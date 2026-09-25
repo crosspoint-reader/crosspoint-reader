@@ -27,10 +27,10 @@ class Epub;
 // Anchor id -> page index, accumulated over a whole chapter parse. Chunked rather
 // than a std::vector because it is appended to while the parse holds most of the
 // heap: a contiguous doubling past ~900 entries is the allocation that fails (and,
-// through the throwing operator new, aborts the device). 64 entries per chunk is
-// 1KB; the 20-chunk directory covers MAX_ANCHORS_PER_CHAPTER plus the TOC anchors
-// that bypass that cap.
-using AnchorMap = ChunkedVector<std::pair<std::string, uint16_t>, 64, 20>;
+// through the throwing operator new, aborts the device). Chunks grow from 4 entries
+// to 64 (under 2KB); the 23-chunk directory covers MAX_ANCHORS_PER_CHAPTER plus the
+// TOC anchors that bypass that cap.
+using AnchorMap = ChunkedVector<std::pair<std::string, uint16_t>, 4, 64, 23>;
 
 class ChapterHtmlSlimParser {
   std::shared_ptr<Epub> epub;
