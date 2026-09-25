@@ -37,7 +37,16 @@ scriptGroups:
   - {tag: greek, label: Greek}
   - {tag: hebrew, label: Hebrew}
   - {tag: arabic, label: Arabic}
+  - {tag: devanagari, label: Devanagari}
   - {tag: bengali, label: Bengali}
+  - {tag: gurmukhi, label: Gurmukhi}
+  - {tag: gujarati, label: Gujarati}
+  - {tag: oriya, label: Odia}
+  - {tag: tamil, label: Tamil}
+  - {tag: telugu, label: Telugu}
+  - {tag: kannada, label: Kannada}
+  - {tag: malayalam, label: Malayalam}
+  - {tag: sinhala, label: Sinhala}
   - {tag: georgian, label: Georgian}
   - {tag: armenian, label: Armenian}
   - {tag: ethiopic, label: Ethiopic}
@@ -357,10 +366,11 @@ families:
       regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 400}}
       bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 700}}
 
-  # ── Bengali ────────────────────────────────────────────────────────────
-  # The bengali preset also embeds each style's OpenType layout tables, so
-  # the reader forms conjuncts, reph and positioned vowel signs (HarfBuzz).
-  # Sizes include 8/10 so UI text in Bengali has a same-size fallback.
+  # ── Indic ──────────────────────────────────────────────────────────────
+  # Each Indic preset (devanagari, bengali, ..., sinhala) also embeds each
+  # style's OpenType layout tables, so the reader forms conjuncts, reph and
+  # positioned vowel signs (HarfBuzz). Sizes include 8/10 so UI text in these
+  # scripts has a same-size fallback.
 
   - name: NotoSansBengali
     description: "Bengali sans-serif with shaping (Bengali, Latin)"
@@ -379,6 +389,168 @@ families:
     styles:
       regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifBengali/hinted/ttf/NotoSerifBengali-Regular.ttf"}
       bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifBengali/hinted/ttf/NotoSerifBengali-Bold.ttf"}
+
+  - name: NotoSansDevanagari
+    description: "Devanagari sans-serif with shaping (Hindi, Marathi, Nepali, Sanskrit, Latin)"
+    scripts: [devanagari, latin]
+    intervals: devanagari,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Bold.ttf"}
+
+  - name: NotoSerifDevanagari
+    description: "Devanagari serif for long-form reading, with shaping (Hindi, Marathi, Nepali, Sanskrit, Latin)"
+    scripts: [devanagari, latin]
+    intervals: devanagari,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifDevanagari/hinted/ttf/NotoSerifDevanagari-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifDevanagari/hinted/ttf/NotoSerifDevanagari-Bold.ttf"}
+
+  - name: NotoSansGurmukhi
+    description: "Gurmukhi sans-serif with shaping (Punjabi, Latin)"
+    scripts: [gurmukhi, latin]
+    intervals: gurmukhi,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansGurmukhi/hinted/ttf/NotoSansGurmukhi-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansGurmukhi/hinted/ttf/NotoSansGurmukhi-Bold.ttf"}
+
+  - name: NotoSerifGurmukhi
+    description: "Gurmukhi serif for long-form reading, with shaping (Punjabi, Latin)"
+    scripts: [gurmukhi, latin]
+    intervals: gurmukhi,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifGurmukhi/hinted/ttf/NotoSerifGurmukhi-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifGurmukhi/hinted/ttf/NotoSerifGurmukhi-Bold.ttf"}
+
+  - name: NotoSansGujarati
+    description: "Gujarati sans-serif with shaping (Gujarati, Latin)"
+    scripts: [gujarati, latin]
+    intervals: gujarati,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansGujarati/hinted/ttf/NotoSansGujarati-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansGujarati/hinted/ttf/NotoSansGujarati-Bold.ttf"}
+
+  - name: NotoSerifGujarati
+    description: "Gujarati serif for long-form reading, with shaping (Gujarati, Latin)"
+    scripts: [gujarati, latin]
+    intervals: gujarati,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifGujarati/hinted/ttf/NotoSerifGujarati-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifGujarati/hinted/ttf/NotoSerifGujarati-Bold.ttf"}
+
+  - name: NotoSansOriya
+    description: "Odia sans-serif with shaping (Odia, Latin)"
+    scripts: [oriya, latin]
+    intervals: oriya,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansOriya/hinted/ttf/NotoSansOriya-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansOriya/hinted/ttf/NotoSansOriya-Bold.ttf"}
+
+  - name: NotoSerifOriya
+    description: "Odia serif for long-form reading, with shaping (Odia, Latin)"
+    scripts: [oriya, latin]
+    intervals: oriya,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifOriya/hinted/ttf/NotoSerifOriya-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifOriya/hinted/ttf/NotoSerifOriya-Bold.ttf"}
+
+  - name: NotoSansTamil
+    description: "Tamil sans-serif with shaping (Tamil, Latin)"
+    scripts: [tamil, latin]
+    intervals: tamil,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansTamil/hinted/ttf/NotoSansTamil-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansTamil/hinted/ttf/NotoSansTamil-Bold.ttf"}
+
+  - name: NotoSerifTamil
+    description: "Tamil serif for long-form reading, with shaping (Tamil, Latin)"
+    scripts: [tamil, latin]
+    intervals: tamil,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifTamil/hinted/ttf/NotoSerifTamil-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifTamil/hinted/ttf/NotoSerifTamil-Bold.ttf"}
+
+  - name: NotoSansTelugu
+    description: "Telugu sans-serif with shaping (Telugu, Latin)"
+    scripts: [telugu, latin]
+    intervals: telugu,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansTelugu/hinted/ttf/NotoSansTelugu-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansTelugu/hinted/ttf/NotoSansTelugu-Bold.ttf"}
+
+  - name: NotoSerifTelugu
+    description: "Telugu serif for long-form reading, with shaping (Telugu, Latin)"
+    scripts: [telugu, latin]
+    intervals: telugu,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifTelugu/hinted/ttf/NotoSerifTelugu-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifTelugu/hinted/ttf/NotoSerifTelugu-Bold.ttf"}
+
+  - name: NotoSansKannada
+    description: "Kannada sans-serif with shaping (Kannada, Latin)"
+    scripts: [kannada, latin]
+    intervals: kannada,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansKannada/hinted/ttf/NotoSansKannada-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansKannada/hinted/ttf/NotoSansKannada-Bold.ttf"}
+
+  - name: NotoSerifKannada
+    description: "Kannada serif for long-form reading, with shaping (Kannada, Latin)"
+    scripts: [kannada, latin]
+    intervals: kannada,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifKannada/hinted/ttf/NotoSerifKannada-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifKannada/hinted/ttf/NotoSerifKannada-Bold.ttf"}
+
+  - name: NotoSansMalayalam
+    description: "Malayalam sans-serif with shaping (Malayalam, Latin)"
+    scripts: [malayalam, latin]
+    intervals: malayalam,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansMalayalam/hinted/ttf/NotoSansMalayalam-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansMalayalam/hinted/ttf/NotoSansMalayalam-Bold.ttf"}
+
+  - name: NotoSerifMalayalam
+    description: "Malayalam serif for long-form reading, with shaping (Malayalam, Latin)"
+    scripts: [malayalam, latin]
+    intervals: malayalam,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifMalayalam/hinted/ttf/NotoSerifMalayalam-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifMalayalam/hinted/ttf/NotoSerifMalayalam-Bold.ttf"}
+
+  - name: NotoSansSinhala
+    description: "Sinhala sans-serif with shaping (Sinhala, Latin)"
+    scripts: [sinhala, latin]
+    intervals: sinhala,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansSinhala/hinted/ttf/NotoSansSinhala-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansSinhala/hinted/ttf/NotoSansSinhala-Bold.ttf"}
+
+  - name: NotoSerifSinhala
+    description: "Sinhala serif for long-form reading, with shaping (Sinhala, Latin)"
+    scripts: [sinhala, latin]
+    intervals: sinhala,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifSinhala/hinted/ttf/NotoSerifSinhala-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifSinhala/hinted/ttf/NotoSerifSinhala-Bold.ttf"}
 
   # ── Korean ─────────────────────────────────────────────────────────────
 
