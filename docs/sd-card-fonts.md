@@ -136,6 +136,47 @@ What this means in practice:
   CJK fallback and the UI again shows boxes for CJK — pick a CJK SD font to
   restore it.
 
+## Bengali (Bangla)
+
+Bengali needs shaping: vowel signs move around their consonants, consonant
+clusters join into conjuncts (ক্ষ, ন্ত, স্ত্র), র্ becomes a reph above the next
+letter, and marks sit where the font places them. CrossPoint shapes Bengali
+with [HarfBuzz](https://harfbuzz.github.io/) using the font's own OpenType
+tables, on every device.
+
+- **Fonts.** The `NotoSansBengali` and `NotoSerifBengali` families on the
+  font download page already carry shaping data and Latin letters. Select one
+  under **Settings > Reader > Font Family**.
+- **Your own `.cpfont`.** Converting with the `bengali` preset embeds the
+  shaping data automatically when the font has an OpenType `GSUB` table. Bengali
+  fonts rarely include Latin letters, so add a Latin fallback, and build the UI
+  sizes as well:
+
+      python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+        --regular MyBangla-Regular.ttf --bold MyBangla-Bold.ttf \
+        --fallback-regular NotoSans-Regular.ttf --fallback-bold NotoSans-Bold.ttf \
+        --intervals bengali,latin-ext,punctuation \
+        --sizes 8,10,12,14,16,18 \
+        --name MyBangla --output-dir ./MyBangla/
+
+  Pass `--no-shaping` to leave the shaping data out. Older firmware ignores it,
+  so the same files work everywhere.
+- **Direct TTF/OTF/TTC fonts** (devices with external RAM) shape straight from
+  the font file.
+- **Fonts without shaping data** still get their vowel signs in the right
+  order, but conjuncts show a visible hasant (প্‌র).
+
+Book titles and other interface text in Bengali use the selected family as a
+size-matched fallback, as described for CJK above, which is why the families
+include 8 and 10 pt.
+
+On the X3 and X4, the first time a Bengali font is used its shaping tables
+(about 40 KB per style) are copied once into a reserved area of the device's
+internal flash and read from there, keeping the reader's RAM free. Opening a
+Bengali chapter for the first time takes longer than a Latin one, because every
+word is shaped while the chapter is laid out. Page turns do no shaping: the
+shaped words are stored with the chapter's cached layout.
+
 ## Available Pre-Built Fonts
 
 The current list of pre-built fonts is maintained in the
@@ -182,6 +223,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 | `cyrillic` | Cyrillic + Supplement |
 | `hebrew` | Hebrew + Alphabetic Presentation Forms |
 | `arabic` | Arabic + Supplement + Extended-A + Presentation Forms A/B (RTL, contextual shaping) |
+| `bengali` | Bengali + dandas + joiners; embeds OpenType shaping data (see [Bengali](#bengali-bangla)) |
 | `georgian` | Georgian + Georgian Supplement |
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |

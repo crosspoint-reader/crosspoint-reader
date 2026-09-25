@@ -37,6 +37,7 @@ scriptGroups:
   - {tag: greek, label: Greek}
   - {tag: hebrew, label: Hebrew}
   - {tag: arabic, label: Arabic}
+  - {tag: bengali, label: Bengali}
   - {tag: georgian, label: Georgian}
   - {tag: armenian, label: Armenian}
   - {tag: ethiopic, label: Ethiopic}
@@ -355,6 +356,29 @@ families:
     styles:
       regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 400}}
       bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 700}}
+
+  # ── Bengali ────────────────────────────────────────────────────────────
+  # The bengali preset also embeds each style's OpenType layout tables, so
+  # the reader forms conjuncts, reph and positioned vowel signs (HarfBuzz).
+  # Sizes include 8/10 so UI text in Bengali has a same-size fallback.
+
+  - name: NotoSansBengali
+    description: "Bengali sans-serif with shaping (Bengali, Latin)"
+    scripts: [bengali, latin]
+    intervals: bengali,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansBengali/hinted/ttf/NotoSansBengali-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansBengali/hinted/ttf/NotoSansBengali-Bold.ttf"}
+
+  - name: NotoSerifBengali
+    description: "Bengali serif for long-form reading, with shaping (Bengali, Latin)"
+    scripts: [bengali, latin]
+    intervals: bengali,latin-ext,punctuation
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifBengali/hinted/ttf/NotoSerifBengali-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSerifBengali/hinted/ttf/NotoSerifBengali-Bold.ttf"}
 
   # ── Korean ─────────────────────────────────────────────────────────────
 

@@ -207,9 +207,9 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   if (readerIt == renderer.getFontMap().end()) return;
   // One representative codepoint per script the built-in fonts may lack:
   // Han, Hiragana, Katakana, Hangul, Greek, Cyrillic, Hebrew, Arabic, Thai,
-  // Devanagari.
-  static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x03B1,
-                                                 0x0430, 0x05D0, 0x0627, 0x0E01, 0x0905};
+  // Devanagari, Bengali.
+  static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x03B1, 0x0430,
+                                                 0x05D0, 0x0627, 0x0E01, 0x0905, 0x0995};
   bool hasFallbackScript = false;
   for (const uint32_t cp : kFallbackProbes) {
     if (readerIt->second.hasCodepoint(cp)) {
