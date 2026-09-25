@@ -169,9 +169,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // Power-button shortcut options, shared by the short- and long-press settings.
 //
 // The display order is grouped by usefulness rather than by persisted value.
-// Only actions the reader can execute today are listed; the enum carries no entry we cannot run.
-inline SettingInfo buildPowerButtonActionSetting(StrId nameId, uint8_t CrossPointSettings::* valuePtr,
-                                                 const char* key) {
+// Only actions the reader can execute today are listed, plus Select (short-press only; see
+// includeSelect below) — the enum carries no other entry we cannot run.
+inline SettingInfo buildPowerButtonActionSetting(StrId nameId, uint8_t CrossPointSettings::* valuePtr, const char* key,
+                                                 const bool includeSelect = false) {
   SettingEnumOptions options({{StrId::STR_IGNORE, shortcutActionRawValue(ShortcutAction::None)},
                               {StrId::STR_SLEEP, shortcutActionRawValue(ShortcutAction::Sleep)},
                               {StrId::STR_PAGE_TURN, shortcutActionRawValue(ShortcutAction::PageTurn)},
@@ -183,9 +184,14 @@ inline SettingInfo buildPowerButtonActionSetting(StrId nameId, uint8_t CrossPoin
                               {StrId::STR_BROWSE_FILES, shortcutActionRawValue(ShortcutAction::FileBrowser)},
                               {StrId::STR_FILE_TRANSFER, shortcutActionRawValue(ShortcutAction::FileTransfer)},
                               {StrId::STR_LOOK_UP_WORD, shortcutActionRawValue(ShortcutAction::LookUpWord)}},
-                             1);
+                             2);
   if (halTiltSensor.isAvailable()) {
     options.add(StrId::STR_TOGGLE_TILT_PAGE_TURN, shortcutActionRawValue(ShortcutAction::ToggleTiltPageTurn));
+  }
+  // Select only makes sense as a quick tap: aliasing a long hold risks activating whatever is
+  // highlighted while the user is deliberately mid-hold for the long-press action instead.
+  if (includeSelect) {
+    options.add(StrId::STR_SELECT, shortcutActionRawValue(ShortcutAction::Select));
   }
   return SettingInfo::MappedEnum(nameId, valuePtr, std::move(options), key, StrId::STR_CAT_CONTROLS);
 }
@@ -301,7 +307,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
         // --- Controls: Power Button ---
-        buildPowerButtonActionSetting(StrId::STR_SHORT_PRESS_ACTION, &CrossPointSettings::shortPwrBtn, "shortPwrBtn"),
+        buildPowerButtonActionSetting(StrId::STR_SHORT_PRESS_ACTION, &CrossPointSettings::shortPwrBtn, "shortPwrBtn",
+                                      /*includeSelect=*/true),
         buildPowerButtonActionSetting(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn, "longPwrBtn"),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
