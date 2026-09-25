@@ -108,6 +108,8 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
       displayPresent = false;
       totalDisplay = 0;
     }
+    // Every word draws as its own text (nothing was shaped or reordered).
+    if (totalDisplay == 0) displayPresent = false;
   }
   displayBytes = static_cast<uint16_t>(totalDisplay);
 

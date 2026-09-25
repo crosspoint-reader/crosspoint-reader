@@ -86,3 +86,16 @@ TEST(TextBlockDisplay, RejectsACorruptDisplayOffset) {
   EXPECT_EQ(TextBlock::deserialize(in), nullptr);
   std::remove(path.c_str());
 }
+
+TEST(TextBlockDisplay, ComplexScriptLineWithNothingToRedrawRoundTrips) {
+  // An Indic line whose words all draw as their own text (unshaped, with no
+  // vowel sign to reorder): the display vector exists but every entry is empty.
+  const std::vector<std::string> words = {"\xE0\xA4\x95\xE0\xA5\x80", "\xE0\xA4\xB9\xE0\xA5\x88"};  // की है
+  TextBlock block(words, {0, 30}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {},
+                  {"", ""});
+  ASSERT_TRUE(block.valid());
+  const auto restored = roundTrip(block, "empty-display.bin");
+  ASSERT_NE(restored, nullptr) << "a line with no display forms must not store an empty display region";
+  EXPECT_STREQ(restored->displayText(0), words[0].c_str());
+  EXPECT_STREQ(restored->displayText(1), words[1].c_str());
+}
