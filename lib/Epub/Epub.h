@@ -55,6 +55,10 @@ class Epub {
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
+  // First JPEG/PNG reference inside a cover document, resolved against that document's own
+  // directory; empty when the document holds none. Serves both the guide's cover XHTML and an
+  // SVG wrapper named as the cover image.
+  std::string findCoverImageInDocument(const std::string& docHref) const;
   std::string getCoverBmpPath(bool cropped = false, bool originalThresholds = false) const;
   bool generateCoverBmp(bool cropped = false, bool originalThresholds = false) const;
   std::string getThumbBmpPath() const;

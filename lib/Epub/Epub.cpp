@@ -101,44 +101,28 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   // try extracting the image reference from the guide's cover page XHTML
   if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
     LOG_DBG("EBP", "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
-    size_t coverPageSize;
-    uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
-    if (coverPageData) {
-      const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData), coverPageSize);
-      free(coverPageData);
+    const auto fromGuide = findCoverImageInDocument(opfParser.guideCoverPageHref);
+    if (!fromGuide.empty()) {
+      bookMetadata.coverItemHref = fromGuide;
+      LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
+    }
+  }
 
-      // Determine base path of the cover page for resolving relative image references
-      std::string coverPageBase;
-      const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
-      if (lastSlash != std::string::npos) {
-        coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
-      }
-
-      // Search for image references: xlink:href="..." (SVG) and src="..." (img)
-      std::string imageRef;
-      for (const char* pattern : {"xlink:href=\"", "src=\""}) {
-        auto pos = coverPageHtml.find(pattern);
-        while (pos != std::string::npos) {
-          pos += strlen(pattern);
-          const auto endPos = coverPageHtml.find('"', pos);
-          if (endPos != std::string::npos) {
-            const auto ref = std::string_view{coverPageHtml}.substr(pos, endPos - pos);
-            // Cover BMP generation supports JPG/PNG only; skip GIF so an unsupported wrapper image
-            // does not block a later supported cover reference.
-            if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref)) {
-              imageRef = ref;
-              break;
-            }
-          }
-          pos = coverPageHtml.find(pattern, pos);
-        }
-        if (!imageRef.empty()) break;
-      }
-
-      if (!imageRef.empty()) {
-        bookMetadata.coverItemHref = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(coverPageBase + imageRef));
-        LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
-      }
+  // The manifest names an SVG wrapper as the cover image rather than the picture itself:
+  //
+  //   <item properties="cover-image" media-type="image/svg+xml" href="cover.svg"/>
+  //   cover.svg: <svg viewBox="0 0 1135 1600"><image xlink:href="cover.jpg"/></svg>
+  //
+  // Follow the one <image> inside it. Cover and thumbnail generation understand JPEG and PNG
+  // only, so without this the book gets no cover at all.
+  if (FsHelpers::checkFileExtension(bookMetadata.coverItemHref, ".svg")) {
+    const auto inWrapper = findCoverImageInDocument(bookMetadata.coverItemHref);
+    if (inWrapper.empty()) {
+      LOG_DBG("EBP", "Cover SVG holds no JPEG/PNG reference: %s", bookMetadata.coverItemHref.c_str());
+      bookMetadata.coverItemHref.clear();
+    } else {
+      LOG_DBG("EBP", "Cover SVG wraps %s", inWrapper.c_str());
+      bookMetadata.coverItemHref = inWrapper;
     }
   }
 
@@ -673,6 +657,47 @@ std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
   const auto coverFileName =
       std::string("cover") + (originalThresholds ? "_original" : "_legacy_v2") + (cropped ? "_crop" : "");
   return cachePath + "/" + coverFileName + ".bmp";
+}
+
+std::string Epub::findCoverImageInDocument(const std::string& docHref) const {
+  if (docHref.empty()) return {};
+
+  size_t docSize;
+  uint8_t* docData = readItemContentsToBytes(docHref, &docSize, true);
+  if (!docData) return {};
+  const std::string doc(reinterpret_cast<char*>(docData), docSize);
+  free(docData);
+
+  // Relative references inside the document resolve against its own directory.
+  std::string base;
+  const auto lastSlash = docHref.rfind('/');
+  if (lastSlash != std::string::npos) {
+    base = docHref.substr(0, lastSlash + 1);
+  }
+
+  // xlink:href="..." (SVG <image>) and src="..." (<img>). Cover BMP generation supports JPEG
+  // and PNG only, so anything else is skipped rather than taken -- a GIF ornament earlier in
+  // the document must not shadow the picture that follows it.
+  std::string imageRef;
+  for (const char* pattern : {"xlink:href=\"", "src=\""}) {
+    auto pos = doc.find(pattern);
+    while (pos != std::string::npos) {
+      pos += strlen(pattern);
+      const auto endPos = doc.find('"', pos);
+      if (endPos != std::string::npos) {
+        const auto ref = std::string_view{doc}.substr(pos, endPos - pos);
+        if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref)) {
+          imageRef = ref;
+          break;
+        }
+      }
+      pos = doc.find(pattern, pos);
+    }
+    if (!imageRef.empty()) break;
+  }
+  if (imageRef.empty()) return {};
+
+  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(base + imageRef));
 }
 
 bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
