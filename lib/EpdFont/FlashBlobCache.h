@@ -5,10 +5,10 @@
 // Read-only copies of .cpfont layout fonts in internal flash, memory-mapped
 // for HarfBuzz so a complex-script face costs no heap for its tables.
 //
-// No-PSRAM boards only: there a Bengali layout font (~40 KB) would otherwise
+// No-PSRAM boards only: there an Indic layout font (5-80 KB) would otherwise
 // sit in the same internal DRAM the reader lives in. The "spiffs" data
-// partition, which nothing else uses, is split into 64 KB slots behind a
-// one-sector directory. A blob is written once, keyed by its content hash, and
+// partition, which nothing else uses, is split into MAX_BLOB_BYTES slots
+// behind a one-sector directory. A blob is written once, keyed by its content hash, and
 // re-verified against that hash every time it is mapped; slots are recycled
 // least-recently-used. Writes happen only when a font is used for the first
 // time (or after its slot was recycled), so flash wear is negligible.
@@ -17,6 +17,9 @@
 // partition is missing, the blob is too large, or flash access fails, and the
 // caller then keeps the blob in RAM.
 namespace FlashBlobCache {
+
+// Largest blob a slot holds: Noto Devanagari's layout font is ~77 KB.
+constexpr uint32_t MAX_BLOB_BYTES = 128 * 1024;
 
 // Fills buf with `length` bytes of the blob starting at `offset`.
 using Reader = bool (*)(void* ctx, uint32_t offset, uint8_t* buf, uint32_t length);

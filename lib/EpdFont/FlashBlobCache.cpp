@@ -65,8 +65,8 @@ void unmap(const uint32_t handle) { esp_partition_munmap(static_cast<esp_partiti
 namespace FlashBlobCache {
 namespace {
 
-constexpr uint32_t kMagic = 0x42465043;  // "CPFB"
-constexpr uint32_t kSlotSize = 64 * 1024;
+constexpr uint32_t kMagic = 0x32465043;  // "CPF2": 128 KB slots (a "CPFB" directory had 64 KB slots)
+constexpr uint32_t kSlotSize = MAX_BLOB_BYTES;
 constexpr uint32_t kSlots = 8;
 constexpr uint32_t kDirSector = 4096;  // directory at offset 0; slot i at (i + 1) * kSlotSize
 constexpr uint32_t kCopyChunk = 4096;

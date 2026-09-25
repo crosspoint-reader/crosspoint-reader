@@ -11,7 +11,7 @@
 // Fake NOR partition for FlashBlobCache's backend: erase sets bytes to 0xFF,
 // writes can only clear bits, and map() hands out pointers into the array.
 namespace fake {
-constexpr uint32_t kSize = 1024 * 1024;
+constexpr uint32_t kSize = 2 * 1024 * 1024;
 std::vector<uint8_t> flash(kSize, 0xFF);
 int erases = 0;
 int writes = 0;
@@ -181,7 +181,8 @@ TEST_F(FlashBlobCacheTest, RecyclesTheOldestIdleSlotButNeverAMappedOne) {
 }
 
 TEST_F(FlashBlobCacheTest, DeclinesWhatItCannotHold) {
-  EXPECT_EQ(acquire(makeBlob(64 * 1024 + 1, 4)), nullptr);  // larger than a slot
+  EXPECT_NE(acquire(makeBlob(FlashBlobCache::MAX_BLOB_BYTES, 3)), nullptr);      // fills a slot exactly
+  EXPECT_EQ(acquire(makeBlob(FlashBlobCache::MAX_BLOB_BYTES + 1, 4)), nullptr);  // larger than a slot
 
   const auto blob = makeBlob(2000, 5);
   gFailReads = true;
