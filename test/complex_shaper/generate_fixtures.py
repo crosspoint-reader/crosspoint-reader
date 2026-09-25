@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Regenerate the ComplexShaper test fixtures.
 
-Writes data/NotoSansBengali-Regular.layout (the layout blob the .cpfont
-converter embeds, built by lib/EpdFont/scripts/shaping_blob.py) and
-ExpectedShaping.h (HarfBuzz's own output for that blob, via uharfbuzz), so the
-test checks that the firmware's HarfBuzz build and token encoding reproduce
-reference shaping exactly.
+For each fixture script, writes data/NotoSans<Script>-Regular.layout (the
+layout blob the .cpfont converter embeds, built by
+lib/EpdFont/scripts/shaping_blob.py) and, into ExpectedShaping.h, HarfBuzz's
+own output for that blob (via uharfbuzz), so the test checks that the
+firmware's HarfBuzz build and token encoding reproduce reference shaping
+exactly.
 
     pip install fonttools uharfbuzz
-    python3 test/complex_shaper/generate_fixtures.py NotoSansBengali-Regular.ttf
+    python3 test/complex_shaper/generate_fixtures.py <dir with NotoSans<Script>-Regular.ttf>
 
-Noto Sans Bengali: https://github.com/notofonts/bengali (SIL OFL 1.1, see
-data/OFL.txt).
+Noto Sans Bengali, Devanagari, Tamil and Sinhala:
+https://github.com/notofonts (SIL OFL 1.1, see data/OFL.txt).
 """
 
 import sys
@@ -26,47 +27,80 @@ import uharfbuzz as hb  # noqa: E402
 # 16 pt at 150 DPI in 26.6, as the converter and TtfEpdFont compute it.
 PPEM_26_6 = (16 * 150 * 64 + 36) // 72
 
-WORDS = [
-    "কলম",            # no shaping beyond cmap
-    "কি",             # pre-base i-matra
-    "টেলিবই",          # e-matra and i-matra in one word
-    "কো", "কৌ",        # two-part vowels
-    "শকুন্তলা",         # n-ta conjunct and u below a base
-    "প্রকাশ",           # ra-phala
-    "বিদ্যাসাগর",        # ya-phala with i-matra before the cluster
-    "কর্ত্তৃক",           # reph over a doubled conjunct with ri-matra
-    "সর্ব্বোৎকৃষ্ট",        # reph, o-matra, khanda ta, ss-tta
-    "অভিজ্ঞান",          # j-nya
-    "ক্ষ", "ক্ষি",        # k-ssa with and without a matra
-    "শ্রীঈশ্বরচন্দ্র",      # ra-phala, ba-phala, ndra
-    "দ্বিতীয়",           # decomposed ya + nukta
-    "ড়", "ঢ়",          # nukta letters
-    "বাক্‌শক্তি",         # ZWNJ keeps the halant explicit
-    "চাঁদ",            # candrabindu
-    "সহোদরস্নেহ",        # s-n conjunct under e-matra
-    "গ্রীষ্মকালে",        # ra-phala, ss-ma
-    "হৃদয়", "রূপ", "রু",  # special u/uu/ri forms under ha and ra
-    "বই।",            # danda joins the run
-    "১৮৫৪",           # Bengali digits
+# (script, HarfBuzz script tag, words). A word is text, or (text, BCP 47
+# language) for a word shaped in a specific language.
+FIXTURES = [
+    ("bengali", "Beng", [
+        "কলম",            # no shaping beyond cmap
+        "কি",             # pre-base i-matra
+        "টেলিবই",          # e-matra and i-matra in one word
+        "কো", "কৌ",        # two-part vowels
+        "শকুন্তলা",         # n-ta conjunct and u below a base
+        "প্রকাশ",           # ra-phala
+        "বিদ্যাসাগর",        # ya-phala with i-matra before the cluster
+        "কর্ত্তৃক",           # reph over a doubled conjunct with ri-matra
+        "সর্ব্বোৎকৃষ্ট",        # reph, o-matra, khanda ta, ss-tta
+        "অভিজ্ঞান",          # j-nya
+        "ক্ষ", "ক্ষি",        # k-ssa with and without a matra
+        "শ্রীঈশ্বরচন্দ্র",      # ra-phala, ba-phala, ndra
+        "দ্বিতীয়",           # decomposed ya + nukta
+        "ড়", "ঢ়",          # nukta letters
+        "বাক্‌শক্তি",         # ZWNJ keeps the halant explicit
+        "চাঁদ",            # candrabindu
+        "সহোদরস্নেহ",        # s-n conjunct under e-matra
+        "গ্রীষ্মকালে",        # ra-phala, ss-ma
+        "হৃদয়", "রূপ", "রু",  # special u/uu/ri forms under ha and ra
+        "বই।",            # danda joins the run
+        "১৮৫৪",           # Bengali digits
+    ]),
+    ("devanagari", "Deva", [
+        "हिन्दी",           # i-matra before a n-da conjunct
+        "क्षत्रिय",          # k-ssa, t-ra, i-matra
+        "श्री",            # sh-ra with ii-matra
+        "प्रार्थना",         # ra below, reph
+        "कृष्ण",           # vocalic r, ss-nna
+        "ज्ञान",           # j-nya
+        "द्ध", "त्र्य",      # stacked and chained conjuncts
+        "क़िला",           # nukta consonant under an i-matra
+        "र्‍य",            # eyelash ra (ZWJ)
+        "संस्कृतम्",        # anusvara, final virama
+        "लक्ष", ("लक्ष", "mr"),   # Marathi la and k-ssa
+        "झाड", ("झाड", "ne"),     # Nepali jha
+        ("९८५", "ne"),            # Nepali digits
+    ]),
+    ("tamil", "Taml", [
+        "தமிழ்",           # visible pulli
+        "கொ", "கோ", "கௌ",   # two-part vowels
+        "க்ஷ",             # the one conjunct
+        "ஸ்ரீ",             # shri ligature
+        "பொன்னியின்",       # pulli and two-part vowel in one word
+        "செல்வன்",          # e-matra before its consonant
+    ]),
+    ("sinhala", "Sinh", [
+        "සිංහල",           # anusvara, i-sign
+        "ශ්‍රී",            # rakaransaya (ZWJ)
+        "ක්‍ෂ",            # ZWJ conjunct
+        "කෝ", "කෞ",        # multi-part vowels
+        "ලංකාව",           # aa-sign after anusvara
+    ]),
 ]
 
 
+def round_px(v):
+    return (v + 32) // 64 if v >= 0 else -((-v + 32) // 64)
+
+
+def c_string(text):
+    return "".join(c if ord(c) < 0x80 else "".join(f"\\x{b:02X}" for b in c.encode()) for c in text)
+
+
 def main():
-    font_path = sys.argv[1]
-    _, layout, _ = shaping_blob.build(font_path, ["bengali"])
-    (HERE / "data" / "NotoSansBengali-Regular.layout").write_bytes(layout)
-
-    font = hb.Font(hb.Face(layout))
-    font.scale = (PPEM_26_6, PPEM_26_6)
-    font.ppem = ((PPEM_26_6 + 32) >> 6,) * 2
-
-    def round_px(v):
-        return (v + 32) // 64 if v >= 0 else -((-v + 32) // 64)
-
+    font_dir = Path(sys.argv[1])
     lines = [
         "#pragma once",
-        "// Generated by generate_fixtures.py from data/NotoSansBengali-Regular.layout. Do not edit.",
+        "// Generated by generate_fixtures.py from data/*.layout. Do not edit.",
         "",
+        "#include <cstddef>",
         "#include <cstdint>",
         "",
         f"constexpr uint32_t kFixturePpem26_6 = {PPEM_26_6};",
@@ -80,29 +114,52 @@ def main():
         "",
         "struct ExpectedShaping {",
         "  const char* utf8;",
+        "  const char* language;  // BCP 47; \"\" = none",
         "  const ExpectedGlyph* glyphs;",
         "  uint8_t count;",
         "};",
         "",
+        "struct ShapingFixture {",
+        "  const char* script;",
+        "  const char* layoutFile;  // in data/",
+        "  const ExpectedShaping* words;",
+        "  size_t count;",
+        "};",
+        "",
     ]
-    table = []
-    for i, word in enumerate(WORDS):
-        buf = hb.Buffer()
-        buf.add_str(word)
-        buf.direction = "ltr"
-        buf.script = "Beng"
-        buf.language = "bn"
-        hb.shape(font, buf, {})
-        glyphs = [
-            f"{{{info.codepoint}, {(pos.x_advance + 2) >> 2}, {round_px(pos.x_offset)}, {-round_px(pos.y_offset)}}}"
-            for info, pos in zip(buf.glyph_infos, buf.glyph_positions)
-        ]
-        lines.append(f"constexpr ExpectedGlyph kGlyphs{i}[] = {{{', '.join(glyphs)}}};")
-        escaped = "".join(c if ord(c) < 0x80 else "".join(f"\\x{b:02X}" for b in c.encode()) for c in word)
-        table.append(f'    {{"{escaped}", kGlyphs{i}, {len(glyphs)}}},  // {word}')
-    lines += ["", "constexpr ExpectedShaping kExpectedShaping[] = {", *table, "};", ""]
+    fixtures = []
+    for script, hb_script, words in FIXTURES:
+        name = script.capitalize()
+        layout_file = f"NotoSans{name}-Regular.layout"
+        _, layout, _ = shaping_blob.build(str(font_dir / f"NotoSans{name}-Regular.ttf"), [script])
+        (HERE / "data" / layout_file).write_bytes(layout)
+
+        font = hb.Font(hb.Face(layout))
+        font.scale = (PPEM_26_6, PPEM_26_6)
+        font.ppem = ((PPEM_26_6 + 32) >> 6,) * 2
+
+        table = []
+        for i, word in enumerate(words):
+            text, language = word if isinstance(word, tuple) else (word, "")
+            buf = hb.Buffer()
+            buf.add_str(text)
+            buf.direction = "ltr"
+            buf.script = hb_script
+            if language:
+                buf.language = language
+            hb.shape(font, buf, {})
+            glyphs = [
+                f"{{{info.codepoint}, {(pos.x_advance + 2) >> 2}, {round_px(pos.x_offset)}, {-round_px(pos.y_offset)}}}"
+                for info, pos in zip(buf.glyph_infos, buf.glyph_positions)
+            ]
+            lines.append(f"constexpr ExpectedGlyph k{name}Glyphs{i}[] = {{{', '.join(glyphs)}}};")
+            comment = f"{text} ({language})" if language else text
+            table.append(f'    {{"{c_string(text)}", "{language}", k{name}Glyphs{i}, {len(glyphs)}}},  // {comment}')
+        lines += ["", f"constexpr ExpectedShaping k{name}Shaping[] = {{", *table, "};", ""]
+        fixtures.append(f'    {{"{name}", "{layout_file}", k{name}Shaping, sizeof(k{name}Shaping) / sizeof(k{name}Shaping[0])}},')
+        print(f"{layout_file}: {len(layout)} bytes, {len(words)} expected words")
+    lines += ["constexpr ShapingFixture kShapingFixtures[] = {", *fixtures, "};", ""]
     (HERE / "ExpectedShaping.h").write_text("\n".join(lines))
-    print(f"layout blob: {len(layout)} bytes, {len(WORDS)} expected words")
 
 
 if __name__ == "__main__":

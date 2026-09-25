@@ -33,7 +33,7 @@ constexpr size_t kDefaultBudget = 1024 * 1024;
 constexpr size_t kInternalReserve = 0;
 constexpr size_t kMaxLiveFaces = 8;
 #else
-// One Bengali face is ~16 KB of HarfBuzz state (its ~40 KB of layout tables
+// One Indic face is 8-16 KB of HarfBuzz state (its 5-80 KB of layout tables
 // are flash-mapped, see FlashBlobCache.h, or else count here too). When the
 // budget runs out anyway, appendShapedRun() drops every face and retries with
 // just the one it needs. The reserve keeps shaping from taking the last
@@ -253,6 +253,17 @@ void memoStore(const ComplexShaper* owner, const uint32_t scale, const uint32_t 
   gMemoBytes += static_cast<uint32_t>(need);
 }
 
+// Language every run is shaped in (setDocumentLanguage).
+hb_language_t gLanguage = HB_LANGUAGE_INVALID;
+
+// Drops every shaped run, keeping the cache and memo storage.
+void forgetAllRuns() {
+  if (gSlots != nullptr) memset(gSlots, 0, sizeof(CacheSlot) * kCacheSlots);
+  gArenaHead = 0;
+  gMemoCount = 0;
+  gMemoBytes = 0;
+}
+
 void memoFree() {
   budgetedFree(gMemo);
   budgetedFree(gMemoArena);
@@ -274,11 +285,28 @@ void cacheForget(const ComplexShaper* owner) {
 
 // --- Runs -------------------------------------------------------------------
 
-constexpr bool isRunCodepoint(const uint32_t cp) {
-  return (cp >= 0x0980 && cp <= 0x09FF)   // Bengali
-         || cp == 0x0964 || cp == 0x0965  // danda, double danda
-         || cp == 0x200C || cp == 0x200D  // ZWNJ, ZWJ
-         || cp == 0x25CC;                 // dotted circle
+// One script's text plus the shared codepoints around it, ending at `end`.
+// `script` is nullptr for shared codepoints alone.
+struct Run {
+  const unsigned char* end;
+  const indic::ScriptInfo* script;
+};
+
+// The run starting at `p`; `end == p` when `p` is not Indic.
+Run scanRun(const unsigned char* p) {
+  const indic::ScriptInfo* script = nullptr;
+  while (*p) {
+    const unsigned char* next = p;
+    const uint32_t cp = utf8NextCodepoint(&next);
+    const indic::ScriptInfo* cpScript = indic::scriptOf(cp);
+    if (cpScript == nullptr && !indic::isShared(cp)) break;
+    if (cpScript != nullptr) {
+      if (script != nullptr && cpScript != script) break;
+      script = cpScript;
+    }
+    p = next;
+  }
+  return Run{p, script};
 }
 
 // 26.6 -> whole pixels, rounding half away from zero.
@@ -425,6 +453,7 @@ void ComplexShaper::setBlobSource(const BlobLoader loader, void* ctx, const uint
   sourceCtx_ = ctx;
   contentKey_ = contentKey;
   unusable_ = false;
+  coverageChecked_ = coverageMask_ = 0;
 }
 
 void ComplexShaper::setTableSource(const TableLoader loader, void* ctx) {
@@ -436,6 +465,7 @@ void ComplexShaper::setTableSource(const TableLoader loader, void* ctx) {
   sourceCtx_ = ctx;
   contentKey_ = 0;
   unusable_ = false;
+  coverageChecked_ = coverageMask_ = 0;
 }
 
 void ComplexShaper::setScale(const uint32_t ppem26_6) {
@@ -518,7 +548,32 @@ bool ComplexShaper::ensureFont() {
   return true;
 }
 
-bool ComplexShaper::appendShapedRun(const char* run, const size_t length, std::string& out) {
+bool ComplexShaper::ensureFontMakingRoom() {
+  const uint32_t failuresBefore = gFailures;
+  if (ensureFont()) return true;
+  if (gFailures == failuresBefore) return false;  // not for lack of memory
+  releaseEveryFaceLocked();
+  retryBackoff_ = 0;
+  return ensureFont();
+}
+
+void ComplexShaper::releaseEveryFaceLocked() {
+  for (ComplexShaper* shaper = gShapers; shaper != nullptr; shaper = shaper->next_) shaper->releaseLocked();
+}
+
+ComplexShaper::Coverage ComplexShaper::coverage(const indic::ScriptInfo& script) {
+  const auto bit = static_cast<uint16_t>(1u << indic::indexOf(script));
+  if ((coverageChecked_ & bit) == 0) {
+    if (!ensureFontMakingRoom()) return Coverage::Unknown;
+    hb_codepoint_t glyph = 0;
+    if (hb_font_get_nominal_glyph(font_, script.probe, &glyph)) coverageMask_ |= bit;
+    coverageChecked_ |= bit;
+  }
+  return (coverageMask_ & bit) != 0 ? Coverage::Covered : Coverage::NotCovered;
+}
+
+bool ComplexShaper::appendShapedRun(const char* run, const size_t length, const indic::ScriptInfo& script,
+                                    std::string& out) {
   const uint32_t hash = fnv1a(run, length);
   if (const CacheSlot* hit = memoFind(this, scale26_6_, hash, run, length)) {
     out.append(reinterpret_cast<const char*>(gMemoArena + hit->offset + hit->inLength), hit->outLength);
@@ -532,15 +587,14 @@ bool ComplexShaper::appendShapedRun(const char* run, const size_t length, std::s
     return true;
   }
 
-  static hb_language_t bengali = hb_language_from_string("bn", -1);
   for (int attempt = 0;; attempt++) {
     const uint32_t failuresBefore = gFailures;
     if (ensureFont()) {
       hb_buffer_clear_contents(buffer_);
       hb_buffer_add_utf8(buffer_, run, static_cast<int>(length), 0, static_cast<int>(length));
       hb_buffer_set_direction(buffer_, HB_DIRECTION_LTR);
-      hb_buffer_set_script(buffer_, HB_SCRIPT_BENGALI);
-      hb_buffer_set_language(buffer_, bengali);
+      hb_buffer_set_script(buffer_, hb_script_from_iso15924_tag(script.isoTag));
+      hb_buffer_set_language(buffer_, gLanguage);
       hb_shape(font_, buffer_, nullptr, 0);
       gShapedRuns++;
       if (gFailures == failuresBefore && hb_buffer_allocation_successful(buffer_)) break;
@@ -549,7 +603,7 @@ bool ComplexShaper::appendShapedRun(const char* run, const size_t length, std::s
     // An allocation failed inside HarfBuzz, which caches the tables it fails
     // to build: shaping with this face now could silently skip substitutions.
     // Drop every face (the shaped-run cache survives) and rebuild just this one.
-    for (ComplexShaper* shaper = gShapers; shaper != nullptr; shaper = shaper->next_) shaper->releaseLocked();
+    releaseEveryFaceLocked();
     retryBackoff_ = 0;
   }
 
@@ -582,20 +636,27 @@ bool ComplexShaper::shape(const char* utf8, std::string& out) {
   bool shapedAny = false;
   const auto* p = reinterpret_cast<const unsigned char*>(utf8);
   while (*p) {
-    const unsigned char* next = p;
-    if (!isRunCodepoint(utf8NextCodepoint(&next))) {
+    const Run run = scanRun(p);
+    if (run.end == p) {
+      const unsigned char* next = p;
+      utf8NextCodepoint(&next);
       out.append(reinterpret_cast<const char*>(p), next - p);
       p = next;
       continue;
     }
-    const unsigned char* runStart = p;
-    p = next;
-    while (*p) {
-      next = p;
-      if (!isRunCodepoint(utf8NextCodepoint(&next))) break;
-      p = next;
+    const auto* runText = reinterpret_cast<const char*>(p);
+    const auto length = static_cast<size_t>(run.end - p);
+    p = run.end;
+
+    // Shared codepoints alone (a lone danda) and scripts the layout tables do
+    // not cover stay text, drawn glyph by glyph like any unshaped string.
+    const Coverage covered = run.script != nullptr ? coverage(*run.script) : Coverage::NotCovered;
+    if (covered == Coverage::Unknown) return false;
+    if (covered == Coverage::NotCovered) {
+      out.append(runText, length);
+      continue;
     }
-    if (!appendShapedRun(reinterpret_cast<const char*>(runStart), p - runStart, out)) return false;
+    if (!appendShapedRun(runText, length, *run.script, out)) return false;
     shapedAny = true;
   }
   return shapedAny;
@@ -649,10 +710,19 @@ void ComplexShaper::releaseCache() {
 size_t ComplexShaper::releaseAll() {
   std::lock_guard<std::recursive_mutex> lock(shaperMutex());
   const size_t before = gCurrent;
-  for (ComplexShaper* shaper = gShapers; shaper != nullptr; shaper = shaper->next_) shaper->releaseLocked();
+  releaseEveryFaceLocked();
   releaseCache();
   memoFree();  // later runs in the scope re-shape; nothing reads a freed entry
   return before - gCurrent;
+}
+
+void ComplexShaper::setDocumentLanguage(const char* bcp47) {
+  std::lock_guard<std::recursive_mutex> lock(shaperMutex());
+  const hb_language_t language =
+      bcp47 != nullptr && *bcp47 != '\0' ? hb_language_from_string(bcp47, -1) : HB_LANGUAGE_INVALID;
+  if (language == gLanguage) return;
+  gLanguage = language;
+  forgetAllRuns();
 }
 
 void ComplexShaper::beginMemo() {

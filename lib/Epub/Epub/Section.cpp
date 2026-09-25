@@ -1,5 +1,6 @@
 #include "Section.h"
 
+#include <ComplexShaper.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -57,7 +58,9 @@ namespace {
 // v49: Bengali text is measured as shaped glyphs (HarfBuzz conjuncts, reph, positioned
 //      marks; reordered vowel signs for fonts without shaping data), and TextBlocks store
 //      each complex-script word's drawn form so page turns never shape.
-constexpr uint8_t SECTION_FILE_VERSION = 49;
+// v50: Every Indic script is shaped (Devanagari, Gurmukhi, Gujarati, Oriya, Tamil, Telugu,
+//      Kannada, Malayalam, Sinhala), in the book's language (Marathi and Nepali forms).
+constexpr uint8_t SECTION_FILE_VERSION = 50;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -456,6 +459,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
 
   ctx->parser->setTextSpacing(spec.characterSpacing, spec.wordSpacingPercent);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
+  ComplexShaper::setDocumentLanguage(epub->getLanguage().c_str());
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {

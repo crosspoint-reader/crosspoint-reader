@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 50
+
+Version 50 keeps the version 49 serialized layout unchanged. It was bumped
+because shaping now covers every Indic script (Devanagari, Gurmukhi, Gujarati,
+Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala) and follows the book's
+language, so cached widths and display text from version 49 no longer match.
+
 ### Version 49
 
 Version 49 shapes Bengali text. Fonts with shaping data form conjuncts, reph

@@ -2,12 +2,14 @@
 
 #if CROSSPOINT_VECTOR_FONTS
 
+#include <IndicScripts.h>
 #include <Logging.h>
 #include <MemoryManager.h>
 #include <Utf8.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
+#include <iterator>
 
 #include "ShapingTokens.h"
 
@@ -456,10 +458,13 @@ bool TtfEpdFont::shapeThunk(void* ctx, const char* utf8, std::string* out) {
   TtfEpdFont* owner = f->owner;
   const uint8_t src = f->srcIndex;
   if (owner->shapingCoverage_[src] == 0) {
-    // Only faces that draw the script get a shaper: a Latin face would load
-    // its layout tables just to emit .notdef glyphs.
+    // Only faces that draw a shaped script get a shaper: a Latin face would
+    // load its layout tables just to emit .notdef glyphs.
     if (!f->inited) owner->initFace(*f);
-    owner->shapingCoverage_[src] = f->ready && f->ft.hasGlyph(0x0995) ? 1 : 2;  // BENGALI LETTER KA
+    const bool drawsIndic =
+        f->ready && std::any_of(std::begin(indic::SCRIPTS), std::end(indic::SCRIPTS),
+                                [f](const indic::ScriptInfo& s) { return f->ft.hasGlyph(s.probe); });
+    owner->shapingCoverage_[src] = drawsIndic ? 1 : 2;
   }
   return owner->shapingCoverage_[src] == 1 && owner->shapers_[src].shape(utf8, *out);
 }

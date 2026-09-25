@@ -527,7 +527,7 @@ constexpr char SHAPING_MAGIC[4] = {'C', 'P', 'S', 'H'};
 constexpr uint16_t SHAPING_VERSION = 1;
 // magic(4) version(2) reserved(2) ppem26_6(4) blobLength(4) blobHash(4)
 constexpr uint32_t SHAPING_HEADER_SIZE = 20;
-// A Bengali layout font is 10-40 KB; anything far larger is not one.
+// An Indic layout font is 5-80 KB; anything far larger is not one.
 constexpr uint32_t SHAPING_MAX_BLOB = 256 * 1024;
 }  // namespace
 
