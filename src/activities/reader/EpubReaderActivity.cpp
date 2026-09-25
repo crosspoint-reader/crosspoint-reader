@@ -1152,8 +1152,11 @@ void EpubReaderActivity::renderBook() {
 
   const auto showBuildError = [this]() {
     renderer.clearScreen();
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
     automaticPageTurnActive = false;
+    sectionBuildFailed.store(true);
   };
 
   if (currentSpineIndex < 0) currentSpineIndex = 0;
@@ -1440,6 +1443,7 @@ void EpubReaderActivity::renderBook() {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
+    sectionBuildFailed.store(false);
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
@@ -1535,6 +1539,11 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
                  : section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
   }
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset);
+}
+
+void EpubReaderActivity::onExit() {
+  if (sectionBuildFailed.load()) APP_STATE.openEpubPath.clear();
+  ReaderActivity::onExit();
 }
 
 void EpubReaderActivity::rememberCurrentContentOffset() {

@@ -125,6 +125,9 @@ class EpubReaderActivity final : public ReaderActivity {
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
   static constexpr unsigned long BUILD_POPUP_DEADLINE_MS = 1000;
   bool buildPopupPending = false;
+  // Set by the render task while the current chapter can't be built.
+  // onExit() then forgets the book so waking from sleep lands on Home instead of reopening it.
+  std::atomic<bool> sectionBuildFailed{false};
   void showBuildPopup(GfxRenderer& renderer, int& pagesUntilFullRefresh);
   bool applyDeferredReposition();
   void clearDeferredReposition();
@@ -189,6 +192,7 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string getBookThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }
   void renderBook() override;
   void onEndOfBookRendered() override;
+  void onExit() override;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
