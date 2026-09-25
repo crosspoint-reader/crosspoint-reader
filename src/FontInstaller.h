@@ -28,6 +28,10 @@ class FontInstaller {
   /// "evil/foo.cpfont".
   static bool isValidCpfontFilename(const char* name);
 
+  /// Validate a vector font filename (.ttf/.otf, case-insensitive extension)
+  /// with the same path-traversal and basename rules as isValidCpfontFilename.
+  static bool isValidVectorFontFilename(const char* name);
+
   /// Ensure /<root>/<family>/ exists, where <root> is /.fonts (preferred) or /fonts.
   /// Re-uses the existing root if the family is already installed; otherwise
   /// creates it under SdCardFontRegistry::defaultWriteRoot().
