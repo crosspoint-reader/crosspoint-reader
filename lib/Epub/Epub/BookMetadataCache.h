@@ -77,6 +77,17 @@ class BookMetadataCache {
   std::deque<SpineHrefIndexEntry> spineHrefIndex;
   bool useSpineHrefIndex = false;
 
+  // Index for the filename-only fallback lookup, built on the first TOC href that no
+  // spine href matches exactly (see findSpineIndexByFilename). Well-formed books never
+  // build it, so it costs them nothing.
+  struct SpineFilenameIndexEntry {
+    uint64_t filenameHash;  // FNV-1a 64-bit hash of the href's last path segment
+    uint16_t filenameLen;   // length for collision reduction
+    int16_t spineIndex;
+  };
+  std::deque<SpineFilenameIndexEntry> spineFilenameIndex;
+  bool spineFilenameIndexBuilt = false;
+
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a 64-bit hash function
@@ -88,6 +99,11 @@ class BookMetadataCache {
     }
     return hash;
   }
+
+  // Last path segment of an href ("text/ch1.xhtml" -> "ch1.xhtml").
+  static std::string filenameOf(const std::string& path);
+  // Filename-only spine lookup for TOC hrefs that no spine href matches exactly.
+  int16_t findSpineIndexByFilename(const std::string& href);
 
   uint32_t writeSpineEntry(HalFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(HalFile& file, const TocEntry& entry) const;
