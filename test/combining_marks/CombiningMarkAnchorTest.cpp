@@ -15,6 +15,7 @@ using combiningMark::Anchor;
 using combiningMark::anchorFor;
 using combiningMark::anchorOver;
 using combiningMark::anchorOverRotated90CW;
+using combiningMark::lowerBelowBase;
 using combiningMark::raiseAboveBase;
 
 TEST(AnchorFor, PositionSensitiveNiqqud) {
@@ -70,4 +71,35 @@ TEST(RaiseAboveBase, CentreRaisedBehaviourUnchanged) {
   EXPECT_EQ(raiseAboveBase(Anchor::CenterRaised, 16, 3, 12), 0);
   // Below-baseline mark (kasra, cedilla): stays at font-native position.
   EXPECT_EQ(raiseAboveBase(Anchor::CenterRaised, 2, 4, 12), 0);
+}
+
+// A below-baseline mark (top -3, height 6) lowered clear of a base glyph that
+// descends past it. Font descender -18. Values from a real 16px face.
+TEST(LowerBelowBase, ClearsDescendingBase) {
+  // Base bottom -8, no clamp: lower = -3 - (-8 - 1) = 6.
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterRaised, -3, 6, 12, 20, -18), 6);
+}
+
+TEST(LowerBelowBase, ClampsToLineDescender) {
+  // Deep base (bottom -12): ideal lower 10 puts the mark at -19, clamped to 9.
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterRaised, -3, 6, 22, 34, -18), 9);
+}
+
+TEST(LowerBelowBase, NoLowerWhenBaseDoesNotDescendIntoMark) {
+  // Base sitting on the baseline: mark already clear.
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterRaised, -3, 6, 20, 20, -18), 0);
+}
+
+TEST(LowerBelowBase, NoLowerWithoutBaseGlyph) {
+  // No base glyph (baseHeight 0): a leading mark, or a mark after a zero-height
+  // space. Nothing to clear, so the mark must not be pushed against a phantom
+  // baseline. E.g. a leading U+0318 (combining tack below).
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterRaised, 0, 3, 0, 0, -18), 0);
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterRaised, -3, 6, 0, 0, -18), 0);
+}
+
+TEST(LowerBelowBase, IgnoresAboveBaselineMarksAndNativeAnchors) {
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterRaised, 23, 5, 22, 34, -18), 0);  // above-baseline: raiseAboveBase owns it
+  EXPECT_EQ(lowerBelowBase(Anchor::CenterNative, -3, 6, 22, 34, -18), 0);  // native anchors keep font height
+  EXPECT_EQ(lowerBelowBase(Anchor::RightNative, -3, 6, 22, 34, -18), 0);
 }
