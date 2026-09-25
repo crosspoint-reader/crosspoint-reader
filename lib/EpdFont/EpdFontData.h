@@ -3,6 +3,7 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 /// Font metrics use "fixed-point 4" (4 fractional bits, i.e. 1/16-pixel
 /// resolution).  Both the 12.4 glyph advances (uint16_t) and the 4.4 kern
@@ -255,4 +256,11 @@ typedef struct {
   /// none). Shares glyphMissCtx. nullptr for built-in and SD fonts, whose
   /// kerning is baked into the tables above (all fonts zero-init this).
   int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
+
+  /// Complex-script shaping (ComplexShaper). When non-null, the renderer hands
+  /// it any text containing a complex-script run and draws the ShapingTokens.h
+  /// stream written to `out` instead. Returns false to draw the text unshaped.
+  /// Shares glyphMissCtx. nullptr for fonts without shaping data (all fonts
+  /// zero-init this).
+  bool (*shapeHandler)(void* ctx, const char* utf8, std::string* out);
 } EpdFontData;
