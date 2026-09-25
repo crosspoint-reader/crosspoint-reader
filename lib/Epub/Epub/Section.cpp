@@ -500,8 +500,8 @@ bool Section::hasHtmlCache() const {
 
 std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string& anchor) const {
   if (!build_ || !build_->parser) return std::nullopt;
-  for (const auto& [key, page] : build_->parser->getAnchors()) {
-    if (key == anchor) return page;
+  for (const auto& entry : build_->parser->getAnchors()) {
+    if (anchor.size() == entry.length && memcmp(anchor.data(), entry.id.get(), entry.length) == 0) return entry.page;
   }
   return std::nullopt;
 }
@@ -587,14 +587,15 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   const uint32_t anchorMapOffset = file.position();
   const auto& anchors = build_->parser->getAnchors();
   uint16_t anchorCount = 0;
-  for (const auto& [anchor, page] : anchors) {
-    if (!asPartial || page < builtPageCount_) anchorCount++;
+  for (const auto& anchor : anchors) {
+    if (!asPartial || anchor.page < builtPageCount_) anchorCount++;
   }
   serialization::writePod(file, anchorCount);
-  for (const auto& [anchor, page] : anchors) {
-    if (asPartial && page >= builtPageCount_) continue;
-    serialization::writeString(file, anchor);
-    serialization::writePod(file, page);
+  for (const auto& anchor : anchors) {
+    if (asPartial && anchor.page >= builtPageCount_) continue;
+    serialization::writePod(file, anchor.length);
+    file.write(reinterpret_cast<const uint8_t*>(anchor.id.get()), anchor.length);
+    serialization::writePod(file, anchor.page);
   }
 
   const uint32_t paragraphLutOffset = file.position();

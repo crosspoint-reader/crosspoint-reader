@@ -295,7 +295,28 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   }
 }
 
+bool ChapterHtmlSlimParser::appendAnchor(const char* id, const uint16_t page) {
+  if (layoutFailed) return false;
+  const size_t length = strlen(id);
+  auto ownedId = makeUniqueNoThrow<char[]>(length + 1);
+  if (!ownedId) {
+    failLayout();
+    return false;
+  }
+  memcpy(ownedId.get(), id, length + 1);
+  AnchorRecord record;
+  record.id = std::move(ownedId);
+  record.length = static_cast<uint32_t>(length);
+  record.page = page;
+  if (!anchorData.push_back(std::move(record))) {
+    failLayout();
+    return false;
+  }
+  return true;
+}
+
 void ChapterHtmlSlimParser::flushPendingAnchor(const char* storedAnchor) {
+  if (layoutFailed) return;
   const char* anchor = storedAnchor ? storedAnchor : pendingAnchorId.c_str();
   if (*anchor == '\0') return;
 
@@ -311,13 +332,8 @@ void ChapterHtmlSlimParser::flushPendingAnchor(const char* storedAnchor) {
   }
 
   // Record deferred anchor after previous block is flushed (and any TOC page break)
-  if (storedAnchor) {
-    // The final anchor map owns the ID after the bounded row storage is reused.
-    anchorData.emplace_back(storedAnchor, static_cast<uint16_t>(completedPageCount));
-  } else {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
-  }
+  if (!appendAnchor(anchor, static_cast<uint16_t>(completedPageCount))) return;
+  if (!storedAnchor) pendingAnchorId.clear();
 }
 
 void ChapterHtmlSlimParser::collectPendingTableAnchor() {
@@ -600,7 +616,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
   if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+    if (!appendAnchor(pendingAnchorId.c_str(), static_cast<uint16_t>(completedPageCount))) return;
     pendingAnchorId.clear();
   }
 }
@@ -2486,7 +2502,7 @@ bool ChapterHtmlSlimParser::finishParse() {
       return false;
     }
     if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+      if (!appendAnchor(pendingAnchorId.c_str(), static_cast<uint16_t>(completedPageCount))) return false;
       pendingAnchorId.clear();
     }
     setCurrentPageVisibleOffset(visibleTextOffset);

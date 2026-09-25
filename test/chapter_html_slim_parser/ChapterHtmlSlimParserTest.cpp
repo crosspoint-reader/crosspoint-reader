@@ -296,7 +296,7 @@ TEST_F(ChapterHtmlSlimParserTest, PreservesCurrentAnchorWhenFlushingStoredCellAn
   parser.flushTableRowAnchorsForCell(0);
 
   ASSERT_EQ(parser.anchorData.size(), 1u);
-  EXPECT_EQ(parser.anchorData.front().first, "stored-anchor");
+  EXPECT_STREQ(parser.anchorData[0].id.get(), "stored-anchor");
   EXPECT_EQ(parser.pendingAnchorId, currentAnchor);
   EXPECT_EQ(parser.pendingAnchorId.data(), pendingStorage);
 }
@@ -320,6 +320,76 @@ TEST_F(ChapterHtmlSlimParserTest, ReclaimsFlushedTableAnchorStorageBeforeCollect
   EXPECT_TRUE(parser.pendingAnchorId.empty());
 }
 
+TEST_F(ChapterHtmlSlimParserTest, OwnsAnchorIdsLongerThanRowStorage) {
+  std::string id(ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES + 40, 'a');
+  parser.completedPageCount = 7;
+  parser.flushPendingAnchor(id.c_str());
+  parser.pendingAnchorId = id;
+  parser.flushPendingAnchor();
+  id[0] = 'b';
+
+  ASSERT_EQ(parser.getAnchors().size(), 2u);
+  for (const auto& anchor : parser.getAnchors()) {
+    EXPECT_EQ(anchor.length, id.size());
+    EXPECT_EQ(anchor.id[0], 'a');
+    EXPECT_EQ(anchor.id[anchor.length], '\0');
+    EXPECT_EQ(anchor.page, 7u);
+  }
+  EXPECT_TRUE(parser.pendingAnchorId.empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionWhenStoredAnchorCopyFails) {
+  const std::string id(80, 'a');
+  failNextArrayAllocation = true;
+  parser.flushPendingAnchor(id.c_str());
+
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_TRUE(parser.getAnchors().empty());
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionWhenAnchorSlotsCannotGrow) {
+  for (int i = 0; i < 4; ++i) {
+    ASSERT_TRUE(parser.appendAnchor("kept", static_cast<uint16_t>(i)));
+  }
+  ASSERT_EQ(parser.anchorData.size(), parser.anchorData.capacity());
+  parser.pendingAnchorId.assign(80, 'a');
+  failNextArrayAllocation = true;
+  arrayAllocationsToSkip = 1;  // The ID copy succeeds; slot growth fails.
+  parser.flushPendingAnchor();
+
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_EQ(parser.pendingAnchorId.size(), 80u);
+  ASSERT_EQ(parser.getAnchors().size(), 4u);
+  for (const auto& anchor : parser.getAnchors()) EXPECT_STREQ(anchor.id.get(), "kept");
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionWhenHorizontalRuleAnchorCopyFails) {
+  parser.currentPage = std::make_unique<Page>();
+  ASSERT_TRUE(parser.currentPage->elements.reserve(4));
+  parser.pendingAnchorId.assign(80, 'a');
+  failNextArrayAllocation = true;
+  parser.emitHorizontalRule(BlockStyle{});
+
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_EQ(parser.pendingAnchorId.size(), 80u);
+  EXPECT_TRUE(parser.getAnchors().empty());
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionWhenFinalAnchorCopyFails) {
+  parser.pendingAnchorId.assign(80, 'a');
+  bool emitted = false;
+  parser.completePageFn = [&](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) { emitted = true; };
+  failNextArrayAllocation = true;
+
+  EXPECT_FALSE(parser.finishParse());
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(emitted);
+  EXPECT_TRUE(parser.getAnchors().empty());
+}
+
 TEST_F(ChapterHtmlSlimParserTest, KeepsAnchorsAcrossRepeatedStackedStorageOverflow) {
   parser.tableRowStacked = true;
   parser.insideTableCell = true;
@@ -332,7 +402,7 @@ TEST_F(ChapterHtmlSlimParserTest, KeepsAnchorsAcrossRepeatedStackedStorageOverfl
   parser.flushTableRowAnchors();
   ASSERT_EQ(parser.anchorData.size(), 80u);
   std::set<std::string> ids;
-  for (const auto& anchor : parser.anchorData) ids.insert(anchor.first);
+  for (const auto& anchor : parser.anchorData) ids.insert(anchor.id.get());
   EXPECT_EQ(ids.size(), 80u);
 }
 
@@ -352,7 +422,7 @@ TEST_F(ChapterHtmlSlimParserTest, OversizedTocAnchorKeepsBufferedAliasesAfterPag
   parser.flushTableRowAnchors();
   EXPECT_EQ(completed, 1u);
   ASSERT_EQ(parser.anchorData.size(), 2u);
-  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.page, 1u);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, OverflowingAliasFollowsBufferedTocPageBreak) {
@@ -369,7 +439,7 @@ TEST_F(ChapterHtmlSlimParserTest, OverflowingAliasFollowsBufferedTocPageBreak) {
   parser.collectPendingTableAnchor();
   parser.flushTableRowAnchors();
   ASSERT_EQ(parser.anchorData.size(), 2u);
-  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.page, 1u);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitEmptyPageForOversizedLine) {
@@ -405,7 +475,7 @@ TEST_F(ChapterHtmlSlimParserTest, MapsCellAliasesAfterItsTocPageBreak) {
   parser.pendingAnchorId = "next-cell";
   parser.flushPendingTableCellAnchors();
   ASSERT_EQ(parser.anchorData.size(), 2u);
-  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.page, 1u);
   EXPECT_EQ(parser.pendingAnchorId, "next-cell");
 }
 
@@ -426,7 +496,7 @@ TEST_F(ChapterHtmlSlimParserTest, MapsNormalTableAnchorAfterLaterTocAnchor) {
   parser.finishTableRow();
 
   ASSERT_EQ(parser.anchorData.size(), 2u);
-  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.page, 1u);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, FailsLayoutWhenHorizontalRulePageAllocationFails) {
