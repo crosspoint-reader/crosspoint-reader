@@ -59,10 +59,8 @@ INTERVAL_PRESETS = {
     "hangul":      [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)],
     "cherokee":    [(0x13A0, 0x13FF), (0xAB70, 0xABBF)],
     "tifinagh":    [(0x2D30, 0x2D7F)],
-    # Bengali letters, signs and digits plus the dandas and joiners Bengali
-    # text uses. Fonts with GSUB also get a shaping section (conjuncts, reph,
-    # positioned marks) — see shaping_blob.py.
-    "bengali":     [(0x0964, 0x0965), (0x0980, 0x09FF), (0x200C, 0x200D), (0x25CC, 0x25CC)],
+    # One preset per Indic script (devanagari, bengali, ..., sinhala; see
+    # shaping_blob.SCRIPTS) is added below.
     # Symbol blocks commonly seen in scifi/popsci/literary fiction.
 
     "symbols":     [(0x2070, 0x209F), (0x20A0, 0x20CF), (0x2150, 0x218F),
@@ -86,6 +84,14 @@ INTERVAL_PRESETS = {
                     (0x2070, 0x209F), (0x2190, 0x21FF), (0x2200, 0x22FF),
                     (0xFB00, 0xFB06)],
 }
+
+# Indic script presets: the script's block plus the dandas and joiners its text
+# uses. Fonts with GSUB also get a shaping section (conjuncts, reph,
+# positioned marks) — see shaping_blob.py.
+INTERVAL_PRESETS.update({
+    name: [(script.first, script.first + 0x7F), *shaping_blob.SHARED_INTERVALS]
+    for name, script in shaping_blob.SCRIPTS.items()
+})
 
 # Regex for parsing unnamed hex range intervals: (0xSTART-0xEND)
 _HEX_RANGE_PATTERN = re.compile(r'^\(0x([0-9a-fA-F]+)-0x([0-9a-fA-F]+)\)$')
@@ -650,18 +656,17 @@ def _pack_loaded_glyph(slot, data_offset, code_point):
     return glyph, packed
 
 
-def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset):
-    """Rasterize every glyph a complex-script shaper can emit for this font.
+def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts):
+    """Rasterize every glyph a complex-script shaper can emit for this font
+    when shaping the named scripts.
 
     Returns (glyph entries for codepoints GLYPH_TOKEN_BASE + glyph ID, glyph
-    count, packed shaping section), or None when the font cannot shape Bengali.
+    count, packed shaping section).
     """
     import freetype
     import tempfile
 
-    if not shaping_blob.font_supports_script(fontfile, "bengali"):
-        return None
-    render_bytes, layout_bytes, glyph_count = shaping_blob.build(fontfile)
+    render_bytes, layout_bytes, glyph_count = shaping_blob.build(fontfile, scripts)
     with tempfile.NamedTemporaryFile(suffix=".ttf", delete=False) as tmp:
         tmp.write(render_bytes)
     try:
@@ -759,18 +764,24 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
 
     # Complex-script shaping: glyphs by glyph ID plus the layout tables.
     shaping_section = b""
-    if shaping and any(start <= 0x0995 <= end for start, end in intervals):
-        shaped = rasterize_shaping_glyphs(fontfile, size, load_flags, total_bitmap_size)
-        if shaped is None:
-            print(f"  [{style_label}] Shaping: font has no Bengali GSUB, skipped", file=sys.stderr)
-        else:
-            shaped_glyphs, shaped_count, shaping_section = shaped
-            all_glyphs.extend(shaped_glyphs)
-            total_bitmap_size += sum(len(packed) for _, packed in shaped_glyphs)
-            base = shaping_blob.GLYPH_TOKEN_BASE
-            intervals = intervals + [(base, base + shaped_count - 1)]
-            print(f"  [{style_label}] Shaping: {shaped_count} glyphs, "
-                  f"{len(shaping_section)} bytes of layout tables", file=sys.stderr)
+    requested = shaping_blob.scripts_in_intervals(intervals) if shaping else []
+    scripts = [name for name in requested if shaping_blob.font_supports_script(fontfile, name)]
+    if len(scripts) < len(requested):
+        unsupported = ", ".join(name for name in requested if name not in scripts)
+        print(f"  [{style_label}] Shaping: font has no GSUB for {unsupported}, skipped", file=sys.stderr)
+    if scripts:
+        shaped_glyphs, shaped_count, shaping_section = rasterize_shaping_glyphs(
+            fontfile, size, load_flags, total_bitmap_size, scripts)
+        all_glyphs.extend(shaped_glyphs)
+        total_bitmap_size += sum(len(packed) for _, packed in shaped_glyphs)
+        base = shaping_blob.GLYPH_TOKEN_BASE
+        intervals = intervals + [(base, base + shaped_count - 1)]
+        layout_bytes = len(shaping_section) - shaping_blob.SECTION_HEADER_SIZE
+        print(f"  [{style_label}] Shaping {', '.join(scripts)}: {shaped_count} glyphs, "
+              f"{layout_bytes} bytes of layout tables", file=sys.stderr)
+        if layout_bytes > shaping_blob.FLASH_SLOT_BYTES:
+            print(f"  [{style_label}] Warning: layout tables exceed {shaping_blob.FLASH_SLOT_BYTES} bytes; "
+                  f"boards without PSRAM (X3/X4) keep them in RAM and may not shape", file=sys.stderr)
 
     # Get font metrics from pipe character (same heuristic as fontconvert.py)
     load_glyph(ord('|'))
@@ -1023,7 +1034,7 @@ def main():
     parser.add_argument("--list-presets", action="store_true",
                         help="List available interval presets and exit.")
     parser.add_argument("--no-shaping", dest="shaping", action="store_false",
-                        help="Skip the complex-script shaping section even when the intervals include Bengali.")
+                        help="Skip the complex-script shaping section even when the intervals include an Indic script.")
 
     # Multi-style mode: per-style font file arguments (generates v4 .cpfont)
     parser.add_argument("--regular", dest="font_regular",

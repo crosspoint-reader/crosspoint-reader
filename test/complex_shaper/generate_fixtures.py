@@ -53,7 +53,7 @@ WORDS = [
 
 def main():
     font_path = sys.argv[1]
-    _, layout, _ = shaping_blob.build(font_path)
+    _, layout, _ = shaping_blob.build(font_path, ["bengali"])
     (HERE / "data" / "NotoSansBengali-Regular.layout").write_bytes(layout)
 
     font = hb.Font(hb.Face(layout))
