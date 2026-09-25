@@ -203,6 +203,17 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  // Short power-button press turns the page here too, matching the reader
+  // (ReaderUtils::detectPageTurn) when the setting is Page Turn.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    if (currentPage + 1 < totalPages) {
+      currentPage++;
+      requestUpdate();
+    }
+    return;
+  }
+
   // Same tap zones as the reader page turns: left third = previous page,
   // the rest = next. Back is the usual left-edge swipe.
   int tx = 0;
