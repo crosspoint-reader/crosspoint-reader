@@ -501,11 +501,12 @@ bool Section::buildSomeMore(const int maxPages) {
     }
     if (build_->lutExhausted) {
       // The page index could not grow (see onPageComplete). Persist what is indexed as
-      // a partial and report success: the reader keeps the pages it has, and the next
-      // attempt resumes from the watermark rather than losing the chapter.
+      // a partial: the reader keeps the pages it has, and the next attempt resumes from
+      // the watermark rather than losing the chapter. Failure only if nothing readable
+      // survived (the partial commit failed and no earlier partial exists).
       LOG_ERR("SCT", "Stopping build at %u pages: page index exhausted", builtPageCount_);
       suspendBuild();
-      return true;
+      return pageCount > 0;
     }
     // ParseStatus::More: yield once we've laid out the requested number of pages.
     if (maxPages > 0 && (builtPageCount_ - startCount) >= maxPages) {
@@ -692,7 +693,7 @@ bool Section::finalizeBuild() {
     // mid-parse, rather than a "complete" section that quietly lost content.
     LOG_ERR("SCT", "Page index exhausted on the final page: persisting %u pages as a partial", builtPageCount_);
     suspendBuild();
-    return true;
+    return pageCount > 0;
   }
 
   if (!build_->reusedHtml) {
