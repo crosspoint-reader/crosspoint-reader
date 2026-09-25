@@ -314,6 +314,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
   - "KOSync" - Hold Confirm (~1 second) to launch KOReader sync directly.
   - "Dictionary" - Hold Confirm (~0.4 second) to start dictionary word selection on the current page (see [docs/dictionary.md](docs/dictionary.md)).
+  - "File Transfer" - Hold Confirm (~0.4 second) to open the File Transfer screen directly, skipping the trip back to the Home menu.
   - "Disabled" - Long-press is ignored; only short-press opens the reader menu.
 
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
