@@ -2249,11 +2249,14 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 bool GfxRenderer::shapeForDisplay(const int fontId, const char* text, const EpdFontFamily::Style style,
                                   std::string& out) const {
   if (!ComplexShaper::containsComplexScript(text)) return false;
-  const int resolvedFontId = resolveTextFontId(fontId, text, style);
-  std::string buffer;
-  const char* display = resolveComplexText(text, buffer, fontDataFor(fontMap, resolvedFontId, style));
-  if (display == text) return false;
-  out.swap(buffer);
+  // Shaper output only: the unshaped fallback reorders vowel signs, and
+  // drawText would reorder an already reordered string a second time.
+  const EpdFontData* font = fontDataFor(fontMap, resolveTextFontId(fontId, text, style), style);
+  std::string shaped;
+  if (font == nullptr || font->shapeHandler == nullptr || !font->shapeHandler(font->glyphMissCtx, text, &shaped)) {
+    return false;
+  }
+  out.swap(shaped);
   return true;
 }
 

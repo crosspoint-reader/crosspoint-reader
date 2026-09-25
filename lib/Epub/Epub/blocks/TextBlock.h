@@ -33,7 +33,7 @@
 // Each word is stored NUL-terminated so render() can hand `text + textOff[i]`
 // straight to C APIs (drawText) with no std::string materialization.
 //
-// Display text: complex-script words (Bengali) are stored a second time in
+// Display text: shaped complex-script words are stored a second time in
 // the form drawText renders them, as shaped glyph tokens (see
 // GfxRenderer::shapeForDisplay), so a page turn draws them without running the
 // shaper. wordText() stays the logical text for dictionary lookup and text

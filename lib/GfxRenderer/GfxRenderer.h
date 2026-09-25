@@ -344,12 +344,12 @@ class GfxRenderer {
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
 
-  // The form drawText renders `text` in: complex-script runs shaped into glyph
-  // tokens (ShapingTokens.h), or reordered when the font cannot shape. Returns
-  // false, leaving `out` untouched, when the text draws as is. The result is
-  // tied to this font and style; drawText and getTextAdvanceX take it like
-  // any other string, without shaping it again. Layout stores it in the page
-  // cache so page turns never shape.
+  // The shaped form drawText renders `text` in: complex-script runs as glyph
+  // tokens (ShapingTokens.h). Returns false, leaving `out` untouched, when
+  // the font cannot shape `text`; drawText then reorders the logical text
+  // itself. The result is tied to this font and style; drawText and
+  // getTextAdvanceX take it like any other string, without shaping it again.
+  // Layout stores it in the page cache so page turns never shape.
   bool shapeForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
 
   // While one of these is alive, repeated runs shape once (see
