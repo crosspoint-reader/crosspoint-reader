@@ -21,6 +21,7 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## Portuguese (Brazil)
 - [yagofarias](https://github.com/yagofarias)
+- [Rodrigo-Matsuura](https://github.com/Rodrigo-Matsuura)
 
 ## Portuguese (Portugal)
 - [victordomingos](https://github.com/victordomingos)
