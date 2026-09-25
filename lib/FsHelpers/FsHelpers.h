@@ -64,6 +64,13 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+// Check for .txt or .md extension (case-insensitive): the plain-text book formats that
+// share TxtReaderActivity and the same on-disk cache layout (see Txt::getCachePath()).
+bool hasPlainTextBookExtension(std::string_view fileName);
+inline bool hasPlainTextBookExtension(const String& fileName) {
+  return hasPlainTextBookExtension(std::string_view{fileName.c_str(), fileName.length()});
+}
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {
