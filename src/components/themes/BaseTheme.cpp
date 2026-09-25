@@ -412,7 +412,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // the FUI header's leading slot (applyHeaderStatus set the size/offset) so
   // the recorded rect matches the drawn button.
   const int16_t backBtnSize = props.leadingSize;
-  const bool showBackButton = backButton && title != nullptr && !props.status.batteryLeft && gpio.hasTouch();
+  const bool showBackButton = backButton && title != nullptr && gpio.hasTouch();
   if (showBackButton) {
     props.leadingIcon = fui::bitmapFromIcon(icon_header_back_32);
     props.leadingAction = 1;  // any non-NO_ACTION id: paints the button, routing is via HeaderBackTapTarget
