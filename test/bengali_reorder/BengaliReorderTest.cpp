@@ -94,3 +94,15 @@ TEST(BengaliReorder, PreservesSurroundingText) {
   // A vowel sign with no consonant before it is left in place.
   EXPECT_EQ(reorder(cps({I, ' ', KA, I})), cps({I, ' ', I, KA}));
 }
+
+TEST(BengaliLineBreaks, NeverSplitASyllable) {
+  EXPECT_FALSE(utf8SyllableBreakAllowed(KA, I));            // before a vowel sign
+  EXPECT_FALSE(utf8SyllableBreakAllowed(KA, HALANT));       // before a hasant
+  EXPECT_FALSE(utf8SyllableBreakAllowed(HALANT, SSA));      // inside a conjunct
+  EXPECT_FALSE(utf8SyllableBreakAllowed(KA, CANDRABINDU));  // before a mark
+  EXPECT_FALSE(utf8SyllableBreakAllowed(YA, NUKTA));
+  EXPECT_FALSE(utf8SyllableBreakAllowed(HALANT, ZWNJ));  // before a joiner
+  EXPECT_TRUE(utf8SyllableBreakAllowed(I, KA));          // between syllables
+  EXPECT_TRUE(utf8SyllableBreakAllowed(ZWNJ, SSA));      // after an explicit hasant
+  EXPECT_TRUE(utf8SyllableBreakAllowed('a', 'b'));
+}
