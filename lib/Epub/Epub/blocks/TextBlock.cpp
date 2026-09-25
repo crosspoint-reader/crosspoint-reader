@@ -257,15 +257,14 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   const int rubyShift = getRubyShift(ascender);
 
   for (uint16_t i = 0; i < numWords; i++) {
-    // Focus splits only occur on words without a display form (ParsedText
-    // never splits a complex-script word), so the byte boundary below always
-    // indexes the logical text it was computed on.
-    const char* word = displayText(i);
+    // A focus boundary indexes the logical text. ParsedText never splits a
+    // word that has a display form, but a corrupt cache could pair them.
+    const uint8_t boundary = focusBoundary(i);
+    const char* word = boundary > 0 ? wordText(i) : displayText(i);
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
     const auto baseDir =
         static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(wordText(i), blockStyle.isRtl ? 1 : 0));
-    const uint8_t boundary = focusBoundary(i);
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
     // drawText, so these offsets are chosen relative to the full-size ascender:

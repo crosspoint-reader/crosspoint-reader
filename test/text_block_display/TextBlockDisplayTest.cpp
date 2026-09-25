@@ -1,3 +1,4 @@
+#include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -98,4 +99,17 @@ TEST(TextBlockDisplay, ComplexScriptLineWithNothingToRedrawRoundTrips) {
   ASSERT_NE(restored, nullptr) << "a line with no display forms must not store an empty display region";
   EXPECT_STREQ(restored->displayText(0), words[0].c_str());
   EXPECT_STREQ(restored->displayText(1), words[1].c_str());
+}
+
+TEST(TextBlockDisplay, FocusSplitWordsDrawTheirLogicalText) {
+  // A corrupt cache can pair a focus boundary with a display form shorter than
+  // the boundary; the split must still index the logical text.
+  const std::vector<std::string> words = {"abcdef"};
+  TextBlock block(words, {0}, {EpdFontFamily::REGULAR}, {3}, {24}, BlockStyle(), {}, {}, {"x"});
+  ASSERT_TRUE(block.valid());
+  GfxRenderer renderer;
+  block.render(renderer, 0, 0, 0);
+  ASSERT_EQ(renderer.drawnTexts.size(), 2u);
+  EXPECT_EQ(renderer.drawnTexts[0], "abc");
+  EXPECT_EQ(renderer.drawnTexts[1], "def");
 }
