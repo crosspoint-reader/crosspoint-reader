@@ -136,6 +136,10 @@ class Page {
     });
   }
 
+  // Decode one still-uncached image straight to its .pxc cache (no framebuffer
+  // writes), so idle prefetch stays chunked. True when a decode succeeded.
+  bool prefetchOneImage(GfxRenderer& renderer, int xOffset, int yOffset) const;
+
   // Get bounding box of all images on the page (union of image rects)
   // Returns false if no images. Coordinates are relative to page origin.
   bool getImageBoundingBox(int16_t& outX, int16_t& outY, int16_t& outW, int16_t& outH) const {

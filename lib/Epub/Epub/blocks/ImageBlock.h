@@ -18,6 +18,12 @@ class ImageBlock final : public Block {
   bool imageExists() const;
   bool hasValidCache() const;
   bool needsDecode() const;
+
+  // Idle prefetch: decode straight to the .pxc cache without touching the
+  // framebuffer, at the position the real render will use so the cache matches
+  // a decode at view time. False asks the caller to stop retrying this page;
+  // the real render then retries with placeholder fallback.
+  bool prefetch(GfxRenderer& renderer, int x, int y) const;
   void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;
   static void clearRenderFailures();
 
@@ -48,6 +54,12 @@ class ImageBlock final : public Block {
   std::string srcPath;  // book-internal source href; empty once known-extracted
   int16_t width;
   int16_t height;
+
+  bool positionOnScreen(GfxRenderer& renderer, int x, int y) const;
+  // Lazy-extract from the book, validate, and decode to the framebuffer and
+  // the .pxc cache; shared by render() and prefetch(). cacheOnly suppresses
+  // framebuffer writes for the idle path.
+  bool decodeImage(GfxRenderer& renderer, int x, int y, const std::string& cachePath, bool cacheOnly) const;
 
   static void* extractCtx;
   static ExtractFn extractFn;
