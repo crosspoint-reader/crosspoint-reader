@@ -21,35 +21,39 @@
 class DictionaryWordSelectActivity final : public Activity {
  public:
   // Owns `page` for this activity's lifetime (reader flow: a Page loaded
-  // just for word selection, discarded afterward).
+  // just for word selection, discarded afterward). page(page.get()) reads
+  // the parameter before ownedPage(std::move(page)) moves out of it --safe
+  // because mem-initializers run in declaration order (page is declared
+  // before ownedPage below), not the listed order here. A delegating
+  // constructor computing both from a single `page.get()`/`std::move(page)`
+  // call would instead rely on unspecified function-argument evaluation
+  // order and could read a null pointer.
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, std::string dictionaryFolder, int marginLeft,
                                         int marginTop)
-      : DictionaryWordSelectActivity(renderer, mappedInput, page.get(), std::move(page), std::move(dictionaryFolder),
-                                     marginLeft, marginTop) {}
+      : Activity("DictionaryWordSelect", renderer, mappedInput),
+        page(page.get()),
+        ownedPage(std::move(page)),
+        dictionaryFolder(std::move(dictionaryFolder)),
+        marginLeft(marginLeft),
+        marginTop(marginTop) {}
 
   // Borrows `page`: the caller keeps ownership and must keep it alive and
   // unchanged until this activity finishes (definition-view flow).
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Page* page,
                                         std::string dictionaryFolder, int marginLeft, int marginTop)
-      : DictionaryWordSelectActivity(renderer, mappedInput, page, nullptr, std::move(dictionaryFolder), marginLeft,
-                                     marginTop) {}
+      : Activity("DictionaryWordSelect", renderer, mappedInput),
+        page(page),
+        ownedPage(nullptr),
+        dictionaryFolder(std::move(dictionaryFolder)),
+        marginLeft(marginLeft),
+        marginTop(marginTop) {}
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
-  DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Page* page,
-                               std::unique_ptr<Page> ownedPage, std::string dictionaryFolder, int marginLeft,
-                               int marginTop)
-      : Activity("DictionaryWordSelect", renderer, mappedInput),
-        page(page),
-        ownedPage(std::move(ownedPage)),
-        dictionaryFolder(std::move(dictionaryFolder)),
-        marginLeft(marginLeft),
-        marginTop(marginTop) {}
-
   // Screen box of one selectable word. `text` points into the Page's
   // TextBlock arena (NUL-terminated), valid for this activity's lifetime.
   struct WordBox {

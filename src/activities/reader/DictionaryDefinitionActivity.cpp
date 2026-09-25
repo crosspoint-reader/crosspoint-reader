@@ -228,6 +228,13 @@ void DictionaryDefinitionActivity::openWordSelect() {
                                                                         dictionaryFolder, origin.x, origin.y),
                          [this](const ActivityResult& result) {
                            if (const auto* lookup = std::get_if<DictionaryLookupResult>(&result.data)) {
+                             // The callback runs without the render task's
+                             // lock held (ActivityManager releases it before
+                             // invoking result handlers); showDefinition()
+                             // mutates several members render() reads
+                             // (pages, lines, headword...), so take it here
+                             // for the duration of that update.
+                             RenderLock lock(*this);
                              showDefinition(lookup->headword, lookup->definition, lookup->isHtml);
                            }
                            requestUpdate(true);
