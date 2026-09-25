@@ -90,23 +90,18 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 50
-
-Version 50 keeps the version 49 serialized layout unchanged. It was bumped
-because shaping now covers every Indic script (Devanagari, Gurmukhi, Gujarati,
-Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala) and follows the book's
-language, so cached widths and display text from version 49 no longer match.
-
 ### Version 49
 
-Version 49 shapes Bengali text. Fonts with shaping data form conjuncts, reph
-and positioned marks through HarfBuzz, and other fonts reorder pre-base vowel
-signs; both change word widths, so cached word positions from version 48 no
-longer match. TextBlock's former `hasFocus` byte became a flags byte: bit 1
-adds a `displayBytes` count, a `displayOff[]` table and a `display[]` blob that
-hold each complex-script word in its drawn form (ShapingTokens.h glyph,
-advance and offset tokens), so page renders draw shaped words without running
-the shaper. Words without a display entry draw `text[]` as before.
+Version 49 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
+shaping data form conjuncts, reph and positioned marks through HarfBuzz, and
+other fonts reorder pre-base vowel signs; both change word widths, so cached
+word positions from version 48 no longer match. TextBlock's former `hasFocus`
+byte became a flags byte: bit 1 adds a `displayBytes` count, a `displayOff[]`
+table and a `display[]` blob that hold each complex-script word in its drawn
+form (ShapingTokens.h glyph, advance and offset tokens), so page renders draw
+shaped words without running the shaper. Words without a display entry draw
+`text[]` as before.
 
 ### Version 48
 
