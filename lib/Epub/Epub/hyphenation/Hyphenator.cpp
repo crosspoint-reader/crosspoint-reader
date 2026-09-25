@@ -1,5 +1,6 @@
 #include "Hyphenator.h"
 
+#include <IndicScripts.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -247,7 +248,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
     for (size_t idx = minPrefix; idx + minSuffix <= cps.size(); ++idx) {
       // Never inside a shaped syllable: each half would shape on its own.
-      if (idx > 0 && !utf8SyllableBreakAllowed(cps[idx - 1].value, cps[idx].value)) continue;
+      if (idx > 0 && !indic::syllableBreakAllowed(cps[idx - 1].value, cps[idx].value)) continue;
       indexes.push_back(idx);
     }
   }

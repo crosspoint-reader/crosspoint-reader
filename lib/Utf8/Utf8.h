@@ -96,16 +96,6 @@ inline bool utf8IsCjkCodepoint(const uint32_t cp) {
          || (cp >= 0x30000 && cp <= 0x323AF);  // CJK Extensions G-H
 }
 
-// False when a line break between `prev` and `cur` would split a Bengali
-// syllable: before a vowel sign, mark or joiner, or after a hasant or ZWJ
-// (which bind the next consonant into a conjunct). Everything else may break.
-inline bool utf8SyllableBreakAllowed(const uint32_t prev, const uint32_t cur) {
-  const bool curIsSign = (cur >= 0x0981 && cur <= 0x0983) || cur == 0x09BC || (cur >= 0x09BE && cur <= 0x09CD) ||
-                         cur == 0x09D7 || cur == 0x09E2 || cur == 0x09E3 || cur == 0x09FE || cur == 0x200C ||
-                         cur == 0x200D;
-  return !curIsSign && prev != 0x09CD && prev != 0x200D;
-}
-
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.
 inline bool utf8IsCombiningMark(const uint32_t cp) {
   return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks

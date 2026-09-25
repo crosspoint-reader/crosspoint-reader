@@ -1,12 +1,12 @@
 #include "GfxRenderer.h"
 
-#include <BengaliReorder.h>
 #include <BidiUtils.h>
 #include <BoardConfig.h>
 #include <BuildScratch.h>
 #include <ComplexShaper.h>
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
+#include <IndicReorder.h>
 #include <Logging.h>
 #include <MemoryManager.h>
 #include <SdCardFont.h>
@@ -870,13 +870,13 @@ const char* resolveBidiText(const char* text, std::string& visualBuffer, const B
 // same bidi-reordered, Arabic-shaped codepoints and, for complex scripts, the
 // same shaped glyph tokens. `shapingFont` is the resolved font the stream will
 // be drawn with: glyph tokens are only meaningful to the font that made them.
-// Fonts that cannot shape fall back to reordering Bengali vowel signs.
+// Fonts that cannot shape fall back to reordering Indic vowel signs.
 const char* resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontData* shapingFont) {
   if (!ComplexShaper::containsComplexScript(text)) return text;
   std::string rewritten;
   const bool shaped = shapingFont != nullptr && shapingFont->shapeHandler != nullptr &&
                       shapingFont->shapeHandler(shapingFont->glyphMissCtx, text, &rewritten);
-  if (!shaped && !bengaliReorderForDisplay(text, rewritten)) return text;
+  if (!shaped && !indicReorderForDisplay(text, rewritten)) return text;
   visualBuffer.swap(rewritten);
   return visualBuffer.c_str();
 }
