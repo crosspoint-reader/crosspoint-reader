@@ -55,7 +55,7 @@ FIXTURES = [
     ]),
     ("devanagari", "Deva", [
         "हिन्दी",           # i-matra before a n-da conjunct
-        "क्षत्रिय",          # k-ssa, t-ra, i-matra
+        "पत्रिका",          # t-ra with the i-matra before the conjunct
         "श्री",            # sh-ra with ii-matra
         "प्रार्थना",         # ra below, reph
         "कृष्ण",           # vocalic r, ss-nna

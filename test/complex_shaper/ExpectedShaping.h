@@ -121,7 +121,8 @@ constexpr ExpectedShaping kBengaliShaping[] = {
 
 constexpr ExpectedGlyph kDevanagariGlyphs0[] = {
     {446, 138, 0, 0}, {84, 283, 0, 0}, {150, 165, 0, 0}, {69, 283, 0, 0}, {29, 138, 0, 0}};
-constexpr ExpectedGlyph kDevanagariGlyphs1[] = {{86, 382, 0, 0}, {447, 138, 0, 0}, {209, 294, 0, 0}, {77, 309, 0, 0}};
+constexpr ExpectedGlyph kDevanagariGlyphs1[] = {
+    {72, 303, 0, 0}, {447, 138, 0, 0}, {209, 294, 0, 0}, {52, 410, 0, 0}, {27, 138, 0, 0}};
 constexpr ExpectedGlyph kDevanagariGlyphs2[] = {{222, 378, 0, 0}, {29, 138, 0, 0}};
 constexpr ExpectedGlyph kDevanagariGlyphs3[] = {{214, 304, 0, 0}, {27, 138, 0, 0}, {68, 341, 0, 0},
                                                 {408, 0, 0, 0},   {71, 296, 0, 0}, {27, 138, 0, 0}};
@@ -141,8 +142,8 @@ constexpr ExpectedGlyph kDevanagariGlyphs15[] = {{118, 277, 0, 0}, {120, 277, 0,
 
 constexpr ExpectedShaping kDevanagariShaping[] = {
     {"\xE0\xA4\xB9\xE0\xA4\xBF\xE0\xA4\xA8\xE0\xA5\x8D\xE0\xA4\xA6\xE0\xA5\x80", "", kDevanagariGlyphs0, 5},  // हिन्दी
-    {"\xE0\xA4\x95\xE0\xA5\x8D\xE0\xA4\xB7\xE0\xA4\xA4\xE0\xA5\x8D\xE0\xA4\xB0\xE0\xA4\xBF\xE0\xA4\xAF", "",
-     kDevanagariGlyphs1, 4},                                                          // क्षत्रिय
+    {"\xE0\xA4\xAA\xE0\xA4\xA4\xE0\xA5\x8D\xE0\xA4\xB0\xE0\xA4\xBF\xE0\xA4\x95\xE0\xA4\xBE", "", kDevanagariGlyphs1,
+     5},                                                                              // पत्रिका
     {"\xE0\xA4\xB6\xE0\xA5\x8D\xE0\xA4\xB0\xE0\xA5\x80", "", kDevanagariGlyphs2, 2},  // श्री
     {"\xE0\xA4\xAA\xE0\xA5\x8D\xE0\xA4\xB0\xE0\xA4\xBE\xE0\xA4\xB0\xE0\xA5\x8D\xE0\xA4\xA5\xE0\xA4\xA8\xE0\xA4\xBE", "",
      kDevanagariGlyphs3, 6},                                                                      // प्रार्थना
