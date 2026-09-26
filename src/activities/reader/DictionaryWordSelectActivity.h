@@ -4,21 +4,48 @@
 #include <I18n.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
 
-// Word selection over the current reader page: Left/Right step through words
-// in reading order, Up/Down jump rows, Confirm looks the word up and opens
-// DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
-// touch-down moves the highlight and a tap on a word looks it up directly.
+// Word selection over one already-laid-out Page: Left/Right step through
+// words in reading order, Up/Down jump rows, Confirm looks the word up and
+// opens DictionaryDefinitionActivity, Back returns to the caller. On touch
+// devices a touch-down moves the highlight and a tap on a word looks it up
+// directly. Two flavors of page ownership: the reader hands over a freshly
+// loaded Page it doesn't need back; DictionaryDefinitionActivity lends its
+// own currently displayed Page (borrowed, not moved) so it's intact when this
+// activity finishes and control returns to it.
 class DictionaryWordSelectActivity final : public Activity {
  public:
+  // Owns `page` for this activity's lifetime (reader flow: a Page loaded
+  // just for word selection, discarded afterward). page(page.get()) reads
+  // the parameter before ownedPage(std::move(page)) moves out of it --safe
+  // because mem-initializers run in declaration order (page is declared
+  // before ownedPage below), not the listed order here. A delegating
+  // constructor computing both from a single `page.get()`/`std::move(page)`
+  // call would instead rely on unspecified function-argument evaluation
+  // order and could read a null pointer.
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
+                                        std::unique_ptr<Page> page, std::string dictionaryFolder, int marginLeft,
+                                        int marginTop)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
-        page(std::move(page)),
+        page(page.get()),
+        ownedPage(std::move(page)),
+        dictionaryFolder(std::move(dictionaryFolder)),
+        marginLeft(marginLeft),
+        marginTop(marginTop) {}
+
+  // Borrows `page`: the caller keeps ownership and must keep it alive and
+  // unchanged until this activity finishes (definition-view flow).
+  explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Page* page,
+                                        std::string dictionaryFolder, int marginLeft, int marginTop)
+      : Activity("DictionaryWordSelect", renderer, mappedInput),
+        page(page),
+        ownedPage(nullptr),
+        dictionaryFolder(std::move(dictionaryFolder)),
         marginLeft(marginLeft),
         marginTop(marginTop) {}
 
@@ -27,7 +54,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  // Screen box of one selectable word. `text` points into the owned Page's
+  // Screen box of one selectable word. `text` points into the Page's
   // TextBlock arena (NUL-terminated), valid for this activity's lifetime.
   struct WordBox {
     int16_t x;
@@ -48,7 +75,11 @@ class DictionaryWordSelectActivity final : public Activity {
   bool drawHighlightWithSnapshot();
   void drawHints() const;
 
-  std::unique_ptr<Page> page;
+  // Non-owning; aliases either ownedPage or the caller's borrowed Page.
+  Page* page;
+  // Non-null only in the owning-constructor case; keeps the Page alive.
+  std::unique_ptr<Page> ownedPage;
+  const std::string dictionaryFolder;
   const int marginLeft;
   const int marginTop;
   int fontId = 0;
