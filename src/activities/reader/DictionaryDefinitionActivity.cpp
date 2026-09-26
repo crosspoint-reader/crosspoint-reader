@@ -3,12 +3,15 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "DictionaryWordSelectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/DictHtmlPages.h"
@@ -203,6 +206,13 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (lookupDepth < MAX_LOOKUP_DEPTH) {
+      openWordLookup();
+    }
+    return;
+  }
+
   // Same tap zones as the reader page turns: left third = previous page,
   // the rest = next. Back is the usual left-edge swipe.
   int tx = 0;
@@ -233,6 +243,101 @@ void DictionaryDefinitionActivity::loop() {
       requestUpdate();
     }
   });
+}
+
+void DictionaryDefinitionActivity::bodyOrigin(int& x, int& y) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto orientation = renderer.getOrientation();
+  const int contentX = orientation == GfxRenderer::Orientation::LandscapeClockwise ? metrics.sideButtonHintsWidth : 0;
+  const int contentY = orientation == GfxRenderer::Orientation::PortraitInverted ? metrics.buttonHintsHeight : 0;
+  x = contentX + SIDE_PADDING;
+  y = contentY + metrics.topPadding + metrics.headerHeight;
+}
+
+void DictionaryDefinitionActivity::openWordLookup() {
+  int x = 0;
+  int y = 0;
+  bodyOrigin(x, y);
+  std::unique_ptr<DictionaryWordSelectActivity> select;
+  if (!pages.empty()) {
+    // Styled path: lend the current Page — it stays alive in this activity,
+    // which remains on the activity stack below the word select.
+    select = makeUniqueNoThrow<DictionaryWordSelectActivity>(renderer, mappedInput, pages[currentPage].get(), x, y,
+                                                             lookupDepth);
+  } else {
+    // Plain-text path: no laid-out Page exists, so build one whose lines and
+    // word positions reproduce exactly what drawBody paints.
+    auto page = buildSelectionPage();
+    if (page) {
+      select =
+          makeUniqueNoThrow<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), x, y, lookupDepth);
+    }
+  }
+  if (!select) {
+    LOG_ERR("DDA", "Word select unavailable (low memory)");
+    GUI.drawPopup(renderer, tr(STR_DICT_LOW_MEMORY));
+    return;
+  }
+  startActivityForResult(std::move(select), [this](const ActivityResult&) { requestUpdate(); });
+}
+
+// Plain-text path: no Page is held for the wrapped lines, so one is
+// synthesized for the current page — each visible Line becomes a PageLine
+// whose TextBlock carries the line's tokens at their measured x positions.
+// Whitespace runs inside a span are measured too, keeping the select boxes
+// pixel-aligned with what drawBody renders as a single drawText per line.
+std::unique_ptr<Page> DictionaryDefinitionActivity::buildSelectionPage() const {
+  auto page = makeUniqueNoThrow<Page>();
+  if (!page) {
+    LOG_ERR("DDA", "OOM: selection page");
+    return nullptr;
+  }
+  const int fontId = SETTINGS.getReaderFontId();
+  const int lineHeight = renderer.getLineHeight(fontId);
+  const int firstLine = currentPage * linesPerPage;
+  const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
+  page->elements.reserve(static_cast<size_t>(lastLine - firstLine));
+
+  const char* text = definition.c_str();
+  for (int i = firstLine; i < lastLine; i++) {
+    if (lines[i].len == 0) continue;
+    const uint32_t spanEnd = lines[i].start + lines[i].len;
+    std::vector<std::string> words;
+    std::vector<int16_t> xpos;
+    std::vector<EpdFontFamily::Style> styles;
+    words.reserve(16);
+    xpos.reserve(16);
+    styles.reserve(16);
+    int cursor = 0;
+    for (uint32_t pos = lines[i].start; pos < spanEnd;) {
+      const uint32_t runStart = pos;
+      const bool space = text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\r';
+      while (pos < spanEnd && (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\r') == space) {
+        pos++;
+      }
+      if (space) {
+        cursor += measureSpan(fontId, text + runStart, pos - runStart);
+        continue;
+      }
+      words.emplace_back(text + runStart, pos - runStart);
+      xpos.push_back(static_cast<int16_t>(cursor));
+      styles.push_back(EpdFontFamily::REGULAR);
+      cursor += measureSpan(fontId, text + runStart, pos - runStart);
+    }
+    auto block = makeUniqueNoThrow<TextBlock>(words, xpos, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{},
+                                              BlockStyle());
+    if (!block || !block->valid()) {
+      LOG_ERR("DDA", "Selection block failed for line %d", i);
+      continue;
+    }
+    auto line = makeUniqueNoThrow<PageLine>(std::move(block), 0, static_cast<int16_t>((i - firstLine) * lineHeight));
+    if (!line) {
+      LOG_ERR("DDA", "OOM: selection PageLine");
+      continue;
+    }
+    page->elements.push_back(std::move(line));
+  }
+  return page;
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,
@@ -284,15 +389,17 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
   const int fontId = SETTINGS.getReaderFontId();
-  const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight;
+  int bodyX = 0;
+  int bodyStartY = 0;
+  bodyOrigin(bodyX, bodyStartY);
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);  // scan pass: records codepoints only
+  drawBody(fontId, bodyX, bodyStartY);  // scan pass: records codepoints only
   scope.endScanAndPrewarm();
-  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
+  drawBody(fontId, bodyX, bodyStartY);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), (lookupDepth < MAX_LOOKUP_DEPTH ? tr(STR_LOOKUP) : ""),
+                                            (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
