@@ -2,6 +2,8 @@ _language_name: "Português (Portugal)"
 _language_code: "P2"
 _order: "27"
 _bcp47: "pt-PT"
+_iso639_2: "por"
+_articles: "o os a as um uma uns umas"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "A INICIAR"

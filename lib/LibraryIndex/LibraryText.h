@@ -27,6 +27,7 @@
 //     "Austen, Jane" and "Jane Austen" as two people is worse than the guess.
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -48,10 +49,49 @@ std::string joinLibraryPath(std::string_view folder, std::string_view name);
 // numbers, and turns punctuation into a single space. Combining marks are
 // dropped. Apostrophes survive as ASCII '\'' so names and elisions keep their
 // shape.
+std::string fold(std::string_view text);
+
+// A language's articles. e.g. {"the", "a", "an"}.
+using Articles = std::span<const char* const>;
+// A language code, e.g. the BCP 47 tag "de" or "pt-BR".
+using LanguageCode = const char*;
+// Some languages have two ISO 639-2 codes, one from the English
+// name and one from the native name, and books can use either. e.g. {"ger", "deu"}.
+using LanguageCodes = std::span<const char* const>;
+
+// Every language's articles, one array entry per language. The firmware fills
+// these from the translation files; this library never names a language itself.
+// The arrays line up: entry i of `bcp47`, `iso639_2` and `articles` is the same
+// language.
 //
-// `stripArticle` additionally removes one leading article ("the ", "le ", "la ",
-// ...) — correct for sort keys and search text, wrong for anything displayed.
-std::string fold(std::string_view text, bool stripArticle = false);
+// `fallbackArticles` is used for a book whose language is missing or matches
+// none of the languages, and for every non-EPUB. The firmware sets it to the UI
+// language's articles, or English's when the UI language has none
+struct ArticlesByLanguage {
+  const LanguageCode* bcp47 = nullptr;      // `_bcp47`: "de", "pt-BR"
+  const LanguageCodes* iso639_2 = nullptr;  // `_iso639_2`: {"ger", "deu"}
+  const Articles* articles = nullptr;       // `_articles`, already folded: {"der", "die", "das"}; empty if none
+  size_t languageCount = 0;                 // number of languages; each array has this many entries
+  Articles fallbackArticles;
+};
+
+// Remove a leading article (if any) from an already-folded key: correct for sort keys,
+// wrong for anything displayed or searched. A key that is nothing but an
+// article is left whole.
+void stripLeadingArticle(std::string& folded, Articles articles);
+
+// The article list for a book's dc:language: "en-US", "EN" and "eng" all find
+// the "en" list. A known language with no articles gets its empty list, so its
+// titles keep every word; a tag that matches no known language, or is missing,
+// gets `config.fallbackArticles`.
+Articles articlesForLanguage(std::string_view tag, const ArticlesByLanguage& config);
+
+// Fingerprint of all the article data (every language's codes and articles,
+// plus the fallback), stored in the index header. The Library rebuilds when it
+// changes: after a UI language change (new fallback), after an update edits
+// `_articles` or `_iso639_2`, or on an index from before this field, which
+// holds 0. Never returns 0.
+uint32_t articleConfigId(const ArticlesByLanguage& config);
 
 // First letter of an already-folded sort key, or 0 when the key starts with a
 // number/non-letter. The Library renders 0 as its shared '#' group.
@@ -88,8 +128,8 @@ std::string authorKey(std::string_view author);
 //
 // Both sides are already folded — accents stripped, case dropped, punctuation
 // turned to spaces — so "eneide" finds "L'Énéide" and "eluard" finds
-// "Éluard". `haystack` is the record's stored fold; `needle` is the query put
-// through the same fold.
+// "Éluard". `haystack` is the book's title or author as shown, folded; `needle`
+// is the query put through the same fold.
 //
 // Every query word must PREFIX some word of the book. That is the rule that fits
 // the hardware: with no partial refresh, each keypress costs a full ~185 ms panel

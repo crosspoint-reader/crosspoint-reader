@@ -2,6 +2,8 @@ _language_name: "Italiano"
 _language_code: "IT"
 _order: "12"
 _bcp47: "it"
+_iso639_2: "ita"
+_articles: "il lo la l' i gli le un uno una un'"
 
 STR_ACCOUNT_CREATED: "Account creato"
 STR_ADD_HIDDEN_NETWORK: "Aggiungi rete nascosta..."

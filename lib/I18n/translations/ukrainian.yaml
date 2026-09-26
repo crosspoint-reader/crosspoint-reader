@@ -2,6 +2,7 @@ _language_name: "Українська"
 _language_code: "UK"
 _order: "10"
 _bcp47: "uk"
+_iso639_2: "ukr"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ЗАВАНТАЖЕННЯ"

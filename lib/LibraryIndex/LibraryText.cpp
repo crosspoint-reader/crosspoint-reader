@@ -143,11 +143,32 @@ bool isUnicodeLetter(const uint32_t cp) {
   return inRanges(cp, LETTER_RANGES, sizeof(LETTER_RANGES) / sizeof(LETTER_RANGES[0]));
 }
 
-// Articles stripped from the head of sort and search keys. Display text never
-// goes through this.
-constexpr const char* ARTICLES[] = {"the ", "a ",   "an ", "le ",  "la ",  "les ", "l'",   "un ",
-                                    "une ", "de ",  "du ", "des ", "der ", "die ", "das ", "el ",
-                                    "los ", "las ", "il ", "lo ",  "gli ", "i ",   "o ",   "os "};
+constexpr size_t LANGUAGE_CODE_MAX = 3;
+
+bool containsISOCode(const LanguageCodes codes, const std::string_view code) {
+  for (const char* c : codes) {
+    if (code == c) return true;
+  }
+  return false;
+}
+
+bool isTagSpace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+
+// Writes the lowercased primary subtag of a BCP47 language tag (e.g. "en-US" -> "en")
+// and returns its length: 0 when the tag is empty, LANGUAGE_CODE_MAX + 1
+// when the subtag is too long to be a language code.
+size_t primarySubtag(const std::string_view tag, char (&out)[LANGUAGE_CODE_MAX]) {
+  size_t i = 0;
+  while (i < tag.size() && isTagSpace(tag[i])) i++;
+  size_t len = 0;
+  for (; i < tag.size(); i++) {
+    const char c = tag[i];
+    if (c == '-' || c == '_' || isTagSpace(c)) break;
+    if (len == LANGUAGE_CODE_MAX) return LANGUAGE_CODE_MAX + 1;
+    out[len++] = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+  }
+  return len;
+}
 
 // Views into `folded`, not copies: the caller keeps that string alive for as
 // long as the tokens, and a std::string per token costs an allocation each plus
@@ -173,7 +194,7 @@ bool isSingleCodepoint(const std::string_view text) {
 
 }  // namespace
 
-std::string fold(const std::string_view text, const bool stripArticle) {
+std::string fold(const std::string_view text) {
   std::string out;
   out.reserve(text.size());
 
@@ -225,17 +246,68 @@ std::string fold(const std::string_view text, const bool stripArticle) {
     // words. Deferring the space keeps runs collapsed and drops trailing ones.
     if (!out.empty()) pendingSpace = true;
   }
-
-  if (stripArticle) {
-    for (const char* article : ARTICLES) {
-      const size_t len = strlen(article);
-      if (out.size() > len && out.compare(0, len, article) == 0) {
-        out.erase(0, len);
-        break;
-      }
-    }
-  }
   return out;
+}
+
+// Removes a book title's first word for library sorting if it's in its language's article list
+void stripLeadingArticle(std::string& folded, const Articles articles) {
+  for (const std::string_view article : articles) {
+    // Edge case: an elided article like "l'" is stripped even though it's attached
+    // to the next word (e.g. "l'eneide" -> "eneide").
+    const bool elided = article.back() == '\'';
+    const size_t lenToStrip = article.size() + (elided ? 0 : 1);
+    // `<=` keeps a title that is nothing but an article. Skip if title does not start with the article
+    if (folded.size() <= lenToStrip || folded.compare(0, article.size(), article) != 0) continue;
+    if (!elided && folded[article.size()] != ' ') continue;
+    folded.erase(0, lenToStrip);
+    // An elided article can still be followed by a space ("L' Étranger");
+    // left in, it would sort the title before every letter.
+    if (!folded.empty() && folded.front() == ' ') folded.erase(0, 1);
+    return;
+  }
+}
+
+Articles articlesForLanguage(const std::string_view tag, const ArticlesByLanguage& config) {
+  char primary[LANGUAGE_CODE_MAX];
+  const size_t len = primarySubtag(tag, primary);
+  // Invalid language code derived, use the fallback list.
+  if (len < 2 || len > LANGUAGE_CODE_MAX) return config.fallbackArticles;
+
+  const std::string_view code(primary, len);
+  for (size_t i = 0; i < config.languageCount; i++) {
+    char own[LANGUAGE_CODE_MAX];
+    const size_t ownLen = primarySubtag(config.bcp47[i], own);
+    const bool sameTag = ownLen <= LANGUAGE_CODE_MAX && code == std::string_view(own, ownLen);
+    // BCP47 or ISO639-2 match: return the articles for that language.
+    if (sameTag || (config.iso639_2 != nullptr && containsISOCode(config.iso639_2[i], code))) return config.articles[i];
+  }
+  return config.fallbackArticles;
+}
+
+uint32_t articleConfigId(const ArticlesByLanguage& config) {
+  uint32_t hash = 2166136261u;  // FNV-1a 32
+  const auto mixByte = [&hash](const unsigned char byte) {
+    hash ^= byte;
+    hash *= 16777619u;
+  };
+  // Each word ends in a NUL and each list in a 0xFF, which no word contains, so
+  // moving a word from one list to the next changes the id.
+  const auto mixText = [&mixByte](const std::string_view text) {
+    for (const char c : text) mixByte(static_cast<unsigned char>(c));
+    mixByte(0);
+  };
+  const auto mixList = [&mixText, &mixByte](const std::span<const char* const> words) {
+    for (const char* word : words) mixText(word);
+    mixByte(0xFF);
+  };
+  for (size_t i = 0; i < config.languageCount; i++) {
+    mixText(config.bcp47[i]);
+    mixList(config.iso639_2 != nullptr ? config.iso639_2[i] : LanguageCodes{});
+    mixList(config.articles[i]);
+  }
+  mixList(config.fallbackArticles);
+  // 0 is what an index written before the id existed holds.
+  return hash == 0 ? 1 : hash;
 }
 
 uint32_t foldedGroupInitial(const std::string_view folded) {

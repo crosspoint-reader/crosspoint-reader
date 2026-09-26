@@ -2,6 +2,8 @@ _language_name: "Magyar"
 _language_code: "HU"
 _order: "19"
 _bcp47: "hu"
+_iso639_2: "hun"
+_articles: "a az egy"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "INDÍTÁS"

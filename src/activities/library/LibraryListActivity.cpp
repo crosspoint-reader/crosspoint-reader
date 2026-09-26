@@ -14,6 +14,7 @@
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "LibraryArticles.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -89,10 +90,12 @@ void LibraryListActivity::onEnter() {
   if (RECENT_BOOKS.pruneMissing()) RECENT_BOOKS.saveToFile();
 
   // Rebuild when the index is missing, invalid, or was built with the other
-  // metadata mode. Otherwise entering the screen stays instant.
+  // metadata mode or other article lists (a new UI language changes the
+  // fallback). Otherwise entering the screen stays instant.
   const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
   const bool rebuildNeeded = library::isLibraryIndexDirty() || !index.open(library::libraryIndexPath()) ||
-                             index.header().metadataEnabled != readMetadata;
+                             index.header().metadataEnabled != readMetadata ||
+                             index.header().articlesId != library::articleConfigId(libraryArticleConfig());
   if (rebuildNeeded) {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
@@ -118,7 +121,7 @@ void LibraryListActivity::onExit() {
 
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0, libraryArticleConfig());
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;
@@ -612,9 +615,7 @@ void LibraryListActivity::applyFilter() {
   headerSearchTitle = query.empty() ? std::string() : "“" + query + "”";
   if (query.empty()) return;
 
-  // Folded the same way the stored folds were, articles removed included —
-  // otherwise "the hobbit" searches for a word no record contains.
-  const std::string needle = library::fold(query, /*stripArticle=*/true);
+  const std::string needle = library::fold(query);
   const int total = static_cast<int>(index.bookCount());
   if (total <= 0) return;
 
@@ -626,19 +627,23 @@ void LibraryListActivity::applyFilter() {
   }
 
   uint16_t matchCount = 0;
+  std::string title;
   std::string author;
   for (int row = 0; row < total; row++) {
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
     library::ClixRecord record{};
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) continue;
-    if (library::matchesQuery(std::string_view(record.fold, record.foldLen), needle)) {
+    // The stored title when the book gave one, the filename otherwise: the
+    // same text the row shows.
+    title.clear();
+    if (!index.readTitle(record, title) || title.empty()) index.readName(record, title);
+    if (library::matchesQuery(library::fold(title), needle)) {
       matches[matchCount++] = static_cast<uint16_t>(row);
       continue;
     }
-    // The stored fold covers the title only, so the author has to be read and
-    // folded here. That is the search most worth having: the reader who knows
-    // the author usually also knows where the book is, while "emily" finding
-    // Alice Hunter is the case the shelf exists to answer.
+    // The author is searched too. That is the search most worth having: the
+    // reader who knows the author usually also knows where the book is, while
+    // "emily" finding Alice Hunter is the case the shelf exists to answer.
     author.clear();
     if (index.readAuthor(record, author) && library::matchesQuery(library::fold(author), needle)) {
       matches[matchCount++] = static_cast<uint16_t>(row);

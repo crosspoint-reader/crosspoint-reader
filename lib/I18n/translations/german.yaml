@@ -2,6 +2,8 @@ _language_name: "Deutsch"
 _language_code: "DE"
 _order: "3"
 _bcp47: "de"
+_iso639_2: "ger deu"
+_articles: "der die das"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "STARTE"
