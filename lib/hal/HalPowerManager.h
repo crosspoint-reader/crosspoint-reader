@@ -8,6 +8,7 @@
 
 #include <cassert>
 
+#include "Bq27220Capacity.h"
 #include "HalGPIO.h"
 
 class HalPowerManager;
@@ -24,6 +25,8 @@ class HalPowerManager {
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
 
+  Bq27220Capacity gaugeCapacity;
+
  public:
 #if BOARD_HAS_PSRAM
   static constexpr int LOW_POWER_FREQ = 80;  // MHz
@@ -32,8 +35,17 @@ class HalPowerManager {
 #endif
   static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // ms
   static constexpr unsigned long BATTERY_POLL_MS = 1500;       // ms
+  // X3 battery, loaded into its BQ27220 while the gauge still reads TI's 3000 mAh default.
+  static constexpr uint16_t X3_BATTERY_MAH = 650;
 
   void begin();
+
+  // One step of the X3 battery capacity load a call, from the main loop; the longest call takes
+  // about 40 ms. The caller keeps other tasks off the gauge's I2C bus for the duration of each call.
+  void loadGaugeCapacity();
+  bool isGaugeCapacityLoadPending() const { return gaugeCapacity.result() == Bq27220Capacity::Result::Pending; }
+  // Before deep sleep: a load under way leaves CONFIG UPDATE and seals the gauge at once.
+  void abandonGaugeCapacityLoad();
 
   // Control CPU frequency for power saving
   void setPowerSaving(bool enabled);
