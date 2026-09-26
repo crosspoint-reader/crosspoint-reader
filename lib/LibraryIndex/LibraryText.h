@@ -54,8 +54,25 @@ std::string joinLibraryPath(std::string_view folder, std::string_view name);
 std::string fold(std::string_view text, bool stripArticle = false);
 
 // First letter of an already-folded sort key, or 0 when the key starts with a
-// number/non-letter. The Library renders 0 as its shared '#' group.
+// number/non-letter. The Library renders 0 as its shared '#' group. A kana
+// initial is the head of its gojūon row (が -> か, ぁ -> あ), which is how a
+// Japanese index is headed.
 uint32_t foldedGroupInitial(std::string_view folded);
+
+// Byte form of a fold for the fixed-width sort keys (the record's author key
+// and the phase-local sort arrays). ASCII and every non-Japanese script keep
+// their UTF-8 bytes, so for Latin text this IS the fold prefix. Hiragana packs
+// to one byte each at 0x80 + (cp - 0x3040): twelve bytes hold twelve kana
+// instead of four, which is what lets the volumes of a series still differ
+// inside the key, and kana keep their own order while sorting after Latin.
+// Only whole codepoints are written. Returns the number of bytes in `out`.
+size_t packSortKey(std::string_view folded, char* out, size_t cap);
+
+// Identity key for a person from the sort form the book itself carries
+// (EPUB `file-as`, the kana reading of a Japanese name). Folded, initials
+// dropped, but the words keep the publisher's order — family name first —
+// since there is nothing to harmonise. Not truncated: the builder packs it.
+std::string authorKeyFromReading(std::string_view reading);
 
 // Tidy a person's name for DISPLAY, without reordering it.
 //

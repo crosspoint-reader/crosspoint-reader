@@ -112,7 +112,8 @@ constexpr CodepointRange LETTER_RANGES[] = {
     {0x1200, 0x135A},   {0x1380, 0x138F},   {0x2D80, 0x2DDE},                      // Ethiopic
     {0x13A0, 0x13F5},   {0x13F8, 0x13FD},   {0xAB70, 0xABBF},                      // Cherokee
     {0x2D30, 0x2D67},                                                              // Tifinagh
-    {0x3041, 0x3096},   {0x30A1, 0x30FA},   {0x3105, 0x312F},   {0x31A0, 0x31BF},  // Kana/Bopomofo
+    {0x3005, 0x3006},   {0x3041, 0x3096},   {0x309D, 0x309E},   {0x30A1, 0x30FA},  // Kana, 々〆, ゝゞ
+    {0x30FC, 0x30FC},   {0x3105, 0x312F},   {0x31A0, 0x31BF},                      // ー, Bopomofo
     {0x3400, 0x4DBF},   {0x4E00, 0x9FFF},   {0xF900, 0xFAFF},                      // Han
     {0x1100, 0x11FF},   {0x3131, 0x318E},   {0xA960, 0xA97F},   {0xAC00, 0xD7FF},  // Hangul
     {0x20000, 0x2EBEF}, {0x2F800, 0x2FA1F}, {0x30000, 0x323AF},                    // Han extensions
@@ -122,11 +123,53 @@ constexpr CodepointRange NUMBER_RANGES[] = {
     {0x0030, 0x0039}, {0x0660, 0x0669}, {0x06F0, 0x06F9}, {0x0966, 0x096F}, {0xFF10, 0xFF19},
 };
 
+// U+3099/U+309A are the combining kana voicing marks of NFD input; dropping
+// them leaves the base kana to carry the sort, as it does in NFC.
 constexpr CodepointRange MARK_RANGES[] = {
-    {0x0483, 0x0489}, {0x0591, 0x05BD}, {0x05BF, 0x05BF}, {0x05C1, 0x05C2}, {0x05C4, 0x05C5},
-    {0x05C7, 0x05C7}, {0x0610, 0x061A}, {0x064B, 0x065F}, {0x0670, 0x0670}, {0x06D6, 0x06DC},
-    {0x06DF, 0x06E4}, {0x06E7, 0x06E8}, {0x06EA, 0x06ED}, {0x08D3, 0x08FF}, {0xFB1E, 0xFB1E},
+    {0x0483, 0x0489}, {0x0591, 0x05BD}, {0x05BF, 0x05BF}, {0x05C1, 0x05C2}, {0x05C4, 0x05C5}, {0x05C7, 0x05C7},
+    {0x0610, 0x061A}, {0x064B, 0x065F}, {0x0670, 0x0670}, {0x06D6, 0x06DC}, {0x06DF, 0x06E4}, {0x06E7, 0x06E8},
+    {0x06EA, 0x06ED}, {0x08D3, 0x08FF}, {0xFB1E, 0xFB1E}, {0x3099, 0x309A},
 };
+
+// A Japanese title or name sorts by its READING, which the OPF gives as kana.
+// Publishers write readings in katakana or hiragana as they please, so both
+// fold to hiragana; the fullwidth ASCII forms Japanese text uses for digits and
+// Latin letters fold to their ASCII value so "２" and "2" agree.
+uint32_t foldJapanese(const uint32_t cp) {
+  if (cp >= 0x30A1 && cp <= 0x30F6) return cp - 0x60;    // katakana -> hiragana
+  if (cp == 0x30FD || cp == 0x30FE) return cp - 0x60;    // ヽヾ -> ゝゞ
+  if (cp >= 0xFF01 && cp <= 0xFF5E) return cp - 0xFEE0;  // fullwidth ASCII -> ASCII
+  return cp;
+}
+
+// Hiragana groups by gojūon row — the あ か さ … column heads a Japanese index
+// uses — with the voiced, semi-voiced and small forms filed under their base
+// row, so が and ぁ both land in あ/か where a reader looks for them.
+uint32_t kanaRowInitial(const uint32_t cp) {
+  struct Row {
+    uint32_t last;
+    uint32_t head;
+  };
+  static constexpr Row ROWS[] = {
+      {0x304A, 0x3042},  // ぁ..お -> あ
+      {0x3054, 0x304B},  // か..ご -> か
+      {0x305E, 0x3055},  // さ..ぞ -> さ
+      {0x3069, 0x305F},  // た..ど -> た
+      {0x306E, 0x306A},  // な..の -> な
+      {0x307D, 0x306F},  // は..ぽ -> は
+      {0x3082, 0x307E},  // ま..も -> ま
+      {0x3088, 0x3084},  // ゃ..よ -> や
+      {0x308D, 0x3089},  // ら..ろ -> ら
+      {0x3093, 0x308F},  // ゎ..ん -> わ
+      {0x3094, 0x3042},  // ゔ -> あ
+      {0x3096, 0x304B},  // ゕゖ -> か
+  };
+  if (cp < 0x3041 || cp > 0x3096) return cp;
+  for (const Row& row : ROWS) {
+    if (cp <= row.last) return row.head;
+  }
+  return cp;
+}
 
 bool isUnicodeNumber(const uint32_t cp) {
   return inRanges(cp, NUMBER_RANGES, sizeof(NUMBER_RANGES) / sizeof(NUMBER_RANGES[0]));
@@ -193,11 +236,12 @@ std::string fold(const std::string_view text, const bool stripArticle) {
                                : (lead >> 3) == 0x1E ? 4
                                                      : 1;
     if (promised > end - cursor) break;
-    const uint32_t cp = utf8NextCodepoint(&cursor);
-    if (cp == 0) break;
+    const uint32_t decoded = utf8NextCodepoint(&cursor);
+    if (decoded == 0) break;
 
-    if (isUnicodeMark(cp)) continue;
+    if (isUnicodeMark(decoded)) continue;
 
+    const uint32_t cp = foldJapanese(decoded);
     const char* mapped = explicitMapping(cp);
     if (mapped != nullptr) {
       if (pendingSpace && !out.empty()) out.push_back(' ');
@@ -242,7 +286,59 @@ uint32_t foldedGroupInitial(const std::string_view folded) {
   if (folded.empty()) return 0;
   const auto* cursor = reinterpret_cast<const unsigned char*>(folded.data());
   const uint32_t cp = utf8NextCodepoint(&cursor);
-  return isUnicodeLetter(cp) ? cp : 0;
+  return isUnicodeLetter(cp) ? kanaRowInitial(cp) : 0;
+}
+
+size_t packSortKey(const std::string_view folded, char* out, const size_t cap) {
+  size_t written = 0;
+  const auto* cursor = reinterpret_cast<const unsigned char*>(folded.data());
+  const auto* end = cursor + folded.size();
+  while (cursor < end && written < cap) {
+    const auto* start = cursor;
+    const uint32_t cp = utf8NextCodepoint(&cursor);
+    if (cp == 0 || cursor > end) break;
+    uint8_t packed = 0;
+    if (cp >= 0x3041 && cp <= 0x3096) {
+      packed = static_cast<uint8_t>(0x80 + (cp - 0x3040));  // 0x81..0xD6, in kana order
+    } else if (cp == 0x309D || cp == 0x309E) {
+      packed = static_cast<uint8_t>(0xD7 + (cp - 0x309D));  // ゝゞ
+    } else if (cp == 0x30FC) {
+      packed = 0xD9;  // ー
+    } else if (cp == 0x3005 || cp == 0x3006) {
+      packed = static_cast<uint8_t>(0xDA + (cp - 0x3005));  // 々〆
+    }
+    if (packed != 0) {
+      out[written++] = static_cast<char>(packed);
+      continue;
+    }
+    // ASCII and every other script keep their UTF-8 bytes; a codepoint that
+    // does not fit whole is left out so a prefix compare never splits one.
+    const size_t bytes = static_cast<size_t>(cursor - start);
+    if (bytes > cap - written) break;
+    memcpy(out + written, start, bytes);
+    written += bytes;
+  }
+  return written;
+}
+
+std::string authorKeyFromReading(const std::string_view reading) {
+  const std::string folded = fold(reading);
+
+  // The reading is the publisher's own sort form of the name, family name
+  // first, so unlike authorKey() the words keep their order. Initials are still
+  // dropped for the same reason: they come and go between editions.
+  constexpr size_t MAX_TOKENS = 12;
+  std::string_view tokens[MAX_TOKENS];
+  size_t count = 0;
+  splitTokens(folded, tokens, MAX_TOKENS, count);
+
+  std::string key;
+  for (size_t i = 0; i < count; i++) {
+    if (isSingleCodepoint(tokens[i])) continue;
+    if (!key.empty()) key.push_back(' ');
+    key.append(tokens[i]);
+  }
+  return key;
 }
 
 std::string cleanPersonName(const std::string_view author) {

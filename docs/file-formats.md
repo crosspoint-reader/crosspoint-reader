@@ -415,7 +415,7 @@ Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. On
 file describing every book on the card, so the shelf can sort and search
 thousands of titles without opening any of them.
 
-Format version 2. An index written by another version fails validation on open
+Format version 3. An index written by another version fails validation on open
 and is rebuilt; that is the entire migration mechanism.
 
 ### Layout
@@ -426,7 +426,7 @@ and is rebuilt; that is the entire migration mechanism.
 | Folders | `folderStart` | length-prefixed paths, one per folder |
 | Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
 | Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
-| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author (see below) |
+| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author, author reading (see below) |
 
 The arrival permutation runs oldest first, keyed by the record's FAT
 modification time (when the file landed on the card); `firstSeen` — the
@@ -446,6 +446,22 @@ accents stripped, case dropped, leading articles removed — and `authorKey[12]`
 the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
+
+A book that carries sort forms in its package metadata (EPUB 3 `file-as`, or
+EPUB 2 `opf:file-as`) is folded from those instead of its display strings. For
+Japanese that is the kana reading, the only way to order a 漢字 title; the fold
+maps katakana to hiragana and fullwidth ASCII to ASCII so either spelling gives
+one key, and the group initial of a kana fold is the head of its gojūon row
+(が → か). An author reading keys the group in the publisher's own order,
+family name first, and orders the shelf in place of the surname guess.
+
+`authorKey` and the phase-local sort keys hold the fold in `packSortKey()` byte
+form: ASCII and every non-Japanese script keep their UTF-8 bytes, hiragana packs
+to one byte each at `0x80 + (cp - 0x3040)`, so twelve bytes hold twelve kana
+instead of four and kana sort after Latin. Titles whose packed prefixes tie are
+ordered by their full folds, read back from the stage for those runs only
+(one checked 6,336-byte allocation; a run longer than 64 keeps walk order), so
+the volumes of a series come out in order.
 
 The byte before the folded title records metadata extraction status: not
 attempted, extracted, or failed. The final four bytes contain the packed FAT
@@ -467,7 +483,12 @@ Per record, at `nameStart + nameOff`:
 [u8][author]     display author, one spelling chosen per authorKey across the library
 [u8][title]      the book's own title, or length 0 if it never gave one
 [u8][source]     cleaned author spelling before the library-wide spelling vote
+[u8][reading]    folded file-as reading of the author, or length 0 if it gave none
 ```
+
+The reading is stored so an unchanged rebuild can reproduce the author order
+without opening the book again; it is folded already because only its fold is
+ever compared.
 
 The filename must stay the first textual field and stay the filename: `readPath`
 rebuilds a book's path from it, so writing the display title there makes the book
