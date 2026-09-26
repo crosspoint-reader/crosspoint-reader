@@ -333,6 +333,8 @@ USB-storage mode, and active injected input. Readiness describes the known UI wo
 it is not a guarantee that every network or background task is idle. A chapter
 builder paused at its lookahead window or heap limit does not keep the UI busy. The client
 uses bounded waits and never requests an extra refresh to obtain readiness.
+A press rejected with `BUSY` never started, so the client waits for readiness and
+resends it with a new ID until its timeout.
 
 Control uses fixed RAM state and the existing main/render tasks. It does not add
 a device command queue or allocate a new input buffer on the heap. Fixed state

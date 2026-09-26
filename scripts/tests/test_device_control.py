@@ -93,6 +93,10 @@ class CliTests(monitor_tests.SessionFixture):
                 f"spine=0 page={self.page} pages=100 requested=2 completed=2",
             )
         elif verb == "PRESS":
+            if self.mode == "busy_once":
+                self.mode = "normal"
+                self.reply(request_id, "ERROR reason=BUSY")
+                return
             self.reply(request_id, "ACCEPTED")
             if self.mode == "silent":
                 return
@@ -145,6 +149,14 @@ class CliTests(monitor_tests.SessionFixture):
         self.assertEqual(result[4]["id"], 101)
         self.assertEqual(result[-1]["event"], "CANCELLED")
         self.assertFalse(self.session.status()["control_claimed"])
+
+    def test_busy_press_is_retried_with_a_new_id(self):
+        self.mode = "busy_once"
+        result = self.cli("press", "page-forward", "--expect-page-change")
+        self.assertEqual(result[-1]["state"]["page"], 2)
+        presses = [p for p in self.ports[-1].writes if b"PRESS" in p]
+        self.assertEqual(len(presses), 2)
+        self.assertNotEqual(presses[0].split()[1], presses[1].split()[1])
 
     def test_timeout_does_not_replay_input_or_execute_next_step(self):
         self.mode = "silent"

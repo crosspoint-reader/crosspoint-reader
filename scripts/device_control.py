@@ -17,9 +17,11 @@ from urllib.request import Request, urlopen
 
 
 class ControlError(RuntimeError):
-    def __init__(self, message, code=4):
+    def __init__(self, message, code=4, reason=None):
         super().__init__(message)
         self.code = code
+        # Firmware ERROR reason when the device rejected the command.
+        self.reason = reason
 
 
 class ControlTimeout(ControlError, TimeoutError):
@@ -213,7 +215,9 @@ class DeviceControl:
                                 "Firmware has no serial control; flash a build "
                                 "with ENABLE_SERIAL_CONTROL"
                             )
-                        raise ControlError("Firmware rejected command: " + reason)
+                        raise ControlError(
+                            "Firmware rejected command: " + reason, reason=reason
+                        )
                     if event["event"] == "CANCELLED" and expected != "CANCELLED":
                         raise ControlError("Firmware cancelled the input command")
                     if event["event"] == expected:
@@ -245,10 +249,22 @@ class DeviceControl:
         return self.last_state
 
     def press(self, button, hold_ms=80, timeout=15):
-        self._press_pending = True
-        result = self._command("PRESS", f"{button} {hold_ms}", "INPUT_DONE", timeout)
-        self._press_pending = False
-        return result
+        with self.operation(timeout):
+            while True:
+                self._press_pending = True
+                try:
+                    result = self._command(
+                        "PRESS", f"{button} {hold_ms}", "INPUT_DONE", timeout
+                    )
+                except ControlError as exc:
+                    if exc.reason != "BUSY":
+                        raise
+                    # BUSY means the press never started, so resending is safe.
+                    self._press_pending = False
+                    self.wait_ready()
+                    continue
+                self._press_pending = False
+                return result
 
     def cancel(self):
         result = self._command("CANCEL", expected="CANCELLED")
