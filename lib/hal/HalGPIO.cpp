@@ -149,16 +149,20 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
+#ifdef ENABLE_SERIAL_CONTROL
+static_assert(HalGPIO::BUTTON_COUNT <= SerialInput::MAX_BUTTONS, "SerialInput mask cannot hold every button");
+#endif
+
 bool HalGPIO::isPressed(uint8_t buttonIndex) const {
 #ifdef ENABLE_SERIAL_CONTROL
-  if (buttonIndex < 7 && (serialInput.down() & (1u << buttonIndex))) return true;
+  if (buttonIndex < BUTTON_COUNT && (serialInput.down() & (1u << buttonIndex))) return true;
 #endif
   return inputMgr.isPressed(buttonIndex);
 }
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
 #ifdef ENABLE_SERIAL_CONTROL
-  if (buttonIndex < 7 && (serialInput.pressed() & (1u << buttonIndex))) return true;
+  if (buttonIndex < BUTTON_COUNT && (serialInput.pressed() & (1u << buttonIndex))) return true;
 #endif
   return inputMgr.wasPressed(buttonIndex);
 }
@@ -172,7 +176,7 @@ bool HalGPIO::wasAnyPressed() const {
 
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
 #ifdef ENABLE_SERIAL_CONTROL
-  if (buttonIndex < 7 && (serialInput.released() & (1u << buttonIndex))) return true;
+  if (buttonIndex < BUTTON_COUNT && (serialInput.released() & (1u << buttonIndex))) return true;
 #endif
   return inputMgr.wasReleased(buttonIndex);
 }
@@ -186,7 +190,7 @@ bool HalGPIO::wasAnyReleased() const {
 
 bool HalGPIO::physicalInputActive() const {
   if (inputMgr.wasAnyPressed() || inputMgr.wasAnyReleased() || inputMgr.wasTouchActivity()) return true;
-  for (uint8_t button = 0; button < 7; ++button) {
+  for (uint8_t button = 0; button < BUTTON_COUNT; ++button) {
     if (inputMgr.isPressed(button)) return true;
   }
   return false;

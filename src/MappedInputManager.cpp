@@ -80,7 +80,7 @@ MappedInputManager::Button MappedInputManager::mapScreenDirection(const Button b
 }
 
 uint8_t MappedInputManager::buttonMask(const Button button) const {
-  const auto mask = [](uint8_t index) -> uint8_t { return index < 7 ? (1u << index) : 0; };
+  const auto mask = [](uint8_t index) -> uint8_t { return index < HalGPIO::BUTTON_COUNT ? (1u << index) : 0; };
   const auto sideLayout = SETTINGS.sideButtonLayout;
 
   switch (button) {
@@ -154,7 +154,7 @@ uint8_t MappedInputManager::buttonMask(const Button button) const {
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const uint8_t mask = buttonMask(button);
-  for (uint8_t index = 0; index < 7; ++index) {
+  for (uint8_t index = 0; index < HalGPIO::BUTTON_COUNT; ++index) {
     if ((mask & (1u << index)) && (gpio.*fn)(index)) return true;
   }
   return false;
@@ -163,7 +163,7 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
 #ifdef ENABLE_SERIAL_CONTROL
 int MappedInputManager::controlButton(Button button) const {
   const uint8_t mask = buttonMask(button);
-  for (uint8_t index = 0; index < 7; ++index) {
+  for (uint8_t index = 0; index < HalGPIO::BUTTON_COUNT; ++index) {
     if (mask & (1u << index)) return index;
   }
   return -1;

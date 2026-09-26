@@ -16,6 +16,13 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
+# Must match SerialInput::MIN_HOLD_MS, MAX_HOLD_MS, and DEFAULT_HOLD_MS. press()
+# also checks the limits that the connected firmware reports in INFO.
+MIN_HOLD_MS = 20
+MAX_HOLD_MS = 2000
+DEFAULT_HOLD_MS = 80
+
+
 class ControlError(RuntimeError):
     def __init__(self, message, code=4, reason=None):
         super().__init__(message)
@@ -65,6 +72,7 @@ class DeviceControl:
         self._renew_at = 0
         self._synced = False
         self._press_pending = False
+        self.hold_limits = (MIN_HOLD_MS, MAX_HOLD_MS)
 
     @contextmanager
     def operation(self, timeout):
@@ -229,6 +237,10 @@ class DeviceControl:
             raise ControlError("Unsupported firmware control protocol")
         self.boot = result["boot"]
         self.next_id = result["last_id"] + 1
+        self.hold_limits = (
+            result.get("min_hold", MIN_HOLD_MS),
+            result.get("max_hold", MAX_HOLD_MS),
+        )
         self._synced = True
         return result
 
@@ -248,8 +260,13 @@ class DeviceControl:
         self.last_state = self._command("STATE")
         return self.last_state
 
-    def press(self, button, hold_ms=80, timeout=15):
+    def press(self, button, hold_ms=DEFAULT_HOLD_MS, timeout=15):
         with self.operation(timeout):
+            if not self._synced:
+                self.info()
+            low, high = self.hold_limits
+            if not low <= hold_ms <= high:
+                raise ControlError(f"Firmware accepts holds of {low}-{high} ms", 2)
             while True:
                 self._press_pending = True
                 try:
@@ -443,7 +460,9 @@ def parser():
             "PAGE_BACK",
         ),
     )
-    press.add_argument("--hold-ms", type=integer(20, 2000), default=80)
+    press.add_argument(
+        "--hold-ms", type=integer(MIN_HOLD_MS, MAX_HOLD_MS), default=DEFAULT_HOLD_MS
+    )
     press.add_argument("--repeat", type=integer(1, 10000), default=1)
     press.add_argument("--wait", choices=("ready", "input"), default="ready")
     press.add_argument("--expect-page-change", action="store_true")
