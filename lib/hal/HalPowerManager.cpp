@@ -4,6 +4,7 @@
 #include <Logging.h>
 #include <PowerManager.h>
 #include <WiFi.h>
+#include <Wire.h>
 #include <esp_sleep.h>
 #include <soc/soc_caps.h>
 
@@ -29,6 +30,59 @@ void HalPowerManager::begin() {
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
+  gaugeCapacity = Bq27220Capacity(gpio.deviceIsX3() ? X3_BATTERY_MAH : 0);
+}
+
+namespace {
+// The X3's BQ27220 on Wire, each transaction followed by the bus-free time the gauge asks for
+// between packets (66 us).
+class X3GaugeBus final : public Bq27220Capacity::Bus {
+ public:
+  bool write(const uint8_t reg, const uint8_t* data, const uint8_t count) override {
+    Wire.beginTransmission(I2C_ADDR_BQ27220);
+    Wire.write(reg);
+    Wire.write(data, count);
+    const bool ok = Wire.endTransmission() == 0;
+    delayMicroseconds(66);
+    return ok;
+  }
+
+  bool read(const uint8_t reg, uint8_t* out, const uint8_t count) override {
+    Wire.beginTransmission(I2C_ADDR_BQ27220);
+    Wire.write(reg);
+    bool ok = Wire.endTransmission(false) == 0 &&
+              Wire.requestFrom(static_cast<uint8_t>(I2C_ADDR_BQ27220), count, static_cast<uint8_t>(true)) == count;
+    for (uint8_t i = 0; ok && i < count; ++i) out[i] = static_cast<uint8_t>(Wire.read());
+    while (Wire.available()) Wire.read();
+    delayMicroseconds(66);
+    return ok;
+  }
+
+  void pause(const uint32_t ms) override { delay(ms); }
+};
+
+void logGaugeCapacity(const Bq27220Capacity& load, const char* when) {
+  if (load.result() == Bq27220Capacity::Result::Failed) {
+    LOG_ERR("PWR", "Gauge capacity load failed at stage %u%s, DesignCapacity %u mAh",
+            static_cast<unsigned>(load.failedAt()), when, static_cast<unsigned>(load.designCapacity()));
+  } else if (load.result() == Bq27220Capacity::Result::Loaded) {
+    LOG_INF("PWR", "Gauge capacity loaded, DesignCapacity %u mAh", static_cast<unsigned>(load.designCapacity()));
+  }
+}
+}  // namespace
+
+void HalPowerManager::loadGaugeCapacity() {
+  if (!isGaugeCapacityLoadPending()) return;
+  X3GaugeBus bus;
+  gaugeCapacity.tick(bus, millis());
+  logGaugeCapacity(gaugeCapacity, "");
+}
+
+void HalPowerManager::abandonGaugeCapacityLoad() {
+  if (!gaugeCapacity.running()) return;
+  X3GaugeBus bus;
+  gaugeCapacity.abandon(bus);
+  logGaugeCapacity(gaugeCapacity, " (sleep)");
 }
 
 void HalPowerManager::setPowerSaving(bool enabled) {

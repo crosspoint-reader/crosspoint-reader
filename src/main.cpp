@@ -293,6 +293,12 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
   halTiltSensor.deepSleep();
+#if FREEINK_DEVICE_X3
+  {
+    RenderLock lock;  // keeps the render task's gauge reads off the bus
+    powerManager.abandonGaugeCapacityLoad();
+  }
+#endif
   display.deepSleep();
   Storage.prepareForDeepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -606,6 +612,16 @@ void loop() {
   }
 
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
+
+#if FREEINK_DEVICE_X3
+  // The render task reads the fuel gauge while it draws a frame, and draws only under the render
+  // lock. Holding that lock keeps its reads off the I2C bus during each step of the capacity load;
+  // a step due while a frame is being drawn waits for a later loop.
+  if (powerManager.isGaugeCapacityLoadPending() && !RenderLock::peek()) {
+    RenderLock lock;
+    powerManager.loadGaugeCapacity();
+  }
+#endif
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 
