@@ -193,9 +193,21 @@ class SessionTests(SessionFixture):
         self.assertEqual(self.events("screenshot"), [])
         self.assertFalse(list(Path(self.temp.name).glob("*.pbm")))
 
-    def test_screenshot_timeout_and_invalid_size(self):
+    def test_screenshot_timeout_before_transfer_keeps_connection(self):
+        self.session.SCREENSHOT_TIMEOUT = 0.05
+        sent = self.session.request("command", "SCREENSHOT")
+        self.wait_for(lambda: bool(self.events("screenshot_error")))
+        error = self.events("screenshot_error")[0]
+        self.assertEqual(error["command_id"], sent["command_id"])
+        self.assertEqual(error["error"], "Screenshot timed out")
+        self.assertEqual(self.session.status()["state"], "connected")
+        self.assertEqual(len(self.ports), 1)
+        self.session.request("command", "STATE")
+
+    def test_screenshot_transfer_timeout_and_invalid_size(self):
         self.session.SCREENSHOT_TIMEOUT = 0.05
         self.session.request("command", "SCREENSHOT")
+        self.ports[-1].incoming.put(b"SCREENSHOT_META:1:8:2:1:0:0\nSCREENSHOT_START:2\n")
         self.wait_for(lambda: bool(self.events("screenshot_error")))
         self.assertEqual(self.session.status()["state"], "disconnected")
         self.wait_for(lambda: len(self.ports) == 2)
