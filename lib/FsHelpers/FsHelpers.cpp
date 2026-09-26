@@ -89,30 +89,39 @@ bool naturalLess(const std::string& str1, const std::string& str2) {
   // bytes above 0x7f with signed char) is undefined behavior
   const auto isDigit = [](const char c) { return isdigit(static_cast<unsigned char>(c)) != 0; };
 
+  const auto compareDigits = [isDigit](const char*& a, const char*& b) {
+    const char* aStart = a;
+    const char* bStart = b;
+    while (isDigit(*a)) ++a;
+    while (isDigit(*b)) ++b;
+
+    while (aStart < a && *aStart == '0') ++aStart;
+    while (bStart < b && *bStart == '0') ++bStart;
+
+    const auto aLength = a - aStart;
+    const auto bLength = b - bStart;
+    if (aLength != bLength) return aLength < bLength ? -1 : 1;
+    for (; aStart < a; ++aStart, ++bStart) {
+      if (*aStart != *bStart) return *aStart < *bStart ? -1 : 1;
+    }
+    return 0;
+  };
+
   // Iterate while both strings have characters
   while (*s1 && *s2) {
     // Check if both are at the start of a number
     if (isDigit(*s1) && isDigit(*s2)) {
-      // Skip leading zeros and track them
-      while (*s1 == '0') s1++;
-      while (*s2 == '0') s2++;
+      while (true) {
+        const int order = compareDigits(s1, s2);
+        if (order != 0) return order < 0;
 
-      // Count digits to compare lengths first
-      int len1 = 0, len2 = 0;
-      while (isDigit(s1[len1])) len1++;
-      while (isDigit(s2[len2])) len2++;
-
-      // Different length so return smaller integer value
-      if (len1 != len2) return len1 < len2;
-
-      // Same length so compare digit by digit
-      for (int i = 0; i < len1; i++) {
-        if (s1[i] != s2[i]) return s1[i] < s2[i];
+        const bool next1 = *s1 == '.' && isDigit(s1[1]);
+        const bool next2 = *s2 == '.' && isDigit(s2[1]);
+        if (next1 != next2) return !next1;
+        if (!next1) break;
+        ++s1;
+        ++s2;
       }
-
-      // Numbers equal so advance pointers
-      s1 += len1;
-      s2 += len2;
     } else {
       // Regular case-insensitive character comparison
       const int c1 = tolower(static_cast<unsigned char>(*s1));
@@ -124,7 +133,11 @@ bool naturalLess(const std::string& str1, const std::string& str2) {
   }
 
   // One string is prefix of other
-  return *s1 == '\0' && *s2 != '\0';
+  if (*s1 != *s2) return *s1 == '\0';
+
+  // Numeric values and case may compare equal for distinct filenames.
+  if (str1.size() != str2.size()) return str1.size() < str2.size();
+  return str1 < str2;
 }
 
 void sortFileList(std::vector<std::string>& strs) {
