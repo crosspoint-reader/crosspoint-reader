@@ -42,6 +42,9 @@ def open_serial(port, baud):
 class DeviceSession:
     MAX_SCREENSHOT = 2 * 1024 * 1024
     SCREENSHOT_TIMEOUT = 10
+    # id=0 ERROR reasons that firmware sends for a rejected CMD:SCREENSHOT.
+    # Other id=0 errors (INVALID_LINE, PARTIAL_TIMEOUT, ...) are unrelated.
+    SCREENSHOT_ERRORS = frozenset(("BUSY", "NO_FRAMEBUFFER"))
 
     def __init__(
         self,
@@ -392,11 +395,10 @@ class DeviceSession:
                 if (
                     fields.get("event") == "ERROR"
                     and fields.get("id") == 0
+                    and fields.get("reason") in self.SCREENSHOT_ERRORS
                     and self.waiting_screenshot
                 ):
-                    self._fail_screenshot(
-                        fields.get("reason", "Firmware rejected screenshot")
-                    )
+                    self._fail_screenshot(fields["reason"])
 
     def _fail_screenshot(self, error):
         self._publish("screenshot_error", command_id=self.capture_id, error=error)
