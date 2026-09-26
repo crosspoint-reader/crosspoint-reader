@@ -14,6 +14,7 @@
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
 #include "fontIds.h"
+#include "util/ParagraphIndentMigration.h"
 
 namespace {
 
@@ -179,6 +180,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  const auto indentSpaces = doc["paragraphIndentSpaces"];
+  const bool hasSavedWidth = indentSpaces.is<int>();
+  const int savedWidth = hasSavedWidth ? indentSpaces.as<int>() : 0;
+  paragraphIndentSpaces = migrateParagraphIndentSpaces(hasSavedWidth, savedWidth, extraParagraphSpacing != 0);
+  if (!hasSavedWidth || savedWidth < 0 || savedWidth > 5) needsResave = true;
+
   // Older files stored one combined touch mode under "touchReaderControls":
   // 0=off, 1=tap, 2=swipe, 3=inverted tap. Split it into the master toggle
   // plus the per-direction gesture pair (the generic loop above already folded
@@ -293,6 +300,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.characterSpacing = getCharacterSpacing();
   spec.wordSpacingPercent = wordSpacing;
   spec.extraParagraphSpacing = extraParagraphSpacing != 0;
+  spec.paragraphIndentSpaces = paragraphIndentSpaces;
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
