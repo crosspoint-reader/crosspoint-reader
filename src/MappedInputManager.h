@@ -46,6 +46,8 @@ class MappedInputManager {
   // current action remains available for immediate Home cancellation.
   void update(bool deferHomeButtonAction = false) const;
 #ifdef ENABLE_SERIAL_CONTROL
+  // First physical index that a synthetic press of this button drives, or -1
+  // when the mapping is disabled or reaches only Power.
   int controlButton(Button button) const;
   // A cancelled synthetic hold still releases; hide that release from activities.
   void suppressControlRelease(Button button) const { suppressNextRelease(button); }

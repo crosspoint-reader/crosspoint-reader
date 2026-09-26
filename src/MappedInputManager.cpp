@@ -162,7 +162,8 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
 
 #ifdef ENABLE_SERIAL_CONTROL
 int MappedInputManager::controlButton(Button button) const {
-  const uint8_t mask = buttonMask(button);
+  // Serial control never injects Power: it would sleep the device mid-session.
+  const uint8_t mask = buttonMask(button) & ~(1u << HalGPIO::BTN_POWER);
   for (uint8_t index = 0; index < HalGPIO::BUTTON_COUNT; ++index) {
     if (mask & (1u << index)) return index;
   }
