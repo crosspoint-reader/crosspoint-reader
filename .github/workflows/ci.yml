@@ -52,7 +52,7 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.2.0.zip
           # platform-espressif32's builder/main.py imports these unconditionally; its own
           # penv bootstrap (builder/penv_setup.py) is supposed to install them automatically
           # but isn't picking them up reliably in this runner image, so pin them explicitly.
@@ -113,7 +113,7 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.2.0.zip
           # platform-espressif32's builder/main.py imports these unconditionally; its own
           # penv bootstrap (builder/penv_setup.py) is supposed to install them automatically
           # but isn't picking them up reliably in this runner image, so pin them explicitly.
@@ -128,21 +128,6 @@ jobs:
           path: ~/.platformio
           key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-v3-${{ runner.os }}-${{ matrix.env }}-
-
-      - name: Pin pioarduino core inside the platform penv
-        run: |
-          set -euo pipefail
-          # Envs with custom_sdkconfig (default, sticky) run a nested `pio run` from
-          # ~/.platformio/penv. The platform bootstraps that penv with an open-ended
-          # "pioarduino>=6.1.19", which now resolves to 6.2.0. That core wants
-          # tool-scons 4.11.1 while platform 55.03.311 pins 4.8.1; the two keep
-          # reinstalling over each other and the running SCons loses its package
-          # mid-build ("No module named 'SCons.Tool.FortranCommon'"). Keep the penv
-          # core on the same version as the outer core installed above.
-          # See https://github.com/pioarduino/platform-espressif32/issues/529
-          pio pkg install -e ${{ matrix.env }}
-          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
-          ~/.platformio/penv/bin/pio --version
 
       - name: Build ${{ matrix.env }} firmware
         run: |
