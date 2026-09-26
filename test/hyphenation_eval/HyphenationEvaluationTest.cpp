@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -224,6 +225,27 @@ void runLanguageEval(const char* langName, const char* primaryTag, const char* r
 
 }  // namespace
 
+TEST(HyphenationEval, Catalan) { runLanguageEval("catalan", "ca", "catalan_hyphenation_tests.txt", 98.17); }
+TEST(HyphenationEval, CatalanLanguageAliases) {
+  const std::string word = "acompanyament";
+  Hyphenator::setPreferredLanguage("ca");
+  const auto expected = Hyphenator::breakOffsets(word, false);
+  Hyphenator::setPreferredLanguage("");
+  ASSERT_FALSE(expected.empty());
+  EXPECT_TRUE(Hyphenator::breakOffsets(word, false).empty());
+
+  for (const char* tag : {"cat", "CAT", "cat-ES", "ca-ES", "ca-valencia"}) {
+    SCOPED_TRACE(tag);
+    Hyphenator::setPreferredLanguage(tag);
+    const auto actual = Hyphenator::breakOffsets(word, false);
+    Hyphenator::setPreferredLanguage("");
+    ASSERT_EQ(actual.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+      EXPECT_EQ(actual[i].byteOffset, expected[i].byteOffset);
+      EXPECT_EQ(actual[i].requiresInsertedHyphen, expected[i].requiresInsertedHyphen);
+    }
+  }
+}
 TEST(HyphenationEval, English) { runLanguageEval("english", "en", "english_hyphenation_tests.txt", 98.10); }
 TEST(HyphenationEval, French) { runLanguageEval("french", "fr", "french_hyphenation_tests.txt", 99.00); }
 TEST(HyphenationEval, German) { runLanguageEval("german", "de", "german_hyphenation_tests.txt", 96.73); }

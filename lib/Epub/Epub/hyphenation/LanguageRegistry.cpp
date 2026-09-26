@@ -4,6 +4,7 @@
 #include <array>
 
 #include "HyphenationCommon.h"
+#include "generated/hyph-ca.trie.h"
 #include "generated/hyph-de.trie.h"
 #include "generated/hyph-en.trie.h"
 #include "generated/hyph-es.trie.h"
@@ -23,6 +24,7 @@ LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 3
 LanguageHyphenator frenchHyphenator(fr_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator germanHyphenator(de_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator russianHyphenator(ru_patterns, isCyrillicLetter, toLowerCyrillic);
+LanguageHyphenator catalanHyphenator(ca_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator spanishHyphenator(es_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator italianHyphenator(it_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator swedishHyphenator(sv_patterns, isLatinLetter, toLowerLatin);
@@ -31,20 +33,21 @@ LanguageHyphenator polishHyphenator(pl_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator finnishHyphenator(fi_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator portugueseHyphenator(pt_patterns, isLatinLetter, toLowerLatin);
 
-using EntryArray = std::array<LanguageEntry, 11>;
+using EntryArray = std::array<LanguageEntry, 12>;
 
 const EntryArray& entries() {
-  static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
-                                       {"french", "fr", &frenchHyphenator},
-                                       {"german", "de", &germanHyphenator},
-                                       {"russian", "ru", &russianHyphenator},
-                                       {"spanish", "es", &spanishHyphenator},
-                                       {"italian", "it", &italianHyphenator},
-                                       {"polish", "pl", &polishHyphenator},
-                                       {"swedish", "sv", &swedishHyphenator},
-                                       {"ukrainian", "uk", &ukrainianHyphenator},
-                                       {"finnish", "fi", &finnishHyphenator},
-                                       {"portuguese", "pt", &portugueseHyphenator}}};
+  static constexpr EntryArray kEntries = {{{"catalan", "ca", &catalanHyphenator},
+                                           {"english", "en", &englishHyphenator},
+                                           {"french", "fr", &frenchHyphenator},
+                                           {"german", "de", &germanHyphenator},
+                                           {"russian", "ru", &russianHyphenator},
+                                           {"spanish", "es", &spanishHyphenator},
+                                           {"italian", "it", &italianHyphenator},
+                                           {"polish", "pl", &polishHyphenator},
+                                           {"swedish", "sv", &swedishHyphenator},
+                                           {"ukrainian", "uk", &ukrainianHyphenator},
+                                           {"finnish", "fi", &finnishHyphenator},
+                                           {"portuguese", "pt", &portugueseHyphenator}}};
   return kEntries;
 }
 
