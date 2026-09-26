@@ -471,8 +471,14 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
-  uint32_t numPages;
+  uint32_t numPages = 0;
   serialization::readPod(f, numPages);
+  // A truncated file (e.g. power loss mid-save) leaves numPages unreliable; a
+  // garbage count would make reserve() abort and crash-loop on reopen.
+  if (numPages == 0 || f.size() != f.position() + static_cast<size_t>(numPages) * sizeof(uint32_t)) {
+    LOG_DBG("TRS", "Cache page count inconsistent with file size, rebuilding");
+    return false;
+  }
 
   pageOffsets.clear();
   pageOffsets.reserve(numPages);
