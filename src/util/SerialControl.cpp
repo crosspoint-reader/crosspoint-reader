@@ -183,7 +183,7 @@ void dispatch() {
     const auto* entry = std::find_if(std::begin(BUTTONS), std::end(BUTTONS),
                                      [arg](const ButtonName& candidate) { return strcmp(arg, candidate.name) == 0; });
     const int physical = entry == std::end(BUTTONS) ? -1 : mappedInputManager.controlButton(entry->button);
-    if (physical < 0 || physical == HalGPIO::BTN_POWER) {
+    if (physical < 0) {
       error(id, "UNSUPPORTED_BUTTON");
       return;
     }
@@ -206,8 +206,7 @@ void dispatch() {
             static_cast<unsigned long>(id), static_cast<unsigned long>(bootId), static_cast<unsigned long>(lastId),
             static_cast<unsigned long>(SerialInput::MIN_HOLD_MS), static_cast<unsigned long>(SerialInput::MAX_HOLD_MS));
     for (const auto& entry : BUTTONS) {
-      const int physical = mappedInputManager.controlButton(entry.button);
-      if (physical >= 0 && physical != HalGPIO::BTN_POWER)
+      if (mappedInputManager.controlButton(entry.button) >= 0)
         LOG_INF("CTL", "id=%lu boot=%lu event=BUTTON name=%s", static_cast<unsigned long>(id),
                 static_cast<unsigned long>(bootId), entry.name);
     }
