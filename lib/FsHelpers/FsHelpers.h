@@ -70,6 +70,10 @@ inline bool hasCssExtension(const String& fileName) {
   return hasCssExtension(std::string_view{fileName.c_str(), fileName.length()});
 }
 std::string extractFolderPath(const std::string& filePath);
+std::string getFileNameWithoutExtension(std::string_view filePath);
+inline std::string getFileNameWithoutExtension(const String& filePath) {
+  return getFileNameWithoutExtension(std::string_view{filePath.c_str(), filePath.length()});
+}
 
 // Rejects an empty component, one containing '/' or '\', or the exact components
 // "." and "..", so a single filename/folder-name argument can never be used to

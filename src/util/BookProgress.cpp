@@ -5,7 +5,6 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <Txt.h>
 #include <Xtc.h>
 
 #include <algorithm>
@@ -18,7 +17,7 @@ uint32_t readLe32(const uint8_t* p) {
 
 int loadBookProgress(const std::string& path) {
   uint8_t data[10]{};
-  if (FsHelpers::hasEpubExtension(path)) {
+  if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     // Metadata objects exceed the stack budget; only the featured book is loaded, once per entry.
     auto epub = makeUniqueNoThrow<Epub>(path, "/.crosspoint");
     if (!epub) {
@@ -53,25 +52,6 @@ int loadBookProgress(const std::string& path) {
     if (xtc->getPageCount() == 0) return -1;
     if (page >= xtc->getPageCount()) return 100;
     return xtc->calculateProgress(page);
-  }
-  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    Txt txt(path, "/.crosspoint");
-    HalFile file;
-    if (!Storage.openFileForRead("HOME", txt.getCachePath() + "/progress.bin", file) || file.read(data, 4) != 4)
-      return -1;
-    const uint32_t page = data[0] | (data[1] << 8);
-    HalFile index;
-    // TXT index v3: magic, version, file size, four layout fields, alignment, page count.
-    uint8_t header[30];
-    if (!Storage.openFileForRead("HOME", txt.getCachePath() + "/index.bin", index) ||
-        index.read(header, sizeof(header)) != sizeof(header))
-      return -1;
-    if (readLe32(header) != 0x54585449 || header[4] != 3) return -1;
-    const uint32_t pages = readLe32(header + 26);
-    if (pages == 0 || pages > (index.size() - sizeof(header)) / 4) return -1;
-    HalFile source;
-    if (!Storage.openFileForRead("HOME", path, source) || source.size() != readLe32(header + 5)) return -1;
-    return std::min<int>(100, static_cast<int>((page + 1) * 100ULL / pages));
   }
   return -1;
 }

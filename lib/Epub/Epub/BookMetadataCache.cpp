@@ -245,100 +245,124 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     }
   }
 
-  ZipFile zip(epubPath);
-  // Pre-open zip file to speed up size calculations
-  if (!zip.open()) {
-    LOG_ERR("BMC", "Could not open EPUB zip for size calculations");
-    // Explicit close() required: member variables persist beyond function scope
-    bookFile.close();
-    spineFile.close();
-    tocFile.close();
-    return false;
-  }
-  // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
-  // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
-  // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
-  // Instead, for large books we use a one-pass batch lookup that scans the ZIP
-  // central directory once and matches against spine targets using hash comparison.
-  // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
-  // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
+  const bool isZip = !FsHelpers::hasTxtExtension(epubPath) && !FsHelpers::hasMarkdownExtension(epubPath);
+  if (isZip) {
+    ZipFile zip(epubPath);
+    // Pre-open zip file to speed up size calculations
+    if (!zip.open()) {
+      LOG_ERR("BMC", "Could not open EPUB zip for size calculations");
+      // Explicit close() required: member variables persist beyond function scope
+      bookFile.close();
+      spineFile.close();
+      tocFile.close();
+      return false;
+    }
+    // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
+    // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
+    // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
+    // Instead, for large books we use a one-pass batch lookup that scans the ZIP
+    // central directory once and matches against spine targets using hash comparison.
+    // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
+    // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
 
-  std::deque<uint32_t> spineSizes;
-  bool useBatchSizes = false;
+    std::deque<uint32_t> spineSizes;
+    bool useBatchSizes = false;
 
-  if (spineCount >= LARGE_SPINE_THRESHOLD) {
-    LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
+    if (spineCount >= LARGE_SPINE_THRESHOLD) {
+      LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
 
-    std::deque<ZipFile::SizeTarget> targets;
-    targets.resize(spineCount);
+      std::deque<ZipFile::SizeTarget> targets;
+      targets.resize(spineCount);
 
+      spineIn.seek(0);
+      for (int i = 0; i < spineCount; i++) {
+        auto entry = readSpineEntryFrom(spineIn);
+        std::string path = FsHelpers::normalisePath(entry.href);
+
+        ZipFile::SizeTarget t;
+        t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
+        t.len = static_cast<uint16_t>(path.size());
+        t.index = static_cast<uint16_t>(i);
+        targets[i] = t;
+      }
+
+      std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+        return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+      });
+
+      spineSizes.resize(spineCount, 0);
+      int matched = zip.fillUncompressedSizes(targets, spineSizes);
+      LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
+
+      targets.clear();
+      targets.shrink_to_fit();
+
+      useBatchSizes = true;
+    }
+
+    uint32_t cumSize = 0;
     spineIn.seek(0);
+    int lastSpineTocIndex = -1;
     for (int i = 0; i < spineCount; i++) {
-      auto entry = readSpineEntryFrom(spineIn);
-      std::string path = FsHelpers::normalisePath(entry.href);
+      auto spineEntry = readSpineEntryFrom(spineIn);
 
-      ZipFile::SizeTarget t;
-      t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
-      t.len = static_cast<uint16_t>(path.size());
-      t.index = static_cast<uint16_t>(i);
-      targets[i] = t;
-    }
+      spineEntry.tocIndex = spineToTocIndex[i];
 
-    std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
-      return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
-    });
+      // Not a huge deal if we don't fine a TOC entry for the spine entry, this is expected behaviour for EPUBs
+      // Logging here is for debugging
+      if (spineEntry.tocIndex == -1) {
+        LOG_DBG("BMC", "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
+                spineEntry.href.c_str());
+        spineEntry.tocIndex = lastSpineTocIndex;
+      }
+      lastSpineTocIndex = spineEntry.tocIndex;
 
-    spineSizes.resize(spineCount, 0);
-    int matched = zip.fillUncompressedSizes(targets, spineSizes);
-    LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
-
-    targets.clear();
-    targets.shrink_to_fit();
-
-    useBatchSizes = true;
-  }
-
-  uint32_t cumSize = 0;
-  spineIn.seek(0);
-  int lastSpineTocIndex = -1;
-  for (int i = 0; i < spineCount; i++) {
-    auto spineEntry = readSpineEntryFrom(spineIn);
-
-    spineEntry.tocIndex = spineToTocIndex[i];
-
-    // Not a huge deal if we don't fine a TOC entry for the spine entry, this is expected behaviour for EPUBs
-    // Logging here is for debugging
-    if (spineEntry.tocIndex == -1) {
-      LOG_DBG("BMC", "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
-              spineEntry.href.c_str());
-      spineEntry.tocIndex = lastSpineTocIndex;
-    }
-    lastSpineTocIndex = spineEntry.tocIndex;
-
-    size_t itemSize = 0;
-    if (useBatchSizes) {
-      itemSize = spineSizes[i];
-      if (itemSize == 0) {
+      size_t itemSize = 0;
+      if (useBatchSizes) {
+        itemSize = spineSizes[i];
+        if (itemSize == 0) {
+          const std::string path = FsHelpers::normalisePath(spineEntry.href);
+          if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
+            LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
+          }
+        }
+      } else {
         const std::string path = FsHelpers::normalisePath(spineEntry.href);
         if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
           LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
         }
       }
-    } else {
-      const std::string path = FsHelpers::normalisePath(spineEntry.href);
-      if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-        LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
-      }
+
+      cumSize += itemSize;
+      spineEntry.cumulativeSize = cumSize;
+
+      // Write out spine data to book.bin
+      writeSpineEntryTo(bookOut, spineEntry);
     }
-
-    cumSize += itemSize;
-    spineEntry.cumulativeSize = cumSize;
-
-    // Write out spine data to book.bin
-    writeSpineEntryTo(bookOut, spineEntry);
+    // Close opened zip file
+    zip.close();
+  } else {
+    // Non-zip file (TXT/MD): determine size from file on storage
+    HalFile rawFile;
+    size_t rawSize = 0;
+    if (Storage.openFileForRead("BMC", epubPath, rawFile)) {
+      rawSize = rawFile.size();
+    }
+    uint32_t cumSize = 0;
+    spineIn.seek(0);
+    int lastSpineTocIndex = -1;
+    for (int i = 0; i < spineCount; i++) {
+      auto spineEntry = readSpineEntryFrom(spineIn);
+      spineEntry.tocIndex = spineToTocIndex[i];
+      if (spineEntry.tocIndex == -1) {
+        spineEntry.tocIndex = lastSpineTocIndex;
+      }
+      lastSpineTocIndex = spineEntry.tocIndex;
+      cumSize += rawSize;
+      spineEntry.cumulativeSize = cumSize;
+      writeSpineEntryTo(bookOut, spineEntry);
+    }
   }
-  // Close opened zip file
-  zip.close();
 
   // Loop through toc entries from toc file writing to book.bin
   tocIn.seek(0);

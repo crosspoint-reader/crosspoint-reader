@@ -30,12 +30,10 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 
 std::string getBookCachePath(const std::string& path) {
   const char* prefix = nullptr;
-  if (FsHelpers::hasEpubExtension(path)) {
+  if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     prefix = "epub_";
   } else if (FsHelpers::hasXtcExtension(path)) {
     prefix = "xtc_";
-  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    prefix = "txt_";
   } else {
     return "";
   }

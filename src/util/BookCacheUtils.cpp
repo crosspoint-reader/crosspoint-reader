@@ -3,7 +3,6 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <Logging.h>
-#include <Txt.h>
 #include <Xtc.h>
 
 bool isBookCacheDirectoryName(const char* name) {
@@ -21,12 +20,10 @@ bool isBookCacheDirectoryName(const char* name) {
 }
 
 void clearBookCache(const std::string& path) {
-  if (FsHelpers::hasEpubExtension(path)) {
+  if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     Epub(path, "/.crosspoint").clearCache();
   } else if (FsHelpers::hasXtcExtension(path)) {
     Xtc(path, "/.crosspoint").clearCache();
-  } else if (FsHelpers::hasTxtExtension(path)) {
-    Txt(path, "/.crosspoint").clearCache();
   } else {
     return;
   }
