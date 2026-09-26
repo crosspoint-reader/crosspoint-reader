@@ -1,5 +1,6 @@
 #include "ContentOpfParser.h"
 
+#include <Arduino.h>
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
@@ -15,6 +16,10 @@ constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char MEDIA_TYPE_IMAGE_PREFIX[] = "image/";
 constexpr char itemCacheFile[] = "/.items.bin";
+// The manifest index grows by one entry per item, thousands in a web novel. Without
+// exceptions a std::deque that cannot get memory aborts the device, so the parse
+// stops with an error while this much heap is still free.
+constexpr uint32_t ITEM_INDEX_MIN_FREE_HEAP = 16 * 1024;
 
 bool startsWithImageMediaType(const std::string& mediaType) {
   constexpr size_t prefixLen = sizeof(MEDIA_TYPE_IMAGE_PREFIX) - 1;
@@ -253,6 +258,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
     // Record index entry for fast lookup later
     if (self->tempItemStore) {
+      // A deque node holds dozens of entries, so checking every 32 pushes still sees
+      // each node allocation coming.
+      if (self->itemIndex.size() % 32 == 0 && ESP.getFreeHeap() < ITEM_INDEX_MIN_FREE_HEAP) {
+        LOG_ERR("COF", "Book too large: manifest index stopped at %u items, %u B heap free",
+                static_cast<unsigned>(self->itemIndex.size()), static_cast<unsigned>(ESP.getFreeHeap()));
+        XML_StopParser(self->parser, XML_FALSE);
+        return;
+      }
       ItemIndexEntry entry;
       entry.idHash = fnvHash(itemId);
       entry.idLen = static_cast<uint16_t>(itemId.size());

@@ -63,6 +63,7 @@ add_subdirectory(korean_line_breaking)
 add_subdirectory(ligature_guard)
 add_subdirectory(page_link)
 add_subdirectory(content_opf_parser)
+add_subdirectory(huge_book_index)
 add_subdirectory(chapter_position)
 add_subdirectory(home_button)
 
