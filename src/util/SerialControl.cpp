@@ -33,6 +33,7 @@ uint32_t lastByteAt = 0;
 uint32_t bootId = 0;
 uint32_t lastId = 0;
 uint32_t activeId = 0;
+MappedInputManager::Button activeButton = MappedInputManager::Button::Back;
 
 struct ButtonName {
   const char* name;
@@ -50,6 +51,13 @@ static constexpr ButtonName BUTTONS[] = {
     {"PAGE_FORWARD", MappedInputManager::Button::PageForward},
     {"PAGE_BACK", MappedInputManager::Button::PageBack},
 };
+
+// Ends the active hold. A button already down gets a suppressed release so
+// long-press and release-suppression state in MappedInputManager stays paired.
+void endHold() {
+  if (serialInput.releaseEarly()) mappedInputManager.suppressControlRelease(activeButton);
+  activeId = 0;
+}
 
 bool number(const char* text, uint32_t& value) {
   if (!text || !*text) return false;
@@ -166,6 +174,7 @@ void dispatch() {
     }
     serialInput.start(static_cast<uint8_t>(physical), duration);
     activeId = id;
+    activeButton = entry->button;
     LOG_INF("CTL", "id=%lu boot=%lu event=ACCEPTED button=%s hold_ms=%lu", static_cast<unsigned long>(id),
             static_cast<unsigned long>(bootId), arg, static_cast<unsigned long>(duration));
     return;
@@ -190,8 +199,7 @@ void dispatch() {
       LOG_INF("CTL", "id=%lu boot=%lu event=CANCELLED", static_cast<unsigned long>(activeId),
               static_cast<unsigned long>(bootId));
     }
-    serialInput.cancel();
-    activeId = 0;
+    endHold();
     LOG_INF("CTL", "id=%lu boot=%lu event=CANCELLED", static_cast<unsigned long>(id),
             static_cast<unsigned long>(bootId));
   } else
@@ -213,9 +221,8 @@ void SerialControl::beginFrame() {
 
 void SerialControl::poll() {
   if (activeId && (gpio.physicalInputActive() || activityManager.requiresExclusiveStorageLoop())) {
-    serialInput.cancel();
     error(activeId, "INTERRUPTED");
-    activeId = 0;
+    endHold();
   }
   if (lineLength && static_cast<uint32_t>(millis() - lastByteAt) > 1000) {
     lineLength = 0;

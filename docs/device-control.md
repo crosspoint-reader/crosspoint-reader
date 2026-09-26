@@ -310,8 +310,10 @@ than requested; `INPUT_DONE.held_ms` reports the actual duration.
 
 Only one synthetic press can be active. Busy rendering/navigation and physical
 input reject a new press with `BUSY`; physical input during a press produces
-`INTERRUPTED`. Cancellation clears synthetic state without emitting a release
-click. It cannot undo an action already triggered on button-down. Requests have
+`INTERRUPTED`. Cancellation of a held button releases it on the next loop, and
+that release is hidden from the activity, so no release click or leftover
+long-press state remains. It cannot undo an action already triggered on
+button-down. Requests have
 a bounded 127-byte buffer and a one-second partial-line timeout. An overlong,
 invalid, or timed-out line is discarded through its next newline.
 
