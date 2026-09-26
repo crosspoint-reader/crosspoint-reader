@@ -423,9 +423,7 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (section && section->isBuilding() && !RenderLock::peek() &&
-      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
-      buildTickHeapGate()) {
+  if (backgroundBuildWanted() && !RenderLock::peek() && buildTickHeapGate()) {
     RenderLock lock;
     if (section->isBuilding() && buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
@@ -1132,10 +1130,12 @@ void EpubReaderActivity::onReturnFromEndOfBook() {
   }
 }
 
-bool EpubReaderActivity::skipLoopDelay() {
-  return section && section->isBuilding() && !buildHeapPaused &&
+bool EpubReaderActivity::backgroundBuildWanted() const {
+  return section && section->isBuilding() &&
          (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
 }
+
+bool EpubReaderActivity::skipLoopDelay() { return backgroundBuildWanted() && !buildHeapPaused; }
 
 void EpubReaderActivity::renderBook() {
   currentPageLinks.clear();
@@ -2676,10 +2676,8 @@ void EpubReaderActivity::updateBookmarkFlag() {
 
 #ifdef ENABLE_SERIAL_CONTROL
 bool EpubReaderActivity::controlBusy() const {
-  // A retained builder can be paused at its page window or by the heap gate.
-  const bool building =
-      section && section->isBuilding() && !buildHeapPaused &&
-      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  // A builder paused at its page window or by the heap gate is not busy.
+  const bool building = backgroundBuildWanted() && !buildHeapPaused;
   return building || buildPopupPending || pendingManualTurn != 0 || pendingPageJump.has_value() ||
          pendingOffsetJump.has_value() || pendingPercentJump || !pendingAnchor.empty();
 }
