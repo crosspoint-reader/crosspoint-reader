@@ -96,6 +96,8 @@ jobs:
             asset: firmware-x4c.bin
           - env: papermono
             asset: firmware-papermono.bin
+          - env: murphy_m4
+            asset: firmware-murphy-m4.bin
     steps:
       - uses: actions/checkout@v6
         with:
