@@ -78,7 +78,7 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 void ActivityManager::renderTaskLoop() {
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
     controlRendering.store(true);
     const uint32_t ticket = controlRequested.load();
 #endif
@@ -94,7 +94,7 @@ void ActivityManager::renderTaskLoop() {
       currentActivity->render(std::move(lock));
       paintedVisit.store(renderingVisit, std::memory_order_release);
     }
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
     controlCompleted.store(ticket);
     controlRendering.store(false);
 #endif
@@ -478,7 +478,7 @@ void ActivityManager::prepareForSleep() {
 }
 
 void ActivityManager::requestUpdate(bool immediate) {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   controlRequested.fetch_add(1);
 #endif
   if (immediate) {
@@ -517,14 +517,14 @@ void ActivityManager::requestUpdateAndWait() {
   // Cannot call while holding RenderLock or it will cause a deadlock
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   controlRequested.fetch_add(1);
 #endif
   xTaskNotify(renderTaskHandle, 1, eIncrement);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
 void ActivityManager::getControlState(ControlState& state) const {
   state.requested = controlRequested.load();
   state.completed = controlCompleted.load();
