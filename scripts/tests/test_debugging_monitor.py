@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from collections import deque
 from concurrent.futures import Future
 from pathlib import Path
 
@@ -90,6 +91,24 @@ class SessionFixture(unittest.TestCase):
 
 
 class SessionTests(SessionFixture):
+    def test_read_events_returns_tail_after_cursor(self):
+        with self.session.condition:
+            self.session.events = deque(maxlen=4)
+            start = self.session.sequence
+            for index in range(6):
+                self.session._publish("log", line=str(index))
+
+        def lines(batch):
+            return [e["line"] for e in batch["events"]]
+
+        batch = self.session.read_events(start + 4)
+        self.assertEqual(lines(batch), ["4", "5"])
+        self.assertFalse(batch["dropped"])
+        batch = self.session.read_events(start)
+        self.assertEqual(lines(batch), ["2", "3", "4", "5"])
+        self.assertTrue(batch["dropped"])
+        self.assertEqual(self.session.read_events(start + 6)["events"], [])
+
     def test_control_replies_preserve_logs_and_report_rejected_capture(self):
         self.ports[-1].incoming.put(
             b"[123] [INF] [CTL] id=4 boot=12 event=STATE available=1 busy=0 "
