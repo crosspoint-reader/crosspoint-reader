@@ -92,18 +92,36 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
 // (no-op once a build has completed or never started).
 Section::~Section() { suspendBuild(); }
 
-uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
+void Section::onPageComplete(std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
+                             const uint32_t visibleTextOffset) {
+  // Already stopping (buildSomeMore suspends as soon as it regains control): don't
+  // write pages that can no longer be indexed.
+  if (build_->lutExhausted) return;
+
+  // A zero file offset marks a page that failed to write; commitBuildFile rejects the
+  // build when it sees one, so the entry is still recorded to keep the LUT aligned
+  // with the pages emitted so far.
+  uint32_t position = 0;
   if (!file) {
     LOG_ERR("SCT", "File not open for writing page %d", builtPageCount_);
-    return 0;
+  } else {
+    position = file.position();
+    if (!page->serialize(file)) {
+      LOG_ERR("SCT", "Failed to serialize page %d", builtPageCount_);
+      position = 0;
+    } else {
+      LOG_DBG("SCT", "Page %d processed", builtPageCount_);
+    }
   }
 
-  const uint32_t position = file.position();
-  if (!page->serialize(file)) {
-    LOG_ERR("SCT", "Failed to serialize page %d", builtPageCount_);
-    return 0;
+  if (!build_->lut.push_back({position, paragraphIndex, listItemIndex, visibleTextOffset})) {
+    // Out of memory, or past the LUT's ceiling. builtPageCount_ is deliberately not
+    // advanced: this page is unreachable without an index entry, so the build stops
+    // here and keeps the pages it can still address.
+    LOG_ERR("SCT", "OOM: page LUT at %u pages", build_->lut.size());
+    build_->lutExhausted = true;
+    return;
   }
-  LOG_DBG("SCT", "Page %d processed", builtPageCount_);
 
   builtPageCount_++;
   // pageCount is the pages available to read: a rebuild over a partial only raises it
@@ -111,7 +129,6 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   if (builtPageCount_ > pageCount) {
     pageCount = builtPageCount_;
   }
-  return position;
 }
 
 void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
@@ -427,18 +444,17 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   }
 
   // The parser stores the path/contentBase/imageBasePath by reference, so they must
-  // live in the BuildContext (which outlives the parser). The page-complete callback
-  // captures the BuildContext pointer to append to its in-RAM LUT; build_ owns the
-  // context for the parser's whole lifetime.
+  // live in the BuildContext (which outlives the parser); build_ owns the context for
+  // the parser's whole lifetime. The page-complete callback runs only from parseStep(),
+  // i.e. after build_ has taken ownership, so it can reach the LUT through build_.
   BuildContext* ctxPtr = ctx.get();
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
       spec.focusReadingEnabled,
-      [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
-                     const uint32_t visibleTextOffset) {
-        ctxPtr->lut.push_back(
-            {this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
+      [this](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
+             const uint32_t visibleTextOffset) {
+        this->onPageComplete(std::move(page), paragraphIndex, listItemIndex, visibleTextOffset);
       },
       spec.embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors),
       popupFn, ctxPtr->cssParser);
@@ -482,6 +498,15 @@ bool Section::buildSomeMore(const int maxPages) {
     }
     if (status == ChapterHtmlSlimParser::ParseStatus::Done) {
       return finalizeBuild();
+    }
+    if (build_->lutExhausted) {
+      // The page index could not grow (see onPageComplete). Persist what is indexed as
+      // a partial: the reader keeps the pages it has, and the next attempt resumes from
+      // the watermark rather than losing the chapter. Failure only if nothing readable
+      // survived (the partial commit failed and no earlier partial exists).
+      LOG_ERR("SCT", "Stopping build at %u pages: page index exhausted", builtPageCount_);
+      suspendBuild();
+      return pageCount > 0;
     }
     // ParseStatus::More: yield once we've laid out the requested number of pages.
     if (maxPages > 0 && (builtPageCount_ - startCount) >= maxPages) {
@@ -646,6 +671,11 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
 }
 
 bool Section::finalizeBuild() {
+  // finishParse() closes the parse file before it flushes, and parseBytesConsumed() reads
+  // that file, so the watermark has to be taken now: if the flush below is the write that
+  // exhausts the page index, this build becomes a partial and needs it.
+  build_->bytesConsumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+
   // Flush the trailing page (emits the last page via the completePageFn into the LUT).
   // A false return means layout dropped content (OOM); committing would persist a
   // section cache with holes in the text, so abandon the build instead.
@@ -653,6 +683,17 @@ bool Section::finalizeBuild() {
     LOG_ERR("SCT", "Parse finalize failed; abandoning section build");
     abandonBuild();
     return false;
+  }
+
+  if (build_->lutExhausted) {
+    // The trailing page could not be indexed (see onPageComplete). Committing a full
+    // section here would cache a chapter that is silently short its last page, with an
+    // anchor map naming a page the LUT has no entry for. Persist the indexed pages as a
+    // partial instead -- the same outcome buildSomeMore produces when the index runs out
+    // mid-parse, rather than a "complete" section that quietly lost content.
+    LOG_ERR("SCT", "Page index exhausted on the final page: persisting %u pages as a partial", builtPageCount_);
+    suspendBuild();
+    return pageCount > 0;
   }
 
   if (!build_->reusedHtml) {
@@ -694,7 +735,11 @@ void Section::suspendBuild() {
     // Capture the parse watermark and commit before tearing the parser down (the anchor
     // map is read from it). The incomplete trailing page is intentionally not flushed:
     // only fully laid-out pages are persisted, and the rebuild re-derives the rest.
-    const uint32_t consumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+    // parseBytesConsumed() reports the open parse file's position, so it reads 0 once the
+    // parser has closed it -- the case when finalizeBuild suspends after finishParse().
+    // It records the watermark before flushing, so fall back to that.
+    uint32_t consumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+    if (consumed == 0) consumed = build_->bytesConsumed;
     committed = commitBuildFile(SECTION_FILE_PARTIAL_VERSION, consumed, build_->totalBytes);
     if (committed) {
       partial_ = true;
@@ -702,6 +747,12 @@ void Section::suspendBuild() {
       partialBytesConsumed_ = consumed;
       partialTotalBytes_ = build_->totalBytes;
       LOG_INF("SCT", "Suspended build: %u pages persisted", builtPageCount_);
+    } else if (partial_ && !Storage.exists(filePath.c_str())) {
+      // commitBuildFile removes the old file before its rename, so a failed swap can
+      // take the earlier partial with it.
+      LOG_ERR("SCT", "Earlier partial lost with the failed commit");
+      partial_ = false;
+      partialPageCount_ = 0;
     }
   }
 

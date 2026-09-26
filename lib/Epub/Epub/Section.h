@@ -1,4 +1,6 @@
 #pragma once
+#include <ChunkedVector.h>
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -21,7 +23,8 @@ class Section {
   HalFile file;
 
   void writeSectionFileHeader(const ReaderRenderSpec& spec);
-  uint32_t onPageComplete(std::unique_ptr<Page> page);
+  void onPageComplete(std::unique_ptr<Page> page, uint16_t paragraphIndex, uint16_t listItemIndex,
+                      uint32_t visibleTextOffset);
 
   // Page-offset table entry, kept in RAM while an incremental build is running so
   // already-built pages can be located in the partially-written .bin.
@@ -31,12 +34,26 @@ class Section {
     uint16_t listItemIndex;
     uint32_t visibleTextOffset;
   };
+  // One entry per laid-out page, so the table's length is the length of the chapter:
+  // a single-file book runs to thousands of pages. As a std::vector that meant an
+  // ever-larger contiguous block plus a full copy at every doubling, allocated while
+  // the parse already holds most of the heap -- the allocation that aborts the device
+  // deep into a long chapter. Chunked instead: chunks start at 16 entries (192B), so a
+  // short section costs what a vector would, and top out at 128 entries (1.5KB), well
+  // inside the largest-free-block floor the reader's build gate enforces; nothing
+  // is ever copied. 131 chunks cover 16496 pages, far past any real chapter; a build
+  // that somehow exceeds that is suspended rather than aborted.
+  using PageLut = ChunkedVector<PageLutEntry, 16, 128, 131>;
   // Held only while an incremental build is in progress (see startBuild). Carries the
   // live parser plus the strings it references (the parser stores them by reference)
   // and the in-RAM page-offset table.
   struct BuildContext {
     std::unique_ptr<ChapterHtmlSlimParser> parser;
-    std::vector<PageLutEntry> lut;
+    PageLut lut;
+    // Set when the LUT could not take another page. The build stops at the pages it
+    // has (they are still persisted as a partial) instead of continuing to lay out
+    // pages it can no longer index.
+    bool lutExhausted = false;
     std::string parsePath;
     std::string contentBase;
     std::string imageBasePath;
