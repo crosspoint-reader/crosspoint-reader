@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MemoryManager.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -32,6 +33,12 @@ constexpr int SIDE_PADDING = 20;
 // reader and word-select. Bigger definitions take the span-based plain-text
 // path, which holds no per-page copies.
 constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
+
+// Free-heap budget for opening word select over a definition: a borrowed or
+// synthesized page, its TextBlock arenas, the 4KB snapshot and the word vector.
+// With -fno-exceptions a failed vector growth aborts(), so the request is
+// guaranteed up front via the memory manager's cache eviction.
+constexpr size_t SELECT_HEAP_BUDGET = 20 * 1024;
 
 }  // namespace
 
@@ -255,6 +262,11 @@ void DictionaryDefinitionActivity::bodyOrigin(int& x, int& y) const {
 }
 
 void DictionaryDefinitionActivity::openWordLookup() {
+  if (!freeink::MemoryManager::instance().ensureFree(SELECT_HEAP_BUDGET)) {
+    LOG_ERR("DDA", "Low heap for word select");
+    GUI.drawPopup(renderer, tr(STR_DICT_LOW_MEMORY));
+    return;
+  }
   int x = 0;
   int y = 0;
   bodyOrigin(x, y);
@@ -286,6 +298,8 @@ void DictionaryDefinitionActivity::openWordLookup() {
 // whose TextBlock carries the line's tokens at their measured x positions.
 // Whitespace runs inside a span are measured too, keeping the select boxes
 // pixel-aligned with what drawBody renders as a single drawText per line.
+// Spans are capped at drawBody's own MAX_LINE_BYTES limit so selection never
+// offers words that were not actually drawn.
 std::unique_ptr<Page> DictionaryDefinitionActivity::buildSelectionPage() const {
   auto page = makeUniqueNoThrow<Page>();
   if (!page) {
@@ -301,7 +315,7 @@ std::unique_ptr<Page> DictionaryDefinitionActivity::buildSelectionPage() const {
   const char* text = definition.c_str();
   for (int i = firstLine; i < lastLine; i++) {
     if (lines[i].len == 0) continue;
-    const uint32_t spanEnd = lines[i].start + lines[i].len;
+    const uint32_t spanEnd = lines[i].start + std::min<size_t>(lines[i].len, MAX_LINE_BYTES);
     std::vector<std::string> words;
     std::vector<int16_t> xpos;
     std::vector<EpdFontFamily::Style> styles;
