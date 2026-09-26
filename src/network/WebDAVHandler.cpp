@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include "util/BookCacheUtils.h"
+#include "util/BookDataMove.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -543,11 +544,11 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  clearBookCache(srcPath.c_str());
   bool success = file.rename(dstPath.c_str());
   file.close();
 
   if (success) {
+    moveBookData(srcPath.c_str(), dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -642,6 +643,8 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    // Unconditional: stale data can exist here even when dstExists was false (book deleted from a PC).
+    clearBookData(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());
