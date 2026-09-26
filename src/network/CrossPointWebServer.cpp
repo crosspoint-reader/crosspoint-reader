@@ -10,6 +10,7 @@
 #include <WiFi.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#include <lwip/sockets.h>
 
 #include <algorithm>
 #include <cctype>
@@ -30,6 +31,8 @@
 #include "util/TaskWatchdog.h"
 
 namespace {
+void shutReadSide(const int fd) { shutdown(fd, SHUT_RD); }
+
 // Folders/files to hide from the web interface file browser
 // Note: Items starting with "." are automatically hidden
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
@@ -158,7 +161,14 @@ void CrossPointWebServer::begin() {
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   // Upload endpoint with special handling for multipart form data
-  server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
+  // The body has been read when the first handler runs; the server closes the socket after its reply.
+  server->on(
+      "/upload", HTTP_POST,
+      [this] {
+        uploadCancel.retract();
+        handleUploadPost(upload);
+      },
+      [this] { handleUpload(upload); });
 
   // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
@@ -180,7 +190,13 @@ void CrossPointWebServer::begin() {
   // Font management endpoints
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
   server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
-  server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
+  server->on(
+      "/api/fonts/upload", HTTP_POST,
+      [this] {
+        uploadCancel.retract();
+        handleFontUpload();
+      },
+      [this] { handleFontUploadData(); });
   server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
 
   // OPDS server endpoints
@@ -231,6 +247,8 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "WebSocket at ws://%s:%d/", ipAddr.c_str(), wsPort);
   LOG_DBG("WEB", "[MEM] Free heap after server.begin(): %d bytes", ESP.getFreeHeap());
 }
+
+void CrossPointWebServer::cancelUploads() { uploadCancel.cancel(shutReadSide); }
 
 void CrossPointWebServer::abortWsUpload(const char* tag) {
   // Explicit close() required: file-scope global persists beyond function scope
@@ -317,6 +335,7 @@ void CrossPointWebServer::handleClient() {
   }
 
   server->handleClient();
+  uploadCancel.retract();
 
   // Handle WebSocket events
   if (wsServer) {
@@ -676,6 +695,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
   const HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
+    uploadCancel.note(server->client().fd(), shutReadSide);
     // Reset watchdog - this is the critical 1% crash point
     resetTaskWatchdogIfSubscribed();
 
@@ -793,6 +813,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    uploadCancel.retract();
     state.bufferPos = 0;  // Discard buffered data
     if (state.file) {
       state.file.close();
@@ -1839,6 +1860,7 @@ void CrossPointWebServer::handleFontUploadData() {
 
   switch (upload.status) {
     case UPLOAD_FILE_START: {
+      uploadCancel.note(server->client().fd(), shutReadSide);
       resetTaskWatchdogIfSubscribed();
       String family = server->arg("family");
       fontUpload.file = HalFile();
@@ -1943,6 +1965,7 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_ABORTED: {
+      uploadCancel.retract();
       if (fontUpload.file) {
         fontUpload.file.close();
       }

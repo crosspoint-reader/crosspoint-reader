@@ -4,11 +4,13 @@
 #include <ESPmDNS.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 #include <WiFi.h>
 
 #include <cstddef>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
@@ -98,6 +100,7 @@ void CrossPointWebServerActivity::onEnter() {
 }
 
 void CrossPointWebServerActivity::onExit() {
+  backLatch.stop();
   Activity::onExit();
 
   LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
@@ -280,6 +283,13 @@ void CrossPointWebServerActivity::startWebServer() {
   webServer->begin();
 
   if (webServer->isRunning()) {
+    // An HTTP upload holds loop() until it ends; the sampler task keeps Back
+    // working meanwhile and cuts the upload short. Logical Back is this front button.
+    if (!backLatch.start(
+            gpio, SETTINGS.frontButtonBack,
+            [](void* server) { static_cast<CrossPointWebServer*>(server)->cancelUploads(); }, webServer.get())) {
+      LOG_ERR("WEBACT", "Back sampler task not started; Back waits for uploads to finish");
+    }
     state = WebServerActivityState::SERVER_RUNNING;
     LOG_DBG("WEBACT", "Web server started successfully");
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
@@ -365,6 +375,10 @@ void CrossPointWebServerActivity::loop() {
       constexpr int MAX_ITERATIONS = 500;
       for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
+        if (backLatch.consume()) {
+          onGoHome();
+          return;
+        }
         // Reset watchdog every 32 iterations
         if ((i & 0x1F) == 0x1F) {
           resetTaskWatchdogIfSubscribed();

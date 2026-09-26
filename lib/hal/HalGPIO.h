@@ -82,6 +82,9 @@ class HalGPIO {
   // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
   // going through the debounced state. Cheap enough to call every few ms.
   bool rawInputActive();
+  // Both button ladders sampled now and classified, bypassing the debounced
+  // state. Safe from another task while the main loop polls input.
+  void readButtonAdc(InputManager::ButtonAdcSample& group1, InputManager::ButtonAdcSample& group2);
   bool hasTouch() const;
   // Capacitive Home key reported by the touch controller (X4 Pro). The tap
   // event fires on release and excludes a long hold.
