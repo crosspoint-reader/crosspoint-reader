@@ -83,10 +83,8 @@ Command responses include `command_id`, `sent`, and `after`, the event cursor
 captured before writing. Read events after that cursor to include immediate
 responses. `command_sent` is a host event; ordinary firmware log lines do not have
 command IDs. UI-control replies carry their own request IDs. Screenshots retain
-the single-capture framing protocol. A screenshot that has not started after 10
-seconds publishes `screenshot_error` and keeps the connection. A transfer that
-stalls after its metadata reconnects the port to resynchronize. Do not infer completion from a successful
-HTTP response.
+the single-capture framing protocol; see [screenshots](#screenshots-and-measurement-limits).
+Do not infer completion from a successful HTTP response.
 
 ## Exclusive benchmark control
 
@@ -170,9 +168,13 @@ than automatically repeating an action. The command queue is bounded to 64 jobs.
 ## Screenshots and measurement limits
 
 The receiver handles fragmented binary transfers and validates the ending marker
-before publishing an image. Missing responses time out after 10 seconds. Other
-commands are rejected during screenshot transfers; serial release remains
-available to interrupt a transfer.
+before publishing an image. A screenshot that has not started after 10 seconds
+publishes `screenshot_error` and keeps the connection. A transfer that stalls
+after its metadata reconnects the port to resynchronize. While a screenshot is
+pending, only the firmware's `BUSY` and `NO_FRAMEBUFFER` rejections (`id=0`) fail
+it; other `id=0` errors are unrelated. Other commands are rejected during
+screenshot transfers; serial release remains available to interrupt a transfer.
+Release builds without `ENABLE_SERIAL_CONTROL` still support screenshots.
 
 Firmware can report runtime panel geometry, row stride, orientation, and output
 inversion before each capture. The device sends its original framebuffer.

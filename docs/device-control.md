@@ -289,10 +289,13 @@ Each command is a single ASCII line. The monitor supplies the `CMD:` prefix.
 
 | Firmware command | Response |
 |---|---|
-| `CMD:INFO 0` | `INFO` with protocol version, boot ID and last request ID, followed by supported `BUTTON` records |
+| `CMD:INFO 0` | `INFO` with protocol version, boot ID, last request ID and `min_hold`/`max_hold` limits, followed by supported `BUTTON` records |
 | `CMD:PRESS 1 CONFIRM 80` | `ACCEPTED`, then `INPUT_DONE` after release passes through the firmware loop |
 | `CMD:STATE 2` | Current activity/reader position and render readiness; does not request a render |
 | `CMD:CANCEL 3` | Cancels pending or held synthetic input; returns `CANCELLED` |
+
+Firmware built without `ENABLE_SERIAL_CONTROL` answers every command except
+`SCREENSHOT` with `id=0 event=ERROR reason=UNKNOWN_COMMAND`.
 
 Request IDs must increase within a boot; `INFO 0` is a read-only discovery
 exception that lets a new client find the last ID. The Python client allocates
@@ -315,10 +318,9 @@ input reject a new press with `BUSY`; physical input during a press produces
 `INTERRUPTED`. Cancellation of a held button releases it on the next loop, and
 that release is hidden from the activity, so no release click or leftover
 long-press state remains. It cannot undo an action already triggered on
-button-down. Requests have
-a bounded 127-byte buffer and a one-second partial-line timeout, which starts
-once no more request bytes are waiting. An overlong,
-invalid, or timed-out line is discarded through its next newline.
+button-down. Requests have a bounded 127-byte buffer and a one-second
+partial-line timeout, which starts once no more request bytes are waiting. An
+overlong, invalid, or timed-out line is discarded through its next newline.
 
 `INPUT_DONE` means input was delivered, not that the intended navigation occurred.
 Always check a state predicate: a button may be ignored by the current activity,
@@ -345,7 +347,8 @@ wait duration is not a rendering measurement.
 
 The simulator can consume these same `CMD:` lines from stdin and emits replies
 on stderr. Its HAL includes the shared `SerialInput` state when the consuming
-firmware supplies it. Existing scheduled simulator input still works; it counts
+firmware supplies it; the simulator environment must define both
+`ENABLE_SERIAL_LOG` and `ENABLE_SERIAL_CONTROL`. Existing scheduled simulator input still works; it counts
 as competing physical input during serial control. Performance measurements must
 come from the real device, not simulator timing.
 
@@ -397,8 +400,15 @@ c++ -std=c++20 -Ilib/SerialInput tests/serial-control/input.cpp -o /tmp/test-ser
 
 For UI control, open a book and use the client example to turn forward and back.
 Confirm the reader position changes and `requested == completed` when ready.
-Repeated `STATE` queries must not increase the render generation. Cancel a long
-Confirm before release and confirm no selection opens. Compare standard `MEM`
+Repeated `STATE` queries must not increase the render generation.
+
+To check cancellation, open Browse Files with a folder highlighted. Send
+`CMD:PRESS <id> CONFIRM 1500` and, about 1.3 seconds later, `CMD:CANCEL <id>`.
+The one-second hold opens the entry popup with Open highlighted. After the UI is
+ready, a single short `press confirm` must open the folder; a swallowed first
+press is a regression. Cancelling before one second must leave the screen
+unchanged. Reader page buttons are unsuitable when the device turns pages on
+press, because their holds never become long presses. Compare standard `MEM`
 logs at the same activity before and after repeated navigation; use serial render
 timings for performance comparisons.
 
