@@ -8,13 +8,14 @@
 #include "OpdsServerStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "util/OpdsFilename.h"
 
 namespace fui = freeink::ui;
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
+// Editable fields: Name, URL, Username, Password, Download folder.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int BASE_ITEMS = 5;
 }  // namespace
 
 OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -23,7 +24,8 @@ OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputMan
   // Labels never change (unlike the values, which track editServer's fields
   // live), so they're set once here rather than every buildScreen() call.
   static constexpr StrId fieldNames[BASE_ITEMS] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL,
-                                                   StrId::STR_USERNAME, StrId::STR_PASSWORD};
+                                                   StrId::STR_USERNAME, StrId::STR_PASSWORD,
+                                                   StrId::STR_OPDS_DOWNLOAD_FOLDER};
   for (int i = 0; i < BASE_ITEMS; i++) {
     fieldRowItems[i].label = I18N.get(fieldNames[i]);
     fieldRowItems[i].actionValue = static_cast<int16_t>(i);
@@ -150,7 +152,21 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Text),
                            handler);
-  } else if (nav.selected == 4 && !isNewServer) {
+  } else if (nav.selected == 4) {
+    // Download folder. Empty defers to the global default, so the keyboard
+    // prefills with whatever this server has set rather than the fallback.
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.downloadFolder = normalizeOpdsFolder(kb.text);
+        saveServer();
+        requestUpdate();
+      }
+    };
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
+                                                                   editServer.downloadFolder, 63, InputType::Text),
+                           handler);
+  } else if (nav.selected == 5 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -186,6 +202,10 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   fieldRowItems[1].value = editServer.url.empty() ? tr(STR_NOT_SET) : editServer.url.c_str();
   fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
   fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
+  // Empty folder falls back to the list screen's default, so show "Default"
+  // rather than "Not Set" — nothing is missing, it is just inherited.
+  fieldRowItems[4].value =
+      editServer.downloadFolder.empty() ? tr(STR_DEFAULT_VALUE) : editServer.downloadFolder.c_str();
 
   fui::ListProps props;
   props.items = fieldRowItems;

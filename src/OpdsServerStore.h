@@ -10,6 +10,10 @@ struct OpdsServer {
   std::string url;
   std::string username;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  // Per-server download destination, already normalized (leading '/', no
+  // trailing '/'). Empty falls back to SETTINGS.opdsDownloadFolder, which is
+  // itself the SD root when empty.
+  std::string downloadFolder;
 };
 
 /**
