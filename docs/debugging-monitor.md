@@ -50,7 +50,7 @@ the in-memory event history is bounded to 65536 events.
 All POST requests require a JSON object and `Content-Type: application/json`.
 Errors return `{"error": "..."}` with an HTTP error status. A command response
 with `sent: true` means the host wrote the command, **not** that firmware executed
-it or completed rendering. Firmware built with `ENABLE_SERIAL_LOG` also supports
+it or completed rendering. Development firmware built with `ENABLE_SERIAL_CONTROL` also supports
 the [UI-control protocol](device-control.md#ui-control). Firmware replies appear
 as `control` events as well as unchanged `log` events.
 

@@ -2674,7 +2674,7 @@ void EpubReaderActivity::updateBookmarkFlag() {
   });
 }
 
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
 bool EpubReaderActivity::controlBusy() const {
   // A retained builder can be paused at its page window or by the heap gate.
   const bool building =

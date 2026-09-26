@@ -150,35 +150,35 @@ void HalGPIO::update() {
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   if (buttonIndex < 7 && (serialInput.down() & (1u << buttonIndex))) return true;
 #endif
   return inputMgr.isPressed(buttonIndex);
 }
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   if (buttonIndex < 7 && (serialInput.pressed() & (1u << buttonIndex))) return true;
 #endif
   return inputMgr.wasPressed(buttonIndex);
 }
 
 bool HalGPIO::wasAnyPressed() const {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   if (serialInput.pressed()) return true;
 #endif
   return inputMgr.wasAnyPressed();
 }
 
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   if (buttonIndex < 7 && (serialInput.released() & (1u << buttonIndex))) return true;
 #endif
   return inputMgr.wasReleased(buttonIndex);
 }
 
 bool HalGPIO::wasAnyReleased() const {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   if (serialInput.released()) return true;
 #endif
   return inputMgr.wasAnyReleased();
@@ -202,7 +202,7 @@ bool HalGPIO::rawInputActive() {
 }
 
 unsigned long HalGPIO::getHeldTime() const {
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   if (serialInput.down() || serialInput.released()) return serialInput.heldMs(millis());
 #endif
   return inputMgr.getHeldTime();

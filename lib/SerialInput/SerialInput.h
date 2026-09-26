@@ -53,6 +53,6 @@ class SerialInput {
   uint32_t heldMs(uint32_t now) const { return released() ? releasedAfter : down() ? now - startedAt : 0; }
 };
 
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
 inline SerialInput serialInput;
 #endif

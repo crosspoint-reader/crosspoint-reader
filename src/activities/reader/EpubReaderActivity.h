@@ -206,7 +206,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool skipLoopDelay() override;
 
   ScreenshotInfo getScreenshotInfo() const override;
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   bool controlBusy() const override;
 #endif
   CrossPointPosition getCurrentPosition() const;

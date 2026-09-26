@@ -65,7 +65,7 @@ class ActivityManager {
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   std::atomic<uint32_t> controlRequested{0};
   std::atomic<uint32_t> controlCompleted{0};
   std::atomic<bool> controlRendering{false};
@@ -112,7 +112,7 @@ class ActivityManager {
   bool handleForcedRefresh();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   struct ControlState {
     char activity[40] = {};
     ScreenshotInfo reader;

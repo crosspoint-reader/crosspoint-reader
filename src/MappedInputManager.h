@@ -45,7 +45,7 @@ class MappedInputManager {
   // Home-key actions so the next main-loop pass can dispatch them, while the
   // current action remains available for immediate Home cancellation.
   void update(bool deferHomeButtonAction = false) const;
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
   int controlButton(Button button) const;
   // A cancelled synthetic hold still releases; hide that release from activities.
   void suppressControlRelease(Button button) const { suppressNextRelease(button); }
