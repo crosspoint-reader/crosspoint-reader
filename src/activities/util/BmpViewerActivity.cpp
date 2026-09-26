@@ -93,9 +93,9 @@ void BmpViewerActivity::loadSiblingImages() {
 }
 
 bool BmpViewerActivity::canSetSleepCover() const {
+  // JPEGs become the custom sleep image; PNGs can only be sleep overlays.
   return FsHelpers::hasBmpExtension(filePath) || FsHelpers::hasJpgExtension(filePath) ||
-         (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
-          FsHelpers::hasPngExtension(filePath));
+         (SETTINGS.sleepScreenOverlay && FsHelpers::hasPngExtension(filePath));
 }
 
 bool BmpViewerActivity::renderImage() {
@@ -385,13 +385,16 @@ void BmpViewerActivity::doSetSleepCover() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
   const bool jpeg = FsHelpers::hasJpgExtension(filePath);
-  const bool transparentMode =
-      !jpeg && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+  // With the overlay on, Current Screen has no image of its own, so a BMP becomes the overlay too.
+  // JPEGs have no transparency and are always converted to the custom sleep image.
+  const bool setAsOverlay = !jpeg && SETTINGS.sleepScreenOverlay &&
+                            (FsHelpers::hasPngExtension(filePath) ||
+                             SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CURRENT_SCREEN);
   if (!canSetSleepCover()) return;
 
   const char* destination =
-      transparentMode ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
-                      : CUSTOM_SLEEP_ROOT_BMP;
+      setAsOverlay ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
+                   : CUSTOM_SLEEP_ROOT_BMP;
   bool success = filePath == destination;
 
   if (jpeg) {
@@ -423,7 +426,7 @@ void BmpViewerActivity::doSetSleepCover() {
   }
 
   if (success) {
-    if (!transparentMode) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    if (!setAsOverlay) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
     SETTINGS.saveToFile();
     GUI.drawPopup(renderer, tr(STR_DONE));
   } else {
