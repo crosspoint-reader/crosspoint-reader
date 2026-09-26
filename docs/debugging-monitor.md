@@ -83,7 +83,9 @@ Command responses include `command_id`, `sent`, and `after`, the event cursor
 captured before writing. Read events after that cursor to include immediate
 responses. `command_sent` is a host event; ordinary firmware log lines do not have
 command IDs. UI-control replies carry their own request IDs. Screenshots retain
-the single-capture framing protocol. Do not infer completion from a successful
+the single-capture framing protocol. A screenshot that has not started after 10
+seconds publishes `screenshot_error` and keeps the connection. A transfer that
+stalls after its metadata reconnects the port to resynchronize. Do not infer completion from a successful
 HTTP response.
 
 ## Exclusive benchmark control
