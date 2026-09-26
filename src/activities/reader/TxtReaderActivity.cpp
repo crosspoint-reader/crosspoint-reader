@@ -90,8 +90,8 @@ void TxtReaderActivity::buildPageIndex(GfxRenderer& renderer) {
 
   GUI.drawPopup(renderer, tr(STR_INDEXING));
 
+  std::vector<std::string> tempLines;
   while (offset < fileSize) {
-    std::vector<std::string> tempLines;
     size_t nextOffset = offset;
 
     if (!loadPageAtOffset(renderer, offset, tempLines, nextOffset)) {
@@ -116,6 +116,50 @@ void TxtReaderActivity::buildPageIndex(GfxRenderer& renderer) {
 
   totalPages = pageOffsets.size();
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
+}
+
+size_t TxtReaderActivity::fitLineBytes(const GfxRenderer& renderer, std::string& line, const size_t start) const {
+  // Width of line[start, end), measured in place by temporarily terminating the string.
+  const auto widthTo = [&](const size_t end) {
+    if (end == line.size()) {
+      return renderer.getTextAdvanceX(cachedFontId, line.c_str() + start, EpdFontFamily::REGULAR);
+    }
+    const char saved = line[end];
+    line[end] = '\0';
+    const int width = renderer.getTextAdvanceX(cachedFontId, line.c_str() + start, EpdFontFamily::REGULAR);
+    line[end] = saved;
+    return width;
+  };
+
+  // Grow one word at a time, so each measurement is bounded by roughly one line
+  // of text rather than the whole remaining paragraph.
+  size_t fit = start;
+  size_t end = line.find(' ', start + 1);
+  while (true) {
+    if (end == std::string::npos) end = line.size();
+    if (widthTo(end) > viewportWidth) break;
+    fit = end;
+    if (end == line.size()) break;
+    end = line.find(' ', end + 1);
+  }
+  if (fit > start) {
+    return fit - start;
+  }
+
+  // The first word alone overflows: split it at the last UTF-8 character that fits,
+  // keeping at least one character so layout always advances.
+  const auto nextChar = [&](size_t i) {
+    i++;
+    while (i < line.size() && (static_cast<uint8_t>(line[i]) & 0xC0) == 0x80) i++;
+    return i;
+  };
+  fit = nextChar(start);
+  while (fit < line.size()) {
+    end = nextChar(fit);
+    if (widthTo(end) > viewportWidth) break;
+    fit = end;
+  }
+  return fit - start;
 }
 
 bool TxtReaderActivity::loadPageAtOffset(const GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines,
@@ -168,58 +212,24 @@ bool TxtReaderActivity::loadPageAtOffset(const GfxRenderer& renderer, size_t off
     size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
 
     std::string line(reinterpret_cast<char*>(buffer + pos), displayLen);
-    size_t lineBytePos = 0;
-
-    do {
-      if (line.empty()) {
-        outLines.emplace_back();
-        break;
-      }
-
-      int lineWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
-
-      if (lineWidth <= viewportWidth) {
-        outLines.push_back(line);
-        lineBytePos = displayLen;
-        line.clear();
-        break;
-      }
-
-      // Find break point
-      size_t breakPos = line.length();
-      while (breakPos > 0 && renderer.getTextAdvanceX(cachedFontId, line.substr(0, breakPos).c_str(),
-                                                      EpdFontFamily::REGULAR) > viewportWidth) {
-        // Try to break at space
-        size_t spacePos = line.rfind(' ', breakPos - 1);
-        if (spacePos != std::string::npos && spacePos > 0) {
-          breakPos = spacePos;
-        } else {
-          // Break at character boundary for UTF-8
-          breakPos--;
-          while (breakPos > 0 && (line[breakPos] & 0xC0) == 0x80) {
-            breakPos--;
-          }
-        }
-      }
-
-      if (breakPos == 0) {
-        breakPos = 1;
-      }
-
-      outLines.push_back(line.substr(0, breakPos));
-
-      size_t skipChars = breakPos;
-      if (breakPos < line.length() && line[breakPos] == ' ') {
-        skipChars++;
-      }
-      lineBytePos += skipChars;
-      line = line.substr(skipChars);
-    } while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage);
+    size_t lineStart = 0;  // bytes of `line` already laid out
 
     if (line.empty()) {
+      outLines.emplace_back();
+    }
+    while (lineStart < line.size() && static_cast<int>(outLines.size()) < linesPerPage) {
+      const size_t len = fitLineBytes(renderer, line, lineStart);
+      outLines.emplace_back(line, lineStart, len);
+      lineStart += len;
+      if (lineStart < line.size() && line[lineStart] == ' ') {
+        lineStart++;
+      }
+    }
+
+    if (lineStart >= line.size()) {
       pos = lineEnd + 1;
     } else {
-      pos = pos + lineBytePos;
+      pos = pos + lineStart;
       break;
     }
   }
