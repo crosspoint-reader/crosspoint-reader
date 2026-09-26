@@ -36,4 +36,17 @@ int main() {
   input.cancel();  // cancelling pending input emits no click
   input.beginFrame(2001);
   assert(!input.active() && !input.pressed() && !input.released());
+
+  assert(input.start(2, 1000));
+  assert(!input.releaseEarly());  // pending input never went down
+  assert(!input.active());
+
+  assert(input.start(2, 1000));
+  input.beginFrame(3000);
+  assert(input.releaseEarly());
+  assert(input.down() == 4 && !input.released());  // still held for the rest of this frame
+  input.beginFrame(3050);
+  assert(input.released() == 4 && input.heldMs(3050) == 50);
+  input.beginFrame(3051);
+  assert(!input.active());
 }
