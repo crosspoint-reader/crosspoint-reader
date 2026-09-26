@@ -36,6 +36,9 @@ class DictionaryWordSelectActivity final : public Activity {
     uint16_t row;
     const char* text;
     EpdFontFamily::Style style;
+    /// No space should be inserted before this word when building a phrase
+    /// (gap to previous word < half a space width, typical for CJK text).
+    bool joinWithoutSpaceBefore = false;
   };
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
@@ -44,7 +47,10 @@ class DictionaryWordSelectActivity final : public Activity {
   int closestInRow(uint16_t row, int centerX) const;
   int wordAt(int x, int y) const;
   void moveVertical(int direction);
-  void performLookup();
+  /// Build a phrase by joining words[fromIdx..toIdx] (inclusive, either order).
+  /// Words flagged joinWithoutSpaceBefore are appended without a leading space.
+  std::string buildPhrase(int fromIdx, int toIdx) const;
+  void performLookup(const char* phrase);
   bool drawHighlightWithSnapshot();
   void drawHints() const;
 
@@ -81,4 +87,10 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
+
+  // Multi-word phrase selection.
+  static constexpr unsigned long MULTI_SELECT_HOLD_MS = 600;
+  int selectAnchor_ = -1;  ///< anchor word index; -1 when not in multi-select
+  bool inMultiSelectMode_ = false;
+  unsigned long confirmHoldStart_ = 0;  ///< millis() when Confirm was pressed; 0 when idle
 };

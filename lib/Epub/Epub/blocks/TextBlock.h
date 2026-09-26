@@ -26,6 +26,7 @@
 //   uint16_t focusSuffixX[wordCount]   present only when focusPresent
 //   uint8_t  styles[wordCount]
 //   uint8_t  focusBoundary[wordCount]  present only when focusPresent
+//   uint8_t  hasSpace[wordCount]       1 if a space precedes this word in source
 //   char     text[textBytes]           all words back to back, NUL-terminated
 //
 // Each word is stored NUL-terminated so render() can hand `text + textOff[i]`
@@ -63,6 +64,7 @@ class TextBlock final : public Block {
   const uint16_t* focusSuffixXArr = nullptr;  // null when !focusPresent
   const uint8_t* stylesArr = nullptr;
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
+  const uint8_t* hasSpaceArr = nullptr;
   const char* textArr = nullptr;
   std::vector<std::string> rubyTexts;
   // Layout-only metadata. ChapterHtmlSlimParser moves it into Page::links
@@ -100,6 +102,10 @@ class TextBlock final : public Block {
   EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }
   uint8_t focusBoundary(const uint16_t i) const { return focusPresent ? focusBoundaryArr[i] : 0; }
   uint16_t focusSuffixX(const uint16_t i) const { return focusPresent ? focusSuffixXArr[i] : 0; }
+  bool wordHasSpaceBefore(const uint16_t i) const { return i < numWords && hasSpaceArr && hasSpaceArr[i] != 0; }
+  void setWordHasSpaceBefore(const uint16_t i, const bool v) {
+    if (i < numWords && hasSpaceArr) const_cast<uint8_t*>(hasSpaceArr)[i] = v ? 1 : 0;
+  }
   bool hasRuby() const;
   int getRubyShift(int ascender) const { return hasRuby() ? (ascender / 2) : 0; }
   const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }
