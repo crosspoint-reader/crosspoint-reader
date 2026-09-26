@@ -160,7 +160,7 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-#ifdef ENABLE_SERIAL_LOG
+#ifdef ENABLE_SERIAL_CONTROL
 int MappedInputManager::controlButton(Button button) const {
   const uint8_t mask = buttonMask(button);
   for (uint8_t index = 0; index < 7; ++index) {

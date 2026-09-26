@@ -8,7 +8,9 @@ connection.
 ## Start a session
 
 Run from the repository root. The monitor requires `pyserial`; firmware UI
-control requires a build with `ENABLE_SERIAL_LOG`. Start the server in one
+control requires a development build with `ENABLE_SERIAL_CONTROL`, which the
+`default`, `sticky`, `x4pro`, `x4c`, and `papermono` environments enable. Release
+builds accept only `CMD:SCREENSHOT`. Start the server in one
 terminal:
 
 ```sh

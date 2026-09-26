@@ -207,9 +207,13 @@ class DeviceControl:
                         continue
                     self.last_command["stage"] = event["event"].lower()
                     if event["event"] == "ERROR":
-                        raise ControlError(
-                            "Firmware rejected command: " + str(event.get("reason"))
-                        )
+                        reason = str(event.get("reason"))
+                        if reason == "UNKNOWN_COMMAND" and request_id == 0:
+                            raise ControlError(
+                                "Firmware has no serial control; flash a build "
+                                "with ENABLE_SERIAL_CONTROL"
+                            )
+                        raise ControlError("Firmware rejected command: " + reason)
                     if event["event"] == "CANCELLED" and expected != "CANCELLED":
                         raise ControlError("Firmware cancelled the input command")
                     if event["event"] == expected:

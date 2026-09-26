@@ -4,7 +4,9 @@
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+#ifdef ENABLE_SERIAL_CONTROL
 #include <SerialInput.h>
+#endif
 
 #include <algorithm>
 #include <cerrno>
@@ -31,6 +33,13 @@ uint8_t lineLength = 0;
 bool discarding = false;
 uint32_t lastByteAt = 0;
 uint32_t bootId = 0;
+
+void error(uint32_t id, const char* reason) {
+  LOG_INF("CTL", "id=%lu boot=%lu event=ERROR reason=%s", static_cast<unsigned long>(id),
+          static_cast<unsigned long>(bootId), reason);
+}
+
+#ifdef ENABLE_SERIAL_CONTROL
 uint32_t lastId = 0;
 uint32_t activeId = 0;
 MappedInputManager::Button activeButton = MappedInputManager::Button::Back;
@@ -70,11 +79,6 @@ bool number(const char* text, uint32_t& value) {
   return true;
 }
 
-void error(uint32_t id, const char* reason) {
-  LOG_INF("CTL", "id=%lu boot=%lu event=ERROR reason=%s", static_cast<unsigned long>(id),
-          static_cast<unsigned long>(bootId), reason);
-}
-
 void state(uint32_t id) {
   ActivityManager::ControlState snapshot;
   activityManager.getControlState(snapshot);
@@ -87,9 +91,18 @@ void state(uint32_t id) {
           snapshot.orientation, static_cast<unsigned int>(snapshot.reader.readerType), snapshot.reader.spineIndex,
           snapshot.reader.currentPage, snapshot.reader.totalPages);
 }
+#endif
+
+bool controlInputActive() {
+#ifdef ENABLE_SERIAL_CONTROL
+  return serialInput.active();
+#else
+  return false;
+#endif
+}
 
 void screenshot() {
-  if (serialInput.active() || RenderLock::peek() || activityManager.requiresExclusiveStorageLoop()) {
+  if (controlInputActive() || RenderLock::peek() || activityManager.requiresExclusiveStorageLoop()) {
     error(0, "BUSY");
     return;
   }
@@ -134,6 +147,7 @@ void dispatch() {
     screenshot();
     return;
   }
+#ifdef ENABLE_SERIAL_CONTROL
   uint32_t id = 0;
   const bool discovery = strcmp(verb, "INFO") == 0;
   if (!number(idText, id) || (id == 0 && !discovery)) {
@@ -204,9 +218,13 @@ void dispatch() {
             static_cast<unsigned long>(bootId));
   } else
     error(id, "UNKNOWN_COMMAND");
+#else
+  error(0, "UNKNOWN_COMMAND");
+#endif
 }
 }  // namespace
 
+#ifdef ENABLE_SERIAL_CONTROL
 void SerialControl::beginFrame() {
   if (!bootId) {
 #ifdef SIMULATOR
@@ -219,11 +237,22 @@ void SerialControl::beginFrame() {
   serialInput.beginFrame(millis());
 }
 
+void SerialControl::endFrame() {
+  if (activeId && serialInput.released()) {
+    LOG_INF("CTL", "id=%lu boot=%lu event=INPUT_DONE held_ms=%lu", static_cast<unsigned long>(activeId),
+            static_cast<unsigned long>(bootId), static_cast<unsigned long>(serialInput.heldMs(millis())));
+    activeId = 0;
+  }
+}
+#endif
+
 void SerialControl::poll() {
+#ifdef ENABLE_SERIAL_CONTROL
   if (activeId && (gpio.physicalInputActive() || activityManager.requiresExclusiveStorageLoop())) {
     error(activeId, "INTERRUPTED");
     endHold();
   }
+#endif
   if (lineLength && static_cast<uint32_t>(millis() - lastByteAt) > 1000) {
     lineLength = 0;
     discarding = true;
@@ -249,14 +278,6 @@ void SerialControl::poll() {
       error(0, "INVALID_LINE");
     } else
       line[lineLength++] = static_cast<char>(c);
-  }
-}
-
-void SerialControl::endFrame() {
-  if (activeId && serialInput.released()) {
-    LOG_INF("CTL", "id=%lu boot=%lu event=INPUT_DONE held_ms=%lu", static_cast<unsigned long>(activeId),
-            static_cast<unsigned long>(bootId), static_cast<unsigned long>(serialInput.heldMs(millis())));
-    activeId = 0;
   }
 }
 #endif
