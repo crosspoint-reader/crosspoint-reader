@@ -17,7 +17,9 @@ Only `src/harfbuzz-crosspoint.cc` is compiled: one translation unit holding
 the OpenType shaper, its script shapers and the built-in Unicode data. It is
 built with the `HB_TINY` profile plus `src/hb-crosspoint-config.h`, which
 routes every allocation through CrossPoint's budgeted allocator
-(`lib/EpdFont/ComplexShaper.cpp`) and enables the local patch below.
+(`lib/EpdFont/ComplexShaper.cpp`), caps nested lookups at 8 levels so a
+malformed font cannot overflow the render task's stack, and enables the
+local patch below.
 
 ## Updating
 

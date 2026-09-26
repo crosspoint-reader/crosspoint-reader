@@ -19,3 +19,9 @@
 // Requires HB_NO_OT_LAYOUT_LOOKUP_CACHE (set by HB_TINY): the cached apply
 // path still reads the digest and would not compile.
 #define HB_CROSSPOINT_NO_SUBTABLE_DIGEST
+
+// Nested-lookup depth. Each level costs about 0.4 KB of stack on the
+// ESP32-C3, and layout shapes on the 8 KB render task: HarfBuzz's default
+// of 64 lets a malformed font overflow it. Real fonts nest two or three
+// levels deep.
+#define HB_MAX_NESTING_LEVEL 8
