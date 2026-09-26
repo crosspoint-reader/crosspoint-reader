@@ -416,7 +416,7 @@ TEST(KoreanLayout, HangulWordsStayWholeAndWrapAtSpaces) {
     BlockStyle style;
     style.alignment = CssTextAlign::Left;
     style.textIndentDefined = true;
-    ParsedText text(false, false, style);
+    ParsedText text(false, false, style, 0);
     text.addWord("가나다", EpdFontFamily::REGULAR);
     text.addWord("라마", EpdFontFamily::REGULAR);
     text.addWord("3개를", EpdFontFamily::REGULAR);
@@ -437,7 +437,7 @@ TEST(KoreanLayout, JustifiedHangulStretchesOnlyWordSpaces) {
   BlockStyle style;
   style.alignment = CssTextAlign::Justify;
   style.textIndentDefined = true;
-  ParsedText text(false, false, style);
+  ParsedText text(false, false, style, 0);
   for (const char* word : {"가나", "다라", "마바", "사아"}) text.addWord(word, EpdFontFamily::REGULAR);
   unsigned lines = 0;
   text.layoutAndExtractLines(renderer, 0, 60, [&](std::unique_ptr<TextBlock> line, auto) {
