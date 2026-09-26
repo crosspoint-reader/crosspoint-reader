@@ -112,6 +112,17 @@ class SessionTests(SessionFixture):
         )
         self.assertFalse(self.session.waiting_screenshot)
 
+    def test_unrelated_id0_error_does_not_fail_pending_screenshot(self):
+        sent = self.session.request("command", "SCREENSHOT")
+        self.ports[-1].incoming.put(
+            b"[124] [INF] [CTL] id=0 boot=12 event=ERROR reason=PARTIAL_TIMEOUT\n"
+            b"SCREENSHOT_META:1:8:2:1:0:0\nSCREENSHOT_START:2\n"
+            b"\x00\xffSCREENSHOT_END\n"
+        )
+        self.wait_for(lambda: bool(self.events("screenshot")))
+        self.assertEqual(self.events("screenshot")[0]["command_id"], sent["command_id"])
+        self.assertFalse(self.events("screenshot_error"))
+
     def test_metadata_orientation_and_missing_metadata_rejected(self):
         self.session.request("command", "SCREENSHOT")
         self.ports[-1].incoming.put(
