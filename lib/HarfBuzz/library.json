@@ -1,0 +1,21 @@
+{
+  "name": "HarfBuzz",
+  "version": "14.5.0",
+  "description": "OpenType text shaping engine: the shaping subset of upstream HarfBuzz (HB_TINY profile), fetched by scripts/fetch_harfbuzz.py.",
+  "homepage": "https://harfbuzz.github.io/",
+  "license": "MIT-Modern-Variant",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "upstream/src",
+    "srcFilter": ["+<harfbuzz-crosspoint.cc>"],
+    "flags": [
+      "-DHB_TINY",
+      "-DHB_CONFIG_OVERRIDE_H=\\\"hb-crosspoint-config.h\\\"",
+      "-Wno-cast-function-type",
+      "-Wno-unused-function",
+      "-Wno-format"
+    ]
+  }
+}

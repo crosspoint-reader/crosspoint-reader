@@ -2,11 +2,13 @@
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <IndicScripts.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <TtfEpdFont.h>
 #include <esp_heap_caps.h>
 
+#include <algorithm>
 #include <iterator>
 
 #include "CrossPointSettings.h"
@@ -207,16 +209,15 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   if (readerIt == renderer.getFontMap().end()) return;
   // One representative codepoint per script the built-in fonts may lack:
   // Han, Hiragana, Katakana, Hangul, Greek, Cyrillic, Hebrew, Arabic, Thai,
-  // Devanagari.
+  // and every Indic script.
   static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x03B1,
-                                                 0x0430, 0x05D0, 0x0627, 0x0E01, 0x0905};
-  bool hasFallbackScript = false;
-  for (const uint32_t cp : kFallbackProbes) {
-    if (readerIt->second.hasCodepoint(cp)) {
-      hasFallbackScript = true;
-      break;
-    }
-  }
+                                                 0x0430, 0x05D0, 0x0627, 0x0E01};
+  const EpdFontFamily& readerFont = readerIt->second;
+  const bool hasFallbackScript =
+      std::any_of(std::begin(kFallbackProbes), std::end(kFallbackProbes),
+                  [&](const uint32_t cp) { return readerFont.hasCodepoint(cp); }) ||
+      std::any_of(std::begin(indic::SCRIPTS), std::end(indic::SCRIPTS),
+                  [&](const indic::ScriptInfo& script) { return readerFont.hasCodepoint(script.probe); });
   if (!hasFallbackScript) {
     LOG_DBG("SDFS", "%s has no fallback-script coverage - skipping UI fallback sizes", familyName.c_str());
     return;

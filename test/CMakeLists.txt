@@ -24,6 +24,21 @@ FetchContent_MakeAvailable(googletest)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+# HarfBuzz is fetched, not vendored (scripts/fetch_harfbuzz.py); tests that
+# shape build lib/HarfBuzz from these include directories.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(
+  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/fetch_harfbuzz.py
+  RESULT_VARIABLE HARFBUZZ_FETCH_RESULT
+)
+if(NOT HARFBUZZ_FETCH_RESULT EQUAL 0)
+  message(FATAL_ERROR "scripts/fetch_harfbuzz.py failed")
+endif()
+file(GLOB HARFBUZZ_PATCHES ${REPO_ROOT}/scripts/harfbuzz_patches/*.patch)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${REPO_ROOT}/scripts/fetch_harfbuzz.py ${HARFBUZZ_PATCHES})
+set(HARFBUZZ_INCLUDE_DIRS ${REPO_ROOT}/lib/HarfBuzz/src ${REPO_ROOT}/lib/HarfBuzz/upstream/src)
+
 add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
@@ -43,6 +58,10 @@ add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
 add_subdirectory(utf8_compose)
+add_subdirectory(indic_text)
+add_subdirectory(complex_shaper)
+add_subdirectory(flash_blob_cache)
+add_subdirectory(text_block_display)
 add_subdirectory(opds_filename)
 add_subdirectory(html_to_plain_text)
 add_subdirectory(library_text)

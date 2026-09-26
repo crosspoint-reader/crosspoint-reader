@@ -33,6 +33,7 @@ import argparse
 from collections import namedtuple
 
 from cpfont_version import CPFONT_VERSION
+import shaping_blob
 
 # --- Unicode interval presets ---
 
@@ -58,6 +59,8 @@ INTERVAL_PRESETS = {
     "hangul":      [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)],
     "cherokee":    [(0x13A0, 0x13FF), (0xAB70, 0xABBF)],
     "tifinagh":    [(0x2D30, 0x2D7F)],
+    # One preset per Indic script (devanagari, bengali, ..., sinhala; see
+    # shaping_blob.SCRIPTS) is added below.
     # Symbol blocks commonly seen in scifi/popsci/literary fiction.
 
     "symbols":     [(0x2070, 0x209F), (0x20A0, 0x20CF), (0x2150, 0x218F),
@@ -81,6 +84,14 @@ INTERVAL_PRESETS = {
                     (0x2070, 0x209F), (0x2190, 0x21FF), (0x2200, 0x22FF),
                     (0xFB00, 0xFB06)],
 }
+
+# Indic script presets: the script's block plus the dandas and joiners its text
+# uses. Fonts with GSUB also get a shaping section (conjuncts, reph,
+# positioned marks) — see shaping_blob.py.
+INTERVAL_PRESETS.update({
+    name: [(script.first, script.first + 0x7F), *shaping_blob.SHARED_INTERVALS]
+    for name, script in shaping_blob.SCRIPTS.items()
+})
 
 # Regex for parsing unnamed hex range intervals: (0xSTART-0xEND)
 _HEX_RANGE_PATTERN = re.compile(r'^\(0x([0-9a-fA-F]+)-0x([0-9a-fA-F]+)\)$')
@@ -144,6 +155,7 @@ StyleRasterData = namedtuple("StyleRasterData", [
     "kern_left_classes", "kern_right_classes", "kern_matrix",
     "kern_left_class_count", "kern_right_class_count",
     "ligature_pairs",
+    "shaping_section",         # bytes of the trailing shaping section, or b"" when none
 ])
 
 
@@ -567,8 +579,115 @@ def extract_ligatures_fonttools(font_path, codepoints):
     return pairs
 
 
+def _pack_loaded_glyph(slot, data_offset, code_point):
+    """Convert FreeType's rendered glyph slot to (GlyphProps, packed 2-bit bitmap)."""
+    bitmap = slot.bitmap
+
+    # Build 4-bit greyscale bitmap (same logic as fontconvert.py).
+    #
+    # FreeType returns the buffer with bitmap.pitch as the row stride
+    # in bytes, which can be negative when the bitmap is stored
+    # bottom-up. Iterating bitmap.buffer linearly assumes
+    # pitch == width and a top-down layout — that holds in the common
+    # case but breaks on padded or flipped bitmaps and corrupts the
+    # output. Walk by (row, col) using the real pitch instead.
+    #
+    # Cache bitmap.buffer in a local — ctypes struct field access
+    # creates a new Python wrapper object each time, so re-evaluating
+    # it per pixel is catastrophically slow.
+    pixels4g = []
+    px = 0
+    buf = bitmap.buffer
+    abs_pitch = abs(bitmap.pitch)
+    for y in range(bitmap.rows):
+        row_offset = y * abs_pitch if bitmap.pitch >= 0 else (bitmap.rows - 1 - y) * abs_pitch
+        for x in range(bitmap.width):
+            v = buf[row_offset + x]
+            if x % 2 == 0:
+                px = (v >> 4)
+            else:
+                px = px | (v & 0xF0)
+                pixels4g.append(px)
+                px = 0
+        if bitmap.width % 2 > 0:
+            pixels4g.append(px)
+            px = 0
+
+    # Downsample to 2-bit bitmap
+    pixels2b = []
+    px = 0
+    pitch = (bitmap.width // 2) + (bitmap.width % 2)
+    for y in range(bitmap.rows):
+        for x in range(bitmap.width):
+            px = px << 2
+            bm = pixels4g[y * pitch + (x // 2)]
+            bm = (bm >> ((x % 2) * 4)) & 0xF
+
+            if bm >= 12:
+                px += 3
+            elif bm >= 8:
+                px += 2
+            elif bm >= 4:
+                px += 1
+
+            if (y * bitmap.width + x) % 4 == 3:
+                pixels2b.append(px)
+                px = 0
+    if (bitmap.width * bitmap.rows) % 4 != 0:
+        # Outer parens are for clarity: in Python `*` binds tighter
+        # than `<<`, so the original `px << (4 - … % 4) * 2` already
+        # evaluates as `px << ((4 - … % 4) * 2)`. Match the explicit
+        # bracketing here so the shift width is obvious at a glance,
+        # mirroring the inner-loop style in fontconvert.py.
+        px = px << ((4 - (bitmap.width * bitmap.rows) % 4) * 2)
+        pixels2b.append(px)
+
+    packed = bytes(pixels2b)
+    glyph = GlyphProps(
+        width=bitmap.width,
+        height=bitmap.rows,
+        advance_x=fp4_from_ft16_16(slot.linearHoriAdvance),
+        left=slot.bitmap_left,
+        top=slot.bitmap_top,
+        data_length=len(packed),
+        data_offset=data_offset,
+        code_point=code_point,
+    )
+    return glyph, packed
+
+
+def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts):
+    """Rasterize every glyph a complex-script shaper can emit for this font
+    when shaping the named scripts.
+
+    Returns (glyph entries for codepoints GLYPH_TOKEN_BASE + glyph ID, glyph
+    count, packed shaping section).
+    """
+    import freetype
+    import tempfile
+
+    render_bytes, layout_bytes, glyph_count = shaping_blob.build(fontfile, scripts)
+    with tempfile.NamedTemporaryFile(suffix=".ttf", delete=False) as tmp:
+        tmp.write(render_bytes)
+    try:
+        face = freetype.Face(tmp.name)
+        face.set_char_size(size << 6, size << 6, 150, 150)
+        glyphs = []
+        offset = first_offset
+        for gid in range(glyph_count):
+            face.load_glyph(gid, load_flags)
+            glyph, packed = _pack_loaded_glyph(face.glyph, offset, shaping_blob.GLYPH_TOKEN_BASE + gid)
+            offset += len(packed)
+            glyphs.append((glyph, packed))
+    finally:
+        os.unlink(tmp.name)
+    # Same ppem the glyphs were rendered at (and TtfEpdFont uses): size pt at 150 DPI, 26.6.
+    ppem26_6 = (size * 150 * 64 + 36) // 72
+    return glyphs, glyph_count, shaping_blob.pack_section(ppem26_6, layout_bytes)
+
+
 def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False,
-                         fallback_fontfile=None):
+                         fallback_fontfile=None, shaping=True):
     """Rasterize all glyphs for one font style. Returns StyleRasterData."""
     import freetype
 
@@ -639,80 +758,30 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
                 all_glyphs.append((glyph, b''))
                 continue
 
-            bitmap = f.glyph.bitmap
-
-            # Build 4-bit greyscale bitmap (same logic as fontconvert.py).
-            #
-            # FreeType returns the buffer with bitmap.pitch as the row stride
-            # in bytes, which can be negative when the bitmap is stored
-            # bottom-up. Iterating bitmap.buffer linearly assumes
-            # pitch == width and a top-down layout — that holds in the common
-            # case but breaks on padded or flipped bitmaps and corrupts the
-            # output. Walk by (row, col) using the real pitch instead.
-            #
-            # Cache bitmap.buffer in a local — ctypes struct field access
-            # creates a new Python wrapper object each time, so re-evaluating
-            # it per pixel is catastrophically slow.
-            pixels4g = []
-            px = 0
-            buf = bitmap.buffer
-            abs_pitch = abs(bitmap.pitch)
-            for y in range(bitmap.rows):
-                row_offset = y * abs_pitch if bitmap.pitch >= 0 else (bitmap.rows - 1 - y) * abs_pitch
-                for x in range(bitmap.width):
-                    v = buf[row_offset + x]
-                    if x % 2 == 0:
-                        px = (v >> 4)
-                    else:
-                        px = px | (v & 0xF0)
-                        pixels4g.append(px)
-                        px = 0
-                if bitmap.width % 2 > 0:
-                    pixels4g.append(px)
-                    px = 0
-
-            # Downsample to 2-bit bitmap
-            pixels2b = []
-            px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
-            for y in range(bitmap.rows):
-                for x in range(bitmap.width):
-                    px = px << 2
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    bm = (bm >> ((x % 2) * 4)) & 0xF
-
-                    if bm >= 12:
-                        px += 3
-                    elif bm >= 8:
-                        px += 2
-                    elif bm >= 4:
-                        px += 1
-
-                    if (y * bitmap.width + x) % 4 == 3:
-                        pixels2b.append(px)
-                        px = 0
-            if (bitmap.width * bitmap.rows) % 4 != 0:
-                # Outer parens are for clarity: in Python `*` binds tighter
-                # than `<<`, so the original `px << (4 - … % 4) * 2` already
-                # evaluates as `px << ((4 - … % 4) * 2)`. Match the explicit
-                # bracketing here so the shift width is obvious at a glance,
-                # mirroring the inner-loop style in fontconvert.py.
-                px = px << ((4 - (bitmap.width * bitmap.rows) % 4) * 2)
-                pixels2b.append(px)
-
-            packed = bytes(pixels2b)
-            glyph = GlyphProps(
-                width=bitmap.width,
-                height=bitmap.rows,
-                advance_x=fp4_from_ft16_16(f.glyph.linearHoriAdvance),
-                left=f.glyph.bitmap_left,
-                top=f.glyph.bitmap_top,
-                data_length=len(packed),
-                data_offset=total_bitmap_size,
-                code_point=code_point,
-            )
+            glyph, packed = _pack_loaded_glyph(f.glyph, total_bitmap_size, code_point)
             total_bitmap_size += len(packed)
             all_glyphs.append((glyph, packed))
+
+    # Complex-script shaping: glyphs by glyph ID plus the layout tables.
+    shaping_section = b""
+    requested = shaping_blob.scripts_in_intervals(intervals) if shaping else []
+    scripts = [name for name in requested if shaping_blob.font_supports_script(fontfile, name)]
+    if len(scripts) < len(requested):
+        unsupported = ", ".join(name for name in requested if name not in scripts)
+        print(f"  [{style_label}] Shaping: font has no GSUB for {unsupported}, skipped", file=sys.stderr)
+    if scripts:
+        shaped_glyphs, shaped_count, shaping_section = rasterize_shaping_glyphs(
+            fontfile, size, load_flags, total_bitmap_size, scripts)
+        all_glyphs.extend(shaped_glyphs)
+        total_bitmap_size += sum(len(packed) for _, packed in shaped_glyphs)
+        base = shaping_blob.GLYPH_TOKEN_BASE
+        intervals = intervals + [(base, base + shaped_count - 1)]
+        layout_bytes = len(shaping_section) - shaping_blob.SECTION_HEADER_SIZE
+        print(f"  [{style_label}] Shaping {', '.join(scripts)}: {shaped_count} glyphs, "
+              f"{layout_bytes} bytes of layout tables", file=sys.stderr)
+        if layout_bytes > shaping_blob.FLASH_SLOT_BYTES:
+            print(f"  [{style_label}] Warning: layout tables exceed {shaping_blob.FLASH_SLOT_BYTES} bytes; "
+                  f"boards without PSRAM (X3/X4) keep them in RAM and may not shape", file=sys.stderr)
 
     # Get font metrics from pipe character (same heuristic as fontconvert.py)
     load_glyph(ord('|'))
@@ -768,6 +837,7 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
         kern_left_class_count=kern_left_class_count,
         kern_right_class_count=kern_right_class_count,
         ligature_pairs=ligature_pairs,
+        shaping_section=shaping_section,
     )
 
 
@@ -827,7 +897,7 @@ def style_sections_total_size(sections):
 # --- File writers ---
 
 def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
-                               force_autohint=False, fallback_style_fonts=None):
+                               force_autohint=False, fallback_style_fonts=None, shaping=True):
     """Generate a multi-style v4 .cpfont file.
 
     style_fonts: dict of {style_id: fontfile_path} e.g. {0: "Regular.ttf", 2: "Italic.ttf"}
@@ -849,7 +919,8 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
         raster_data[style_id] = rasterize_font_style(
             fontfile, size, intervals, style_id=style_id,
             force_autohint=force_autohint,
-            fallback_fontfile=fallback_fontfile)
+            fallback_fontfile=fallback_fontfile,
+            shaping=shaping)
 
     # Pack binary sections for each style
     packed_sections = {}  # style_id -> tuple of section bytearrays
@@ -865,6 +936,14 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
         style_offsets[style_id] = current_offset
         current_offset += style_sections_total_size(packed_sections[style_id])
 
+    # Shaping sections follow every style's data; readers that predate them
+    # never look past the bitmaps, and see zero in the TOC field.
+    shaping_offsets = {}  # style_id -> absolute file offset, 0 when none
+    for style_id in sorted(raster_data.keys()):
+        section = raster_data[style_id].shaping_section
+        shaping_offsets[style_id] = current_offset if section else 0
+        current_offset += len(section)
+
     # Build global header
     # V4 header: magic(8) + version(2) + flags(2) + styleCount(1) + reserved(19) = 32
     header = struct.pack("<8sHHB19s", MAGIC, CPFONT_VERSION, flags, style_count, bytes(19))
@@ -873,8 +952,8 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
     # Build style TOC entries
     # Each entry: styleId(1) + pad(3) + intervalCount(4) + glyphCount(4) +
     #   advanceY(1) + ascender(2) + descender(2) + kernL(2) + kernR(2) +
-    #   kernLCls(1) + kernRCls(1) + ligCount(1) + dataOffset(4) + reserved(4) = 32
-    STYLE_TOC_FORMAT = "<B3xIIBhhHHBBBI4x"
+    #   kernLCls(1) + kernRCls(1) + ligCount(1) + dataOffset(4) + shapingOffset(4) = 32
+    STYLE_TOC_FORMAT = "<B3xIIBhhHHBBBII"
     assert struct.calcsize(STYLE_TOC_FORMAT) == STYLE_TOC_ENTRY_SIZE
 
     toc_data = bytearray()
@@ -893,7 +972,8 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
                                 len(sd.kern_left_classes), len(sd.kern_right_classes),
                                 sd.kern_left_class_count, sd.kern_right_class_count,
                                 len(sd.ligature_pairs),
-                                style_offsets[style_id])
+                                style_offsets[style_id],
+                                shaping_offsets[style_id])
 
     # Write output
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
@@ -904,6 +984,9 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
         for style_id in sorted(packed_sections.keys()):
             for section in packed_sections[style_id]:
                 f.write(section)
+        for style_id in sorted(raster_data.keys()):
+            assert raster_data[style_id].shaping_section == b"" or f.tell() == shaping_offsets[style_id]
+            f.write(raster_data[style_id].shaping_section)
         total_file_size = f.tell()
 
     # Print summary
@@ -950,6 +1033,8 @@ def main():
                         help="Output directory for multi-size mode.")
     parser.add_argument("--list-presets", action="store_true",
                         help="List available interval presets and exit.")
+    parser.add_argument("--no-shaping", dest="shaping", action="store_false",
+                        help="Skip the complex-script shaping section even when the intervals include an Indic script.")
 
     # Multi-style mode: per-style font file arguments (generates v4 .cpfont)
     parser.add_argument("--regular", dest="font_regular",
@@ -1067,7 +1152,8 @@ def main():
         total_size += generate_cpfont_multistyle(
             style_fonts, sz, intervals, output_path,
             force_autohint=args.force_autohint,
-            fallback_style_fonts=fallback_style_fonts)
+            fallback_style_fonts=fallback_style_fonts,
+            shaping=args.shaping)
     print(f"\nTotal: {len(sizes)} files, {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
 
 
