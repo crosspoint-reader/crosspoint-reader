@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Epub/FootnoteEntry.h"
+#include "Epub/LayoutBuffer.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
@@ -94,15 +95,22 @@ class ChapterHtmlSlimParser {
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
   static constexpr size_t MAX_GRID_TABLE_CELL_WORDS = 32;
   static constexpr size_t MAX_GRID_TABLE_CELL_BYTES = 512;
+  static constexpr size_t MAX_GRID_TABLE_ANCHOR_BYTES = 256;
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
   bool tableRowRtl = false;
+  bool tablePreviousRowWasGrid = false;
+  bool tablePreviousRowEndedWithSeparator = false;
   uint16_t tableRowsSpannedRemaining = 0;
   size_t tableCellTextBytes = 0;
-  std::vector<std::unique_ptr<ParsedText>> tableRowCells;
-  std::array<std::vector<std::unique_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
-  std::vector<uint32_t> tableLineVisibleOffsets;
+  LayoutBuffer<std::unique_ptr<ParsedText>> tableRowCells;
+  std::array<LayoutBuffer<std::unique_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
+  LayoutBuffer<uint32_t> tableLineVisibleOffsets;
+  std::array<char, MAX_GRID_TABLE_ANCHOR_BYTES> tableRowAnchorStorage{};
+  size_t tableRowAnchorCount = 0;
+  size_t tableRowAnchorBytes = 0;
+  uint8_t tableAnchorCellPendingLine = UINT8_MAX;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
 
   // Tracks the innermost open <ul>/<ol> so <li> knows whether to number itself,
@@ -121,7 +129,14 @@ class ChapterHtmlSlimParser {
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
-  std::vector<std::pair<std::string, uint16_t>> anchorData;
+  struct AnchorRecord {
+    std::unique_ptr<char[]> id;
+    uint32_t length;
+    uint16_t page;
+
+    AnchorRecord() noexcept : length(0), page(0) {}
+  };
+  LayoutBuffer<AnchorRecord> anchorData;
   std::string pendingAnchorId;          // deferred until after previous text block is flushed
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
@@ -135,6 +150,7 @@ class ChapterHtmlSlimParser {
   bool currentPageVisibleOffsetSet = false;
   bool insideBody = false;
   bool htmlEnded_ = false;
+  bool layoutFailed = false;
   bool syntheticCharacterData = false;
   uint16_t nonVisibleTextDepth = 0;
 
@@ -163,14 +179,23 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
-  void flushPendingAnchor();
+  [[nodiscard]] bool appendAnchor(const char* id, uint16_t page);
+  void flushPendingAnchor(const char* storedAnchor = nullptr);
   void flushPartWordBuffer();
+  void compactTableRowAnchors();
+  void collectPendingTableAnchor();
+  void flushTableRowAnchorsForCell(size_t cellIndex);
+  void flushPendingTableCellAnchors();
+  void flushTableRowAnchors();
   void fallbackTableRowToStacked();
   void closeTableCell();
   void finishTableRow();
   void addTableRowSeparator();
+  bool addTableGridSegment(uint8_t columnCount, int16_t topY, int16_t bottomY);
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages();
+  void failLayout();
+  bool ensureCurrentPage();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
@@ -236,7 +261,7 @@ class ChapterHtmlSlimParser {
   void abortParse();   // tear down without flushing (error / abandon)
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
-  const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const LayoutBuffer<AnchorRecord>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page
   // count (a giant single-spine book never fully lays out, so its real count is unknown). Valid
