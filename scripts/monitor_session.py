@@ -9,6 +9,7 @@ import secrets
 import threading
 import time
 from collections import deque
+from itertools import islice
 from concurrent.futures import Future, TimeoutError
 from pathlib import Path
 
@@ -138,8 +139,12 @@ class DeviceSession:
                     break
                 self.condition.wait(remaining)
             oldest = self.events[0]["seq"] if self.events else self.sequence + 1
+            # Sequence numbers are contiguous, so the newest events form the tail.
+            count = max(0, min(len(self.events), self.sequence - after))
+            events = list(islice(reversed(self.events), count))
+            events.reverse()
             return {
-                "events": [e for e in self.events if e["seq"] > after],
+                "events": events,
                 "cursor": self.sequence,
                 "dropped": after < oldest - 1,
             }
