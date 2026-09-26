@@ -139,6 +139,7 @@ class HalGPIO {
   static constexpr uint8_t BTN_UP = 4;
   static constexpr uint8_t BTN_DOWN = 5;
   static constexpr uint8_t BTN_POWER = 6;
+  static constexpr uint8_t BUTTON_COUNT = BTN_POWER + 1;
 };
 
 extern HalGPIO gpio;

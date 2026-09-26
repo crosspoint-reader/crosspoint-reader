@@ -5,7 +5,7 @@
 
 int main() {
   SerialInput input;
-  assert(!input.start(7, 80));
+  assert(!input.start(SerialInput::MAX_BUTTONS, 80));
   assert(!input.start(1, 0));
   assert(input.start(1, 80));
   assert(!input.start(2, 80));
