@@ -253,7 +253,9 @@ void SerialControl::poll() {
     endHold();
   }
 #endif
-  if (lineLength && static_cast<uint32_t>(millis() - lastByteAt) > 1000) {
+  // lastByteAt is when poll() last read, not when bytes arrived. A slow loop
+  // may leave the rest of the line buffered, so time out only once RX is empty.
+  if (lineLength && logSerial.available() <= 0 && static_cast<uint32_t>(millis() - lastByteAt) > 1000) {
     lineLength = 0;
     discarding = true;
     error(0, "PARTIAL_TIMEOUT");

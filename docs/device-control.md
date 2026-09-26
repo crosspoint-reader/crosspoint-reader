@@ -316,7 +316,8 @@ input reject a new press with `BUSY`; physical input during a press produces
 that release is hidden from the activity, so no release click or leftover
 long-press state remains. It cannot undo an action already triggered on
 button-down. Requests have
-a bounded 127-byte buffer and a one-second partial-line timeout. An overlong,
+a bounded 127-byte buffer and a one-second partial-line timeout, which starts
+once no more request bytes are waiting. An overlong,
 invalid, or timed-out line is discarded through its next newline.
 
 `INPUT_DONE` means input was delivered, not that the intended navigation occurred.
