@@ -194,6 +194,13 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  // The Transparent sleep screen drew an overlay over the current screen. It is now the
+  // Current Screen mode plus the separate overlay toggle: keep the overlay on after upgrade.
+  if (doc["sleepScreenOverlay"].isNull() && sleepScreen == CURRENT_SCREEN) {
+    sleepScreenOverlay = 1;
+    needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);

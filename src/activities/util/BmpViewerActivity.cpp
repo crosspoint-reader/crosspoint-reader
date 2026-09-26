@@ -65,9 +65,8 @@ void BmpViewerActivity::loadSiblingImages() {
 }
 
 bool BmpViewerActivity::canSetSleepCover() const {
-  return FsHelpers::hasBmpExtension(filePath) ||
-         (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
-          FsHelpers::hasPngExtension(filePath));
+  // PNGs can only be sleep overlays.
+  return FsHelpers::hasBmpExtension(filePath) || (SETTINGS.sleepScreenOverlay && FsHelpers::hasPngExtension(filePath));
 }
 
 bool BmpViewerActivity::renderPng() {
@@ -236,12 +235,15 @@ void BmpViewerActivity::onExit() {
 void BmpViewerActivity::doSetSleepCover() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
-  const bool transparentMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+  // With the overlay on, Current Screen has no image of its own, so a BMP becomes the overlay too.
+  const bool setAsOverlay =
+      SETTINGS.sleepScreenOverlay && (FsHelpers::hasPngExtension(filePath) ||
+                                      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CURRENT_SCREEN);
   if (!canSetSleepCover()) return;
 
   const char* destination =
-      transparentMode ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
-                      : CUSTOM_SLEEP_ROOT_BMP;
+      setAsOverlay ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
+                   : CUSTOM_SLEEP_ROOT_BMP;
   bool success = filePath == destination;
 
   if (!success) {
@@ -266,7 +268,7 @@ void BmpViewerActivity::doSetSleepCover() {
   }
 
   if (success) {
-    if (!transparentMode) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    if (!setAsOverlay) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
     SETTINGS.saveToFile();
     GUI.drawPopup(renderer, tr(STR_DONE));
   } else {

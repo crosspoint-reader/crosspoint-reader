@@ -32,7 +32,9 @@
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "activities/boot_sleep/SleepActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
@@ -66,6 +68,11 @@ void SettingsActivity::rebuildSettingsLists() {
       // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
       if (setting.valuePtr == &CrossPointSettings::fadingFix &&
           (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
+        continue;
+      }
+      // Quick resume keeps the page with its moon icon; the overlay is not drawn there.
+      if (setting.valuePtr == &CrossPointSettings::sleepScreenOverlay &&
+          SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) {
         continue;
       }
       displaySettings.push_back(setting);
@@ -284,6 +291,22 @@ void SettingsActivity::toggleCurrentSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+
+  if (setting.valuePtr == &CrossPointSettings::sleepScreenOverlay && !SETTINGS.sleepScreenOverlay &&
+      !SleepActivity::hasSleepOverlayImage()) {
+    // Turning the overlay on without an image would silently do nothing: ask first.
+    startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_SLEEP_OVERLAY_MISSING),
+                                                                  tr(STR_SLEEP_OVERLAY_MISSING_HINT)),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               SETTINGS.sleepScreenOverlay = 1;
+                               SETTINGS.saveToFile();
+                               rebuildSettingsLists();
+                             }
+                             requestUpdate();
+                           });
     return;
   }
 

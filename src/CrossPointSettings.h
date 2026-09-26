@@ -24,7 +24,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     COVER_CUSTOM = 4,
     BLANK = 5,
     QUICK_RESUME = 6,
-    TRANSPARENT_CUSTOM = 7,
+    // Keeps the current screen (was "Transparent" before the overlay became a separate toggle).
+    CURRENT_SCREEN = 7,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -227,6 +228,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Draw the transparent sleep overlay on top of the selected sleep screen
+  uint8_t sleepScreenOverlay = 0;
   // Status bar settings
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
