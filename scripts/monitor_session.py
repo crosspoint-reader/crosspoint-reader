@@ -394,14 +394,15 @@ class DeviceSession:
                     and fields.get("id") == 0
                     and self.waiting_screenshot
                 ):
-                    self._publish(
-                        "screenshot_error",
-                        command_id=self.capture_id,
-                        error=fields.get("reason", "Firmware rejected screenshot"),
+                    self._fail_screenshot(
+                        fields.get("reason", "Firmware rejected screenshot")
                     )
-                    self.waiting_screenshot = False
-                    self.capture_id = None
-                    self.capture_metadata = None
+
+    def _fail_screenshot(self, error):
+        self._publish("screenshot_error", command_id=self.capture_id, error=error)
+        self.waiting_screenshot = False
+        self.capture_id = None
+        self.capture_metadata = None
 
     def _run(self):
         retry_at = 0
@@ -427,7 +428,10 @@ class DeviceSession:
                     if (
                         self.waiting_screenshot or self.capture is not None
                     ) and time.monotonic() > self.capture_deadline:
-                        raise OSError("Screenshot timed out")
+                        # Only a started transfer leaves binary data to resync from.
+                        if self.capture is not None or self.capture_metadata:
+                            raise OSError("Screenshot transfer timed out")
+                        self._fail_screenshot("Screenshot timed out")
                 except OSError as exc:
                     self._disconnect()
                     self._set_state("disconnected", str(exc))
