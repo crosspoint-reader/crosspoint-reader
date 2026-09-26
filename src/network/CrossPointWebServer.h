@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "UploadCancel.h"
+
 // Structure to hold file information
 struct FileInfo {
   String name;
@@ -65,6 +67,10 @@ class CrossPointWebServer {
 
   WsUploadStatus getWsUploadStatus() const;
 
+  // Safe from another task. Ends the HTTP upload being read now, and any later
+  // one as it starts; its partial file is removed.
+  void cancelUploads();
+
   // Get the port number
   uint16_t getPort() const { return port; }
 
@@ -77,6 +83,7 @@ class CrossPointWebServer {
   uint16_t wsPort = 81;  // WebSocket port
   NetworkUDP udp;
   bool udpActive = false;
+  mutable UploadCancel uploadCancel;
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);

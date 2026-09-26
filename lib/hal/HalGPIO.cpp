@@ -167,6 +167,10 @@ bool HalGPIO::rawInputActive() {
   return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
 }
 
+void HalGPIO::readButtonAdc(InputManager::ButtonAdcSample& group1, InputManager::ButtonAdcSample& group2) {
+  inputMgr.readButtonAdc(group1, group2);
+}
+
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
