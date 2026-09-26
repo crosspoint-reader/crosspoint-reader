@@ -47,6 +47,8 @@ class MappedInputManager {
   void update(bool deferHomeButtonAction = false) const;
 #ifdef ENABLE_SERIAL_LOG
   int controlButton(Button button) const;
+  // A cancelled synthetic hold still releases; hide that release from activities.
+  void suppressControlRelease(Button button) const { suppressNextRelease(button); }
 #endif
 #if FREEINK_CAP_TOUCH
   // X4 Pro delays a single power click until its frontlight double-click window

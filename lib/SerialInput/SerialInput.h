@@ -3,7 +3,7 @@
 
 // Advance once per firmware loop; repeated GPIO polls retain the same edges.
 class SerialInput {
-  enum class Phase : uint8_t { Idle, Pending, Down, Released };
+  enum class Phase : uint8_t { Idle, Pending, Down, Releasing, Released };
   Phase phase = Phase::Idle;
   uint8_t buttonMask = 0;
   bool pressedEdge = false;
@@ -26,10 +26,20 @@ class SerialInput {
       phase = Phase::Down;
       startedAt = now;
       pressedEdge = true;
-    } else if (phase == Phase::Down && now - startedAt >= duration) {
+    } else if ((phase == Phase::Down && now - startedAt >= duration) || phase == Phase::Releasing) {
       releasedAfter = now - startedAt;
       phase = Phase::Released;
     }
+  }
+  // Ends a hold early: a held button releases on the next frame so press/release
+  // stays paired. Returns true when a release will be emitted.
+  bool releaseEarly() {
+    if (phase == Phase::Down) {
+      phase = Phase::Releasing;
+      return true;
+    }
+    if (phase == Phase::Pending) cancel();
+    return false;
   }
   void cancel() {
     phase = Phase::Idle;
@@ -37,7 +47,7 @@ class SerialInput {
     pressedEdge = false;
   }
   bool active() const { return phase != Phase::Idle; }
-  uint8_t down() const { return phase == Phase::Down ? buttonMask : 0; }
+  uint8_t down() const { return phase == Phase::Down || phase == Phase::Releasing ? buttonMask : 0; }
   uint8_t pressed() const { return pressedEdge ? buttonMask : 0; }
   uint8_t released() const { return phase == Phase::Released ? buttonMask : 0; }
   uint32_t heldMs(uint32_t now) const { return released() ? releasedAfter : down() ? now - startedAt : 0; }
