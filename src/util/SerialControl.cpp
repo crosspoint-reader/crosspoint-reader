@@ -168,8 +168,9 @@ void dispatch() {
     return;
   }
   if (strcmp(verb, "PRESS") == 0) {
-    uint32_t duration = 80;
-    if (!arg || (durationText && !number(durationText, duration)) || duration < 20 || duration > 2000) {
+    uint32_t duration = SerialInput::DEFAULT_HOLD_MS;
+    if (!arg || (durationText && !number(durationText, duration)) || duration < SerialInput::MIN_HOLD_MS ||
+        duration > SerialInput::MAX_HOLD_MS) {
       error(id, "SYNTAX");
       return;
     }
@@ -186,7 +187,10 @@ void dispatch() {
       error(id, "UNSUPPORTED_BUTTON");
       return;
     }
-    serialInput.start(static_cast<uint8_t>(physical), duration);
+    if (!serialInput.start(static_cast<uint8_t>(physical), duration)) {
+      error(id, "UNSUPPORTED_BUTTON");
+      return;
+    }
     activeId = id;
     activeButton = entry->button;
     LOG_INF("CTL", "id=%lu boot=%lu event=ACCEPTED button=%s hold_ms=%lu", static_cast<unsigned long>(id),
@@ -198,8 +202,9 @@ void dispatch() {
     return;
   }
   if (strcmp(verb, "INFO") == 0) {
-    LOG_INF("CTL", "id=%lu boot=%lu event=INFO protocol=1 last_id=%lu min_hold=20 max_hold=2000",
-            static_cast<unsigned long>(id), static_cast<unsigned long>(bootId), static_cast<unsigned long>(lastId));
+    LOG_INF("CTL", "id=%lu boot=%lu event=INFO protocol=1 last_id=%lu min_hold=%lu max_hold=%lu",
+            static_cast<unsigned long>(id), static_cast<unsigned long>(bootId), static_cast<unsigned long>(lastId),
+            static_cast<unsigned long>(SerialInput::MIN_HOLD_MS), static_cast<unsigned long>(SerialInput::MAX_HOLD_MS));
     for (const auto& entry : BUTTONS) {
       const int physical = mappedInputManager.controlButton(entry.button);
       if (physical >= 0 && physical != HalGPIO::BTN_POWER)

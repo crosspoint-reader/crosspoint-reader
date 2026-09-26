@@ -12,8 +12,13 @@ class SerialInput {
   uint32_t releasedAfter = 0;
 
  public:
+  static constexpr uint8_t MAX_BUTTONS = 8;  // bits in buttonMask
+  static constexpr uint32_t MIN_HOLD_MS = 20;
+  static constexpr uint32_t MAX_HOLD_MS = 2000;
+  static constexpr uint32_t DEFAULT_HOLD_MS = 80;
+
   bool start(uint8_t button, uint32_t holdMs) {
-    if (active() || button >= 7 || holdMs < 20 || holdMs > 2000) return false;
+    if (active() || button >= MAX_BUTTONS || holdMs < MIN_HOLD_MS || holdMs > MAX_HOLD_MS) return false;
     buttonMask = 1u << button;
     duration = holdMs;
     phase = Phase::Pending;
