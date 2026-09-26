@@ -1184,6 +1184,10 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
+    // Category-less entries (frontlight, OPDS download options) are owned by
+    // dedicated UIs; they stay settable by key but are hidden from the
+    // settings page, like on the device.
+    if (s.category == StrId::STR_NONE_OPT) continue;
 
     doc.clear();
     doc["key"] = s.key;

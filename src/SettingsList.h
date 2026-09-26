@@ -343,9 +343,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
-        // Erased below unless the board is an X4 Pro.
-        SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
-                            "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
+        // Erased below unless the board is an X4 Pro. A stored 0/1 bool, shown
+        // as Off / Double Click (which gesture triggers the light).
+        SettingInfo::Enum(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
+                          {StrId::STR_STATE_OFF, StrId::STR_DOUBLE_CLICK}, "doubleClickPwrLight",
+                          StrId::STR_CAT_CONTROLS),
 #if FREEINK_CAP_TOUCH
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
@@ -380,18 +382,17 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM),
 
-        // OPDS download folder: persisted + web-exposed, but category-less so it
-        // is hidden from the on-device Settings screen (edited via OPDS UI).
+        // OPDS entries: persisted + settable by key, but category-less so they
+        // are hidden from both the device Settings screen and the web settings
+        // page (edited via the OPDS UI).
         SettingInfo::String(StrId::STR_OPDS_DOWNLOAD_FOLDER, &SETTINGS.opdsDownloadFolder[0],
                             sizeof(SETTINGS.opdsDownloadFolder), "opdsDownloadFolder"),
-        // OPDS download filename format: persisted + web-exposed, category-less so it
-        // is hidden from the on-device Settings screen (cycled from the OPDS UI).
         SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                           {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                           "opdsFilenameFormat"),
 
-        // Frontlight quick-panel state: persisted and web-exposed, but hidden
-        // from the on-device Settings screen because the swipe panel owns it.
+        // Frontlight quick-panel state: persisted + settable by key, but hidden
+        // from both settings UIs because the swipe panel owns it.
         SettingInfo::Value(StrId::STR_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 5},
                            "frontlightBrightness"),
 #if FREEINK_CAP_WARMLIGHT
