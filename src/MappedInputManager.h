@@ -45,6 +45,13 @@ class MappedInputManager {
   // Home-key actions so the next main-loop pass can dispatch them, while the
   // current action remains available for immediate Home cancellation.
   void update(bool deferHomeButtonAction = false) const;
+#ifdef ENABLE_SERIAL_CONTROL
+  // First physical index that a synthetic press of this button drives, or -1
+  // when the mapping is disabled or reaches only Power.
+  int controlButton(Button button) const;
+  // A cancelled synthetic hold still releases; hide that release from activities.
+  void suppressControlRelease(Button button) const { suppressNextRelease(button); }
+#endif
 #if FREEINK_CAP_TOUCH
   // X4 Pro delays a single power click until its frontlight double-click window
   // expires. The main loop supplies that one-frame event here.
@@ -135,6 +142,7 @@ class MappedInputManager {
 
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
+  uint8_t buttonMask(Button button) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   // SDK edge classification (fui::edgeSwipe) + the shared decode/held-time
   // bookkeeping; the wrappers below give each edge its board meaning.
