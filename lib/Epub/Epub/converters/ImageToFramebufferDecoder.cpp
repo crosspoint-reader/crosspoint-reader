@@ -1,7 +1,30 @@
 #include "ImageToFramebufferDecoder.h"
 
 #include <Arduino.h>
+#include <GfxRenderer.h>
 #include <Logging.h>
+
+DecodeTarget captureDecodeTarget(const GfxRenderer& renderer, const bool writeFramebuffer) {
+  DecodeTarget target;
+  target.writeFramebuffer = writeFramebuffer;
+  target.framebuffer = renderer.getWriteTarget();
+  target.writeOriginY = renderer.getWriteOriginY();
+  target.writeRows = renderer.getWriteRows();
+  target.renderMode = static_cast<uint8_t>(renderer.getRenderMode());
+  target.grayAbsolute = renderer.grayPlanesAreAbsolute();
+  target.displayWidthBytes = renderer.getDisplayWidthBytes();
+  target.displayWidth = renderer.getDisplayWidth();
+  target.displayHeight = renderer.getDisplayHeight();
+  target.screenWidth = renderer.getScreenWidth();
+  target.screenHeight = renderer.getScreenHeight();
+  target.orientation = static_cast<uint8_t>(renderer.getOrientation());
+  return target;
+}
+
+bool ImageToFramebufferDecoder::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
+                                                    const RenderConfig& config) {
+  return decodeToFramebuffer(imagePath, captureDecodeTarget(renderer, !config.cacheOnly), config);
+}
 
 bool ImageToFramebufferDecoder::validateAndStoreDimensions(const int64_t width, const int64_t height,
                                                            ImageDimensions& out, const char* format) {

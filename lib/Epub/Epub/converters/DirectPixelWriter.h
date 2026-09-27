@@ -7,6 +7,8 @@
 
 #include <cassert>
 
+#include "DecodeTarget.h"
+
 // Direct framebuffer writer that eliminates per-pixel overhead from the image
 // rendering hot path.  Pre-computes orientation transform as linear coefficients
 // and caches render-mode state so the inner loop is: one multiply, one add,
@@ -40,18 +42,18 @@ struct DirectPixelWriter {
   // writeFramebuffer=false (cache-only decode, idle prefetch) disables
   // framebuffer output: fb stays null and writePixel() becomes a no-op, so no
   // callback call site needs its own branch.
-  void init(GfxRenderer& renderer, const bool writeFramebuffer = true) {
-    fb = renderer.getWriteTarget();
-    originY = renderer.getWriteOriginY();
-    clipRows = renderer.getWriteRows();
-    mode = renderer.getRenderMode();
-    absolute = renderer.grayPlanesAreAbsolute();
-    displayWidthBytes = renderer.getDisplayWidthBytes();
+  void init(const DecodeTarget& target) {
+    fb = target.writeFramebuffer ? target.framebuffer : nullptr;
+    originY = target.writeOriginY;
+    clipRows = target.writeRows;
+    mode = static_cast<GfxRenderer::RenderMode>(target.renderMode);
+    absolute = target.grayAbsolute;
+    displayWidthBytes = target.displayWidthBytes;
 
-    const int phyW = renderer.getDisplayWidth();
-    const int phyH = renderer.getDisplayHeight();
+    const int phyW = target.displayWidth;
+    const int phyH = target.displayHeight;
 
-    switch (renderer.getOrientation()) {
+    switch (static_cast<GfxRenderer::Orientation>(target.orientation)) {
       case GfxRenderer::Portrait:
         // phyX = y, phyY = (phyH-1) - x
         phyXBase = 0;
@@ -98,8 +100,6 @@ struct DirectPixelWriter {
         phyYStepY = 1;
         break;
     }
-
-    if (!writeFramebuffer) fb = nullptr;
   }
 
   // Call once per row before the column loop.

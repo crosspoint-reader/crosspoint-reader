@@ -19,7 +19,7 @@
 namespace {
 
 struct GifContext {
-  GfxRenderer* renderer{nullptr};
+  const DecodeTarget* target{nullptr};
   const RenderConfig* config{nullptr};
   int screenWidth{0};
   int screenHeight{0};
@@ -66,7 +66,7 @@ void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
   if (endDstY > ctx.dstHeight) endDstY = ctx.dstHeight;
 
   DirectPixelWriter pw;
-  pw.init(*ctx.renderer);
+  pw.init(*ctx.target);
 
   for (int dstY = firstDstY; dstY < endDstY; ++dstY) {
     ctx.lastDstY = dstY;
@@ -237,8 +237,15 @@ bool GifToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
   return validateAndStoreDimensions(info.canvasWidth, info.canvasHeight, out, "GIF");
 }
 
-bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
+bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                     const RenderConfig& config) {
+  bool cacheWritten;
+  return decodeToFramebuffer(imagePath, target, config, cacheWritten);
+}
+
+bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
+                                                    const RenderConfig& config, bool& cacheWritten) {
+  cacheWritten = false;
   LOG_DBG("GIF", "Decoding GIF: %s", imagePath.c_str());
 
   GifBasicInfo info;
@@ -278,10 +285,10 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
   GifContext& ctx = *ctxPtr;
-  ctx.renderer = &renderer;
+  ctx.target = &target;
   ctx.config = &config;
-  ctx.screenWidth = renderer.getScreenWidth();
-  ctx.screenHeight = renderer.getScreenHeight();
+  ctx.screenWidth = target.screenWidth;
+  ctx.screenHeight = target.screenHeight;
   ctx.srcWidth = sourceDimensions.width;
   ctx.srcHeight = sourceDimensions.height;
 
@@ -360,9 +367,12 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     LOG_ERR("GIF", "Failed to finalize pixel cache: %s", config.cachePath.c_str());
     return false;
   }
+  cacheWritten = ctx.caching;
 
   return true;
 }
+
+size_t GifToFramebufferConverter::minFreeHeapToDecode() const { return MIN_FREE_HEAP_FOR_GIF; }
 
 bool GifToFramebufferConverter::supportsFormat(const std::string& extension) {
   return FsHelpers::hasGifExtension(extension);
