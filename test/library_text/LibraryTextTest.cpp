@@ -323,6 +323,17 @@ TEST(LibraryFold, DecomposedVoicingMarkIsDropped) {
   EXPECT_EQ(fold("か\xE3\x82\x99な"), "かな");
 }
 
+TEST(LibraryFold, HalfwidthKatakanaFoldsLikeFullwidth) {
+  // ｶﾀｶﾅ, with voicing written as a separate ﾞ/ﾟ: ｶﾞ ﾊﾟ ｳﾞ.
+  EXPECT_EQ(fold("ｶﾀｶﾅ"), fold("カタカナ"));
+  EXPECT_EQ(fold("ｶﾞｸｴﾝ"), "がくえん");
+  EXPECT_EQ(fold("ﾊﾟﾝ"), "ぱん");
+  EXPECT_EQ(fold("ｳﾞｧｲｵﾘﾝ"), fold("ヴァイオリン"));
+  EXPECT_EQ(fold("ﾗｰﾒﾝ"), "らーめん");
+  // A mark after a kana that cannot take it is dropped, not kept as a gap.
+  EXPECT_EQ(fold("ｱﾞｲ"), "あい");
+}
+
 TEST(LibraryFold, KanaGroupInitialIsTheHeadOfItsRow) {
   using library::foldedGroupInitial;
   EXPECT_EQ(foldedGroupInitial(fold("あさ")), 0x3042u);          // あ
@@ -371,6 +382,15 @@ TEST(PackSortKey, NeverSplitsAMultiByteCodepoint) {
   char out[4];
   // Two kanji: 3 bytes each; the second does not fit in the remaining byte.
   EXPECT_EQ(library::packSortKey(fold("漢字"), out, sizeof(out)), 3u);
+}
+
+TEST(PackSortKey, StopsAtASequenceCutByTheView) {
+  // "かな" viewed without its last byte: な is cut, so only か is packed and
+  // the decoder never reads past the view.
+  const std::string folded = fold("かな");
+  char out[12];
+  EXPECT_EQ(library::packSortKey(std::string_view(folded.data(), folded.size() - 1), out, sizeof(out)), 1u);
+  EXPECT_EQ(library::foldedGroupInitial(std::string_view(folded.data(), 2)), 0u);
 }
 
 TEST(AuthorKeyFromReading, KeepsThePublishersWordOrder) {
