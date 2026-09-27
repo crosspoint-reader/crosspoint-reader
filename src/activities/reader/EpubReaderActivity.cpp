@@ -1,14 +1,15 @@
 #include "EpubReaderActivity.h"
 
+#include <Epub/ImageCacheService.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <Epub/converters/DecodeTarget.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
-#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -152,6 +153,8 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 }  // namespace
 
 EpubReaderActivity::~EpubReaderActivity() {
+  // Join the decoder task before the Epub/extractor it may be using goes away.
+  ImageCacheService::getInstance().stop();
   ImageBlock::setExtractor(nullptr, nullptr);
   // ActivityManager destroys activities with its RenderLock already held;
   // taking another here self-deadlocks (renderingMutex is non-recursive).
@@ -173,6 +176,17 @@ EpubReaderActivity::~EpubReaderActivity() {
   } else {
     epub.reset();
   }
+}
+
+void EpubReaderActivity::onEnter() {
+  // Start the decoder task before the first render can request a page's cache.
+  ImageCacheService::getInstance().start();
+  ReaderActivity::onEnter();
+}
+
+void EpubReaderActivity::onExit() {
+  ImageCacheService::getInstance().stop();
+  ReaderActivity::onExit();
 }
 
 bool EpubReaderActivity::loadBook() {
@@ -414,21 +428,18 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Idle image prefetch: decode the next page's uncached images straight to
-  // their .pxc cache (framebuffer untouched), one image per tick, so the first
-  // view of an image page skips the placeholder + FAST_REFRESH pass in
-  // renderContents. A failed attempt gives up on the page; the real render
-  // retries it with placeholder fallback.
+  // Idle image prefetch: hand the next page to the decoder task, which writes
+  // the .pxc without touching the framebuffer. The render path renders from
+  // that cache, so the first view of an image page skips the placeholder pass.
   {
     RenderLock lock(RenderLock::Mode::Try);
     if (lock.ownsLock() && section && !skipLoopDelay() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
         millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
         ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
         (idlePrefetchSpine != currentSpineIndex || idlePrefetchPage != section->currentPage)) {
-      bool decodedOne = false;
       const int nextPage = section->currentPage + 1;
       if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
+        if (auto p = section->loadPage(nextPage)) {
           if (p->hasImagesNeedingDecode()) {
             // Decode at the position the real render will use (same margin
             // math as renderBook()) so the .pxc matches a decode at view time.
@@ -436,22 +447,13 @@ void EpubReaderActivity::loop() {
             renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
             mTop += SETTINGS.screenMargin;
             mLeft += SETTINGS.screenMargin;
-            // The decode starts after the 3s idle low-power drop; without the
-            // lock a ~1.5s JPEG would stretch to ~10s at 10 MHz.
-            HalPowerManager::Lock powerLock;
-            const auto t0 = millis();
-            decodedOne = p->prefetchOneImage(renderer, mLeft, mTop);
-            LOG_DBG("ERS", "Idle image prefetch: page %d %s in %lums", nextPage, decodedOne ? "decoded" : "failed",
-                    millis() - t0);
+            ImageCacheService::getInstance().prefetchPage(std::move(p), captureDecodeTarget(renderer, false), mLeft,
+                                                          mTop);
           }
         }
       }
-      // A successful decode may leave more images for the next tick; anything
-      // else (nothing to do, or a failed attempt) marks the page handled.
-      if (!decodedOne) {
-        idlePrefetchSpine = currentSpineIndex;
-        idlePrefetchPage = section->currentPage;
-      }
+      idlePrefetchSpine = currentSpineIndex;
+      idlePrefetchPage = section->currentPage;
     }
   }
 
@@ -955,6 +957,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           uint16_t backupSpine = currentSpineIndex;
           uint16_t backupPage = section->currentPage;
           uint16_t backupPageCount = section->pageCount;
+          // Join the decoder task first: it may hold an open .pxc (and be
+          // extracting an image) inside the cache directory about to be removed.
+          ImageCacheService::getInstance().stop();
           section.reset();
           epub->clearCache();
           epub->setupCacheDir();
@@ -1032,6 +1037,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
       nextPageNumber = section->currentPage;
     }
     discardOverlayPage();
+    ImageCacheService::getInstance().stop();
     ImageBlock::releaseRenderCache();
     ImageBlock::setExtractor(nullptr, nullptr);
     section.reset();
@@ -1620,6 +1626,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto tPrewarm = millis();
 
   const bool pageHasImages = page->hasImages();
+  // The decoder task owns every .pxc write. Make sure this page's images are
+  // cached before deciding whether the placeholder pass is needed, so a first
+  // view renders straight from cache with no placeholder flash.
+  if (pageHasImages && page->hasImagesNeedingDecode()) {
+    const DecodeTarget target = captureDecodeTarget(renderer, /*writeFramebuffer=*/false);
+    ImageCacheService::getInstance().ensurePageCached(*page, target, orientedMarginLeft, orientedMarginTop);
+  }
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
