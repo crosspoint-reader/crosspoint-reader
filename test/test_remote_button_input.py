@@ -19,6 +19,7 @@ stub = r"""
 #pragma once
 #include <cstdint>
 struct HalGPIO {
+  enum : uint8_t { BTN_BACK = 0, BTN_UP = 4, BTN_DOWN = 5, BTN_POWER = 6 };
   bool pressed = false, released = false, held = false;
   uint8_t button = 0;
   void update() {}
@@ -29,6 +30,7 @@ struct HalGPIO {
   bool isPressed(uint8_t b) const { return b == button && held; }
   unsigned long getHeldTime() const { return 900; }
   bool wasCapacitivePagePressed() const { return false; }
+  bool isCapacitivePagePressed(uint8_t) const { return false; }
   bool hasHomeKey() const { return false; }
   bool wasHomeKeyTapped() const { return false; }
   bool wasHomeKeyLongPressed() const { return false; }
@@ -37,6 +39,7 @@ struct HalGPIO {
 """
 harness = r"""
 #include <cassert>
+#define LOG_ERR(...) ((void)0)
 #include "MappedInputManager.h"
 class GfxRenderer {};
 unsigned long millis() { return 1000; }
@@ -44,6 +47,7 @@ constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
   enum { IGNORE = 0, PWR_BOOKMARK = 7, PWR_SYNC = 8, PWR_READER_MENU = 9 };
+  int frontButtonLeft = 2, frontButtonRight = 3, frontButtonBack = 0, frontButtonConfirm = 1;
   int shortPwrBtn = IGNORE;
   int vibration = VIBRATION_OFF, hapticIntensity = 0;
   int homeButtonTapAction = 0, homeButtonDoubleTapAction = 0, homeButtonLongPressAction = 0;
@@ -55,6 +59,7 @@ struct HalHaptics {
 bool MappedInputManager::mapButton(Button b, bool (HalGPIO::*fn)(uint8_t) const) const {
   return (gpio.*fn)(static_cast<uint8_t>(b));
 }
+bool MappedInputManager::hasTouch() const { return false; }
 bool MappedInputManager::wasBackGesture() const { return false; }
 MappedInputManager::SwipeDir MappedInputManager::wasSwipe(int*, int*) const { return SwipeDir::None; }
 """ + "\n".join(methods) + r"""
@@ -100,7 +105,26 @@ int main() {
     assert(!input.injectRemoteClick(RemoteButton::Back));
   }
   gpio.held = false;
+  input.update();
+  input.resetButtonBuffer(true);
+  gpio.button = static_cast<uint8_t>(Button::Confirm);
+  gpio.pressed = gpio.held = true;
+  input.update();
+  gpio.pressed = gpio.held = false;
+  input.update();
+  assert(!input.injectRemoteClick(RemoteButton::Next));
+  input.resetButtonBuffer(true);
+  gpio.button = 2;  // Held directional contact without a new physical edge.
+  gpio.held = true;
+  input.update();
+  assert(input.beginBufferedButtons());
+  assert(input.bufferedNavigationOnly());
+  assert(input.getHeldTime() == 900);
   assert(input.injectRemoteClick(RemoteButton::Back));
+  assert(input.wasPressed(Button::Back) && input.wasReleased(Button::Back));
+  assert(input.getHeldTime() == 0);
+  assert(!input.bufferedNavigationOnly());
+  input.endBufferedButtons();
 }
 """
 manager_source = (ROOT / "src/activities/ActivityManager.cpp").read_text()
