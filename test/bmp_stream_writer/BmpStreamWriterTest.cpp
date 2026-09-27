@@ -1,9 +1,8 @@
+#include <Print.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <vector>
-
-#include <Print.h>
 
 #include "BmpStreamWriter.h"
 
