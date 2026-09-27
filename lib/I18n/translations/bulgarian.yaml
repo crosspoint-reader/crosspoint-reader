@@ -365,7 +365,6 @@ STR_PWR_BTN_FOOTNOTE_BACK: "Бързо връщане от бележки под
 STR_BACK_SHORT_TO_FILE_BROWSER: "Натиск. назад към файловия браузър"
 STR_SET_SLEEP_COVER: "Задай корица"
 STR_FOOTNOTES: "Бележки под линия"
-STR_NO_FOOTNOTES: "Няма бележки под линия на тази страница"
 STR_LINK: "[връзка]"
 STR_SCREENSHOT_BUTTON: "Направи снимка на екрана"
 STR_SLEEP_TIMER_VALUE_FORMAT: "%u мин"

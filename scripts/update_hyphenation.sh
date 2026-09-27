@@ -24,5 +24,6 @@ process ru
 process it
 process uk
 process pl
+process pt
 process sv
 process fi

@@ -1,5 +1,7 @@
 #include "FsHelpers.h"
 
+#include <Utf8.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -203,6 +205,8 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
       output[i] = c;
     }
   }
+  // If the last character was cut in half, drop its leftover bytes.
+  i = static_cast<size_t>(utf8SafeTruncateBuffer(output, static_cast<int>(i)));
   output[i] = '\0';
 }
 

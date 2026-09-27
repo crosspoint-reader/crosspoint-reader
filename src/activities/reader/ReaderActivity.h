@@ -16,6 +16,10 @@ class ReaderActivity : public Activity {
 
   std::unique_ptr<EndOfBookOptions> endOfBookOptions;
   std::atomic<bool> endOfBookOptionsReady{false};
+  std::atomic<bool> pageRendered{false};
+  bool bookRemembered = false;
+  void markPageRendered() { pageRendered.store(true, std::memory_order_release); }
+  void rememberBookOnceRendered();
 
   explicit ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                           std::string bookPath, bool allowFastInitialRefresh);
