@@ -96,8 +96,8 @@ void UiListActivity::loop() {
 void UiListActivity::navigateButtons() {
   const int count = listCount();
   auto& n = activeNav();
-  buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
-  buttonNavigator.onPreviousRelease(
+  buttonNavigator.onNextPress([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
+  buttonNavigator.onPreviousPress(
       [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
   // Page by the rows the last build actually drew (pageRows), not the
   // fixed-height visibleRows estimate: with wrapped labels the estimate

@@ -65,6 +65,7 @@ add_subdirectory(page_link)
 add_subdirectory(content_opf_parser)
 add_subdirectory(chapter_position)
 add_subdirectory(home_button)
+add_subdirectory(button_press_navigation)
 
 add_subdirectory(inflate_stream)
 add_subdirectory(fs_helpers)
