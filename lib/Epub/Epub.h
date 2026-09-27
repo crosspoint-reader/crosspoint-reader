@@ -32,7 +32,8 @@ class Epub {
 
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
-                       bool metadataOnly = false, ZipFile* sharedZip = nullptr);
+                       bool metadataOnly = false, ZipFile* sharedZip = nullptr,
+                       BookMetadataCache::ExtendedMetadata* extendedMetadata = nullptr);
   bool generateThumbBmpForCover(int height, const std::string& coverImageHref) const;
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
@@ -47,7 +48,8 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
-  bool loadMetadata(std::string& title, std::string& author);
+  // `extended` is optional; when given it is filled from the same cache or OPF read.
+  bool loadMetadata(std::string& title, std::string& author, BookMetadataCache::ExtendedMetadata* extended = nullptr);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

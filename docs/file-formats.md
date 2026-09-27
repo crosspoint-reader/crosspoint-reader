@@ -6,10 +6,25 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
-### Version 10
+### Version 11
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
+
+Version 11 appends five strings to the metadata block, after
+`textReferenceHref`: `titleSort`, `authorSort`, `series`, `seriesIndex` and
+`tags`. Each is empty when the OPF does not provide it. `BookMetadataCache::load()`
+skips them; `loadExtendedMetadata()` reads them.
+
+- `titleSort`: the main title's `file-as` (EPUB 3 `refines`, or an `opf:file-as`
+  attribute), else `calibre:title_sort`.
+- `authorSort`: `file-as` of the first creator whose role is `aut` or unset.
+- `series` / `seriesIndex`: `calibre:series` and `calibre:series_index`, else the
+  top-level `belongs-to-collection` typed `series` (or untyped) with its
+  `group-position`. Collections typed `set` are ignored. A trailing `.0` is
+  dropped from the index.
+- `tags`: `dc:subject` and `schema:genre` values, deduplicated
+  case-insensitively and joined with `\n`; at most 16 tags and 512 bytes.
 
 ImHex pattern:
 
@@ -18,7 +33,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 10
+#define EXPECTED_VERSION 11
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -39,6 +54,11 @@ struct Metadata {
     String language [[comment("Book language code")]];
     String coverItemHref [[comment("Path to cover image")]];
     String textReferenceHref [[comment("Path to guided first text reference")]];
+    String titleSort [[comment("Title file-as, empty if absent")]];
+    String authorSort [[comment("Primary author file-as, empty if absent")]];
+    String series [[comment("Series name, empty if absent")]];
+    String seriesIndex [[comment("Position in series, empty if absent")]];
+    String tags [[comment("Newline-separated tags")]];
 };
 
 struct SpineEntry {

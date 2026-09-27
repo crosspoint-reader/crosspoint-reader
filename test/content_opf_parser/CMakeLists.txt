@@ -8,6 +8,7 @@ add_executable(ContentOpfParserTest
 target_include_directories(ContentOpfParserTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/lib/Epub/Epub/parsers
+  ${REPO_ROOT}/lib/Memory
   ${REPO_ROOT}/lib/XmlParserUtils
 )
 
