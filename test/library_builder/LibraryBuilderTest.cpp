@@ -400,3 +400,80 @@ TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(index.bookCount(), 513);
 }
+
+TEST_F(LibraryBuilderTest, TitleSortOrdersRecordsWhileBlobKeepsShownTitle) {
+  bookMetadata["/a.epub"].title = "The Hobbit";
+  bookMetadata["/a.epub"].titleSort = "Hobbit, The";
+  bookMetadata["/b.epub"].title = "Middlemarch";
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), "/a.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 1), "/b.epub");
+
+  ClixRecord record{};
+  ASSERT_TRUE(index.readRecord(0, record));
+  EXPECT_EQ(std::string(record.fold, record.foldLen), "hobbit the");
+  std::string author;
+  std::string title;
+  ASSERT_TRUE(index.readAuthorAndTitle(record, author, title));
+  EXPECT_EQ(title, "The Hobbit");
+  EXPECT_EQ(author, "Author");
+}
+
+TEST_F(LibraryBuilderTest, AuthorFileAsOrdersAuthorShelfOverSurnameGuess) {
+  // The last-word guess files Lu Xun under X, after Morrison.
+  bookMetadata["/a.epub"].author = "Lu Xun";
+  bookMetadata["/a.epub"].authorSort = "Lu, Xun";
+  bookMetadata["/b.epub"].author = "Toni Morrison";
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 0), "/a.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 1), "/b.epub");
+}
+
+TEST_F(LibraryBuilderTest, AuthorGroupWithPartialFileAsStaysWhole) {
+  fake::add("/c.epub");
+  bookMetadata["/a.epub"].author = "Lu Xun";
+  bookMetadata["/b.epub"].author = "Toni Morrison";
+  bookMetadata["/c.epub"].author = "Lu Xun";
+  bookMetadata["/c.epub"].authorSort = "Lu, Xun";
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  const std::string first = pathAt(index, SortOrder::AuthorAsc, 0);
+  const std::string second = pathAt(index, SortOrder::AuthorAsc, 1);
+  EXPECT_TRUE((first == "/a.epub" && second == "/c.epub") || (first == "/c.epub" && second == "/a.epub"));
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 2), "/b.epub");
+}
+
+TEST_F(LibraryBuilderTest, ReusedRecordsKeepSortKeysWithoutParsing) {
+  bookMetadata["/a.epub"].title = "The Hobbit";
+  bookMetadata["/a.epub"].titleSort = "Hobbit, The";
+  bookMetadata["/a.epub"].author = "Lu Xun";
+  bookMetadata["/a.epub"].authorSort = "Lu, Xun";
+  bookMetadata["/b.epub"].title = "Middlemarch";
+  bookMetadata["/b.epub"].author = "Toni Morrison";
+  initial();
+  // Changing /b.epub forces a new index while /a.epub is reused from the old one.
+  fake::files["/b.epub"]->time++;
+  fake::parses = 0;
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+
+  EXPECT_EQ(fake::parses, 1u);
+  EXPECT_EQ(stats.metadataReused, 1);
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), "/a.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 0), "/a.epub");
+  ClixRecord record{};
+  std::string authorSort;
+  ASSERT_TRUE(index.readRecord(0, record));
+  ASSERT_TRUE(index.readAuthorSort(record, authorSort));
+  EXPECT_EQ(authorSort, "Lu, Xun");
+}

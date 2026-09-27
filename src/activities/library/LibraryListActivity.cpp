@@ -625,6 +625,9 @@ void LibraryListActivity::applyFilter() {
 
   uint16_t matchCount = 0;
   std::string author;
+  std::string title;
+  author.reserve(128);
+  title.reserve(2 * 256);
   for (int row = 0; row < total; row++) {
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
     library::ClixRecord record{};
@@ -633,12 +636,13 @@ void LibraryListActivity::applyFilter() {
       matches[matchCount++] = static_cast<uint16_t>(row);
       continue;
     }
-    // The stored fold covers the title only, so the author has to be read and
-    // folded here. That is the search most worth having: the reader who knows
-    // the author usually also knows where the book is, while "emily" finding
-    // Alice Hunter is the case the shelf exists to answer.
-    author.clear();
-    if (index.readAuthor(record, author) && library::matchesQuery(library::fold(author), needle)) {
+    // The stored fold is the title SORT ("Hobbit, The"), so the shown title and
+    // the author are read and folded here. The author is the search most worth
+    // having: the reader who knows the author usually also knows where the book
+    // is, while "emily" finding Alice Hunter is the case the shelf exists to answer.
+    if (!index.readAuthorAndTitle(record, author, title)) continue;
+    if ((!title.empty() && library::matchesQuery(library::fold(title), needle)) ||
+        (!author.empty() && library::matchesQuery(library::fold(author), needle))) {
       matches[matchCount++] = static_cast<uint16_t>(row);
     }
   }

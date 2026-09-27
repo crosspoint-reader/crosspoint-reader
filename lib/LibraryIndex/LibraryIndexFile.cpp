@@ -231,6 +231,46 @@ bool LibraryIndexFile::readSourceAuthor(const ClixRecord& record, std::string& o
   return readBlobField(record, 2, out);
 }
 
+bool LibraryIndexFile::readAuthorSort(const ClixRecord& record, std::string& out) {
+  return readBlobField(record, 3, out);
+}
+
+bool LibraryIndexFile::readAuthorAndTitle(const ClixRecord& record, std::string& author, std::string& title) {
+  author.clear();
+  title.clear();
+  if (!opened || record.nameLen == 0) return false;
+  if (record.nameOff > head.nameLen || sizeof(uint64_t) > head.nameLen - record.nameOff ||
+      record.nameLen > head.nameLen - record.nameOff - sizeof(uint64_t))
+    return false;
+
+  // Both fields sit right after the name, each behind a length byte, so one read
+  // of the largest possible pair covers them. `title` doubles as the buffer.
+  const uint32_t start = record.nameOff + sizeof(uint64_t) + record.nameLen;
+  if (start >= head.nameLen) return false;
+  const uint32_t want = std::min<uint32_t>(head.nameLen - start, 2u * (1u + UINT8_MAX));
+  title.resize(want);
+  if (!readAt(head.nameStart + start, title.data(), want)) {
+    title.clear();
+    return false;
+  }
+
+  const auto authorLen = static_cast<uint8_t>(title[0]);
+  if (1u + authorLen >= want) {
+    title.clear();
+    return false;
+  }
+  author.assign(title, 1, authorLen);
+  const auto titleLen = static_cast<uint8_t>(title[1u + authorLen]);
+  if (2u + authorLen + titleLen > want) {
+    author.clear();
+    title.clear();
+    return false;
+  }
+  title.erase(0, 2u + authorLen);
+  title.resize(titleLen);
+  return true;
+}
+
 bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {
   out.clear();
   if (!opened || record.folderId >= head.folderCount) return false;

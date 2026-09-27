@@ -446,7 +446,7 @@ and is rebuilt; that is the entire migration mechanism.
 | Folders | `folderStart` | length-prefixed paths, one per folder |
 | Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
 | Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
-| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author (see below) |
+| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author, author sort (see below) |
 
 The arrival permutation runs oldest first, keyed by the record's FAT
 modification time (when the file landed on the card); `firstSeen` — the
@@ -454,6 +454,9 @@ build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
 fold bump rebuilds ranks while preserving `firstSeen`.
 Fold version 4 preserves leading articles in title sort and search keys.
+Fold version 5 folds the book's title sort (`file-as`) into `fold`, orders the
+author permutation by the author's `file-as`, and appends the author-sort field
+to the name blob.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
@@ -462,11 +465,18 @@ Sections are 512-byte aligned so each starts on an SD block boundary.
 A fixed stride is what lets the reader seek straight to record *n* without an
 offset table, and read a screenful in one 4 KB block. `static_assert` enforces it.
 
-Each record carries `fold[96]`, the title normalised for search and sorting —
-accents stripped, case dropped, leading articles preserved — and `authorKey[12]`,
-the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
-one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
-surname, derived separately from the display name.
+Each record carries `fold[96]`, the title normalised for sorting and search —
+accents stripped, case dropped, leading articles preserved. It folds the book's
+title sort ("Hobbit, The") when the OPF gives one, otherwise the shown title, and
+the records are stored in this order. Search matches `fold`, then the folded
+shown title and display author from the name blob, so the shown title stays
+searchable when it differs from the sort title.
+
+`authorKey[12]` holds the author's words folded and sorted so that "Victor Hugo"
+and "Hugo Victor" group as one person. `authorKey` is a GROUPING key, not an
+ordering one: the shelf orders by the folded `file-as` of the group's
+representative book when it has one, otherwise by surname, taken as the last word
+of the display name.
 
 The byte before the folded title records metadata extraction status: not
 attempted, extracted, or failed. The final four bytes contain the packed FAT
@@ -488,6 +498,7 @@ Per record, at `nameStart + nameOff`:
 [u8][author]     display author, one spelling chosen per authorKey across the library
 [u8][title]      the book's own title, or length 0 if it never gave one
 [u8][source]     cleaned author spelling before the library-wide spelling vote
+[u8][authorSort] the book's primary-author file-as, or length 0 if it never gave one
 ```
 
 The filename must stay the first textual field and stay the filename: `readPath`
@@ -495,8 +506,10 @@ rebuilds a book's path from it, so writing the display title there makes the boo
 impossible to open. That was a real defect, and it is why title has its own field.
 
 The source author is separate from the displayed canonical author so a later
-rebuild can repeat the spelling vote after books are added or removed. Existing
-display reads still stop at the author or title fields and retain their offsets.
+rebuild can repeat the spelling vote after books are added or removed. The author
+sort is kept for the same reason: a reused record needs it to order the author
+shelf without reparsing the book. Existing display reads still stop at the author
+or title fields and retain their offsets.
 
 ### Freshness and unchanged rebuilds
 

@@ -88,6 +88,11 @@ class LibraryIndexFile {
   // Cleaned author spelling before the library-wide spelling vote. Empty is a
   // valid value, so success is independent of `out.empty()`.
   bool readSourceAuthor(const ClixRecord& record, std::string& out);
+  // The book's own primary-author file-as. Empty is a valid value.
+  bool readAuthorSort(const ClixRecord& record, std::string& out);
+  // readAuthor and readTitle in one read, for scans that need both per record.
+  // Both may come back empty; false only when the blob cannot be read.
+  bool readAuthorAndTitle(const ClixRecord& record, std::string& author, std::string& title);
 
   // Absolute path of the book, rebuilt from its folder record.
   bool readPath(const ClixRecord& record, std::string& out);

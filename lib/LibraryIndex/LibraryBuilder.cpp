@@ -48,6 +48,10 @@ struct StagedEntry {
   // is chosen later, across every book by the same person.
   uint8_t authorLen;
   char author[STAGE_AUTHOR_BYTES];
+  // The primary author's file-as ("Austen, Jane") when the book gives one. It
+  // orders the author shelf in place of the last-word surname guess.
+  uint8_t authorSortLen;
+  char authorSort[STAGE_AUTHOR_BYTES];
   // The title the book gives itself, kept SEPARATE from `name`. Writing it into
   // the name slot was a defect: readPath rebuilds a book's file path from that
   // slot, so an enriched book resolved to "/Books/Germinal" and could not be
@@ -70,9 +74,10 @@ static_assert(sizeof(SortKey) == 14, "SortKey must stay small: it is the only pe
 constexpr uint8_t MAX_AUTHOR_SPELLINGS = 16;
 struct SpellingSlot {
   char text[STAGE_AUTHOR_BYTES];
-  uint16_t ordinal;
+  uint16_t ordinal;  // representative book; one with a file-as when any has it
   uint16_t count;
   uint8_t len;
+  bool hasAuthorSort;
 };
 static_assert(sizeof(SpellingSlot) <= 136, "spelling vote scratch grew unexpectedly");
 
@@ -258,6 +263,8 @@ struct WalkState {
   bool failed = false;
   bool readMetadata = false;
   LibraryIndexFile* previous = nullptr;
+  // Reused for every book's metadata read; heap because it exceeds the stack budget.
+  BookMetadataCache::ExtendedMetadata* extended = nullptr;
   BuildStats* stats = nullptr;
   uint16_t enriched = 0;
   HalFile folders;  // folder section, staged separately then copied in
@@ -299,6 +306,8 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   // and a name pulled out of one by pattern is a guess wearing a fact's clothes.
   std::string title = stemOf(name);
   std::string author;
+  std::string titleSort;
+  std::string authorSort;
   bool titleFromBook = false;
   bool authorFromBook = false;
 
@@ -321,7 +330,7 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   }
 
   if (reuseMetadata) {
-    if (!st.previous->readSourceAuthor(priorRecord, author)) {
+    if (!st.previous->readSourceAuthor(priorRecord, author) || !st.previous->readAuthorSort(priorRecord, authorSort)) {
       st.failed = true;
       return false;
     }
@@ -347,13 +356,17 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
     st.stats->parsed++;
     Epub epub(fullPath, CACHE_DIR);
     std::string bookTitle;
-    if (epub.loadMetadata(bookTitle, author)) {
+    if (epub.loadMetadata(bookTitle, author, st.extended)) {
       entry.record.metadataStatus = CLIX_METADATA_EXTRACTED;
       if (!bookTitle.empty()) {
         title = std::move(bookTitle);
         titleFromBook = true;
       }
       authorFromBook = !author.empty();
+      if (st.extended) {
+        titleSort = std::move(st.extended->titleSort);
+        authorSort = std::move(st.extended->authorSort);
+      }
     } else {
       entry.record.metadataStatus = CLIX_METADATA_FAILED;
     }
@@ -365,6 +378,7 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   // asked it to cost.
   if (!author.empty() && fold(author) == "unknown") {
     author.clear();
+    authorSort.clear();
     authorFromBook = false;
   }
 
@@ -372,7 +386,9 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
 
   // An absent author is a fact, not a gap to fill: the row joins the Unknown
   // group rather than borrowing a name from its surroundings.
-  const std::string folded = reuseMetadata ? std::string() : fold(title);
+  // Ordered by the book's title sort ("Hobbit, The") when it gives one. Search
+  // still reaches the shown title through the name blob.
+  const std::string folded = reuseMetadata ? std::string() : fold(titleSort.empty() ? title : titleSort);
   const std::string key = reuseMetadata ? std::string() : authorKey(author);
 
   entry.record.fileSize = fileSize;
@@ -412,6 +428,10 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   const std::string displayAuthor = cleanPersonName(author);
   entry.authorLen = static_cast<uint8_t>(std::min(displayAuthor.size(), STAGE_AUTHOR_BYTES));
   memcpy(entry.author, displayAuthor.data(), entry.authorLen);
+  const size_t authorSortBytes = std::min(authorSort.size(), STAGE_AUTHOR_BYTES);
+  entry.authorSortLen =
+      static_cast<uint8_t>(utf8SafeTruncateBuffer(authorSort.data(), static_cast<int>(authorSortBytes)));
+  memcpy(entry.authorSort, authorSort.data(), entry.authorSortLen);
 
   st.stageOut->write(&entry, STAGE_STRIDE);
   st.books++;
@@ -550,7 +570,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
 // truth.
 uint32_t blobBytesFor(const StagedEntry& entry, const StagedEntry& canonical) {
   return sizeof(entry.pathHash) + entry.record.nameLen + 1u + canonical.authorLen + 1u + entry.titleLen + 1u +
-         entry.authorLen;
+         entry.authorLen + 1u + entry.authorSortLen;
 }
 
 bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order, const uint16_t* resolvedFirstSeen,
@@ -770,11 +790,22 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
           const size_t want = std::min<size_t>(len, sizeof(buf));
           if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, author), buf, want))
             break;
+          uint8_t authorSortLen = 0;
+          if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, authorSortLen),
+                           &authorSortLen, sizeof(authorSortLen)))
+            break;
+          const bool hasAuthorSort = authorSortLen > 0;
           bool merged = false;
           for (uint8_t i = 0; i < spellingCount; i++) {
             SpellingSlot& sp = spellingScratch[i];
             if (sp.len == want && memcmp(sp.text, buf, want) == 0) {
               sp.count++;
+              // Same spelling either way; represent it by a book that carries a
+              // file-as so the whole group can be ordered by it.
+              if (!sp.hasAuthorSort && hasAuthorSort) {
+                sp.ordinal = ord;
+                sp.hasAuthorSort = true;
+              }
               merged = true;
               break;
             }
@@ -788,6 +819,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
             sp.ordinal = ord;
             sp.count = 1;
             sp.len = static_cast<uint8_t>(want);
+            sp.hasAuthorSort = hasAuthorSort;
           }
         }
 
@@ -824,9 +856,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // recognised as one person — so ordering by it files Herman Melville under B.
   //
   // Now that every book carries its canonical display name, the shelf is ordered
-  // by surname, as a library would. Keying off the canonical name rather than the
-  // raw one is what keeps a group whole: all of a group's books resolve to the
-  // same string, so they cannot split across two places.
+  // by surname, as a library would: the canonical book's file-as when it has one,
+  // otherwise the last word of its name. Keying off the canonical book rather than
+  // each book's own data is what keeps a group whole: all of a group's books
+  // resolve to the same key, so they cannot split across two places.
   if (!ioFailed && authorSort && canonicalFrom && n > 1) {
     for (uint16_t i = 0; i < n; i++) {
       serviceBuilder(serviceUnits);
@@ -840,13 +873,28 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, authorLen), &authorLen,
                        sizeof(authorLen)))
         break;
+      // `author` holds the file-as first and the display name only when the
+      // file-as folds to nothing: one buffer, since this runs on a small stack.
+      std::string key;
       if (authorLen > 0) {
-        if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, author), author,
-                         std::min<size_t>(authorLen, sizeof(author))))
+        uint8_t authorSortLen = 0;
+        if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, authorSortLen),
+                         &authorSortLen, sizeof(authorSortLen)))
           break;
+        if (authorSortLen > 0) {
+          const size_t sortBytes = std::min<size_t>(authorSortLen, sizeof(author));
+          if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, authorSort), author,
+                           sortBytes))
+            break;
+          key = fold(std::string_view(author, sortBytes));
+        }
+        if (key.empty()) {
+          if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, author), author,
+                           std::min<size_t>(authorLen, sizeof(author))))
+            break;
+          key = surnameKey(std::string_view(author, authorLen));
+        }
       }
-
-      const std::string key = authorLen == 0 ? std::string() : surnameKey(std::string_view(author, authorLen));
       if (key.empty()) {
         // 0xFF outranks every folded byte, so unknown authors stay at the end.
         memset(authorSort[i].key, 0xFF, sizeof(authorSort[i].key));
@@ -960,7 +1008,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     if (!fetch(order[i], entry)) break;
     entry.record.nameOff = nameCursor;
     // The blob holds the path hash, basename, chosen author spelling, title, and
-    // source author spelling used by later rebuilds.
+    // the source author spelling and author sort used by later rebuilds.
     // Keeping them adjacent means no second offset has to live in the record.
     const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
     if (!fetch(order[from], canonical)) break;
@@ -997,6 +1045,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     if (entry.titleLen > 0) put(entry.title, entry.titleLen);
     put(&entry.authorLen, 1);
     if (entry.authorLen > 0) put(entry.author, entry.authorLen);
+    put(&entry.authorSortLen, 1);
+    if (entry.authorSortLen > 0) put(entry.authorSort, entry.authorSortLen);
     blobWritten += blobBytesFor(entry, canonical);
   }
   header.nameLen = blobWritten;
@@ -1131,9 +1181,21 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     }
   }
 
+  // Only metadata reads use it. Fatal rather than degraded: records built without
+  // sort keys would be marked extracted and reused unchanged by later rebuilds.
+  std::unique_ptr<BookMetadataCache::ExtendedMetadata> extendedMetadata;
+  if (readMetadata) {
+    extendedMetadata = makeUniqueNoThrow<BookMetadataCache::ExtendedMetadata>();
+    if (!extendedMetadata) {
+      LOG_ERR("LIBIDX", "extended metadata alloc failed");
+      return false;
+    }
+  }
+
   WalkState st;
   st.nameBuf = nameBuf.get();
   st.stagedEntry = stagedEntry.get();
+  st.extended = extendedMetadata.get();
   st.dedupKeys = dedupKeys.get();
   st.dedupDegraded = !dedupKeys;
   st.nextFirstSeen = nextFirstSeen;
@@ -1287,9 +1349,11 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   st.nameBuf = nullptr;
   st.stagedEntry = nullptr;
   st.dedupKeys = nullptr;
+  st.extended = nullptr;
   priorList.reset();
   nameBuf.reset();
   stagedEntry.reset();
+  extendedMetadata.reset();
   dedupKeys.reset();
 
   // Read the staged fold prefixes back and sort ordinals. The checked 14-byte
