@@ -45,7 +45,7 @@ void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback
   });
 
   if (wasReleased) {
-    if (lastContinuousNavTime == 0) {
+    if (lastContinuousNavTime == 0 && mappedInput->getHeldTime() <= continuousStartMs) {
       callback();
     }
 
