@@ -124,9 +124,13 @@ suppresses list markers, and `<ul>`/`<ol>` containers contribute their own
 margins and padding to child block insets, changing cached word contents and
 page layout.
 
+### Version 45
+
 Version 45 keeps the version 44 serialized layout unchanged. It was bumped
 because internal EPUB links now preserve CSS superscript and subscript styles,
 changing their cached word-style flags and page layout.
+
+### Version 44
 
 Version 44 appends the internal-link rectangles produced during text layout to
 each serialized page. The reader uses these rectangles for touch navigation;
