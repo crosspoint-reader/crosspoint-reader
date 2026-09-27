@@ -42,6 +42,7 @@ struct HalGPIO {
   unsigned long getHeldTime() const { return 900; }
   unsigned long getPowerButtonHeldTime() const { return powerHeldMs; }
   bool wasCapacitivePagePressed() const { return false; }
+  bool isCapacitivePagePressed(uint8_t) const { return false; }
   bool hasHomeKey() const { return false; }
   bool wasHomeKeyTapped() const { return false; }
   bool wasHomeKeyLongPressed() const { return false; }
@@ -50,6 +51,7 @@ struct HalGPIO {
 """
 harness = r"""
 #include <cassert>
+#define LOG_ERR(...) ((void)0)
 #include "MappedInputManager.h"
 class GfxRenderer {};
 namespace BoardConfig {
@@ -69,6 +71,7 @@ struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
   POWER_ACTIONS
   int shortPwrBtn = IGNORE, doublePwrBtn = PWR_FRONTLIGHT;
+  int frontButtonLeft = 2, frontButtonRight = 3, frontButtonBack = 0, frontButtonConfirm = 1;
   static bool hasPowerDoubleClick() {
     return BoardConfig::ACTIVE.inputStyle != BoardConfig::InputStyle::DigitalConfirmPowerHold;
   }
@@ -81,8 +84,9 @@ struct HalHaptics {
   static void longPress(bool, int) {}
 };
 bool MappedInputManager::mapButton(Button b, bool (HalGPIO::*fn)(uint8_t) const) const {
-  return (gpio.*fn)(static_cast<uint8_t>(b));
+  return readButton(static_cast<uint8_t>(b), fn);
 }
+bool MappedInputManager::hasTouch() const { return false; }
 bool MappedInputManager::wasBackGesture() const { return false; }
 MappedInputManager::SwipeDir MappedInputManager::wasSwipe(int*, int*) const { return SwipeDir::None; }
 """ + "\n".join(methods) + r"""
@@ -128,7 +132,27 @@ int main() {
     assert(!input.injectRemoteClick(RemoteButton::Back));
   }
   gpio.held = false;
+  input.update();
+  input.resetButtonBuffer(true);
+  gpio.button = static_cast<uint8_t>(Button::Confirm);
+  gpio.pressed = gpio.held = true;
+  input.update();
+  gpio.pressed = gpio.held = false;
+  input.update();
+  assert(!input.injectRemoteClick(RemoteButton::Next));
+  input.resetButtonBuffer(true);
+  gpio.button = 2;  // Held directional contact without a new physical edge.
+  gpio.held = true;
+  input.update();
+  assert(input.beginBufferedButtons());
+  assert(input.bufferedNavigationOnly());
+  assert(input.getHeldTime() == 900);
   assert(input.injectRemoteClick(RemoteButton::Back));
+  assert(input.wasPressed(Button::Back) && input.wasReleased(Button::Back));
+  assert(input.getHeldTime() == 0);
+  assert(!input.bufferedNavigationOnly());
+  input.resetButtonBuffer(false);
+  gpio.held = false;
 
   // All power-bound reader shortcuts share duration and startup qualification.
   const auto doubleAction = SETTINGS.doublePwrBtn;
