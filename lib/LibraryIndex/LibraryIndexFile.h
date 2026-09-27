@@ -93,6 +93,11 @@ class LibraryIndexFile {
   // readAuthor and readTitle in one read, for scans that need both per record.
   // Both may come back empty; false only when the blob cannot be read.
   bool readAuthorAndTitle(const ClixRecord& record, std::string& author, std::string& title);
+  // readTitle, readSourceAuthor and readAuthorSort in one read: what a rebuild
+  // reuses from an unchanged book. Any may come back empty; false only when the
+  // blob cannot be read.
+  bool readRebuildFields(const ClixRecord& record, std::string& title, std::string& sourceAuthor,
+                         std::string& authorSort);
 
   // Absolute path of the book, rebuilt from its folder record.
   bool readPath(const ClixRecord& record, std::string& out);
@@ -101,6 +106,10 @@ class LibraryIndexFile {
   bool openImpl(const char* path, bool acceptStaleFold);
   bool readAt(uint32_t offset, void* dst, size_t len);
   bool readBlobField(const ClixRecord& record, uint8_t field, std::string& out);
+  // The first `fieldCount` length-prefixed fields after the name, fetched with a
+  // single read into `buf`; field i is buf.substr(offsets[i], lengths[i]).
+  bool readBlobFields(const ClixRecord& record, uint8_t fieldCount, std::string& buf, uint32_t* offsets,
+                      uint8_t* lengths);
 
   HalFile file;
   ClixHeader head{};

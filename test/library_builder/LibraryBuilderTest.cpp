@@ -476,4 +476,40 @@ TEST_F(LibraryBuilderTest, ReusedRecordsKeepSortKeysWithoutParsing) {
   ASSERT_TRUE(index.readRecord(0, record));
   ASSERT_TRUE(index.readAuthorSort(record, authorSort));
   EXPECT_EQ(authorSort, "Lu, Xun");
+
+  std::string title;
+  std::string sourceAuthor;
+  authorSort.clear();
+  ASSERT_TRUE(index.readRebuildFields(record, title, sourceAuthor, authorSort));
+  EXPECT_EQ(title, "The Hobbit");
+  EXPECT_EQ(sourceAuthor, "Lu Xun");
+  EXPECT_EQ(authorSort, "Lu, Xun");
+}
+
+TEST_F(LibraryBuilderTest, BlobFieldsLongerThanTheFirstReadChunkAreReadWhole) {
+  const std::string longTitle(200, 't');
+  const std::string longAuthor = "Author " + std::string(100, 'a');
+  const std::string longSort = std::string(100, 'a') + ", Author";
+  bookMetadata["/a.epub"].title = longTitle;
+  bookMetadata["/a.epub"].author = longAuthor;
+  bookMetadata["/a.epub"].authorSort = longSort;
+  bookMetadata["/b.epub"].title = "Zzz";
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  ClixRecord record{};
+  ASSERT_TRUE(index.readRecord(0, record));
+  std::string title;
+  std::string sourceAuthor;
+  std::string authorSort;
+  ASSERT_TRUE(index.readRebuildFields(record, title, sourceAuthor, authorSort));
+  EXPECT_EQ(title, longTitle);
+  EXPECT_EQ(sourceAuthor, longAuthor);
+  EXPECT_EQ(authorSort, longSort);
+
+  std::string author;
+  ASSERT_TRUE(index.readAuthorAndTitle(record, author, title));
+  EXPECT_EQ(author, longAuthor);
+  EXPECT_EQ(title, longTitle);
 }

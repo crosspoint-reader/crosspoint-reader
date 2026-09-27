@@ -330,18 +330,14 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   }
 
   if (reuseMetadata) {
-    if (!st.previous->readSourceAuthor(priorRecord, author) || !st.previous->readAuthorSort(priorRecord, authorSort)) {
-      st.failed = true;
-      return false;
-    }
-    const bool hasBookTitle = st.previous->readTitle(priorRecord, title);
-    if (!hasBookTitle && st.previous->ioFailed()) {
+    // One read per unchanged book: this runs for every book on every freshness check.
+    if (!st.previous->readRebuildFields(priorRecord, title, author, authorSort)) {
       st.failed = true;
       return false;
     }
     entry.record = priorRecord;
     authorFromBook = !author.empty();
-    if (hasBookTitle) {
+    if (!title.empty()) {
       titleFromBook = true;
     } else {
       title = stemOf(name);
