@@ -514,14 +514,15 @@ bool BookMetadataCache::loadExtendedMetadata(ExtendedMetadata& out) {
   }
 
   bookFile.seek(extendedMetadataOffset);
-  serialization::readString(bookFile, out.titleSort);
-  serialization::readString(bookFile, out.authorSort);
-  serialization::readString(bookFile, out.series);
-  serialization::readString(bookFile, out.seriesIndex);
-  serialization::readString(bookFile, out.tags);
+  if (!serialization::readString(bookFile, out.titleSort) ||
+      !serialization::readString(bookFile, out.authorSort) ||
+      !serialization::readString(bookFile, out.series) ||
+      !serialization::readString(bookFile, out.seriesIndex) ||
+      !serialization::readString(bookFile, out.tags)) {
+    return false;
+  }
   return true;
 }
-
 uint32_t BookMetadataCache::getCumulativeSize(const int index) const {
   if (index < 0 || index >= static_cast<int>(cumulativeSizes.size())) {
     return 0;
