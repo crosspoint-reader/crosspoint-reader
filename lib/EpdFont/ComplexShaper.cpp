@@ -36,8 +36,10 @@ constexpr size_t kMaxLiveFaces = 8;
 // One Indic face is 8-16 KB of HarfBuzz state (its 5-80 KB of layout tables
 // are flash-mapped, see FlashBlobCache.h, or else count here too). When the
 // budget runs out anyway, appendShapedRun() drops every face and retries with
-// just the one it needs. The reserve keeps shaping from taking the last
-// contiguous block that section builds and page renders depend on.
+// just the one it needs. The reserve is free heap left to the section build
+// and page render. It is counted against the total, not the largest block:
+// shaping allocates at most a few KB at a time, and a fragmented C3 heap
+// rarely has a 20 KB block to spare while reading.
 constexpr size_t kDefaultBudget = 64 * 1024;
 constexpr size_t kInternalReserve = 20 * 1024;
 constexpr size_t kMaxLiveFaces = 2;  // regular + bold without rebuilding on every style change
@@ -50,9 +52,12 @@ size_t gCurrent = 0;
 size_t gPeak = 0;
 uint32_t gFailures = 0;
 
-bool admits(const size_t growth) {
+// `growth` is what the allocation adds to the heap in use; `block` is the
+// contiguous size it needs (they differ for realloc).
+bool admits(const size_t growth, const size_t block) {
   if (gCurrent + growth > gBudget) return false;
-  if (kInternalReserve != 0 && ESP.getMaxAllocHeap() < growth + kHeader + kInternalReserve) {
+  if (kInternalReserve != 0 &&
+      (ESP.getFreeHeap() < growth + kHeader + kInternalReserve || ESP.getMaxAllocHeap() < block + kHeader)) {
     return false;
   }
   return true;
@@ -60,13 +65,14 @@ bool admits(const size_t growth) {
 
 void noteFailure([[maybe_unused]] const size_t size) {
   if ((gFailures++ & 0x3F) == 0) {
-    LOG_ERR("SHAPE", "Allocation of %u bytes refused (in use %u / %u)", static_cast<unsigned>(size),
-            static_cast<unsigned>(gCurrent), static_cast<unsigned>(gBudget));
+    LOG_ERR("SHAPE", "Allocation of %u bytes refused (in use %u / %u, heap free %u, max block %u)",
+            static_cast<unsigned>(size), static_cast<unsigned>(gCurrent), static_cast<unsigned>(gBudget),
+            static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
   }
 }
 
 void* budgetedMalloc(const size_t size) {
-  if (size > gBudget || !admits(size)) {
+  if (size > gBudget || !admits(size, size)) {
     noteFailure(size);
     return nullptr;
   }
@@ -100,7 +106,7 @@ void* budgetedRealloc(void* ptr, const size_t size) {
     return nullptr;
   }
   const size_t old = blockSize(ptr);
-  if (size > old && (size > gBudget || !admits(size - old))) {
+  if (size > old && (size > gBudget || !admits(size - old, size))) {
     noteFailure(size);
     return nullptr;
   }
