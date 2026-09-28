@@ -2,14 +2,26 @@
 #include <ArduinoJson.h>
 #include <PersistableStore.h>
 
+#include <array>
 #include <string>
 #include <vector>
+
+#include "network/HttpDownloader.h"
 
 struct OpdsServer {
   std::string name;
   std::string url;
   std::string username;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+
+  // Extra headers sent with every request to this server (e.g. a Cloudflare
+  // Access service token). Fixed-size to avoid vector growth on the settings
+  // edit path; an empty name marks an unused slot.
+  static constexpr size_t MAX_CUSTOM_HEADERS = 2;
+  std::array<HttpHeader, MAX_CUSTOM_HEADERS> customHeaders;
+
+  // Headers with a non-empty name, ready to hand to HttpDownloader.
+  std::vector<HttpHeader> activeCustomHeaders() const;
 };
 
 /**
