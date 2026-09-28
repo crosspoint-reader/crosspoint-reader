@@ -98,7 +98,10 @@ def _subset(fontfile, scripts):
     from fontTools import subset
     from fontTools.ttLib import TTFont
 
-    font = TTFont(fontfile, fontNumber=0)
+    # Keep the source's head.modified: a save-time stamp would give every
+    # size its own blob hash, and the firmware shares flash slots and
+    # HarfBuzz faces between sizes by that hash.
+    font = TTFont(fontfile, fontNumber=0, recalcTimestamp=False)
     opts = subset.Options()
     opts.layout_features = ["*"]
     opts.layout_scripts = [tag for name in scripts for tag in SCRIPTS[name].ot_tags] + ["DFLT"]
@@ -150,7 +153,7 @@ def build(fontfile, scripts):
 
     from fontTools.ttLib import TTFont
 
-    layout = TTFont(io.BytesIO(render_bytes))
+    layout = TTFont(io.BytesIO(render_bytes), recalcTimestamp=False)
     layout_bytes = _strip_to_layout(layout)
     return render_bytes, layout_bytes, glyph_count
 
