@@ -57,7 +57,7 @@ class TextSettingsActivity final : public UiTabListActivity {
   void activateRow(int row);
 
   std::string layoutValueText(int row) const;
-  std::string styleValueText(int row) const;
+  bool styleRowChecked(int row) const;
   // Button-hint label for Confirm at the current ring position.
   const char* confirmLabelText() const;
   // True when the focused list row is a setting the preview cannot reflect.

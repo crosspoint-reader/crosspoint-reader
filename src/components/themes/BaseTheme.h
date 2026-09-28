@@ -12,6 +12,8 @@ struct RecentBook;
 namespace freeink {
 namespace ui {
 struct HeaderProps;
+struct BitmapRef;
+struct ListItem;
 }  // namespace ui
 }  // namespace freeink
 
@@ -230,6 +232,8 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
+  static freeink::ui::BitmapRef checkboxIcon(bool checked);
+  static void setCheckboxRow(freeink::ui::ListItem& item, bool checked);
   static void drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect);
   // Draws a pre-dithered cover thumb 1:1, centered and clipped to fill the
   // slot. Rescaling a dithered bitmap aliases badly, so overflow is cropped.
