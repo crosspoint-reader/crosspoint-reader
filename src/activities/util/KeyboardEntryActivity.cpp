@@ -999,6 +999,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.altText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.gap = props.rowGap = static_cast<int16_t>(keyboardGap(metrics));
   if (urlPanel) props.uniformKeyWidth = false;  // Shortcut rows stretch independently.
+  if (!mappedInput.hasTouch()) props.background = fui::Paint::none();
   frame.target().fill(kbRect, props.background);
   const int bottomEdge =
       mappedInput.hasTouch() ? renderer.getScreenHeight() : renderer.getScreenHeight() - metrics.buttonHintsHeight;
