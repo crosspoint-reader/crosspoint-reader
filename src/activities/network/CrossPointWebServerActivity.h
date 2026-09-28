@@ -13,8 +13,10 @@ enum class WebServerActivityState {
   MODE_SELECTION,  // Choosing between Join Network and Create Hotspot
   WIFI_SELECTION,  // WiFi selection subactivity is active (for Join Network mode)
   AP_STARTING,     // Starting Access Point mode
-  SERVER_RUNNING,  // Web server is running and handling requests
-  SHUTTING_DOWN    // Shutting down server and WiFi
+  // Activity is serving clients. In STA mode the server may be stopped briefly
+  // during WiFi reconnect; check webServer->isRunning() for socket state.
+  SERVER_RUNNING,
+  SHUTTING_DOWN  // Shutting down server and WiFi
 };
 
 /**
