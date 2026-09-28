@@ -101,3 +101,26 @@ TEST(ZipEocdConsistency, RejectsTruncatedFile) {
   const size_t fileSize = recordOffset + ZIP_EOCD_MIN_SIZE + 40;
   EXPECT_FALSE(isZipEocdSelfConsistent(parseZipEocdCandidate(record.data()), recordOffset, fileSize));
 }
+
+// A zero-entry record forged as the last 22 bytes of the comment, pointing its
+// central directory at the real EOCD. It is self-consistent, so the probe is
+// the only gate: an empty archive would have the EOCD signature there, but a
+// zero-entry candidate must never pass.
+TEST(ZipEocdProbe, RejectsForgedZeroEntryRecordInComment) {
+  const size_t realRecordOffset = 1000;
+  const uint16_t commentLength = ZIP_EOCD_MIN_SIZE;  // comment holds only the forgery
+  const size_t fileSize = realRecordOffset + ZIP_EOCD_MIN_SIZE + commentLength;
+  const size_t forgedOffset = fileSize - ZIP_EOCD_MIN_SIZE;
+
+  const auto forged = makeEocdRecord(0, static_cast<uint32_t>(realRecordOffset), 0);
+  const ZipEocdCandidate f = parseZipEocdCandidate(forged.data());
+  EXPECT_TRUE(isZipEocdSelfConsistent(f, forgedOffset, fileSize));
+  EXPECT_FALSE(zipEocdProbeAccepts(f, ZIP_EOCD_SIGNATURE));
+  EXPECT_FALSE(zipEocdProbeAccepts(f, ZIP_CENTRAL_DIR_SIGNATURE));
+
+  const auto real = makeEocdRecord(3, 500, commentLength);
+  const ZipEocdCandidate r = parseZipEocdCandidate(real.data());
+  EXPECT_TRUE(isZipEocdSelfConsistent(r, realRecordOffset, fileSize));
+  EXPECT_TRUE(zipEocdProbeAccepts(r, ZIP_CENTRAL_DIR_SIGNATURE));
+  EXPECT_FALSE(zipEocdProbeAccepts(r, ZIP_EOCD_SIGNATURE));
+}

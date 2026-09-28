@@ -36,9 +36,21 @@ inline ZipEocdCandidate parseZipEocdCandidate(const uint8_t* record) {
 // starts at or before the record itself. A PK\x05\x06 that is actually
 // payload inside the archive comment sits nearer EOF than the real record
 // and reads its "fields" out of comment bytes, so it fails these checks
-// unless the comment embeds a byte-exact, correctly-positioned EOCD image —
-// which the central-directory probe in ZipFile::loadZipDetails() and the
-// scan's preference for a self-consistent record still resolve correctly.
+// unless the comment embeds a forged, correctly positioned record. The
+// central-directory probe below rejects forged zero-entry records. A forged
+// record pointing into the middle of a real central directory is not
+// detected (only a full directory walk would catch it); it only makes that
+// crafted file fail to open.
 inline bool isZipEocdSelfConsistent(const ZipEocdCandidate& c, size_t recordOffset, size_t fileSize) {
   return recordOffset + ZIP_EOCD_MIN_SIZE + c.commentLength == fileSize && c.centralDirOffset <= recordOffset;
+}
+
+// Decides the central-directory probe from the 4 bytes read at the
+// candidate's central directory offset. Zero-entry candidates never pass:
+// ZipFile only serves EPUBs, which are never empty archives, and a forged
+// zero-entry record in the comment can point at the real EOCD, whose
+// signature is what an empty archive would have there. Callers may skip the
+// read when totalEntries is 0.
+inline bool zipEocdProbeAccepts(const ZipEocdCandidate& c, uint32_t signatureAtCentralDirOffset) {
+  return c.totalEntries != 0 && signatureAtCentralDirOffset == ZIP_CENTRAL_DIR_SIGNATURE;
 }

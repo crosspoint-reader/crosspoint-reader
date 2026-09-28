@@ -65,10 +65,12 @@ size_t zipFillCallback(void* vctx, const uint8_t** data) {
 }
 
 // The definitive check for an EOCD candidate: the bytes at its central
-// directory offset must actually start a central directory record (or, for
-// an empty archive, the EOCD itself). Costs one 4-byte read; a scan sees at
-// most a handful of candidates, and usually none besides the real record.
+// directory offset must actually start a central directory record. Costs one
+// 4-byte read; a scan sees at most a handful of candidates, and usually none
+// besides the real record. Zero-entry candidates are rejected without
+// reading; see zipEocdProbeAccepts().
 bool centralDirSignatureMatches(HalFile& file, const ZipEocdCandidate& c, size_t fileSize) {
+  if (c.totalEntries == 0) return false;
   // fileSize >= 22 is guaranteed by the caller, so fileSize - 4 can't wrap;
   // the addition-form check could (32-bit size_t on the ESP32 targets).
   if (c.centralDirOffset > fileSize - 4) return false;
@@ -77,7 +79,7 @@ bool centralDirSignatureMatches(HalFile& file, const ZipEocdCandidate& c, size_t
   if (file.read(bytes, sizeof(bytes)) != static_cast<int>(sizeof(bytes))) return false;
   uint32_t signature;
   memcpy(&signature, bytes, sizeof(signature));
-  return signature == (c.totalEntries != 0 ? ZIP_CENTRAL_DIR_SIGNATURE : ZIP_EOCD_SIGNATURE);
+  return zipEocdProbeAccepts(c, signature);
 }
 }  // namespace
 
