@@ -103,6 +103,10 @@ class EpubReaderActivity final : public ReaderActivity {
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
+  // The back-stack outlives the reader (sleep, home) in links.bin so Back
+  // still returns to where a followed link was tapped.
+  void saveLinkStack() const;
+  void loadLinkStack();
 
   uint16_t buildViewportWidth = 0;
   uint16_t buildViewportHeight = 0;
