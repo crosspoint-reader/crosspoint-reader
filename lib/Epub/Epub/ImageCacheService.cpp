@@ -87,9 +87,14 @@ void ImageCacheService::run() {
     xSemaphoreTake(mutex_, portMAX_DELAY);
     if (jobs_[0].valid) {
       job = std::move(jobs_[0]);
+      // Clear the slot: a moved-from Job still holds its raw borrowed pointers
+      // and valid flag, so leaving it would make the worker re-run the job
+      // against a Page the waiter has already freed.
+      jobs_[0] = Job{};
       haveJob = true;
     } else if (!paused_ && jobs_[1].valid) {
       job = std::move(jobs_[1]);
+      jobs_[1] = Job{};
       haveJob = true;
     }
     xSemaphoreGive(mutex_);
