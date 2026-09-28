@@ -58,6 +58,13 @@ class HalGPIO {
   // Inline device type helpers for cleaner downstream checks
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
+  bool isXteinkDevice() const;
+
+  // True when the board's page buttons sit on the left/right screen edges
+  // (X3, X4 Pro) rather than an off-screen vertical rocker. Drives side-hint
+  // placement and the flipped large-step direction in selection activities.
+  // Keyed off the active BoardConfig profile, not the X3/X4 runtime detection.
+  bool hasEdgeSideButtons() const;
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
@@ -71,17 +78,50 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+  // True when any button contact is closed right now, read straight from the
+  // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
+  // going through the debounced state. Cheap enough to call every few ms.
+  bool rawInputActive();
+  bool hasTouch() const;
+  // Capacitive Home key reported by the touch controller (X4 Pro). The tap
+  // event fires on release and excludes a long hold.
+  bool hasHomeKey() const;
+  bool wasHomeKeyPressed() const;
+  bool wasHomeKeyTapped() const;
+  bool wasHomeKeyLongPressed() const;
+  bool wasTouchTap(float& nx, float& ny) const;
+  bool wasTouchDown(float& nx, float& ny) const;
+  // Raw release edge, reported even when the contact was not a tap (swipe end,
+  // drag-off). Snapshot builders forward it so interaction routing can clear
+  // pressed state.
+  bool wasTouchReleased() const;
+  bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
+  bool isTouchHeldAt(float& nx, float& ny) const;
+  // One-shot long-press, fired by the SDK classifier while the finger is still
+  // down (stationary contact held past its threshold). Position = touch-down
+  // point. Callers that act on it should suppressTouchContact() so the lift
+  // cannot also tap.
+  bool wasTouchLongPress(float& nx, float& ny) const;
+  // Ignore the remainder of the current contact (its continued hold and its
+  // release edge). Self-clears once the contact ends.
+  void suppressTouchContact();
+  unsigned long lastTouchHeldMs() const;
+  bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
+  bool wasTouchActivity() const;
+  void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
-  // Setup wake up GPIO and enter deep sleep
-  void startDeepSleep();
-
-  // Verify power button was held long enough after wakeup.
-  // If verification fails, enters deep sleep and does not return.
+  // Verify that the physical power button remains held through input debounce.
+  // Returns true if verification succeeded, false if device should return to sleep.
   // Should only be called when wakeup reason is PowerButton.
-  void verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
+  bool verifyPowerButtonWakeup();
 
   // Check if USB is connected
   bool isUsbConnected() const;
+
+  // Whether a cold boot with no USB detected can be trusted to mean a held
+  // power button (Xteink-style button-energized rail with reliable USB
+  // detection). When false, cold boots always proceed to a normal boot.
+  bool coldBootImpliesPowerButton() const;
 
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;

@@ -1,1 +1,1 @@
-.skills/SKILL.md
+AGENTS.md

@@ -8,7 +8,7 @@ At a high level, it is firmware that uses an activity-driven application archite
 
 ```mermaid
 graph TD
-    A[Hardware: ESP32-C3 + SD + E-ink + Buttons] --> B[open-x4-sdk]
+    A[Hardware: ESP32-C3 + SD + E-ink + Buttons] --> B[freeink-sdk]
     B --> C[lib/hal wrappers]
     C --> D[src/main.cpp runtime loop]
     D --> E[Activities layer]
@@ -154,9 +154,11 @@ Typical persisted areas on SD:
   state.json
 ```
 
-`sections/*.bin` contains rendered pages plus anchor, paragraph, and list-item
-lookup tables used for TOC/footnote jumps and KOReader sync refinement. For
-binary cache formats, see `docs/file-formats.md`.
+`sections/*.bin` contains rendered pages plus anchor, paragraph, list-item, and
+page-start visible-text-offset lookup tables. The offset table makes reading
+positions content-based: KOReader XPaths resolve to an exact chapter offset,
+and the current layout derives the corresponding page. For binary cache
+formats, see `docs/file-formats.md`.
 
 ## Networking architecture
 
@@ -195,10 +197,10 @@ When editing related source assets, regenerate via normal build steps/scripts.
 - `src/`: app orchestration, settings/state, and activity implementations
 - `src/network/`: web server and OTA/update networking
 - `src/components/`: theming and shared UI components
-- `lib/hal/`: hardware abstraction wrappers around open-x4-sdk
+- `lib/hal/`: hardware abstraction wrappers around freeink-sdk
 - `lib/Epub/`: EPUB parser, layout, CSS handling, and hyphenation
 - `lib/`: supporting libraries (fonts, text, filesystem helpers, etc.)
-- `open-x4-sdk/`: hardware SDK submodule (display, input, storage, battery)
+- `freeink-sdk/`: hardware SDK submodule (display, input, storage, battery). Docs: https://freeink.org/docs
 - `docs/`: user and technical documentation
 
 ## Embedded constraints that shape design

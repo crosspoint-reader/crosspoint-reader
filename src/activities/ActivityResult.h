@@ -43,6 +43,14 @@ struct PageResult {
 struct ProgressChangeResult {
   int spineIndex = 0;
   int page = 0;
+  int totalPages = 0;
+  std::string xpath;
+  float percentage = 0.0f;
+  bool hasSavedProgress = false;
+  // Exact visible-codepoint offset within spineIndex, when the source (a bookmark) has one.
+  // Preferred over xpath/percentage on resolution: it is immune to re-pagination.
+  bool hasVisibleTextOffset = false;
+  uint32_t visibleTextOffset = 0;
 };
 
 enum class NetworkMode;

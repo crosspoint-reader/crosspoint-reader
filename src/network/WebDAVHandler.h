@@ -39,5 +39,5 @@ class WebDAVHandler : public RequestHandler {
   int getDepth(WebServer& s) const;
   bool getOverwrite(WebServer& s) const;
   void sendPropEntry(WebServer& s, const String& href, bool isDir, size_t size, const String& lastModified) const;
-  String getMimeType(const String& path) const;
+  static String getMimeType(const String& path);
 };
