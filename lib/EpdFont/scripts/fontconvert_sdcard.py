@@ -322,8 +322,8 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
     # Collect raw kerning values in font design units
     raw_kern = {}  # (left_glyph_name, right_glyph_name) -> design_units
 
-    # 1. Legacy kern table, used only when GPOS has no 'kern' feature, as in
-    # HarfBuzz. Fonts that ship both repeat pairs, so adding the two double-kerns.
+    # 1. Legacy kern table, used only when GPOS has no 'kern' feature. Fonts
+    # that ship both repeat pairs in each, so adding the two double-kerns them.
     gpos_has_kern = ('GPOS' in font and font['GPOS'].table.FeatureList is not None and
                      any(fr.FeatureTag == 'kern' for fr in font['GPOS'].table.FeatureList.FeatureRecord))
     if 'kern' in font and not gpos_has_kern:
