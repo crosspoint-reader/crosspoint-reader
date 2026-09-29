@@ -205,8 +205,12 @@ TEST_F(FlashBlobCacheTest, DeclinesWhatItCannotHold) {
   gFailReads = true;
   EXPECT_EQ(acquire(blob), nullptr);  // SD read failed mid-copy
   gFailReads = false;
-  // The failed copy left no directory entry, so the next use copies again.
+  // Each copy erases a slot first, so a failed one is not retried.
+  const int erases = fake::erases;
   gReads = 0;
-  ASSERT_NE(acquire(blob), nullptr);
-  EXPECT_GT(gReads, 0);
+  EXPECT_EQ(acquire(blob), nullptr);
+  EXPECT_EQ(gReads, 0);
+  EXPECT_EQ(fake::erases, erases);
+  // Other blobs still copy.
+  EXPECT_NE(acquire(makeBlob(2000, 7)), nullptr);
 }

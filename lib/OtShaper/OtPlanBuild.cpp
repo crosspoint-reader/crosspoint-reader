@@ -40,10 +40,16 @@ uint32_t featureTag(const Table& layout, const unsigned featureIndex) {
   return features.u32(2 + 6 * featureIndex);
 }
 
+// Condition tables one FeatureVariations table may have evaluated. Records
+// and conditions can share subtrees, so a small table could otherwise ask for
+// exponential work; HarfBuzz's sanitizer rejects such a table, and here no
+// record's conditions hold once the budget is spent.
+constexpr int MAX_CONDITION_EVALUATIONS = 4096;
+
 // A FeatureVariations condition at the default instance (every normalized
 // axis coordinate 0), as HarfBuzz evaluates it when no variations are set.
-bool conditionHolds(const Table& condition, const unsigned depth = 0) {
-  if (depth > 8) return false;
+bool conditionHolds(const Table& condition, int& budget, const unsigned depth = 0) {
+  if (depth > 8 || --budget < 0) return false;
   switch (condition.u16(0)) {
     case 1:  // axis range
       return condition.s16(4) <= 0 && 0 <= condition.s16(6);
@@ -53,13 +59,13 @@ bool conditionHolds(const Table& condition, const unsigned depth = 0) {
     case 4: {  // or
       const bool isAnd = condition.u16(0) == 3;
       for (uint8_t i = 0; i < condition.u8(2); i++) {
-        const bool holds = conditionHolds(condition.at(condition.u24(3 + 3 * i)), depth + 1);
+        const bool holds = conditionHolds(condition.at(condition.u24(3 + 3 * i)), budget, depth + 1);
         if (isAnd != holds) return holds;
       }
       return isAnd;
     }
     case 5:  // negate
-      return !conditionHolds(condition.at(condition.u24(2)), depth + 1);
+      return !conditionHolds(condition.at(condition.u24(2)), budget, depth + 1);
     default:
       return false;
   }
@@ -70,11 +76,13 @@ bool conditionHolds(const Table& condition, const unsigned depth = 0) {
 Table defaultFeatureSubstitution(const Table& layout) {
   if (layout.u16(2) < 1) return Table();
   const Table variations = layout.offset32(10);
+  int budget = MAX_CONDITION_EVALUATIONS;
   for (uint32_t i = 0; i < variations.u32(4); i++) {
     const uint32_t record = 8 + 8 * i;
     const Table set = variations.offset32(record);
     bool all = true;
-    for (uint16_t c = 0; c < set.u16(0) && all; c++) all = conditionHolds(set.offset32(2 + 4 * c));
+    for (uint16_t c = 0; c < set.u16(0) && all; c++) all = conditionHolds(set.offset32(2 + 4 * c), budget);
+    if (budget < 0) return Table();
     if (all) return variations.offset32(record + 4);
   }
   return Table();

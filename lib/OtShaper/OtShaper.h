@@ -22,8 +22,9 @@ namespace ot {
 // Shapes one run of a single script (plus the joiners, dandas and dotted
 // circle any Indic run may contain) into buffer.info[].codepoint glyph IDs
 // and buffer.pos[] advances/offsets in scaled units. Returns false when the
-// run could not be shaped: the heap check refused the buffer's reservation,
-// or the font's lookups grew the run past its limit.
+// run could not be shaped: the heap check refused the buffer's reservation
+// (buffer.successful stays true), or the font's lookups failed the run by
+// growing it past its limit, nesting too deep or running too long.
 bool shape(const Face& face, const Scale& scale, const Plan& plan, const uint32_t* codepoints, unsigned count,
            Buffer& buffer);
 

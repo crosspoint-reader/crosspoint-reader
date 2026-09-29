@@ -548,6 +548,13 @@ bool SdCardFont::loadShapingSection(HalFile& file, const uint8_t styleIdx, const
     LOG_ERR("SDCF", "Style %u: unsupported shaping section (v%u, %u bytes)", styleIdx, version, length);
     return false;
   }
+  // The blob's last byte must be in the file: a copy cut short would otherwise
+  // fail every load of it.
+  uint8_t last;
+  if (!file.seekSet(sectionOffset + SHAPING_HEADER_SIZE + length - 1) || file.read(&last, 1) != 1) {
+    LOG_ERR("SDCF", "Style %u: shaping section truncated (%u-byte blob)", styleIdx, length);
+    return false;
+  }
   auto& s = styles_[styleIdx];
   s.shaper = new (std::nothrow) ComplexShaper();
   if (!s.shaper) {
@@ -578,7 +585,10 @@ bool SdCardFont::loadShapingBlob(void* ctx, ComplexShaper::Blob* out) {
   const auto* octx = static_cast<OverflowContext*>(ctx);
   const PerStyle& s = octx->self->styles_[octx->styleIdx];
   HalFile file;
-  if (!Storage.openFileForRead("SDCF", octx->self->filePath_, file)) return false;
+  if (!Storage.openFileForRead("SDCF", octx->self->filePath_, file)) {
+    ComplexShaper::noteSourceUnavailable();
+    return false;
+  }
   BlobFileCtx source{&file, s.shapingBlobOffset};
 
   // No-PSRAM boards map the layout font from internal flash (see
@@ -587,11 +597,18 @@ bool SdCardFont::loadShapingBlob(void* ctx, ComplexShaper::Blob* out) {
     *out = ComplexShaper::Blob{mapped, s.shapingBlobLength, &FlashBlobCache::release};
     return true;
   }
+  // A blob larger than the whole budget can only be mapped: freeing memory
+  // for it would not help.
+  if (s.shapingBlobLength > ComplexShaper::memoryStats().budget) {
+    ComplexShaper::noteSourceUnavailable();
+    return false;
+  }
   auto* blob = static_cast<uint8_t*>(ComplexShaper::allocate(s.shapingBlobLength));
   if (!blob) return false;
   if (!readBlobChunk(&source, 0, blob, s.shapingBlobLength)) {
     LOG_ERR("SDCF", "Failed to read %u-byte shaping blob", s.shapingBlobLength);
     ComplexShaper::deallocate(blob);
+    ComplexShaper::noteSourceUnavailable();
     return false;
   }
   *out = ComplexShaper::Blob{blob, s.shapingBlobLength, nullptr};

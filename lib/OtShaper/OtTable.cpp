@@ -8,11 +8,7 @@ inline uint16_t be16(const uint8_t* p) { return static_cast<uint16_t>((p[0] << 8
 
 // Entries of `recordSize` bytes after a 4-byte header that fit in `t`: the
 // declared count, clamped so the searches below can read without checks.
-inline unsigned fittingCount(const Table& t, const unsigned recordSize) {
-  const unsigned count = t.u16(2);
-  const unsigned fits = t.length() >= 4 ? (t.length() - 4) / recordSize : 0;
-  return count < fits ? count : fits;
-}
+inline unsigned fittingCount(const Table& t, const unsigned recordSize) { return t.count16(2, 4, recordSize); }
 
 }  // namespace
 

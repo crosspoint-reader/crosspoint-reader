@@ -40,6 +40,8 @@ class ComplexShaper {
   using BlobLoader = bool (*)(void* ctx, Blob* out);
   // Loads one sfnt table by tag (TTF/OTF files). Same ownership contract.
   using TableLoader = uint8_t* (*)(void* ctx, uint32_t tag, uint32_t* length);
+  // A glyph's advance in 26.6 pixels at the shaper's scale; negative when unknown.
+  using AdvanceSource = int32_t (*)(void* ctx, uint32_t glyph);
 
   ComplexShaper();
   ~ComplexShaper();
@@ -54,6 +56,10 @@ class ComplexShaper {
   void setTableSource(TableLoader loader, void* ctx);
   // Pixels per em in 26.6 fixed point: the size positions are produced at.
   void setScale(uint32_t ppem26_6);
+  // For text drawn from another instance of the source's design (a variable
+  // font's wght axis): glyphs advance by `source` plus what GPOS adjusts,
+  // instead of by the source's hmtx. nullptr: the source's own advances.
+  void setAdvanceSource(AdvanceSource source, void* ctx);
 
   bool hasSource() const { return blobLoader_ != nullptr || tableLoader_ != nullptr; }
 
@@ -82,6 +88,10 @@ class ComplexShaper {
   // Budgeted allocation for the source loaders (layout tables in RAM).
   static void* allocate(size_t size);
   static void deallocate(void* ptr);
+  // Loaders call this when their source cannot be loaded now (a read failed,
+  // or it fits neither flash nor the budget), so the shaper retries later
+  // instead of treating the source as malformed.
+  static void noteSourceUnavailable();
 
   struct MemoryStats {
     size_t current = 0;
@@ -132,6 +142,8 @@ class ComplexShaper {
   // table path and the runtime planner behind it.
   struct SharedFace* (*buildTableFace_)(TableLoader loader, void* ctx, uint32_t* key) = nullptr;
   void* sourceCtx_ = nullptr;
+  AdvanceSource advanceSource_ = nullptr;
+  void* advanceCtx_ = nullptr;
   uint32_t scale26_6_ = 0;
 
   uint32_t contentKey_ = 0;
@@ -140,7 +152,7 @@ class ComplexShaper {
   // After a failed build, skip this many shape() calls before retrying so a
   // persistently tight heap does not re-read the source for every word.
   uint16_t retryBackoff_ = 0;
-  bool unusable_ = false;  // the source parsed but cannot shape (no glyphs)
+  bool unusable_ = false;  // the source was read but is malformed
   // One bit per indic::SCRIPTS entry. Coverage is a property of the source,
   // so it survives release().
   uint16_t coverageChecked_ = 0;

@@ -68,6 +68,7 @@ bool Buffer::prepare(const unsigned maxGlyphs) {
   randomState = 1;
   hasDefaultIgnorables = hasBrokenSyllable = hasGposAttachment = false;
   digest = Digest();
+  if (maxGlyphs > UINT16_MAX + 1u) return false;  // `indices` holds glyph positions as uint16_t
   if (info.capacity() >= maxGlyphs) return true;
   const size_t bytes =
       static_cast<size_t>(maxGlyphs) * (2 * sizeof(GlyphInfo) + sizeof(GlyphPosition) + sizeof(uint16_t));

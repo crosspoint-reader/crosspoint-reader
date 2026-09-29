@@ -1,6 +1,7 @@
 #include "OtFace.h"
 
 #include "OtBuffer.h"
+#include "OtLayoutInternal.h"
 
 namespace ot {
 
@@ -184,7 +185,7 @@ void Face::initFilters(const Table& cpac) {
     uint32_t total = 0;
     for (uint32_t i = 0; i < lookups; i++) {
       if (starts.u32(4 * i) != total) return;
-      total += lookup(t, i).u16(4);
+      total += subtableCount(lookup(t, i));
     }
     if (total != subtables) return;
     found[t].lookupDigests = cpac.data() + base;
@@ -260,7 +261,21 @@ uint16_t Face::lookupCount(const int table) const { return layout(table).offset1
 Table Face::lookup(const int table, const uint32_t index) const {
   const Table list = layout(table).offset16(8);
   if (index >= list.u16(0)) return Table();
-  return list.offset16(2 + 2 * index);
+  const Table lookup = list.offset16(2 + 2 * index);
+  // Every subtable of an Extension lookup must extend the same type, or
+  // HarfBuzz's Lookup::sanitize drops the lookup: a reverse chaining subtable
+  // applied in a forward pass (or the reverse) would never move past its glyph.
+  if (lookup.u16(0) == (table == GSUB ? layout::gsub::EXTENSION : layout::gpos::EXTENSION)) {
+    const auto extendedType = [&](const uint16_t i) {
+      const Table st = lookup.offset16(6 + 2 * i);
+      return st.u16(0) == 1 ? st.u16(2) : 0;
+    };
+    const uint16_t first = extendedType(0);
+    for (uint16_t i = 1; i < subtableCount(lookup); i++) {
+      if (extendedType(i) != first) return Table();
+    }
+  }
+  return lookup;
 }
 
 uint32_t Face::lookupProps(const Table& lookup) const {

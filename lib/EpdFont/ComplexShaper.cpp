@@ -53,6 +53,10 @@ uint32_t gReusedRuns = 0;
 size_t gCurrent = 0;
 size_t gPeak = 0;
 uint32_t gFailures = 0;
+// Loads that failed for a reason that may pass: allocations refused
+// (gFailures) plus sources that could not be read (noteSourceUnavailable).
+uint32_t gUnavailable = 0;
+uint32_t transientFailures() { return gFailures + gUnavailable; }
 
 // `growth` is what the allocation adds to the heap in use; `block` is the
 // contiguous size it needs (they differ for realloc).
@@ -442,9 +446,12 @@ SharedFace* buildTableFace(const ComplexShaper::TableLoader loader, void* ctx, u
     return nullptr;
   }
   shared->tables[0] = head;
+  // An optional table the loader returns no data for is absent, unless the
+  // load failed: then the face would silently shape without it.
+  const uint32_t failuresBefore = transientFailures();
   for (size_t i = 1; i < kTableCount; i++) {
     shared->tables[i] = loader(ctx, kShapingTables[i], &lengths[i]);
-    if (shared->tables[i] == nullptr && i < kRequiredTables) {
+    if (shared->tables[i] == nullptr && (i < kRequiredTables || transientFailures() != failuresBefore)) {
       destroyFace(shared);
       return nullptr;
     }
@@ -568,6 +575,14 @@ void ComplexShaper::setTableSource(const TableLoader loader, void* ctx) {
   coverageChecked_ = coverageMask_ = 0;
 }
 
+void ComplexShaper::setAdvanceSource(const AdvanceSource source, void* ctx) {
+  std::lock_guard<std::recursive_mutex> lock(shaperMutex());
+  if (source == advanceSource_ && ctx == advanceCtx_) return;
+  advanceSource_ = source;
+  advanceCtx_ = ctx;
+  cacheForget(this);
+}
+
 void ComplexShaper::setScale(const uint32_t ppem26_6) {
   std::lock_guard<std::recursive_mutex> lock(shaperMutex());
   if (ppem26_6 == scale26_6_) return;
@@ -592,13 +607,13 @@ bool ComplexShaper::ensureFace() {
     }
   }
   if (shared == nullptr) {
-    const uint32_t failuresBefore = gFailures;
+    const uint32_t failuresBefore = transientFailures();
     uint32_t key = contentKey_;
     SharedFace* built = blobLoader_ != nullptr ? buildBlobFace(blobLoader_, sourceCtx_, key)
                                                : buildTableFace_(tableLoader_, sourceCtx_, &key);
     if (built == nullptr) {
-      if (gFailures == failuresBefore) {
-        LOG_ERR("SHAPE", "Shaping source is unreadable or malformed; shaping disabled for this face");
+      if (transientFailures() == failuresBefore) {
+        LOG_ERR("SHAPE", "Shaping source is malformed; shaping disabled for this face");
         unusable_ = true;
       } else {
         retryBackoff_ = kRetryAfterFailure;
@@ -687,12 +702,19 @@ bool ComplexShaper::appendShapedRun(const char* run, const size_t length, const 
   const size_t start = out.size();
   for (unsigned i = 0; i < buffer.len(); i++) {
     const ot::GlyphPosition& pos = buffer.pos[i];
+    const uint32_t glyph = buffer.info[i].codepoint;
+    int32_t xAdvance = pos.xAdvance;
+    // Keep what GPOS added to the hmtx advance; marks it zeroed stay zero.
+    if (advanceSource_ != nullptr && !(buffer.info[i].isMark() && xAdvance == 0)) {
+      const int32_t own = advanceSource_(advanceCtx_, glyph);
+      if (own >= 0) xAdvance += own - scale.emScaleX(face_->face.advance(glyph));
+    }
     // 26.6 -> 12.4, rounded.
-    appendToken(shaping::advanceToken((pos.xAdvance + 2) >> 2), out);
+    appendToken(shaping::advanceToken((xAdvance + 2) >> 2), out);
     const int dx = roundPixels(pos.xOffset);
     const int dy = -roundPixels(pos.yOffset);  // font y grows up, the screen's down
     if (dx != 0 || dy != 0) appendToken(shaping::offsetToken(dx, dy), out);
-    const uint32_t gid = buffer.info[i].codepoint <= shaping::GLYPH_TOKEN_MAX_GID ? buffer.info[i].codepoint : 0;
+    const uint32_t gid = glyph <= shaping::GLYPH_TOKEN_MAX_GID ? glyph : 0;
     appendToken(shaping::glyphToken(gid), out);
   }
   cacheStore(this, scale26_6_, hash, run, length, out.data() + start, out.size() - start);
@@ -761,6 +783,11 @@ void ComplexShaper::release() {
 void* ComplexShaper::allocate(const size_t size) {
   std::lock_guard<std::recursive_mutex> lock(shaperMutex());
   return budgetedMalloc(size);
+}
+
+void ComplexShaper::noteSourceUnavailable() {
+  std::lock_guard<std::recursive_mutex> lock(shaperMutex());
+  gUnavailable++;
 }
 
 void ComplexShaper::deallocate(void* ptr) {

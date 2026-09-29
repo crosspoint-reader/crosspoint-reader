@@ -394,8 +394,15 @@ def _feature_tag(layout, index):
     return 0 if index >= features.u16(0) else features.u32(2 + 6 * index)
 
 
-def _condition_holds(condition, depth=0):
+# Mirrors MAX_CONDITION_EVALUATIONS in OtPlanBuild.cpp.
+_MAX_CONDITION_EVALUATIONS = 4096
+
+
+def _condition_holds(condition, budget, depth=0):
     if depth > 8:
+        return False
+    budget[0] -= 1
+    if budget[0] < 0:
         return False
     fmt = condition.u16(0)
     if fmt == 1:
@@ -405,12 +412,12 @@ def _condition_holds(condition, depth=0):
     if fmt in (3, 4):
         is_and = fmt == 3
         for i in range(condition.u8(2)):
-            holds = _condition_holds(condition.at(condition.u24(3 + 3 * i)), depth + 1)
+            holds = _condition_holds(condition.at(condition.u24(3 + 3 * i)), budget, depth + 1)
             if is_and != holds:
                 return holds
         return is_and
     if fmt == 5:
-        return not _condition_holds(condition.at(condition.u24(2)), depth + 1)
+        return not _condition_holds(condition.at(condition.u24(2)), budget, depth + 1)
     return False
 
 
@@ -418,10 +425,14 @@ def _default_feature_substitution(layout):
     if layout.u16(2) < 1:
         return _View()
     variations = layout.offset32(10)
+    budget = [_MAX_CONDITION_EVALUATIONS]
     for i in range(variations.u32(4)):
         record = 8 + 8 * i
         conditions = variations.offset32(record)
-        if all(_condition_holds(conditions.offset32(2 + 4 * c)) for c in range(conditions.u16(0))):
+        holds = all(_condition_holds(conditions.offset32(2 + 4 * c), budget) for c in range(conditions.u16(0)))
+        if budget[0] < 0:
+            return _View()
+        if holds:
             return variations.offset32(record + 4)
     return _View()
 

@@ -132,9 +132,10 @@ class Plan {
  private:
   friend class PlanBuilder;
 
+  // The planned GSUB lookups [start, end) of the stage a feature is applied in.
   struct WouldSubstituteLookups {
-    std::vector<uint16_t> lookups;
-    std::vector<Digest> digests;
+    uint16_t start = 0;
+    uint16_t end = 0;
   };
 
   // load() until the plan is complete; false when anything is missing or malformed.
@@ -145,7 +146,7 @@ class Plan {
   // mark handling, lookup filters and the shapers' data.
   void finish(const Face& face);
   void buildFilters(const Face& face);
-  void collectWould(const Face& face, WouldFeature feature);
+  void collectWould(WouldFeature feature);
 
   bool zeroContext_ = false;
   WouldSubstituteLookups would_[WS_COUNT];

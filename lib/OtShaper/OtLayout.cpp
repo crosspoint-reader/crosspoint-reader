@@ -42,10 +42,12 @@ Table subtableCoverage(const int table, uint16_t type, Table st) {
 void collectCoverage(const Table& coverage, Digest& digest) {
   switch (coverage.u16(0)) {
     case 1:
-      for (uint16_t i = 0; i < coverage.u16(2); i++) digest.add(coverage.u16(4 + 2 * i));
+      for (uint16_t i = 0; i < coverage.count16(2, 4, 2); i++) digest.add(coverage.u16(4 + 2 * i));
       break;
     case 2:
-      for (uint16_t i = 0; i < coverage.u16(2); i++) digest.addRange(coverage.u16(4 + 6 * i), coverage.u16(6 + 6 * i));
+      for (uint16_t i = 0; i < coverage.count16(2, 4, 6); i++) {
+        digest.addRange(coverage.u16(4 + 6 * i), coverage.u16(6 + 6 * i));
+      }
       break;
     default:
       break;
@@ -207,7 +209,7 @@ bool ApplyContext::applySubtable(uint16_t type, Table st) {
 
 bool ApplyContext::applyLookupSubtables(const Table& lookup, const uint8_t* digests) {
   const uint16_t type = lookup.u16(0);
-  const uint16_t count = lookup.u16(4);
+  const uint16_t count = Face::subtableCount(lookup);
   const uint32_t glyph = buffer.cur().codepoint;
   for (uint16_t i = 0; i < count; i++) {
     if (digests && !digestRecordMayHave(digests + DIGEST_BYTES * i, glyph)) continue;
@@ -245,7 +247,7 @@ using layout::ApplyContext;
 Digest lookupDigest(const Face& face, const int table, const uint32_t lookupIndex) {
   Digest digest;
   const Table lookup = face.lookup(table, lookupIndex);
-  for (uint16_t i = 0; i < lookup.u16(4); i++) {
+  for (uint16_t i = 0; i < Face::subtableCount(lookup); i++) {
     layout::collectCoverage(layout::subtableCoverage(table, lookup.u16(0), lookup.offset16(6 + 2 * i)), digest);
   }
   return digest;
@@ -253,7 +255,7 @@ Digest lookupDigest(const Face& face, const int table, const uint32_t lookupInde
 
 void appendSubtableDigests(const Face& face, const int table, const uint32_t lookupIndex, std::vector<uint8_t>& out) {
   const Table lookup = face.lookup(table, lookupIndex);
-  for (uint16_t i = 0; i < lookup.u16(4); i++) {
+  for (uint16_t i = 0; i < Face::subtableCount(lookup); i++) {
     Digest d;
     layout::collectCoverage(layout::subtableCoverage(table, lookup.u16(0), lookup.offset16(6 + 2 * i)), d);
     out.resize(out.size() + DIGEST_BYTES);
@@ -295,7 +297,12 @@ void applyLookup(const Face& face, const Scale& scale, Buffer& buffer, const int
   while (buffer.successful) {
     while (buffer.idx < buffer.len() && !startsAt(buffer.info[buffer.idx])) buffer.idx++;
     if (buffer.idx >= buffer.len()) break;
-    if (!c.applyLookupSubtables(lookup, c.subtableDigests)) buffer.idx++;
+    const unsigned idx = buffer.idx, len = buffer.len();
+    // An applied subtable moves past its glyphs; one that leaves the buffer
+    // as it was would apply again forever.
+    if (!c.applyLookupSubtables(lookup, c.subtableDigests) || (buffer.idx == idx && buffer.len() == len)) {
+      buffer.idx++;
+    }
   }
 }
 
@@ -304,7 +311,7 @@ bool wouldSubstitute(const Face& face, const uint32_t lookupIndex, const Digest&
   if (!count || lookupIndex >= face.lookupCount(GSUB)) return false;
   if (!digest.mayHave(glyphs[0])) return false;
   const Table lookup = face.lookup(GSUB, lookupIndex);
-  for (uint16_t i = 0; i < lookup.u16(4); i++) {
+  for (uint16_t i = 0; i < Face::subtableCount(lookup); i++) {
     if (layout::wouldApplyGsubSubtable(glyphs, count, zeroContext, lookup.u16(0), lookup.offset16(6 + 2 * i))) {
       return true;
     }

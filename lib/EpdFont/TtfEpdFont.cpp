@@ -139,11 +139,11 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
   }
   for (int i = 0; i < 4; ++i) {
     shapingCoverage_[i] = 0;
-    if (sources_[i].present) {
-      shapers_[i].setTableSource(&TtfEpdFont::loadTable, &sources_[i]);
-    } else {
-      shapers_[i].setTableSource(nullptr, nullptr);
-    }
+    Source& source = sources_[faces_[i].srcIndex];
+    shapers_[i].setTableSource(source.present ? &TtfEpdFont::loadTable : nullptr, source.present ? &source : nullptr);
+    // A face given another weight than its file's (a variable font's wght
+    // axis) advances by its own metrics; slant leaves advances as they are.
+    shapers_[i].setAdvanceSource(faces_[i].weight != 400 ? &TtfEpdFont::advanceThunk : nullptr, &faces_[i]);
     shapers_[i].setScale(size26_6_);
   }
   initFace(faces_[0]);  // regular eagerly: validates the font + gives metrics
@@ -467,7 +467,14 @@ bool TtfEpdFont::shapeThunk(void* ctx, const char* utf8, std::string* out) {
                                 [f](const indic::ScriptInfo& s) { return f->ft.hasGlyph(s.probe); });
     owner->shapingCoverage_[src] = drawsIndic ? 1 : 2;
   }
-  return owner->shapingCoverage_[src] == 1 && owner->shapers_[src].shape(utf8, *out);
+  return owner->shapingCoverage_[src] == 1 && owner->shapers_[f - owner->faces_].shape(utf8, *out);
+}
+
+int32_t TtfEpdFont::advanceThunk(void* ctx, const uint32_t glyph) {
+  Face* f = static_cast<Face*>(ctx);
+  if (!f->inited) f->owner->initFace(*f);
+  freeink::font::FtFont::GlyphMetrics metrics;
+  return f->ready && f->ft.metricsGlyph26_6(glyph, f->owner->size26_6_, metrics) ? metrics.advance26_6 : -1;
 }
 
 uint8_t* TtfEpdFont::loadTable(void* ctx, const uint32_t tag, uint32_t* length) {
@@ -478,8 +485,10 @@ uint8_t* TtfEpdFont::loadTable(void* ctx, const uint32_t tag, uint32_t* length) 
       memcpy(buf, src->data + offset, count);
       return true;
     }
-    return offset <= src->fileSize && count <= src->fileSize - offset &&
-           src->read(src->ctx, offset, buf, count) == count;
+    if (offset > src->fileSize || count > src->fileSize - offset) return false;
+    if (src->read(src->ctx, offset, buf, count) == count) return true;
+    ComplexShaper::noteSourceUnavailable();
+    return false;
   };
 
   // sfnt directory; a collection (.ttc) is read through its first font, the

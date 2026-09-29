@@ -141,6 +141,8 @@ class TtfEpdFont {
   static bool coverageThunk(void* ctx, uint32_t codepoint);
   static int8_t kernThunk(void* ctx, uint32_t leftCp, uint32_t rightCp);
   static bool shapeThunk(void* ctx, const char* utf8, std::string* out);
+  // ComplexShaper::AdvanceSource over a Face (ctx = Face*).
+  static int32_t advanceThunk(void* ctx, uint32_t glyph);
   // ComplexShaper::TableLoader over a Source (ctx = const Source*).
   static uint8_t* loadTable(void* ctx, uint32_t tag, uint32_t* length);
 
@@ -153,8 +155,8 @@ class TtfEpdFont {
   static void flushFace(Face& f);
 
   Source sources_[4];  // indexed by Style role
-  // One shaper per source file: faces synthesized from the same file share
-  // its glyph IDs, so they share its layout tables too.
+  // One shaper per face, indexed like faces_. Faces synthesized from the same
+  // file share its glyph IDs, and their shapers share its layout tables.
   ComplexShaper shapers_[4];
   // Per source: 0 = unchecked, 1 = covers a complex script, 2 = does not.
   uint8_t shapingCoverage_[4] = {};

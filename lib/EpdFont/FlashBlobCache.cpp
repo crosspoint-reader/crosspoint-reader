@@ -144,16 +144,12 @@ const uint8_t* mapVerified(const uint32_t slot, const uint32_t key, const uint32
   return data;
 }
 
-bool copyIn(const uint32_t slot, const uint32_t length, const Reader read, void* ctx) {
-  const std::unique_ptr<uint8_t[]> chunk(new (std::nothrow) uint8_t[kCopyChunk]);
-  if (!chunk) {
-    LOG_ERR("FBC", "OOM: %u-byte copy buffer", kCopyChunk);
-    return false;
-  }
+// `chunk` holds kCopyChunk bytes.
+bool copyIn(const uint32_t slot, const uint32_t length, const Reader read, void* ctx, uint8_t* chunk) {
   if (!backend::erase(slotOffset(slot), kSlotSize)) return false;
   for (uint32_t done = 0; done < length;) {
     const uint32_t n = length - done < kCopyChunk ? length - done : kCopyChunk;
-    if (!read(ctx, done, chunk.get(), n) || !backend::write(slotOffset(slot) + done, chunk.get(), n)) return false;
+    if (!read(ctx, done, chunk, n) || !backend::write(slotOffset(slot) + done, chunk, n)) return false;
     done += n;
   }
   return true;
@@ -188,10 +184,17 @@ const uint8_t* acquire(const uint32_t key, const uint32_t length, const Reader r
   }
   if (victim < 0) return nullptr;
 
+  const std::unique_ptr<uint8_t[]> chunk(new (std::nothrow) uint8_t[kCopyChunk]);
+  if (!chunk) {
+    LOG_ERR("FBC", "OOM: %u-byte copy buffer", kCopyChunk);
+    return nullptr;
+  }
   const auto slot = static_cast<uint32_t>(victim);
   LOG_DBG("FBC", "Copying %u-byte layout font to flash slot %u", length, slot);
-  if (!copyIn(slot, length, read, ctx)) {
+  if (!copyIn(slot, length, read, ctx, chunk.get())) {
+    // Not retried this session: every attempt erases a slot first.
     LOG_ERR("FBC", "Flash copy to slot %u failed", slot);
+    rememberRejected(key);
     return nullptr;
   }
   const uint8_t* data = mapVerified(slot, key, length);

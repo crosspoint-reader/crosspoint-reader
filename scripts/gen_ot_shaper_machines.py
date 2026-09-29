@@ -289,8 +289,8 @@ def used_categories(shift):
     so input classes are only spent on categories that occur."""
     import re
     text = (OUTPUT.parent / "OtUnicodeData.h").read_text()
-    blocks = text.split("constexpr uint32_t BLOCKS[] = {")[1].split("struct Decomposition")[0]
-    values = [int(v, 16) for v in re.findall(r"0x[0-9A-F]{8}", blocks)]
+    props = text.split("constexpr uint32_t PROPS[] = {")[1].split("struct Decomposition")[0]
+    values = [int(v, 16) for v in re.findall(r"0x[0-9A-F]{8}", props)]
     return {(v >> shift) & 0x3F for v in values}
 
 
@@ -335,9 +335,11 @@ constexpr unsigned CATEGORY_COUNT = 64;  // *_CLASSES entries; categories are be
 constexpr uint8_t NO_TRANSITION = 255;
 constexpr uint8_t NO_ACCEPT = 255;
 
+// clang-format off
 {indic}
 
 {use}
+// clang-format on
 
 }}  // namespace ot::machines
 """)

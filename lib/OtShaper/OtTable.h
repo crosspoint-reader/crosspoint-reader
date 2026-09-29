@@ -42,6 +42,14 @@ class Table {
                : 0;
   }
 
+  // The u16 count stored at `field`, clamped to the `recordSize`-byte records
+  // that fit from offset `first` on.
+  uint16_t count16(const uint32_t field, const uint32_t first, const uint32_t recordSize) const {
+    const uint32_t fits = first <= length_ ? (length_ - first) / recordSize : 0;
+    const uint16_t count = u16(field);
+    return count < fits ? count : static_cast<uint16_t>(fits);
+  }
+
   // The subtable `offset` bytes in; empty for a null (zero) or out-of-range offset.
   Table at(const uint32_t offset) const {
     if (offset == 0 || offset >= length_) return Table();

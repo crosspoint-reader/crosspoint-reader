@@ -15,6 +15,7 @@ constexpr unsigned CATEGORY_COUNT = 64;  // *_CLASSES entries; categories are be
 constexpr uint8_t NO_TRANSITION = 255;
 constexpr uint8_t NO_ACCEPT = 255;
 
+// clang-format off
 // hb-ot-shaper-indic-machine.rl: 125 states x 18 input classes.
 constexpr uint8_t INDIC_CLASSES[CATEGORY_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 12, 13, 14, 15, 16, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 constexpr uint8_t INDIC_CLASS_COUNT = 18;
@@ -202,5 +203,6 @@ constexpr uint8_t USE_TRANSITIONS[] = {
     255, 255, 255, 255, 255, 34, 255, 255, 255, 255, 255, 255, 255, 255, 41, 42, 43, 255, 44, 41,
 };
 constexpr uint8_t USE_ACCEPT[] = {7, 8, 5, 2, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 7, 7, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 7, 5, 2};
+// clang-format on
 
 }  // namespace ot::machines

@@ -8,6 +8,7 @@
 
 #include "ComplexShaper.h"
 #include "ExpectedShaping.h"
+#include "OtFace.h"
 #include "ShapingTokens.h"
 #include "Utf8.h"
 
@@ -264,6 +265,121 @@ TEST_F(ComplexShaperTest, RefusesCleanlyWhenTheBudgetIsTooSmallAndRecovers) {
   for (int i = 0; i < 100 && !shaped; i++) shaped = shaper.shape(kBengaliShaping[1].utf8, out);
   ASSERT_TRUE(shaped) << "the shaper must retry after its backoff";
   EXPECT_EQ(decode(out).size(), kBengaliShaping[1].count);
+}
+
+// Fails its first `failuresLeft` loads, reporting them as the source being
+// unavailable when `unavailable` is set (else they read as a malformed
+// source), then loads the fixture.
+struct FlakySource {
+  int failuresLeft;
+  bool unavailable;
+};
+
+bool loadFlakyBlob(void* ctx, ComplexShaper::Blob* out) {
+  auto* source = static_cast<FlakySource*>(ctx);
+  if (source->failuresLeft > 0) {
+    source->failuresLeft--;
+    if (source->unavailable) ComplexShaper::noteSourceUnavailable();
+    return false;
+  }
+  return loadFixture(nullptr, out);
+}
+
+// The fixture's sfnt tables by tag, with GSUB failing as FlakySource says.
+uint8_t* loadFlakyTable(void* ctx, const uint32_t tag, uint32_t* length) {
+  auto* source = static_cast<FlakySource*>(ctx);
+  const std::vector<uint8_t>& font = fixture();
+  const auto u32 = [&](const size_t at) {
+    return static_cast<uint32_t>(font[at] << 24 | font[at + 1] << 16 | font[at + 2] << 8 | font[at + 3]);
+  };
+  if (tag == 0x47535542u && source->failuresLeft > 0) {  // 'GSUB'
+    source->failuresLeft--;
+    if (source->unavailable) ComplexShaper::noteSourceUnavailable();
+    return nullptr;
+  }
+  const unsigned count = font[4] << 8 | font[5];
+  for (unsigned i = 0; i < count; i++) {
+    const size_t record = 12 + 16 * i;
+    if (u32(record) != tag) continue;
+    *length = u32(record + 12);
+    auto* table = static_cast<uint8_t*>(ComplexShaper::allocate(*length ? *length : 1));
+    if (table != nullptr) std::memcpy(table, font.data() + u32(record + 8), *length);
+    return table;
+  }
+  return nullptr;
+}
+
+bool shapesWithin(ComplexShaper& shaper, const int attempts, std::string& out,
+                  const char* word = kBengaliShaping[1].utf8) {
+  for (int i = 0; i < attempts; i++) {
+    if (shaper.shape(word, out)) return true;
+  }
+  return false;
+}
+
+TEST_F(ComplexShaperTest, RetriesASourceThatCouldNotBeLoaded) {
+  FlakySource source{2, true};
+  ComplexShaper flaky;
+  flaky.setBlobSource(loadFlakyBlob, &source, kFixtureKey + 300);
+  flaky.setScale(kFixturePpem26_6);
+  std::string out;
+  ASSERT_TRUE(shapesWithin(flaky, 300, out)) << "an unreadable source is retried after the backoff";
+  EXPECT_EQ(decode(out).size(), kBengaliShaping[1].count);
+}
+
+TEST_F(ComplexShaperTest, StopsLoadingAMalformedSource) {
+  FlakySource source{1, false};
+  ComplexShaper broken;
+  broken.setBlobSource(loadFlakyBlob, &source, kFixtureKey + 301);
+  broken.setScale(kFixturePpem26_6);
+  std::string out;
+  EXPECT_FALSE(shapesWithin(broken, 300, out));
+}
+
+TEST_F(ComplexShaperTest, DoesNotShapeWithoutATableThatFailedToLoad) {
+  FlakySource source{1, true};
+  ComplexShaper ttf;
+  ttf.setTableSource(loadFlakyTable, &source);
+  ttf.setScale(kFixturePpem26_6);
+  const char* conjunct = kBengaliShaping[5].utf8;  // শকুন্তলা: GSUB forms its conjunct
+  std::string out, expected;
+  ASSERT_TRUE(shapesWithin(ttf, 300, out, conjunct));
+  ASSERT_TRUE(shaper.shape(conjunct, expected));
+  EXPECT_EQ(decode(out), decode(expected)) << "shaped with every layout table";
+}
+
+// The fixture's hmtx advances at the fixture scale, plus one pixel.
+int32_t widerAdvance(void* ctx, const uint32_t glyph) {
+  const auto* face = static_cast<const ot::Face*>(ctx);
+  ot::Scale scale;
+  scale.set(static_cast<int32_t>(kFixturePpem26_6), (kFixturePpem26_6 + 32) >> 6, face->upem());
+  return scale.emScaleX(face->advance(glyph)) + 64;
+}
+
+TEST_F(ComplexShaperTest, AdvancesByTheAdvanceSourceKeepingGposAdjustments) {
+  ot::FaceTables tables;
+  ASSERT_TRUE(ot::tablesFromSfnt(fixture().data(), static_cast<uint32_t>(fixture().size()), &tables));
+  ot::Face face;
+  ASSERT_TRUE(face.init(tables));
+  const char* word = kBengaliShaping[5].utf8;
+  std::string base, wider;
+  ASSERT_TRUE(shaper.shape(word, base));
+  shaper.setAdvanceSource(widerAdvance, &face);
+  ASSERT_TRUE(shaper.shape(word, wider));
+  const auto a = decode(base), b = decode(wider);
+  ASSERT_EQ(a.size(), b.size());
+  int widened = 0;
+  for (size_t i = 0; i < a.size(); i++) {
+    EXPECT_EQ(a[i].gid, b[i].gid);
+    if (a[i].advance12_4 == 0) continue;  // a zeroed mark keeps no advance
+    EXPECT_EQ(b[i].advance12_4, a[i].advance12_4 + 16) << "glyph " << i;
+    widened++;
+  }
+  EXPECT_GT(widened, 0);
+  shaper.setAdvanceSource(nullptr, nullptr);
+  std::string again;
+  ASSERT_TRUE(shaper.shape(word, again));
+  EXPECT_EQ(again, base);
 }
 
 TEST_F(ComplexShaperTest, MakesRoomForANewFaceWhenTheBudgetHoldsOnlyOne) {

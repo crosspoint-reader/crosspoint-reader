@@ -77,6 +77,16 @@ constexpr uint32_t TABLES = WOULD_STAGES + 8;  // wouldStage u8[5], reserved u8[
 constexpr uint32_t STAGE_BYTES = 4;            // lastLookup u16, pause u8, reserved u8
 constexpr uint32_t LOOKUP_BYTES = 8;           // index u16, flags u8, reserved u8, mask u32
 constexpr uint8_t MAX_PAUSE = static_cast<uint8_t>(Pause::UseReorder);
+
+// Whether a stage may run `pause`: as the planner emits them, Indic pauses
+// only in Indic plans and USE pauses only in USE plans, both after GSUB
+// stages. Other pauses would run a shaper's code without its data.
+bool pauseAllowed(const ShaperKind shaper, const int table, const uint8_t pause) {
+  if (pause == static_cast<uint8_t>(Pause::None)) return true;
+  if (table != GSUB || pause > MAX_PAUSE) return false;
+  return pause <= static_cast<uint8_t>(Pause::IndicFinalReordering) ? shaper == ShaperKind::Indic
+                                                                    : shaper == ShaperKind::Use;
+}
 }  // namespace cppl
 
 }  // namespace
@@ -108,6 +118,11 @@ bool Plan::read(const Face& face, const Script s, const uint32_t* languageTags) 
     }
   }
   if (body.empty() || body.u8(4) > static_cast<uint8_t>(ShaperKind::Use)) return false;
+  // INDIC_CONFIGS has no entry for Sinhala, which shapes with USE.
+  if (body.u8(4) == static_cast<uint8_t>(ShaperKind::Indic) &&
+      static_cast<unsigned>(s) >= sizeof(INDIC_CONFIGS) / sizeof(INDIC_CONFIGS[0])) {
+    return false;
+  }
 
   script = s;
   chosenScript = body.u32(0);
@@ -131,7 +146,8 @@ bool Plan::read(const Face& face, const Script s, const uint32_t* languageTags) 
     for (uint16_t i = 0; i < stageCount; i++, at += cppl::STAGE_BYTES) {
       const Stage stage{body.u16(at), static_cast<Pause>(body.u8(at + 2))};
       const uint16_t previous = stages[t].empty() ? 0 : stages[t].back().lastLookup;
-      if (stage.lastLookup < previous || stage.lastLookup > lookupCount || body.u8(at + 2) > cppl::MAX_PAUSE) {
+      if (stage.lastLookup < previous || stage.lastLookup > lookupCount ||
+          !cppl::pauseAllowed(shaper, t, body.u8(at + 2))) {
         return false;
       }
       stages[t].push_back(stage);
@@ -170,7 +186,7 @@ void Plan::finish(const Face& face) {
     // would_substitute() ignores context in new-spec fonts, except Malayalam
     // (as Uniscribe does, per HarfBuzz's data_create_indic()).
     zeroContext_ = !isOldSpec && script != Script::Malayalam;
-    for (int feature = 0; feature < WS_COUNT; feature++) collectWould(face, static_cast<WouldFeature>(feature));
+    for (int feature = 0; feature < WS_COUNT; feature++) collectWould(static_cast<WouldFeature>(feature));
   }
 }
 
@@ -183,13 +199,14 @@ void Plan::buildFilters(const Face& face) {
     subtableDigests_[t].clear();
     fontFilters_[t] = face.filters(t);
     if (fontFilters_[t]) continue;
-    size_t subtables = 0;
-    for (const PlannedLookup& lookup : lookups[t]) subtables += face.lookup(t, lookup.index).u16(4);
-    const size_t bytes = (lookups[t].size() + subtables) * DIGEST_BYTES + lookups[t].size() * sizeof(uint32_t);
-    if (!heapAvailable(bytes)) continue;
+    // 64-bit: planned lookups may share one lookup of 65535 subtables.
+    uint64_t subtables = 0;
+    for (const PlannedLookup& lookup : lookups[t]) subtables += Face::subtableCount(face.lookup(t, lookup.index));
+    const uint64_t bytes = (lookups[t].size() + subtables) * DIGEST_BYTES + lookups[t].size() * sizeof(uint32_t);
+    if (bytes > UINT32_MAX || !heapAvailable(static_cast<size_t>(bytes))) continue;
     lookupDigests_[t].resize(lookups[t].size() * DIGEST_BYTES);
     subtableStarts_[t].reserve(lookups[t].size());
-    subtableDigests_[t].reserve(subtables * DIGEST_BYTES);
+    subtableDigests_[t].reserve(static_cast<size_t>(subtables) * DIGEST_BYTES);
     for (size_t i = 0; i < lookups[t].size(); i++) {
       writeDigest(lookupDigest(face, t, lookups[t][i].index), lookupDigests_[t].data() + i * DIGEST_BYTES);
       subtableStarts_[t].push_back(static_cast<uint32_t>(subtableDigests_[t].size() / DIGEST_BYTES));
@@ -225,34 +242,32 @@ size_t Plan::memoryBytes() const {
              lookupDigests_[t].capacity() + subtableStarts_[t].capacity() * sizeof(uint32_t) +
              subtableDigests_[t].capacity();
   }
-  for (const WouldSubstituteLookups& w : would_) {
-    bytes += w.lookups.capacity() * sizeof(uint16_t) + w.digests.capacity() * sizeof(Digest);
-  }
   return bytes;
 }
 
 // The lookups of the stage the feature is applied in (get_stage_lookups()).
-void Plan::collectWould(const Face& face, const WouldFeature feature) {
+void Plan::collectWould(const WouldFeature feature) {
   WouldSubstituteLookups& w = would_[feature];
-  w.lookups.clear();
-  w.digests.clear();
+  w = WouldSubstituteLookups();
   const unsigned stage = wouldStage[feature];
   if (stage == NO_STAGE || stage > stages[GSUB].size()) return;
-  const size_t start = stage ? stages[GSUB][stage - 1].lastLookup : 0;
-  const size_t end = stage < stages[GSUB].size() ? stages[GSUB][stage].lastLookup : lookups[GSUB].size();
-  w.lookups.reserve(end - start);
-  w.digests.reserve(end - start);
-  for (size_t i = start; i < end; i++) {
-    w.lookups.push_back(lookups[GSUB][i].index);
-    w.digests.push_back(lookupDigest(face, GSUB, lookups[GSUB][i].index));
-  }
+  // Stages end in order within lookups[GSUB] (read() and the builder check),
+  // and a plan has at most MAX_PLANNED_LOOKUPS of them.
+  w.start = stage ? stages[GSUB][stage - 1].lastLookup : 0;
+  w.end = static_cast<uint16_t>(stage < stages[GSUB].size() ? stages[GSUB][stage].lastLookup : lookups[GSUB].size());
 }
 
 bool Plan::wouldSubstitute(const Face& face, const WouldFeature feature, const uint32_t* glyphs,
                            const unsigned count) const {
+  // Without filters, every lookup may start at any glyph.
+  static constexpr Digest ANY_GLYPH{{~0ull, ~0ull, ~0ull}};
   const WouldSubstituteLookups& w = would_[feature];
-  for (size_t i = 0; i < w.lookups.size(); i++) {
-    if (ot::wouldSubstitute(face, w.lookups[i], w.digests[i], glyphs, count, zeroContext_)) return true;
+  for (size_t i = w.start; i < w.end; i++) {
+    const LookupSettings s = settings(GSUB, i);
+    if (ot::wouldSubstitute(face, lookups[GSUB][i].index, s.hasDigest ? s.digest : ANY_GLYPH, glyphs, count,
+                            zeroContext_)) {
+      return true;
+    }
   }
   return false;
 }
