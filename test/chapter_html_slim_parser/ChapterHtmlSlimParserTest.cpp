@@ -109,6 +109,13 @@ TEST_F(ChapterHtmlSlimParserTest, MissingRequestedFragmentDoesNotCollectConverte
   EXPECT_TRUE(parser.getAnchors().empty());
 }
 
+TEST_F(ChapterHtmlSlimParserTest, RequestedStructuralAnchorWithoutTextIsPreserved) {
+  parser.requestedAnchor = "id28";
+  ASSERT_TRUE(parseHtml("<html><body><p>Before.</p><div id='id28'><hr/></div></body></html>"));
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().first, "id28");
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RequestedTargetAndTocBypassOrdinaryAnchorCap) {
   parser.requestedAnchor = "id28";
   parser.tocAnchors = {"toc"};
