@@ -17,9 +17,9 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockSettingsActivity.h"
+#include "ControlsSubmenuActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
-#include "HomeButtonSettingsActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "KeyboardLayoutsActivity.h"
 #include "LanguageSelectActivity.h"
@@ -49,6 +49,11 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings.clear();
   controlsSettings.clear();
   systemSettings.clear();
+  homeSettings.clear();
+  powerSettings.clear();
+  sideSettings.clear();
+  gestureSettings.clear();
+  frontSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -60,7 +65,7 @@ void SettingsActivity::rebuildSettingsLists() {
   DictionaryRegistry::discover(dictionaries);
 
   for (const auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
-    if (setting.category == StrId::STR_NONE_OPT || home_button::isSetting(setting.valuePtr)) continue;
+    if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       // The sunlight fading fix is a grayscale-waveform compensation that does
       // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
@@ -75,25 +80,36 @@ void SettingsActivity::rebuildSettingsLists() {
       if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
-      if (BoardConfig::hasHomeKey() && setting.valuePtr == &CrossPointSettings::longPressMenuFunction) continue;
-      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
-          SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
-        continue;
-      }
-      controlsSettings.push_back(setting);
+      routeControlsSetting(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
     }
   }
 
-  // Append device-only ACTION items
+  // Append device-only ACTION items.
+  // Per-button submenus: Power, Side and Front lead the Controls list ahead
+  // of the loose rows; Touch Screen and Home Button close it.
   if (!BoardConfig::hasTouch()) {
-    controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+    frontSettings.insert(frontSettings.begin(),
+                         SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  }
+  if (!gestureSettings.empty()) {
+    controlsSettings.push_back(SettingInfo::Action(StrId::STR_TOUCH_SCREEN, SettingAction::TouchScreen));
   }
   if (BoardConfig::hasHomeKey()) {
+    controlsSettings.push_back(SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
+  }
+  if (!frontSettings.empty()) {
     controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
+                            SettingInfo::Action(StrId::STR_FRONT_BUTTONS, SettingAction::FrontButtons));
+  }
+  if (!sideSettings.empty()) {
+    controlsSettings.insert(controlsSettings.begin(),
+                            SettingInfo::Action(StrId::STR_SIDE_BUTTONS, SettingAction::SideButtons));
+  }
+  if (!powerSettings.empty()) {
+    controlsSettings.insert(controlsSettings.begin(),
+                            SettingInfo::Action(StrId::STR_POWER_BUTTON, SettingAction::PowerButton));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   // Clock configuration only exists where the RTC probe found hardware; on
@@ -169,6 +185,52 @@ void SettingsActivity::selectCategory(const int categoryIndex) {
   settingsCount = static_cast<int>(currentSettings->size());
   activeNav().top = 0;  // category switches start the list at the top (no per-tab memory here)
   rebuildRowItems();
+}
+
+// Routes a Controls-category entry into its per-button submenu bucket (with
+// the submenu's shorter row label) or, for the few loose rows, into the flat
+// Controls list. Board-conditional presence is already handled by
+// getSettingsList(); only placement is decided here.
+void SettingsActivity::routeControlsSetting(const SettingInfo& setting) {
+  const auto route = [](std::vector<SettingInfo>& dst, const SettingInfo& s, StrId label = StrId::STR_NONE_OPT) {
+    dst.push_back(s);
+    if (label != StrId::STR_NONE_OPT) dst.back().nameId = label;
+  };
+  const auto ptr = setting.valuePtr;
+
+  if (home_button::isSetting(ptr)) return route(homeSettings, setting);
+  if (ptr == &CrossPointSettings::shortPwrBtn) return route(powerSettings, setting, StrId::STR_CLICK);
+  if (ptr == &CrossPointSettings::doubleClickPwrLight) return route(powerSettings, setting, StrId::STR_TOGGLE_LIGHT);
+  if (ptr == &CrossPointSettings::pwrBtnFootnoteBack) return route(powerSettings, setting);
+  if (ptr == &CrossPointSettings::sideButtonLayout) return route(sideSettings, setting, StrId::STR_PAGE_TURN_LAYOUT);
+  if (ptr == &CrossPointSettings::longPressButtonBehavior) {
+    return route(sideSettings, setting, StrId::STR_HOME_BUTTON_LONG_PRESS);
+  }
+  if (ptr == &CrossPointSettings::tiltPageTurn) return route(sideSettings, setting);
+  if (ptr == &CrossPointSettings::touchReaderControls || ptr == &CrossPointSettings::pageTurnGesture ||
+      ptr == &CrossPointSettings::previousPageGesture || ptr == &CrossPointSettings::showReaderMenu) {
+    return route(gestureSettings, setting);
+  }
+  if (ptr == &CrossPointSettings::frontButtonFollowOrientation || ptr == &CrossPointSettings::backShortToFileBrowser) {
+    return route(frontSettings, setting);
+  }
+  if (ptr == &CrossPointSettings::longPressMenuFunction) {
+    if (BoardConfig::hasHomeKey()) return;  // the home button's own long press covers it
+    if (!BoardConfig::hasTouch()) return route(frontSettings, setting);
+    // Touch board without a home key: no front-buttons submenu to put it in.
+    controlsSettings.push_back(setting);
+    return;
+  }
+  controlsSettings.push_back(setting);
+}
+
+void SettingsActivity::openSubmenu(StrId title, const std::vector<SettingInfo>& list) {
+  auto activity = makeUniqueNoThrow<ControlsSubmenuActivity>(renderer, mappedInput, title, list);
+  if (!activity) {
+    LOG_ERR("SET", "OOM: controls submenu");
+    return;
+  }
+  startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
 }
 
 // Rebuilds rowValues_/rowItems_ (label + actionValue) for *currentSettings.
@@ -343,16 +405,21 @@ void SettingsActivity::toggleCurrentSetting() {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     switch (setting.action) {
-      case SettingAction::HomeButton: {
-        // Activities must outlive this call and are owned by the activity stack.
-        auto activity = makeUniqueNoThrow<HomeButtonSettingsActivity>(renderer, mappedInput);
-        if (!activity) {
-          LOG_ERR("SET", "OOM: Home button settings");
-          return;
-        }
-        startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+      case SettingAction::HomeButton:
+        openSubmenu(StrId::STR_HOME_BUTTON, homeSettings);
         return;
-      }
+      case SettingAction::PowerButton:
+        openSubmenu(StrId::STR_POWER_BUTTON, powerSettings);
+        return;
+      case SettingAction::SideButtons:
+        openSubmenu(StrId::STR_SIDE_BUTTONS, sideSettings);
+        return;
+      case SettingAction::FrontButtons:
+        openSubmenu(StrId::STR_FRONT_BUTTONS, frontSettings);
+        return;
+      case SettingAction::TouchScreen:
+        openSubmenu(StrId::STR_TOUCH_SCREEN, gestureSettings);
+        return;
       case SettingAction::RemapFrontButtons:
         startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -497,7 +564,16 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
-  if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
+  switch (setting.action) {
+    case SettingAction::HomeButton:
+    case SettingAction::PowerButton:
+    case SettingAction::SideButtons:
+    case SettingAction::FrontButtons:
+    case SettingAction::TouchScreen:
+      return tr(STR_CONFIGURE);
+    default:
+      break;
+  }
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
   }

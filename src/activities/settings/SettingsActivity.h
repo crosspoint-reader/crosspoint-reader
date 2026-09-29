@@ -28,6 +28,10 @@ enum class SettingAction {
   TextSettings,
   KeyboardLayouts,
   HomeButton,
+  PowerButton,
+  SideButtons,
+  FrontButtons,
+  TouchScreen,
   About,
 };
 
@@ -182,6 +186,13 @@ class SettingsActivity final : public UiTabListActivity {
   std::vector<SettingInfo> systemSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
+  // Per-button Controls submenus (opened via ControlsSubmenuActivity)
+  std::vector<SettingInfo> homeSettings;
+  std::vector<SettingInfo> powerSettings;
+  std::vector<SettingInfo> sideSettings;
+  std::vector<SettingInfo> gestureSettings;
+  std::vector<SettingInfo> frontSettings;
+
   bool preserveQuickResumeTimeoutOn = false;
   bool quickResumeTimeoutAutoEnabled = false;
 
@@ -213,7 +224,8 @@ class SettingsActivity final : public UiTabListActivity {
   bool handleButtons() override;
   bool handleCustomInput() override;
 
-  static std::string settingValueText(const SettingInfo& setting);
+  void routeControlsSetting(const SettingInfo& setting);
+  void openSubmenu(StrId title, const std::vector<SettingInfo>& list);
   void selectCategory(int categoryIndex);
   void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
 
@@ -228,6 +240,7 @@ class SettingsActivity final : public UiTabListActivity {
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  static std::string settingValueText(const SettingInfo& setting);
   void onEnter() override;
   void onExit() override;
   void render(RenderLock&& lock) override;
