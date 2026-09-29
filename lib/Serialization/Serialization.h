@@ -43,10 +43,18 @@ inline void readString(std::istream& is, std::string& s) {
   is.read(&s[0], len);
 }
 
-inline void readString(HalFile& file, std::string& s) {
+// Returns false on a short read or a length exceeding the remaining file bytes, so a
+// corrupt cache can't trigger an oversized (aborting) allocation.
+inline bool readString(HalFile& file, std::string& s) {
   uint32_t len;
-  readPod(file, len);
+  if (file.read(&len, sizeof(len)) != static_cast<int>(sizeof(len))) {
+    return false;
+  }
+  const int remaining = file.available();
+  if (remaining < 0 || len > static_cast<uint32_t>(remaining)) {
+    return false;
+  }
   s.resize(len);
-  file.read(&s[0], len);
+  return len == 0 || file.read(&s[0], len) == static_cast<int>(len);
 }
 }  // namespace serialization
