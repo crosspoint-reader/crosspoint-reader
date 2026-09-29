@@ -1,0 +1,36 @@
+{
+  "build": {
+    "core": "esp32",
+    "f_cpu": "160000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "dio",
+    "mcu": "esp32c61",
+    "variant": "esp32c61"
+  },
+  "connectivity": [
+    "bluetooth",
+    "wifi"
+  ],
+  "debug": {
+    "openocd_target": "esp32c61.cfg"
+  },
+  "frameworks": [
+    "arduino",
+    "espidf"
+  ],
+  "name": "OnePage (ESP32-C61HR2, 16 MB Flash, 2 MB PSRAM @40MHz)",
+  "upload": {
+    "flash_size": "16MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 16777216,
+    "require_upload_port": true,
+    "speed": 460800
+  },
+  "espidf": {
+    "custom_sdkconfig": [
+      "CONFIG_IDF_TARGET=\"esp32c61\""
+    ]
+  },
+  "url": "https://github.com/MoveCall/onepage-reader",
+  "vendor": "OnePage"
+}
