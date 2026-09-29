@@ -123,8 +123,9 @@ class BookMetadataCache {
   bool endWrite();
   bool cleanupTmpFiles() const;
 
-  // Post-processing to update mappings and sizes
-  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata, const ExtendedMetadata& extended);
+  // Post-processing to update mappings and sizes. Formats without sort/series metadata
+  // (e.g. TXT) omit `extended`; empty sort keys fall back to title/author in the library.
+  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata, const ExtendedMetadata& extended = {});
 
   // Reading phase (read mode)
   bool load();
