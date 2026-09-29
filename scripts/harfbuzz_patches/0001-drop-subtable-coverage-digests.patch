@@ -1,0 +1,85 @@
+From: CrossPoint Reader
+Subject: [PATCH] Drop per-subtable coverage digests (HB_CROSSPOINT_NO_SUBTABLE_DIGEST)
+
+Each GSUB/GPOS lookup accelerator keeps a coverage digest per subtable,
+which only lets HarfBuzz skip a subtable before its own coverage check.
+With HB_CROSSPOINT_NO_SUBTABLE_DIGEST defined (hb-crosspoint-config.h),
+the digests are left out: every subtable still checks its coverage, so
+shaping output is unchanged, and each subtable costs two pointers
+instead of five words. On an Indic face that is roughly a third of
+HarfBuzz's heap, which matters on the ESP32-C3.
+
+Requires HB_NO_OT_LAYOUT_LOOKUP_CACHE (set by HB_TINY): the cached apply
+path still reads the digest.
+
+Applies to HarfBuzz 14.5.0.
+---
+diff --git a/src/hb-ot-layout-gsubgpos.hh b/src/hb-ot-layout-gsubgpos.hh
+--- a/src/hb-ot-layout-gsubgpos.hh
++++ b/src/hb-ot-layout-gsubgpos.hh
+@@ -1453,14 +1453,21 @@ struct hb_accelerate_subtables_context_t :
+       cache_func = cache_func_;
+       external_cache = external_cache_;
+ #endif
++#ifndef HB_CROSSPOINT_NO_SUBTABLE_DIGEST
+       digest.init ();
+       obj_.get_coverage ().collect_coverage (&digest);
++#endif
+     }
+ 
+ #ifdef HB_NO_OT_LAYOUT_LOOKUP_CACHE
+     bool apply (hb_ot_apply_context_t *c) const
+     {
++#ifdef HB_CROSSPOINT_NO_SUBTABLE_DIGEST
++      /* CrossPoint: coverage is checked inside apply_func; the digest was only a shortcut. */
++      return apply_func (obj, c, nullptr);
++#else
+       return digest.may_have (c->buffer->cur().codepoint) && apply_func (obj, c, nullptr);
++#endif
+     }
+     bool apply_no_digest (hb_ot_apply_context_t *c) const
+     {
+@@ -1502,7 +1509,9 @@ struct hb_accelerate_subtables_context_t :
+     hb_cache_func_t cache_func;
+     void *external_cache;
+ #endif
++#ifndef HB_CROSSPOINT_NO_SUBTABLE_DIGEST
+     hb_set_digest_t digest;
++#endif
+   };
+ 
+ #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
+@@ -1522,6 +1531,9 @@ struct hb_accelerate_subtables_context_t :
+   return_t dispatch (const T &obj)
+   {
+     collect_second_glyphs_ (obj, &digest_second, hb_prioritize);
++#ifdef HB_CROSSPOINT_NO_SUBTABLE_DIGEST
++    obj.get_coverage ().collect_coverage (&digest_first);
++#endif
+ 
+ #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
+     void *external_cache = nullptr;
+@@ -1567,6 +1579,9 @@ struct hb_accelerate_subtables_context_t :
+   hb_applicable_t *array;
+   unsigned i = 0;
+   hb_set_digest_t digest_second;
++#ifdef HB_CROSSPOINT_NO_SUBTABLE_DIGEST
++  hb_set_digest_t digest_first;
++#endif
+ 
+ #ifndef HB_NO_OT_LAYOUT_LOOKUP_CACHE
+   unsigned subtable_cache_user_idx = (unsigned) -1;
+@@ -6152,9 +6167,13 @@ struct hb_ot_layout_lookup_accelerator_t
+     while (count && !thiz->subtables[count - 1].apply_func)
+       count--;
+ 
++#ifdef HB_CROSSPOINT_NO_SUBTABLE_DIGEST
++    thiz->digest = c_accelerate_subtables.digest_first;
++#else
+     thiz->digest.init ();
+     for (auto& subtable : hb_iter (thiz->subtables, count))
+       thiz->digest.union_ (subtable.digest);
++#endif
+     thiz->digest_second = c_accelerate_subtables.digest_second;
+ 
+     thiz->count = count;

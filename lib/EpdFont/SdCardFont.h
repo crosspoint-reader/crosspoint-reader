@@ -4,8 +4,11 @@
 #include <string>
 #include <vector>
 
+#include "ComplexShaper.h"
 #include "EpdFont.h"
 #include "EpdFontData.h"
+
+class HalFile;
 
 // On-disk binary format version for .cpfont files. Defined as a preprocessor
 // macro (rather than a constexpr) so it can be stringified into the SD-fonts
@@ -141,6 +144,9 @@ class SdCardFont {
   void resetStats();
   const Stats& getStats() const { return stats_; }
 
+  // True when any style carries OpenType shaping data (complex scripts).
+  bool hasShaping() const;
+
   // Content hash of the file header + style TOC entries (computed during load).
   // Used to generate deterministic font IDs for section cache invalidation.
   uint32_t contentHash() const { return contentHash_; }
@@ -264,6 +270,14 @@ class SdCardFont {
     uint16_t miniKernRightCapacity = 0;
     uint32_t miniKernMatrixCapacity = 0;
 
+    // Optional shaping section (see docs/file-formats.md): the layout font
+    // HarfBuzz shapes complex-script runs with. The shaper loads it on first
+    // use and drops it in releaseResidentCaches().
+    uint32_t shapingBlobOffset = 0;
+    uint32_t shapingBlobLength = 0;
+    uint32_t shapingBlobKey = 0;  // content hash from the section header
+    ComplexShaper* shaper = nullptr;
+
     // The EpdFont whose data pointer we manage
     EpdFont epdFont{&stubData};
 
@@ -341,6 +355,13 @@ class SdCardFont {
 
   // Static callback for EpdFontData::glyphMissHandler (per-style via OverflowContext)
   static const EpdGlyph* onGlyphMiss(void* ctx, uint32_t codepoint);
+
+  // Static callback for EpdFontData::shapeHandler (per-style via OverflowContext).
+  static bool onShape(void* ctx, const char* utf8, std::string* out);
+  // ComplexShaper::BlobLoader: maps or reads this style's layout font.
+  static bool loadShapingBlob(void* ctx, ComplexShaper::Blob* out);
+  // Reads and validates the shaping section header of style `styleIdx`.
+  bool loadShapingSection(HalFile& file, uint8_t styleIdx, uint32_t sectionOffset);
 
   // Static callback for EpdFontData::coverageHandler: answers hasCodepoint()
   // from the RAM-resident full interval table, without SD I/O.

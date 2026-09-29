@@ -22,6 +22,8 @@ build
 lib/EpdFont/scripts/downloaded_fonts/
 lib/EpdFont/scripts/instanced_fonts/
 lib/EpdFont/scripts/output/
+# HarfBuzz sources, fetched by scripts/fetch_harfbuzz.py
+/lib/HarfBuzz/upstream*/
 # Claude Code: keep local agent state out (worktrees, scheduled-task
 # locks, settings.local, scout CLEANUP.md).
 .claude/*

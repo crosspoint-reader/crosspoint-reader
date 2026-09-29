@@ -2,12 +2,16 @@
 
 #if CROSSPOINT_VECTOR_FONTS
 
+#include <IndicScripts.h>
 #include <Logging.h>
 #include <MemoryManager.h>
 #include <Utf8.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
+#include <iterator>
+
+#include "ShapingTokens.h"
 
 namespace {
 
@@ -132,6 +136,15 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.ligPairCount = 0;                  // re-resolved in initFace; stale pairs must not leak
     for (uint32_t& g : f.ligGid) g = 0;  // across a reload with new sources
   }
+  for (int i = 0; i < 4; ++i) {
+    shapingCoverage_[i] = 0;
+    if (sources_[i].present) {
+      shapers_[i].setTableSource(&TtfEpdFont::loadTable, &sources_[i]);
+    } else {
+      shapers_[i].setTableSource(nullptr, nullptr);
+    }
+    shapers_[i].setScale(size26_6_);
+  }
   initFace(faces_[0]);  // regular eagerly: validates the font + gives metrics
   if (!faces_[0].ready) return false;
   for (int i = 1; i < 4; ++i) setupFace(faces_[i]);  // handlers + placeholder metrics (regular's)
@@ -237,6 +250,7 @@ void TtfEpdFont::setupFace(Face& f) {
   f.data.ligaturePairs = f.ligPairCount ? f.ligPairs : nullptr;
   f.data.ligaturePairCount = f.ligPairCount;
   f.data.kernHandler = &TtfEpdFont::kernThunk;
+  f.data.shapeHandler = &TtfEpdFont::shapeThunk;
 }
 
 void TtfEpdFont::flushFace(Face& f) {
@@ -259,6 +273,7 @@ void TtfEpdFont::clearCache() {
 
 void TtfEpdFont::releaseResidentCaches() {
   if (evictionLocked_) return;  // mid-fault: this font's faces are live
+  for (ComplexShaper& shaper : shapers_) shaper.release();
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
     // Actually RELEASE the caches (swap-with-empty frees capacity; clear() alone
@@ -293,7 +308,8 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
 
   // Resolve to a glyph ID: cmap first, then the GSUB result for the ligature
   // presentation codepoints (whose glyphs commonly have no cmap entry at all).
-  freeink::font::FtFont::GlyphId gid = f.ft.glyphId(cp);
+  // Shaped glyph tokens name a glyph ID directly (ShapingTokens.h).
+  freeink::font::FtFont::GlyphId gid = shaping::isGlyphToken(cp) ? shaping::glyphTokenId(cp) : f.ft.glyphId(cp);
   if (gid == 0 && cp >= 0xFB00u && cp <= 0xFB04u) gid = f.ligGid[cp - 0xFB00u];
   if (gid == 0) return nullptr;
 
@@ -437,6 +453,72 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
   Face* f = static_cast<Face*>(ctx);
   return f->owner->faultKern(*f, leftCp, rightCp);
 }
+bool TtfEpdFont::shapeThunk(void* ctx, const char* utf8, std::string* out) {
+  Face* f = static_cast<Face*>(ctx);
+  TtfEpdFont* owner = f->owner;
+  const uint8_t src = f->srcIndex;
+  if (owner->shapingCoverage_[src] == 0) {
+    // Only faces that draw a shaped script get a shaper: a Latin face would
+    // load its layout tables just to emit .notdef glyphs.
+    if (!f->inited) owner->initFace(*f);
+    const bool drawsIndic =
+        f->ready && std::any_of(std::begin(indic::SCRIPTS), std::end(indic::SCRIPTS),
+                                [f](const indic::ScriptInfo& s) { return f->ft.hasGlyph(s.probe); });
+    owner->shapingCoverage_[src] = drawsIndic ? 1 : 2;
+  }
+  return owner->shapingCoverage_[src] == 1 && owner->shapers_[src].shape(utf8, *out);
+}
+
+namespace {
+uint32_t readBe32(const uint8_t* p) {
+  return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
+         (static_cast<uint32_t>(p[2]) << 8) | p[3];
+}
+uint16_t readBe16(const uint8_t* p) { return static_cast<uint16_t>((p[0] << 8) | p[1]); }
+}  // namespace
+
+uint8_t* TtfEpdFont::loadTable(void* ctx, const uint32_t tag, uint32_t* length) {
+  const Source* src = static_cast<const Source*>(ctx);
+  const auto readAt = [src](const uint32_t offset, uint8_t* buf, const uint32_t count) {
+    if (!src->streamed) {
+      if (offset > src->len || count > src->len - offset) return false;
+      memcpy(buf, src->data + offset, count);
+      return true;
+    }
+    return offset <= src->fileSize && count <= src->fileSize - offset &&
+           src->read(src->ctx, offset, buf, count) == count;
+  };
+
+  // sfnt directory; a collection (.ttc) is read through its first font, the
+  // face FreeType renders.
+  uint8_t header[12];
+  if (!readAt(0, header, sizeof(header))) return nullptr;
+  uint32_t base = 0;
+  if (readBe32(header) == 0x74746366) {  // 'ttcf'
+    uint8_t first[4];
+    if (!readAt(12, first, sizeof(first))) return nullptr;
+    base = readBe32(first);
+    if (!readAt(base, header, sizeof(header))) return nullptr;
+  }
+  const uint16_t numTables = readBe16(header + 4);
+  for (uint16_t i = 0; i < numTables; ++i) {
+    uint8_t record[16];
+    if (!readAt(base + 12 + 16u * i, record, sizeof(record))) return nullptr;
+    if (readBe32(record) != tag) continue;
+    const uint32_t offset = readBe32(record + 8);
+    const uint32_t size = readBe32(record + 12);
+    auto* table = static_cast<uint8_t*>(ComplexShaper::allocate(size ? size : 1));
+    if (table == nullptr) return nullptr;
+    if (!readAt(offset, table, size)) {
+      ComplexShaper::deallocate(table);
+      return nullptr;
+    }
+    *length = size;
+    return table;
+  }
+  return nullptr;
+}
+
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
   return static_cast<Face*>(ctx)->bmp.data() + glyph->dataOffset;
@@ -444,6 +526,7 @@ const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
   // All styles share one file → coverage comes from the always-live regular face.
   Face& reg = static_cast<Face*>(ctx)->owner->faces_[0];
+  if (shaping::isGlyphToken(codepoint)) return true;  // only shapers emit them, from this font's own tables
   if (reg.ft.hasGlyph(codepoint)) return true;
   // Ligature presentation codepoints resolvable through GSUB despite no cmap
   // entry (some EPUBs carry literal U+FB01/U+FB02 in their text).
@@ -462,7 +545,10 @@ bool TtfEpdFont::build(const char* utf8) {
 bool TtfEpdFont::addCoverage(const char* utf8) {
   if (!loaded_ || utf8 == nullptr) return false;
   const auto* p = reinterpret_cast<const unsigned char*>(utf8);
-  while (*p != '\0') faultGlyph(faces_[0], utf8NextCodepoint(&p));
+  while (*p != '\0') {
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (!shaping::isPositionToken(cp)) faultGlyph(faces_[0], cp);
+  }
   return true;
 }
 

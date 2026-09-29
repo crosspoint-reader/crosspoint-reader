@@ -48,6 +48,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "ComplexShaper.h"
 #include "EpdFont.h"
 #include "EpdFontData.h"
 #include "EpdFontFamily.h"
@@ -139,6 +140,9 @@ class TtfEpdFont {
   static const uint8_t* bitmapThunk(void* ctx, const EpdGlyph* glyph);
   static bool coverageThunk(void* ctx, uint32_t codepoint);
   static int8_t kernThunk(void* ctx, uint32_t leftCp, uint32_t rightCp);
+  static bool shapeThunk(void* ctx, const char* utf8, std::string* out);
+  // ComplexShaper::TableLoader over a Source (ctx = const Source*).
+  static uint8_t* loadTable(void* ctx, uint32_t tag, uint32_t* length);
 
   void resolveFaces();             // map the 4 faces onto the configured sources
   void initFace(Face& f);          // lazy: create the FT face on first use
@@ -148,7 +152,12 @@ class TtfEpdFont {
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
 
-  Source sources_[4];      // indexed by Style role
+  Source sources_[4];  // indexed by Style role
+  // One shaper per source file: faces synthesized from the same file share
+  // its glyph IDs, so they share its layout tables too.
+  ComplexShaper shapers_[4];
+  // Per source: 0 = unchecked, 1 = covers a complex script, 2 = does not.
+  uint8_t shapingCoverage_[4] = {};
   Face faces_[4];          // 0=regular 1=bold 2=italic 3=bold-italic
   uint32_t size26_6_ = 0;  // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
   bool loaded_ = false;
