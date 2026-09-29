@@ -345,7 +345,9 @@ struct SharedFace {
   ComplexShaper::Blob blob;      // whole layout font (blob sources)
   uint8_t* tables[kTableCount];  // loaded tables (table sources), from allocate()
   ot::Face face;
-  ot::Plan* plans[indic::SCRIPT_COUNT];  // built on demand in the document language
+  // Fills a plan for this face: read from the font (blobs) or built (tables).
+  bool (*makePlan)(ot::Plan& plan, const ot::Face& face, ot::Script script, const uint32_t* languageTags);
+  ot::Plan* plans[indic::SCRIPT_COUNT];  // made on demand in the document language
   uint16_t users;
   SharedFace* next;
 };
@@ -411,6 +413,17 @@ size_t liveFaceCount() {
   return count;
 }
 
+// Blob faces carry their plans compiled by the .cpfont converter; table
+// faces (TTF/OTF files) plan at runtime. Only buildTableFace() refers to the
+// runtime planner, and only setTableSource() to buildTableFace(), so builds
+// without TTF support link neither.
+bool loadCompiledPlan(ot::Plan& plan, const ot::Face& face, const ot::Script script, const uint32_t* languageTags) {
+  return plan.load(face, script, languageTags);
+}
+bool buildPlan(ot::Plan& plan, const ot::Face& face, const ot::Script script, const uint32_t* languageTags) {
+  return plan.build(face, script, languageTags);
+}
+
 // Builds a face from a table source. `key` receives the source's identity: a
 // hash of its 'head' table, which carries the whole-file checksum and
 // timestamps; an existing face with that key is returned instead.
@@ -444,6 +457,7 @@ SharedFace* buildTableFace(const ComplexShaper::TableLoader loader, void* ctx, u
     destroyFace(shared);
     return nullptr;
   }
+  shared->makePlan = &buildPlan;
   return shared;
 }
 
@@ -465,10 +479,11 @@ SharedFace* buildBlobFace(const ComplexShaper::BlobLoader loader, void* ctx, con
     destroyFace(shared);
     return nullptr;
   }
+  shared->makePlan = &loadCompiledPlan;
   return shared;
 }
 
-// The face's plan for `script` in the document language, built on first use.
+// The face's plan for `script` in the document language, made on first use.
 // ot::HeapCheck for the plan, its computed lookup filters and the glyph
 // buffer: they must leave the plan reserve free, and fit a free block.
 bool filtersFit(const size_t bytes) {
@@ -489,7 +504,12 @@ const ot::Plan* planFor(SharedFace* shared, const indic::ScriptInfo& script) {
     gFailures++;
     return nullptr;
   }
-  plan->build(shared->face, static_cast<ot::Script>(indic::indexOf(script)), gLanguageTags);
+  if (!shared->makePlan(*plan, shared->face, static_cast<ot::Script>(indic::indexOf(script)), gLanguageTags)) {
+    delete plan;
+    plan = nullptr;
+    gFailures++;
+    return nullptr;
+  }
   gPlanBytes += plan->memoryBytes();
   return plan;
 }
@@ -540,6 +560,7 @@ void ComplexShaper::setTableSource(const TableLoader loader, void* ctx) {
   releaseLocked();
   cacheForget(this);
   tableLoader_ = loader;
+  buildTableFace_ = &buildTableFace;
   blobLoader_ = nullptr;
   sourceCtx_ = ctx;
   contentKey_ = 0;
@@ -574,7 +595,7 @@ bool ComplexShaper::ensureFace() {
     const uint32_t failuresBefore = gFailures;
     uint32_t key = contentKey_;
     SharedFace* built = blobLoader_ != nullptr ? buildBlobFace(blobLoader_, sourceCtx_, key)
-                                               : buildTableFace(tableLoader_, sourceCtx_, &key);
+                                               : buildTableFace_(tableLoader_, sourceCtx_, &key);
     if (built == nullptr) {
       if (gFailures == failuresBefore) {
         LOG_ERR("SHAPE", "Shaping source is unreadable or malformed; shaping disabled for this face");

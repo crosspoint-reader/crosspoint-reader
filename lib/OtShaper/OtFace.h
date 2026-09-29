@@ -12,12 +12,12 @@ constexpr int GPOS = 1;
 
 // The tables shaping reads. head and cmap are required; the others may be
 // empty (a font without hmtx advances every glyph by half an em, as in
-// HarfBuzz). CPac holds lookup filters the .cpfont converter precomputes
-// (docs/file-formats.md); other fonts have none.
+// HarfBuzz). CPac and CPpl hold the lookup filters and shaping plans the
+// .cpfont converter precomputes (docs/file-formats.md); other fonts have none.
 struct FaceTables {
-  enum Index { HEAD, HHEA, MAXP, HMTX, CMAP, GDEF, GSUB_TABLE, GPOS_TABLE, CPAC, COUNT };
+  enum Index { HEAD, HHEA, MAXP, HMTX, CMAP, GDEF, GSUB_TABLE, GPOS_TABLE, CPAC, CPPL, COUNT };
   static constexpr uint32_t TAGS[COUNT] = {tag("head"), tag("hhea"), tag("maxp"), tag("hmtx"), tag("cmap"),
-                                           tag("GDEF"), tag("GSUB"), tag("GPOS"), tag("CPac")};
+                                           tag("GDEF"), tag("GSUB"), tag("GPOS"), tag("CPac"), tag("CPpl")};
   Table tables[COUNT];
 
   const Table& operator[](const Index i) const { return tables[i]; }
@@ -110,6 +110,8 @@ class Face {
   const FilterRecords* filters(const int table) const {
     return filters_[table].lookupDigests ? &filters_[table] : nullptr;
   }
+  // Precompiled shaping plans (the CPpl table); empty when the font has none.
+  const Table& compiledPlans() const { return compiledPlans_; }
 
  private:
   void initFilters(const Table& cpac);
@@ -130,6 +132,7 @@ class Face {
   Table gsub_;
   Table gpos_;
   FilterRecords filters_[2];
+  Table compiledPlans_;
 };
 
 }  // namespace ot

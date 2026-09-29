@@ -83,7 +83,8 @@ int main(int argc, char** argv) {
     }
     const auto si = static_cast<size_t>(script);
     if (!built[si]) {
-      plans[si].build(face, script, languages);
+      // .cpfont layout fonts carry compiled plans; TTF/OTF files are planned here.
+      if (!plans[si].load(face, script, languages)) plans[si].build(face, script, languages);
       built[si] = true;
     }
     if (!ot::shape(face, scale, plans[si], cps.data(), static_cast<unsigned>(cps.size()), buffer)) {

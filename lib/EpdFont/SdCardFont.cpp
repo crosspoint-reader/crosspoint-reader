@@ -524,7 +524,7 @@ bool SdCardFont::onCoverageQuery(void* ctx, const uint32_t codepoint) {
 
 namespace {
 constexpr char SHAPING_MAGIC[4] = {'C', 'P', 'S', 'H'};
-constexpr uint16_t SHAPING_VERSION = 1;
+constexpr uint16_t SHAPING_VERSION = 2;  // 2: the layout font carries its shaping plans (CPpl)
 // magic(4) version(2) reserved(2) ppem26_6(4) blobLength(4) blobHash(4)
 constexpr uint32_t SHAPING_HEADER_SIZE = 20;
 // An Indic layout font is 5-80 KB; anything far larger is not one.

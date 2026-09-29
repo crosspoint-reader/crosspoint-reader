@@ -30,7 +30,18 @@ enum class Pause : uint8_t {
 };
 
 // Indic scripts shaped here, in Unicode block order from U+0900.
-enum class Script : uint8_t { Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala };
+enum class Script : uint8_t {
+  Devanagari,
+  Bengali,
+  Gurmukhi,
+  Gujarati,
+  Oriya,
+  Tamil,
+  Telugu,
+  Kannada,
+  Malayalam,
+  Sinhala
+};
 
 // Most lookups a plan takes per table; fonts with more are not shaped.
 constexpr size_t MAX_PLANNED_LOOKUPS = 4096;
@@ -53,24 +64,47 @@ struct Stage {
   Pause pause;          // run after the stage's lookups
 };
 
-class FeatureBuilder;
+class PlanBuilder;
+
+// Features whose mask bit the shapers set on glyphs themselves, in the order
+// compiled plans store their masks (docs/file-formats.md, CPpl).
+enum MaskedFeature {
+  MF_RPHF,
+  MF_PREF,
+  MF_BLWF,
+  MF_ABVF,
+  MF_HALF,
+  MF_PSTF,
+  MF_INIT,
+  MF_ISOL,
+  MF_MEDI,
+  MF_FINA,
+  MF_COUNT
+};
+constexpr uint32_t MASKED_FEATURE_TAGS[MF_COUNT] = {tag("rphf"), tag("pref"), tag("blwf"), tag("abvf"), tag("half"),
+                                                    tag("pstf"), tag("init"), tag("isol"), tag("medi"), tag("fina")};
 
 class Plan {
  public:
+  // Plans `script` from the font's GSUB and GPOS (OtPlanBuild.cpp).
   // `languageTags` are the OpenType language systems to try, in order
   // (zero-terminated, up to three). False when the font has more lookups
-  // than a plan takes or the heap check refuses the plan's memory.
+  // than a plan takes or the heap check refuses the plan's memory; a plan
+  // that failed to build or load is empty, and shapes nothing.
   bool build(const Face& face, Script script, const uint32_t* languageTags);
+  // The same plan, read from the font's CPpl table, where the .cpfont
+  // converter stored it. False when the font has none for this script and
+  // language, or it is malformed.
+  bool load(const Face& face, Script script, const uint32_t* languageTags);
 
   // Lookup settings (flags, mask, filters) of planned lookup `i` of `table`.
   LookupSettings settings(int table, size_t i) const;
-  // Bit value of `tag` in glyph masks; 0 when the font lacks the feature.
-  uint32_t oneMask(uint32_t tag) const;
   // Heap the plan holds, for memory statistics.
   size_t memoryBytes() const;
 
   Script script = Script::Devanagari;
   ShaperKind shaper = ShaperKind::Default;
+  uint32_t chosenScript = 0;  // the GSUB script tag the plan follows
   uint32_t globalMask = 0;
   std::vector<PlannedLookup> lookups[2];
   std::vector<Stage> stages[2];
@@ -85,6 +119,9 @@ class Plan {
   enum IndicMask { RPHF, PREF, BLWF, ABVF, HALF, PSTF, INIT, INDIC_MASK_COUNT };
   uint32_t indicMasks[INDIC_MASK_COUNT] = {};
   enum WouldFeature { WS_RPHF, WS_PREF, WS_BLWF, WS_PSTF, WS_VATU, WS_COUNT };
+  static constexpr uint8_t NO_STAGE = 0xFF;
+  // GSUB stage of each would-substitute feature; NO_STAGE when the font lacks it.
+  uint8_t wouldStage[WS_COUNT] = {NO_STAGE, NO_STAGE, NO_STAGE, NO_STAGE, NO_STAGE};
   // Whether the lookups of the stage of `feature` would substitute `glyphs`.
   bool wouldSubstitute(const Face& face, WouldFeature feature, const uint32_t* glyphs, unsigned count) const;
 
@@ -93,36 +130,23 @@ class Plan {
   uint32_t useTopographicalMasks[4] = {};  // isol, init, medi, fina
 
  private:
-  struct FeatureMap {
-    uint32_t tag;
-    unsigned index[2];  // feature index in GSUB and GPOS, or 0xFFFF
-    uint8_t stage[2];
-    uint8_t lookupFlags;
-    uint8_t shift;
-    uint32_t mask;
-  };
-  struct LanguageSystem {
-    uint32_t chosenScript = 0;
-    Table langSys;
-    unsigned requiredIndex = 0xFFFF;
-    uint32_t requiredTag = 0;
-  };
+  friend class PlanBuilder;
+
   struct WouldSubstituteLookups {
     std::vector<uint16_t> lookups;
     std::vector<Digest> digests;
   };
 
-  void selectLanguageSystems(const Face& face, const uint32_t* languageTags, LanguageSystem* systems) const;
-  void chooseShaper(uint32_t chosenScript);
-  void mapFeatures(const Face& face, const LanguageSystem* systems, const FeatureBuilder& builder,
-                   unsigned* requiredStage);
-  bool planLookups(const Face& face, const LanguageSystem* systems, const FeatureBuilder& builder,
-                   const unsigned* requiredStage);
+  // load() until the plan is complete; false when anything is missing or malformed.
+  bool read(const Face& face, Script script, const uint32_t* languageTags);
+  // `masks` in MaskedFeature order, as the builder computes them.
+  void setFeatureMasks(const uint32_t* masks);
+  // Everything that follows from the lookups, stages and masks: GPOS and
+  // mark handling, lookup filters and the shapers' data.
+  void finish(const Face& face);
   void buildFilters(const Face& face);
-  void setupShaperData(const Face& face, uint32_t chosenScript);
-  void collectWould(const Face& face, WouldFeature feature, uint32_t tag);
+  void collectWould(const Face& face, WouldFeature feature);
 
-  std::vector<FeatureMap> features_;
   bool zeroContext_ = false;
   WouldSubstituteLookups would_[WS_COUNT];
   // Lookup filters: the font's CPac records, or computed here (per planned
@@ -132,5 +156,16 @@ class Plan {
   std::vector<uint32_t> subtableStarts_[2];
   std::vector<uint8_t> subtableDigests_[2];
 };
+
+// The script and language system a plan follows in one layout table
+// (hb_ot_layout_table_select_script, hb_ot_layout_script_select_language).
+struct LanguageSystem {
+  uint32_t chosenScript = 0;
+  Table langSys;
+  // Identifies the choice within the font: the matched LangSys tag, 'dflt',
+  // or 0 for the script's default LangSys. Compiled plans are keyed by it.
+  uint32_t key = 0;
+};
+LanguageSystem selectLanguageSystem(const Table& layout, Script script, const uint32_t* languageTags);
 
 }  // namespace ot

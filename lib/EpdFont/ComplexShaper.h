@@ -128,6 +128,9 @@ class ComplexShaper {
 
   BlobLoader blobLoader_ = nullptr;
   TableLoader tableLoader_ = nullptr;
+  // Set by setTableSource(), so only builds with table sources link the
+  // table path and the runtime planner behind it.
+  struct SharedFace* (*buildTableFace_)(TableLoader loader, void* ctx, uint32_t* key) = nullptr;
   void* sourceCtx_ = nullptr;
   uint32_t scale26_6_ = 0;
 

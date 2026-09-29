@@ -96,15 +96,14 @@ bool Buffer::canGrow(const unsigned extra) {
 void Buffer::removeGlyph(const unsigned i) { info.erase(info.begin() + i); }
 
 void Buffer::moveGlyph(const unsigned from, const unsigned to) {
-  if (from < to) {
-    std::rotate(info.begin() + from, info.begin() + from + 1, info.begin() + to + 1);
-  } else if (from > to) {
-    std::rotate(info.begin() + to, info.begin() + from, info.begin() + from + 1);
-  }
+  const GlyphInfo moved = info[from];
+  for (unsigned i = from; i < to; i++) info[i] = info[i + 1];
+  for (unsigned i = from; i > to; i--) info[i] = info[i - 1];
+  info[to] = moved;
 }
 
 void Buffer::reverseRange(const unsigned start, const unsigned end) {
-  std::reverse(info.begin() + start, info.begin() + end);
+  for (unsigned i = start, j = end; i + 1 < j; i++, j--) std::swap(info[i], info[j - 1]);
 }
 
 void Buffer::refreshDigest() {

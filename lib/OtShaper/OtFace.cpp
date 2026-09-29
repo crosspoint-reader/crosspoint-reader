@@ -158,6 +158,7 @@ bool Face::init(const FaceTables& tables) {
   gsub_ = gsub.u16(0) == 1 ? gsub : Table();
   gpos_ = gpos.u16(0) == 1 ? gpos : Table();
   initFilters(tables[FaceTables::CPAC]);
+  compiledPlans_ = tables[FaceTables::CPPL];
   return true;
 }
 
@@ -175,8 +176,8 @@ void Face::initFilters(const Table& cpac) {
     const uint32_t lookups = cpac.u16(4 + 2 * t);
     const uint32_t subtables = cpac.u32(8 + 4 * t);
     if (lookups != lookupCount(t)) return;
-    const uint64_t size = static_cast<uint64_t>(lookups) * (DIGEST_RECORD + 4) +
-                          static_cast<uint64_t>(subtables) * DIGEST_RECORD;
+    const uint64_t size =
+        static_cast<uint64_t>(lookups) * (DIGEST_RECORD + 4) + static_cast<uint64_t>(subtables) * DIGEST_RECORD;
     if (offset + size > cpac.length()) return;
     const auto base = static_cast<uint32_t>(offset);
     const Table starts = Table(cpac.data() + base + lookups * DIGEST_RECORD, lookups * 4);

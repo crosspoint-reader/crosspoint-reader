@@ -1,4 +1,5 @@
 #include <OtShaper.h>
+#include <OtUnicodeData.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -10,7 +11,7 @@
 // lib/OtShaper on the .cpfont layout fonts in test/complex_shaper/data. Its
 // output is checked against HarfBuzz glyph for glyph by ComplexShaperTest
 // (and at scale by compare_harfbuzz.py); these tests cover the parts that
-// test cannot see: the precomputed lookup filters and hostile fonts.
+// test cannot see: the precomputed lookup filters and plans, and hostile fonts.
 
 namespace {
 
@@ -147,6 +148,74 @@ TEST(OtShaperFilters, MismatchedFiltersAreIgnored) {
   EXPECT_EQ(face.filters(ot::GSUB), nullptr);
 }
 
+void expectSamePlan(const ot::Plan& built, const ot::Plan& loaded, const std::string& where) {
+  SCOPED_TRACE(where);
+  EXPECT_EQ(built.script, loaded.script);
+  EXPECT_EQ(built.shaper, loaded.shaper);
+  EXPECT_EQ(built.chosenScript, loaded.chosenScript);
+  EXPECT_EQ(built.globalMask, loaded.globalMask);
+  for (int t = 0; t < 2; t++) {
+    ASSERT_EQ(built.lookups[t].size(), loaded.lookups[t].size());
+    for (size_t i = 0; i < built.lookups[t].size(); i++) {
+      EXPECT_EQ(built.lookups[t][i].index, loaded.lookups[t][i].index);
+      EXPECT_EQ(built.lookups[t][i].flags, loaded.lookups[t][i].flags);
+      EXPECT_EQ(built.lookups[t][i].mask, loaded.lookups[t][i].mask);
+    }
+    ASSERT_EQ(built.stages[t].size(), loaded.stages[t].size());
+    for (size_t i = 0; i < built.stages[t].size(); i++) {
+      EXPECT_EQ(built.stages[t][i].lastLookup, loaded.stages[t][i].lastLookup);
+      EXPECT_EQ(built.stages[t][i].pause, loaded.stages[t][i].pause);
+    }
+  }
+  EXPECT_EQ(built.applyGpos, loaded.applyGpos);
+  EXPECT_EQ(built.fallbackGlyphClasses, loaded.fallbackGlyphClasses);
+  EXPECT_EQ(built.zeroMarks, loaded.zeroMarks);
+  EXPECT_EQ(built.indicConfig, loaded.indicConfig);
+  EXPECT_EQ(built.isOldSpec, loaded.isOldSpec);
+  EXPECT_EQ(0, std::memcmp(built.indicMasks, loaded.indicMasks, sizeof(built.indicMasks)));
+  EXPECT_EQ(0, std::memcmp(built.wouldStage, loaded.wouldStage, sizeof(built.wouldStage)));
+  EXPECT_EQ(built.useRphfMask, loaded.useRphfMask);
+  EXPECT_EQ(
+      0, std::memcmp(built.useTopographicalMasks, loaded.useTopographicalMasks, sizeof(built.useTopographicalMasks)));
+}
+
+// The converter compiles the plans in Python (shaping_blob.py); loading one
+// must give exactly the plan the shaper builds from the font, in every
+// language the firmware maps and for mixed requests.
+TEST(OtPlanCompiled, LoadedPlansMatchBuiltPlans) {
+  std::vector<std::vector<uint32_t>> requests = {{0}};
+  for (const auto& language : ot::ucd::LANGUAGES) requests.emplace_back(language.tags, language.tags + 3);
+  requests.push_back({ot::tag("MAR "), ot::tag("NEP "), 0});
+  requests.push_back({ot::tag("XXXX"), ot::tag("SAN "), ot::tag("MAR ")});
+  requests.push_back({ot::tag("dflt"), 0, 0});
+  for (const Fixture& fx : fixtures()) {
+    const std::vector<uint8_t> font = readFixture(fx.file);
+    ot::Face face;
+    ASSERT_TRUE(face.init(tablesOf(font)));
+    ASSERT_FALSE(face.compiledPlans().empty()) << fx.file;
+    for (const std::vector<uint32_t>& tags : requests) {
+      const std::string where = std::string(fx.file) + " language " + std::to_string(tags[0]);
+      ot::Plan built, loaded;
+      ASSERT_TRUE(built.build(face, fx.script, tags.data())) << where;
+      ASSERT_TRUE(loaded.load(face, fx.script, tags.data())) << where;
+      expectSamePlan(built, loaded, where);
+      for (const char* word : fx.words) EXPECT_EQ(shapeWord(face, built, word), shapeWord(face, loaded, word));
+    }
+  }
+}
+
+TEST(OtPlanCompiled, FontsWithoutPlansOrForOtherScriptsLoadNothing) {
+  const std::vector<uint8_t> font = readFixture("NotoSansTamil-Regular.layout");
+  ot::FaceTables tables = tablesOf(font);
+  ot::Face face;
+  ASSERT_TRUE(face.init(tables));
+  ot::Plan plan;
+  EXPECT_FALSE(plan.load(face, ot::Script::Bengali, ot::languageTagsFor("")));
+  tables[ot::FaceTables::CPPL] = ot::Table();
+  ASSERT_TRUE(face.init(tables));
+  EXPECT_FALSE(plan.load(face, ot::Script::Tamil, ot::languageTagsFor("")));
+}
+
 // Truncated and corrupted fonts must shape to something or fail cleanly,
 // never read out of bounds (run under -fsanitize=address to check).
 TEST(OtShaperRobustness, SurvivesTruncatedAndCorruptedFonts) {
@@ -163,9 +232,12 @@ TEST(OtShaperRobustness, SurvivesTruncatedAndCorruptedFonts) {
       }
       ot::Face face;
       if (!face.init(tablesOf(font))) continue;
-      ot::Plan plan;
-      plan.build(face, fx.script, ot::languageTagsFor(""));
-      for (const char* word : fx.words) shapeWord(face, plan, word);
+      ot::Plan built, loaded;
+      built.build(face, fx.script, ot::languageTagsFor(""));
+      for (const char* word : fx.words) shapeWord(face, built, word);
+      if (loaded.load(face, fx.script, ot::languageTagsFor(""))) {
+        for (const char* word : fx.words) shapeWord(face, loaded, word);
+      }
     }
   }
   SUCCEED();

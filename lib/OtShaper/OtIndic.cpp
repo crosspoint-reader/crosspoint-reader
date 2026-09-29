@@ -1,6 +1,7 @@
 #include <algorithm>
 
 #include "OtShaperInternal.h"
+#include "OtSort.h"
 
 // The Indic shaper: syllable segmentation, then the initial and final
 // reordering around the basic-shaping GSUB features. A port of HarfBuzz's
@@ -171,8 +172,8 @@ void assignPositions(const Plan& plan, Buffer& buffer, const unsigned start, con
 // left matras is flipped back into logical order.
 unsigned sortSyllable(Buffer& buffer, const unsigned start, const unsigned end) {
   auto& info = buffer.info;
-  std::stable_sort(info.begin() + start, info.begin() + end,
-                   [](const GlyphInfo& a, const GlyphInfo& b) { return a.position < b.position; });
+  stableSort(info.data() + start, info.data() + end,
+             [](const GlyphInfo& a, const GlyphInfo& b) { return a.position < b.position; });
 
   // Find the base again; also flip a sequence of left matras.
   unsigned firstLeftMatra = end;

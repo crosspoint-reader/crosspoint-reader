@@ -543,15 +543,16 @@ The section header is little-endian:
 | Field | Type | Meaning |
 |---|---|---|
 | magic | `char[4]` | `CPSH` |
-| version | `u16` | 1 |
+| version | `u16` | 2 (the layout font carries `CPpl`; firmware ignores version 1) |
 | reserved | `u16` | 0 |
 | ppem26_6 | `u32` | size the section was built for, in 26.6 pixels |
 | blobLength | `u32` | bytes of layout font that follow |
 | blobHash | `u32` | FNV-1a of the layout font; keys its flash slot and shared face |
 
 The layout font that follows is an OpenType font holding only `head`, `hhea`,
-`maxp`, `hmtx`, `cmap`, `GDEF`, `GSUB`, `GPOS` and `CPac`. Its glyph order is
-the one the style's glyph tokens (U+F0000 + glyph ID) index.
+`maxp`, `hmtx`, `cmap`, `GDEF`, `GSUB`, `GPOS`, `CPpl` and (when it fits the
+128 KB flash slot) `CPac`. Its glyph order is the one the style's glyph tokens
+(U+F0000 + glyph ID) index.
 
 ### `CPac`: lookup filters
 
@@ -577,3 +578,43 @@ Then, for GSUB and then GPOS:
 A digest record is HarfBuzz's set digest: three 64-bit masks (bit
 `(glyph >> shift) & 63`, shifts 4, 0 and 6), stored as little-endian `u64`s
 so the device can copy them into memory as they are.
+
+### `CPpl`: shaping plans
+
+`CPpl` holds the plans `lib/OtShaper` would otherwise build from `GSUB` and
+`GPOS` on the device (`ot::Plan`): which lookups run, in which stages, with
+which masks. The converter (`shaping_blob.py`) stores one per script and pair
+of language systems a request of up to three language tags can select;
+identical plans are stored once. Firmware without TTF support reads plans
+only from here. Every field is big-endian:
+
+| Field | Type | Meaning |
+|---|---|---|
+| version | `u16` | 1 |
+| planCount | `u16` | plan records that follow |
+
+Each plan record is 14 bytes:
+
+| Field | Type | Meaning |
+|---|---|---|
+| script | `u8` | `ot::Script` (0 Devanagari … 9 Sinhala) |
+| reserved | `u8` | 0 |
+| gsubKey, gposKey | `u32` each | the language system chosen in GSUB and GPOS: its tag, `dflt`, or 0 for the script's default |
+| offset | `u32` | from the start of `CPpl` to the plan |
+
+A plan:
+
+| Field | Type | Meaning |
+|---|---|---|
+| chosenScript | `u32` | the GSUB script tag the plan follows (`dev2`, `deva`, …) |
+| shaper | `u8` | 0 default, 1 Indic, 2 USE |
+| reserved | `u8[3]` | 0 |
+| globalMask | `u32` | mask of the features on by default |
+| masks | `u32[10]` | glyph mask bit of `rphf pref blwf abvf half pstf init isol medi fina` (0 = absent) |
+| wouldStages | `u8[5]` | GSUB stage of `rphf pref blwf pstf vatu`; 0xFF = absent |
+| reserved | `u8[3]` | 0 |
+
+Then, for GSUB and then GPOS: `stageCount` and `lookupCount` (`u16` each),
+`stageCount` stages (`u16` lookups before the stage ends, `u8` `ot::Pause`
+run after it, `u8` reserved) and `lookupCount` lookups (`u16` lookup index,
+`u8` lookup flags, `u8` reserved, `u32` mask).
