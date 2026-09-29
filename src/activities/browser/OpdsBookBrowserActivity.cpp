@@ -153,12 +153,19 @@ void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::DOWNLOADING) return;
 
   if (state == BrowserState::BROWSING) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      leftSearchPending = !searchTemplate.empty() && selectorIndex == 0;
+    }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       activateSelected();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
+      if (leftSearchPending) {
+        leftSearchPending = false;
+        launchSearch();
+        return;
+      }
     }
 
     // Touch goes through the FreeInkApp: render() registered every tap target
@@ -190,14 +197,16 @@ void OpdsBookBrowserActivity::loop() {
         listNav.follow(static_cast<int>(entries.size()));
         requestUpdate();
       };
-      buttonNavigator.onNextRelease(
+      buttonNavigator.onNextPress(
           [this, &moveSelection] { moveSelection(ButtonNavigator::nextIndex(selectorIndex, entries.size())); });
-      buttonNavigator.onPreviousRelease(
-          [this, &moveSelection] { moveSelection(ButtonNavigator::previousIndex(selectorIndex, entries.size())); });
+      buttonNavigator.onPreviousPress([this, &moveSelection] {
+        if (!leftSearchPending) moveSelection(ButtonNavigator::previousIndex(selectorIndex, entries.size()));
+      });
       buttonNavigator.onNextContinuous([this, &moveSelection] {
         moveSelection(ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), listNav.visibleRows));
       });
       buttonNavigator.onPreviousContinuous([this, &moveSelection] {
+        leftSearchPending = false;
         moveSelection(ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), listNav.visibleRows));
       });
     }

@@ -38,6 +38,7 @@ class OpdsBookBrowserActivity final : public Activity, private UiAppHost {
   std::string currentPath;
   std::string searchTemplate;
   int selectorIndex = 0;
+  bool leftSearchPending = false;
   std::string errorMessage;
   std::string statusMessage;
   size_t downloadProgress = 0;

@@ -60,7 +60,9 @@ void EpubReaderFootnoteSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !footnoteLinks.empty()) {
+  if ((mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+       mappedInput.wasReleased(MappedInputManager::Button::Power)) &&
+      !footnoteLinks.empty()) {
     performJump();
     return;
   }

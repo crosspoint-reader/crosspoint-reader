@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -277,6 +278,18 @@ void CrossPointWebServerActivity::startWebServer() {
 
   // Create the web server instance
   webServer.reset(new CrossPointWebServer());
+  // An upload holds loop() inside handleClient(), so input is sampled on each received chunk instead. On a slow
+  // link chunks come ~0.5 s apart, so a button found down gets a second sample past the SDK's 5 ms debounce.
+  webServer->setUploadCancelCheck([this] {
+    mappedInput.update(true);
+    if (gpio.rawInputActive()) {
+      delay(6);
+      mappedInput.update(true);
+    }
+    leaveRequested = leaveRequested || mappedInput.isPressed(MappedInputManager::Button::Back) ||
+                     mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture();
+    return leaveRequested;
+  });
   webServer->begin();
 
   if (webServer->isRunning()) {
@@ -365,6 +378,10 @@ void CrossPointWebServerActivity::loop() {
       constexpr int MAX_ITERATIONS = 500;
       for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
+        if (leaveRequested) {
+          onGoHome();
+          return;
+        }
         // Reset watchdog every 32 iterations
         if ((i & 0x1F) == 0x1F) {
           resetTaskWatchdogIfSubscribed();

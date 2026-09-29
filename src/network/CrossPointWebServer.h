@@ -65,6 +65,10 @@ class CrossPointWebServer {
 
   WsUploadStatus getWsUploadStatus() const;
 
+  // An HTTP upload holds handleClient() until its body is read, so this is polled on each chunk.
+  // Returning true drops the client: the upload aborts and its partial file is removed.
+  void setUploadCancelCheck(std::function<bool()> check) { uploadCancelCheck = std::move(check); }
+
   // Get the port number
   uint16_t getPort() const { return port; }
 
@@ -77,6 +81,8 @@ class CrossPointWebServer {
   uint16_t wsPort = 81;  // WebSocket port
   NetworkUDP udp;
   bool udpActive = false;
+  std::function<bool()> uploadCancelCheck;
+  bool dropUploadIfCancelled() const;
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
