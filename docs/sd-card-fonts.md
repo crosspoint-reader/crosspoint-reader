@@ -199,7 +199,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
 
 You can also specify arbitrary Unicode ranges directly:
-`--intervals latin-ext,(0x2190-0x21FF)`
+`--intervals 'latin-ext,(0x2190-0x21FF)'`
 
 To list all presets with codepoint counts:
 
