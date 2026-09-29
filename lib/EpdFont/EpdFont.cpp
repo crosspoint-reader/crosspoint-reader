@@ -24,20 +24,9 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   uint32_t cp;
   uint32_t prevCp = 0;
-  // Position tokens for the next shaped glyph (ShapingTokens.h).
-  int32_t shapedAdvanceFP = -1;
-  int shapedDx = 0;
-  int shapedDy = 0;
+  shaping::PendingGlyph shaped;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    if (shaping::isAdvanceToken(cp)) {
-      shapedAdvanceFP = shaping::advanceTokenValue(cp);
-      continue;
-    }
-    if (shaping::isOffsetToken(cp)) {
-      shapedDx = shaping::offsetTokenDx(cp);
-      shapedDy = shaping::offsetTokenDy(cp);
-      continue;
-    }
+    if (shaped.consume(cp)) continue;
     const bool isShaped = shaping::isGlyphToken(cp);
     const bool isCombining = !isShaped && utf8IsCombiningMark(cp);
 
@@ -51,14 +40,15 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       // combining marks to stale base metrics.
       if (!isCombining) {
         lastBaseX += fp4::toPixel(prevAdvanceFP);  // flush pending advance before resetting
+        // A missing shaped glyph still moves the pen by its shaped advance, as in drawText.
+        if (isShaped) lastBaseX += fp4::toPixel(shaped.advanceOr(0));
         prevCp = 0;
-        prevAdvanceFP = isShaped && shapedAdvanceFP >= 0 ? shapedAdvanceFP : 0;
+        prevAdvanceFP = 0;
         lastBaseLeft = 0;
         lastBaseWidth = 0;
         lastBaseTop = 0;
       }
-      shapedAdvanceFP = -1;
-      shapedDx = shapedDy = 0;
+      shaped.reset();
       continue;
     }
 
@@ -72,8 +62,8 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
     const int glyphBaseX = isCombining ? combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                                    glyph->left, glyph->width)
-                                       : lastBaseX + shapedDx;
-    const int glyphBaseY = startY - raiseBy + shapedDy;
+                                       : lastBaseX + shaped.dx;
+    const int glyphBaseY = startY - raiseBy + shaped.dy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
     *maxX = std::max(*maxX, glyphBaseX + glyph->left + glyph->width);
@@ -84,11 +74,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       lastBaseLeft = glyph->left;
       lastBaseWidth = glyph->width;
       lastBaseTop = glyph->top;
-      prevAdvanceFP = shapedAdvanceFP >= 0 ? shapedAdvanceFP : glyph->advanceX;  // 12.4 fixed-point
+      prevAdvanceFP = shaped.advanceOr(glyph->advanceX);  // 12.4 fixed-point
       prevCp = cp;
     }
-    shapedAdvanceFP = -1;
-    shapedDx = shapedDy = 0;
+    shaped.reset();
   }
 }
 

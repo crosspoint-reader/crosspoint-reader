@@ -38,16 +38,16 @@ TEST(TextBlockDisplay, KeepsLogicalAndDisplayTextApart) {
                   BlockStyle(), {}, {}, display);
   ASSERT_TRUE(block.valid());
   EXPECT_STREQ(block.wordText(1), words[1].c_str());
-  EXPECT_EQ(block.displayText(1), kShaped);
-  EXPECT_STREQ(block.displayText(0), "hello");  // no display form: draws the text itself
-  EXPECT_STREQ(block.displayText(2), "world");
+  EXPECT_EQ(block.displayForm(1), kShaped);
+  EXPECT_EQ(block.displayForm(0), nullptr);  // no display form: draws the text itself
+  EXPECT_EQ(block.displayForm(2), nullptr);
 
   const auto restored = roundTrip(block, "display.bin");
   ASSERT_NE(restored, nullptr);
   ASSERT_EQ(restored->wordCount(), 3);
   for (uint16_t i = 0; i < 3; i++) {
     EXPECT_STREQ(restored->wordText(i), words[i].c_str());
-    EXPECT_STREQ(restored->displayText(i), block.displayText(i));
+    EXPECT_STREQ(restored->displayForm(i), block.displayForm(i));
     EXPECT_EQ(restored->wordXpos(i), block.wordXpos(i));
     EXPECT_EQ(restored->wordStyle(i), block.wordStyle(i));
   }
@@ -59,8 +59,8 @@ TEST(TextBlockDisplay, LinesWithoutComplexScriptStoreNoDisplayRegion) {
   ASSERT_TRUE(block.valid());
   const auto restored = roundTrip(block, "plain.bin");
   ASSERT_NE(restored, nullptr);
-  EXPECT_STREQ(restored->displayText(0), "plain");
-  EXPECT_STREQ(restored->displayText(1), "line");
+  EXPECT_EQ(restored->displayForm(0), nullptr);
+  EXPECT_EQ(restored->displayForm(1), nullptr);
 }
 
 TEST(TextBlockDisplay, RejectsACorruptDisplayOffset) {
@@ -97,8 +97,8 @@ TEST(TextBlockDisplay, ComplexScriptLineWithNothingToRedrawRoundTrips) {
   ASSERT_TRUE(block.valid());
   const auto restored = roundTrip(block, "empty-display.bin");
   ASSERT_NE(restored, nullptr) << "a line with no display forms must not store an empty display region";
-  EXPECT_STREQ(restored->displayText(0), words[0].c_str());
-  EXPECT_STREQ(restored->displayText(1), words[1].c_str());
+  EXPECT_EQ(restored->displayForm(0), nullptr);
+  EXPECT_EQ(restored->displayForm(1), nullptr);
 }
 
 TEST(TextBlockDisplay, FocusSplitWordsDrawTheirLogicalText) {
@@ -112,4 +112,16 @@ TEST(TextBlockDisplay, FocusSplitWordsDrawTheirLogicalText) {
   ASSERT_EQ(renderer.drawnTexts.size(), 2u);
   EXPECT_EQ(renderer.drawnTexts[0], "abc");
   EXPECT_EQ(renderer.drawnTexts[1], "def");
+}
+
+TEST(TextBlockDisplay, RenderDrawsTheStoredDisplayForm) {
+  const std::vector<std::string> words = {"hello", "\xE0\xA6\x95\xE0\xA6\xBF"};
+  TextBlock block(words, {0, 50}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {},
+                  {"", kShaped});
+  ASSERT_TRUE(block.valid());
+  GfxRenderer renderer;
+  block.render(renderer, 0, 0, 0);
+  ASSERT_EQ(renderer.drawnTexts.size(), 2u);
+  EXPECT_EQ(renderer.drawnTexts[0], "hello");
+  EXPECT_EQ(renderer.drawnTexts[1], kShaped);
 }

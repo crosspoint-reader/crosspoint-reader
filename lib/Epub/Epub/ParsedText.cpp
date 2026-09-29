@@ -1718,13 +1718,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  // Complex-script words keep their drawn (shaped) form in the page cache, so
-  // page turns draw them without shaping. Empty when the line has none.
+  // Complex-script words keep the form they were measured in (shaped, via
+  // this layout's shaping memo) in the page cache, so page turns draw exactly
+  // that without shaping. Empty when the line has none.
   std::vector<std::string> lineDisplay;
   for (size_t i = 0; i < lineWordCount; i++) {
     if (!ComplexShaper::containsComplexScript(lineWords[i].c_str())) continue;
     if (lineDisplay.empty()) lineDisplay.resize(lineWordCount);
-    renderer.shapeForDisplay(fontId, lineWords[i].c_str(), lineWordStyles[i], lineDisplay[i]);
+    renderer.resolveForDisplay(fontId, lineWords[i].c_str(), lineWordStyles[i], lineDisplay[i]);
   }
 
   // Fast path: no word on this line carries focus emphasis, so pass empty boundary/suffixX

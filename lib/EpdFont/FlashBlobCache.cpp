@@ -15,6 +15,8 @@
 #include <memory>
 #include <new>
 
+#include "Fnv1a.h"
+
 // Partition access. The device build maps these onto esp_partition; a host
 // test can supply its own by defining FLASH_BLOB_CACHE_EXTERNAL_BACKEND.
 namespace FlashBlobCache::backend {
@@ -119,14 +121,7 @@ bool usable() {
   return gUsable == 1;
 }
 
-uint32_t contentKey(const uint8_t* data, const uint32_t length) {
-  uint32_t hash = 2166136261u;
-  for (uint32_t i = 0; i < length; i++) {
-    hash ^= data[i];
-    hash *= 16777619u;
-  }
-  return hash | 1u;
-}
+uint32_t contentKey(const uint8_t* data, const uint32_t length) { return fnv1a::hash(data, length) | 1u; }
 
 bool slotMapped(const uint32_t slot) {
   for (uint8_t i = 0; i < gMappingCount; i++) {

@@ -93,7 +93,7 @@ void DictionaryWordSelectActivity::extractWords() {
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
       box.text = text;
-      box.display = block->displayText(i);
+      box.display = block->displayForm(i);
       words.push_back(box);
       rowHasWords = true;
 
@@ -107,7 +107,7 @@ void DictionaryWordSelectActivity::extractWords() {
   if (styleMask == 0) styleMask = 0x01;  // REGULAR
   renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
   for (auto& word : words) {
-    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.display, word.style));
+    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.laidOut(), word.style));
   }
 }
 
@@ -325,7 +325,7 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   snapshotIdx = saved ? selected : -1;
 
   renderer.fillRect(hx, hy, hw, hh, true);
-  renderer.drawText(fontId, word.x, word.y, word.display, false, word.style);
+  renderer.drawText(fontId, word.x, word.y, word.laidOut(), false, word.style);
   return saved;
 }
 
@@ -358,7 +358,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     // The full path's PrewarmScope cleared the glyph cache on exit; batch-load
     // just the highlighted word's glyphs before drawing them white-on-black.
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, words[selected].display,
+        fontId, words[selected].display ? words[selected].display : words[selected].text,
         static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
     if (drawHighlightWithSnapshot()) {
       drawHints();

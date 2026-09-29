@@ -5,6 +5,7 @@
 #include <IndicScripts.h>
 #include <Logging.h>
 #include <MemoryManager.h>
+#include <OtTable.h>
 #include <Utf8.h>
 #include <esp_heap_caps.h>
 
@@ -469,14 +470,6 @@ bool TtfEpdFont::shapeThunk(void* ctx, const char* utf8, std::string* out) {
   return owner->shapingCoverage_[src] == 1 && owner->shapers_[src].shape(utf8, *out);
 }
 
-namespace {
-uint32_t readBe32(const uint8_t* p) {
-  return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
-         (static_cast<uint32_t>(p[2]) << 8) | p[3];
-}
-uint16_t readBe16(const uint8_t* p) { return static_cast<uint16_t>((p[0] << 8) | p[1]); }
-}  // namespace
-
 uint8_t* TtfEpdFont::loadTable(void* ctx, const uint32_t tag, uint32_t* length) {
   const Source* src = static_cast<const Source*>(ctx);
   const auto readAt = [src](const uint32_t offset, uint8_t* buf, const uint32_t count) {
@@ -494,19 +487,20 @@ uint8_t* TtfEpdFont::loadTable(void* ctx, const uint32_t tag, uint32_t* length) 
   uint8_t header[12];
   if (!readAt(0, header, sizeof(header))) return nullptr;
   uint32_t base = 0;
-  if (readBe32(header) == 0x74746366) {  // 'ttcf'
+  if (ot::Table(header, sizeof(header)).u32(0) == ot::tag("ttcf")) {
     uint8_t first[4];
     if (!readAt(12, first, sizeof(first))) return nullptr;
-    base = readBe32(first);
+    base = ot::Table(first, sizeof(first)).u32(0);
     if (!readAt(base, header, sizeof(header))) return nullptr;
   }
-  const uint16_t numTables = readBe16(header + 4);
+  const uint16_t numTables = ot::Table(header, sizeof(header)).u16(4);
   for (uint16_t i = 0; i < numTables; ++i) {
     uint8_t record[16];
     if (!readAt(base + 12 + 16u * i, record, sizeof(record))) return nullptr;
-    if (readBe32(record) != tag) continue;
-    const uint32_t offset = readBe32(record + 8);
-    const uint32_t size = readBe32(record + 12);
+    const ot::Table entry(record, sizeof(record));
+    if (entry.u32(0) != tag) continue;
+    const uint32_t offset = entry.u32(8);
+    const uint32_t size = entry.u32(12);
     auto* table = static_cast<uint8_t*>(ComplexShaper::allocate(size ? size : 1));
     if (table == nullptr) return nullptr;
     if (!readAt(offset, table, size)) {

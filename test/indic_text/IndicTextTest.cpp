@@ -218,6 +218,13 @@ TEST(IndicReorder, ReordersEachScriptInMixedText) {
   EXPECT_EQ(reorder(cps({KA, I, ' ', DEVA_KA, DEVA_I})), cps({I, KA, ' ', DEVA_I, DEVA_KA}));
 }
 
+TEST(IndicLineBreaks, JoinersOutsideIndicTextNeverBlockABreak) {
+  EXPECT_TRUE(indic::syllableBreakAllowed(0x0645, indic::ZWNJ));  // Persian meh + ZWNJ
+  EXPECT_TRUE(indic::syllableBreakAllowed(indic::ZWNJ, 0x0627));
+  EXPECT_TRUE(indic::syllableBreakAllowed(0x1F468, indic::ZWJ));  // emoji ZWJ sequence
+  EXPECT_TRUE(indic::syllableBreakAllowed(indic::ZWJ, 0x1F469));
+}
+
 TEST(IndicLineBreaks, NeverSplitASyllableInAnyScript) {
   EXPECT_FALSE(indic::syllableBreakAllowed(DEVA_KA, DEVA_I));
   EXPECT_FALSE(indic::syllableBreakAllowed(DEVA_VIRAMA, DEVA_SSA));

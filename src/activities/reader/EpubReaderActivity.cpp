@@ -1,6 +1,5 @@
 #include "EpubReaderActivity.h"
 
-#include <ComplexShaper.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
@@ -1446,13 +1445,8 @@ void EpubReaderActivity::renderBook() {
     discardOverlayPage();
 
     const auto start = millis();
-    const auto shapingBefore = ComplexShaper::memoryStats();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
-    const auto shaping = ComplexShaper::memoryStats();
-    LOG_DBG("ERS", "Rendered page in %dms (shaped %u runs, reused %u; shaper heap %u B, peak %u B)", millis() - start,
-            static_cast<unsigned>(shaping.shapedRuns - shapingBefore.shapedRuns),
-            static_cast<unsigned>(shaping.reusedRuns - shapingBefore.reusedRuns),
-            static_cast<unsigned>(shaping.current), static_cast<unsigned>(shaping.peak));
+    LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
   }

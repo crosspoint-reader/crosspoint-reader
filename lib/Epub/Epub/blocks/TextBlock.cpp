@@ -208,7 +208,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         }
         int groupActualWidth = 0;
         for (int k = 0; k < groupWordCount; ++k) {
-          groupActualWidth += renderer.getTextAdvanceX(fontId, displayText(i + k), wordStyle(i + k), tracking);
+          const GfxRenderer::LaidOutText word{wordText(i + k), displayForm(i + k)};
+          groupActualWidth += renderer.getTextAdvanceX(fontId, word, wordStyle(i + k), tracking);
         }
         const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, tracking);
         const int leaderWordX = xposArr[i] + x;
@@ -257,14 +258,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   const int rubyShift = getRubyShift(ascender);
 
   for (uint16_t i = 0; i < numWords; i++) {
+    const char* word = wordText(i);
     // A focus boundary indexes the logical text. ParsedText never splits a
     // word that has a display form, but a corrupt cache could pair them.
     const uint8_t boundary = focusBoundary(i);
-    const char* word = boundary > 0 ? wordText(i) : displayText(i);
+    const GfxRenderer::LaidOutText laidOut{word, boundary > 0 ? nullptr : displayForm(i)};
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
     const auto baseDir =
-        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(wordText(i), blockStyle.isRtl ? 1 : 0));
+        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
     // drawText, so these offsets are chosen relative to the full-size ascender:
@@ -297,7 +299,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const int suffixX = drawX + focusSuffixXArr[i];
       renderer.drawText(fontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir, tracking);
     } else {
-      renderer.drawText(fontId, drawX, wordY, word, true, currentStyle, baseDir, tracking);
+      renderer.drawText(fontId, drawX, wordY, laidOut, true, currentStyle, baseDir, tracking);
     }
 
     // Horizontal ruby text rendering
@@ -314,15 +316,18 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
     if (EpdFontFamily::hasTextDecoration(currentStyle)) {
       int lineStartX = drawX;
-      int lineWidth = renderer.getTextAdvanceX(fontId, word, currentStyle, tracking, baseDir,
+      int lineWidth = renderer.getTextAdvanceX(fontId, laidOut, currentStyle, tracking, baseDir,
                                                GfxRenderer::TextMeasureMode::Rendered);
 
       // Do not decorate the synthetic em-space used for paragraph indentation.
-      // (A display form copies the logical text outside its shaped runs, so
-      // the em-space prefix is the same in both.)
-      if (wordTextLen(i) >= 3 && static_cast<uint8_t>(word[0]) == 0xE2 && static_cast<uint8_t>(word[1]) == 0x80 &&
-          static_cast<uint8_t>(word[2]) == 0x83) {
-        const char* visibleText = word + 3;
+      const auto startsWithEmSpace = [](const char* s) {
+        return static_cast<uint8_t>(s[0]) == 0xE2 && static_cast<uint8_t>(s[1]) == 0x80 &&
+               static_cast<uint8_t>(s[2]) == 0x83;
+      };
+      if (wordTextLen(i) >= 3 && startsWithEmSpace(word)) {
+        const char* visibleDisplay =
+            laidOut.display && startsWithEmSpace(laidOut.display) ? laidOut.display + 3 : nullptr;
+        const GfxRenderer::LaidOutText visibleText{word + 3, visibleDisplay};
         lineStartX += renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle, tracking, baseDir,
                                                GfxRenderer::TextMeasureMode::Rendered);
         lineWidth = renderer.getTextAdvanceX(fontId, visibleText, currentStyle, tracking, baseDir,

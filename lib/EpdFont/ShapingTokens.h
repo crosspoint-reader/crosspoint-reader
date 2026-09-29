@@ -15,8 +15,9 @@
 //               whole pixels right/down of the pen (int8 each); the pen itself
 //               does not move.
 //
-// All three lie in the supplementary private-use planes, which the renderer
-// never otherwise draws, so unshaped text cannot be mistaken for tokens.
+// All three lie in the supplementary private-use planes (U+F0000-U+10FFFF).
+// The renderer replaces those codepoints in text with U+FFFD before shaping
+// it, so only the shaper's own output carries tokens.
 // Mirrored by GLYPH_TOKEN_BASE in lib/EpdFont/scripts/shaping_blob.py.
 namespace shaping {
 
@@ -53,5 +54,31 @@ constexpr uint32_t offsetToken(const int dx, const int dy) {
 
 // Advance and offset tokens modify the next glyph; they have no glyph of their own.
 constexpr bool isPositionToken(const uint32_t cp) { return isAdvanceToken(cp) || isOffsetToken(cp); }
+
+// The planes every token lies in.
+constexpr bool inTokenPlanes(const uint32_t cp) { return cp >= GLYPH_TOKEN_BASE; }
+
+// Position tokens waiting for the next glyph.
+struct PendingGlyph {
+  int32_t advanceFP = -1;  // 12.4 advance chosen by the shaper; -1 = the glyph's own
+  int dx = 0;
+  int dy = 0;
+
+  // Absorbs `cp` when it is a position token.
+  bool consume(const uint32_t cp) {
+    if (isAdvanceToken(cp)) {
+      advanceFP = advanceTokenValue(cp);
+      return true;
+    }
+    if (isOffsetToken(cp)) {
+      dx = offsetTokenDx(cp);
+      dy = offsetTokenDy(cp);
+      return true;
+    }
+    return false;
+  }
+  int32_t advanceOr(const int32_t ownAdvanceFP) const { return advanceFP >= 0 ? advanceFP : ownAdvanceFP; }
+  void reset() { *this = PendingGlyph{}; }
+};
 
 }  // namespace shaping

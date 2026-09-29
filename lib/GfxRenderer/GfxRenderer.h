@@ -333,6 +333,18 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
+
+  // A word as layout measured it: `text` is its logical form, which picks the
+  // font as for any string, and `display` the form resolveForDisplay() made
+  // of it, or nullptr when it made none. The overloads taking one draw and
+  // measure it without shaping again, so a page turn draws what layout measured.
+  struct LaidOutText {
+    const char* text;
+    const char* display;
+  };
+  void drawText(int fontId, int x, int y, const LaidOutText& text, bool black = true,
+                EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
@@ -343,14 +355,16 @@ class GfxRenderer {
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style, int8_t tracking = 0,
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
+  int getTextAdvanceX(int fontId, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode mode = TextMeasureMode::Layout) const;
 
-  // The shaped form drawText renders `text` in: complex-script runs as glyph
-  // tokens (ShapingTokens.h). Returns false, leaving `out` untouched, when
-  // the font cannot shape `text`; drawText then reorders the logical text
-  // itself. The result is tied to this font and style; drawText and
-  // getTextAdvanceX take it like any other string, without shaping it again.
-  // Layout stores it in the page cache so page turns never shape.
-  bool shapeForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
+  // The form getTextAdvanceX measures a complex-script `text` in: shaped
+  // glyph tokens (ShapingTokens.h), or reordered vowel signs when the font
+  // cannot shape it. Returns false, leaving `out` untouched, when that form
+  // is `text` itself. Tied to this font and style; layout stores it in the
+  // page cache as a LaidOutText display form.
+  bool resolveForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
 
   // While one of these is alive, repeated runs shape once (see
   // ComplexShaper::beginMemo). Scope it to a paragraph's layout.
@@ -361,6 +375,16 @@ class GfxRenderer {
     ShapingMemoScope(const ShapingMemoScope&) = delete;
     ShapingMemoScope& operator=(const ShapingMemoScope&) = delete;
   };
+
+ private:
+  // drawText and getTextAdvanceX once `text` is the visual stream (bidi
+  // resolved, complex scripts shaped) and `resolvedFontId` the font it draws in.
+  void drawVisualText(int fontId, int resolvedFontId, int x, int y, const char* text, bool black,
+                      EpdFontFamily::Style style, int8_t tracking) const;
+  int measureVisualText(int resolvedFontId, const char* text, EpdFontFamily::Style style, int8_t tracking,
+                        TextMeasureMode mode) const;
+
+ public:
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   int getLineHeight(int fontId, float compression) const;

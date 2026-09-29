@@ -220,6 +220,23 @@ TEST_F(ComplexShaperTest, MemoReusesRunsWithinAScope) {
   EXPECT_EQ(after.reusedRuns - before.reusedRuns, 1u);
 }
 
+TEST_F(ComplexShaperTest, MemoRepeatsAFailureUntilTheScopeEnds) {
+  // Layout measures a word, then stores the form it draws: both passes must
+  // agree even when memory frees up in between.
+  const char* word = kBengaliShaping[1].utf8;
+  std::string out;
+  ComplexShaper::beginMemo();
+  ComplexShaper::setMemoryBudget(16 * 1024);  // smaller than the layout tables
+  EXPECT_FALSE(shaper.shape(word, out));
+  ComplexShaper::setMemoryBudget(4 << 20);
+  for (int i = 0; i < 100; i++) ASSERT_FALSE(shaper.shape(word, out));
+  ComplexShaper::endMemo();
+
+  bool shaped = false;
+  for (int i = 0; i < 100 && !shaped; i++) shaped = shaper.shape(word, out);
+  EXPECT_TRUE(shaped) << "outside the scope the shaper retries after its backoff";
+}
+
 TEST_F(ComplexShaperTest, SizesShareOneFace) {
   ComplexShaper larger;
   larger.setBlobSource(loadFixture, nullptr, kFixtureKey);

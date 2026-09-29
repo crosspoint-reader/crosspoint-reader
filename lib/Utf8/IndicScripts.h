@@ -204,13 +204,15 @@ constexpr bool isDependentSign(const uint32_t cp) {
   return false;
 }
 
-// False when a line break between `prev` and `cur` would split a syllable:
-// before a sign or joiner, or after a virama or ZWJ (which bind the next
-// consonant into a conjunct). Each half of a split syllable would shape on
-// its own. Everything else may break.
+// False when a line break between `prev` and `cur` would split an Indic
+// syllable: before a dependent sign, after a virama, or at a joiner inside
+// Indic text (after a letter it steers, or before the consonant a ZWJ binds).
+// Each half of a split syllable would shape on its own. Joiners in other
+// text, such as Persian ZWNJ or emoji ZWJ sequences, never block a break.
 constexpr bool syllableBreakAllowed(const uint32_t prev, const uint32_t cur) {
-  const bool curBindsBack = isDependentSign(cur) || cur == ZWNJ || cur == ZWJ;
-  return !curBindsBack && !isVirama(prev) && prev != ZWJ;
+  if (isDependentSign(cur) || isVirama(prev)) return false;
+  if ((cur == ZWNJ || cur == ZWJ) && scriptOf(prev) != nullptr) return false;
+  return !(prev == ZWJ && scriptOf(cur) != nullptr);
 }
 
 }  // namespace indic

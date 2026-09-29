@@ -12,6 +12,7 @@
 #include <new>
 #include <vector>
 
+#include "Fnv1a.h"
 #include "ShapingTokens.h"
 
 namespace {
@@ -149,15 +150,6 @@ CacheSlot* gSlots = nullptr;
 uint8_t* gArena = nullptr;
 uint32_t gArenaHead = 0;
 
-uint32_t fnv1a(const char* data, const size_t length) {
-  uint32_t hash = 2166136261u;
-  for (size_t i = 0; i < length; i++) {
-    hash ^= static_cast<uint8_t>(data[i]);
-    hash *= 16777619u;
-  }
-  return hash;
-}
-
 bool ensureCache() {
   if (gSlots != nullptr) return true;
   gSlots = static_cast<CacheSlot*>(budgetedMalloc(sizeof(CacheSlot) * kCacheSlots));
@@ -202,8 +194,10 @@ void cacheStore(const ComplexShaper* owner, const uint32_t scale, const uint32_t
 
 // Unlike the direct-mapped cache, the memo never evicts: a paragraph measured
 // in one pass and flattened into page-cache lines in the next shapes every run
-// twice, and the gap between the two can exceed the cache. Entries are
-// appended until the cap and then the memo simply stops growing.
+// twice, and the gap between the two can exceed the cache. It also records
+// every text that failed to shape (an entry with no output), so the second
+// pass fails it too and draws the fallback the first pass measured. Entries
+// are appended until the cap and then the memo simply stops growing.
 #ifdef BOARD_HAS_PSRAM
 constexpr uint32_t kMemoMaxEntries = 2048;
 constexpr uint32_t kMemoMaxBytes = 128 * 1024;
@@ -220,12 +214,13 @@ uint32_t gMemoBytes = 0;
 uint32_t gMemoArenaCapacity = 0;
 uint16_t gMemoDepth = 0;
 
+// A shaped run, or with `failed` a text recorded as failing to shape.
 const CacheSlot* memoFind(const ComplexShaper* owner, const uint32_t scale, const uint32_t hash, const char* run,
-                          const size_t length) {
+                          const size_t length, const bool failed = false) {
   for (uint32_t i = 0; i < gMemoCount; i++) {
     const CacheSlot& e = gMemo[i];
-    if (e.hash == hash && e.owner == owner && e.scale == scale && e.inLength == length &&
-        memcmp(gMemoArena + e.offset, run, length) == 0) {
+    if ((e.outLength == 0) == failed && e.hash == hash && e.owner == owner && e.scale == scale &&
+        e.inLength == length && memcmp(gMemoArena + e.offset, run, length) == 0) {
       return &e;
     }
   }
@@ -423,7 +418,7 @@ SharedFace* buildTableFace(const ComplexShaper::TableLoader loader, void* ctx, u
   uint32_t lengths[kTableCount] = {};
   uint8_t* head = loader(ctx, kShapingTables[0], &lengths[0]);
   if (head == nullptr) return nullptr;
-  *key = fnv1a(reinterpret_cast<const char*>(head), lengths[0]) | 1u;  // never 0
+  *key = fnv1a::hash(head, lengths[0]) | 1u;  // never 0
   if (SharedFace* existing = findFace(*key)) {
     budgetedFree(head);
     return existing;
@@ -628,7 +623,7 @@ ComplexShaper::Coverage ComplexShaper::coverage(const indic::ScriptInfo& script)
 
 bool ComplexShaper::appendShapedRun(const char* run, const size_t length, const indic::ScriptInfo& script,
                                     std::string& out) {
-  const uint32_t hash = fnv1a(run, length);
+  const uint32_t hash = fnv1a::hash(run, length);
   if (const CacheSlot* hit = memoFind(this, scale26_6_, hash, run, length)) {
     out.append(reinterpret_cast<const char*>(gMemoArena + hit->offset + hit->inLength), hit->outLength);
     gReusedRuns++;
@@ -688,7 +683,17 @@ bool ComplexShaper::shape(const char* utf8, std::string& out) {
   if (!containsComplexScript(utf8)) return false;
   std::lock_guard<std::recursive_mutex> lock(shaperMutex());
   if (unusable_ || !hasSource() || scale26_6_ == 0) return false;
+  if (gMemoDepth == 0) return shapeRuns(utf8, out);
 
+  const size_t length = strlen(utf8);
+  const uint32_t hash = fnv1a::hash(utf8, length);
+  if (memoFind(this, scale26_6_, hash, utf8, length, /*failed=*/true) != nullptr) return false;
+  if (shapeRuns(utf8, out)) return true;
+  memoStore(this, scale26_6_, hash, utf8, length, "", 0);
+  return false;
+}
+
+bool ComplexShaper::shapeRuns(const char* utf8, std::string& out) {
   out.clear();
   out.reserve(strlen(utf8) * 4);
   bool shapedAny = false;
@@ -767,7 +772,8 @@ size_t ComplexShaper::releaseAll() {
   releaseEveryFaceLocked();
   releaseCache();
   releaseBuffer();
-  memoFree();  // later runs in the scope re-shape; nothing reads a freed entry
+  // The layout memo stays until its scope ends: dropping it would let the
+  // scope's second pass shape differently from its first.
   return before - (gCurrent + gPlanBytes);
 }
 

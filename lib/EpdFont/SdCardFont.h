@@ -144,10 +144,7 @@ class SdCardFont {
   void resetStats();
   const Stats& getStats() const { return stats_; }
 
-  // True when any style carries OpenType shaping data (complex scripts).
-  bool hasShaping() const;
-
-  // Content hash of the file header + style TOC entries (computed during load).
+  // Content hash of the file header + style TOC entries + shaping blobs (computed during load).
   // Used to generate deterministic font IDs for section cache invalidation.
   uint32_t contentHash() const { return contentHash_; }
 

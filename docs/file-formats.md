@@ -99,10 +99,10 @@ tables (lib/OtShaper), and
 other fonts reorder pre-base vowel signs; both change word widths, so cached
 word positions from version 48 no longer match. TextBlock's former `hasFocus`
 byte became a flags byte: bit 1 adds a `displayBytes` count, a `displayOff[]`
-table and a `display[]` blob that hold each complex-script word in its drawn
-form (ShapingTokens.h glyph, advance and offset tokens), so page renders draw
-shaped words without running the shaper. Words without a display entry draw
-`text[]` as before.
+table and a `display[]` blob that hold each complex-script word in the form
+layout measured it in (ShapingTokens.h glyph, advance and offset tokens, or
+reordered vowel signs), so page renders draw exactly that without running the
+shaper. Words without a display entry draw `text[]` as before.
 
 ### Version 48
 
@@ -297,7 +297,7 @@ struct TextBlock {
         }
         char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
         if ((flags & 2) != 0) {
-            char display[displayBytes] [[comment("Drawn form of complex-script words (shaped glyph tokens)")]];
+            char display[displayBytes] [[comment("Measured form of complex-script words (shaped glyph tokens or reordered text)")]];
         }
     }
 

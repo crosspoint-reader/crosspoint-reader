@@ -103,8 +103,10 @@ class ComplexShaper {
 
   // Layout memo: between beginMemo() and endMemo() every shaped run is also
   // kept in a scope-sized arena, so a paragraph that is measured and then
-  // shaped again for its page cache runs the shaper once per distinct run.
-  // Scopes nest; the memo is freed when the outermost one ends.
+  // shaped again for its page cache runs the shaper once per distinct run,
+  // and a text that failed to shape fails again rather than shaping once
+  // memory frees up. Scopes nest; the memo is freed when the outermost one
+  // ends (releaseAll() leaves it alone).
   static void beginMemo();
   static void endMemo();
 
@@ -119,6 +121,8 @@ class ComplexShaper {
   // Whether this font's layout tables map `script`; Unknown when the face
   // cannot be built right now.
   Coverage coverage(const indic::ScriptInfo& script);
+  // shape() without the layout memo's record of failures.
+  bool shapeRuns(const char* utf8, std::string& out);
   bool appendShapedRun(const char* run, size_t length, const indic::ScriptInfo& script, std::string& out);
   void releaseLocked();
 

@@ -33,11 +33,11 @@
 // Each word is stored NUL-terminated so render() can hand `text + textOff[i]`
 // straight to C APIs (drawText) with no std::string materialization.
 //
-// Display text: shaped complex-script words are stored a second time in
-// the form drawText renders them, as shaped glyph tokens (see
-// GfxRenderer::shapeForDisplay), so a page turn draws them without running the
-// shaper. wordText() stays the logical text for dictionary lookup and text
-// extraction. Absent entirely when no word on the line needs it.
+// Display text: complex-script words are stored a second time in the form
+// layout measured them in, usually shaped glyph tokens (see
+// GfxRenderer::resolveForDisplay), so a page turn draws exactly that without
+// running the shaper. wordText() stays the logical text for dictionary lookup
+// and text extraction. Absent entirely when no word on the line needs it.
 //
 // Focus split semantics (unchanged from the vector layout): boundary N > 0
 // means the first N bytes of word i render bold, the remainder in the base
@@ -112,9 +112,10 @@ class TextBlock final : public Block {
   uint16_t wordCount() const { return numWords; }
   // NUL-terminated by construction; safe to pass to C APIs directly.
   const char* wordText(const uint16_t i) const { return textArr + textOffArr[i]; }
-  // What render() draws: the stored display form, else the logical text.
-  const char* displayText(const uint16_t i) const {
-    return displayPresent && displayOffArr[i] != NO_DISPLAY ? displayArr + displayOffArr[i] : wordText(i);
+  // The form layout measured word i in (GfxRenderer::resolveForDisplay), or
+  // nullptr when it measured wordText(i) itself.
+  const char* displayForm(const uint16_t i) const {
+    return displayPresent && displayOffArr[i] != NO_DISPLAY ? displayArr + displayOffArr[i] : nullptr;
   }
   uint16_t wordTextLen(const uint16_t i) const {
     const uint16_t end = (i + 1 < numWords) ? textOffArr[i + 1] : textBytes;

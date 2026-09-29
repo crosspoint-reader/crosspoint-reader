@@ -604,13 +604,6 @@ bool SdCardFont::onShape(void* ctx, const char* utf8, std::string* out) {
   return shaper != nullptr && shaper->shape(utf8, *out);
 }
 
-bool SdCardFont::hasShaping() const {
-  for (const auto& s : styles_) {
-    if (s.present && s.shaper) return true;
-  }
-  return false;
-}
-
 // --- Compute per-style file offsets from a base data offset ---
 
 void SdCardFont::computeStyleFileOffsets(PerStyle& s, uint32_t baseOffset) {
@@ -877,7 +870,10 @@ bool SdCardFont::load(const char* path) {
 
     s.epdFont.data = &s.stubData;
     // A bad shaping section only costs complex-script shaping, not the font.
-    if (shapingOffsets[i] != 0) loadShapingSection(file, i, shapingOffsets[i]);
+    // Page caches store the layout font's glyph IDs, so its hash joins the font's.
+    if (shapingOffsets[i] != 0 && loadShapingSection(file, i, shapingOffsets[i])) {
+      contentHash_ = fnv1a(reinterpret_cast<const uint8_t*>(&s.shapingBlobKey), sizeof(s.shapingBlobKey), contentHash_);
+    }
     applyGlyphMissCallback(i);
   }
 
