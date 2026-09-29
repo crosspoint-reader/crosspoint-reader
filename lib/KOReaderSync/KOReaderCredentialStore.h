@@ -31,6 +31,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
   bool sendMetadata = false;                                        // Send document metadata with progress sync
+  bool syncClippings = false;                                       // Opt-in crosspoint-sync extension
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
 
   // Private constructor for singleton
@@ -75,6 +76,9 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Send metadata setting
   void setSendMetadata(bool enabled);
   bool getSendMetadata() const { return sendMetadata; }
+
+  void setSyncClippings(bool enabled) { syncClippings = enabled; }
+  bool getSyncClippings() const { return syncClippings; }
 
   // Sync behavior
   void setSyncBehavior(KOReaderSyncBehavior behavior);

@@ -93,3 +93,32 @@ TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenDigitAndHangul) {
   const std::vector<std::vector<std::string>> expected{{"가나다", "12"}, {"월부터", "자"}};
   EXPECT_EQ(wordsOf(lines), expected);
 }
+
+TEST(ClippingAnchors, SourceCoverageSurvivesWrappingAndHyphenation) {
+  Hyphenator::setPreferredLanguage("ko");
+  GfxRenderer renderer;
+  for (const int width : {50, 180}) {
+    for (const bool hyphenation : {false, true}) {
+      BlockStyle style;
+      style.textIndentDefined = true;
+      ParsedText text(false, hyphenation, false, style);
+      text.addWord("가나", EpdFontFamily::REGULAR, false, false, 100);
+      text.addWord("다라마바사아", EpdFontFamily::REGULAR, false, false, 103);
+      text.addWord("자", EpdFontFamily::REGULAR, false, false, 110);
+      unsigned coverage[11] = {};
+      text.layoutAndExtractLines(renderer, 0, width, [&](std::unique_ptr<TextBlock> block, auto) {
+        ASSERT_TRUE(block->valid());
+        for (uint16_t i = 0; i < block->wordCount(); ++i) {
+          const auto range = block->wordSourceRange(i);
+          ASSERT_GE(range.start, 100u);
+          ASSERT_LE(range.end, 111u);
+          ASSERT_LT(range.start, range.end);
+          for (uint32_t offset = range.start; offset < range.end; ++offset) ++coverage[offset - 100];
+        }
+      });
+      for (unsigned i = 0; i < 11; ++i) {
+        EXPECT_EQ(coverage[i], i == 2 || i == 9 ? 0u : 1u) << "width=" << width << " offset=" << i;
+      }
+    }
+  }
+}

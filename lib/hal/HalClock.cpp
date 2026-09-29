@@ -60,6 +60,17 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   return true;
 }
 
+bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const {
+  struct tm local;
+  if (!localTime(local)) return false;
+  year = static_cast<uint16_t>(local.tm_year + 1900);
+  month = static_cast<uint8_t>(local.tm_mon + 1);
+  day = static_cast<uint8_t>(local.tm_mday);
+  hour = static_cast<uint8_t>(local.tm_hour);
+  minute = static_cast<uint8_t>(local.tm_min);
+  return true;
+}
+
 bool HalClock::formatTime(char* buf, size_t bufSize, bool use12Hour) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
   struct tm local;

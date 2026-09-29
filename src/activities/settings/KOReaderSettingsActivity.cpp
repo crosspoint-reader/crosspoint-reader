@@ -15,9 +15,10 @@
 namespace fui = freeink::ui;
 
 namespace {
-const StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
-    StrId::STR_USERNAME,      StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL, StrId::STR_DOCUMENT_MATCHING,
-    StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR, StrId::STR_SIGN_UP,         StrId::STR_AUTHENTICATE};
+constexpr StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
+    StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL,
+    StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,
+    StrId::STR_SYNC_CLIPPINGS,    StrId::STR_SIGN_UP,       StrId::STR_AUTHENTICATE};
 }  // namespace
 
 KOReaderSettingsActivity::KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -97,6 +98,10 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (index == 6) {
+    KOREADER_STORE.setSyncClippings(!KOREADER_STORE.getSyncClippings());
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (index == 7) {
     // Sign Up - create a new account on the sync server with the entered credentials
     if (!KOREADER_STORE.hasCredentials()) {
       return;
@@ -104,7 +109,7 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
     startActivityForResult(
         std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::SIGN_UP),
         [](const ActivityResult&) {});
-  } else if (index == 7) {
+  } else if (index == 8) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -145,7 +150,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     } else if (i == 3) {
       rowValues_[i] =
           KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY);
-    } else if (i == 4) {
+    } else if (i == 4 || i == 6) {
       rowValues_[i].clear();
     } else if (i == 5) {
       rowValues_[i] =
@@ -156,6 +161,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
   }
   GUI.setCheckboxRow(rowItems_[4], KOREADER_STORE.getSendMetadata());
+  GUI.setCheckboxRow(rowItems_[6], KOREADER_STORE.getSyncClippings());
 
   fui::ListProps props;
   props.items = rowItems_;

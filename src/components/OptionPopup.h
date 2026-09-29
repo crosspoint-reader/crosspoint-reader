@@ -67,10 +67,6 @@ class OptionPopup {
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
-    // Match the render cap: only the first MAX_OPTIONS rows exist on screen,
-    // so button wrap-around must not select an invisible option.
-    const int total = static_cast<int>(ownedStrings.size());
-    const int count = total > MAX_OPTIONS ? MAX_OPTIONS : total;
     const freeink::ui::InputSnapshot snap = touchSnapshotFrom(input);
     if (snap.touchPressed || snap.touchReleased || snap.touchHeld) {
       // Interactions are registered on the render task; only route once the
@@ -112,20 +108,30 @@ class OptionPopup {
       return true;
     }
 
-    if (input.wasPressed(MappedInputManager::Button::NavPrevious)) {
+    return handleButtons(input.wasPressed(MappedInputManager::Button::NavPrevious),
+                         input.wasPressed(MappedInputManager::Button::NavNext),
+                         input.wasReleased(MappedInputManager::Button::Confirm),
+                         input.wasReleased(MappedInputManager::Button::Back), requestUpdate);
+  }
+
+  bool handleButtons(const bool previous, const bool next, const bool confirm, const bool back,
+                     const std::function<void()>& requestUpdate) {
+    if (!active) return false;
+    const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
+    if (previous) {
       selectedIndex = (selectedIndex - 1 + count) % count;
       requestUpdate();
       return true;
-    } else if (input.wasPressed(MappedInputManager::Button::NavNext)) {
+    } else if (next) {
       selectedIndex = (selectedIndex + 1) % count;
       requestUpdate();
       return true;
-    } else if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+    } else if (confirm) {
       active = false;
       if (onSelectCallback) onSelectCallback(selectedIndex);
       requestUpdate();
       return true;
-    } else if (input.wasReleased(MappedInputManager::Button::Back)) {
+    } else if (back) {
       active = false;
       requestUpdate();
       return true;

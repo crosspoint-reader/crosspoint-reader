@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+inline constexpr int O_WRONLY = 1, O_CREAT = 2, O_TRUNC = 4, O_APPEND = 8, O_RDWR = 16, O_AT_END = 32;
+
 namespace fake {
 
 struct Node {
@@ -148,6 +150,16 @@ class HalFile {
     return true;
   }
   bool seek(const size_t offset) { return seekSet(offset); }
+  bool seekCur(const size_t offset) { return seek(pos + offset); }
+  int available() const { return node ? static_cast<int>(node->bytes.size() - std::min(pos, node->bytes.size())) : -1; }
+  size_t size() const { return fileSize(); }
+  void flush() {}
+  bool truncate(const size_t size) {
+    if (!node || size > node->bytes.size()) return false;
+    node->bytes.resize(size);
+    pos = std::min(pos, size);
+    return true;
+  }
   int read(void* out, size_t size) {
     fake::reads++;
     if (size == 0) return 0;
@@ -196,6 +208,16 @@ class HalStorage {
     }
     return file;
   }
+  HalFile open(const char* path, const int flags) {
+    if (!exists(path) && (flags & O_CREAT)) fake::add(path, "");
+    auto file = open(path);
+    if (file && (flags & O_TRUNC)) file.node->bytes.clear();
+    if (file && (flags & (O_APPEND | O_AT_END))) file.pos = file.node->bytes.size();
+    return file;
+  }
+  bool openFileForRead(const char* module, const std::string& path, HalFile& file) {
+    return openFileForRead(module, path.c_str(), file);
+  }
   bool openFileForRead(const char*, const char* path, HalFile& file) {
     file = open(path);
     return bool(file);
@@ -211,8 +233,17 @@ class HalStorage {
   bool remove(const char* path) { return fake::files.erase(path) != 0; }
   bool rename(const char* from, const char* to) {
     if (fake::fail(fake::failRename) || !exists(from) || exists(to)) return false;
-    fake::files[to] = fake::files[from];
-    fake::files.erase(from);
+    std::vector<std::pair<std::string, std::shared_ptr<fake::Node>>> moved;
+    moved.reserve(fake::files.size());
+    const std::string prefix = std::string(from) + "/";
+    for (auto it = fake::files.begin(); it != fake::files.end();) {
+      if (it->first == from || it->first.starts_with(prefix)) {
+        moved.emplace_back(std::string(to) + it->first.substr(std::strlen(from)), it->second);
+        it = fake::files.erase(it);
+      } else
+        ++it;
+    }
+    for (auto& [path, node] : moved) fake::files[path] = std::move(node);
     return true;
   }
 };

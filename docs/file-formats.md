@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 49
+
+Each TextBlock arena starts with one 8-byte source range per word (two uint32
+chapter-visible Unicode-codepoint offsets, start inclusive and end exclusive).
+Ranges follow words through BiDi ordering and line wrapping. Old section caches
+are rebuilt automatically; no book or progress file is removed.
+
 ### Version 48
 
 Version 48 keeps the version 47 serialized layout unchanged. It was bumped
@@ -507,3 +514,25 @@ make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
+
+## Clipping store (`/.crosspoint/clippings/epub_<path-hash>.bin`)
+
+Version 4 retains the version 3 header and page-local range fields. After each
+record's layout signature it stores `startOffset` and `endOffset` (uint32 chapter
+codepoint range, end exclusive; UINT32_MAX means unavailable), `syncRevision`
+(uint64), `pendingUpload` (one byte), and a 65-byte NUL-terminated sync ID. The
+chapter title, text length, and text follow. Versions 1–3 remain readable.
+
+Stable IDs are saved before upload. A sibling `.deleted` file stores fixed
+65-byte IDs awaiting server acknowledgement. Deletions are queued before the
+local record is removed and retried on the next enabled manual sync. A `.bak`
+file is recovered if power interrupted replacement of the main store.
+
+Clipping header strings are limited to 4 KiB on both reads and writes. A failed
+load leaves no usable index and disables writes until a successful load. The
+index is allocated with checked, bounded growth and released on unload.
+
+Book moves rename the store and its `.deleted` journal (plus recovery sidecars)
+together. The stored source path is informational and is refreshed on the next
+save; the current file path selects the store. Local book deletion cleans up all
+of these sidecars but preserves the independent `My Clippings.txt` export.

@@ -43,6 +43,9 @@ class HalClock {
   // Returns false if RTC is not available.
   bool formatTime(char* buf, size_t bufSize, bool use12Hour = false) const;
 
+  // Get the current local date and time from the same cached RTC sample used by getTime().
+  bool getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const;
+
   // Sync the RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
   // Returns true if the RTC was successfully updated.

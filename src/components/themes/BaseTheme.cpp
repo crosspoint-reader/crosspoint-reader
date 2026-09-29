@@ -14,6 +14,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "clippings/SelectionGeometry.h"
 #include "components/HeaderBackTapTarget.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -951,5 +952,23 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
     const int lineW = textWidth + metrics.textFieldHorizontalPadding * 2;
     const int lineStart = rect.x + (rect.width - lineW) / 2;
     renderer.drawLine(lineStart, lineY, lineStart + lineW + metrics.textFieldLineEndOffset, lineY, thickness, true);
+  }
+}
+
+void BaseTheme::drawSelectionHandle(const GfxRenderer& renderer, const Rect rect, const bool start) {
+  const int radius = rect.width / 2;
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, radius, Color::Black);
+  renderer.fillRect(start ? rect.x + radius : rect.x, rect.y, radius, radius);
+}
+
+void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const char* labels[] = {tr(STR_LOOKUP), tr(STR_CLIP), tr(STR_BOOKMARK_OPTION)};
+  for (int i = 0; i < 3; ++i) {
+    const Rect button = selectionGeometry::button(rect, i, metrics.menuSpacing);
+    renderer.fillRoundedRect(button.x, button.y, button.width, button.height, metrics.controlRadius, Color::White);
+    renderer.drawRoundedRect(button.x, button.y, button.width, button.height, 1, metrics.controlRadius, true);
+    UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[i], 2, true,
+                                     EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::CENTER);
   }
 }

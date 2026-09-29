@@ -49,7 +49,7 @@ class ParsedText {
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
   // uint16_t deltas from a shared base to keep this layout-only metadata small.
   // Pathological spans wider than uint16_t use sparse rebases; rendered
-  // TextBlocks do not carry any of this metadata.
+  // TextBlocks retain absolute ranges for portable clipping anchors.
   struct VisibleOffsetRebase {
     size_t wordIndex;
     uint32_t base;

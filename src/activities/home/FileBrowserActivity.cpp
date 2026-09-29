@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -242,8 +243,7 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
 
   if (!file.isDirectory()) {
     file.close();
-    clearBookCache(fullPath);
-    return Storage.remove(fullPath.c_str());
+    return removeBookFile(fullPath);
   }
   file.close();
 
@@ -300,8 +300,7 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
       if (isDir) {
         stack.push_back({std::move(entryPath), false});
       } else {
-        clearBookCache(entryPath);
-        if (!Storage.remove(entryPath.c_str())) {
+        if (!removeBookFile(entryPath)) {
           LOG_ERR("FileBrowser", "Failed to remove file: %s", entryPath.c_str());
           return false;
         }
@@ -486,7 +485,7 @@ void FileBrowserActivity::renameSelectedFile(const std::string& oldPath, const s
     rollBackStatePath(oldCachePath, newCachePath, cacheMoved);
     return;
   }
-  if (!Storage.rename(oldPath.c_str(), newPath.c_str())) {
+  if (!ClippingStore::moveBook(oldPath, newPath)) {
     LOG_ERR("FileBrowser", "Failed to rename file: %s -> %s", oldPath.c_str(), newPath.c_str());
     rollBackStatePath(oldBookmarkPath, newBookmarkPath, bookmarksMoved);
     rollBackStatePath(oldCachePath, newCachePath, cacheMoved);
