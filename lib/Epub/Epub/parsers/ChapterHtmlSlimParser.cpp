@@ -121,12 +121,7 @@ uint16_t parseTableSpan(const char* value) {
   return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
 }
 
-// Returns true if the HTML element is a purely inline, non-navigable wrapper.
-// IDs on these elements are never meaningful navigation targets in epub content.
-// Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
-// of such IDs for progress tracking or internal bookkeeping, and recording each one
-// as a navigation anchor exhausts the heap on memory-constrained devices.
-// Block-level, sectioning, and structural elements are always considered navigable.
+// Span IDs are often converter bookkeeping; retain them only for known targets.
 bool isNonNavigableInlineElement(const char* name) { return strcmp(name, "span") == 0; }
 
 bool isInternalEpubLink(const char* href) {
@@ -744,14 +739,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // Defer both anchor recording and TOC page breaks until startNewTextBlock,
         // after the previous block is flushed to pages via makePages().
         //
-        // Skip IDs on non-navigable inline elements (e.g. <span>): these are never
-        // link targets in epub content, but reading-system converters can inject tens
-        // of thousands of them per chapter, exhausting the heap. TOC anchors are
-        // always recorded regardless of element type, since they drive page breaks.
+        // Converter-generated span IDs stay filtered. TOC anchors and the single
+        // requested fragment bypass the filter and cap without collecting every ID.
         const char* idValue = atts[i + 1];
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+        const bool isRequestedAnchor = !self->requestedAnchor.empty() && self->requestedAnchor == idValue;
+        if (isRequestedAnchor && !self->requestedAnchorSeen) {
+          self->requestedAnchorSeen = true;
+          self->requestedAnchorWaitingForText = true;
+        }
+        if (isTocAnchor || (!isRequestedAnchor && !isNonNavigableInlineElement(name) &&
+                            self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
           // Flush a displaced anchor before overwriting. Consecutive non-block elements
           // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
@@ -1658,6 +1657,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
+    if (self->requestedAnchorWaitingForText && countVisibleOffsets) {
+      self->requestedAnchorOffset = codepointOffset;
+      self->requestedAnchorWaitingForText = false;
+    }
+
     // Detect U+00A0 (non-breaking space, UTF-8: 0xC2 0xA0) or
     //        U+202F (narrow no-break space, UTF-8: 0xE2 0x80 0xAF).
     //
@@ -1787,10 +1791,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
                                         ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
                                         : self->viewportWidth;
+    size_t wordIndex = 0;
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
-        [self](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
-          self->addLineToPage(std::move(textBlock), offset);
+        [self, &wordIndex](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
+          self->addFlowLineToPage(std::move(textBlock), offset, wordIndex);
         },
         false, self->characterSpacing, self->wordSpacingPercent);
   }
@@ -2202,7 +2207,23 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return finishParse();
 }
 
-void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const uint32_t visibleOffset) {
+void ChapterHtmlSlimParser::addFlowLineToPage(std::unique_ptr<TextBlock> line, const uint32_t visibleOffset,
+                                              size_t& wordIndex) {
+  wordIndex += line->wordCount();
+  uint32_t visibleEnd = 0;
+  if (requestedAnchorOffset && line->wordCount() > 0) {
+    visibleEnd = currentTextBlock->getWordVisibleOffsetAt(wordIndex - 1);
+    const auto* ptr = reinterpret_cast<const unsigned char*>(line->wordText(line->wordCount() - 1));
+    while (*ptr) {
+      utf8NextCodepoint(&ptr);
+      ++visibleEnd;
+    }
+  }
+  addLineToPage(std::move(line), visibleOffset, visibleEnd);
+}
+
+void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const uint32_t visibleOffset,
+                                          const uint32_t visibleEnd) {
   const int lineHeight =
       renderer.getLineHeight(fontId, lineCompression) + line->getRubyShift(renderer.getFontAscenderSize(fontId));
 
@@ -2221,6 +2242,19 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
     currentPageVisibleOffsetSet = false;
   }
   setCurrentPageVisibleOffset(visibleOffset);
+
+  // Resolve after the line's page break, including targets inside a long paragraph.
+  if (requestedAnchorOffset && *requestedAnchorOffset >= visibleOffset &&
+      (*requestedAnchorOffset < visibleEnd || *requestedAnchorOffset == visibleOffset)) {
+    const auto existing = std::find_if(anchorData.begin(), anchorData.end(),
+                                       [this](const auto& entry) { return entry.first == requestedAnchor; });
+    if (existing != anchorData.end()) {
+      existing->second = static_cast<uint16_t>(completedPageCount);
+    } else {
+      anchorData.emplace_back(requestedAnchor, static_cast<uint16_t>(completedPageCount));
+    }
+    requestedAnchorOffset.reset();
+  }
 
   // Track cumulative words to assign footnotes to the page containing their anchor
   wordsExtractedInBlock += line->wordCount();
@@ -2286,10 +2320,11 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
+  size_t wordIndex = 0;
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
-        addLineToPage(std::move(textBlock), offset);
+      [this, &wordIndex](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
+        addFlowLineToPage(std::move(textBlock), offset, wordIndex);
       },
       true, characterSpacing, wordSpacingPercent);
 

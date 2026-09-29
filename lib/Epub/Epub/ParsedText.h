@@ -129,6 +129,7 @@ class ParsedText {
   // True once any word was dropped because the text arena could not allocate.
   // Callers must treat the block as incomplete and fail the section build.
   bool hadDroppedWords() const { return droppedWords; }
+  uint32_t getWordVisibleOffsetAt(size_t wordIndex) const { return visibleOffsetAt(wordIndex); }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                              bool includeLastLine = true, int8_t characterSpacing = 0,

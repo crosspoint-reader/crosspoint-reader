@@ -7,6 +7,7 @@
 #include <climits>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -124,6 +125,10 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;          // deferred until after previous text block is flushed
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
+  std::string requestedAnchor;          // one fragment explicitly requested by navigation
+  bool requestedAnchorSeen = false;
+  bool requestedAnchorWaitingForText = false;
+  std::optional<uint32_t> requestedAnchorOffset;
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
   // Canonical reading-position counter: zero-based Unicode codepoints in visible
@@ -193,7 +198,8 @@ class ChapterHtmlSlimParser {
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
       const bool embeddedStyle, const std::string& contentBase, const std::string& imageBasePath,
       const uint8_t imageRendering = 0, std::vector<std::string> tocAnchors = {},
-      const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
+      const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr,
+      const std::string& requestedAnchor = {})
 
       : epub(epub),
         filepath(filepath),
@@ -213,7 +219,8 @@ class ChapterHtmlSlimParser {
         imageRendering(imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
-        tocAnchors(std::move(tocAnchors)) {}
+        tocAnchors(std::move(tocAnchors)),
+        requestedAnchor(requestedAnchor) {}
 
   ~ChapterHtmlSlimParser();
   void setTextSpacing(const int8_t character, const uint8_t wordPercent) {
@@ -235,7 +242,8 @@ class ChapterHtmlSlimParser {
   bool finishParse();  // flush the trailing page and tear down; returns true
   void abortParse();   // tear down without flushing (error / abandon)
 
-  void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
+  void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset, uint32_t visibleEnd = 0);
+  void addFlowLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset, size_t& wordIndex);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page

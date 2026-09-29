@@ -260,9 +260,10 @@ bool Section::clearCache() const {
   return true;
 }
 
-bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn,
+                                const std::string& requestedAnchor) {
   // One-shot build: start, then lay out the whole section in a single pass.
-  if (!startBuild(spec, popupFn)) {
+  if (!startBuild(spec, popupFn, requestedAnchor)) {
     return false;
   }
   if (!buildSomeMore(0)) {  // 0 = build to completion
@@ -271,7 +272,8 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
   return buildComplete_;
 }
 
-bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn,
+                         const std::string& requestedAnchor) {
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
@@ -441,7 +443,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
             {this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
       },
       spec.embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors),
-      popupFn, ctxPtr->cssParser);
+      popupFn, ctxPtr->cssParser, requestedAnchor);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     if (ctx->cssParser) ctx->cssParser->clear();
@@ -499,7 +501,7 @@ bool Section::hasHtmlCache() const {
 std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string& anchor) const {
   if (!build_ || !build_->parser) return std::nullopt;
   for (const auto& [key, page] : build_->parser->getAnchors()) {
-    if (key == anchor) return page;
+    if (key == anchor && page < builtPageCount_) return page;
   }
   return std::nullopt;
 }

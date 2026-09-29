@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <set>
 #include <string>
@@ -42,7 +43,96 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
                                &cssParser};
 
   void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(false); }
+
+  uint16_t parsedPages = 0;
+  std::optional<uint16_t> targetPage;
+
+  bool parseHtml(const std::string& html) {
+    filepath = (std::filesystem::temp_directory_path() /
+                (::testing::UnitTest::GetInstance()->current_test_info()->name() + std::string(".xhtml")))
+                   .string();
+    {
+      std::ofstream output(filepath);
+      output << html;
+    }
+    parser.viewportHeight = 32;
+    parser.completePageFn = [this](std::unique_ptr<Page> page, auto, auto, auto) {
+      for (const auto& element : page->elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& block = *static_cast<const PageLine&>(*element).getBlock();
+        for (uint16_t word = 0; word < block.wordCount(); ++word) {
+          if (std::string_view(block.wordText(word)) == "TARGET") targetPage = parsedPages;
+        }
+      }
+      ++parsedPages;
+    };
+    const bool ok = parser.parseAndBuildPages();
+    std::filesystem::remove(filepath);
+    return ok;
+  }
 };
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanFootnoteMapsToItsRenderedPage) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 40; ++i) html += "<p>Previous note text.</p>";
+  for (int i = 0; i < 10000; ++i) html += "<span id='kobo" + std::to_string(i) + "'></span>";
+  html += "<span id='id28'><div><p>TARGET</p></div><p>Footnote text.</p></span></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().first, "id28");
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, UnrequestedSpanFootnotesStayFiltered) {
+  ASSERT_TRUE(parseHtml("<html><body><span id='id28'><p>TARGET</p></span></body></html>"));
+  EXPECT_TRUE(parser.getAnchors().empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedInlineSpanInLongParagraphMapsToItsRenderedPage) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body><p>";
+  for (int i = 0; i < 1500; ++i) html += "Previous ";
+  html += "<span id='id28'> \n TARGET </span>following text.</p></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, MissingRequestedFragmentDoesNotCollectConverterIds) {
+  parser.requestedAnchor = "missing";
+  ASSERT_TRUE(parseHtml("<html><body><span id='other'><p>TARGET</p></span></body></html>"));
+  EXPECT_TRUE(parser.getAnchors().empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedTargetAndTocBypassOrdinaryAnchorCap) {
+  parser.requestedAnchor = "id28";
+  parser.tocAnchors = {"toc"};
+  std::string html = "<html><body>";
+  for (int i = 0; i < 1100; ++i) html += "<p id='p" + std::to_string(i) + "'>Text.</p>";
+  html += "<span id='id28'><p>TARGET</p></span><span id='toc'><p>Chapter.</p></span></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  const auto& anchors = parser.getAnchors();
+  ASSERT_EQ(anchors.size(), 1026u);
+  EXPECT_EQ(anchors[1024].first, "id28");
+  ASSERT_TRUE(targetPage.has_value());
+  EXPECT_EQ(anchors[1024].second, *targetPage);
+  EXPECT_EQ(anchors[1025].first, "toc");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, DuplicateRequestedSpanDoesNotBypassCapRepeatedly) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 2000; ++i) html += "<span id='id28'><p>Note.</p></span>";
+  html += "</body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, 0u);
+}
 
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
   ParsedText text(false);

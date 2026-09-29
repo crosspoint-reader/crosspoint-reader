@@ -1207,7 +1207,9 @@ void EpubReaderActivity::renderBook() {
       cachedChapterTotalPageCount = 0;
       cachedVisibleTextOffset.reset();
     }
-    const bool cacheComplete = cacheLoaded && !section->isPartial();
+    // Older caches can omit span targets; rebuild this section on a fragment miss.
+    const bool cacheComplete = cacheLoaded && !section->isPartial() &&
+                               (pendingAnchor.empty() || section->getPageForAnchor(pendingAnchor).has_value());
     const bool explicitOffsetJump = pendingOffsetJump.has_value();
     const std::optional<uint32_t> offsetJump =
         explicitOffsetJump ? pendingOffsetJump
@@ -1229,7 +1231,7 @@ void EpubReaderActivity::renderBook() {
           if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
         };
         GfxRenderer::FrameBufferLoan loan(renderer);
-        if (!section->createSectionFile(renderSpec, popupFn)) {
+        if (!section->createSectionFile(renderSpec, popupFn, pendingAnchor)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
           section.reset();
           loan.end();
@@ -1280,7 +1282,8 @@ void EpubReaderActivity::renderBook() {
           bool started;
           {
             GfxRenderer::FrameBufferLoan loan(renderer);
-            started = section->startBuild(renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); });
+            started = section->startBuild(
+                renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); }, pendingAnchor);
           }
           if (!started) {
             LOG_ERR("ERS", "Failed to start section build");
