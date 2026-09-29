@@ -90,6 +90,20 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 49
+
+Version 49 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
+shaping data form conjuncts, reph and positioned marks from the font's OpenType
+tables (lib/OtShaper), and
+other fonts reorder pre-base vowel signs; both change word widths, so cached
+word positions from version 48 no longer match. TextBlock's former `hasFocus`
+byte became a flags byte: bit 1 adds a `displayBytes` count, a `displayOff[]`
+table and a `display[]` blob that hold each complex-script word in its drawn
+form (ShapingTokens.h glyph, advance and offset tokens), so page renders draw
+shaped words without running the shaper. Words without a display entry draw
+`text[]` as before.
+
 ### Version 48
 
 Version 48 keeps the version 47 serialized layout unchanged. It was bumped
@@ -262,20 +276,29 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 hasFocus;
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v49)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+    if ((flags & 2) != 0) {
+        u16 displayBytes [[comment("Total size of display[], including one NUL per stored entry")]];
+    }
 
     if (wordCount > 0) {
         u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
         s16 wordXPos[wordCount];
-        if (hasFocus != 0) {
+        if ((flags & 1) != 0) {
             u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
         }
+        if ((flags & 2) != 0) {
+            u16 displayOff[wordCount] [[comment("Offset within display[], 0xFFFF = draw text[] as is")]];
+        }
         WordStyle wordStyle[wordCount];
-        if (hasFocus != 0) {
+        if ((flags & 1) != 0) {
             u8 wordFocusBoundary[wordCount] [[comment("UTF-8 byte boundary between bold prefix and suffix")]];
         }
         char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
+        if ((flags & 2) != 0) {
+            char display[displayBytes] [[comment("Drawn form of complex-script words (shaped glyph tokens)")]];
+        }
     }
 
     BlockStyle blockStyle;
@@ -507,3 +530,50 @@ make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
+
+## `.cpfont` shaping section
+
+A style that shapes an Indic script carries a shaping section after every
+style's bitmap data. Its absolute file offset is the style TOC's last `u32`
+(`shapingOffset`); 0 means the style has none. Readers that predate the
+section never look past the bitmaps.
+
+The section header is little-endian:
+
+| Field | Type | Meaning |
+|---|---|---|
+| magic | `char[4]` | `CPSH` |
+| version | `u16` | 1 |
+| reserved | `u16` | 0 |
+| ppem26_6 | `u32` | size the section was built for, in 26.6 pixels |
+| blobLength | `u32` | bytes of layout font that follow |
+| blobHash | `u32` | FNV-1a of the layout font; keys its flash slot and shared face |
+
+The layout font that follows is an OpenType font holding only `head`, `hhea`,
+`maxp`, `hmtx`, `cmap`, `GDEF`, `GSUB`, `GPOS` and `CPac`. Its glyph order is
+the one the style's glyph tokens (U+F0000 + glyph ID) index.
+
+### `CPac`: lookup filters
+
+`CPac` lets `lib/OtShaper` skip lookups and subtables that cannot match
+without computing filters on the device. A font without it (or whose counts
+do not match its lookups) has them computed on the heap instead.
+
+Every field is big-endian except the digest records:
+
+| Field | Type | Meaning |
+|---|---|---|
+| version | `u16` | 1 |
+| reserved | `u16` | 0 |
+| gsubLookups, gposLookups | `u16` each | lookups in GSUB and GPOS |
+| gsubSubtables, gposSubtables | `u32` each | subtables across those lookups |
+
+Then, for GSUB and then GPOS:
+
+1. one digest record per lookup: the glyphs any of its subtables can start at;
+2. one `u32` per lookup: the index of its first subtable record;
+3. one digest record per subtable.
+
+A digest record is HarfBuzz's set digest: three 64-bit masks (bit
+`(glyph >> shift) & 63`, shifts 4, 0 and 6), stored as little-endian `u64`s
+so the device can copy them into memory as they are.

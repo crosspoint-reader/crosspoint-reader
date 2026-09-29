@@ -1,6 +1,7 @@
 #include "ParsedText.h"
 
 #include <BidiUtils.h>
+#include <ComplexShaper.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -554,7 +555,9 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
-  if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0) {
+  // Complex-script words are never split: each half would shape on its own.
+  if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0 ||
+      ComplexShaper::containsComplexScript(word.c_str())) {
     pushToken(word, effectiveAttachToPrevious, effectiveNoSpaceBefore, /*focusBoundary=*/0, visibleTextOffset);
     if (wordStartsRtl) {
       hasRtlWord = true;
@@ -732,6 +735,9 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   if (words.empty()) {
     return;
   }
+  // Measuring words and flattening lines both shape complex-script runs; the
+  // memo makes the second pass reuse the first.
+  const GfxRenderer::ShapingMemoScope shapingMemo;
   // Stamped here rather than at construction: the parser replaces blockStyle as CSS resolves.
   blockStyle.characterSpacing = characterSpacing;
   this->wordSpacingPercent = wordSpacingPercent;
@@ -1712,6 +1718,15 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
+  // Complex-script words keep their drawn (shaped) form in the page cache, so
+  // page turns draw them without shaping. Empty when the line has none.
+  std::vector<std::string> lineDisplay;
+  for (size_t i = 0; i < lineWordCount; i++) {
+    if (!ComplexShaper::containsComplexScript(lineWords[i].c_str())) continue;
+    if (lineDisplay.empty()) lineDisplay.resize(lineWordCount);
+    renderer.shapeForDisplay(fontId, lineWords[i].c_str(), lineWordStyles[i], lineDisplay[i]);
+  }
+
   // Fast path: no word on this line carries focus emphasis, so pass empty boundary/suffixX
   // vectors. TextBlock pays zero per-word RAM cost for these annotations when they are empty.
   bool lineHasFocusSplit = false;
@@ -1726,7 +1741,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
     auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
                                               std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts),
-                                              std::move(lineLinks));
+                                              std::move(lineLinks), lineDisplay);
     if (!block || !block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
       // Latch through the same flag as addWord() OOM: the caller releases the
@@ -1754,7 +1769,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
-                                            std::move(lineRubyTexts), std::move(lineLinks));
+                                            std::move(lineRubyTexts), std::move(lineLinks), lineDisplay);
   if (!block || !block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
     droppedWords = true;  // see the non-focus branch above

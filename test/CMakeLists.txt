@@ -24,6 +24,10 @@ FetchContent_MakeAvailable(googletest)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+# lib/OtShaper, the Indic shaping engine, for tests that shape.
+file(GLOB OT_SHAPER_SOURCES ${REPO_ROOT}/lib/OtShaper/*.cpp)
+set(OT_SHAPER_INCLUDE_DIR ${REPO_ROOT}/lib/OtShaper)
+
 add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
@@ -43,6 +47,11 @@ add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
 add_subdirectory(utf8_compose)
+add_subdirectory(indic_text)
+add_subdirectory(ot_shaper)
+add_subdirectory(complex_shaper)
+add_subdirectory(flash_blob_cache)
+add_subdirectory(text_block_display)
 add_subdirectory(opds_filename)
 add_subdirectory(html_to_plain_text)
 add_subdirectory(library_text)

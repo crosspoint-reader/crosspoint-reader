@@ -1,11 +1,15 @@
 add_executable(SdCardFontTest
   SdCardFontTest.cpp
   ${REPO_ROOT}/lib/EpdFont/SdCardFont.cpp
+  ${REPO_ROOT}/lib/EpdFont/ComplexShaper.cpp
+  ${REPO_ROOT}/lib/EpdFont/FlashBlobCache.cpp
+  ${OT_SHAPER_SOURCES}
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 target_include_directories(SdCardFontTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/lib/EpdFont
+  ${OT_SHAPER_INCLUDE_DIR}
   ${REPO_ROOT}/lib/Utf8
   ${REPO_ROOT}/lib/Memory
 )
