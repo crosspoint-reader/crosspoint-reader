@@ -1673,6 +1673,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
+    // U+FEFF is discarded before selecting rendered anchor text.
+    if (static_cast<uint8_t>(s[i]) == 0xEF && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0xBB &&
+        static_cast<uint8_t>(s[i + 2]) == 0xBF) {
+      i += 2;
+      continue;
+    }
+
     if (self->requestedAnchorWaitingForText && countVisibleOffsets && isCodepointStart) {
       // Soft hyphens keep their source offsets but do not select rendered anchor text.
       const bool isSoftHyphen =
@@ -1737,20 +1744,6 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
       i += 2;  // Skip the remaining two bytes (0x80 0xAF)
       continue;
-    }
-
-    // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
-    const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
-    const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
-    const XML_Char FEFF_BYTE_3 = static_cast<XML_Char>(0xBF);
-
-    if (s[i] == FEFF_BYTE_1) {
-      // Check if the next two bytes complete the 3-byte sequence
-      if ((i + 2 < len) && (s[i + 1] == FEFF_BYTE_2) && (s[i + 2] == FEFF_BYTE_3)) {
-        // Sequence 0xEF 0xBB 0xBF found!
-        i += 2;    // Skip the next two bytes
-        continue;  // Move to the next iteration
-      }
     }
 
     // If we're about to run out of space, then cut the word off and start a new one.

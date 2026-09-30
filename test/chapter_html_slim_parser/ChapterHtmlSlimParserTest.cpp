@@ -316,6 +316,31 @@ TEST_F(ChapterHtmlSlimParserTest, RequestedGridSpanStartingWithSoftHyphenMapsToR
   EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanStartingWithFeffMapsToRenderedTextPage) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body><p>";
+  for (int i = 0; i < 1500; ++i) html += "Previous ";
+  html += "<span id='id28'>&#xFEFF;TARGET</span></p></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedGridSpanStartingWithFeffMapsToRenderedTextSlice) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 160;
+  std::string html = "<html><body><table><tr><td>";
+  for (int i = 0; i < 20; ++i) html += "Before ";
+  html += "<span id='id28'>&#xFEFF;TARGET</span></td><td>Other.</td></tr></table></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RequestedSpanAtGridInsertedHyphenBoundaryMapsToRemainderSlice) {
   Hyphenator::setPreferredLanguage("");
   parser.requestedAnchor = "id28";

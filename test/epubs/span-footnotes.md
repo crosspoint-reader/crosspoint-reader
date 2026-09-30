@@ -28,7 +28,7 @@ The host parser tests compare the selected anchor with the page actually holding
 its text, including a page boundary and an inline span inside a long paragraph.
 They also check the ordinary 1024-anchor cap, text-free structural targets beyond
 the cap, TOC preservation, hidden/skipped IDs, BiDi and inserted-hyphen line
-boundaries, leading soft hyphens, targets in buffered grid cells, missing targets
+boundaries, leading soft hyphens/U+FEFF, targets in buffered grid cells, missing targets
 and duplicate requested IDs. Anchor-map tests exercise completed negative lookups,
 reopen, partial builds, legacy encoding, long IDs and truncated records.
 
