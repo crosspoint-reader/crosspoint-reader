@@ -1,4 +1,5 @@
 #include <Epub/Page.h>
+#include <Epub/hyphenation/Hyphenator.h>
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
@@ -212,6 +213,69 @@ TEST_F(ChapterHtmlSlimParserTest, RequestedSpanInSecondGridColumnMapsToItsRowSli
   ASSERT_GT(*targetPage, 0u);
   ASSERT_EQ(parser.getAnchors().size(), 1u);
   EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanAtInsertedHyphenBoundaryMapsToRemainderPage) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.viewportWidth = 48;
+  ASSERT_TRUE(
+      parseHtml("<html><body><p style='text-indent:0'>abcd&#173;<span id='id28'>TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanAtSourceHyphenBoundaryMapsToRemainderPage) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.viewportWidth = 48;
+  ASSERT_TRUE(
+      parseHtml("<html><body><p style='text-indent:0'>abcd-<span id='id28'>TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanAtGridInsertedHyphenBoundaryMapsToRemainderSlice) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.viewportWidth = 160;
+  ASSERT_TRUE(
+      parseHtml("<html><body><table><tr><td>abcd&#173;<span id='id28'>TARGET</span>"
+                "</td><td>Other.</td></tr></table></body></html>",
+                16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, LogicalWordRangeExcludesInsertedHyphen) {
+  Hyphenator::setPreferredLanguage("");
+  ParsedText text(false, true);
+  text.addWord("abcd\u00ADTARGET", EpdFontFamily::REGULAR, false, false, 10);
+  std::vector<uint16_t> widths{88};
+  ASSERT_TRUE(text.hyphenateWordAtIndex(0, 48, renderer, 0, widths, false));
+  EXPECT_EQ(text.wordAt(0), "abcd\u00AD-");
+  EXPECT_EQ(text.getWordVisibleEndOffsetAt(0), 15u);
+  EXPECT_EQ(text.getWordVisibleEndOffsetAt(1), 21u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, LogicalWordRangeIncludesGenuineSourceHyphen) {
+  Hyphenator::setPreferredLanguage("");
+  ParsedText text(false, true);
+  text.addWord("abcd-TARGET", EpdFontFamily::REGULAR, false, false, 10);
+  std::vector<uint16_t> widths{88};
+  ASSERT_TRUE(text.hyphenateWordAtIndex(0, 48, renderer, 0, widths, false));
+  EXPECT_EQ(text.wordAt(0), "abcd-");
+  EXPECT_EQ(text.getWordVisibleEndOffsetAt(0), 15u);
+  EXPECT_EQ(text.getWordVisibleEndOffsetAt(1), 21u);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {

@@ -27,7 +27,7 @@ the notes. Links 1, 28 and 151 appear first for convenient testing.
 The host parser tests compare the selected anchor with the page actually holding
 its text, including a page boundary and an inline span inside a long paragraph.
 They also check the ordinary 1024-anchor cap, TOC preservation, hidden/skipped
-IDs, BiDi line boundaries, targets in buffered grid cells, missing targets and
+IDs, BiDi and inserted-hyphen line boundaries, targets in buffered grid cells, missing targets and
 duplicate requested IDs. Anchor-map tests exercise completed negative lookups,
 reopen, partial builds, legacy encoding, long IDs and truncated records.
 
