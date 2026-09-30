@@ -41,9 +41,10 @@ uint32_t utf8DecomposedBase(uint32_t cp);
 // incomplete trailing bytes are excluded.
 int utf8SafeTruncateBuffer(const char* buf, int len);
 
-// Returns true for CJK characters that allow line breaks on either side without hyphenation.
-// Covers CJK Unified Ideographs, Hiragana, Katakana, Hangul Syllables, CJK punctuation,
-// and fullwidth forms — the ranges where word boundaries are implicit per character.
+// Returns true for CJK characters that break without hyphenation. Covers CJK Unified Ideographs,
+// Hiragana, Katakana, Hangul, CJK punctuation, and fullwidth forms. Han and Kana have implicit
+// word boundaries per character; Hangul is space-delimited, so layout keeps Hangul words whole
+// (see utf8IsHangul) and splits one without a hyphen only through the hyphenation path.
 inline bool utf8IsCjkBreakable(const uint32_t cp) {
   return (cp >= 0x1100 && cp <= 0x11FF)        // Hangul Jamo
          || (cp >= 0x3000 && cp <= 0x303F)     // CJK Symbols and Punctuation
@@ -60,6 +61,16 @@ inline bool utf8IsCjkBreakable(const uint32_t cp) {
          || (cp >= 0xFF65 && cp <= 0xFFEF)     // Halfwidth Katakana / Hangul
          || (cp >= 0x20000 && cp <= 0x2A6DF)   // CJK Extension B
          || (cp >= 0x2A700 && cp <= 0x2B73F);  // CJK Extension C
+}
+
+// Returns true for Hangul letters. Korean separates words with spaces, so a boundary touching
+// Hangul is never an implicit line-break opportunity (CSS word-break: keep-all).
+inline bool utf8IsHangul(const uint32_t cp) {
+  return (cp >= 0x1100 && cp <= 0x11FF)      // Hangul Jamo
+         || (cp >= 0x3130 && cp <= 0x318F)   // Hangul Compatibility Jamo
+         || (cp >= 0xA960 && cp <= 0xA97F)   // Hangul Jamo Extended-A
+         || (cp >= 0xAC00 && cp <= 0xD7FF)   // Hangul Syllables, Hangul Jamo Extended-B
+         || (cp >= 0xFFA0 && cp <= 0xFFDC);  // Halfwidth Hangul
 }
 
 // Returns true for any codepoint in a CJK script block (Han, Kana, Hangul, Bopomofo,

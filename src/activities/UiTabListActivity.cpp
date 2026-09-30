@@ -60,13 +60,31 @@ void UiTabListActivity::moveRingTo(const int ringIndex) {
 }
 
 void UiTabListActivity::navigateButtons() {
+  if (mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
+      mappedInput.wasPressed(MappedInputManager::Button::NavPrevious)) {
+    navigationStartedOnTabs = ringPos() == 0;
+  }
   // Buttons walk the tab band (index 0) plus the rows (1..listCount).
   const int ringSize = listCount() + 1;
-  buttonNavigator.onNextRelease([this, ringSize] { moveRingTo(ButtonNavigator::nextIndex(ringPos(), ringSize)); });
-  buttonNavigator.onPreviousRelease(
+  buttonNavigator.onNextPress([this, ringSize] { moveRingTo(ButtonNavigator::nextIndex(ringPos(), ringSize)); });
+  buttonNavigator.onPreviousPress(
       [this, ringSize] { moveRingTo(ButtonNavigator::previousIndex(ringPos(), ringSize)); });
-  buttonNavigator.onNextContinuous([this] { stepTab(1); });
-  buttonNavigator.onPreviousContinuous([this] { stepTab(-1); });
+  buttonNavigator.onNextContinuous([this] {
+    if (navigationStartedOnTabs) {
+      activeNav().selected = 0;
+    } else if (ringPos() == 0 && listCount() > 0) {
+      activeNav().selected = 1;
+    }
+    stepTab(1);
+  });
+  buttonNavigator.onPreviousContinuous([this] {
+    if (navigationStartedOnTabs) {
+      activeNav().selected = 0;
+    } else if (ringPos() == 0 && listCount() > 0) {
+      activeNav().selected = 1;
+    }
+    stepTab(-1);
+  });
 }
 
 void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props) {

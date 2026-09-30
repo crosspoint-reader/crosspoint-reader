@@ -1,5 +1,6 @@
 #include "ReaderActivity.h"
 
+#include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Memory.h>
@@ -12,7 +13,6 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
-#include "TxtReaderActivity.h"
 #include "XtcReaderActivity.h"
 
 ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -30,8 +30,6 @@ std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, Ma
   std::unique_ptr<ReaderActivity> activity;
   if (FsHelpers::hasXtcExtension(path)) {
     activity = makeUniqueNoThrow<XtcReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
-  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    activity = makeUniqueNoThrow<TxtReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
   } else {
     activity = makeUniqueNoThrow<EpubReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
   }
@@ -59,6 +57,12 @@ void ReaderActivity::onEnter() {
     return;
   }
 
+  // Clear remembered book after opening it
+  if (!APP_STATE.openEpubPath.empty()) {
+    APP_STATE.openEpubPath.clear();
+    APP_STATE.saveToFile();
+  }
+
   sdFontSystem.ensureLoaded(renderer);
   applyInitialOrientation();
 
@@ -67,14 +71,24 @@ void ReaderActivity::onEnter() {
     return;
   }
 
+  requestUpdate();
+}
+
+void ReaderActivity::rememberBookOnceRendered() {
+  if (bookRemembered || !pageRendered.load(std::memory_order_acquire)) return;
+  bookRemembered = true;
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath());
-  requestUpdate();
 }
 
 void ReaderActivity::onExit() {
   Activity::onExit();
+
+  // Keep rebuildable font buffers from pinning the heap between reading sessions.
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
+  }
 
   LOG_INF("MEM", "reader exit: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
 
@@ -146,6 +160,7 @@ bool ReaderActivity::handleEndOfBookPageTurn(const bool prevTriggered, const boo
 }
 
 void ReaderActivity::loop() {
+  rememberBookOnceRendered();
   clearEndOfBookOptionsIfNeeded();
   if (handleEndOfBookMenu()) return;
   if (handleFormatInput()) return;
@@ -194,6 +209,7 @@ void ReaderActivity::render(RenderLock&&) {
     }
     renderer.displayBuffer();
     onEndOfBookRendered();
+    markPageRendered();
     return;
   }
 

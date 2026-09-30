@@ -90,6 +90,15 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 48
+
+Version 48 keeps the version 47 serialized layout unchanged. It was bumped
+because Hangul text no longer has implicit line-break opportunities between
+syllables: Korean words wrap at spaces (like CSS `word-break: keep-all`), and
+with hyphenation enabled a word may also split at the end of a line wherever the
+CJK line-breaking rules allow, without an inserted hyphen. Justification stretches only word spaces. Cached line breaks and word
+positions from version 47 no longer match.
+
 ### Version 47
 
 The section header adds signed `characterSpacing` (pixels) and unsigned
@@ -191,7 +200,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 47
+#define EXPECTED_VERSION 48
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -424,6 +433,7 @@ modification time (when the file landed on the card); `firstSeen` — the
 build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
 fold bump rebuilds ranks while preserving `firstSeen`.
+Fold version 4 preserves leading articles in title sort and search keys.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
@@ -433,7 +443,7 @@ A fixed stride is what lets the reader seek straight to record *n* without an
 offset table, and read a screenful in one 4 KB block. `static_assert` enforces it.
 
 Each record carries `fold[96]`, the title normalised for search and sorting —
-accents stripped, case dropped, leading articles removed — and `authorKey[12]`,
+accents stripped, case dropped, leading articles preserved — and `authorKey[12]`,
 the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.

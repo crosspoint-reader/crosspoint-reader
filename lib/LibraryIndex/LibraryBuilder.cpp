@@ -372,7 +372,7 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
 
   // An absent author is a fact, not a gap to fill: the row joins the Unknown
   // group rather than borrowing a name from its surroundings.
-  const std::string folded = reuseMetadata ? std::string() : fold(title, true);
+  const std::string folded = reuseMetadata ? std::string() : fold(title);
   const std::string key = reuseMetadata ? std::string() : authorKey(author);
 
   entry.record.fileSize = fileSize;
