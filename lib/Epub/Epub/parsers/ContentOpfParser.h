@@ -49,10 +49,15 @@ class ContentOpfParser final : public Print {
   std::string metaProperty;
   std::string metaRefines;
   std::string metaId;
-  std::string collectionCandidateId;
-  std::string collectionCandidateTitle;
-  std::optional<float> collectionCandidateIndex;
-  bool collectionCandidateIsSeries = false;
+  struct CollectionMetadata {
+    std::string id;
+    std::string title;
+    std::optional<float> index;
+    bool isSeries = false;
+  };
+  std::vector<CollectionMetadata> collectionCandidates;
+  std::string calibreSeries;
+  std::optional<float> calibreSeriesIndex;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {

@@ -40,6 +40,7 @@ bool isXmlWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\r' |
 // a multi-megabyte title would exhaust the heap. Downstream consumers truncate
 // far below this anyway, so overflow is clamped, not fatal.
 constexpr size_t MAX_METADATA_TEXT = 512;
+constexpr size_t MAX_COLLECTION_CANDIDATES = 8;
 
 void appendMetadataText(std::string& out, const XML_Char* text, const int len, bool& spacePending,
                         bool* separatorPending = nullptr) {
@@ -74,9 +75,9 @@ std::string lowerAscii(std::string value) {
 
 std::string boundedMetadataValue(const XML_Char* value) {
   if (!value) return {};
-  std::string result(value);
-  if (result.size() > MAX_METADATA_TEXT) result.resize(MAX_METADATA_TEXT);
-  return result;
+  size_t length = 0;
+  while (length < MAX_METADATA_TEXT && value[length] != '\0') ++length;
+  return std::string(value, length);
 }
 
 bool hasMetadataPrefix(const std::string& value, const char* prefix) {
@@ -293,9 +294,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
     const std::string lowerName = lowerAscii(metaName);
     if (lowerName == "cover") self->coverItemId = content;
-    if (lowerName == "calibre:series" && self->series.empty()) self->series = content;
-    if (lowerName == "calibre:series_index" && !self->seriesIndex.has_value()) {
-      self->seriesIndex = parseFiniteFloat(content);
+    if (lowerName == "calibre:series" && self->calibreSeries.empty()) self->calibreSeries = content;
+    if (lowerName == "calibre:series_index" && !self->calibreSeriesIndex.has_value()) {
+      self->calibreSeriesIndex = parseFiniteFloat(content);
     }
 
     const std::string property = lowerAscii(self->metaProperty);
@@ -555,22 +556,33 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_META_TEXT && xmlLocalNameEquals(name, "meta")) {
     const std::string property = lowerAscii(self->metaProperty);
-    if (property == "belongs-to-collection") {
-      self->collectionCandidateId = self->metaId;
-      self->collectionCandidateTitle = self->metaText;
-      self->collectionCandidateIndex.reset();
-      self->collectionCandidateIsSeries = false;
-    } else if (!self->collectionCandidateId.empty() && self->metaRefines == self->collectionCandidateId) {
-      if (property == "collection-type" && lowerAscii(self->metaText) == "series") {
-        self->collectionCandidateIsSeries = true;
-      } else if (property == "group-position") {
-        self->collectionCandidateIndex = parseFiniteFloat(self->metaText);
+    if (property == "belongs-to-collection" && !self->metaId.empty()) {
+      CollectionMetadata* candidate = nullptr;
+      for (auto& collection : self->collectionCandidates) {
+        if (collection.id == self->metaId) {
+          candidate = &collection;
+          break;
+        }
       }
-    }
-    if (self->collectionCandidateIsSeries && !self->collectionCandidateTitle.empty()) {
-      if (self->series.empty()) self->series = self->collectionCandidateTitle;
-      if (!self->seriesIndex.has_value() && self->collectionCandidateIndex.has_value()) {
-        self->seriesIndex = self->collectionCandidateIndex;
+      if (candidate != nullptr) {
+        candidate->title = self->metaText;
+        candidate->index.reset();
+        candidate->isSeries = false;
+      } else if (self->collectionCandidates.size() < MAX_COLLECTION_CANDIDATES) {
+        self->collectionCandidates.push_back({self->metaId, self->metaText, std::nullopt, false});
+      } else {
+        LOG_DBG("COF", "Ignoring collection metadata beyond %u entries",
+                static_cast<unsigned>(MAX_COLLECTION_CANDIDATES));
+      }
+    } else if (!self->metaRefines.empty()) {
+      for (auto& candidate : self->collectionCandidates) {
+        if (candidate.id != self->metaRefines) continue;
+        if (property == "collection-type" && lowerAscii(self->metaText) == "series") {
+          candidate.isSeries = true;
+        } else if (property == "group-position") {
+          candidate.index = parseFiniteFloat(self->metaText);
+        }
+        break;
       }
     }
     self->state = IN_METADATA;
@@ -578,6 +590,17 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "metadata")) {
+    if (!self->calibreSeries.empty()) {
+      self->series = self->calibreSeries;
+      self->seriesIndex = self->calibreSeriesIndex;
+    } else {
+      for (const auto& candidate : self->collectionCandidates) {
+        if (!candidate.isSeries || candidate.title.empty()) continue;
+        self->series = candidate.title;
+        self->seriesIndex = candidate.index;
+        break;
+      }
+    }
     self->state = IN_PACKAGE;
     self->metadataComplete = true;
     return;

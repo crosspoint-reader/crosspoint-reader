@@ -135,6 +135,41 @@ TEST(ContentOpfParserMetadata, ExtractsEpub3SeriesCollection) {
   EXPECT_FLOAT_EQ(*parser.seriesIndex, 2.0f);
 }
 
+TEST(ContentOpfParserMetadata, ResolvesInterleavedCollectionRefinementsById) {
+  const std::string xml = R"(<package><metadata>
+    <meta id="series-a" property="belongs-to-collection">Primary Series</meta>
+    <meta id="series-b" property="belongs-to-collection">Secondary Series</meta>
+    <meta refines="#series-a" property="collection-type">series</meta>
+    <meta refines="#series-a" property="group-position">3</meta>
+    <meta refines="#series-b" property="collection-type">series</meta>
+    <meta refines="#series-b" property="group-position">9</meta>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.series, "Primary Series");
+  ASSERT_TRUE(parser.seriesIndex.has_value());
+  EXPECT_FLOAT_EQ(*parser.seriesIndex, 3.0f);
+}
+
+TEST(ContentOpfParserMetadata, KeepsSeriesIndexWithSelectedMetadataSource) {
+  const std::string xml = R"(<package><metadata>
+    <meta name="calibre:series" content="Calibre Series"/>
+    <meta name="calibre:series_index" content="4"/>
+    <meta id="epub-series" property="belongs-to-collection">EPUB Series</meta>
+    <meta refines="#epub-series" property="collection-type">series</meta>
+    <meta refines="#epub-series" property="group-position">9</meta>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.series, "Calibre Series");
+  ASSERT_TRUE(parser.seriesIndex.has_value());
+  EXPECT_FLOAT_EQ(*parser.seriesIndex, 4.0f);
+}
+
 TEST(ContentOpfParserMetadata, StopsBeforeManifestWithoutOpeningTemporaryStorage) {
   const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
     <dc:title>A Wizard of Earthsea</dc:title>
