@@ -1,14 +1,15 @@
 #pragma once
 #include <I18n.h>
 
+#include <array>
 #include <functional>
 #include <span>
 #include <string>
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/UiTabListActivity.h"
-#include "components/OptionPopup.h"
+#include "SettingsSection.h"
+#include "activities/UiListActivity.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
@@ -52,7 +53,6 @@ struct SettingInfo {
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
   bool inTextSettings = false;           // Surfaced in the Text Settings screen; hidden from the flat Reader list
-  StrId section = StrId::STR_NONE_OPT;   // On-device heading drawn above this row (starts a group)
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
@@ -173,65 +173,33 @@ struct SettingInfo {
   }
 };
 
-class SettingsActivity final : public UiTabListActivity {
-  int selectedCategoryIndex = 0;  // Currently selected category
-  int settingsCount = 0;
+// Settings root: one row per SettingsSection, each opening a
+// SettingsSectionActivity with that group's settings.
+class SettingsActivity final : public UiListActivity {
+  // Section opened on the first loop pass (Count = none), e.g. returning to
+  // Network after the Wi-Fi rows' silent restart.
+  SettingsSection pendingSection;
 
-  // Per-category settings derived from shared list + device-only actions
-  std::vector<SettingInfo> displaySettings;
-  std::vector<SettingInfo> readerSettings;
-  std::vector<SettingInfo> controlsSettings;
-  std::vector<SettingInfo> systemSettings;
-  const std::vector<SettingInfo>* currentSettings = nullptr;
+  // Comma-joined setting names per section; shown as the subtitle when they
+  // fit in two lines, otherwise the section's summary string is.
+  std::array<std::string, SETTINGS_SECTION_COUNT> nameLists_;
+  std::array<freeink::ui::ListItem, SETTINGS_SECTION_COUNT> rowItems_{};
+  int16_t subtitleWidth_ = -1;  // width the current subtitle choice was measured at
 
-  bool preserveQuickResumeTimeoutOn = false;
-  bool quickResumeTimeoutAutoEnabled = false;
+  void rebuildRows();
+  void chooseSubtitles(UiScreen& screen, const freeink::ui::TextStyle& style);
+  void openSection(SettingsSection section);
 
-  OptionPopup optionPopup;
-
-  // Row structure (label/actionValue) for *currentSettings, rebuilt only when
-  // the active category or a category's setting list changes
-  // (rebuildRowItems(), called from selectCategory()/rebuildSettingsLists())
-  // — not on every repaint. rowValues_ holds the live per-row value text,
-  // refreshed every buildScreen() call by assigning into the existing
-  // strings (no vector growth).
-  std::vector<std::string> rowValues_;
-  std::vector<freeink::ui::ListItem> rowItems_;
-  void rebuildRowItems();
-
-  static constexpr int categoryCount = 4;
-  static constexpr StrId categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
-                                                         StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
-
-  // --- UiTabListActivity contract ---
-  int listCount() const override { return settingsCount; }
-  int tabCount() const override { return categoryCount; }
-  int activeTab() const override { return selectedCategoryIndex; }
-  const char* tabLabel(int index) const override { return I18N.get(categoryNames[index]); }
+  int listCount() const override { return static_cast<int>(SETTINGS_SECTION_COUNT); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  void onTabAction(int index) override;
-  void stepTab(int direction) override;
-  bool handleButtons() override;
-  bool handleCustomInput() override;
-
-  static std::string settingValueText(const SettingInfo& setting);
-  void selectCategory(int categoryIndex);
-  void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
-
-  void enterCategory(int categoryIndex);
-  void toggleCurrentSetting();
-  void openSleepTimeoutPicker();
-  void rebuildSettingsLists();
-  void buildSystemSettings(std::vector<SettingInfo>& pool);
-  void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
-
+  void onBackButton() override;
   void drawChrome() override;
-  void drawFooter() override;
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                            SettingsSection openSection = SettingsSection::Count);
   void onEnter() override;
   void onExit() override;
-  void render(RenderLock&& lock) override;
+  void loop() override;
 };

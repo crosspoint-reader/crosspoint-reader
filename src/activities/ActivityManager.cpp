@@ -116,9 +116,9 @@ void ActivityManager::loop() {
     // panels' etched glass makes unreliable). The reader keeps its clean page
     // (no status bar there to tap). Touch boards only, like the swipe itself.
     bool statusBarTap = false;
-    if (mappedInput.hasTouch() &&
-        (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
-         currentActivity->name == "Settings" || currentActivity->name == "NetworkModeSelection")) {
+    if (mappedInput.hasTouch() && (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
+                                   currentActivity->name == "Settings" || currentActivity->name == "SettingsSection" ||
+                                   currentActivity->name == "NetworkModeSelection")) {
       int tx = 0;
       int ty = 0;
       // The header back button shares this band; its taps stay Back.
@@ -269,7 +269,9 @@ void ActivityManager::goToUsbDrive() {
 #endif
 }
 
-void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
+void ActivityManager::goToSettings(const SettingsSection openSection) {
+  replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput, openSection));
+}
 
 void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
@@ -342,7 +344,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == "Settings") {
+    } else if (activityName == "Settings" || activityName == "SettingsSection") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }

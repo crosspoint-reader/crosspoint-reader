@@ -12,6 +12,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "settings/SettingsSection.h"
 #include "util/ScreenshotInfo.h"
 
 class Activity;    // forward declaration
@@ -84,7 +85,8 @@ class ActivityManager {
   void goToFileTransfer();
   void goToJoinNetwork();  // File Transfer straight into Join Network (post heap-defrag reboot)
   void goToUsbDrive();
-  void goToSettings();
+  // openSection jumps straight into one group (Count = the section list).
+  void goToSettings(SettingsSection openSection = SettingsSection::Count);
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
   void goToBrowser();
