@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ContentProtection.h>
 #include <Print.h>
 
 #include <memory>
@@ -29,6 +30,11 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // Optional encrypted-entry accessor. Entries are decoded in memory and stay
+  // encrypted at rest. Null when the accessor is not needed or unavailable.
+  std::unique_ptr<freeink::content::ContentDecryptor> decryptor;
+  // User-presentable reason the encrypted-entry accessor could not be opened.
+  std::string protectionError;
 
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
@@ -40,10 +46,7 @@ class Epub {
   CssParser::ParseResult parseCssFiles(CssParser::CacheStatus existingCacheStatus) const;
 
  public:
-  explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
-    // create a cache key based on the filepath
-    cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
-  }
+  explicit Epub(std::string filepath, const std::string& cacheDir);
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
@@ -52,6 +55,8 @@ class Epub {
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;
+  // Empty unless the encrypted-entry accessor failed to open.
+  const std::string& getProtectionError() const { return protectionError; }
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
