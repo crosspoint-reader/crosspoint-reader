@@ -604,6 +604,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
   size_t maxLineCount = 0;
   const bool rowRtl = tableRowRtl;
+  std::optional<size_t> requestedLineIndex;
 
   for (size_t column = 0; column < columnCount; ++column) {
     auto& lines = tableCellLines[column];
@@ -611,11 +612,24 @@ void ChapterHtmlSlimParser::finishTableRow() {
     if (lines.capacity() < MAX_GRID_TABLE_CELL_WORDS * 2) {
       lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
     }
-    tableRowCells[column]->layoutAndExtractLines(
+    struct CellLayout {
+      ParsedText& cell;
+      std::vector<std::unique_ptr<TextBlock>>& lines;
+      std::optional<size_t>& requestedLineIndex;
+      size_t wordIndex = 0;
+    } layout{*tableRowCells[column], lines, requestedLineIndex};
+    // Two pointer captures keep the callback within std::function's inline storage.
+    layout.cell.layoutAndExtractLines(
         renderer, fontId, textWidth,
-        [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
-          const size_t lineIndex = lines.size();
-          lines.push_back(std::move(line));
+        [this, &layout](std::unique_ptr<TextBlock> line, const uint32_t offset) {
+          const size_t lineIndex = layout.lines.size();
+          layout.wordIndex += line->wordCount();
+          // Only the requested target needs a source range retained across cell layout.
+          if (requestedAnchorOffset && line->wordCount() > 0 && *requestedAnchorOffset >= offset &&
+              *requestedAnchorOffset < layout.cell.getWordVisibleEndOffsetAt(layout.wordIndex - 1)) {
+            layout.requestedLineIndex = lineIndex;
+          }
+          layout.lines.push_back(std::move(line));
           if (tableLineVisibleOffsets.size() <= lineIndex) {
             tableLineVisibleOffsets.resize(lineIndex + 1, UINT32_MAX);
           }
@@ -667,6 +681,9 @@ void ChapterHtmlSlimParser::finishTableRow() {
       currentPageVisibleOffsetSet = false;
     }
 
+    if (requestedLineIndex && *requestedLineIndex == lineIndex) {
+      recordRequestedAnchor();
+    }
     const int16_t rowY = currentPageNextY;
     const size_t requiredCapacity = currentPage->elements.size() + columnCount;
     if (currentPage->elements.capacity() < requiredCapacity) {
@@ -729,6 +746,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   std::string styleAttr;
   std::string dirAttr;
   bool hasHiddenAttr = false;
+  const char* idAttr = nullptr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
@@ -736,30 +754,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        // Defer both anchor recording and TOC page breaks until startNewTextBlock,
-        // after the previous block is flushed to pages via makePages().
-        //
-        // Converter-generated span IDs stay filtered. TOC anchors and the single
-        // requested fragment bypass the filter and cap without collecting every ID.
-        const char* idValue = atts[i + 1];
-        const bool isTocAnchor =
-            std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
-        const bool isRequestedAnchor = !self->requestedAnchor.empty() && self->requestedAnchor == idValue;
-        if (isRequestedAnchor && !self->requestedAnchorSeen) {
-          self->requestedAnchorSeen = true;
-          self->requestedAnchorWaitingForText = true;
-        }
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
-          // Flush a displaced anchor before overwriting. Consecutive non-block elements
-          // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
-          // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
-          // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
-          // lands at page 0 (section start) instead of the footnote.
-          if (!self->pendingAnchorId.empty()) {
-            self->flushPendingAnchor();
-          }
-          self->pendingAnchorId = idValue;
-        }
+        idAttr = atts[i + 1];
       } else if (strcmp(atts[i], "dir") == 0) {
         dirAttr = atts[i + 1];
       } else if (strcmp(atts[i], "hidden") == 0) {
@@ -812,6 +807,49 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
+  }
+
+  if (VisibleTextUtils::isNonVisibleElement(name)) {
+    // start skip
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
+  }
+
+  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak"
+  if (atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if ((strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0) ||
+          (strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0)) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
+    }
+  }
+
+  if (matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS)) && self->imageRendering == 2) {
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
+  }
+
+  if (idAttr) {
+    const bool isTocAnchor =
+        std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idAttr) != self->tocAnchors.end();
+    const bool isRequestedAnchor = !self->requestedAnchor.empty() && self->requestedAnchor == idAttr;
+    if (isRequestedAnchor && !self->requestedAnchorSeen && self->insideBody && self->nonVisibleTextDepth == 0 &&
+        !self->collectingRubyText && strcmp(name, "rt") != 0 && !matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
+      self->requestedAnchorSeen = true;
+      self->requestedAnchorWaitingForText = true;
+    }
+    // Converter spans stay filtered; TOC targets keep their structural page breaks.
+    if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+      if (!self->pendingAnchorId.empty()) {
+        self->flushPendingAnchor();
+      }
+      self->pendingAnchorId = idAttr;
+    }
   }
 
   // Buffer one simple row; oversized rows fall back to full-width flow.
@@ -969,12 +1007,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
-      if (self->imageRendering == 2) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
-        return;
-      }
-
       if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
 
@@ -1275,25 +1307,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->collectingRubyText = true;
     self->depth += 1;
     return;
-  }
-
-  if (VisibleTextUtils::isNonVisibleElement(name)) {
-    // start skip
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
-    return;
-  }
-
-  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak"
-  if (atts != nullptr) {
-    for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0 ||
-          strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
-        return;
-      }
-    }
   }
 
   // Detect internal <a href="..."> links (footnotes, cross-references)
@@ -2206,17 +2219,23 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return finishParse();
 }
 
+void ChapterHtmlSlimParser::recordRequestedAnchor() {
+  const auto existing = std::find_if(anchorData.begin(), anchorData.end(),
+                                     [this](const auto& entry) { return entry.first == requestedAnchor; });
+  if (existing != anchorData.end()) {
+    existing->second = static_cast<uint16_t>(completedPageCount);
+  } else {
+    anchorData.emplace_back(requestedAnchor, static_cast<uint16_t>(completedPageCount));
+  }
+  requestedAnchorOffset.reset();
+}
+
 void ChapterHtmlSlimParser::addFlowLineToPage(std::unique_ptr<TextBlock> line, const uint32_t visibleOffset,
                                               size_t& wordIndex) {
   wordIndex += line->wordCount();
   uint32_t visibleEnd = 0;
   if (requestedAnchorOffset && line->wordCount() > 0) {
-    visibleEnd = currentTextBlock->getWordVisibleOffsetAt(wordIndex - 1);
-    const auto* ptr = reinterpret_cast<const unsigned char*>(line->wordText(line->wordCount() - 1));
-    while (*ptr) {
-      utf8NextCodepoint(&ptr);
-      ++visibleEnd;
-    }
+    visibleEnd = currentTextBlock->getWordVisibleEndOffsetAt(wordIndex - 1);
   }
   addLineToPage(std::move(line), visibleOffset, visibleEnd);
 }
@@ -2245,14 +2264,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   // Resolve after the line's page break, including targets inside a long paragraph.
   if (requestedAnchorOffset && *requestedAnchorOffset >= visibleOffset &&
       (*requestedAnchorOffset < visibleEnd || *requestedAnchorOffset == visibleOffset)) {
-    const auto existing = std::find_if(anchorData.begin(), anchorData.end(),
-                                       [this](const auto& entry) { return entry.first == requestedAnchor; });
-    if (existing != anchorData.end()) {
-      existing->second = static_cast<uint16_t>(completedPageCount);
-    } else {
-      anchorData.emplace_back(requestedAnchor, static_cast<uint16_t>(completedPageCount));
-    }
-    requestedAnchorOffset.reset();
+    recordRequestedAnchor();
   }
 
   // Track cumulative words to assign footnotes to the page containing their anchor

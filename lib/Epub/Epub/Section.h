@@ -7,6 +7,7 @@
 
 #include "Epub.h"
 #include "ReaderRenderSpec.h"
+#include "SectionAnchorMap.h"
 
 class Page;
 class GfxRenderer;
@@ -73,6 +74,7 @@ class Section {
   // partial/finalized file stays readable while a rebuild is in progress.
   std::string binTmpPath() const { return filePath + ".part"; }
   std::unique_ptr<Page> loadPageAt(int page) const;
+  sectionAnchors::Lookup lookupAnchor(const std::string& anchor) const;
   // Read a page already laid out by the in-progress build (page < build LUT size), from
   // the partially-written tmp .bin without disturbing the build's write cursor.
   std::unique_ptr<Page> loadPageDuringBuild(int page);
@@ -132,6 +134,8 @@ class Section {
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
+  // A complete build may have checked a fragment and found no rendered destination.
+  bool hasCheckedAnchor(const std::string& anchor) const { return anchor.empty() || lookupAnchor(anchor).checked; }
 
   // Look up an anchor among the pages built so far by the in-progress build, so an anchor jump
   // (TOC / chapter select, usually the chapter top = page 0) can resolve without laying out the

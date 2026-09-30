@@ -1207,9 +1207,8 @@ void EpubReaderActivity::renderBook() {
       cachedChapterTotalPageCount = 0;
       cachedVisibleTextOffset.reset();
     }
-    // Older caches can omit span targets; rebuild this section on a fragment miss.
-    const bool cacheComplete = cacheLoaded && !section->isPartial() &&
-                               (pendingAnchor.empty() || section->getPageForAnchor(pendingAnchor).has_value());
+    // Rebuild unexamined span targets; a completed negative lookup keeps the cache usable.
+    const bool cacheComplete = cacheLoaded && !section->isPartial() && section->hasCheckedAnchor(pendingAnchor);
     const bool explicitOffsetJump = pendingOffsetJump.has_value();
     const std::optional<uint32_t> offsetJump =
         explicitOffsetJump ? pendingOffsetJump

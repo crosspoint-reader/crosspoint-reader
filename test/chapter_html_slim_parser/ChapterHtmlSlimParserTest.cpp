@@ -47,7 +47,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   uint16_t parsedPages = 0;
   std::optional<uint16_t> targetPage;
 
-  bool parseHtml(const std::string& html) {
+  bool parseHtml(const std::string& html, const uint16_t height = 32) {
     filepath = (std::filesystem::temp_directory_path() /
                 (::testing::UnitTest::GetInstance()->current_test_info()->name() + std::string(".xhtml")))
                    .string();
@@ -55,7 +55,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
       std::ofstream output(filepath);
       output << html;
     }
-    parser.viewportHeight = 32;
+    parser.viewportHeight = height;
     parser.completePageFn = [this](std::unique_ptr<Page> page, auto, auto, auto) {
       for (const auto& element : page->elements) {
         if (element->getTag() != TAG_PageLine) continue;
@@ -139,6 +139,79 @@ TEST_F(ChapterHtmlSlimParserTest, DuplicateRequestedSpanDoesNotBypassCapRepeated
   ASSERT_TRUE(parseHtml(html));
   ASSERT_EQ(parser.getAnchors().size(), 1u);
   EXPECT_EQ(parser.getAnchors().front().second, 0u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedHiddenIdsDoNotCaptureFollowingVisibleText) {
+  parser.requestedAnchor = "id28";
+  ASSERT_TRUE(
+      parseHtml("<html><body><span id='id28' hidden='hidden'>Hidden.</span>"
+                "<span id='id28' style='display:none'>Hidden.</span>"
+                "<div hidden='hidden'><span id='id28'>Hidden.</span></div>"
+                "<p>TARGET</p></body></html>"));
+  EXPECT_TRUE(parser.getAnchors().empty());
+  EXPECT_FALSE(parser.requestedAnchorSeen);
+  EXPECT_FALSE(parser.requestedAnchorWaitingForText);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, VisibleDuplicateAfterSkippedIdResolvesNormally) {
+  parser.requestedAnchor = "id28";
+  std::string html =
+      "<html><body><span id='id28' hidden='hidden'>Hidden.</span>"
+      "<span id='id28' role='doc-pagebreak'>Skipped.</span>"
+      "<script id='id28'>Skipped.</script>";
+  for (int i = 0; i < 40; ++i) html += "<p>Previous text.</p>";
+  html += "<span id='id28'>TARGET</span></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSkippedSpanDoesNotCaptureFollowingVisibleText) {
+  parser.requestedAnchor = "id28";
+  ASSERT_TRUE(
+      parseHtml("<html><body><span id='id28' role='doc-pagebreak'>Skipped.</span>"
+                "<span id='id28' epub:type='pagebreak'>Skipped.</span>"
+                "<p>TARGET</p></body></html>"));
+  EXPECT_TRUE(parser.getAnchors().empty());
+  EXPECT_FALSE(parser.requestedAnchorSeen);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanAfterRtlLineMapsToNextPage) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 96;
+  ASSERT_TRUE(parseHtml("<html><body><p dir='rtl'>אבגדהוזח א <span id='id28'>TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanInLateGridCellLineMapsToItsPage) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 160;
+  std::string html = "<html><body><table><tr><td>";
+  for (int i = 0; i < 20; ++i) html += "Before ";
+  html += "<span id='id28'>TARGET</span></td><td>Other.</td></tr></table></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanInSecondGridColumnMapsToItsRowSlice) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 160;
+  std::string html = "<html><body><p>Previous.</p><table><tr><td>";
+  for (int i = 0; i < 20; ++i) html += "Before ";
+  html += "</td><td>X <span id='id28'>TARGET</span></td></tr></table></body></html>";
+  ASSERT_TRUE(parseHtml(html, 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {

@@ -585,16 +585,10 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   // Write anchor-to-page map for fragment navigation (e.g. footnote targets). For a
   // partial, skip anchors that landed on the incomplete trailing page the suspend drops.
   const uint32_t anchorMapOffset = file.position();
-  const auto& anchors = build_->parser->getAnchors();
-  uint16_t anchorCount = 0;
-  for (const auto& [anchor, page] : anchors) {
-    if (!asPartial || page < builtPageCount_) anchorCount++;
-  }
-  serialization::writePod(file, anchorCount);
-  for (const auto& [anchor, page] : anchors) {
-    if (asPartial && page >= builtPageCount_) continue;
-    serialization::writeString(file, anchor);
-    serialization::writePod(file, page);
+  if (!sectionAnchors::write(file, build_->parser->getAnchors(), build_->parser->getRequestedAnchor(), builtPageCount_,
+                             asPartial)) {
+    LOG_ERR("SCT", "Failed to write anchor map");
+    return failCommit();
   }
 
   const uint32_t paragraphLutOffset = file.position();
@@ -868,34 +862,18 @@ std::optional<uint16_t> Section::getCachedPageCount() const {
   return count;
 }
 
-std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
-  HalFile f;
-  if (!Storage.openFileForRead("SCT", filePath, f)) {
-    return std::nullopt;
-  }
+std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const { return lookupAnchor(anchor).page; }
 
+sectionAnchors::Lookup Section::lookupAnchor(const std::string& anchor) const {
+  HalFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) return {};
   const uint32_t fileSize = f.size();
   f.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
-  uint32_t anchorMapOffset;
+  uint32_t anchorMapOffset = 0;
   serialization::readPod(f, anchorMapOffset);
-  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
-    return std::nullopt;
-  }
-
+  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) return {};
   f.seek(anchorMapOffset);
-  uint16_t count;
-  serialization::readPod(f, count);
-  for (uint16_t i = 0; i < count; i++) {
-    std::string key;
-    uint16_t page;
-    serialization::readString(f, key);
-    serialization::readPod(f, page);
-    if (key == anchor) {
-      return page;
-    }
-  }
-
-  return std::nullopt;
+  return sectionAnchors::read(f, anchor);
 }
 
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {

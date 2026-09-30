@@ -169,6 +169,7 @@ class ChapterHtmlSlimParser {
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
+  void recordRequestedAnchor();
   void flushPartWordBuffer();
   void fallbackTableRowToStacked();
   void closeTableCell();
@@ -244,6 +245,7 @@ class ChapterHtmlSlimParser {
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset, uint32_t visibleEnd = 0);
   void addFlowLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset, size_t& wordIndex);
+  const std::string& getRequestedAnchor() const { return requestedAnchor; }
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page
