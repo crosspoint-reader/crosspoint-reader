@@ -40,6 +40,13 @@ std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, Ma
   return activity;
 }
 
+TiltInteraction ReaderActivity::tiltInteraction() const {
+  if (CrossPointSettings::TILT_PAGE_TURN::TILT_OFF != SETTINGS.tiltPageTurn) {
+    return TiltInteraction::PageTurn;
+  }
+  return TiltInteraction::None;
+}
+
 void ReaderActivity::applyInitialOrientation() { ReaderUtils::applyOrientation(renderer, SETTINGS.orientation); }
 
 void ReaderActivity::disableFastInitialRefresh() { pagesUntilFullRefresh = 0; }
