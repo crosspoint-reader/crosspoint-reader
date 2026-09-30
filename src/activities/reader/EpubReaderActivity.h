@@ -82,6 +82,9 @@ class EpubReaderActivity final : public ReaderActivity {
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
+  // A background build step lent the framebuffer: it came back white while the panel still shows the
+  // page. Until renderBook() redraws, nothing may be painted straight onto it.
+  bool pageBufferStale = false;
   // True while a deferred overlay chrome refresh (pushOverlayRefresh) may still
   // be running on the panel. settleOverlayRefresh() must run before the
   // framebuffer is touched or another differential refresh is pushed.
