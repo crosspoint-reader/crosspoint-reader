@@ -60,6 +60,11 @@ void SettingsActivity::rebuildSettingsLists() {
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
 
+  // System-category entries from the shared list, arranged into groups by
+  // buildSystemSettings() below.
+  std::vector<SettingInfo> systemPool;
+  systemPool.reserve(8);
+
   for (const auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
     if (setting.category == StrId::STR_NONE_OPT || home_button::isSetting(setting.valuePtr)) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
@@ -83,7 +88,7 @@ void SettingsActivity::rebuildSettingsLists() {
       }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      systemSettings.push_back(setting);
+      systemPool.push_back(setting);
     }
   }
 
@@ -96,23 +101,8 @@ void SettingsActivity::rebuildSettingsLists() {
     controlsSettings.insert(controlsSettings.begin(),
                             SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
   }
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  // Clock configuration only exists where the RTC probe found hardware; on
-  // clockless boards there is nothing to set.
-  if (halClock.isAvailable()) {
-    systemSettings.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
-  }
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
-  // OTA fetches this board's own release asset (see OtaUpdater); boards whose
-  // asset isn't published yet just report no update available.
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  buildSystemSettings(systemPool);
+
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
@@ -136,6 +126,63 @@ void SettingsActivity::rebuildSettingsLists() {
   }
   settingsCount = static_cast<int>(currentSettings->size());
   rebuildRowItems();
+}
+
+void SettingsActivity::buildSystemSettings(std::vector<SettingInfo>& pool) {
+  // Upper bound: every pooled entry plus the device-only actions added below.
+  systemSettings.reserve(pool.size() + 11);
+
+  StrId pendingSection = StrId::STR_NONE_OPT;
+  auto add = [&](SettingInfo setting) {
+    setting.section = pendingSection;
+    pendingSection = StrId::STR_NONE_OPT;
+    systemSettings.push_back(std::move(setting));
+  };
+  auto addFromPool = [&](const StrId nameId) {
+    auto it = std::find_if(pool.begin(), pool.end(), [nameId](const SettingInfo& s) {
+      return s.nameId == nameId && s.category != StrId::STR_NONE_OPT;
+    });
+    if (it == pool.end()) return;
+    add(std::move(*it));
+    it->category = StrId::STR_NONE_OPT;  // mark consumed
+  };
+
+  // Language leads so a user stuck in an unfamiliar language finds it first.
+  pendingSection = StrId::STR_SETTINGS_GENERAL;
+  add(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  addFromPool(StrId::STR_TIME_TO_SLEEP);
+  // Clock configuration only exists where the RTC probe found hardware.
+  if (halClock.isAvailable()) {
+    add(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
+  }
+  add(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
+
+  pendingSection = StrId::STR_LIBRARY;
+  addFromPool(StrId::STR_SHOW_HIDDEN_FILES);
+  addFromPool(StrId::STR_LIBRARY_USE_METADATA);
+  addFromPool(StrId::STR_REMOVE_READ_FROM_RECENTS);
+  addFromPool(StrId::STR_MOVE_FINISHED_TO_READ);
+  add(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+
+  pendingSection = StrId::STR_SETTINGS_NETWORK;
+  add(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
+  add(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  add(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+
+  pendingSection = StrId::STR_SETTINGS_SOFTWARE;
+  // OTA fetches this board's own release asset (see OtaUpdater); boards whose
+  // asset isn't published yet just report no update available.
+  add(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  add(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  add(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
+  add(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
+
+  // System settings not placed above stay reachable at the end rather than vanishing.
+  for (auto& setting : pool) {
+    if (setting.category == StrId::STR_NONE_OPT) continue;
+    LOG_DBG("SET", "Ungrouped system setting: %s", I18N.get(setting.nameId));
+    add(std::move(setting));
+  }
 }
 
 void SettingsActivity::onEnter() {
@@ -185,6 +232,7 @@ void SettingsActivity::rebuildRowItems() {
   for (size_t i = 0; i < settings.size(); i++) {
     fui::ListItem item;
     item.label = I18N.get(settings[i].nameId);
+    if (settings[i].section != StrId::STR_NONE_OPT) item.sectionHeading = I18N.get(settings[i].section);
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
