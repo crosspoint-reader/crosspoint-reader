@@ -838,13 +838,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     const bool isTocAnchor =
         std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idAttr) != self->tocAnchors.end();
     const bool isRequestedAnchor = !self->requestedAnchor.empty() && self->requestedAnchor == idAttr;
-    if (isRequestedAnchor && !self->requestedAnchorSeen && self->insideBody && self->nonVisibleTextDepth == 0 &&
-        !self->collectingRubyText && strcmp(name, "rt") != 0 && !matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
+    const bool selectRequestedAnchor = isRequestedAnchor && !self->requestedAnchorSeen && self->insideBody &&
+                                       self->nonVisibleTextDepth == 0 && !self->collectingRubyText &&
+                                       strcmp(name, "rt") != 0 && !matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS));
+    if (selectRequestedAnchor) {
       self->requestedAnchorSeen = true;
       self->requestedAnchorWaitingForText = true;
     }
     // Converter spans stay filtered; TOC targets keep their structural page breaks.
-    if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+    if (isTocAnchor || (!isNonNavigableInlineElement(name) &&
+                        (selectRequestedAnchor || self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER))) {
       if (!self->pendingAnchorId.empty()) {
         self->flushPendingAnchor();
       }
@@ -1654,7 +1657,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   uint32_t nextCodepointOffset = callbackVisibleOffset;
   for (int i = 0; i < len; i++) {
     const uint32_t codepointOffset = nextCodepointOffset;
-    if (countVisibleOffsets && (static_cast<uint8_t>(s[i]) & 0xC0) != 0x80) {
+    const bool isCodepointStart = (static_cast<uint8_t>(s[i]) & 0xC0) != 0x80;
+    if (countVisibleOffsets && isCodepointStart) {
       nextCodepointOffset++;
     }
 
@@ -1669,9 +1673,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
-    if (self->requestedAnchorWaitingForText && countVisibleOffsets) {
-      self->requestedAnchorOffset = codepointOffset;
-      self->requestedAnchorWaitingForText = false;
+    if (self->requestedAnchorWaitingForText && countVisibleOffsets && isCodepointStart) {
+      // Soft hyphens keep their source offsets but do not select rendered anchor text.
+      const bool isSoftHyphen =
+          static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xAD;
+      if (!isSoftHyphen) {
+        self->requestedAnchorOffset = codepointOffset;
+        self->requestedAnchorWaitingForText = false;
+      }
     }
 
     // Detect U+00A0 (non-breaking space, UTF-8: 0xC2 0xA0) or

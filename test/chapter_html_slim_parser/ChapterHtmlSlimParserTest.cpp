@@ -47,6 +47,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
 
   uint16_t parsedPages = 0;
   std::optional<uint16_t> targetPage;
+  std::optional<uint16_t> firstRulePage;
 
   bool parseHtml(const std::string& html, const uint16_t height = 32) {
     filepath = (std::filesystem::temp_directory_path() /
@@ -59,6 +60,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     parser.viewportHeight = height;
     parser.completePageFn = [this](std::unique_ptr<Page> page, auto, auto, auto) {
       for (const auto& element : page->elements) {
+        if (element->getTag() == TAG_PageHorizontalRule && !firstRulePage) firstRulePage = parsedPages;
         if (element->getTag() != TAG_PageLine) continue;
         const auto& block = *static_cast<const PageLine&>(*element).getBlock();
         for (uint16_t word = 0; word < block.wordCount(); ++word) {
@@ -140,6 +142,51 @@ TEST_F(ChapterHtmlSlimParserTest, DuplicateRequestedSpanDoesNotBypassCapRepeated
   ASSERT_TRUE(parseHtml(html));
   ASSERT_EQ(parser.getAnchors().size(), 1u);
   EXPECT_EQ(parser.getAnchors().front().second, 0u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedStructuralAnchorWithoutTextBypassesCap) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 1101; ++i) html += "<p id='p" + std::to_string(i) + "'>Text.</p>";
+  html += "<div id='id28'><hr/></div></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  ASSERT_GT(*firstRulePage, 0u);
+  const auto& anchors = parser.getAnchors();
+  ASSERT_EQ(anchors.size(), 1025u);
+  EXPECT_EQ(anchors.back().first, "id28");
+  EXPECT_EQ(anchors.back().second, *firstRulePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, DuplicateRequestedStructuralIdsBypassCapOnlyOnce) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 1101; ++i) html += "<p id='p" + std::to_string(i) + "'>Text.</p>";
+  for (int i = 0; i < 2000; ++i) html += "<div id='id28'><hr/></div>";
+  html += "</body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  const auto& anchors = parser.getAnchors();
+  ASSERT_EQ(anchors.size(), 1025u);
+  EXPECT_EQ(anchors.back().first, "id28");
+  EXPECT_EQ(anchors.back().second, *firstRulePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, SkippedStructuralIdDoesNotConsumeRequestedCapBypass) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 1101; ++i) html += "<p id='p" + std::to_string(i) + "'>Text.</p>";
+  html +=
+      "<div id='id28' hidden='hidden'><hr/></div>"
+      "<div id='id28' style='display:none'><hr/></div>"
+      "<div id='id28' role='doc-pagebreak'><hr/></div>"
+      "<div id='id28'><hr/></div></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  const auto& anchors = parser.getAnchors();
+  ASSERT_EQ(anchors.size(), 1025u);
+  EXPECT_EQ(anchors.back().first, "id28");
+  EXPECT_EQ(anchors.back().second, *firstRulePage);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RequestedHiddenIdsDoNotCaptureFollowingVisibleText) {
@@ -235,6 +282,34 @@ TEST_F(ChapterHtmlSlimParserTest, RequestedSpanAtSourceHyphenBoundaryMapsToRemai
   parser.viewportWidth = 48;
   ASSERT_TRUE(
       parseHtml("<html><body><p style='text-indent:0'>abcd-<span id='id28'>TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedSpanStartingWithSoftHyphenMapsToRenderedTextPage) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.viewportWidth = 48;
+  ASSERT_TRUE(
+      parseHtml("<html><body><p style='text-indent:0'>abcd<span id='id28'>&#173;TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedGridSpanStartingWithSoftHyphenMapsToRenderedTextSlice) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.viewportWidth = 160;
+  ASSERT_TRUE(
+      parseHtml("<html><body><table><tr><td>abcd<span id='id28'>&#173;TARGET</span>"
+                "</td><td>Other.</td></tr></table></body></html>",
+                16));
   ASSERT_TRUE(targetPage.has_value());
   ASSERT_GT(*targetPage, 0u);
   ASSERT_EQ(parser.getAnchors().size(), 1u);
