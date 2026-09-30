@@ -45,7 +45,12 @@ class GfxRenderer {
   int getKerning(int, uint32_t left, uint32_t right, EpdFontFamily::Style, int8_t tracking = 0) const {
     return trackingBetween(left, right, tracking);
   }
-  int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 4; }
+  // Counts space-advance lookups so layout tests can bound measurement work.
+  inline static int spaceAdvanceCalls = 0;
+  int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const {
+    ++spaceAdvanceCalls;
+    return 4;
+  }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const char* const*, const size_t*, size_t, bool, bool, uint8_t) const {}
 };
