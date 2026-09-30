@@ -76,22 +76,6 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
       password);
 }
 
-bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
-                              const std::string& password) {
-  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
-  outContent.clear();  // start clean; the sink appends, so don't carry prior content
-  freeink::FetchSink sink;
-  sink.write = [&outContent](const uint8_t* data, size_t len) {
-    outContent.append(reinterpret_cast<const char*>(data), len);
-    return true;
-  };
-  sink.rewind = [&outContent] {
-    outContent.clear();
-    return true;
-  };
-  return runGetSecure(url, username, password, {}, sink) == OK;
-}
-
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
                               const std::string& password) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());

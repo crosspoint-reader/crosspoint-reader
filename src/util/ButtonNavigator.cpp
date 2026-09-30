@@ -23,8 +23,6 @@ void ButtonNavigator::onNextPress(const Callback& callback) { onPress(getNextBut
 
 void ButtonNavigator::onPreviousPress(const Callback& callback) { onPress(getPreviousButtons(), callback); }
 
-void ButtonNavigator::onNextRelease(const Callback& callback) { onRelease(getNextButtons(), callback); }
-
 void ButtonNavigator::onPreviousRelease(const Callback& callback) { onRelease(getPreviousButtons(), callback); }
 
 void ButtonNavigator::onNextContinuous(const Callback& callback) { onContinuous(getNextButtons(), callback); }
