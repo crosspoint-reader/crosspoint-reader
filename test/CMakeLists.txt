@@ -78,3 +78,6 @@ add_subdirectory(glyph_bitmap)
 
 add_subdirectory(reader_session)
 add_subdirectory(plugin_manifest_classification)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)

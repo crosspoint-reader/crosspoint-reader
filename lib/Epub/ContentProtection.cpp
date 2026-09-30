@@ -18,7 +18,10 @@
 #include <TrustedTime.h>
 #include <WolfsslCrypto.h>
 #include <Zip.h>
+#include <ZipFile.h>
 #include <esp_heap_caps.h>
+
+#include "Epub/parsers/EncryptionManifestProbe.h"
 
 namespace freeink {
 namespace content {
@@ -103,16 +106,28 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
   // (largest collapses) from a leak.
   LOG_INF("CPRO", "open: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
 
-  // open() is the single existence test: a missing path fails to open.
-  SdByteSource source(epubPath);
-  if (!source.open()) return nullptr;
+  // The reader's ZIP lookup scans without retaining a directory index.
+  size_t manifestSize = 0;
+  if (!ZipFile(epubPath).getInflatedFileSize("META-INF/encryption.xml", &manifestSize)) return nullptr;
+  {
+    EncryptionManifestProbe manifest;
+    if (!manifest.setup() || !ZipFile(epubPath).readFileToStream("META-INF/encryption.xml", manifest, 512) ||
+        !manifest.finish()) {
+      LOG_ERR("CPRO", "Cannot read encryption manifest");
+      err = "cannot read encryption manifest";
+      return nullptr;
+    }
+    if (!manifest.needsProtectionCheck()) return nullptr;
+  }
 
-  // Classify before initializing crypto or loading credentials, then transfer
-  // this same ZIP index into ProtectedBook. Protected EPUBs still scan only
-  // once; plain EPUBs return immediately through the normal reader path.
-  ZipScan scan;
-  if (!scan.open(source) || !scan.find("META-INF/encryption.xml")) return nullptr;
+  SdByteSource source(epubPath);
   reclaimContentCaches();
+  ZipScan scan;
+  if (!source.open() || !scan.open(source)) {
+    LOG_ERR("CPRO", "Cannot index protected container");
+    err = "cannot index protected content";
+    return nullptr;
+  }
 
   // A book carrying encryption.xml may only obfuscate its embedded fonts
   // (not content-protected). The SDK demands the credential only after parsing

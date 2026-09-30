@@ -5,6 +5,8 @@
 #include <Preferences.h>
 #include <esp_sntp.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <ctime>
 
 namespace trustedtime {
@@ -53,11 +55,14 @@ void writeFloor(const int64_t value) {
 // SNTP sync callback (lwIP task context; Preferences/NVS is mutex-guarded).
 void onTimeSynced(struct timeval*) { note(); }
 
-// configTzTime() (Arduino-ESP32) stops SNTP if already running, sets the poll
-// server, inits, and pins TZ. TZ=UTC0 matches this module's epoch-based logic
-// (everything here uses time(nullptr), not localtime). The notification
-// callback set in init() is a module static and survives the stop/init cycle.
-void configureSntp() { configTzTime("UTC0", "pool.ntp.org"); }
+void configureSntp() {
+  // SNTP uses UTC epochs regardless of the display timezone. Copy TZ before
+  // configTzTime replaces the environment entry, as HalClock::syncFromNTP does.
+  const char* currentTz = getenv("TZ");
+  char timezone[64];
+  snprintf(timezone, sizeof(timezone), "%s", currentTz ? currentTz : "UTC0");
+  configTzTime(timezone, "pool.ntp.org");
+}
 
 }  // namespace
 
