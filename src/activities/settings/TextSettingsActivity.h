@@ -29,7 +29,16 @@ class TextSettingsActivity final : public UiTabListActivity {
  private:
   // Row indices per tab. enum class (not plain enum) so a LayoutRow can't be
   // silently confused with a StyleRow of equal value.
-  enum class LayoutRow { LineSpacing, WordSpacing, CharacterSpacing, ParaSpacing, Alignment, ScreenMargin, Count };
+  enum class LayoutRow {
+    LineSpacing,
+    WordSpacing,
+    CharacterSpacing,
+    ParaSpacing,
+    ParaIndentation,
+    Alignment,
+    ScreenMargin,
+    Count
+  };
   enum class StyleRow { FocusReading, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
 
   // --- UiTabListActivity contract ---
@@ -57,7 +66,7 @@ class TextSettingsActivity final : public UiTabListActivity {
   void activateRow(int row);
 
   std::string layoutValueText(int row) const;
-  std::string styleValueText(int row) const;
+  bool styleRowChecked(int row) const;
   // Button-hint label for Confirm at the current ring position.
   const char* confirmLabelText() const;
   // True when the focused list row is a setting the preview cannot reflect.

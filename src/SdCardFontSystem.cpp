@@ -424,9 +424,9 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
 
 void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
                                      const bool registryWasDirty) {
-  // Vector fonts render at any size; snap the reader size into the standard set.
-  snapFontPointSizeTo(snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES),
-                                             SETTINGS.fontPointSize));
+  // Keep sizes inherited from other families within the selectable vector range.
+  snapFontPointSizeTo(
+      snapToNearestPointSize(VECTOR_READER_POINT_SIZES, std::size(VECTOR_READER_POINT_SIZES), SETTINGS.fontPointSize));
   const uint8_t size = SETTINGS.fontPointSize;
 
   // Already loaded, same family + size, and disk unchanged → nothing to do.

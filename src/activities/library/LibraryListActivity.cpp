@@ -612,9 +612,7 @@ void LibraryListActivity::applyFilter() {
   headerSearchTitle = query.empty() ? std::string() : "“" + query + "”";
   if (query.empty()) return;
 
-  // Folded the same way the stored folds were, articles removed included —
-  // otherwise "the hobbit" searches for a word no record contains.
-  const std::string needle = library::fold(query, /*stripArticle=*/true);
+  const std::string needle = library::fold(query);
   const int total = static_cast<int>(index.bookCount());
   if (total <= 0) return;
 
@@ -772,28 +770,36 @@ bool LibraryListActivity::handleButtons() {
 void LibraryListActivity::navigateButtons() {
   const int count = listCount();
   auto& nav = activeNav();
-  buttonNavigator.onNextRelease([this, count] {
+  if (mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
+      mappedInput.wasPressed(MappedInputManager::Button::NavPrevious)) {
+    navigationStartedOnTabs = tabsFocused();
+  }
+  buttonNavigator.onNextPress([this, count] {
     if (count > 0) moveRingTo(ringPos() == count ? 1 : ringPos() + 1);
   });
-  buttonNavigator.onPreviousRelease([this, count] {
-    if (tabsFocused() && !degraded) {
-      openSearch();
-    } else if (count > 0) {
+  buttonNavigator.onPreviousPress([this, count] {
+    if ((!navigationStartedOnTabs || degraded) && count > 0) {
       moveRingTo(ringPos() <= 1 ? count : ringPos() - 1);
     }
+  });
+  // Search is an activation: defer it so holding Previous can still step tabs.
+  buttonNavigator.onPreviousRelease([this] {
+    if (navigationStartedOnTabs && tabsFocused() && !degraded) openSearch();
   });
   // A held button steps tabs while the strip has focus (the base behaviour
   // Settings keeps) and page-jumps once the selection is down in the rows,
   // where fast travel through a long shelf is what a hold means.
   buttonNavigator.onNextContinuous([this, count, &nav] {
-    if (tabsFocused()) {
+    if (navigationStartedOnTabs) {
+      activeNav().selected = 0;
       stepTab(1);
     } else if (count > 0) {
       moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
     }
   });
   buttonNavigator.onPreviousContinuous([this, count, &nav] {
-    if (tabsFocused()) {
+    if (navigationStartedOnTabs) {
+      activeNav().selected = 0;
       stepTab(-1);
     } else if (count > 0) {
       moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
