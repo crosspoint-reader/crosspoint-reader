@@ -1,0 +1,29 @@
+Subject: [PATCH 1/2] FsCache: invalidate the cache after a failed sector read
+
+FsCache::prepare() reads the new sector directly into m_buffer. When
+readSector() fails, it returns without updating m_sector, but the buffer
+may already hold the new sector's bytes. The cache then reports the
+previous sector as cached while holding different data. A later
+prepare() or cacheSafeRead() for that sector returns the wrong bytes,
+and a CACHE_FOR_WRITE prepare() writes them back to the card (to both
+copies for a FAT sector).
+
+With SHARED_SPI, SdSpiCard::readSectors() fills the whole buffer and
+then sends CMD12. If CMD12 fails, readSector() returns false after the
+buffer already holds the new sector.
+
+Any dirty data is written back by sync() before the read starts, so
+clearing the cache here does not lose data.
+
+---
+--- a/src/common/FsCache.cpp
++++ b/src/common/FsCache.cpp
+@@ -39,6 +39,8 @@
+     }
+     if (!(option & CACHE_OPTION_NO_READ)) {
+       if (!m_blockDev->readSector(sector, m_buffer)) {
++        // A failed transfer may have overwritten the old cached sector.
++        invalidate();
+         DBG_FAIL_MACRO;
+         goto fail;
+       }

@@ -24,9 +24,9 @@ namespace {
 // Tab labels for Font | Size | Layout | Style.
 constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
 
-constexpr StrId LAYOUT_ROW_NAME_IDS[] = {StrId::STR_LINE_SPACING,      StrId::STR_WORD_SPACING,
-                                         StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
-                                         StrId::STR_ALIGNMENT,         StrId::STR_SCREEN_MARGIN};
+constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
+    StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
+    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
                                         StrId::STR_TEXT_AA};
 
@@ -230,13 +230,15 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       case Tab::Layout:
         rowValues_[i] = layoutValueText(i);
         break;
-      case Tab::Style:
-        rowValues_[i] = styleValueText(i);
-        break;
       default:
         break;
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    if (tab_ == Tab::Style) {
+      GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
+    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
+      GUI.setCheckboxRow(rowItems_[i], SETTINGS.extraParagraphSpacing);
+    }
   }
 
   fui::ListProps props;
@@ -261,7 +263,6 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
   switch (tab_) {
     case Tab::Layout:
-      // Extra Paragraph Spacing toggles; the rest open a picker
       return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
     case Tab::Style:
       return tr(STR_TOGGLE);
@@ -385,6 +386,18 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       SETTINGS.saveToFile();
       requestUpdate();
       break;
+    case LayoutRow::ParaIndentation: {
+      std::vector<std::string> options;
+      options.reserve(6);
+      options.push_back(tr(STR_STATE_OFF));
+      for (int spaces = 1; spaces <= 5; ++spaces) options.push_back(std::to_string(spaces));
+      optionPopup_.show(StrId::STR_PARAGRAPH_INDENTATION, options, SETTINGS.paragraphIndentSpaces, [](int idx) {
+        SETTINGS.paragraphIndentSpaces = static_cast<uint8_t>(idx);
+        SETTINGS.saveToFile();
+      });
+      requestUpdate();
+      break;
+    }
     case LayoutRow::LineSpacing:
       optionPopup_.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),
                         SETTINGS.lineSpacing, [](int idx) {
@@ -444,8 +457,10 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       const uint8_t v = SETTINGS.lineSpacing;
       return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
     }
-    case LayoutRow::ParaSpacing:
-      return SETTINGS.extraParagraphSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case LayoutRow::ParaIndentation: {
+      const int spaces = std::clamp<int>(SETTINGS.paragraphIndentSpaces, 0, 5);
+      return spaces == 0 ? tr(STR_STATE_OFF) : std::to_string(spaces);
+    }
     case LayoutRow::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
       return v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
@@ -487,19 +502,19 @@ void TextSettingsActivity::confirmStyleRow(int row) {
   requestUpdate();
 }
 
-std::string TextSettingsActivity::styleValueText(int row) const {
+bool TextSettingsActivity::styleRowChecked(int row) const {
   switch (static_cast<StyleRow>(row)) {
     case StyleRow::FocusReading:
-      return SETTINGS.focusReadingEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.focusReadingEnabled;
     case StyleRow::Hyphenation:
-      return SETTINGS.hyphenationEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.hyphenationEnabled;
     case StyleRow::EmbeddedStyle:
-      return SETTINGS.embeddedStyle ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.embeddedStyle;
     case StyleRow::AntiAliasing:
-      return SETTINGS.textAntiAliasing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.textAntiAliasing;
 
     default:
-      return "";
+      return false;
   }
 }
 

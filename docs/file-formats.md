@@ -90,19 +90,28 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 49
+### Version 51
 
-Version 49 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Version 51 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
 Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
 shaping data form conjuncts, reph and positioned marks from the font's OpenType
 tables (lib/OtShaper), and
 other fonts reorder pre-base vowel signs; both change word widths, so cached
-word positions from version 48 no longer match. TextBlock's former `hasFocus`
+word positions from version 50 no longer match. TextBlock's former `hasFocus`
 byte became a flags byte: bit 1 adds a `displayBytes` count, a `displayOff[]`
 table and a `display[]` blob that hold each complex-script word in the form
 layout measured it in (ShapingTokens.h glyph, advance and offset tokens, or
-reordered vowel signs), so page renders draw exactly that without running the
-shaper. Words without a display entry draw `text[]` as before.
+reordered vowel signs from a font without shaping data), so page renders draw
+exactly that without running the shaper. Words without a display entry, among
+them words a shaping font could not shape while memory was short, are resolved
+from `text[]` when drawn.
+
+### Version 50
+
+The header adds `paragraphIndentSpaces` after `extraParagraphSpacing`. The value
+participates in cache validation, so sections with different indentation settings
+are rebuilt. Version 49 was used by pre-release builds with a different header
+layout and is skipped to prevent reuse of those caches.
 
 ### Version 48
 
@@ -214,7 +223,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 49
+#define EXPECTED_VERSION 51
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -276,7 +285,7 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v49)")]];
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v51)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
     if ((flags & 2) != 0) {
         u16 displayBytes [[comment("Total size of display[], including one NUL per stored entry")]];
@@ -289,7 +298,7 @@ struct TextBlock {
             u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
         }
         if ((flags & 2) != 0) {
-            u16 displayOff[wordCount] [[comment("Offset within display[], 0xFFFF = draw text[] as is")]];
+            u16 displayOff[wordCount] [[comment("Offset within display[], 0xFFFF = resolve text[] when drawn")]];
         }
         WordStyle wordStyle[wordCount];
         if ((flags & 1) != 0) {
@@ -297,7 +306,7 @@ struct TextBlock {
         }
         char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
         if ((flags & 2) != 0) {
-            char display[displayBytes] [[comment("Measured form of complex-script words (shaped glyph tokens or reordered text)")]];
+            char display[displayBytes] [[comment("Measured form of complex-script words (shaped glyph tokens, or reordered text from a font without shaping data)")]];
         }
     }
 
@@ -380,6 +389,7 @@ struct SectionBin {
     s32 fontId;
     float lineCompression;
     bool extraParagraphSpacing;
+    u8 paragraphIndentSpaces;
     u8 paragraphAlignment;
     u16 viewportWidth;
     u16 viewportHeight;

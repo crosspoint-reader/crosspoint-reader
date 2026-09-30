@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <PngToBmpConverter.h>
+#include <Txt.h>
 #include <Utf8.h>
 #include <ZipFile.h>
 
@@ -13,6 +14,10 @@
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
+
+Epub::Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
+  cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
+}
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip) const {
   const auto containerPath = "META-INF/container.xml";
@@ -432,12 +437,32 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
   // Initialize spine/TOC cache
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser(cachePath));
+  cssParser = makeUniqueNoThrow<CssParser>(cachePath);
+  if (!bookMetadataCache || !cssParser) {
+    LOG_ERR("EBP", "OOM: metadata cache or CSS parser");
+    return false;
+  }
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
+    if (Txt::isTxtOrMd(filepath)) {
+      if (!Txt::validateCache(filepath, cachePath, bookMetadataCache->getCumulativeSize(0))) {
+        LOG_DBG("EBP", "TXT/MD cache invalid or outdated: %s", filepath.c_str());
+        if (!buildIfMissing) {
+          return false;
+        }
+        bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+        if (!bookMetadataCache) {
+          LOG_ERR("EBP", "OOM: TXT/MD metadata cache");
+          return false;
+        }
+        return Txt::buildTxtCache(filepath, cachePath, bookMetadataCache);
+      }
+      LOG_DBG("EBP", "Loaded TXT/MD from cache: %s", filepath.c_str());
+      return true;
+    }
     if (!skipLoadingCss) {
       const CssParser::CacheStatus cacheStatus = cssParser->inspectCache();
       CssParser::CacheLoadResult cacheLoadResult = CssParser::CacheLoadResult::Invalid;
@@ -465,8 +490,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
           cssParseResult = parseCssFiles(cacheStatus);
         }
         bookMetadataCache.reset();
-        bookMetadataCache.reset(new BookMetadataCache(cachePath));
-        if (!bookMetadataCache->load()) {
+        bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+        if (!bookMetadataCache || !bookMetadataCache->load()) {
           LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
           return false;
         }
@@ -491,6 +516,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // If we didn't load from cache above and we aren't allowed to build, fail now
   if (!buildIfMissing) {
     return false;
+  }
+
+  if (Txt::isTxtOrMd(filepath)) {
+    return Txt::buildTxtCache(filepath, cachePath, bookMetadataCache);
   }
 
   // Cache doesn't exist or is invalid, build it
@@ -583,8 +612,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
 
   // Reload the cache from disk so it's in the correct state
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
-  if (!bookMetadataCache->load()) {
+  bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!bookMetadataCache || !bookMetadataCache->load()) {
     LOG_ERR("EBP", "Failed to reload cache after writing");
     return false;
   }
@@ -596,6 +625,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 bool Epub::loadMetadata(std::string& title, std::string& author) {
   title.clear();
   author.clear();
+
+  if (Txt::isTxtOrMd(filepath)) {
+    title = utf8ComposeNfc(FsHelpers::getFileNameWithoutExtension(filepath));
+    return true;
+  }
 
   auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   if (metadataCache && metadataCache->load()) {
@@ -692,6 +726,11 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     return false;
   }
 
+  if (Txt::isTxtOrMd(filepath)) {
+    return Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds), 0, cropped,
+                                       originalThresholds);
+  }
+
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating BMP from JPG cover image (%s mode%s)", cropped ? "cropped" : "fit",
             originalThresholds ? ", original thresholds" : "");
@@ -785,6 +824,12 @@ bool Epub::generateThumbBmp(int height) const {
 
 bool Epub::generateThumbBmpFromSource(int height) {
   if (Storage.exists(getThumbBmpPath(height).c_str())) return true;
+  if (Txt::isTxtOrMd(filepath)) {
+    std::string companionCover = Txt::findCompanionCoverImage(filepath);
+    if (companionCover.empty()) return false;
+    setupCacheDir();
+    return generateThumbBmpForCover(height, companionCover);
+  }
   // Parser input and metadata outlive parsing but exceed the small task stack budget.
   auto metadata = makeUniqueNoThrow<BookMetadataCache::BookMetadata>();
   auto zip = makeUniqueNoThrow<ZipFile>(filepath);
@@ -805,7 +850,14 @@ bool Epub::generateThumbBmpFromSource(int height) {
 bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHref) const {
   if (coverImageHref.empty()) {
     LOG_DBG("EBP", "No known cover image for thumbnail");
-  } else if (FsHelpers::hasJpgExtension(coverImageHref)) {
+    return false;
+  }
+
+  if (Txt::isTxtOrMd(filepath)) {
+    return Txt::convertCoverImageToBmp(coverImageHref, getThumbBmpPath(height), height);
+  }
+
+  if (FsHelpers::hasJpgExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating thumb BMP from JPG cover image");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
@@ -911,6 +963,10 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
     return false;
   }
 
+  if (Txt::isTxtOrMd(filepath)) {
+    return Txt::streamTxtToHtml(filepath, out);
+  }
+
   const std::string path = FsHelpers::normalisePath(itemHref);
   return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, allowEarlyStop);
 }
@@ -932,6 +988,14 @@ bool Epub::extractItemToFile(const std::string& itemHref, const std::string& des
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
+  if (Txt::isTxtOrMd(filepath)) {
+    HalFile f;
+    if (Storage.openFileForRead("EBP", filepath, f)) {
+      if (size) *size = f.size();
+      return true;
+    }
+    return false;
+  }
   const std::string path = FsHelpers::normalisePath(itemHref);
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
 }
