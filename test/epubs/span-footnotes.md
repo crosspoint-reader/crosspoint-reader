@@ -29,7 +29,10 @@ its text, including a page boundary and an inline span inside a long paragraph.
 They also check the ordinary 1024-anchor cap, text-free structural targets beyond
 the cap, TOC preservation, hidden/skipped IDs, BiDi and inserted-hyphen line
 boundaries, leading soft hyphens/U+FEFF, targets in buffered grid cells, missing targets
-and duplicate requested IDs. Anchor-map tests exercise completed negative lookups,
+and duplicate requested IDs. Text-free targets retain their structural page when
+later text appears on another page, while empty children do not end target selection.
+Empty requested non-TOC spans map to the following rendered text.
+Anchor-map tests exercise completed negative lookups,
 reopen, partial builds, legacy encoding, long IDs and truncated records.
 
 For a broken link to an absent ID, follow it twice and then exit/reopen the book.

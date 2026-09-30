@@ -844,6 +844,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (selectRequestedAnchor) {
       self->requestedAnchorSeen = true;
       self->requestedAnchorWaitingForText = true;
+      if (isTocAnchor || !isNonNavigableInlineElement(name)) {
+        self->requestedStructuralAnchorDepth = self->depth;
+      }
     }
     // Converter spans stay filtered; TOC targets keep their structural page breaks.
     if (isTocAnchor || (!isNonNavigableInlineElement(name) &&
@@ -1833,6 +1836,10 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->requestedStructuralAnchorDepth == self->depth - 1) {
+    self->requestedAnchorWaitingForText = false;
+    self->requestedStructuralAnchorDepth = -1;
+  }
   if (self->nonVisibleTextDepth > 0) {
     self->nonVisibleTextDepth--;
   }

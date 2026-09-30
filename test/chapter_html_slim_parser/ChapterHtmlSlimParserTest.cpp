@@ -189,6 +189,84 @@ TEST_F(ChapterHtmlSlimParserTest, SkippedStructuralIdDoesNotConsumeRequestedCapB
   EXPECT_EQ(anchors.back().second, *firstRulePage);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, TextFreeTargetKeepsStructuralPageAfterClosing) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 41; ++i) html += "<p>Before.</p>";
+  html += "<div id='id28'><span><hr/><hr/></span></div><p>TARGET</p></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, *firstRulePage);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstRulePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, TextFreeTargetBeyondCapKeepsStructuralPageAfterClosing) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 1101; ++i) html += "<p id='p" + std::to_string(i) + "'>Before.</p>";
+  html += "<div id='id28'><span><hr/><hr/></span></div><p>TARGET</p></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, *firstRulePage);
+  const auto& anchors = parser.getAnchors();
+  ASSERT_EQ(anchors.size(), 1025u);
+  EXPECT_EQ(anchors.back().first, "id28");
+  EXPECT_EQ(anchors.back().second, *firstRulePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, EmptyChildCloseDoesNotEndRequestedTextSelection) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body><p>";
+  for (int i = 0; i < 1500; ++i) html += "Previous ";
+  html += "<span id='id28'><i></i><b></b>TARGET</span></p></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedEmptySpanMapsToFollowingRenderedTextPage) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 40; ++i) html += "<p>Before.</p>";
+  html += "<span id='id28'></span><p>TARGET</p></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, EmptyChildClosePreservesStructuralTargetsLaterTextPage) {
+  parser.requestedAnchor = "id28";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 41; ++i) html += "<p>Before.</p>";
+  html += "<div id='id28'><i></i><p style='margin-top:64px'>TARGET</p></div></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 10u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, TextFreeRequestedTocSpanKeepsStructuralPageAfterClosing) {
+  parser.requestedAnchor = "id28";
+  parser.tocAnchors = {"id28"};
+  std::string html = "<html><body>";
+  for (int i = 0; i < 41; ++i) html += "<p>Before.</p>";
+  html += "<span id='id28'><hr/><hr/><hr/></span><p>TARGET</p></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, *firstRulePage);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstRulePage);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RequestedHiddenIdsDoNotCaptureFollowingVisibleText) {
   parser.requestedAnchor = "id28";
   ASSERT_TRUE(
