@@ -15,9 +15,16 @@
 namespace fui = freeink::ui;
 
 namespace {
-const StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
-    StrId::STR_USERNAME,      StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL, StrId::STR_DOCUMENT_MATCHING,
-    StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR, StrId::STR_SIGN_UP,         StrId::STR_AUTHENTICATE};
+const StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {StrId::STR_USERNAME,
+                                                               StrId::STR_PASSWORD,
+                                                               StrId::STR_SYNC_SERVER_URL,
+                                                               StrId::STR_DOCUMENT_MATCHING,
+                                                               StrId::STR_SEND_METADATA,
+                                                               StrId::STR_SYNC_BEHAVIOR,
+                                                               StrId::STR_AUTOMATIC_PROGRESS_CHECK,
+                                                               StrId::STR_AUTOMATIC_PROGRESS_UPLOAD,
+                                                               StrId::STR_SIGN_UP,
+                                                               StrId::STR_AUTHENTICATE};
 }  // namespace
 
 KOReaderSettingsActivity::KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -97,6 +104,16 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (index == 6) {
+    // Automatic pull-only progress check on explicit book opens and reader resumes
+    KOREADER_STORE.setAutomaticProgressCheck(!KOREADER_STORE.getAutomaticProgressCheck());
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (index == 7) {
+    // Automatic local-ahead upload when leaving an EPUB
+    KOREADER_STORE.setAutomaticProgressUpload(!KOREADER_STORE.getAutomaticProgressUpload());
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (index == 8) {
     // Sign Up - create a new account on the sync server with the entered credentials
     if (!KOREADER_STORE.hasCredentials()) {
       return;
@@ -104,7 +121,7 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
     startActivityForResult(
         std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::SIGN_UP),
         [](const ActivityResult&) {});
-  } else if (index == 7) {
+  } else if (index == 9) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -150,6 +167,10 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     } else if (i == 5) {
       rowValues_[i] =
           KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? tr(STR_SMART_SYNC) : tr(STR_ASK_EVERY_TIME);
+    } else if (i == 6) {
+      rowValues_[i] = KOREADER_STORE.getAutomaticProgressCheck() ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    } else if (i == 7) {
+      rowValues_[i] = KOREADER_STORE.getAutomaticProgressUpload() ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     } else {
       rowValues_[i] = KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
     }

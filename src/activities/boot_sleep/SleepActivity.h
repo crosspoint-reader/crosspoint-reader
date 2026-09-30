@@ -8,8 +8,9 @@ class HalFile;
 
 class SleepActivity final : public Activity {
  public:
-  explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
-      : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
+  explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false,
+                         bool renderScreen = true)
+      : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout), renderScreen(renderScreen) {}
   void onEnter() override;
 
  private:
@@ -25,4 +26,5 @@ class SleepActivity final : public Activity {
   void renderBlankSleepScreen() const;
 
   bool fromTimeout = false;
+  bool renderScreen = true;
 };
