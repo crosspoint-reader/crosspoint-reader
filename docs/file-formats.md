@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 50
+
+The header adds `paragraphIndentSpaces` after `extraParagraphSpacing`. The value
+participates in cache validation, so sections with different indentation settings
+are rebuilt. Version 49 was used by pre-release builds with a different header
+layout and is skipped to prevent reuse of those caches.
+
 ### Version 48
 
 Version 48 keeps the version 47 serialized layout unchanged. It was bumped
@@ -200,7 +207,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 48
+#define EXPECTED_VERSION 50
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -357,6 +364,7 @@ struct SectionBin {
     s32 fontId;
     float lineCompression;
     bool extraParagraphSpacing;
+    u8 paragraphIndentSpaces;
     u8 paragraphAlignment;
     u16 viewportWidth;
     u16 viewportHeight;
