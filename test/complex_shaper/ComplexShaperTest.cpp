@@ -1,8 +1,10 @@
+#include <Arduino.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -74,6 +76,18 @@ std::vector<DecodedGlyph> decode(const std::string& tokens, std::string* plain =
     }
   }
   return glyphs;
+}
+
+std::vector<uint32_t> glyphIds(const std::string& tokens) {
+  std::vector<uint32_t> gids;
+  for (const auto& g : decode(tokens)) gids.push_back(g.gid);
+  return gids;
+}
+
+std::vector<uint32_t> glyphIds(const ExpectedShaping& entry) {
+  std::vector<uint32_t> gids;
+  for (uint8_t i = 0; i < entry.count; i++) gids.push_back(entry.glyphs[i].gid);
+  return gids;
 }
 
 class ComplexShaperTest : public testing::Test {
@@ -380,6 +394,78 @@ TEST_F(ComplexShaperTest, AdvancesByTheAdvanceSourceKeepingGposAdjustments) {
   std::string again;
   ASSERT_TRUE(shaper.shape(word, again));
   EXPECT_EQ(again, base);
+}
+
+namespace {
+
+// HarfBuzz keeps an empty table in place of one it could not allocate, and
+// shapes with it afterwards without reporting an error. However memory runs
+// short, a successful shape() must match the reference, both then and once
+// memory is back.
+void expectShapesCorrectlyUnderPressure(ComplexShaper& shaper, const std::string& when,
+                                        const std::function<void()>& restoreMemory) {
+  const auto& word = kBengaliShaping[5];   // শকুন্তলা: a conjunct and positioned marks
+  const auto& later = kBengaliShaping[6];  // প্রকাশ: first shaped once memory is back
+  std::string out;
+  for (int call = 0; call < 3; call++) {
+    if (shaper.shape(word.utf8, out)) ASSERT_EQ(glyphIds(out), glyphIds(word)) << when << ", call " << call;
+  }
+  restoreMemory();
+  for (const auto* entry : {&word, &later}) {
+    bool shaped = false;
+    for (int i = 0; i < 100 && !shaped; i++) shaped = shaper.shape(entry->utf8, out);
+    ASSERT_TRUE(shaped) << when;
+    ASSERT_EQ(glyphIds(out), glyphIds(*entry)) << when << ", after recovery";
+  }
+}
+
+}  // namespace
+
+TEST_F(ComplexShaperTest, RecoversFromARefusedAllocationAnywhere) {
+  int64_t allocations = 0;  // counted by the first pass, which refuses nothing
+  for (int64_t refused = -1; refused < allocations; refused++) {
+    ComplexShaper::releaseAll();
+    ComplexShaper probe;
+    probe.setBlobSource(loadFixture, nullptr, kFixtureKey + 400);
+    probe.setScale(kFixturePpem26_6);
+    ESP.freeHeapCalls = 0;
+    ESP.emptyAtCall = refused;
+    expectShapesCorrectlyUnderPressure(probe, "allocation " + std::to_string(refused) + " refused", [&] {
+      if (refused < 0) allocations = ESP.freeHeapCalls;
+      ESP.emptyAtCall = -1;
+    });
+    if (HasFatalFailure()) return;
+  }
+  EXPECT_GT(allocations, 0);
+}
+
+TEST_F(ComplexShaperTest, RecoversFromEveryBudgetShortfall) {
+  // A nearly spent budget admits small allocations and refuses larger ones,
+  // so the face builds and a table inside it does not.
+  for (size_t budget = fixture().size(); budget < fixture().size() + 48 * 1024; budget += 128) {
+    ComplexShaper::releaseAll();
+    ComplexShaper::setMemoryBudget(budget);
+    ComplexShaper probe;
+    probe.setBlobSource(loadFixture, nullptr, kFixtureKey + 400);
+    probe.setScale(kFixturePpem26_6);
+    expectShapesCorrectlyUnderPressure(probe, "budget " + std::to_string(budget),
+                                       [] { ComplexShaper::setMemoryBudget(4 << 20); });
+    if (HasFatalFailure()) return;
+  }
+}
+
+TEST_F(ComplexShaperTest, RetriesTheNextWordOnceTheBackoffHasLasted) {
+  // Pages drawn from the page cache do not shape, so a shaper can sit unused
+  // while memory comes back; its next word must not wait out the call count.
+  const auto& word = kBengaliShaping[1];
+  std::string out;
+  ComplexShaper::setMemoryBudget(16 * 1024);  // smaller than the layout tables
+  EXPECT_FALSE(shaper.shape(word.utf8, out));
+  ComplexShaper::setMemoryBudget(4 << 20);
+  EXPECT_FALSE(shaper.shape(word.utf8, out)) << "a retry right away would re-read the source for every word";
+  hostMillis += 1000;
+  ASSERT_TRUE(shaper.shape(word.utf8, out));
+  EXPECT_EQ(glyphIds(out), glyphIds(word));
 }
 
 TEST_F(ComplexShaperTest, MakesRoomForANewFaceWhenTheBudgetHoldsOnlyOne) {

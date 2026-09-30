@@ -149,9 +149,12 @@ class ComplexShaper {
   uint32_t contentKey_ = 0;
 
   struct SharedFace* face_ = nullptr;
-  // After a failed build, skip this many shape() calls before retrying so a
-  // persistently tight heap does not re-read the source for every word.
+  // After a failed build, skip this many shape() calls, for at most a
+  // second, before retrying: a persistently tight heap does not re-read the
+  // source for every word, and a shaper left unused while memory came back
+  // (pages drawn from the page cache) shapes the next word it gets.
   uint16_t retryBackoff_ = 0;
+  uint32_t backoffStartMs_ = 0;
   bool unusable_ = false;  // the source was read but is malformed
   // One bit per indic::SCRIPTS entry. Coverage is a property of the source,
   // so it survives release().

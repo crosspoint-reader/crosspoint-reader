@@ -321,6 +321,7 @@ constexpr int roundPixels(const int32_t v) { return v >= 0 ? (v + 32) / 64 : -((
 void appendToken(const uint32_t cp, std::string& out) { utf8AppendCodepoint(cp, out); }
 
 constexpr uint16_t kRetryAfterFailure = 64;
+constexpr uint32_t kRetryAfterMs = 1000;
 
 // A shaping plan (the font's lookup list for one script, a few KB) is only
 // built when the shaping reserve remains free around it.
@@ -594,8 +595,11 @@ bool ComplexShaper::ensureFace() {
   if (face_ != nullptr) return true;
   if (unusable_ || !hasSource() || scale26_6_ == 0) return false;
   if (retryBackoff_ > 0) {
-    retryBackoff_--;
-    return false;
+    if (static_cast<uint32_t>(millis()) - backoffStartMs_ < kRetryAfterMs) {
+      retryBackoff_--;
+      return false;
+    }
+    retryBackoff_ = 0;
   }
 
   SharedFace* shared = findFace(contentKey_);
@@ -617,6 +621,7 @@ bool ComplexShaper::ensureFace() {
         unusable_ = true;
       } else {
         retryBackoff_ = kRetryAfterFailure;
+        backoffStartMs_ = static_cast<uint32_t>(millis());
       }
       return false;
     }

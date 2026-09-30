@@ -337,7 +337,8 @@ class GfxRenderer {
   // A word as layout measured it: `text` is its logical form, which picks the
   // font as for any string, and `display` the form resolveForDisplay() made
   // of it, or nullptr when it made none. The overloads taking one draw and
-  // measure it without shaping again, so a page turn draws what layout measured.
+  // measure a display form without shaping again, so a page turn draws what
+  // layout measured; without one they resolve `text` like any string.
   struct LaidOutText {
     const char* text;
     const char* display;
@@ -361,9 +362,10 @@ class GfxRenderer {
 
   // The form getTextAdvanceX measures a complex-script `text` in: shaped
   // glyph tokens (ShapingTokens.h), or reordered vowel signs when the font
-  // cannot shape it. Returns false, leaving `out` untouched, when that form
-  // is `text` itself. Tied to this font and style; layout stores it in the
-  // page cache as a LaidOutText display form.
+  // cannot shape. Returns false, leaving `out` untouched, when that form is
+  // `text` itself or when a shaping font could not shape `text` just now (the
+  // page then shapes it when drawn). Tied to this font and style; layout
+  // stores it in the page cache as a LaidOutText display form.
   bool resolveForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
 
   // While one of these is alive, repeated runs shape once (see

@@ -53,7 +53,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiU
 const char* resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontData* shapingFont);
 const char* replaceTokenPlanes(const char* text, std::string& visualBuffer);
 const char* resolveLaidOutText(const GfxRenderer::LaidOutText& text, std::string& visualBuffer,
-                               BidiUtils::BidiBaseDir baseDir);
+                               BidiUtils::BidiBaseDir baseDir, const EpdFontData* shapingFont);
 
 // The shaper already applied the font's kerning; letter spacing inside a
 // shaped run would pull marks off their bases.
@@ -736,7 +736,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const Lai
   }
   const int resolvedFontId = resolveTextFontId(fontId, text.text, style);
   std::string visual;
-  drawVisualText(fontId, resolvedFontId, x, y, resolveLaidOutText(text, visual, baseDir), black, style, tracking);
+  drawVisualText(fontId, resolvedFontId, x, y,
+                 resolveLaidOutText(text, visual, baseDir, fontDataFor(fontMap, resolvedFontId, style)), black, style,
+                 tracking);
 }
 
 void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, const int x, const int y,
@@ -908,13 +910,21 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
   return resolveComplexText(plain, visualBuffer, shapingFont);
 }
 
-// A laid-out word draws its stored display form as is. Without one, its
-// complex-script runs are left alone too: layout measured them unresolved.
+// A laid-out word draws its stored display form as is. Without one it either
+// draws as it is or could not be shaped during layout, so it is resolved like
+// any string and shapes now if the font can.
 const char* resolveLaidOutText(const GfxRenderer::LaidOutText& text, std::string& visualBuffer,
-                               const BidiUtils::BidiBaseDir baseDir) {
+                               const BidiUtils::BidiBaseDir baseDir, const EpdFontData* shapingFont) {
   if (text.display != nullptr) return text.display;
-  if (!text.text || *text.text == '\0') return text.text;
-  return replaceTokenPlanes(resolveBidiText(text.text, visualBuffer, baseDir), visualBuffer);
+  return resolveVisualText(text.text, visualBuffer, baseDir, shapingFont);
+}
+
+bool containsGlyphToken(const char* text) {
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  while (const uint32_t cp = utf8NextCodepoint(&p)) {
+    if (shaping::isGlyphToken(cp)) return true;
+  }
+  return false;
 }
 }  // namespace
 
@@ -2225,7 +2235,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const LaidOutText& text, cons
                                  const TextMeasureMode mode) const {
   const int resolvedFontId = resolveTextFontId(fontId, text.text, style);
   std::string visual;
-  return measureVisualText(resolvedFontId, resolveLaidOutText(text, visual, baseDir), style, tracking, mode);
+  return measureVisualText(resolvedFontId,
+                           resolveLaidOutText(text, visual, baseDir, fontDataFor(fontMap, resolvedFontId, style)),
+                           style, tracking, mode);
 }
 
 int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, const EpdFontFamily::Style style,
@@ -2323,6 +2335,9 @@ bool GfxRenderer::resolveForDisplay(const int fontId, const char* text, const Ep
   std::string visual;
   const EpdFontData* font = fontDataFor(fontMap, resolveTextFontId(fontId, text, style), style);
   if (resolveVisualText(text, visual, BidiUtils::BidiBaseDir::AUTO, font) == text) return false;
+  // A font that shapes but could not shape `text` now (memory ran short)
+  // keeps no form, so the page shapes the word once it is drawn.
+  if (font != nullptr && font->shapeHandler != nullptr && !containsGlyphToken(visual.c_str())) return false;
   out.swap(visual);
   return true;
 }
