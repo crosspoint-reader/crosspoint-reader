@@ -70,7 +70,7 @@ void CatalogActivity::launchWifiSelection() {
 }
 
 void CatalogActivity::launchSearch() {
-  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH), searchPrefill());
   if (!keyboard) {
     LOG_ERR("CAT", "OOM: search keyboard");
     fail(StrId::STR_MEMORY_ERROR);

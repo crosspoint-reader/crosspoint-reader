@@ -4,6 +4,7 @@
 #include <Logging.h>
 #include <ResumableFetch.h>
 
+#include <algorithm>
 #include <functional>
 #include <string>
 
@@ -16,6 +17,21 @@ namespace {
 // (>15s) and chunked catalogs stall mid-body, so 15s killed them. 60s gives
 // slow servers room.
 constexpr int HTTP_TIMEOUT_MS = 60000;
+
+constexpr int MAX_REDIRECTS = 5;
+
+// postForm response cap: token responses are small JSON; a misbehaving server
+// must not balloon the heap.
+constexpr size_t MAX_RESPONSE_BYTES = 4096;
+
+void applyCommonClientSetup(freeink::SecureHttpClient& http) {
+  http.setTimeout(HTTP_TIMEOUT_MS);
+  http.setInsecure();
+  // setUserAgent replaces SecureHttpClient's built-in UA; addHeader would
+  // append a second User-Agent header, which strict servers reject (aiohttp
+  // answers 400 "Duplicate 'User-Agent' header found").
+  http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
+}
 
 // All HTTP(S) fetches go through wolfSSL (the firmware's only TLS stack: it
 // speaks TLS 1.3 and reads large bodies reliably). Plain-http URLs still use a
@@ -32,12 +48,7 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
   const freeink::FetchResult result = freeink::fetchResumable(
       url, options,
       [&](freeink::SecureHttpClient& http, const bool sameOrigin) {
-        http.setTimeout(HTTP_TIMEOUT_MS);
-        http.setInsecure();
-        // setUserAgent replaces SecureHttpClient's built-in UA; addHeader would
-        // append a second User-Agent header, which strict servers reject (aiohttp
-        // answers 400 "Duplicate 'User-Agent' header found").
-        http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
+        applyCommonClientSetup(http);
         // Credentials and caller headers stay with the starting origin; a
         // redirect elsewhere (or to plain http) gets neither.
         if (sameOrigin) {
@@ -82,6 +93,82 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   freeink::FetchSink sink;
   sink.write = onData;
   return runGetSecure(url, username, password, {}, sink) == OK;
+}
+
+bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const FetchOptions& options) {
+  // OPDS fetches need what fetchResumable withholds: the final HTTP status
+  // and a 401 body (auth documents are served as 401 bodies). Direct GET with
+  // a manual redirect loop; catalog feeds are small enough that Range resume
+  // isn't worth carrying here (books go through downloadToFile, which has it).
+  WifiPowerSaveGuard psGuard;
+  std::string current = url;
+  const std::string startOrigin = freeink::fetchOrigin(url);
+  int status = 0;
+  bool sinkStopped = false;
+  for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
+    freeink::SecureHttpClient http;
+    if (!http.begin(current)) {
+      LOG_ERR("HTTP", "bad URL: %s", current.c_str());
+      status = 0;
+      break;
+    }
+    applyCommonClientSetup(http);
+    // Credentials belong to the starting origin only: a redirect to another
+    // origin (a CDN) must not receive them.
+    if (freeink::fetchOrigin(current) == startOrigin) {
+      if (!options.bearer.empty()) {
+        http.addHeader("Authorization", "Bearer " + options.bearer);
+      } else if (!options.username.empty() && !options.password.empty()) {
+        http.setBasicAuth(options.username, options.password);
+      }
+    }
+    if (!options.accept.empty()) http.addHeader("Accept", options.accept);
+    if (!options.acceptLanguage.empty()) http.addHeader("Accept-Language", options.acceptLanguage);
+
+    LOG_DBG("HTTP", "wolfSSL GET: %s", current.c_str());
+    status = http.GET([&](const uint8_t* data, size_t len) {
+      const int st = http.getStatus();
+      const bool wanted = (st >= 200 && st < 300) || (options.captureErrorBody && st == 401);
+      if (!wanted) return true;  // redirect or error body: drain
+      if (!onData(data, len)) {
+        sinkStopped = true;
+        return false;
+      }
+      return true;
+    });
+    if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+      const std::string location = http.getHeader("location");
+      if (location.empty() || !freeink::SecureHttpClient::resolveUrl(current, location, current)) break;
+      continue;
+    }
+    break;
+  }
+  if (options.statusOut) *options.statusOut = status > 0 ? status : 0;
+  return status >= 200 && status < 300 && !sinkStopped;
+}
+
+bool HttpDownloader::postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
+                              int* statusOut) {
+  WifiPowerSaveGuard psGuard;
+  outResponse.clear();
+  freeink::SecureHttpClient http;
+  if (!http.begin(url)) {
+    LOG_ERR("HTTP", "bad URL: %s", url.c_str());
+    if (statusOut) *statusOut = 0;
+    return false;
+  }
+  applyCommonClientSetup(http);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  LOG_DBG("HTTP", "wolfSSL POST: %s", url.c_str());
+  const int status = http.sendRequest("POST", reinterpret_cast<const uint8_t*>(formBody.data()), formBody.size(),
+                                      [&outResponse](const uint8_t* data, size_t len) {
+                                        const size_t room =
+                                            MAX_RESPONSE_BYTES - std::min(outResponse.size(), MAX_RESPONSE_BYTES);
+                                        outResponse.append(reinterpret_cast<const char*>(data), std::min(len, room));
+                                        return true;
+                                      });
+  if (statusOut) *statusOut = status > 0 ? status : 0;
+  return status >= 200 && status < 300;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
