@@ -66,6 +66,9 @@ class ActivityManager {
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
 
+  // Counts screen changes, so the Bluetooth page turner can tell one visit of a book from the next.
+  uint32_t screenVisit = 0;
+
  public:
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
@@ -104,6 +107,12 @@ class ActivityManager {
   bool preventAutoSleep() const;
   bool requiresExclusiveStorageLoop() const;
   bool isReaderActivity() const;
+  // Bluetooth page turner (lib/BlePageTurner): the book in front, whether it has painted a page, and
+  // a page or chapter turn from a remote. False when no book in front took the turn.
+  bool isForegroundReader() const;
+  bool isForegroundReaderShown() const;
+  uint32_t visit() const { return screenVisit; }
+  bool remoteTurn(bool forward, bool chapter);
   bool handleForcedRefresh();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;

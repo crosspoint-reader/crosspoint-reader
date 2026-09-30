@@ -9,6 +9,8 @@
 #include "activities/Activity.h"
 
 class ReaderActivity : public Activity {
+  friend class ActivityManager;  // turns pages for a Bluetooth remote (ActivityManager::remoteTurn)
+
  protected:
   std::string bookPath;
   int pagesUntilFullRefresh = 0;
@@ -42,6 +44,8 @@ class ReaderActivity : public Activity {
   bool handleBackNavigation();
   /** True while the end-of-book suggestion menu is on screen and owning input. */
   bool endOfBookMenuActive() const;
+  /** True while a toolbar, panel or menu over the page owns the device keys: a remote turn is refused. */
+  virtual bool inputOverPage() const { return endOfBookMenuActive(); }
   bool handleEndOfBookMenu(bool suppressConfirmRelease = false);
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
   void clearEndOfBookOptionsIfNeeded();

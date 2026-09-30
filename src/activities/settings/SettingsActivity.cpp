@@ -1,5 +1,6 @@
 #include "SettingsActivity.h"
 
+#include <BlePageTurner.h>
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
@@ -14,6 +15,7 @@
 #include <cstring>
 
 #include "AboutActivity.h"
+#include "BleSettingsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockSettingsActivity.h"
@@ -96,6 +98,9 @@ void SettingsActivity::rebuildSettingsLists() {
                             SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
+  if (bleturner::status().compiledIn) {
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_BT_PAGE_TURNER, SettingAction::Bluetooth));
+  }
   // Clock configuration only exists where the RTC probe found hardware; on
   // clockless boards there is nothing to set.
   if (halClock.isAvailable()) {
@@ -392,6 +397,15 @@ void SettingsActivity::toggleCurrentSetting() {
           RenderLock lock;
           silentRestartToSettings();
         });
+        break;
+      }
+      case SettingAction::Bluetooth: {
+        auto activity = makeUniqueNoThrow<BleSettingsActivity>(renderer, mappedInput);
+        if (!activity) {
+          LOG_ERR("SETTINGS", "OOM: BleSettingsActivity");
+          return;
+        }
+        startActivityForResult(std::move(activity), resultHandler);
         break;
       }
       case SettingAction::ClearCache:

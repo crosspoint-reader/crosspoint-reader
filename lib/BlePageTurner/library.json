@@ -1,0 +1,11 @@
+{
+  "name": "BlePageTurner",
+  "version": "0.1.0",
+  "description": "Bluetooth page turner for e-ink readers: one module owns the BLE HID radio, decides when it may run, and routes remote presses to the book.",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}
