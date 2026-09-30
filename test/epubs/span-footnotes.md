@@ -32,6 +32,9 @@ boundaries, leading soft hyphens/U+FEFF, targets in buffered grid cells, missing
 and duplicate requested IDs. Text-free targets retain their structural page when
 later text appears on another page, while empty children do not end target selection.
 Empty requested non-TOC spans map to the following rendered text.
+Inline targets also survive NFC composition and discarded U+FEFF within one word,
+hyphenation, focus tokenization and a UTF-8 codepoint crossing the word-buffer boundary.
+These cases reopen the completed anchor map and verify a page rather than a missing marker.
 Anchor-map tests exercise completed negative lookups,
 reopen, partial builds, legacy encoding, long IDs and truncated records.
 

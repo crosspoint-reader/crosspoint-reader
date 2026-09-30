@@ -323,6 +323,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   // to fail the build via layoutOom.
   if (!currentTextBlock) {
     partWordBufferIndex = 0;
+    requestedAnchorBufferByteOffset.reset();
     nextWordContinues = false;
     return;
   }
@@ -359,6 +360,20 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
       currentFootnoteLinkId = currentTextBlock->addLinkTarget(currentFootnote.href);
     }
     linkId = currentFootnoteLinkId;
+  }
+  if (requestedAnchorBufferByteOffset) {
+    // Only the requested word needs its target translated into layout coordinates.
+    size_t byteOffset = *requestedAnchorBufferByteOffset;
+    utf8ComposeNfcInPlace(partWordBuffer, &byteOffset);
+    uint32_t offset = partWordVisibleOffset;
+    const auto* ptr = reinterpret_cast<const unsigned char*>(partWordBuffer);
+    const auto* const target = ptr + byteOffset;
+    while (ptr < target) {
+      utf8NextCodepoint(&ptr);
+      ++offset;
+    }
+    requestedAnchorOffset = offset;
+    requestedAnchorBufferByteOffset.reset();
   }
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId);
   if (insideTableCell && !tableRowStacked) {
@@ -1683,11 +1698,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
+    bool isRequestedCodepoint = false;
     if (self->requestedAnchorWaitingForText && countVisibleOffsets && isCodepointStart) {
       // Soft hyphens keep their source offsets but do not select rendered anchor text.
       const bool isSoftHyphen =
           static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xAD;
       if (!isSoftHyphen) {
+        isRequestedCodepoint = true;
         self->requestedAnchorOffset = codepointOffset;
         self->requestedAnchorWaitingForText = false;
       }
@@ -1771,8 +1788,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         for (int j = 0; j < overflow; j++) {
           saved[j] = self->partWordBuffer[safeLen + j];
         }
+        std::optional<uint16_t> overflowAnchorByteOffset;
+        if (self->requestedAnchorBufferByteOffset && *self->requestedAnchorBufferByteOffset >= safeLen) {
+          overflowAnchorByteOffset = *self->requestedAnchorBufferByteOffset - safeLen;
+          self->requestedAnchorBufferByteOffset.reset();
+        }
         self->partWordBufferIndex = safeLen;
         self->flushPartWordBuffer();
+        self->requestedAnchorBufferByteOffset = overflowAnchorByteOffset;
         self->nextWordContinues = true;
         for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
@@ -1787,6 +1810,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     if (self->partWordBufferIndex == 0) {
       self->partWordVisibleOffset = codepointOffset;
+    }
+    if (isRequestedCodepoint) {
+      self->requestedAnchorBufferByteOffset = static_cast<uint16_t>(self->partWordBufferIndex);
     }
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
@@ -2237,6 +2263,7 @@ void ChapterHtmlSlimParser::recordRequestedAnchor() {
     anchorData.emplace_back(requestedAnchor, static_cast<uint16_t>(completedPageCount));
   }
   requestedAnchorOffset.reset();
+  requestedAnchorBufferByteOffset.reset();
 }
 
 void ChapterHtmlSlimParser::addFlowLineToPage(std::unique_ptr<TextBlock> line, const uint32_t visibleOffset,

@@ -131,6 +131,7 @@ class ChapterHtmlSlimParser {
   bool requestedAnchorWaitingForText = false;
   int requestedStructuralAnchorDepth = -1;  // opening depth of the selected structural target
   std::optional<uint32_t> requestedAnchorOffset;
+  std::optional<uint16_t> requestedAnchorBufferByteOffset;  // follows the selected codepoint through NFC
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
   // Canonical reading-position counter: zero-based Unicode codepoints in visible

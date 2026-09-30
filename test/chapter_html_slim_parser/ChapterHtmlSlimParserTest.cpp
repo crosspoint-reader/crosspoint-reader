@@ -1,4 +1,5 @@
 #include <Epub/Page.h>
+#include <Epub/SectionAnchorMap.h>
 #include <Epub/hyphenation/Hyphenator.h>
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
@@ -49,6 +50,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(); }
 
   uint16_t parsedPages = 0;
+  std::string targetWord = "TARGET";
   std::optional<uint16_t> targetPage;
   std::optional<uint16_t> firstRulePage;
 
@@ -67,7 +69,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
         if (element->getTag() != TAG_PageLine) continue;
         const auto& block = *static_cast<const PageLine&>(*element).getBlock();
         for (uint16_t word = 0; word < block.wordCount(); ++word) {
-          if (std::string_view(block.wordText(word)) == "TARGET") targetPage = parsedPages;
+          if (std::string_view(block.wordText(word)) == targetWord) targetPage = parsedPages;
         }
       }
       ++parsedPages;
@@ -75,6 +77,26 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     const bool ok = parser.parseAndBuildPages();
     std::filesystem::remove(filepath);
     return ok;
+  }
+
+  void expectRequestedAnchorInCache() {
+    ASSERT_TRUE(targetPage.has_value());
+    EXPECT_EQ(parser.getAnchors().size(), 1u);
+    if (!parser.getAnchors().empty()) EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+    const std::string cachePath = filepath + ".anchors";
+    {
+      HalFile file;
+      ASSERT_TRUE(Storage.openFileForWrite("TEST", cachePath, file));
+      ASSERT_TRUE(sectionAnchors::write(file, parser.getAnchors(), parser.requestedAnchor, parsedPages, false));
+    }
+    {
+      HalFile file;
+      ASSERT_TRUE(Storage.openFileForRead("TEST", cachePath, file));
+      const auto lookup = sectionAnchors::read(file, parser.requestedAnchor);
+      EXPECT_TRUE(lookup.checked);
+      EXPECT_EQ(lookup.page, targetPage);
+    }
+    std::filesystem::remove(cachePath);
   }
 };
 
@@ -410,6 +432,115 @@ TEST_F(ChapterHtmlSlimParserTest, RequestedSpanStartingWithFeffMapsToRenderedTex
   ASSERT_GT(*targetPage, 0u);
   ASSERT_EQ(parser.getAnchors().size(), 1u);
   EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedInlineNfcSpanSurvivesCacheReopen) {
+  parser.requestedAnchor = "id28";
+  targetWord = "\u00e9X";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 20; ++i) html += "<p>Before.</p>";
+  html += "<p>e&#x301;<span id='id28'>X</span></p></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedInlineFeffSpanSurvivesCacheReopen) {
+  parser.requestedAnchor = "id28";
+  targetWord = "abcdX";
+  std::string html = "<html><body>";
+  for (int i = 0; i < 20; ++i) html += "<p>Before.</p>";
+  html += "<p>abcd<span id='id28'>&#xFEFF;X</span></p></body></html>";
+  ASSERT_TRUE(parseHtml(html));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedGridInlineNfcSpanSurvivesCacheReopen) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 160;
+  targetWord = "\u00e9X";
+  std::string html = "<html><body><table><tr><td>";
+  for (int i = 0; i < 20; ++i) html += "Before ";
+  html += "e&#x301;<span id='id28'>X</span></td><td>Other.</td></tr></table></body></html>";
+  ASSERT_TRUE(parseHtml(html, 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedGridInlineFeffSpanSurvivesCacheReopen) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 160;
+  targetWord = "abcdX";
+  std::string html = "<html><body><table><tr><td>";
+  for (int i = 0; i < 20; ++i) html += "Before ";
+  html += "abcd<span id='id28'>&#xFEFF;X</span></td><td>Other.</td></tr></table></body></html>";
+  ASSERT_TRUE(parseHtml(html, 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedNfcSpanAtHyphenBoundaryMapsToRemainderPage) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.setParagraphIndentSpaces(0);
+  parser.viewportWidth = 56;
+  parser.currentTextBlock.reset();
+  ASSERT_TRUE(parseHtml("<html><body><p>e&#x301;abcd&#173;<span id='id28'>TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedFeffSpanAtHyphenBoundaryMapsToRemainderPage) {
+  Hyphenator::setPreferredLanguage("");
+  parser.requestedAnchor = "id28";
+  parser.hyphenationEnabled = true;
+  parser.setParagraphIndentSpaces(0);
+  parser.viewportWidth = 48;
+  parser.currentTextBlock.reset();
+  ASSERT_TRUE(parseHtml("<html><body><p>abcd&#xFEFF;<span id='id28'>&#173;TARGET</span></p></body></html>", 16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedCombiningMarkMapsToComposedGlyph) {
+  parser.requestedAnchor = "id28";
+  targetWord = "\u00e9";
+  ASSERT_TRUE(parseHtml("<html><body><p>e<span id='id28'>&#x301;</span></p></body></html>"));
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedMultibyteTargetSurvivesWordBufferSplit) {
+  parser.requestedAnchor = "id28";
+  targetWord = "\u20ac";
+  const std::string html =
+      "<html><body><p>" + std::string(199, 'a') + "<span id='id28'>&#x20ac;</span></p></body></html>";
+  ASSERT_TRUE(parseHtml(html, 16));
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedTargetAfterFullWordBufferMapsToNewToken) {
+  parser.requestedAnchor = "id28";
+  targetWord = "X";
+  const std::string html = "<html><body><p>" + std::string(200, 'a') + "<span id='id28'>X</span></p></body></html>";
+  ASSERT_TRUE(parseHtml(html, 16));
+  expectRequestedAnchorInCache();
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedNfcTargetSurvivesFocusTokenization) {
+  parser.requestedAnchor = "id28";
+  parser.focusReadingEnabled = true;
+  parser.currentTextBlock.reset();
+  targetWord = "X";
+  ASSERT_TRUE(parseHtml("<html><body><p>e&#x301;-<span id='id28'>X</span></p></body></html>"));
+  expectRequestedAnchorInCache();
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RequestedGridSpanStartingWithFeffMapsToRenderedTextSlice) {
