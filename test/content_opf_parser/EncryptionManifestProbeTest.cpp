@@ -6,17 +6,17 @@
 
 TEST(EncryptionManifestProbe, FontOnlyAndEmptyManifestsDoNotNeedProtection) {
   // Same algorithms and references as Foundryside's retained font manifest.
-  for (const std::string xml : {
-           R"(<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+  for (
+      const std::string xml : {
+          R"(<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
              <enc:EncryptedData><enc:EncryptionMethod Algorithm="http://ns.adobe.com/pdf/enc#RC"/>
              <enc:CipherData><enc:CipherReference URI="OEBPS/Fonts/font00372.otf"/></enc:CipherData></enc:EncryptedData>
              <enc:EncryptedData><enc:EncryptionMethod Algorithm="http://ns.adobe.com/pdf/enc#RC"/>
              <enc:CipherData><enc:CipherReference URI="OEBPS/Fonts/font00373.otf"/></enc:CipherData></enc:EncryptedData>
            </encryption>)",
-           R"(<encryption><EncryptedData><EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>
+          R"(<encryption><EncryptedData><EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>
              <CipherData><CipherReference URI="font.otf"/></CipherData></EncryptedData></encryption>)",
-           "<encryption/>",
-           R"(<encryption><!-- <EncryptionMethod Algorithm="aes128-cbc"/> --></encryption>)"}) {
+          "<encryption/>", R"(<encryption><!-- <EncryptionMethod Algorithm="aes128-cbc"/> --></encryption>)"}) {
     EncryptionManifestProbe probe;
     ASSERT_TRUE(probe.setup());
     for (const unsigned char byte : xml) ASSERT_EQ(probe.write(byte), 1u);
