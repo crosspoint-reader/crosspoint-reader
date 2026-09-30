@@ -31,7 +31,6 @@ class ButtonNavigator final {
   static void onPreviousPress(const Callback& callback);
   static void onPress(const Buttons& buttons, const Callback& callback);
 
-  void onNextRelease(const Callback& callback);
   void onPreviousRelease(const Callback& callback);
   void onRelease(const Buttons& buttons, const Callback& callback);
 
