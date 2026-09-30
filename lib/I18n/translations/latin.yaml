@@ -1,174 +1,174 @@
-_language_name: “Latina”
-_language_code: “LA”
-_order: “36”
-_bcp47: “la”
+_language_name: "Latina"
+_language_code: "LA"
+_order: "36"
+_bcp47: "la"
 
-STR_ACCOUNT_CREATED: “Ratio creata”
-STR_ADD_HIDDEN_NETWORK: “Adde rete occultam…”
-STR_ADD_SERVER: “Adde ministrum”
-STR_ALIGN_LEFT: “Sinistra”
-STR_ALIGN_RIGHT: “Dextra”
-STR_ALIGNMENT: “Compositio”
-STR_ALL_FONTS: “Omnes typi”
-STR_ALREADY_ASSIGNED: “Iam assignatum”
-STR_ALREADY_SYNCED: “Iam synchronizatum”
-STR_ALWAYS: “Semper”
-STR_APPLY_REMOTE: “Applica situm remotum”
-STR_ASK_EVERY_TIME: “Semper roga”
-STR_AUTH_FAILED: “Authenticatio defecit”
-STR_AUTH_SUCCESS: “Authenticatio successit!”
-STR_AUTHENTICATE: “Authentica”
-STR_AUTHENTICATING: “Authenticatio…”
-STR_AUTO_TURN_ENABLED: “Versio paginae automatica: “
-STR_AUTO_TURN_PAGES_PER_MIN: “Versio paginae automatica (pag/min)”
-STR_BACK: “« Retro”
-STR_BACK_SHORT_TO_FILE_BROWSER: “Pressio brevis: Retro ad fasciculos”
-STR_BATTERY: “Accumulator”
-STR_BINARY: “Binarium”
-STR_BOOK: “Liber”
-STR_BOOK_PREFIX: “Liber: “
-STR_BOOK_PROGRESS_PERCENTAGE: “% progressus lectionis”
-STR_BOOK_S_STYLE: “Stilus libri”
-STR_BOOKMARK_ADDED: “Signaculum additum”
-STR_BOOKMARK_OPTION: “Signaculum”
-STR_BOOKMARK_REMOVED: “Signaculum remotum”
-STR_BOOKMARKS: “Signacula”
-STR_BOOTING: “INITIUM…”
-STR_BOTTOM: “Imum”
-STR_BRIGHTNESS: “Claritas”
-STR_BROWSE_FILES: “Perlustra fasciculos”
-STR_CACHE_CLEARED: “Casche evacuata”
-STR_CALC_HASH: “Hash documenti computatur…”
-STR_CALIBRE_DESC: “Translatio sine filo per Calibre”
-STR_CALIBRE_INSTRUCTION_1: “1) Constitue plugin CrossPoint Reader”
-STR_CALIBRE_INSTRUCTION_2: “2) Coniungere eidem reti Wi-Fi”
-STR_CALIBRE_INSTRUCTION_3: “3) In Calibre: "Mitte ad machinam"”
-STR_CALIBRE_INSTRUCTION_4: “"Hoc velum apertum serva dum mittitur"”
-STR_CALIBRE_RECEIVED: “Acceptum: “
-STR_CALIBRE_RECEIVING: “Acceptio: “
-STR_CALIBRE_SETUP: “Configuratio”
-STR_CALIBRE_STARTING: “Calibre incipit…”
-STR_CALIBRE_STATUS: “Status”
-STR_CALIBRE_URL_HINT: “Pro Calibre, adde /opds ad URL”
-STR_CALIBRE_WIRELESS: “Coniunge ad Calibre”
-STR_CANCEL: “Abroga”
-STR_CAT_CONTROLS: “Gubernacula”
-STR_CAT_DISPLAY: “Velum”
-STR_CAT_READER: “Lector”
-STR_CAT_SYSTEM: “Systema”
-STR_CENTER: “Medium”
-STR_CHAPTER: “Caput”
-STR_CHAPTER_PAGE_COUNT: “Numerus paginarum capitis”
-STR_CHAPTER_PREFIX: “Caput: “
-STR_CHECK_SERIAL_OUTPUT: “Examina exitum serialem ad singula”
-STR_CHECK_UPDATES: “Renovationes quaere”
-STR_CHECKING_UPDATE: “Renovationes quaeruntur…”
-STR_CHECKING_WIFI: “Retia Wi-Fi examinantur…”
-STR_CLEAR_BUTTON: “Dele”
-STR_CLEAR_CACHE_FAILED: “Casche evacuari non potuit”
-STR_CLEAR_CACHE_WARNING_1: “Omnia data casche delebuntur”
-STR_CLEAR_CACHE_WARNING_2: “Progressus lectionis amittetur!”
-STR_CLEAR_CACHE_WARNING_3: “Libri iterum indexabuntur”
-STR_CLEAR_CACHE_WARNING_4: “cum denuo aperientur.”
-STR_CLEAR_READING_CACHE: “Evacua casche lectionis”
-STR_CLEARING_CACHE: “Casche evacuatur…”
-STR_CLOCK: “Horologium”
-STR_CLOCK_FORMAT: “Forma horologii”
-STR_CLOCK_FORMAT_12H: “XII horae”
-STR_CLOCK_FORMAT_24H: “XXIV horae”
-STR_CLOCK_SYNC: “Synchroniza horologium”
-STR_CLOCK_SYNC_FAIL: “Synchronizatio defecit”
-STR_CLOCK_SYNC_NO_WIFI: “Wi-Fi non coniunctum”
-STR_CLOCK_SYNC_NO_WIFI_HINT: “Primum coniunge ad Wi-Fi, deinde iterum tenta”
-STR_CLOCK_SYNC_NOW: “Synchroniza horologium nunc”
-STR_CLOCK_SYNC_OK: “Horologium synchronizatum”
-STR_CLOCK_SYNCED: “Horologium synchronizatum”
-STR_CLOCK_SYNCING: “Synchronizatio cum ministro NTP…”
-STR_CLOCK_UTC_OFFSET: “Differentia temporis UTC”
-STR_CONFIRM: “Confirma”
-STR_CONFIRM_DELETE_BOOKMARK: “Hoc signaculum delere?”
-STR_CONNECT: “Coniunge”
-STR_CONNECT_WIFI_HINT: “Coniunge machinam huic reti Wi-Fi”
-STR_CONNECTED: “Coniunctum!”
-STR_CONNECTING: “Coniungitur…”
-STR_CONNECTING_SAVED_WIFI: “Coniungitur reti Wi-Fi servatae…”
-STR_CONNECTION_FAILED: “Coniunctio defecit”
-STR_CONTINUE_READING: “Perge legere”
-STR_COVER: “Imago operculi”
-STR_COVER_CUSTOM: “Imago operculi + Imago”
-STR_CRASH_DESCRIPTION: “Relatio accurata in crash_report.txt servata est. Include fasciculum ad problema referendum.”
-STR_CRASH_NO_REASON: “(Nulla causa relata)”
-STR_CRASH_REASON: “Causa mendae:”
-STR_CRASH_TITLE: “Menda systematis”
-STR_CREATE_HOTSPOT: “Crea Hotspot”
-STR_CREATING_ACCOUNT: “Ratio creatur…”
-STR_CROP: “Reseca”
-STR_CROSSPOINT: “CrossPoint”
-STR_CURRENT_TIME: “Hora praesentis: “
-STR_CURRENT_VERSION: “Versio praesentis: “
-STR_CUSTOM: “Imago”
-STR_CUSTOMISE_STATUS_BAR: “Barra status constitue”
-STR_DARK: “Obscurum”
-STR_DEFAULT_VALUE: “Praedefinitum”
-STR_DELETE: “Dele”
-STR_DELETE_CACHE: “Dele Casche libri”
-STR_DELETE_SERVER: “Dele ministrum”
-STR_DEVICE_FROM_FORMAT: “  Ex: %s”
-STR_DICT_DECOMPRESS_ERROR: “Definitio extrahi non potuit”
-STR_DICT_ERROR: “Menda lexici”
-STR_DICT_INDEXING: “Lexicon indexatur…”
-STR_DICT_LOOKING_UP: “Quaeritur…”
-STR_DICT_LOW_MEMORY: “Memoria insufficiens”
-STR_DICT_NO_DICT_SET: “Lexicon non constitutum”
-STR_DICT_NOT_FOUND: “Non inventum”
-STR_DICT_READ_FAILED: “Definitio legi non potuit”
-STR_DICTIONARY: “Lexicon”
-STR_DIR_DOWN: “Deorsum”
-STR_DIR_LEFT: “Sinistra”
-STR_DIR_RIGHT: “Dextra”
-STR_DIR_UP: “Sursum”
-STR_DISABLED: “Inactivum”
-STR_DISPLAY_QR: “Monstra paginam ut QR”
-STR_DOCUMENT_MATCHING: “Concordantia documentorum”
-STR_DONE: “Factum”
-STR_DOWNLOAD: “Exonera”
-STR_DOWNLOAD_ALL: “Exonera omnia”
-STR_DOWNLOAD_FAILED: “Exoneratio defecit”
-STR_DOWNLOADING: “Exoneratur…”
-STR_EMBEDDED_STYLE: “Stilus incorporatus EPUB”
-STR_EMPTY_CHAPTER: “Caput vacuum”
-STR_EMPTY_FILE: “Fasciculus vacuus”
-STR_END_OF_BOOK: “Finis libri”
-STR_ENTER_WIFI_PASSWORD: “Insere tesseram Wi-Fi”
-STR_ENTER_WIFI_SSID: “Insere nomen retis (SSID)”
-STR_ENTERING_SLEEP: “Suspenditur…”
-STR_EOB_CONTINUE_WITH: “Perge cum”
-STR_EOB_HOME: “Domus”
-STR_ERROR_CONNECTION_TIMEOUT: “Menda: tempus connexionis excessit”
-STR_ERROR_GENERAL_FAILURE: “Menda: operatio defecit”
-STR_ERROR_MSG: “Menda:”
-STR_ERROR_NETWORK_NOT_FOUND: “Menda: rete non inventum”
-STR_EXAMPLE_BOOK: “Titulus libri”
-STR_EXAMPLE_CHAPTER: “Caput XXI”
-STR_EXIT: “« Exi”
-STR_EXTRA_SPACING: “Intervallum paragraphorum additum”
-STR_EXTRA_WIDE: “Valde latum”
-STR_FAILED_LOWER: “defecit”
-STR_FETCH_FEED_FAILED: “Feed recipi non potuit”
-STR_FETCH_PROGRESS: “Situs recipitur…”
-STR_FILE_OPEN_FAILED: “Fasciculus aperiri non potuit”
-STR_FILE_TRANSFER: “Translatio fasciculorum”
-STR_FILENAME: “Nomen fasciculi”
-STR_FILTER_CONTRAST: “Contrastus”
-STR_FINDING_SAVED_WIFI: “Retia Wi-Fi servata quaeruntur…”
-STR_FIRMWARE_FILE_OPEN_FAILED: “Fasciculus aperiri non potuit”
-STR_FIRMWARE_TOO_LARGE: “Firmware nimis magnum”
-STR_FIRMWARE_TOO_SMALL: “Firmware nimis parvum”
-STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF: “Machinam ne exstinguas!”
-STR_FIRMWARE_UPDATE_PROMPT: “Firmware renovare?”
-STR_FIRMWARE_WRITE_FAILED: “Renovatio firmware defecit”
-STR_FIRMWARE_WRONG_DEVICE: “Firmware alteri machinae destinatum.”
-STR_FIT: “Accommoda”
+STR_ACCOUNT_CREATED: "Ratio creata"
+STR_ADD_HIDDEN_NETWORK: "Adde rete occultam…"
+STR_ADD_SERVER: "Adde ministrum"
+STR_ALIGN_LEFT: "Sinistra"
+STR_ALIGN_RIGHT: "Dextra"
+STR_ALIGNMENT: "Compositio"
+STR_ALL_FONTS: "Omnes typi"
+STR_ALREADY_ASSIGNED: "Iam assignatum"
+STR_ALREADY_SYNCED: "Iam synchronizatum"
+STR_ALWAYS: "Semper"
+STR_APPLY_REMOTE: "Applica situm remotum"
+STR_ASK_EVERY_TIME: "Semper roga"
+STR_AUTH_FAILED: "Authenticatio defecit"
+STR_AUTH_SUCCESS: "Authenticatio successit!"
+STR_AUTHENTICATE: "Authentica"
+STR_AUTHENTICATING: "Authenticatio…"
+STR_AUTO_TURN_ENABLED: "Versio paginae automatica: "
+STR_AUTO_TURN_PAGES_PER_MIN: "Versio paginae automatica (pag/min)"
+STR_BACK: "« Retro"
+STR_BACK_SHORT_TO_FILE_BROWSER: "Pressio brevis: Retro ad fasciculos"
+STR_BATTERY: "Accumulator"
+STR_BINARY: "Binarium"
+STR_BOOK: "Liber"
+STR_BOOK_PREFIX: "Liber: "
+STR_BOOK_PROGRESS_PERCENTAGE: "% progressus lectionis"
+STR_BOOK_S_STYLE: "Stilus libri"
+STR_BOOKMARK_ADDED: "Signaculum additum"
+STR_BOOKMARK_OPTION: "Signaculum"
+STR_BOOKMARK_REMOVED: "Signaculum remotum"
+STR_BOOKMARKS: "Signacula"
+STR_BOOTING: "INITIUM…"
+STR_BOTTOM: "Imum"
+STR_BRIGHTNESS: "Claritas"
+STR_BROWSE_FILES: "Perlustra fasciculos"
+STR_CACHE_CLEARED: "Casche evacuata"
+STR_CALC_HASH: "Hash documenti computatur…"
+STR_CALIBRE_DESC: "Translatio sine filo per Calibre"
+STR_CALIBRE_INSTRUCTION_1: "1) Constitue plugin CrossPoint Reader"
+STR_CALIBRE_INSTRUCTION_2: "2) Coniungere eidem reti Wi-Fi"
+STR_CALIBRE_INSTRUCTION_3: "3) In Calibre: "Mitte ad machinam""
+STR_CALIBRE_INSTRUCTION_4: ""Hoc velum apertum serva dum mittitur""
+STR_CALIBRE_RECEIVED: "Acceptum: "
+STR_CALIBRE_RECEIVING: "Acceptio: "
+STR_CALIBRE_SETUP: "Configuratio"
+STR_CALIBRE_STARTING: "Calibre incipit…"
+STR_CALIBRE_STATUS: "Status"
+STR_CALIBRE_URL_HINT: "Pro Calibre, adde /opds ad URL"
+STR_CALIBRE_WIRELESS: "Coniunge ad Calibre"
+STR_CANCEL: "Abroga"
+STR_CAT_CONTROLS: "Gubernacula"
+STR_CAT_DISPLAY: "Velum"
+STR_CAT_READER: "Lector"
+STR_CAT_SYSTEM: "Systema"
+STR_CENTER: "Medium"
+STR_CHAPTER: "Caput"
+STR_CHAPTER_PAGE_COUNT: "Numerus paginarum capitis"
+STR_CHAPTER_PREFIX: "Caput: "
+STR_CHECK_SERIAL_OUTPUT: "Examina exitum serialem ad singula"
+STR_CHECK_UPDATES: "Renovationes quaere"
+STR_CHECKING_UPDATE: "Renovationes quaeruntur…"
+STR_CHECKING_WIFI: "Retia Wi-Fi examinantur…"
+STR_CLEAR_BUTTON: "Dele"
+STR_CLEAR_CACHE_FAILED: "Casche evacuari non potuit"
+STR_CLEAR_CACHE_WARNING_1: "Omnia data casche delebuntur"
+STR_CLEAR_CACHE_WARNING_2: "Progressus lectionis amittetur!"
+STR_CLEAR_CACHE_WARNING_3: "Libri iterum indexabuntur"
+STR_CLEAR_CACHE_WARNING_4: "cum denuo aperientur."
+STR_CLEAR_READING_CACHE: "Evacua casche lectionis"
+STR_CLEARING_CACHE: "Casche evacuatur…"
+STR_CLOCK: "Horologium"
+STR_CLOCK_FORMAT: "Forma horologii"
+STR_CLOCK_FORMAT_12H: "XII horae"
+STR_CLOCK_FORMAT_24H: "XXIV horae"
+STR_CLOCK_SYNC: "Synchroniza horologium"
+STR_CLOCK_SYNC_FAIL: "Synchronizatio defecit"
+STR_CLOCK_SYNC_NO_WIFI: "Wi-Fi non coniunctum"
+STR_CLOCK_SYNC_NO_WIFI_HINT: "Primum coniunge ad Wi-Fi, deinde iterum tenta"
+STR_CLOCK_SYNC_NOW: "Synchroniza horologium nunc"
+STR_CLOCK_SYNC_OK: "Horologium synchronizatum"
+STR_CLOCK_SYNCED: "Horologium synchronizatum"
+STR_CLOCK_SYNCING: "Synchronizatio cum ministro NTP…"
+STR_CLOCK_UTC_OFFSET: "Differentia temporis UTC"
+STR_CONFIRM: "Confirma"
+STR_CONFIRM_DELETE_BOOKMARK: "Hoc signaculum delere?"
+STR_CONNECT: "Coniunge"
+STR_CONNECT_WIFI_HINT: "Coniunge machinam huic reti Wi-Fi"
+STR_CONNECTED: "Coniunctum!"
+STR_CONNECTING: "Coniungitur…"
+STR_CONNECTING_SAVED_WIFI: "Coniungitur reti Wi-Fi servatae…"
+STR_CONNECTION_FAILED: "Coniunctio defecit"
+STR_CONTINUE_READING: "Perge legere"
+STR_COVER: "Imago operculi"
+STR_COVER_CUSTOM: "Imago operculi + Imago"
+STR_CRASH_DESCRIPTION: "Relatio accurata in crash_report.txt servata est. Include fasciculum ad problema referendum."
+STR_CRASH_NO_REASON: "(Nulla causa relata)"
+STR_CRASH_REASON: "Causa mendae:"
+STR_CRASH_TITLE: "Menda systematis"
+STR_CREATE_HOTSPOT: "Crea Hotspot"
+STR_CREATING_ACCOUNT: "Ratio creatur…"
+STR_CROP: "Reseca"
+STR_CROSSPOINT: "CrossPoint"
+STR_CURRENT_TIME: "Hora praesentis: "
+STR_CURRENT_VERSION: "Versio praesentis: "
+STR_CUSTOM: "Imago"
+STR_CUSTOMISE_STATUS_BAR: "Barra status constitue"
+STR_DARK: "Obscurum"
+STR_DEFAULT_VALUE: "Praedefinitum"
+STR_DELETE: "Dele"
+STR_DELETE_CACHE: "Dele Casche libri"
+STR_DELETE_SERVER: "Dele ministrum"
+STR_DEVICE_FROM_FORMAT: "  Ex: %s"
+STR_DICT_DECOMPRESS_ERROR: "Definitio extrahi non potuit"
+STR_DICT_ERROR: "Menda lexici"
+STR_DICT_INDEXING: "Lexicon indexatur…"
+STR_DICT_LOOKING_UP: "Quaeritur…"
+STR_DICT_LOW_MEMORY: "Memoria insufficiens"
+STR_DICT_NO_DICT_SET: "Lexicon non constitutum"
+STR_DICT_NOT_FOUND: "Non inventum"
+STR_DICT_READ_FAILED: "Definitio legi non potuit"
+STR_DICTIONARY: "Lexicon"
+STR_DIR_DOWN: "Deorsum"
+STR_DIR_LEFT: "Sinistra"
+STR_DIR_RIGHT: "Dextra"
+STR_DIR_UP: "Sursum"
+STR_DISABLED: "Inactivum"
+STR_DISPLAY_QR: "Monstra paginam ut QR"
+STR_DOCUMENT_MATCHING: "Concordantia documentorum"
+STR_DONE: "Factum"
+STR_DOWNLOAD: "Exonera"
+STR_DOWNLOAD_ALL: "Exonera omnia"
+STR_DOWNLOAD_FAILED: "Exoneratio defecit"
+STR_DOWNLOADING: "Exoneratur…"
+STR_EMBEDDED_STYLE: "Stilus incorporatus EPUB"
+STR_EMPTY_CHAPTER: "Caput vacuum"
+STR_EMPTY_FILE: "Fasciculus vacuus"
+STR_END_OF_BOOK: "Finis libri"
+STR_ENTER_WIFI_PASSWORD: "Insere tesseram Wi-Fi"
+STR_ENTER_WIFI_SSID: "Insere nomen retis (SSID)"
+STR_ENTERING_SLEEP: "Suspenditur…"
+STR_EOB_CONTINUE_WITH: "Perge cum"
+STR_EOB_HOME: "Domus"
+STR_ERROR_CONNECTION_TIMEOUT: "Menda: tempus connexionis excessit"
+STR_ERROR_GENERAL_FAILURE: "Menda: operatio defecit"
+STR_ERROR_MSG: "Menda:"
+STR_ERROR_NETWORK_NOT_FOUND: "Menda: rete non inventum"
+STR_EXAMPLE_BOOK: "Titulus libri"
+STR_EXAMPLE_CHAPTER: "Caput XXI"
+STR_EXIT: "« Exi"
+STR_EXTRA_SPACING: "Intervallum paragraphorum additum"
+STR_EXTRA_WIDE: "Valde latum"
+STR_FAILED_LOWER: "defecit"
+STR_FETCH_FEED_FAILED: "Feed recipi non potuit"
+STR_FETCH_PROGRESS: "Situs recipitur…"
+STR_FILE_OPEN_FAILED: "Fasciculus aperiri non potuit"
+STR_FILE_TRANSFER: "Translatio fasciculorum"
+STR_FILENAME: "Nomen fasciculi"
+STR_FILTER_CONTRAST: "Contrastus"
+STR_FINDING_SAVED_WIFI: "Retia Wi-Fi servata quaeruntur…"
+STR_FIRMWARE_FILE_OPEN_FAILED: "Fasciculus aperiri non potuit"
+STR_FIRMWARE_TOO_LARGE: "Firmware nimis magnum"
+STR_FIRMWARE_TOO_SMALL: "Firmware nimis parvum"
+STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF: "Machinam ne exstinguas!"
+STR_FIRMWARE_UPDATE_PROMPT: "Firmware renovare?"
+STR_FIRMWARE_WRITE_FAILED: "Renovatio firmware defecit"
+STR_FIRMWARE_WRONG_DEVICE: "Firmware alteri machinae destinatum."
+STR_FIT: "Accommoda"
 STR_FMT_AUTHOR_TITLE: "Auctor - Titulus"
 STR_FMT_TITLE: "Titulus"
 STR_FMT_TITLE_AUTHOR: "Titulus - Auctor"
@@ -391,75 +391,75 @@ STR_SLEEP_NEVER: "Numquam"
 STR_SLEEP_SCREEN: "Imago suspensionis"
 STR_SLEEP_TIMER_VALUE_FORMAT: "%u min"
 STR_SLEEPING: "SUSPENDITUR"
-STR_SMART_SYNC: “Synchronizatio callida”
-STR_START_READING: “Incipe legere infra”
-STR_STARTING_HOTSPOT: “Hotspot incipitur…”
-STR_STATE_INVERTED_TAP: “Tactus inversus”
-STR_STATE_OFF: “OFF”
-STR_STATE_ON: “ON”
-STR_STATE_SWIPE: “Tractio”
-STR_STATE_SWIPE_UP: “Tractio sursum”
-STR_STATE_TAP: “Tactus”
-STR_STEP_HINT_FRONT: “Bullae frontales:”
-STR_STEP_HINT_SIDE: “Bullae laterales:”
-STR_STYLE: “Stilus”
-STR_SUNLIGHT_FADING_FIX: “Correctio lucis solaris”
-STR_SYNC_BEHAVIOR: “Modus synchronizationis”
-STR_SYNC_FAILED_MSG: “Synchronizatio non successit”
-STR_SYNC_PROGRESS: “Synchroniza positionem”
-STR_SYNC_READY: “Synchronizatio KOReader parata”
-STR_SYNC_SERVER_URL: “URL servi synchronizationis”
-STR_SYNCING_TIME: “Horologium synchronizatur…”
-STR_TAP_TO_RETRY: “Tange ut iteres”
-STR_TEXT_AA: “Anti-aliasing textus”
-STR_TEXT_SETTINGS: “Occasus textus”
-STR_THEME_CLASSIC: “Classicus”
-STR_THEME_LYRA: “Lyra”
-STR_THEME_LYRA_EXTENDED: “Lyra extensa”
-STR_THEME_ROUNDEDRAFF: “RoundedRaff”
-STR_TIGHT: “Artus”
-STR_TILT_PAGE_TURN: “Inclina ad paginam vertendam”
-STR_TIME_TO_SLEEP: “Tempus ad dormitionem”
-STR_TITLE: “Titulus”
-STR_TO_PREFIX: “ad “
-STR_TOGGLE: “Commuta”
-STR_TOGGLE_BOOKMARK: “Commuta signaculum”
-STR_TOOL_CONTENTS: “Contenta”
-STR_TOOL_MORE: “Plus”
-STR_TOOL_TEXT: “Textus”
-STR_TOP: “Summum”
-STR_TOUCH_READER_CONTROLS: “Moderamina tactilia lectoris”
-STR_TOUCH_TOGGLE: “Tactus”
-STR_TRANSPARENT: “Transparens”
-STR_UI_THEME: “Thema interfaciei”
-STR_UNASSIGNED: “Non assignatum”
-STR_UNNAMED: “Sine nomine”
-STR_UPDATE: “Renova”
-STR_UPDATE_ALL: “Renova omnia”
-STR_UPDATE_AVAILABLE: “Renova”
-STR_UPDATE_COMPLETE: “Renovatio completa”
-STR_UPDATE_FAILED: “Renovatio non successit”
-STR_UPDATING: “Renovatur…”
-STR_UPLOAD: “Mitte”
-STR_UPLOAD_LOCAL: “Mitte positionem localem”
-STR_UPLOAD_PROGRESS: “Mittitur positio…”
-STR_UPLOAD_PROMPT: “Mittere positionem praesentem?”
-STR_UPLOAD_SUCCESS: “Positio missa!”
-STR_USB_DRIVE: “Discus USB”
-STR_USB_DRIVE_CONNECT_DELAY: “Usque ad XXX secunda ad coniunctionem requiri possunt”
-STR_USB_DRIVE_CONNECTED: “Discus USB coniunctus”
-STR_USB_DRIVE_DESC: “Administra schedam SD ex computatro”
-STR_USB_DRIVE_EJECT_HINT: “Discum e computatro expelle aut funem remove ut ad Domum redeas.”
-STR_USB_DRIVE_ERROR: “Error disci USB. Funem remove ut ad Domum redeas.”
-STR_USB_DRIVE_PREPARING: “Discus USB praeparatur…”
-STR_USB_DRIVE_START_ERROR: “Discus USB initiari non potuit. Preme Retro ad Domum.”
-STR_USB_DRIVE_WAITING: “Coniunge lectorem ad computatrum”
-STR_USERNAME: “Nomen usoris”
-STR_USERNAME_TAKEN: “Nomen usoris iam adhibitum”
-STR_VALIDATING_FIRMWARE: “Firmware comprobatur…”
-STR_WARMTH: “Calor”
-STR_WIDE: “Latus”
-STR_WIFI_CONN_FAILED: “Coniunctio Wi-Fi non successit”
-STR_WIFI_NETWORKS: “Retiacula Wi-Fi”
-STR_XTC_STATUS_BAR: “Barra status XTC”
-STR_YES: “Ita”
+STR_SMART_SYNC: "Synchronizatio callida"
+STR_START_READING: "Incipe legere infra"
+STR_STARTING_HOTSPOT: "Hotspot incipitur…"
+STR_STATE_INVERTED_TAP: "Tactus inversus"
+STR_STATE_OFF: "OFF"
+STR_STATE_ON: "ON"
+STR_STATE_SWIPE: "Tractio"
+STR_STATE_SWIPE_UP: "Tractio sursum"
+STR_STATE_TAP: "Tactus"
+STR_STEP_HINT_FRONT: "Bullae frontales:"
+STR_STEP_HINT_SIDE: "Bullae laterales:"
+STR_STYLE: "Stilus"
+STR_SUNLIGHT_FADING_FIX: "Correctio lucis solaris"
+STR_SYNC_BEHAVIOR: "Modus synchronizationis"
+STR_SYNC_FAILED_MSG: "Synchronizatio non successit"
+STR_SYNC_PROGRESS: "Synchroniza positionem"
+STR_SYNC_READY: "Synchronizatio KOReader parata"
+STR_SYNC_SERVER_URL: "URL servi synchronizationis"
+STR_SYNCING_TIME: "Horologium synchronizatur…"
+STR_TAP_TO_RETRY: "Tange ut iteres"
+STR_TEXT_AA: "Anti-aliasing textus"
+STR_TEXT_SETTINGS: "Occasus textus"
+STR_THEME_CLASSIC: "Classicus"
+STR_THEME_LYRA: "Lyra"
+STR_THEME_LYRA_EXTENDED: "Lyra extensa"
+STR_THEME_ROUNDEDRAFF: "RoundedRaff"
+STR_TIGHT: "Artus"
+STR_TILT_PAGE_TURN: "Inclina ad paginam vertendam"
+STR_TIME_TO_SLEEP: "Tempus ad dormitionem"
+STR_TITLE: "Titulus"
+STR_TO_PREFIX: "ad "
+STR_TOGGLE: "Commuta"
+STR_TOGGLE_BOOKMARK: "Commuta signaculum"
+STR_TOOL_CONTENTS: "Contenta"
+STR_TOOL_MORE: "Plus"
+STR_TOOL_TEXT: "Textus"
+STR_TOP: "Summum"
+STR_TOUCH_READER_CONTROLS: "Moderamina tactilia lectoris"
+STR_TOUCH_TOGGLE: "Tactus"
+STR_TRANSPARENT: "Transparens"
+STR_UI_THEME: "Thema interfaciei"
+STR_UNASSIGNED: "Non assignatum"
+STR_UNNAMED: "Sine nomine"
+STR_UPDATE: "Renova"
+STR_UPDATE_ALL: "Renova omnia"
+STR_UPDATE_AVAILABLE: "Renova"
+STR_UPDATE_COMPLETE: "Renovatio completa"
+STR_UPDATE_FAILED: "Renovatio non successit"
+STR_UPDATING: "Renovatur…"
+STR_UPLOAD: "Mitte"
+STR_UPLOAD_LOCAL: "Mitte positionem localem"
+STR_UPLOAD_PROGRESS: "Mittitur positio…"
+STR_UPLOAD_PROMPT: "Mittere positionem praesentem?"
+STR_UPLOAD_SUCCESS: "Positio missa!"
+STR_USB_DRIVE: "Discus USB"
+STR_USB_DRIVE_CONNECT_DELAY: "Usque ad XXX secunda ad coniunctionem requiri possunt"
+STR_USB_DRIVE_CONNECTED: "Discus USB coniunctus"
+STR_USB_DRIVE_DESC: "Administra schedam SD ex computatro"
+STR_USB_DRIVE_EJECT_HINT: "Discum e computatro expelle aut funem remove ut ad Domum redeas."
+STR_USB_DRIVE_ERROR: "Error disci USB. Funem remove ut ad Domum redeas."
+STR_USB_DRIVE_PREPARING: "Discus USB praeparatur…"
+STR_USB_DRIVE_START_ERROR: "Discus USB initiari non potuit. Preme Retro ad Domum."
+STR_USB_DRIVE_WAITING: "Coniunge lectorem ad computatrum"
+STR_USERNAME: "Nomen usoris"
+STR_USERNAME_TAKEN: "Nomen usoris iam adhibitum"
+STR_VALIDATING_FIRMWARE: "Firmware comprobatur…"
+STR_WARMTH: "Calor"
+STR_WIDE: "Latus"
+STR_WIFI_CONN_FAILED: "Coniunctio Wi-Fi non successit"
+STR_WIFI_NETWORKS: "Retiacula Wi-Fi"
+STR_XTC_STATUS_BAR: "Barra status XTC"
+STR_YES: "Ita"
