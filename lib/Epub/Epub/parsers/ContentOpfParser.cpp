@@ -566,23 +566,30 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
       }
       if (candidate != nullptr) {
         candidate->title = self->metaText;
-        candidate->index.reset();
-        candidate->isSeries = false;
       } else if (self->collectionCandidates.size() < MAX_COLLECTION_CANDIDATES) {
         self->collectionCandidates.push_back({self->metaId, self->metaText, std::nullopt, false});
       } else {
         LOG_DBG("COF", "Ignoring collection metadata beyond %u entries",
                 static_cast<unsigned>(MAX_COLLECTION_CANDIDATES));
       }
-    } else if (!self->metaRefines.empty()) {
-      for (auto& candidate : self->collectionCandidates) {
-        if (candidate.id != self->metaRefines) continue;
-        if (property == "collection-type" && lowerAscii(self->metaText) == "series") {
-          candidate.isSeries = true;
-        } else if (property == "group-position") {
-          candidate.index = parseFiniteFloat(self->metaText);
+    } else if (!self->metaRefines.empty() && (property == "collection-type" || property == "group-position")) {
+      CollectionMetadata* candidate = nullptr;
+      for (auto& collection : self->collectionCandidates) {
+        if (collection.id == self->metaRefines) {
+          candidate = &collection;
+          break;
         }
-        break;
+      }
+      if (candidate == nullptr && self->collectionCandidates.size() < MAX_COLLECTION_CANDIDATES) {
+        self->collectionCandidates.push_back({self->metaRefines, {}, std::nullopt, false});
+        candidate = &self->collectionCandidates.back();
+      }
+      if (candidate != nullptr) {
+        if (property == "collection-type" && lowerAscii(self->metaText) == "series") {
+          candidate->isSeries = true;
+        } else if (property == "group-position") {
+          candidate->index = parseFiniteFloat(self->metaText);
+        }
       }
     }
     self->state = IN_METADATA;

@@ -135,6 +135,21 @@ TEST(ContentOpfParserMetadata, ExtractsEpub3SeriesCollection) {
   EXPECT_FLOAT_EQ(*parser.seriesIndex, 2.0f);
 }
 
+TEST(ContentOpfParserMetadata, ResolvesRefinementsBeforeCollectionDeclaration) {
+  const std::string xml = R"(<package><metadata>
+    <meta refines="#series-a" property="collection-type">series</meta>
+    <meta refines="#series-a" property="group-position">7</meta>
+    <meta id="series-a" property="belongs-to-collection">Deferred Series</meta>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.series, "Deferred Series");
+  ASSERT_TRUE(parser.seriesIndex.has_value());
+  EXPECT_FLOAT_EQ(*parser.seriesIndex, 7.0f);
+}
+
 TEST(ContentOpfParserMetadata, ResolvesInterleavedCollectionRefinementsById) {
   const std::string xml = R"(<package><metadata>
     <meta id="series-a" property="belongs-to-collection">Primary Series</meta>
