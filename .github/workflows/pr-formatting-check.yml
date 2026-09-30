@@ -1,15 +1,15 @@
 name: "PR Formatting"
 
 on:
-  pull_request:
   pull_request_target:
     types:
       - opened
       - reopened
       - edited
+      - synchronize
 
 permissions:
-  statuses: write
+  pull-requests: read
 
 jobs:
   title-check:

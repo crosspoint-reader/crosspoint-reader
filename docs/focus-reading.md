@@ -11,7 +11,7 @@ Focus Reading is a reading aid that bolds the first portion of each word, guidin
 1. Open **Settings > Reader**
 2. Toggle **Focus Reading** on
 
-Toggling the setting will trigger a re-index of your current book, the same as when changing font settings. Once indexing is complete, page turns proceed as normal. No changes are made to your EPUB files.
+Toggling the setting invalidates affected EPUB section caches for the current layout, the same as changing font settings. Sections are rebuilt on demand, then page turns proceed as normal. No changes are made to your EPUB files.
 
 ## Examples
 

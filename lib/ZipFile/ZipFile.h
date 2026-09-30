@@ -69,12 +69,76 @@ class ZipFile {
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
-  bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
+  // allowEarlyStop: a short write from `out` is treated as the sink asking to
+  // stop (returns true) instead of a write failure — used by header probes
+  // that only need the first bytes of an entry.
+  bool readFileToStream(const char* filename, Print& out, size_t chunkSize, bool allowEarlyStop = false);
 
   template <typename F>
-  void enumerateFilePaths(F&& callback) const {
-    for (const auto& entry : fileStatSlimCache) {
-      callback(std::string_view{entry.first});
+  bool enumerateFilePaths(F&& callback) {
+    if (!fileStatSlimCache.empty()) {
+      for (const auto& entry : fileStatSlimCache) {
+        callback(std::string_view{entry.first});
+      }
+      return true;
     }
+
+    return enumerateFileEntries([&callback](std::string_view path, uint32_t, uint32_t) { callback(path); });
+  }
+
+  // Callback receives (path, crc32, compressedSize) for each central-directory
+  // entry. Always scans the central directory: the slim-stat cache does not
+  // hold CRCs.
+  template <typename F>
+  bool enumerateFileEntries(F&& callback) {
+    const bool wasOpen = isOpen();
+    if (!wasOpen && !open()) {
+      return false;
+    }
+
+    if (!loadZipDetails()) {
+      if (!wasOpen) {
+        close();
+      }
+      return false;
+    }
+
+    file.seek(zipDetails.centralDirOffset);
+
+    uint32_t sig;
+    char itemName[256];
+
+    while (file.available()) {
+      file.read(&sig, 4);
+      if (sig != 0x02014b50) {
+        break;
+      }
+
+      file.seekCur(12);
+      uint32_t crc32, compressedSize;
+      file.read(&crc32, 4);
+      file.read(&compressedSize, 4);
+      file.seekCur(4);
+      uint16_t nameLen, m, k;
+      file.read(&nameLen, 2);
+      file.read(&m, 2);
+      file.read(&k, 2);
+      file.seekCur(12);
+
+      if (nameLen < sizeof(itemName)) {
+        file.read(itemName, nameLen);
+        itemName[nameLen] = '\0';
+        callback(std::string_view{itemName, nameLen}, crc32, compressedSize);
+      } else {
+        file.seekCur(nameLen);
+      }
+
+      file.seekCur(m + k);
+    }
+
+    if (!wasOpen) {
+      close();
+    }
+    return true;
   }
 };

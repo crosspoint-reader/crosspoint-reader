@@ -14,13 +14,14 @@ void CrashActivity::onEnter() {
   if (panicMessage.empty()) {
     panicMessage = tr(STR_CRASH_NO_REASON);
   }
-  HalSystem::clearPanic();
 
   requestUpdateAndWait();
 }
 
 void CrashActivity::loop() {
-  if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
     finish();
   }
 }
@@ -34,7 +35,9 @@ void CrashActivity::render(RenderLock&&) {
   const auto x = metrics.contentSidePadding;
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CRASH_TITLE));
+  // Crash report is a dead end, not a pushed screen: no back button.
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CRASH_TITLE), nullptr,
+                 false);
 
   int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 

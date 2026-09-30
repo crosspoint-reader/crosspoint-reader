@@ -33,6 +33,7 @@ import sys
 import tempfile
 import threading
 import time
+import socket
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -46,19 +47,47 @@ DEFAULT_CONFIG = SCRIPT_DIR / "sd-fonts.yaml"
 DEFAULT_OUTPUT = SCRIPT_DIR / "output"
 DOWNLOAD_DIR = SCRIPT_DIR / "downloaded_fonts"
 INSTANCE_DIR = SCRIPT_DIR / "instanced_fonts"
+DEFAULT_FALLBACK_FONT = EPDFONTS_DIR / "builtinFonts/source/NotoSans/NotoSans-Regular.ttf"
 
 
-def download_font(url: str, dest: Path) -> Path:
-    """Download a font file if not already cached. Returns the local path."""
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_only_getaddrinfo(*args, **kwargs):
+    """getaddrinfo variant that drops AAAA records (IPv4 only)."""
+    return [ai for ai in _orig_getaddrinfo(*args, **kwargs) if ai[0] == socket.AF_INET]
+
+
+def download_font(url: str, dest: Path, retries: int = 3) -> Path:
+    """Download a font file if not already cached. Returns the local path.
+
+    Some sources (e.g. mirrors.ctan.org) are round-robin redirectors that land
+    on a different mirror each request; a mirror may advertise an IPv6 address a
+    host without an IPv6 route cannot reach ([Errno 101] Network is unreachable).
+    Retry on failure, forcing IPv4 resolution after the first attempt.
+    """
     if dest.exists():
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"  Downloading {dest.name}...")
-    try:
-        urllib.request.urlretrieve(url, dest)
-    except Exception as e:
-        dest.unlink(missing_ok=True)
-        raise RuntimeError(f"Failed to download {url}: {e}") from e
+    last_err = None
+    for attempt in range(1, retries + 1):
+        force_ipv4 = attempt > 1
+        if force_ipv4:
+            socket.getaddrinfo = _ipv4_only_getaddrinfo
+        try:
+            urllib.request.urlretrieve(url, dest)
+            break
+        except Exception as e:  # noqa: BLE001 - reported via RuntimeError below
+            last_err = e
+            dest.unlink(missing_ok=True)
+            if attempt < retries:
+                print(f"  Attempt {attempt} failed ({e}); retrying (IPv4-only)...")
+        finally:
+            if force_ipv4:
+                socket.getaddrinfo = _orig_getaddrinfo
+    else:
+        raise RuntimeError(f"Failed to download {url}: {last_err}") from last_err
     size_kb = dest.stat().st_size / 1024
     print(f"  Downloaded {dest.name} ({size_kb:.0f} KB)")
     return dest
@@ -186,12 +215,14 @@ def build_family(
         # Multi-style mode
         for style_name, font_path in resolved_styles.items():
             cmd.extend([f"--{style_name}", str(font_path)])
+            cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
     else:
         # Single-style mode
         style_name = next(iter(resolved_styles))
         font_path = resolved_styles[style_name]
         cmd.append(str(font_path))
         cmd.extend(["--style", style_name])
+        cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
 
     cmd.extend(["--intervals", intervals])
     cmd.extend(["--sizes", sizes])
@@ -328,6 +359,15 @@ def main():
     families = config.get("families", [])
     if not families:
         print("ERROR: No families defined in config", file=sys.stderr)
+        sys.exit(1)
+
+    if not DEFAULT_FALLBACK_FONT.exists() or not DEFAULT_FALLBACK_FONT.is_file():
+        print(
+            "ERROR: Missing default fallback font: "
+            f"{DEFAULT_FALLBACK_FONT}\n"
+            "This font is required for fallback glyphs in SD font builds.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Filter if --only specified

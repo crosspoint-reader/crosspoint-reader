@@ -29,10 +29,18 @@ class ContentOpfParser final : public Print {
   XML_Parser parser = nullptr;
   ParserState state = START;
   BookMetadataCache* cache;
+  const bool metadataOnly;
+  bool metadataComplete = false;
   HalFile tempItemStore;
   std::string coverItemId;
+  bool hasExplicitStartReference = false;
+  // XML character data is allowed to arrive in several callbacks for one text
+  // node (notably around character references). Keep whitespace and creator
+  // separation as element state rather than inferring either from callbacks.
+  bool metadataSpacePending = false;
+  bool authorSeparatorPending = false;
 
-  // Index for fast idref→href lookup (used only for large EPUBs)
+  // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
     uint32_t idHash;      // FNV-1a hash of itemId
     uint16_t idLen;       // length for collision reduction
@@ -40,8 +48,6 @@ class ContentOpfParser final : public Print {
   };
   std::deque<ItemIndexEntry> itemIndex;
   bool useItemIndex = false;
-
-  static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {
@@ -69,8 +75,12 @@ class ContentOpfParser final : public Print {
   std::vector<std::string> cssFiles;  // CSS stylesheet paths
 
   explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
-                            BookMetadataCache* cache)
-      : cachePath(cachePath), baseContentPath(baseContentPath), remainingSize(xmlSize), cache(cache) {}
+                            BookMetadataCache* cache, const bool metadataOnly = false)
+      : cachePath(cachePath),
+        baseContentPath(baseContentPath),
+        remainingSize(xmlSize),
+        cache(cache),
+        metadataOnly(metadataOnly) {}
   ~ContentOpfParser() override;
 
   bool setup();

@@ -1,7 +1,9 @@
 # Translators
 
-Below is a list of users and languages CrossPoint may support in the future.
-Note because a language is below does not mean there is official support for the language at this time.
+Below is a list of translator credits for languages with known contributors.
+Official UI language support is determined by the YAML files in
+`lib/I18n/translations/`; see [i18n.md](./i18n.md) for the current supported
+language list.
 
 ## Contributing
 
@@ -19,6 +21,7 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## Portuguese (Brazil)
 - [yagofarias](https://github.com/yagofarias)
+- [Rodrigo-Matsuura](https://github.com/Rodrigo-Matsuura)
 
 ## Portuguese (Portugal)
 - [victordomingos](https://github.com/victordomingos)
@@ -37,6 +40,7 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 - [Skrzakk](https://github.com/Skrzakk)
 - [pablohc](https://github.com/pablohc)
 - [DaniPhii](https://github.com/DaniPhii)
+- [lpla](https://github.com/lpla)
 
 ## Swedish
 - [dawiik](https://github.com/dawiik)
@@ -47,6 +51,7 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## Catalan
 - [angeldenom](https://github.com/angeldenom)
+- [lpla](https://github.com/lpla)
 
 ## Finnish
 - [plahteenlahti](https://github.com/plahteenlahti)

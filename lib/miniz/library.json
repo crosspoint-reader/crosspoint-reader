@@ -1,0 +1,9 @@
+{
+  "name": "miniz",
+  "version": "11.3.2",
+  "description": "Vendored miniz (tinfl inflate only) + InflateStream wrapper",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

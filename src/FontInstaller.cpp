@@ -141,8 +141,7 @@ FontInstaller::Error FontInstaller::deleteFamily(const char* familyName) {
 
   // If this was the active font, clear the setting
   if (strcmp(SETTINGS.sdFontFamilyName, familyName) == 0) {
-    SETTINGS.sdFontFamilyName[0] = '\0';
-    SETTINGS.saveToFile();
+    SETTINGS.clearSdFontFamily();
     LOG_DBG("FONT", "Cleared active SD font (deleted family: %s)", familyName);
   }
 

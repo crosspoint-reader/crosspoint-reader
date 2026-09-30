@@ -479,8 +479,23 @@
     return changed;
   }
 
+  function updateSettingsVisibility() {
+    const shortPwrBtnVal = getControlValue('shortPwrBtn');
+    const pwrBtnFootnoteBackRow = document.getElementById('row-setting-pwrBtnFootnoteBack');
+    if (pwrBtnFootnoteBackRow) {
+      if (shortPwrBtnVal === 4) {
+        pwrBtnFootnoteBackRow.style.display = '';
+      } else {
+        pwrBtnFootnoteBackRow.style.display = 'none';
+      }
+    }
+  }
+
   function handleSettingChanged(key) {
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
+    if (key === 'shortPwrBtn') {
+      updateSettingsVisibility();
+    }
     markChanged();
   }
 
@@ -511,7 +526,7 @@
       for (const category in groups) {
         html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
         groups[category].forEach(function(s) {
-          html += '<div class="setting-row">' +
+          html += '<div class="setting-row" id="row-setting-' + s.key + '">' +
             '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
             '<span class="setting-control">' + renderControl(s) + '</span>' +
             '</div>';
@@ -520,6 +535,7 @@
       }
 
       container.innerHTML = html;
+      updateSettingsVisibility();
       document.getElementById('save-container').style.display = '';
       document.getElementById('saveBtn').disabled = true;
       preserveQuickResumeTimeoutOn = getControlValue('quickResumeSleepScreen') === 1;
@@ -579,8 +595,6 @@
 
     btn.textContent = 'Save Settings';
   }
-
-  loadSettings();
 
   // --- Wi-Fi Network Management ---
   // Renders an editable list of saved Wi-Fi networks using /api/wifi endpoints.
@@ -809,8 +823,14 @@
     }
   }
 
-  loadWifiNetworks();
-  loadOpdsServers();
+  // Sequential, not concurrent: the device's web server handles one client
+  // connection at a time, and three simultaneous fetches on page load can
+  // stall long enough inside a single response to trip the firmware watchdog.
+  (async () => {
+    await loadSettings();
+    await loadWifiNetworks();
+    await loadOpdsServers();
+  })();
 </script>
 </body>
 </html>

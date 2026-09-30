@@ -26,9 +26,9 @@ class ButtonNavigator final {
   void onPrevious(const Callback& callback);
   void onPressAndContinuous(const Buttons& buttons, const Callback& callback);
 
-  void onNextPress(const Callback& callback);
-  void onPreviousPress(const Callback& callback);
-  void onPress(const Buttons& buttons, const Callback& callback);
+  static void onNextPress(const Callback& callback);
+  static void onPreviousPress(const Callback& callback);
+  static void onPress(const Buttons& buttons, const Callback& callback);
 
   void onNextRelease(const Callback& callback);
   void onPreviousRelease(const Callback& callback);
@@ -44,10 +44,8 @@ class ButtonNavigator final {
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
 
-  [[nodiscard]] static Buttons getNextButtons() {
-    return {MappedInputManager::Button::Down, MappedInputManager::Button::Right};
-  }
-  [[nodiscard]] static Buttons getPreviousButtons() {
-    return {MappedInputManager::Button::Up, MappedInputManager::Button::Left};
-  }
+  // Navigation uses the logical NavNext / NavPrevious buttons; MappedInputManager::mapButton resolves
+  // them to physical buttons and applies any orientation-based direction swap, so this stays settings-free.
+  [[nodiscard]] static Buttons getNextButtons() { return {MappedInputManager::Button::NavNext}; }
+  [[nodiscard]] static Buttons getPreviousButtons() { return {MappedInputManager::Button::NavPrevious}; }
 };

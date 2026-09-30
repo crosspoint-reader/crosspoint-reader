@@ -16,7 +16,12 @@ void safeCopy(char* dst, size_t dstSize, const char* src, size_t srcLen) {
 ReleaseJsonParser::ReleaseJsonParser()
     : parser(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
                            sOnArrayStart, sOnArrayEnd}) {
+  safeCopy(firmwareAssetName, sizeof(firmwareAssetName), "firmware.bin", sizeof("firmware.bin") - 1);
   reset();
+}
+
+void ReleaseJsonParser::setFirmwareAssetName(const char* name) {
+  safeCopy(firmwareAssetName, sizeof(firmwareAssetName), name, strlen(name));
 }
 
 void ReleaseJsonParser::reset() {
@@ -44,7 +49,7 @@ const char* ReleaseJsonParser::getFirmwareUrl() const { return firmwareUrl; }
 size_t ReleaseJsonParser::getFirmwareSize() const { return firmwareSize; }
 
 void ReleaseJsonParser::commitAsset() {
-  if (strcmp(currentAssetName, "firmware.bin") == 0) {
+  if (strcmp(currentAssetName, firmwareAssetName) == 0) {
     memcpy(firmwareUrl, currentAssetUrl, sizeof(firmwareUrl));
     firmwareSize = currentAssetSize;
     firmwareFound = true;
