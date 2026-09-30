@@ -429,11 +429,15 @@ void EpubReaderActivity::loop() {
   {
     RenderLock lock(RenderLock::Mode::Try);
     if (lock.ownsLock() && backgroundBuildWanted() && buildTickHeapGate()) {
+      // A build step can lend the framebuffer (image probes), which hands it back white while the
+      // panel still shows the page; redraw so nothing is later painted over the blank buffer.
+      const uint32_t loansBefore = renderer.frameBufferLoanCount();
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
         requestUpdate();
-      } else if (section->isBuildComplete() && applyDeferredReposition()) {
+      } else if ((section->isBuildComplete() && applyDeferredReposition()) ||
+                 renderer.frameBufferLoanCount() != loansBefore) {
         requestUpdate();
       }
     }

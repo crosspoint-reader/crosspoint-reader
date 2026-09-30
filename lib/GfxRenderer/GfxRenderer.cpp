@@ -216,6 +216,7 @@ void GfxRenderer::releaseFrameBufferForBuild() {
   uint32_t size = 0;
   uint8_t* scratch = display.lendFrameBufferStorage(&size);
   frameBuffer = nullptr;
+  frameBufferLoans++;
   if (scratch) {
     buildscratch::lend(scratch, size);
   }

@@ -1005,6 +1005,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               bool gotDimensions = headerProbe.getDimensions(dims);
 
               if (!gotDimensions) {
+                // Starting the inflate needs its 32 KB window in one block even for a
+                // 1 KB probe. Mid-build the heap often has no such block (a CJK SD font
+                // plus a publisher stylesheet leave ~19 KB on the X3), so the probe
+                // fails and the image is dropped from the page without a placeholder.
+                // Retry with the framebuffer lent to the inflater.
+                GfxRenderer::FrameBufferLoan probeLoan(self->renderer);
+                ImageDimsProbe retryProbe;
+                self->epub->readItemContentsToStream(resolvedPath, retryProbe, 1024, /*allowEarlyStop=*/true);
+                gotDimensions = retryProbe.getDimensions(dims);
+              }
+
+              if (!gotDimensions) {
                 // No header within the stream (rare) — fall back to extracting the
                 // whole image and probing the file. That can take seconds, so
                 // surface the indexing popup first (single-shot per parser).
@@ -1015,7 +1027,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 HalFile cachedImageFile;
                 bool extractSuccess = false;
                 if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
-                  extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+                  {
+                    // Same 32 KB inflate window as the probe; the popup is already up.
+                    GfxRenderer::FrameBufferLoan extractLoan(self->renderer);
+                    extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+                  }
                   cachedImageFile.flush();
                   cachedImageFile.close();
                 }
