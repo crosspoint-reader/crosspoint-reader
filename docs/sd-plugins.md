@@ -142,15 +142,15 @@ Two browse formats:
 {
   "title": "Service Name",                  // menu label; defaults to folder name
 
-  // By convention a plugin's own files go under /.crosspoint/plugin-data/<name>/.
+  // Relative paths are in the plugin's own folder; absolute paths work too.
   // The credential stores (wifi/opds/koreader .json) are refused.
   "token": {                                // omit for token-less catalogs
-    "file": "/.crosspoint/plugin-data/<name>/token.json", // written by auth (either side)
+    "file": "token.json",                   // written by auth (either side)
     "path": "token"                         // dotted JSON path inside the file
   },
 
   "config": {                               // optional: flat JSON of {cfg.KEY} values,
-    "file": "/.crosspoint/plugin-data/<name>/config.json" // e.g. a user-entered server URL + credentials
+    "file": "config.json"                   // e.g. a user-entered server URL + credentials
   },
 
   "browse": {                               // required
@@ -377,6 +377,7 @@ browser-side.
 | Outbound HTTP(S), any method (CORS-free) | `api.relay(method, url, headers, body)` |
 | Download a URL straight to SD | `api.fetchToSd(url, dest, headers)` |
 | Write a small file to SD | `api.writeFile(path, base64)` |
+| The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
 | Create / delete / move SD files | same-origin `/mkdir`, `/delete`, `/move` |
 | On-device catalog/browse/download | `device.json` (this document) |

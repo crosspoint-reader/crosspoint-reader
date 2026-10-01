@@ -231,9 +231,9 @@ bool loadDrainManifest(const Subscriber& sub, DrainManifest& out) {
   JsonDocument doc;
   if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return false;
 
-  out.tokenFile = doc["token"]["file"] | "";
+  out.tokenFile = pluginhttp::inPluginDir(sub.dir, doc["token"]["file"] | "");
   out.tokenPath = doc["token"]["path"] | "token";
-  out.configFile = doc["config"]["file"] | "";
+  out.configFile = pluginhttp::inPluginDir(sub.dir, doc["config"]["file"] | "");
   JsonVariantConst auth = doc["auth"];
   out.authType = auth["type"] | "device_code";
   pluginhttp::readRequest(auth["request"], "POST", out.authReq);

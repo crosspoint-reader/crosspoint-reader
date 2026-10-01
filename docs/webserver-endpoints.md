@@ -525,8 +525,9 @@ encrypted but the peer is not verified (the transport ships no CA bundle).
 ### `GET /api/plugins`
 
 Installed plugins that ship a `plugin.js`:
-`[{"name":"<folder>","title":"<title>","mount":"settings"}, ...]`. `title` and
-`mount` come from the plugin's `manifest.json` when present.
+`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings"}, ...]`.
+`dir` is where the plugin is installed (plugins keep their own files there);
+`title` and `mount` come from the plugin's `manifest.json` when present.
 
 ### `GET /plugin?name=<plugin>&file=<file>`
 
@@ -612,8 +613,7 @@ Writes one small file to SD. The content is sent as a multipart file part
 (`api.writeFile()` builds it), so binary data, including NUL bytes, arrives
 intact. It streams to `<path>.tmp` and replaces `path` only after a complete,
 non-empty body. `path` must be absolute, without `..`, and not a credential
-store. By convention a plugin keeps its own files under
-`/.crosspoint/plugin-data/<name>/`.
+store. A plugin keeps its own files in its install folder (`api.dir`).
 
 - **Success:** `200 {"ok":true,"bytes":N}`.
 - **Errors:** `400` (`bad path`, `empty body`, `missing file part`,

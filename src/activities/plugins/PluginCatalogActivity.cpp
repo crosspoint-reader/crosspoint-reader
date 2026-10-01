@@ -162,9 +162,10 @@ bool PluginCatalogActivity::loadManifest() {
   JsonDocument doc;
   if (deserializeJson(doc, raw) != DeserializationError::Ok) return false;
 
-  manifest.tokenFile = doc["token"]["file"] | "";
+  const std::string pluginDir = manifestPath.substr(0, manifestPath.rfind('/'));
+  manifest.tokenFile = pluginhttp::inPluginDir(pluginDir, doc["token"]["file"] | "");
   manifest.tokenPath = doc["token"]["path"] | "token";
-  manifest.configFile = doc["config"]["file"] | "";
+  manifest.configFile = pluginhttp::inPluginDir(pluginDir, doc["config"]["file"] | "");
 
   JsonVariantConst browse = doc["browse"];
   manifest.browseFormat = browse["format"] | "json";
@@ -202,7 +203,7 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.dlUrlPath = dl["url_path"] | "";
   manifest.dlUser = dl["username"] | "";
   manifest.dlPass = dl["password"] | "";
-  manifest.destDir = dl["dest_dir"] | "";
+  manifest.destDir = pluginhttp::inPluginDir(pluginDir, dl["dest_dir"] | "");
   if (!manifest.destDir.empty() && !protectedpaths::isPluginPath(manifest.destDir)) {
     LOG_ERR("PCAT", "dest_dir outside plugin space: %s", manifest.destDir.c_str());
     return false;

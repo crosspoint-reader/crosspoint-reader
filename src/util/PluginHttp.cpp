@@ -118,6 +118,11 @@ std::string urlEncodeQuery(const std::string& s) {
   return out;
 }
 
+std::string inPluginDir(const std::string& pluginDir, const char* path) {
+  if (!path || !path[0] || path[0] == '/') return path ? path : "";
+  return pluginDir + "/" + path;
+}
+
 // A manifest may not point the firmware at a credential store.
 static bool allowedFile(const std::string& file) {
   if (protectedpaths::isPluginPath(file)) return true;
