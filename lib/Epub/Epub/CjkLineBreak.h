@@ -201,19 +201,17 @@ inline bool isNoBreakAfterCjkPunctuation(const uint32_t cp) {
   }
 }
 
-// cl-08 inseparable characters: a run of the same leader or dash (……, ――) is one mark
-// and must not be split. Only same-character pairs qualify; a leader followed by text
-// may break after it.
+// cl-08 inseparable characters: a run of the same leader or dash (……, ――) is one mark, and
+// so is a vertical kana repeat mark written as its upper and lower halves (〳〵, 〴〵). Neither
+// may be split; a leader followed by text may break after it.
 inline bool isCjkInseparablePair(const uint32_t leftCp, const uint32_t rightCp) {
+  if ((leftCp == 0x3033 || leftCp == 0x3034) && rightCp == 0x3035) return true;  // 〳〵 〴〵
   if (leftCp != rightCp) return false;
   switch (leftCp) {
     case 0x2014:  // —
     case 0x2015:  // ―
     case 0x2025:  // ‥
     case 0x2026:  // …
-    case 0x3033:  // 〳
-    case 0x3034:  // 〴
-    case 0x3035:  // 〵
       return true;
     default:
       return false;

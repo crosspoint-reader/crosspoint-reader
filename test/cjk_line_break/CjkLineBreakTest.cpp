@@ -83,10 +83,12 @@ TEST(CjkLineBreak, InseparableRunsStayTogetherButReleaseWhatFollows) {
   EXPECT_FALSE(hasCjkBreakOpportunityBetween(0x2015, 0x2015));  // ――
   EXPECT_FALSE(hasCjkBreakOpportunityBetween(KANJI, 0x2026));   // 漢…
   EXPECT_TRUE(hasCjkBreakOpportunityBetween(0x2026, KANJI));    // …漢
-  // 〳〴〵 sit inside the CJK Symbols block, so the pair rule is what keeps them together;
-  // … and ― are General Punctuation and already stay glued by the block test above.
-  EXPECT_FALSE(hasCjkBreakOpportunityBetween(0x3033, 0x3033));  // 〳〳
-  EXPECT_TRUE(hasCjkBreakOpportunityBetween(0x3033, KANJI));    // 〳漢
+  // 〳〴〵 sit inside the CJK Symbols block, so the pair rule is what keeps the halves of a
+  // vertical repeat mark together; … and ― are General Punctuation and already stay glued by
+  // the block test above.
+  EXPECT_FALSE(hasCjkBreakOpportunityBetween(0x3033, 0x3035));  // 〳〵
+  EXPECT_FALSE(hasCjkBreakOpportunityBetween(0x3034, 0x3035));  // 〴〵
+  EXPECT_TRUE(hasCjkBreakOpportunityBetween(0x3035, KANJI));    // 〵漢
 }
 
 // cl-11 small kana are in the 3.1.7 rule itself (the Note records a relaxed practice that lets
