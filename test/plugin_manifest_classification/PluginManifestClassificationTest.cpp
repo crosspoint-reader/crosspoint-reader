@@ -36,3 +36,14 @@ TEST(PluginManifestClassification, CatalogOpensEvenWithReadme) {
   EXPECT_EQ(PluginLocations::pickerAction(PluginLocations::DeviceKind::Catalog, true),
             PluginLocations::PickerAction::Catalog);
 }
+
+TEST(PluginManifestClassification, OnlyANewerCatalogVersionIsAnUpdate) {
+  EXPECT_TRUE(PluginLocations::isNewerVersion("1.1.0", "1.0.0"));
+  EXPECT_TRUE(PluginLocations::isNewerVersion("0.1.10", "0.1.9"));
+  EXPECT_TRUE(PluginLocations::isNewerVersion("2.0.0", "1.9.9"));
+  EXPECT_FALSE(PluginLocations::isNewerVersion("1.0.0", "1.1.0"));  // no downgrade offers
+  EXPECT_FALSE(PluginLocations::isNewerVersion("1.2.0", "1.2.0"));
+  EXPECT_TRUE(PluginLocations::isNewerVersion("1.0.0", ""));  // installed copy without a version
+  EXPECT_FALSE(PluginLocations::isNewerVersion("", "1.0.0"));
+  EXPECT_FALSE(PluginLocations::isNewerVersion("1.2", "1.0.0"));  // catalog must be MAJOR.MINOR.PATCH
+}

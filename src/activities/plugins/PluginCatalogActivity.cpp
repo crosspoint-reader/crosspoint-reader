@@ -584,8 +584,8 @@ bool PluginCatalogActivity::parseBrowseResponse() {
 }
 
 // Badge each item by comparing its catalog version to the installed copy's
-// manifest (located by folder id across the plugin roots). Any string
-// mismatch is an update, mirroring the browser store and the font downloader.
+// manifest (located by folder id across the plugin roots). Only a newer
+// catalog version is an update, so an older catalog never offers a downgrade.
 // Runs once per page.
 void PluginCatalogActivity::computeInstallStatus() {
   if (!manifest.tracksInstalls()) return;
@@ -608,9 +608,8 @@ void PluginCatalogActivity::computeInstallStatus() {
     if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
       installed = doc["version"] | "";
     }
-    // A mismatch (including an installed copy with no version recorded) means
-    // the catalog carries a different build; offer the update.
-    item.status = (!item.version.empty() && installed != item.version) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
+    item.status =
+        PluginLocations::isNewerVersion(item.version, installed) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
   }
 }
 

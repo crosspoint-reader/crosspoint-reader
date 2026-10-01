@@ -169,7 +169,9 @@ Two browse formats:
       "url": "download_url",                // when the item carries a direct file URL
       "version": "version"                  // catalog-of-plugins only: badges each row
                                             // Installed / Update by comparing this to the
-                                            // installed plugin's manifest.json (found by id)
+                                            // installed plugin's manifest.json (found by id).
+                                            // Both are MAJOR.MINOR.PATCH ("1.2.0"); only a
+                                            // newer catalog version shows Update.
     },
     "page_size": 8,                         // 1..16; response should honor {limit}
 

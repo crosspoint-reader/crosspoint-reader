@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,19 @@ constexpr DeviceKind classifyDeviceManifest(const bool hasBrowseUrl, const bool 
 constexpr PickerAction pickerAction(const DeviceKind kind, const bool hasReadme) {
   if (kind == DeviceKind::Catalog) return PickerAction::Catalog;
   return hasReadme ? PickerAction::Readme : PickerAction::None;
+}
+
+// Plugin versions are MAJOR.MINOR.PATCH (the catalog contract). True when
+// `catalog` is newer than `installed`. An installed copy without a valid
+// version is offered the update; a malformed catalog version never is.
+inline bool isNewerVersion(const std::string& catalog, const std::string& installed) {
+  unsigned c[3], i[3];
+  if (sscanf(catalog.c_str(), "%u.%u.%u", &c[0], &c[1], &c[2]) != 3) return false;
+  if (sscanf(installed.c_str(), "%u.%u.%u", &i[0], &i[1], &i[2]) != 3) return true;
+  for (int k = 0; k < 3; k++) {
+    if (c[k] != i[k]) return c[k] > i[k];
+  }
+  return false;
 }
 
 // One SD plugin folder, classified by the marker files it carries.
