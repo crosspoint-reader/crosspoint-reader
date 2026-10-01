@@ -20,6 +20,17 @@ TEST(ProtectedPaths, SpellingVariantsCannotDodgeTheMatch) {
   EXPECT_TRUE(isSensitivePath(".crosspoint/opds.json"));
 }
 
+TEST(ProtectedPaths, NamesSdFatWouldTrimOrAliasStillMatch) {
+  EXPECT_TRUE(isSensitivePath("/.crosspoint/wifi.json."));
+  EXPECT_TRUE(isSensitivePath("/.crosspoint./wifi.json"));
+  EXPECT_TRUE(isSensitivePath("/ .crosspoint/ wifi.json"));
+  EXPECT_TRUE(isSensitivePath("/.crosspoint ./opds.json"));
+  EXPECT_TRUE(isSensitivePath("/CROSSP~1/wifi.json"));
+  EXPECT_TRUE(isSensitivePath("/.crosspoint/WIFI~1.JSO"));
+  EXPECT_FALSE(isSensitivePath("/Books/Photos/IMG~1.JPG"));  // too deep to reach a store
+  EXPECT_FALSE(isSensitivePath("/Books/a~b.epub"));
+}
+
 TEST(ProtectedPaths, EverythingElseStaysReachable) {
   EXPECT_FALSE(isSensitivePath("/.crosspoint/settings.json"));
   EXPECT_FALSE(isSensitivePath("/.crosspoint/library.idx"));

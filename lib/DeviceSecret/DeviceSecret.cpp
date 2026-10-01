@@ -1,8 +1,8 @@
 #include "DeviceSecret.h"
 
 #include <Logging.h>
-#include <Preferences.h>
 #include <esp_random.h>
+#include <nvs.h>
 
 #include <cstring>
 #include <mutex>
@@ -15,18 +15,19 @@ bool deviceSecret(uint8_t (&out)[32]) {
 
   // A failure is not cached: the next call retries.
   if (!loaded) {
-    Preferences prefs;
-    if (prefs.begin("devid", false)) {
-      const size_t stored = prefs.getBytesLength("secret");
-      if (stored == sizeof(secret)) {
-        loaded = prefs.getBytes("secret", secret, sizeof(secret)) == sizeof(secret);
-      } else if (stored == 0) {
-        // Only a missing secret is created. Replacing an existing one would
-        // orphan every book key wrapped with it.
+    nvs_handle_t handle;
+    if (nvs_open("devid", NVS_READWRITE, &handle) == ESP_OK) {
+      size_t stored = sizeof(secret);
+      const esp_err_t err = nvs_get_blob(handle, "secret", secret, &stored);
+      if (err == ESP_OK) {
+        loaded = stored == sizeof(secret);
+      } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+        // Only a missing secret is created. Any other read error leaves the
+        // stored one alone: replacing it would orphan every wrapped book key.
         esp_fill_random(secret, sizeof(secret));
-        loaded = prefs.putBytes("secret", secret, sizeof(secret)) == sizeof(secret);
+        loaded = nvs_set_blob(handle, "secret", secret, sizeof(secret)) == ESP_OK && nvs_commit(handle) == ESP_OK;
       }
-      prefs.end();
+      nvs_close(handle);
     }
     if (!loaded) {
       LOG_ERR("DSEC", "Device secret unavailable");

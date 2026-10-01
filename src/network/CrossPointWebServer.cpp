@@ -524,17 +524,19 @@ void CrossPointWebServer::handleStatus() const {
   doc["uptime"] = millis() / 1000;
   // ?plugin=<name> adds a stable device ID for that plugin: sha256(secret ||
   // name). Not reversible to any hardware ID, and different per plugin.
-  const String plugin = server->arg("plugin");
+  String plugin = server->arg("plugin");
+  plugin.toLowerCase();  // FAT folder names ignore case
   uint8_t secret[32];
   if (!plugin.isEmpty() && plugin.length() <= 64 && deviceSecret(secret)) {
     uint8_t input[32 + 64];
     memcpy(input, secret, sizeof(secret));
     memcpy(input + sizeof(secret), plugin.c_str(), plugin.length());
     uint8_t hash[32];
-    wc_Sha256Hash(input, sizeof(secret) + plugin.length(), hash);
-    char hex[65];
-    for (size_t i = 0; i < sizeof(hash); i++) snprintf(hex + 2 * i, 3, "%02x", hash[i]);
-    doc["deviceId"] = hex;
+    if (wc_Sha256Hash(input, sizeof(secret) + plugin.length(), hash) == 0) {
+      char hex[65];
+      for (size_t i = 0; i < sizeof(hash); i++) snprintf(hex + 2 * i, 3, "%02x", hash[i]);
+      doc["deviceId"] = hex;
+    }
   }
 #if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
