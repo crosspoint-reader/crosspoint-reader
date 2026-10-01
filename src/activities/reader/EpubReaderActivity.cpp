@@ -1010,6 +1010,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
   if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
     RenderLock lock;
     clearDeferredReposition();
+    clearPendingJumps();
     const auto page = section && currentSpineIndex == sync.spineIndex
                           ? section->getPageForVisibleTextOffset(sync.visibleTextOffset)
                           : std::nullopt;
@@ -1042,6 +1043,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
 
   RenderLock lock;
   clearDeferredReposition();
+  clearPendingJumps();
 
   if (currentSpineIndex != targetSpineIndex) {
     currentSpineIndex = targetSpineIndex;
@@ -1063,7 +1065,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openReaderMenu();
     } else {
       const auto& sync = std::get<ProgressChangeResult>(result.data);
-
       applyProgressChange(sync);
     }
   };
@@ -1097,6 +1098,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             const auto& chapterResult = std::get<ChapterResult>(result.data);
             RenderLock lock;
             clearDeferredReposition();
+            clearPendingJumps();
             currentSpineIndex = chapterResult.spineIndex;
             pendingAnchor = chapterResult.anchor;
             nextPageNumber = 0;
@@ -1380,6 +1382,7 @@ bool EpubReaderActivity::skipPages(int amount) {
   if (!section) return false;
   if (amount > 0) {
     RenderLock lock;
+    clearPendingJumps();
     nextPageNumber = 0;
     currentSpineIndex++;
     section.reset();
@@ -1390,6 +1393,7 @@ bool EpubReaderActivity::skipPages(int amount) {
       return true;
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
+      clearPendingJumps();
       nextPageNumber = 0;
       currentSpineIndex--;
       section.reset();
@@ -1910,6 +1914,11 @@ bool EpubReaderActivity::applyDeferredReposition() {
 void EpubReaderActivity::clearDeferredReposition() {
   cachedChapterTotalPageCount = 0;
   cachedVisibleTextOffset.reset();
+}
+
+void EpubReaderActivity::clearPendingJumps() {
+  pendingPercentJump = false;
+  pendingLastPageJump = false;
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
@@ -2662,6 +2671,7 @@ void EpubReaderActivity::handleOverlayInput() {
     if (target != currentSpineIndex) {
       RenderLock lock;
       clearDeferredReposition();
+      clearPendingJumps();
       nextPageNumber = 0;
       currentSpineIndex = target;
       section.reset();
@@ -2773,6 +2783,7 @@ void EpubReaderActivity::handleOverlayInput() {
       if (item.spineIndex != -1) {
         RenderLock lock;
         clearDeferredReposition();
+        clearPendingJumps();
         currentSpineIndex = item.spineIndex;
         pendingAnchor = item.anchor;
         nextPageNumber = 0;
@@ -3087,6 +3098,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   {
     RenderLock lock;
     clearDeferredReposition();
+    clearPendingJumps();
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
@@ -3151,6 +3163,7 @@ void EpubReaderActivity::restoreSavedPosition() {
   {
     RenderLock lock;
     clearDeferredReposition();
+    clearPendingJumps();
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
     section.reset();
