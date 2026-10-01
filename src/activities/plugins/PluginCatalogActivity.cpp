@@ -741,13 +741,13 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   for (size_t i = 0; i < total; i++) {
     std::string rel = item.files[i];
     while (!rel.empty() && rel.front() == '/') rel.erase(rel.begin());
-    if (rel.empty() || rel.find("..") != std::string::npos) {
-      // A manifest listing traversal entries is hostile or broken either
-      // way; abort rather than install a bundle with silent holes.
+    const std::string dest = dir + "/" + rel;
+    if (rel.empty() || !protectedpaths::isPluginPath(dest)) {
+      // A manifest listing traversal or credential-store entries is hostile
+      // or broken either way; abort rather than install a bundle with holes.
       LOG_ERR("PCAT", "unsafe bundle entry rejected: %s", item.files[i].c_str());
       return HttpDownloader::FILE_ERROR;
     }
-    const std::string dest = dir + "/" + rel;
     // Create any intermediate folders for nested files ("assets/icon.bin").
     const size_t slash = dest.find_last_of('/');
     if (slash != std::string::npos) {
@@ -821,6 +821,10 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
   if (haveFolder) dest += folder;
   dest += '/';
   dest += filename;
+  if (!protectedpaths::isPluginPath(dest)) {
+    LOG_ERR("PCAT", "unsafe download dest rejected: %s", dest.c_str());
+    return HttpDownloader::FILE_ERROR;
+  }
 
   // url_path already authenticated the JSON hop; the resolved file URL must not
   // inherit those headers (S3 pre-signed GETs reject a second Authorization).
@@ -853,8 +857,8 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     // {title} alone cannot express that, since the filename is sanitized.
     substituteAll(path, "{dest}", dest);
     // Sidecar paths legitimately contain '/', but the substituted fields must
-    // not climb out of the tree.
-    if (path.empty() || path.find("..") != std::string::npos) {
+    // not climb out of the tree or land on a credential store.
+    if (!protectedpaths::isPluginPath(path)) {
       LOG_ERR("PCAT", "unsafe sidecar path rejected: %s", path.c_str());
     } else {
       std::string body = substituted(manifest.sidecarBody, &item);

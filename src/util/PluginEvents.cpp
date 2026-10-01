@@ -14,6 +14,7 @@
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
+#include "network/ProtectedPaths.h"
 
 namespace {
 
@@ -321,9 +322,9 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
     }
     if (handler->isDownload()) {
       const std::string dest = drainSubstituted(handler->dest, tok, config, meta, vars, ts, id);
-      // Substituted fields must not climb out of the tree (same guard as the
-      // catalog sidecar writer).
-      if (dest.empty() || dest[0] != '/' || dest.find("..") != std::string::npos) {
+      // Substituted fields must not climb out of the tree or land on a
+      // credential store (same guard as the catalog sidecar writer).
+      if (!protectedpaths::isPluginPath(dest)) {
         LOG_ERR("PEVT", "unsafe download dest rejected: %s", dest.c_str());
         return 200;  // treat as delivered: retrying can never fix the manifest
       }
