@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "network/ProtectedPaths.h"
 #include "network/WifiPowerSaveGuard.h"
 
 namespace {
@@ -117,9 +118,17 @@ std::string urlEncodeQuery(const std::string& s) {
   return out;
 }
 
+// A manifest may not point the firmware at a credential store.
+static bool allowedFile(const std::string& file) {
+  if (protectedpaths::isPluginPath(file)) return true;
+  LOG_ERR("PHTP", "Manifest file not allowed: %s", file.c_str());
+  return false;
+}
+
 bool loadTokenFromFile(const std::string& file, const std::string& path, std::string& out) {
   out.clear();
   if (file.empty()) return true;  // token-less plugin
+  if (!allowedFile(file)) return false;
   std::string raw;
   if (!Storage.readFileToString("PHTP", file, MAX_TOKEN_FILE_SIZE, raw)) return false;
   JsonDocument doc;
@@ -130,6 +139,7 @@ bool loadTokenFromFile(const std::string& file, const std::string& path, std::st
 
 bool saveTokenToFile(const std::string& file, const std::string& path, const std::string& value) {
   if (file.empty()) return false;
+  if (!allowedFile(file)) return false;
   JsonDocument doc;
   // Build the nesting the read path expects (numeric segments unsupported).
   std::vector<std::string> segs;
@@ -158,6 +168,7 @@ bool saveTokenToFile(const std::string& file, const std::string& path, const std
 void loadConfigFile(const std::string& file, Headers& out) {
   out.clear();
   if (file.empty()) return;
+  if (!allowedFile(file)) return;
   std::string raw;
   if (!Storage.readFileToString("PHTP", file, MAX_TOKEN_FILE_SIZE, raw)) return;
   JsonDocument doc;

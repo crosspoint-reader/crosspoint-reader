@@ -142,13 +142,15 @@ Two browse formats:
 {
   "title": "Service Name",                  // menu label; defaults to folder name
 
+  // By convention a plugin's own files go under /.crosspoint/plugin-data/<name>/.
+  // The credential stores (wifi/opds/koreader .json) are refused.
   "token": {                                // omit for token-less catalogs
-    "file": "/.crosspoint/<name>.json",     // written by auth (either side)
+    "file": "/.crosspoint/plugin-data/<name>/token.json", // written by auth (either side)
     "path": "token"                         // dotted JSON path inside the file
   },
 
   "config": {                               // optional: flat JSON of {cfg.KEY} values,
-    "file": "/.crosspoint/<name>-cfg.json"  // e.g. a user-entered server URL + credentials
+    "file": "/.crosspoint/plugin-data/<name>/config.json" // e.g. a user-entered server URL + credentials
   },
 
   "browse": {                               // required
@@ -303,6 +305,8 @@ lets plugins attach service fields (e.g. a service book id) to a book; those
 fields ride along with KOSync progress uploads and are available to event
 handlers as `{meta.*}` variables. See `plugin-events.md` for the whole
 surface: the event whitelist, handler schema, delivery semantics, and limits.
+The device's plugin list shows, under each plugin, the events it receives, so
+the person using the reader can see what activity a plugin is sent.
 
 ## Ideas to build
 
@@ -381,13 +385,19 @@ browser-side.
 ## Protected content and loan expiry
 
 Books whose entries are content-protected open through the read path in
-`lib/Epub/ContentProtection.cpp`: the access credential lives at
-`/.crosspoint/content.key`, and an out-of-band rights document may sit next to
-the book as `<book>.epub.rights` (falling back to a rights file inside the
-zip). Entries decrypt on demand, streamed in small chunks; nothing decrypted
-is ever written to SD.
+`lib/Epub/ContentProtection.cpp`. The core (SDK `ContentProtection`) only
+understands the standard OCF `encryption.xml` and decrypts entries on demand,
+streamed in small chunks; nothing decrypted is ever written to SD.
 
-When the rights carry a due date, the reader enforces it against
+The reader gets each book's content key from `<book>.key`, written through
+`POST /api/book-key` by the plugin that fulfilled the book: the plugin (or its
+service) turns whatever the provider delivers into the key, and the device
+stores it wrapped to itself. The reader carries no rights or account scheme.
+A book with no `.key`, or one wrapped by another reader, does not open. A full
+flash erase replaces the device secret, so a plugin should keep what it needs
+to derive keys again.
+
+When the key carries a due date, the reader enforces it against
 `lib/TrustedTime`: a monotonic clock floor persisted in NVS (on-flash, not on
 the removable card), restored into the system clock at boot, advanced at
 every sleep entry and snapped to real time by SNTP on every Wi-Fi join. The

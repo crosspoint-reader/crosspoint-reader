@@ -116,6 +116,13 @@ bool anySubscriber(const Event e) {
   return false;
 }
 
+uint8_t subscriptionMask(const char* plugin) {
+  for (const auto& sub : subscribers) {
+    if (sub.name[0] != '\0' && strcmp(sub.name, plugin) == 0) return sub.mask;
+  }
+  return 0;
+}
+
 bool wantsConnectAny() {
   for (const auto& sub : subscribers) {
     if (sub.name[0] == '\0' || sub.connectMask == 0) continue;

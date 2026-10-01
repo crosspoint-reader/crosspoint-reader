@@ -5,7 +5,6 @@
 #include <Preferences.h>
 #include <SPI.h>
 #include <XteinkDetect.h>
-#include <esp_mac.h>
 #include <esp_sleep.h>
 
 // Global HalGPIO instance
@@ -81,18 +80,6 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 }
 
 }  // namespace
-
-bool HalGPIO::getFactoryMac(char (&address)[18]) const {
-  uint8_t mac[6] = {};
-  address[0] = '\0';
-  const esp_err_t err = esp_efuse_mac_get_default(mac);
-  if (err != ESP_OK) {
-    LOG_ERR("GPIO", "Factory MAC read failed: %d", static_cast<int>(err));
-    return false;
-  }
-  snprintf(address, sizeof(address), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return true;
-}
 
 void HalGPIO::begin() {
 #if FREEINK_MCU_C3

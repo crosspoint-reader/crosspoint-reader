@@ -24,6 +24,7 @@
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "network/HttpDownloader.h"
+#include "network/ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/PluginEvents.h"
 #include "util/PluginHttp.h"
@@ -202,6 +203,10 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.dlUser = dl["username"] | "";
   manifest.dlPass = dl["password"] | "";
   manifest.destDir = dl["dest_dir"] | "";
+  if (!manifest.destDir.empty() && !protectedpaths::isPluginPath(manifest.destDir)) {
+    LOG_ERR("PCAT", "dest_dir outside plugin space: %s", manifest.destDir.c_str());
+    return false;
+  }
   manifest.filenameTpl = dl["filename"] | "{title}.epub";
   // Multi-file bundle install (generic): base URL + a files array per item.
   manifest.bundleBasePath = dl["bundle"]["base"] | "";
@@ -291,6 +296,26 @@ void PluginCatalogActivity::enterPluginPicker() {
   // table in step so a plugin installed since boot starts receiving events
   // (and a removed one stops) without a restart.
   pluginevents::refreshSubscriptions();
+  // Disclose which device events each plugin receives (and so what reading
+  // activity it can send off the device). The list leads the subtitle so the
+  // two-line wrap never cuts it.
+  static constexpr StrId EVENT_LABELS[] = {StrId::STR_EVENT_BOOK_OPEN, StrId::STR_EVENT_BOOK_CLOSE,
+                                           StrId::STR_EVENT_READING_SESSION, StrId::STR_EVENT_DOWNLOAD,
+                                           StrId::STR_EVENT_SLEEP};
+  static_assert(sizeof(EVENT_LABELS) / sizeof(EVENT_LABELS[0]) == static_cast<size_t>(pluginevents::Event::COUNT));
+  for (auto& plugin : installedPlugins) {
+    const uint8_t mask = pluginevents::subscriptionMask(plugin.name.c_str());
+    if (mask == 0) continue;
+    std::string events;
+    for (size_t i = 0; i < std::size(EVENT_LABELS); i++) {
+      if (!(mask & (1u << i))) continue;
+      if (!events.empty()) events += ", ";
+      events += I18N.get(EVENT_LABELS[i]);
+    }
+    char line[192];
+    snprintf(line, sizeof(line), tr(STR_PLUGIN_RECEIVES_EVENTS), events.c_str());
+    plugin.description = plugin.description.empty() ? line : std::string(line) + ". " + plugin.description;
+  }
 
   manifestPath.clear();
   manifest = Manifest{};

@@ -68,7 +68,6 @@ class HalGPIO {
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
-  bool getFactoryMac(char (&address)[18]) const;
 
   // Button input methods
   void update();
