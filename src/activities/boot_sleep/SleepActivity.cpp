@@ -12,6 +12,7 @@
 #include <I18n.h>
 #include <Memory.h>
 #include <PNGdec.h>
+#include <ToneLut.h>
 #include <Xtc.h>
 
 #include <algorithm>
@@ -567,15 +568,24 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
+  // The persisted sleep render profile drives every custom BMP decode below
+  // through the SAME ToneLut/Bitmap pipeline the viewer uses (default profile
+  // = no override = unchanged rendering). Static: ToneLut is 264B, too big for
+  // the render task stack budget; one shared buffer for both decode sites.
+  static ToneLut sleepTone;
+
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
   HalFile file;
   if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
+    sleepTone = toneLutFromProfile(SETTINGS.sleepRenderProfile);
+    buildToneLut(sleepTone);
     Bitmap bitmap(file, true,
                   renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported() &&
                       display.getController() == HalDisplay::Controller::SSD1677 &&
-                      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
+                      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER,
+                  &sleepTone);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
@@ -595,10 +605,13 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (Storage.openFileForRead("SLP", selectedPath, randFile)) {
       LOG_DBG("SLP", "Randomly loading: %s", selectedPath.c_str());
       delay(100);
+      sleepTone = toneLutFromProfile(SETTINGS.sleepRenderProfile);
+      buildToneLut(sleepTone);
       Bitmap bitmap(randFile, true,
                     renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported() &&
                         display.getController() == HalDisplay::Controller::SSD1677 &&
-                        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
+                        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER,
+                    &sleepTone);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         renderBitmapSleepScreen(bitmap);
         randFile.close();

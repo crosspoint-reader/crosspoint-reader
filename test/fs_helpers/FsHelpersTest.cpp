@@ -76,4 +76,35 @@ TEST(SanitizePathComponentForFat32, DoesNotSplitLetterAtBufferLimit) {
   EXPECT_EQ(sanitize(kTitle2103), "Богиня-глюкозы.-Нормализуйте-уров");
 }
 
+// Post-delete navigation plan (imageIndexAfterRemove, removeOk=true):
+// prefer the next image at the same slot, fall back to the previous one,
+// -1 = folder becomes empty (exit to the file browser), out-of-range
+// deletedIndex is safe.
+TEST(ImageIndexAfterRemove, PointsAtNextImageForMiddleDelete) {
+  // [a b c d e], delete c(2): the slot now holds d.
+  EXPECT_EQ(FsHelpers::imageIndexAfterRemove(true, 5, 2), 2);
+}
+
+TEST(ImageIndexAfterRemove, FallsBackToPreviousForLastDelete) {
+  // [a b c d e], delete e(4): open d at slot 3.
+  EXPECT_EQ(FsHelpers::imageIndexAfterRemove(true, 5, 4), 3);
+}
+
+TEST(ImageIndexAfterRemove, EmptyListMeansExitToBrowser) {
+  EXPECT_EQ(FsHelpers::imageIndexAfterRemove(true, 1, 0), -1);  // only image
+  EXPECT_EQ(FsHelpers::imageIndexAfterRemove(true, 0, 0), -1);  // degenerate
+}
+
+TEST(ImageIndexAfterRemove, OutOfRangeDeletedIndexIsSafe) {
+  EXPECT_EQ(FsHelpers::imageIndexAfterRemove(true, 3, 99), 0);
+  EXPECT_EQ(FsHelpers::imageIndexAfterRemove(true, 3, -1), 0);
+}
+
+// Image Viewer delete contract: a failed physical delete must abort BEFORE
+// any list/index mutation — the viewer stays on the current image.
+TEST(ImageIndexAfterRemove, FailedRemoveAbortsBeforeStateChange) {
+  EXPECT_FALSE(FsHelpers::imageIndexAfterRemove(false, 5, 2).has_value());
+  EXPECT_FALSE(FsHelpers::imageIndexAfterRemove(false, 1, 0).has_value());
+}
+
 }  // namespace
