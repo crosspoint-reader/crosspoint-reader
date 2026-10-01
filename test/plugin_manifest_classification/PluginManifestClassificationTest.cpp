@@ -47,3 +47,12 @@ TEST(PluginManifestClassification, OnlyANewerCatalogVersionIsAnUpdate) {
   EXPECT_FALSE(PluginLocations::isNewerVersion("", "1.0.0"));
   EXPECT_FALSE(PluginLocations::isNewerVersion("1.2", "1.0.0"));  // catalog must be MAJOR.MINOR.PATCH
 }
+
+TEST(PluginManifestClassification, VersionsMustBeExactlyThreeDigitComponents) {
+  for (const char* bad :
+       {"1.2.3-beta", "1.2.3 ", "1.2.3.4", "-1.2.3", "+1.2.3", " 1.2.3", "1..3", "1.2.", "1.2.99999999999", "v1.2.3"}) {
+    EXPECT_FALSE(PluginLocations::isNewerVersion(bad, "0.0.1")) << bad;  // never offered
+    EXPECT_TRUE(PluginLocations::isNewerVersion("0.0.1", bad)) << bad;   // installed treated as unversioned
+  }
+  EXPECT_TRUE(PluginLocations::isNewerVersion("4294967295.0.0", "1.0.0"));  // UINT32_MAX still fits
+}
