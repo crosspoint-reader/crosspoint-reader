@@ -42,14 +42,17 @@ class GfxRenderer {
     }
     return width;
   }
+  // Off by default (uniform fixture metrics). When set, word-boundary gaps depend on the
+  // codepoint pair, so a layout test can tell which boundary a gap was measured for.
+  inline static bool pairDependentGaps = false;
   int getKerning(int, uint32_t left, uint32_t right, EpdFontFamily::Style, int8_t tracking = 0) const {
-    return trackingBetween(left, right, tracking);
+    return trackingBetween(left, right, tracking) + (pairDependentGaps ? static_cast<int>((left ^ right) % 3) - 1 : 0);
   }
   // Counts space-advance lookups so layout tests can bound measurement work.
   inline static int spaceAdvanceCalls = 0;
-  int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const {
+  int getSpaceAdvance(int, uint32_t left, uint32_t right, EpdFontFamily::Style) const {
     ++spaceAdvanceCalls;
-    return 4;
+    return pairDependentGaps ? 3 + static_cast<int>((left * 7 + right * 13) % 6) : 4;
   }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const char* const*, const size_t*, size_t, bool, bool, uint8_t) const {}

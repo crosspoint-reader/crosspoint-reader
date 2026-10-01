@@ -110,16 +110,73 @@ TEST(LineBreakCost, MeasuresEachWordGapOnceInTheBreakSearch) {
   EXPECT_LE(GfxRenderer::spaceAdvanceCalls, 3 * kWords) << "gap measured more than once per word";
 }
 
-TEST(LineBreakCost, LinesLongerThanTheGapWindowBreakTheSame) {
-  // 300 one-letter words (8 px + 4 px space) on a 2000 px line: 167 fit, far more than the
-  // 64-entry gap window, so most gaps on a line are measured directly. The optimal breaks
-  // must not depend on which path supplied a gap: the first line is filled, the rest follows.
+namespace {
+// Independent oracle for plain space-separated words (no indent, hyphenation or attached
+// tokens): minimum sum of squared slack over all lines but the last, ties to the longer line,
+// with every gap measured directly from the renderer.
+std::vector<uint16_t> referenceWordsPerLine(const GfxRenderer& renderer, const std::vector<std::string>& words,
+                                            const int pageWidth) {
+  const size_t n = words.size();
+  const auto gapBefore = [&](const size_t j) {
+    return renderer.getSpaceAdvance(0, static_cast<unsigned char>(words[j - 1].back()),
+                                    static_cast<unsigned char>(words[j].front()), EpdFontFamily::REGULAR);
+  };
+  std::vector<long long> cost(n + 1, 0);
+  std::vector<size_t> last(n, 0);
+  for (size_t i = n; i-- > 0;) {
+    long long best = -1;
+    int length = 0;
+    for (size_t j = i; j < n; ++j) {
+      length += static_cast<int>(words[j].size()) * 8 + (j > i ? gapBefore(j) : 0);
+      if (length > pageWidth) break;
+      const long long slack = pageWidth - length;
+      const long long candidate = j == n - 1 ? 0 : slack * slack + cost[j + 1];
+      if (best < 0 || candidate <= best) {
+        best = candidate;
+        last[i] = j;
+      }
+    }
+    cost[i] = best;
+  }
+  std::vector<uint16_t> lines;
+  for (size_t i = 0; i < n; i = last[i] + 1) lines.push_back(static_cast<uint16_t>(last[i] - i + 1));
+  return lines;
+}
+}  // namespace
+
+TEST(LineBreakCost, CachedGapsMatchDirectMeasurement) {
+  // The fixture's uniform 4 px space cannot tell one boundary's gap from another's, so make
+  // gaps depend on the letter pair and compare with the oracle above. Narrow pages keep every
+  // line inside the 32-entry gap window, 600 px straddles it and wider pages go well past it.
+  GfxRenderer::pairDependentGaps = true;
   GfxRenderer renderer;
-  BlockStyle style;
-  ParsedText text(false, false, style, 0);
-  for (int i = 0; i < 300; ++i) text.addWord("a", EpdFontFamily::REGULAR);
-  std::vector<uint16_t> wordsPerLine;
-  text.layoutAndExtractLines(
-      renderer, 0, 2000, [&](std::unique_ptr<TextBlock> block, auto) { wordsPerLine.push_back(block->wordCount()); });
-  EXPECT_EQ(wordsPerLine, (std::vector<uint16_t>{167, 133}));
+  uint32_t state = 20261001;
+  const auto next = [&state](const uint32_t n) {
+    state = state * 1664525u + 1013904223u;
+    return (state >> 8) % n;
+  };
+  for (const int pageWidth : {150, 480, 600, 800, 2000}) {
+    for (int paragraph = 0; paragraph < 40; ++paragraph) {
+      BlockStyle style;
+      style.alignment = CssTextAlign::Left;
+      ParsedText text(false, false, style, 0);
+      std::vector<std::string> words;
+      const int count = 1 + static_cast<int>(next(400));
+      const int maxLength = pageWidth >= 600 ? 2 : 6;
+      for (int i = 0; i < count; ++i) {
+        std::string word;
+        for (int k = 1 + static_cast<int>(next(maxLength)); k > 0; --k)
+          word.push_back(static_cast<char>('a' + next(26)));
+        text.addWord(word, EpdFontFamily::REGULAR);
+        words.push_back(std::move(word));
+      }
+      std::vector<uint16_t> wordsPerLine;
+      text.layoutAndExtractLines(
+          renderer, 0, static_cast<uint16_t>(pageWidth),
+          [&](std::unique_ptr<TextBlock> block, auto) { wordsPerLine.push_back(block->wordCount()); });
+      ASSERT_EQ(wordsPerLine, referenceWordsPerLine(renderer, words, pageWidth))
+          << "page width " << pageWidth << ", paragraph " << paragraph;
+    }
+  }
+  GfxRenderer::pairDependentGaps = false;
 }
