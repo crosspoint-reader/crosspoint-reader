@@ -40,7 +40,14 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
-  void startDeepSleep(HalGPIO& gpio) const;
+  //
+  // timerWakeUs: optional one-shot deep-sleep timer wake in microseconds (the
+  // ESP-IDF timer-wake contract). Zero arms nothing, keeping the
+  // power-button-only behavior; when set, the timer wakes in addition to the
+  // power button — whichever source fires first ends the sleep. Timer wake is
+  // effective only where the ESP32 stays powered through sleep (USB power or
+  // latched rails); a battery power-off or PMIC shutdown removes it.
+  void startDeepSleep(HalGPIO& gpio, uint64_t timerWakeUs = 0) const;
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
