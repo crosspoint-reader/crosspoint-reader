@@ -10,6 +10,7 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
+#include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -119,6 +120,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
         case CrossPointSettings::NEXT_PREV:
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
+        case CrossPointSettings::PREV_PREV:
+          return (gpio.*fn)(HalGPIO::BTN_UP) || (gpio.*fn)(HalGPIO::BTN_DOWN);
+        case CrossPointSettings::NEXT_NEXT:
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
@@ -130,6 +134,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
         case CrossPointSettings::NEXT_PREV:
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
+        case CrossPointSettings::NEXT_NEXT:
+          return (gpio.*fn)(HalGPIO::BTN_UP) || (gpio.*fn)(HalGPIO::BTN_DOWN);
+        case CrossPointSettings::PREV_PREV:
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
@@ -170,7 +177,15 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   float nx = 0.0f;
   float ny = 0.0f;
   if (!gpio.wasTouchTap(nx, ny)) return false;
-  renderer.tapToLogical(nx, ny, x, y);
+  int tapX = 0;
+  int tapY = 0;
+  renderer.tapToLogical(nx, ny, tapX, tapY);
+  // A tap on the header back button is Button::Back (wasBackGesture), not a
+  // screen tap: screens that route every tap (the keyboard's key router)
+  // would otherwise swallow it before their Back check.
+  if (HeaderBackTapTarget::contains(tapX, tapY)) return false;
+  x = tapX;
+  y = tapY;
   rememberTouchHeldTime();
   return true;
 }
@@ -297,6 +312,20 @@ bool MappedInputManager::wasEdgeSwipe(const freeink::ui::ScreenEdge edge) const 
 }
 
 bool MappedInputManager::wasBackGesture() const {
+  // Tap on the header back button (rect recorded by BaseTheme::drawHeader;
+  // empty on screens without one). Folded into Button::Back alongside the
+  // swipe so every activity's existing Back handling picks it up.
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (gpio.wasTouchTap(nx, ny)) {
+    int tapX = 0;
+    int tapY = 0;
+    renderer.tapToLogical(nx, ny, tapX, tapY);
+    if (HeaderBackTapTarget::contains(tapX, tapY)) {
+      rememberTouchHeldTime();
+      return true;
+    }
+  }
   // Back = left-to-right swipe starting near the left edge. Edge-anchored so that
   // mid-screen horizontal swipes stay available to activities that consume
   // SwipeDir::Left/Right (e.g. percent selection, image viewer).
@@ -378,10 +407,6 @@ bool MappedInputManager::consumeSuppressedRelease() const {
 }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
-
-bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
-
-bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
 
 unsigned long MappedInputManager::getHeldTime() const {
   // A mapped action has its own meaning, independent of the contact duration.

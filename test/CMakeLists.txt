@@ -59,15 +59,25 @@ add_subdirectory(progress_comparison)
 add_subdirectory(font_cache_manager)
 add_subdirectory(css_parser)
 add_subdirectory(chapter_html_slim_parser)
+add_subdirectory(korean_line_breaking)
 add_subdirectory(ligature_guard)
 add_subdirectory(page_link)
 add_subdirectory(content_opf_parser)
 add_subdirectory(chapter_position)
 add_subdirectory(home_button)
+add_subdirectory(button_press_navigation)
 
 add_subdirectory(inflate_stream)
 add_subdirectory(fs_helpers)
+add_subdirectory(txt_to_html)
 
 add_subdirectory(absolute_grayscale)
 
 add_subdirectory(sd_card_font)
+add_subdirectory(glyph_bitmap)
+
+add_subdirectory(reader_session)
+add_subdirectory(plugin_manifest_classification)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)

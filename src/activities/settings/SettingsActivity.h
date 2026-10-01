@@ -21,12 +21,12 @@ enum class SettingAction {
   OPDSBrowser,
   Network,
   ClearCache,
-  RebuildLibraryIndex,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
   DownloadFonts,
   TextSettings,
+  Plugins,
   KeyboardLayouts,
   HomeButton,
   About,
@@ -221,13 +221,15 @@ class SettingsActivity final : public UiTabListActivity {
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
-  void rebuildLibraryIndex();
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
+
+  void drawChrome() override;
+  void drawFooter() override;
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
   void onExit() override;
-  void render(RenderLock&&) override;
+  void render(RenderLock&& lock) override;
 };

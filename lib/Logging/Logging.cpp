@@ -63,9 +63,7 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   }
   va_end(args);
 #if FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF
-  // IDF/ROM console path for boards monitored over USB-Serial-JTAG, where the
-  // HWCDC `operator bool` reads false under `pio device monitor` and logs would
-  // otherwise be silently dropped (e.g. Sticky).
+  // Sticky's USB serial bridge uses UART0; ROM output also works before Serial0.begin().
   esp_rom_printf("%s", buf);
 #else
   if (logSerial) {

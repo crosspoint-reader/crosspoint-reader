@@ -108,8 +108,6 @@ class MappedInputManager {
   // Top-edge down-swipe opens the light panel when the active board actually
   // has a frontlight. ActivityManager consumes it before activity input.
   bool wasLightPanelGesture() const;
-  bool wasAnyPressed() const;
-  bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   const GfxRenderer& getRenderer() const { return renderer; }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;

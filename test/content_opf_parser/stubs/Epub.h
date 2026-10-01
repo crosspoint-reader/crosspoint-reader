@@ -1,5 +1,7 @@
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -7,17 +9,24 @@
 class HalFile {
  public:
   explicit operator bool() const { return open_; }
-  void close() { open_ = false; }
+  void close() {
+    EXPECT_TRUE(initialized_) << "Closing a default HalFile asserts on device";
+    open_ = false;
+  }
   bool seek(size_t position) {
     position_ = position;
     return true;
   }
   size_t position() const { return position_; }
   int available() const { return 0; }
-  void markOpen() { open_ = true; }
+  void markOpen() {
+    initialized_ = true;
+    open_ = true;
+  }
 
  private:
   bool open_ = false;
+  bool initialized_ = false;
   size_t position_ = 0;
 };
 
