@@ -17,7 +17,13 @@ class AboutActivity final : public UiListActivity {
  private:
   int listCount() const override { return ITEM_COUNT; }
   void buildScreen(UiScreen& screen) override;
+#ifdef POCKET_LIBRARY
+  // Pocket Library: five taps on the Firmware row open the hidden diagnostics.
+  void activateIndex(int index) override;
+  int firmwareTaps_ = 0;
+#else
   void activateIndex(int) override {}
+#endif
   const char* headerTitle() const override;
 
   std::string rowValues_[ITEM_COUNT];

@@ -1,0 +1,153 @@
+# Pocket Library — Decisions
+
+Each entry: date, decision, reason. Measured numbers live in the tables at the
+bottom; anything marked *(est.)* is still a guess.
+
+---
+
+## What upstream CrossPoint 1.6.5 gives us (read 2026-10-01)
+
+- **Build.** PlatformIO with the pioarduino ESP32 platform (Arduino core 3.3.11,
+  ESP-IDF underneath). Env `x4pro`: board `esp32-s3-devkitc1-n16r8`, OPI PSRAM
+  (`dio_opi`), 16 MB flash, `FREEINK_DEVICE_X4PRO`, `USE_BLOCK_DEVICE_INTERFACE`.
+  `x4pro-gh_release` is the same with release logging. Partitions: two 6.25 MB
+  OTA app slots, 3.4 MB SPIFFS (unmounted), 64 KB coredump.
+- **Hardware layer** lives in the `freeink-sdk` submodule (MIT, FreeInk), at
+  commit `111fdcc` for this tag. Its `docs/xteink-x4pro-support.md` is a
+  bench-verified pin map: SSD1677 *or* UC8179/UC8279 panel (varies by batch,
+  detected at boot), GT911 touch (Home key is a GT911 key bit), digital side
+  buttons on GPIO0/7, Power GPIO3, CW2017 fuel gauge, BM8563 RTC, warm/cool
+  frontlight on GPIO8/9.
+- **SD card: native SDMMC, 1-bit, slot 1** (CLK 41, CMD 42, DAT0 40; power
+  enable GPIO5, active-low). Mounted as a block device under SdFat. *Not SPI.*
+- **Activities.** One `ActivityManager` owns a stack of activities and a single
+  render task. List screens derive from `UiListActivity` (FreeInkUI). Children
+  open with `startActivityForResult`. There is already an on-screen keyboard
+  (`KeyboardEntryActivity`) with layouts, and a StarDict dictionary with a
+  word-selection UI (`DictionaryWordSelectActivity`).
+- **Storage rule.** All SD access goes through `HalStorage`/`HalFile`, which
+  serialize on one mutex. Never call SdFat or `SDCardManager` directly.
+- **Memory.** `HalMemory::allocatePsram()` returns PSRAM-only buffers (never
+  falls back to internal RAM); `makeUniqueNoThrow` for every `new`. Upstream's
+  rules were written for the 380 KB ESP32-C3; on the S3 they're still the
+  right hygiene for internal SRAM.
+- **Rendering pipeline** (to read in depth at M3): `lib/Epub` parses XHTML with
+  expat into pages and caches laid-out sections on SD under `/.crosspoint/`;
+  `lib/GfxRenderer` draws; fonts are built-in bitmap fonts plus runtime
+  TTF/OTF from the card via FreeType (`lib/EpdFont/TtfEpdFont`).
+- **Upstream already has `src/activities/library/` and `lib/LibraryIndex`**
+  (its book library). Our code therefore uses `src/pocketlib/` and `lib/zim/`.
+
+## 2026-10-01 — Base on tag 1.6.5, not `main`
+
+1.6.5 is the latest tagged release with `x4pro`. `main` is 17 commits ahead
+and has already changed `lib_deps` (adds SdFat, JsonSax, Opds and others).
+Release tags are what we rebase onto.
+
+## 2026-10-01 — How we stay mergeable
+
+- New code only in `lib/zim/`, `src/pocketlib/`, `tools/`, and our own docs.
+- Our build envs live in `platformio.pocketlib.ini`, pulled in by one edit to
+  `platformio.ini` (`extra_configs`). Each env = upstream env + `-DPOCKET_LIBRARY=1`.
+- Upstream source files are touched only inside `#ifdef POCKET_LIBRARY`, so the
+  stock envs in our fork build byte-for-byte what upstream builds.
+- **Rebase procedure** per upstream release: `git fetch upstream --tags`;
+  `git rebase --onto <new-tag> <old-tag> pocket-library`; resolve the touch
+  points listed below; `git submodule update`; build both stock `x4pro-gh_release`
+  and `x4pro-pocketlib-release`; run host tests; device checklist.
+
+### Upstream touch points
+
+| File | Change | Why |
+|---|---|---|
+| `platformio.ini` | `extra_configs` also lists `platformio.pocketlib.ini` | our envs |
+| `CLAUDE.md` | symlink to `AGENTS.md` replaced by our working rules, which import `@AGENTS.md` | brief §1 |
+| `src/activities/settings/AboutActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: 5 taps on "Firmware" open Diagnostics | hidden debug screen |
+
+## 2026-10-01 — Licensing layout
+
+- Upstream CrossPoint (MIT) and freeink-sdk (MIT) keep their notices.
+- Everything we write is GPL-3.0-or-later; full text in `LICENSE-GPL-3.0`;
+  each new file carries an SPDX header. The combined firmware binary is
+  distributed under GPL-3.0-or-later, which MIT permits.
+- Header copyright line reads "Pocket Library contributors" until the owner
+  says what name to use.
+
+## 2026-10-01 — Hidden Diagnostics screen
+
+Entrance: Settings → About → tap **Firmware** five times. Shows PSRAM size
+(`esp_psram_get_size`), PSRAM and internal heap free/largest block, flash
+size and speed, the SD bus width and **real** clock (`sdmmc_host_get_real_freq`,
+not a config comment), and an on-demand benchmark:
+- picks the largest file under `/library` (two levels) or `/` (one level);
+  if none ≥ 16 MB, writes a 32 MB scratch file `/.pocketlib/bench.bin` and
+  reports write speed;
+- sequential: 16 MB in 64 KB reads into PSRAM;
+- random: 64 × 4 KB reads at random aligned offsets across the whole file,
+  including backward seeks (exposes FAT-chain walking), avg / p95 / max.
+All values are logged on serial with tag `DIAG`.
+
+## 2026-10-01 — Findings that change the brief's assumptions
+
+1. **SD clock is 20 MHz, not 40.** `SdmmcBlockDevice.cpp` sets
+   `host.max_freq_khz = SDMMC_FREQ_DEFAULT; // 40 MHz`, but ESP-IDF defines
+   `SDMMC_FREQ_DEFAULT` as 20000 (`sd_protocol_types.h:218`). 1-bit × 20 MHz
+   ≈ 2.5 MB/s ceiling. Reads also bounce through a 4 KB DMA buffer
+   (`kMaxTransferSectors = 8`). Diagnostics will confirm the real clock.
+2. **zstd window.** Probing openZIM's 2024 Wikipedia sample: zstd clusters
+   decompress to ≤ 2,096,688 bytes, compress to ≤ 267,897 bytes (≈ 8:1), but
+   the frames declare an **8 MiB window**. Plan: one-shot decode of a whole
+   cluster into a 2 MiB PSRAM buffer (no separate window), with the frame's
+   content size checked against the buffer first.
+3. **Namespaces and listings.** The 2024 sample exists in both schemes:
+   v5.0 with `A/` articles and v6.2 with `C/`. The v6.2 file carries both
+   `X/listing/titleOrdered/v0` (all entries) and `.../v1` (front articles
+   only, the right list for Random and for "articles only" search).
+4. **Older files use xz** (2017 Wikibooks sample, compression type 4). Some
+   real-world collections may still be xz; the card builder will report it.
+5. **FAT32 seek cost** in 4 GB parts (see PLAN.md risk 1).
+
+## Dependencies
+
+| Dependency | License | Use | Status |
+|---|---|---|---|
+| CrossPoint Reader 1.6.5 | MIT | base firmware | in use |
+| freeink-sdk | MIT | hardware layer | in use (upstream) |
+| Upstream's own deps (ArduinoJson MIT, QRCode MIT, PNGdec Apache-2.0, JPEGDEC Apache-2.0, WebSockets LGPL-2.1, Arduino-wolfSSL GPL, FreeType FTL/GPL-2, expat MIT, miniz MIT) | as listed — to verify one by one at M1 | upstream features | in use (upstream) |
+| zstd (decoder only) | BSD-3-Clause (dual BSD/GPLv2) | ZIM clusters | planned M1 |
+| xz-embedded | 0BSD (public domain before 2024) | old ZIM clusters | planned M1, only if our collections need it |
+| zim-testing-suite (openZIM) | test data | host tests | planned M1 |
+
+## Cloud-build workarounds (not part of the firmware)
+
+This cloud session's network policy blocks the PlatformIO registry,
+`download.kiwix.org` and `wiki.openzim.org`. To build here: SCons comes from
+PyPI, registry libraries come from their GitHub tags at the same pinned
+versions via a git-ignored `platformio.local.ini`, and the proxy's CA was added
+to PlatformIO's private certifi bundle. None of this is needed on a Mac.
+
+## Measurements
+
+### Device (fill in from Diagnostics and serial logs)
+
+| Quantity | Value | Date | Notes |
+|---|---|---|---|
+| PSRAM size | | | `esp_psram_get_size()` |
+| PSRAM free at Diagnostics | | | |
+| Internal RAM free / largest | | | |
+| Flash size / speed | | | |
+| SD bus | | | expect "SDMMC 1-bit @ 20.0 MHz" |
+| Panel controller | | | Settings → About → Display Controller |
+| SD sequential read | | | |
+| SD random 4 KB avg / p95 / max | | | file used, size |
+| SD sequential write | | | only if scratch file was written |
+
+### Performance targets (brief §7) — measured values arrive from M3 on
+
+| Action | Target *(est.)* | Measured |
+|---|---|---|
+| Search update per keystroke | ≤ 100 ms | |
+| Open article, cluster not cached | ≤ 800 ms | |
+| Open article, cluster cached | ≤ 300 ms | |
+| Page turn layout | ≤ 100 ms | |
+| Wake to usable screen | ≤ 1 s excl. refresh | |

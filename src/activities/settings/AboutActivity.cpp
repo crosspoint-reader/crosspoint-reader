@@ -11,6 +11,11 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#ifdef POCKET_LIBRARY
+#include <Memory.h>
+
+#include "pocketlib/DiagnosticsActivity.h"
+#endif
 
 namespace fui = freeink::ui;
 
@@ -116,6 +121,22 @@ void AboutActivity::onEnter() {
   snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   rowValues_[ITEM_MAC] = buf;
 }
+
+#ifdef POCKET_LIBRARY
+void AboutActivity::activateIndex(int index) {
+  if (index != ITEM_FIRMWARE) {
+    firmwareTaps_ = 0;
+    return;
+  }
+  if (++firmwareTaps_ < 5) return;
+  firmwareTaps_ = 0;
+  if (auto activity = makeUniqueNoThrow<DiagnosticsActivity>(renderer, mappedInput)) {
+    startActivityForResult(std::move(activity), nullptr);
+  } else {
+    LOG_ERR("ABOUT", "OOM: DiagnosticsActivity");
+  }
+}
+#endif
 
 void AboutActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
