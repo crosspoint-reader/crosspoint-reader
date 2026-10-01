@@ -49,27 +49,26 @@ class InflateReader {
   InflateReader(const InflateReader&) = delete;
   InflateReader& operator=(const InflateReader&) = delete;
 
-  // Size of the streaming ring buffer, exposed so callers using initWithRing()
-  // can allocate it themselves.
+  // Size of the streaming ring buffer.
   static constexpr size_t RING_BYTES = 32768;
+
+  // initWithSegments() takes the ring as RING_SEGMENTS separate blocks of
+  // RING_SEGMENT_BYTES, so a streaming decode never needs one contiguous 32KB
+  // block — on a fragmented heap the largest free block sits just under 32KB
+  // long before total free memory runs out.
+  static constexpr size_t RING_SEGMENT_BYTES = 8192;
+  static constexpr size_t RING_SEGMENTS = RING_BYTES / RING_SEGMENT_BYTES;
 
   // Initialise decompressor. streaming=true allocates a 32KB ring buffer needed
   // when read() or readAtMost() will be called multiple times.
   // Returns false only in streaming mode if the ring buffer allocation fails.
   bool init(bool streaming = false);
 
-  // Initialise streaming mode over a caller-owned ring buffer of RING_BYTES.
-  //
-  // Exists for allocation ordering. The ring is by far the largest block a
-  // streaming decode needs, and on a heap where every allocation is carved from
-  // one big free run, taking any smaller buffer first can leave the largest
-  // block just short of 32KB — measured on device at 32756 bytes against a
-  // 32768 requirement. A caller that allocates the ring FIRST, then its own
-  // state, never hits that. The buffer must outlive the reader; deinit() does
-  // not free it.
-  // Returns false if ring is null (e.g. a forwarded failed allocation), leaving
-  // the reader deinitialised.
-  bool initWithRing(uint8_t* ring);
+  // Initialise streaming mode over caller-owned ring segments, each
+  // RING_SEGMENT_BYTES. The segments must outlive the reader; deinit() does not
+  // free them. Returns false if any segment is null (e.g. a forwarded failed
+  // allocation), leaving the reader deinitialised.
+  bool initWithSegments(uint8_t* const (&segments)[RING_SEGMENTS]);
 
   // Release the ring buffer (only if this reader owns it) and reset state.
   void deinit();
@@ -103,6 +102,6 @@ class InflateReader {
 
  private:
   uzlib_uncomp decomp = {};
-  uint8_t* ringBuffer = nullptr;
-  bool ownsRing = false;
+  uint8_t* ringBuffer = nullptr;  // owned contiguous ring from init(true)
+  bool streamingMode = false;
 };
