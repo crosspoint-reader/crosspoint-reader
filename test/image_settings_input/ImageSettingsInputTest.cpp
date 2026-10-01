@@ -245,3 +245,53 @@ TEST(ImageSettingsInput, DeleteConfirmActionMapping) {
   EXPECT_EQ(deleteConfirmActionForRow(2), DeleteAction::None);
   EXPECT_EQ(deleteConfirmActionForRow(3), DeleteAction::None);
 }
+
+// Fixed four-column stepper geometry (stepperColumns / stepperRequiredBodyWidth,
+// pure policy): the touch Image Settings page shares ONE page-wide column set
+// across every editable row, so the '-' control, the value slot and the '+'
+// control hold identical X positions on all rows no matter what the current
+// value text is.
+TEST(ImageSettingsInput, StepperColumnsAreFixedByValueAndTouchMinimum) {
+  using imageSettingsInput::stepperColumns;
+  // Touch minimum wins when it exceeds the font-derived control width.
+  const auto touch = stepperColumns(360, 8, 120, 90, 28, 44);
+  EXPECT_EQ(touch.buttonWidth, 44);
+  EXPECT_EQ(touch.valueWidth, 90 + 12);
+  EXPECT_EQ(touch.gap, 6);
+  EXPECT_TRUE(touch.fits);
+  // Font-derived width wins when it exceeds the touch minimum.
+  const auto large = stepperColumns(360, 8, 120, 90, 40, 44);
+  EXPECT_EQ(large.buttonWidth, 50);
+  // The controls do not depend on the label length: a longer label changes
+  // only the fit decision, never the fixed control geometry.
+  const auto longLabel = stepperColumns(360, 8, 200, 90, 28, 44);
+  EXPECT_EQ(longLabel.buttonWidth, touch.buttonWidth);
+  EXPECT_EQ(longLabel.valueWidth, touch.valueWidth);
+  EXPECT_FALSE(longLabel.fits);
+}
+
+// Label/value measurements never move the controls: with the same value and
+// touch inputs, different label widths produce identical button/value columns.
+TEST(ImageSettingsInput, StepperColumnsIndependentOfLabelAndValueText) {
+  using imageSettingsInput::stepperColumns;
+  const auto small = stepperColumns(400, 8, 100, 80, 28, 44);
+  const auto big = stepperColumns(400, 8, 180, 140, 28, 44);
+  EXPECT_EQ(small.buttonWidth, big.buttonWidth);
+  EXPECT_EQ(small.gap, big.gap);
+  // Value slot scales with the widest VALUE text only (never the label):
+  EXPECT_NE(small.valueWidth, big.valueWidth);
+  // Same value on different bodies keeps identical columns.
+  const auto narrow = stepperColumns(340, 8, 100, 80, 28, 44);
+  EXPECT_EQ(small.buttonWidth, narrow.buttonWidth);
+  EXPECT_EQ(small.valueWidth, narrow.valueWidth);
+}
+
+// Required body width is the exact inverse of the fit decision: the required
+// width fits, one pixel less does not (deterministic fit boundary).
+TEST(ImageSettingsInput, StepperRequiredBodyWidthMatchesFitBoundary) {
+  using imageSettingsInput::stepperColumns;
+  using imageSettingsInput::stepperRequiredBodyWidth;
+  const int required = stepperRequiredBodyWidth(8, 120, 90, 28, 44);
+  EXPECT_TRUE(stepperColumns(required, 8, 120, 90, 28, 44).fits);
+  EXPECT_FALSE(stepperColumns(required - 1, 8, 120, 90, 28, 44).fits);
+}

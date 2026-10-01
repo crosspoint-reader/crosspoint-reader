@@ -78,6 +78,12 @@ class BmpViewerActivity final : public Activity {
   // the list cadence, settingRow for the action rows, stepperRow for the four
   // editable ToneParam rows); every component registers its own interactions.
   void buildSettingsPage(freeink::ui::Frame<MODAL_INTERACTION_CAPACITY>& frame, const freeink::ui::Rect& body);
+  // Pixel extents of the settings page's label/value columns measured from
+  // the localized strings (widest row label, widest possible value) — the
+  // single measurement owner for the fixed stepper columns and the modal
+  // width sizing.
+  void measureStepperExtents(const freeink::ui::DrawTarget& target, int16_t& maxLabelWidth,
+                             int16_t& maxValueWidth) const;
   int pageSelectableCount() const;
   void handleModalInput();
   void handleSettingsAxesInput();

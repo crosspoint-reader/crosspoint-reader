@@ -138,10 +138,6 @@ void BmpViewerActivity::computeModalRect() {
   const int screenW = renderer.getScreenWidth();
   const int screenH = renderer.getScreenHeight();
 
-  // Standard popup width (the OptionPopup/fui dialog convention: 3/4 of the
-  // screen, clamped by the theme's side margins), centered.
-  const int width = std::min<int>(screenW * 3 / 4, screenW - metrics.optionPopupDialogSideMargin * 2);
-
   // Exact height of the LARGEST page — Image Settings — computed from the
   // same quantities buildSettingsPage() renders with (title header + the
   // page's rows at the resolved modal cadence) plus the panel's borders and
@@ -157,6 +153,24 @@ void BmpViewerActivity::computeModalRect() {
   const fui::DeviceContext device = target.deviceContext();
   modalRowH = static_cast<int16_t>(imageSettingsInput::modalRowHeight(device.hasTouch, device.minTouchSize));
   const int border = metrics.popupFrameThickness;
+
+  // Width: the standard OptionPopup convention; on touch targets the Image
+  // Settings page's fixed four-column layout may need more — derive the
+  // minimum from MEASURED content (labels/values in the row fonts + fixed
+  // controls at the touch minimum), take the max with the standard width and
+  // clamp by the theme margins. Button-only targets keep the compact width.
+  int width = std::min<int>(screenW * 3 / 4, screenW - metrics.optionPopupDialogSideMargin * 2);
+  if (device.hasTouch) {
+    int16_t maxLabelWidth = 0;
+    int16_t maxValueWidth = 0;
+    measureStepperExtents(target, maxLabelWidth, maxValueWidth);
+    const int requiredBodyWidth = imageSettingsInput::stepperRequiredBodyWidth(
+        MODAL_SIDE_PAD, maxLabelWidth, maxValueWidth, target.lineHeight(fui::GfxRendererTarget::FONT_BODY),
+        device.minTouchSize);
+    width = std::min<int>(std::max<int>(width, requiredBodyWidth + border * 2 + 8),
+                          screenW - metrics.optionPopupDialogSideMargin * 2);
+  }
+
   const int height = std::min<int>(screenH, imageSettingsInput::modalBodyHeight(modalHeaderHeight(target), modalRowH,
                                                                                 static_cast<int>(ToneParam::Count)) +
                                                 border * 2 + 8);
@@ -170,6 +184,33 @@ int16_t BmpViewerActivity::modalHeaderHeight(const fui::DrawTarget& target) {
   // the text). The header draws with the default TextStyle (font 0 =
   // FONT_SMALL), the same style buildSettingsPage() renders it with.
   return static_cast<int16_t>(target.lineHeight(fui::GfxRendererTarget::FONT_SMALL) + 4);
+}
+
+void BmpViewerActivity::measureStepperExtents(const fui::DrawTarget& target, int16_t& maxLabelWidth,
+                                              int16_t& maxValueWidth) const {
+  // The settings page's label/value measurement owner: the widest localized
+  // row label and the widest possible value text (static format maxima plus
+  // the widest localized quantizer label), in the fonts the rows render with.
+  fui::TextStyle labelStyle{};
+  labelStyle.font = fui::GfxRendererTarget::FONT_BODY;
+  fui::TextStyle valueStyle{};
+  valueStyle.font = fui::GfxRendererTarget::FONT_BODY;
+
+  maxLabelWidth = 0;
+  for (const char* label : {tr(STR_BRIGHTNESS), tr(STR_GAMMA), tr(STR_FILTER_CONTRAST), tr(STR_QUANTIZER)}) {
+    maxLabelWidth = std::max<int16_t>(maxLabelWidth, target.measureText(labelStyle.font, label, labelStyle).width);
+  }
+  const char* quantizerWidest = tr(STR_QUANTIZER_DEFAULT);
+  for (const char* candidate : {tr(STR_QUANTIZER_DEFAULT), tr(STR_QUANTIZER_LEGACY), tr(STR_QUANTIZER_CANONICAL)}) {
+    if (target.measureText(valueStyle.font, candidate, valueStyle).width >
+        target.measureText(valueStyle.font, quantizerWidest, valueStyle).width) {
+      quantizerWidest = candidate;
+    }
+  }
+  maxValueWidth = 0;
+  for (const char* value : {"110 %", "1.30", "130 %", quantizerWidest}) {
+    maxValueWidth = std::max<int16_t>(maxValueWidth, target.measureText(valueStyle.font, value, valueStyle).width);
+  }
 }
 
 void BmpViewerActivity::renderModal() {
@@ -383,39 +424,66 @@ void BmpViewerActivity::buildSettingsPage(fui::Frame<MODAL_INTERACTION_CAPACITY>
     return row;
   };
 
+  // Presentation layout follows the device capability (DeviceContext::hasTouch),
+  // never a board name:
+  // - button-only: the compact list view that passed X4 Classic UAT — plain
+  //   label/value rows (values right-aligned by settingRow), no inline -/+
+  //   controls; the hardware Left/Right keys stay represented by the bottom
+  //   button hints.
+  // - touch: the four editable rows share ONE page-wide fixed column geometry
+  //   (label | - | value | +) so the controls hold identical X positions on
+  //   every row regardless of the current value text.
+  const bool hasTouch = frame.device().hasTouch;
+
   fui::SettingRowProps reset = rowProps(tr(STR_RESET_TO_DEFAULTS), 0);
   fui::settingRow(frame, fui::Rect{body.x, cursorY, body.width, modalRowH}, reset);
   cursorY = static_cast<int16_t>(cursorY + modalRowH);
 
-  // The four editable ToneParam rows are SDK steppers: label + [- value +].
-  // stepperRow registers the row body on the LABEL rect only (which ends
-  // before the controls, so body and controls never overlap), then the
-  // decrement/increment button hits — routePublished scans newest-first, so a
-  // tap on +/- always resolves to the stepper control and can never also
-  // reach the row body's Apply route. widestValue pins the value slot at the
-  // row's widest rendering (the value-format maximum; for the quantizer the
-  // pixel-widest localized label), so the controls hold still while stepping.
   const char* labels[] = {tr(STR_BRIGHTNESS), tr(STR_GAMMA), tr(STR_FILTER_CONTRAST), tr(STR_QUANTIZER)};
-  const char* widest[] = {"110 %", "1.30", "130 %", quantizerText};
+  const char* widest[] = {"110 %", "1.30", "130 %", nullptr};
   // The quantizer's value slot must fit the widest localized label in pixels.
+  const char* quantizerWidest = tr(STR_QUANTIZER_DEFAULT);
   for (const char* candidate : {tr(STR_QUANTIZER_DEFAULT), tr(STR_QUANTIZER_LEGACY), tr(STR_QUANTIZER_CANONICAL)}) {
     if (frame.target().measureText(fui::GfxRendererTarget::FONT_BODY, candidate, valueStyle).width >
-        frame.target().measureText(fui::GfxRendererTarget::FONT_BODY, widest[3], valueStyle).width) {
-      widest[3] = candidate;
+        frame.target().measureText(fui::GfxRendererTarget::FONT_BODY, quantizerWidest, valueStyle).width) {
+      quantizerWidest = candidate;
     }
   }
+  widest[3] = quantizerWidest;
 
-  for (int param = 0; param < static_cast<int>(ToneParam::Count); ++param) {
-    fui::StepperRowProps stepper{};
-    stepper.row = rowProps(labels[param], param + 1);
-    stepper.value = valueScratch[param];
-    stepper.widestValue = widest[param];
-    stepper.decrement = ACTION_DECREMENT;
-    stepper.decrementValue = static_cast<int16_t>(param);
-    stepper.increment = ACTION_INCREMENT;
-    stepper.incrementValue = static_cast<int16_t>(param);
-    fui::stepperRow(frame, fui::Rect{body.x, cursorY, body.width, modalRowH}, stepper);
-    cursorY = static_cast<int16_t>(cursorY + modalRowH);
+  if (!hasTouch) {
+    for (int param = 0; param < static_cast<int>(ToneParam::Count); ++param) {
+      auto row = rowProps(labels[param], param + 1);
+      row.value = valueScratch[param];
+      fui::settingRow(frame, fui::Rect{body.x, cursorY, body.width, modalRowH}, row);
+      cursorY = static_cast<int16_t>(cursorY + modalRowH);
+    }
+  } else {
+    // ONE page-wide fixed column set for every editable row: valueWidth from
+    // the widest possible value text, buttonWidth at least the touch minimum
+    // (a fixed column must never expand its hit into a neighbor). Identical
+    // controlsW pins controlsX identically on all rows.
+    int16_t maxLabelWidth = 0;
+    int16_t maxValueWidth = 0;
+    measureStepperExtents(frame.target(), maxLabelWidth, maxValueWidth);
+    const auto cols = imageSettingsInput::stepperColumns(body.width, MODAL_SIDE_PAD, maxLabelWidth, maxValueWidth,
+                                                         frame.target().lineHeight(fui::GfxRendererTarget::FONT_BODY),
+                                                         frame.device().minTouchSize);
+    for (int param = 0; param < static_cast<int>(ToneParam::Count); ++param) {
+      fui::StepperRowProps stepper{};
+      stepper.row = rowProps(labels[param], param + 1);
+      stepper.value = valueScratch[param];
+      stepper.widestValue = widest[param];
+      stepper.buttonWidth = cols.buttonWidth;
+      stepper.valueWidth = cols.valueWidth;
+      stepper.gap = cols.gap;
+      stepper.decrement = ACTION_DECREMENT;
+      stepper.decrementValue = static_cast<int16_t>(param);
+      stepper.increment = ACTION_INCREMENT;
+      stepper.incrementValue = static_cast<int16_t>(param);
+      fui::stepperRow(frame, fui::Rect{body.x, cursorY, body.width, modalRowH}, stepper);
+      cursorY = static_cast<int16_t>(cursorY + modalRowH);
+    }
   }
 
   const int paramCount = static_cast<int>(ToneParam::Count);

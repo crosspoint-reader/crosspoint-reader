@@ -150,6 +150,54 @@ inline constexpr int modalRowHeight(const bool touchCapable, const int minTouchS
   return touchCapable && minTouchSize > MODAL_MIN_ROW_H ? minTouchSize : MODAL_MIN_ROW_H;
 }
 
+// Fixed four-column stepper geometry (label | - | value | +) shared by EVERY
+// editable row of the touch Image Settings page (pure policy, host-tested):
+// one page-wide geometry keeps the '-' control, the value slot and the '+'
+// control at identical X positions on all rows, no matter what the current
+// value text is. Deriving per-row from the current value would shift controls
+// while stepping or switching the quantizer label.
+//
+// buttonWidth is at least the touch minimum: a fixed column must never need
+// ensureMinTouchRect() to expand its hit band sideways into a neighbor
+// column. valueWidth is the pixel width of the WIDEST possible value text
+// plus the SDK stepper's value-slot padding, so the value never reflows the
+// controls. `fits` is false when the body cannot hold label + fixed controls
+// + widest value; the label column is then the part that clips
+// deterministically (controls and value keep their minimums).
+struct StepperColumns {
+  int16_t buttonWidth;
+  int16_t valueWidth;
+  int16_t gap;
+  bool fits;
+};
+
+// The SDK stepperRow derives valueWidth as measured width + 12; the shared
+// fixed slot keeps the same convention.
+inline constexpr int STEPPER_VALUE_PAD = 12;
+
+inline StepperColumns stepperColumns(const int bodyWidth, const int sidePadding, const int minLabelWidth,
+                                     const int widestValueWidth, const int lineHeight, const int minTouchSize,
+                                     const int gap = 6) {
+  StepperColumns cols{};
+  cols.gap = static_cast<int16_t>(gap);
+  // The SDK stepperRow derives buttonHeight as lineHeight + 10; never smaller
+  // than the touch minimum.
+  cols.buttonWidth = static_cast<int16_t>(lineHeight + 10 > minTouchSize ? lineHeight + 10 : minTouchSize);
+  cols.valueWidth = static_cast<int16_t>(widestValueWidth + STEPPER_VALUE_PAD);
+  const int controlsW = cols.buttonWidth * 2 + cols.valueWidth + cols.gap * 2;
+  cols.fits = bodyWidth - sidePadding * 2 - controlsW - cols.gap >= minLabelWidth;
+  return cols;
+}
+
+// Minimum BODY width the touch page needs so the widest localized label, the
+// fixed controls and the widest value all display without clipping (modal
+// sizing derives its width from this, clamped by the screen margins).
+inline int stepperRequiredBodyWidth(const int sidePadding, const int minLabelWidth, const int widestValueWidth,
+                                    const int lineHeight, const int minTouchSize, const int gap = 6) {
+  const int buttonWidth = lineHeight + 10 > minTouchSize ? lineHeight + 10 : minTouchSize;
+  return 2 * sidePadding + minLabelWidth + gap + buttonWidth * 2 + (widestValueWidth + STEPPER_VALUE_PAD) + gap * 2;
+}
+
 // Editable row index for a ToneParam (the inverse of editableParamForRow): a
 // touch stepper +/- moves the visible focus onto the row it adjusts, so the
 // adjustment and the row highlight stay consistent. -1 for out-of-range.
