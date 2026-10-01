@@ -189,7 +189,7 @@ void BmpViewerActivity::renderModal() {
   // mapped-input path, so the buffer is touch-only and never competes with
   // them for dispatch.
   fui::GfxRendererTarget target = makeUiTarget(renderer);
-  const fui::ThemeTokens& theme = refreshSharedUiThemeTokens(target);
+  refreshSharedUiThemeTokens(target);
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
   modalInteractions.beginPublishCycle();

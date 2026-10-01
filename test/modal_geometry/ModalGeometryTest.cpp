@@ -95,13 +95,13 @@ TEST(ModalGeometry, DeleteConfirmTouchBandsAreDisjointAndRoutedExactly) {
     const Routed r = routeTap(interactions, device, buildDeleteConfirmRows, BODY_Y, BODY_X + 10, y);
     ASSERT_TRUE(r.routed) << "y=" << y;
     EXPECT_EQ(r.action, ACTION_ROW) << "y=" << y;
-    EXPECT_EQ(r.value, 0) << "y=" << y;   // always Cancel, never Delete
+    EXPECT_EQ(r.value, 0) << "y=" << y;  // always Cancel, never Delete
   }
   for (int16_t y = deleteBand.y; y < deleteBand.bottom(); ++y) {
     const Routed r = routeTap(interactions, device, buildDeleteConfirmRows, BODY_Y, BODY_X + 10, y);
     ASSERT_TRUE(r.routed) << "y=" << y;
     EXPECT_EQ(r.action, ACTION_ROW) << "y=" << y;
-    EXPECT_EQ(r.value, 1) << "y=" << y;   // always Delete, never Cancel
+    EXPECT_EQ(r.value, 1) << "y=" << y;  // always Delete, never Cancel
   }
 }
 
@@ -166,26 +166,26 @@ TEST(ModalGeometry, StepperControlsStayInRowAndRouteToAdjustment) {
 
   // A tap on a control routes to the directional adjustment — never to the
   // row body's Apply route.
-  const Routed minus =
-      routeTap(interactions, device, buildStepperFragment, BODY_Y, static_cast<int16_t>(minusBand.x + minusBand.width / 2),
-               static_cast<int16_t>(minusBand.y + minusBand.height / 2));
+  const Routed minus = routeTap(interactions, device, buildStepperFragment, BODY_Y,
+                                static_cast<int16_t>(minusBand.x + minusBand.width / 2),
+                                static_cast<int16_t>(minusBand.y + minusBand.height / 2));
   EXPECT_EQ(minus.action, imageSettingsInput::kActionDecrement);
   EXPECT_EQ(minus.value, 3);
-  const Routed plus =
-      routeTap(interactions, device, buildStepperFragment, BODY_Y, static_cast<int16_t>(plusBand.x + plusBand.width / 2),
-               static_cast<int16_t>(plusBand.y + plusBand.height / 2));
+  const Routed plus = routeTap(interactions, device, buildStepperFragment, BODY_Y,
+                               static_cast<int16_t>(plusBand.x + plusBand.width / 2),
+                               static_cast<int16_t>(plusBand.y + plusBand.height / 2));
   EXPECT_EQ(plus.action, imageSettingsInput::kActionIncrement);
   EXPECT_EQ(plus.value, 3);
 
   // The label side of the row keeps Confirm parity (Apply route).
-  const Routed body = routeTap(interactions, device, buildStepperFragment, BODY_Y, static_cast<int16_t>(bodyBand.x + 10),
-                               static_cast<int16_t>(BODY_Y + ROW_H / 2));
+  const Routed body = routeTap(interactions, device, buildStepperFragment, BODY_Y,
+                               static_cast<int16_t>(bodyBand.x + 10), static_cast<int16_t>(BODY_Y + ROW_H / 2));
   EXPECT_EQ(body.action, ACTION_ROW);
   EXPECT_EQ(body.value, 4);
 
   // The Apply row's band routes to Apply, never to the stepper above it.
-  const Routed applyTap = routeTap(interactions, device, buildStepperFragment, BODY_Y, BODY_X + 10,
-                                   static_cast<int16_t>(applyBand.y + 2));
+  const Routed applyTap =
+      routeTap(interactions, device, buildStepperFragment, BODY_Y, BODY_X + 10, static_cast<int16_t>(applyBand.y + 2));
   EXPECT_EQ(applyTap.action, ACTION_ROW);
   EXPECT_EQ(applyTap.value, 5);
 }

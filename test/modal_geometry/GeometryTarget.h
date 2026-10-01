@@ -14,8 +14,8 @@ class GeometryTarget final : public freeink::ui::DrawTarget {
   }
   int16_t lineHeight(freeink::ui::FontId) const override { return 24; }
   void fill(freeink::ui::Rect, freeink::ui::Paint, uint8_t = 0, uint8_t = freeink::ui::CornersAll) override {}
-  void stroke(freeink::ui::Rect, freeink::ui::Paint, uint8_t, uint8_t = 0,
-              uint8_t = freeink::ui::CornersAll) override {}
+  void stroke(freeink::ui::Rect, freeink::ui::Paint, uint8_t, uint8_t = 0, uint8_t = freeink::ui::CornersAll) override {
+  }
   void line(freeink::ui::Point, freeink::ui::Point, uint8_t, freeink::ui::Paint) override {}
   void triangle(freeink::ui::Point, freeink::ui::Point, freeink::ui::Point, freeink::ui::Paint) override {}
   void text(freeink::ui::Rect, const char*, freeink::ui::TextStyle) override {}
