@@ -109,3 +109,17 @@ TEST(LineBreakCost, MeasuresEachWordGapOnceInTheBreakSearch) {
   EXPECT_GT(lines, 20U);
   EXPECT_LE(GfxRenderer::spaceAdvanceCalls, 3 * kWords) << "gap measured more than once per word";
 }
+
+TEST(LineBreakCost, LinesLongerThanTheGapWindowBreakTheSame) {
+  // 300 one-letter words (8 px + 4 px space) on a 2000 px line: 167 fit, far more than the
+  // 64-entry gap window, so most gaps on a line are measured directly. The optimal breaks
+  // must not depend on which path supplied a gap: the first line is filled, the rest follows.
+  GfxRenderer renderer;
+  BlockStyle style;
+  ParsedText text(false, false, style, 0);
+  for (int i = 0; i < 300; ++i) text.addWord("a", EpdFontFamily::REGULAR);
+  std::vector<uint16_t> wordsPerLine;
+  text.layoutAndExtractLines(
+      renderer, 0, 2000, [&](std::unique_ptr<TextBlock> block, auto) { wordsPerLine.push_back(block->wordCount()); });
+  EXPECT_EQ(wordsPerLine, (std::vector<uint16_t>{167, 133}));
+}
