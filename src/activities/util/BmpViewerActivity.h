@@ -60,6 +60,11 @@ class BmpViewerActivity final : public Activity {
   bool canSetSleepCover() const;
   bool renderPng();
   void renderBmp(bool showPopup);
+  // Canonical format-aware render entry for the CURRENT image: PNG goes
+  // through the PNG converter/presentation path and never enters renderBmp();
+  // BMP renders through the grayscale pipeline. showLoadingPopup gates the
+  // BMP loading popup; the PNG path always shows its own decode progress.
+  void renderCurrentImage(bool showLoadingPopup);
   void openOptionsMenu();
   void computeModalRect();
   void renderModal();

@@ -576,10 +576,15 @@ void BmpViewerActivity::performDelete() {
   if (!next.has_value()) {
     GUI.drawPopup(renderer, tr(STR_FAILED_LOWER));
     delay(1000);
-    renderBmp(false);
+    renderCurrentImage(false);
     return;
   }
-  if (deletedIndex < 0 || deletedIndex >= oldCount) return;  // inconsistent state: do not corrupt indices
+  if (deletedIndex < 0 || deletedIndex >= oldCount) {
+    // Successful delete with an index outside the old sibling list: the file
+    // is gone and the stale list can't be trusted — exit to the file browser.
+    activityManager.goToFileBrowser(dirPath);
+    return;
+  }
 
   siblingImages.erase(siblingImages.begin() + deletedIndex);
   currentImageIndex = *next;
@@ -804,10 +809,11 @@ void BmpViewerActivity::activateRow() {
 void BmpViewerActivity::modalBack() {
   switch (viewerPage) {
     case ViewerPage::Options:
-      // Root page Back closes the modal; the image re-renders (grayscale
-      // pipeline) to restore the panel content under it.
+      // Root page Back closes the modal; the image re-renders according to
+      // its format (grayscale pipeline for BMP, PNG path for PNG) to restore
+      // the panel content under it.
       viewerPage = ViewerPage::Viewer;
-      renderBmp(false);
+      renderCurrentImage(false);
       break;
     case ViewerPage::ImageSettings:
       // Discard the staged draft (activeTone untouched) and return to the
@@ -924,18 +930,10 @@ void BmpViewerActivity::saveSleepProfile() {
   openModalPage(ViewerPage::Options);
 }
 
-void BmpViewerActivity::onEnter() {
-  Activity::onEnter();
-
-  if (siblingImages.empty() && !filePath.empty()) {
-    loadSiblingImages();
-  }
-
-  isPng = FsHelpers::hasPngExtension(filePath);
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+void BmpViewerActivity::renderCurrentImage(const bool showLoadingPopup) {
   if (isPng) {
+    // PNG decodes through the PNG converter path and never enters renderBmp().
+    const auto pageHeight = renderer.getScreenHeight();
     Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
     GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
     renderer.clearScreen();
@@ -950,8 +948,19 @@ void BmpViewerActivity::onEnter() {
     }
     return;
   }
+  renderBmp(showLoadingPopup);
+}
 
-  renderBmp(true);
+void BmpViewerActivity::onEnter() {
+  Activity::onEnter();
+
+  if (siblingImages.empty() && !filePath.empty()) {
+    loadSiblingImages();
+  }
+
+  isPng = FsHelpers::hasPngExtension(filePath);
+
+  renderCurrentImage(true);
 }
 
 void BmpViewerActivity::renderBmp(bool showPopup) {
