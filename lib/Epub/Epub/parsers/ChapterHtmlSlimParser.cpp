@@ -1005,11 +1005,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               bool gotDimensions = headerProbe.getDimensions(dims);
 
               if (!gotDimensions) {
-                // Starting the inflate needs its 32 KB window in one block even for a
-                // 1 KB probe. Mid-build the heap often has no such block (a CJK SD font
-                // plus a publisher stylesheet leave ~19 KB on the X3), so the probe
-                // fails and the image is dropped from the page without a placeholder.
-                // Retry with the framebuffer lent to the inflater.
+                // Retry with framebuffer scratch when the heap cannot fit the inflate window.
                 GfxRenderer::FrameBufferLoan probeLoan(self->renderer);
                 ImageDimsProbe retryProbe;
                 self->epub->readItemContentsToStream(resolvedPath, retryProbe, 1024, /*allowEarlyStop=*/true);
