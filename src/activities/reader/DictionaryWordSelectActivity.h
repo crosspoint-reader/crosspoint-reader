@@ -16,19 +16,33 @@
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop, int depth = 0)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
-        page(std::move(page)),
+        ownedPage(std::move(page)),
+        page(ownedPage.get()),
         marginLeft(marginLeft),
-        marginTop(marginTop) {}
+        marginTop(marginTop),
+        depth(depth) {}
+
+  // Borrowed-page variant for lookup-inside-definition: the definition
+  // activity stays alive on the activity stack below this one, so its styled
+  // Pages remain valid for this activity's whole lifetime.
+  explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Page* page,
+                                        int marginLeft, int marginTop, int depth)
+      : Activity("DictionaryWordSelect", renderer, mappedInput),
+        page(page),
+        marginLeft(marginLeft),
+        marginTop(marginTop),
+        depth(depth) {}
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
-  // Screen box of one selectable word. `text` points into the owned Page's
-  // TextBlock arena (NUL-terminated), valid for this activity's lifetime.
+  // Screen box of one selectable word. `text` points into the Page's
+  // TextBlock arena (NUL-terminated), valid for this activity's lifetime:
+  // owned pages live here, borrowed ones live in the stacked parent activity.
   struct WordBox {
     int16_t x;
     int16_t y;
@@ -48,9 +62,13 @@ class DictionaryWordSelectActivity final : public Activity {
   bool drawHighlightWithSnapshot();
   void drawHints() const;
 
-  std::unique_ptr<Page> page;
+  std::unique_ptr<Page> ownedPage;  // null when selecting over a borrowed page
+  const Page* page;
   const int marginLeft;
   const int marginTop;
+  // Depth in the lookup-inside-definition chain, forwarded to the spawned
+  // DictionaryDefinitionActivity so it can stop nesting at the cap.
+  const int depth;
   int fontId = 0;
   int lineHeight = 0;
 

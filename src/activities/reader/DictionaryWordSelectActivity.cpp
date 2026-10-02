@@ -181,7 +181,7 @@ void DictionaryWordSelectActivity::performLookup() {
     popup = Popup::None;
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                       std::move(definition), dict.definitionsAreHtml()),
+                                                       std::move(definition), dict.definitionsAreHtml(), depth + 1),
         [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
