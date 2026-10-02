@@ -263,6 +263,9 @@ class SdCardFont {
     uint16_t miniKernLeftCapacity = 0;
     uint16_t miniKernRightCapacity = 0;
     uint32_t miniKernMatrixCapacity = 0;
+    // True once the mini kern tables cover the resident mini glyph set (possibly
+    // with no pairs). Subset hits skip the rebuild.
+    bool miniKernBuilt = false;
 
     // The EpdFont whose data pointer we manage
     EpdFont epdFont{&stubData};
