@@ -427,6 +427,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             },
             "koServerUrl", StrId::STR_KOREADER_SYNC),
         SettingInfo::DynamicEnum(
+            StrId::STR_SERVER_TYPE, {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC, StrId::STR_OTHER},
+            [] { return static_cast<uint8_t>(KOREADER_STORE.getServerType()); },
+            [](uint8_t v) {
+              KOREADER_STORE.setServerType(static_cast<KOReaderServerType>(v));
+              KOREADER_STORE.saveToFile();
+            },
+            "koServerType", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicEnum(
             StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
             [](uint8_t v) {
