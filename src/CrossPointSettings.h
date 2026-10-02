@@ -167,6 +167,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
     LP_MENU_READER_MENU = 4,
+    LP_MENU_FILE_TRANSFER = 5,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
