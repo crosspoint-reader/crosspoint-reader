@@ -92,6 +92,7 @@ void Archive::close() {
   header_ = Header();
   titles_ = TitleList();
   titleCount_ = 0;
+  titleSource_ = TitleSource::None;
   articleList_ = TitleList();
   articleListCount_ = 0;
   newNamespaces_ = false;
@@ -321,13 +322,15 @@ Error Archive::findListing(std::string_view path, TitleList& list, uint32_t& cou
 
 Error Archive::setUpTitleIndex() {
   titleCount_ = 0;
+  titleSource_ = TitleSource::None;
   articleListCount_ = 0;
   if (newNamespaces_) {
     uint32_t count = 0;
     const Error err = findListing("listing/titleOrdered/v0", titles_, count);
-    if (err == Error::None) {
+    if (err == Error::None && count > 0) {
       titleCount_ = count;
-    } else if (err != Error::NotFound) {
+      titleSource_ = TitleSource::Listing;
+    } else if (err != Error::None && err != Error::NotFound) {
       return err;
     }
     uint32_t articles = 0;
@@ -342,6 +345,12 @@ Error Archive::setUpTitleIndex() {
     titles_.inBlob = false;
     titles_.fileOffset = header_.titlePtrPos;
     titleCount_ = header_.entryCount;
+    titleSource_ = TitleSource::Header;
+  }
+  if (titleCount_ == 0 && articleListCount_ > 0) {
+    titles_ = articleList_;
+    titleCount_ = articleListCount_;
+    titleSource_ = TitleSource::Articles;
   }
   return Error::None;
 }

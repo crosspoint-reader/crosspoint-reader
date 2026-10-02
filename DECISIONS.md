@@ -185,6 +185,25 @@ All English, text-only (nopic) where an edition exists.
 - **Firmware cost so far: zero.** `lib/zim` is only compiled into the
   firmware once something includes it (M3).
 
+## 2026-10-02 — Real Wikipedia has no full title index; use the article list
+
+Found on the owner's `wikipedia_en_all_nopic_2026-06.zim` (ZIM 6.3,
+19,707,096 entries, 178,627 clusters): it has no `X/listing/titleOrdered/v0`
+and no header title list, only `v1` (19,191,219 front articles and their
+redirects, sorted by title). The reader reported `title index 0` and a title
+lookup failed. openZIM's test suite already has this case
+(`noTitleListingV0/`).
+
+- When neither full source exists, the title index now *is* the v1 list
+  (`TitleSource::Articles`). Searching and opening articles only ever needs
+  front articles, so nothing user-facing is lost.
+- zimcat also tries the path (title with spaces as underscores) when the
+  title misses. The device reader will do the same.
+- Open question, to measure next: whether v1's ~77 MB blob sits in an
+  uncompressed cluster. If it is compressed, binary search cannot read it
+  in place on the device, and the card builder must write its own title
+  index (the sidecar planned for Milestone 2 anyway).
+
 ## Dependencies
 
 | Dependency | License | Use | Status |

@@ -99,6 +99,15 @@ struct Options {
   const Allocator* allocator = nullptr;  // null = malloc/free
 };
 
+// Where the title index comes from. Recent Kiwix files (libzim 9+) ship only
+// the front-article list, so that is used when nothing fuller exists.
+enum class TitleSource : uint8_t {
+  None,
+  Listing,   // X/listing/titleOrdered/v0: every entry
+  Header,    // header title pointer list: every entry
+  Articles,  // X/listing/titleOrdered/v1: front articles (and their redirects) only
+};
+
 struct CacheStats {
   uint32_t hits = 0;
   uint32_t misses = 0;
@@ -139,8 +148,10 @@ class Archive {
 
   // --- title index ---------------------------------------------------------
   // Entries ordered by (namespace, title). Source is X/listing/titleOrdered/v0
-  // when present, else the header's title pointer list.
+  // when present, else the header's title pointer list, else the front-article
+  // list (v1), which covers only articles but is all recent files carry.
   uint32_t titleCount() const { return titleCount_; }
+  TitleSource titleSource() const { return titleSource_; }
   bool hasTitleIndex() const { return titleCount_ > 0; }
   Error titleEntryAt(uint32_t position, Entry& out);
   // First position whose (ns, title) is >= (ns, title). Equals titleCount()
@@ -219,6 +230,7 @@ class Archive {
   std::vector<std::string> mimeTypes_;
   TitleList titles_;
   uint32_t titleCount_ = 0;
+  TitleSource titleSource_ = TitleSource::None;
   TitleList articleList_;
   uint32_t articleListCount_ = 0;
   std::vector<CachedCluster> cache_;

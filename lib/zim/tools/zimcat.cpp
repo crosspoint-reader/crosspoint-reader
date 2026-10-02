@@ -76,8 +76,14 @@ int info(zim::Archive& archive, size_t parts) {
   std::printf("parts          %zu\n", parts);
   std::printf("entries        %u\n", h.entryCount);
   std::printf("clusters       %u\n", h.clusterCount);
-  std::printf("title index    %u%s\n", archive.titleCount(),
-              archive.usesNewNamespaces() && archive.hasTitleIndex() ? " (X/listing/titleOrdered/v0 or header)" : "");
+  const char* source = "";
+  switch (archive.titleSource()) {
+    case zim::TitleSource::Listing: source = " (X/listing/titleOrdered/v0)"; break;
+    case zim::TitleSource::Header: source = " (header title list)"; break;
+    case zim::TitleSource::Articles: source = " (front articles only, v1)"; break;
+    case zim::TitleSource::None: break;
+  }
+  std::printf("title index    %u%s\n", archive.titleCount(), source);
   if (archive.hasArticleList()) std::printf("articles (v1)  %u\n", archive.articleListCount());
   std::printf("mime types     %zu\n", archive.mimeTypeCount());
   for (size_t i = 0; i < archive.mimeTypeCount(); ++i) {
@@ -155,9 +161,18 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  // Default: exact title in the content namespace.
+  // Default: exact title in the content namespace. Wikipedia paths are titles
+  // with spaces as underscores, so try that when the title index misses.
   const auto t = Clock::now();
   err = archive.findByTitle(archive.contentNamespace(), cmd, entry);
+  if (err == zim::Error::NotFound) {
+    std::string path = cmd;
+    for (char& c : path) {
+      if (c == ' ') c = '_';
+    }
+    err = archive.findByPath(archive.contentNamespace(), path, entry);
+    if (err == zim::Error::None) std::fprintf(stderr, "[found by path, not title]\n");
+  }
   if (err != zim::Error::None) return fail(err, cmd.c_str());
   std::fprintf(stderr, "[title lookup in %.1f ms]\n", msSince(t));
   return printEntry(archive, entry);

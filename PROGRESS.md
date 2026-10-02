@@ -84,3 +84,13 @@
 containing "Forbidden City"; see the session summary for the download.
 
 **Next**: M1 sign-off, then Milestone 2 (card builder).
+
+## 2026-10-02 — First run on real Wikipedia
+
+- Owner verified `wikipedia_en_all_nopic_2026-06.zim` (52,690,706,555 bytes,
+  sha256 OK) on the SSK drive (ExFAT).
+- `zimcat --info` opened it in 1.9 ms and read the header, MIME list and
+  metadata correctly, but showed `title index 0`, and "Forbidden City" was
+  not found: the file has only the v1 article list. Fixed (see DECISIONS);
+  2 new tests, 25/25 pass under ASan/UBSan. Re-test pending on the new dev
+  build.

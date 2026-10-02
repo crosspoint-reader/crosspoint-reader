@@ -191,6 +191,43 @@ TEST(Zim, NewSchemeHasFrontArticleList) {
   }
 }
 
+// Recent Kiwix files (e.g. wikipedia_en_all_nopic_2026-06) have no full title
+// listing; lookups and prefix search must fall back to the front-article list.
+TEST(Zim, FallsBackToFrontArticleListWithoutV0) {
+  zim::Archive a;
+  ASSERT_EQ(openFile(a, dataPath("noTitleListingV0", "wikipedia_en_climate_change_mini_2024-06.zim")),
+            zim::Error::None);
+  ASSERT_TRUE(a.hasArticleList());
+  EXPECT_EQ(a.titleSource(), zim::TitleSource::Articles);
+  EXPECT_EQ(a.titleCount(), a.articleListCount());
+
+  zim::Entry e;
+  ASSERT_EQ(a.findByTitle('C', "Climate change", e), zim::Error::None);
+  std::string html;
+  ASSERT_EQ(a.read(e, html), zim::Error::None);
+  EXPECT_NE(html.find("greenhouse"), std::string::npos);
+
+  uint32_t pos = 0;
+  ASSERT_EQ(a.lowerBoundTitle('C', "Clim", pos), zim::Error::None);
+  ASSERT_EQ(a.titleEntryAt(pos, e), zim::Error::None);
+  EXPECT_EQ(e.title.rfind("Clim", 0), 0u) << e.title;
+
+  zim::Entry prev;
+  for (uint32_t p = 0; p < a.titleCount(); ++p) {
+    ASSERT_EQ(a.titleEntryAt(p, e), zim::Error::None) << p;
+    if (p > 0) {
+      ASSERT_LE(compareKey(prev, e, true), 0) << "not sorted at " << p;
+    }
+    prev = e;
+  }
+}
+
+TEST(Zim, PrefersTheFullListingWhenPresent) {
+  zim::Archive a;
+  ASSERT_EQ(openFile(a, dataPath("nons", "wikipedia_en_climate_change_mini_2024-06.zim")), zim::Error::None);
+  EXPECT_EQ(a.titleSource(), zim::TitleSource::Listing);
+}
+
 TEST(Zim, MetadataReads) {
   zim::Archive a;
   ASSERT_EQ(openFile(a, dataPath("nons", "wikipedia_en_climate_change_mini_2024-06.zim")), zim::Error::None);
