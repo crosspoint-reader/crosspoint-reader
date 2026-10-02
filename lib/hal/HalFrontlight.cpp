@@ -5,9 +5,10 @@
 HalFrontlight HalFrontlight::instance;
 
 void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const bool on) {
-  if (!manager.present()) return;
-
+  // Run the probe first: for the EEGO A4, present() reflects whether begin()
+  // detected the LM3630A, so it must run before the presence gate below.
   manager.begin();
+  if (!manager.present()) return;
   lastBrightness = brightness > 100 ? 100 : brightness;
   manager.setColorTemperature(warmth > 100 ? 100 : warmth);
   lit = on;
