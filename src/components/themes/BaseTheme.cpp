@@ -806,29 +806,26 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     // Right aligned text for progress counter
     char progressStr[32];
 
-    // Draw the estimate marker separately so it can use the next UI font size.
-    const bool showEstimate = pageCountEstimated && sb.showChapterPageCount;
+    // The estimate marker sits directly on the total, not the current page: it
+    // qualifies the number that's still a guess. Drawn at the same size and
+    // baseline as the rest of the cluster (a separate, larger glyph used to sit
+    // right before the current-page digit with almost no gap and read as a
+    // minus sign — see #2708).
+    const char* estimateMark = (pageCountEstimated && sb.showChapterPageCount) ? "~" : "";
 
     if (sb.showBookProgressPercent && sb.showChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
+      snprintf(progressStr, sizeof(progressStr), "%d/%s%d  %.0f%%", currentPage, estimateMark, pageCount, bookProgress);
     } else if (sb.showBookProgressPercent) {
       snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
+      snprintf(progressStr, sizeof(progressStr), "%d/%s%d", currentPage, estimateMark, pageCount);
     }
 
-    int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    const int estimateWidth = showEstimate ? renderer.getTextWidth(UI_10_FONT_ID, "~") : 0;
-    constexpr int estimateGap = 2;
-    const int estimateSpacing = showEstimate ? estimateGap : 0;
-    const int progressX = rightClusterX - estimateWidth - estimateSpacing - progressTextWidth;
-    if (showEstimate) {
-      const int estimateY = textY + (renderer.getLineHeight(SMALL_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-      renderer.drawText(UI_10_FONT_ID, progressX, estimateY, "~");
-    }
-    renderer.drawText(SMALL_FONT_ID, progressX + estimateWidth + estimateSpacing, textY, progressStr);
+    const int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
+    const int progressX = rightClusterX - progressTextWidth;
+    renderer.drawText(SMALL_FONT_ID, progressX, textY, progressStr);
 
-    rightClusterWidth += estimateWidth + estimateSpacing + progressTextWidth;
+    rightClusterWidth += progressTextWidth;
   }
 
   // Draw Progress Bar
