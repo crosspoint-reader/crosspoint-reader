@@ -127,6 +127,16 @@ font still goes on the card (SD-card TTF, no firmware cost) because English
 articles carry native-script names (紫禁城, 東京, القاهرة); without it they
 render as boxes. Card-builder defaults are pending the owner's corpus picks.
 
+## 2026-10-02 — Corpus chosen (owner)
+
+In: Wikipedia, Wiktionary, Wikivoyage, Wikiquote (core); WikiProjectMed
+(mdwiki) plus other first-aid / emergency-medicine collections the catalog
+offers as text (candidates to verify: WikEM; Kiwix "zimgit" medicine and
+post-disaster sets are mostly PDFs, which the reader can't render, so they
+are excluded unless that changes); Wikisource; Wikibooks; Standard Ebooks as
+EPUBs in `/books`. Out: Stack Exchange, DevDocs, iFixit, Chinese Wikipedia.
+All English, text-only (nopic) where an edition exists.
+
 ## 2026-10-02 — First device measurements change two plans
 
 - **PSRAM is nearly all ours.** 8,080 KB free with CrossPoint running, so the
@@ -138,6 +148,43 @@ render as boxes. Card-builder defaults are pending the owner's corpus picks.
   measured). Search: ~25 probes × ~2 ms ≈ 50 ms if, and only if, seeks in
   4 GB parts stay cheap; that test needs a real 4 GB file.
 
+## 2026-10-02 — Milestone 1: how the ZIM reader is built
+
+- **Source of truth.** wiki.openzim.org is blocked from the cloud session, so
+  the reader is written from the format as documented (header, MIME list,
+  directory entries, cluster info byte, blob offset tables, title listings)
+  and **verified against real files** rather than from a copy of the spec
+  page: byte-level probes of the openZIM test files, then a cross-check
+  against libzim's Python binding as an independent oracle. 527 randomly
+  sampled entries matched byte-for-byte across both namespace schemes, xz
+  and zstd clusters, and a 3-part split. Re-read the spec page when the
+  network allows and note any differences here.
+- **No exceptions, no per-entry memory.** Every lookup binary-searches on the
+  card. RAM use is independent of archive size: a dirent read (512 B,
+  growing only for very long paths) plus the cluster cache.
+- **One-shot decompression.** Each cluster is decoded straight into a buffer
+  of its exact size (zstd records it; xz grows from 1 MiB). No decoder
+  window is reserved, which matters because Kiwix frames declare 8 MiB to
+  128 MiB windows. Clusters above `maxClusterBytes` (default 16 MiB) are
+  refused.
+- **Uncompressed clusters are never loaded whole**: blobs are read straight
+  from the file. This is how the 72 MB title listing of English Wikipedia
+  stays usable.
+- **Corruption handling.** Every pointer and size is bounds-checked; each
+  cluster's whole offset table is validated on first use (caught
+  `too_large_offset_of_first_blob_in_cluster`, where only unused entries
+  were bad). All 23 tests, including ~25 corrupted files in both schemes,
+  pass under AddressSanitizer and UBSan.
+- **Title search is byte-wise for now** (case-sensitive). Case/accent
+  folding (sidecar index vs. probing variants) is decided in M3/M4 as the
+  brief says.
+- **Not implemented, on purpose:** MD5 checksum verification (the card
+  builder verifies downloads on the Mac instead; hashing 60 GB on the device
+  would take hours), zlib/bzip2 clusters (absent from Kiwix files for
+  years), Xapian full-text indexes (non-goal).
+- **Firmware cost so far: zero.** `lib/zim` is only compiled into the
+  firmware once something includes it (M3).
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -145,9 +192,11 @@ render as boxes. Card-builder defaults are pending the owner's corpus picks.
 | CrossPoint Reader 1.6.5 | MIT | base firmware | in use |
 | freeink-sdk | MIT | hardware layer | in use (upstream) |
 | Upstream's own deps (ArduinoJson MIT, QRCode MIT, PNGdec Apache-2.0, JPEGDEC Apache-2.0, WebSockets LGPL-2.1, Arduino-wolfSSL GPL, FreeType FTL/GPL-2, expat MIT, miniz MIT) | as listed — to verify one by one at M1 | upstream features | in use (upstream) |
-| zstd (decoder only) | BSD-3-Clause (dual BSD/GPLv2) | ZIM clusters | planned M1 |
-| xz-embedded | 0BSD (public domain before 2024) | old ZIM clusters | planned M1, only if our collections need it |
-| zim-testing-suite (openZIM) | test data | host tests | planned M1 |
+| zstd 1.5.7 single-file decoder | BSD-3-Clause (dual BSD/GPLv2) | ZIM clusters | in use, `lib/zim/src/third_party/zstd` |
+| xz-embedded v20240322 | 0BSD | older (pre-2020) ZIM clusters; the 2017 test files use it | in use, `lib/zim/src/third_party/xz` |
+| zim-testing-suite (openZIM) @ 2edf720 | test data, fetched at test time, not vendored | host tests | in use |
+| GoogleTest 1.17.0 | BSD-3-Clause | host tests (same as upstream) | in use |
+| python-libzim | GPL-3.0 | **test oracle only**, run by hand to cross-check zimcat output; not shipped, no code used | used once, 2026-10-02 |
 
 ## 2026-10-02 — Firmware is built by GitHub Actions on the fork
 

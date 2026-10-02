@@ -1,0 +1,24 @@
+# Pocket Library — host tests for lib/zim (AddressSanitizer + UBSan).
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Pocket Library host
+
+on:
+  push:
+    branches: [pocket-library]
+    paths: ['lib/zim/**', '.github/workflows/pocketlib-host.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build with AddressSanitizer + UBSan
+        run: |
+          cmake -S lib/zim -B build/zim -DCMAKE_BUILD_TYPE=Debug -DZIM_SANITIZE=ON
+          cmake --build build/zim -j
+      - name: Test
+        run: ctest --test-dir build/zim --output-on-failure -j2

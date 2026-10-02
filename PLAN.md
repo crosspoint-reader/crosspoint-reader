@@ -7,8 +7,8 @@ Status date: 2026-10-01.
 
 | # | Milestone | Status |
 |---|---|---|
-| 0 | Foundation: fork, build, docs, debug screen, first flash | **Done on device 2026-10-02**, awaiting owner's sign-off |
-| 1 | ZIM core library + host tests + Mac CLI | Not started (test files located: openZIM `zim-testing-suite`) |
+| 0 | Foundation: fork, build, docs, debug screen, first flash | **Passed 2026-10-02** (owner sign-off) |
+| 1 | ZIM core library + host tests + Mac CLI | **In progress** |
 | 2 | Card builder (Python, Mac) | Not started |
 | 3 | First article on device | — |
 | 4 | Search | — |

@@ -64,3 +64,23 @@
 - **Milestone 0 acceptance met on device:** boots our build, reads books like
   stock, Diagnostics shows real numbers. Waiting for owner's sign-off before
   starting Milestone 1.
+
+## 2026-10-02 — Milestone 1: ZIM core library
+
+**What changed**
+- `lib/zim/`: ZIM reader (header, MIME list, directory entries in both
+  namespace schemes, path and title lookup with binary search, redirects,
+  title listings v0/v1 or the header title list, metadata, zstd + xz
+  clusters, 64-bit offsets, split files, LRU cluster cache with a pluggable
+  allocator for PSRAM).
+- `zimcat` command-line tool; host CMake build; 23 GoogleTest tests over
+  openZIM's test files, all passing under ASan/UBSan; cross-checked against
+  libzim on 527 random entries (0 mismatches).
+- CI: host tests on every change to `lib/zim`; the firmware workflow now
+  also builds zimcat for macOS and publishes everything to a rolling **dev**
+  pre-release on the fork's Releases page.
+
+**For the owner (Milestone 1 acceptance)** — needs a real Wikipedia file
+containing "Forbidden City"; see the session summary for the download.
+
+**Next**: M1 sign-off, then Milestone 2 (card builder).

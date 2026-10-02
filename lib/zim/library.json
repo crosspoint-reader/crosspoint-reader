@@ -1,0 +1,13 @@
+{
+  "name": "zim",
+  "version": "0.1.0",
+  "description": "Pocket Library: openZIM (Kiwix) archive reader. GPL-3.0-or-later; vendored zstd (BSD) and xz-embedded (0BSD).",
+  "license": "GPL-3.0-or-later",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src",
+    "flags": ["-DZSTD_DISABLE_ASM=1", "-Isrc/third_party/xz"]
+  }
+}
