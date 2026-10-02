@@ -56,3 +56,7 @@
 - **Factory backup done:** 16,777,216 bytes via esptool in download mode.
   Unit is not USB-locked. Next: download the official
   `crosspoint-1.6.5-x4pro.bin`, then flash stock 1.6.5.
+- Our build flashed via Custom .bin (first attempt dropped at "Update boot
+  partition"; retry in download mode succeeded). Diagnostics opens; SD
+  benchmark runs. Numbers in DECISIONS.md. Still missing: SD bus line and
+  Display Controller.

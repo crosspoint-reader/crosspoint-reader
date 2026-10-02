@@ -57,8 +57,8 @@ GeoNames/Wikipedia-coordinate indexes + viewer. **M9** release.
    through a 4 KB DMA buffer. Ceiling about 2.5 MB/s, likely ~1.5 real.
    *Experiment later:* `SDMMC_FREQ_HIGHSPEED` (40 MHz) and larger DMA
    transfers, SDK-side, tested with your OK.
-3. **PSRAM budget.** 8 MB total, shared with CrossPoint's own buffers and
-   fonts. Three 2 MiB decompressed clusters = 6 MiB, likely too much. Proposal:
+3. **PSRAM budget (resolved 2026-10-02).** 8,080 KB free on device, so three
+   2 MiB clusters fit. Original worry: three 2 MiB decompressed clusters = 6 MiB, likely too much. Proposal:
    keep **one** decompressed cluster plus a small cache of extracted article
    blobs and compressed clusters (~250 KB each). Decide after M0 reports free
    PSRAM.

@@ -120,6 +120,24 @@ same dictionary works inside ordinary EPUBs too. The Wiktionary ZIM stays on
 the card as a browsable shelf for full entries. Revisit if conversion loses
 too much (etymologies, translations).
 
+## 2026-10-02 — Corpus is English only; keep a CJK font
+
+Owner wants English collections only, so Chinese Wikipedia is dropped. A CJK
+font still goes on the card (SD-card TTF, no firmware cost) because English
+articles carry native-script names (紫禁城, 東京, القاهرة); without it they
+render as boxes. Card-builder defaults are pending the owner's corpus picks.
+
+## 2026-10-02 — First device measurements change two plans
+
+- **PSRAM is nearly all ours.** 8,080 KB free with CrossPoint running, so the
+  brief's 3 × 2 MiB decompressed-cluster LRU fits with ~1.9 MB to spare.
+  Earlier worry (PLAN risk 3) withdrawn; the cache size stays a setting.
+- **The card is slow but steady.** 1.93 MB/s sequential and ~1.9 ms per
+  random 4 KB read with a tight tail. Projected cost of an uncached article:
+  ~250 KB compressed cluster ≈ 130 ms to read, plus decompression (to be
+  measured). Search: ~25 probes × ~2 ms ≈ 50 ms if, and only if, seeks in
+  4 GB parts stay cheap; that test needs a real 4 GB file.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -158,14 +176,14 @@ to PlatformIO's private certifi bundle. None of this is needed on a Mac.
 |---|---|---|---|
 | Chip | ESP32-S3 (QFN56) rev v0.2, dual core 240 MHz, 40 MHz crystal | 2026-10-02 | esptool 5.4.0 |
 | PSRAM size | 8 MB embedded (AP_3v3) per esptool; firmware value pending | 2026-10-02 | confirm with `esp_psram_get_size()` |
-| PSRAM free at Diagnostics | | | |
-| Internal RAM free / largest | | | |
-| Flash size / speed | 16 MB (full read = 16,777,216 bytes); speed pending | 2026-10-02 | esptool read-flash |
+| PSRAM free at Diagnostics | 8,080 KB free, largest block 8,063 KB | 2026-10-02 | CrossPoint 1.6.5 barely touches PSRAM |
+| Internal RAM free / largest | 183 KB / 135 KB | 2026-10-02 | |
+| Flash size / speed | 16 MB @ 80 MHz | 2026-10-02 | Diagnostics + esptool |
 | SD bus | | | expect "SDMMC 1-bit @ 20.0 MHz" |
 | Panel controller | | | Settings → About → Display Controller |
-| SD sequential read | | | |
-| SD random 4 KB avg / p95 / max | | | file used, size |
-| SD sequential write | | | only if scratch file was written |
+| SD sequential read | 1.93 MB/s (16 MB, 64 KB reads into PSRAM) | 2026-10-02 | 32 MB scratch file; consistent with a 20 MHz 1-bit bus |
+| SD random 4 KB avg / p95 / max | 1.9 / 1.9 / 2.1 ms | 2026-10-02 | 32 MB scratch file: too small to show FAT-chain cost; repeat on a 4 GB part |
+| SD sequential write | 1.72 MB/s | 2026-10-02 | 32 MB scratch file `/.pocketlib/bench.bin` |
 
 ### Factory backup (2026-10-02)
 
