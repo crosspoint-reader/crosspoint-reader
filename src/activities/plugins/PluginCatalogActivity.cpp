@@ -29,6 +29,7 @@
 #include "util/PluginEvents.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
+#include "util/PluginPickerLayout.h"
 #include "util/QrUtils.h"
 #include "util/StringUtils.h"
 
@@ -298,8 +299,7 @@ void PluginCatalogActivity::enterPluginPicker() {
   // (and a removed one stops) without a restart.
   pluginevents::refreshSubscriptions();
   // Disclose which device events each plugin receives (and so what reading
-  // activity it can send off the device). The list leads the subtitle so the
-  // two-line wrap never cuts it.
+  // activity it can send off the device). Events precede the optional summary.
   static constexpr StrId EVENT_LABELS[] = {StrId::STR_EVENT_BOOK_OPEN, StrId::STR_EVENT_BOOK_CLOSE,
                                            StrId::STR_EVENT_READING_SESSION, StrId::STR_EVENT_DOWNLOAD,
                                            StrId::STR_EVENT_SLEEP};
@@ -1167,14 +1167,14 @@ void PluginCatalogActivity::buildBrowsingScreen(UiScreen& screen) {
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the nav chevron and the row edge
   if (state == State::PLUGIN_PICKER) {
-    // Let a long plugin description wrap onto a second line under the title;
-    // the row grows to fit it. maxLines=2 also marks the style caller-owned
-    // (an all-default smallText fails textStyleUnset and the list would
-    // resubstitute).
+    // Mark the subtitle style caller-owned before resolving the theme.
     props.subtitleText = screen.theme().smallText;
     props.subtitleText.maxLines = 2;
   }
   syncListViewport(screen, props);
+  if (state == State::PLUGIN_PICKER) {
+    fitPluginSubtitleToViewport(screen.target(), screen.body().height, props);
+  }
   screen.list(props);
 }
 

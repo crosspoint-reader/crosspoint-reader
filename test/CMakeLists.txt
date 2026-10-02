@@ -78,6 +78,7 @@ add_subdirectory(glyph_bitmap)
 
 add_subdirectory(reader_session)
 add_subdirectory(plugin_manifest_classification)
+add_subdirectory(plugin_picker_layout)
 add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
