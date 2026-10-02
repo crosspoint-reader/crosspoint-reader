@@ -7,7 +7,7 @@ Status date: 2026-10-01.
 
 | # | Milestone | Status |
 |---|---|---|
-| 0 | Foundation: fork, build, docs, debug screen, first flash | **In progress** — builds done in the cloud; waiting on repo location and device test |
+| 0 | Foundation: fork, build, docs, debug screen, first flash | **In progress** — both firmwares build on GitHub Actions; waiting on owner's backup and device test |
 | 1 | ZIM core library + host tests + Mac CLI | Not started (test files located: openZIM `zim-testing-suite`) |
 | 2 | Card builder (Python, Mac) | Not started |
 | 3 | First article on device | — |
@@ -75,7 +75,9 @@ GeoNames/Wikipedia-coordinate indexes + viewer. **M9** release.
    allowed-domain change or the owner's Mac.
 7. **Panel varies by batch** (SSD1677, UC8179 or UC8279); refresh timings must
    be measured on your unit. Diagnostics will name the controller.
-8. **Upstream drift.** `main` is already 17 commits past 1.6.5. Rebase per
+8. **Flash space.** The app slot is already 86% full (~915 KB free) before any
+   ZIM code. Measure every build; trims or a repartition if needed.
+9. **Upstream drift.** `main` is already 17 commits past 1.6.5. Rebase per
    release (see DECISIONS.md).
 
 ## Open questions

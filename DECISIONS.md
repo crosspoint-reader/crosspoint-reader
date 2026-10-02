@@ -166,6 +166,21 @@ to PlatformIO's private certifi bundle. None of this is needed on a Mac.
 | SD random 4 KB avg / p95 / max | | | file used, size |
 | SD sequential write | | | only if scratch file was written |
 
+### Build outputs (GitHub Actions run 37042994823, commit 805c76f, 2026-10-02)
+
+| Firmware | .bin bytes | SHA-256 | App slot used | Static internal RAM |
+|---|---|---|---|---|
+| stock 1.6.5 `x4pro-gh_release` | 5,632,640 | `d5dfea88…b56c5ac` | 85.9% of 6,553,600 | 101,792 B (31.1%) |
+| ours `x4pro-pocketlib-release` | 5,638,416 | `13758ff0…27f2db` | 86.0% | 101,792 B (31.1%) |
+
+Diagnostics costs 5,776 bytes of flash and no static RAM. **Flash headroom is
+the new constraint:** about 915 KB remain in each 6.25 MB OTA slot, and the
+ZIM reader, zstd decoder, xz decoder, HTML converter and library UI must fit
+there. Watch this number every build; options if it gets tight are the
+`firmware_tuned`-style trims upstream uses on the C3, dropping unused
+features from our env (e.g. the OPDS/KOReader-sync code), or a repartition
+(SPIFFS is 3.4 MB and unmounted) — the last needs a full-flash, so it waits.
+
 ### Performance targets (brief §7) — measured values arrive from M3 on
 
 | Action | Target *(est.)* | Measured |

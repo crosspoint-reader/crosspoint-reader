@@ -49,3 +49,7 @@
 - Fork is `noah-pi/pocket-library`; work pushed to branch `pocket-library`.
 - Added a GitHub Actions build (see DECISIONS.md). Owner enables Actions on
   the fork once; then each push produces downloadable `.bin` files.
+- First Actions run failed: our envs defined CROSSPOINT_VERSION twice
+  (compile error in `HalSystem.cpp`). Fixed in 805c76f by listing the flags
+  explicitly; both firmwares now build. Sizes and checksums in DECISIONS.md.
+- Downloads: https://github.com/noah-pi/pocket-library/actions/runs/37042994823
