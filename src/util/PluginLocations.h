@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,36 @@ constexpr DeviceKind classifyDeviceManifest(const bool hasBrowseUrl, const bool 
 constexpr PickerAction pickerAction(const DeviceKind kind, const bool hasReadme) {
   if (kind == DeviceKind::Catalog) return PickerAction::Catalog;
   return hasReadme ? PickerAction::Readme : PickerAction::None;
+}
+
+// Exactly MAJOR.MINOR.PATCH: three digit-only components, nothing else (no
+// sign, spaces, suffix or fourth part), each fitting in 32 bits.
+inline bool parseVersion(const std::string& v, uint32_t (&out)[3]) {
+  size_t pos = 0;
+  for (int k = 0; k < 3; k++) {
+    if (k > 0 && (pos >= v.size() || v[pos++] != '.')) return false;
+    if (pos >= v.size() || v[pos] < '0' || v[pos] > '9') return false;
+    uint64_t n = 0;
+    for (; pos < v.size() && v[pos] >= '0' && v[pos] <= '9'; pos++) {
+      n = n * 10 + static_cast<uint64_t>(v[pos] - '0');
+      if (n > UINT32_MAX) return false;
+    }
+    out[k] = static_cast<uint32_t>(n);
+  }
+  return pos == v.size();
+}
+
+// Plugin versions are MAJOR.MINOR.PATCH (the catalog contract). True when
+// `catalog` is newer than `installed`. An installed copy without a valid
+// version is offered the update; a malformed catalog version never is.
+inline bool isNewerVersion(const std::string& catalog, const std::string& installed) {
+  uint32_t c[3], i[3];
+  if (!parseVersion(catalog, c)) return false;
+  if (!parseVersion(installed, i)) return true;
+  for (int k = 0; k < 3; k++) {
+    if (c[k] != i[k]) return c[k] > i[k];
+  }
+  return false;
 }
 
 // One SD plugin folder, classified by the marker files it carries.

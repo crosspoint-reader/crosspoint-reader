@@ -138,16 +138,22 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     return;
   }
 
-  const std::string rightsSrcPath = srcPath + ".rights";
-  if (Storage.exists(rightsSrcPath.c_str())) {
-    const std::string rightsDstPath = dstPath + ".rights";
-    if (!Storage.rename(rightsSrcPath.c_str(), rightsDstPath.c_str())) {
-      LOG_ERR("ERS", "Failed to move rights file %s -> %s", rightsSrcPath.c_str(), rightsDstPath.c_str());
-      if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
-        LOG_ERR("ERS", "Failed to restore epub after rights move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
-      }
-      return;
+  // Protected-book sidecars travel with the book; a protected book separated
+  // from its key no longer opens, so a failed move rolls everything back.
+  static constexpr const char* SIDECARS[] = {".key", ".rights"};
+  for (size_t i = 0; i < std::size(SIDECARS); i++) {
+    const std::string from = srcPath + SIDECARS[i];
+    if (!Storage.exists(from.c_str())) continue;
+    const std::string to = dstPath + SIDECARS[i];
+    if (Storage.rename(from.c_str(), to.c_str())) continue;
+    LOG_ERR("ERS", "Failed to move sidecar %s -> %s", from.c_str(), to.c_str());
+    for (size_t j = 0; j < i; j++) {
+      Storage.rename((dstPath + SIDECARS[j]).c_str(), (srcPath + SIDECARS[j]).c_str());
     }
+    if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
+      LOG_ERR("ERS", "Failed to restore epub after sidecar move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
+    }
+    return;
   }
 
   const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));

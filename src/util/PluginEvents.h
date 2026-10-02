@@ -66,6 +66,10 @@ void refreshSubscriptions();
 // True when at least one plugin subscribes to `e` (a few string compares).
 bool anySubscriber(Event e);
 
+// Bit per Event the named plugin subscribes to (0 = none), for disclosing
+// what leaves the device. Reflects the last refreshSubscriptions().
+uint8_t subscriptionMask(const char* plugin);
+
 // True when any queued event belongs to a handler marked "connect": true
 // (sleep.enter subscriptions imply it; see above): the sleep path may then
 // bring WiFi up, bounded, so delivery happens before the chip powers down
