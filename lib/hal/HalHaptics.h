@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BoardConfig.h>
+
 #include <cstdint>
 
 #if FREEINK_CAP_HAPTIC && !CROSSPOINT_EMULATED
