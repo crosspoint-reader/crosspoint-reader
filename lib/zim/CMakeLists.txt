@@ -46,12 +46,14 @@ add_library(zim STATIC
   src/ZimSource.cpp
   src/ZimArchive.cpp
   src/ZimDecompress.cpp
+  src/ZimFold.cpp
+  src/ZimTitleIndex.cpp
 )
 target_include_directories(zim PUBLIC src)
 target_link_libraries(zim PRIVATE zim_thirdparty)
 target_compile_options(zim PRIVATE -Wall -Wextra -pedantic)
 
-add_library(zim_host STATIC host/PosixSource.cpp)
+add_library(zim_host STATIC host/PosixSource.cpp host/TitleIndexWriter.cpp)
 target_include_directories(zim_host PUBLIC host)
 target_link_libraries(zim_host PUBLIC zim)
 target_compile_options(zim_host PRIVATE -Wall -Wextra -pedantic)
@@ -59,6 +61,10 @@ target_compile_options(zim_host PRIVATE -Wall -Wextra -pedantic)
 add_executable(zimcat tools/zimcat.cpp)
 target_link_libraries(zimcat PRIVATE zim_host zim zim_thirdparty)
 target_compile_options(zimcat PRIVATE -Wall -Wextra -pedantic)
+
+add_executable(zimindex tools/zimindex.cpp)
+target_link_libraries(zimindex PRIVATE zim_host zim zim_thirdparty)
+target_compile_options(zimindex PRIVATE -Wall -Wextra -pedantic)
 
 if(ZIM_BUILD_TESTS)
   include(FetchContent)
@@ -80,7 +86,7 @@ if(ZIM_BUILD_TESTS)
 
   enable_testing()
   include(GoogleTest)
-  add_executable(zim_tests test/ZimArchiveTest.cpp test/SplitSourceTest.cpp)
+  add_executable(zim_tests test/ZimArchiveTest.cpp test/SplitSourceTest.cpp test/TitleIndexTest.cpp)
   target_link_libraries(zim_tests PRIVATE zim_host zim zim_thirdparty GTest::gtest_main)
   target_compile_definitions(zim_tests PRIVATE ZIM_TEST_DATA_DIR="${ZIM_TEST_DATA_DIR}")
   target_compile_options(zim_tests PRIVATE -Wall -Wextra)

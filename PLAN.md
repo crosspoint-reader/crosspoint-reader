@@ -8,8 +8,8 @@ Status date: 2026-10-01.
 | # | Milestone | Status |
 |---|---|---|
 | 0 | Foundation: fork, build, docs, debug screen, first flash | **Passed 2026-10-02** (owner sign-off) |
-| 1 | ZIM core library + host tests + Mac CLI | **In progress** |
-| 2 | Card builder (Python, Mac) | Not started |
+| 1 | ZIM core library + host tests + Mac CLI | **Passed 2026-10-02** (owner sign-off) |
+| 2 | Card builder (Python, Mac) | **In progress**: search index done |
 | 3 | First article on device | — |
 | 4 | Search | — |
 | 5 | Full reader | — |

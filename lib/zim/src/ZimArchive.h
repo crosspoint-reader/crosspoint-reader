@@ -163,6 +163,9 @@ class Archive {
   bool hasArticleList() const { return articleListCount_ > 0; }
   uint32_t articleListCount() const { return articleListCount_; }
   Error articleListEntryAt(uint32_t position, Entry& out);
+  // Entry indices at positions [first, first + count) of the front-article
+  // list, in one read (for tools that walk all of it).
+  Error articleListIndices(uint32_t first, uint32_t count, uint32_t* out);
 
   // --- content -------------------------------------------------------------
   // Copies the entry's bytes into `out`. The entry must be content (resolve

@@ -206,6 +206,36 @@ lookup failed. openZIM's test suite already has this case
   capitalised title (on "~"). Case-insensitive search needs the Milestone 2
   sidecar index; probing case variants is not enough.
 
+## 2026-10-02 — Search uses a sidecar title index (`.pltitles`)
+
+Chosen over probing case variants of the query, because Wikipedia titles all
+start with a capital letter and the ZIM's own list is ordered byte by byte
+("forb" sorts after every capitalised title; see the measurements).
+
+- **Key**: `foldKey(title)`. ASCII is lower-cased. A generated table (Python
+  `unicodedata`: NFKD, combining marks dropped, `casefold`, plus a hand list
+  for ø/ł/æ/ß/þ and typographic quotes and dashes) covers Latin, Greek,
+  Cyrillic and Vietnamese. Whitespace is collapsed. CJK passes through
+  unchanged. Keys are capped at 255 bytes. The Mac and the device run the same
+  C++, so they cannot disagree; `kFoldVersion` is stored in each index, and
+  stale ones are refused.
+- **Format**: a static B-tree of 4 KB pages. Leaves are front-coded
+  `(key, entry index)` records, sorted, on consecutive pages. Inner pages
+  hold each child's first key. The ZIM's UUID and entry count are in the
+  header, so an index is never used with the wrong file.
+- **What is indexed**: the v1 front-article list (articles plus redirects to
+  them). Files without one index the HTML entries and redirects in the
+  content namespace.
+- **Device cost**: one read per level. Measured on 19.2 M synthetic titles:
+  3 inner levels, so 4 reads (3 if the root page stays in RAM), about 8 ms at
+  the measured 1.9 ms per 4 KB read. Each result shown costs one directory
+  read for its display title.
+- **Size and build** (synthetic, 19.2 M titles, cloud x86): 160 MB file,
+  1 min 55 s, 918 MB peak memory.
+- Not yet: ranking. Matches come back in alphabetical order, so "Forb" lists
+  "Forbach…" before "Forbidden City". Ranking is decided in M4 with real
+  queries, and the format has a version number for it.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |

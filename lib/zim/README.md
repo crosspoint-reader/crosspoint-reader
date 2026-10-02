@@ -8,9 +8,10 @@ xz-embedded 2024-03-22 (0BSD, `src/third_party/xz/COPYING`).
 
 | Path | What |
 |---|---|
-| `src/` | the library (device + host): `ZimArchive`, `ZimSource` (incl. `SplitSource`), `ZimDecompress` |
-| `host/` | macOS/Linux file access and split-part discovery |
-| `tools/zimcat.cpp` | command-line tool |
+| `src/` | the library (device + host): `ZimArchive`, `ZimSource` (incl. `SplitSource`), `ZimDecompress`, `ZimFold` (search-key folding), `ZimTitleIndex` (search index reader) |
+| `host/` | macOS/Linux file access, split-part discovery, `TitleIndexWriter` |
+| `scripts/gen_fold_table.py` | regenerates `src/ZimFoldTable.inc` |
+| `tools/zimcat.cpp`, `tools/zimindex.cpp` | command-line tools |
 | `test/` | GoogleTest suite over openZIM's `zim-testing-suite` |
 
 ## Build and test on a computer
@@ -34,3 +35,17 @@ zimcat wikipedia_en_all_nopic.zim --path C/Forbidden_City
 ```
 
 Timings for open, lookup and read go to stderr.
+
+## zimindex
+
+Builds the search index the device uses: a `.pltitles` file next to the ZIM,
+keyed by titles folded case- and accent-insensitively (format in
+`src/ZimTitleIndex.h`).
+
+```sh
+zimindex wikipedia_en_all_nopic.zim                 # writes wikipedia_en_all_nopic.pltitles
+zimindex wikipedia_en_all_nopic.zim --search "forbidden ci" 10
+```
+
+English Wikipedia (19.2 M titles) gives an index of about 160 MB and needs
+about 1 GB of memory and a few minutes to build.

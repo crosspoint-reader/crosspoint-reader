@@ -98,3 +98,13 @@ containing "Forbidden City"; see the session summary for the download.
   "Forbidden City" found by title in 0.3 ms and read in 9.3 ms; "Forb"
   prefix search correct; "forb" lands on "~" as predicted. Milestone 1
   acceptance criteria met; awaiting owner sign-off.
+
+## 2026-10-02 — Milestone 1 signed off; Milestone 2 started
+
+- Owner signed off M1. The split-file check on the real file is deferred to
+  M2's card builder, which splits anyway.
+- Search index: `ZimFold` (shared folding), `ZimTitleIndex` (device reader),
+  `TitleIndexWriter` + `collectTitles` (host), `zimindex` tool. 8 new tests
+  (33 total) pass under ASan/UBSan. CI now publishes `zimindex` for macOS.
+- **Next**: owner builds the index for real Wikipedia (time and size); then
+  the Python card builder (`tools/cardbuilder/`).

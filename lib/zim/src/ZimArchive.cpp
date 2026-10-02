@@ -385,6 +385,19 @@ Error Archive::articleListEntryAt(uint32_t position, Entry& out) {
   return entryAt(index, out);
 }
 
+Error Archive::articleListIndices(uint32_t first, uint32_t count, uint32_t* out) {
+  if (first > articleListCount_ || count > articleListCount_ - first) return Error::OutOfRange;
+  if (count == 0) return Error::None;
+  std::vector<uint8_t> raw(4ull * count);
+  const Error err = readBlobRange(articleList_.cluster, articleList_.blob, 4ull * first, raw.size(), raw.data());
+  if (err != Error::None) return err;
+  for (uint32_t i = 0; i < count; ++i) {
+    out[i] = le32(raw.data() + 4ull * i);
+    if (out[i] >= header_.entryCount) return Error::BadCluster;
+  }
+  return Error::None;
+}
+
 Error Archive::lowerBoundTitle(char ns, std::string_view title, uint32_t& position) {
   uint32_t lo = 0;
   uint32_t hi = titleCount_;

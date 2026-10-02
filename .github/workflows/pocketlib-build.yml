@@ -6,7 +6,8 @@
 #   stock-1.6.5-x4pro      official CrossPoint 1.6.5 for X4 Pro, built from
 #                           upstream's tag: the known-good fallback
 #   pocketlib-x4pro        our firmware (x4pro-pocketlib-release)
-#   zimcat-macos           the ZIM command-line tool for Intel and Apple-silicon Macs
+#   zimcat-macos           zimcat and zimindex, the ZIM command-line tools, for
+#                           Intel and Apple-silicon Macs
 # Each comes with a .sha256 so the file you flash can be checked. All of them
 # are also published to the rolling "dev" pre-release on the Releases page.
 # X4 Pro (ESP32-S3) only: no C3 environment is ever built here.
@@ -92,13 +93,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Build universal zimcat (Intel + Apple silicon)
+      - name: Build universal zimcat and zimindex (Intel + Apple silicon)
         run: |
           cmake -S lib/zim -B build/zim -DCMAKE_BUILD_TYPE=Release -DZIM_BUILD_TESTS=OFF \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-          cmake --build build/zim -j --target zimcat
-          lipo -info build/zim/zimcat
-          mkdir out && cp build/zim/zimcat out/ && (cd out && shasum -a 256 zimcat > zimcat.sha256)
+          cmake --build build/zim -j --target zimcat zimindex
+          lipo -info build/zim/zimcat build/zim/zimindex
+          mkdir out && cp build/zim/zimcat build/zim/zimindex out/
+          (cd out && shasum -a 256 zimcat > zimcat.sha256 && shasum -a 256 zimindex > zimindex.sha256)
       - uses: actions/upload-artifact@v6
         with:
           name: zimcat-macos
@@ -132,4 +134,5 @@ jobs:
           - pocketlib-x4pro.bin: Pocket Library firmware. Flash with crosspointreader.com, Xteink X4 Pro, Custom .bin.
           - stock-1.6.5-x4pro.bin: unmodified CrossPoint 1.6.5, the known-good fallback.
           - zimcat: command-line ZIM reader for macOS (Intel and Apple silicon).
+          - zimindex: builds the search index (.pltitles) the device uses, for macOS.
           Each file has a .sha256 alongside it."
