@@ -66,6 +66,7 @@ jobs:
               { name: 'firmware-x4pro.bin', device: 'X4 Pro' },
               { name: 'firmware-x4c.bin', device: 'X4 Classic' },
               { name: 'firmware-papermono.bin', device: 'Paper Mono' },
+              { name: 'firmware-murphy-m4.bin', device: 'Murphy M4' },
             ];
             const { data: artifactResponse } =
               await github.rest.actions.listWorkflowRunArtifacts({
