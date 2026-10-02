@@ -66,6 +66,12 @@ class ClipSelectionActivity final : public Activity {
   void cancel();
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
+  bool renderIncremental();
+  void drawWordHighlight(int index, int firstSelected, int lastSelected, int offsetX, int offset) const;
+  void drawWordClean(int index, int offsetX, int offset) const;
+  void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
+  void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
+  void prewarmWord(int index) const;
 
   std::vector<std::unique_ptr<Page>> pages;
   const int marginLeft;
@@ -94,4 +100,9 @@ class ClipSelectionActivity final : public Activity {
   int touchDragStartY = 0;
   int touchDragPageEndIndex = -1;
   unsigned long touchDragPageEndHeldSince = 0;
+  int lastRenderedSelected = -1;
+  int lastRenderedRangeStart = -1;
+  int lastRenderedPageOffset = -1;
+  int lastRenderedTextOffset = 0;
+  int lastRenderedTextXOffset = 0;
 };
