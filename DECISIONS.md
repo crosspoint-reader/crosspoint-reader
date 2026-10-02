@@ -179,8 +179,8 @@ to PlatformIO's private certifi bundle. None of this is needed on a Mac.
 | PSRAM free at Diagnostics | 8,080 KB free, largest block 8,063 KB | 2026-10-02 | CrossPoint 1.6.5 barely touches PSRAM |
 | Internal RAM free / largest | 183 KB / 135 KB | 2026-10-02 | |
 | Flash size / speed | 16 MB @ 80 MHz | 2026-10-02 | Diagnostics + esptool |
-| SD bus | | | expect "SDMMC 1-bit @ 20.0 MHz" |
-| Panel controller | | | Settings → About → Display Controller |
+| SD bus | SDMMC @ **20.0 MHz** (driver-reported); width read aloud as "2-bit", which SDMMC does not support, so almost certainly 1-bit | 2026-10-02 | confirms the SDK's "40 MHz" comment is wrong |
+| Panel controller | **UC8279** (UltraChip variant, not the SSD1677 in the brief's spec sheet) | 2026-10-02 | refresh timings must be measured on this panel, not taken from the GDEQ0426T82 datasheet |
 | SD sequential read | 1.93 MB/s (16 MB, 64 KB reads into PSRAM) | 2026-10-02 | 32 MB scratch file; consistent with a 20 MHz 1-bit bus |
 | SD random 4 KB avg / p95 / max | 1.9 / 1.9 / 2.1 ms | 2026-10-02 | 32 MB scratch file: too small to show FAT-chain cost; repeat on a 4 GB part |
 | SD sequential write | 1.72 MB/s | 2026-10-02 | 32 MB scratch file `/.pocketlib/bench.bin` |

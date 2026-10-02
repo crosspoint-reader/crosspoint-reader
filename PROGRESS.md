@@ -60,3 +60,7 @@
   partition"; retry in download mode succeeded). Diagnostics opens; SD
   benchmark runs. Numbers in DECISIONS.md. Still missing: SD bus line and
   Display Controller.
+- SD bus: 20.0 MHz confirmed on device. Panel: UC8279.
+- **Milestone 0 acceptance met on device:** boots our build, reads books like
+  stock, Diagnostics shows real numbers. Waiting for owner's sign-off before
+  starting Milestone 1.
