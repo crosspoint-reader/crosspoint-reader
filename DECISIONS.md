@@ -70,8 +70,8 @@ Release tags are what we rebase onto.
 - Everything we write is GPL-3.0-or-later; full text in `LICENSE-GPL-3.0`;
   each new file carries an SPDX header. The combined firmware binary is
   distributed under GPL-3.0-or-later, which MIT permits.
-- Header copyright line reads "Pocket Library contributors" until the owner
-  says what name to use.
+- Header copyright line reads "Pocket Library contributors" (owner approved
+  2026-10-02).
 
 ## 2026-10-01 — Hidden Diagnostics screen
 
@@ -106,6 +106,19 @@ All values are logged on serial with tag `DIAG`.
 4. **Older files use xz** (2017 Wikibooks sample, compression type 4). Some
    real-world collections may still be xz; the card builder will report it.
 5. **FAT32 seek cost** in 4 GB parts (see PLAN.md risk 1).
+
+## 2026-10-02 — Wiktionary lookups go through StarDict
+
+Owner left the choice to me. The card builder will convert the Wiktionary ZIM
+into a StarDict dictionary (`.ifo/.idx/.dict.dz`) on the Mac, and tap-and-hold
+in our reader will use CrossPoint's existing StarDict lookup and its
+definition screen. Reasons: upstream's lookup already handles case folding,
+synonyms and its own sidecar index, and is tested on hardware; a StarDict
+entry is a few hundred bytes of plain text, where a Wiktionary article is a
+full HTML page in a 2 MiB cluster, so lookups get cheaper and faster; and the
+same dictionary works inside ordinary EPUBs too. The Wiktionary ZIM stays on
+the card as a browsable shelf for full entries. Revisit if conversion loses
+too much (etymologies, translations).
 
 ## Dependencies
 

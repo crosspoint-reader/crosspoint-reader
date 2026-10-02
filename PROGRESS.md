@@ -34,3 +34,15 @@
 - Owner answers the questions in the session summary.
 - Build both firmwares; record sizes; hand over the `.bin`.
 - Then Milestone 1 (`lib/zim/`, host tests on the openZIM files).
+
+## 2026-10-02 — Session 1, continued: owner's answers
+
+- Fork approved. Owner creates it on github.com (this session can't fork
+  without upstream API credentials); then it gets attached and pushed.
+- Network: owner will allow `api.registry.platformio.org`,
+  `download.kiwix.org` and `wiki.openzim.org`. Not yet in effect here.
+- **No backups yet.** Before any flashing: make the factory backup ("Read
+  flash") and download the official 1.6.5 X4 Pro `.bin`. Steps in the
+  session summary.
+- Copyright line "Pocket Library contributors" approved.
+- Wiktionary → StarDict conversion chosen (DECISIONS.md).
