@@ -380,6 +380,39 @@ TEST(SdCardFontTest, LigatureRequestsServedFromAKernFreeMiniGetLigatures) {
   EXPECT_EQ(static_cast<uint32_t>('A'), font.getEpdFont()->getLigature('E', 'F'));
 }
 
+TEST(SdCardFontTest, RedrawingAPrewarmedPageReadsNothing) {
+  makeKerningFont();
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  for (const char* text : {"ABCD", "DEF"}) {  // with and without kerning pairs
+    font.clearCache();
+    ASSERT_EQ(0, font.prewarm(text, 1, false, true, false));
+    font.clearCache();
+    sdFontTestReads = 0;
+    ASSERT_EQ(0, font.prewarm(text, 1, false, true, false));
+    EXPECT_EQ(0U, sdFontTestReads) << text;
+  }
+}
+
+TEST(SdCardFontTest, LaterPagesReadOnlyTheKernClassBlocksTheyUse) {
+  makeKerningFont(300);  // five 64-entry blocks per class table
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  sdFontTestReads = 0;
+  ASSERT_EQ(0, font.prewarm("ABCDEF", 1, false, true, false));
+  const size_t firstReads = sdFontTestReads;
+  EXPECT_EQ(-5, font.getEpdFont()->getKerning('C', 'D'));
+
+  font.releaseResidentCaches();
+  sdFontTestReads = 0;
+  ASSERT_EQ(0, font.prewarm("ABCDEF", 1, false, true, false));
+  EXPECT_EQ(firstReads - 8, sdFontTestReads);  // 4 of the 5 blocks skipped in each table
+  const EpdFont* epd = font.getEpdFont();
+  EXPECT_EQ(-3, epd->getKerning('A', 'B'));
+  EXPECT_EQ(4, epd->getKerning('C', 'B'));
+  EXPECT_EQ(-5, epd->getKerning('C', 'D'));
+}
+
 TEST(SdCardFontTest, AdvancesStayCorrectWhenPagesAddCodepointsOutOfOrder) {
   makeFont();
   for (uint32_t i = 0; i < GLYPHS; ++i) {
