@@ -396,6 +396,30 @@ void pushRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx) 
   }
 }
 
+void getLCGState(const SleepRecentKind kind, uint32_t& seed, uint32_t& state, uint16_t& indexesLeft,
+                 uint16_t& indexesTotal) {
+  switch (kind) {
+    case SleepRecentKind::Overlay:
+      APP_STATE.getSleepOverlayLCG(seed, state, indexesLeft, indexesTotal);
+      break;
+    case SleepRecentKind::Standard:
+      APP_STATE.getSleepLCG(seed, state, indexesLeft, indexesTotal);
+      break;
+  }
+}
+
+void setLCGState(const SleepRecentKind kind, uint32_t seed, uint32_t state, uint16_t indexesLeft,
+                 uint16_t indexesTotal) {
+  switch (kind) {
+    case SleepRecentKind::Overlay:
+      APP_STATE.setSleepOverlayLCG(seed, state, indexesLeft, indexesTotal);
+      break;
+    case SleepRecentKind::Standard:
+      APP_STATE.setSleepLCG(seed, state, indexesLeft, indexesTotal);
+      break;
+  }
+}
+
 bool findNextValidSleepImage(HalFile& dir, const SleepRecentKind recentKind, char* name) {
   for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
     if (dirFile.isDirectory()) continue;
@@ -438,14 +462,52 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   while (fileCount < UINT16_MAX && findNextValidSleepImage(dir, recentKind, name.get())) ++fileCount;
   if (fileCount == 0) return false;
 
-  // Pick a random wallpaper, excluding recently shown ones.
-  // Window: up to SLEEP_RECENT_COUNT entries, capped at fileCount-1.
-  const uint8_t recentFill =
-      recentKind == SleepRecentKind::Overlay ? APP_STATE.recentOverlaySleepFill : APP_STATE.recentSleepFill;
-  const uint8_t window = static_cast<uint8_t>(std::min<uint16_t>(recentFill, fileCount - 1));
-  auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
-  for (uint8_t attempt = 0; attempt < 20 && isRecentSleepIndex(recentKind, randomFileIndex, window); attempt++) {
-    randomFileIndex = static_cast<uint16_t>(random(fileCount));
+  uint16_t randomFileIndex = 0;
+
+  // Hull-Dobell theorem conditions for full period over mod 2^k: odd increment c and multiplier a = 5
+  // (a - 1 divisible by 4) give period m for any seed; m = 1 is trivial.
+  // https://en.wikipedia.org/wiki/Linear_congruential_generator#Period_length
+  // Cycle-walking skips states >= fileCount, visiting every image once per cycle and finding a valid index
+  // within at most lcgM steps.
+  uint16_t lcgIndexesLeft, lcgIndexesTotal;
+  uint32_t lcgSeed, lcgState;
+  uint32_t lcgM = 1;
+
+  getLCGState(recentKind, lcgSeed, lcgState, lcgIndexesLeft, lcgIndexesTotal);
+
+  while (lcgM < fileCount) {
+    lcgM <<= 1;
+  }
+
+  uint32_t lcgC = (lcgSeed * 2u + 1u) % lcgM;
+
+  if (lcgIndexesLeft == 0 || lcgIndexesTotal != fileCount || lcgIndexesLeft > fileCount || lcgState >= lcgM) {
+    uint8_t attempt = 0;
+    const uint8_t recentFill =
+        recentKind == SleepRecentKind::Overlay ? APP_STATE.recentOverlaySleepFill : APP_STATE.recentSleepFill;
+    const uint8_t window = static_cast<uint8_t>(std::min<uint16_t>(recentFill, fileCount - 1));
+
+    lcgIndexesLeft = lcgIndexesTotal = fileCount;
+
+    do {
+      lcgState = lcgSeed = static_cast<uint32_t>(random(lcgM));
+      lcgC = (lcgSeed * 2u + 1u) % lcgM;
+      for (uint32_t attemptSeed = 0; attemptSeed < lcgM; ++attemptSeed) {
+        lcgState = (5u * lcgState + lcgC) % lcgM;
+        if (lcgState < fileCount) {
+          randomFileIndex = lcgState;
+          break;
+        }
+      }
+    } while (++attempt < 32 && isRecentSleepIndex(recentKind, randomFileIndex, window));
+  } else {
+    for (uint32_t attempt = 0; attempt < lcgM; ++attempt) {
+      lcgState = (5u * lcgState + lcgC) % lcgM;
+      if (lcgState < fileCount) {
+        randomFileIndex = lcgState;
+        break;
+      }
+    }
   }
 
   dir.rewindDirectory();
@@ -458,6 +520,7 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   selectedPath += "/";
   selectedPath += name.get();
   pushRecentSleepIndex(recentKind, randomFileIndex);
+  setLCGState(recentKind, lcgSeed, lcgState, lcgIndexesLeft - 1, lcgIndexesTotal);
   APP_STATE.saveToFile();
   return true;
 }
