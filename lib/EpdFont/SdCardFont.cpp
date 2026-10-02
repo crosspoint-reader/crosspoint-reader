@@ -1414,6 +1414,7 @@ void SdCardFont::clearPersistentCache() {
     psramDeleteArray(advanceTable_[i]);
     advanceTable_[i] = nullptr;
     advanceTableSize_[i] = 0;
+    advanceTableCapacity_[i] = 0;
   }
 }
 
@@ -1437,6 +1438,26 @@ bool SdCardFont::advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16
   return false;
 }
 
+bool SdCardFont::growAdvanceTable(const uint8_t styleIdx, const uint32_t needed) {
+  if (needed <= advanceTableCapacity_[styleIdx]) return true;
+  constexpr uint32_t MIN_ADVANCE_CAPACITY = 64;
+  uint32_t capacity = std::max({needed, advanceTableCapacity_[styleIdx] * 2, MIN_ADVANCE_CAPACITY});
+  capacity = std::min(capacity, ADVANCE_CACHE_LIMIT);
+  AdvanceEntry* grown = psramNewArray<AdvanceEntry>(capacity);
+  if (!grown && capacity > needed) {
+    capacity = needed;
+    grown = psramNewArray<AdvanceEntry>(capacity);
+  }
+  if (!grown) return false;
+  if (advanceTableSize_[styleIdx] > 0) {
+    memcpy(grown, advanceTable_[styleIdx], advanceTableSize_[styleIdx] * sizeof(AdvanceEntry));
+  }
+  psramDeleteArray(advanceTable_[styleIdx]);
+  advanceTable_[styleIdx] = grown;
+  advanceTableCapacity_[styleIdx] = capacity;
+  return true;
+}
+
 void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount) {
   if (newCount == 0) return;
   const uint32_t oldSize = advanceTableSize_[styleIdx];
@@ -1448,31 +1469,32 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
   uint32_t mergedCap = oldSize + newCount;
   if (mergedCap > ADVANCE_CACHE_LIMIT) mergedCap = ADVANCE_CACHE_LIMIT;
 
-  AdvanceEntry* merged = psramNewArray<AdvanceEntry>(mergedCap);
-  if (!merged) {
+  if (!growAdvanceTable(styleIdx, mergedCap)) {
     LOG_ERR("SDCF", "mergeIntoAdvanceTable: alloc failed (%u entries) style %u", mergedCap, styleIdx);
     return;
   }
 
-  const AdvanceEntry* a = advanceTable_[styleIdx];
-  const AdvanceEntry* b = sortedNew;
-  uint32_t i = 0, j = 0, k = 0;
-  while (k < mergedCap && (i < oldSize || j < newCount)) {
-    if (i < oldSize && (j >= newCount || a[i].codepoint <= b[j].codepoint)) {
-      merged[k++] = a[i++];
+  // Merge from the back so existing entries move at most once and are never
+  // overwritten before they are read. The largest `drop` entries fall past the cap.
+  AdvanceEntry* table = advanceTable_[styleIdx];
+  uint32_t drop = oldSize + newCount - mergedCap;
+  uint32_t i = oldSize, j = newCount, k = oldSize + newCount;
+  while (j > 0) {
+    const bool takeNew = i == 0 || sortedNew[j - 1].codepoint >= table[i - 1].codepoint;
+    const AdvanceEntry entry = takeNew ? sortedNew[--j] : table[--i];
+    --k;
+    if (drop > 0) {
+      --drop;
     } else {
-      merged[k++] = b[j++];
+      table[k] = entry;
     }
   }
-
-  psramDeleteArray(advanceTable_[styleIdx]);
-  advanceTable_[styleIdx] = merged;
-  advanceTableSize_[styleIdx] = k;
+  advanceTableSize_[styleIdx] = mergedCap;
 }
 
 bool SdCardFont::hasAdvanceTable() const {
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
-    if (advanceTable_[i]) return true;
+    if (advanceTableSize_[i] > 0) return true;  // a pre-grown table can be allocated but empty
   }
   return false;
 }
@@ -1611,6 +1633,20 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
   if (styleMask == 0) return 0;
 
   unsigned long startMs = millis();
+
+  // Grow nearly full tables now rather than during the merge: the merge runs
+  // while the codepoint scratch below is live, and a table grown then lands
+  // above it, inside the hole the scratch leaves when it is freed.
+  constexpr uint32_t ADVANCE_GROWTH_HEADROOM = 64;
+  for (uint8_t si = 0; si < MAX_STYLES; si++) {
+    if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
+    const uint32_t size = advanceTableSize_[si];
+    if (size < ADVANCE_CACHE_LIMIT && advanceTableCapacity_[si] - size < ADVANCE_GROWTH_HEADROOM) {
+      if (!growAdvanceTable(si, std::min(size + ADVANCE_GROWTH_HEADROOM, ADVANCE_CACHE_LIMIT))) {
+        LOG_DBG("SDCF", "Advance table pre-grow failed for style %u; the merge grows it", si);
+      }
+    }
+  }
 
   // +2 reserved slots for space and hyphen injected after the main scan.
   static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;

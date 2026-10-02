@@ -310,10 +310,16 @@ class SdCardFont {
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 768;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
+  // Allocated entries. Merges fill spare capacity in place, and growth doubles it,
+  // so a table moves a few times per section instead of on every layout pass.
+  uint32_t advanceTableCapacity_[MAX_STYLES] = {};
   bool advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
+  // Grows the table only when the merge exceeds its capacity.
   void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
+  // Ensures room for `needed` entries, at least doubling the capacity when it grows.
+  bool growAdvanceTable(uint8_t styleIdx, uint32_t needed);
 
   Stats stats_;
   uint32_t contentHash_ = 0;
