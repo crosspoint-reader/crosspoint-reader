@@ -94,3 +94,7 @@ containing "Forbidden City"; see the session summary for the download.
   not found: the file has only the v1 article list. Fixed (see DECISIONS);
   2 new tests, 25/25 pass under ASan/UBSan. Re-test pending on the new dev
   build.
+- New dev build (f75c6d1) re-run by owner: title index 19,191,219 (v1);
+  "Forbidden City" found by title in 0.3 ms and read in 9.3 ms; "Forb"
+  prefix search correct; "forb" lands on "~" as predicted. Milestone 1
+  acceptance criteria met; awaiting owner sign-off.

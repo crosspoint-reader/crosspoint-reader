@@ -199,10 +199,12 @@ lookup failed. openZIM's test suite already has this case
   front articles, so nothing user-facing is lost.
 - zimcat also tries the path (title with spaces as underscores) when the
   title misses. The device reader will do the same.
-- Open question, to measure next: whether v1's ~77 MB blob sits in an
-  uncompressed cluster. If it is compressed, binary search cannot read it
-  in place on the device, and the card builder must write its own title
-  index (the sidecar planned for Milestone 2 anyway).
+- Answered: v1's ~77 MB blob sits in an uncompressed cluster (the reader
+  refuses clusters over 16 MB, and an exact-title lookup across all 19.2 M
+  entries took 0.3 ms), so binary search reads it in place on the device.
+- Confirmed: the list is byte-ordered, so "forb" lands past every
+  capitalised title (on "~"). Case-insensitive search needs the Milestone 2
+  sidecar index; probing case variants is not enough.
 
 ## Dependencies
 
@@ -279,6 +281,23 @@ there. Watch this number every build; options if it gets tight are the
 `firmware_tuned`-style trims upstream uses on the C3, dropping unused
 features from our env (e.g. the OPDS/KOReader-sync code), or a repartition
 (SPIFFS is 3.4 MB and unmounted) — the last needs a full-flash, so it waits.
+
+### zimcat on real Wikipedia (owner's Mac, SSK drive, 2026-10-02)
+
+`wikipedia_en_all_nopic_2026-06.zim`, 52,690,706,555 bytes, sha256 OK.
+
+| Operation | Time |
+|---|---|
+| Open archive | 0.3–1.9 ms |
+| Exact title lookup, 19.2 M titles | 0.3 ms |
+| Prefix lower bound ("Forb") | 0.3 ms |
+| Read "Forbidden City" (282,438 B, cluster 75354), cold | 20.9 ms |
+| Same, second run | 9.3 ms |
+
+The Mac's file cache flatters these numbers. Device estimate (speculative):
+about 25 binary-search probes × 2 random reads × 1.9 ms ≈ 100 ms per
+lookup, plus about 1 s to read and decompress a ~2 MB cluster at 1.93 MB/s.
+To be measured in M3.
 
 ### Performance targets (brief §7) — measured values arrive from M3 on
 
