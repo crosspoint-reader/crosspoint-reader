@@ -131,6 +131,17 @@ too much (etymologies, translations).
 | xz-embedded | 0BSD (public domain before 2024) | old ZIM clusters | planned M1, only if our collections need it |
 | zim-testing-suite (openZIM) | test data | host tests | planned M1 |
 
+## 2026-10-02 — Firmware is built by GitHub Actions on the fork
+
+The fork is `noah-pi/pocket-library`, work on branch `pocket-library`.
+`.github/workflows/pocketlib-build.yml` builds on every push to that branch:
+stock 1.6.5 `x4pro-gh_release` straight from upstream's tag (the known-good
+fallback) and our `x4pro-pocketlib-release`, each with a `.sha256`. Reason:
+GitHub's runners reach the PlatformIO registry, so builds don't depend on the
+cloud session's network policy or the owner's Mac, and every `.bin` the owner
+flashes is traceable to a commit. Toolchain pins copied from upstream's
+`release.yml`. Upstream's own workflows don't trigger on this branch.
+
 ## Cloud-build workarounds (not part of the firmware)
 
 This cloud session's network policy blocks the PlatformIO registry,

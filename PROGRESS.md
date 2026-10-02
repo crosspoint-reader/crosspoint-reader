@@ -46,3 +46,6 @@
   session summary.
 - Copyright line "Pocket Library contributors" approved.
 - Wiktionary → StarDict conversion chosen (DECISIONS.md).
+- Fork is `noah-pi/pocket-library`; work pushed to branch `pocket-library`.
+- Added a GitHub Actions build (see DECISIONS.md). Owner enables Actions on
+  the fork once; then each push produces downloadable `.bin` files.

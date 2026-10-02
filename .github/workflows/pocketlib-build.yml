@@ -1,0 +1,87 @@
+# Pocket Library — build the X4 Pro firmware on GitHub's servers.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Runs on every push to the pocket-library branch (and on demand from the
+# Actions tab). Produces two downloadable files under the run's "Artifacts":
+#   stock-1.6.5-x4pro      official CrossPoint 1.6.5 for X4 Pro, built from
+#                           upstream's tag: the known-good fallback
+#   pocketlib-x4pro        our firmware (x4pro-pocketlib-release)
+# Each comes with a .sha256 so the file you flash can be checked.
+# X4 Pro (ESP32-S3) only: no C3 environment is ever built here.
+
+name: Pocket Library build
+
+on:
+  push:
+    branches: [pocket-library]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: stock-1.6.5-x4pro
+            repository: crosspoint-reader/crosspoint-reader
+            ref: "1.6.5"
+            env: x4pro-gh_release
+          - name: pocketlib-x4pro
+            repository: ${{ github.repository }}
+            ref: ${{ github.sha }}
+            env: x4pro-pocketlib-release
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      # Same toolchain pins as upstream's release.yml at 1.6.5.
+      - name: Install PlatformIO Core
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          pio pkg install -e "${{ matrix.env }}"
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+
+      - name: Build
+        run: pio run -e "${{ matrix.env }}" -j1
+
+      - name: Prepare files
+        run: |
+          set -euo pipefail
+          mkdir out
+          cp ".pio/build/${{ matrix.env }}/firmware.bin" "out/${{ matrix.name }}.bin"
+          (cd out && sha256sum "${{ matrix.name }}.bin" > "${{ matrix.name }}.bin.sha256")
+          ls -l out
+          cat out/*.sha256
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.name }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
