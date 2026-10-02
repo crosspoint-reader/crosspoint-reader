@@ -75,6 +75,7 @@ add_subdirectory(absolute_grayscale)
 
 add_subdirectory(sd_card_font)
 add_subdirectory(glyph_bitmap)
+add_subdirectory(zip_eocd)
 
 add_subdirectory(reader_session)
 add_subdirectory(plugin_manifest_classification)

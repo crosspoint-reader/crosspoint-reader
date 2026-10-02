@@ -3,8 +3,12 @@
 #include <HalStorage.h>
 #include <InflateStream.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
+#include <cstring>
+
+#include "ZipEocd.h"
 
 struct ZipInflateCtx {
   HalFile* file = nullptr;
@@ -58,6 +62,24 @@ size_t zipFillCallback(void* vctx, const uint8_t** data) {
 
   *data = ctx->readBuf;
   return bytesRead;
+}
+
+// The definitive check for an EOCD candidate: the bytes at its central
+// directory offset must actually start a central directory record. Costs one
+// 4-byte read; a scan sees at most a handful of candidates, and usually none
+// besides the real record. Zero-entry candidates are rejected without
+// reading; see zipEocdProbeAccepts().
+bool centralDirSignatureMatches(HalFile& file, const ZipEocdCandidate& c, size_t fileSize) {
+  if (c.totalEntries == 0) return false;
+  // fileSize >= 22 is guaranteed by the caller, so fileSize - 4 can't wrap;
+  // the addition-form check could (32-bit size_t on the ESP32 targets).
+  if (c.centralDirOffset > fileSize - 4) return false;
+  if (!file.seek(c.centralDirOffset)) return false;
+  uint8_t bytes[4];
+  if (file.read(bytes, sizeof(bytes)) != static_cast<int>(sizeof(bytes))) return false;
+  uint32_t signature;
+  memcpy(&signature, bytes, sizeof(signature));
+  return zipEocdProbeAccepts(c, signature);
 }
 }  // namespace
 
@@ -234,44 +256,111 @@ bool ZipFile::loadZipDetails() {
     return false;  // Minimum EOCD size is 22 bytes
   }
 
-  // We scan the last 1KB (or the whole file if smaller) for the EOCD signature
-  // 0x06054b50 is stored as 0x50, 0x4b, 0x05, 0x06 in little-endian
-  const int scanRange = fileSize > 1024 ? 1024 : fileSize;
-  const auto buffer = static_cast<uint8_t*>(malloc(scanRange));
+  // Scan backwards from end-of-file for the EOCD signature (0x06054b50).
+  // ZIP spec allows up to 65535+22 bytes of comment after EOCD, so the
+  // signature can be up to 65557 bytes from the end.  To avoid a large
+  // heap allocation on the memory-constrained ESP32-C3, we use a fixed
+  // 4KB window that starts at end-of-file and steps backwards only when
+  // no acceptable record is found, checking the window nearest EOF first.
+  // This keeps the common case (no archive comment) to a single 4KB read
+  // instead of scanning the full 65557-byte region.  Each step overlaps
+  // the previous window by 21 bytes so an EOCD record spanning a window
+  // boundary is never missed (EOCD minimum size is 22 bytes).
+  //
+  // A signature match alone is not proof of the EOCD: the archive comment
+  // FOLLOWS the record, so a PK\x05\x06 byte sequence inside the comment
+  // sits nearer EOF than the real record and would be found first.  Every
+  // candidate is therefore validated before it is accepted -- see
+  // isZipEocdSelfConsistent() and centralDirSignatureMatches().  A fully
+  // self-consistent record wins immediately; failing that, the nearest-EOF
+  // candidate whose central directory probe succeeds is remembered and used
+  // as a fallback, which keeps archives with trailing data (accepted by the
+  // old fixed-1KB scan) opening.
+  constexpr size_t BUF_SIZE = 4096;
+  constexpr size_t MAX_SCAN = 65557;
+  constexpr size_t OVERLAP = 21;  // EOCD min size - 1
+
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(BUF_SIZE);
   if (!buffer) {
-    LOG_ERR("ZIP", "Failed to allocate memory for EOCD scan buffer");
+    LOG_ERR("ZIP", "Failed to allocate EOCD scan buffer (%zu bytes)", BUF_SIZE);
     return false;
   }
 
-  file.seek(fileSize - scanRange);
-  file.read(buffer, scanRange);
+  const size_t totalScannable = fileSize < MAX_SCAN ? fileSize : MAX_SCAN;
+  const size_t scanFloor = fileSize - totalScannable;
 
-  // Scan backwards for the signature
-  int foundOffset = -1;
-  for (int i = scanRange - 22; i >= 0; i--) {
-    constexpr uint32_t signature = 0x06054b50;
-    if (*reinterpret_cast<uint32_t*>(&buffer[i]) == signature) {
-      foundOffset = i;
-      break;
+  bool haveFallback = false;
+  size_t fallbackOffset = 0;
+  ZipEocdCandidate fallback{};
+
+  size_t windowEnd = fileSize;
+  while (true) {
+    const size_t windowStart = windowEnd > scanFloor + BUF_SIZE ? windowEnd - BUF_SIZE : scanFloor;
+    const size_t windowLen = windowEnd - windowStart;
+    if (windowLen < 22) break;  // Not enough bytes left to hold an EOCD record
+
+    if (!file.seek(windowStart)) {
+      LOG_ERR("ZIP", "EOCD scan: seek to %zu failed", windowStart);
+      return false;
     }
+
+    size_t filled = 0;
+    while (filled < windowLen) {
+      const int n = file.read(buffer.get() + filled, windowLen - filled);
+      if (n <= 0) {
+        LOG_ERR("ZIP", "EOCD scan: read failed in window [%zu, %zu), got %zu/%zu bytes", windowStart, windowEnd, filled,
+                windowLen);
+        return false;
+      }
+      filled += static_cast<size_t>(n);
+    }
+
+    // Search this window from the end towards the start so that, among
+    // acceptable records, the one nearest EOF wins.
+    for (int i = static_cast<int>(windowLen) - static_cast<int>(ZIP_EOCD_MIN_SIZE); i >= 0; i--) {
+      uint32_t signature;
+      memcpy(&signature, &buffer[i], sizeof(signature));
+      if (signature != ZIP_EOCD_SIGNATURE) continue;
+
+      const size_t recordOffset = windowStart + static_cast<size_t>(i);
+      const ZipEocdCandidate candidate = parseZipEocdCandidate(&buffer[i]);
+
+      if (isZipEocdSelfConsistent(candidate, recordOffset, fileSize)) {
+        if (centralDirSignatureMatches(file, candidate, fileSize)) {
+          zipDetails.totalEntries = candidate.totalEntries;
+          zipDetails.centralDirOffset = candidate.centralDirOffset;
+          zipDetails.isSet = true;
+          LOG_DBG("ZIP", "EOCD found at offset %zu in file", recordOffset);
+          return true;
+        }
+        LOG_DBG("ZIP", "EOCD candidate at %zu is self-consistent but its central directory probe failed; continuing",
+                recordOffset);
+      } else if (!haveFallback && centralDirSignatureMatches(file, candidate, fileSize)) {
+        // Comment doesn't run to EOF (trailing data after the archive?), but
+        // the candidate points at a real central directory.  Remember the
+        // nearest-EOF such record; keep scanning for a self-consistent one.
+        haveFallback = true;
+        fallbackOffset = recordOffset;
+        fallback = candidate;
+      }
+    }
+
+    if (windowStart <= scanFloor) break;
+    windowEnd = windowStart + OVERLAP;
   }
 
-  if (foundOffset == -1) {
-    LOG_ERR("ZIP", "EOCD signature not found in zip file");
-    free(buffer);
-    return false;
+  if (haveFallback) {
+    zipDetails.totalEntries = fallback.totalEntries;
+    zipDetails.centralDirOffset = fallback.centralDirOffset;
+    zipDetails.isSet = true;
+    LOG_DBG("ZIP",
+            "EOCD at offset %zu accepted via central-directory probe (comment does not reach EOF; trailing data?)",
+            fallbackOffset);
+    return true;
   }
 
-  // Now extract the values we need from the EOCD record
-  // Relative positions within EOCD:
-  // Offset 10: Total number of entries (2 bytes)
-  // Offset 16: Offset of start of central directory with respect to the starting disk number (4 bytes)
-  zipDetails.totalEntries = *reinterpret_cast<uint16_t*>(&buffer[foundOffset + 10]);
-  zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
-  zipDetails.isSet = true;
-
-  free(buffer);
-  return true;
+  LOG_ERR("ZIP", "No valid EOCD record found in zip file (scanned last %zu bytes)", totalScannable);
+  return false;
 }
 
 bool ZipFile::open() {
