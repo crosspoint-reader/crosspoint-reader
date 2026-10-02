@@ -1,5 +1,6 @@
 #include "EpdFont.h"
 
+#include <BidiUtils.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -19,11 +20,16 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
   int lastBaseTop = 0;
+  int lastBaseHeight = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    const bool isCombining = utf8IsCombiningMark(cp);
+    // Match drawText()'s mark predicate: utf8IsCombiningMark() misses RTL NSM
+    // marks (Arabic harakat, Hebrew niqqud), which BidiUtils::isTransparentMark
+    // catches. Measurement must treat the same codepoints as marks that
+    // rendering overlays, or it records them as base glyphs and mismeasures.
+    const bool isCombining = utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp);
 
     if (!isCombining) {
       cp = applyLigatures(cp, string);
@@ -40,12 +46,16 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
         lastBaseLeft = 0;
         lastBaseWidth = 0;
         lastBaseTop = 0;
+        lastBaseHeight = 0;
       }
       continue;
     }
 
     const combiningMark::Anchor anchor = combiningMark::anchorFor(cp);
     const int raiseBy = isCombining ? combiningMark::raiseAboveBase(anchor, glyph->top, glyph->height, lastBaseTop) : 0;
+    const int lowerBy = isCombining ? combiningMark::lowerBelowBase(anchor, glyph->top, glyph->height, lastBaseTop,
+                                                                    lastBaseHeight, data->descender)
+                                    : 0;
 
     if (!isCombining && prevCp != 0) {
       const auto kernFP = getKerning(prevCp, cp);  // 4.4 fixed-point kern
@@ -55,7 +65,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     const int glyphBaseX = isCombining ? combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                                    glyph->left, glyph->width)
                                        : lastBaseX;
-    const int glyphBaseY = startY - raiseBy;
+    const int glyphBaseY = startY - raiseBy + lowerBy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
     *maxX = std::max(*maxX, glyphBaseX + glyph->left + glyph->width);
@@ -66,6 +76,7 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       lastBaseLeft = glyph->left;
       lastBaseWidth = glyph->width;
       lastBaseTop = glyph->top;
+      lastBaseHeight = glyph->height;
       prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
       prevCp = cp;
     }
