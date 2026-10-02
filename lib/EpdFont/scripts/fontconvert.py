@@ -51,6 +51,9 @@ intervals = [
     ### Latin Extended-A ###
     # Eastern European and Baltic languages
     (0x0100, 0x017F),
+    ### Latin Extended-B (Azerbaijani) ###
+    # Schwa and turned e used by Azerbaijani Ə/ə
+    (0x018F, 0x018F),
     ### Latin Extended-B (Vietnamese subset only) ###
     # Only Ơ/ơ (U+01A0-01A1), Ư/ư (U+01AF-01B0) for Vietnamese
     (0x01A0, 0x01A1),
@@ -59,6 +62,7 @@ intervals = [
     # Croatian digraphs (DŽ/Lj/Nj), Pinyin caron variants,
     # European diacritical variants, Romanian (Ș/ș/Ț/ț)
     (0x01C4, 0x021F),
+    (0x0259, 0x0259),
     ### Vietnamese Extended ###
     # All precomposed Vietnamese characters with tone marks
     # Ả Ấ Ầ Ẩ Ẫ Ậ Ắ Ằ Ẳ Ẵ Ặ Ẹ Ẻ Ẽ Ế Ề Ể Ễ Ệ Ỉ Ị Ọ Ỏ Ố Ồ Ổ Ỗ Ộ Ớ Ờ Ở Ỡ Ợ Ụ Ủ Ứ Ừ Ử Ữ Ự Ỳ Ỵ Ỷ Ỹ
