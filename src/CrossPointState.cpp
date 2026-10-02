@@ -22,6 +22,20 @@ void pushRecentIndex(uint16_t* recentImages, uint8_t& recentPos, uint8_t& recent
   if (recentFill < CrossPointState::SLEEP_RECENT_COUNT) recentFill++;
 }
 
+void getLCG(uint32_t packedState, uint32_t packedCount, uint32_t& seed, uint32_t& state, uint16_t& indexesLeft,
+            uint16_t& indexesTotal) {
+  indexesLeft = packedCount >> 16;
+  indexesTotal = packedCount & 0xffff;
+  seed = packedState >> 16;
+  state = packedState & 0xffff;
+}
+
+void setLCG(uint32_t& packedState, uint32_t& packedCount, uint32_t seedVal, uint32_t stateVal, uint16_t indexesLeftVal,
+            uint16_t indexesTotalVal) {
+  packedCount = (static_cast<uint32_t>(indexesLeftVal) << 16) | indexesTotalVal;
+  packedState = (seedVal << 16) | (stateVal & 0xffff);
+}
+
 }  // namespace
 
 bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
@@ -40,16 +54,38 @@ void CrossPointState::pushRecentOverlaySleep(uint16_t idx) {
   pushRecentIndex(recentOverlaySleepImages, recentOverlaySleepPos, recentOverlaySleepFill, idx);
 }
 
+void CrossPointState::getSleepLCG(uint32_t& seed, uint32_t& state, uint16_t& indexesLeft,
+                                  uint16_t& indexesTotal) const {
+  getLCG(sleepLcgState, sleepLcgCount, seed, state, indexesLeft, indexesTotal);
+}
+
+void CrossPointState::getSleepOverlayLCG(uint32_t& seed, uint32_t& state, uint16_t& indexesLeft,
+                                         uint16_t& indexesTotal) const {
+  getLCG(sleepOverlayLcgState, sleepOverlayLcgCount, seed, state, indexesLeft, indexesTotal);
+}
+
+void CrossPointState::setSleepLCG(uint32_t seed, uint32_t state, uint16_t indexesLeft, uint16_t indexesTotal) {
+  setLCG(sleepLcgState, sleepLcgCount, seed, state, indexesLeft, indexesTotal);
+}
+
+void CrossPointState::setSleepOverlayLCG(uint32_t seed, uint32_t state, uint16_t indexesLeft, uint16_t indexesTotal) {
+  setLCG(sleepOverlayLcgState, sleepOverlayLcgCount, seed, state, indexesLeft, indexesTotal);
+}
+
 void CrossPointState::toJson(JsonDocument& doc) const {
   doc["openEpubPath"] = openEpubPath;
   JsonArray recentArr = doc["recentSleepImages"].to<JsonArray>();
   for (int i = 0; i < SLEEP_RECENT_COUNT; i++) recentArr.add(recentSleepImages[i]);
   doc["recentSleepPos"] = recentSleepPos;
   doc["recentSleepFill"] = recentSleepFill;
+  doc["sleepLcgCount"] = sleepLcgCount;
+  doc["sleepLcgState"] = sleepLcgState;
   JsonArray recentOverlayArr = doc["recentOverlaySleepImages"].to<JsonArray>();
   for (int i = 0; i < SLEEP_RECENT_COUNT; i++) recentOverlayArr.add(recentOverlaySleepImages[i]);
   doc["recentOverlaySleepPos"] = recentOverlaySleepPos;
   doc["recentOverlaySleepFill"] = recentOverlaySleepFill;
+  doc["sleepOverlayLcgCount"] = sleepOverlayLcgCount;
+  doc["sleepOverlayLcgState"] = sleepOverlayLcgState;
   doc["readerActivityLoadCount"] = readerActivityLoadCount;
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
@@ -82,6 +118,12 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   }
   recentOverlaySleepFill = doc["recentOverlaySleepFill"] | static_cast<uint8_t>(0);
   recentOverlaySleepFill = static_cast<uint8_t>(std::min(static_cast<int>(recentOverlaySleepFill), actualOverlayCount));
+
+  sleepLcgCount = doc["sleepLcgCount"] | static_cast<uint32_t>(0);
+  sleepLcgState = doc["sleepLcgState"] | static_cast<uint32_t>(0);
+
+  sleepOverlayLcgCount = doc["sleepOverlayLcgCount"] | static_cast<uint32_t>(0);
+  sleepOverlayLcgState = doc["sleepOverlayLcgState"] | static_cast<uint32_t>(0);
 
   if (recentSleepFill == 0 && !doc["lastSleepImage"].isNull()) {
     const uint8_t legacy = doc["lastSleepImage"] | static_cast<uint8_t>(UINT8_MAX);
