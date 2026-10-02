@@ -53,3 +53,6 @@
   (compile error in `HalSystem.cpp`). Fixed in 805c76f by listing the flags
   explicitly; both firmwares now build. Sizes and checksums in DECISIONS.md.
 - Downloads: https://github.com/noah-pi/pocket-library/actions/runs/37042994823
+- **Factory backup done:** 16,777,216 bytes via esptool in download mode.
+  Unit is not USB-locked. Next: download the official
+  `crosspoint-1.6.5-x4pro.bin`, then flash stock 1.6.5.

@@ -156,15 +156,28 @@ to PlatformIO's private certifi bundle. None of this is needed on a Mac.
 
 | Quantity | Value | Date | Notes |
 |---|---|---|---|
-| PSRAM size | | | `esp_psram_get_size()` |
+| Chip | ESP32-S3 (QFN56) rev v0.2, dual core 240 MHz, 40 MHz crystal | 2026-10-02 | esptool 5.4.0 |
+| PSRAM size | 8 MB embedded (AP_3v3) per esptool; firmware value pending | 2026-10-02 | confirm with `esp_psram_get_size()` |
 | PSRAM free at Diagnostics | | | |
 | Internal RAM free / largest | | | |
-| Flash size / speed | | | |
+| Flash size / speed | 16 MB (full read = 16,777,216 bytes); speed pending | 2026-10-02 | esptool read-flash |
 | SD bus | | | expect "SDMMC 1-bit @ 20.0 MHz" |
 | Panel controller | | | Settings → About → Display Controller |
 | SD sequential read | | | |
 | SD random 4 KB avg / p95 / max | | | file used, size |
 | SD sequential write | | | only if scratch file was written |
+
+### Factory backup (2026-10-02)
+
+- Owner's unit is **not USB-locked**. Stock firmware enumerates as
+  "XTEink X4 Pro" (USB 303a:4002), mass storage only, no serial port.
+  Download mode (hold **left side button**, press power) exposes
+  USB-Serial/JTAG at `/dev/cu.usbmodem14301`. This confirms the SDK note
+  that the left button is GPIO0.
+- Full 16 MB read with esptool 5.4.0 in 139.9 s (959 kbit/s), saved as
+  `X4Pro-factory-backup.bin` on the owner's flash drive. Restore command,
+  kept here for emergencies (writes everything back exactly):
+  `esptool --chip esp32s3 --port <port> write-flash 0 X4Pro-factory-backup.bin`
 
 ### Build outputs (GitHub Actions run 37042994823, commit 805c76f, 2026-10-02)
 
