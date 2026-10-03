@@ -120,10 +120,11 @@ void buildSettingsSections(SettingsBySection& out) {
   auto& controls = sectionOf(out, SettingsSection::Controls);
   auto& library = sectionOf(out, SettingsSection::Library);
   auto& network = sectionOf(out, SettingsSection::Network);
-  auto& software = sectionOf(out, SettingsSection::Software);
+  auto& system = sectionOf(out, SettingsSection::System);
 
   // Language leads so a user stuck in an unfamiliar language finds it first.
   general.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  general.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   reader.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   reader.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   if (BoardConfig::hasHomeKey()) {
@@ -142,7 +143,6 @@ void buildSettingsSections(SettingsBySection& out) {
   if (halClock.isAvailable()) {
     general.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
   }
-  general.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   reader.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
   library.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
 
@@ -152,10 +152,10 @@ void buildSettingsSections(SettingsBySection& out) {
 
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
-  software.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
-  software.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
-  software.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
-  software.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
+  system.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  system.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  system.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
+  system.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
 }
 
 SettingsSectionActivity::SettingsSectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

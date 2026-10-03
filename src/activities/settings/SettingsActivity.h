@@ -187,7 +187,7 @@ class SettingsActivity final : public UiListActivity {
   int16_t subtitleWidth_ = -1;  // width the current subtitle choice was measured at
 
   void rebuildRows();
-  void chooseSubtitles(UiScreen& screen, const freeink::ui::TextStyle& style);
+  void chooseSubtitles(UiScreen& screen, const freeink::ui::ListProps& props);
   void openSection(SettingsSection section);
 
   int listCount() const override { return static_cast<int>(SETTINGS_SECTION_COUNT); }
