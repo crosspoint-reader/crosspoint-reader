@@ -417,6 +417,15 @@ if (parsedSize != fileSize) {
 }
 ```
 
+The anchor map may include one negative lookup entry for a fragment searched by a
+completed build but not found among rendered destinations. Its key is the byte
+`0x01` followed by the requested ID, and its page field is `0`. Since XML IDs
+cannot contain U+0001, it cannot collide with a destination; older readers see an
+unrelated key. Navigation treats this record as a checked miss, not a page target,
+so the same missing fragment does not repeatedly rebuild the complete cache.
+Partial builds never record absence. The marker uses the existing string/page
+encoding and does not change the section format version.
+
 ## CLX1 — library index (`.crosspoint/library.idx`)
 
 Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. One

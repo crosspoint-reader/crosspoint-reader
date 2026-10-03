@@ -161,3 +161,39 @@ TEST(Utf8ComposeNfcInPlace, PreservesMalformedAndTruncatedBytes) {
   utf8ComposeNfcInPlace(buffer);
   EXPECT_STREQ(buffer, "\xFF\xC3\xA9\xE1\x84");
 }
+
+TEST(Utf8ComposeNfcInPlace, TracksTextFollowingComposition) {
+  char buffer[] = "e\xCC\x81X";
+  size_t offset = 3;
+  utf8ComposeNfcInPlace(buffer, &offset);
+  EXPECT_STREQ(buffer, "\xC3\xA9X");
+  EXPECT_EQ(offset, 2u);
+}
+
+TEST(Utf8ComposeNfcInPlace, TracksComposedMarksToTheirBase) {
+  for (const size_t markOffset : {1u, 3u}) {
+    char buffer[] = "a\xCC\x82\xCC\x81X";
+    size_t offset = markOffset;
+    utf8ComposeNfcInPlace(buffer, &offset);
+    EXPECT_STREQ(buffer, "\xE1\xBA\xA5X");
+    EXPECT_EQ(offset, 0u);
+  }
+}
+
+TEST(Utf8ComposeNfcInPlace, TracksHangulCompositionAndFollowingText) {
+  for (const size_t inputOffset : {3u, 6u, 9u}) {
+    char buffer[] = "\xE1\x84\x92\xE1\x85\xA1\xE1\x86\xABX";
+    size_t offset = inputOffset;
+    utf8ComposeNfcInPlace(buffer, &offset);
+    EXPECT_STREQ(buffer, "\xED\x95\x9CX");
+    EXPECT_EQ(offset, inputOffset == 9u ? 3u : 0u);
+  }
+}
+
+TEST(Utf8ComposeNfcInPlace, TracksEndOfBufferAfterComposition) {
+  char buffer[] = "e\xCC\x81";
+  size_t offset = 3;
+  utf8ComposeNfcInPlace(buffer, &offset);
+  EXPECT_STREQ(buffer, "\xC3\xA9");
+  EXPECT_EQ(offset, 2u);
+}

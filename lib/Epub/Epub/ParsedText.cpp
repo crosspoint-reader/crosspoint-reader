@@ -378,6 +378,25 @@ uint32_t ParsedText::visibleOffsetAt(const size_t wordIndex) const {
   return visibleOffsetBaseAt(wordIndex) + wordVisibleOffsetDeltas[wordIndex];
 }
 
+uint32_t ParsedText::getWordVisibleEndOffsetAt(const size_t wordIndex) const {
+  if (wordIndex >= words.size()) return 0;
+  const uint32_t start = visibleOffsetAt(wordIndex);
+  uint32_t end = start;
+  const auto text = wordAt(wordIndex);
+  const auto* ptr = reinterpret_cast<const unsigned char*>(text.data());
+  const auto* const limit = ptr + text.size();
+  while (ptr < limit) {
+    utf8NextCodepoint(&ptr);
+    ++end;
+  }
+  // A split remainder's source offset excludes the prefix's display-only hyphen.
+  if (wordIndex + 1 < words.size()) {
+    const uint32_t next = visibleOffsetAt(wordIndex + 1);
+    if (next > start) end = std::min(end, next);
+  }
+  return end;
+}
+
 void ParsedText::pushVisibleOffset(const uint32_t offset) {
   uint32_t base = visibleOffsetBase;
   if (wordVisibleOffsetDeltas.empty()) {
