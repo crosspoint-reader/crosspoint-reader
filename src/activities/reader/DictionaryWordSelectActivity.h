@@ -34,8 +34,11 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t y;
     int16_t width;
     uint16_t row;
-    const char* text;
+    const char* text;     // logical text, for the dictionary lookup
+    const char* display;  // TextBlock::displayForm(): what layout measured, or nullptr
     EpdFontFamily::Style style;
+
+    GfxRenderer::LaidOutText laidOut() const { return {text, display}; }
   };
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };

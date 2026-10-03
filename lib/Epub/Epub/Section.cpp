@@ -1,5 +1,6 @@
 #include "Section.h"
 
+#include <ComplexShaper.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -56,7 +57,11 @@ namespace {
 //      Justification no longer stretches between syllables.
 // v49 was used by pre-release builds with a different header layout.
 // v50: Paragraph indentation width in the header for cache validation.
-constexpr uint8_t SECTION_FILE_VERSION = 50;
+// v51: Indic text is measured as shaped glyphs (OpenType conjuncts, reph, positioned
+//      marks, in the book's language; reordered vowel signs for fonts without shaping
+//      data), and TextBlocks store each complex-script word's drawn form so page turns
+//      never shape.
+constexpr uint8_t SECTION_FILE_VERSION = 51;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -461,6 +466,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->parser->setTextSpacing(spec.characterSpacing, spec.wordSpacingPercent);
   ctx->parser->setParagraphIndentSpaces(spec.paragraphIndentSpaces);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
+  ComplexShaper::setDocumentLanguage(epub->getLanguage().c_str());
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {
