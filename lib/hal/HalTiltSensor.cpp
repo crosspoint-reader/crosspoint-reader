@@ -4,15 +4,6 @@
 
 HalTiltSensor halTiltSensor;  // Singleton instance
 
-bool HalTiltSensor::readGyro(float& gx, float& gy, float& gz) const {
-  Imu::Sample sample;
-  if (!_sdkImu.read(sample)) return false;
-  gx = sample.gx;
-  gy = sample.gy;
-  gz = sample.gz;
-  return true;
-}
-
 void HalTiltSensor::begin() {
   _available = _sdkImu.begin();
   if (_available) {
@@ -78,6 +69,7 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
 
   // If disabled, skip the rest of the polling logic and avoid unnecessary I2C traffic in non-reader activities
   if ((mode == CrossPointTiltPageTurn::TILT_OFF) || !inReader) {
+    _pose[0] = _pose[1] = _pose[2] = _flickDir = 0;
     return;
   }
 
@@ -92,10 +84,11 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
   }
   _lastPollMs = now;
 
-  float gx, gy, gz;
-  if (!readGyro(gx, gy, gz)) {
+  Imu::Sample sample;
+  if (!_sdkImu.read(sample)) {
     return;
   }
+  const float gx = sample.gx, gy = sample.gy, g[3] = {sample.ax, sample.ay, sample.az};
 
   // Map the gyro axis to left/right tilt based on reader orientation.
   // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.
@@ -118,6 +111,22 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
       break;
   }
 
+  // A flick turns the page once at rest near its pose; a pick-up stays turned, and lifting adds to gravity.
+  if (_flickDir) {
+    float nowSq = 0, offSq = 0;
+    for (int i = 0; i < 3; ++i) {
+      nowSq += g[i] * g[i];
+      offSq += (g[i] - _pose[i]) * (g[i] - _pose[i]);
+    }
+    if (now - _lastTiltMs > FLICK_WAIT_MS) {
+      _flickDir = 0;
+      LOG_INF("GYR", "Tilt dropped: device picked up");
+    } else if (fabsf(tiltAxis) < CALM_RATE_DPS && fabsf(sqrtf(nowSq) - 1) < REST_G && offSq < POSE_G * POSE_G) {
+      (_flickDir > 0 ? _tiltForwardEvent : _tiltBackEvent) = true;
+      _flickDir = 0;
+    }
+  }
+
   if (_inTilt) {
     // Wait for device to return to neutral before allowing next trigger
     if (fabsf(tiltAxis) < NEUTRAL_RATE_DPS) {
@@ -127,19 +136,23 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
     // Check for new tilt gesture (with cooldown)
     if ((now - _lastTiltMs) >= COOLDOWN_MS) {
       if (tiltAxis > RATE_THRESHOLD_DPS) {
-        _tiltForwardEvent = true;
+        if (!_flickDir) _flickDir = 1;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
         LOG_INF("GYR", "Forward Trigger=(%.1f) dps", tiltAxis);
       } else if (tiltAxis < -RATE_THRESHOLD_DPS) {
-        _tiltBackEvent = true;
+        if (!_flickDir) _flickDir = -1;
         _hadActivity = true;
         _inTilt = true;
         _lastTiltMs = now;
         LOG_INF("GYR", "Backward Trigger=(%.1f) dps", tiltAxis);
       }
     }
+  }
+
+  if (!_flickDir) {
+    for (int i = 0; i < 3; ++i) _pose[i] += (g[i] - _pose[i]) / 8;
   }
 }
 
