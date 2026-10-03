@@ -772,6 +772,13 @@ void EpubReaderActivity::loop() {
       case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
         startClipSelection();
         return;
+      case CrossPointSettings::LP_MENU_FOOTNOTES:
+        if (footnoteDepth > 0) {
+          restoreSavedPosition();
+        } else {
+          openFootnoteSelect(false);
+        }
+        return;
       case CrossPointSettings::LP_MENU_READER_MENU:
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
@@ -1196,6 +1203,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_BOOKMARK:
     case CrossPointSettings::LP_MENU_DICTIONARY:
     case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
+    case CrossPointSettings::LP_MENU_FOOTNOTES:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
       return KOREADER_STORE.hasCredentials() ? ReaderUtils::GO_HOME_MS : 0;
