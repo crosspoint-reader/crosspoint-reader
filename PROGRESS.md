@@ -142,3 +142,66 @@ containing "Forbidden City"; see the session summary for the download.
   application/pdf and application/wasm). The device reads neither. Owner dropped
   it from `library.toml` (file left on the SSK drive); converting the PDFs is
   a possible later job.
+
+## 2026-10-03 — Card built; Milestone 2 passed; Milestone 3 written
+
+**Owner, on the Mac and the device**
+- `cardbuilder.py copy --card /Volumes/PocketLib --verify`: 30 files, 74.5 GB,
+  9 collections, every file read back from the card and matched. About
+  15 MB/s writing, so roughly 9 minutes per 4.2 GB part with the read-back.
+- After eject and reinsert, read from the card on the Mac: Wikipedia's 13
+  parts open as one archive (19,191,219 titles), "Forbidden City" reads in
+  about 50 ms, and a Wiktionary prefix search works. **M2 passed.**
+- Flashed `pocketlib-x4pro.bin` (13758ff0…) with esptool in download mode:
+  `erase-region 0xe000 0x2000` (otadata, so the unit boots app0), then
+  `write-flash 0x10000`. Partition table read from the factory backup: app0
+  and app1 are 7.88 MB each. The file browser shows `/library` folders empty,
+  as expected: it lists only formats it can open.
+
+**What changed (Milestone 3)**
+- `lib/zim/src/ZimHtml.{h,cpp}`: streaming HTML → XHTML cleaner (see
+  DECISIONS). 10 new tests in `lib/zim/test/HtmlCleanTest.cpp`, checked with
+  the firmware's own expat: every HTML entry of the real Wikipedia sample,
+  truncated at every 97th byte and randomly mangled 200 times, always
+  parses. 45/45 pass under ASan/UBSan.
+- `test/pocketlib_article_layout/`: every sample article cleaned and laid out
+  by CrossPoint's real `ChapterHtmlSlimParser`, as the device does it; pages
+  round-trip through the page file. 4/4 pass.
+- `src/pocketlib/PocketLibrary.{h,cpp}`: reads `/library/manifest.json`,
+  opens split ZIMs from the card through HalStorage, clusters in PSRAM,
+  title index checked against the ZIM.
+- `src/pocketlib/LibraryActivities.{h,cpp}`: the shelf (collections + Books)
+  and a collection screen (Main page, Random article, Go to title, About,
+  Last article timings).
+- `src/pocketlib/ArticleActivity.{h,cpp}`: opens an article and pages
+  through it with the reader's own fonts and settings.
+- Home → Library now opens the shelf (one `#ifdef` in `HomeActivity.cpp`).
+- CI: review branches build too and publish to a **preview** pre-release;
+  the host workflow runs the article-layout test.
+- Firmware: 5,734,480 bytes locally; app slot 87.4% used.
+
+**Not done, and why**
+- Nothing has run on the device yet; timings are unmeasured.
+- No live search list (M4), no link following or back stack (M5), no saved
+  reading position, no images (nopic files have none).
+
+**For the owner (Milestone 3 device checklist)** — backups confirmed earlier
+(factory flash backup and the official 1.6.5 `.bin`, both on the SSK drive).
+1. Download `pocketlib-x4pro.bin` and its `.sha256` from the **preview**
+   pre-release on the fork's Releases page. Check: `shasum -a 256 pocketlib-x4pro.bin`.
+2. Download mode (hold the left side button, press power), then
+   `~/esptool-env/bin/esptool --chip esp32s3 --port /dev/cu.usbmodem14301 --baud 921600 write-flash 0x10000 pocketlib-x4pro.bin`.
+   Success: `Hash of data verified.` Unplug, power on.
+3. Home → **Library**. Success: nine collections with sizes and dates, then
+   **Books**.
+4. **Wikipedia**. Success: About reads "19,191,219 titles, search index OK".
+5. **Go to title**, type `forbidden city`, confirm. Success: an "Opening"
+   screen, then the article's heading and first paragraph; page turns work;
+   the status bar counts pages.
+6. Back. Photograph the **Last article** row (read / clean / first page /
+   all pages).
+7. **Random article** three times; photograph the timings each time.
+8. Repeat 5–7 in Wiktionary and MedlinePlus.
+9. Note anything wrong: junk text, missing sections, freezes, crashes.
+
+**Next**: owner runs the checklist; then Milestone 4 (live search).

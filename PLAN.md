@@ -1,7 +1,7 @@
 # Pocket Library — Plan
 
 Base: CrossPoint **1.6.5** (tag `1.6.5`, commit `93e98bb`), env `x4pro`.
-Status date: 2026-10-01.
+Status date: 2026-10-03.
 
 ## Status
 
@@ -9,8 +9,8 @@ Status date: 2026-10-01.
 |---|---|---|
 | 0 | Foundation: fork, build, docs, debug screen, first flash | **Passed 2026-10-02** (owner sign-off) |
 | 1 | ZIM core library + host tests + Mac CLI | **Passed 2026-10-02** (owner sign-off) |
-| 2 | Card builder (Python, Mac) | **In progress**: search index done |
-| 3 | First article on device | — |
+| 2 | Card builder (Python, Mac) | **Passed 2026-10-03**: card built, copied with `--verify`, read back on the Mac (Standard Ebooks and Wiktionary→StarDict still to add) |
+| 3 | First article on device | **Code done 2026-10-03; waiting for the device test** |
 | 4 | Search | — |
 | 5 | Full reader | — |
 | 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | — |

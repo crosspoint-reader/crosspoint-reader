@@ -63,6 +63,8 @@ Release tags are what we rebase onto.
 | `platformio.ini` | `extra_configs` also lists `platformio.pocketlib.ini` | our envs |
 | `CLAUDE.md` | symlink to `AGENTS.md` replaced by our working rules, which import `@AGENTS.md` | brief §1 |
 | `src/activities/settings/AboutActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: 5 taps on "Firmware" open Diagnostics | hidden debug screen |
+| `src/activities/home/HomeActivity.cpp` | `#ifdef POCKET_LIBRARY`: Home's **Library** opens our shelf; CrossPoint's book library is the shelf's last row | the library's front door (M3) |
+| `test/CMakeLists.txt` | one `add_subdirectory(pocketlib_article_layout)` | real articles through the layout engine on the host |
 
 ## 2026-10-01 — Licensing layout
 
@@ -279,6 +281,67 @@ The card builder now skips collections that are not downloaded yet instead of
 stopping, and refuses to `--prune` in that run so a skipped collection's files
 on the card are never taken for stale.
 
+## 2026-10-03 — Milestone 3: how an article reaches the screen
+
+- **Reuse CrossPoint's EPUB layout engine instead of writing a renderer.**
+  `ChapterHtmlSlimParser` already does fonts (built-in and SD), justification,
+  hyphenation, headings, lists, tables, bold/italic, sub/superscript and the
+  page cache format, and is tested on hardware. It needs well-formed XHTML
+  from a file; Kiwix articles are browser HTML5. So a new streaming cleaner,
+  `lib/zim/src/ZimHtml.{h,cpp}` (`zim::cleanArticleHtml`), sits between them.
+  It runs on the host too, so it is tested there, and the parser is driven
+  with no `Epub` object, no CSS and images off.
+- **Cleaner rules.** Keeps h1–h6, p, lists, block quotes, tables
+  (colspan/rowspan), b/i/u/s, sub/sup, br/hr, ruby. Renames to tags the parser
+  lays out (`section`/`dl`/`pre`/`figcaption` → `div`, `dd` → `blockquote`,
+  `dt`/`caption` → `p`, `em`/`cite` → `i`, `strong` → `b`). Drops, with their
+  content: head, script, style, media, forms, nav, figures; elements whose
+  class is MediaWiki or mwoffliner chrome (edit links, navboxes, hatnotes,
+  message boxes, thumbnails, citation markers `sup.reference`, reference
+  lists, TOC) or that are `display:none`. Unknown tags are unwrapped, keeping
+  their text. Math shows its TeX source (`alttext`) in italics. Entities
+  are decoded (249 named, numeric, Windows-1252 quirks), bad UTF-8 becomes
+  U+FFFD, characters XML forbids are removed, HTML's implied end tags (`p`,
+  `li`, `dt`/`dd`, `tr`/`td`/`th`) are applied, and every element is closed.
+  Memory: the open-element stack plus a 4 KB output buffer.
+- **Links are unwrapped for now.** The parser underlines every internal link,
+  and a Wikipedia paragraph has dozens. Following links is Milestone 5; the
+  cleaner already has `keepLinks` for it (tested).
+- **Reference lists are dropped with their markers.** Without the `[1]`
+  markers the numbered list at the end means nothing. Revisit in M5 if
+  footnote popups are wanted.
+- **Pages go to a file, not RAM.** Laid-out pages are serialized to
+  `/.pocketlib/article.pages` as they are made (offsets in RAM, 4 bytes per
+  page); the screen holds one page. Small allocations would otherwise pile up
+  in the 183 KB of internal RAM. The first page shows as soon as it exists;
+  the rest are laid out in 60 ms slices between page turns, only while the
+  screen task is idle (same render-lock rule as the EPUB reader).
+- **Cluster cache: 2 × ~2 MiB in PSRAM** (not the brief's 3): PSRAM also
+  holds the article's HTML (up to ~1 MB) while it is cleaned, and SD fonts.
+  Large `malloc`s go to PSRAM on this build (`CONFIG_SPIRAM_USE_MALLOC`,
+  threshold 4 KB), so the HTML string does too.
+- **Ways in for M3**: main page, random article (uniform over the front-article
+  list), and "Go to title", which uses the card's `.pltitles` index to open
+  the first title that starts with what was typed, ignoring case and accents.
+  The live result list is M4.
+- **Entry point**: Home → Library opens the shelf. One `#ifdef` in
+  `HomeActivity::onLibraryOpen`, so it works with every Home theme (the cover
+  grid draws its own menu); CrossPoint's book library is the shelf's last row.
+- **Shelf source**: `/library/manifest.json` from the card builder (titles,
+  dates, parts in order, index path); if it is missing or unreadable, the
+  shelf scans `/library/<key>/` for `.zim`/`.zimaa…` and `.pltitles`.
+- **Hyphenation language** is set to English for articles (the corpus is
+  English-only, per the owner).
+- **Cost** (local build, commit of this entry): flash +110 KB (app slot 87.4%,
+  ~824 KB free); static internal RAM +3.2 KB.
+
+## 2026-10-03 — Preview builds for review branches
+
+`pocketlib-build.yml` and `pocketlib-host.yml` also run on `claude/**`
+branches. A review branch publishes to a separate **preview** pre-release, so
+a change can be flashed and tried before it is merged without replacing the
+known-good **dev** build of `pocket-library`.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -310,6 +373,14 @@ This cloud session's network policy blocks the PlatformIO registry,
 PyPI, registry libraries come from their GitHub tags at the same pinned
 versions via a git-ignored `platformio.local.ini`, and the proxy's CA was added
 to PlatformIO's private certifi bundle. None of this is needed on a Mac.
+Refs that work (2026-10-03): ArduinoJson `v7.4.2`, QRCode `v0.0.1`, PNGdec
+`1.1.6`, WebSockets commit `1c8b8de` (2.7.3 has no tag), wolfSSL `5.7.2`.
+SdFat (a dependency of the SDK's SDCardManager) must be pre-placed in
+`.pio/libdeps/<env>/SdFat` from tag `2.3.1` with a `.piopm` naming owner
+`greiman`, or PlatformIO goes to the registry for it. Such local builds are
+for compile checks and sizes only: they are not byte-identical to CI's (the
+1.6.5-based build came out 13,792 bytes smaller), so the owner flashes CI
+builds.
 
 ## Measurements
 

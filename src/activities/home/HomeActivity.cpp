@@ -24,6 +24,9 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#ifdef POCKET_LIBRARY
+#include "pocketlib/LibraryActivities.h"
+#endif
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Library, File transfer, Settings
@@ -552,7 +555,18 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
+#ifdef POCKET_LIBRARY
+// Library opens the Pocket Library shelf; CrossPoint's book library is its last row.
+void HomeActivity::onLibraryOpen() {
+  if (auto shelf = makeUniqueNoThrow<ShelfActivity>(renderer, mappedInput)) {
+    activityManager.replaceActivity(std::move(shelf));
+  } else {
+    activityManager.goToLibrary();
+  }
+}
+#else
 void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
+#endif
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

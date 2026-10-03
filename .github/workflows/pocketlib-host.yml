@@ -1,11 +1,13 @@
-# Pocket Library — host tests: lib/zim (AddressSanitizer + UBSan) and the card builder.
+# Pocket Library — host tests: lib/zim (AddressSanitizer + UBSan), real articles
+# through the cleaner and CrossPoint's layout engine, and the card builder.
 # SPDX-License-Identifier: GPL-3.0-or-later
 name: Pocket Library host
 
 on:
   push:
-    branches: [pocket-library]
-    paths: ['lib/zim/**', 'tools/cardbuilder/**', '.github/workflows/pocketlib-host.yml']
+    branches: [pocket-library, 'claude/**']
+    paths: ['lib/zim/**', 'lib/Epub/**', 'test/pocketlib_article_layout/**', 'tools/cardbuilder/**',
+            '.github/workflows/pocketlib-host.yml']
   workflow_dispatch:
 
 permissions:
@@ -22,6 +24,12 @@ jobs:
           cmake --build build/zim -j
       - name: Test
         run: ctest --test-dir build/zim --output-on-failure -j2
+      - name: Article layout (cleaner + CrossPoint layout engine)
+        run: |
+          sudo apt-get install -y libexpat1-dev
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j --target PocketlibArticleLayoutTest
+          build/test/pocketlib_article_layout/PocketlibArticleLayoutTest
       - name: Card builder tests
         run: |
           ZIMINDEX=build/zim/zimindex ZIM_TEST_DATA_DIR=build/zim/_deps/zim_testing_suite-src/data \

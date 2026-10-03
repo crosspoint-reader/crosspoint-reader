@@ -1,8 +1,8 @@
 # Pocket Library — build the X4 Pro firmware on GitHub's servers.
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Runs on every push to the pocket-library branch (and on demand from the
-# Actions tab). Produces three downloads under the run's "Artifacts":
+# Runs on every push to the pocket-library branch and to claude/* review
+# branches (and on demand from the Actions tab). Produces three downloads under the run's "Artifacts":
 #   stock-1.6.5-x4pro      official CrossPoint 1.6.5 for X4 Pro, built from
 #                           upstream's tag: the known-good fallback
 #   pocketlib-x4pro        our firmware (x4pro-pocketlib-release)
@@ -16,7 +16,7 @@ name: Pocket Library build
 
 on:
   push:
-    branches: [pocket-library]
+    branches: [pocket-library, 'claude/**']
   workflow_dispatch:
 
 permissions:
@@ -115,8 +115,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Rolling pre-release "dev": the latest build of this branch, with plain
-  # download links on the repository's Releases page.
+  # Rolling pre-releases with plain download links on the Releases page:
+  # "dev" is the latest build of pocket-library; "preview" is the latest build
+  # of a claude/* review branch, so a change can be tried on the device before
+  # it is merged without replacing the known-good dev build.
   publish-dev:
     needs: [build, zimcat-macos]
     runs-on: ubuntu-latest
@@ -134,10 +136,16 @@ jobs:
           set -euo pipefail
           ls -l dist
           short="${GITHUB_SHA::7}"
-          gh release delete dev --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
-          gh release create dev dist/* --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
-            --title "Development build ${short}" \
-            --notes "Latest build of the pocket-library branch (commit ${short}). X4 Pro only.
+          tag=dev
+          what="Development build"
+          if [ "$GITHUB_REF_NAME" != "pocket-library" ]; then
+            tag=preview
+            what="Preview build (${GITHUB_REF_NAME})"
+          fi
+          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
+            --title "${what} ${short}" \
+            --notes "Latest build of ${GITHUB_REF_NAME} (commit ${short}). X4 Pro only.
           - pocketlib-x4pro.bin: Pocket Library firmware. Flash with crosspointreader.com, Xteink X4 Pro, Custom .bin.
           - stock-1.6.5-x4pro.bin: unmodified CrossPoint 1.6.5, the known-good fallback.
           - zimcat: command-line ZIM reader for macOS (Intel and Apple silicon).
