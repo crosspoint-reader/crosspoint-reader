@@ -857,7 +857,16 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     }
     if (!ioFailed) {
       delay(1);
-      std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
+      // surnameKey is cut to the key width, so two authors can tie on it
+      // ("sanderson br"). Breaking the tie on the group's canonical book keeps
+      // each author's books contiguous; title order applies within the group.
+      std::sort(authorSort.get(), authorSort.get() + n,
+                [canon = canonicalFrom.get()](const SortKey& a, const SortKey& b) {
+                  const int cmp = memcmp(a.key, b.key, sizeof(a.key));
+                  if (cmp != 0) return cmp < 0;
+                  if (canon[a.ordinal] != canon[b.ordinal]) return canon[a.ordinal] < canon[b.ordinal];
+                  return a.ordinal < b.ordinal;
+                });
       delay(1);
     }
   }
