@@ -340,3 +340,26 @@ containing "Forbidden City"; see the session summary for the download.
   7. Settings → Controls → Short power button → Search; a short press opens
      search from Home and from inside a book; Back returns there.
 
+
+## 2026-10-03 — Owner feedback on the M6 build; next work chosen
+
+- Grid and search work on the device. Fixed: tile names spilling into the
+  next tile; long titles on "Opening" running off the screen (37282e0).
+- A crash (abort() on core 1) seen once; waiting for crash_report.txt and
+  what was on screen. CI now keeps the firmware .elf to decode such reports.
+- Owner's choices for what comes next:
+  - Collection home like the Wikipedia app: a search bar with the
+    collection's icon first, then continue reading, recent, main page and
+    random; About moves to a menu.
+  - Full-screen search results that scroll (swipe or buttons) after OK.
+  - Article navigation from the Wikipedia app: toolbar on a centre tap,
+    contents as navigation (current section marked, page numbers), section
+    name in the status bar, link previews, and **outline mode** (lead plus
+    section headings; tap a heading to read that section).
+  - Search: A any word in a title, B typo tolerance, C search of each
+    article's opening paragraph (its own milestone).
+  - Medical: a First Aid screen (organised by emergency, MedlinePlus pages
+    first, Wikibooks First Aid for detail) and a Medical Encyclopedia
+    (MedlinePlus and MDWiki behind one search, browsable by body system).
+- Fewer clean refreshes: keep them for list and grid screens, not the
+  keyboard or articles.
