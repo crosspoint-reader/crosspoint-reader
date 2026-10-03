@@ -17,6 +17,7 @@
 #include <Epub/Page.h>
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <filesystem>
 #include <memory>
@@ -52,7 +53,10 @@ struct Layout {
   size_t roundTripWords = 0;
 };
 
-std::string tmpPath(const char* name) { return (std::filesystem::temp_directory_path() / name).string(); }
+// Unique per process: ctest runs each test case as its own process, in parallel.
+std::string tmpPath(const char* name) {
+  return (std::filesystem::temp_directory_path() / (std::to_string(getpid()) + "-" + name)).string();
+}
 
 Layout layOut(const std::string& html, const std::string& title, bool readerOptions = false) {
   Layout result;

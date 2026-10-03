@@ -11,6 +11,7 @@
 // the sidecar title index.
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <filesystem>
 #include <memory>
@@ -36,7 +37,8 @@ class Search : public ::testing::TestWithParam<std::string> {
               zim::Error::None);
     zim::TitleIndexWriter w;
     ASSERT_EQ(zim::collectTitles(archive, w, nullptr), zim::Error::None);
-    path = (std::filesystem::temp_directory_path() / ("search-" + GetParam() + ".pltitles")).string();
+    path = (std::filesystem::temp_directory_path() / (std::to_string(getpid()) + "-search-" + GetParam() + ".pltitles"))
+               .string();  // per process: ctest runs cases in parallel
     std::string why;
     ASSERT_TRUE(w.write(path, archive.header().uuid, archive.entryCount(), &why)) << why;
     auto src = zim::PosixSource::open(path);
