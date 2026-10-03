@@ -15,8 +15,8 @@
 
 #include "activities/UiListActivity.h"
 
-// Home -> Library: the collections on the card, then CrossPoint's own book
-// library as the last row.
+// Home -> Library: Recent (articles left part-read), the collections on the
+// card, then CrossPoint's own book library as the last row.
 class ShelfActivity final : public UiListActivity {
  public:
   ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
@@ -29,8 +29,39 @@ class ShelfActivity final : public UiListActivity {
   void onBackButton() override;
   const char* headerTitle() const override { return "Library"; }
 
+  enum class RowKind : uint8_t { Recent, Collection, Books, Empty };
+  struct Row {
+    RowKind kind;
+    int collection;
+  };
+  void rebuildRows();
+  void openRecent();
+
+  std::vector<Row> rows_;
+  std::vector<std::string> labels_;
   std::vector<std::string> subtitles_;
   std::vector<std::string> values_;
+  std::vector<freeink::ui::ListItem> items_;
+};
+
+// A titled list of choices; finishes with MenuResult::action = the row picked
+// (cancelled on Back). Used for an article's contents and the Recent list.
+class ChoiceListActivity final : public UiListActivity {
+ public:
+  ChoiceListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
+                     std::vector<std::string> labels, std::vector<std::string> subtitles = {});
+  void onEnter() override;
+
+ private:
+  int listCount() const override { return static_cast<int>(items_.size()); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onBackButton() override;
+  const char* headerTitle() const override { return title_.c_str(); }
+
+  std::string title_;
+  std::vector<std::string> labels_;
+  std::vector<std::string> subtitles_;
   std::vector<freeink::ui::ListItem> items_;
 };
 

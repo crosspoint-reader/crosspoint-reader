@@ -21,6 +21,7 @@
 #include "ArticleActivity.h"
 #include "MappedInputManager.h"
 #include "PocketLibrary.h"
+#include "ReadingHistory.h"
 #include "activities/ActivityResult.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -48,35 +49,51 @@ ShelfActivity::ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedIn
 void ShelfActivity::onEnter() {
   auto& lib = pocketlib::Library::instance();
   if (lib.collections().empty()) lib.load();
-  const auto& cols = lib.collections();
+  rebuildRows();
+  UiListActivity::onEnter();
+}
 
-  // One row per collection, then the book library. Strings live in members
-  // so the ListItems can point at them.
+void ShelfActivity::rebuildRows() {
+  const auto& lib = pocketlib::Library::instance();
+  const auto& cols = lib.collections();
+  const size_t recent = pocketlib::ReadingHistory::instance().places().size();
+
+  // Recent (when there is any), one row per collection, then the book
+  // library. Strings live in members so the ListItems can point at them.
+  rows_.clear();
+  labels_.clear();
   subtitles_.clear();
   values_.clear();
-  for (const auto& c : cols) {
+  auto add = [&](RowKind kind, int collection, std::string label, std::string sub, std::string value) {
+    rows_.push_back({kind, collection});
+    labels_.push_back(std::move(label));
+    subtitles_.push_back(std::move(sub));
+    values_.push_back(std::move(value));
+  };
+  if (recent > 0) {
+    const auto& last = pocketlib::ReadingHistory::instance().places().front();
+    add(RowKind::Recent, -1, "Recent", "Last: " + last.title, std::to_string(recent));
+  }
+  for (size_t i = 0; i < cols.size(); i++) {
+    const auto& c = cols[i];
     std::string sub = c.description;
     if (!c.date.empty()) sub += sub.empty() ? c.date : " \xC2\xB7 " + c.date;  // " · "
-    subtitles_.push_back(std::move(sub));
-    values_.push_back(pocketlib::formatBytes(c.bytes));
+    add(RowKind::Collection, static_cast<int>(i), c.title, std::move(sub), pocketlib::formatBytes(c.bytes));
   }
   if (cols.empty()) {
-    subtitles_.push_back(lib.loadError().empty() ? "Build the card with cardbuilder.py" : lib.loadError());
-    values_.emplace_back();
+    add(RowKind::Empty, -1, "No collections found",
+        lib.loadError().empty() ? "Build the card with cardbuilder.py" : lib.loadError(), "");
   }
-  subtitles_.push_back("EPUBs and other books on this card");
-  values_.emplace_back();
+  add(RowKind::Books, -1, "Books", "EPUBs and other books on this card", "");
 
-  items_.assign(subtitles_.size(), fui::ListItem{});
+  items_.assign(rows_.size(), fui::ListItem{});
   for (size_t i = 0; i < items_.size(); i++) {
-    const bool books = i + 1 == items_.size();
-    items_[i].label = books ? "Books" : (cols.empty() ? "No collections found" : cols[i].title.c_str());
+    items_[i].label = labels_[i].c_str();
     items_[i].subtitle = subtitles_[i].c_str();
-    items_[i].value = values_[i].c_str();
+    items_[i].value = values_[i].empty() ? nullptr : values_[i].c_str();
     items_[i].actionValue = static_cast<int16_t>(i);
-    items_[i].enabled = books || !cols.empty();
+    items_[i].enabled = rows_[i].kind != RowKind::Empty;
   }
-  UiListActivity::onEnter();
 }
 
 int ShelfActivity::listCount() const { return static_cast<int>(items_.size()); }
@@ -92,18 +109,63 @@ void ShelfActivity::buildScreen(UiScreen& screen) {
 }
 
 void ShelfActivity::activateIndex(int index) {
+  if (index < 0 || index >= static_cast<int>(rows_.size())) return;
+  switch (rows_[index].kind) {
+    case RowKind::Books:
+      activityManager.goToLibrary();  // CrossPoint's book library
+      return;
+    case RowKind::Recent:
+      openRecent();
+      return;
+    case RowKind::Collection: {
+      auto activity =
+          makeUniqueNoThrow<CollectionActivity>(renderer, mappedInput, static_cast<size_t>(rows_[index].collection));
+      if (!activity) {
+        LOG_ERR("PLIB", "OOM: collection activity");
+        return;
+      }
+      startActivityForResult(std::move(activity), [this](const ActivityResult&) { rebuildRows(); });
+      return;
+    }
+    case RowKind::Empty:
+      return;
+  }
+}
+
+void ShelfActivity::openRecent() {
+  const auto& places = pocketlib::ReadingHistory::instance().places();
   const auto& cols = pocketlib::Library::instance().collections();
-  if (index == static_cast<int>(items_.size()) - 1) {
-    activityManager.goToLibrary();  // CrossPoint's book library
-    return;
+  std::vector<std::string> labels;
+  std::vector<std::string> subs;
+  for (const auto& p : places) {
+    labels.push_back(p.title);
+    std::string where = p.collection;
+    for (const auto& c : cols)
+      if (c.key == p.collection) where = c.title;
+    subs.push_back(std::move(where));
   }
-  if (index < 0 || index >= static_cast<int>(cols.size())) return;
-  auto activity = makeUniqueNoThrow<CollectionActivity>(renderer, mappedInput, static_cast<size_t>(index));
-  if (!activity) {
-    LOG_ERR("PLIB", "OOM: collection activity");
-    return;
-  }
-  startActivityForResult(std::move(activity), nullptr);
+  auto list =
+      makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, "Recent", std::move(labels), std::move(subs));
+  if (!list) return;
+  startActivityForResult(std::move(list), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
+    const int row = std::get<MenuResult>(result.data).action;
+    const auto& places = pocketlib::ReadingHistory::instance().places();
+    if (row < 0 || row >= static_cast<int>(places.size())) return;
+    const pocketlib::Place place = places[row];
+    auto& lib = pocketlib::Library::instance();
+    const auto& cols = lib.collections();
+    for (size_t i = 0; i < cols.size(); i++) {
+      if (cols[i].key != place.collection) continue;
+      zim::Archive* a = lib.open(i);
+      zim::Entry e;
+      if (!a || a->findByPath(place.ns, place.path, e) != zim::Error::None) break;
+      auto article = makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, i, e.index);
+      if (article) startActivityForResult(std::move(article), [this](const ActivityResult&) { rebuildRows(); });
+      return;
+    }
+    LOG_ERR("PLIB", "recent article %s no longer on the card", place.path.c_str());
+  });
 }
 
 void ShelfActivity::onBackButton() { onGoHome(HomeMenuItem::LIBRARY); }
@@ -274,6 +336,49 @@ void CollectionActivity::showMessage(const std::string& message) {
   subtitles_[ROW_MAIN] = message;
   refreshRows();
   requestUpdate();
+}
+
+// ------------------------------------------------------------ choice list
+
+ChoiceListActivity::ChoiceListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
+                                       std::vector<std::string> labels, std::vector<std::string> subtitles)
+    : UiListActivity("PocketChoice", renderer, mappedInput),
+      title_(std::move(title)),
+      labels_(std::move(labels)),
+      subtitles_(std::move(subtitles)) {}
+
+void ChoiceListActivity::onEnter() {
+  items_.assign(labels_.size(), fui::ListItem{});
+  for (size_t i = 0; i < items_.size(); i++) {
+    items_[i].label = labels_[i].c_str();
+    items_[i].subtitle = i < subtitles_.size() && !subtitles_[i].empty() ? subtitles_[i].c_str() : nullptr;
+    items_[i].actionValue = static_cast<int16_t>(i);
+  }
+  UiListActivity::onEnter();
+}
+
+void ChoiceListActivity::buildScreen(UiScreen& screen) {
+  fui::ListProps props;
+  layoutList(screen, props);
+  props.items = items_.data();
+  props.count = static_cast<uint16_t>(items_.size());
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
+}
+
+void ChoiceListActivity::activateIndex(int index) {
+  MenuResult r;
+  r.action = index;
+  setResult(std::move(r));
+  finish();
+}
+
+void ChoiceListActivity::onBackButton() {
+  ActivityResult r;
+  r.isCancelled = true;
+  setResult(std::move(r));
+  finish();
 }
 
 #endif  // POCKET_LIBRARY

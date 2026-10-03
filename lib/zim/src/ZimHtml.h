@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace zim {
 
@@ -47,12 +48,27 @@ class StringHtmlSink final : public HtmlSink {
   std::string out;
 };
 
+// A heading found while cleaning, for an article's table of contents. Its
+// element is written with id="pl-h<N>" (N = its position in the list), so the
+// layout engine records which page it lands on.
+struct HtmlHeading {
+  uint8_t level = 2;                 // 1..6
+  std::string text;                  // plain UTF-8, whitespace collapsed
+  std::vector<std::string> aliases;  // the page's own ids on or inside it ("History"), for #fragment links
+};
+
+// "pl-h3"
+std::string headingAnchor(size_t index);
+
 struct HtmlCleanOptions {
   // Written into <title>; the article's own <h1> stays in the body.
   std::string_view title;
   // Keep <a href> for links inside the archive. Off until the reader can
   // follow links (Milestone 5): otherwise every linked word is underlined.
   bool keepLinks = false;
+  // When set, headings are collected here and get the "pl-h<N>" ids above
+  // (instead of the page's own ids).
+  std::vector<HtmlHeading>* headings = nullptr;
 };
 
 struct HtmlCleanStats {

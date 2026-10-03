@@ -44,6 +44,9 @@ class FileSink final : public zim::HtmlSink {
 
 struct Layout {
   bool ok = false;
+  size_t links = 0;
+  std::vector<std::pair<std::string, uint16_t>> anchors;
+  std::vector<zim::HtmlHeading> headings;
   std::vector<std::string> words;  // every word on every page, in order
   size_t pages = 0;
   size_t roundTripWords = 0;
@@ -51,7 +54,7 @@ struct Layout {
 
 std::string tmpPath(const char* name) { return (std::filesystem::temp_directory_path() / name).string(); }
 
-Layout layOut(const std::string& html, const std::string& title) {
+Layout layOut(const std::string& html, const std::string& title, bool readerOptions = false) {
   Layout result;
   const std::string xhtml = tmpPath("pocketlib-article.xhtml");
   const std::string pagesPath = tmpPath("pocketlib-article.pages");
@@ -61,6 +64,10 @@ Layout layOut(const std::string& html, const std::string& title) {
     FileSink sink(out);
     zim::HtmlCleanOptions options;
     options.title = title;
+    if (readerOptions) {  // as ArticleActivity sets them since Milestone 5
+      options.keepLinks = true;
+      options.headings = &result.headings;
+    }
     EXPECT_TRUE(zim::cleanArticleHtml(html, options, sink));
   }
 
@@ -72,6 +79,7 @@ Layout layOut(const std::string& html, const std::string& title) {
       nullptr, xhtml, renderer, 0, 1.0f, false, 0, 440, 740, false, false,
       [&](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
         result.pages++;
+        result.links += page->links.size();
         for (const auto& el : page->elements) {
           if (el->getTag() != TAG_PageLine) continue;
           const auto& block = *static_cast<const PageLine&>(*el).getBlock();
@@ -91,6 +99,7 @@ Layout layOut(const std::string& html, const std::string& title) {
     if (status == ChapterHtmlSlimParser::ParseStatus::Done) break;
   }
   result.ok = parser.finishParse();
+  result.anchors = parser.getAnchors();
   pagesFile.close();
 
   HalFile in;
@@ -132,9 +141,17 @@ TEST_P(ArticleLayout, EveryArticleLaysOut) {
     if (archive.mimeType(e.mime).rfind("text/html", 0) != 0) continue;
     std::string html;
     ASSERT_EQ(archive.read(e, html), zim::Error::None);
-    const Layout layout = layOut(html, e.title);
-    ASSERT_TRUE(layout.ok) << e.path;
-    EXPECT_EQ(layout.roundTripWords, layout.words.size()) << e.path;
+    for (bool reader : {false, true}) {
+      const Layout layout = layOut(html, e.title, reader);
+      ASSERT_TRUE(layout.ok) << e.path;
+      EXPECT_EQ(layout.roundTripWords, layout.words.size()) << e.path;
+      // Every collected heading got an anchor the reader can jump to.
+      for (size_t h = 0; h < layout.headings.size(); h++) {
+        bool found = false;
+        for (const auto& a : layout.anchors) found |= a.first == zim::headingAnchor(h);
+        EXPECT_TRUE(found) << e.path << " heading " << h;
+      }
+    }
     articles++;
   }
   EXPECT_GT(articles, 5);
@@ -158,6 +175,41 @@ TEST_P(ArticleLayout, ClimateChangeReadsInOrder) {
     EXPECT_EQ(w.find(".js"), std::string::npos) << w;
     EXPECT_EQ(w.find('{'), std::string::npos) << w;
   }
+}
+
+TEST_P(ArticleLayout, LinksBecomeTapTargets) {
+  zim::Archive archive;
+  ASSERT_EQ(archive.open(zim::PosixSource::open(GetParam())), zim::Error::None);
+  zim::Entry e;
+  ASSERT_EQ(archive.findByTitle(archive.contentNamespace(), "Climate change", e), zim::Error::None);
+  ASSERT_EQ(archive.resolve(e), zim::Error::None);
+  std::string html;
+  ASSERT_EQ(archive.read(e, html), zim::Error::None);
+  EXPECT_EQ(layOut(html, e.title, false).links, 0u);
+  EXPECT_GT(layOut(html, e.title, true).links, 20u);
+}
+
+TEST(ArticleLayoutSynthetic, HeadingsLandOnTheirPages) {
+  std::string html = "<h1>T</h1>";
+  for (int s = 0; s < 6; s++) {
+    html += "<h2><span class=\"mw-headline\" id=\"S" + std::to_string(s) + "\">Section " + std::to_string(s) +
+            "</span></h2>";
+    for (int p = 0; p < 40; p++) html += "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do.</p>";
+  }
+  const Layout layout = layOut(html, "T", true);
+  ASSERT_TRUE(layout.ok);
+  ASSERT_EQ(layout.headings.size(), 7u);
+  EXPECT_EQ(layout.headings[3].aliases.at(0), "S2");
+  uint16_t previous = 0;
+  for (size_t h = 0; h < layout.headings.size(); h++) {
+    uint16_t page = UINT16_MAX;
+    for (const auto& a : layout.anchors)
+      if (a.first == zim::headingAnchor(h)) page = a.second;
+    ASSERT_NE(page, UINT16_MAX) << h;
+    EXPECT_GE(page, previous) << "headings in page order";
+    previous = page;
+  }
+  EXPECT_GE(previous, 5) << "later sections land on later pages";
 }
 
 INSTANTIATE_TEST_SUITE_P(Wikipedia, ArticleLayout, ::testing::Values(kNewNs, kOldNs));

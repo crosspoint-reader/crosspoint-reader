@@ -175,8 +175,9 @@ uint32_t nextCodePoint(std::string_view s, size_t& i) {
   return cp;
 }
 
-// Appends raw HTML text (entities still encoded) as XML text.
-void appendText(std::string& out, std::string_view text) {
+// Appends raw HTML text (entities still encoded) as XML text, or as plain
+// UTF-8 when `xml` is false.
+void appendText(std::string& out, std::string_view text, bool xml = true) {
   size_t i = 0;
   while (i < text.size()) {
     const char c = text[i];
@@ -188,18 +189,33 @@ void appendText(std::string& out, std::string_view text) {
       if (j < text.size() && text[j] == ';' && j > i + 1) {
         const uint32_t cp = decodeHtmlEntity(text.substr(i + 1, j - i - 1));
         if (cp != 0) {
-          appendXmlChar(out, cp);
+          if (xml)
+            appendXmlChar(out, cp);
+          else if (validXmlCodePoint(cp))
+            appendUtf8(out, cp);
           i = j + 1;
           continue;
         }
       }
-      out += "&amp;";
+      out += xml ? "&amp;" : "&";
       i++;
       continue;
     }
-    appendXmlChar(out, nextCodePoint(text, i));
+    const uint32_t cp = nextCodePoint(text, i);
+    if (xml)
+      appendXmlChar(out, cp);
+    else if (validXmlCodePoint(cp))
+      appendUtf8(out, cp);
   }
 }
+
+std::string plainText(std::string_view raw) {
+  std::string out;
+  appendText(out, raw, false);
+  return out;
+}
+
+bool isHeadingTag(const char* t) { return t[0] == 'h' && t[1] >= '1' && t[1] <= '6' && t[2] == 0; }
 
 // ---------------------------------------------------------------- policy
 
@@ -619,6 +635,22 @@ class Cleaner {
       }
     }
 
+    // Table of contents: a heading opens a record; ids on it or inside it
+    // become its aliases.
+    bool opensHeading = false;
+    if (options_.headings && dropDepth_ == 0) {
+      if (headingDepth_ == 0 && outTag && isHeadingTag(outTag) && !isVoidTag) {
+        HtmlHeading h;
+        h.level = static_cast<uint8_t>(outTag[1] - '0');
+        options_.headings->push_back(std::move(h));
+        opensHeading = true;
+      }
+      if ((opensHeading || headingDepth_ > 0) && tag.hasAttr("id")) {
+        auto& aliases = options_.headings->back().aliases;
+        if (aliases.size() < 4) aliases.push_back(plainText(tag.attr("id")));
+      }
+    }
+
     if (outTag) {
       stats_.elementsKept++;
       out_ += '<';
@@ -632,6 +664,7 @@ class Cleaner {
       }
     }
     if (!isVoidTag) stack_.push_back({name, outTag});
+    if (opensHeading) headingDepth_ = stack_.size();
     flush(false);
   }
 
@@ -643,8 +676,14 @@ class Cleaner {
       appendText(out_, raw);
       out_ += '"';
     };
-    const bool heading = outTag[0] == 'h' && outTag[1] >= '1' && outTag[1] <= '6' && outTag[2] == 0;
-    if (heading && tag.hasAttr("id")) emit("id", tag.attr("id"));
+    const bool heading = isHeadingTag(outTag);
+    if (heading && options_.headings && headingDepth_ == 0 && dropDepth_ == 0) {
+      out_ += " id=\"";
+      out_ += headingAnchor(options_.headings->size() - 1);
+      out_ += '"';
+    } else if (heading && tag.hasAttr("id")) {
+      emit("id", tag.attr("id"));
+    }
     if (tag.hasAttr("dir")) {
       const std::string_view d = tag.attr("dir");
       if (d == "rtl" || d == "ltr") emit("dir", d);
@@ -707,11 +746,19 @@ class Cleaner {
     }
     stack_.pop_back();
     if (dropDepth_ > stack_.size()) dropDepth_ = 0;
+    if (headingDepth_ > stack_.size()) {
+      headingDepth_ = 0;
+      collapseSpaces(options_.headings->back().text);
+    }
     flush(false);
   }
 
   void text(std::string_view t) {
     if (dropDepth_ > 0 || t.empty()) return;
+    if (headingDepth_ > 0) {
+      std::string& h = options_.headings->back().text;
+      if (h.size() < 200) appendText(h, t, false);
+    }
     appendText(out_, t);
     flush(false);
   }
@@ -731,11 +778,31 @@ class Cleaner {
   HtmlCleanStats& stats_;
   std::string out_;
   std::vector<Open> stack_;
-  size_t dropDepth_ = 0;  // stack size at which the dropped subtree began; 0 = not dropping
+  size_t dropDepth_ = 0;
+  size_t headingDepth_ = 0;  // stack size at which the open heading began; 0 = none
+
+  static void collapseSpaces(std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    bool space = true;  // drops leading spaces
+    for (char c : s) {
+      if (isSpace(c)) {
+        if (!space) out.push_back(' ');
+        space = true;
+      } else {
+        out.push_back(c);
+        space = false;
+      }
+    }
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    s.swap(out);
+  }  // stack size at which the dropped subtree began; 0 = not dropping
   bool ok_ = true;
 };
 
 }  // namespace
+
+std::string headingAnchor(size_t index) { return "pl-h" + std::to_string(index); }
 
 uint32_t decodeHtmlEntity(std::string_view name) {
   if (name.empty()) return 0;

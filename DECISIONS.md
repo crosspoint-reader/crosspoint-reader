@@ -388,6 +388,42 @@ would test are unchanged.
 - Check on the device: Diagnostics → SD bus should read 40.0 MHz; rerun the
   SD benchmark and compare with the 1.93 MB/s / 1.9 ms baseline.
 
+## 2026-10-03 — Milestone 5: links, Back, contents, remembered place
+
+- **Links are kept and tappable.** The cleaner now keeps `<a href>` to pages
+  inside the archive; the layout engine underlines them and records each
+  one's box on the page (CrossPoint's footnote-link machinery), and a tap
+  inside a box (6 px slop, 28 px minimum width, as in the EPUB reader)
+  follows it. At most 32 links per page are tappable (the engine's cap).
+- **Resolving a link**: `zim::parseLink` / `zim::resolveLink`
+  (`lib/zim/src/ZimLink.*`): fragment and query split off, percent-decoding,
+  `&amp;`, relative paths against the linking entry's directory, `..`
+  climbing out of the namespace in the old scheme (`../A/Foo`), absolute
+  `/C/Foo`. External schemes are refused. Tested on every link in the real
+  sample in both namespace schemes. A link to an article not on the card
+  shows "Not in this library: …" over the page.
+- **One reading screen, a Back stack.** Following a link loads the new
+  article in the same screen (one page file on the card, not one per
+  article); Back reloads the previous article and lands on the page left.
+  Up to 32 steps. Reloading costs the open time again; caching the previous
+  article's page file is a later optimisation if it feels slow.
+- **Contents**: Confirm, or a tap in the middle third of the screen (the
+  reader-menu gesture CrossPoint uses), lists the article's section
+  headings. The cleaner gives every heading its own anchor (`pl-h<N>`) and
+  remembers the page's own ids on or inside it (`<span id="History">`), so
+  `#History` links and the contents land on the same page. Jumping to a
+  section also goes on the Back stack.
+- **Remembered place**: `/.pocketlib/history.tsv`, the 50 most recent
+  articles, most recent first, with the character offset of the page being
+  read (the layout engine's visible-text offset), so the place survives a
+  change of font or size. Saved on every page turn (write to a temporary
+  file, then rename). Opening an article from a list resumes there; a link
+  opens at the top (or its section).
+- **Recent**: the shelf's first row lists that history; picking one opens
+  the article where it was left.
+- Last page: a page turn past the end now stays put (Back leaves) instead of
+  closing the article.
+
 ## 2026-10-03 — Preview builds for review branches
 
 `pocketlib-build.yml` and `pocketlib-host.yml` also run on `claude/**`

@@ -255,3 +255,32 @@ containing "Forbidden City"; see the session summary for the download.
 - Add to the checklist: Settings → About → tap Firmware five times →
   Diagnostics. **SD bus** should say 40.0 MHz. Tap **SD benchmark** and
   photograph the result (before: 1.93 MB/s sequential, 1.9 ms random).
+
+## 2026-10-03 — M3, M4 and SD speed passed; Milestone 5 written
+
+- Owner: the out-of-memory fix, search and the SD speed build all work on the
+  device. **M3 and M4 passed.** (Timing photos and the Diagnostics SD numbers
+  still to come.)
+- M5 code: tap links (`lib/zim/src/ZimLink.*`), Back through followed
+  articles, contents (Confirm or centre tap), remembered place and a Recent
+  row on the shelf. Host tests: link parsing and every link in the real
+  sample (both schemes), heading capture, links becoming tap targets in the
+  real layout engine, headings landing on their pages. 62/62 lib/zim
+  (ASan), 7/7 article layout.
+- Firmware 87.7% of the app slot.
+
+**For the owner (Milestone 5 device checklist)**
+1. Flash the new `pocketlib-x4pro.bin` from the **preview** release.
+2. Wikipedia → Search `forbidden city` → open it. Success: linked words are
+   underlined.
+3. Tap a linked word (e.g. "Beijing"). Success: "Opening", then that
+   article.
+4. Press **Back**. Success: Forbidden City again, on the page you left.
+5. Press **Confirm** (or tap the middle of the screen). Success: a list of
+   the article's sections. Pick one: the reader jumps there. Back returns.
+6. Turn a few pages, press Back to the collection, then go back to the
+   Library. Success: a **Recent** row at the top; picking Forbidden City
+   reopens it on the same page.
+7. Tap a link to something unlikely to be on the card (a red link or an
+   obscure page). Success: "Not in this library: …", and the page stays.
+8. Note anything wrong or slow.
