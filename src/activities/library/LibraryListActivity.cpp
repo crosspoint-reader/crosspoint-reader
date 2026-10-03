@@ -769,7 +769,6 @@ bool LibraryListActivity::handleButtons() {
 
 void LibraryListActivity::navigateButtons() {
   const int count = listCount();
-  auto& nav = activeNav();
   if (mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
       mappedInput.wasPressed(MappedInputManager::Button::NavPrevious)) {
     navigationStartedOnTabs = tabsFocused();
@@ -789,20 +788,20 @@ void LibraryListActivity::navigateButtons() {
   // A held button steps tabs while the strip has focus (the base behaviour
   // Settings keeps) and page-jumps once the selection is down in the rows,
   // where fast travel through a long shelf is what a hold means.
-  buttonNavigator.onNextContinuous([this, count, &nav] {
+  buttonNavigator.onNextContinuous([this, count] {
     if (navigationStartedOnTabs) {
       activeNav().selected = 0;
       stepTab(1);
     } else if (count > 0) {
-      moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
+      moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, activeNav().pageRows()) + 1);
     }
   });
-  buttonNavigator.onPreviousContinuous([this, count, &nav] {
+  buttonNavigator.onPreviousContinuous([this, count] {
     if (navigationStartedOnTabs) {
       activeNav().selected = 0;
       stepTab(-1);
     } else if (count > 0) {
-      moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
+      moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, activeNav().pageRows()) + 1);
     }
   });
 }
