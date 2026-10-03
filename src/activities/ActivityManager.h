@@ -17,7 +17,17 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, LIBRARY, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+enum class HomeMenuItem {
+  NONE,
+  FILE_BROWSER,
+  LIBRARY,
+  OPDS_BROWSER,
+  FILE_TRANSFER,
+  SETTINGS_MENU,
+#ifdef POCKET_LIBRARY
+  SEARCH,  // Cover Grid home's last tab: Pocket Library search
+#endif
+};
 
 /**
  * ActivityManager
@@ -45,6 +55,13 @@ class ActivityManager {
   void exitActivity(const RenderLock& lock);
 #ifdef POCKET_LIBRARY
   void cleanNextScreen();
+
+ public:
+  // Power button set to Search: Pocket Library search over whatever is open
+  // (not over a search or a keyboard already up).
+  void openPocketSearch();
+
+ protected:
 #endif
 
   // Pending activity to be launched on next loop iteration

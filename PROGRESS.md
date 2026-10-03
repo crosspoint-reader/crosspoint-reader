@@ -311,3 +311,32 @@ containing "Forbidden City"; see the session summary for the download.
   text in the selection bars; Settings → About → Diagnostics → Back: same;
   turning article pages is unchanged (no extra flashes); control center's
   Force refresh still does its full refresh.
+
+## 2026-10-03 — Milestone 6 (part 1): Library grid and search everything
+
+- Owner's design: Library is a grid, two across: Recent, eBooks, Wikipedia,
+  Maps (placeholder), Medical, More, each with a small icon; Medical and More
+  open sub-grids. Search: chips (All · eBooks · Wikipedia · More), results as
+  you type across every collection and the EPUBs; opened from a magnifier tab
+  on the Cover Grid home, from a collection, or by the power button (Settings
+  → Controls → Short power button → Search).
+- Built: `zim::searchMany` (host-tested), `Library` keeps every collection
+  open, `SearchActivity`, the tile grid, keyboard chips and tagged rows, the
+  Home tab, the power-button option. 70 host tests pass; firmware 88.1% of
+  the app slot.
+- Ranked results need the indexes rebuilt on the Mac (v2); until then each
+  collection's results are alphabetical, merged as above.
+- Device checklist:
+  1. Home (Cover Grid) shows a magnifier as the last tab; tapping it opens
+     search with **All** chosen.
+  2. Type `paris`: an exact row with "N sources" first; tapping it lists the
+     collections; each opens its article. Back returns to the results.
+  3. Tap **eBooks**: your EPUBs matching by title or author; one opens in the
+     book reader. Tap **More**: a list of Medical and each collection.
+  4. Empty field: recent searches (tap fills the field) and recent articles.
+  5. Library: the 2×3 grid with icons; Medical and More open sub-grids; Maps
+     shows "coming"; eBooks opens the book list; Recent lists articles.
+  6. Inside a collection, Search starts with that collection's chip chosen.
+  7. Settings → Controls → Short power button → Search; a short press opens
+     search from Home and from inside a book; Back returns there.
+

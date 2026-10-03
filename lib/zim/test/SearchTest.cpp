@@ -148,3 +148,54 @@ TEST_P(Search, WithoutAnIndexMatchesCaseSensitively) {
 }
 
 }  // namespace
+
+// Two collections: the same sample in both namespace schemes, one with the
+// card's index and one without (as an un-indexed collection on the card).
+TEST(SearchMany, ExactFromEverySourceFirstThenTakingTurns) {
+  zim::Archive a, b;
+  ASSERT_EQ(a.open(zim::openArchiveSource(kData + "/nons/wikipedia_en_climate_change_mini_2024-06.zim")),
+            zim::Error::None);
+  ASSERT_EQ(b.open(zim::openArchiveSource(kData + "/withns/wikipedia_en_climate_change_mini_2024-06.zim")),
+            zim::Error::None);
+  zim::TitleIndexWriter w;
+  ASSERT_EQ(zim::collectTitles(a, w, nullptr), zim::Error::None);
+  const std::string path =
+      (std::filesystem::temp_directory_path() / (std::to_string(getpid()) + "-searchmany.pltitles")).string();
+  std::string why;
+  ASSERT_TRUE(w.write(path, a.header().uuid, a.entryCount(), &why)) << why;
+  zim::TitleIndex index;
+  ASSERT_EQ(index.open(zim::PosixSource::open(path)), zim::Error::None);
+  zim::TitleIndex::Cursor cursor;
+
+  const std::vector<zim::SearchSource> sources = {{&a, &index, &cursor}, {&b, nullptr, nullptr}};
+  std::vector<zim::MultiHit> hits;
+  ASSERT_EQ(zim::searchMany(sources, "Climate change", 6, hits), zim::Error::None);
+  ASSERT_GE(hits.size(), 4u);
+  EXPECT_LE(hits.size(), 6u);
+  EXPECT_TRUE(hits[0].hit.exact);
+  EXPECT_EQ(hits[0].source, 0u);
+  EXPECT_TRUE(hits[1].hit.exact);
+  EXPECT_EQ(hits[1].source, 1u);
+  // After the exact matches the sources alternate while both have results.
+  EXPECT_NE(hits[2].source, hits[3].source);
+
+  // Each source's own results match a search of that source alone.
+  std::vector<zim::SearchHit> alone;
+  ASSERT_EQ(zim::searchTitles(a, &index, &cursor, "Climate change", 6, alone), zim::Error::None);
+  size_t k = 0;
+  for (const auto& h : hits) {
+    if (h.source != 0) continue;
+    ASSERT_LT(k, alone.size());
+    EXPECT_EQ(h.hit.entry, alone[k++].entry);
+  }
+
+  // A failing source is left out; nothing to search is not an error.
+  zim::Archive closed;
+  const std::vector<zim::SearchSource> withBroken = {{&closed, nullptr, nullptr}, {&a, &index, &cursor}};
+  ASSERT_EQ(zim::searchMany(withBroken, "Climate", 4, hits), zim::Error::None);
+  EXPECT_FALSE(hits.empty());
+  for (const auto& h : hits) EXPECT_EQ(h.source, 1u);
+  ASSERT_EQ(zim::searchMany({}, "Climate", 4, hits), zim::Error::None);
+  EXPECT_TRUE(hits.empty());
+  std::filesystem::remove(path);
+}

@@ -28,6 +28,9 @@
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#ifdef POCKET_LIBRARY
+#include "pocketlib/SearchActivity.h"
+#endif
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -233,6 +236,18 @@ void ActivityManager::loop() {
 void ActivityManager::cleanNextScreen() {
   if (!currentActivity || currentActivity->isReaderActivity() || currentActivity->name == "FrontlightPanel") return;
   renderer.promoteNextRefreshAtLeast(HalDisplay::HALF_REFRESH);
+}
+#endif
+
+#ifdef POCKET_LIBRARY
+void ActivityManager::openPocketSearch() {
+  if (!currentActivity || pendingActivity || pendingAction != PendingAction::None) return;
+  const auto& name = currentActivity->name;
+  if (name == "PocketSearch" || name == "KeyboardEntry" || currentActivity->requiresExclusiveStorageLoop()) return;
+  for (const auto& a : stackActivities) {
+    if (a->name == "PocketSearch") return;  // one search at a time
+  }
+  if (auto search = makeUniqueNoThrow<SearchActivity>(renderer, mappedInput)) pushActivity(std::move(search));
 }
 #endif
 

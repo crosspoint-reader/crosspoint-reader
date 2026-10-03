@@ -12,19 +12,23 @@
 
 #include "LibraryActivities.h"
 
+#include <FreeInkUIIcon.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <esp_random.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "ArticleActivity.h"
 #include "MappedInputManager.h"
 #include "PocketLibrary.h"
 #include "ReadingHistory.h"
+#include "SearchActivity.h"
 #include "activities/ActivityResult.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "icons/libraryIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -41,95 +45,199 @@ void layoutList(UiAppHost::UiScreen& screen, fui::ListProps& props) {
 }
 }  // namespace
 
+bool locatePlace(const pocketlib::Place& place, size_t& collection, uint32_t& entry) {
+  auto& lib = pocketlib::Library::instance();
+  const auto& cols = lib.collections();
+  for (size_t i = 0; i < cols.size(); i++) {
+    if (cols[i].key != place.collection) continue;
+    zim::Archive* a = lib.open(i);
+    zim::Entry e;
+    if (!a || a->findByPath(place.ns, place.path, e) != zim::Error::None) return false;
+    collection = i;
+    entry = e.index;
+    return true;
+  }
+  return false;
+}
+
 // ------------------------------------------------------------------ shelf
 
-ShelfActivity::ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiListActivity("PocketShelf", renderer, mappedInput) {}
+ShelfActivity::ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string group)
+    : UiListActivity("PocketShelf", renderer, mappedInput), group_(std::move(group)) {}
+
+std::string tileGroupFor(const pocketlib::Collection& c) {
+  if (!c.group.empty()) return c.group;
+  const std::string& k = c.key;
+  if (k.rfind("wikipedia", 0) == 0) return "Wikipedia";
+  for (const char* medical : {"mdwiki", "medlineplus", "medicine", "wikem", "medical"}) {
+    if (k.find(medical) != std::string::npos) return "Medical";
+  }
+  return "More";
+}
+
+namespace {
+const freeink::Icon* iconForGroup(const std::string& group) {
+  if (group == "Wikipedia") return &icon_globe_32;
+  if (group == "Medical") return &icon_heart_pulse_32;
+  if (group == "More") return &icon_ellipsis_32;
+  return &icon_book_open_32;
+}
+
+const freeink::Icon* iconForCollection(const std::string& key) {
+  static const struct {
+    const char* key;
+    const freeink::Icon* icon;
+  } kIcons[] = {
+      {"wikipedia", &icon_globe_32},    {"wiktionary", &icon_book_a_32},      {"wikivoyage", &icon_plane_32},
+      {"wikiquote", &icon_quote_32},    {"wikisource", &icon_scroll_text_32}, {"wikibooks", &icon_graduation_cap_32},
+      {"mdwiki", &icon_stethoscope_32}, {"medlineplus", &icon_pill_32},       {"military", &icon_shield_plus_32},
+  };
+  for (const auto& i : kIcons) {
+    if (key.find(i.key) != std::string::npos) return i.icon;
+  }
+  return &icon_book_open_32;
+}
+}  // namespace
 
 void ShelfActivity::onEnter() {
   auto& lib = pocketlib::Library::instance();
   if (lib.collections().empty()) lib.load();
-  rebuildRows();
+  title_ = group_.empty() ? "Library" : group_;
+  rebuildTiles();
   UiListActivity::onEnter();
 }
 
-void ShelfActivity::rebuildRows() {
-  const auto& lib = pocketlib::Library::instance();
-  const auto& cols = lib.collections();
-  const size_t recent = pocketlib::ReadingHistory::instance().places().size();
+void ShelfActivity::rebuildTiles() {
+  const auto& cols = pocketlib::Library::instance().collections();
+  tiles_.clear();
+  if (group_.empty()) {
+    tiles_.push_back({TileKind::Recent, "Recent", &icon_clock_32, -1, ""});
+    tiles_.push_back({TileKind::Books, "eBooks", &icon_book_open_32, -1, ""});
+    // Wikipedia, Maps, Medical, More; then any other group the manifest names.
+    std::vector<std::string> groups = {"Wikipedia", "Maps", "Medical", "More"};
+    for (const auto& c : cols) {
+      const std::string g = tileGroupFor(c);
+      if (std::find(groups.begin(), groups.end(), g) == groups.end()) groups.push_back(g);
+    }
+    for (const auto& g : groups) {
+      if (g == "Maps") {
+        tiles_.push_back({TileKind::Maps, "Maps", &icon_map_32, -1, ""});
+        continue;
+      }
+      int only = -1;
+      int members = 0;
+      for (size_t i = 0; i < cols.size(); i++) {
+        if (tileGroupFor(cols[i]) != g) continue;
+        only = static_cast<int>(i);
+        members++;
+      }
+      if (members == 0) continue;
+      // A group of one is that collection, under the group's name.
+      if (members == 1)
+        tiles_.push_back({TileKind::Collection, g, iconForGroup(g), only, ""});
+      else
+        tiles_.push_back({TileKind::Group, g, iconForGroup(g), -1, g});
+    }
+  } else {
+    for (size_t i = 0; i < cols.size(); i++) {
+      if (tileGroupFor(cols[i]) == group_)
+        tiles_.push_back(
+            {TileKind::Collection, cols[i].title, iconForCollection(cols[i].key), static_cast<int>(i), ""});
+    }
+  }
 
-  // Recent (when there is any), one row per collection, then the book
-  // library. Strings live in members so the ListItems can point at them.
-  rows_.clear();
-  labels_.clear();
-  subtitles_.clear();
-  values_.clear();
-  auto add = [&](RowKind kind, int collection, std::string label, std::string sub, std::string value) {
-    rows_.push_back({kind, collection});
-    labels_.push_back(std::move(label));
-    subtitles_.push_back(std::move(sub));
-    values_.push_back(std::move(value));
-  };
-  if (recent > 0) {
-    const auto& last = pocketlib::ReadingHistory::instance().places().front();
-    add(RowKind::Recent, -1, "Recent", "Last: " + last.title, std::to_string(recent));
-  }
-  for (size_t i = 0; i < cols.size(); i++) {
-    const auto& c = cols[i];
-    std::string sub = c.description;
-    if (!c.date.empty()) sub += sub.empty() ? c.date : " \xC2\xB7 " + c.date;  // " · "
-    add(RowKind::Collection, static_cast<int>(i), c.title, std::move(sub), pocketlib::formatBytes(c.bytes));
-  }
-  if (cols.empty()) {
-    add(RowKind::Empty, -1, "No collections found",
-        lib.loadError().empty() ? "Build the card with cardbuilder.py" : lib.loadError(), "");
-  }
-  add(RowKind::Books, -1, "Books", "EPUBs and other books on this card", "");
-
-  items_.assign(rows_.size(), fui::ListItem{});
-  for (size_t i = 0; i < items_.size(); i++) {
-    items_[i].label = labels_[i].c_str();
-    items_[i].subtitle = subtitles_[i].c_str();
-    items_[i].value = values_[i].empty() ? nullptr : values_[i].c_str();
-    items_[i].actionValue = static_cast<int16_t>(i);
-    items_[i].enabled = rows_[i].kind != RowKind::Empty;
+  const bool anyRecent = !pocketlib::ReadingHistory::instance().places().empty();
+  items_.assign(tiles_.size(), fui::TileGridItem{});
+  for (size_t i = 0; i < tiles_.size(); i++) {
+    items_[i].label = tiles_[i].label.c_str();
+    items_[i].icon = fui::bitmapFromIcon(*tiles_[i].icon);
+    items_[i].value = static_cast<int16_t>(i);
+    items_[i].enabled = tiles_[i].kind != TileKind::Recent || anyRecent;
   }
 }
 
-int ShelfActivity::listCount() const { return static_cast<int>(items_.size()); }
-
 void ShelfActivity::buildScreen(UiScreen& screen) {
-  fui::ListProps props;
-  layoutList(screen, props);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int16_t top = static_cast<int16_t>(metrics.topPadding + metrics.headerHeight);
+  const int16_t side = static_cast<int16_t>(metrics.contentSidePadding);
+  screen.setContentMarginFromScreen(fui::Insets{top, side, static_cast<int16_t>(metrics.buttonHintsHeight), side});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  constexpr int16_t kGap = 12;
+  const int rows = std::max<int>(3, (static_cast<int>(tiles_.size()) + 1) / 2);
+  const int available =
+      renderer.getScreenHeight() - top - metrics.buttonHintsHeight - 2 * metrics.verticalSpacing - (rows - 1) * kGap;
+  for (size_t i = 0; i < items_.size(); i++) {
+    // Filled = the tile the buttons are on (no dithered gray, so no ghosting).
+    items_[i].state = buttonsUsed_ && static_cast<int>(i) == nav.selected ? fui::StateChecked : fui::StateNormal;
+  }
+  fui::TileGridProps props;
   props.items = items_.data();
   props.count = static_cast<uint16_t>(items_.size());
   props.action = ACTION_ROW;
-  syncListViewport(screen, props);
-  screen.list(props);
+  props.columns = 2;
+  props.gap = kGap;
+  props.tileHeight = static_cast<int16_t>(std::max(48, available / rows));
+  props.iconSize = 32;
+  props.text = screen.theme().bodyText;
+  screen.tileGrid(props);
+}
+
+void ShelfActivity::navigateButtons() {
+  const int count = listCount();
+  if (count == 0) return;
+  auto move = [this, count](int delta) {
+    if (!buttonsUsed_) {
+      buttonsUsed_ = true;  // the first press shows where the selection is
+    } else {
+      nav.selected = (nav.selected + delta + count) % count;
+    }
+    notice_.clear();
+    requestUpdate();
+  };
+  buttonNavigator.onNextRelease([move] { move(1); });
+  buttonNavigator.onPreviousRelease([move] { move(-1); });
+}
+
+void ShelfActivity::drawFooter() {
+  UiListActivity::drawFooter();
+  if (!notice_.empty()) GUI.drawPopup(renderer, notice_.c_str());
 }
 
 void ShelfActivity::activateIndex(int index) {
-  if (index < 0 || index >= static_cast<int>(rows_.size())) return;
-  switch (rows_[index].kind) {
-    case RowKind::Books:
+  if (index < 0 || index >= static_cast<int>(tiles_.size())) return;
+  if (!items_[index].enabled) return;
+  notice_.clear();
+  const Tile& tile = tiles_[index];
+  switch (tile.kind) {
+    case TileKind::Books:
       activityManager.goToLibrary();  // CrossPoint's book library
       return;
-    case RowKind::Recent:
+    case TileKind::Recent:
       openRecent();
       return;
-    case RowKind::Collection: {
-      auto activity =
-          makeUniqueNoThrow<CollectionActivity>(renderer, mappedInput, static_cast<size_t>(rows_[index].collection));
-      if (!activity) {
-        LOG_ERR("PLIB", "OOM: collection activity");
-        return;
-      }
-      startActivityForResult(std::move(activity), [this](const ActivityResult&) { rebuildRows(); });
+    case TileKind::Maps:
+      notice_ = "Offline maps are coming in a later update";
+      requestUpdate();
+      return;
+    case TileKind::Group: {
+      auto sub = makeUniqueNoThrow<ShelfActivity>(renderer, mappedInput, tile.group);
+      if (sub) startActivityForResult(std::move(sub), [this](const ActivityResult&) { rebuildTiles(); });
       return;
     }
-    case RowKind::Empty:
+    case TileKind::Collection:
+      openCollection(static_cast<size_t>(tile.collection));
       return;
   }
+}
+
+void ShelfActivity::openCollection(size_t collection) {
+  auto activity = makeUniqueNoThrow<CollectionActivity>(renderer, mappedInput, collection);
+  if (!activity) {
+    LOG_ERR("PLIB", "OOM: collection activity");
+    return;
+  }
+  startActivityForResult(std::move(activity), [this](const ActivityResult&) { rebuildTiles(); });
 }
 
 void ShelfActivity::openRecent() {
@@ -153,22 +261,23 @@ void ShelfActivity::openRecent() {
     const auto& places = pocketlib::ReadingHistory::instance().places();
     if (row < 0 || row >= static_cast<int>(places.size())) return;
     const pocketlib::Place place = places[row];
-    auto& lib = pocketlib::Library::instance();
-    const auto& cols = lib.collections();
-    for (size_t i = 0; i < cols.size(); i++) {
-      if (cols[i].key != place.collection) continue;
-      zim::Archive* a = lib.open(i);
-      zim::Entry e;
-      if (!a || a->findByPath(place.ns, place.path, e) != zim::Error::None) break;
-      auto article = makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, i, e.index);
-      if (article) startActivityForResult(std::move(article), [this](const ActivityResult&) { rebuildRows(); });
+    size_t collection = 0;
+    uint32_t entry = 0;
+    if (locatePlace(place, collection, entry)) {
+      auto article = makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, collection, entry);
+      if (article) startActivityForResult(std::move(article), [this](const ActivityResult&) { rebuildTiles(); });
       return;
     }
     LOG_ERR("PLIB", "recent article %s no longer on the card", place.path.c_str());
   });
 }
 
-void ShelfActivity::onBackButton() { onGoHome(HomeMenuItem::LIBRARY); }
+void ShelfActivity::onBackButton() {
+  if (group_.empty())
+    onGoHome(HomeMenuItem::LIBRARY);
+  else
+    finish();
+}
 
 // ------------------------------------------------------------- collection
 
@@ -195,8 +304,8 @@ void CollectionActivity::refreshRows() {
     subtitles_[ROW_ABOUT] = std::string("Cannot open: ") + zim::errorName(err);
   } else {
     const uint32_t articles = a->hasArticleList() ? a->articleListCount() : a->titleCount();
-    subtitles_[ROW_ABOUT] =
-        pocketlib::formatCount(articles) + " titles" + (lib.titleIndex() ? ", search index OK" : ", no search index");
+    subtitles_[ROW_ABOUT] = pocketlib::formatCount(articles) + " titles" +
+                            (lib.titleIndex(collection_) ? ", search index OK" : ", no search index");
   }
   const pocketlib::OpenTimings& t = lib.lastOpen;
   if (t.valid) {
@@ -297,39 +406,9 @@ void CollectionActivity::openRandom() {
 }
 
 void CollectionActivity::openSearch() {
-  if (!pocketlib::Library::instance().open(collection_)) return;
-  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "Search " + title_, lastQuery_, 64,
-                                                           InputType::Text);
-  if (!keyboard) return;
-  // Runs on the main task after every edit; the keyboard shows the rows that
-  // fit and reports which one was chosen by its position.
-  keyboard->setLiveSuggestions([this](const std::string& text, std::vector<std::string>& rows, std::string& status) {
-    liveEntries_.clear();
-    if (text.empty()) {
-      status = "Type the start of a title";
-      return;
-    }
-    std::vector<pocketlib::Library::Hit> hits;
-    pocketlib::Library::instance().search(text, 8, hits);
-    for (auto& h : hits) {
-      rows.push_back(std::move(h.title));
-      liveEntries_.push_back(h.entry);
-    }
-    if (rows.empty()) status = "No title starts with \"" + text + "\"";
-  });
-  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-    if (result.isCancelled) {
-      refreshRows();
-      return;
-    }
-    const auto& kb = std::get<KeyboardResult>(result.data);
-    lastQuery_ = kb.text;
-    if (kb.picked >= 0 && kb.picked < static_cast<int>(liveEntries_.size())) {
-      openEntry(liveEntries_[kb.picked]);
-    } else {
-      refreshRows();
-    }
-  });
+  auto search = makeUniqueNoThrow<SearchActivity>(renderer, mappedInput, static_cast<int>(collection_));
+  if (!search) return;
+  startActivityForResult(std::move(search), [this](const ActivityResult&) { refreshRows(); });
 }
 
 void CollectionActivity::showMessage(const std::string& message) {

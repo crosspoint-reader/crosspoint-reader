@@ -102,4 +102,71 @@ Error searchTitles(Archive& archive, TitleIndex* index, TitleIndex::Cursor* curs
   return err;
 }
 
+Error searchMany(const std::vector<SearchSource>& sources, std::string_view query, size_t max,
+                 std::vector<MultiHit>& out) {
+  out.clear();
+  if (max == 0 || sources.empty()) return Error::None;
+
+  struct Lane {
+    std::vector<SearchCandidate> candidates;  // indexed source
+    std::vector<SearchHit> ready;             // source without an index: hits already read
+    std::vector<uint32_t> seen;
+    size_t next = 0;
+    bool dead = false;
+  };
+  std::vector<Lane> lanes(sources.size());
+  Error firstError = Error::None;
+  size_t failed = 0;
+  for (size_t i = 0; i < sources.size(); i++) {
+    const SearchSource& s = sources[i];
+    Error err = Error::NoMemory;
+    if (s.archive && s.index && s.cursor)
+      err = searchCandidates(*s.index, *s.cursor, query, lanes[i].candidates);
+    else if (s.archive && !s.index)
+      err = searchTitles(*s.archive, nullptr, nullptr, query, max, lanes[i].ready);
+    if (err != Error::None) {
+      lanes[i].dead = true;
+      if (failed++ == 0) firstError = err;
+    }
+  }
+
+  // The lane's next distinct result, if any (and, with exactOnly, if exact).
+  auto take = [&](size_t i, bool exactOnly, SearchHit& hit) {
+    Lane& l = lanes[i];
+    if (l.dead) return false;
+    if (!sources[i].index) {
+      if (l.next >= l.ready.size() || (exactOnly && !l.ready[l.next].exact)) return false;
+      hit = std::move(l.ready[l.next++]);
+      return true;
+    }
+    while (l.next < l.candidates.size()) {
+      const SearchCandidate& c = l.candidates[l.next];
+      if (exactOnly && !c.exact) return false;
+      l.next++;
+      bool added = false;
+      if (hitFromCandidate(*sources[i].archive, c, l.seen, hit, added) != Error::None) {
+        l.dead = true;
+        return false;
+      }
+      if (added) return true;
+    }
+    return false;
+  };
+
+  SearchHit hit;
+  for (size_t i = 0; i < sources.size(); i++) {
+    while (out.size() < max && take(i, true, hit)) out.push_back({i, std::move(hit)});
+  }
+  for (bool progress = true; progress && out.size() < max;) {
+    progress = false;
+    for (size_t i = 0; i < sources.size() && out.size() < max; i++) {
+      if (take(i, false, hit)) {
+        out.push_back({i, std::move(hit)});
+        progress = true;
+      }
+    }
+  }
+  return failed == sources.size() ? firstError : Error::None;
+}
+
 }  // namespace zim

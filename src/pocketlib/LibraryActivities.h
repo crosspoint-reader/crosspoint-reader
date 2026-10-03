@@ -15,34 +15,60 @@
 
 #include "activities/UiListActivity.h"
 
-// Home -> Library: Recent (articles left part-read), the collections on the
-// card, then CrossPoint's own book library as the last row.
+namespace pocketlib {
+struct Place;
+struct Collection;
+}  // namespace pocketlib
+namespace freeink {
+struct Icon;
+}
+
+// The collection and directory entry of a saved place; false if its
+// collection or article is no longer on the card.
+bool locatePlace(const pocketlib::Place& place, size_t& collection, uint32_t& entry);
+
+// Home -> Library: a grid of tiles, two across. The top level is Recent,
+// eBooks (CrossPoint's own book library), then one tile per group of
+// collections: Wikipedia, Maps (not yet), Medical and More. A group with one
+// collection opens it; with several, it opens the same grid for its members.
+// Groups come from the manifest's "group" field, else from the collection's
+// name (tileGroupFor).
 class ShelfActivity final : public UiListActivity {
  public:
-  ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string group = "");
   void onEnter() override;
 
  private:
-  int listCount() const override;
+  int listCount() const override { return static_cast<int>(tiles_.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
-  const char* headerTitle() const override { return "Library"; }
+  void navigateButtons() override;
+  void drawFooter() override;
+  const char* headerTitle() const override { return title_.c_str(); }
 
-  enum class RowKind : uint8_t { Recent, Collection, Books, Empty };
-  struct Row {
-    RowKind kind;
-    int collection;
+  enum class TileKind : uint8_t { Recent, Books, Group, Collection, Maps };
+  struct Tile {
+    TileKind kind;
+    std::string label;
+    const freeink::Icon* icon;
+    int collection;     // TileKind::Collection
+    std::string group;  // TileKind::Group
   };
-  void rebuildRows();
+  void rebuildTiles();
   void openRecent();
+  void openCollection(size_t collection);
 
-  std::vector<Row> rows_;
-  std::vector<std::string> labels_;
-  std::vector<std::string> subtitles_;
-  std::vector<std::string> values_;
-  std::vector<freeink::ui::ListItem> items_;
+  const std::string group_;  // "" = the top level
+  std::string title_;
+  std::vector<Tile> tiles_;
+  std::vector<freeink::ui::TileGridItem> items_;
+  bool buttonsUsed_ = false;  // show the selection only once buttons move it
+  std::string notice_;        // a one-line popup over the grid, cleared on the next input
 };
+
+// "Wikipedia", "Medical" or "More": the manifest's group, else by name.
+std::string tileGroupFor(const pocketlib::Collection& collection);
 
 // A titled list of choices; finishes with MenuResult::action = the row picked
 // (cancelled on Back). Used for an article's contents and the Recent list.
@@ -92,6 +118,4 @@ class CollectionActivity final : public UiListActivity {
   std::string values_[ROW_COUNT];
   std::string subtitles_[ROW_COUNT];
   freeink::ui::ListItem items_[ROW_COUNT]{};
-  std::string lastQuery_;
-  std::vector<uint32_t> liveEntries_;  // entries behind the keyboard's suggestion rows
 };

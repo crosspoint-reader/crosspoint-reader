@@ -41,8 +41,22 @@ class KeyboardEntryActivity : public Activity {
   // Pocket Library search: rows of live suggestions between the text field and
   // the keys, refilled after every edit (on the main task). Tapping a row, or
   // OK while rows are shown, finishes with KeyboardResult::picked set.
-  using LiveFill = std::function<void(const std::string& text, std::vector<std::string>& rows, std::string& status)>;
+  struct LiveRow {
+    std::string text;
+    std::string tag;         // drawn small at the right: where the result is from
+    bool fillsText = false;  // a past search: tapping puts it in the field instead
+  };
+  using LiveFill =
+      std::function<void(const std::string& text, int scope, std::vector<LiveRow>& rows, std::string& status)>;
   void setLiveSuggestions(LiveFill fill) { liveFill = std::move(fill); }
+  // Chips above the rows choosing where to search. The first `pinned` scopes
+  // get a chip each; the rest share a last chip that opens a list of them.
+  // Changing scope refills the rows; `scope` is passed to the fill.
+  void setLiveScopes(std::vector<std::string> scopes, size_t pinned, int selected) {
+    liveScopes = std::move(scopes);
+    livePinned = std::min(pinned, liveScopes.size());
+    liveScopeSel = selected;
+  }
 #endif
 
  private:
@@ -120,9 +134,21 @@ class KeyboardEntryActivity : public Activity {
   LiveFill liveFill;
   std::string liveFor;  // text the rows were computed for
   bool liveComputed = false;
-  std::vector<std::string> liveRows;  // guarded by the render lock
+  std::vector<LiveRow> liveRows;  // guarded by the render lock
   std::string liveStatus;
   int pickedRow = -1;
+  std::vector<std::string> liveScopes;
+  size_t livePinned = 0;
+  int liveScopeSel = 0;
+  int liveRowsFor = -1;  // scope the rows were computed for
+  struct ChipBox {
+    int x, w;
+    int scope;  // -1: the shared chip that opens the list
+  };
+  std::vector<ChipBox> chipLayout() const;
+  void openScopeList();
+  std::atomic<int> liveChipTop{-1};
+  std::atomic<int> liveChipHeight{0};
   // Row geometry from the last render, for hit-testing taps in loop().
   std::atomic<int> liveTop{0};
   std::atomic<int> liveRowHeight{0};

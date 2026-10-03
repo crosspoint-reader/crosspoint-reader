@@ -26,6 +26,7 @@
 #include "fontIds.h"
 #ifdef POCKET_LIBRARY
 #include "pocketlib/LibraryActivities.h"
+#include "pocketlib/SearchActivity.h"
 #endif
 
 int HomeActivity::getMenuItemCount() const {
@@ -36,6 +37,9 @@ int HomeActivity::getMenuItemCount() const {
   if (hasOpdsServers) {
     count++;
   }
+#ifdef POCKET_LIBRARY
+  if (coverGridUi) count++;  // the search tab (the list homes have no row for it)
+#endif
   return count;
 }
 
@@ -325,6 +329,13 @@ void HomeActivity::loop() {
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
+#ifdef POCKET_LIBRARY
+      case HomeMenuItem::SEARCH:
+        if (auto search = makeUniqueNoThrow<SearchActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(search), [this](const ActivityResult&) { requestUpdate(); });
+        }
+        break;
+#endif
       default:
         break;
     }

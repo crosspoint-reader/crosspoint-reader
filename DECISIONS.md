@@ -68,6 +68,9 @@ Release tags are what we rebase onto.
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
 | `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
 | `freeink-sdk` (submodule, patched at build time) | `SdmmcBlockDevice.{h,cpp}`: 40 MHz with 20 MHz fallback, 32-sector transfers, all behind `POCKET_LIBRARY_SD_FAST` | SD speed |
+| `src/activities/util/KeyboardEntryActivity.{h,cpp}` (extended) | `#ifdef POCKET_LIBRARY`: live rows carry a source tag and can refill the field (past searches); scope chips above the rows, the last opening a list | search everything (M6) |
+| `src/activities/home/HomeActivity.{h,cpp}`, `src/activities/ActivityManager.h` (`HomeMenuItem::SEARCH`), `src/components/CoverGridHomeUi.{h,cpp}` | `#ifdef POCKET_LIBRARY`: a sixth tab (magnifier) on the Cover Grid home opens search; the list homes are unchanged | search entry point (owner's choice) |
+| `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
 | `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: the first draw after a screen change (push, pop, replace) is promoted to a half refresh, never weakening a deeper one already promoted; readers and the control center are left alone | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
 
 ## 2026-10-01 — Licensing layout
@@ -432,6 +435,35 @@ branches. A review branch publishes to a separate **preview** pre-release, so
 a change can be flashed and tried before it is merged without replacing the
 known-good **dev** build of `pocket-library`.
 
+## 2026-10-03 — Milestone 6: search everything, Library grid
+
+- **Library grid** (owner's design): two across, Recent · eBooks /
+  Wikipedia · Maps / Medical · More. Medical and More open the same grid for
+  their members. Groups come from the manifest's `group` field when the card
+  builder writes one, else from the collection's name (`tileGroupFor`), so the
+  grid works on the current card. Maps is a placeholder tile. The selected
+  tile is solid black, never dithered (see the ghosting fix), and appears only
+  once the buttons move it (touch users see no stray selection).
+- **Icons**: stock Lucide SVGs from the SDK, made with the SDK's own
+  `gen_icons.py` (`src/pocketlib/icons/libraryIcons.manifest`). Wikimedia's
+  logos are trademarks and not used.
+- **All collections stay open** once used (`Library::ensureOpen`): an archive
+  costs a few KB plus open files; only the focused one keeps decoded clusters
+  in PSRAM (`Library::open` drops the others' caches).
+- **Merging across collections** (`zim::searchMany`): exact matches from every
+  source first, then the sources take turns. Popularity scores count
+  redirects inside one archive, so they don't compare across archives; taking
+  turns keeps a small collection's best match beside Wikipedia's.
+- **An exact title in several collections** is one row ("4 sources"); tapping
+  asks which to open.
+- **eBooks** are searched through CrossPoint's own book index
+  (`/.crosspoint/library.idx`, every EPUB on the card, title and author), read
+  once per search screen. "eBooks" means the owner's EPUBs only, whatever
+  their source; Wikisource and Wikibooks stay under More.
+- **Scope follows where search was opened** (a collection, a group, Home).
+- **Recent searches** (`/.pocketlib/searches.txt`, six) and recent articles
+  fill the empty search field.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -442,6 +474,7 @@ known-good **dev** build of `pocket-library`.
 | zstd 1.5.7 single-file decoder | BSD-3-Clause (dual BSD/GPLv2) | ZIM clusters | in use, `lib/zim/src/third_party/zstd` |
 | xz-embedded v20240322 | 0BSD | older (pre-2020) ZIM clusters; the 2017 test files use it | in use, `lib/zim/src/third_party/xz` |
 | zim-testing-suite (openZIM) @ 2edf720 | test data, fetched at test time, not vendored | host tests | in use |
+| Lucide icons (via freeink-sdk `libs/assets/Icons/lucide`) | ISC | Library tile icons, generated into `src/pocketlib/icons/libraryIcons.h` | in use |
 | GoogleTest 1.17.0 | BSD-3-Clause | host tests (same as upstream) | in use |
 | python-libzim | GPL-3.0 | **test oracle only**, run by hand to cross-check zimcat output; not shipped, no code used | used once, 2026-10-02 |
 

@@ -13,7 +13,7 @@ Status date: 2026-10-03.
 | 3 | First article on device | **Passed 2026-10-03** (owner, after the out-of-memory fix) |
 | 4 | Search | **Passed 2026-10-03** (owner) |
 | 5 | Full reader | **Passed 2026-10-03** (owner) |
-| 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | **In progress**: search everything + ranking first (owner's order) |
+| 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | **In progress**: Library grid, search everything with scope chips, ranking, search tab and power-button shortcut built; awaiting device test. Then Wiktionary, CJK, Standard Ebooks |
 | 7 | Power and polish | — |
 | 8 | Atlas (stretch) | — |
 | 9 | Release | — |

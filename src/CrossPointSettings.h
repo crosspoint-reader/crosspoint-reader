@@ -154,6 +154,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
     PWR_CONFIRM = 5,
+#ifdef POCKET_LIBRARY
+    SEARCH = 6,  // opens Pocket Library search from anywhere
+#endif
     SHORT_PWRBTN_COUNT
   };
 

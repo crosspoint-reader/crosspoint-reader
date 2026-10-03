@@ -1,0 +1,20 @@
+# Manifest for src/pocketlib/icons/libraryIcons.h — regenerate with:
+#   python3 freeink-sdk/libs/assets/Icons/tools/gen_icons.py \
+#     --manifest src/pocketlib/icons/libraryIcons.manifest \
+#     --svgdir freeink-sdk/libs/assets/Icons/lucide/icons \
+#     --sizes 32 --out src/pocketlib/icons/libraryIcons.h
+# then clang-format -i the output. Stock Lucide icons (ISC licence).
+clock = clock
+book-open = book-open
+globe = globe
+map = map
+heart-pulse = heart-pulse
+ellipsis = ellipsis
+book-a = book-a
+plane = plane
+quote = quote
+scroll-text = scroll-text
+graduation-cap = graduation-cap
+stethoscope = stethoscope
+pill = pill
+shield-plus = shield-plus

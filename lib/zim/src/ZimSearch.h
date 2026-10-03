@@ -70,4 +70,22 @@ Error hitFromCandidate(Archive& archive, const SearchCandidate& c, std::vector<u
 Error searchTitles(Archive& archive, TitleIndex* index, TitleIndex::Cursor* cursor, std::string_view query, size_t max,
                    std::vector<SearchHit>& out, SearchStats* stats = nullptr);
 
+// Search across several archives at once (the device's "All" scope). Each
+// source is searched as above, then merged: every source's exact matches
+// first, in source order, then one result from each source in turn, so a small
+// collection's best match sits beside the big one's instead of under it
+// (popularity scores are not comparable between archives). A source that
+// fails is left out; the call fails only if every source did.
+struct SearchSource {
+  Archive* archive = nullptr;
+  TitleIndex* index = nullptr;           // may be null: the archive's own title list
+  TitleIndex::Cursor* cursor = nullptr;  // required with an index
+};
+struct MultiHit {
+  size_t source = 0;  // position in `sources`
+  SearchHit hit;
+};
+Error searchMany(const std::vector<SearchSource>& sources, std::string_view query, size_t max,
+                 std::vector<MultiHit>& out);
+
 }  // namespace zim

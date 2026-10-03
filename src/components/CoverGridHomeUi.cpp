@@ -16,6 +16,9 @@
 #include "icons/library.h"
 #include "icons/settings2.h"
 #include "icons/transfer.h"
+#ifdef POCKET_LIBRARY
+#include "icons/search32.h"
+#endif
 #include "util/BookProgress.h"
 
 namespace fui = freeink::ui;
@@ -266,9 +269,14 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
 }
 
 void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
+#ifdef POCKET_LIBRARY
+  static constexpr const uint8_t* ICONS[] = {FolderIcon,   LibraryIcon,   BlocksIcon,
+                                             TransferIcon, Settings2Icon, icon_search_32_bits};
+#else
   static constexpr const uint8_t* ICONS[] = {FolderIcon, LibraryIcon, BlocksIcon, TransferIcon, Settings2Icon};
+#endif
   int count = 0;
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < TAB_COUNT; ++i) {
     if (i == 2 && !hasOpds) continue;
     auto& tab = tabItems[count];
     tab.value = books->size() + count;
