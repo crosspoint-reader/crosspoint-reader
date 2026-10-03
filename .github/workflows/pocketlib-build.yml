@@ -108,8 +108,8 @@ jobs:
           cmake --build build/zim -j --target zimcat zimindex
           lipo -info build/zim/zimcat build/zim/zimindex
           mkdir out && cp build/zim/zimcat build/zim/zimindex out/
-          cp tools/cardbuilder/cardbuilder.py tools/cardbuilder/library.toml out/
-          (cd out && for f in zimcat zimindex cardbuilder.py library.toml; do shasum -a 256 "$f" > "$f.sha256"; done)
+          cp tools/cardbuilder/cardbuilder.py tools/cardbuilder/library.toml tools/books/booklist.py out/
+          (cd out && for f in zimcat zimindex cardbuilder.py library.toml booklist.py; do shasum -a 256 "$f" > "$f.sha256"; done)
       - uses: actions/upload-artifact@v6
         with:
           name: zimcat-macos
@@ -153,4 +153,5 @@ jobs:
           - zimcat: command-line ZIM reader for macOS (Intel and Apple silicon).
           - zimindex: builds the search index (.pltitles) the device uses, for macOS.
           - cardbuilder.py + library.toml: builds the microSD card (python3 cardbuilder.py plan).
+          - booklist.py: lists, prunes and tidies a folder of ebooks before they go on the card.
           Each file has a .sha256 alongside it."
