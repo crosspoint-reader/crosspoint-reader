@@ -47,12 +47,8 @@ flavour = ["", "maxi"]
 optional = true
 note = "unconfirmed name: US National Library of Medicine consumer health pages."
 
-[[collection]]
-key = "post-disaster"
-name = "zimgit-post-disaster_en"
-flavour = [""]
-optional = true
-note = "unconfirmed name: field manuals for first aid, water, shelter after disasters."
+# Post-disaster resources (zimgit-post-disaster_en) dropped 2026-10-03: it is
+# PDFs behind a JavaScript viewer page, and the device reads neither.
 
 [[collection]]
 key = "military-medicine"

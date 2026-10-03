@@ -139,5 +139,6 @@ containing "Forbidden City"; see the session summary for the download.
   Wikivoyage 68,182; MedlinePlus 17,791; each of these under a second).
 - Post-disaster (`zimgit-post-disaster_en_2024-05`) indexed to 1 title: it is
   PDFs behind one JavaScript viewer page (`C/home`; mime types include
-  application/pdf and application/wasm). The device reads neither. Owner chose
-  to keep it on the card for now; converting the PDFs is a possible later job.
+  application/pdf and application/wasm). The device reads neither. Owner dropped
+  it from `library.toml` (file left on the SSK drive); converting the PDFs is
+  a possible later job.
