@@ -65,7 +65,7 @@ TEST_P(Search, ExactMatchComesFirstWhateverTheCase) {
   for (const char* q : {"Climate change", "climate change", "CLIMATE  CHANGE", "climaté change"}) {
     const auto hits = find(q);
     ASSERT_FALSE(hits.empty()) << q;
-    EXPECT_EQ(zim::foldKey(hits[0].title), "climate change") << q;
+    EXPECT_TRUE(hits[0].exact) << q << ": " << hits[0].title;
   }
 }
 
@@ -74,17 +74,61 @@ TEST_P(Search, HitsStartWithTheQueryAndPointAtDistinctArticles) {
   const auto hits = find("clim", 20);
   EXPECT_GT(hits.size(), 3u);
   std::set<uint32_t> targets;
-  std::string previous;
-  for (const auto& h : hits) {
-    const std::string k = zim::foldKey(h.title);
-    EXPECT_TRUE(zim::keyHasPrefix(k, key)) << h.title;
-    EXPECT_LE(previous, k) << "title order";
-    previous = k;
+  for (size_t i = 0; i < hits.size(); i++) {
+    const auto& h = hits[i];
+    zim::Entry matched;
+    ASSERT_EQ(archive.entryAt(h.entry, matched), zim::Error::None);
+    EXPECT_TRUE(zim::keyHasPrefix(zim::foldKey(matched.title), key)) << h.title;
+    if (i > 0 && !hits[i - 1].exact) {
+      // Ranked: exact match first, then popularity, never rising.
+      EXPECT_FALSE(h.exact) << h.title;
+      EXPECT_LE(h.score, hits[i - 1].score) << h.title << " after " << hits[i - 1].title;
+    }
     zim::Entry e;
     ASSERT_EQ(archive.entryAt(h.entry, e), zim::Error::None);
     ASSERT_EQ(archive.resolve(e), zim::Error::None);
     EXPECT_TRUE(targets.insert(e.index).second) << h.title << " repeats an article already listed";
   }
+}
+
+TEST_P(Search, PopularArticlesComeFirst) {
+  // Scores come from redirect counts: the sample has redirects, so some are
+  // non-zero, and the first hit has the highest score of those listed.
+  for (const char* q : {"c", "clim", "glo"}) {
+    const auto hits = find(q, 8);
+    ASSERT_FALSE(hits.empty()) << q;
+    EXPECT_GT(hits[0].score, 0u) << q << ": " << hits[0].title;
+    for (const auto& h : hits) EXPECT_LE(h.score, hits[0].score) << q << ": " << h.title;
+  }
+}
+
+TEST_P(Search, RedirectsShowTheirArticle) {
+  // Any redirect hit is shown as "Article (redirect title)".
+  for (const char* q : {"c", "g", "s", "t"}) {
+    for (const auto& h : find(q, 8)) {
+      zim::Entry e;
+      ASSERT_EQ(archive.entryAt(h.entry, e), zim::Error::None);
+      if (!e.isRedirect()) {
+        EXPECT_EQ(h.title, e.title);
+        continue;
+      }
+      zim::Entry t = e;
+      ASSERT_EQ(archive.resolve(t), zim::Error::None);
+      if (t.title != e.title) {
+        EXPECT_EQ(h.title, t.title + " (" + e.title + ")");
+      }
+    }
+  }
+}
+
+TEST(SearchScore, LogScale) {
+  EXPECT_EQ(zim::popularityScore(0), 0);
+  EXPECT_EQ(zim::popularityScore(1), 0);
+  EXPECT_EQ(zim::popularityScore(2), 32);
+  EXPECT_EQ(zim::popularityScore(4), 64);
+  EXPECT_EQ(zim::popularityScore(16), 128);
+  EXPECT_EQ(zim::popularityScore(256), 255);
+  EXPECT_EQ(zim::popularityScore(100000), 255);
 }
 
 TEST_P(Search, LimitsAndEmptyQueries) {

@@ -47,7 +47,7 @@ Error TitleIndex::open(std::unique_ptr<Source> source) {
   hd.levels = rd32(h + 36);
   std::memcpy(hd.zimUuid, h + 40, 16);
   hd.zimEntryCount = rd32(h + 56);
-  if (hd.version != kTitleIndexVersion) return Error::BadVersion;
+  if (hd.version < kTitleIndexMinVersion || hd.version > kTitleIndexVersion) return Error::BadVersion;
   if (hd.pageSize != kTitleIndexPageSize) return Error::BadHeader;
   if (hd.foldVersion != kFoldVersion) return Error::BadVersion;
   const uint64_t pages = source->size() / kTitleIndexPageSize;
@@ -157,12 +157,14 @@ Error TitleIndex::next(Cursor& cursor, TitleRecord& out) {
   if (off + 2 > kTitleIndexPageSize) return Error::BadCluster;
   const uint8_t shared = b[off];
   const uint8_t suffix = b[off + 1];
-  if (shared > cursor.key_.size() || off + 2 + suffix + 4 > kTitleIndexPageSize) return Error::BadCluster;
+  const size_t tail = header_.version >= 2 ? 5 : 4;  // entry (+ score)
+  if (shared > cursor.key_.size() || off + 2 + suffix + tail > kTitleIndexPageSize) return Error::BadCluster;
   cursor.key_.resize(shared);
   cursor.key_.append(reinterpret_cast<const char*>(b + off + 2), suffix);
   out.key = cursor.key_;
   out.entry = rd32(b + off + 2 + suffix);
-  cursor.offset_ = off + 2 + suffix + 4;
+  out.score = tail == 5 ? b[off + 2 + suffix + 4] : 0;
+  cursor.offset_ = off + 2 + suffix + tail;
   --cursor.remaining_;
   return Error::None;
 }

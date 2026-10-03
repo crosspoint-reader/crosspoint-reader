@@ -208,6 +208,25 @@ optional = true
         self.assertIn("already built", out)
         self.assertIn("0 file(s) to write", out)
 
+    def test_old_index_format_is_rebuilt_and_recopied(self):
+        code, out = self.run_cb("all")
+        self.assertEqual(code, 0, out)
+        card_ix = self.card / "library" / "climate" / "climate_en_all_nopic_2024-06.pltitles"
+        staged = [p for p in Path(self.tmp).rglob("climate_en_all_nopic_2024-06.pltitles") if self.card not in p.parents]
+        self.assertEqual(len(staged), 1)
+        self.assertEqual(cardbuilder.read_index_header(staged[0])["version"], cardbuilder.INDEX_VERSION)
+        # Make both copies look like a version 1 index (same size, older header).
+        for f in (staged[0], card_ix):
+            data = bytearray(f.read_bytes())
+            data[8:12] = (1).to_bytes(4, "little")
+            f.write_bytes(bytes(data))
+        code, out = self.run_cb("all")
+        self.assertEqual(code, 0, out)
+        self.assertIn("older index format (v1)", out)
+        self.assertIn("1 file(s) to write", out)
+        self.assertEqual(cardbuilder.read_index_header(card_ix)["version"], cardbuilder.INDEX_VERSION)
+        self.assertEqual(card_ix.read_bytes(), staged[0].read_bytes())
+
     def test_download_resumes_after_a_dropped_connection(self):
         self.srv.cut_after = 100_000
         code, out = self.run_cb("download", "--only", "climate")

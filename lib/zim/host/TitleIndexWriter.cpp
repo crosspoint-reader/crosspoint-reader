@@ -10,6 +10,7 @@
 #include "TitleIndexWriter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -71,26 +72,42 @@ Error collectTitles(Archive& archive, TitleIndexWriter& writer, void (*progress)
     }
   }
   const char ns = archive.contentNamespace();
+  // Titles leading to each article (the article itself and its redirects).
+  std::vector<uint16_t> titlesOf(total, 0);
+  std::vector<std::pair<size_t, uint32_t>> recordTarget;  // record number, article it leads to
   Entry e;
   for (uint32_t i = 0; i < total; ++i) {
     if (progress && i % (1u << 20) == 0) progress(i, total);
-    if (useList && !wanted[i]) continue;
     const Error err = archive.entryAt(i, e);
     if (err != Error::None) return err;
-    if (!useList) {
-      if (e.ns != ns) continue;
-      if (!e.isRedirect() && archive.mimeType(e.mime).rfind("text/html", 0) != 0) continue;
+    if (e.ns != ns) continue;
+    // Every redirect counts towards its article's score, listed or not (some
+    // files' front-article lists leave redirects out).
+    const uint32_t target = e.isRedirect() && e.redirectIndex < total ? e.redirectIndex : i;
+    const bool listed = useList ? static_cast<bool>(wanted[i])
+                                : (e.isRedirect() || archive.mimeType(e.mime).rfind("text/html", 0) == 0);
+    if (e.isRedirect() || listed) {
+      if (titlesOf[target] < UINT16_MAX) ++titlesOf[target];
     }
-    writer.add(foldKey(e.title), i);
+    if (listed) recordTarget.emplace_back(writer.add(foldKey(e.title), i), target);
   }
+  for (const auto& [record, target] : recordTarget) writer.setScore(record, popularityScore(titlesOf[target]));
   if (progress) progress(total, total);
   return Error::None;
 }
 
-void TitleIndexWriter::add(std::string_view key, uint32_t entry) {
+uint8_t popularityScore(uint32_t titles) {
+  // 1 title -> 0, 2 -> 32, 4 -> 64, 16 -> 128, 256+ -> 255.
+  if (titles <= 1) return 0;
+  const double s = std::log2(static_cast<double>(titles)) * 32.0;
+  return static_cast<uint8_t>(std::min(255.0, s));
+}
+
+size_t TitleIndexWriter::add(std::string_view key, uint32_t entry, uint8_t score) {
   if (key.size() > kMaxKeyBytes) key = key.substr(0, kMaxKeyBytes);
-  records_.push_back(Record{arena_.size(), entry, static_cast<uint8_t>(key.size())});
+  records_.push_back(Record{arena_.size(), entry, static_cast<uint8_t>(key.size()), score});
   arena_.insert(arena_.end(), key.begin(), key.end());
+  return records_.size() - 1;
 }
 
 bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16], uint32_t zimEntryCount,
@@ -135,7 +152,7 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
       const size_t limit = std::min(prev.size(), key.size());
       while (shared < limit && prev[shared] == key[shared]) ++shared;
     }
-    if (off + 2 + (key.size() - shared) + 4 > kPage) {
+    if (off + 2 + (key.size() - shared) + 5 > kPage) {
       flushLeaf();
       shared = 0;
     }
@@ -144,7 +161,8 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
     page[off + 1] = static_cast<uint8_t>(key.size() - shared);
     std::memcpy(page + off + 2, key.data() + shared, key.size() - shared);
     put32(page + off + 2 + key.size() - shared, r.entry);
-    off += 2 + (key.size() - shared) + 4;
+    page[off + 2 + key.size() - shared + 4] = r.score;
+    off += 2 + (key.size() - shared) + 5;
     ++count;
     prev.assign(key);
   }

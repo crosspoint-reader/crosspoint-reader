@@ -25,7 +25,9 @@ namespace zim {
 class TitleIndexWriter {
  public:
   // `key` must already be folded (foldKey) and at most kMaxKeyBytes long.
-  void add(std::string_view key, uint32_t entry);
+  // Returns the record's number, for setScore.
+  size_t add(std::string_view key, uint32_t entry, uint8_t score = 0);
+  void setScore(size_t record, uint8_t score) { records_[record].score = score; }
   size_t size() const { return records_.size(); }
 
   // Sorts and writes the index to `path` (via a temporary file renamed into
@@ -37,6 +39,7 @@ class TitleIndexWriter {
     uint64_t offset;
     uint32_t entry;
     uint8_t length;
+    uint8_t score;
   };
   std::string_view keyOf(const Record& r) const { return std::string_view(arena_.data() + r.offset, r.length); }
 
@@ -46,9 +49,15 @@ class TitleIndexWriter {
 
 // Adds every searchable title of `archive`: the front-article list (articles
 // and the redirects to them) when the file has one, else every entry in the
-// content namespace that is HTML or a redirect. Walks the directory in file
+// content namespace that is HTML or a redirect. Each title is scored by how
+// many titles lead to its article (itself and every redirect to it), on a
+// log scale: major topics gather redirects ("Zijin Cheng", "Purple Forbidden
+// City"), so the count stands in for popularity, which a ZIM does not record. Walks the directory in file
 // order, so it reads sequentially. `progress` (may be null) is called now and
 // then with entries visited so far and the total.
 Error collectTitles(Archive& archive, TitleIndexWriter& writer, void (*progress)(uint32_t done, uint32_t total));
+
+// Score for an article reached by `titles` titles (see collectTitles).
+uint8_t popularityScore(uint32_t titles);
 
 }  // namespace zim

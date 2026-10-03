@@ -46,7 +46,10 @@
 
 namespace zim {
 
-constexpr uint32_t kTitleIndexVersion = 1;
+// 2 adds a popularity byte to every record (see collectTitles); 1 is still
+// read, with every score 0.
+constexpr uint32_t kTitleIndexVersion = 2;
+constexpr uint32_t kTitleIndexMinVersion = 1;
 constexpr uint32_t kTitleIndexPageSize = 4096;
 constexpr char kTitleIndexMagic[8] = {'P', 'L', 'T', 'I', 'T', 'L', 'E', '\0'};
 
@@ -66,6 +69,7 @@ struct TitleIndexHeader {
 struct TitleRecord {
   std::string key;  // folded title
   uint32_t entry = 0;
+  uint8_t score = 0;  // popularity, 0..255 (version 2); 0 in version 1 files
 };
 
 class TitleIndex {

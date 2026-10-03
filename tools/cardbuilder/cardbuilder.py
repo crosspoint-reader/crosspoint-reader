@@ -52,6 +52,9 @@ CATALOG = "https://library.kiwix.org/catalog/v2/entries"
 PART_SIZE = 4000 * 1024 * 1024  # 4,000 MiB: under FAT32's 4 GiB file limit
 CARD_DIR = "library"
 MANIFEST = "manifest.json"
+# Title index format the current zimindex writes; older indexes are rebuilt
+# (version 2 added the popularity score that ranks search results).
+INDEX_VERSION = 2
 STATE_FILE = ".cardbuilder-state.json"
 CHUNK = 4 * 1024 * 1024
 USER_AGENT = f"PocketLibraryCardBuilder/{VERSION}"
@@ -426,9 +429,12 @@ def build_index(zim: Path, zimindex: Path) -> Path:
     out = index_path(zim)
     if out.exists() and out.stat().st_mtime >= zim.stat().st_mtime:
         try:
-            if read_index_header(out)["zim_uuid"] == read_zim_uuid(zim):
+            head = read_index_header(out)
+            if head["zim_uuid"] == read_zim_uuid(zim) and head["version"] >= INDEX_VERSION:
                 say(f"  {out.name}: already built")
                 return out
+            if head["version"] < INDEX_VERSION:
+                say(f"  {out.name}: older index format (v{head['version']}), rebuilding for ranked search")
         except BuildError:
             pass
     say(f"  building {out.name} (large collections take several minutes)")
@@ -484,7 +490,17 @@ def plan_placement(ed: Edition, zim: Path, sha: str, card: Path, part_size: int)
 
 
 def item_done(it: Item) -> bool:
-    return it.dest.exists() and it.dest.stat().st_size == it.size
+    if not it.dest.exists() or it.dest.stat().st_size != it.size:
+        return False
+    if it.src.suffix == ".pltitles":
+        # A rebuilt index can keep its size; its header (format version,
+        # record count, ZIM UUID) tells the copies apart.
+        try:
+            with open(it.src, "rb") as a, open(it.dest, "rb") as b:
+                return a.read(64) == b.read(64)
+        except OSError:
+            return False
+    return True
 
 
 def uncached(f) -> None:
