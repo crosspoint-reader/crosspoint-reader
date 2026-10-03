@@ -15,6 +15,9 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include <cctype>
+#include <string_view>
+
 #include "ArticleActivity.h"
 #include "LibraryActivities.h"
 #include "PocketLibrary.h"
@@ -39,46 +42,53 @@ struct Topic {
   Candidate candidates[4];  // tried in order; title nullptr ends the list
 };
 
-// Emergencies, most urgent first. MedlinePlus (US National Library of
-// Medicine: plain language, reviewed, public domain) first; then MDWiki or
-// Wikipedia. Titles are as the sites name them; a row whose titles are all
-// missing from the card is left out.
-constexpr Topic kFirstAid[] = {
-    {"First aid basics", {{Wikibooks, "First Aid"}, {MedlinePlus, "First Aid"}, {Wikipedia, "First aid"}}},
-    {"CPR",
-     {{MedlinePlus, "CPR - adult and child after onset of puberty"},
-      {MedlinePlus, "CPR"},
-      {MDWiki, "Cardiopulmonary resuscitation"},
-      {Wikipedia, "Cardiopulmonary resuscitation"}}},
-    {"Choking", {{MedlinePlus, "Choking - adult or child over 1 year"}, {MDWiki, "Choking"}, {Wikipedia, "Choking"}}},
-    {"Severe bleeding", {{MedlinePlus, "Bleeding"}, {Wikipedia, "Bleeding"}}},
-    {"Shock", {{MedlinePlus, "Shock"}, {Wikipedia, "Shock (circulatory)"}}},
-    {"Heart attack",
-     {{MedlinePlus, "Heart attack first aid"}, {MedlinePlus, "Heart attack"}, {Wikipedia, "Myocardial infarction"}}},
-    {"Stroke", {{MedlinePlus, "Stroke"}, {MDWiki, "Stroke"}, {Wikipedia, "Stroke"}}},
-    {"Severe allergic reaction",
-     {{MedlinePlus, "Anaphylaxis"}, {MedlinePlus, "Allergic reactions"}, {Wikipedia, "Anaphylaxis"}}},
-    {"Burns", {{MedlinePlus, "Burns"}, {Wikipedia, "Burn"}}},
-    {"Broken bones", {{MedlinePlus, "Broken bone"}, {Wikipedia, "Bone fracture"}}},
-    {"Head injury", {{MedlinePlus, "Head injury - first aid"}, {Wikipedia, "Head injury"}}},
-    {"Poisoning", {{MedlinePlus, "Poisoning first aid"}, {MedlinePlus, "Poisoning"}, {Wikipedia, "Poisoning"}}},
-    {"Seizures", {{MedlinePlus, "Seizures"}, {Wikipedia, "Epileptic seizure"}}},
-    {"Heat stroke and exhaustion", {{MedlinePlus, "Heat emergencies"}, {Wikipedia, "Heat stroke"}}},
-    {"Hypothermia", {{MedlinePlus, "Hypothermia"}, {Wikipedia, "Hypothermia"}}},
-    {"Frostbite", {{MedlinePlus, "Frostbite"}, {Wikipedia, "Frostbite"}}},
-    {"Drowning", {{MedlinePlus, "Near drowning"}, {Wikipedia, "Drowning"}}},
-    {"Electric shock", {{MedlinePlus, "Electrical injury"}, {Wikipedia, "Electrical injury"}}},
-    {"Low blood sugar", {{MedlinePlus, "Low blood sugar"}, {Wikipedia, "Hypoglycemia"}}},
-    {"Cuts and wounds", {{MedlinePlus, "Cuts and puncture wounds"}, {Wikipedia, "Wound"}}},
-    {"Bites and stings", {{MedlinePlus, "Insect bites and stings"}, {Wikipedia, "Insect bites and stings"}}},
-    {"Snake bites", {{MedlinePlus, "Snake bites"}, {Wikipedia, "Snakebite"}}},
-    {"Animal bites", {{MedlinePlus, "Animal bites"}, {Wikipedia, "Dog bite"}}},
-    {"Sprains and strains", {{MedlinePlus, "Sprains"}, {Wikipedia, "Sprain"}}},
-    {"Eye injuries", {{MedlinePlus, "Eye emergencies"}, {Wikipedia, "Eye injury"}}},
-    {"Nosebleed", {{MedlinePlus, "Nosebleed"}, {Wikipedia, "Nosebleed"}}},
-    {"Fainting", {{MedlinePlus, "Fainting"}, {Wikipedia, "Syncope (medicine)"}}},
-    {"Dehydration", {{MedlinePlus, "Dehydration"}, {Wikipedia, "Dehydration"}}},
-    {"Recovery position", {{MDWiki, "Recovery position"}, {Wikipedia, "Recovery position"}}},
+// First Aid: what to do, from sources written as instructions. Each row is a
+// MedlinePlus page (US National Library of Medicine: plain language, reviewed,
+// public domain) named by its permanent address on medlineplus.gov, which
+// opens at its "First Aid" section; else a chapter of the Wikibooks First Aid
+// manual. A row neither answers is left out. Encyclopedia articles about the
+// condition (Wikipedia, MDWiki) are deliberately not used here.
+struct Aid {
+  const char* label;
+  const char* medline;       // path under medlineplus.gov/, or nullptr
+  const char* medlineTitle;  // the page's own title, to check the address
+  const char* wikibooks;     // chapter under First_Aid/, or nullptr
+};
+constexpr Aid kFirstAid[] = {
+    {"Is it an emergency?", "ency/article/001927.htm", "Recognizing medical emergencies",
+     "Emergency_First_Aid_&_Initial_Action_Steps"},
+    {"CPR: adult or teen", "ency/article/000013.htm", "CPR - adult and child after onset of puberty", "CPR_summary"},
+    {"CPR: child (1 to puberty)", "ency/article/000012.htm", "CPR - young child", "CPR_summary"},
+    {"CPR: infant", "ency/article/000011.htm", "CPR - infant", "CPR_summary"},
+    {"Choking: adult or child", "ency/article/000049.htm", "Choking - adult or child over 1 year", nullptr},
+    {"Choking: infant", "ency/article/000048.htm", "Choking - infant under 1 year", nullptr},
+    {"Choking: unconscious", "ency/article/000051.htm", "Choking - unconscious adult or child", nullptr},
+    {"Unconscious person", "ency/article/000022.htm", "Unconsciousness - first aid", nullptr},
+    {"Severe bleeding", "ency/article/000045.htm", "Bleeding", "External_Bleeding"},
+    {"Shock", "ency/article/000039.htm", "Shock", "Shock"},
+    {"Heart attack", "ency/article/000063.htm", "Heart attack first aid", "Heart_Attack_&_Angina"},
+    {"Stroke", nullptr, nullptr, "Stroke_&_TIA"},
+    {"Trouble breathing", "ency/article/000007.htm", "Breathing difficulties - first aid", nullptr},
+    {"Severe allergic reaction", "ency/article/000844.htm", "Anaphylaxis", nullptr},
+    {"Burns", "ency/article/000030.htm", "Burns", "Burns"},
+    {"Poisoning", "ency/article/007579.htm", "Poisoning first aid", "Poisoning"},
+    {"Head injury", "ency/article/000028.htm", "Head injury - first aid", nullptr},
+    {"Neck or back injury", "ency/article/000029.htm", "Spinal injury", nullptr},
+    {"Broken bones", "ency/article/000001.htm", "Broken bone", nullptr},
+    {"Seizures", "ency/article/003200.htm", "Seizures", "Seizures"},
+    {"Heat stroke and exhaustion", "ency/article/000056.htm", "Heat emergencies", nullptr},
+    {"Hypothermia", "ency/article/000038.htm", "Hypothermia", "Cold-Related_Illness_&_Injury"},
+    {"Frostbite", "ency/article/000057.htm", "Frostbite", "Cold-Related_Illness_&_Injury"},
+    {"Electric shock", "ency/article/000053.htm", "Electrical injury", nullptr},
+    {"Low blood sugar", "ency/patientinstructions/000085.htm", "Low blood sugar", nullptr},
+    {"Cuts and wounds", "ency/article/000043.htm", "Cuts and puncture wounds", nullptr},
+    {"Snake bites", "ency/article/000031.htm", "Snake bites", nullptr},
+    {"Animal bites", "ency/patientinstructions/000734.htm", "Animal bites", nullptr},
+    {"Insect bites and stings", "ency/article/000033.htm", "Insect bites and stings", nullptr},
+    {"Sprains", "ency/article/000041.htm", "Sprains", nullptr},
+    {"Eye injuries", "ency/article/000054.htm", "Eye emergencies", nullptr},
+    {"Nosebleed", "ency/article/003106.htm", "Nosebleed", nullptr},
+    {"Fainting", "ency/article/003092.htm", "Fainting", nullptr},
 };
 
 // Body systems and broad topics: MedlinePlus's own group pages, then the
@@ -118,6 +128,45 @@ const char* sourceName(Source s) {
   }
 }
 
+// Lowercase, trimmed: titles compare loosely ("Nosebleed " on the site).
+std::string looseTitle(std::string_view s) {
+  while (!s.empty() && (s.front() == ' ' || s.back() == ' ')) {
+    if (s.front() == ' ') s.remove_prefix(1);
+    if (!s.empty() && s.back() == ' ') s.remove_suffix(1);
+  }
+  std::string out(s);
+  for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return out;
+}
+
+// The page at `path` (tried in the namespaces and host folders a scraped
+// site or a wiki uses), when its title begins with `expect`: a wrong address
+// then opens nothing rather than the wrong page. A title that is only the
+// path (no <title> kept) is taken on trust.
+bool findChecked(zim::Archive& archive, const char* const* prefixes, std::string_view path, std::string_view expect,
+                 uint32_t& entry) {
+  const std::string want = looseTitle(expect);
+  for (char ns : {archive.contentNamespace(), 'A', 'C'}) {
+    for (const char* const* p = prefixes; *p; p++) {
+      const std::string full = std::string(*p) + std::string(path);
+      zim::Entry e;
+      if (archive.findByPath(ns, full, e) != zim::Error::None) continue;
+      if (archive.resolve(e) != zim::Error::None) continue;
+      const std::string got = looseTitle(e.title);
+      if (e.title != e.path && got.compare(0, want.size(), want) != 0) {
+        LOG_INF("PLIB", "First Aid: %s is \"%s\", not \"%s\"", full.c_str(), e.title.c_str(), want.c_str());
+        return false;
+      }
+      entry = e.index;
+      return true;
+    }
+  }
+  return false;
+}
+
+constexpr const char* kMedlinePrefixes[] = {"medlineplus.gov/", "www.medlineplus.gov/", "", nullptr};
+constexpr const char* kWikibooksPrefixes[] = {"First_Aid/", nullptr};
+
 }  // namespace
 
 CuratedListActivity::CuratedListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Kind kind)
@@ -131,8 +180,7 @@ void CuratedListActivity::onEnter() {
   UiListActivity::onEnter();
 }
 
-// One exact-title lookup per candidate until one is on the card: a few index
-// pages each, no article reads.
+// Finds each row's article on the card when the screen opens.
 void CuratedListActivity::resolve() {
   auto& lib = pocketlib::Library::instance();
   const auto& cols = lib.collections();
@@ -145,14 +193,52 @@ void CuratedListActivity::resolve() {
   }
 
   rows_.clear();
-  if (kind_ == Kind::Encyclopedia) {
-    rows_.push_back({"Search medical topics", "MedlinePlus and MDWiki", -1, 0});
+  if (kind_ == Kind::FirstAid) {
+    resolveFirstAid(collectionOf[MedlinePlus], collectionOf[Wikibooks]);
+  } else {
+    resolveTopics(collectionOf);
   }
-  const Topic* topics = kind_ == Kind::FirstAid ? kFirstAid : kEncyclopedia;
-  const size_t count = kind_ == Kind::FirstAid ? std::size(kFirstAid) : std::size(kEncyclopedia);
+  if (rows_.empty() || (kind_ == Kind::Encyclopedia && rows_.size() == 1)) {
+    LOG_INF("PLIB", "%s: nothing found on the card", title_.c_str());
+  }
+
+  items_.assign(rows_.size(), fui::ListItem{});
+  for (size_t i = 0; i < rows_.size(); i++) {
+    items_[i].label = rows_[i].label.c_str();
+    items_[i].subtitle = rows_[i].subtitle.c_str();
+    items_[i].actionValue = static_cast<int16_t>(i);
+  }
+}
+
+// MedlinePlus by address, opened at its "First Aid" heading; else the
+// Wikibooks chapter, from the top.
+void CuratedListActivity::resolveFirstAid(int medline, int wikibooks) {
+  auto& lib = pocketlib::Library::instance();
+  zim::Archive* ml = medline >= 0 ? lib.open(static_cast<size_t>(medline)) : nullptr;
+  zim::Archive* wb = wikibooks >= 0 ? lib.open(static_cast<size_t>(wikibooks)) : nullptr;
+  for (const Aid& aid : kFirstAid) {
+    uint32_t entry = 0;
+    if (ml && aid.medline && findChecked(*ml, kMedlinePrefixes, aid.medline, aid.medlineTitle, entry)) {
+      rows_.push_back({aid.label, std::string("MedlinePlus \xC2\xB7 ") + aid.medlineTitle, medline, entry, "First Aid"});
+      continue;
+    }
+    if (wb && aid.wikibooks && findChecked(*wb, kWikibooksPrefixes, aid.wikibooks, "First Aid", entry)) {
+      std::string chapter = aid.wikibooks;
+      for (char& c : chapter)
+        if (c == '_') c = ' ';
+      rows_.push_back({aid.label, "Wikibooks First Aid \xC2\xB7 " + chapter, wikibooks, entry, {}});
+    }
+  }
+}
+
+// One exact-title lookup per candidate until one is on the card: a few index
+// pages each, no article reads.
+void CuratedListActivity::resolveTopics(const int* collectionOf) {
+  auto& lib = pocketlib::Library::instance();
+  rows_.push_back({"Search medical topics", "MedlinePlus and MDWiki", -1, 0, {}});
   std::vector<pocketlib::Library::Hit> hits;
-  for (size_t t = 0; t < count; t++) {
-    for (const Candidate& c : topics[t].candidates) {
+  for (const Topic& topic : kEncyclopedia) {
+    for (const Candidate& c : topic.candidates) {
       if (!c.title) break;
       const int col = collectionOf[c.source];
       if (col < 0) continue;
@@ -165,19 +251,9 @@ void CuratedListActivity::resolve() {
         }
       }
       if (!exact) continue;
-      rows_.push_back({topics[t].label, std::string(sourceName(c.source)) + " \xC2\xB7 " + c.title, col, exact->entry});
+      rows_.push_back({topic.label, std::string(sourceName(c.source)) + " \xC2\xB7 " + c.title, col, exact->entry, {}});
       break;
     }
-  }
-  if (rows_.empty() || (kind_ == Kind::Encyclopedia && rows_.size() == 1 && collectionOf[MedlinePlus] < 0)) {
-    LOG_INF("PLIB", "%s: nothing found on the card", title_.c_str());
-  }
-
-  items_.assign(rows_.size(), fui::ListItem{});
-  for (size_t i = 0; i < rows_.size(); i++) {
-    items_[i].label = rows_[i].label.c_str();
-    items_[i].subtitle = rows_[i].subtitle.c_str();
-    items_[i].actionValue = static_cast<int16_t>(i);
   }
 }
 
@@ -205,7 +281,7 @@ void CuratedListActivity::activateIndex(int index) {
     return;
   }
   auto article =
-      makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, static_cast<size_t>(row.collection), row.entry);
+      makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, static_cast<size_t>(row.collection), row.entry, row.landing);
   if (article) startActivityForResult(std::move(article), [this](const ActivityResult&) { requestUpdate(); });
 }
 

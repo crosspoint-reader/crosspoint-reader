@@ -613,3 +613,15 @@ To be measured in M3.
 | Open article, cluster cached | ≤ 300 ms | |
 | Page turn layout | ≤ 100 ms | |
 | Wake to usable screen | ≤ 1 s excl. refresh | |
+
+## 2026-10-03 — First Aid: instructions only, by permanent address
+
+First Aid rows name a MedlinePlus page by its path under medlineplus.gov and
+open it at its "First Aid" heading; the fallback is the Wikibooks First Aid
+manual. Encyclopedia articles (Wikipedia, MDWiki) describe a condition at
+length and bury what to do, so they stay out of First Aid (they still serve
+the Medical Encyclopedia). Lookup by path is stable across MedlinePlus
+retitlings; a title check guards against a wrong address. Stroke, drowning,
+dehydration and the recovery position have no MedlinePlus first-aid page, so
+they come from Wikibooks or are folded into other rows (recovery position is
+in "Unconscious person").

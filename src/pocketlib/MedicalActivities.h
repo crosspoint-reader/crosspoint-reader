@@ -17,11 +17,11 @@
 #include "activities/UiListActivity.h"
 
 // Medical → First Aid and Medical Encyclopedia: hand-made lists over the
-// collections already on the card. Each row names the article it wants by
-// title, in order of preference ("Choking - adult or child over 1 year" in
-// MedlinePlus, else "Choking" in MDWiki or Wikipedia); the titles are looked
-// up (exact, through the card's search index) when the screen opens, and a
-// row nothing on the card answers is left out.
+// collections already on the card. First Aid rows name a MedlinePlus page by
+// its permanent address (opened at its "First Aid" section), else a chapter
+// of the Wikibooks First Aid manual. Encyclopedia rows name titles in order of
+// preference (MedlinePlus, then Wikipedia), looked up exactly through the
+// card's search index. A row nothing on the card answers is left out.
 class CuratedListActivity final : public UiListActivity {
  public:
   enum class Kind : uint8_t { FirstAid, Encyclopedia };
@@ -34,6 +34,7 @@ class CuratedListActivity final : public UiListActivity {
     std::string subtitle;
     int collection = -1;  // -1: the search row (Encyclopedia)
     uint32_t entry = 0;
+    std::string landing;  // section to open at ("First Aid"); "" = the usual place
   };
 
   int listCount() const override { return static_cast<int>(rows_.size()); }
@@ -41,6 +42,8 @@ class CuratedListActivity final : public UiListActivity {
   void activateIndex(int index) override;
   const char* headerTitle() const override { return title_.c_str(); }
   void resolve();
+  void resolveFirstAid(int medline, int wikibooks);
+  void resolveTopics(const int* collectionOf);  // indexed by source
 
   const Kind kind_;
   std::string title_;

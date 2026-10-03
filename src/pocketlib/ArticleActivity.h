@@ -45,7 +45,10 @@ class Page;
 // article was left is saved (ReadingHistory) and restored on the next open.
 class ArticleActivity final : public Activity {
  public:
-  ArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection, uint32_t entryIndex);
+  // `landing` (a fragment or a heading's text, "First Aid") opens the article
+  // at that section instead of where it was left; "" for the usual place.
+  ArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection, uint32_t entryIndex,
+                  std::string landing = {});
   ~ArticleActivity() override;
 
   void onEnter() override;
@@ -81,7 +84,8 @@ class ArticleActivity final : public Activity {
   // (render lock held by the caller). -1 when not found.
   int pageForAnchor(const std::string& anchor);
   int pageForOffset(uint32_t offset);
-  // "#History" -> "pl-h3" through the headings' aliases; "" if unknown.
+  // "#History" -> "pl-h3" through the headings' aliases, else a heading whose
+  // text matches (any case: "first aid"); "" if unknown.
   std::string anchorForFragment(const std::string& fragment) const;
   std::unique_ptr<Page> loadPage(int index);
   void showPage(int index);
@@ -112,6 +116,7 @@ class ArticleActivity final : public Activity {
 
   const size_t collection_;
   uint32_t entry_;      // directory index as asked for (may be a redirect)
+  const std::string landing_;
   zim::Entry article_;  // the resolved content entry being read
   std::string collectionKey_;
   std::atomic<State> state_{State::Loading};

@@ -12,6 +12,8 @@
 
 #include "ArticleActivity.h"
 
+#include <cctype>
+
 #include <Epub/Page.h>
 #include <Epub/blocks/ImageBlock.h>
 #include <Epub/hyphenation/Hyphenator.h>
@@ -87,8 +89,11 @@ std::string readable(std::string path) {
 }  // namespace
 
 ArticleActivity::ArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection,
-                                 uint32_t entryIndex)
-    : Activity("Article", renderer, mappedInput), collection_(collection), entry_(entryIndex) {}
+                                 uint32_t entryIndex, std::string landing)
+    : Activity("Article", renderer, mappedInput),
+      collection_(collection),
+      entry_(entryIndex),
+      landing_(std::move(landing)) {}
 
 ArticleActivity::~ArticleActivity() {
   if (parser_) parser_->abortParse();
@@ -105,7 +110,7 @@ void ArticleActivity::onEnter() {
   ImageBlock::setExtractor(this, &ArticleActivity::extractImage);
   const auto& cols = pocketlib::Library::instance().collections();
   if (collection_ < cols.size()) collectionKey_ = cols[collection_].key;
-  openEntry(entry_, kNoOffset, "");
+  openEntry(entry_, kNoOffset, landing_);
 }
 
 void ArticleActivity::onExit() {
@@ -512,6 +517,16 @@ std::string ArticleActivity::anchorForFragment(const std::string& fragment) cons
     return s;
   }();
   if (underscored != fragment) return anchorForFragment(underscored);
+  const auto sameText = [](const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++) {
+      if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) return false;
+    }
+    return true;
+  };
+  for (size_t i = 0; i < headings_.size(); i++) {
+    if (sameText(headings_[i].text, fragment)) return zim::headingAnchor(i);
+  }
   return {};
 }
 

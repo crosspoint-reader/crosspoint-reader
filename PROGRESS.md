@@ -521,3 +521,21 @@ containing "Forbidden City"; see the session summary for the download.
   contents when they opened with the article). The toolbar's freed slot is
   Text size (the reader's own point sizes, same setting books use; the article
   is laid out again at the same place). 92 host tests, 7 layout tests pass.
+
+## 2026-10-03 — First Aid rebuilt around instructions
+
+- The owner found First Aid opening encyclopedia articles about the condition
+  (Wikipedia, MDWiki) instead of what to do. First Aid now uses only sources
+  written as instructions: MedlinePlus pages named by their permanent address
+  on medlineplus.gov (ency/article/000030.htm is Burns), opened at their
+  "First Aid" section; else a chapter of the Wikibooks First Aid manual. 33
+  rows (CPR by age, choking by age, unconscious person, bleeding, stroke, …);
+  Wikipedia and MDWiki are no longer used there.
+- Every address was checked against the live site's titles. On the card, a
+  page found at an address must also carry the expected title, so a wrong
+  number opens nothing rather than the wrong page.
+- Articles can open at a named section: `ArticleActivity(…, landing)`, and a
+  fragment now also matches a heading's text in any case.
+- Device checklist: Medical → First Aid lists the rows with "MedlinePlus ·
+  …" under them; Burns opens on its First Aid section; Stroke (no MedlinePlus
+  first-aid page) shows only if the Wikibooks collection is on the card.
