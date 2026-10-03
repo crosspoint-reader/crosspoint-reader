@@ -83,6 +83,8 @@ jobs:
           set -euo pipefail
           mkdir out
           cp ".pio/build/${{ matrix.env }}/firmware.bin" "out/${{ matrix.name }}.bin"
+          # Symbols for decoding crash_report.txt addresses (artifact only, not the release).
+          cp ".pio/build/${{ matrix.env }}/firmware.elf" "out/${{ matrix.name }}.elf"
           (cd out && sha256sum "${{ matrix.name }}.bin" > "${{ matrix.name }}.bin.sha256")
           ls -l out
           cat out/*.sha256
