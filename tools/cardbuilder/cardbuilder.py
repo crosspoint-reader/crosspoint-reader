@@ -604,7 +604,7 @@ def cmd_plan(eds: list[Edition], staging: Path, card: Path | None) -> None:
         total += ed.size
         say(f"{ed.want.key:<22} {ed.filename:<44} {human(ed.size):>9}  {'yes' if staged else 'no'}")
     say(f"{'Total':<67} {human(total):>9}")
-    say(f"Search indexes add roughly 0.3% on top.")
+    say(f"Search indexes add roughly 0.5% on top.")
     st_free = shutil.disk_usage(staging).free if staging.exists() else 0
     missing = sum(ed.size for ed in eds if not (staging / ed.filename).exists())
     say(f"Staging {staging}: {human(st_free)} free, {human(missing)} still to download"
@@ -612,8 +612,8 @@ def cmd_plan(eds: list[Edition], staging: Path, card: Path | None) -> None:
     if card:
         if card.is_dir():
             free = shutil.disk_usage(card).free
-            say(f"Card {card}: {human(free)} free, collections need about {human(total * 1.003)}"
-                f"{'  << NOT ENOUGH' if total * 1.003 > free else ''} (files already on the card count as free here).")
+            say(f"Card {card}: {human(free)} free, collections need about {human(total * 1.005)}"
+                f"{'  << NOT ENOUGH' if total * 1.005 > free else ''} (files already on the card count as free here).")
         else:
             say(f"Card {card}: not mounted.")
 

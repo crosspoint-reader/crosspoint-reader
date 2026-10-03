@@ -119,3 +119,10 @@ containing "Forbidden City"; see the session summary for the download.
   `cardbuilder.py` and `library.toml`.
 - **Next for the owner**: `python3 cardbuilder.py plan`, the first live
   catalog check.
+- Owner ran `cardbuilder.py plan`: the live catalog worked first time. 9 of 10
+  collections resolved; `fas-military-medicine_en` does not exist (optional,
+  skipped). MedlinePlus (`medlineplus.gov_en_all_2025-01`, 1.9 GB) and
+  post-disaster (`zimgit-post-disaster_en_2024-05`, 645 MB) are real. mdwiki
+  has no nopic edition, so the 2.3 GB maxi was used. Total 74.8 GB; 22.1 GB
+  still to download; 439.6 GB free on the SSK drive. The index estimate in
+  `plan` was corrected from 0.3% to 0.5% after the real Wikipedia index.
