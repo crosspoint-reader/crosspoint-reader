@@ -2849,6 +2849,15 @@ void EpubReaderActivity::updateBookmarkFlag() {
   });
 }
 
+#ifdef ENABLE_SERIAL_CONTROL
+bool EpubReaderActivity::controlBusy() const {
+  // A builder paused at its page window or by the heap gate is not busy.
+  const bool building = backgroundBuildWanted() && !buildHeapPaused;
+  return building || buildPopupPending || pendingManualTurn != 0 || pendingPageJump.has_value() ||
+         pendingOffsetJump.has_value() || pendingPercentJump || !pendingAnchor.empty();
+}
+#endif
+
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Epub;
