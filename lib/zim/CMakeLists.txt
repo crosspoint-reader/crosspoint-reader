@@ -48,6 +48,9 @@ add_library(zim STATIC
   src/ZimDecompress.cpp
   src/ZimFold.cpp
   src/ZimTitleIndex.cpp
+  src/ZimHtml.cpp
+  src/ZimSearch.cpp
+  src/ZimLink.cpp
 )
 target_include_directories(zim PUBLIC src)
 target_link_libraries(zim PRIVATE zim_thirdparty)
@@ -86,8 +89,17 @@ if(ZIM_BUILD_TESTS)
 
   enable_testing()
   include(GoogleTest)
-  add_executable(zim_tests test/ZimArchiveTest.cpp test/SplitSourceTest.cpp test/TitleIndexTest.cpp)
-  target_link_libraries(zim_tests PRIVATE zim_host zim zim_thirdparty GTest::gtest_main)
+  # The firmware's own expat, built with the firmware's flags, so the HTML
+  # cleaner's output is checked by the same parser that lays it out on device.
+  add_library(zim_test_expat STATIC
+    ../expat/xmlparse.c ../expat/xmlrole.c ../expat/xmltok.c)
+  target_include_directories(zim_test_expat PUBLIC ../expat)
+  target_compile_definitions(zim_test_expat PUBLIC XML_GE=0 XML_CONTEXT_BYTES=1024 HAVE_EXPAT_CONFIG_H)
+
+  add_executable(zim_tests test/ZimArchiveTest.cpp test/SplitSourceTest.cpp test/TitleIndexTest.cpp
+    test/HtmlCleanTest.cpp test/SearchTest.cpp
+    test/LinkTest.cpp)
+  target_link_libraries(zim_tests PRIVATE zim_host zim zim_thirdparty zim_test_expat GTest::gtest_main)
   target_compile_definitions(zim_tests PRIVATE ZIM_TEST_DATA_DIR="${ZIM_TEST_DATA_DIR}")
   target_compile_options(zim_tests PRIVATE -Wall -Wextra)
   gtest_discover_tests(zim_tests DISCOVERY_TIMEOUT 60)

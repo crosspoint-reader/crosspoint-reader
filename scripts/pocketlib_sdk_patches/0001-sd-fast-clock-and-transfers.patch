@@ -1,0 +1,52 @@
+Pocket Library patch to freeink-sdk (MIT), applied by scripts/pocketlib_patch_sdk.py
+in the x4pro-pocketlib envs only. Every change is behind POCKET_LIBRARY_SD_FAST,
+which only those envs define. See DECISIONS.md, 2026-10-03, SD speed.
+
+diff --git a/libs/hardware/SDCardManager/src/SdmmcBlockDevice.cpp b/libs/hardware/SDCardManager/src/SdmmcBlockDevice.cpp
+index 1b72b21..c827be6 100644
+--- a/libs/hardware/SDCardManager/src/SdmmcBlockDevice.cpp
++++ b/libs/hardware/SDCardManager/src/SdmmcBlockDevice.cpp
+@@ -22,7 +22,15 @@ bool SdmmcBlockDevice::begin(const BoardConfig::SdmmcPins& pins) {
+   // only, and the data clock at 40 MHz. The read timeouts we chased earlier were a
+   // mount-sequencing problem, not a clock-margin one — see the retry loop below.
+   sdmmc_host_t host = SDMMC_HOST_DEFAULT();
++#ifdef POCKET_LIBRARY_SD_FAST
++  // Pocket Library: SDMMC_FREQ_DEFAULT is 20 MHz in ESP-IDF, not the 40 MHz the
++  // comment below intends (and the OEM firmware runs). Ask for high speed (the
++  // card is switched with CMD6 when it supports it); the mount loop falls back
++  // to 20 MHz if the first attempts fail.
++  host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
++#else
+   host.max_freq_khz = SDMMC_FREQ_DEFAULT;  // 40 MHz
++#endif
+ 
+   // Slot pin map. The ESP32-S3 routes SDMMC through the GPIO matrix, so the data
+   // and clock/command lines are assignable (unlike the classic ESP32's fixed slot).
+@@ -84,6 +92,9 @@ bool SdmmcBlockDevice::begin(const BoardConfig::SdmmcPins& pins) {
+   // block I/O works, and the gate is left in the exact LOW state that read succeeded under.
+   esp_err_t mountErr = ESP_FAIL;
+   for (int attempt = 0; attempt < 4; attempt++) {
++#ifdef POCKET_LIBRARY_SD_FAST
++    if (attempt == 2) host.max_freq_khz = SDMMC_FREQ_DEFAULT;  // 40 MHz would not mount: back to 20
++#endif
+     if (sdPwr >= 0) {
+       digitalWrite(sdPwr, HIGH);
+       delay(80);
+diff --git a/libs/hardware/SDCardManager/src/SdmmcBlockDevice.h b/libs/hardware/SDCardManager/src/SdmmcBlockDevice.h
+index 2900296..fcf7265 100644
+--- a/libs/hardware/SDCardManager/src/SdmmcBlockDevice.h
++++ b/libs/hardware/SDCardManager/src/SdmmcBlockDevice.h
+@@ -40,7 +40,13 @@ class SdmmcBlockDevice : public FsBlockDeviceInterface {
+ 
+  private:
+   static constexpr size_t kSectorSize = 512;
++#ifdef POCKET_LIBRARY_SD_FAST
++  // Pocket Library: 32 sectors (16 KiB of internal DMA RAM) per command instead
++  // of 8, so a ~300 KB compressed cluster takes ~19 commands, not ~75.
++  static constexpr size_t kMaxTransferSectors = 32;
++#else
+   static constexpr size_t kMaxTransferSectors = 8;
++#endif
+ 
+   // esp-idf's sdmmc_card_t is a typedef of an anonymous struct, so it can't be
+   // forward-declared here (a `struct sdmmc_card_t;` tag is a different, conflicting

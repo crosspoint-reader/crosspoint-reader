@@ -142,3 +142,154 @@ containing "Forbidden City"; see the session summary for the download.
   application/pdf and application/wasm). The device reads neither. Owner dropped
   it from `library.toml` (file left on the SSK drive); converting the PDFs is
   a possible later job.
+
+## 2026-10-03 — Card built; Milestone 2 passed; Milestone 3 written
+
+**Owner, on the Mac and the device**
+- `cardbuilder.py copy --card /Volumes/PocketLib --verify`: 30 files, 74.5 GB,
+  9 collections, every file read back from the card and matched. About
+  15 MB/s writing, so roughly 9 minutes per 4.2 GB part with the read-back.
+- After eject and reinsert, read from the card on the Mac: Wikipedia's 13
+  parts open as one archive (19,191,219 titles), "Forbidden City" reads in
+  about 50 ms, and a Wiktionary prefix search works. **M2 passed.**
+- Flashed `pocketlib-x4pro.bin` (13758ff0…) with esptool in download mode:
+  `erase-region 0xe000 0x2000` (otadata, so the unit boots app0), then
+  `write-flash 0x10000`. Partition table read from the factory backup: app0
+  and app1 are 7.88 MB each. The file browser shows `/library` folders empty,
+  as expected: it lists only formats it can open.
+
+**What changed (Milestone 3)**
+- `lib/zim/src/ZimHtml.{h,cpp}`: streaming HTML → XHTML cleaner (see
+  DECISIONS). 10 new tests in `lib/zim/test/HtmlCleanTest.cpp`, checked with
+  the firmware's own expat: every HTML entry of the real Wikipedia sample,
+  truncated at every 97th byte and randomly mangled 200 times, always
+  parses. 45/45 pass under ASan/UBSan.
+- `test/pocketlib_article_layout/`: every sample article cleaned and laid out
+  by CrossPoint's real `ChapterHtmlSlimParser`, as the device does it; pages
+  round-trip through the page file. 4/4 pass.
+- `src/pocketlib/PocketLibrary.{h,cpp}`: reads `/library/manifest.json`,
+  opens split ZIMs from the card through HalStorage, clusters in PSRAM,
+  title index checked against the ZIM.
+- `src/pocketlib/LibraryActivities.{h,cpp}`: the shelf (collections + Books)
+  and a collection screen (Main page, Random article, Go to title, About,
+  Last article timings).
+- `src/pocketlib/ArticleActivity.{h,cpp}`: opens an article and pages
+  through it with the reader's own fonts and settings.
+- Home → Library now opens the shelf (one `#ifdef` in `HomeActivity.cpp`).
+- CI: review branches build too and publish to a **preview** pre-release;
+  the host workflow runs the article-layout test.
+- Firmware: 5,734,480 bytes locally; app slot 87.4% used.
+
+**Not done, and why**
+- Nothing has run on the device yet; timings are unmeasured.
+- No live search list (M4), no link following or back stack (M5), no saved
+  reading position, no images (nopic files have none).
+
+**For the owner (Milestone 3 device checklist)** — backups confirmed earlier
+(factory flash backup and the official 1.6.5 `.bin`, both on the SSK drive).
+1. Download `pocketlib-x4pro.bin` and its `.sha256` from the **preview**
+   pre-release on the fork's Releases page. Check: `shasum -a 256 pocketlib-x4pro.bin`.
+2. Download mode (hold the left side button, press power), then
+   `~/esptool-env/bin/esptool --chip esp32s3 --port /dev/cu.usbmodem14301 --baud 921600 write-flash 0x10000 pocketlib-x4pro.bin`.
+   Success: `Hash of data verified.` Unplug, power on.
+3. Home → **Library**. Success: nine collections with sizes and dates, then
+   **Books**.
+4. **Wikipedia**. Success: About reads "19,191,219 titles, search index OK".
+5. **Go to title**, type `forbidden city`, confirm. Success: an "Opening"
+   screen, then the article's heading and first paragraph; page turns work;
+   the status bar counts pages.
+6. Back. Photograph the **Last article** row (read / clean / first page /
+   all pages).
+7. **Random article** three times; photograph the timings each time.
+8. Repeat 5–7 in Wiktionary and MedlinePlus.
+9. Note anything wrong: junk text, missing sections, freezes, crashes.
+
+**Next**: owner runs the checklist; then Milestone 4 (live search).
+
+## 2026-10-03 — First device test of M3: "out of memory" after one article
+
+- Owner: Random article worked once; every later article said out of memory.
+- Cause: the ZIM cluster cache decoded a new cluster *before* evicting the
+  oldest, so with the cache full the device needed room for one ~2 MB
+  cluster more than the cache holds, on top of PSRAM's other users. Once the
+  first article's cluster was cached, no second cluster fit, and it never
+  got evicted because the eviction came after the failed decode.
+- Fix (`ZimArchive::loadCluster`): evict first; if decoding still runs out
+  of memory, drop every cached cluster and retry once. Regression test
+  `Zim.NewClusterFitsWhereOneClusterFits` gives the allocator a budget of
+  exactly one decode and reads two articles in alternating clusters with
+  cache sizes 1–3: it fails on the old code and passes now (46/46, ASan).
+- The article error screen now shows free/largest PSRAM and internal RAM,
+  and each open logs them, so a future out-of-memory says which pool ran out.
+
+## 2026-10-03 — Milestone 4 written (search as you type)
+
+- Owner asked for M4 in the same update as the M3 fix, and for the roadmap.
+- `lib/zim/src/ZimSearch.*`: prefix search with redirect collapsing, through
+  `.pltitles` or the ZIM's own list; 12 new host tests (58/58, ASan).
+- Collection screen: **Search** is the first row (it replaces "Go to title").
+  CrossPoint's keyboard shows matching titles between the text field and the
+  keys, updated after every keystroke (fenced hook in
+  `KeyboardEntryActivity`).
+- Firmware 87.5% of the app slot.
+
+**For the owner (device checklist: M3 fix + M4)**
+1. Flash the new `pocketlib-x4pro.bin` from the **preview** release, as before.
+2. Wikipedia → **Random article** five times in a row. Success: every one
+   opens (no "out of memory"). If one fails, photograph the error screen: it
+   now shows free memory.
+3. Wikipedia → **Search**. Type `forb` one letter at a time. Success: the list
+   under the text field changes after each letter; titles start with what
+   you typed.
+4. Keep typing to `forbidden c`. Success: "Forbidden City" is first. Tap it:
+   the article opens.
+5. Back to the collection. Photograph the **Search** row ("last lookup … ms")
+   and the **Last article** row.
+6. Try a search in Wiktionary (`serendipity`) and MedlinePlus (`asthma`).
+7. Note anything wrong: slow typing, wrong results, freezes.
+
+## 2026-10-03 — SD speed (owner approved)
+
+- SD card at 40 MHz (falls back to 20 MHz if it won't mount) and 16 KiB per
+  SD command; patch to the SDK applied by our build only. See DECISIONS.
+- Add to the checklist: Settings → About → tap Firmware five times →
+  Diagnostics. **SD bus** should say 40.0 MHz. Tap **SD benchmark** and
+  photograph the result (before: 1.93 MB/s sequential, 1.9 ms random).
+
+## 2026-10-03 — M3, M4 and SD speed passed; Milestone 5 written
+
+- Owner: the out-of-memory fix, search and the SD speed build all work on the
+  device. **M3 and M4 passed.** (Timing photos and the Diagnostics SD numbers
+  still to come.)
+- M5 code: tap links (`lib/zim/src/ZimLink.*`), Back through followed
+  articles, contents (Confirm or centre tap), remembered place and a Recent
+  row on the shelf. Host tests: link parsing and every link in the real
+  sample (both schemes), heading capture, links becoming tap targets in the
+  real layout engine, headings landing on their pages. 62/62 lib/zim
+  (ASan), 7/7 article layout.
+- Firmware 87.7% of the app slot.
+
+**For the owner (Milestone 5 device checklist)**
+1. Flash the new `pocketlib-x4pro.bin` from the **preview** release.
+2. Wikipedia → Search `forbidden city` → open it. Success: linked words are
+   underlined.
+3. Tap a linked word (e.g. "Beijing"). Success: "Opening", then that
+   article.
+4. Press **Back**. Success: Forbidden City again, on the page you left.
+5. Press **Confirm** (or tap the middle of the screen). Success: a list of
+   the article's sections. Pick one: the reader jumps there. Back returns.
+6. Turn a few pages, press Back to the collection, then go back to the
+   Library. Success: a **Recent** row at the top; picking Forbidden City
+   reopens it on the same page.
+7. Tap a link to something unlikely to be on the card (a red link or an
+   obscure page). Success: "Not in this library: …", and the page stays.
+8. Note anything wrong or slow.
+
+## 2026-10-03 — Milestone 5 passed; M6 order chosen
+
+- Owner: links, Back, contents, Recent and "Not in this library" all work
+  on the device. **M5 passed.**
+- Owner's choices: M6 starts with search across all collections, with
+  popularity ranking (needs the indexes rebuilt on the Mac); then Wiktionary
+  lookup, CJK font, Standard Ebooks. Open a pull request merging M3–M5 into
+  `pocket-library`.

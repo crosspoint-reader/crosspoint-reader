@@ -18,7 +18,7 @@ namespace zim {
 std::unique_ptr<PosixSource> PosixSource::open(const std::string& path) {
   const int fd = ::open(path.c_str(), O_RDONLY);
   if (fd < 0) return nullptr;
-  struct stat st {};
+  struct stat st{};
   if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
     ::close(fd);
     return nullptr;
@@ -43,7 +43,7 @@ bool PosixSource::read(uint64_t offset, void* dst, size_t len) {
 
 namespace {
 bool isFile(const std::string& path) {
-  struct stat st {};
+  struct stat st{};
   return ::stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
 }
 bool endsWith(const std::string& s, const std::string& suffix) {

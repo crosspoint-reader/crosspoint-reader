@@ -53,8 +53,8 @@ Error TitleIndex::open(std::unique_ptr<Source> source) {
   const uint64_t pages = source->size() / kTitleIndexPageSize;
   if (pages > 0xffffffffull || source->size() % kTitleIndexPageSize != 0) return Error::BadHeader;
   const uint32_t pageCount = static_cast<uint32_t>(pages);
-  if (hd.leafCount == 0 || hd.firstLeaf == 0 || hd.firstLeaf >= pageCount ||
-      hd.leafCount > pageCount - hd.firstLeaf || hd.root == 0 || hd.root >= pageCount || hd.levels > 16) {
+  if (hd.leafCount == 0 || hd.firstLeaf == 0 || hd.firstLeaf >= pageCount || hd.leafCount > pageCount - hd.firstLeaf ||
+      hd.root == 0 || hd.root >= pageCount || hd.levels > 16) {
     return Error::BadHeader;
   }
   header_ = hd;

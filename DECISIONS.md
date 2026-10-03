@@ -63,6 +63,11 @@ Release tags are what we rebase onto.
 | `platformio.ini` | `extra_configs` also lists `platformio.pocketlib.ini` | our envs |
 | `CLAUDE.md` | symlink to `AGENTS.md` replaced by our working rules, which import `@AGENTS.md` | brief §1 |
 | `src/activities/settings/AboutActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: 5 taps on "Firmware" open Diagnostics | hidden debug screen |
+| `src/activities/home/HomeActivity.cpp` | `#ifdef POCKET_LIBRARY`: Home's **Library** opens our shelf; CrossPoint's book library is the shelf's last row | the library's front door (M3) |
+| `test/CMakeLists.txt` | one `add_subdirectory(pocketlib_article_layout)` | real articles through the layout engine on the host |
+| `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
+| `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
+| `freeink-sdk` (submodule, patched at build time) | `SdmmcBlockDevice.{h,cpp}`: 40 MHz with 20 MHz fallback, 32-sector transfers, all behind `POCKET_LIBRARY_SD_FAST` | SD speed |
 
 ## 2026-10-01 — Licensing layout
 
@@ -279,6 +284,153 @@ The card builder now skips collections that are not downloaded yet instead of
 stopping, and refuses to `--prune` in that run so a skipped collection's files
 on the card are never taken for stale.
 
+## 2026-10-03 — Milestone 3: how an article reaches the screen
+
+- **Reuse CrossPoint's EPUB layout engine instead of writing a renderer.**
+  `ChapterHtmlSlimParser` already does fonts (built-in and SD), justification,
+  hyphenation, headings, lists, tables, bold/italic, sub/superscript and the
+  page cache format, and is tested on hardware. It needs well-formed XHTML
+  from a file; Kiwix articles are browser HTML5. So a new streaming cleaner,
+  `lib/zim/src/ZimHtml.{h,cpp}` (`zim::cleanArticleHtml`), sits between them.
+  It runs on the host too, so it is tested there, and the parser is driven
+  with no `Epub` object, no CSS and images off.
+- **Cleaner rules.** Keeps h1–h6, p, lists, block quotes, tables
+  (colspan/rowspan), b/i/u/s, sub/sup, br/hr, ruby. Renames to tags the parser
+  lays out (`section`/`dl`/`pre`/`figcaption` → `div`, `dd` → `blockquote`,
+  `dt`/`caption` → `p`, `em`/`cite` → `i`, `strong` → `b`). Drops, with their
+  content: head, script, style, media, forms, nav, figures; elements whose
+  class is MediaWiki or mwoffliner chrome (edit links, navboxes, hatnotes,
+  message boxes, thumbnails, citation markers `sup.reference`, reference
+  lists, TOC) or that are `display:none`. Unknown tags are unwrapped, keeping
+  their text. Math shows its TeX source (`alttext`) in italics. Entities
+  are decoded (249 named, numeric, Windows-1252 quirks), bad UTF-8 becomes
+  U+FFFD, characters XML forbids are removed, HTML's implied end tags (`p`,
+  `li`, `dt`/`dd`, `tr`/`td`/`th`) are applied, and every element is closed.
+  Memory: the open-element stack plus a 4 KB output buffer.
+- **Links are unwrapped for now.** The parser underlines every internal link,
+  and a Wikipedia paragraph has dozens. Following links is Milestone 5; the
+  cleaner already has `keepLinks` for it (tested).
+- **Reference lists are dropped with their markers.** Without the `[1]`
+  markers the numbered list at the end means nothing. Revisit in M5 if
+  footnote popups are wanted.
+- **Pages go to a file, not RAM.** Laid-out pages are serialized to
+  `/.pocketlib/article.pages` as they are made (offsets in RAM, 4 bytes per
+  page); the screen holds one page. Small allocations would otherwise pile up
+  in the 183 KB of internal RAM. The first page shows as soon as it exists;
+  the rest are laid out in 60 ms slices between page turns, only while the
+  screen task is idle (same render-lock rule as the EPUB reader).
+- **Cluster cache: 2 × ~2 MiB in PSRAM** (not the brief's 3): PSRAM also
+  holds the article's HTML (up to ~1 MB) while it is cleaned, and SD fonts.
+  Large `malloc`s go to PSRAM on this build (`CONFIG_SPIRAM_USE_MALLOC`,
+  threshold 4 KB), so the HTML string does too.
+- **Ways in for M3**: main page, random article (uniform over the front-article
+  list), and "Go to title", which uses the card's `.pltitles` index to open
+  the first title that starts with what was typed, ignoring case and accents.
+  The live result list is M4.
+- **Entry point**: Home → Library opens the shelf. One `#ifdef` in
+  `HomeActivity::onLibraryOpen`, so it works with every Home theme (the cover
+  grid draws its own menu); CrossPoint's book library is the shelf's last row.
+- **Shelf source**: `/library/manifest.json` from the card builder (titles,
+  dates, parts in order, index path); if it is missing or unreadable, the
+  shelf scans `/library/<key>/` for `.zim`/`.zimaa…` and `.pltitles`.
+- **Hyphenation language** is set to English for articles (the corpus is
+  English-only, per the owner).
+- **Cost** (local build, commit of this entry): flash +110 KB (app slot 87.4%,
+  ~824 KB free); static internal RAM +3.2 KB.
+
+## 2026-10-03 — Milestone 4: search as you type
+
+The owner asked to build M4 before M3's device sign-off (the M3 out-of-memory
+fix is untested on the device). Search is a separate row, so the M3 paths it
+would test are unchanged.
+
+- **Where**: the collection screen's first row, **Search**. It opens
+  CrossPoint's own keyboard with up to eight matching titles drawn between the
+  text field and the keys, refilled after every keystroke. Tap a title to open
+  it; OK opens the top one. Reusing the keyboard (one fenced hook, see touch
+  points) keeps its layouts, shift/symbol layers, cursor editing and button
+  navigation, instead of a second keyboard to maintain.
+- **Matching**: `zim::searchTitles` (`lib/zim/src/ZimSearch.*`, host-tested).
+  With `.pltitles`: folded prefix (case, accents, spacing ignored). Without:
+  the ZIM's byte-ordered title list, so case-sensitive.
+- **Order**: title order, which puts an exact match first (it is the shortest
+  key with that prefix). No popularity signal exists in a ZIM, and cheap
+  proxies (article size, redirect count) cost a cluster decode or a scan per
+  result; "forb" therefore lists Forbach before Forbidden City. Typing more
+  narrows it quickly. Revisit with real use; the index format has a version
+  number for a ranked variant (e.g. a precomputed popularity byte from the
+  card builder).
+- **Redirects collapsed**: results whose redirect target is already listed
+  are skipped, so one article appears once (under the first of its titles
+  reached).
+- **Cost per keystroke**: one index seek (≤ 4 page reads, ~8 ms measured on
+  the synthetic index) + one directory read per result, with at most 4 ×
+  results records read. Estimate ~25–60 ms on the device *(est.)*; the
+  collection screen shows the last lookup's time. The e-ink refresh, not the
+  lookup, is expected to dominate.
+
+## 2026-10-03 — SD speed: 40 MHz and 16 KiB transfers (owner approved)
+
+- The SDK asks for `SDMMC_FREQ_DEFAULT`, commented "40 MHz", which ESP-IDF
+  defines as 20 MHz; the SDK's own notes say the OEM firmware runs 40 MHz.
+  Our envs now ask for `SDMMC_FREQ_HIGHSPEED` (the card is switched to high
+  speed with CMD6 when it supports it). The SDK's mount loop already retries
+  four times; attempts 3 and 4 now fall back to 20 MHz, so a card that will
+  not run at 40 still mounts.
+- Each SD command now moves up to 32 sectors (16 KiB, internal DMA RAM)
+  instead of 8 (4 KiB): a ~300 KB compressed cluster takes ~19 commands
+  instead of ~75.
+- How: `scripts/pocketlib_sdk_patches/0001-sd-fast-clock-and-transfers.patch`,
+  applied to the freeink-sdk submodule by `scripts/pocketlib_patch_sdk.py`
+  (our envs only, idempotent via `git apply --check`, fails the build if the
+  SDK moves). Everything is fenced in `POCKET_LIBRARY_SD_FAST`, defined only
+  in our envs, so stock envs compile upstream's code even from a patched tree.
+- Check on the device: Diagnostics → SD bus should read 40.0 MHz; rerun the
+  SD benchmark and compare with the 1.93 MB/s / 1.9 ms baseline.
+
+## 2026-10-03 — Milestone 5: links, Back, contents, remembered place
+
+- **Links are kept and tappable.** The cleaner now keeps `<a href>` to pages
+  inside the archive; the layout engine underlines them and records each
+  one's box on the page (CrossPoint's footnote-link machinery), and a tap
+  inside a box (6 px slop, 28 px minimum width, as in the EPUB reader)
+  follows it. At most 32 links per page are tappable (the engine's cap).
+- **Resolving a link**: `zim::parseLink` / `zim::resolveLink`
+  (`lib/zim/src/ZimLink.*`): fragment and query split off, percent-decoding,
+  `&amp;`, relative paths against the linking entry's directory, `..`
+  climbing out of the namespace in the old scheme (`../A/Foo`), absolute
+  `/C/Foo`. External schemes are refused. Tested on every link in the real
+  sample in both namespace schemes. A link to an article not on the card
+  shows "Not in this library: …" over the page.
+- **One reading screen, a Back stack.** Following a link loads the new
+  article in the same screen (one page file on the card, not one per
+  article); Back reloads the previous article and lands on the page left.
+  Up to 32 steps. Reloading costs the open time again; caching the previous
+  article's page file is a later optimisation if it feels slow.
+- **Contents**: Confirm, or a tap in the middle third of the screen (the
+  reader-menu gesture CrossPoint uses), lists the article's section
+  headings. The cleaner gives every heading its own anchor (`pl-h<N>`) and
+  remembers the page's own ids on or inside it (`<span id="History">`), so
+  `#History` links and the contents land on the same page. Jumping to a
+  section also goes on the Back stack.
+- **Remembered place**: `/.pocketlib/history.tsv`, the 50 most recent
+  articles, most recent first, with the character offset of the page being
+  read (the layout engine's visible-text offset), so the place survives a
+  change of font or size. Saved on every page turn (write to a temporary
+  file, then rename). Opening an article from a list resumes there; a link
+  opens at the top (or its section).
+- **Recent**: the shelf's first row lists that history; picking one opens
+  the article where it was left.
+- Last page: a page turn past the end now stays put (Back leaves) instead of
+  closing the article.
+
+## 2026-10-03 — Preview builds for review branches
+
+`pocketlib-build.yml` and `pocketlib-host.yml` also run on `claude/**`
+branches. A review branch publishes to a separate **preview** pre-release, so
+a change can be flashed and tried before it is merged without replacing the
+known-good **dev** build of `pocket-library`.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -310,6 +462,14 @@ This cloud session's network policy blocks the PlatformIO registry,
 PyPI, registry libraries come from their GitHub tags at the same pinned
 versions via a git-ignored `platformio.local.ini`, and the proxy's CA was added
 to PlatformIO's private certifi bundle. None of this is needed on a Mac.
+Refs that work (2026-10-03): ArduinoJson `v7.4.2`, QRCode `v0.0.1`, PNGdec
+`1.1.6`, WebSockets commit `1c8b8de` (2.7.3 has no tag), wolfSSL `5.7.2`.
+SdFat (a dependency of the SDK's SDCardManager) must be pre-placed in
+`.pio/libdeps/<env>/SdFat` from tag `2.3.1` with a `.piopm` naming owner
+`greiman`, or PlatformIO goes to the registry for it. Such local builds are
+for compile checks and sizes only: they are not byte-identical to CI's (the
+1.6.5-based build came out 13,792 bytes smaller), so the owner flashes CI
+builds.
 
 ## Measurements
 
@@ -376,7 +536,7 @@ To be measured in M3.
 
 | Action | Target *(est.)* | Measured |
 |---|---|---|
-| Search update per keystroke | ≤ 100 ms | |
+| Search update per keystroke | ≤ 100 ms | (shown as "last lookup" on the collection screen, M4) |
 | Open article, cluster not cached | ≤ 800 ms | |
 | Open article, cluster cached | ≤ 300 ms | |
 | Page turn layout | ≤ 100 ms | |

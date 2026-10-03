@@ -163,7 +163,7 @@ Error Archive::readMimeList() {
   while (true) {
     const size_t end = buf.find('\0', pos);
     if (end == std::string::npos) return Error::BadHeader;  // unterminated list
-    if (end == pos) break;                                   // empty string ends the list
+    if (end == pos) break;                                  // empty string ends the list
     if (mimeTypes_.size() >= kMimeDeleted) return Error::BadHeader;
     mimeTypes_.emplace_back(buf, pos, end - pos);
     pos = end + 1;
@@ -579,18 +579,23 @@ Error Archive::loadCluster(uint32_t cluster, const ClusterInfo& info, CachedClus
   }
   ++stats_.misses;
 
+  // Make room before decoding: a full cache would otherwise hold its
+  // clusters while the new one is decoded beside them, needing one cluster
+  // more than the cache size (several MB on a device with 8 MB of PSRAM).
+  while (!cache_.empty() && cache_.size() >= options_.clusterCacheSize) evictOldestCluster();
+
   uint8_t* data = nullptr;
   size_t size = 0;
-  const Error err = decompress(info, data, size);
+  Error err = decompress(info, data, size);
+  if (err == Error::NoMemory && !cache_.empty()) {
+    // Memory is short (other users of the heap, or fragmentation): drop
+    // every cached cluster and try once more.
+    while (!cache_.empty()) evictOldestCluster();
+    err = decompress(info, data, size);
+  }
   if (err != Error::None) return err;
   ++stats_.decompressions;
 
-  if (cache_.size() >= options_.clusterCacheSize) {
-    auto victim = std::min_element(cache_.begin(), cache_.end(),
-                                   [](const CachedCluster& a, const CachedCluster& b) { return a.lastUse < b.lastUse; });
-    allocator_->release(victim->data);
-    cache_.erase(victim);
-  }
   cache_.push_back(CachedCluster{cluster, data, size, ++useCounter_});
   out = &cache_.back();
   return Error::None;
@@ -645,5 +650,12 @@ void Archive::releaseCache() {
 }
 
 void Archive::clearCache() { releaseCache(); }
+
+void Archive::evictOldestCluster() {
+  auto victim = std::min_element(cache_.begin(), cache_.end(),
+                                 [](const CachedCluster& a, const CachedCluster& b) { return a.lastUse < b.lastUse; });
+  allocator_->release(victim->data);
+  cache_.erase(victim);
+}
 
 }  // namespace zim

@@ -13,7 +13,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -85,8 +87,8 @@ TEST_P(BothSchemes, MainPageResolvesToHtml) {
 // again by binary search, every redirect must resolve, and every content
 // entry must read. Covers zstd (2024 files) and xz (2017 Wikibooks).
 TEST_P(BothSchemes, EveryEntryReadsAndRoundTrips) {
-  for (const char* file : {"small.zim", "wikibooks_be_all_nopic_2017-02.zim",
-                           "wikipedia_en_climate_change_mini_2024-06.zim"}) {
+  for (const char* file :
+       {"small.zim", "wikibooks_be_all_nopic_2017-02.zim", "wikipedia_en_climate_change_mini_2024-06.zim"}) {
     SCOPED_TRACE(file);
     zim::Archive a;
     ASSERT_EQ(openFile(a, dataPath(GetParam(), file)), zim::Error::None);
@@ -290,6 +292,84 @@ TEST(Zim, ClusterCacheHitsAndFreesEverything) {
     EXPECT_GT(a.cacheStats().hits, 0u);
   }
   EXPECT_EQ(gLive.load(), 0) << "allocator leak";
+}
+
+// Allocator with a byte budget, like PSRAM shared with fonts on the device.
+std::atomic<size_t> gBudgetLive{0};
+std::atomic<size_t> gBudgetPeak{0};
+size_t gBudget = SIZE_MAX;
+struct BudgetHeader {
+  size_t size;
+  size_t pad;
+};
+void* budgetAllocate(size_t n) {
+  if (gBudgetLive + n > gBudget) return nullptr;
+  auto* h = static_cast<BudgetHeader*>(std::malloc(sizeof(BudgetHeader) + n));
+  if (!h) return nullptr;
+  h->size = n;
+  gBudgetLive += n;
+  if (gBudgetLive > gBudgetPeak) gBudgetPeak = gBudgetLive.load();
+  return h + 1;
+}
+void budgetRelease(void* p) {
+  if (!p) return;
+  auto* h = static_cast<BudgetHeader*>(p) - 1;
+  gBudgetLive -= h->size;
+  std::free(h);
+}
+const zim::Allocator kBudget{budgetAllocate, budgetRelease};
+
+// Regression (device, 2026-10-03): the first article opened, every later one
+// failed with "out of memory". The cache decoded a new cluster before
+// evicting, so a full cache needed room for one cluster more than its size.
+TEST(Zim, NewClusterFitsWhereOneClusterFits) {
+  const std::string path = dataPath("nons", "wikipedia_en_climate_change_mini_2024-06.zim");
+  // Two articles in different compressed clusters; peak memory for each alone.
+  std::vector<uint32_t> picks;
+  size_t onePeak = 0;
+  {
+    zim::Archive a;
+    zim::Options o;
+    o.allocator = &kBudget;
+    ASSERT_EQ(openFile(a, path, o), zim::Error::None);
+    uint32_t firstCluster = UINT32_MAX;
+    std::string body;
+    for (uint32_t i = 0; i < a.entryCount() && picks.size() < 2; i++) {
+      zim::Entry e;
+      ASSERT_EQ(a.entryAt(i, e), zim::Error::None);
+      if (!e.isContent() || e.cluster == firstCluster) continue;
+      a.clearCache();
+      gBudgetPeak = gBudgetLive.load();
+      const size_t base = gBudgetLive;
+      const auto before = a.cacheStats().decompressions;
+      ASSERT_EQ(a.read(e, body), zim::Error::None);
+      if (a.cacheStats().decompressions == before) continue;  // uncompressed cluster
+      onePeak = std::max(onePeak, gBudgetPeak - base);
+      firstCluster = e.cluster;
+      picks.push_back(i);
+    }
+  }
+  ASSERT_EQ(picks.size(), 2u);
+  ASSERT_EQ(gBudgetLive.load(), 0u);
+
+  for (size_t cacheSize : {1u, 2u, 3u}) {
+    gBudget = onePeak;  // room for decoding one cluster, nothing more
+    zim::Archive a;
+    zim::Options o;
+    o.allocator = &kBudget;
+    o.clusterCacheSize = cacheSize;
+    ASSERT_EQ(openFile(a, path, o), zim::Error::None);
+    std::string body;
+    for (int round = 0; round < 3; round++) {
+      for (uint32_t i : picks) {
+        zim::Entry e;
+        ASSERT_EQ(a.entryAt(i, e), zim::Error::None);
+        EXPECT_EQ(a.read(e, body), zim::Error::None) << "cache " << cacheSize << ", round " << round;
+      }
+    }
+  }
+  gBudget = SIZE_MAX;
+  EXPECT_EQ(gBudgetLive.load(), 0u);
 }
 
 TEST(Zim, CacheOfOneStillWorksAcrossClusters) {
