@@ -487,6 +487,19 @@ def item_done(it: Item) -> bool:
     return it.dest.exists() and it.dest.stat().st_size == it.size
 
 
+def uncached(f) -> None:
+    """Keep this file's data out of the Mac's memory cache, so a read-back
+    comes from the card itself and not from what was just written."""
+    if sys.platform == "darwin":
+        import fcntl
+        fcntl.fcntl(f.fileno(), getattr(fcntl, "F_NOCACHE", 48), 1)
+
+
+def drop_cache(f) -> None:
+    if hasattr(os, "posix_fadvise"):
+        os.posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+
+
 def copy_item(it: Item, verify: bool) -> None:
     it.dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = it.dest.with_name(it.dest.name + ".tmp")
@@ -494,6 +507,8 @@ def copy_item(it: Item, verify: bool) -> None:
     h = hashlib.sha256() if verify else None
     done = 0
     with open(it.src, "rb") as fin, open(tmp, "wb") as fout:
+        if verify:
+            uncached(fout)
         fin.seek(it.offset)
         while done < it.size:
             chunk = fin.read(min(CHUNK, it.size - done))
@@ -506,10 +521,13 @@ def copy_item(it: Item, verify: bool) -> None:
             prog.update(done)
         fout.flush()
         os.fsync(fout.fileno())
+        if verify:
+            drop_cache(fout)
     prog.finish(done)
     if h:
         back = hashlib.sha256()
         with open(tmp, "rb") as f:
+            uncached(f)
             while chunk := f.read(CHUNK):
                 back.update(chunk)
         if back.digest() != h.digest():
