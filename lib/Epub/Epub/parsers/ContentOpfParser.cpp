@@ -64,7 +64,75 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
     out.push_back(c);
   }
 }
+
+// An EPUB 2 opf:file-as attribute is a reading like any other: same clamp.
+void assignFileAsAttribute(std::string& out, const char* value) {
+  out.clear();
+  bool spacePending = false;
+  appendMetadataText(out, value, static_cast<int>(strnlen(value, MAX_METADATA_TEXT + 1)), spacePending);
+}
+
+// Ids tie a file-as reading to the element it refines and are matched exactly,
+// so an overlong one is dropped (its reading is lost) rather than truncated,
+// which could make two ids collide. Real ids are short ("creator01", a UUID).
+constexpr size_t MAX_METADATA_ID = 64;
+
+const char* boundedId(const char* value) {
+  if (value == nullptr) return nullptr;
+  if (strnlen(value, MAX_METADATA_ID + 1) > MAX_METADATA_ID) {
+    LOG_DBG("COF", "Metadata id exceeds %u bytes; ignoring it", static_cast<unsigned>(MAX_METADATA_ID));
+    return nullptr;
+  }
+  return value;
+}
 }  // namespace
+
+// Attribute lookup by local name: expat is run without namespace processing,
+// so an EPUB 2 `opf:file-as` arrives with its prefix attached.
+const char* ContentOpfParser::attributeValue(const XML_Char** atts, const char* localName) {
+  for (int i = 0; atts[i]; i += 2) {
+    if (xmlLocalNameEquals(atts[i], localName)) return atts[i + 1];
+  }
+  return nullptr;
+}
+
+void ContentOpfParser::resolveFileAs(const std::string& id, const std::string& text) {
+  if (id.empty() || text.empty()) return;
+  if (id == titleId) {
+    if (titleFileAs.empty()) titleFileAs = text;
+    return;
+  }
+  for (auto& creator : creators) {
+    if (creator.id == id) {
+      if (creator.fileAs.empty()) creator.fileAs = text;
+      return;
+    }
+  }
+  // Not seen yet: the refining meta may precede the element it refines.
+  if (pendingFileAs.size() < MAX_CREATORS + 1) pendingFileAs.push_back({id, std::string(), text});
+}
+
+void ContentOpfParser::finishMetadata() {
+  // Resolve from a moved-out copy: resolveFileAs() re-queues an id that is
+  // still unknown, which would otherwise grow the vector being iterated. An id
+  // that never appeared refines nothing, so the re-queued leftovers are dropped.
+  const std::vector<Creator> pending = std::move(pendingFileAs);
+  pendingFileAs.clear();
+  for (const auto& entry : pending) resolveFileAs(entry.id, entry.fileAs);
+  pendingFileAs.clear();
+
+  // One reading per creator, in `author` order. Without one for the first
+  // creator the whole thing is useless as a sort form; a later creator without
+  // one contributes its display name so the list still mirrors `author`.
+  authorFileAs.clear();
+  if (creators.empty() || creators.front().fileAs.empty()) return;
+  for (const auto& creator : creators) {
+    const std::string& part = creator.fileAs.empty() ? creator.name : creator.fileAs;
+    if (part.empty()) continue;
+    if (!authorFileAs.empty()) authorFileAs.append(", ");
+    authorFileAs.append(part);
+  }
+}
 
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
@@ -135,13 +203,15 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
 
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ContentOpfParser*>(userData);
-  (void)atts;
 
   if (self->metadataOnly && self->metadataComplete) {
     return;
   }
   if (self->metadataOnly && (xmlLocalNameEquals(name, "manifest") || xmlLocalNameEquals(name, "spine") ||
                              xmlLocalNameEquals(name, "guide"))) {
+    // Reached without </metadata> only when the package has no metadata
+    // element; finishMetadata() is then a no-op.
+    self->finishMetadata();
     self->metadataComplete = true;
     return;
   }
@@ -161,6 +231,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     if (self->title.empty()) {
       self->state = IN_BOOK_TITLE;
       self->metadataSpacePending = false;
+      if (const char* id = boundedId(attributeValue(atts, "id"))) self->titleId = id;
+      if (const char* fileAs = attributeValue(atts, "file-as")) assignFileAsAttribute(self->titleFileAs, fileAs);
     }
     return;
   }
@@ -169,6 +241,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     self->state = IN_BOOK_AUTHOR;
     self->metadataSpacePending = false;
     self->authorSeparatorPending = !self->author.empty();
+    self->creatorStart = self->author.size();
+    self->creatorTracked = self->creators.size() < MAX_CREATORS;
+    if (self->creatorTracked) {
+      Creator creator;
+      if (const char* id = boundedId(attributeValue(atts, "id"))) creator.id = id;
+      if (const char* fileAs = attributeValue(atts, "file-as")) assignFileAsAttribute(creator.fileAs, fileAs);
+      self->creators.push_back(std::move(creator));
+    }
     return;
   }
 
@@ -218,17 +298,31 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "meta")) {
     bool isCover = false;
     std::string coverItemId;
+    const char* refines = nullptr;
+    const char* property = nullptr;
 
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
         isCover = true;
       } else if (strcmp(atts[i], "content") == 0) {
         coverItemId = atts[i + 1];
+      } else if (strcmp(atts[i], "refines") == 0) {
+        refines = atts[i + 1];
+      } else if (strcmp(atts[i], "property") == 0) {
+        property = atts[i + 1];
       }
     }
 
     if (isCover) {
       self->coverItemId = coverItemId;
+    }
+    // EPUB 3 sort form: <meta refines="#title" property="file-as">reading</meta>
+    if (refines != nullptr && refines[0] == '#' && boundedId(refines + 1) != nullptr && property != nullptr &&
+        strcmp(property, "file-as") == 0) {
+      self->state = IN_FILE_AS;
+      self->fileAsTarget = refines + 1;
+      self->fileAsText.clear();
+      self->metadataSpacePending = false;
     }
     return;
   }
@@ -413,6 +507,11 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     appendMetadataText(self->language, s, len, self->metadataSpacePending);
     return;
   }
+
+  if (self->state == IN_FILE_AS) {
+    appendMetadataText(self->fileAsText, s, len, self->metadataSpacePending);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -448,6 +547,15 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_BOOK_AUTHOR && xmlLocalNameEquals(name, "creator")) {
     self->state = IN_METADATA;
+    if (self->creatorTracked) {
+      // This creator's own text: what was appended since the element opened,
+      // less the ", " separator that the first character after a previous
+      // creator inserts.
+      size_t start = self->creatorStart;
+      if (start > 0 && self->author.size() > start && !self->authorSeparatorPending) start += 2;
+      Creator& creator = self->creators.back();
+      if (creator.name.empty() && self->author.size() > start) creator.name = self->author.substr(start);
+    }
     return;
   }
 
@@ -456,8 +564,17 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
 
+  if (self->state == IN_FILE_AS && xmlLocalNameEquals(name, "meta")) {
+    self->state = IN_METADATA;
+    self->resolveFileAs(self->fileAsTarget, self->fileAsText);
+    self->fileAsTarget.clear();
+    self->fileAsText.clear();
+    return;
+  }
+
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "metadata")) {
     self->state = IN_PACKAGE;
+    self->finishMetadata();
     self->metadataComplete = true;
     return;
   }
