@@ -58,6 +58,23 @@ If you are unsure whether your idea falls into one of these categories, open a D
 * **Active Connectivity:** No RSS readers, news aggregators, or web browsers. Background Wi-Fi drains the battery and complicates the single-core CPU. 
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text, resulting in constant panning and zooming that makes for a poor reading experience on e-ink. Out of scope on the current hardware class.
 
+### CrossPoint as a downstream foundation
+
+CrossPoint is also used as a foundation for downstream forks with different
+product goals. Supporting that ecosystem does not expand CrossPoint's own
+product scope, but narrowly scoped, product-neutral improvements to existing
+low-level infrastructure may still be accepted when they are broadly reusable.
+
+Such changes should extend existing abstractions without introducing
+downstream-specific UI, policy, workflows, or feature semantics, and should not
+impose substantial new dependencies, resource cost, or maintenance burden on
+CrossPoint itself.
+
+This does not make the downstream feature itself in scope. If a reusable
+primitive cannot be cleanly separated from the larger feature or subsystem that
+needs it, that work belongs in the downstream fork unless CrossPoint
+independently chooses to adopt it.
+
 ## 5. Calls to Action
 
 These are the areas where contributor help is most valuable right now. If you want to take one of these on, open a Discussion or issue first so we can coordinate.
