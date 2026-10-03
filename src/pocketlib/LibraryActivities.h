@@ -64,11 +64,18 @@ class ShelfActivity final : public UiListActivity {
   std::vector<Tile> tiles_;
   std::vector<freeink::ui::TileGridItem> items_;
   bool buttonsUsed_ = false;  // show the selection only once buttons move it
-  std::string notice_;        // a one-line popup over the grid, cleared on the next input
+  // Grid geometry from the last build: drawFooter() draws each tile's icon
+  // and name itself (icon above, name below, cut to the tile's width).
+  freeink::ui::Rect gridRect_{};
+  int16_t tileHeight_ = 0;
+  std::string notice_;  // a one-line popup over the grid, cleared on the next input
 };
 
 // "Wikipedia", "Medical" or "More": the manifest's group, else by name.
 std::string tileGroupFor(const pocketlib::Collection& collection);
+// A collection's name short enough for a tile: "MedlinePlus", not
+// "MedlinePlus - Health Information from the National Library of Medicine".
+std::string shortTitle(const pocketlib::Collection& collection);
 
 // A titled list of choices; finishes with MenuResult::action = the row picked
 // (cancelled on Back). Used for an article's contents and the Recent list.

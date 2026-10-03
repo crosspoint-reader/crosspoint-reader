@@ -28,6 +28,7 @@
 #include "activities/ActivityResult.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 #include "icons/libraryIcons.h"
 
 namespace fui = freeink::ui;
@@ -73,6 +74,22 @@ std::string tileGroupFor(const pocketlib::Collection& c) {
     if (k.find(medical) != std::string::npos) return "Medical";
   }
   return "More";
+}
+
+std::string shortTitle(const pocketlib::Collection& c) {
+  static const struct {
+    const char* key;
+    const char* name;
+  } kNames[] = {{"mdwiki", "MDWiki"}, {"medlineplus", "MedlinePlus"}, {"military-medicine", "Military Medicine"}};
+  for (const auto& n : kNames) {
+    if (c.key.find(n.key) != std::string::npos) return n.name;
+  }
+  std::string t = c.title;
+  for (const char* sep : {" - ", " \xE2\x80\x93 ", ": ", " ("}) {  // " – " is an en dash
+    const size_t at = t.find(sep);
+    if (at != std::string::npos && at > 0) t.resize(at);
+  }
+  return t;
 }
 
 namespace {
@@ -142,15 +159,13 @@ void ShelfActivity::rebuildTiles() {
     for (size_t i = 0; i < cols.size(); i++) {
       if (tileGroupFor(cols[i]) == group_)
         tiles_.push_back(
-            {TileKind::Collection, cols[i].title, iconForCollection(cols[i].key), static_cast<int>(i), ""});
+            {TileKind::Collection, shortTitle(cols[i]), iconForCollection(cols[i].key), static_cast<int>(i), ""});
     }
   }
 
   const bool anyRecent = !pocketlib::ReadingHistory::instance().places().empty();
   items_.assign(tiles_.size(), fui::TileGridItem{});
   for (size_t i = 0; i < tiles_.size(); i++) {
-    items_[i].label = tiles_[i].label.c_str();
-    items_[i].icon = fui::bitmapFromIcon(*tiles_[i].icon);
     items_[i].value = static_cast<int16_t>(i);
     items_[i].enabled = tiles_[i].kind != TileKind::Recent || anyRecent;
   }
@@ -158,29 +173,36 @@ void ShelfActivity::rebuildTiles() {
 
 void ShelfActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int16_t top = static_cast<int16_t>(metrics.topPadding + metrics.headerHeight);
   const int16_t side = static_cast<int16_t>(metrics.contentSidePadding);
-  screen.setContentMarginFromScreen(fui::Insets{top, side, static_cast<int16_t>(metrics.buttonHintsHeight), side});
-  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+  const int16_t top = static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing);
+  const int16_t bottom =
+      static_cast<int16_t>(renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing);
 
   constexpr int16_t kGap = 12;
   const int rows = std::max<int>(3, (static_cast<int>(tiles_.size()) + 1) / 2);
-  const int available =
-      renderer.getScreenHeight() - top - metrics.buttonHintsHeight - 2 * metrics.verticalSpacing - (rows - 1) * kGap;
+  tileHeight_ = static_cast<int16_t>(std::max(48, (bottom - top - (rows - 1) * kGap) / rows));
+  gridRect_ = fui::Rect{side, top, static_cast<int16_t>(renderer.getScreenWidth() - 2 * side),
+                        static_cast<int16_t>(rows * tileHeight_ + (rows - 1) * kGap)};
   for (size_t i = 0; i < items_.size(); i++) {
-    // Filled = the tile the buttons are on (no dithered gray, so no ghosting).
     items_[i].state = buttonsUsed_ && static_cast<int>(i) == nav.selected ? fui::StateChecked : fui::StateNormal;
   }
+  // Outlined tiles; the one the buttons are on gets a heavy border instead of
+  // a fill, so its black icon and name stay readable (and nothing is gray).
+  fui::StyleSet styles = fui::tileGridStyles(12);
+  fui::BoxStyle chosen = styles.normal;
+  chosen.borderWidth = 5;
+  styles.selected = chosen;
+  styles.focused = chosen;
+  styles.active = chosen;
   fui::TileGridProps props;
   props.items = items_.data();
   props.count = static_cast<uint16_t>(items_.size());
   props.action = ACTION_ROW;
   props.columns = 2;
   props.gap = kGap;
-  props.tileHeight = static_cast<int16_t>(std::max(48, available / rows));
-  props.iconSize = 32;
-  props.text = screen.theme().bodyText;
-  screen.tileGrid(props);
+  props.tileHeight = tileHeight_;
+  props.styles = styles;
+  fui::tileGrid(screen.frame(), gridRect_, props);
 }
 
 void ShelfActivity::navigateButtons() {
@@ -200,6 +222,27 @@ void ShelfActivity::navigateButtons() {
 }
 
 void ShelfActivity::drawFooter() {
+  // Icon above, name below, centred in each tile and cut to its width.
+  constexpr int kGap = 12;
+  constexpr int kIcon = 32;
+  const int tileWidth = (gridRect_.width - kGap) / 2;
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  for (size_t i = 0; i < tiles_.size(); i++) {
+    const int x = gridRect_.x + static_cast<int>(i % 2) * (tileWidth + kGap);
+    const int y = gridRect_.y + static_cast<int>(i / 2) * (tileHeight_ + kGap);
+    const auto lines = renderer.wrappedText(UI_12_FONT_ID, tiles_[i].label.c_str(), tileWidth - 20, 2);
+    const int blockHeight = kIcon + 10 + static_cast<int>(lines.size()) * lineHeight;
+    int ty = y + (tileHeight_ - blockHeight) / 2;
+    renderer.drawIcon(tiles_[i].icon->bits, x + (tileWidth - kIcon) / 2, ty, kIcon);
+    ty += kIcon + 10;
+    const bool enabled = items_[i].enabled;
+    for (const auto& line : lines) {
+      const int w = renderer.getTextWidth(UI_12_FONT_ID, line.c_str());
+      renderer.drawText(UI_12_FONT_ID, x + (tileWidth - w) / 2, ty, line.c_str(), true,
+                        enabled ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+      ty += lineHeight;
+    }
+  }
   UiListActivity::drawFooter();
   if (!notice_.empty()) GUI.drawPopup(renderer, notice_.c_str());
 }

@@ -632,7 +632,17 @@ void ArticleActivity::render(RenderLock&&) {
       renderer.drawCenteredText(UI_10_FONT_ID, y + 120, memory_.c_str());
       if (!back_.empty()) renderer.drawCenteredText(UI_10_FONT_ID, y + 160, "Back returns to the previous article");
     }
-    if (!title_.empty()) renderer.drawCenteredText(UI_10_FONT_ID, y + 40, title_.c_str());
+    if (!title_.empty()) {
+      // Long titles ("MedlinePlus - Health Information from the National
+      // Library of Medicine") wrap onto up to three lines.
+      const int side = UITheme::getInstance().getMetrics().contentSidePadding;
+      const auto lines =
+          renderer.wrappedText(UI_10_FONT_ID, title_.c_str(), renderer.getScreenWidth() - 2 * side - 16, 3);
+      const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+      for (size_t i = 0; i < lines.size(); i++) {
+        renderer.drawCenteredText(UI_10_FONT_ID, y + 40 + static_cast<int>(i) * lineHeight, lines[i].c_str());
+      }
+    }
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     if (state_ == State::Loading) loadingShown_.store(true, std::memory_order_release);
     return;

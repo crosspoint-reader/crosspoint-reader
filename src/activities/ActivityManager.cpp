@@ -234,7 +234,11 @@ void ActivityManager::loop() {
 // draw after a screen change gets a half refresh instead. Readers keep their
 // own refresh choices, and the control center opens over the screen as is.
 void ActivityManager::cleanNextScreen() {
-  if (!currentActivity || currentActivity->isReaderActivity() || currentActivity->name == "FrontlightPanel") return;
+  // "Article" (Pocket Library) opens on a near-blank "Opening" screen that
+  // needs no cleanup, and a half refresh there would delay the article.
+  if (!currentActivity || currentActivity->isReaderActivity() || currentActivity->name == "FrontlightPanel" ||
+      currentActivity->name == "Article")
+    return;
   renderer.promoteNextRefreshAtLeast(HalDisplay::HALF_REFRESH);
 }
 #endif
