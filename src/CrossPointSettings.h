@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
+#include <ToneLut.h>
 
 #include <cstdint>
 
@@ -227,6 +228,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Sleep render profile ("Use for sleep rendering" in the image viewer's
+  // settings): HOW applicable custom BMP sleep images are rendered. Defaults
+  // keep rendering unchanged; independent of the sleep screen mode and of the
+  // sleep cover file choice.
+  ToneProfile sleepRenderProfile;
+  // Viewer render profile (image viewer): persisted tone settings for the
+  // normal BMP viewer session start. Fully independent of sleepRenderProfile;
+  // the default keeps rendering unchanged (B100 G1.00 C100, quantizer = no
+  // override).
+  ToneProfile viewerRenderProfile;
   // Status bar settings
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;

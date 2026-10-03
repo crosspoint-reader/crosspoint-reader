@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "BitmapHelpers.h"
+#include "ToneLut.h"
 
 #pragma pack(push, 1)
 struct BmpHeader {
@@ -65,8 +66,8 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(HalFile& file, bool dithering = false, bool originalThresholds = false)
-      : file(file), dithering(dithering), originalThresholds(originalThresholds) {}
+  explicit Bitmap(HalFile& file, bool dithering = false, bool originalThresholds = false, const ToneLut* tone = nullptr)
+      : file(file), dithering(dithering), originalThresholds(originalThresholds), tone(tone) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
@@ -86,6 +87,7 @@ class Bitmap {
   HalFile& file;
   bool dithering = false;
   bool originalThresholds = false;
+  const ToneLut* tone = nullptr;  // optional tone override; nullptr = exact baseline pass-through
   int width = 0;
   int height = 0;
   bool topDown = false;
