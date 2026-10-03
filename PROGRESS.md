@@ -247,3 +247,11 @@ containing "Forbidden City"; see the session summary for the download.
    and the **Last article** row.
 6. Try a search in Wiktionary (`serendipity`) and MedlinePlus (`asthma`).
 7. Note anything wrong: slow typing, wrong results, freezes.
+
+## 2026-10-03 — SD speed (owner approved)
+
+- SD card at 40 MHz (falls back to 20 MHz if it won't mount) and 16 KiB per
+  SD command; patch to the SDK applied by our build only. See DECISIONS.
+- Add to the checklist: Settings → About → tap Firmware five times →
+  Diagnostics. **SD bus** should say 40.0 MHz. Tap **SD benchmark** and
+  photograph the result (before: 1.93 MB/s sequential, 1.9 ms random).

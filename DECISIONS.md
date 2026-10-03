@@ -67,6 +67,7 @@ Release tags are what we rebase onto.
 | `test/CMakeLists.txt` | one `add_subdirectory(pocketlib_article_layout)` | real articles through the layout engine on the host |
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
 | `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
+| `freeink-sdk` (submodule, patched at build time) | `SdmmcBlockDevice.{h,cpp}`: 40 MHz with 20 MHz fallback, 32-sector transfers, all behind `POCKET_LIBRARY_SD_FAST` | SD speed |
 
 ## 2026-10-01 — Licensing layout
 
@@ -367,6 +368,25 @@ would test are unchanged.
   results records read. Estimate ~25–60 ms on the device *(est.)*; the
   collection screen shows the last lookup's time. The e-ink refresh, not the
   lookup, is expected to dominate.
+
+## 2026-10-03 — SD speed: 40 MHz and 16 KiB transfers (owner approved)
+
+- The SDK asks for `SDMMC_FREQ_DEFAULT`, commented "40 MHz", which ESP-IDF
+  defines as 20 MHz; the SDK's own notes say the OEM firmware runs 40 MHz.
+  Our envs now ask for `SDMMC_FREQ_HIGHSPEED` (the card is switched to high
+  speed with CMD6 when it supports it). The SDK's mount loop already retries
+  four times; attempts 3 and 4 now fall back to 20 MHz, so a card that will
+  not run at 40 still mounts.
+- Each SD command now moves up to 32 sectors (16 KiB, internal DMA RAM)
+  instead of 8 (4 KiB): a ~300 KB compressed cluster takes ~19 commands
+  instead of ~75.
+- How: `scripts/pocketlib_sdk_patches/0001-sd-fast-clock-and-transfers.patch`,
+  applied to the freeink-sdk submodule by `scripts/pocketlib_patch_sdk.py`
+  (our envs only, idempotent via `git apply --check`, fails the build if the
+  SDK moves). Everything is fenced in `POCKET_LIBRARY_SD_FAST`, defined only
+  in our envs, so stock envs compile upstream's code even from a patched tree.
+- Check on the device: Diagnostics → SD bus should read 40.0 MHz; rerun the
+  SD benchmark and compare with the 1.93 MB/s / 1.9 ms baseline.
 
 ## 2026-10-03 — Preview builds for review branches
 
