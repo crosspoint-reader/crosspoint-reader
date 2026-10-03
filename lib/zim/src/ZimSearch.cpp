@@ -10,10 +10,93 @@
 #include "ZimSearch.h"
 
 #include <algorithm>
+#include <string>
 
 #include "ZimFold.h"
 
 namespace zim {
+
+namespace {
+
+// Optimal string alignment distance (Damerau-Levenshtein without repeated
+// edits of one substring), giving up above `limit`.
+size_t editDistance(std::string_view a, std::string_view b, size_t limit) {
+  if (a.size() > b.size() + limit || b.size() > a.size() + limit) return limit + 1;
+  std::vector<size_t> prev2(b.size() + 1), prev(b.size() + 1), cur(b.size() + 1);
+  for (size_t j = 0; j <= b.size(); j++) prev[j] = j;
+  for (size_t i = 1; i <= a.size(); i++) {
+    cur[0] = i;
+    size_t best = cur[0];
+    for (size_t j = 1; j <= b.size(); j++) {
+      const size_t cost = a[i - 1] == b[j - 1] ? 0 : 1;
+      cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost});
+      if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) cur[j] = std::min(cur[j], prev2[j - 2] + 1);
+      best = std::min(best, cur[j]);
+    }
+    if (best > limit) return limit + 1;
+    prev2.swap(prev);
+    prev.swap(cur);
+  }
+  return prev[b.size()];
+}
+
+// Nothing starts with `key`: shorten it from the end until something does,
+// and keep the titles whose start is within one typo (two for long queries)
+// of all of it. A typo in the first three letters is not found.
+Error fuzzyCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, const std::string& key,
+                      std::vector<SearchCandidate>& out) {
+  const size_t limit = key.size() >= 8 ? 2 : 1;
+  struct Scored {
+    SearchCandidate c;
+    size_t distance;
+  };
+  std::vector<Scored> found;
+  // Two letters swapped near the start ("clmiate"): the trimming below keeps
+  // the first three letters, so try those swaps as they are.
+  for (size_t i = 0; i + 1 < key.size() && i < 3 && found.empty(); i++) {
+    if (key[i] == key[i + 1]) continue;
+    std::string swapped = key;
+    std::swap(swapped[i], swapped[i + 1]);
+    Error err = index.seek(swapped, cursor);
+    if (err != Error::None) return err;
+    TitleRecord rec;
+    for (size_t scanned = 0; scanned < kSearchWindow; scanned++) {
+      err = index.next(cursor, rec);
+      if (err == Error::NotFound) break;
+      if (err != Error::None) return err;
+      if (!keyHasPrefix(rec.key, swapped)) break;
+      found.push_back({{rec.entry, rec.score, false}, 1});
+    }
+  }
+  for (size_t cut = key.size() - 1; cut >= 3 && found.empty(); cut--) {
+    const std::string stem = key.substr(0, cut);
+    Error err = index.seek(stem, cursor);
+    if (err != Error::None) return err;
+    TitleRecord rec;
+    for (size_t scanned = 0; scanned < kSearchWindow; scanned++) {
+      err = index.next(cursor, rec);
+      if (err == Error::NotFound) break;
+      if (err != Error::None) return err;
+      if (!keyHasPrefix(rec.key, stem)) break;
+      // Compare with the title's start at the query's length, give or take.
+      size_t d = limit + 1;
+      for (size_t len = key.size() >= limit ? key.size() - limit : 0; len <= key.size() + limit; len++) {
+        if (len > rec.key.size()) break;
+        d = std::min(d, editDistance(key, std::string_view(rec.key).substr(0, len), limit));
+      }
+      if (d <= limit) found.push_back({{rec.entry, rec.score, false}, d});
+    }
+  }
+  std::stable_sort(found.begin(), found.end(), [](const Scored& a, const Scored& b) {
+    if (a.distance != b.distance) return a.distance < b.distance;
+    return a.c.score > b.c.score;
+  });
+  out.clear();
+  for (const auto& f : found) out.push_back(f.c);
+  return Error::None;
+}
+
+}  // namespace
 
 Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::string_view query,
                        std::vector<SearchCandidate>& out) {
@@ -28,8 +111,11 @@ Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::strin
     if (err == Error::NotFound) break;
     if (err != Error::None) return err;
     if (!keyHasPrefix(rec.key, key)) break;
-    out.push_back({rec.entry, rec.score, rec.key == key});
+    // Only a whole title is an exact match; a word inside one ranks by
+    // popularity with the rest.
+    out.push_back({rec.entry, rec.score, rec.key == key && !rec.word});
   }
+  if (out.empty() && key.size() >= 4) return fuzzyCandidates(index, cursor, key, out);
   // Exact first, then popularity; key order (the scan order) breaks ties.
   std::stable_sort(out.begin(), out.end(), [](const SearchCandidate& a, const SearchCandidate& b) {
     if (a.exact != b.exact) return a.exact;

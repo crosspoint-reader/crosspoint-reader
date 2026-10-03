@@ -78,7 +78,9 @@ TEST_P(Search, HitsStartWithTheQueryAndPointAtDistinctArticles) {
     const auto& h = hits[i];
     zim::Entry matched;
     ASSERT_EQ(archive.entryAt(h.entry, matched), zim::Error::None);
-    EXPECT_TRUE(zim::keyHasPrefix(zim::foldKey(matched.title), key)) << h.title;
+    // The title starts with the query, or one of its later words does.
+    const std::string title = zim::foldKey(matched.title);
+    EXPECT_TRUE(zim::keyHasPrefix(title, key) || title.find(" " + key) != std::string::npos) << h.title;
     if (i > 0 && !hits[i - 1].exact) {
       // Ranked: exact match first, then popularity, never rising.
       EXPECT_FALSE(h.exact) << h.title;
@@ -198,4 +200,32 @@ TEST(SearchMany, ExactFromEverySourceFirstThenTakingTurns) {
   ASSERT_EQ(zim::searchMany({}, "Climate", 4, hits), zim::Error::None);
   EXPECT_TRUE(hits.empty());
   std::filesystem::remove(path);
+}
+
+TEST_P(Search, WordsInsideTitles) {
+  // "change" is the second word of "Climate change".
+  bool found = false;
+  for (const auto& h : find("change", 40)) {
+    zim::Entry e;
+    ASSERT_EQ(archive.entryAt(h.entry, e), zim::Error::None);
+    ASSERT_EQ(archive.resolve(e), zim::Error::None);
+    found |= e.title == "Climate change";
+    EXPECT_FALSE(h.exact && zim::foldKey(e.title) != "change") << "a word match is never exact: " << h.title;
+  }
+  if (GetParam() != "noTitleListingV0") EXPECT_TRUE(found);
+}
+
+TEST_P(Search, ToleratesTypos) {
+  for (const char* q : {"climte change", "clmiate change", "climate chnage", "climate changee"}) {
+    const auto hits = find(q, 8);
+    bool found = false;
+    for (const auto& h : hits) {
+      zim::Entry e;
+      ASSERT_EQ(archive.entryAt(h.entry, e), zim::Error::None);
+      ASSERT_EQ(archive.resolve(e), zim::Error::None);
+      found |= e.title == "Climate change";
+    }
+    EXPECT_TRUE(found) << q;
+  }
+  EXPECT_TRUE(find("zzzzqqqq", 8).empty()) << "nothing close: nothing found";
 }

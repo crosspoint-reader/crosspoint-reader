@@ -490,6 +490,16 @@ known-good **dev** build of `pocket-library`.
 - Needs a "maxi" ZIM: the card's "nopic" files have no pictures, so this
   build changes nothing on them.
 
+## 2026-10-03 — Search index v3: words inside titles; typo tolerance on the device
+
+- Word records over a full-text index: a few hundred MB more on the card
+  (estimate from the sample's 2.1x) instead of a separate index of article
+  text, and the device's search code is unchanged but for one flag. Only
+  articles (not redirects) get word records, at most six each.
+- Typos are handled on the device, only when nothing matches, so a correct
+  query costs nothing extra; a typo in the first three letters is found only
+  as a swap of two of them.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |

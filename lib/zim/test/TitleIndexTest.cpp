@@ -240,15 +240,28 @@ TEST_P(RealFiles, IndexFindsTitlesWhateverTheCase) {
   }
   EXPECT_TRUE(found);
 
-  // Every indexed record points at an entry whose folded title is its key.
+  // Every indexed record points at an entry whose folded title is its key,
+  // or, for a word record, ends with it after a space ("change" for
+  // "Climate change").
   const auto all = scanFrom(index, "", w.size() + 1);
   ASSERT_EQ(all.size(), w.size());
+  size_t words = 0;
   for (size_t i = 0; i < all.size(); i += 37) {
     zim::Entry e;
     ASSERT_EQ(a.entryAt(all[i].entry, e), zim::Error::None);
-    EXPECT_EQ(zim::foldKey(e.title), all[i].key);
+    const std::string title = zim::foldKey(e.title);
+    if (all[i].word) {
+      words++;
+      EXPECT_FALSE(e.isRedirect()) << all[i].key;
+      ASSERT_GT(title.size(), all[i].key.size()) << all[i].key;
+      EXPECT_EQ(title.compare(title.size() - all[i].key.size(), all[i].key.size(), all[i].key), 0) << title;
+      EXPECT_EQ(title[title.size() - all[i].key.size() - 1], ' ') << title;
+    } else {
+      EXPECT_EQ(title, all[i].key);
+    }
     EXPECT_EQ(e.ns, a.contentNamespace());
   }
+  EXPECT_GT(words, 0u) << "version 3 indexes words inside titles";
 
   // An index built for one file is refused for another.
   zim::Archive other;

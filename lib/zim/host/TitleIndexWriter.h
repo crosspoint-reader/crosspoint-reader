@@ -26,7 +26,8 @@ class TitleIndexWriter {
  public:
   // `key` must already be folded (foldKey) and at most kMaxKeyBytes long.
   // Returns the record's number, for setScore.
-  size_t add(std::string_view key, uint32_t entry, uint8_t score = 0);
+  // `word`: the title from a later word on (TitleRecord::word).
+  size_t add(std::string_view key, uint32_t entry, uint8_t score = 0, bool word = false);
   void setScore(size_t record, uint8_t score) { records_[record].score = score; }
   size_t size() const { return records_.size(); }
 
@@ -40,6 +41,7 @@ class TitleIndexWriter {
     uint32_t entry;
     uint8_t length;
     uint8_t score;
+    uint8_t flags;  // bit 0: word record
   };
   std::string_view keyOf(const Record& r) const { return std::string_view(arena_.data() + r.offset, r.length); }
 

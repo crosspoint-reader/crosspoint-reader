@@ -458,3 +458,19 @@ containing "Forbidden City"; see the session summary for the download.
 - Device checklist: Library → Medical → First Aid: rows with their sources;
   each opens; Encyclopedia: search row opens search scoped to Medical; a
   body system opens.
+
+## 2026-10-03 — Search: words inside titles, typos (index v3)
+
+- Index version 3 (`zimindex`, `cardbuilder.py` rebuilds older ones): each
+  article's title is also indexed from each later word on (up to six, words
+  of three letters or more, a few stop words skipped), flagged as a word
+  record. "panda" now finds Giant panda and Red panda, ranked by popularity
+  with the titles that start with "panda"; only a whole title is an exact
+  match. The sample's index grows 2.1x (96 KB → 204 KB).
+- Typos: when nothing matches, the search tries the query with one of its
+  first letter pairs swapped, then trims letters from the end (keeping three)
+  until titles turn up, and keeps those within one typo (two for queries of
+  eight letters or more). "climte change", "clmiate change", "climate
+  chnage" and "climate changee" all find Climate change. Works with older
+  indexes too (device-side).
+- 90 host tests, 12 card builder tests pass.

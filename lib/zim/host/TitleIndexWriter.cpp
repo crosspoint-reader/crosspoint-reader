@@ -56,6 +56,18 @@ class PageFile {
 
 }  // namespace
 
+namespace {
+constexpr int kMaxWordRecords = 6;
+// Words a title is never looked up by on their own ("History of the …").
+bool isStopWord(std::string_view w) {
+  static constexpr const char* kStop[] = {"and", "the", "for", "from", "with", "des", "del", "der",
+                                          "die", "les", "von", "van",  "one",  "two", "list"};
+  for (const char* s : kStop)
+    if (w == s) return true;
+  return false;
+}
+}  // namespace
+
 Error collectTitles(Archive& archive, TitleIndexWriter& writer, void (*progress)(uint32_t, uint32_t)) {
   const uint32_t total = archive.entryCount();
   std::vector<bool> wanted;
@@ -89,7 +101,20 @@ Error collectTitles(Archive& archive, TitleIndexWriter& writer, void (*progress)
     if (e.isRedirect() || listed) {
       if (titlesOf[target] < UINT16_MAX) ++titlesOf[target];
     }
-    if (listed) recordTarget.emplace_back(writer.add(foldKey(e.title), i), target);
+    if (!listed) continue;
+    const std::string key = foldKey(e.title);
+    recordTarget.emplace_back(writer.add(key, i), target);
+    // The title from each later word on, for articles (not redirects).
+    if (!e.isRedirect()) {
+      int added = 0;
+      for (size_t at = key.find(' '); at != std::string::npos && added < kMaxWordRecords; at = key.find(' ', at + 1)) {
+        const std::string_view rest = std::string_view(key).substr(at + 1);
+        const std::string_view word = rest.substr(0, rest.find(' '));
+        if (word.size() < 3 || isStopWord(word)) continue;
+        recordTarget.emplace_back(writer.add(rest, i, 0, true), target);
+        added++;
+      }
+    }
   }
   for (const auto& [record, target] : recordTarget) writer.setScore(record, popularityScore(titlesOf[target]));
   if (progress) progress(total, total);
@@ -103,9 +128,10 @@ uint8_t popularityScore(uint32_t titles) {
   return static_cast<uint8_t>(std::min(255.0, s));
 }
 
-size_t TitleIndexWriter::add(std::string_view key, uint32_t entry, uint8_t score) {
+size_t TitleIndexWriter::add(std::string_view key, uint32_t entry, uint8_t score, bool word) {
   if (key.size() > kMaxKeyBytes) key = key.substr(0, kMaxKeyBytes);
-  records_.push_back(Record{arena_.size(), entry, static_cast<uint8_t>(key.size()), score});
+  records_.push_back(
+      Record{arena_.size(), entry, static_cast<uint8_t>(key.size()), score, static_cast<uint8_t>(word ? 1 : 0)});
   arena_.insert(arena_.end(), key.begin(), key.end());
   return records_.size() - 1;
 }
@@ -152,7 +178,7 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
       const size_t limit = std::min(prev.size(), key.size());
       while (shared < limit && prev[shared] == key[shared]) ++shared;
     }
-    if (off + 2 + (key.size() - shared) + 5 > kPage) {
+    if (off + 2 + (key.size() - shared) + 6 > kPage) {
       flushLeaf();
       shared = 0;
     }
@@ -162,7 +188,8 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
     std::memcpy(page + off + 2, key.data() + shared, key.size() - shared);
     put32(page + off + 2 + key.size() - shared, r.entry);
     page[off + 2 + key.size() - shared + 4] = r.score;
-    off += 2 + (key.size() - shared) + 5;
+    page[off + 2 + key.size() - shared + 5] = r.flags;
+    off += 2 + (key.size() - shared) + 6;
     ++count;
     prev.assign(key);
   }

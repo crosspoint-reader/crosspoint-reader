@@ -53,8 +53,9 @@ PART_SIZE = 4000 * 1024 * 1024  # 4,000 MiB: under FAT32's 4 GiB file limit
 CARD_DIR = "library"
 MANIFEST = "manifest.json"
 # Title index format the current zimindex writes; older indexes are rebuilt
-# (version 2 added the popularity score that ranks search results).
-INDEX_VERSION = 2
+# (version 2 added the popularity score that ranks search results; version 3
+# adds words inside titles, so "panda" finds Giant panda).
+INDEX_VERSION = 3
 STATE_FILE = ".cardbuilder-state.json"
 CHUNK = 4 * 1024 * 1024
 USER_AGENT = f"PocketLibraryCardBuilder/{VERSION}"
@@ -434,7 +435,7 @@ def build_index(zim: Path, zimindex: Path) -> Path:
                 say(f"  {out.name}: already built")
                 return out
             if head["version"] < INDEX_VERSION:
-                say(f"  {out.name}: older index format (v{head['version']}), rebuilding for ranked search")
+                say(f"  {out.name}: older index format (v{head['version']}), rebuilding (ranked, words inside titles)")
         except BuildError:
             pass
     say(f"  building {out.name} (large collections take several minutes)")

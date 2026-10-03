@@ -157,13 +157,14 @@ Error TitleIndex::next(Cursor& cursor, TitleRecord& out) {
   if (off + 2 > kTitleIndexPageSize) return Error::BadCluster;
   const uint8_t shared = b[off];
   const uint8_t suffix = b[off + 1];
-  const size_t tail = header_.version >= 2 ? 5 : 4;  // entry (+ score)
+  const size_t tail = header_.version >= 3 ? 6 : header_.version == 2 ? 5 : 4;  // entry (+ score) (+ flags)
   if (shared > cursor.key_.size() || off + 2 + suffix + tail > kTitleIndexPageSize) return Error::BadCluster;
   cursor.key_.resize(shared);
   cursor.key_.append(reinterpret_cast<const char*>(b + off + 2), suffix);
   out.key = cursor.key_;
   out.entry = rd32(b + off + 2 + suffix);
-  out.score = tail == 5 ? b[off + 2 + suffix + 4] : 0;
+  out.score = tail >= 5 ? b[off + 2 + suffix + 4] : 0;
+  out.word = tail == 6 && (b[off + 2 + suffix + 5] & 1) != 0;
   cursor.offset_ = off + 2 + suffix + tail;
   --cursor.remaining_;
   return Error::None;
