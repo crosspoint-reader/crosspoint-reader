@@ -108,3 +108,14 @@ containing "Forbidden City"; see the session summary for the download.
   (33 total) pass under ASan/UBSan. CI now publishes `zimindex` for macOS.
 - **Next**: owner builds the index for real Wikipedia (time and size); then
   the Python card builder (`tools/cardbuilder/`).
+
+## 2026-10-03 — Real index built; card builder written
+
+- Owner ran zimindex on real Wikipedia: 2 min 2 s, 269 MB, and lowercase,
+  capitals and accents all find the right titles.
+- `tools/cardbuilder/`: `cardbuilder.py` (plan / download / index / copy /
+  all), `library.toml` with the chosen corpus, README, and 10 tests against a
+  local fake Kiwix server. CI runs them; the dev release now carries
+  `cardbuilder.py` and `library.toml`.
+- **Next for the owner**: `python3 cardbuilder.py plan`, the first live
+  catalog check.

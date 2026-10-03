@@ -1,11 +1,11 @@
-# Pocket Library — host tests for lib/zim (AddressSanitizer + UBSan).
+# Pocket Library — host tests: lib/zim (AddressSanitizer + UBSan) and the card builder.
 # SPDX-License-Identifier: GPL-3.0-or-later
 name: Pocket Library host
 
 on:
   push:
     branches: [pocket-library]
-    paths: ['lib/zim/**', '.github/workflows/pocketlib-host.yml']
+    paths: ['lib/zim/**', 'tools/cardbuilder/**', '.github/workflows/pocketlib-host.yml']
   workflow_dispatch:
 
 permissions:
@@ -22,3 +22,7 @@ jobs:
           cmake --build build/zim -j
       - name: Test
         run: ctest --test-dir build/zim --output-on-failure -j2
+      - name: Card builder tests
+        run: |
+          ZIMINDEX=build/zim/zimindex ZIM_TEST_DATA_DIR=build/zim/_deps/zim_testing_suite-src/data \
+            python3 -m unittest tools/cardbuilder/test_cardbuilder.py -v

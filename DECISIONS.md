@@ -232,9 +232,39 @@ start with a capital letter and the ZIM's own list is ordered byte by byte
   read for its display title.
 - **Size and build** (synthetic, 19.2 M titles, cloud x86): 160 MB file,
   1 min 55 s, 918 MB peak memory.
+- **Real Wikipedia** (owner's Mac, Intel, file on the SSK drive): 19,191,219
+  titles indexed in 2 min 2 s. The index is 269,029,376 bytes, 0.5% of the
+  ZIM; real titles share less of their prefixes than the synthetic ones.
+  "forbidden ci", "FORB" and "zurich" (finds "Zürich") all work.
+- Seen in that run: one target can have a dozen redirects ("FORBA
+  Holdings", "FORBA Holdings LLC", ...). The device list should collapse
+  redirects that share a target (M4).
 - Not yet: ranking. Matches come back in alphabetical order, so "Forb" lists
   "Forbach…" before "Forbidden City". Ranking is decided in M4 with real
   queries, and the format has a version number for it.
+
+## 2026-10-03 — Card builder: one stdlib Python file, `library.toml`
+
+- **TOML, not the brief's YAML.** Python 3.11+ reads TOML out of the box
+  (`tomllib`); YAML needs PyYAML, and the owner's macOS Python refuses
+  `pip install` outside a venv. One file, nothing to install.
+- **Catalog**: Kiwix OPDS v2 (`library.kiwix.org/catalog/v2/entries?name=`).
+  Per collection, the newest edition in the first listed flavour wins. The
+  download URL is the entry's `.meta4` link minus `.meta4`, and the checksum
+  is `URL.sha256`, as the owner fetched by hand. Written from the format,
+  not tested live (this session cannot reach Kiwix); the owner's `plan` run
+  is the first live check, and it is read-only.
+- **Staging** defaults to the SSK drive, where Wikipedia already sits; the
+  builder recognises the file by name and checks its hash once (state in
+  `.cardbuilder-state.json`, keyed by size + mtime).
+- **Card layout**: `/library/<key>/`, ZIMs over 4,000 MiB written straight to
+  the card as `.zimaa…` parts (no second 53 GB copy on the staging drive),
+  each file written as `.tmp` and renamed, then `/library/manifest.json`.
+- **Deletes only with `--prune`**, per the owner's ask-first rule; stale
+  files are otherwise listed.
+- First-aid names beyond mdwiki (MedlinePlus, post-disaster, military
+  medicine) are unconfirmed and marked optional.
+- Standard Ebooks (EPUB, not ZIM) and Wiktionary → StarDict come later in M2.
 
 ## Dependencies
 

@@ -1,0 +1,76 @@
+# Pocket Library — what goes on the card.
+#
+# Each [[collection]] is one Kiwix ZIM, looked up by its catalog name. The
+# newest edition in the first flavour that exists is used ("nopic" = text
+# without pictures). "key" is the folder name under /library on the card.
+# optional = true: skip with a warning if the catalog does not have it.
+# Names marked "unconfirmed" come from memory, not a live catalog check;
+# `cardbuilder.py plan` reports any that do not resolve.
+
+[settings]
+staging = "/Volumes/SSK Drive"   # downloads and indexes live here
+# card = "/Volumes/POCKET LIB"   # or pass --card; check the name with: ls /Volumes
+
+# --- core ---------------------------------------------------------------------
+[[collection]]
+key = "wikipedia"
+name = "wikipedia_en_all"
+flavour = ["nopic"]
+
+[[collection]]
+key = "wiktionary"
+name = "wiktionary_en_all"
+flavour = ["nopic"]
+note = "Also converted to a StarDict dictionary for word lookups (later in M2)."
+
+[[collection]]
+key = "wikivoyage"
+name = "wikivoyage_en_all"
+flavour = ["nopic"]
+
+[[collection]]
+key = "wikiquote"
+name = "wikiquote_en_all"
+flavour = ["nopic"]
+
+# --- medicine and first aid ---------------------------------------------------------
+[[collection]]
+key = "wikiprojectmed"
+name = "mdwiki_en_all"
+flavour = ["nopic", "maxi"]
+note = "WikiProjectMed Foundation's medical encyclopedia (mdwiki.org)."
+
+[[collection]]
+key = "medlineplus"
+name = "medlineplus.gov_en_all"
+flavour = ["", "maxi"]
+optional = true
+note = "unconfirmed name: US National Library of Medicine consumer health pages."
+
+[[collection]]
+key = "post-disaster"
+name = "zimgit-post-disaster_en"
+flavour = [""]
+optional = true
+note = "unconfirmed name: field manuals for first aid, water, shelter after disasters."
+
+[[collection]]
+key = "military-medicine"
+name = "fas-military-medicine_en"
+flavour = [""]
+optional = true
+note = "unconfirmed name: US military field-medicine manuals (public domain)."
+
+# --- books ------------------------------------------------------------------------
+[[collection]]
+key = "wikisource"
+name = "wikisource_en_all"
+flavour = ["nopic"]
+
+[[collection]]
+key = "wikibooks"
+name = "wikibooks_en_all"
+flavour = ["nopic"]
+
+# Standard Ebooks are EPUBs, not ZIMs; CrossPoint already reads EPUB. They get
+# their own step later in M2 (their bulk downloads need checking first).
