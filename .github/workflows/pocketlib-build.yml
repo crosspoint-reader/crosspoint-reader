@@ -22,6 +22,12 @@ on:
 permissions:
   contents: read
 
+# One build at a time, newest last, so the dev release always ends on the
+# latest commit (two overlapping runs could otherwise publish out of order).
+concurrency:
+  group: pocketlib-build
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
