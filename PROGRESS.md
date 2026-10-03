@@ -133,3 +133,11 @@ containing "Forbidden City"; see the session summary for the download.
   step). `library.toml` no longer lists Gutenberg. `index` and `copy` now skip
   anything not downloaded, with a note, and will not prune in that case (11
   card-builder tests).
+- Owner ran `cardbuilder.py index`: all 9 indexes built (Wikipedia already
+  done; Wiktionary 9,129,949 titles in 32.6 s; Wikisource 857,535 in 4.5 s;
+  WikiProjectMed 363,797 in 1.3 s; Wikibooks 118,571; Wikiquote 102,400;
+  Wikivoyage 68,182; MedlinePlus 17,791; each of these under a second).
+- Post-disaster (`zimgit-post-disaster_en_2024-05`) indexed to 1 title: it is
+  PDFs behind one JavaScript viewer page (`C/home`; mime types include
+  application/pdf and application/wasm). The device reads neither. Owner chose
+  to keep it on the card for now; converting the PDFs is a possible later job.
