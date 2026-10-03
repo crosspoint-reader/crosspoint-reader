@@ -819,9 +819,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // --- re-sort by surname --------------------------------------------------
   //
   // The pass above had to run in authorKey order, because that is what puts one
-  // author's books in a single run for the spelling vote. But authorKey sorts a
-  // name's WORDS — the property that lets "Victor Hugo" and "Hugo Victor" be
-  // recognised as one person — so ordering by it files Herman Melville under B.
+  // author's books in a single run for the spelling vote. authorKey is a hash, so
+  // that order carries no meaning on the shelf.
   //
   // Now that every book carries its canonical display name, the shelf is ordered
   // by surname, as a library would. Keying off the canonical name rather than the
