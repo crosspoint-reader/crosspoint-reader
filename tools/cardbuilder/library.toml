@@ -26,7 +26,7 @@ note = "Also converted to a StarDict dictionary for word lookups (later in M2)."
 [[collection]]
 key = "wikivoyage"
 name = "wikivoyage_en_all"
-flavour = ["nopic"]
+flavour = ["maxi", "nopic"]   # with pictures: the first test of article images (owner, 2026-10-03)
 
 [[collection]]
 key = "wikiquote"

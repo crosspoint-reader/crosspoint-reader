@@ -441,3 +441,20 @@ containing "Forbidden City"; see the session summary for the download.
   3. Pages without pictures turn as fast as before; a page with one takes a
      moment the first time only.
 
+
+## 2026-10-03 — Medical: First Aid and Medical Encyclopedia
+
+- Medical opens on two guides, then its collections: **First Aid** (29
+  emergencies, most urgent first: CPR, choking, bleeding, shock, heart
+  attack, stroke, anaphylaxis, burns, …) and **Medical Encyclopedia** (search
+  over MedlinePlus and MDWiki, then 17 body systems and topics). Each row
+  names the page it wants, MedlinePlus first (US National Library of
+  Medicine, public domain), then MDWiki or Wikipedia; titles are looked up
+  exactly when the screen opens, and rows nothing answers are left out.
+- The MedlinePlus titles are from the website's naming and not yet checked
+  against the card's file: the Mac session lists which resolve (zimcat).
+- Wikivoyage switched to the edition with pictures (maxi) in library.toml,
+  to test article images.
+- Device checklist: Library → Medical → First Aid: rows with their sources;
+  each opens; Encyclopedia: search row opens search scoped to Medical; a
+  body system opens.

@@ -47,7 +47,7 @@ class ShelfActivity final : public UiListActivity {
   void drawFooter() override;
   const char* headerTitle() const override { return title_.c_str(); }
 
-  enum class TileKind : uint8_t { Recent, Books, Group, Collection, Maps };
+  enum class TileKind : uint8_t { Recent, Books, Group, Collection, Maps, FirstAid, Encyclopedia };
   struct Tile {
     TileKind kind;
     std::string label;

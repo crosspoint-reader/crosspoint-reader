@@ -22,6 +22,7 @@
 
 #include "ArticleActivity.h"
 #include "MappedInputManager.h"
+#include "MedicalActivities.h"
 #include "PocketLibrary.h"
 #include "ReadingHistory.h"
 #include "SearchActivity.h"
@@ -150,12 +151,17 @@ void ShelfActivity::rebuildTiles() {
       }
       if (members == 0) continue;
       // A group of one is that collection, under the group's name.
-      if (members == 1)
+      if (members == 1 && g != "Medical")  // Medical always opens on its guides
         tiles_.push_back({TileKind::Collection, g, iconForGroup(g), only, ""});
       else
         tiles_.push_back({TileKind::Group, g, iconForGroup(g), -1, g});
     }
   } else {
+    // Medical opens on its two guides, then its collections one by one.
+    if (group_ == "Medical") {
+      tiles_.push_back({TileKind::FirstAid, "First Aid", &icon_heart_pulse_32, -1, ""});
+      tiles_.push_back({TileKind::Encyclopedia, "Medical Encyclopedia", &icon_stethoscope_32, -1, ""});
+    }
     for (size_t i = 0; i < cols.size(); i++) {
       if (tileGroupFor(cols[i]) == group_)
         tiles_.push_back(
@@ -271,6 +277,15 @@ void ShelfActivity::activateIndex(int index) {
     case TileKind::Collection:
       openCollection(static_cast<size_t>(tile.collection));
       return;
+    case TileKind::FirstAid:
+    case TileKind::Encyclopedia: {
+      auto list = makeUniqueNoThrow<CuratedListActivity>(renderer, mappedInput,
+                                                         tile.kind == TileKind::FirstAid
+                                                             ? CuratedListActivity::Kind::FirstAid
+                                                             : CuratedListActivity::Kind::Encyclopedia);
+      if (list) startActivityForResult(std::move(list), [this](const ActivityResult&) { rebuildTiles(); });
+      return;
+    }
   }
 }
 
