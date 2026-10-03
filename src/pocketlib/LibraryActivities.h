@@ -98,17 +98,23 @@ class ChoiceListActivity final : public UiListActivity {
   std::vector<freeink::ui::ListItem> items_;
 };
 
-// One collection: ways into it. Search (live, as you type), the main page and
-// a random article.
+// One collection's home, like the Wikipedia app's: a search bar with the
+// collection's icon first, then the article to continue, recent articles,
+// the main page, a random article, and About (size, index, last timings).
 class CollectionActivity final : public UiListActivity {
  public:
   CollectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection);
   void onEnter() override;
 
  private:
-  enum Row { ROW_SEARCH = 0, ROW_MAIN, ROW_RANDOM, ROW_ABOUT, ROW_LAST_OPEN, ROW_COUNT };
+  static constexpr freeink::ui::ActionId ACTION_SEARCH_BAR = ACTION_USER;
+  enum class RowKind : uint8_t { Search, Place, Main, Random, About };
+  struct Row {
+    RowKind kind;
+    size_t place;  // RowKind::Place: index into ReadingHistory::places()
+  };
 
-  int listCount() const override { return ROW_COUNT; }
+  int listCount() const override { return static_cast<int>(rows_.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override { return title_.c_str(); }
@@ -118,11 +124,17 @@ class CollectionActivity final : public UiListActivity {
   void openRandom();
   void openMain();
   void openSearch();
+  void openPlace(size_t place);
   void showMessage(const std::string& message);
+  void drawFooter() override;
 
   const size_t collection_;
   std::string title_;
-  std::string values_[ROW_COUNT];
-  std::string subtitles_[ROW_COUNT];
-  freeink::ui::ListItem items_[ROW_COUNT]{};
+  std::string searchLabel_;
+  std::string notice_;  // a popup over the screen, cleared by the next choice
+  const freeink::Icon* icon_ = nullptr;
+  std::vector<Row> rows_;  // rows_[0] is the search bar
+  std::vector<std::string> labels_;
+  std::vector<std::string> subtitles_;
+  std::vector<freeink::ui::ListItem> items_;  // rows_[1..]
 };

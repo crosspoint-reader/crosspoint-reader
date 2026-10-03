@@ -329,75 +329,145 @@ CollectionActivity::CollectionActivity(GfxRenderer& renderer, MappedInputManager
 
 void CollectionActivity::onEnter() {
   const auto& cols = pocketlib::Library::instance().collections();
-  if (collection_ < cols.size()) title_ = cols[collection_].title;
-  static const char* const kLabels[ROW_COUNT] = {"Search", "Main page", "Random article", "About", "Last article"};
-  for (int i = 0; i < ROW_COUNT; i++) {
-    items_[i].label = kLabels[i];
-    items_[i].actionValue = static_cast<int16_t>(i);
+  if (collection_ < cols.size()) {
+    title_ = shortTitle(cols[collection_]);
+    icon_ = iconForCollection(cols[collection_].key);
   }
+  searchLabel_ = "Search " + title_;
   refreshRows();
   UiListActivity::onEnter();
+  app.on(
+      ACTION_SEARCH_BAR,
+      [](const fui::ActionEvent&, void* user) { static_cast<CollectionActivity*>(user)->openSearch(); }, this);
 }
 
 void CollectionActivity::refreshRows() {
   auto& lib = pocketlib::Library::instance();
+  const auto& cols = lib.collections();
+  rows_.clear();
+  labels_.clear();
+  subtitles_.clear();
+  rows_.push_back({RowKind::Search, 0});
+  auto add = [&](RowKind kind, size_t place, std::string label, std::string sub) {
+    rows_.push_back({kind, place});
+    labels_.push_back(std::move(label));
+    subtitles_.push_back(std::move(sub));
+  };
+
+  // Continue reading, then up to three more recent articles from here.
+  const std::string key = collection_ < cols.size() ? cols[collection_].key : std::string();
+  const auto& places = pocketlib::ReadingHistory::instance().places();
+  int shown = 0;
+  for (size_t i = 0; i < places.size() && shown < 4; i++) {
+    if (places[i].collection != key) continue;
+    add(RowKind::Place, i, places[i].title, shown == 0 ? "Continue reading" : "Recent");
+    shown++;
+  }
+
   zim::Error err = zim::Error::None;
   zim::Archive* a = lib.open(collection_, &err);
+  const std::string description = collection_ < cols.size() ? cols[collection_].description : std::string();
+  add(RowKind::Main, 0, "Main page", description);
+  add(RowKind::Random, 0, "Random article", "");
+
+  std::string about;
   if (!a) {
-    subtitles_[ROW_ABOUT] = std::string("Cannot open: ") + zim::errorName(err);
+    about = std::string("Cannot open: ") + zim::errorName(err);
   } else {
     const uint32_t articles = a->hasArticleList() ? a->articleListCount() : a->titleCount();
-    subtitles_[ROW_ABOUT] = pocketlib::formatCount(articles) + " titles" +
-                            (lib.titleIndex(collection_) ? ", search index OK" : ", no search index");
+    about = pocketlib::formatCount(articles) + " titles";
+    if (collection_ < cols.size()) {
+      if (!cols[collection_].date.empty()) about += " \xC2\xB7 " + cols[collection_].date;
+      about += " \xC2\xB7 " + pocketlib::formatBytes(cols[collection_].bytes);
+    }
+    about += lib.titleIndex(collection_) ? "" : " \xC2\xB7 no search index";
   }
   const pocketlib::OpenTimings& t = lib.lastOpen;
   if (t.valid) {
-    char buf[160];
-    snprintf(buf, sizeof(buf), "read %u ms%s \xC2\xB7 clean %u ms \xC2\xB7 first page %u ms%s", t.readMs,
-             t.clusterCached ? " (cached)" : "", t.cleanMs, t.firstPageMs, "");
-    subtitles_[ROW_LAST_OPEN] = buf;
-    if (t.pages > 0) {
-      snprintf(buf, sizeof(buf), " \xC2\xB7 %u pages in %.1f s", t.pages, t.allPagesMs / 1000.0);
-      subtitles_[ROW_LAST_OPEN] += buf;
-    }
-  } else {
-    subtitles_[ROW_LAST_OPEN] = "Open an article to see timings";
+    char buf[96];
+    snprintf(buf, sizeof(buf), "\nLast article: read %u ms%s, first page %u ms", t.readMs,
+             t.clusterCached ? " (cached)" : "", t.firstPageMs);
+    about += buf;
   }
-  if (lib.lastSearchMs > 0) {
-    subtitles_[ROW_SEARCH] = "Titles as you type \xC2\xB7 last lookup " + std::to_string(lib.lastSearchMs) + " ms";
-  } else {
-    subtitles_[ROW_SEARCH] = "Titles as you type";
-  }
-  for (int i = 0; i < ROW_COUNT; i++) {
+  add(RowKind::About, 0, "About this collection", about);
+
+  items_.assign(rows_.size() - 1, fui::ListItem{});
+  for (size_t i = 0; i < items_.size(); i++) {
+    items_[i].label = labels_[i].c_str();
     items_[i].subtitle = subtitles_[i].empty() ? nullptr : subtitles_[i].c_str();
-    items_[i].value = values_[i].empty() ? nullptr : values_[i].c_str();
-    items_[i].enabled = i < ROW_ABOUT && a != nullptr;
+    items_[i].actionValue = static_cast<int16_t>(i + 1);
+    const RowKind kind = rows_[i + 1].kind;
+    items_[i].enabled = kind == RowKind::About || kind == RowKind::Place || a != nullptr;
   }
 }
 
 void CollectionActivity::buildScreen(UiScreen& screen) {
-  fui::ListProps props;
-  layoutList(screen, props);
-  props.items = items_;
-  props.count = ROW_COUNT;
-  props.action = ACTION_ROW;
-  syncListViewport(screen, props);
-  screen.list(props);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int16_t side = static_cast<int16_t>(metrics.contentSidePadding);
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), side,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), side});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing + 4));
+
+  // The search bar: the collection's icon and "Search Wikipedia" in a
+  // rounded field; a heavier border while the buttons are on it.
+  constexpr int16_t kBarHeight = 58;
+  const fui::Rect bar = screen.takeTop(kBarHeight, 14);
+  fui::ButtonProps props;
+  props.label = searchLabel_.c_str();
+  if (icon_) props.icon = fui::bitmapFromIcon(*icon_);
+  props.iconSize = 28;
+  props.gap = 12;
+  props.action = ACTION_SEARCH_BAR;
+  props.inputMask = fui::InputTouch;
+  fui::StyleSet styles = fui::tileGridStyles(kBarHeight / 2);
+  fui::BoxStyle focus = styles.normal;
+  focus.borderWidth = 4;
+  styles.selected = styles.focused = styles.active = focus;
+  props.styles = styles;
+  props.state = nav.selected == 0 ? fui::StateChecked : fui::StateNormal;
+  screen.button(props, bar);
+
+  fui::ListProps list;
+  list.inputMask = fui::InputTouch;
+  list.subtitleText = screen.theme().smallText;
+  list.subtitleText.maxLines = 2;
+  list.items = items_.data();
+  list.count = static_cast<uint16_t>(items_.size());
+  list.action = ACTION_ROW;
+  syncListViewport(screen, list, 1);
+  screen.list(list);
 }
 
 void CollectionActivity::activateIndex(int index) {
-  switch (index) {
-    case ROW_MAIN:
-      openMain();
-      break;
-    case ROW_RANDOM:
-      openRandom();
-      break;
-    case ROW_SEARCH:
+  notice_.clear();
+  if (index < 0 || index >= static_cast<int>(rows_.size())) return;
+  const Row row = rows_[index];
+  switch (row.kind) {
+    case RowKind::Search:
       openSearch();
-      break;
-    default:
-      break;
+      return;
+    case RowKind::Place:
+      openPlace(row.place);
+      return;
+    case RowKind::Main:
+      openMain();
+      return;
+    case RowKind::Random:
+      openRandom();
+      return;
+    case RowKind::About:
+      return;
+  }
+}
+
+void CollectionActivity::openPlace(size_t place) {
+  const auto& places = pocketlib::ReadingHistory::instance().places();
+  size_t collection = 0;
+  uint32_t entry = 0;
+  if (place < places.size() && locatePlace(places[place], collection, entry) && collection == collection_) {
+    openEntry(entry);
+  } else {
+    showMessage("That article is no longer on the card");
   }
 }
 
@@ -455,9 +525,13 @@ void CollectionActivity::openSearch() {
 }
 
 void CollectionActivity::showMessage(const std::string& message) {
-  subtitles_[ROW_MAIN] = message;
-  refreshRows();
+  notice_ = message;
   requestUpdate();
+}
+
+void CollectionActivity::drawFooter() {
+  UiListActivity::drawFooter();
+  if (!notice_.empty()) GUI.drawPopup(renderer, notice_.c_str());
 }
 
 // ------------------------------------------------------------ choice list

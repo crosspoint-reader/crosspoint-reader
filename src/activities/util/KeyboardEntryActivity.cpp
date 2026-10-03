@@ -1020,8 +1020,8 @@ void KeyboardEntryActivity::onComplete(std::string text) {
 #ifdef POCKET_LIBRARY
   KeyboardResult result{std::move(text)};
   if (liveFill) {
-    // OK opens the best match; a tapped row opens that one.
-    result.picked = pickedRow >= 0 ? pickedRow : (liveRows.empty() || liveFor != result.text ? -1 : 0);
+    // A tapped row opens that one; OK (picked -1) asks for every result.
+    result.picked = pickedRow;
     liveFill = nullptr;  // finishing: no refill on the way out
   }
   setResult(std::move(result));

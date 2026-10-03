@@ -31,6 +31,8 @@ constexpr size_t kMaxRows = 12;        // more than fit above the keys
 constexpr size_t kMaxBooks = 2000;     // cached titles; the index's own cap is 4096
 constexpr size_t kBooksInAll = 3;      // book rows among everything else
 constexpr size_t kRecentArticles = 4;  // under the recent searches, empty field
+constexpr size_t kMaxResults = 80;     // the full-screen list after OK
+constexpr size_t kBooksInResults = 10;
 }  // namespace
 
 SearchActivity::SearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int collection,
@@ -115,8 +117,13 @@ void SearchActivity::openKeyboard() {
     }
     const auto& kb = std::get<KeyboardResult>(result.data);
     query_ = kb.text;
+    inResults_ = false;
     if (kb.picked < 0 || kb.picked >= static_cast<int>(picks_.size())) {
-      openKeyboard();  // OK with nothing to open: keep searching
+      // OK: every result, full screen; an empty field keeps the keyboard.
+      if (query_.empty())
+        openKeyboard();
+      else
+        openResults();
       return;
     }
     const Pick pick = picks_[kb.picked];
@@ -132,14 +139,20 @@ void SearchActivity::openKeyboard() {
 void SearchActivity::fill(const std::string& text, int scope, std::vector<KeyboardEntryActivity::LiveRow>& rows,
                           std::string& status) {
   scope_ = scope;
-  picks_.clear();
+  compute(text, scope, kMaxRows, kBooksInAll, rows, picks_, status);
+}
+
+void SearchActivity::compute(const std::string& text, int scope, size_t maxRows, size_t booksInAll,
+                             std::vector<KeyboardEntryActivity::LiveRow>& rows, std::vector<Pick>& picks,
+                             std::string& status) {
+  picks.clear();
   auto& lib = pocketlib::Library::instance();
   const auto& cols = lib.collections();
 
   if (text.empty()) {
     for (const auto& q : pocketlib::ReadingHistory::instance().searches()) {
       rows.push_back({q, "searched", true});
-      picks_.push_back({});  // never picked: the row fills the field
+      picks.push_back({});  // never picked: the row fills the field
     }
     const auto& places = pocketlib::ReadingHistory::instance().places();
     for (size_t i = 0; i < places.size() && i < kRecentArticles; i++) {
@@ -150,7 +163,7 @@ void SearchActivity::fill(const std::string& text, int scope, std::vector<Keyboa
       Pick p;
       p.kind = PickKind::Place;
       p.place = i;
-      picks_.push_back(std::move(p));
+      picks.push_back(std::move(p));
     }
     if (rows.empty()) status = "Type the start of a title";
     return;
@@ -171,7 +184,7 @@ void SearchActivity::fill(const std::string& text, int scope, std::vector<Keyboa
       } else if (library::matchesQuery(b.fold, needle) || library::matchesQuery(b.authorFold, needle)) {
         otherBooks.push_back(&b);
       }
-      if (exactBooks.size() + otherBooks.size() >= kMaxRows) break;
+      if (exactBooks.size() + otherBooks.size() >= maxRows) break;
     }
   }
   auto addBook = [&](const Book& b) {
@@ -179,11 +192,11 @@ void SearchActivity::fill(const std::string& text, int scope, std::vector<Keyboa
     Pick p;
     p.kind = PickKind::Book;
     p.book = b.ordinal;
-    picks_.push_back(std::move(p));
+    picks.push_back(std::move(p));
   };
 
   std::vector<pocketlib::Library::Hit> hits;
-  if (!s.collections.empty()) lib.search(s.collections, text, kMaxRows, hits);
+  if (!s.collections.empty()) lib.search(s.collections, text, maxRows, hits);
 
   // An exact title found in several collections: one row for all of them.
   std::vector<std::pair<size_t, uint32_t>> exact;
@@ -191,24 +204,31 @@ void SearchActivity::fill(const std::string& text, int scope, std::vector<Keyboa
     if (h.exact) exact.emplace_back(h.collection, h.entry);
   const bool grouped = exact.size() > 1;
   if (grouped) {
-    rows.push_back({hits.front().title, std::to_string(exact.size()) + " sources", false});
+    // "Wikipedia · Wiktionary · +1": where it is, not just how many.
+    std::string where;
+    for (size_t i = 0; i < exact.size() && i < 2; i++) {
+      if (i) where += " \xC2\xB7 ";
+      where += shortTitle(cols[exact[i].first]);
+    }
+    if (exact.size() > 2) where += " \xC2\xB7 +" + std::to_string(exact.size() - 2);
+    rows.push_back({hits.front().title, where, false});
     Pick p;
     p.kind = PickKind::Sources;
     p.sources = exact;
-    picks_.push_back(std::move(p));
+    picks.push_back(std::move(p));
   }
   for (const Book* b : exactBooks) addBook(*b);
-  for (size_t i = 0; i < otherBooks.size() && (onlyBooks || i < kBooksInAll); i++) addBook(*otherBooks[i]);
+  for (size_t i = 0; i < otherBooks.size() && (onlyBooks || i < booksInAll); i++) addBook(*otherBooks[i]);
   for (auto& h : hits) {
     if (grouped && h.exact) continue;
-    if (rows.size() >= kMaxRows) break;
+    if (rows.size() >= maxRows) break;
     const bool one = s.collections.size() == 1;
-    rows.push_back({std::move(h.title), one ? std::string() : cols[h.collection].title, false});
+    rows.push_back({std::move(h.title), one ? std::string() : shortTitle(cols[h.collection]), false});
     Pick p;
     p.kind = PickKind::Article;
     p.collection = h.collection;
     p.entry = h.entry;
-    picks_.push_back(std::move(p));
+    picks.push_back(std::move(p));
   }
 
   if (rows.empty()) {
@@ -246,10 +266,61 @@ void SearchActivity::loadBooks() {
   LOG_INF("PLIB", "search: %u books", static_cast<unsigned>(books_.size()));
 }
 
+// After OK: up to kMaxResults results as a full-screen list that scrolls
+// (swipe or the side buttons). Back returns to the keyboard; Back from an
+// article opened here returns to this list.
+void SearchActivity::openResults() {
+  std::vector<KeyboardEntryActivity::LiveRow> rows;
+  std::string status;
+  compute(query_, scope_, kMaxResults, kBooksInResults, rows, results_, status);
+  std::vector<std::string> labels;
+  std::vector<std::string> subtitles;
+  for (auto& r : rows) {
+    labels.push_back(std::move(r.text));
+    subtitles.push_back(std::move(r.tag));
+  }
+  if (labels.empty()) {
+    labels.push_back(status.empty() ? "No results" : status);
+    subtitles.emplace_back();
+    results_.assign(1, Pick{});
+  }
+  const std::string where = scopes_[std::min<size_t>(scope_, scopes_.size() - 1)].label;
+  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput,
+                                                    "\xE2\x80\x9C" + query_ + "\xE2\x80\x9D \xC2\xB7 " + where,
+                                                    std::move(labels), std::move(subtitles));
+  if (!list) {
+    openKeyboard();
+    return;
+  }
+  inResults_ = true;
+  startActivityForResult(std::move(list), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) {
+      inResults_ = false;
+      openKeyboard();
+      return;
+    }
+    const int row = std::get<MenuResult>(result.data).action;
+    if (row < 0 || row >= static_cast<int>(results_.size()) || results_[row].kind == PickKind::None) {
+      openResults();
+      return;
+    }
+    pocketlib::ReadingHistory::instance().recordSearch(query_);
+    act(results_[row]);
+  });
+}
+
+// Where to come back to after an article or a list closes.
+void SearchActivity::resume() {
+  if (inResults_)
+    openResults();
+  else
+    openKeyboard();
+}
+
 void SearchActivity::act(const Pick& pick) {
   switch (pick.kind) {
     case PickKind::None:
-      openKeyboard();
+      resume();
       return;
     case PickKind::Article:
       openArticle(pick.collection, pick.entry);
@@ -268,7 +339,7 @@ void SearchActivity::act(const Pick& pick) {
         openArticle(collection, entry);
         return;
       }
-      openKeyboard();
+      resume();
       return;
     }
   }
@@ -278,11 +349,11 @@ void SearchActivity::openArticle(size_t collection, uint32_t entry) {
   auto article = makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, collection, entry);
   if (!article) {
     LOG_ERR("PLIB", "OOM: article activity");
-    openKeyboard();
+    resume();
     return;
   }
   // Back from the article returns to the results, as they were.
-  startActivityForResult(std::move(article), [this](const ActivityResult&) { openKeyboard(); });
+  startActivityForResult(std::move(article), [this](const ActivityResult&) { resume(); });
 }
 
 void SearchActivity::chooseSource(const std::vector<std::pair<size_t, uint32_t>>& sources) {
@@ -291,17 +362,17 @@ void SearchActivity::chooseSource(const std::vector<std::pair<size_t, uint32_t>>
   for (const auto& s : sources) labels.push_back(cols[s.first].title);
   auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, query_, std::move(labels));
   if (!list) {
-    openKeyboard();
+    resume();
     return;
   }
   startActivityForResult(std::move(list), [this, sources](const ActivityResult& result) {
     if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) {
-      openKeyboard();
+      resume();
       return;
     }
     const int row = std::get<MenuResult>(result.data).action;
     if (row < 0 || row >= static_cast<int>(sources.size())) {
-      openKeyboard();
+      resume();
       return;
     }
     openArticle(sources[row].first, sources[row].second);
@@ -315,7 +386,7 @@ void SearchActivity::openBook(uint16_t ordinal) {
     library::ClixRecord rec{};
     if (!index.open(library::libraryIndexPath()) || !index.readRecord(ordinal, rec) || !index.readPath(rec, path)) {
       LOG_ERR("PLIB", "search: cannot find book %u", static_cast<unsigned>(ordinal));
-      openKeyboard();
+      resume();
       return;
     }
   }  // index file closed before the reader opens the book

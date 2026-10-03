@@ -235,9 +235,12 @@ void ActivityManager::loop() {
 // own refresh choices, and the control center opens over the screen as is.
 void ActivityManager::cleanNextScreen() {
   // "Article" (Pocket Library) opens on a near-blank "Opening" screen that
-  // needs no cleanup, and a half refresh there would delay the article.
+  // needs no cleanup, and a half refresh there would delay the article. The
+  // keyboard (and the search screen under it) is mostly white and redrawn
+  // on every key: a clean refresh there costs more than it saves.
   if (!currentActivity || currentActivity->isReaderActivity() || currentActivity->name == "FrontlightPanel" ||
-      currentActivity->name == "Article")
+      currentActivity->name == "Article" || currentActivity->name == "KeyboardEntry" ||
+      currentActivity->name == "PocketSearch")
     return;
   renderer.promoteNextRefreshAtLeast(HalDisplay::HALF_REFRESH);
 }

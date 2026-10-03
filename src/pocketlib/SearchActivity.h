@@ -65,6 +65,10 @@ class SearchActivity final : public Activity {
   void buildScopes(int collection, const std::string& group);
   void openKeyboard();
   void fill(const std::string& text, int scope, std::vector<KeyboardEntryActivity::LiveRow>& rows, std::string& status);
+  void compute(const std::string& text, int scope, size_t maxRows, size_t booksInAll,
+               std::vector<KeyboardEntryActivity::LiveRow>& rows, std::vector<Pick>& picks, std::string& status);
+  void openResults();
+  void resume();
   void loadBooks();
   void act(const Pick& pick);
   void openArticle(size_t collection, uint32_t entry);
@@ -75,7 +79,9 @@ class SearchActivity final : public Activity {
   size_t pinned_ = 0;
   int scope_ = 0;
   std::string query_;
-  std::vector<Pick> picks_;  // parallel to the rows the keyboard shows
+  std::vector<Pick> picks_;    // parallel to the rows the keyboard shows
+  std::vector<Pick> results_;  // parallel to the full-screen results
+  bool inResults_ = false;     // an article opened from the results returns to them
   std::vector<Book> books_;
   bool booksLoaded_ = false;
   std::string booksStatus_;  // why there are no books, if there are none

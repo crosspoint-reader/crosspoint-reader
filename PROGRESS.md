@@ -382,3 +382,24 @@ containing "Forbidden City"; see the session summary for the download.
 - Measured on the device (same log): article read 425–464 ms when its
   cluster is decoded, 2 ms when cached; clean 34–111 ms; first page
   185–1018 ms; a 33-page article lays out in 3.4 s in the background.
+
+## 2026-10-03 — Next update, build 1: collection home, full-screen results
+
+- Collection home (owner's request, like the Wikipedia app): a rounded
+  search bar with the collection's icon ("Search Wikipedia"), then Continue
+  reading and up to three recent articles from this collection, Main page,
+  Random article, and About (titles, date, size, last article's timings).
+- Search: OK now opens every result (up to 80) as a full-screen list that
+  scrolls by swipe or the side buttons; Back returns to the keyboard, and
+  Back from an article opened there returns to the list. A tapped
+  suggestion still opens directly. An exact title in several collections
+  names them ("Wikipedia · Wiktionary · +1").
+- Clean refresh no longer on the keyboard or the search screen under it.
+- Device checklist:
+  1. Library → Wikipedia: the search bar with the globe, then Continue
+     reading / Recent (if any), Main page, Random article, About.
+  2. Tap the bar: search opens with the Wikipedia chip chosen.
+  3. Type `paris`, press OK: a full list; swipe up/down; open one; Back
+     returns to the list; Back again to the keyboard.
+  4. Opening search and typing feel quicker (no flash on the keyboard).
+  5. Lists and grids still open with one clean flash (no ghosts).
