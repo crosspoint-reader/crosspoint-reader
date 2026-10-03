@@ -241,22 +241,32 @@ def extract_ligature_glyph_indices_fonttools(font_path):
     return overrides
 
 
-def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
-    """Extract kerning from a PairPos subtable (Format 1 or 2)."""
+def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern, claimed_pairs, claimed_left):
+    """Extract kerning from a PairPos subtable (Format 1 or 2).
+
+    Within one lookup, a pair takes its value from the first subtable that
+    matches it. claimed_pairs and claimed_left record the pairs matched by
+    earlier subtables of the same lookup: a Format 1 subtable matches only
+    its listed pairs, a Format 2 subtable every pair whose left glyph is in
+    its coverage.
+    """
     if subtable.Format == 1:
         # Individual pairs
         for i, coverage_glyph in enumerate(subtable.Coverage.glyphs):
-            if coverage_glyph not in glyph_to_cp:
+            if coverage_glyph not in glyph_to_cp or coverage_glyph in claimed_left:
                 continue
             pair_set = subtable.PairSet[i]
             for pvr in pair_set.PairValueRecord:
                 if pvr.SecondGlyph not in glyph_to_cp:
                     continue
+                key = (coverage_glyph, pvr.SecondGlyph)
+                if key in claimed_pairs:
+                    continue
+                claimed_pairs.add(key)
                 xa = 0
                 if hasattr(pvr, 'Value1') and pvr.Value1:
                     xa = getattr(pvr.Value1, 'XAdvance', 0) or 0
                 if xa != 0:
-                    key = (coverage_glyph, pvr.SecondGlyph)
                     raw_kern[key] = raw_kern.get(key, 0) + xa
     elif subtable.Format == 2:
         # Class-based pairs — iterate by class, not by glyph, to avoid
@@ -266,9 +276,9 @@ def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
         coverage_set = set(subtable.Coverage.glyphs)
 
         # Build reverse mappings: class_id -> list of glyph names
-        left_by_class = {}   # only glyphs in coverage AND glyph_to_cp
+        left_by_class = {}   # only glyphs in coverage AND glyph_to_cp, not yet claimed
         for glyph in glyph_to_cp:
-            if glyph not in coverage_set:
+            if glyph not in coverage_set or glyph in claimed_left:
                 continue
             c1 = class_def1.get(glyph, 0)
             left_by_class.setdefault(c1, []).append(glyph)
@@ -293,7 +303,10 @@ def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
                 for lg in left_by_class[c1]:
                     for rg in right_by_class[c2]:
                         key = (lg, rg)
-                        raw_kern[key] = raw_kern.get(key, 0) + xa
+                        if key not in claimed_pairs:
+                            raw_kern[key] = raw_kern.get(key, 0) + xa
+        for glyphs in left_by_class.values():
+            claimed_left.update(glyphs)
 
 
 def extract_kerning_fonttools(font_path, codepoints, ppem):
@@ -340,6 +353,7 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
                     kern_lookup_indices.update(fr.Feature.LookupListIndex)
         for li in kern_lookup_indices:
             lookup = gpos.LookupList.Lookup[li]
+            claimed_pairs, claimed_left = set(), set()
             for st in lookup.SubTable:
                 actual = st
                 # Unwrap Extension (lookup type 9) wrappers. After unwrapping,
@@ -360,7 +374,8 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
                     # type instead of the outer type is what makes those
                     # lookups actually reach the extractor.
                     if effective_type == 2:
-                        _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern)
+                        _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern,
+                                                  claimed_pairs, claimed_left)
                     else:
                         print(f"  Debug: skipping unsupported GPOS kern lookupType="
                               f"{effective_type} (outer={lookup.LookupType}, Format={actual.Format})",
