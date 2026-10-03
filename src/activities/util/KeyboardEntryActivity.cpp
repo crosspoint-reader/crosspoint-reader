@@ -522,6 +522,15 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 }
 
 void KeyboardEntryActivity::loop() {
+#ifdef POCKET_LIBRARY
+  // Refill the suggestions after this pass's edits, whichever way it returns,
+  // so the repaint the edit requested already shows the new rows.
+  struct LiveRefresh {
+    KeyboardEntryActivity* self;
+    ~LiveRefresh() { self->refreshLive(); }
+  } liveRefresh{this};
+  if (handleLiveTap()) return;
+#endif
   int tx = 0;
   int ty = 0;
 
@@ -913,6 +922,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     tipCount = 1 + (inputType == InputType::Url ? 1 : 0) + (!text.empty() ? 1 : 0);
   }
 
+#ifdef POCKET_LIBRARY
+  if (liveFill) {
+    tipCount = 0;
+    drawLive(underlineBottom + metrics.verticalSpacing, kbRect.y - metrics.verticalSpacing);
+  }
+#endif
   if (tipCount > 0) {
     int y = (underlineBottom + kbRect.y) / 2 - (tipCount + 1) * tipsLh / 2;
     drawTip(tr(STR_KB_TIPS), y);
@@ -999,9 +1014,72 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 }
 
 void KeyboardEntryActivity::onComplete(std::string text) {
+#ifdef POCKET_LIBRARY
+  KeyboardResult result{std::move(text)};
+  if (liveFill) {
+    // OK opens the best match; a tapped row opens that one.
+    result.picked = pickedRow >= 0 ? pickedRow : (liveRows.empty() || liveFor != result.text ? -1 : 0);
+    liveFill = nullptr;  // finishing: no refill on the way out
+  }
+  setResult(std::move(result));
+#else
   setResult(KeyboardResult{std::move(text)});
+#endif
   finish();
 }
+
+#ifdef POCKET_LIBRARY
+void KeyboardEntryActivity::refreshLive() {
+  if (!liveFill || (liveComputed && liveFor == text)) return;
+  std::vector<std::string> rows;
+  std::string status;
+  liveFill(text, rows, status);
+  {
+    RenderLock lock(*this);
+    liveRows = std::move(rows);
+    liveStatus = std::move(status);
+    liveFor = text;
+    liveComputed = true;
+  }
+  requestUpdate();
+}
+
+bool KeyboardEntryActivity::handleLiveTap() {
+  const int count = liveRowCount.load();
+  const int rowHeight = liveRowHeight.load();
+  if (!liveFill || count == 0 || rowHeight <= 0) return false;
+  int x = 0;
+  int y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return false;
+  const int top = liveTop.load();
+  if (y < top || y >= top + count * rowHeight) return false;
+  pickedRow = (y - top) / rowHeight;
+  onComplete(text);
+  return true;
+}
+
+void KeyboardEntryActivity::drawLive(const int top, const int bottom) {
+  const int pageWidth = renderer.getScreenWidth();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int side = metrics.contentSidePadding;
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int rowHeight = std::max(lineHeight + 14, static_cast<int>(metrics.listRowHeight));
+  const int fit = std::max(0, (bottom - top) / rowHeight);
+  const int count = std::min(fit, static_cast<int>(liveRows.size()));
+  for (int i = 0; i < count; i++) {
+    const int y = top + i * rowHeight;
+    const std::string shown = renderer.truncatedText(UI_12_FONT_ID, liveRows[i].c_str(), pageWidth - 2 * side);
+    renderer.drawText(UI_12_FONT_ID, side, y + (rowHeight - lineHeight) / 2, shown.c_str(), true);
+    renderer.drawLine(side, y + rowHeight - 1, pageWidth - side, y + rowHeight - 1, true);
+  }
+  if (count == 0 && !liveStatus.empty()) {
+    renderer.drawCenteredText(SMALL_FONT_ID, top + rowHeight / 2, liveStatus.c_str(), true);
+  }
+  liveTop.store(top);
+  liveRowHeight.store(rowHeight);
+  liveRowCount.store(count);
+}
+#endif
 
 void KeyboardEntryActivity::onCancel() {
   ActivityResult result;

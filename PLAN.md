@@ -11,7 +11,7 @@ Status date: 2026-10-03.
 | 1 | ZIM core library + host tests + Mac CLI | **Passed 2026-10-02** (owner sign-off) |
 | 2 | Card builder (Python, Mac) | **Passed 2026-10-03**: card built, copied with `--verify`, read back on the Mac (Standard Ebooks and Wiktionary→StarDict still to add) |
 | 3 | First article on device | **Code done 2026-10-03; waiting for the device test** |
-| 4 | Search | — |
+| 4 | Search | **Code done 2026-10-03** (built before M3's device sign-off, at the owner's request) |
 | 5 | Full reader | — |
 | 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | — |
 | 7 | Power and polish | — |

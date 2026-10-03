@@ -65,6 +65,8 @@ Release tags are what we rebase onto.
 | `src/activities/settings/AboutActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: 5 taps on "Firmware" open Diagnostics | hidden debug screen |
 | `src/activities/home/HomeActivity.cpp` | `#ifdef POCKET_LIBRARY`: Home's **Library** opens our shelf; CrossPoint's book library is the shelf's last row | the library's front door (M3) |
 | `test/CMakeLists.txt` | one `add_subdirectory(pocketlib_article_layout)` | real articles through the layout engine on the host |
+| `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
+| `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
 
 ## 2026-10-01 — Licensing layout
 
@@ -335,6 +337,37 @@ on the card are never taken for stale.
 - **Cost** (local build, commit of this entry): flash +110 KB (app slot 87.4%,
   ~824 KB free); static internal RAM +3.2 KB.
 
+## 2026-10-03 — Milestone 4: search as you type
+
+The owner asked to build M4 before M3's device sign-off (the M3 out-of-memory
+fix is untested on the device). Search is a separate row, so the M3 paths it
+would test are unchanged.
+
+- **Where**: the collection screen's first row, **Search**. It opens
+  CrossPoint's own keyboard with up to eight matching titles drawn between the
+  text field and the keys, refilled after every keystroke. Tap a title to open
+  it; OK opens the top one. Reusing the keyboard (one fenced hook, see touch
+  points) keeps its layouts, shift/symbol layers, cursor editing and button
+  navigation, instead of a second keyboard to maintain.
+- **Matching**: `zim::searchTitles` (`lib/zim/src/ZimSearch.*`, host-tested).
+  With `.pltitles`: folded prefix (case, accents, spacing ignored). Without:
+  the ZIM's byte-ordered title list, so case-sensitive.
+- **Order**: title order, which puts an exact match first (it is the shortest
+  key with that prefix). No popularity signal exists in a ZIM, and cheap
+  proxies (article size, redirect count) cost a cluster decode or a scan per
+  result; "forb" therefore lists Forbach before Forbidden City. Typing more
+  narrows it quickly. Revisit with real use; the index format has a version
+  number for a ranked variant (e.g. a precomputed popularity byte from the
+  card builder).
+- **Redirects collapsed**: results whose redirect target is already listed
+  are skipped, so one article appears once (under the first of its titles
+  reached).
+- **Cost per keystroke**: one index seek (≤ 4 page reads, ~8 ms measured on
+  the synthetic index) + one directory read per result, with at most 4 ×
+  results records read. Estimate ~25–60 ms on the device *(est.)*; the
+  collection screen shows the last lookup's time. The e-ink refresh, not the
+  lookup, is expected to dominate.
+
 ## 2026-10-03 — Preview builds for review branches
 
 `pocketlib-build.yml` and `pocketlib-host.yml` also run on `claude/**`
@@ -447,7 +480,7 @@ To be measured in M3.
 
 | Action | Target *(est.)* | Measured |
 |---|---|---|
-| Search update per keystroke | ≤ 100 ms | |
+| Search update per keystroke | ≤ 100 ms | (shown as "last lookup" on the collection screen, M4) |
 | Open article, cluster not cached | ≤ 800 ms | |
 | Open article, cluster cached | ≤ 300 ms | |
 | Page turn layout | ≤ 100 ms | |

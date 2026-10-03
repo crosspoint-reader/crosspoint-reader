@@ -49,6 +49,7 @@ add_library(zim STATIC
   src/ZimFold.cpp
   src/ZimTitleIndex.cpp
   src/ZimHtml.cpp
+  src/ZimSearch.cpp
 )
 target_include_directories(zim PUBLIC src)
 target_link_libraries(zim PRIVATE zim_thirdparty)
@@ -95,7 +96,7 @@ if(ZIM_BUILD_TESTS)
   target_compile_definitions(zim_test_expat PUBLIC XML_GE=0 XML_CONTEXT_BYTES=1024 HAVE_EXPAT_CONFIG_H)
 
   add_executable(zim_tests test/ZimArchiveTest.cpp test/SplitSourceTest.cpp test/TitleIndexTest.cpp
-    test/HtmlCleanTest.cpp)
+    test/HtmlCleanTest.cpp test/SearchTest.cpp)
   target_link_libraries(zim_tests PRIVATE zim_host zim zim_thirdparty zim_test_expat GTest::gtest_main)
   target_compile_definitions(zim_tests PRIVATE ZIM_TEST_DATA_DIR="${ZIM_TEST_DATA_DIR}")
   target_compile_options(zim_tests PRIVATE -Wall -Wextra)

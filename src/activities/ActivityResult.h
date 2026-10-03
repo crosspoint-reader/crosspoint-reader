@@ -15,6 +15,10 @@ struct WifiResult {
 
 struct KeyboardResult {
   std::string text;
+#ifdef POCKET_LIBRARY
+  // Live suggestion chosen (tapped, or the top one on OK); -1 = none.
+  int picked = -1;
+#endif
 };
 
 struct MenuResult {

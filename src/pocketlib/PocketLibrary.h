@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pocketlib {
@@ -70,7 +71,19 @@ class Library {
   }
   void close();
 
+  // Titles in the open collection starting with `query`, best first, at most
+  // `max`, redirects to the same article collapsed. Uses the card's .pltitles
+  // index (case- and accent-insensitive) when there is one, else the ZIM's
+  // own byte-ordered title list (case-sensitive). Returns false if nothing
+  // is open.
+  struct Hit {
+    uint32_t entry = 0;  // directory index (may be a redirect; the reader resolves it)
+    std::string title;
+  };
+  bool search(std::string_view query, size_t max, std::vector<Hit>& out);
+
   OpenTimings lastOpen;
+  uint32_t lastSearchMs = 0;
 
  private:
   Library() = default;
@@ -81,6 +94,7 @@ class Library {
   std::string loadError_;
   std::unique_ptr<zim::Archive> archive_;
   std::unique_ptr<zim::TitleIndex> index_;
+  std::unique_ptr<zim::TitleIndex::Cursor> cursor_;  // one 4 KB leaf page, reused per keystroke
   size_t openIndex_ = SIZE_MAX;
 };
 

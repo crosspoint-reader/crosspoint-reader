@@ -34,15 +34,15 @@ class ShelfActivity final : public UiListActivity {
   std::vector<freeink::ui::ListItem> items_;
 };
 
-// One collection: ways into it. Milestone 3 has the main page, a random
-// article and an exact title; search arrives in Milestone 4.
+// One collection: ways into it. Search (live, as you type), the main page and
+// a random article.
 class CollectionActivity final : public UiListActivity {
  public:
   CollectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection);
   void onEnter() override;
 
  private:
-  enum Row { ROW_MAIN = 0, ROW_RANDOM, ROW_TITLE, ROW_ABOUT, ROW_LAST_OPEN, ROW_COUNT };
+  enum Row { ROW_SEARCH = 0, ROW_MAIN, ROW_RANDOM, ROW_ABOUT, ROW_LAST_OPEN, ROW_COUNT };
 
   int listCount() const override { return ROW_COUNT; }
   void buildScreen(UiScreen& screen) override;
@@ -53,8 +53,7 @@ class CollectionActivity final : public UiListActivity {
   void openEntry(uint32_t entryIndex);
   void openRandom();
   void openMain();
-  void askTitle();
-  void openTitle(const std::string& query);
+  void openSearch();
   void showMessage(const std::string& message);
 
   const size_t collection_;
@@ -63,4 +62,5 @@ class CollectionActivity final : public UiListActivity {
   std::string subtitles_[ROW_COUNT];
   freeink::ui::ListItem items_[ROW_COUNT]{};
   std::string lastQuery_;
+  std::vector<uint32_t> liveEntries_;  // entries behind the keyboard's suggestion rows
 };

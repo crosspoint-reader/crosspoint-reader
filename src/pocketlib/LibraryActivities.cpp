@@ -14,7 +14,6 @@
 
 #include <Logging.h>
 #include <Memory.h>
-#include <ZimFold.h>
 #include <esp_random.h>
 
 #include <cstdio>
@@ -117,7 +116,7 @@ CollectionActivity::CollectionActivity(GfxRenderer& renderer, MappedInputManager
 void CollectionActivity::onEnter() {
   const auto& cols = pocketlib::Library::instance().collections();
   if (collection_ < cols.size()) title_ = cols[collection_].title;
-  static const char* const kLabels[ROW_COUNT] = {"Main page", "Random article", "Go to title", "About", "Last article"};
+  static const char* const kLabels[ROW_COUNT] = {"Search", "Main page", "Random article", "About", "Last article"};
   for (int i = 0; i < ROW_COUNT; i++) {
     items_[i].label = kLabels[i];
     items_[i].actionValue = static_cast<int16_t>(i);
@@ -150,7 +149,11 @@ void CollectionActivity::refreshRows() {
   } else {
     subtitles_[ROW_LAST_OPEN] = "Open an article to see timings";
   }
-  if (subtitles_[ROW_TITLE].empty()) subtitles_[ROW_TITLE] = "Type the exact start of a title";
+  if (lib.lastSearchMs > 0) {
+    subtitles_[ROW_SEARCH] = "Titles as you type \xC2\xB7 last lookup " + std::to_string(lib.lastSearchMs) + " ms";
+  } else {
+    subtitles_[ROW_SEARCH] = "Titles as you type";
+  }
   for (int i = 0; i < ROW_COUNT; i++) {
     items_[i].subtitle = subtitles_[i].empty() ? nullptr : subtitles_[i].c_str();
     items_[i].value = values_[i].empty() ? nullptr : values_[i].c_str();
@@ -176,8 +179,8 @@ void CollectionActivity::activateIndex(int index) {
     case ROW_RANDOM:
       openRandom();
       break;
-    case ROW_TITLE:
-      askTitle();
+    case ROW_SEARCH:
+      openSearch();
       break;
     default:
       break;
@@ -231,57 +234,44 @@ void CollectionActivity::openRandom() {
   showMessage("No random article found");
 }
 
-void CollectionActivity::askTitle() {
-  auto keyboard =
-      makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "Go to title", lastQuery_, 64, InputType::Text);
+void CollectionActivity::openSearch() {
+  if (!pocketlib::Library::instance().open(collection_)) return;
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "Search " + title_, lastQuery_, 64,
+                                                           InputType::Text);
   if (!keyboard) return;
+  // Runs on the main task after every edit; the keyboard shows the rows that
+  // fit and reports which one was chosen by its position.
+  keyboard->setLiveSuggestions([this](const std::string& text, std::vector<std::string>& rows, std::string& status) {
+    liveEntries_.clear();
+    if (text.empty()) {
+      status = "Type the start of a title";
+      return;
+    }
+    std::vector<pocketlib::Library::Hit> hits;
+    pocketlib::Library::instance().search(text, 8, hits);
+    for (auto& h : hits) {
+      rows.push_back(std::move(h.title));
+      liveEntries_.push_back(h.entry);
+    }
+    if (rows.empty()) status = "No title starts with \"" + text + "\"";
+  });
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-    if (result.isCancelled) return;
-    lastQuery_ = std::get<KeyboardResult>(result.data).text;
-    if (!lastQuery_.empty()) openTitle(lastQuery_);
+    if (result.isCancelled) {
+      refreshRows();
+      return;
+    }
+    const auto& kb = std::get<KeyboardResult>(result.data);
+    lastQuery_ = kb.text;
+    if (kb.picked >= 0 && kb.picked < static_cast<int>(liveEntries_.size())) {
+      openEntry(liveEntries_[kb.picked]);
+    } else {
+      refreshRows();
+    }
   });
 }
 
-void CollectionActivity::openTitle(const std::string& query) {
-  auto& lib = pocketlib::Library::instance();
-  zim::Archive* a = lib.open(collection_);
-  if (!a) return;
-
-  // With the card's search index: case- and accent-insensitive, and the
-  // first title that starts with what was typed ("forbidden c" finds
-  // "Forbidden City"). Milestone 4 turns this into a live result list.
-  if (zim::TitleIndex* index = lib.titleIndex()) {
-    const std::string key = zim::foldKey(query);
-    auto cursor = makeUniqueNoThrow<zim::TitleIndex::Cursor>();
-    zim::TitleRecord rec;
-    if (cursor && index->seek(key, *cursor) == zim::Error::None && index->next(*cursor, rec) == zim::Error::None &&
-        zim::keyHasPrefix(rec.key, key)) {
-      openEntry(rec.entry);
-      return;
-    }
-    showMessage("No title starts with \"" + query + "\"");
-    return;
-  }
-
-  // Without one: exact title, then the same with spaces as underscores (path).
-  zim::Entry e;
-  const char ns = a->contentNamespace();
-  if (a->findByTitle(ns, query, e) == zim::Error::None) {
-    openEntry(e.index);
-    return;
-  }
-  std::string path = query;
-  for (char& c : path)
-    if (c == ' ') c = '_';
-  if (a->findByPath(ns, path, e) == zim::Error::None) {
-    openEntry(e.index);
-    return;
-  }
-  showMessage("Not found (exact title, case matters): \"" + query + "\"");
-}
-
 void CollectionActivity::showMessage(const std::string& message) {
-  subtitles_[ROW_TITLE] = message;
+  subtitles_[ROW_MAIN] = message;
   refreshRows();
   requestUpdate();
 }

@@ -16,6 +16,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <ZimSearch.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
@@ -265,7 +266,29 @@ zim::Archive* Library::open(size_t i, zim::Error* error) {
   return archive_.get();
 }
 
+bool Library::search(std::string_view query, size_t max, std::vector<Hit>& out) {
+  out.clear();
+  zim::Archive* archive = archive_.get();
+  if (!archive) return false;
+  zim::TitleIndex* index = titleIndex();
+  if (index && !cursor_) cursor_ = makeUniqueNoThrow<zim::TitleIndex::Cursor>();
+  if (index && !cursor_) return false;
+  const uint32_t t0 = millis();
+  std::vector<zim::SearchHit> hits;
+  zim::SearchStats stats;
+  const zim::Error err = zim::searchTitles(*archive, index, cursor_.get(), query, max, hits, &stats);
+  lastSearchMs = millis() - t0;
+  if (err != zim::Error::None) LOG_ERR("PLIB", "search: %s", zim::errorName(err));
+  LOG_DBG("PLIB", "search \"%.*s\": %u hits, %u read, %u ms", static_cast<int>(query.size()), query.data(),
+          static_cast<unsigned>(hits.size()), static_cast<unsigned>(stats.recordsRead),
+          static_cast<unsigned>(lastSearchMs));
+  out.reserve(hits.size());
+  for (auto& h : hits) out.push_back({h.entry, std::move(h.title)});
+  return true;
+}
+
 void Library::close() {
+  cursor_.reset();
   index_.reset();
   archive_.reset();
   openIndex_ = SIZE_MAX;

@@ -221,3 +221,29 @@ containing "Forbidden City"; see the session summary for the download.
   cache sizes 1–3: it fails on the old code and passes now (46/46, ASan).
 - The article error screen now shows free/largest PSRAM and internal RAM,
   and each open logs them, so a future out-of-memory says which pool ran out.
+
+## 2026-10-03 — Milestone 4 written (search as you type)
+
+- Owner asked for M4 in the same update as the M3 fix, and for the roadmap.
+- `lib/zim/src/ZimSearch.*`: prefix search with redirect collapsing, through
+  `.pltitles` or the ZIM's own list; 12 new host tests (58/58, ASan).
+- Collection screen: **Search** is the first row (it replaces "Go to title").
+  CrossPoint's keyboard shows matching titles between the text field and the
+  keys, updated after every keystroke (fenced hook in
+  `KeyboardEntryActivity`).
+- Firmware 87.5% of the app slot.
+
+**For the owner (device checklist: M3 fix + M4)**
+1. Flash the new `pocketlib-x4pro.bin` from the **preview** release, as before.
+2. Wikipedia → **Random article** five times in a row. Success: every one
+   opens (no "out of memory"). If one fails, photograph the error screen: it
+   now shows free memory.
+3. Wikipedia → **Search**. Type `forb` one letter at a time. Success: the list
+   under the text field changes after each letter; titles start with what
+   you typed.
+4. Keep typing to `forbidden c`. Success: "Forbidden City" is first. Tap it:
+   the article opens.
+5. Back to the collection. Photograph the **Search** row ("last lookup … ms")
+   and the **Last article** row.
+6. Try a search in Wiktionary (`serendipity`) and MedlinePlus (`asthma`).
+7. Note anything wrong: slow typing, wrong results, freezes.

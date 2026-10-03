@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#ifdef POCKET_LIBRARY
+#include <functional>
+#include <vector>
+#endif
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
@@ -32,6 +36,14 @@ class KeyboardEntryActivity : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override { return true; }
+
+#ifdef POCKET_LIBRARY
+  // Pocket Library search: rows of live suggestions between the text field and
+  // the keys, refilled after every edit (on the main task). Tapping a row, or
+  // OK while rows are shown, finishes with KeyboardResult::picked set.
+  using LiveFill = std::function<void(const std::string& text, std::vector<std::string>& rows, std::string& status)>;
+  void setLiveSuggestions(LiveFill fill) { liveFill = std::move(fill); }
+#endif
 
  private:
   std::string title;
@@ -103,6 +115,22 @@ class KeyboardEntryActivity : public Activity {
   int delPressCount = 0;
   bool hintVisible = false;
   unsigned long hintShowTime = 0;
+
+#ifdef POCKET_LIBRARY
+  LiveFill liveFill;
+  std::string liveFor;  // text the rows were computed for
+  bool liveComputed = false;
+  std::vector<std::string> liveRows;  // guarded by the render lock
+  std::string liveStatus;
+  int pickedRow = -1;
+  // Row geometry from the last render, for hit-testing taps in loop().
+  std::atomic<int> liveTop{0};
+  std::atomic<int> liveRowHeight{0};
+  std::atomic<int> liveRowCount{0};
+  void refreshLive();
+  bool handleLiveTap();
+  void drawLive(int top, int bottom);
+#endif
 
   void onComplete(std::string text);
   void onCancel();
