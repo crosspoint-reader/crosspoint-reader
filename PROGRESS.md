@@ -539,3 +539,14 @@ containing "Forbidden City"; see the session summary for the download.
 - Device checklist: Medical → First Aid lists the rows with "MedlinePlus ·
   …" under them; Burns opens on its First Aid section; Stroke (no MedlinePlus
   first-aid page) shows only if the Wikibooks collection is on the card.
+
+## 2026-10-03 — Sleep screen: DON'T PANIC
+
+- The Dark and Light sleep screens show DON'T PANIC in large, friendly
+  letters (about a quarter of the screen's height, 368 px wide), "Sleeping"
+  small under it. The lettering is a 1-bit picture made by
+  `tools/sleep/make_dont_panic.py` from Fredoka (SIL OFL), the heaviest
+  weight; the font itself is not in the firmware. Custom and Cover sleep
+  screens are unchanged.
+- Device checklist: Settings → Sleep Screen → Dark; press power: white
+  DON'T PANIC on black, centred, edges crisp; Light gives black on white.
