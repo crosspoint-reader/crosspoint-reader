@@ -18,7 +18,9 @@ class GfxRenderer {
     return left == 0 || left == ' ' || right == ' ' ? 0 : tracking;
   }
   bool isFontCacheScanning() const { return false; }
+  void drawLine(int, int, int, int, bool = true) const {}
   void drawLine(int, int, int, int, int, bool) const {}
+  void drawRect(int, int, int, int, bool = true) const {}
   void drawText(int, int, int, const char*, bool, EpdFontFamily::Style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {}
   int getTextWidth(int font, const char* text, EpdFontFamily::Style style,
