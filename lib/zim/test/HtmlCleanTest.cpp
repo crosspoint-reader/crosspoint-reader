@@ -318,3 +318,78 @@ TEST_F(Sample, RealLeadStartsWithTheArticle) {
   EXPECT_EQ(lead.find('{'), std::string::npos);
   EXPECT_LE(lead.size(), 603u);
 }
+
+namespace {
+const char* kPictures =
+    "<h1>Panda</h1><table class=\"infobox\"><tr><td class=\"infobox-image\">"
+    "<a href=\"./File:P.jpg\"><img src=\"../I/P.jpg.webp\" width=\"220\" height=\"330\" alt=\"A &amp; panda\"></a>"
+    "<div class=\"infobox-caption\">Lead caption</div></td></tr></table>"
+    "<p>Text <img src=\"./I/flag.svg.png.webp\" width=\"20\" height=\"14\"> here.</p>"
+    "<figure typeof=\"mw:File/Thumb\"><a href=\"./File:Q.jpg\"><img src=\"./I/Q.jpg.webp\" width=\"200\" "
+    "height=\"150\"></a><figcaption>Second caption</figcaption></figure>"
+    "<h2>Range</h2><div class=\"thumb tright\"><div class=\"thumbinner\"><img src=\"R.png.webp\" width=\"300\" "
+    "height=\"200\"><div class=\"thumbcaption\">Third caption</div></div></div>"
+    "<p><img class=\"mwe-math-fallback-image-inline\" src=\"m.svg\" width=\"90\" height=\"40\"></p>";
+
+std::string cleanPictures(zim::HtmlImages mode, std::vector<zim::HtmlImage>& images) {
+  zim::StringHtmlSink sink;
+  zim::HtmlCleanOptions o;
+  o.images = mode;
+  o.imageList = &images;
+  EXPECT_TRUE(zim::cleanArticleHtml(kPictures, o, sink));
+  EXPECT_TRUE(parseXml(sink.out).ok) << sink.out;
+  return sink.out;
+}
+}  // namespace
+
+TEST(HtmlClean, NoImagesByDefault) {
+  std::vector<zim::HtmlImage> images;
+  const std::string out = cleanPictures(zim::HtmlImages::None, images);
+  EXPECT_TRUE(images.empty());
+  EXPECT_EQ(out.find("<img"), std::string::npos);
+  EXPECT_EQ(out.find("caption"), std::string::npos) << "frames go with their pictures";
+}
+
+TEST(HtmlClean, LeadImageOnly) {
+  std::vector<zim::HtmlImage> images;
+  const std::string out = cleanPictures(zim::HtmlImages::Lead, images);
+  ASSERT_EQ(images.size(), 1u);
+  EXPECT_EQ(images[0].src, "../I/P.jpg.webp");
+  EXPECT_EQ(images[0].width, 220);
+  EXPECT_EQ(images[0].height, 330);
+  EXPECT_NE(out.find("<img src=\"/pl-img/0.png\" width=\"220\" height=\"330\" alt=\"A &amp; panda\"/>"),
+            std::string::npos)
+      << out;
+  EXPECT_NE(out.find("Lead caption"), std::string::npos);
+  EXPECT_EQ(out.find("Second caption"), std::string::npos);
+  EXPECT_EQ(out.find("Third caption"), std::string::npos);
+}
+
+TEST(HtmlClean, AllImages) {
+  std::vector<zim::HtmlImage> images;
+  const std::string out = cleanPictures(zim::HtmlImages::All, images);
+  ASSERT_EQ(images.size(), 3u) << "the flag icon and the formula stay out";
+  EXPECT_EQ(images[1].src, "./I/Q.jpg.webp");
+  EXPECT_EQ(images[2].src, "R.png.webp");
+  EXPECT_NE(out.find("/pl-img/2.png"), std::string::npos);
+  EXPECT_NE(out.find("Second caption"), std::string::npos);
+  EXPECT_NE(out.find("Third caption"), std::string::npos);
+}
+
+TEST_F(Sample, EveryArticleWithAllImagesIsWellFormed) {
+  for (uint32_t i = 0; i < archive.entryCount(); i++) {
+    zim::Entry e;
+    ASSERT_EQ(archive.entryAt(i, e), zim::Error::None);
+    if (!e.isContent() || archive.mimeType(e.mime).rfind("text/html", 0) != 0) continue;
+    std::string html;
+    ASSERT_EQ(archive.read(e, html), zim::Error::None);
+    zim::StringHtmlSink sink;
+    std::vector<zim::HtmlImage> images;
+    zim::HtmlCleanOptions o;
+    o.keepLinks = true;
+    o.images = zim::HtmlImages::All;
+    o.imageList = &images;
+    ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+    ASSERT_TRUE(parseXml(sink.out).ok) << e.path;
+  }
+}

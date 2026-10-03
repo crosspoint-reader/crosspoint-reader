@@ -102,6 +102,10 @@ class ArticleActivity final : public Activity {
   // Page of each heading (-1 while not laid out yet), from the layout's
   // anchors; refreshed as layout runs. Callers hold the render lock.
   void refreshHeadingPages();
+  void toggleImages();
+  // ImageBlock's extractor: makes /.pocketlib/img/<n>.png from the article's
+  // n-th picture (a WebP in the archive) when its page is first drawn.
+  static bool extractImage(void* ctx, const char* src, const char* dest);
   int currentSection() const;  // heading index, or -1 before the first section
   void fail(const char* message);
   void renderStatusBar() const;
@@ -131,7 +135,12 @@ class ArticleActivity final : public Activity {
   std::vector<uint32_t> pageVisible_;  // visible-text offset where each page starts
   std::vector<zim::HtmlHeading> headings_;
   std::vector<int> headingPages_;
-  std::string lead_;            // the article's opening paragraphs, for the outline
+  std::string lead_;                    // the article's opening paragraphs, for the outline
+  std::vector<zim::HtmlImage> images_;  // pictures kept by the cleaner, by number
+  bool allImages_ = false;              // this article with every picture, not just the lead one
+  bool keepImageMode_ = false;          // the next openEntry is that same article again
+  void* bookExtractCtx_ = nullptr;      // a book's image extractor, put back on exit
+  bool (*bookExtractFn_)(void*, const char*, const char*) = nullptr;
   bool outlineReturn_ = false;  // a section chosen in the outline: Back returns to it
   bool offerOutline_ = false;   // open the outline once the first page is up
   bool toolbar_ = false;        // guarded by RenderLock

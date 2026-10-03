@@ -425,3 +425,19 @@ containing "Forbidden City"; see the session summary for the download.
   3. Tap a link: a preview card; tap it to open; Back returns.
   4. Outline: sections with pages and lengths; pick one; Back returns to the
      outline. Turn "Open articles here first" On and open another article.
+
+## 2026-10-03 — Article images (lead picture; all on request)
+
+- Built and host-tested: WebP → greyscale PNG (`ZimImage`, every WebP in the
+  sample converts; PNGs read back, and Pillow opens them), the cleaner's
+  lead/all picture modes (3 new tests), the reader's lazy extractor and a
+  fifth toolbar button, **Images**. 84 host tests pass.
+- Device test needs a ZIM with pictures ("maxi"); the card's files are
+  "nopic". Cheapest test: Wikivoyage maxi.
+- Device checklist (with a maxi file):
+  1. An article with an infobox shows its picture on page 1, in grey.
+  2. Toolbar → Images: the article is laid out again at the same place with
+     every picture and its caption; Images again returns to the lead picture.
+  3. Pages without pictures turn as fast as before; a page with one takes a
+     moment the first time only.
+

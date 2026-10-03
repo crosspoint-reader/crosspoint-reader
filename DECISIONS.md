@@ -68,6 +68,8 @@ Release tags are what we rebase onto.
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
 | `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
 | `freeink-sdk` (submodule, patched at build time) | `SdmmcBlockDevice.{h,cpp}`: 40 MHz with 20 MHz fallback, 32-sector transfers, all behind `POCKET_LIBRARY_SD_FAST` | SD speed |
+| `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp` | `#ifdef POCKET_LIBRARY`: with no Epub (an article), an `<img>`'s size comes from its width/height attributes and no file is extracted at layout time | article images (lead image, "Images") |
+| `lib/Epub/Epub/blocks/ImageBlock.h` | `#ifdef POCKET_LIBRARY`: `getExtractor()`, so an article opened over a book puts the book's image extractor back | article images |
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` (extended) | `#ifdef POCKET_LIBRARY`: live rows carry a source tag and can refill the field (past searches); scope chips above the rows, the last opening a list | search everything (M6) |
 | `src/activities/home/HomeActivity.{h,cpp}`, `src/activities/ActivityManager.h` (`HomeMenuItem::SEARCH`), `src/components/CoverGridHomeUi.{h,cpp}` | `#ifdef POCKET_LIBRARY`: a sixth tab (magnifier) on the Cover Grid home opens search; the list homes are unchanged | search entry point (owner's choice) |
 | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
@@ -464,6 +466,30 @@ known-good **dev** build of `pocket-library`.
 - **Recent searches** (`/.pocketlib/searches.txt`, six) and recent articles
   fill the empty search field.
 
+## 2026-10-03 — Article images: the lead picture, and every picture on request
+
+- Owner's choice: options 1 and 2 (the infobox/lead picture always; all
+  pictures when asked, from the article toolbar's **Images**).
+- Kiwix stores Wikipedia's pictures as **WebP** (checked: the 2024 sample has
+  100, about 23 KB each). The reader's image pipeline reads JPEG and PNG, so
+  the decoder of Google's **libwebp 1.4.0** (BSD-3-Clause + patent grant) is
+  vendored in `lib/libwebp` (decoder only, no SIMD; +96 KB of flash, app
+  slot 89.7%).
+- Lazy, using CrossPoint's own mechanism: the cleaner writes each kept
+  picture as `<img src="/pl-img/N.png" width height>`, the layout engine
+  sizes it from those attributes (fenced patch), and ImageBlock's extractor
+  hook calls `ArticleActivity::extractImage` when the picture's page is first
+  drawn: one read of the WebP, decoded already scaled (libwebp's scaler, so a
+  big picture never sits in memory full size), composited on white, turned
+  grey, written as an uncompressed 8-bit greyscale PNG in
+  `/.pocketlib/img/` (emptied for each article). Opening an article costs
+  nothing more; a picture costs its decode only on the page that shows it.
+- Kept: WebP pictures at least 60×40 (no flags, icons or formula images), in
+  infobox image cells, figures and thumbnails, with their captions. Lead
+  mode keeps the first such picture before the first section heading.
+- Needs a "maxi" ZIM: the card's "nopic" files have no pictures, so this
+  build changes nothing on them.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -474,6 +500,7 @@ known-good **dev** build of `pocket-library`.
 | zstd 1.5.7 single-file decoder | BSD-3-Clause (dual BSD/GPLv2) | ZIM clusters | in use, `lib/zim/src/third_party/zstd` |
 | xz-embedded v20240322 | 0BSD | older (pre-2020) ZIM clusters; the 2017 test files use it | in use, `lib/zim/src/third_party/xz` |
 | zim-testing-suite (openZIM) @ 2edf720 | test data, fetched at test time, not vendored | host tests | in use |
+| libwebp 1.4.0 (decoder only) | BSD-3-Clause + WebM patent grant | article images (WebP) | in use, `lib/libwebp` |
 | Lucide icons (via freeink-sdk `libs/assets/Icons/lucide`) | ISC | Library tile icons, generated into `src/pocketlib/icons/libraryIcons.h` | in use |
 | GoogleTest 1.17.0 | BSD-3-Clause | host tests (same as upstream) | in use |
 | python-libzim | GPL-3.0 | **test oracle only**, run by hand to cross-check zimcat output; not shipped, no code used | used once, 2026-10-02 |

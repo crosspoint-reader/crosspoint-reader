@@ -60,6 +60,22 @@ struct HtmlHeading {
 // "pl-h3"
 std::string headingAnchor(size_t index);
 
+// An image the cleaner kept: written as <img src="/pl-img/<n>.png"
+// width=.. height=..>, where n is its position in HtmlCleanOptions::imageList.
+// The reader makes that PNG from `src` (the article's own reference to the
+// WebP in the archive) when the image's page is first drawn.
+struct HtmlImage {
+  std::string src;
+  int width = 0;
+  int height = 0;
+};
+enum class HtmlImages : uint8_t {
+  None,  // drop every image (and its frame and caption)
+  Lead,  // the first picture before the first section (an infobox photo)
+  All,
+};
+constexpr const char* kArticleImagePrefix = "/pl-img/";
+
 struct HtmlCleanOptions {
   // Written into <title>; the article's own <h1> stays in the body.
   std::string_view title;
@@ -74,6 +90,10 @@ struct HtmlCleanOptions {
   // bytes, cut at a word: for outlines and link previews.
   std::string* lead = nullptr;
   size_t leadLimit = 600;
+  // Images to keep, collected in imageList (required unless None). Only
+  // WebP pictures at least 60x40: icons, flags and formula images stay out.
+  HtmlImages images = HtmlImages::None;
+  std::vector<HtmlImage>* imageList = nullptr;
 };
 
 // Up to `maxSentences` sentences of `text` (cut at ". ", "! " or "? "

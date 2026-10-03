@@ -13,6 +13,7 @@
 #include "ArticleActivity.h"
 
 #include <Epub/Page.h>
+#include <Epub/blocks/ImageBlock.h>
 #include <Epub/hyphenation/Hyphenator.h>
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
 #include <FontCacheManager.h>
@@ -20,6 +21,7 @@
 #include <HalMemory.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <ZimImage.h>
 #include <ZimLink.h>
 
 #include <cstdio>
@@ -34,6 +36,7 @@
 #include "SearchActivity.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "icons/libraryIcons.h"
@@ -52,8 +55,10 @@ constexpr int kTouchSlop = 6;
 constexpr int kMinTouchWidth = 28;
 // The toolbar across the top of the page (a tap in the middle shows it).
 constexpr int kToolbarHeight = 76;
-constexpr int kToolbarItems = 4;
-const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search", "Outline"};
+constexpr int kToolbarItems = 5;
+const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search", "Outline", "Images"};
+constexpr const char* kImageDir = "/.pocketlib/img";
+constexpr const char* kImageBase = "/.pocketlib/img/";
 
 class NullSink final : public zim::HtmlSink {
  public:
@@ -94,6 +99,8 @@ void ArticleActivity::onEnter() {
   sdFontSystem.ensureLoaded(renderer);
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   computeViewport();
+  ImageBlock::getExtractor(bookExtractCtx_, bookExtractFn_);
+  ImageBlock::setExtractor(this, &ArticleActivity::extractImage);
   const auto& cols = pocketlib::Library::instance().collections();
   if (collection_ < cols.size()) collectionKey_ = cols[collection_].key;
   openEntry(entry_, kNoOffset, "");
@@ -104,6 +111,8 @@ void ArticleActivity::onExit() {
   savePlace();
   resetLayout();
   page_.reset();  // ActivityManager holds the render lock around onExit()
+  ImageBlock::releaseRenderCache();
+  ImageBlock::setExtractor(bookExtractCtx_, bookExtractFn_);
   if (auto* fontCache = renderer.getFontCacheManager()) fontCache->releaseSdFontCaches();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 }
@@ -131,6 +140,9 @@ void ArticleActivity::resetLayout() {
 
 void ArticleActivity::openEntry(uint32_t entry, uint32_t offset, const std::string& fragment) {
   resetLayout();
+  // "Images" lasts for the article it was asked on.
+  if (!keepImageMode_) allImages_ = false;
+  keepImageMode_ = false;
   entry_ = entry;
   targetOffset_ = offset;
   targetFragment_ = fragment;
@@ -308,6 +320,9 @@ bool ArticleActivity::load() {
   t.clusterCached = archive->cacheStats().misses == missesBefore;
 
   Storage.ensureDirectoryExists(kWorkDir);
+  // The previous article's pictures: their numbers would be reused.
+  Storage.removeDir(kImageDir);
+  Storage.ensureDirectoryExists(kImageDir);
   {
     HalFile out;
     if (!Storage.openFileForWrite("PLIB", kXhtmlPath, out)) {
@@ -321,6 +336,9 @@ bool ArticleActivity::load() {
     options.headings = &headings_;
     lead_.clear();
     options.lead = &lead_;
+    images_.clear();
+    options.images = allImages_ ? zim::HtmlImages::All : zim::HtmlImages::Lead;
+    options.imageList = &images_;
     zim::HtmlCleanStats stats;
     const bool ok = zim::cleanArticleHtml(html, options, sink, &stats);
     out.flush();
@@ -379,6 +397,7 @@ bool ArticleActivity::startLayout() {
   xhtmlPath_ = kXhtmlPath;
   const ReaderRenderSpec spec = SETTINGS.readerRenderSpec(viewportWidth_, viewportHeight_);
   static const std::string kNoBase;
+  static const std::string kImageBasePath = kImageBase;
   parser_ = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       nullptr, xhtmlPath_, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
@@ -390,7 +409,7 @@ bool ArticleActivity::startLayout() {
           pageVisible_.push_back(visibleOffset);
         }
       },
-      /*embeddedStyle=*/false, kNoBase, kNoBase, /*imageRendering=*/1);
+      /*embeddedStyle=*/false, kNoBase, kImageBasePath, /*imageRendering=*/0);
   if (!parser_) {
     fail("Out of memory for the layout engine");
     return false;
@@ -564,8 +583,13 @@ void ArticleActivity::followLink(const char* href) {
   zim::Entry to;
   bool samePage = target.samePage;
   if (!samePage) {
-    zim::Error err = archive->findByPath(target.ns, target.path, to);
-    if (err == zim::Error::None) err = archive->resolve(to);
+    zim::Error err = zim::Error::None;
+    {
+      // Drawing a page may be reading the archive for a picture.
+      RenderLock lock(*this);
+      err = archive->findByPath(target.ns, target.path, to);
+      if (err == zim::Error::None) err = archive->resolve(to);
+    }
     if (err != zim::Error::None) {
       LOG_INF("PLIB", "link %s: %s", href, zim::errorName(err));
       {
@@ -764,6 +788,51 @@ void ArticleActivity::openOutline() {
   });
 }
 
+// Every picture, or back to the lead one: the article is laid out again at
+// the same place.
+void ArticleActivity::toggleImages() {
+  allImages_ = !allImages_;
+  const uint32_t here = currentPage_ < static_cast<int>(pageVisible_.size()) ? pageVisible_[currentPage_] : 0;
+  savePlace();
+  keepImageMode_ = true;
+  openEntry(article_.index, here, "");
+}
+
+bool ArticleActivity::extractImage(void* ctx, const char* src, const char* dest) {
+  auto* self = static_cast<ArticleActivity*>(ctx);
+  const char* at = src ? strstr(src, "pl-img/") : nullptr;
+  if (!self || !at) return false;
+  const size_t n = static_cast<size_t>(strtoul(at + 7, nullptr, 10));
+  if (n >= self->images_.size()) return false;
+  zim::Archive* archive = pocketlib::Library::instance().open(self->collection_);
+  zim::LinkTarget target;
+  zim::Entry e;
+  if (!archive || !zim::parseLink(self->article_, self->images_[n].src, target) ||
+      archive->findByPath(target.ns, target.path, e) != zim::Error::None || archive->resolve(e) != zim::Error::None) {
+    LOG_ERR("PLIB", "image %u (%s) not in the archive", static_cast<unsigned>(n), self->images_[n].src.c_str());
+    return false;
+  }
+  const uint32_t t0 = millis();
+  std::string storage;
+  std::string_view bytes;
+  if (archive->readView(e, storage, bytes) != zim::Error::None) return false;
+  std::vector<uint8_t> png;
+  zim::ImageSize size;
+  if (!zim::webpToGrayPng(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), self->viewportWidth_,
+                          self->viewportHeight_ * 2 / 3, png, &size)) {
+    LOG_ERR("PLIB", "image %u: not a WebP the decoder reads", static_cast<unsigned>(n));
+    return false;
+  }
+  HalFile out;
+  if (!Storage.openFileForWrite("PLIB", dest, out)) return false;
+  const bool ok = out.write(png.data(), png.size()) == png.size();
+  out.flush();
+  out.close();
+  LOG_INF("PLIB", "image %u: %ux%u in %u ms", static_cast<unsigned>(n), static_cast<unsigned>(size.width),
+          static_cast<unsigned>(size.height), static_cast<unsigned>(millis() - t0));
+  return ok;
+}
+
 void ArticleActivity::openSearch() {
   auto search = makeUniqueNoThrow<SearchActivity>(renderer, mappedInput, static_cast<int>(collection_));
   if (!search) return;
@@ -824,8 +893,11 @@ bool ArticleActivity::handleOverlayInput() {
     case 2:
       openSearch();
       break;
-    default:
+    case 3:
       openOutline();
+      break;
+    default:
+      toggleImages();
       break;
   }
   return true;
@@ -837,6 +909,7 @@ void ArticleActivity::showPreview(const zim::Entry& to, const std::string& fragm
   zim::Archive* archive = pocketlib::Library::instance().open(collection_);
   std::string text;
   if (archive) {
+    RenderLock lock(*this);  // drawing a page may be reading the archive for a picture
     std::string storage;
     std::string_view html;
     if (archive->readView(to, storage, html) == zim::Error::None) {
@@ -870,7 +943,7 @@ void ArticleActivity::drawToolbar() const {
   renderer.fillRect(0, 0, w, kToolbarHeight, false);
   renderer.fillRect(0, kToolbarHeight - 2, w, 2, true);
   const uint8_t* icons[kToolbarItems] = {icon_arrow_left_32_bits, icon_list_32_bits, icon_search_32_bits,
-                                         icon_list_tree_32_bits};
+                                         icon_list_tree_32_bits, icon_image_32_bits};
   const int cell = w / kToolbarItems;
   const int labelHeight = renderer.getLineHeight(SMALL_FONT_ID);
   for (int i = 0; i < kToolbarItems; i++) {

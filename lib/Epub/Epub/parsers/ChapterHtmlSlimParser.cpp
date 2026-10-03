@@ -1000,11 +1000,33 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               // ImageBlock's lazy extractor). This is what keeps first-open of an
               // image-heavy chapter from stalling for seconds per image.
               ImageDimensions dims = {0, 0};
+#ifdef POCKET_LIBRARY
+              // Pocket Library articles have no Epub: the cleaner wrote each
+              // picture's size on its <img>, and the reader makes the file
+              // (ImageBlock's extractor) when the picture's page is first drawn.
+              bool gotDimensions = false;
+              if (!self->epub) {
+                const char* w = getAttribute(atts, "width");
+                const char* h = getAttribute(atts, "height");
+                dims.width = static_cast<decltype(dims.width)>(w ? atoi(w) : 0);
+                dims.height = static_cast<decltype(dims.height)>(h ? atoi(h) : 0);
+                gotDimensions = dims.width > 0 && dims.height > 0;
+              } else {
+                ImageDimsProbe headerProbe;
+                self->epub->readItemContentsToStream(resolvedPath, headerProbe, 1024, /*allowEarlyStop=*/true);
+                gotDimensions = headerProbe.getDimensions(dims);
+              }
+#else
               ImageDimsProbe headerProbe;
               self->epub->readItemContentsToStream(resolvedPath, headerProbe, 1024, /*allowEarlyStop=*/true);
               bool gotDimensions = headerProbe.getDimensions(dims);
+#endif
 
+#ifdef POCKET_LIBRARY
+              if (!gotDimensions && self->epub) {
+#else
               if (!gotDimensions) {
+#endif
                 // No header within the stream (rare) — fall back to extracting the
                 // whole image and probing the file. That can take seconds, so
                 // surface the indexing popup first (single-shot per parser).

@@ -1,0 +1,3 @@
+# Vendored decoders (zstd, xz-embedded) stay byte-for-byte as upstream ships them.
+DisableFormat: true
+SortIncludes: Never

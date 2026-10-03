@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -613,6 +614,18 @@ class Cleaner {
       }
     }
 
+    if (options_.images != HtmlImages::None && options_.imageList) {
+      if (name == "img") {
+        keepImage(tag);
+        return;  // void: nothing to push
+      }
+      // Picture frames (infobox image cells, figures, thumbnails) stay while
+      // pictures are wanted, so their image and caption come through.
+      if (wantImages() && !styleHidden(tag.attr("style")) && isPictureFrame(name, tag.attr("class"))) {
+        action = Action::Unwrap;
+      }
+    }
+
     if (name == "math") {
       // Kiwix keeps the TeX source; show it instead of a missing image.
       mathAltText(tag.attr("alttext"));
@@ -667,7 +680,10 @@ class Cleaner {
     if (!isVoidTag) stack_.push_back({name, outTag});
     if (opensHeading) headingDepth_ = stack_.size();
     // The lead ends at the first section heading.
-    if (outTag && isHeadingTag(outTag) && outTag[1] != '1') leadDone_ = true;
+    if (outTag && isHeadingTag(outTag) && outTag[1] != '1') {
+      leadDone_ = true;
+      sawSection_ = true;
+    }
     flush(false);
   }
 
@@ -776,6 +792,51 @@ class Cleaner {
     flush(false);
   }
 
+  bool wantImages() const {
+    return options_.images == HtmlImages::All ||
+           (options_.images == HtmlImages::Lead && !leadImageTaken_ && !sawSection_);
+  }
+
+  static bool isPictureFrame(const std::string& name, std::string_view cls) {
+    if (name == "figure") return true;
+    size_t i = 0;
+    while (i < cls.size()) {
+      while (i < cls.size() && isSpace(cls[i])) i++;
+      size_t j = i;
+      while (j < cls.size() && !isSpace(cls[j])) j++;
+      const std::string_view t = cls.substr(i, j - i);
+      if (t == "infobox-image" || t == "thumb" || t == "tmulti" || t == "thumbinner") return true;
+      i = j;
+    }
+    return false;
+  }
+
+  // An <img> while pictures are wanted: a WebP of a useful size becomes
+  // <img src="/pl-img/N.png" width height>; anything else is dropped.
+  void keepImage(const Tag& tag) {
+    if (!wantImages() || classDropped(tag.attr("class"))) return;
+    const std::string_view src = tag.attr("src");
+    const int w = atoi(std::string(tag.attr("width")).c_str());
+    const int h = atoi(std::string(tag.attr("height")).c_str());
+    const bool webp = src.size() > 5 && src.substr(src.size() - 5) == ".webp";
+    if (!webp || w < 60 || h < 40) return;
+    const size_t n = options_.imageList->size();
+    options_.imageList->push_back({std::string(src), w, h});
+    if (options_.images == HtmlImages::Lead) leadImageTaken_ = true;
+    out_ += "<img src=\"";
+    out_ += kArticleImagePrefix;
+    out_ += std::to_string(n);
+    out_ += ".png\" width=\"" + std::to_string(w) + "\" height=\"" + std::to_string(h) + "\"";
+    if (tag.hasAttr("alt")) {
+      out_ += " alt=\"";
+      appendText(out_, tag.attr("alt"));
+      out_ += '"';
+    }
+    out_ += "/>";
+    stats_.elementsKept++;
+    flush(false);
+  }
+
   // Text of a <p> that isn't inside a table, list or heading: body prose.
   bool inLeadParagraph() const {
     bool para = false;
@@ -806,6 +867,8 @@ class Cleaner {
   std::vector<Open> stack_;
   size_t dropDepth_ = 0;
   bool leadDone_ = false;
+  bool sawSection_ = false;
+  bool leadImageTaken_ = false;
   size_t headingDepth_ = 0;  // stack size at which the open heading began; 0 = none
 
   static void collapseSpaces(std::string& s) {

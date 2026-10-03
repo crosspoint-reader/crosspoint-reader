@@ -42,6 +42,13 @@ add_library(zim_thirdparty STATIC
 target_include_directories(zim_thirdparty PUBLIC src/third_party/xz)
 target_compile_definitions(zim_thirdparty PRIVATE ZSTD_DISABLE_ASM=1)
 
+# libwebp's decoder (../libwebp, BSD-3-Clause), for article images.
+file(GLOB WEBP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../libwebp/src/dec/*.c
+     ${CMAKE_CURRENT_SOURCE_DIR}/../libwebp/src/dsp/*.c ${CMAKE_CURRENT_SOURCE_DIR}/../libwebp/src/utils/*.c)
+add_library(zim_webp STATIC ${WEBP_SOURCES})
+target_include_directories(zim_webp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../libwebp)
+target_compile_definitions(zim_webp PUBLIC HAVE_CONFIG_H)
+
 add_library(zim STATIC
   src/ZimSource.cpp
   src/ZimArchive.cpp
@@ -51,9 +58,10 @@ add_library(zim STATIC
   src/ZimHtml.cpp
   src/ZimSearch.cpp
   src/ZimLink.cpp
+  src/ZimImage.cpp
 )
 target_include_directories(zim PUBLIC src)
-target_link_libraries(zim PRIVATE zim_thirdparty)
+target_link_libraries(zim PRIVATE zim_thirdparty zim_webp)
 target_compile_options(zim PRIVATE -Wall -Wextra -pedantic)
 
 add_library(zim_host STATIC host/PosixSource.cpp host/TitleIndexWriter.cpp)
@@ -62,11 +70,11 @@ target_link_libraries(zim_host PUBLIC zim)
 target_compile_options(zim_host PRIVATE -Wall -Wextra -pedantic)
 
 add_executable(zimcat tools/zimcat.cpp)
-target_link_libraries(zimcat PRIVATE zim_host zim zim_thirdparty)
+target_link_libraries(zimcat PRIVATE zim_host zim zim_thirdparty zim_webp)
 target_compile_options(zimcat PRIVATE -Wall -Wextra -pedantic)
 
 add_executable(zimindex tools/zimindex.cpp)
-target_link_libraries(zimindex PRIVATE zim_host zim zim_thirdparty)
+target_link_libraries(zimindex PRIVATE zim_host zim zim_thirdparty zim_webp)
 target_compile_options(zimindex PRIVATE -Wall -Wextra -pedantic)
 
 if(ZIM_BUILD_TESTS)
@@ -98,8 +106,8 @@ if(ZIM_BUILD_TESTS)
 
   add_executable(zim_tests test/ZimArchiveTest.cpp test/SplitSourceTest.cpp test/TitleIndexTest.cpp
     test/HtmlCleanTest.cpp test/SearchTest.cpp
-    test/LinkTest.cpp)
-  target_link_libraries(zim_tests PRIVATE zim_host zim zim_thirdparty zim_test_expat GTest::gtest_main)
+    test/LinkTest.cpp test/ImageTest.cpp)
+  target_link_libraries(zim_tests PRIVATE zim_host zim zim_thirdparty zim_webp zim_test_expat GTest::gtest_main)
   target_compile_definitions(zim_tests PRIVATE ZIM_TEST_DATA_DIR="${ZIM_TEST_DATA_DIR}")
   target_compile_options(zim_tests PRIVATE -Wall -Wextra)
   gtest_discover_tests(zim_tests DISCOVERY_TIMEOUT 60)
