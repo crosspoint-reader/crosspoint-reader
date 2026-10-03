@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "HapticFeedback.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/DictHtmlPages.h"
@@ -210,10 +211,12 @@ void DictionaryDefinitionActivity::loop() {
   if (mappedInput.wasScreenTapped(tx, ty)) {
     if (tx < renderer.getScreenWidth() / 3) {
       if (currentPage > 0) {
+        haptic_feedback::touchAction();
         currentPage--;
         requestUpdate();
       }
     } else if (currentPage + 1 < totalPages) {
+      haptic_feedback::touchAction();
       currentPage++;
       requestUpdate();
     }

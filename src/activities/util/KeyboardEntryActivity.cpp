@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "HapticFeedback.h"
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -542,6 +543,7 @@ void KeyboardEntryActivity::loop() {
 
   size_t touchedCursorPos = 0;
   if (mappedInput.wasScreenTapped(tx, ty) && cursorPositionFromPoint(tx, ty, touchedCursorPos)) {
+    haptic_feedback::touchAction();
     cursorPos = std::min(touchedCursorPos, text.length());
     // The masked text field maps taps per byte; snap back to a boundary so
     // the cursor never lands inside a multi-byte character.
@@ -571,6 +573,7 @@ void KeyboardEntryActivity::loop() {
     if (result.event) {
       syncSelectionToValue(result.event.value);
       if (activateValue(result.event.value, result.event.longPress)) {
+        haptic_feedback::touchAction(result.event.longPress);
         requestUpdate();
       }
       return;
