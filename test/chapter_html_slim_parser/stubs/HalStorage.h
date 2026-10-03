@@ -22,6 +22,7 @@ class HalFile {
   size_t write(uint8_t byte) { return write(&byte, 1); }
   bool flush() { return file_ && std::fflush(file_) == 0; }
   bool seekCur(size_t offset) { return file_ && std::fseek(file_, static_cast<long>(offset), SEEK_CUR) == 0; }
+  bool seek(size_t offset) { return file_ && std::fseek(file_, static_cast<long>(offset), SEEK_SET) == 0; }
   bool close() {
     if (!file_) return false;
     const bool ok = std::fclose(file_) == 0;
