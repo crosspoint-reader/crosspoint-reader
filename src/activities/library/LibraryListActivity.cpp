@@ -9,6 +9,9 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <Utf8.h>
+#ifdef POCKET_LIBRARY
+#include <TitleSortKey.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -520,7 +523,11 @@ uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
   library::ClixRecord record{};
   if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) return 0;
+#ifdef POCKET_LIBRARY
+  return library::foldedGroupInitial(library::titleSortKey(std::string_view(record.fold, record.foldLen)));
+#else
   return library::foldedGroupInitial(std::string_view(record.fold, record.foldLen));
+#endif
 }
 
 bool LibraryListActivity::buildGroupStarts() {

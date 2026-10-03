@@ -33,7 +33,12 @@ inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
 // Bump when the fold or a permutation's sort key changes.
 // Forces fold and ranks to be rebuilt while firstSeen values are preserved, so
 // arrival history survives.
+#ifdef POCKET_LIBRARY
+// 5: titles sort without a leading "The", "A" or "An" (TitleSortKey.h).
+inline constexpr uint8_t CLIX_FOLD_VERSION = 5;
+#else
 inline constexpr uint8_t CLIX_FOLD_VERSION = 4;
+#endif
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_FOLD_BYTES = 96;

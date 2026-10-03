@@ -74,6 +74,7 @@ Release tags are what we rebase onto.
 | `src/activities/home/HomeActivity.{h,cpp}`, `src/activities/ActivityManager.h` (`HomeMenuItem::SEARCH`), `src/components/CoverGridHomeUi.{h,cpp}` | `#ifdef POCKET_LIBRARY`: a sixth tab (magnifier) on the Cover Grid home opens search; the list homes are unchanged | search entry point (owner's choice) |
 | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
 | `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: the first draw after a screen change (push, pop, replace) is promoted to a half refresh, never weakening a deeper one already promoted; readers and the control center are left alone | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
+| `lib/LibraryIndex/LibraryBuilder.cpp`, `lib/LibraryIndex/LibraryFormat.h`, `src/activities/library/LibraryListActivity.cpp`, `test/CMakeLists.txt` | `#ifdef POCKET_LIBRARY`: the title sort and the letter groups skip a leading "The", "A" or "An" (`TitleSortKey.h`, ours); `CLIX_FOLD_VERSION` 5 so existing indexes rebuild once; one `add_subdirectory(pocketlib_title_sort)` | "The" shouldn't decide where a book files (owner) |
 
 ## 2026-10-01 — Licensing layout
 

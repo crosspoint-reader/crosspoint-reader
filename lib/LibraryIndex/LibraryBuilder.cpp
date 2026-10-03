@@ -15,6 +15,9 @@
 
 #include "LibraryIndexFile.h"
 #include "LibraryText.h"
+#ifdef POCKET_LIBRARY
+#include "TitleSortKey.h"
+#endif
 
 namespace library {
 namespace {
@@ -1333,7 +1336,13 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
           return false;
         }
         memset(keys[i].key, 0, sizeof(keys[i].key));
+#ifdef POCKET_LIBRARY
+        // "The Road" files under R (TitleSortKey.h).
+        const std::string_view sortKey = titleSortKey(std::string_view(r.fold, r.foldLen));
+        memcpy(keys[i].key, sortKey.data(), std::min<size_t>(sortKey.size(), sizeof(keys[i].key)));
+#else
         memcpy(keys[i].key, r.fold, std::min<size_t>(r.foldLen, sizeof(keys[i].key)));
+#endif
         keys[i].ordinal = i;
       }
       if (!stage.close()) {

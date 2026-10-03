@@ -474,3 +474,24 @@ containing "Forbidden City"; see the session summary for the download.
   chnage" and "climate changee" all find Climate change. Works with older
   indexes too (device-side).
 - 90 host tests, 12 card builder tests pass.
+
+## 2026-10-03 — The owner's books: sorting, tidying, shelf order
+
+- The owner's 907 converted EPUBs were sorted into High / Medium / Low
+  (shown to the owner first; nothing deleted). The list lives outside the
+  repo; it is the owner's library.
+- `booklist.py prune books.csv [--apply]`: moves every book not marked keep
+  to the macOS Trash (File > Put Back undoes it). Prints the list first and
+  does nothing without `--apply`.
+- `booklist.py tidy books.csv [--apply]`: writes Title Case titles and mended
+  authors into the kept books with Calibre's ebook-meta ("The demolished man"
+  → "The Demolished Man", "Cormac Mccarthy" → McCarthy), drops bare "a novel"
+  subtitles, and turns "Joe Pitt 1 - Already Dead" into the title plus a
+  series. Deliberate capitals (UR, H.M.S., V., Less Than Zero) are kept.
+  8 tests (`python3 -m unittest test_booklist` in tools/books).
+- Device: the Library's title sort and letter groups ignore a leading "The",
+  "A" or "An" ("The Road" files under R; "A Is for Alibi" stays under A).
+  Search still matches the whole title. Index fold version 5: the book index
+  rebuilds once on the first boot after the update.
+- Device checklist: Library sorted by title: The Road between Rabbit and
+  Rant, under R; the letter jump shows R for it.
