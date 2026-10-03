@@ -506,8 +506,9 @@ containing "Forbidden City"; see the session summary for the download.
 - No pictures in Wikivoyage: the cleaner took only WebP pictures. It now takes
   JPEG and PNG too (a JPEG goes to the reader's JPEG decoder as it is, a PNG to
   its PNG decoder; WebP is still converted), and a picture with no size on its
-  tag uses data-file-width/height. Not yet confirmed on the owner's Wikivoyage:
-  the owner is checking what its pages hold (zimcat).
+  tag uses data-file-width/height. The owner's Wikivoyage (zimcat on Paris)
+  holds JPEG photos and PNG maps under ./_assets_/<hash>/, so it had no WebP
+  at all; a link test covers that path.
 - Contents and Outline say "Page 12" and "3 pages long, from page 12" instead
   of "p. 12".
 - 91 host tests pass.
