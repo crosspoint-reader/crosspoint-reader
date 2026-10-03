@@ -53,8 +53,8 @@ enum Row {
 // Diagnostic labels stay English on every unit, like AboutActivity: they are
 // read from screenshots and serial logs, not by the reader.
 const char* const rowNames[DiagnosticsActivity::ITEM_COUNT] = {
-    "PSRAM",       "PSRAM free",  "Internal RAM free", "Flash",          "SD bus",        "SD benchmark",
-    "Bench file",  "Sequential",  "Random 4 KB avg",   "Random p95/max", "Seq. write",
+    "PSRAM",      "PSRAM free", "Internal RAM free", "Flash",          "SD bus",     "SD benchmark",
+    "Bench file", "Sequential", "Random 4 KB avg",   "Random p95/max", "Seq. write",
 };
 
 constexpr size_t kMiB = 1024u * 1024u;

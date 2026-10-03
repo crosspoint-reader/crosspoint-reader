@@ -65,12 +65,15 @@ TEST(Fold, CaseAccentsSpacesAndPunctuation) {
   EXPECT_EQ(zim::foldKey("北京市"), "北京市");
   EXPECT_EQ(zim::foldKey("Rock ’n’ roll — history"), "rock 'n' roll - history");
   EXPECT_EQ(zim::foldKey("co­operate"), "cooperate");  // soft hyphen dropped
-  EXPECT_EQ(zim::foldKey("ﬁsh"), "fish");                // ligature
+  EXPECT_EQ(zim::foldKey("ﬁsh"), "fish");              // ligature
   EXPECT_EQ(zim::foldKey(""), "");
 }
 
 TEST(Fold, InvalidUtf8PassesThroughAndLongKeysAreCut) {
-  EXPECT_EQ(zim::foldKey(std::string("A\xff" "B")), std::string("a\xff" "b"));
+  EXPECT_EQ(zim::foldKey(std::string("A\xff"
+                                     "B")),
+            std::string("a\xff"
+                        "b"));
   std::string longTitle;
   for (int i = 0; i < 300; ++i) longTitle += "é";  // folds to 300 one-byte "e"
   EXPECT_EQ(zim::foldKey(longTitle), std::string(zim::kMaxKeyBytes, 'e'));

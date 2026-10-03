@@ -32,9 +32,7 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-double msSince(Clock::time_point t) {
-  return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
-}
+double msSince(Clock::time_point t) { return std::chrono::duration<double, std::milli>(Clock::now() - t).count(); }
 
 void usage() {
   std::fprintf(stderr,
@@ -78,10 +76,17 @@ int info(zim::Archive& archive, size_t parts) {
   std::printf("clusters       %u\n", h.clusterCount);
   const char* source = "";
   switch (archive.titleSource()) {
-    case zim::TitleSource::Listing: source = " (X/listing/titleOrdered/v0)"; break;
-    case zim::TitleSource::Header: source = " (header title list)"; break;
-    case zim::TitleSource::Articles: source = " (front articles only, v1)"; break;
-    case zim::TitleSource::None: break;
+    case zim::TitleSource::Listing:
+      source = " (X/listing/titleOrdered/v0)";
+      break;
+    case zim::TitleSource::Header:
+      source = " (header title list)";
+      break;
+    case zim::TitleSource::Articles:
+      source = " (front articles only, v1)";
+      break;
+    case zim::TitleSource::None:
+      break;
   }
   std::printf("title index    %u%s\n", archive.titleCount(), source);
   if (archive.hasArticleList()) std::printf("articles (v1)  %u\n", archive.articleListCount());

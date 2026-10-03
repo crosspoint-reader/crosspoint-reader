@@ -33,20 +33,20 @@ namespace zim {
 
 enum class Error : uint8_t {
   None = 0,
-  Io,              // Source read failed or was short
-  BadMagic,        // not a ZIM file
-  BadVersion,      // unsupported major version
-  BadHeader,       // header fields point outside the file or are inconsistent
-  BadDirent,       // malformed directory entry
-  BadCluster,      // malformed cluster or blob table
-  Unsupported,     // compression type we don't decode
-  Decompress,      // compressed data is corrupt
-  TooLarge,        // exceeds Options limits
-  NoMemory,        // allocator returned null
-  NotFound,        // no such entry
-  OutOfRange,      // index beyond the entry/title/blob count
-  RedirectLoop,    // redirect chain longer than Options::maxRedirects
-  NotContent,      // entry is a redirect/link/deleted entry where content was expected
+  Io,            // Source read failed or was short
+  BadMagic,      // not a ZIM file
+  BadVersion,    // unsupported major version
+  BadHeader,     // header fields point outside the file or are inconsistent
+  BadDirent,     // malformed directory entry
+  BadCluster,    // malformed cluster or blob table
+  Unsupported,   // compression type we don't decode
+  Decompress,    // compressed data is corrupt
+  TooLarge,      // exceeds Options limits
+  NoMemory,      // allocator returned null
+  NotFound,      // no such entry
+  OutOfRange,    // index beyond the entry/title/blob count
+  RedirectLoop,  // redirect chain longer than Options::maxRedirects
+  NotContent,    // entry is a redirect/link/deleted entry where content was expected
 };
 
 const char* errorName(Error e);
@@ -218,8 +218,8 @@ class Archive {
   Error readU32At(const TitleList& list, uint32_t position, uint32_t& value);
   Error clusterInfo(uint32_t cluster, ClusterInfo& info);
   Error locateBlob(uint32_t cluster, uint32_t blob, BlobLocation& loc);
-  Error validateTable(uint32_t cluster, const uint8_t* memory, uint64_t dataStart, uint64_t dataSize,
-                      size_t offSize, uint64_t first);
+  Error validateTable(uint32_t cluster, const uint8_t* memory, uint64_t dataStart, uint64_t dataSize, size_t offSize,
+                      uint64_t first);
   Error loadCluster(uint32_t cluster, const ClusterInfo& info, CachedCluster*& out);
   Error decompress(const ClusterInfo& info, uint8_t*& data, size_t& size);
   void releaseCache();
