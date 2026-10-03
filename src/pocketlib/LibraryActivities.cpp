@@ -537,11 +537,12 @@ void CollectionActivity::drawFooter() {
 // ------------------------------------------------------------ choice list
 
 ChoiceListActivity::ChoiceListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
-                                       std::vector<std::string> labels, std::vector<std::string> subtitles)
+                                       std::vector<std::string> labels, std::vector<std::string> subtitles, int initial)
     : UiListActivity("PocketChoice", renderer, mappedInput),
       title_(std::move(title)),
       labels_(std::move(labels)),
-      subtitles_(std::move(subtitles)) {}
+      subtitles_(std::move(subtitles)),
+      initial_(initial) {}
 
 void ChoiceListActivity::onEnter() {
   items_.assign(labels_.size(), fui::ListItem{});
@@ -551,6 +552,7 @@ void ChoiceListActivity::onEnter() {
     items_[i].actionValue = static_cast<int16_t>(i);
   }
   UiListActivity::onEnter();
+  if (initial_ > 0 && initial_ < static_cast<int>(items_.size())) moveSelectionTo(initial_);
 }
 
 void ChoiceListActivity::buildScreen(UiScreen& screen) {

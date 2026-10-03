@@ -82,7 +82,7 @@ std::string shortTitle(const pocketlib::Collection& collection);
 class ChoiceListActivity final : public UiListActivity {
  public:
   ChoiceListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
-                     std::vector<std::string> labels, std::vector<std::string> subtitles = {});
+                     std::vector<std::string> labels, std::vector<std::string> subtitles = {}, int initial = -1);
   void onEnter() override;
 
  private:
@@ -96,6 +96,7 @@ class ChoiceListActivity final : public UiListActivity {
   std::vector<std::string> labels_;
   std::vector<std::string> subtitles_;
   std::vector<freeink::ui::ListItem> items_;
+  const int initial_;  // row selected on entry (-1: the first)
 };
 
 // One collection's home, like the Wikipedia app's: a search bar with the

@@ -26,6 +26,7 @@ constexpr const char* kTmpPath = "/.pocketlib/history.tsv.tmp";
 constexpr size_t kMaxFileBytes = 64 * 1024;
 constexpr const char* kSearchesPath = "/.pocketlib/searches.txt";
 constexpr const char* kSearchesTmpPath = "/.pocketlib/searches.txt.tmp";
+constexpr const char* kOutlinePath = "/.pocketlib/outline-first";  // exists = on
 
 std::string clean(const std::string& s) {
   std::string out = s;
@@ -172,6 +173,22 @@ void ReadingHistory::recordSearch(const std::string& query) {
   if (ok) {
     Storage.remove(kSearchesPath);
     Storage.rename(kSearchesTmpPath, kSearchesPath);
+  }
+}
+
+bool ReadingHistory::outlineByDefault() {
+  if (outline_ < 0) outline_ = Storage.exists(kOutlinePath) ? 1 : 0;
+  return outline_ == 1;
+}
+
+void ReadingHistory::setOutlineByDefault(bool on) {
+  outline_ = on ? 1 : 0;
+  if (on) {
+    Storage.ensureDirectoryExists(kDir);
+    HalFile f;
+    if (Storage.openFileForWrite("PLIB", kOutlinePath, f)) f.close();
+  } else {
+    Storage.remove(kOutlinePath);
   }
 }
 

@@ -403,3 +403,25 @@ containing "Forbidden City"; see the session summary for the download.
      returns to the list; Back again to the keyboard.
   4. Opening search and typing feel quicker (no flash on the keyboard).
   5. Lists and grids still open with one clean flash (no ghosts).
+
+## 2026-10-03 — Next update, build 2: article navigation
+
+- A tap in the middle of an article shows a toolbar across the top: Back,
+  Contents, Search, Outline (tap elsewhere, turn the page or Back closes it).
+- Contents mark the section being read (•), select it, and give each
+  section's page.
+- The status bar names the section being read (when the title is shown).
+- Link previews: tapping a link shows its article's title and first
+  sentences in a card; tap the card to open it, the page to close it.
+- Outline: Introduction (the lead's first sentences) and the sections, each
+  with its page and length; choose one to read it, Back returns to the
+  outline. "Open articles here first: On/Off" at its foot.
+- The cleaner keeps each article's lead (`HtmlCleanOptions::lead`,
+  `firstSentences`); 4 new host tests, 76 in all.
+- Device checklist:
+  1. Open Climate change; tap the middle: the toolbar; each of its four
+     buttons works.
+  2. Contents: the current section marked, page numbers beside sections.
+  3. Tap a link: a preview card; tap it to open; Back returns.
+  4. Outline: sections with pages and lengths; pick one; Back returns to the
+     outline. Turn "Open articles here first" On and open another article.

@@ -23,6 +23,7 @@
 #include <ZimLink.h>
 
 #include <cstdio>
+#include <cstdlib>
 
 #include "CrossPointSettings.h"
 #include "LibraryActivities.h"
@@ -30,9 +31,12 @@
 #include "PocketLibrary.h"
 #include "ReadingHistory.h"
 #include "SdCardFontSystem.h"
+#include "SearchActivity.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/icons/search32.h"
 #include "fontIds.h"
+#include "icons/libraryIcons.h"
 
 namespace {
 constexpr const char* kWorkDir = "/.pocketlib";
@@ -46,6 +50,15 @@ constexpr uint32_t kBuildSliceMs = 60;
 // a one-letter link is still tappable.
 constexpr int kTouchSlop = 6;
 constexpr int kMinTouchWidth = 28;
+// The toolbar across the top of the page (a tap in the middle shows it).
+constexpr int kToolbarHeight = 76;
+constexpr int kToolbarItems = 4;
+const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search", "Outline"};
+
+class NullSink final : public zim::HtmlSink {
+ public:
+  bool write(const char*, size_t) override { return true; }
+};
 
 // Streams the cleaner's output to the card.
 class FileSink final : public zim::HtmlSink {
@@ -143,8 +156,14 @@ void ArticleActivity::openEntry(uint32_t entry, uint32_t offset, const std::stri
 }
 
 void ArticleActivity::loop() {
+  if (state_ == State::Reading && (toolbar_ || preview_.shown)) {
+    if (handleOverlayInput()) return;
+  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (!back_.empty()) {
+    if (outlineReturn_ && state_ == State::Reading) {
+      outlineReturn_ = false;
+      openOutline();  // a section chosen in the outline: back to the outline
+    } else if (!back_.empty()) {
       goBack();  // also from "Opening" or an error: back to the article the link was on
     } else {
       finish();
@@ -173,6 +192,7 @@ void ArticleActivity::loop() {
         state_ = State::Reading;
         showPage(landing);
         savePlace();
+        offerOutline_ = landing == 0 && pocketlib::ReadingHistory::instance().outlineByDefault();
       }
       requestUpdate();
     }
@@ -180,11 +200,28 @@ void ArticleActivity::loop() {
   }
   if (state_ != State::Reading) return;
 
+  if (offerOutline_) {
+    offerOutline_ = false;
+    int sections = 0;
+    for (const auto& h : headings_) sections += h.level >= 2 && !h.text.empty();
+    if (sections >= 3) {
+      openOutline();
+      return;
+    }
+  }
+
   if (handleLinkTap()) return;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-      ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     openContents();
+    return;
+  }
+  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
+    {
+      RenderLock lock(*this);
+      toolbar_ = true;
+    }
+    requestUpdate();
     return;
   }
 
@@ -282,6 +319,8 @@ bool ArticleActivity::load() {
     options.title = title_;
     options.keepLinks = true;
     options.headings = &headings_;
+    lead_.clear();
+    options.lead = &lead_;
     zim::HtmlCleanStats stats;
     const bool ok = zim::cleanArticleHtml(html, options, sink, &stats);
     out.flush();
@@ -375,6 +414,7 @@ bool ArticleActivity::buildMore(uint32_t budgetMs) {
     ~Publish() {
       a.shownTotal_ = static_cast<int>(a.pageOffsets_.size());
       a.shownComplete_ = !a.building_;
+      a.refreshHeadingPages();
     }
   } publish{*this};
   do {
@@ -476,6 +516,8 @@ void ArticleActivity::showPage(int index) {
   page_ = std::move(page);
   currentPage_ = index;
   notice_.clear();
+  toolbar_ = false;
+  preview_.shown = false;
 }
 
 void ArticleActivity::savePlace() {
@@ -551,9 +593,16 @@ void ArticleActivity::followLink(const char* href) {
     return;
   }
 
+  showPreview(to, target.fragment);
+}
+
+void ArticleActivity::openLinked(uint32_t entry, const std::string& fragment) {
+  const uint32_t here = currentPage_ < static_cast<int>(pageVisible_.size()) ? pageVisible_[currentPage_] : 0;
+  outlineReturn_ = false;
   savePlace();
-  remember();
-  openEntry(to.index, 0, target.fragment);
+  if (back_.size() >= kMaxBack) back_.erase(back_.begin());
+  back_.push_back({article_.index, here});
+  openEntry(entry, 0, fragment);
 }
 
 void ArticleActivity::goBack() {
@@ -576,20 +625,55 @@ void ArticleActivity::goBack() {
   openEntry(v.entry, v.offset, "");
 }
 
+void ArticleActivity::refreshHeadingPages() {
+  headingPages_.assign(headings_.size(), -1);
+  const auto& anchors = parser_ ? parser_->getAnchors() : anchors_;
+  for (const auto& a : anchors) {
+    if (a.first.compare(0, 4, "pl-h") != 0) continue;
+    const size_t n = static_cast<size_t>(strtoul(a.first.c_str() + 4, nullptr, 10));
+    if (n < headingPages_.size()) headingPages_[n] = a.second;
+  }
+}
+
+int ArticleActivity::currentSection() const {
+  int section = -1;
+  for (size_t i = 0; i < headings_.size() && i < headingPages_.size(); i++) {
+    if (headings_[i].level < 2 || headingPages_[i] < 0) continue;
+    if (headingPages_[i] > currentPage_) break;
+    section = static_cast<int>(i);
+  }
+  return section;
+}
+
 void ArticleActivity::openContents() {
   // Row 0 is the top; then the article's section headings (its own title,
-  // the h1, is row 0's job). Indent shows nesting.
+  // the h1, is row 0's job). Indent shows nesting; the section being read is
+  // marked and chosen; each row gives its page once it is laid out.
   std::vector<std::string> labels;
+  std::vector<std::string> subtitles;
   std::vector<int> headingOf;
-  labels.emplace_back("Beginning");
-  headingOf.push_back(-1);
-  for (size_t i = 0; i < headings_.size(); i++) {
-    const auto& h = headings_[i];
-    if (h.level < 2 || h.text.empty()) continue;
-    labels.push_back(std::string(static_cast<size_t>(h.level - 2) * 3, ' ') + h.text);
-    headingOf.push_back(static_cast<int>(i));
+  int here = 0;
+  {
+    RenderLock lock(*this);
+    const int current = currentSection();
+    labels.emplace_back("Beginning");
+    subtitles.emplace_back("p. 1");
+    headingOf.push_back(-1);
+    for (size_t i = 0; i < headings_.size(); i++) {
+      const auto& h = headings_[i];
+      if (h.level < 2 || h.text.empty()) continue;
+      const bool isHere = static_cast<int>(i) == current;
+      if (isHere) here = static_cast<int>(labels.size());
+      labels.push_back(std::string(static_cast<size_t>(h.level - 2) * 3, ' ') + (isHere ? "\xE2\x80\xA2 " : "") +
+                       h.text);
+      const int page = i < headingPages_.size() ? headingPages_[i] : -1;
+      subtitles.push_back(page >= 0 ? "p. " + std::to_string(page + 1) + (isHere ? " \xC2\xB7 reading" : "")
+                                    : std::string());
+      headingOf.push_back(static_cast<int>(i));
+    }
   }
-  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, title_, std::move(labels));
+  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, title_, std::move(labels),
+                                                    std::move(subtitles), here);
   if (!list) return;
   startActivityForResult(std::move(list), [this, headingOf](const ActivityResult& result) {
     if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
@@ -604,9 +688,228 @@ void ArticleActivity::openContents() {
     const uint32_t here = currentPage_ < static_cast<int>(pageVisible_.size()) ? pageVisible_[currentPage_] : 0;
     if (back_.size() >= kMaxBack) back_.erase(back_.begin());
     back_.push_back({article_.index, here});
+    outlineReturn_ = false;
     showPage(page);
     savePlace();
   });
+}
+
+// The lead, then the sections (two levels), each with how long it is; the
+// last row turns "open articles in outline" on or off.
+void ArticleActivity::openOutline() {
+  std::vector<std::string> labels;
+  std::vector<std::string> subtitles;
+  std::vector<int> headingOf;  // -1 = the lead, -2 = the setting
+  int here = 0;
+  {
+    RenderLock lock(*this);
+    const int current = currentSection();
+    const int total = static_cast<int>(pageOffsets_.size());
+    labels.emplace_back("Introduction");
+    subtitles.push_back(lead_.empty() ? std::string() : zim::firstSentences(lead_, 3, 260));
+    headingOf.push_back(-1);
+    for (size_t i = 0; i < headings_.size(); i++) {
+      const auto& h = headings_[i];
+      if (h.level < 2 || h.level > 3 || h.text.empty()) continue;
+      if (static_cast<int>(i) == current) here = static_cast<int>(labels.size());
+      labels.push_back((h.level == 3 ? "   " : "") + h.text);
+      const int page = i < headingPages_.size() ? headingPages_[i] : -1;
+      std::string sub;
+      if (page >= 0) {
+        // Length: up to the next heading of this level or higher.
+        int end = shownComplete_ ? total : -1;
+        for (size_t k = i + 1; k < headings_.size(); k++) {
+          if (headings_[k].level <= h.level && k < headingPages_.size() && headingPages_[k] >= 0) {
+            end = headingPages_[k];
+            break;
+          }
+        }
+        sub = "p. " + std::to_string(page + 1);
+        if (end > page) {
+          const int pages = end - page;
+          sub += " \xC2\xB7 " + std::to_string(pages) + (pages == 1 ? " page" : " pages");
+        }
+      }
+      subtitles.push_back(std::move(sub));
+      headingOf.push_back(static_cast<int>(i));
+    }
+  }
+  const bool outlineFirst = pocketlib::ReadingHistory::instance().outlineByDefault();
+  labels.emplace_back(outlineFirst ? "Open articles here first: On" : "Open articles here first: Off");
+  subtitles.emplace_back("Tap to switch");
+  headingOf.push_back(-2);
+
+  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, title_, std::move(labels),
+                                                    std::move(subtitles), here);
+  if (!list) return;
+  startActivityForResult(std::move(list), [this, headingOf](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
+    const int row = std::get<MenuResult>(result.data).action;
+    if (row < 0 || row >= static_cast<int>(headingOf.size())) return;
+    if (headingOf[row] == -2) {
+      auto& history = pocketlib::ReadingHistory::instance();
+      history.setOutlineByDefault(!history.outlineByDefault());
+      openOutline();
+      return;
+    }
+    int page = 0;
+    if (headingOf[row] >= 0) {
+      RenderLock lock(*this);
+      page = pageForAnchor(zim::headingAnchor(static_cast<size_t>(headingOf[row])));
+    }
+    if (page < 0) return;
+    showPage(page);
+    savePlace();
+    outlineReturn_ = true;  // Back returns to the outline
+  });
+}
+
+void ArticleActivity::openSearch() {
+  auto search = makeUniqueNoThrow<SearchActivity>(renderer, mappedInput, static_cast<int>(collection_));
+  if (!search) return;
+  startActivityForResult(std::move(search), [this](const ActivityResult&) { requestUpdate(); });
+}
+
+void ArticleActivity::hideOverlays() {
+  {
+    RenderLock lock(*this);
+    toolbar_ = false;
+    preview_.shown = false;
+  }
+  requestUpdate();
+}
+
+// With the toolbar or a preview up, input goes to them first. Returns true
+// when it was theirs.
+bool ArticleActivity::handleOverlayInput() {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    hideOverlays();
+    return true;
+  }
+  int x = 0;
+  int y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) {
+    // A page turn falls through to the reader: showing the new page closes
+    // the overlays.
+    return false;
+  }
+  if (preview_.shown) {
+    if (y >= previewTop_.load()) {
+      const uint32_t entry = preview_.entry;
+      const std::string fragment = preview_.fragment;
+      hideOverlays();
+      openLinked(entry, fragment);
+    } else {
+      hideOverlays();
+    }
+    return true;
+  }
+  // Toolbar.
+  if (y >= kToolbarHeight) {
+    hideOverlays();
+    return true;
+  }
+  const int item = std::min(kToolbarItems - 1, x * kToolbarItems / std::max(1, renderer.getScreenWidth()));
+  hideOverlays();
+  switch (item) {
+    case 0:
+      if (!back_.empty())
+        goBack();
+      else
+        finish();
+      break;
+    case 1:
+      openContents();
+      break;
+    case 2:
+      openSearch();
+      break;
+    default:
+      openOutline();
+      break;
+  }
+  return true;
+}
+
+// A link's target: its title and first sentences, over the page. One read
+// of its cluster and a cleaning pass that keeps only the lead.
+void ArticleActivity::showPreview(const zim::Entry& to, const std::string& fragment) {
+  zim::Archive* archive = pocketlib::Library::instance().open(collection_);
+  std::string text;
+  if (archive) {
+    std::string storage;
+    std::string_view html;
+    if (archive->readView(to, storage, html) == zim::Error::None) {
+      std::string lead;
+      zim::HtmlCleanOptions options;
+      options.lead = &lead;
+      options.leadLimit = 500;
+      NullSink sink;
+      zim::cleanArticleHtml(html, options, sink);
+      text = zim::firstSentences(lead, 3, 360);
+    }
+  }
+  if (!archive || text.empty()) {
+    openLinked(to.index, fragment);  // nothing to preview: just open it
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    preview_.shown = true;
+    preview_.entry = to.index;
+    preview_.fragment = fragment;
+    preview_.title = to.title;
+    preview_.text = std::move(text);
+    toolbar_ = false;
+  }
+  requestUpdate();
+}
+
+void ArticleActivity::drawToolbar() const {
+  const int w = renderer.getScreenWidth();
+  renderer.fillRect(0, 0, w, kToolbarHeight, false);
+  renderer.fillRect(0, kToolbarHeight - 2, w, 2, true);
+  const uint8_t* icons[kToolbarItems] = {icon_arrow_left_32_bits, icon_list_32_bits, icon_search_32_bits,
+                                         icon_list_tree_32_bits};
+  const int cell = w / kToolbarItems;
+  const int labelHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  for (int i = 0; i < kToolbarItems; i++) {
+    const int cx = i * cell + cell / 2;
+    renderer.drawIcon(icons[i], cx - 16, 10, 32);
+    const int tw = renderer.getTextWidth(SMALL_FONT_ID, kToolbarLabels[i]);
+    renderer.drawText(SMALL_FONT_ID, cx - tw / 2, kToolbarHeight - labelHeight - 8, kToolbarLabels[i], true);
+  }
+}
+
+void ArticleActivity::drawPreview() const {
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  constexpr int kMargin = 12;
+  constexpr int kPad = 16;
+  const int inner = w - 2 * kMargin - 2 * kPad;
+  const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, preview_.title.c_str(), inner, 2, EpdFontFamily::BOLD);
+  const auto textLines = renderer.wrappedText(UI_10_FONT_ID, preview_.text.c_str(), inner, 7);
+  const int titleLh = renderer.getLineHeight(UI_12_FONT_ID);
+  const int textLh = renderer.getLineHeight(UI_10_FONT_ID);
+  const int smallLh = renderer.getLineHeight(SMALL_FONT_ID);
+  const int cardH = kPad + static_cast<int>(titleLines.size()) * titleLh + 8 +
+                    static_cast<int>(textLines.size()) * textLh + 12 + smallLh + kPad;
+  const int top = h - kMargin - cardH - 40;  // above the status bar
+  renderer.fillRect(kMargin, top, w - 2 * kMargin, cardH, false);
+  renderer.drawRoundedRect(kMargin, top, w - 2 * kMargin, cardH, 3, 12, true);
+  int y = top + kPad;
+  for (const auto& line : titleLines) {
+    renderer.drawText(UI_12_FONT_ID, kMargin + kPad, y, line.c_str(), true, EpdFontFamily::BOLD);
+    y += titleLh;
+  }
+  y += 8;
+  for (const auto& line : textLines) {
+    renderer.drawText(UI_10_FONT_ID, kMargin + kPad, y, line.c_str(), true);
+    y += textLh;
+  }
+  y += 12;
+  renderer.drawText(SMALL_FONT_ID, kMargin + kPad, y, "Tap here to open \xC2\xB7 tap the page to close", true);
+  previewTop_.store(top);
 }
 
 void ArticleActivity::fail(const char* message) {
@@ -630,7 +933,10 @@ void ArticleActivity::renderStatusBar() const {
   const int total = shownTotal_;
   const float progress = (total > 0 && shownComplete_) ? (currentPage_ + 1) * 100.0f / total : 0;
   std::string title;
-  if (SETTINGS.statusBarSpec().showsTitle()) title = title_;
+  if (SETTINGS.statusBarSpec().showsTitle()) {
+    const int section = currentSection();
+    title = section >= 0 ? headings_[section].text : title_;
+  }
   GUI.drawStatusBar(renderer, progress, currentPage_ + 1, total, title);
 }
 
@@ -673,7 +979,12 @@ void ArticleActivity::render(RenderLock&&) {
 
   page_->render(renderer, fontId, marginLeft_, marginTop_);
   renderStatusBar();
-  if (SETTINGS.textAntiAliasing) {
+  // Overlays draw over the page in black and white (the anti-aliasing pass
+  // would put grey text under them).
+  const bool overlay = toolbar_ || preview_.shown;
+  if (toolbar_) drawToolbar();
+  if (preview_.shown) drawPreview();
+  if (SETTINGS.textAntiAliasing && !overlay) {
     ReaderUtils::displayBaseWithRefreshCycle(renderer, pagesUntilFullRefresh_);
     ReaderUtils::renderAntiAliased(renderer,
                                    [this, fontId]() { page_->render(renderer, fontId, marginLeft_, marginTop_); });

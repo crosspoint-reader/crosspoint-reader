@@ -69,7 +69,16 @@ struct HtmlCleanOptions {
   // When set, headings are collected here and get the "pl-h<N>" ids above
   // (instead of the page's own ids).
   std::vector<HtmlHeading>* headings = nullptr;
+  // When set, the article's opening paragraphs as plain text (before its
+  // first section heading, outside tables and lists), at most leadLimit
+  // bytes, cut at a word: for outlines and link previews.
+  std::string* lead = nullptr;
+  size_t leadLimit = 600;
 };
+
+// Up to `maxSentences` sentences of `text` (cut at ". ", "! " or "? "
+// followed by a capital), at most `maxBytes`, ending with "…" if cut short.
+std::string firstSentences(std::string_view text, size_t maxSentences, size_t maxBytes);
 
 struct HtmlCleanStats {
   size_t inputBytes = 0;

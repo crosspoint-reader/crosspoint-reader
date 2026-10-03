@@ -10,6 +10,7 @@
 #include "ZimHtml.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <vector>
 
@@ -665,6 +666,8 @@ class Cleaner {
     }
     if (!isVoidTag) stack_.push_back({name, outTag});
     if (opensHeading) headingDepth_ = stack_.size();
+    // The lead ends at the first section heading.
+    if (outTag && isHeadingTag(outTag) && outTag[1] != '1') leadDone_ = true;
     flush(false);
   }
 
@@ -744,6 +747,11 @@ class Cleaner {
           strcmp(top.out, "tr") == 0)
         out_ += '\n';
     }
+    // Paragraphs of the lead are joined by a space; one long enough is the lead.
+    if (top.out && strcmp(top.out, "p") == 0 && options_.lead && !leadDone_ && !options_.lead->empty()) {
+      *options_.lead += ' ';
+      if (options_.lead->size() >= 280) leadDone_ = true;
+    }
     stack_.pop_back();
     if (dropDepth_ > stack_.size()) dropDepth_ = 0;
     if (headingDepth_ > stack_.size()) {
@@ -759,8 +767,26 @@ class Cleaner {
       std::string& h = options_.headings->back().text;
       if (h.size() < 200) appendText(h, t, false);
     }
+    if (options_.lead && !leadDone_ && inLeadParagraph()) {
+      std::string& lead = *options_.lead;
+      appendText(lead, t, false);
+      if (lead.size() >= options_.leadLimit) leadDone_ = true;
+    }
     appendText(out_, t);
     flush(false);
+  }
+
+  // Text of a <p> that isn't inside a table, list or heading: body prose.
+  bool inLeadParagraph() const {
+    bool para = false;
+    for (const Open& o : stack_) {
+      if (!o.out) continue;
+      if (strcmp(o.out, "p") == 0) para = true;
+      if (strcmp(o.out, "td") == 0 || strcmp(o.out, "th") == 0 || strcmp(o.out, "li") == 0 ||
+          strcmp(o.out, "table") == 0 || isHeadingTag(o.out) || strcmp(o.out, "blockquote") == 0)
+        return false;
+    }
+    return para;
   }
 
   void flush(bool force) {
@@ -779,6 +805,7 @@ class Cleaner {
   std::string out_;
   std::vector<Open> stack_;
   size_t dropDepth_ = 0;
+  bool leadDone_ = false;
   size_t headingDepth_ = 0;  // stack size at which the open heading began; 0 = none
 
   static void collapseSpaces(std::string& s) {
@@ -850,10 +877,61 @@ uint32_t decodeHtmlEntity(std::string_view name) {
   return 0;
 }
 
+namespace {
+// Whitespace runs -> one space, trimmed; then at most `limit` bytes, cut at a
+// word (or a UTF-8 boundary) with "…".
+void tidyLead(std::string& s, size_t limit) {
+  std::string out;
+  out.reserve(s.size());
+  bool space = false;
+  for (const char c : s) {
+    if (c == ' ' || c == '\n' || c == '\t' || c == '\r') {
+      space = !out.empty();
+      continue;
+    }
+    if (space) out += ' ';
+    space = false;
+    out += c;
+  }
+  if (out.size() > limit) {
+    size_t cut = out.rfind(' ', limit);
+    if (cut == std::string::npos || cut < limit / 2) {
+      cut = limit;
+      while (cut > 0 && (static_cast<unsigned char>(out[cut]) & 0xC0) == 0x80) cut--;
+    }
+    out.resize(cut);
+    while (!out.empty() && (out.back() == ',' || out.back() == ';' || out.back() == ':')) out.pop_back();
+    out += "\xE2\x80\xA6";
+  }
+  s = std::move(out);
+}
+}  // namespace
+
+std::string firstSentences(std::string_view text, size_t maxSentences, size_t maxBytes) {
+  size_t end = 0;
+  size_t found = 0;
+  for (size_t i = 0; i + 2 < text.size() && found < maxSentences; i++) {
+    const char c = text[i];
+    if ((c == '.' || c == '!' || c == '?') && text[i + 1] == ' ' &&
+        (std::isupper(static_cast<unsigned char>(text[i + 2])) || static_cast<unsigned char>(text[i + 2]) >= 0x80)) {
+      // "U.S. " and "c. 1500": a one-letter word before the stop is an abbreviation.
+      const bool initial = i < 2 || text[i - 2] == ' ' || text[i - 2] == '.';
+      if (initial) continue;
+      end = i + 1;
+      found++;
+    }
+  }
+  std::string out(found >= maxSentences && end > 0 ? text.substr(0, end) : text);
+  tidyLead(out, maxBytes);
+  return out;
+}
+
 bool cleanArticleHtml(std::string_view html, const HtmlCleanOptions& options, HtmlSink& sink, HtmlCleanStats* stats) {
   HtmlCleanStats local;
   Cleaner cleaner(options, sink, stats ? *stats : local);
-  return cleaner.run(html);
+  const bool ok = cleaner.run(html);
+  if (options.lead) tidyLead(*options.lead, options.leadLimit);
+  return ok;
 }
 
 }  // namespace zim

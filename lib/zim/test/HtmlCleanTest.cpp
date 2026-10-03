@@ -269,3 +269,52 @@ TEST(HtmlClean, LargeInputStreamsInChunks) {
 }
 
 }  // namespace
+
+namespace {
+std::string leadOf(std::string_view html, size_t limit = 600) {
+  zim::StringHtmlSink sink;
+  std::string lead;
+  zim::HtmlCleanOptions o;
+  o.lead = &lead;
+  o.leadLimit = limit;
+  EXPECT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  return lead;
+}
+}  // namespace
+
+TEST(HtmlClean, LeadIsTheOpeningProse) {
+  const std::string lead = leadOf(
+      "<h1>Panda</h1><table class=infobox><tr><td><p>Infobox text</p></td></tr></table>"
+      "<p class=mw-empty-elt></p><p>The <b>giant panda</b> is a bear.\n It eats   bamboo.</p>"
+      "<ul><li>a list</li></ul><p>Second paragraph.</p><h2>History</h2><p>Later text.</p>");
+  EXPECT_EQ(lead, "The giant panda is a bear. It eats bamboo. Second paragraph.");
+}
+
+TEST(HtmlClean, LeadIsCutAtAWord) {
+  std::string body = "<p>";
+  for (int i = 0; i < 100; i++) body += "word" + std::to_string(i) + " ";
+  body += "</p>";
+  const std::string lead = leadOf(body, 50);
+  EXPECT_LE(lead.size(), 53u);
+  EXPECT_EQ(lead.compare(lead.size() - 3, 3, "\xE2\x80\xA6"), 0) << lead;
+  EXPECT_EQ(lead.find("  "), std::string::npos);
+}
+
+TEST(HtmlClean, FirstSentences) {
+  EXPECT_EQ(zim::firstSentences("The U.S. Army is big. It has tanks. It is old.", 2, 200),
+            "The U.S. Army is big. It has tanks.");
+  EXPECT_EQ(zim::firstSentences("Paris (c. 250 BC) is a city. More.", 1, 200), "Paris (c. 250 BC) is a city.");
+  EXPECT_EQ(zim::firstSentences("No stop at all", 2, 200), "No stop at all");
+}
+
+TEST_F(Sample, RealLeadStartsWithTheArticle) {
+  const std::string html = article("Climate change");
+  zim::StringHtmlSink sink;
+  std::string lead;
+  zim::HtmlCleanOptions o;
+  o.lead = &lead;
+  ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  EXPECT_EQ(lead.rfind("In common usage, climate change describes global warming", 0), 0u) << lead;
+  EXPECT_EQ(lead.find('{'), std::string::npos);
+  EXPECT_LE(lead.size(), 603u);
+}

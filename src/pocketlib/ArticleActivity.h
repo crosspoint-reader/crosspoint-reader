@@ -34,9 +34,14 @@ class Page;
 // laid out; the first one is shown as soon as it exists and the rest are laid
 // out between page turns.
 //
-// Reading: tap a link to follow it (the same screen loads the new article);
-// Back returns through the articles followed, to the place left in each;
-// Confirm or a tap in the middle of the screen opens the contents. Where each
+// Reading, after the Wikipedia app: tap a link for a preview card (its
+// article's first sentences; tap the card to open it in this screen); Back
+// returns through the articles followed, to the place left in each. A tap in
+// the middle of the page shows a toolbar (Back, Contents, Search, Outline);
+// Confirm opens the contents, which mark the section being read and give
+// each section's page. The status bar names the section. The outline is the
+// lead and the section headings: choose one to read it, Back returns to the
+// outline; articles can open in it (a setting at its foot). Where each
 // article was left is saved (ReadingHistory) and restored on the next open.
 class ArticleActivity final : public Activity {
  public:
@@ -85,6 +90,19 @@ class ArticleActivity final : public Activity {
   void followLink(const char* href);
   void goBack();
   void openContents();
+  void openOutline();
+  void openSearch();
+  // The overlays drawn over the page: the toolbar and the link preview.
+  bool handleOverlayInput();
+  void showPreview(const zim::Entry& to, const std::string& fragment);
+  void openLinked(uint32_t entry, const std::string& fragment);
+  void hideOverlays();
+  void drawToolbar() const;
+  void drawPreview() const;
+  // Page of each heading (-1 while not laid out yet), from the layout's
+  // anchors; refreshed as layout runs. Callers hold the render lock.
+  void refreshHeadingPages();
+  int currentSection() const;  // heading index, or -1 before the first section
   void fail(const char* message);
   void renderStatusBar() const;
 
@@ -112,6 +130,19 @@ class ArticleActivity final : public Activity {
   std::vector<uint32_t> pageOffsets_;  // file offset of each page
   std::vector<uint32_t> pageVisible_;  // visible-text offset where each page starts
   std::vector<zim::HtmlHeading> headings_;
+  std::vector<int> headingPages_;
+  std::string lead_;            // the article's opening paragraphs, for the outline
+  bool outlineReturn_ = false;  // a section chosen in the outline: Back returns to it
+  bool offerOutline_ = false;   // open the outline once the first page is up
+  bool toolbar_ = false;        // guarded by RenderLock
+  struct Preview {
+    bool shown = false;
+    uint32_t entry = 0;
+    std::string fragment;
+    std::string title;
+    std::string text;
+  } preview_;                                              // guarded by RenderLock
+  mutable std::atomic<int> previewTop_{0};                 // set when the card is drawn, read by taps
   std::vector<std::pair<std::string, uint16_t>> anchors_;  // copied from the parser when layout ends
   bool building_ = false;
   uint32_t layoutStartMs_ = 0;
