@@ -365,6 +365,26 @@ TEST(HtmlClean, LeadImageOnly) {
   EXPECT_EQ(out.find("Third caption"), std::string::npos);
 }
 
+TEST(HtmlClean, SectionSummaries) {
+  // Each section's first sentence, for the contents: from its first paragraph
+  // or list item, not from a table; empty when it opens with a subsection.
+  const char* html =
+      "<h1>Paris</h1><p>Lead text here.</p>"
+      "<h2>Understand</h2><p>Paris is the capital of France. It is big.</p>"
+      "<h2>Get in</h2><h3>By plane</h3><ul><li>Charles de Gaulle Airport is the main hub. More.</li></ul>"
+      "<h2>Data</h2><table><tr><td>Not this.</td></tr></table><p>But this one. Not this.</p>";
+  zim::StringHtmlSink sink;
+  std::vector<zim::HtmlHeading> headings;
+  zim::HtmlCleanOptions o;
+  o.headings = &headings;
+  ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  ASSERT_EQ(headings.size(), 5u);
+  EXPECT_EQ(headings[1].summary, "Paris is the capital of France.");
+  EXPECT_EQ(headings[2].summary, "");
+  EXPECT_EQ(headings[3].summary, "Charles de Gaulle Airport is the main hub.");
+  EXPECT_EQ(headings[4].summary, "But this one.");
+}
+
 TEST(HtmlClean, JpegAndPngPicturesToo) {
   // Collections Kiwix doesn't convert to WebP (Wikivoyage): a JPEG keeps its
   // .jpg (the reader shows it as it is), a PNG its .png; a tag without a size

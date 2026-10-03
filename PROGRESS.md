@@ -512,3 +512,12 @@ containing "Forbidden City"; see the session summary for the download.
 - Contents and Outline say "Page 12" and "3 pages long, from page 12" instead
   of "p. 12".
 - 91 host tests pass.
+- Contents and Outline merged into one Contents (owner's choice), after the
+  Wikipedia app: Introduction with the article's opening sentences, then each
+  section and subsection (to level 4) with its first sentence (new
+  `HtmlHeading::summary`, from its first paragraph or list item) and length,
+  the one being read marked "You are here"; the foot row "Open articles at
+  their contents". Back after a jump returns to the page left (or to the
+  contents when they opened with the article). The toolbar's freed slot is
+  Text size (the reader's own point sizes, same setting books use; the article
+  is laid out again at the same place). 92 host tests, 7 layout tests pass.

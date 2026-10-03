@@ -31,6 +31,7 @@
 #include "LibraryActivities.h"
 #include "MappedInputManager.h"
 #include "PocketLibrary.h"
+#include "ReaderFontSizes.h"
 #include "ReadingHistory.h"
 #include "SdCardFontSystem.h"
 #include "SearchActivity.h"
@@ -57,7 +58,7 @@ constexpr int kMinTouchWidth = 28;
 // The toolbar across the top of the page (a tap in the middle shows it).
 constexpr int kToolbarHeight = 76;
 constexpr int kToolbarItems = 5;
-const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search", "Outline", "Images"};
+const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search", "Text size", "Images"};
 constexpr const char* kImageDir = "/.pocketlib/img";
 constexpr const char* kImageBase = "/.pocketlib/img/";
 
@@ -175,7 +176,7 @@ void ArticleActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (outlineReturn_ && state_ == State::Reading) {
       outlineReturn_ = false;
-      openOutline();  // a section chosen in the outline: back to the outline
+      openContents(true);  // a section chosen in the contents shown at open: back to them
     } else if (!back_.empty()) {
       goBack();  // also from "Opening" or an error: back to the article the link was on
     } else {
@@ -218,7 +219,7 @@ void ArticleActivity::loop() {
     int sections = 0;
     for (const auto& h : headings_) sections += h.level >= 2 && !h.text.empty();
     if (sections >= 3) {
-      openOutline();
+      openContents(true);
       return;
     }
   }
@@ -670,113 +671,68 @@ int ArticleActivity::currentSection() const {
   return section;
 }
 
-void ArticleActivity::openContents() {
-  // Row 0 is the top; then the article's section headings (its own title,
-  // the h1, is row 0's job). Indent shows nesting; the section being read is
-  // marked and chosen; each row gives its page once it is laid out.
+// The contents, after the Wikipedia app: the introduction (the article's
+// opening sentences), then each section and subsection with its first
+// sentence and its length; the one being read is marked and chosen. A section
+// chosen from here: Back returns to the page left (or, when the contents
+// opened with the article, to the contents). The last row turns "open
+// articles at their contents" on or off.
+void ArticleActivity::openContents(const bool atOpen) {
   std::vector<std::string> labels;
   std::vector<std::string> subtitles;
-  std::vector<int> headingOf;
-  int here = 0;
-  {
-    RenderLock lock(*this);
-    const int current = currentSection();
-    labels.emplace_back("Beginning");
-    subtitles.emplace_back("Page 1");
-    headingOf.push_back(-1);
-    for (size_t i = 0; i < headings_.size(); i++) {
-      const auto& h = headings_[i];
-      if (h.level < 2 || h.text.empty()) continue;
-      const bool isHere = static_cast<int>(i) == current;
-      if (isHere) here = static_cast<int>(labels.size());
-      labels.push_back(std::string(static_cast<size_t>(h.level - 2) * 3, ' ') + (isHere ? "\xE2\x80\xA2 " : "") +
-                       h.text);
-      const int page = i < headingPages_.size() ? headingPages_[i] : -1;
-      subtitles.push_back(page >= 0 ? "Page " + std::to_string(page + 1) + (isHere ? " \xC2\xB7 you are here" : "")
-                                    : std::string());
-      headingOf.push_back(static_cast<int>(i));
-    }
-  }
-  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, title_, std::move(labels),
-                                                    std::move(subtitles), here);
-  if (!list) return;
-  startActivityForResult(std::move(list), [this, headingOf](const ActivityResult& result) {
-    if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
-    const int row = std::get<MenuResult>(result.data).action;
-    if (row < 0 || row >= static_cast<int>(headingOf.size())) return;
-    int page = 0;
-    if (headingOf[row] >= 0) {
-      RenderLock lock(*this);
-      page = pageForAnchor(zim::headingAnchor(static_cast<size_t>(headingOf[row])));
-    }
-    if (page < 0) return;
-    const uint32_t here = currentPage_ < static_cast<int>(pageVisible_.size()) ? pageVisible_[currentPage_] : 0;
-    if (back_.size() >= kMaxBack) back_.erase(back_.begin());
-    back_.push_back({article_.index, here});
-    outlineReturn_ = false;
-    showPage(page);
-    savePlace();
-  });
-}
-
-// The lead, then the sections (two levels), each with how long it is; the
-// last row turns "open articles in outline" on or off.
-void ArticleActivity::openOutline() {
-  std::vector<std::string> labels;
-  std::vector<std::string> subtitles;
-  std::vector<int> headingOf;  // -1 = the lead, -2 = the setting
+  std::vector<int> headingOf;  // -1 = the introduction, -2 = the setting
   int here = 0;
   {
     RenderLock lock(*this);
     const int current = currentSection();
     const int total = static_cast<int>(pageOffsets_.size());
-    labels.emplace_back("Introduction");
-    subtitles.push_back(lead_.empty() ? std::string() : zim::firstSentences(lead_, 3, 260));
+    labels.emplace_back(current < 0 ? "\xE2\x80\xA2 Introduction" : "Introduction");
+    subtitles.push_back(lead_.empty() ? std::string("Page 1") : zim::firstSentences(lead_, 2, 200));
     headingOf.push_back(-1);
     for (size_t i = 0; i < headings_.size(); i++) {
       const auto& h = headings_[i];
-      if (h.level < 2 || h.level > 3 || h.text.empty()) continue;
-      if (static_cast<int>(i) == current) here = static_cast<int>(labels.size());
-      labels.push_back((h.level == 3 ? "   " : "") + h.text);
+      if (h.level < 2 || h.level > 4 || h.text.empty()) continue;
+      const bool isHere = static_cast<int>(i) == current;
+      if (isHere) here = static_cast<int>(labels.size());
+      labels.push_back(std::string(static_cast<size_t>(h.level - 2) * 3, ' ') + (isHere ? "\xE2\x80\xA2 " : "") +
+                       h.text);
+      // Length: up to the next heading of this level or higher.
+      std::string length;
       const int page = i < headingPages_.size() ? headingPages_[i] : -1;
-      std::string sub;
       if (page >= 0) {
-        // Length: up to the next heading of this level or higher.
-        int end = shownComplete_ ? total : -1;
+        int endPage = shownComplete_ ? total : -1;
         for (size_t k = i + 1; k < headings_.size(); k++) {
           if (headings_[k].level <= h.level && k < headingPages_.size() && headingPages_[k] >= 0) {
-            end = headingPages_[k];
+            endPage = headingPages_[k];
             break;
           }
         }
-        if (end > page) {
-          const int pages = end - page;
-          sub = std::to_string(pages) + (pages == 1 ? " page long, from page " : " pages long, from page ") +
-                std::to_string(page + 1);
-        } else {
-          sub = "From page " + std::to_string(page + 1);
-        }
+        const int pages = endPage > page ? endPage - page : 1;
+        length = std::to_string(pages) + (pages == 1 ? " page" : " pages");
       }
+      std::string sub = isHere ? "You are here" : std::string();
+      if (!h.summary.empty()) sub += (sub.empty() ? "" : " \xC2\xB7 ") + h.summary;
+      if (!length.empty()) sub += (sub.empty() ? "" : " \xC2\xB7 ") + length;
       subtitles.push_back(std::move(sub));
       headingOf.push_back(static_cast<int>(i));
     }
   }
-  const bool outlineFirst = pocketlib::ReadingHistory::instance().outlineByDefault();
-  labels.emplace_back(outlineFirst ? "Open articles here first: On" : "Open articles here first: Off");
+  const bool contentsFirst = pocketlib::ReadingHistory::instance().outlineByDefault();
+  labels.emplace_back(contentsFirst ? "Open articles at their contents: On" : "Open articles at their contents: Off");
   subtitles.emplace_back("Tap to switch");
   headingOf.push_back(-2);
 
   auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, title_, std::move(labels),
                                                     std::move(subtitles), here);
   if (!list) return;
-  startActivityForResult(std::move(list), [this, headingOf](const ActivityResult& result) {
+  startActivityForResult(std::move(list), [this, headingOf, atOpen](const ActivityResult& result) {
     if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
     const int row = std::get<MenuResult>(result.data).action;
     if (row < 0 || row >= static_cast<int>(headingOf.size())) return;
     if (headingOf[row] == -2) {
       auto& history = pocketlib::ReadingHistory::instance();
       history.setOutlineByDefault(!history.outlineByDefault());
-      openOutline();
+      openContents(atOpen);
       return;
     }
     int page = 0;
@@ -785,9 +741,47 @@ void ArticleActivity::openOutline() {
       page = pageForAnchor(zim::headingAnchor(static_cast<size_t>(headingOf[row])));
     }
     if (page < 0) return;
+    if (atOpen) {
+      outlineReturn_ = true;  // Back returns to the contents
+    } else {
+      const uint32_t at = currentPage_ < static_cast<int>(pageVisible_.size()) ? pageVisible_[currentPage_] : 0;
+      if (back_.size() >= kMaxBack) back_.erase(back_.begin());
+      back_.push_back({article_.index, at});
+      outlineReturn_ = false;
+    }
     showPage(page);
     savePlace();
-    outlineReturn_ = true;  // Back returns to the outline
+  });
+}
+
+// Text size: the point sizes the reader's font comes in (the same setting
+// books use); the article is laid out again at the same place.
+void ArticleActivity::openTextSize() {
+  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
+  if (sizes.empty()) return;
+  std::vector<std::string> labels;
+  std::vector<std::string> subtitles;
+  const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
+  int current = 0;
+  for (size_t i = 0; i < sizes.size(); i++) {
+    if (sizes[i] == cur) current = static_cast<int>(i);
+    labels.push_back(std::to_string(sizes[i]) + " pt");
+    subtitles.push_back(sizes[i] == cur ? "Current size" : std::string());
+  }
+  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, "Text size", std::move(labels),
+                                                    std::move(subtitles), current);
+  if (!list) return;
+  startActivityForResult(std::move(list), [this, sizes](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
+    const int row = std::get<MenuResult>(result.data).action;
+    if (row < 0 || row >= static_cast<int>(sizes.size()) || sizes[row] == SETTINGS.fontPointSize) return;
+    SETTINGS.fontPointSize = sizes[row];
+    SETTINGS.saveToFile();
+    sdFontSystem.ensureLoaded(renderer);
+    const uint32_t at = currentPage_ < static_cast<int>(pageVisible_.size()) ? pageVisible_[currentPage_] : 0;
+    savePlace();
+    keepImageMode_ = true;
+    openEntry(article_.index, at, "");
   });
 }
 
@@ -915,7 +909,7 @@ bool ArticleActivity::handleOverlayInput() {
       openSearch();
       break;
     case 3:
-      openOutline();
+      openTextSize();
       break;
     default:
       toggleImages();
@@ -964,7 +958,7 @@ void ArticleActivity::drawToolbar() const {
   renderer.fillRect(0, 0, w, kToolbarHeight, false);
   renderer.fillRect(0, kToolbarHeight - 2, w, 2, true);
   const uint8_t* icons[kToolbarItems] = {icon_arrow_left_32_bits, icon_list_32_bits, icon_search_32_bits,
-                                         icon_list_tree_32_bits, icon_image_32_bits};
+                                         icon_a_large_small_32_bits, icon_image_32_bits};
   const int cell = w / kToolbarItems;
   const int labelHeight = renderer.getLineHeight(SMALL_FONT_ID);
   for (int i = 0; i < kToolbarItems; i++) {

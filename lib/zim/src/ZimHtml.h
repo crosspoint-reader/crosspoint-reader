@@ -55,6 +55,10 @@ struct HtmlHeading {
   uint8_t level = 2;                 // 1..6
   std::string text;                  // plain UTF-8, whitespace collapsed
   std::vector<std::string> aliases;  // the page's own ids on or inside it ("History"), for #fragment links
+  // The section's opening sentence (its first paragraph or list item before
+  // the next heading), for the contents list; empty when it opens straight
+  // into a subsection or a table.
+  std::string summary;
 };
 
 // "pl-h3"

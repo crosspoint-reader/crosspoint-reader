@@ -763,6 +763,11 @@ class Cleaner {
           strcmp(top.out, "tr") == 0)
         out_ += '\n';
     }
+    // A section's opening text: paragraphs and list items joined by a space.
+    if (top.out && (strcmp(top.out, "p") == 0 || strcmp(top.out, "li") == 0) && options_.headings &&
+        !options_.headings->empty() && !options_.headings->back().summary.empty()) {
+      options_.headings->back().summary += ' ';
+    }
     // Paragraphs of the lead are joined by a space; one long enough is the lead.
     if (top.out && strcmp(top.out, "p") == 0 && options_.lead && !leadDone_ && !options_.lead->empty()) {
       *options_.lead += ' ';
@@ -782,6 +787,10 @@ class Cleaner {
     if (headingDepth_ > 0) {
       std::string& h = options_.headings->back().text;
       if (h.size() < 200) appendText(h, t, false);
+    }
+    if (options_.headings && !options_.headings->empty() && headingDepth_ == 0) {
+      std::string& summary = options_.headings->back().summary;
+      if (summary.size() < kSummaryCollect && inSectionProse()) appendText(summary, t, false);
     }
     if (options_.lead && !leadDone_ && inLeadParagraph()) {
       std::string& lead = *options_.lead;
@@ -859,6 +868,20 @@ class Cleaner {
     stats_.elementsKept++;
     flush(false);
   }
+
+  // Text of a <p> or <li> outside tables and headings: what a section opens
+  // with, for its line in the contents.
+  bool inSectionProse() const {
+    bool prose = false;
+    for (const Open& o : stack_) {
+      if (!o.out) continue;
+      if (strcmp(o.out, "p") == 0 || strcmp(o.out, "li") == 0) prose = true;
+      if (strcmp(o.out, "td") == 0 || strcmp(o.out, "th") == 0 || strcmp(o.out, "table") == 0 || isHeadingTag(o.out))
+        return false;
+    }
+    return prose;
+  }
+  static constexpr size_t kSummaryCollect = 400;
 
   // Text of a <p> that isn't inside a table, list or heading: body prose.
   bool inLeadParagraph() const {
@@ -1017,6 +1040,13 @@ bool cleanArticleHtml(std::string_view html, const HtmlCleanOptions& options, Ht
   Cleaner cleaner(options, sink, stats ? *stats : local);
   const bool ok = cleaner.run(html);
   if (options.lead) tidyLead(*options.lead, options.leadLimit);
+  if (options.headings) {
+    for (HtmlHeading& h : *options.headings) {
+      if (h.summary.empty()) continue;
+      tidyLead(h.summary, 400);
+      h.summary = firstSentences(h.summary, 1, 160);
+    }
+  }
   return ok;
 }
 

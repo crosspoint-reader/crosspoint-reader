@@ -37,11 +37,11 @@ class Page;
 // Reading, after the Wikipedia app: tap a link for a preview card (its
 // article's first sentences; tap the card to open it in this screen); Back
 // returns through the articles followed, to the place left in each. A tap in
-// the middle of the page shows a toolbar (Back, Contents, Search, Outline);
-// Confirm opens the contents, which mark the section being read and give
-// each section's page. The status bar names the section. The outline is the
-// lead and the section headings: choose one to read it, Back returns to the
-// outline; articles can open in it (a setting at its foot). Where each
+// the middle of the page shows a toolbar (Back, Contents, Search, Text size,
+// Images); Confirm opens the contents: the introduction, then each section
+// with its first sentence and length, the one being read marked. Articles can
+// open at their contents (a setting at its foot). The status bar names the
+// section. Where each
 // article was left is saved (ReadingHistory) and restored on the next open.
 class ArticleActivity final : public Activity {
  public:
@@ -89,8 +89,8 @@ class ArticleActivity final : public Activity {
   bool handleLinkTap();
   void followLink(const char* href);
   void goBack();
-  void openContents();
-  void openOutline();
+  void openContents(bool atOpen = false);
+  void openTextSize();
   void openSearch();
   // The overlays drawn over the page: the toolbar and the link preview.
   bool handleOverlayInput();
