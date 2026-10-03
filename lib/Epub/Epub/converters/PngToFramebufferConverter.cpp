@@ -252,7 +252,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
-  pw.init(*ctx->renderer);
+  pw.init(*ctx->renderer, !ctx->config->cacheOnly);
 
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;

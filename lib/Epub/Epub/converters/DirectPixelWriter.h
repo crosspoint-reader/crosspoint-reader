@@ -37,7 +37,10 @@ struct DirectPixelWriter {
   // Row-precomputed: the Y-dependent portion of the physical coords
   int rowPhyXBase, rowPhyYBase;
 
-  void init(GfxRenderer& renderer) {
+  // writeFramebuffer=false (cache-only decode, idle prefetch) disables
+  // framebuffer output: fb stays null and writePixel() becomes a no-op, so no
+  // callback call site needs its own branch.
+  void init(GfxRenderer& renderer, const bool writeFramebuffer = true) {
     fb = renderer.getWriteTarget();
     originY = renderer.getWriteOriginY();
     clipRows = renderer.getWriteRows();
@@ -95,6 +98,8 @@ struct DirectPixelWriter {
         phyYStepY = 1;
         break;
     }
+
+    if (!writeFramebuffer) fb = nullptr;
   }
 
   // Call once per row before the column loop.
@@ -148,6 +153,8 @@ struct DirectPixelWriter {
   // Must be called after beginRow() for the current row.
   // No bounds checking — caller guarantees coordinates are valid.
   inline void writePixel(int logicalX, uint8_t pixelValue, bool writeWhiteInBw = false) const {
+    if (!fb) return;  // cache-only decode: framebuffer output disabled
+
     // Determine whether to draw based on render mode
     bool draw;
     bool state;

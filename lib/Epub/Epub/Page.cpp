@@ -148,6 +148,16 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
   }
 }
 
+bool Page::prefetchOneImage(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageImage) continue;
+    const auto& image = static_cast<const PageImage&>(*element);
+    if (!image.getImageBlock().needsDecode()) continue;
+    return image.getImageBlock().prefetch(renderer, image.xPos + xOffset, image.yPos + yOffset);
+  }
+  return false;
+}
+
 bool Page::serialize(HalFile& file) const {
   const uint16_t count = elements.size();
   serialization::writePod(file, count);
