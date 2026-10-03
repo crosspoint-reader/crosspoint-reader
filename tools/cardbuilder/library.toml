@@ -72,11 +72,7 @@ key = "wikibooks"
 name = "wikibooks_en_all"
 flavour = ["nopic"]
 
-[[collection]]
-key = "gutenberg"
-name = "gutenberg_en_all"
-flavour = [""]
-note = "Project Gutenberg, ~70,000 public-domain books. Kiwix ships it one way only (covers included)."
-
-# Standard Ebooks are EPUBs, not ZIMs; CrossPoint already reads EPUB. They get
-# their own step later in M2 (their bulk downloads need checking first).
+# Project Gutenberg (gutenberg_en_all) was tried and dropped on 2026-10-03:
+# Kiwix ships it only with covers, 221.3 GB, which does not fit the 256 GB card.
+# Books come from Standard Ebooks instead: EPUBs, not ZIMs (CrossPoint already
+# reads EPUB). They get their own step later in M2.

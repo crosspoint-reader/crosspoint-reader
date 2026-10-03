@@ -256,6 +256,21 @@ optional = true
         self.assertIn("not enough space", out)
         self.assertFalse((self.card / "library" / "manifest.json").exists())
 
+    def test_copy_skips_what_is_not_downloaded_and_will_not_prune(self):
+        self.assertEqual(self.run_cb("download", "--only", "tiny")[0], 0)
+        code, out = self.run_cb("index")
+        self.assertEqual(code, 0, out)
+        self.assertIn("[climate] skipped", out)
+        kept = self.card / "library" / "climate" / "climate_en_all_nopic_2024-06.zimaa"
+        kept.parent.mkdir(parents=True)
+        kept.write_bytes(b"copied earlier")
+
+        code, out = self.run_cb("copy", "--prune")
+        self.assertEqual(code, 0, out)
+        self.assertIn("Not pruning", out)
+        self.assertTrue(kept.exists(), "pruned a collection that was only skipped")
+        self.assertTrue((self.card / "library" / "tiny" / "tiny_en_all_2024-01.zim").exists())
+
     def test_copy_before_download_explains_what_to_do(self):
         code, out = self.run_cb("copy")
         self.assertEqual(code, 1)

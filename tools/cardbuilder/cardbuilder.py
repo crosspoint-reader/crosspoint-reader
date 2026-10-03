@@ -618,15 +618,22 @@ def cmd_plan(eds: list[Edition], staging: Path, card: Path | None) -> None:
             say(f"Card {card}: not mounted.")
 
 
-def staged_zims(eds: list[Edition], staging: Path, state: State) -> list[tuple[Edition, Path, str]]:
-    out = []
+def staged_zims(eds: list[Edition], staging: Path, state: State) -> tuple[list[tuple[Edition, Path, str]], list[Edition]]:
+    """Collections ready to index or copy, and the ones skipped because they
+    are not downloaded and checked yet."""
+    out, missing = [], []
     for ed in eds:
         z = staging / ed.filename
         sha = state.verified(z)
-        if not sha:
-            raise BuildError(f"{ed.filename} is not downloaded and checked yet; run download first")
-        out.append((ed, z, sha))
-    return out
+        if sha:
+            out.append((ed, z, sha))
+        else:
+            missing.append(ed)
+    for ed in missing:
+        say(f"[{ed.want.key}] skipped: {ed.filename} is not downloaded and checked yet (run download)")
+    if eds and not out:
+        raise BuildError("nothing is downloaded and checked yet; run download first")
+    return out, missing
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -674,20 +681,26 @@ def main(argv: list[str] | None = None) -> int:
                 download(ed, staging, state)
         if a.command in ("index", "all"):
             tool = find_tool("zimindex", a.zimindex)
-            for ed, z, _ in staged_zims(eds, staging, state):
+            ready, _ = staged_zims(eds, staging, state)
+            for ed, z, _ in ready:
                 say(f"[{ed.want.key}]")
                 build_index(z, tool)
         if a.command in ("copy", "all"):
             if not card:
                 raise BuildError("say where the card is: --card /Volumes/NAME or settings.card in library.toml")
             placements = []
-            for ed, z, sha in staged_zims(eds, staging, state):
+            ready, missing = staged_zims(eds, staging, state)
+            prune = a.prune and not a.only
+            if missing and prune:
+                say("Not pruning: some collections were skipped, and their files on the card would look stale.")
+                prune = False
+            for ed, z, sha in ready:
                 if not index_path(z).exists():
                     raise BuildError(f"no search index for {z.name}; run index first")
                 placements.append(plan_placement(ed, z, sha, card, a.part_size))
             if a.only:
                 say("Note: with --only, files of other collections on the card show as stale.")
-            copy_to_card(placements, card, a.dry_run, a.verify, a.prune and not a.only)
+            copy_to_card(placements, card, a.dry_run, a.verify, prune)
         return 0
     except BuildError as e:
         say(f"\ncardbuilder: {e}")

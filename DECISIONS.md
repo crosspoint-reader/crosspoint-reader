@@ -266,6 +266,19 @@ start with a capital letter and the ZIM's own list is ordered byte by byte
   medicine) are unconfirmed and marked optional.
 - Standard Ebooks (EPUB, not ZIM) and Wiktionary → StarDict come later in M2.
 
+## 2026-10-03 — Books: Standard Ebooks, not Project Gutenberg
+
+Kiwix ships `gutenberg_en_all` one way only, covers included: 221.3 GB
+(measured from the live download, not the 60–80 GB estimated earlier). With
+the other 74.8 GB that is 296 GB, more than the 256 GB card holds (about
+238 GB usable). The owner chose Standard Ebooks instead: a few thousand
+carefully edited public-domain books as EPUB, which CrossPoint already reads.
+Their download route is checked before it is added to the card builder.
+
+The card builder now skips collections that are not downloaded yet instead of
+stopping, and refuses to `--prune` in that run so a skipped collection's files
+on the card are never taken for stale.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |

@@ -128,3 +128,8 @@ containing "Forbidden City"; see the session summary for the download.
   `plan` was corrected from 0.3% to 0.5% after the real Wikipedia index.
 - Card is 256 GB (about 238 GB usable). Owner added Project Gutenberg
   (`gutenberg_en_all`) and declined Wikipedia with pictures.
+- Gutenberg turned out to be 221.3 GB (estimate was 60–80 GB); with it the
+  card would need 296 GB. Dropped; Standard Ebooks chosen instead (separate
+  step). `library.toml` no longer lists Gutenberg. `index` and `copy` now skip
+  anything not downloaded, with a note, and will not prune in that case (11
+  card-builder tests).
