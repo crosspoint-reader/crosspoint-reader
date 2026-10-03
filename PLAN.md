@@ -12,8 +12,8 @@ Status date: 2026-10-03.
 | 2 | Card builder (Python, Mac) | **Passed 2026-10-03**: card built, copied with `--verify`, read back on the Mac (Standard Ebooks and Wiktionary→StarDict still to add) |
 | 3 | First article on device | **Passed 2026-10-03** (owner, after the out-of-memory fix) |
 | 4 | Search | **Passed 2026-10-03** (owner) |
-| 5 | Full reader | **Code done 2026-10-03; waiting for the device test** |
-| 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | — |
+| 5 | Full reader | **Passed 2026-10-03** (owner) |
+| 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | **In progress**: search everything + ranking first (owner's order) |
 | 7 | Power and polish | — |
 | 8 | Atlas (stretch) | — |
 | 9 | Release | — |

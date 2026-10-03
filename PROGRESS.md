@@ -284,3 +284,12 @@ containing "Forbidden City"; see the session summary for the download.
 7. Tap a link to something unlikely to be on the card (a red link or an
    obscure page). Success: "Not in this library: …", and the page stays.
 8. Note anything wrong or slow.
+
+## 2026-10-03 — Milestone 5 passed; M6 order chosen
+
+- Owner: links, Back, contents, Recent and "Not in this library" all work
+  on the device. **M5 passed.**
+- Owner's choices: M6 starts with search across all collections, with
+  popularity ranking (needs the indexes rebuilt on the Mac); then Wiktionary
+  lookup, CJK font, Standard Ebooks. Open a pull request merging M3–M5 into
+  `pocket-library`.
