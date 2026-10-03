@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <deque>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "Epub.h"
@@ -18,6 +20,8 @@ class ContentOpfParser final : public Print {
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
+    IN_BOOK_SUBJECT,
+    IN_META_TEXT,  // EPUB 3 <meta property="..."> whose text content is kept
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
@@ -49,6 +53,17 @@ class ContentOpfParser final : public Print {
   std::deque<ItemIndexEntry> itemIndex;
   bool useItemIndex = false;
 
+  // Working state for sort keys, series and tags: creator/collection ids and
+  // EPUB 3 refinements that can only be resolved once <metadata> closes.
+  // Heap-allocated in setup() and freed at the end of <metadata>, because the
+  // parser itself lives on the caller's stack.
+  struct ExtendedState;
+  std::unique_ptr<ExtendedState> ext;
+
+  void addTag(std::string& value);
+  void endMetaText();
+  void finalizeExtendedMetadata();
+
   // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {
     uint32_t hash = 2166136261u;
@@ -64,9 +79,19 @@ class ContentOpfParser final : public Print {
   static void endElement(void* userData, const XML_Char* name);
 
  public:
+  // Metadata text has its whitespace collapsed to single spaces, so a newline
+  // can never occur inside a tag.
+  static constexpr char TAG_SEPARATOR = '\n';
+
   std::string title;
   std::string author;
   std::string language;
+  // Sort keys, series and tags; each is empty when the OPF does not provide it.
+  std::string titleSort;
+  std::string authorSort;  // file-as of the first creator whose role is "aut" or unset
+  std::string series;
+  std::string seriesIndex;
+  std::string tags;  // TAG_SEPARATOR-joined, deduplicated case-insensitively
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;
@@ -74,13 +99,9 @@ class ContentOpfParser final : public Print {
   std::string textReferenceHref;
   std::vector<std::string> cssFiles;  // CSS stylesheet paths
 
-  explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
-                            BookMetadataCache* cache, const bool metadataOnly = false)
-      : cachePath(cachePath),
-        baseContentPath(baseContentPath),
-        remainingSize(xmlSize),
-        cache(cache),
-        metadataOnly(metadataOnly) {}
+  // Out of line so ExtendedState is complete wherever `ext` may be destroyed.
+  explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, size_t xmlSize,
+                            BookMetadataCache* cache, bool metadataOnly = false);
   ~ContentOpfParser() override;
 
   bool setup();

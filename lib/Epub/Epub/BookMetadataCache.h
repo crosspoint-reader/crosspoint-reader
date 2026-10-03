@@ -19,6 +19,16 @@ class BookMetadataCache {
     std::string textReferenceHref;
   };
 
+  // Library-facing metadata, stored in book.bin after BookMetadata. load() skips
+  // it so an open book holds none of it; read it with loadExtendedMetadata().
+  struct ExtendedMetadata {
+    std::string titleSort;
+    std::string authorSort;
+    std::string series;
+    std::string seriesIndex;  // as written ("3", "2.5"), trailing ".0" dropped
+    std::string tags;         // newline-separated
+  };
+
   struct SpineEntry {
     std::string href;
     uint32_t cumulativeSize;
@@ -48,6 +58,7 @@ class BookMetadataCache {
  private:
   std::string cachePath;
   uint32_t lutOffset;
+  uint32_t extendedMetadataOffset = 0;
   uint16_t spineCount;
   uint16_t tocCount;
   bool loaded;
@@ -112,11 +123,14 @@ class BookMetadataCache {
   bool endWrite();
   bool cleanupTmpFiles() const;
 
-  // Post-processing to update mappings and sizes
-  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata);
+  // Post-processing to update mappings and sizes. Formats without sort/series metadata
+  // (e.g. TXT) omit `extended`; empty sort keys fall back to title/author in the library.
+  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata, const ExtendedMetadata& extended = {});
 
   // Reading phase (read mode)
   bool load();
+  // Requires a successful load().
+  bool loadExtendedMetadata(ExtendedMetadata& out);
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
   // Cumulative byte size up to and including the given spine item (0 if out of range
