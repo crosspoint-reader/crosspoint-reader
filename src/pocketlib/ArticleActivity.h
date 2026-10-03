@@ -64,6 +64,7 @@ class ArticleActivity final : public Activity {
   bool loadAttempted_ = false;
   std::string title_;
   std::string error_;
+  std::string memory_;  // free memory when error_ was set
 
   // Layout. The parser keeps a reference to xhtmlPath_.
   std::string xhtmlPath_;

@@ -205,3 +205,19 @@ containing "Forbidden City"; see the session summary for the download.
 9. Note anything wrong: junk text, missing sections, freezes, crashes.
 
 **Next**: owner runs the checklist; then Milestone 4 (live search).
+
+## 2026-10-03 — First device test of M3: "out of memory" after one article
+
+- Owner: Random article worked once; every later article said out of memory.
+- Cause: the ZIM cluster cache decoded a new cluster *before* evicting the
+  oldest, so with the cache full the device needed room for one ~2 MB
+  cluster more than the cache holds, on top of PSRAM's other users. Once the
+  first article's cluster was cached, no second cluster fit, and it never
+  got evicted because the eviction came after the failed decode.
+- Fix (`ZimArchive::loadCluster`): evict first; if decoding still runs out
+  of memory, drop every cached cluster and retry once. Regression test
+  `Zim.NewClusterFitsWhereOneClusterFits` gives the allocator a budget of
+  exactly one decode and reads two articles in alternating clusters with
+  cache sizes 1–3: it fails on the old code and passes now (46/46, ASan).
+- The article error screen now shows free/largest PSRAM and internal RAM,
+  and each open logs them, so a future out-of-memory says which pool ran out.

@@ -17,9 +17,12 @@
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalMemory.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <ZimHtml.h>
+
+#include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -228,6 +231,10 @@ bool ArticleActivity::load() {
   }
   t.firstPageMs = millis() - t3;
   t.valid = true;
+  LOG_INF("PLIB", "PSRAM free %u KB (largest %u KB), internal free %u KB",
+          static_cast<unsigned>(HalMemory::getPsramHeap().freeBytes / 1024),
+          static_cast<unsigned>(HalMemory::getPsramHeap().largestBlockBytes / 1024),
+          static_cast<unsigned>(HalMemory::getInternalHeap().freeBytes / 1024));
   LOG_INF("PLIB", "open \"%s\": lookup %u ms, read %u ms (%u B, cluster %s), clean %u ms (%u B), first page %u ms",
           title_.c_str(), static_cast<unsigned>(t.lookupMs), static_cast<unsigned>(t.readMs),
           static_cast<unsigned>(t.htmlBytes), t.clusterCached ? "cached" : "read", static_cast<unsigned>(t.cleanMs),
@@ -254,7 +261,7 @@ bool ArticleActivity::startLayout() {
       },
       /*embeddedStyle=*/false, kNoBase, kNoBase, /*imageRendering=*/1);
   if (!parser_) {
-    fail("Out of memory");
+    fail("Out of memory for the layout engine");
     return false;
   }
   parser_->setTextSpacing(spec.characterSpacing, spec.wordSpacingPercent);
@@ -333,10 +340,20 @@ void ArticleActivity::showPage(int index) {
 }
 
 void ArticleActivity::fail(const char* message) {
+  // Free memory on the error screen: an out-of-memory report then says which
+  // pool ran out (PSRAM holds clusters and article text, internal RAM the
+  // layout's small allocations).
+  const auto psram = HalMemory::getPsramHeap();
+  const auto internal = HalMemory::getInternalHeap();
+  char mem[96];
+  snprintf(mem, sizeof(mem), "Free/largest: PSRAM %u/%u KB, RAM %u/%u KB",
+           static_cast<unsigned>(psram.freeBytes / 1024), static_cast<unsigned>(psram.largestBlockBytes / 1024),
+           static_cast<unsigned>(internal.freeBytes / 1024), static_cast<unsigned>(internal.largestBlockBytes / 1024));
   error_ = message ? message : "Error";
+  memory_ = mem;
   state_ = State::Failed;
   building_ = false;
-  LOG_ERR("PLIB", "article %u: %s", static_cast<unsigned>(entryIndex_), error_.c_str());
+  LOG_ERR("PLIB", "article %u: %s. %s", static_cast<unsigned>(entryIndex_), error_.c_str(), memory_.c_str());
 }
 
 void ArticleActivity::renderStatusBar() const {
@@ -356,6 +373,7 @@ void ArticleActivity::render(RenderLock&&) {
     } else {
       renderer.drawCenteredText(UI_12_FONT_ID, y, "Could not open this article", true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(UI_10_FONT_ID, y + 80, error_.c_str());
+      renderer.drawCenteredText(UI_10_FONT_ID, y + 120, memory_.c_str());
     }
     if (!title_.empty()) renderer.drawCenteredText(UI_10_FONT_ID, y + 40, title_.c_str());
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);

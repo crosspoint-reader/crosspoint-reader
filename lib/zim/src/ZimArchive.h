@@ -223,6 +223,7 @@ class Archive {
   Error loadCluster(uint32_t cluster, const ClusterInfo& info, CachedCluster*& out);
   Error decompress(const ClusterInfo& info, uint8_t*& data, size_t& size);
   void releaseCache();
+  void evictOldestCluster();
   int comparePathAt(uint32_t index, char ns, std::string_view path, Entry& scratch, Error& err);
 
   std::unique_ptr<Source> source_;
