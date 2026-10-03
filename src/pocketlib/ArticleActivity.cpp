@@ -256,8 +256,11 @@ bool ArticleActivity::load() {
   t.lookupMs = t1 - t0;
 
   const uint32_t missesBefore = archive->cacheStats().misses;
-  std::string html;
-  err = archive->read(entry, html);
+  // Straight from the decoded cluster when it is cached (no copy of the
+  // article: a large one beside two ~2 MiB clusters can exhaust PSRAM).
+  std::string storage;
+  std::string_view html;
+  err = archive->readView(entry, storage, html);
   if (err != zim::Error::None) {
     fail(zim::errorName(err));
     return false;
@@ -289,7 +292,18 @@ bool ArticleActivity::load() {
     }
     t.cleanBytes = static_cast<uint32_t>(stats.outputBytes);
   }
-  std::string().swap(html);  // give the PSRAM back before layout
+  html = {};
+  std::string().swap(storage);  // give the PSRAM back before layout
+  // Layout needs room of its own. With little PSRAM left (seen on the
+  // device: 816 KB free in 431 KB pieces after a 33-page article), drop the
+  // decoded clusters too: Back then decodes again instead of the firmware
+  // running out of memory mid-layout.
+  constexpr size_t kLayoutReserve = 1536 * 1024;
+  if (HalMemory::getPsramHeap().largestBlockBytes < kLayoutReserve) {
+    LOG_INF("PLIB", "PSRAM low (largest %u KB): dropping cached clusters",
+            static_cast<unsigned>(HalMemory::getPsramHeap().largestBlockBytes / 1024));
+    archive->clearCache();
+  }
   const uint32_t t3 = millis();
   t.cleanMs = t3 - t2;
 

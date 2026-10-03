@@ -206,11 +206,11 @@ void Library::scanFolders() {
 
 zim::Archive* Library::open(size_t i, zim::Error* error) {
   zim::Archive* archive = ensureOpen(i, error);
-  if (!archive || focus_ == i) return archive;
-  // Only the collection being read keeps decoded clusters in PSRAM.
-  for (size_t k = 0; k < slots_.size(); k++) {
-    if (k != i && slots_[k].archive) slots_[k].archive->clearCache();
-  }
+  if (!archive) return archive;
+  // Only the collection being read keeps decoded clusters in PSRAM. Every
+  // time, not only when the focus moves: a search may have decoded listing
+  // clusters in the others since.
+  dropOtherCaches(i);
   focus_ = i;
   return archive;
 }
@@ -289,6 +289,12 @@ zim::Archive* Library::ensureOpen(size_t i, zim::Error* error) {
   return slot.archive.get();
 }
 
+void Library::dropOtherCaches(size_t keep) {
+  for (size_t k = 0; k < slots_.size(); k++) {
+    if (k != keep && slots_[k].archive) slots_[k].archive->clearCache();
+  }
+}
+
 zim::TitleIndex* Library::titleIndex(size_t i) {
   if (i >= slots_.size()) return nullptr;
   const Slot& slot = slots_[i];
@@ -320,6 +326,7 @@ bool Library::search(const std::vector<size_t>& scope, std::string_view query, s
   LOG_DBG("PLIB", "search \"%.*s\" in %u: %u hits, %u ms", static_cast<int>(query.size()), query.data(),
           static_cast<unsigned>(sources.size()), static_cast<unsigned>(hits.size()),
           static_cast<unsigned>(lastSearchMs));
+  dropOtherCaches(focus_);  // collections without an index may have decoded title listings
   out.reserve(hits.size());
   for (auto& h : hits) out.push_back({owners[h.source], h.hit.entry, std::move(h.hit.title), h.hit.exact});
   return err == zim::Error::None;

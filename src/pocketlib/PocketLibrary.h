@@ -107,6 +107,7 @@ class Library {
   };
   // Opens collections()[i] without changing the focus.
   zim::Archive* ensureOpen(size_t i, zim::Error* error);
+  void dropOtherCaches(size_t keep);  // keep = SIZE_MAX drops every cache
 
   std::vector<Collection> collections_;
   std::string loadError_;

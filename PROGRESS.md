@@ -363,3 +363,22 @@ containing "Forbidden City"; see the session summary for the download.
     (MedlinePlus and MDWiki behind one search, browsable by body system).
 - Fewer clean refreshes: keep them for list and grid screens, not the
   keyboard or articles.
+
+## 2026-10-03 — Crash opening "Giant panda": out of PSRAM
+
+- crash_report.txt: after "Josephoartigasia" (108 KB HTML, 33 pages) PSRAM
+  was down to 816 KB free (largest piece 431 KB); opening "Giant panda" then
+  aborted. Built without exceptions, a failed std::string allocation aborts.
+- Fixes: articles are cleaned straight from the decoded cluster
+  (`Archive::readView`, no copy); `readBlob` checks for room and returns
+  NoMemory instead of aborting; other collections drop their decoded
+  clusters on every article open and after every search; with under 1.5 MB
+  of PSRAM in one piece after cleaning, the article's own clusters are
+  dropped before layout. Host tests: ReadViewMatchesRead,
+  CopyThatDoesNotFitIsNoMemory (72 pass).
+- Open question: what held the other ~4 MB between "PANDA experiment"
+  (4857 KB free) and "Josephoartigasia" (816 KB free). Watch the
+  "PSRAM free" log line across several articles.
+- Measured on the device (same log): article read 425–464 ms when its
+  cluster is decoded, 2 ms when cached; clean 34–111 ms; first page
+  185–1018 ms; a 33-page article lays out in 3.4 s in the background.
