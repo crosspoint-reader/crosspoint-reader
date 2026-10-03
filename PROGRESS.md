@@ -126,3 +126,5 @@ containing "Forbidden City"; see the session summary for the download.
   has no nopic edition, so the 2.3 GB maxi was used. Total 74.8 GB; 22.1 GB
   still to download; 439.6 GB free on the SSK drive. The index estimate in
   `plan` was corrected from 0.3% to 0.5% after the real Wikipedia index.
+- Card is 256 GB (about 238 GB usable). Owner added Project Gutenberg
+  (`gutenberg_en_all`) and declined Wikipedia with pictures.

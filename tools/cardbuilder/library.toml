@@ -72,5 +72,11 @@ key = "wikibooks"
 name = "wikibooks_en_all"
 flavour = ["nopic"]
 
+[[collection]]
+key = "gutenberg"
+name = "gutenberg_en_all"
+flavour = [""]
+note = "Project Gutenberg, ~70,000 public-domain books. Kiwix ships it one way only (covers included)."
+
 # Standard Ebooks are EPUBs, not ZIMs; CrossPoint already reads EPUB. They get
 # their own step later in M2 (their bulk downloads need checking first).
