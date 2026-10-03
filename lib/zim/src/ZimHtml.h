@@ -61,13 +61,16 @@ struct HtmlHeading {
 std::string headingAnchor(size_t index);
 
 // An image the cleaner kept: written as <img src="/pl-img/<n>.png"
-// width=.. height=..>, where n is its position in HtmlCleanOptions::imageList.
-// The reader makes that PNG from `src` (the article's own reference to the
-// WebP in the archive) when the image's page is first drawn.
+// width=.. height=..> (<n>.jpg for a JPEG), where n is its position in
+// HtmlCleanOptions::imageList. The reader makes that file from `src` (the
+// article's own reference to the picture in the archive) when the image's
+// page is first drawn: a WebP is converted, a JPEG or PNG copied.
+enum class ImageFormat : uint8_t { Unknown, WebP, Png, Jpeg };
 struct HtmlImage {
   std::string src;
   int width = 0;
   int height = 0;
+  ImageFormat format = ImageFormat::Unknown;  // from the src's extension
 };
 enum class HtmlImages : uint8_t {
   None,  // drop every image (and its frame and caption)

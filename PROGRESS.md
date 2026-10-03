@@ -495,3 +495,19 @@ containing "Forbidden City"; see the session summary for the download.
   rebuilds once on the first boot after the update.
 - Device checklist: Library sorted by title: The Road between Rabbit and
   Rant, under R; the letter jump shows R for it.
+
+## 2026-10-03 — Owner's first look at M6 on the device: fixes
+
+- Icons (Library tiles, the article toolbar, Home's search tab) were on their
+  side: ours are generated upright, and CrossPoint's drawIcon expects icons
+  stored a quarter turn round. Drawn with `drawUprightIcon` now.
+- The screen flashed on every tap: the ghost-text fix gave every screen change
+  a half refresh. Now on every return to Home and every fourth other change.
+- No pictures in Wikivoyage: the cleaner took only WebP pictures. It now takes
+  JPEG and PNG too (a JPEG goes to the reader's JPEG decoder as it is, a PNG to
+  its PNG decoder; WebP is still converted), and a picture with no size on its
+  tag uses data-file-width/height. Not yet confirmed on the owner's Wikivoyage:
+  the owner is checking what its pages hold (zimcat).
+- Contents and Outline say "Page 12" and "3 pages long, from page 12" instead
+  of "p. 12".
+- 91 host tests pass.

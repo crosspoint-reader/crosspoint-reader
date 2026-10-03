@@ -30,6 +30,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "icons/UprightIcon.h"
 #include "icons/libraryIcons.h"
 
 namespace fui = freeink::ui;
@@ -239,7 +240,7 @@ void ShelfActivity::drawFooter() {
     const auto lines = renderer.wrappedText(UI_12_FONT_ID, tiles_[i].label.c_str(), tileWidth - 20, 2);
     const int blockHeight = kIcon + 10 + static_cast<int>(lines.size()) * lineHeight;
     int ty = y + (tileHeight_ - blockHeight) / 2;
-    renderer.drawIcon(tiles_[i].icon->bits, x + (tileWidth - kIcon) / 2, ty, kIcon);
+    pocketlib::drawUprightIcon(renderer, tiles_[i].icon->bits, x + (tileWidth - kIcon) / 2, ty, kIcon);
     ty += kIcon + 10;
     const bool enabled = items_[i].enabled;
     for (const auto& line : lines) {

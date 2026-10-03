@@ -39,6 +39,7 @@
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
+#include "icons/UprightIcon.h"
 #include "icons/libraryIcons.h"
 
 namespace {
@@ -681,7 +682,7 @@ void ArticleActivity::openContents() {
     RenderLock lock(*this);
     const int current = currentSection();
     labels.emplace_back("Beginning");
-    subtitles.emplace_back("p. 1");
+    subtitles.emplace_back("Page 1");
     headingOf.push_back(-1);
     for (size_t i = 0; i < headings_.size(); i++) {
       const auto& h = headings_[i];
@@ -691,7 +692,7 @@ void ArticleActivity::openContents() {
       labels.push_back(std::string(static_cast<size_t>(h.level - 2) * 3, ' ') + (isHere ? "\xE2\x80\xA2 " : "") +
                        h.text);
       const int page = i < headingPages_.size() ? headingPages_[i] : -1;
-      subtitles.push_back(page >= 0 ? "p. " + std::to_string(page + 1) + (isHere ? " \xC2\xB7 reading" : "")
+      subtitles.push_back(page >= 0 ? "Page " + std::to_string(page + 1) + (isHere ? " \xC2\xB7 you are here" : "")
                                     : std::string());
       headingOf.push_back(static_cast<int>(i));
     }
@@ -748,10 +749,12 @@ void ArticleActivity::openOutline() {
             break;
           }
         }
-        sub = "p. " + std::to_string(page + 1);
         if (end > page) {
           const int pages = end - page;
-          sub += " \xC2\xB7 " + std::to_string(pages) + (pages == 1 ? " page" : " pages");
+          sub = std::to_string(pages) + (pages == 1 ? " page long, from page " : " pages long, from page ") +
+                std::to_string(page + 1);
+        } else {
+          sub = "From page " + std::to_string(page + 1);
         }
       }
       subtitles.push_back(std::move(sub));
@@ -816,16 +819,34 @@ bool ArticleActivity::extractImage(void* ctx, const char* src, const char* dest)
   std::string storage;
   std::string_view bytes;
   if (archive->readView(e, storage, bytes) != zim::Error::None) return false;
+  const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
+  const bool isWebp = bytes.size() >= 12 && memcmp(data, "RIFF", 4) == 0 && memcmp(data + 8, "WEBP", 4) == 0;
+  const bool isPng = bytes.size() >= 8 && memcmp(data, "\x89PNG", 4) == 0;
+  const bool isJpeg = bytes.size() >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF;
+  const bool wantJpeg = strlen(dest) > 4 && strcmp(dest + strlen(dest) - 4, ".jpg") == 0;
   std::vector<uint8_t> png;
   zim::ImageSize size;
-  if (!zim::webpToGrayPng(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), self->viewportWidth_,
-                          self->viewportHeight_ * 2 / 3, png, &size)) {
-    LOG_ERR("PLIB", "image %u: not a WebP the decoder reads", static_cast<unsigned>(n));
+  const uint8_t* write = data;
+  size_t writeSize = bytes.size();
+  if (isWebp && !wantJpeg) {
+    // Kiwix's WebP: decoded, scaled and turned grey here (the reader has no
+    // WebP decoder).
+    if (!zim::webpToGrayPng(data, bytes.size(), self->viewportWidth_, self->viewportHeight_ * 2 / 3, png, &size)) {
+      LOG_ERR("PLIB", "image %u: not a WebP the decoder reads", static_cast<unsigned>(n));
+      return false;
+    }
+    write = png.data();
+    writeSize = png.size();
+  } else if (!(wantJpeg ? isJpeg : isPng)) {
+    // A JPEG or PNG goes to the reader's own decoder as it is, if it is what
+    // its name says.
+    LOG_ERR("PLIB", "image %u (%s): contents do not match its name", static_cast<unsigned>(n),
+            self->images_[n].src.c_str());
     return false;
   }
   HalFile out;
   if (!Storage.openFileForWrite("PLIB", dest, out)) return false;
-  const bool ok = out.write(png.data(), png.size()) == png.size();
+  const bool ok = out.write(write, writeSize) == writeSize;
   out.flush();
   out.close();
   LOG_INF("PLIB", "image %u: %ux%u in %u ms", static_cast<unsigned>(n), static_cast<unsigned>(size.width),
@@ -948,7 +969,7 @@ void ArticleActivity::drawToolbar() const {
   const int labelHeight = renderer.getLineHeight(SMALL_FONT_ID);
   for (int i = 0; i < kToolbarItems; i++) {
     const int cx = i * cell + cell / 2;
-    renderer.drawIcon(icons[i], cx - 16, 10, 32);
+    pocketlib::drawUprightIcon(renderer, icons[i], cx - 16, 10, 32);
     const int tw = renderer.getTextWidth(SMALL_FONT_ID, kToolbarLabels[i]);
     renderer.drawText(SMALL_FONT_ID, cx - tw / 2, kToolbarHeight - labelHeight - 8, kToolbarLabels[i], true);
   }

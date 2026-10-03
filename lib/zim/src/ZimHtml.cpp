@@ -811,22 +811,45 @@ class Cleaner {
     return false;
   }
 
-  // An <img> while pictures are wanted: a WebP of a useful size becomes
-  // <img src="/pl-img/N.png" width height>; anything else is dropped.
+  // The picture format an <img src> names, by its extension: WebP (Kiwix's
+  // Wikipedia), JPEG or PNG (other collections, e.g. Wikivoyage). Anything
+  // else (SVG, GIF) is not one the reader can show.
+  static ImageFormat imageFormat(std::string_view src) {
+    const size_t cut = src.find_first_of("?#");
+    if (cut != std::string_view::npos) src = src.substr(0, cut);
+    const size_t dot = src.rfind('.');
+    if (dot == std::string_view::npos) return ImageFormat::Unknown;
+    std::string ext(src.substr(dot + 1));
+    for (char& c : ext) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    if (ext == "webp") return ImageFormat::WebP;
+    if (ext == "png") return ImageFormat::Png;
+    if (ext == "jpg" || ext == "jpeg") return ImageFormat::Jpeg;
+    return ImageFormat::Unknown;
+  }
+
+  // An <img> while pictures are wanted: a WebP, JPEG or PNG of a useful size
+  // becomes <img src="/pl-img/N.png" width height> (N.jpg for a JPEG, which
+  // the reader shows as it is); anything else is dropped.
   void keepImage(const Tag& tag) {
     if (!wantImages() || classDropped(tag.attr("class"))) return;
     const std::string_view src = tag.attr("src");
-    const int w = atoi(std::string(tag.attr("width")).c_str());
-    const int h = atoi(std::string(tag.attr("height")).c_str());
-    const bool webp = src.size() > 5 && src.substr(src.size() - 5) == ".webp";
-    if (!webp || w < 60 || h < 40) return;
+    int w = atoi(std::string(tag.attr("width")).c_str());
+    int h = atoi(std::string(tag.attr("height")).c_str());
+    if (w <= 0 || h <= 0) {
+      // No size on the tag: the original's, which has the same shape.
+      w = atoi(std::string(tag.attr("data-file-width")).c_str());
+      h = atoi(std::string(tag.attr("data-file-height")).c_str());
+    }
+    const ImageFormat format = imageFormat(src);
+    if (format == ImageFormat::Unknown || w < 60 || h < 40) return;
     const size_t n = options_.imageList->size();
-    options_.imageList->push_back({std::string(src), w, h});
+    options_.imageList->push_back({std::string(src), w, h, format});
     if (options_.images == HtmlImages::Lead) leadImageTaken_ = true;
     out_ += "<img src=\"";
     out_ += kArticleImagePrefix;
     out_ += std::to_string(n);
-    out_ += ".png\" width=\"" + std::to_string(w) + "\" height=\"" + std::to_string(h) + "\"";
+    out_ += format == ImageFormat::Jpeg ? ".jpg" : ".png";
+    out_ += "\" width=\"" + std::to_string(w) + "\" height=\"" + std::to_string(h) + "\"";
     if (tag.hasAttr("alt")) {
       out_ += " alt=\"";
       appendText(out_, tag.attr("alt"));

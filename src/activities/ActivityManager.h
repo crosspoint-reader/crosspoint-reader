@@ -55,6 +55,7 @@ class ActivityManager {
   void exitActivity(const RenderLock& lock);
 #ifdef POCKET_LIBRARY
   void cleanNextScreen();
+  uint8_t screensSinceClean_ = 0;
 
  public:
   // Power button set to Search: Pocket Library search over whatever is open

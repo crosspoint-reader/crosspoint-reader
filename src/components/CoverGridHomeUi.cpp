@@ -18,6 +18,7 @@
 #include "icons/transfer.h"
 #ifdef POCKET_LIBRARY
 #include "icons/search32.h"
+#include "pocketlib/icons/UprightIcon.h"
 #endif
 #include "util/BookProgress.h"
 
@@ -295,6 +296,13 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
     const auto& self = *static_cast<CoverGridHomeUi*>(user);
     const int index = tab.value - static_cast<int>(self.books->size());
     const int icon = !self.hasOpds && index >= 2 ? index + 1 : index;
+#ifdef POCKET_LIBRARY
+    // The search icon is a freeink (upright) one; drawIcon would turn it on its side.
+    if (icon == 5) {
+      pocketlib::drawUprightIcon(self.renderer, ICONS[icon], iconRect.x, iconRect.y, iconRect.width);
+      return true;
+    }
+#endif
     self.renderer.drawIcon(ICONS[icon], iconRect.x, iconRect.y, iconRect.width);
     return true;
   };

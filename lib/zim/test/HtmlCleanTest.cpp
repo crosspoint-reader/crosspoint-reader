@@ -365,6 +365,33 @@ TEST(HtmlClean, LeadImageOnly) {
   EXPECT_EQ(out.find("Third caption"), std::string::npos);
 }
 
+TEST(HtmlClean, JpegAndPngPicturesToo) {
+  // Collections Kiwix doesn't convert to WebP (Wikivoyage): a JPEG keeps its
+  // .jpg (the reader shows it as it is), a PNG its .png; a tag without a size
+  // borrows the original's; an SVG or GIF stays out.
+  const char* html =
+      "<h1>Paris</h1><p>Lead.</p><h2>See</h2>"
+      "<figure><img src=\"../I/Louvre.JPG\" width=\"300\" height=\"200\"><figcaption>Louvre</figcaption></figure>"
+      "<figure><img src=\"../I/Map.png?x=1\" data-file-width=\"1200\" data-file-height=\"900\"></figure>"
+      "<figure><img src=\"../I/Logo.svg\" width=\"300\" height=\"200\"></figure>"
+      "<figure><img src=\"../I/Anim.gif\" width=\"300\" height=\"200\"></figure>";
+  zim::StringHtmlSink sink;
+  std::vector<zim::HtmlImage> images;
+  zim::HtmlCleanOptions o;
+  o.images = zim::HtmlImages::All;
+  o.imageList = &images;
+  ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  EXPECT_TRUE(parseXml(sink.out).ok) << sink.out;
+  ASSERT_EQ(images.size(), 2u) << sink.out;
+  EXPECT_EQ(images[0].format, zim::ImageFormat::Jpeg);
+  EXPECT_EQ(images[1].format, zim::ImageFormat::Png);
+  EXPECT_EQ(images[1].width, 1200);
+  EXPECT_EQ(images[1].height, 900);
+  EXPECT_NE(sink.out.find("/pl-img/0.jpg\" width=\"300\""), std::string::npos) << sink.out;
+  EXPECT_NE(sink.out.find("/pl-img/1.png\" width=\"1200\""), std::string::npos) << sink.out;
+  EXPECT_NE(sink.out.find("Louvre"), std::string::npos);
+}
+
 TEST(HtmlClean, AllImages) {
   std::vector<zim::HtmlImage> images;
   const std::string out = cleanPictures(zim::HtmlImages::All, images);
