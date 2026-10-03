@@ -48,6 +48,22 @@ struct SearchStats {
   uint32_t recordsRead = 0;
 };
 
+// The two halves of an indexed search, for searching several archives at
+// once: rank each archive's candidates (index pages only, no directory reads),
+// merge them, then read entries only for the results shown.
+struct SearchCandidate {
+  uint32_t entry = 0;
+  uint8_t score = 0;
+  bool exact = false;
+};
+// Up to kSearchWindow records starting with `query`, ranked (exact, score, key).
+Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::string_view query,
+                       std::vector<SearchCandidate>& out);
+// Reads `c`'s entry into a hit unless its article is in `seenArticles`
+// (which it then joins). Returns false for a duplicate.
+Error hitFromCandidate(Archive& archive, const SearchCandidate& c, std::vector<uint32_t>& seenArticles, SearchHit& out,
+                       bool& added);
+
 // `index` may be null; `cursor` must be non-null when `index` is (one 4 KB
 // leaf page, reused across keystrokes). Directory reads: one per result, plus
 // one per duplicate (a redirect to an article already listed) skipped.

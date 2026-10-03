@@ -226,6 +226,13 @@ class GfxRenderer {
     promotedRefreshPending_ = true;
     promotedRefresh_ = mode;
   }
+#ifdef POCKET_LIBRARY
+  // promoteNextRefresh that never weakens a deeper refresh already promoted
+  // (FULL < HALF < FAST in RefreshMode order).
+  void promoteNextRefreshAtLeast(const HalDisplay::RefreshMode mode) const {
+    if (!promotedRefreshPending_ || mode < promotedRefresh_) promoteNextRefresh(mode);
+  }
+#endif
   // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
   // grayscale strip rendering) can overlap the panel's refresh time. The
   // framebuffer must stay untouched until waitRefreshComplete(). Falls back to

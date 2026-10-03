@@ -158,6 +158,9 @@ void ActivityManager::loop() {
       } else {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
+#ifdef POCKET_LIBRARY
+        cleanNextScreen();
+#endif
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
         // Handle result if necessary
         if (currentActivity->resultHandler) {
@@ -201,6 +204,9 @@ void ActivityManager::loop() {
       }
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
+#ifdef POCKET_LIBRARY
+      cleanNextScreen();
+#endif
 
       lock.unlock();  // onEnter may acquire its own lock
       currentActivity->onEnter();
@@ -218,6 +224,17 @@ void ActivityManager::loop() {
     }
   }
 }
+
+#ifdef POCKET_LIBRARY
+// Screens redraw with the panel's fast waveform, which leaves a faint trace of
+// the screen before; the dithered gray selection bar makes it plain. The first
+// draw after a screen change gets a half refresh instead. Readers keep their
+// own refresh choices, and the control center opens over the screen as is.
+void ActivityManager::cleanNextScreen() {
+  if (!currentActivity || currentActivity->isReaderActivity() || currentActivity->name == "FrontlightPanel") return;
+  renderer.promoteNextRefreshAtLeast(HalDisplay::HALF_REFRESH);
+}
+#endif
 
 void ActivityManager::exitActivity(const RenderLock& lock) {
   // Note: lock must be held by the caller

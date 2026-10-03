@@ -43,6 +43,9 @@ class ActivityManager {
   std::unique_ptr<Activity> currentActivity;
 
   void exitActivity(const RenderLock& lock);
+#ifdef POCKET_LIBRARY
+  void cleanNextScreen();
+#endif
 
   // Pending activity to be launched on next loop iteration
   std::unique_ptr<Activity> pendingActivity;

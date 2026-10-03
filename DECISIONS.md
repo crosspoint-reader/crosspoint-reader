@@ -68,6 +68,7 @@ Release tags are what we rebase onto.
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
 | `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
 | `freeink-sdk` (submodule, patched at build time) | `SdmmcBlockDevice.{h,cpp}`: 40 MHz with 20 MHz fallback, 32-sector transfers, all behind `POCKET_LIBRARY_SD_FAST` | SD speed |
+| `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: the first draw after a screen change (push, pop, replace) is promoted to a half refresh, never weakening a deeper one already promoted; readers and the control center are left alone | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
 
 ## 2026-10-01 — Licensing layout
 

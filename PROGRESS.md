@@ -293,3 +293,21 @@ containing "Forbidden City"; see the session summary for the download.
   popularity ranking (needs the indexes rebuilt on the Mac); then Wiktionary
   lookup, CJK font, Standard Ebooks. Open a pull request merging M3–M5 into
   `pocket-library`.
+
+## 2026-10-03 — PR #1 merged; ghost text fix
+
+- PR #1 (M3–M5, SD speed) merged into `pocket-library`.
+- Owner: faint text from the previous screen shows inside the gray selection
+  bar, on every return to Home too. Cause: list screens draw with the fast
+  waveform, which leaves a trace of the screen before; the bar is a dither, so
+  the trace breaks its pattern. Stock CrossPoint behaves the same (seen on
+  Diagnostics). Fix: one half refresh on the first draw after any screen
+  change (a brief flash); moving the selection stays fast. Workaround on
+  older builds: control center → Force refresh, or Settings → Controls →
+  Short power button → Force refresh.
+- Also in this build: ranked search (works with the current cards; results
+  rank by popularity once the indexes are rebuilt as v2).
+- Device checklist: Home → Library → a collection → Back → Home: no ghost
+  text in the selection bars; Settings → About → Diagnostics → Back: same;
+  turning article pages is unchanged (no extra flashes); control center's
+  Force refresh still does its full refresh.
