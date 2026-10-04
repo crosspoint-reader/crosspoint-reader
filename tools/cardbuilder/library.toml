@@ -15,7 +15,7 @@ staging = "/Volumes/SSK Drive"   # downloads and indexes live here
 [[collection]]
 key = "wikipedia"
 name = "wikipedia_en_all"
-flavour = ["nopic"]
+flavour = ["maxi", "nopic"]   # with pictures (owner, 2026-10-04: the card has room)
 
 [[collection]]
 key = "wiktionary"
