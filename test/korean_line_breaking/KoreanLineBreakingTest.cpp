@@ -21,7 +21,7 @@ std::vector<Line> layout(const std::vector<const char*>& words, const bool hyphe
   BlockStyle style;
   style.alignment = CssTextAlign::Justify;
   style.textIndentDefined = true;
-  ParsedText text(false, hyphenation, false, style);
+  ParsedText text(hyphenation, false, style, 0);
   for (const char* word : words) text.addWord(word, EpdFontFamily::REGULAR);
   std::vector<Line> lines;
   text.layoutAndExtractLines(renderer, 0, width, [&](std::unique_ptr<TextBlock> block, auto) {

@@ -249,8 +249,11 @@ void BmpViewerActivity::doSetSleepCover() {
     if (!buffer) {
       LOG_ERR("BMP", "OOM: sleep cover copy buffer");
     } else {
+      // Copy beside the target and swap in only a complete image, so a failed
+      // copy keeps the previous sleep cover instead of a truncated one.
+      const std::string tmp = std::string(destination) + ".tmp";
       HalFile inFile, outFile;
-      if (Storage.openFileForRead("BMP", filePath, inFile) && Storage.openFileForWrite("BMP", destination, outFile)) {
+      if (Storage.openFileForRead("BMP", filePath, inFile) && Storage.openFileForWrite("BMP", tmp, outFile)) {
         int bytesRead;
         success = true;
         while ((bytesRead = inFile.read(buffer.get(), COPY_BUFFER_SIZE)) > 0) {
@@ -261,6 +264,8 @@ void BmpViewerActivity::doSetSleepCover() {
         }
         if (bytesRead < 0) success = false;
         outFile.close();
+        success = success && Storage.replaceFile(tmp.c_str(), destination);
+        if (!success) Storage.remove(tmp.c_str());
       }
     }
   }

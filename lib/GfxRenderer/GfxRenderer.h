@@ -52,6 +52,7 @@ class GfxRenderer {
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
+  uint32_t frameBufferLoans = 0;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
   uint16_t panelWidthBytes = HalDisplay::DISPLAY_WIDTH_BYTES;
@@ -414,6 +415,9 @@ class GfxRenderer {
   void releaseFrameBufferForBuild();
   bool restoreFrameBufferAfterBuild();
   bool hasFrameBuffer() const { return frameBuffer != nullptr; }
+  // Bumped by every loan. A loan returns the buffer white, so a caller that ran code which may lend
+  // (e.g. a background chapter-build step) compares this to know the page it drew is gone.
+  uint32_t frameBufferLoanCount() const { return frameBufferLoans; }
 
   // RAII form of the loan above, for blocking build regions with early-return
   // error paths: restores on scope exit (or explicitly via end()). Display the
