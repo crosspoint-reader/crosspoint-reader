@@ -25,7 +25,7 @@
 #include "plugins/PluginCatalogActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
-#include "settings/SettingsActivity.h"
+#include "settings/SettingsListActivity.h"
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -117,7 +117,7 @@ void ActivityManager::loop() {
     // (no status bar there to tap). Touch boards only, like the swipe itself.
     bool statusBarTap = false;
     if (mappedInput.hasTouch() && (currentActivity->name == "Home" || currentActivity->name == "FileBrowser" ||
-                                   currentActivity->name == "Settings" || currentActivity->name == "SettingsSection" ||
+                                   currentActivity->name == "Settings" || currentActivity->name == "SettingsList" ||
                                    currentActivity->name == "NetworkModeSelection")) {
       int tx = 0;
       int ty = 0;
@@ -270,7 +270,7 @@ void ActivityManager::goToUsbDrive() {
 }
 
 void ActivityManager::goToSettings(const SettingsSection openSection) {
-  replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput, openSection));
+  replaceActivity(std::make_unique<SettingsListActivity>(renderer, mappedInput, openSection));
 }
 
 void ActivityManager::goToFileBrowser(std::string path) {
@@ -344,7 +344,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == "Settings" || activityName == "SettingsSection") {
+    } else if (activityName == "Settings" || activityName == "SettingsList") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }

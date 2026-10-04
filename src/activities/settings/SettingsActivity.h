@@ -10,6 +10,7 @@
 #include "CrossPointSettings.h"
 #include "SettingsSection.h"
 #include "activities/UiListActivity.h"
+#include "components/OptionPopup.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
@@ -173,33 +174,46 @@ struct SettingInfo {
   }
 };
 
-// Settings root: one row per SettingsSection, each opening a
-// SettingsSectionActivity with that group's settings.
+using SettingsBySection = std::array<std::vector<SettingInfo>, SETTINGS_SECTION_COUNT>;
+
+// Fills every section with its on-device rows: the shared settings list,
+// filtered for this board, plus device-only action rows.
+void buildSettingsSections(SettingsBySection& out);
+
+// The rows of one SettingsSection; activating a row toggles/cycles it, opens
+// its option popup, or launches its sub-screen.
 class SettingsActivity final : public UiListActivity {
-  // Section opened on the first loop pass (Count = none), e.g. returning to
-  // Network after the Wi-Fi rows' silent restart.
-  SettingsSection pendingSection;
+  const SettingsSection section;
+  std::vector<SettingInfo> settings;
 
-  // Comma-joined setting names per section; shown as the subtitle when they
-  // fit in two lines, otherwise the section's summary string is.
-  std::array<std::string, SETTINGS_SECTION_COUNT> nameLists_;
-  std::array<freeink::ui::ListItem, SETTINGS_SECTION_COUNT> rowItems_{};
-  int16_t subtitleWidth_ = -1;  // width the current subtitle choice was measured at
+  bool preserveQuickResumeTimeoutOn = false;
+  bool quickResumeTimeoutAutoEnabled = false;
 
-  void rebuildRows();
-  void chooseSubtitles(UiScreen& screen, const freeink::ui::ListProps& props);
-  void openSection(SettingsSection section);
+  OptionPopup optionPopup;
 
-  int listCount() const override { return static_cast<int>(SETTINGS_SECTION_COUNT); }
+  // Row structure (label/actionValue), rebuilt only when the setting list
+  // changes; rowValues_ holds the live value text, refreshed every
+  // buildScreen() by assigning into the existing strings.
+  std::vector<std::string> rowValues_;
+  std::vector<freeink::ui::ListItem> rowItems_;
+
+  void rebuildSettings();
+  void rebuildRowItems();
+  void toggleSelectedSetting();
+  void openSleepTimeoutPicker();
+  void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
+  void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
+  static std::string settingValueText(const SettingInfo& setting);
+
+  int listCount() const override { return static_cast<int>(settings.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  void onBackButton() override;
-  void drawChrome() override;
+  bool handleCustomInput() override;
+  const char* headerTitle() const override;
+  void drawFooter() override;
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                            SettingsSection openSection = SettingsSection::Count);
+  SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, SettingsSection section);
   void onEnter() override;
-  void onExit() override;
-  void loop() override;
+  void render(RenderLock&& lock) override;
 };
