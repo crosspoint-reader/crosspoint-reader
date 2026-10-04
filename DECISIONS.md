@@ -626,3 +626,11 @@ retitlings; a title check guards against a wrong address. Stroke, drowning,
 dehydration and the recovery position have no MedlinePlus first-aid page, so
 they come from Wikibooks or are folded into other rows (recovery position is
 in "Unconscious person").
+
+## 2026-10-04 — Scope: performance first
+
+Owner: the Wiktionary tap-to-look-up is overkill (dropped); CJK waits (fonts
+download over Wi-Fi when needed); the last missing-symbol fixes come later;
+the six failed book conversions are dropped. From here the priority is
+everything working excellently: speed, battery life, fast loading, with
+optional features cut where they cost too much.
