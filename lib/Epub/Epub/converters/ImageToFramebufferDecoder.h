@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -45,6 +46,12 @@ class ImageToFramebufferDecoder {
   virtual bool getDimensions(const std::string& imagePath, ImageDimensions& dims) const = 0;
 
   virtual const char* getFormatName() const = 0;
+
+  // Minimum free heap required to attempt a decode. Callers that decide whether
+  // to queue work (the reader's idle prefetch) must gate on this rather than a
+  // local constant, so the admission check and the decoder's own check cannot
+  // drift apart.
+  virtual size_t minFreeHeapToDecode() const = 0;
 
   // Call from per-row/per-MCU decode callbacks (free functions, hence public):
   // yields one tick at most every 250 ms so multi-second decodes keep the idle

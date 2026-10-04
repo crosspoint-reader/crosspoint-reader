@@ -16,4 +16,5 @@ class PngToFramebufferConverter final : public ImageToFramebufferDecoder {
 
   static bool supportsFormat(const std::string& extension);
   const char* getFormatName() const override { return "PNG"; }
+  size_t minFreeHeapToDecode() const override;
 };

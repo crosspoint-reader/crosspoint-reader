@@ -24,6 +24,7 @@ bool ImageDecoderFactory::isFormatSupported(const std::string& path) {
   return Epub::enableGifProbeForTest && path.ends_with(".gif");
 }
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string&) { return nullptr; }
+size_t ImageDecoderFactory::minFreeHeapToDecode(const std::string&) { return 0; }
 
 void ImageBlock::render(GfxRenderer&, int, int) {}
 void ImageBlock::renderPlaceholder(GfxRenderer&, int, int) const {}
