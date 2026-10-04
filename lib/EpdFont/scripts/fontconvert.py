@@ -82,6 +82,8 @@ intervals = [
     ### Cyrillic ###
     # Russian, Ukrainian, Bulgarian, etc.
     (0x0400, 0x04FF),
+    ### Thai ###
+    (0x0E00, 0x0E7F),
     ### Math Symbols (common subset) ###
     # Superscripts and Subscripts
     (0x2070, 0x209F),
