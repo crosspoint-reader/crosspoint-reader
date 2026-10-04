@@ -24,7 +24,7 @@
 // card's search index. A row nothing on the card answers is left out.
 class CuratedListActivity final : public UiListActivity {
  public:
-  enum class Kind : uint8_t { FirstAid, Encyclopedia };
+  enum class Kind : uint8_t { FirstAid, Encyclopedia, PetFirstAid };
   CuratedListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Kind kind);
   void onEnter() override;
 
@@ -44,6 +44,7 @@ class CuratedListActivity final : public UiListActivity {
   void resolve();
   void fillItems();
   void resolveFirstAid(int medline, int wikibooks);
+  void resolvePets(int pets);
   void resolveTopics(const int* collectionOf);  // indexed by source
 
   const Kind kind_;

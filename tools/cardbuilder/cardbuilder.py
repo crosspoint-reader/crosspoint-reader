@@ -153,6 +153,7 @@ class Want:
     optional: bool = False
     url: str = ""       # direct .zim URL instead of the catalog
     note: str = ""
+    file: str = ""      # a ZIM you made (tools/webpack), in the staging folder; may hold * for the date
 
 
 def load_library(path: Path) -> tuple[dict, list[Want]]:
@@ -168,16 +169,17 @@ def load_library(path: Path) -> tuple[dict, list[Want]]:
     for i, c in enumerate(data.get("collection", [])):
         name = c.get("name", "")
         url = c.get("url", "")
-        if not name and not url:
-            raise BuildError(f"{path}: collection #{i + 1} needs a name or a url")
-        key = c.get("key") or name or Path(urllib.parse.urlparse(url).path).stem
+        file = c.get("file", "")
+        if not name and not url and not file:
+            raise BuildError(f"{path}: collection #{i + 1} needs a name, a url or a file")
+        key = c.get("key") or name or Path(urllib.parse.urlparse(url).path).stem or Path(file).stem
         if key in seen:
             raise BuildError(f"{path}: two collections use the folder name {key!r}")
         seen.add(key)
         fl = c.get("flavour", [])
         wants.append(Want(key=key, name=name, flavours=[fl] if isinstance(fl, str) else list(fl),
                           lang=c.get("lang", ""), optional=bool(c.get("optional", False)),
-                          url=url, note=c.get("note", "")))
+                          url=url, note=c.get("note", ""), file=file))
     if not wants:
         raise BuildError(f"{path} lists no [[collection]] entries")
     return settings, wants
@@ -279,9 +281,30 @@ def resolve(want: Want, catalog: str = CATALOG) -> Edition | None:
     return None
 
 
-def resolve_all(wants: list[Want], catalog: str) -> list[Edition]:
+def resolve_local(want: Want, staging: Path) -> Edition | None:
+    """A ZIM made on this Mac (tools/webpack): the newest file in the staging
+    folder that matches the pattern."""
+    found = sorted(staging.glob(want.file)) if staging.is_dir() else []
+    if not found:
+        return None
+    z = found[-1]
+    return Edition(want, title=want.key, name=want.name or want.key, flavour="", language=want.lang,
+                   date=z.stem.rsplit("_", 1)[-1], url=z.resolve().as_uri(), size=z.stat().st_size)
+
+
+def resolve_all(wants: list[Want], catalog: str, staging: Path) -> list[Edition]:
     out = []
     for w in wants:
+        if w.file:
+            ed = resolve_local(w, staging)
+            if ed is None:
+                msg = f"{w.key}: no {w.file} in {staging} yet (make it with tools/webpack)"
+                if w.optional:
+                    say(f"  skipped (optional) {msg}")
+                    continue
+                raise BuildError(msg)
+            out.append(ed)
+            continue
         ed = resolve(w, catalog)
         if ed is None:
             msg = f"{w.name}: no edition with flavour {' or '.join(w.flavours) or 'any'} in the catalog"
@@ -339,6 +362,11 @@ def fetch_checksum(url: str) -> str:
 
 def download(ed: Edition, staging: Path, state: State, retries: int = 8) -> Path:
     dest = staging / ed.filename
+    if ed.want.file:  # made on this Mac: nothing to download, only to check once
+        if not state.verified(dest):
+            state.mark(dest, sha256_file(dest))
+        say(f"  {dest.name}: made locally")
+        return dest
     expected = fetch_checksum(ed.url)
     if dest.exists():
         known = state.verified(dest)
@@ -702,7 +730,7 @@ def main(argv: list[str] | None = None) -> int:
         card = Path(os.path.expanduser(card_s)) if card_s else None
 
         say(f"Looking up {len(wants)} collection(s) in the Kiwix catalog...")
-        eds = resolve_all(wants, a.catalog)
+        eds = resolve_all(wants, a.catalog, staging)
         if a.command == "plan":
             cmd_plan(eds, staging, card)
             return 0

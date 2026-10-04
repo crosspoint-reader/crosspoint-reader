@@ -290,6 +290,27 @@ optional = true
         self.assertTrue(kept.exists(), "pruned a collection that was only skipped")
         self.assertTrue((self.card / "library" / "tiny" / "tiny_en_all_2024-01.zim").exists())
 
+    def test_local_zim_made_on_the_mac(self):
+        # A pack from tools/webpack sits in staging; the newest one is used.
+        (self.staging / "pets_en_msd_2026-09.zim").write_bytes(Path(DATA, "nons", "small.zim").read_bytes())
+        (self.staging / "pets_en_msd_2026-10.zim").write_bytes(self.zim)
+        with open(self.lib, "a") as f:
+            f.write('\n[[collection]]\nkey = "pets"\nfile = "pets_en_msd_*.zim"\noptional = true\n')
+        code, out = self.run_cb("all")
+        self.assertEqual(code, 0, out)
+        self.assertIn("made locally", out)
+        folder = self.card / "library" / "pets"
+        self.assertTrue(any(folder.glob("pets_en_msd_2026-10.zim*")), out)
+        man = json.loads((self.card / "library" / "manifest.json").read_text())
+        self.assertIn("pets", [c["key"] for c in man["collections"]])
+
+    def test_local_zim_not_made_yet_is_skipped_when_optional(self):
+        with open(self.lib, "a") as f:
+            f.write('\n[[collection]]\nkey = "pets"\nfile = "pets_en_msd_*.zim"\noptional = true\n')
+        code, out = self.run_cb("plan")
+        self.assertEqual(code, 0, out)
+        self.assertIn("skipped (optional) pets", out)
+
     def test_copy_before_download_explains_what_to_do(self):
         code, out = self.run_cb("copy")
         self.assertEqual(code, 1)

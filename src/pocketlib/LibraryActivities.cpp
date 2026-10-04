@@ -74,7 +74,7 @@ std::string tileGroupFor(const pocketlib::Collection& c) {
   if (!c.group.empty()) return c.group;
   const std::string& k = c.key;
   if (k.rfind("wikipedia", 0) == 0) return "Wikipedia";
-  for (const char* medical : {"mdwiki", "medlineplus", "medicine", "wikem", "medical"}) {
+  for (const char* medical : {"mdwiki", "medlineplus", "medicine", "wikem", "medical", "pets"}) {
     if (k.find(medical) != std::string::npos) return "Medical";
   }
   return "More";
@@ -160,12 +160,17 @@ void ShelfActivity::rebuildTiles() {
         tiles_.push_back({TileKind::Group, g, iconForGroup(g), -1, g});
     }
   } else {
-    // Medical opens on its two guides, then its collections one by one.
+    // Medical opens on its guides (and Pet First Aid when the pet pack is on
+    // the card), then its collections one by one.
     if (group_ == "Medical") {
       tiles_.push_back({TileKind::FirstAid, "First Aid", &icon_heart_pulse_32, -1, ""});
       tiles_.push_back({TileKind::Encyclopedia, "Medical Encyclopedia", &icon_stethoscope_32, -1, ""});
+      // The pet pack (tools/webpack) shows as its guide, not as a collection.
+      for (const auto& c : cols)
+        if (c.key == "pets") tiles_.push_back({TileKind::PetFirstAid, "Pet First Aid", &icon_paw_print_32, -1, ""});
     }
     for (size_t i = 0; i < cols.size(); i++) {
+      if (group_ == "Medical" && cols[i].key == "pets") continue;
       if (tileGroupFor(cols[i]) == group_)
         tiles_.push_back(
             {TileKind::Collection, shortTitle(cols[i]), iconForCollection(cols[i].key), static_cast<int>(i), ""});
@@ -281,11 +286,12 @@ void ShelfActivity::activateIndex(int index) {
       openCollection(static_cast<size_t>(tile.collection));
       return;
     case TileKind::FirstAid:
-    case TileKind::Encyclopedia: {
-      auto list = makeUniqueNoThrow<CuratedListActivity>(renderer, mappedInput,
-                                                         tile.kind == TileKind::FirstAid
-                                                             ? CuratedListActivity::Kind::FirstAid
-                                                             : CuratedListActivity::Kind::Encyclopedia);
+    case TileKind::Encyclopedia:
+    case TileKind::PetFirstAid: {
+      const auto kind = tile.kind == TileKind::FirstAid      ? CuratedListActivity::Kind::FirstAid
+                        : tile.kind == TileKind::PetFirstAid ? CuratedListActivity::Kind::PetFirstAid
+                                                             : CuratedListActivity::Kind::Encyclopedia;
+      auto list = makeUniqueNoThrow<CuratedListActivity>(renderer, mappedInput, kind);
       if (list) startActivityForResult(std::move(list), [this](const ActivityResult&) { rebuildTiles(); });
       return;
     }

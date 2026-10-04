@@ -686,3 +686,21 @@ POCKETLIB_BUILD), so the owner and I can tell which build is on the device.
   page, or Confirm, opens the contents with the toolbar across the top
   (Back/Close, Search, Text size, Images/Hide images). The floating toolbar
   over the page is gone. ChoiceListActivity::setToolbar.
+
+## 2026-10-04 — Pet First Aid from a pack made on the Mac
+
+- No pet first aid exists in the Kiwix library. The best owner-facing source
+  is the MSD Veterinary Manual's pet-owner edition (vet-written, plain
+  language); its Emergencies and Poisoning pages are copied for personal use
+  by `tools/webpack` (our own small ZIM writer in Python, no libzim) and
+  nothing of it goes in this repository. Zimit was the alternative; webpack
+  needs no account or e-mail and keeps pages at stable addresses the reader's
+  list can name.
+- cardbuilder: a collection can be `file = "pattern"`: the newest match in
+  the staging folder; optional ones are skipped until made.
+- Medical shows "Pet First Aid" (paw icon) when the "pets" collection is on
+  the card: 16 rows by page address, several opening at a heading of the
+  emergency page (a landing may name the heading's start: "Heat"), and
+  "Every pet page". The pack is not shown again as a collection.
+- Military working-dog guidelines (K9TCCC) were considered and left out:
+  written for combat medics.

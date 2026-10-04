@@ -30,8 +30,8 @@ namespace fui = freeink::ui;
 namespace {
 
 // Where a title is looked for: a fragment of the collection's key.
-enum Source : uint8_t { MedlinePlus, MDWiki, Wikipedia, Wikibooks, kSources };
-const char* const kSourceKeys[kSources] = {"medlineplus", "mdwiki", "wikipedia", "wikibooks"};
+enum Source : uint8_t { MedlinePlus, MDWiki, Wikipedia, Wikibooks, Pets, kSources };
+const char* const kSourceKeys[kSources] = {"medlineplus", "mdwiki", "wikipedia", "wikibooks", "pets"};
 
 struct Candidate {
   Source source;
@@ -164,6 +164,37 @@ bool findChecked(zim::Archive& archive, const char* const* prefixes, std::string
   return false;
 }
 
+// Pet First Aid: the MSD Veterinary Manual's pet-owner pages (written by
+// veterinarians for owners), from the pack made with tools/webpack
+// (recipes/pets.toml). Pages are named by their address; `landing` is the
+// start of the heading to open at ("Heat" for "Heatstroke"), when a page
+// covers several emergencies.
+struct PetAid {
+  const char* label;
+  const char* path;     // under msdvetmanual.com/special-pet-topics/
+  const char* landing;  // "" = the top
+};
+constexpr const char* kPetWhatToDo = "emergencies/what-to-do-in-a-dog-or-cat-emergency";
+constexpr PetAid kPetFirstAid[] = {
+    {"Is it an emergency?", "emergencies/evaluation-and-initial-treatment-of-dog-and-cat-emergencies", ""},
+    {"What to do first", kPetWhatToDo, ""},
+    {"Not breathing or unconscious", kPetWhatToDo, "Unconscious"},
+    {"Bleeding", kPetWhatToDo, "Bleeding"},
+    {"Choking", kPetWhatToDo, "Choking"},
+    {"Heatstroke", kPetWhatToDo, "Heat"},
+    {"Hypothermia", kPetWhatToDo, "Hypotherm"},
+    {"Burns", kPetWhatToDo, "Burn"},
+    {"Wounds and bandaging", "emergencies/wound-management", ""},
+    {"Poisoning: foods", "poisoning/food-hazards", ""},
+    {"Poisoning: household products", "poisoning/household-hazards", ""},
+    {"Poisoning: flea and insect products", "poisoning/insecticide-poisoning", ""},
+    {"Poisoning: rat and mouse bait", "poisoning/rodenticide-poisoning", ""},
+    {"Poisoning: medicines and drugs", "poisoning/poisonings-from-illicit-and-abused-drugs", ""},
+    {"Poisoning: slug and snail bait", "poisoning/metaldehyde-poisoning", ""},
+    {"First aid kit", "emergencies/first-aid-kit-for-a-pet", ""},
+};
+constexpr const char* kPetPrefixes[] = {"msdvetmanual.com/special-pet-topics/", nullptr};
+
 constexpr const char* kMedlinePrefixes[] = {"medlineplus.gov/", "www.medlineplus.gov/", "", nullptr};
 constexpr const char* kWikibooksPrefixes[] = {"First_Aid/", nullptr};
 
@@ -175,7 +206,9 @@ CuratedListActivity::CuratedListActivity(GfxRenderer& renderer, MappedInputManag
 void CuratedListActivity::onEnter() {
   auto& lib = pocketlib::Library::instance();
   if (lib.collections().empty()) lib.load();
-  title_ = kind_ == Kind::FirstAid ? "First Aid" : "Medical Encyclopedia";
+  title_ = kind_ == Kind::FirstAid      ? "First Aid"
+           : kind_ == Kind::PetFirstAid ? "Pet First Aid"
+                                        : "Medical Encyclopedia";
   resolve();
   UiListActivity::onEnter();
 }
@@ -190,8 +223,8 @@ void CuratedListActivity::resolve() {
     size_t collections = 0;
     std::vector<Row> rows;
   };
-  static Cached cache[2];
-  Cached& c = cache[kind_ == Kind::FirstAid ? 0 : 1];
+  static Cached cache[3];
+  Cached& c = cache[static_cast<int>(kind_)];
   if (c.done && c.collections == cols.size()) {
     rows_ = c.rows;
     fillItems();
@@ -208,6 +241,8 @@ void CuratedListActivity::resolve() {
   rows_.clear();
   if (kind_ == Kind::FirstAid) {
     resolveFirstAid(collectionOf[MedlinePlus], collectionOf[Wikibooks]);
+  } else if (kind_ == Kind::PetFirstAid) {
+    resolvePets(collectionOf[Pets]);
   } else {
     resolveTopics(collectionOf);
   }
@@ -236,7 +271,8 @@ void CuratedListActivity::resolveFirstAid(int medline, int wikibooks) {
   for (const Aid& aid : kFirstAid) {
     uint32_t entry = 0;
     if (ml && aid.medline && findChecked(*ml, kMedlinePrefixes, aid.medline, aid.medlineTitle, entry)) {
-      rows_.push_back({aid.label, std::string("MedlinePlus \xC2\xB7 ") + aid.medlineTitle, medline, entry, "First Aid"});
+      rows_.push_back(
+          {aid.label, std::string("MedlinePlus \xC2\xB7 ") + aid.medlineTitle, medline, entry, "First Aid"});
       continue;
     }
     if (wb && aid.wikibooks && findChecked(*wb, kWikibooksPrefixes, aid.wikibooks, "First Aid", entry)) {
@@ -246,6 +282,21 @@ void CuratedListActivity::resolveFirstAid(int medline, int wikibooks) {
       rows_.push_back({aid.label, "Wikibooks First Aid \xC2\xB7 " + chapter, wikibooks, entry, {}});
     }
   }
+}
+
+// Each pet page by its address, then the pack's contents page (every page).
+void CuratedListActivity::resolvePets(int pets) {
+  if (pets < 0) return;
+  zim::Archive* archive = pocketlib::Library::instance().open(static_cast<size_t>(pets));
+  if (!archive) return;
+  for (const PetAid& aid : kPetFirstAid) {
+    uint32_t entry = 0;
+    if (findChecked(*archive, kPetPrefixes, aid.path, "", entry))
+      rows_.push_back({aid.label, "MSD Veterinary Manual", pets, entry, aid.landing});
+  }
+  zim::Entry main;
+  if (archive->mainEntry(main) == zim::Error::None)
+    rows_.push_back({"Every pet page", "All the emergency and poisoning pages", pets, main.index, {}});
 }
 
 // One exact-title lookup per candidate until one is on the card: a few index
@@ -297,8 +348,8 @@ void CuratedListActivity::activateIndex(int index) {
     if (search) startActivityForResult(std::move(search), [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-  auto article =
-      makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, static_cast<size_t>(row.collection), row.entry, row.landing);
+  auto article = makeUniqueNoThrow<ArticleActivity>(renderer, mappedInput, static_cast<size_t>(row.collection),
+                                                    row.entry, row.landing);
   if (article) startActivityForResult(std::move(article), [this](const ActivityResult&) { requestUpdate(); });
 }
 

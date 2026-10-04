@@ -585,3 +585,15 @@ containing "Forbidden City"; see the session summary for the download.
   "All" shows mostly Wikipedia; OK list ends in More results; tap a picture
   (Wikivoyage Paris, Images on): full screen, tap returns; tap the middle of a
   page: contents with the toolbar on top; its buttons work.
+
+## 2026-10-04 — Pet First Aid
+
+- tools/webpack (fetch, extract, write ZIM; tested against a local mock
+  site and read back with zimcat and zimindex), recipes/pets.toml (MSD pages,
+  not fetchable from this container: first real run is the owner's).
+- cardbuilder `file =` collections (two new tests; 14 pass with the test
+  data). Firmware: Pet First Aid list and tile. 94 + 387 host tests; release
+  build OK; clang-format 21 clean.
+- Device checklist (after the pack is made and copied): Medical shows Pet
+  First Aid with a paw; Bleeding opens the emergency page at Bleeding;
+  Poisoning: foods opens Food Hazards; Every pet page lists them all.

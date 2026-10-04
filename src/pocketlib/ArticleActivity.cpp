@@ -12,8 +12,6 @@
 
 #include "ArticleActivity.h"
 
-#include <cctype>
-
 #include <Epub/Page.h>
 #include <Epub/blocks/ImageBlock.h>
 #include <Epub/hyphenation/Hyphenator.h>
@@ -26,6 +24,7 @@
 #include <ZimImage.h>
 #include <ZimLink.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 
@@ -508,12 +507,22 @@ std::string ArticleActivity::anchorForFragment(const std::string& fragment) cons
   const auto sameText = [](const std::string& a, const std::string& b) {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); i++) {
-      if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) return false;
+      if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
+        return false;
     }
     return true;
   };
   for (size_t i = 0; i < headings_.size(); i++) {
     if (sameText(headings_[i].text, fragment)) return zim::headingAnchor(i);
+  }
+  // A landing asked for by a guide may name only the start of the heading
+  // ("Heat" for "Heatstroke" or "Heat Stroke").
+  if (fragment == landing_ && fragment.size() >= 3) {
+    for (size_t i = 0; i < headings_.size(); i++) {
+      if (headings_[i].text.size() >= fragment.size() &&
+          sameText(headings_[i].text.substr(0, fragment.size()), fragment))
+        return zim::headingAnchor(i);
+    }
   }
   return {};
 }

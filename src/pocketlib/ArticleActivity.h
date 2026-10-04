@@ -115,7 +115,7 @@ class ArticleActivity final : public Activity {
   void renderStatusBar() const;
 
   const size_t collection_;
-  uint32_t entry_;      // directory index as asked for (may be a redirect)
+  uint32_t entry_;  // directory index as asked for (may be a redirect)
   const std::string landing_;
   zim::Entry article_;  // the resolved content entry being read
   std::string collectionKey_;

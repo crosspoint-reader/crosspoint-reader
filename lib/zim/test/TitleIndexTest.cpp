@@ -278,8 +278,8 @@ TEST_P(RealFiles, IndexFindsTitlesWhateverTheCase) {
 TEST(TitleSearch, ExactTitleAmongThousandsEndingInIt) {
   zim::TitleIndexWriter w;
   for (uint32_t i = 0; i < 3000; ++i) w.add("paris", i, static_cast<uint8_t>(i % 200), /*word=*/true);
-  w.add("paris", 1500 + 100000, 250);                       // the city, mid-run by entry
-  w.add("paris hilton", 200000, 240);                       // goes on past the query
+  w.add("paris", 1500 + 100000, 250);  // the city, mid-run by entry
+  w.add("paris hilton", 200000, 240);  // goes on past the query
   w.add("paris (band)", 200001, 10);
   const std::string path = tempPath("paris.pltitles");
   std::string why;
@@ -304,8 +304,8 @@ TEST(TitleSearch, ExactTitleAmongThousandsEndingInIt) {
 TEST(TitleSearch, PopularTreeLiftsWellKnownTitles) {
   zim::TitleIndexWriter w;
   for (uint32_t i = 0; i < 5000; ++i) w.add("pari" + std::string(1, 'a' + i % 17) + std::to_string(i), i, 1);
-  w.add("paris", 900000, 200);          // the city
-  w.add("paris hilton", 900001, 150);   // also well known
+  w.add("paris", 900000, 200);         // the city
+  w.add("paris hilton", 900001, 150);  // also well known
   const std::string path = tempPath("popular.pltitles");
   std::string why;
   ASSERT_TRUE(w.write(path, kUuid, 1000000, &why, /*popularMax=*/100)) << why;

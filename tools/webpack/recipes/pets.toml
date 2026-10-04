@@ -1,0 +1,31 @@
+# Pet first aid: the MSD Veterinary Manual's pet-owner pages on emergencies
+# and poisoning (written by veterinarians for owners). Personal copy.
+[pack]
+name = "pets_en_msd"
+title = "Pet First Aid"
+description = "Emergencies and poisoning in dogs and cats, from the MSD Veterinary Manual (pet owner version)."
+source = "MSD Veterinary Manual, Pet Owner Version"
+language = "eng"
+start = [
+  "https://www.msdvetmanual.com/special-pet-topics/emergencies",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning",
+]
+# Also fetched outright, in case a section page lists them only by script.
+pages = [
+  "https://www.msdvetmanual.com/special-pet-topics/emergencies/introduction-to-emergencies",
+  "https://www.msdvetmanual.com/special-pet-topics/emergencies/what-to-do-in-a-dog-or-cat-emergency",
+  "https://www.msdvetmanual.com/special-pet-topics/emergencies/evaluation-and-initial-treatment-of-dog-and-cat-emergencies",
+  "https://www.msdvetmanual.com/special-pet-topics/emergencies/first-aid-kit-for-a-pet",
+  "https://www.msdvetmanual.com/special-pet-topics/emergencies/wound-management",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning/household-hazards",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning/food-hazards",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning/insecticide-poisoning",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning/rodenticide-poisoning",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning/poisonings-from-illicit-and-abused-drugs",
+  "https://www.msdvetmanual.com/special-pet-topics/poisoning/metaldehyde-poisoning",
+]
+follow = '^https://www\.msdvetmanual\.com/special-pet-topics/(emergencies|poisoning)/[a-z0-9-]+$'
+strip_title = ' - (Special Pet Topics|Dog Owners|Cat Owners) - MSD Veterinary Manual$'
+depth = 1
+max_pages = 120
+delay = 1.0

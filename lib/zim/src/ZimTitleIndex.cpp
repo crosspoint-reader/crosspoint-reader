@@ -62,10 +62,9 @@ Error TitleIndex::open(std::unique_ptr<Source> source) {
       hd.root == 0 || hd.root >= pageCount || hd.levels > 16) {
     return Error::BadHeader;
   }
-  if (hd.topRecordCount > 0 &&
-      (hd.topLeafCount == 0 || hd.topFirstLeaf == 0 || hd.topFirstLeaf >= pageCount ||
-       hd.topLeafCount > pageCount - hd.topFirstLeaf || hd.topRoot == 0 || hd.topRoot >= pageCount ||
-       hd.topLevels > 16)) {
+  if (hd.topRecordCount > 0 && (hd.topLeafCount == 0 || hd.topFirstLeaf == 0 || hd.topFirstLeaf >= pageCount ||
+                                hd.topLeafCount > pageCount - hd.topFirstLeaf || hd.topRoot == 0 ||
+                                hd.topRoot >= pageCount || hd.topLevels > 16)) {
     hd.topRecordCount = 0;  // a damaged popular tree: search the whole index only
   }
   header_ = hd;

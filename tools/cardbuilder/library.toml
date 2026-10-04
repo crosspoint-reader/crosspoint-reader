@@ -47,6 +47,12 @@ flavour = ["", "maxi"]
 optional = true
 note = "unconfirmed name: US National Library of Medicine consumer health pages."
 
+[[collection]]
+key = "pets"
+file = "pets_en_msd_*.zim"
+optional = true
+note = "Made on the Mac: python3 webpack.py recipes/pets.toml STAGING (MSD Veterinary Manual pet-owner emergencies and poisoning; personal copy)."
+
 # Post-disaster resources (zimgit-post-disaster_en) dropped 2026-10-03: it is
 # PDFs behind a JavaScript viewer page, and the device reads neither.
 
