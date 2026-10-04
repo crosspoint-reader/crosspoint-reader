@@ -70,11 +70,12 @@ bool showOnDevice(const SettingInfo& setting) {
 // Section for a shared-list System row that has no explicit placement.
 SettingsSection systemSectionFor(const StrId nameId) {
   switch (nameId) {
-    case StrId::STR_SHOW_HIDDEN_FILES:
     case StrId::STR_LIBRARY_USE_METADATA:
+      return SettingsSection::Library;
+    case StrId::STR_SHOW_HIDDEN_FILES:
     case StrId::STR_REMOVE_READ_FROM_RECENTS:
     case StrId::STR_MOVE_FINISHED_TO_READ:
-      return SettingsSection::Library;
+      return SettingsSection::FileBrowser;
     default:
       return SettingsSection::General;
   }
@@ -118,7 +119,7 @@ void buildSettingsSections(SettingsBySection& out) {
   auto& general = sectionOf(out, SettingsSection::General);
   auto& reader = sectionOf(out, SettingsSection::Reader);
   auto& controls = sectionOf(out, SettingsSection::Controls);
-  auto& library = sectionOf(out, SettingsSection::Library);
+  auto& fileBrowser = sectionOf(out, SettingsSection::FileBrowser);
   auto& network = sectionOf(out, SettingsSection::Network);
   auto& system = sectionOf(out, SettingsSection::System);
 
@@ -144,7 +145,7 @@ void buildSettingsSections(SettingsBySection& out) {
     general.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
   }
   reader.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
-  library.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  fileBrowser.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
 
   network.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   network.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
