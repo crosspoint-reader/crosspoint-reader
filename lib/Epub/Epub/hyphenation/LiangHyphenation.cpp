@@ -240,7 +240,7 @@ AutomatonState decodeState(const EmbeddedAutomaton& automaton, size_t addr) {
     // The bottom nibble stores how many packed entries belong to this node.
     const size_t offset = (static_cast<size_t>(offsetHi) << 4) | (offsetLoLen >> 4);
     levelsLen = offsetLoLen & 0x0Fu;
-    if (offset + levelsLen > automaton.size) {
+    if (offset < 4u || offset - 4u + levelsLen > automaton.size) {
       return AutomatonState{};
     }
     levelsPtr = automaton.data + offset - 4u;

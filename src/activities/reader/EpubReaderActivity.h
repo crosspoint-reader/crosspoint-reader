@@ -207,6 +207,8 @@ class EpubReaderActivity final : public ReaderActivity {
   // Wi-Fi join + SNTP for a loan whose date could not be verified, then a
   // clean re-open of the book.
   void beginLoanTimeSync();
+  bool hyphenationPackChecked = false;
+  bool checkHyphenationPack();
   std::string getBookTitle() const override { return epub ? epub->getTitle() : ""; }
   std::string getBookAuthor() const override { return epub ? epub->getAuthor() : ""; }
   std::string getBookThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }
