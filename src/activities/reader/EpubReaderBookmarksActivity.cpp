@@ -2,11 +2,14 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 
 #include "../../util/BookmarkFile.h"
 #include "MappedInputManager.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
@@ -14,7 +17,7 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int ENTER_DELETE_MODE_MS = 700;
+constexpr int ENTER_ACTIONS_MODE_MS = 700;
 }  // namespace
 
 EpubReaderBookmarksActivity::EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -61,7 +64,7 @@ void EpubReaderBookmarksActivity::rebuildBookmarkRowItems() {
     bookmarkSubtitles.push_back(std::move(subtitle));
 
     fui::ListItem item;
-    item.label = bookmark.summary.c_str();
+    item.label = bookmark.name.empty() ? bookmark.summary.c_str() : bookmark.name.c_str();
     item.subtitle = bookmarkSubtitles.back().c_str();
     item.icon = listIconFor(UIIcon::Bookmark, 32);  // subtitle rows carry the larger icon
     item.actionValue = static_cast<int16_t>(bookmarkRowItems.size());
@@ -107,18 +110,13 @@ void EpubReaderBookmarksActivity::activateIndex(const int index) {
 void EpubReaderBookmarksActivity::onRowLongPress(const int index) {
   if (confirmPopup.isActive()) return;
   if (index < 0 || index >= listCount()) return;
-  // The row is deleted; a lingering flash would gray an unrelated row on the
-  // next render.
   app.clearTapFlash();
   nav.selected = index;
-  // Touch long-press asks the same Cancel/Delete confirmation as the physical
-  // hold (the popup is tap-operable), matching the file browser's long-press
-  // delete flow. Does not open the bookmark.
-  showDeleteConfirmation();
+  showBookmarkActions();
 }
 
 bool EpubReaderBookmarksActivity::handleCustomInput() {
-  // Delete confirmation popup
+  // Bookmark action or delete confirmation popup.
   if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
   if (confirmingDelete) {
     // Popup dismissed without a selection (Back button or tap outside): cancel delete
@@ -130,6 +128,11 @@ bool EpubReaderBookmarksActivity::handleCustomInput() {
 }
 
 bool EpubReaderBookmarksActivity::handleButtons() {
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, ENTER_ACTIONS_MODE_MS)) {
+    showBookmarkActions();
+    return true;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
@@ -139,15 +142,58 @@ bool EpubReaderBookmarksActivity::handleButtons() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
-      showDeleteConfirmation();
-    } else {
-      openSelectedBookmark();
-    }
+    openSelectedBookmark();
     return true;
   }
 
   return false;
+}
+
+void EpubReaderBookmarksActivity::startRename() {
+  if (bookmarks.empty() || nav.selected < 0 || nav.selected >= listCount()) {
+    return;
+  }
+
+  app.clearTapFlash();
+  const int renameIndex = nav.selected;
+  auto keyboard =
+      makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_RENAME), bookmarks[renameIndex].name,
+                                               BookmarkEntry::MAX_NAME_LENGTH, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("EPB", "OOM: bookmark rename keyboard");
+    return;
+  }
+  startActivityForResult(std::move(keyboard), [this, renameIndex](const ActivityResult& result) {
+    if (result.isCancelled || renameIndex < 0 || renameIndex >= listCount()) {
+      return;
+    }
+    std::string previousName = std::move(bookmarks[renameIndex].name);
+    bookmarks[renameIndex].name = std::get<KeyboardResult>(result.data).text;
+    rebuildBookmarkRowItems();
+    if (!BookmarkFile::save(epubPath, bookmarks)) {
+      LOG_ERR("EPB", "Failed to save bookmarks after rename");
+      bookmarks[renameIndex].name = std::move(previousName);
+      rebuildBookmarkRowItems();
+    }
+    requestUpdate();
+  });
+}
+
+void EpubReaderBookmarksActivity::showBookmarkActions() {
+  if (bookmarks.empty() || confirmPopup.isActive()) {
+    return;
+  }
+  const StrId options[] = {StrId::STR_OPEN, StrId::STR_RENAME, StrId::STR_DELETE};
+  confirmPopup.show(StrId::STR_BOOKMARKS, options, 3, 0, [this](const int idx) {
+    if (idx == 0) {
+      openSelectedBookmark();
+    } else if (idx == 1) {
+      startRename();
+    } else if (idx == 2) {
+      showDeleteConfirmation();
+    }
+  });
+  requestUpdate();
 }
 
 void EpubReaderBookmarksActivity::showDeleteConfirmation() {
@@ -208,13 +254,12 @@ void EpubReaderBookmarksActivity::buildScreen(UiScreen& screen) {
     return;
   }
 
-  // "Hold Open to Delete" names a physical button; on touch boards the row
-  // long-press covers deletion, so the hint would be wrong there.
+  // This hint names a physical button, so omit it on touch boards.
   if (!mappedInput.hasTouch()) {
     const int helpLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
     const fui::Rect band = screen.takeBottom(static_cast<int16_t>(helpLineHeight + metrics.verticalSpacing));
     GUI.drawHelpText(renderer, Rect{band.x, band.y + metrics.verticalSpacing, band.width, helpLineHeight},
-                     tr(STR_HOLD_OPEN_TO_DELETE));
+                     tr(STR_HOLD_OPEN_FOR_ACTIONS));
   }
 
   // bookmarkSubtitles/bookmarkRowItems are built once whenever `bookmarks`
@@ -223,9 +268,9 @@ void EpubReaderBookmarksActivity::buildScreen(UiScreen& screen) {
   props.items = bookmarkRowItems.data();
   props.count = static_cast<uint16_t>(bookmarkRowItems.size());
   props.action = ACTION_ROW;
-  // Tap opens; long-press deletes (physical buttons stay in loop()).
+  // Tap opens; long-press shows bookmark actions (physical buttons stay in loop()).
   props.inputMask = fui::InputTouch | fui::InputLongPress;
-  syncListViewport(screen, props, /*hasSubtitle=*/true);
+  syncListViewport(screen, props);
   screen.list(props);
 }
 

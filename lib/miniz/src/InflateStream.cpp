@@ -1,6 +1,8 @@
 #include "InflateStream.h"
 
 #include <BuildScratch.h>
+#include <HalMemory.h>
+#include <Logging.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -12,6 +14,12 @@ namespace {
 constexpr size_t WINDOW_SIZE = TINFL_LZ_DICT_SIZE;
 // tinfl_decompressor holds mz_uint32 arrays; 8 keeps the window aligned too.
 constexpr size_t STATE_ALIGNED = (sizeof(tinfl_decompressor) + 7) & ~size_t{7};
+void logAllocationFailure(const char* allocation, size_t bytes) {
+  const auto heap = HalMemory::getDefaultHeap();
+  const auto psram = HalMemory::getPsramHeap();
+  LOG_ERR("ZIP", "Inflate %s OOM (%zu bytes): heap %zu free/%zu max, PSRAM %zu free/%zu total", allocation, bytes,
+          heap.freeBytes, heap.largestBlockBytes, psram.freeBytes, psram.totalBytes);
+}
 }  // namespace
 
 InflateStream::~InflateStream() { deinit(); }
@@ -21,7 +29,7 @@ bool InflateStream::init(const bool streaming) {
   // from scratch each init (releasing any prior backing first).
   deinit();
 
-  // During a framebuffer loan the lent 48KB is up for grabs: state (~11KB) +
+  // During a framebuffer loan the lent 48KB is up for grabs: state (~8KB) +
   // window (32KB) fit inside it, so a chapter-build inflate costs the heap
   // nothing. Absent (or already claimed): plain heap, freed in deinit().
   const size_t needed = STATE_ALIGNED + (streaming ? WINDOW_SIZE : 0);
@@ -34,10 +42,17 @@ bool InflateStream::init(const bool streaming) {
     // an incomplete type so consumers never include miniz; both blocks are
     // freed in deinit()/the destructor.
     state = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
-    if (!state) return false;
+    if (!state) {
+      logAllocationFailure("state", sizeof(tinfl_decompressor));
+      return false;
+    }
     if (streaming) {
       window = static_cast<uint8_t*>(malloc(WINDOW_SIZE));
-      if (!window) return false;  // state kept; deinit()/next init reclaims it
+      if (!window) {
+        logAllocationFailure("window", WINDOW_SIZE);
+        deinit();
+        return false;
+      }
     }
   }
 

@@ -64,12 +64,27 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+bool hasReflowableBookExtension(std::string_view fileName);
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {
   return hasCssExtension(std::string_view{fileName.c_str(), fileName.length()});
 }
 std::string extractFolderPath(const std::string& filePath);
+std::string getFileNameWithoutExtension(std::string_view filePath);
+inline std::string getFileNameWithoutExtension(const String& filePath) {
+  return getFileNameWithoutExtension(std::string_view{filePath.c_str(), filePath.length()});
+}
+
+// Rejects an empty component, one containing '/' or '\', or the exact components
+// "." and "..", so a single filename/folder-name argument can never be used to
+// escape the directory it is placed into. Names like "volume..2.epub" or
+// "notes...txt" that merely contain ".." are accepted.
+bool isSafePathComponent(std::string_view name);
+inline bool isSafePathComponent(const String& name) {
+  return isSafePathComponent(std::string_view{name.c_str(), name.length()});
+}
 
 /**
  * Sanitize a filename/path component for FAT32 in a caller-provided buffer.

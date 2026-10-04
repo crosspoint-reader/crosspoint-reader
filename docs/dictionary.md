@@ -15,6 +15,9 @@ A dictionary folder must contain:
 
 Not supported: dictionaries with 64-bit index offsets (`idxoffsetbits=64` in the `.ifo` — rare, and rejected with an error).
 
+> [!NOTE]  
+> If you use .dict.dz and Crosspoint failed to load your dictionary with error message "Not enough memory", try unzipping it.
+
 ## Setting Up a Dictionary
 
 1. Copy your dictionary folder(s) to `/dictionaries/` on the SD card — one dictionary per folder, e.g. `/dictionaries/webster/webster.idx` + `webster.dict.dz`. A hidden `/.dictionaries/` folder (dot-prefixed) works the same way, for keeping it out of the file browser.

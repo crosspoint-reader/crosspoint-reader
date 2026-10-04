@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
+#include "HapticFeedback.h"
 #include "components/UITheme.h"
 
 namespace {
@@ -76,7 +77,7 @@ void DictionaryWordSelectActivity::extractWords() {
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageLine) continue;
     const auto* line = static_cast<const PageLine*>(element.get());
-    const auto& block = line->getBlock();
+    const auto* block = line->getBlock();
     if (!block || !block->valid()) continue;
 
     bool rowHasWords = false;
@@ -264,6 +265,7 @@ void DictionaryWordSelectActivity::loop() {
   if (mappedInput.wasScreenTapped(tx, ty)) {
     const int hit = wordAt(tx, ty);
     if (hit >= 0) {
+      haptic_feedback::touchAction();
       selected = hit;
       performLookup();
     }

@@ -31,6 +31,7 @@ class KeyboardEntryActivity : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool preventAutoSleep() override { return true; }
 
  private:
   std::string title;
@@ -46,7 +47,8 @@ class KeyboardEntryActivity : public Activity {
   // app-defined tables in the .cpp.
   freeink::ui::KeyboardLayoutId layoutId = freeink::ui::KeyboardLayoutId::QwertyEn;
   // Asks the SDK for a layout variant with the language key. Only the Latin
-  // layouts honour it; the Cyrillic and Hebrew tables carry the key either way.
+  // layouts honour it; the Cyrillic, Hebrew and Arabic tables carry the key
+  // either way.
   // Resolved once in onEnter(): the set cannot change while a keyboard is on
   // screen, and currentLayout() runs on every loop pass.
   bool showLangKey = false;

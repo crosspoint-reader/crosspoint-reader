@@ -7,20 +7,25 @@
 
 class FontDecompressor;
 class SdCardFont;
+class TtfEpdFont;
 
 class FontCacheManager {
  public:
-  FontCacheManager(const std::map<int, EpdFontFamily>& fontMap, const std::map<int, SdCardFont*>& sdCardFonts);
+  FontCacheManager(const std::map<int, EpdFontFamily>& fontMap, const std::map<int, SdCardFont*>& sdCardFonts,
+                   const std::map<int, TtfEpdFont*>& ttfFonts);
 
   void setFontDecompressor(FontDecompressor* d);
 
   void clearCache();
-  // Release every rebuildable SD-font cache (mini glyph/kern arenas, kern/lig
-  // class tables, overflow rings, advance tables) while keeping the fonts
-  // loaded. Everything faults back in on demand. For heap-critical transitions
-  // (e.g. web-server + WiFi startup); see SdCardFont::releaseResidentCaches().
+  // Release every rebuildable font cache while keeping the fonts loaded:
+  //   * SD (.cpfont): mini glyph/kern arenas, kern/lig class tables, overflow
+  //     rings, advance tables (SdCardFont::releaseResidentCaches).
+  //   * TTF (vector): byte arenas, glyph tables, and the lazy bold/italic
+  //     FreeType faces (TtfEpdFont::releaseResidentCaches).
+  // Everything faults back in on demand. For heap-critical transitions (e.g.
+  // web-server + WiFi startup, image decode, dictionary, sleep).
   void releaseSdFontCaches();
-  void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F);
+  void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
   void logStats(const char* label = "render");
   void resetStats();
 
@@ -51,6 +56,8 @@ class FontCacheManager {
  private:
   const std::map<int, EpdFontFamily>& fontMap_;
   const std::map<int, SdCardFont*>& sdCardFonts_;
+  // Read only when CROSSPOINT_VECTOR_FONTS is on (PSRAM boards).
+  [[maybe_unused]] const std::map<int, TtfEpdFont*>& ttfFonts_;
   FontDecompressor* fontDecompressor_ = nullptr;
 
   enum class ScanMode : uint8_t { None, Scanning };

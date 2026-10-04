@@ -4,43 +4,11 @@
 #include <PowerManager.h>
 #include <Preferences.h>
 #include <SPI.h>
-#include <Wire.h>
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
 // Global HalGPIO instance
 HalGPIO gpio;
-
-namespace X3GPIO {
-
-bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
-  }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
-    while (Wire.available()) {
-      Wire.read();
-    }
-    return false;
-  }
-  const uint8_t lo = Wire.read();
-  const uint8_t hi = Wire.read();
-  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
-  return true;
-}
-
-bool readBQ27220CurrentMA(int16_t* outCurrent) {
-  uint16_t raw = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
-    return false;
-  }
-  *outCurrent = static_cast<int16_t>(raw);
-  return true;
-}
-
-}  // namespace X3GPIO
 
 namespace {
 constexpr char HW_NAMESPACE[] = "cphw";
@@ -141,6 +109,9 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  const uint8_t pageButtons = inputMgr.capacitivePageButtonMask();
+  capacitivePagePressed = (pageButtons & ~previousCapacitivePageButtons) != 0;
+  previousCapacitivePageButtons = pageButtons;
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -158,6 +129,15 @@ bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleas
 
 bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
 
+bool HalGPIO::rawInputActive() {
+  if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+  InputManager::ButtonAdcSample g1{}, g2{};
+  inputMgr.readButtonAdc(g1, g2);
+  // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
+  constexpr int kIdleRailMin = 4000;
+  return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
+}
+
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
@@ -165,6 +145,8 @@ unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPower
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
+
+bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }
 
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
 
@@ -232,22 +214,11 @@ bool HalGPIO::verifyPowerButtonWakeup() {
 }
 
 bool HalGPIO::isUsbConnected() const {
-  if (deviceIsX3()) {
-    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
-    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-      int16_t currentMa = 0;
-      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        return currentMa > 0;
-      }
-      delay(2);
-    }
-    return false;
-  }
-  if (BoardConfig::ACTIVE.usbDetect >= 0) {
+  if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
     return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
   }
-  // No digital USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog
+  // X3 uses GPIO20 for I2C, not USB detection. Boards without a digital
+  // USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog
   // divider): infer external power from charging state instead. BatteryMonitor
   // picks the board's best source — charger IC status, gauge Current() sign, or
   // a /STAT pin — and reports false on boards with no battery telemetry at all.

@@ -3,6 +3,7 @@
 #include <FontDecompressor.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <TtfEpdFont.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -32,8 +33,9 @@ char* appendUtf8Codepoint(char* output, const uint32_t codepoint) {
 }  // namespace
 
 FontCacheManager::FontCacheManager(const std::map<int, EpdFontFamily>& fontMap,
-                                   const std::map<int, SdCardFont*>& sdCardFonts)
-    : fontMap_(fontMap), sdCardFonts_(sdCardFonts) {}
+                                   const std::map<int, SdCardFont*>& sdCardFonts,
+                                   const std::map<int, TtfEpdFont*>& ttfFonts)
+    : fontMap_(fontMap), sdCardFonts_(sdCardFonts), ttfFonts_(ttfFonts) {}
 
 void FontCacheManager::setFontDecompressor(FontDecompressor* d) { fontDecompressor_ = d; }
 
@@ -42,6 +44,11 @@ void FontCacheManager::clearCache() {
   for (auto& [id, font] : sdCardFonts_) {
     font->clearCache();
   }
+#if CROSSPOINT_VECTOR_FONTS
+  for (auto& [id, font] : ttfFonts_) {
+    if (font) font->clearCache();
+  }
+#endif
 }
 
 void FontCacheManager::releaseSdFontCaches() {
@@ -49,13 +56,35 @@ void FontCacheManager::releaseSdFontCaches() {
   for (auto& [id, font] : sdCardFonts_) {
     font->releaseResidentCaches();
   }
+#if CROSSPOINT_VECTOR_FONTS
+  for (auto& [id, font] : ttfFonts_) {
+    if (font) font->releaseResidentCaches();
+  }
+#endif
 }
 
-void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask) {
+void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
+  // TTF (vector) font prewarm path. This is the single dispatch every draw path
+  // funnels through (reader endScanAndPrewarm, the settings preview, UI text),
+  // so building here covers them all. accumulate=false means "this is the whole
+  // glyph set for this render" → replace; accumulate=true → add incrementally.
+  // styleMask is ignored: a TTF face has no synthesized bold/italic here.
+#if CROSSPOINT_VECTOR_FONTS
+  auto tit = ttfFonts_.find(fontId);
+  if (tit != ttfFonts_.end() && tit->second) {
+    if (accumulate) {
+      tit->second->addCoverage(utf8Text);
+    } else {
+      tit->second->build(utf8Text);
+    }
+    return;
+  }
+#endif
+
   // SD card font prewarm path: prewarm all requested styles in one call
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {
-    int missed = it->second->prewarm(utf8Text, styleMask);
+    int missed = it->second->prewarm(utf8Text, styleMask, /*metadataOnly=*/false, /*loadKernLig=*/true, accumulate);
     if (missed > 0) {
       LOG_DBG("FCM", "prewarmCache(SD): %d glyph(s) not found (styleMask=0x%02X)", missed, styleMask);
     }
@@ -197,7 +226,8 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
 
     const uint8_t fontSlot = static_cast<uint8_t>(group) / 4;
     const uint8_t style = static_cast<uint8_t>(group) & 0x03;
-    manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style);
+    // This group is the complete glyph set for one font/style in this render.
+    manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style, /*accumulate=*/false);
   }
 
   manager_->scanCodepointCount_ = 0;

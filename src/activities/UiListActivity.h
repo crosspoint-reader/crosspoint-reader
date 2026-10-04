@@ -48,7 +48,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Bounds-checked ACTION_ROW dispatch. Default: selection follows the tapped
   // row, then long-press/activate. UiTabListActivity remaps row -> ring.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
-  // The button-navigation tail of loop(): release steps the selection, hold
+  // The button-navigation tail of loop(): press steps the selection, hold
   // jumps by page. UiTabListActivity replaces it with the ring walk.
   virtual void navigateButtons();
   // First hook in loop(); return true when the pass is consumed (popups, extra
@@ -69,10 +69,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
   // viewport, and write selection/viewport into props. Call from buildScreen
   // right before screen.list(props).
-  // hasSubtitle: rows carry a second (subtitle) text line, so on non-touch
-  // hardware the denser override below uses the theme's *-with-subtitle row
-  // height instead of its single-line one (see syncListViewport()).
-  void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
+  // SDK resolves fonts, content padding and touch minimum before measuring.
+  // selectionOffset reserves leading ring entries such as the tab bar.
+  void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, int selectionOffset = 0);
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);
 

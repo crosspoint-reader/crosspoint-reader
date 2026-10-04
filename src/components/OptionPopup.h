@@ -29,37 +29,47 @@ class OptionPopup {
   void show(StrId titleId, const StrId* optionIds, int optionCount, int currentIndex,
             std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
+    headline.clear();
     ownedStrings.resize(optionCount);
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = I18N.get(optionIds[i]);
     }
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    uiReady = false;
-    active = true;
+    activate(currentIndex, std::move(onSelect));
   }
 
   void show(const char* titleStr, const char* const* options, int optionCount, int currentIndex,
             std::function<void(int)> onSelect) {
     title = titleStr;
+    headline.clear();
     ownedStrings.resize(optionCount);
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = options[i];
     }
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    uiReady = false;
-    active = true;
+    activate(currentIndex, std::move(onSelect));
+  }
+
+  // As above, plus a subject line inside the dialog (a book or event title).
+  // It wraps to several lines under the caption; the dialog grows to fit.
+  void show(const char* titleStr, const char* headlineStr, const char* const* options, int optionCount,
+            int currentIndex, std::function<void(int)> onSelect) {
+    show(titleStr, options, optionCount, currentIndex, std::move(onSelect));
+    headline = headlineStr ? headlineStr : "";
+  }
+
+  // Message dialog: a wrapped body under the (optional) title, like the
+  // Wi-Fi forget-network prompt. Pass an empty title for a message-only look.
+  void showMessage(const char* titleStr, const char* messageStr, const char* const* options, int optionCount,
+                   int currentIndex, std::function<void(int)> onSelect) {
+    show(titleStr, options, optionCount, currentIndex, std::move(onSelect));
+    message = messageStr ? messageStr : "";
   }
 
   void show(StrId titleId, const std::vector<std::string>& options, int currentIndex,
             std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
+    headline.clear();
     ownedStrings = options;
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    uiReady = false;
-    active = true;
+    activate(currentIndex, std::move(onSelect));
   }
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
@@ -80,6 +90,7 @@ class OptionPopup {
           selectedIndex = event.value;
           active = false;
           if (onSelectCallback) onSelectCallback(selectedIndex);
+          haptic_feedback::touchAction();
           requestUpdate();
           return true;
         }
@@ -91,6 +102,7 @@ class OptionPopup {
           // Tap released outside the dialog: dismiss without firing. Swipe-end
           // releases arrive with -1,-1 coords and fall through (no dismiss).
           active = false;
+          haptic_feedback::touchAction();
           requestUpdate();
           return true;
         }
@@ -177,7 +189,14 @@ class OptionPopup {
     }
 
     fui::OptionDialogProps props;
-    props.title = title.c_str();
+    props.title = title.empty() ? nullptr : title.c_str();
+    props.headline = headline.empty() ? nullptr : headline.c_str();
+    if (!message.empty()) {
+      props.message = message.c_str();
+      props.messageText.font = fui::GfxRendererTarget::FONT_BODY;
+      props.messageText.align = fui::TextAlign::Center;
+      props.messageText.maxLines = 6;
+    }
     props.options = options;
     props.optionCount = count;
     props.verticalOptions = true;
@@ -187,6 +206,12 @@ class OptionPopup {
     props.titleText.font = fui::GfxRendererTarget::FONT_BODY;
     props.titleText.bold = true;
     props.titleText.align = fui::TextAlign::Center;
+    // Captions like "Remove from Recent Books?" overflow the narrow portrait
+    // dialog in one line; let them wrap and the panel grow.
+    props.titleText.maxLines = 2;
+    props.headlineText.font = fui::GfxRendererTarget::FONT_BODY;
+    props.headlineText.align = fui::TextAlign::Center;
+    props.headlineText.maxLines = 3;
     props.buttonText.font = fui::GfxRendererTarget::FONT_BODY;
     const int16_t innerPadding = static_cast<int16_t>(metrics.optionPopupInnerPadding);
     props.padding = fui::Insets{innerPadding, innerPadding, innerPadding, innerPadding};
@@ -245,8 +270,19 @@ class OptionPopup {
   static constexpr freeink::ui::ActionId ACTION_OPTION = 1;
   static constexpr freeink::ui::ActionId ACTION_CHROME = 2;
 
+  void activate(int currentIndex, std::function<void(int)> onSelect) {
+    const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
+    selectedIndex = currentIndex >= 0 && currentIndex < count ? currentIndex : 0;
+    onSelectCallback = std::move(onSelect);
+    message.clear();
+    uiReady = false;
+    active = count > 0;
+  }
+
   bool active = false;
   std::string title;
+  std::string headline;
+  std::string message;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;

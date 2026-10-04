@@ -50,6 +50,9 @@ class ChapterHtmlSlimParser {
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
+  uint8_t paragraphIndentSpaces = 2;
+  int8_t characterSpacing = 0;
+  uint8_t wordSpacingPercent = 100;
   uint8_t paragraphAlignment;
   uint16_t viewportWidth;
   uint16_t viewportHeight;
@@ -99,9 +102,23 @@ class ChapterHtmlSlimParser {
   uint16_t tableRowsSpannedRemaining = 0;
   size_t tableCellTextBytes = 0;
   std::vector<std::unique_ptr<ParsedText>> tableRowCells;
-  std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
+  std::array<std::vector<std::unique_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
   std::vector<uint32_t> tableLineVisibleOffsets;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
+
+  // Tracks the innermost open <ul>/<ol> so <li> knows whether to number itself,
+  // bullet itself, or (list-style-type: none) emit no marker at all. Pushed on
+  // <ul>/<ol> open, popped on close, so nested lists restart their own counter
+  // without disturbing the parent list's.
+  struct ListContext {
+    bool ordered = false;    // true for <ol>, false for <ul>
+    bool styleNone = false;  // true when list-style-type: none is set on this list
+    int counter = 0;         // incremented before each direct <li>; used as its number when ordered
+    int depth = 0;           // parser depth at open time; matches the depth seen in endElement
+                             // for the same tag, so a hidden nested list's close can't pop
+                             // an outer list's context
+  };
+  std::vector<ListContext> listStack;
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
@@ -130,6 +147,10 @@ class ChapterHtmlSlimParser {
   int currentFootnoteLinkTextLen = 0;
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
+  // Latched when a ParsedText could not be created (OOM). Together with
+  // ParsedText::hadDroppedWords() this turns layout OOM into ParseStatus::Error
+  // so the section build fails readably instead of emitting pages with holes.
+  bool layoutOom = false;
 
   // Resumable parse state. The one-shot parseAndBuildPages() drives these
   // internally; the incremental section builder drives them across render ticks
@@ -196,6 +217,11 @@ class ChapterHtmlSlimParser {
         tocAnchors(std::move(tocAnchors)) {}
 
   ~ChapterHtmlSlimParser();
+  void setTextSpacing(const int8_t character, const uint8_t wordPercent) {
+    characterSpacing = character;
+    wordSpacingPercent = wordPercent;
+  }
+  void setParagraphIndentSpaces(const uint8_t spaces) { paragraphIndentSpaces = spaces; }
 
   // One-shot parse: builds every page before returning (begin + step* + finish).
   bool parseAndBuildPages();
@@ -211,7 +237,7 @@ class ChapterHtmlSlimParser {
   bool finishParse();  // flush the trailing page and tear down; returns true
   void abortParse();   // tear down without flushing (error / abandon)
 
-  void addLineToPage(std::shared_ptr<TextBlock> line, uint32_t visibleOffset);
+  void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page

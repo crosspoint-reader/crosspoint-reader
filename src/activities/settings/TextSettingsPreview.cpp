@@ -18,6 +18,9 @@
 
 namespace textsettings {
 
+PreviewLayout::PreviewLayout() = default;
+PreviewLayout::~PreviewLayout() = default;
+
 namespace {
 
 // Map the paragraph-alignment setting to the engine's CssTextAlign (BOOK_STYLE = justified)
@@ -34,8 +37,8 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
   style.alignment = toCssAlign(SETTINGS.paragraphAlignment);
   style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
 
-  ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
-                    SETTINGS.focusReadingEnabled != 0, style);
+  ParsedText parsed(SETTINGS.hyphenationEnabled != 0, SETTINGS.focusReadingEnabled != 0, style,
+                    SETTINGS.paragraphIndentSpaces);
 
   // Feed one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting
   const char* text = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
@@ -54,7 +57,8 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
 
   parsed.layoutAndExtractLines(
       renderer, fontId, static_cast<uint16_t>(textWidth),
-      [&layout](std::shared_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); });
+      [&layout](std::unique_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); }, true,
+      SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing);
 }
 
 }  // namespace
@@ -100,6 +104,9 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
                        .lineCompression = compression,
                        .alignment = SETTINGS.paragraphAlignment,
                        .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
+                       .paragraphIndentSpaces = SETTINGS.paragraphIndentSpaces,
+                       .characterSpacing = SETTINGS.getCharacterSpacing(),
+                       .wordSpacingPercent = SETTINGS.wordSpacing,
                        .focusReading = SETTINGS.focusReadingEnabled != 0,
                        .hyphenation = SETTINGS.hyphenationEnabled != 0};
   if (key != layout.key) {

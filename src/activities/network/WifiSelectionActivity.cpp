@@ -4,6 +4,7 @@
 #include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <TrustedTime.h>
 #include <WiFi.h>
 #include <esp_mac.h>
 
@@ -15,6 +16,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/PluginEvents.h"
 
 namespace fui = freeink::ui;
 
@@ -519,7 +521,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
 
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
+    // Settings > System > Clock > Sync clock now.
     if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
@@ -527,12 +529,21 @@ void WifiSelectionActivity::checkConnectionStatus() {
       }
     }
 
+    // Every station join is a chance to snap the loan-clock floor to real
+    // time (non-blocking; see TrustedTime).
+    trustedtime::startSync();
+
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both
     {
       RenderLock lock(*this);
       WIFI_STORE.setLastConnectedSsid(selectedSSID);
     }
+
+    // Every station join is a window where plugin senders are deliverable, so
+    // drain the plugin outboxes here (web server up and sleep entry are the
+    // other such moments). Cheap no-op when nothing is queued.
+    pluginevents::drain(&renderer);
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server
@@ -937,24 +948,14 @@ void WifiSelectionActivity::buildListScreen(UiScreen& screen) {
   // Tap opens; long-press a saved network forgets it (physical buttons stay in loop()).
   props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.valueInset = 8;  // air between the signal bars and the row edge
-  // Long SSIDs wrap onto a second line inside the row (two body lines always
-  // fit the theme row height) instead of truncating; the trailing value is
+  // Long SSIDs grow their row to a second line; the trailing value is
   // just the short status glyphs, so skip the balanced 60%-band wrap cap.
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 2;
   props.balanceWrappedLabelWithValue = false;
   listNav.selected = static_cast<int>(selectedNetworkIndex);
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser row height
-    // instead of FreeInkUI's touch-target-sized default (see
-    // UiListActivity::syncListViewport; this screen predates that base and
-    // syncs its own viewport directly). A long SSID that wraps grows only
-    // its own row: list() sizes wrapped items per-row.
-    rowHeight = static_cast<int16_t>(metrics.listRowHeight);
-    props.rowHeight = rowHeight;
-  }
-  listNav.syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, static_cast<int>(networks.size()), props);
+  props.partialTrailingRow = true;
+  screen.syncListViewport(listNav, props, static_cast<int>(networks.size()));
   screen.list(props);
 }
 

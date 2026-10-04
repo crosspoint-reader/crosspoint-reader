@@ -8,6 +8,8 @@
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
 
+class CoverGridHomeUi;
+
 class UITheme {
   // Static instance
   static UITheme instance;
@@ -19,7 +21,7 @@ class UITheme {
   static UITheme& getInstance() { return instance; }
 
   const ThemeMetrics& getMetrics() const;
-  const BaseTheme& getTheme() const { return *currentTheme; }
+  const BaseTheme& getTheme() const { return currentTheme ? *currentTheme : fallbackTheme; }
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
@@ -29,6 +31,9 @@ class UITheme {
                                       int maxLines, bool black = true,
                                       EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                                       TextVerticalAlignment verticalAlignment = TextVerticalAlignment::CENTER);
+  static bool supportsCoverGrid();
+  static bool hasCoverGridHome();
+  static void drawCoverGridHome(CoverGridHomeUi& home);
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
@@ -37,7 +42,8 @@ class UITheme {
   static int getProgressBarHeight();
 
  private:
-  const ThemeMetrics* currentMetrics;
+  BaseTheme fallbackTheme;
+  const ThemeMetrics* currentMetrics = &BaseMetrics::values;
   std::unique_ptr<BaseTheme> currentTheme;
   mutable ThemeMetrics adjustedMetrics;
   mutable bool metricsValid = false;

@@ -47,6 +47,22 @@ void UsbDriveActivity::loop() {
     }
   }
 
+  // A battery-powered USB device may stay mounted after cable removal. End
+  // sustained suspend sessions too; host sleep intentionally has the same policy.
+  if (state == State::Connected && Storage.usbDriveHostSuspended()) {
+    if (!hostSuspendPending) {
+      hostSuspendPending = true;
+      hostSuspendStartedAt = millis();
+    } else if (millis() - hostSuspendStartedAt >= HOST_SUSPEND_TIMEOUT_MS) {
+      LOG_INF("USB", "USB Drive host suspend timed out; ending session");
+      // endUsbDrive() soft-disconnects before teardown and reboot.
+      restartToHome();
+      return;
+    }
+  } else {
+    hostSuspendPending = false;
+  }
+
   if (state == State::WaitingForHost && millis() - hostWaitStartedAt >= HOST_WAIT_TIMEOUT_MS) {
     LOG_INF("USB", "USB Drive host wait timed out");
     restartToHome();

@@ -6,20 +6,24 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <Memory.h>
+#include <VectorFontSupport.h>
 
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "HapticFeedback.h"
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/HeaderBackTapTarget.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
-#include "home/RecentBooksActivity.h"
+#include "library/LibraryListActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "network/UsbDriveActivity.h"
+#include "plugins/PluginCatalogActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
@@ -35,11 +39,21 @@ void ActivityManager::begin() {
 #else
   constexpr BaseType_t renderTaskCore = 0;
 #endif
+#if CROSSPOINT_VECTOR_FONTS
+  // FreeType rasterization runs on this task, and the deepest observed chain
+  // is a glyph fault DURING LAYOUT: expat + parser + line-layout frames
+  // (~3.5KB on Xtensa) with the scan converter's FT_RENDER_POOL_SIZE (4KB)
+  // stack-resident band pool on top — a measured ~8KB peak that trips the
+  // canary on an 8KB stack. Vector-font boards all have PSRAM-class RAM.
+  constexpr uint32_t renderTaskStackBytes = 16384;
+#else
+  constexpr uint32_t renderTaskStackBytes = 8192;
+#endif
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
-                          8192,               // Stack size
-                          this,               // Parameters
-                          1,                  // Priority
-                          &renderTaskHandle,  // Task handle
+                          renderTaskStackBytes,  // Stack size
+                          this,                  // Parameters
+                          1,                     // Priority
+                          &renderTaskHandle,     // Task handle
                           renderTaskCore  // Keep long renders/cover decodes off CPU 0's idle watchdog when available
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
@@ -108,9 +122,11 @@ void ActivityManager::loop() {
          currentActivity->name == "Settings" || currentActivity->name == "NetworkModeSelection")) {
       int tx = 0;
       int ty = 0;
-      statusBarTap = mappedInput.wasScreenTapped(tx, ty) && ty < 44;
+      // The header back button shares this band; its taps stay Back.
+      statusBarTap = mappedInput.wasScreenTapped(tx, ty) && ty < 44 && !HeaderBackTapTarget::contains(tx, ty);
     }
     if (currentActivity->name != "FrontlightPanel" && (statusBarTap || mappedInput.wasLightPanelGesture())) {
+      haptic_feedback::touchAction();
       pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));
       return;
     }
@@ -181,6 +197,9 @@ void ActivityManager::loop() {
       } else if (pendingAction == PendingAction::Push) {
         // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
+        // The parent's header back rect must not route taps on the pushed
+        // screen (which may draw no header of its own).
+        HeaderBackTapTarget::clear();
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
       pendingAction = PendingAction::None;
@@ -209,9 +228,13 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
     currentActivity->onExit();
     currentActivity.reset();
   }
+  // The outgoing screen's header back button must not eat taps on the next
+  // screen; the next header draw re-records it.
+  HeaderBackTapTarget::clear();
 }
 
 void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  mappedInput.resetHomeButtonInput();
   // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
@@ -227,6 +250,12 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
 
 void ActivityManager::goToFileTransfer() {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToJoinNetwork() {
+  // Post heap-defrag reboot: enter the web-server activity straight in Join
+  // Network mode (skips mode selection, does not reboot again).
+  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, /*startInJoinNetwork=*/true));
 }
 
 void ActivityManager::goToUsbDrive() {
@@ -248,8 +277,13 @@ void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
-void ActivityManager::goToRecentBooks() {
-  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
+void ActivityManager::goToLibrary() {
+  auto activity = makeUniqueNoThrow<LibraryListActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: library activity");
+    return;
+  }
+  replaceActivity(std::move(activity));
 }
 
 void ActivityManager::goToBrowser() {
@@ -260,6 +294,10 @@ void ActivityManager::goToBrowser() {
   } else {
     replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
   }
+}
+
+void ActivityManager::goToPlugins(bool showOpds) {
+  replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true));
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
@@ -300,9 +338,9 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "RecentBooks") {
-      initialMenuItem = HomeMenuItem::RECENTS;
-    } else if (activityName == "OpdsBookBrowser") {
+    } else if (activityName == "Library") {
+      initialMenuItem = HomeMenuItem::LIBRARY;
+    } else if (activityName == "OpdsBookBrowser" || activityName == "PluginCatalog") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
@@ -315,6 +353,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
+  mappedInput.resetHomeButtonInput();
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");
@@ -325,6 +364,7 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
 }
 
 void ActivityManager::popActivity() {
+  mappedInput.resetHomeButtonInput();
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while popActivity is not expected");
@@ -354,6 +394,12 @@ ScreenshotInfo ActivityManager::getScreenshotInfo() const {
     return currentActivity->getScreenshotInfo();
   }
   return {};
+}
+
+void ActivityManager::prepareForSleep() {
+  RenderLock lock;
+  for (const auto& activity : stackActivities) activity->prepareForSleep();
+  if (currentActivity) currentActivity->prepareForSleep();
 }
 
 void ActivityManager::requestUpdate(bool immediate) {
@@ -399,15 +445,12 @@ void ActivityManager::requestUpdateAndWait() {
 
 // RenderLock
 
-RenderLock::RenderLock() {
-  xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
-  isLocked = true;
+RenderLock::RenderLock(Mode mode) {
+  isLocked = xSemaphoreTake(activityManager.renderingMutex, mode == Mode::Try ? 0 : portMAX_DELAY) == pdTRUE;
+  assert((mode == Mode::Try || isLocked) && "Blocking render lock acquisition failed");
 }
 
-RenderLock::RenderLock([[maybe_unused]] Activity&) {
-  xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
-  isLocked = true;
-}
+RenderLock::RenderLock(Activity&) : RenderLock(Mode::Blocking) {}
 
 RenderLock::~RenderLock() {
   if (isLocked) {
