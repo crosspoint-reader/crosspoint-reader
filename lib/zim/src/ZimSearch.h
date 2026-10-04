@@ -77,14 +77,16 @@ Error searchTitles(Archive& archive, TitleIndex* index, TitleIndex::Cursor* curs
 
 // Search across several archives at once (the device's "All" scope). Each
 // source is searched as above, then merged: every source's exact matches
-// first, in source order, then one result from each source in turn, so a small
-// collection's best match sits beside the big one's instead of under it
-// (popularity scores are not comparable between archives). A source that
+// first, in source order, then `weight` results from each source in turn, so
+// a small collection's best match sits beside the big one's instead of under
+// it (popularity scores are not comparable between archives), while the
+// encyclopedia gets the larger share. A source that
 // fails is left out; the call fails only if every source did.
 struct SearchSource {
   Archive* archive = nullptr;
   TitleIndex* index = nullptr;           // may be null: the archive's own title list
   TitleIndex::Cursor* cursor = nullptr;  // required with an index
+  uint8_t weight = 1;                    // results per round after the exact ones
 };
 struct MultiHit {
   size_t source = 0;  // position in `sources`

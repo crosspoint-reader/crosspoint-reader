@@ -317,7 +317,9 @@ bool Library::search(const std::vector<size_t>& scope, std::string_view query, s
     zim::TitleIndex* index = titleIndex(i);
     if (index && !slot.cursor) slot.cursor = makeUniqueNoThrow<zim::TitleIndex::Cursor>();
     if (index && !slot.cursor) continue;
-    sources.push_back({archive, index, index ? slot.cursor.get() : nullptr});
+    // The encyclopedia gets three results for each one of the others.
+    const uint8_t weight = collections_[i].key == "wikipedia" ? 3 : 1;
+    sources.push_back({archive, index, index ? slot.cursor.get() : nullptr, weight});
     owners.push_back(i);
   }
   if (sources.empty()) return false;

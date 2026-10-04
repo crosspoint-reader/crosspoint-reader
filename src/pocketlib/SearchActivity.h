@@ -52,7 +52,7 @@ class SearchActivity final : public Activity {
     std::string author;
     uint16_t ordinal = 0;
   };
-  enum class PickKind : uint8_t { None, Article, Sources, Book, Place };
+  enum class PickKind : uint8_t { None, Article, Sources, Book, Place, More };
   struct Pick {
     PickKind kind = PickKind::None;
     size_t collection = 0;
@@ -82,6 +82,8 @@ class SearchActivity final : public Activity {
   std::vector<Pick> picks_;    // parallel to the rows the keyboard shows
   std::vector<Pick> results_;  // parallel to the full-screen results
   bool inResults_ = false;     // an article opened from the results returns to them
+  size_t resultsMax_ = 0;      // rows in the full list ("More results" adds a page)
+  int resultsFocus_ = -1;      // row selected when the list reopens
   std::vector<Book> books_;
   bool booksLoaded_ = false;
   std::string booksStatus_;  // why there are no books, if there are none

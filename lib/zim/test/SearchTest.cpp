@@ -181,6 +181,21 @@ TEST(SearchMany, ExactFromEverySourceFirstThenTakingTurns) {
   // After the exact matches the sources alternate while both have results.
   EXPECT_NE(hits[2].source, hits[3].source);
 
+  // A weighted source takes that many results per round.
+  {
+    const std::vector<zim::SearchSource> weighted = {{&a, &index, &cursor, 3}, {&b, nullptr, nullptr, 1}};
+    std::vector<zim::MultiHit> wh;
+    ASSERT_EQ(zim::searchMany(weighted, "Clim", 12, wh), zim::Error::None);
+    size_t i = 0;
+    while (i < wh.size() && wh[i].hit.exact) i++;
+    if (wh.size() >= i + 4) {
+      EXPECT_EQ(wh[i].source, 0u);
+      EXPECT_EQ(wh[i + 1].source, 0u);
+      EXPECT_EQ(wh[i + 2].source, 0u);
+      EXPECT_EQ(wh[i + 3].source, 1u);
+    }
+  }
+
   // Each source's own results match a search of that source alone.
   std::vector<zim::SearchHit> alone;
   ASSERT_EQ(zim::searchTitles(a, &index, &cursor, "Climate change", 6, alone), zim::Error::None);

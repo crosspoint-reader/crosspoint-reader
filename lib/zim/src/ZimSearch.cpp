@@ -98,12 +98,14 @@ Error fuzzyCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, const std::
 
 }  // namespace
 
-Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::string_view query,
-                       std::vector<SearchCandidate>& out) {
-  out.clear();
-  const std::string key = foldKey(query);
-  if (key.empty()) return Error::None;
-  Error err = index.seek(key, cursor);
+namespace {
+
+// The records of one tree that start with `key` (see searchCandidates):
+// every whole title equal to it, the most popular titles ending in it, and up
+// to kSearchWindow that go on past it. Unsorted.
+Error collectCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, const std::string& key, bool top,
+                        std::vector<SearchCandidate>& out) {
+  Error err = index.seek(key, cursor, top);
   if (err != Error::None) return err;
 
   // Records whose key is the query itself come first, in entry order. Every
@@ -139,7 +141,7 @@ Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::strin
 
   // Then titles that go on past the query ("Paris Hilton"), up to the window.
   if (runCut) {
-    err = index.seek(key + '\x01', cursor);  // the first key longer than the query
+    err = index.seek(key + '\x01', cursor, top);  // the first key longer than the query
     if (err != Error::None) return err;
   }
   for (size_t taken = 0; taken < kSearchWindow; taken++) {
@@ -152,12 +154,52 @@ Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::strin
     if (!keyHasPrefix(rec.key, key)) break;
     out.push_back({rec.entry, rec.score, false});
   }
-  if (out.empty() && key.size() >= 4) return fuzzyCandidates(index, cursor, key, out);
+  return Error::None;
+}
+
+void rank(std::vector<SearchCandidate>& v) {
   // Exact first, then popularity; key order (the scan order) breaks ties.
-  std::stable_sort(out.begin(), out.end(), [](const SearchCandidate& a, const SearchCandidate& b) {
+  std::stable_sort(v.begin(), v.end(), [](const SearchCandidate& a, const SearchCandidate& b) {
     if (a.exact != b.exact) return a.exact;
     return a.score > b.score;
   });
+}
+
+}  // namespace
+
+Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::string_view query,
+                       std::vector<SearchCandidate>& out) {
+  out.clear();
+  const std::string key = foldKey(query);
+  if (key.empty()) return Error::None;
+  std::vector<SearchCandidate> whole;
+  Error err = collectCandidates(index, cursor, key, false, whole);
+  if (err != Error::None) return err;
+  if (whole.empty()) {
+    if (key.size() >= 4) return fuzzyCandidates(index, cursor, key, out);
+    return Error::None;
+  }
+  rank(whole);
+  if (!index.hasPopularTree()) {
+    out = std::move(whole);
+    return Error::None;
+  }
+  // The popular tree reaches the well-known titles a short prefix shares with
+  // thousands of rare ones: exact matches first, then those, then the rest.
+  std::vector<SearchCandidate> popular;
+  err = collectCandidates(index, cursor, key, true, popular);
+  if (err != Error::None) return err;
+  rank(popular);
+  std::vector<uint32_t> seen;
+  auto add = [&](const SearchCandidate& c) {
+    if (std::find(seen.begin(), seen.end(), c.entry) != seen.end()) return;
+    seen.push_back(c.entry);
+    out.push_back(c);
+  };
+  for (const auto& c : whole)
+    if (c.exact) add(c);
+  for (const auto& c : popular) add(c);
+  for (const auto& c : whole) add(c);
   return Error::None;
 }
 
@@ -283,7 +325,8 @@ Error searchMany(const std::vector<SearchSource>& sources, std::string_view quer
   for (bool progress = true; progress && out.size() < max;) {
     progress = false;
     for (size_t i = 0; i < sources.size() && out.size() < max; i++) {
-      if (take(i, false, hit)) {
+      for (uint8_t k = 0; k < std::max<uint8_t>(1, sources[i].weight) && out.size() < max; k++) {
+        if (!take(i, false, hit)) break;
         out.push_back({i, std::move(hit)});
         progress = true;
       }

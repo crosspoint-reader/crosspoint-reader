@@ -32,8 +32,16 @@ class TitleIndexWriter {
   size_t size() const { return records_.size(); }
 
   // Sorts and writes the index to `path` (via a temporary file renamed into
-  // place). Returns false and sets `error` on failure.
-  bool write(const std::string& path, const uint8_t zimUuid[16], uint32_t zimEntryCount, std::string* error);
+  // place). Returns false and sets `error` on failure. With popularMax, an
+  // index of more than twice that many records also gets a popular tree of
+  // at most popularMax records: those of the best-scored titles.
+  bool write(const std::string& path, const uint8_t zimUuid[16], uint32_t zimEntryCount, std::string* error,
+             size_t popularMax = 0);
+  // Records in the popular tree of the last write (0: none).
+  size_t popularRecords() const { return popularRecords_; }
+  // The lowest score whose records, with every higher score's, number at
+  // most maxRecords (255 when even the top score has more).
+  uint8_t popularThreshold(size_t maxRecords) const;
 
  private:
   struct Record {
@@ -47,6 +55,7 @@ class TitleIndexWriter {
 
   std::vector<char> arena_;
   std::vector<Record> records_;
+  size_t popularRecords_ = 0;
 };
 
 // Adds every searchable title of `archive`: the front-article list (articles

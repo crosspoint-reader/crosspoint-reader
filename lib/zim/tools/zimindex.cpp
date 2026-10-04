@@ -132,10 +132,13 @@ int main(int argc, char** argv) {
   }
   std::fprintf(stderr, "  %zu titles in %.1f s; sorting and writing...\n", writer.size(), secondsSince(t0));
   std::string why;
-  if (!writer.write(out, archive.header().uuid, archive.entryCount(), &why)) {
+  // Popular tree: the best-known titles, so short prefixes find them first.
+  constexpr size_t kPopularMax = 400000;
+  if (!writer.write(out, archive.header().uuid, archive.entryCount(), &why, kPopularMax)) {
     std::fprintf(stderr, "zimindex: %s\n", why.c_str());
     return 2;
   }
-  std::fprintf(stderr, "wrote %s in %.1f s total\n", out.c_str(), secondsSince(t0));
+  std::fprintf(stderr, "wrote %s (%zu popular) in %.1f s total\n", out.c_str(), writer.popularRecords(),
+               secondsSince(t0));
   return 0;
 }

@@ -136,25 +136,24 @@ size_t TitleIndexWriter::add(std::string_view key, uint32_t entry, uint8_t score
   return records_.size() - 1;
 }
 
-bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16], uint32_t zimEntryCount,
-                             std::string* error) {
-  const auto fail = [&](const std::string& why) {
-    if (error) *error = why;
-    return false;
-  };
-  if (records_.size() > 0xffffffffull) return fail("too many titles");
-  std::sort(records_.begin(), records_.end(), [this](const Record& a, const Record& b) {
-    const int c = keyOf(a).compare(keyOf(b));
-    return c != 0 ? c < 0 : a.entry < b.entry;
-  });
+namespace {
 
-  const std::string tmp = path + ".tmp";
-  std::FILE* f = std::fopen(tmp.c_str(), "wb");
-  if (!f) return fail("cannot create " + tmp);
+struct TreeInfo {
+  uint32_t records = 0;
+  uint32_t firstLeaf = 0;
+  uint32_t leafCount = 0;
+  uint32_t root = 0;
+  uint32_t levels = 0;
+};
+
+}  // namespace
+
+// One B-tree of `records` (already in key order) appended to `out`.
+template <typename Records, typename KeyOf>
+static bool writeTree(PageFile& out, const Records& records, KeyOf keyOf, TreeInfo& info) {
+  bool ok = true;
   uint8_t page[kPage];
   std::memset(page, 0, kPage);
-  bool ok = std::fwrite(page, 1, kPage, f) == kPage;  // header placeholder
-  PageFile out(f);
 
   // Leaves.
   std::vector<Child> level;
@@ -170,8 +169,10 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
     count = 0;
     prev.clear();
   };
-  const uint32_t firstLeaf = out.next();
-  for (const Record& r : records_) {
+  info.firstLeaf = out.next();
+  info.records = 0;
+  for (const auto* rp : records) {
+    const auto& r = *rp;
     const std::string_view key = keyOf(r);
     size_t shared = 0;
     if (count > 0) {
@@ -191,16 +192,17 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
     page[off + 2 + key.size() - shared + 5] = r.flags;
     off += 2 + (key.size() - shared) + 6;
     ++count;
+    ++info.records;
     prev.assign(key);
   }
   if (count > 0 || level.empty()) {
     if (level.empty()) level.push_back(Child{std::string(), out.next()});
     flushLeaf();
   }
-  const uint32_t leafCount = out.next() - firstLeaf;
+  info.leafCount = out.next() - info.firstLeaf;
 
   // Inner levels, bottom-up, until one page holds every child.
-  uint32_t levels = 0;
+  info.levels = 0;
   while (level.size() > 1) {
     std::vector<Child> upper;
     off = kPageHeader;
@@ -224,7 +226,66 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
     }
     if (count > 0) flushInner();
     level.swap(upper);
-    ++levels;
+    ++info.levels;
+  }
+  info.root = level.front().page;
+  return ok;
+}
+
+uint8_t TitleIndexWriter::popularThreshold(size_t maxRecords) const {
+  // Records per score; the lowest score whose records, with every higher
+  // score's, still fit in maxRecords.
+  size_t perScore[256] = {};
+  for (const Record& r : records_) perScore[r.score]++;
+  size_t kept = 0;
+  int threshold = 256;
+  for (int sc = 255; sc >= 1; --sc) {
+    if (kept + perScore[sc] > maxRecords) break;
+    kept += perScore[sc];
+    threshold = sc;
+  }
+  return threshold > 255 ? 255 : static_cast<uint8_t>(threshold);
+}
+
+bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16], uint32_t zimEntryCount,
+                             std::string* error, size_t popularMax) {
+  const auto fail = [&](const std::string& why) {
+    if (error) *error = why;
+    return false;
+  };
+  if (records_.size() > 0xffffffffull) return fail("too many titles");
+  std::sort(records_.begin(), records_.end(), [this](const Record& a, const Record& b) {
+    const int c = keyOf(a).compare(keyOf(b));
+    return c != 0 ? c < 0 : a.entry < b.entry;
+  });
+
+  const std::string tmp = path + ".tmp";
+  std::FILE* f = std::fopen(tmp.c_str(), "wb");
+  if (!f) return fail("cannot create " + tmp);
+  uint8_t page[kPage];
+  std::memset(page, 0, kPage);
+  bool ok = std::fwrite(page, 1, kPage, f) == kPage;  // header placeholder
+  PageFile out(f);
+  const auto key = [this](const Record& r) { return keyOf(r); };
+
+  std::vector<const Record*> all;
+  all.reserve(records_.size());
+  for (const Record& r : records_) all.push_back(&r);
+  TreeInfo whole;
+  ok = ok && writeTree(out, all, key, whole);
+
+  // The popular tree: the records of the best-scored titles, so a short
+  // prefix reaches them before the rarer titles that share it. Only worth it
+  // when the index is much bigger than the tree would be.
+  TreeInfo top;
+  if (popularMax > 0 && records_.size() > popularMax * 2) {
+    const uint8_t threshold = popularThreshold(popularMax);
+    std::vector<const Record*> popular;
+    for (const Record* r : all)
+      if (r->score >= threshold) popular.push_back(r);
+    all.clear();
+    all.shrink_to_fit();
+    if (!popular.empty()) ok = ok && writeTree(out, popular, key, top);
   }
 
   // Header.
@@ -234,12 +295,20 @@ bool TitleIndexWriter::write(const std::string& path, const uint8_t zimUuid[16],
   put32(page + 12, kTitleIndexPageSize);
   put32(page + 16, kFoldVersion);
   put32(page + 20, static_cast<uint32_t>(records_.size()));
-  put32(page + 24, firstLeaf);
-  put32(page + 28, leafCount);
-  put32(page + 32, level.front().page);
-  put32(page + 36, levels);
+  put32(page + 24, whole.firstLeaf);
+  put32(page + 28, whole.leafCount);
+  put32(page + 32, whole.root);
+  put32(page + 36, whole.levels);
   std::memcpy(page + 40, zimUuid, 16);
   put32(page + 56, zimEntryCount);
+  if (top.records > 0) {
+    put32(page + 60, top.records);
+    put32(page + 64, top.firstLeaf);
+    put32(page + 68, top.leafCount);
+    put32(page + 72, top.root);
+    put32(page + 76, top.levels);
+  }
+  popularRecords_ = top.records;
   ok = ok && std::fseek(f, 0, SEEK_SET) == 0 && std::fwrite(page, 1, kPage, f) == kPage;
   ok = std::fclose(f) == 0 && ok;
   if (!ok) {

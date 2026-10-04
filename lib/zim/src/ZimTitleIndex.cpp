@@ -33,7 +33,7 @@ Error TitleIndex::open(std::unique_ptr<Source> source) {
   header_ = TitleIndexHeader();
   if (!source) return Error::Io;
   if (source->size() < kTitleIndexPageSize) return Error::BadMagic;
-  uint8_t h[64];
+  uint8_t h[80];
   if (!source->read(0, h, sizeof h)) return Error::Io;
   if (std::memcmp(h, kTitleIndexMagic, 8) != 0) return Error::BadMagic;
   TitleIndexHeader hd;
@@ -47,6 +47,11 @@ Error TitleIndex::open(std::unique_ptr<Source> source) {
   hd.levels = rd32(h + 36);
   std::memcpy(hd.zimUuid, h + 40, 16);
   hd.zimEntryCount = rd32(h + 56);
+  hd.topRecordCount = rd32(h + 60);
+  hd.topFirstLeaf = rd32(h + 64);
+  hd.topLeafCount = rd32(h + 68);
+  hd.topRoot = rd32(h + 72);
+  hd.topLevels = rd32(h + 76);
   if (hd.version < kTitleIndexMinVersion || hd.version > kTitleIndexVersion) return Error::BadVersion;
   if (hd.pageSize != kTitleIndexPageSize) return Error::BadHeader;
   if (hd.foldVersion != kFoldVersion) return Error::BadVersion;
@@ -56,6 +61,12 @@ Error TitleIndex::open(std::unique_ptr<Source> source) {
   if (hd.leafCount == 0 || hd.firstLeaf == 0 || hd.firstLeaf >= pageCount || hd.leafCount > pageCount - hd.firstLeaf ||
       hd.root == 0 || hd.root >= pageCount || hd.levels > 16) {
     return Error::BadHeader;
+  }
+  if (hd.topRecordCount > 0 &&
+      (hd.topLeafCount == 0 || hd.topFirstLeaf == 0 || hd.topFirstLeaf >= pageCount ||
+       hd.topLeafCount > pageCount - hd.topFirstLeaf || hd.topRoot == 0 || hd.topRoot >= pageCount ||
+       hd.topLevels > 16)) {
+    hd.topRecordCount = 0;  // a damaged popular tree: search the whole index only
   }
   header_ = hd;
   pageCount_ = pageCount;
@@ -75,7 +86,9 @@ Error TitleIndex::readPage(uint32_t page, uint8_t* buf) {
 }
 
 Error TitleIndex::loadLeaf(uint32_t page, Cursor& cursor) {
-  if (page < header_.firstLeaf || page - header_.firstLeaf >= header_.leafCount) {
+  const uint32_t first = cursor.top_ ? header_.topFirstLeaf : header_.firstLeaf;
+  const uint32_t count = cursor.top_ ? header_.topLeafCount : header_.leafCount;
+  if (page < first || page - first >= count) {
     cursor.page_ = 0;  // past the last leaf
     return Error::None;
   }
@@ -89,14 +102,16 @@ Error TitleIndex::loadLeaf(uint32_t page, Cursor& cursor) {
   return Error::None;
 }
 
-Error TitleIndex::seek(std::string_view foldedKey, Cursor& cursor) {
+Error TitleIndex::seek(std::string_view foldedKey, Cursor& cursor, bool top) {
   if (!isOpen()) return Error::NotFound;
   cursor.page_ = 0;
+  cursor.top_ = top && hasPopularTree();
+  if (top && !cursor.top_) return Error::None;  // no popular tree: nothing in it
   // Descend: in each inner page take the last child whose first key is
   // strictly below the target (equal keys may continue from the child before).
-  uint32_t page = header_.root;
+  uint32_t page = cursor.top_ ? header_.topRoot : header_.root;
   uint8_t* buf = cursor.buf_;
-  for (uint32_t level = header_.levels; level > 0; --level) {
+  for (uint32_t level = cursor.top_ ? header_.topLevels : header_.levels; level > 0; --level) {
     Error err = readPage(page, buf);
     if (err != Error::None) return err;
     if (buf[0] != kInner) return Error::BadCluster;

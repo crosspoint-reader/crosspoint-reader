@@ -118,6 +118,8 @@ void SearchActivity::openKeyboard() {
     const auto& kb = std::get<KeyboardResult>(result.data);
     query_ = kb.text;
     inResults_ = false;
+    resultsMax_ = kMaxResults;
+    resultsFocus_ = -1;
     if (kb.picked < 0 || kb.picked >= static_cast<int>(picks_.size())) {
       // OK: every result, full screen; an empty field keeps the keyboard.
       if (query_.empty())
@@ -266,18 +268,27 @@ void SearchActivity::loadBooks() {
   LOG_INF("PLIB", "search: %u books", static_cast<unsigned>(books_.size()));
 }
 
-// After OK: up to kMaxResults results as a full-screen list that scrolls
+// After OK: kMaxResults results at a time as a full-screen list that scrolls
 // (swipe or the side buttons). Back returns to the keyboard; Back from an
 // article opened here returns to this list.
 void SearchActivity::openResults() {
   std::vector<KeyboardEntryActivity::LiveRow> rows;
   std::string status;
-  compute(query_, scope_, kMaxResults, kBooksInResults, rows, results_, status);
+  if (resultsMax_ == 0) resultsMax_ = kMaxResults;
+  compute(query_, scope_, resultsMax_, kBooksInResults, rows, results_, status);
   std::vector<std::string> labels;
   std::vector<std::string> subtitles;
   for (auto& r : rows) {
     labels.push_back(std::move(r.text));
     subtitles.push_back(std::move(r.tag));
+  }
+  // A full page may not be all: offer the next one at the foot.
+  if (rows.size() >= resultsMax_) {
+    labels.emplace_back("More results");
+    subtitles.emplace_back();
+    Pick more;
+    more.kind = PickKind::More;
+    results_.push_back(std::move(more));
   }
   if (labels.empty()) {
     labels.push_back(status.empty() ? "No results" : status);
@@ -287,7 +298,8 @@ void SearchActivity::openResults() {
   const std::string where = scopes_[std::min<size_t>(scope_, scopes_.size() - 1)].label;
   auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput,
                                                     "\xE2\x80\x9C" + query_ + "\xE2\x80\x9D \xC2\xB7 " + where,
-                                                    std::move(labels), std::move(subtitles));
+                                                    std::move(labels), std::move(subtitles), resultsFocus_);
+  resultsFocus_ = -1;
   if (!list) {
     openKeyboard();
     return;
@@ -301,6 +313,12 @@ void SearchActivity::openResults() {
     }
     const int row = std::get<MenuResult>(result.data).action;
     if (row < 0 || row >= static_cast<int>(results_.size()) || results_[row].kind == PickKind::None) {
+      openResults();
+      return;
+    }
+    if (results_[row].kind == PickKind::More) {
+      resultsFocus_ = row;  // the first of the new rows
+      resultsMax_ += kMaxResults;
       openResults();
       return;
     }
@@ -320,6 +338,7 @@ void SearchActivity::resume() {
 void SearchActivity::act(const Pick& pick) {
   switch (pick.kind) {
     case PickKind::None:
+    case PickKind::More:  // handled by the results list
       resume();
       return;
     case PickKind::Article:
