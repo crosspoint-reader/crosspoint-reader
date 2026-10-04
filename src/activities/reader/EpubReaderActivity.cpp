@@ -458,16 +458,21 @@ void EpubReaderActivity::loop() {
   // Idle image prefetch: hand the next page to the decoder task, which writes
   // the .pxc without touching the framebuffer. The render path renders from
   // that cache, so the first view of an image page skips the placeholder pass.
+  // Skipped while a section build is live: the retained builder holds the bulk
+  // of the free heap, so a decode started under it is likely to be refused.
   {
     RenderLock lock(RenderLock::Mode::Try);
-    if (lock.ownsLock() && section && !skipLoopDelay() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
-        millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
-        ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
+    if (lock.ownsLock() && section && !section->isBuilding() && !skipLoopDelay() && renderer.hasFrameBuffer() &&
+        lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
         (idlePrefetchSpine != currentSpineIndex || idlePrefetchPage != section->currentPage)) {
       const int nextPage = section->currentPage + 1;
       if (nextPage < static_cast<int>(section->pageCount)) {
         if (auto p = section->loadPage(nextPage)) {
-          if (p->hasImagesNeedingDecode()) {
+          // Only queue a decode the decoder will actually accept. The floor is
+          // the decoder's own requirement, so this gate cannot drift from the
+          // check the decoder runs when the worker picks the job up.
+          if (p->hasImagesNeedingDecode() && ESP.getFreeHeap() >= p->decodeFreeHeapFloor() &&
+              ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC) {
             // Decode at the position the real render will use (same margin
             // math as renderBook()) so the .pxc matches a decode at view time.
             int mTop, mRight, mBottom, mLeft;

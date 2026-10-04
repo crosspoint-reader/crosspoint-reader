@@ -357,6 +357,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
 }  // namespace
 
+size_t JpegToFramebufferConverter::minFreeHeapToDecode() const { return MIN_FREE_HEAP_FOR_JPEG; }
+
 bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
   size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < MIN_FREE_HEAP_FOR_JPEG) {

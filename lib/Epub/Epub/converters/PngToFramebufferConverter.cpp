@@ -312,6 +312,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
 }  // namespace
 
+size_t PngToFramebufferConverter::minFreeHeapToDecode() const { return MIN_FREE_HEAP_FOR_PNG; }
+
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
   size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {

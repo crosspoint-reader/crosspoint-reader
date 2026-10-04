@@ -21,6 +21,7 @@ ImageBlock::ImageBlock(const std::string& imagePath, const std::string& srcPath,
 
 bool ImageDecoderFactory::isFormatSupported(const std::string&) { return false; }
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string&) { return nullptr; }
+size_t ImageDecoderFactory::minFreeHeapToDecode(const std::string&) { return 0; }
 bool ImageToFramebufferDecoder::validateAndStoreDimensions(int64_t, int64_t, ImageDimensions&, const char*) {
   return false;
 }

@@ -40,3 +40,8 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
 }
 
 bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) { return getDecoder(imagePath) != nullptr; }
+
+size_t ImageDecoderFactory::minFreeHeapToDecode(const std::string& imagePath) {
+  const ImageToFramebufferDecoder* decoder = getDecoder(imagePath);
+  return decoder ? decoder->minFreeHeapToDecode() : 0;
+}
