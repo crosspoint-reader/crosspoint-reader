@@ -101,10 +101,6 @@ class ParsedText {
                    const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
-  using ClusterBoundaryFn = size_t (*)(const char*, size_t);
-  void addSegmentedWord(const std::string& word, EpdFontFamily::Style style, WordJoin firstJoin,
-                        ClusterBoundaryFn nextBoundary);
-
  public:
   explicit ParsedText(const bool hyphenationEnabled = false, const bool focusReadingEnabled = false,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2)

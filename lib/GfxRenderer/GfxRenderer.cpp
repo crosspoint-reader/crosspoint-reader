@@ -14,9 +14,9 @@
 #include <algorithm>
 
 #include "../Memory/Memory.h"
+#include "../ThaiShaper/ThaiCharacter.h"
 #include "FontCacheManager.h"
 #include "GlyphBitmap.h"
-#include "lib/ThaiShaper/ThaiCharacter.h"
 
 namespace {
 constexpr int trackingBetween(const uint32_t leftCp, const uint32_t rightCp, const int8_t tracking) {
@@ -747,7 +747,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       const int combiningX = combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                        combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
-      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(combiningGlyph->top) + raiseBy);
       continue;
     }
 
@@ -781,13 +781,6 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     } else {
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
     }
-    if (prevCp != 0) {
-      xPosFP += font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-    }
-
-    lastBaseTop = glyph->top;
-    renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, fp4::toPixel(xPosFP), yPos, black, style);
-    xPosFP += glyph->advanceX;  // 12.4 fixed-point advance
     prevCp = cp;
   }
 }
@@ -2177,7 +2170,6 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     if (utf8IsCombiningMark(cp)) {
       continue;
     }
-    if (glyph->advanceX == 0) continue;
     cp = font.applyLigatures(cp, text, style);
 
     // Differential rounding: snap (previous advance + current kern) together,
@@ -2279,7 +2271,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       const int combiningY = combiningMark::anchorOverRotated90CW(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
                                                                   combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
-      lastBaseTop = std::max(lastBaseTop, static_cast<int>(glyph->top) + raiseBy);
+      lastBaseTop = std::max(lastBaseTop, static_cast<int>(combiningGlyph->top) + raiseBy);
       continue;
     }
 

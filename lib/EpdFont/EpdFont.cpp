@@ -23,6 +23,12 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
+    const bool isCombining = utf8IsCombiningMark(cp);
+
+    if (!isCombining) {
+      cp = applyLigatures(cp, string);
+    }
+
     const EpdGlyph* glyph = getGlyph(cp);
     if (!glyph) {
       // Keep cursor movement stable when a base glyph is missing, but don't attach subsequent
@@ -36,17 +42,6 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
         lastBaseTop = 0;
       }
       continue;
-    }
-
-    const bool isCombining = (glyph->advanceX == 0);
-
-    if (!isCombining) {
-      cp = applyLigatures(cp, string);
-      glyph = getGlyph(cp);
-      if (!glyph) {
-        prevCp = 0;
-        continue;
-      }
     }
 
     const combiningMark::Anchor anchor = combiningMark::anchorFor(cp);
