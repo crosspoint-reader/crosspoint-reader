@@ -73,6 +73,7 @@ Release tags are what we rebase onto.
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` (extended) | `#ifdef POCKET_LIBRARY`: live rows carry a source tag and can refill the field (past searches); scope chips above the rows, the last opening a list | search everything (M6) |
 | `src/activities/home/HomeActivity.{h,cpp}`, `src/activities/ActivityManager.h` (`HomeMenuItem::SEARCH`), `src/components/CoverGridHomeUi.{h,cpp}` | `#ifdef POCKET_LIBRARY`: a sixth tab (magnifier) on the Cover Grid home opens search; the list homes are unchanged; its icon is drawn upright (`pocketlib/icons/UprightIcon.h`) | search entry point (owner's choice) |
 | `src/activities/boot_sleep/SleepActivity.cpp` | `#ifdef POCKET_LIBRARY`: the Dark and Light sleep screens show DON'T PANIC (a 1-bit picture, `pocketlib/images/DontPanic.h`, lettered in Fredoka, OFL) with "Sleeping" small under it, in place of the CrossPoint logo | owner's request, after the Guide's cover |
+| `src/activities/settings/SettingsActivity.cpp` | `#ifdef POCKET_LIBRARY`: "Check for updates" hidden | it downloads upstream CrossPoint into the other app slot and boots it, replacing Pocket Library |
 | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
 | `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: a half refresh on every return to Home and on every fourth other screen change (push, pop, replace), never weakening a deeper one already promoted; readers and the control center are left alone. (First version did it on every change: it cleared the ghosting but flashed the panel on each tap; owner report) | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
 | `lib/LibraryIndex/LibraryBuilder.cpp`, `lib/LibraryIndex/LibraryFormat.h`, `src/activities/library/LibraryListActivity.cpp`, `test/CMakeLists.txt` | `#ifdef POCKET_LIBRARY`: the title sort and the letter groups skip a leading "The", "A" or "An" (`TitleSortKey.h`, ours); `CLIX_FOLD_VERSION` 5 so existing indexes rebuild once; one `add_subdirectory(pocketlib_title_sort)` | "The" shouldn't decide where a book files (owner) |
@@ -634,3 +635,8 @@ download over Wi-Fi when needed); the last missing-symbol fixes come later;
 the six failed book conversions are dropped. From here the priority is
 everything working excellently: speed, battery life, fast loading, with
 optional features cut where they cost too much.
+
+## 2026-10-04 — Builds name their commit
+
+Release builds show `1.6.5-pocketlib-<commit>` on Settings → About (CI sets
+POCKETLIB_BUILD), so the owner and I can tell which build is on the device.

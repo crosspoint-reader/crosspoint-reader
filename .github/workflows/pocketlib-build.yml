@@ -76,7 +76,10 @@ jobs:
           uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
 
       - name: Build
-        run: pio run -e "${{ matrix.env }}" -j1
+        run: |
+          # Pocket Library builds name their commit on Settings > About.
+          export POCKETLIB_BUILD="${GITHUB_SHA::7}"
+          pio run -e "${{ matrix.env }}" -j1
 
       - name: Prepare files
         run: |
