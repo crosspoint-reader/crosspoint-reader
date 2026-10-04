@@ -401,19 +401,6 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
 
 enum class SleepRecentKind : uint8_t { Standard, Overlay };
 
-bool isRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx, const uint8_t window) {
-  return recentKind == SleepRecentKind::Overlay ? APP_STATE.isRecentOverlaySleep(idx, window)
-                                                : APP_STATE.isRecentSleep(idx, window);
-}
-
-void pushRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx) {
-  if (recentKind == SleepRecentKind::Overlay) {
-    APP_STATE.pushRecentOverlaySleep(idx);
-  } else {
-    APP_STATE.pushRecentSleep(idx);
-  }
-}
-
 void getLCGState(const SleepRecentKind kind, uint32_t& seed, uint32_t& state, uint16_t& indexesLeft,
                  uint16_t& indexesTotal) {
   switch (kind) {
@@ -500,24 +487,32 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   uint32_t lcgC = (lcgSeed * 2u + 1u) % lcgM;
 
   if (lcgIndexesLeft == 0 || lcgIndexesTotal != fileCount || lcgIndexesLeft > fileCount || lcgState >= lcgM) {
-    uint8_t attempt = 0;
-    const uint8_t recentFill =
-        recentKind == SleepRecentKind::Overlay ? APP_STATE.recentOverlaySleepFill : APP_STATE.recentSleepFill;
-    const uint8_t window = static_cast<uint8_t>(std::min<uint16_t>(recentFill, fileCount - 1));
+    uint16_t previousIndexes[CrossPointState::SLEEP_AVOID_REPEAT_LOOKBACK];
+    uint8_t previousCount = 0;
+    const uint8_t window =
+        static_cast<uint8_t>(std::min<uint16_t>(fileCount / 2, CrossPointState::SLEEP_AVOID_REPEAT_LOOKBACK));
+    if (lcgIndexesLeft == 0 && lcgIndexesTotal == fileCount && lcgState < fileCount) {
+      // Invert the completed cycle (5 * 0xCCCCCCCD = 1 mod 2^32) to obtain recently shown image indexes
+      static constexpr uint32_t LCG_MULTIPLIER_INVERSE = 0xCCCCCCCDu;
+      uint32_t previousState = lcgState;
+      for (uint32_t step = 0; step < lcgM && previousCount < window; ++step) {
+        if (previousState < fileCount) previousIndexes[previousCount++] = static_cast<uint16_t>(previousState);
+        previousState = (LCG_MULTIPLIER_INVERSE * (previousState - lcgC)) & (lcgM - 1u);
+      }
+    }
 
     lcgIndexesLeft = lcgIndexesTotal = fileCount;
-
-    do {
-      lcgState = lcgSeed = static_cast<uint32_t>(random(lcgM));
-      lcgC = (lcgSeed * 2u + 1u) % lcgM;
-      for (uint32_t attemptSeed = 0; attemptSeed < lcgM; ++attemptSeed) {
-        lcgState = (5u * lcgState + lcgC) % lcgM;
-        if (lcgState < fileCount) {
-          randomFileIndex = lcgState;
-          break;
-        }
+    lcgState = lcgSeed = static_cast<uint32_t>(random(lcgM));
+    lcgC = (lcgSeed * 2u + 1u) % lcgM;
+    for (uint32_t step = 0; step < lcgM; ++step) {
+      lcgState = (5u * lcgState + lcgC) % lcgM;
+      if (lcgState < fileCount &&
+          std::find(previousIndexes, previousIndexes + previousCount, lcgState) == previousIndexes + previousCount) {
+        // Starting here rotates the new cycle without removing any images from its permutation.
+        randomFileIndex = lcgState;
+        break;
       }
-    } while (++attempt < 32 && isRecentSleepIndex(recentKind, randomFileIndex, window));
+    }
   } else {
     for (uint32_t attempt = 0; attempt < lcgM; ++attempt) {
       lcgState = (5u * lcgState + lcgC) % lcgM;
@@ -537,7 +532,6 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   selectedPath = dirPath;
   selectedPath += "/";
   selectedPath += name.get();
-  pushRecentSleepIndex(recentKind, randomFileIndex);
   setLCGState(recentKind, lcgSeed, lcgState, lcgIndexesLeft - 1, lcgIndexesTotal);
   APP_STATE.saveToFile();
   return true;
