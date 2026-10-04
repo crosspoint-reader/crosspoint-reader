@@ -922,8 +922,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // Reserve the Clear Text row even when the entry is empty.
   const int tipCount = cursorMode ? 1 : urlPanel ? 3 : symbols ? 2 : 3 + (inputType == InputType::Url ? 1 : 0);
   const int tipsHeight = (tipCount + 1) * tipsLh;
-  // Cursor instructions occupy up to two lines below the field.
-  const int tipsTop = underlineBottom + (cursorMode ? 2 * tipsLh : 0);
+  // Reserve cursor instructions even for an empty field; passwords need a second row.
+  const int tipsTop = underlineBottom + (cursorMode ? (isPassword ? 2 : 1) * tipsLh : 0);
 
   if (kbRect.y - tipsTop >= tipsHeight) {
     int y = tipsTop + (kbRect.y - tipsTop - tipsHeight) / 2;
