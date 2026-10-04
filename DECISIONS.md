@@ -704,3 +704,10 @@ POCKETLIB_BUILD), so the owner and I can tell which build is on the device.
   "Every pet page". The pack is not shown again as a collection.
 - Military working-dog guidelines (K9TCCC) were considered and left out:
   written for combat medics.
+
+## 2026-10-04 — Ideas parked (owner: not now)
+
+Survival shelf (FM 21-76, Where There Is No Doctor, FEMA Are You Ready?, SAS
+if DRM-free), notes app (Bluetooth keyboard untested), emergency-card sleep
+screen, QR hand-off to a phone, Wi-Fi hotspot library, face-down sleep,
+flashlight, CPR metronome. Recorded so they can be picked up later.
