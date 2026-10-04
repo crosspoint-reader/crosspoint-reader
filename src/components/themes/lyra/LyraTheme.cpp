@@ -50,6 +50,8 @@ const uint8_t* iconForName(UIIcon icon) {
       return TransferIcon;
     case UIIcon::Library:
       return LibraryIcon;
+    case UIIcon::Plugins:
+      return BlocksIcon;
     case UIIcon::Wifi:
       return WifiIcon;
     case UIIcon::Hotspot:

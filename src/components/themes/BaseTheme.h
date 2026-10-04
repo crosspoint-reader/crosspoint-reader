@@ -12,6 +12,8 @@ struct RecentBook;
 namespace freeink {
 namespace ui {
 struct HeaderProps;
+struct BitmapRef;
+struct ListItem;
 }  // namespace ui
 }  // namespace freeink
 
@@ -139,6 +141,7 @@ enum UIIcon {
   Settings,
   Transfer,
   Library,
+  Plugins,
   Wifi,
   Hotspot,
   Bookmark,
@@ -193,7 +196,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .progressBarMarginTop = 1,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
-                                 .keyboardKeyHeight = 48,
+                                 .keyboardKeyHeight = 56,
                                  .keyboardKeySpacing = 0,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = -13,
@@ -230,6 +233,8 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
+  static freeink::ui::BitmapRef checkboxIcon(bool checked);
+  static void setCheckboxRow(freeink::ui::ListItem& item, bool checked);
   static void drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect);
   // Draws a pre-dithered cover thumb 1:1, centered and clipped to fill the
   // slot. Rescaling a dithered bitmap aliases badly, so overflow is cropped.
