@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Block.h"
+#include "Epub/converters/DecodeTarget.h"
 
 class ImageBlock final : public Block {
  public:
@@ -19,11 +20,11 @@ class ImageBlock final : public Block {
   bool hasValidCache() const;
   bool needsDecode() const;
 
-  // Idle prefetch: decode straight to the .pxc cache without touching the
-  // framebuffer, at the position the real render will use so the cache matches
-  // a decode at view time. False asks the caller to stop retrying this page;
-  // the real render then retries with placeholder fallback.
-  bool prefetch(GfxRenderer& renderer, int x, int y) const;
+  // Cache-only decode of this image, run by ImageCacheService on its worker
+  // task. The target carries the renderer geometry (writeFramebuffer=false) so
+  // the worker never touches the live renderer. True when the .pxc is valid
+  // afterwards.
+  bool prefetch(const DecodeTarget& target, int x, int y) const;
   void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;
   static void clearRenderFailures();
 
@@ -55,11 +56,10 @@ class ImageBlock final : public Block {
   int16_t width;
   int16_t height;
 
-  bool positionOnScreen(GfxRenderer& renderer, int x, int y) const;
-  // Lazy-extract from the book, validate, and decode to the framebuffer and
-  // the .pxc cache; shared by render() and prefetch(). cacheOnly suppresses
-  // framebuffer writes for the idle path.
-  bool decodeImage(GfxRenderer& renderer, int x, int y, const std::string& cachePath, bool cacheOnly) const;
+  bool positionOnScreen(int screenWidth, int screenHeight, int x, int y) const;
+  // Lazy-extract from the book, validate, and decode straight to the .pxc (the
+  // target disables framebuffer output); owned by ImageCacheService.
+  bool decodeImage(const DecodeTarget& target, int x, int y, const std::string& cachePath) const;
 
   static void* extractCtx;
   static ExtractFn extractFn;

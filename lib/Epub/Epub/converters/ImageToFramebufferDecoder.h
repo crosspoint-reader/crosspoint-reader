@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "DecodeTarget.h"
+
 class GfxRenderer;
 
 struct ImageDimensions {
@@ -30,7 +32,15 @@ class ImageToFramebufferDecoder {
  public:
   virtual ~ImageToFramebufferDecoder() = default;
 
-  virtual bool decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer, const RenderConfig& config) = 0;
+  // Decode from a captured target. The idle prefetch cacher has no live
+  // renderer, so this is the only entry point it can use; the GfxRenderer
+  // overload below captures the live renderer and forwards here.
+  virtual bool decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
+                                   const RenderConfig& config) = 0;
+
+  // Convenience wrapper for framebuffer-rendering callers: captures the live
+  // renderer (writeFramebuffer = !config.cacheOnly) and forwards to the virtual.
+  bool decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer, const RenderConfig& config);
 
   virtual bool getDimensions(const std::string& imagePath, ImageDimensions& dims) const = 0;
 

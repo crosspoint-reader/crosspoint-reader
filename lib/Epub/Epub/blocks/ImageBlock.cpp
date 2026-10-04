@@ -10,6 +10,7 @@
 #include <cstring>
 #include <new>
 
+#include "Epub/ImageCacheService.h"
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 
@@ -168,7 +169,7 @@ void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y) {
   uint8_t tempRow[PXC_MAX_BYTES_PER_ROW];
 
   DirectPixelWriter pw;
-  pw.init(renderer);
+  pw.init(captureDecodeTarget(renderer));
 
   for (int row = 0; row < pxcSlotHeight; row++) {
     const uint8_t* rowBuffer = pxcRowPtr((size_t)row * bytesPerRow, bytesPerRow, tempRow);
@@ -249,7 +250,7 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   }
 
   DirectPixelWriter pw;
-  pw.init(renderer);
+  pw.init(captureDecodeTarget(renderer));
 
   int rowsInBuffer = 0;
   int bufferRow = 0;
@@ -293,6 +294,12 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
 bool ImageBlock::hasValidCache() const {
   const auto cachePath = getCachePath(imagePath);
+  // Missing cache is the normal "not decoded yet" case; don't log it as an
+  // error (the open below would).
+  if (!Storage.exists(cachePath.c_str())) {
+    return false;
+  }
+
   HalFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
     return false;
@@ -315,10 +322,8 @@ void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int
   }
 }
 
-bool ImageBlock::positionOnScreen(GfxRenderer& renderer, const int x, const int y) const {
+bool ImageBlock::positionOnScreen(const int screenWidth, const int screenHeight, const int x, const int y) const {
   // Bounds check render position using logical screen dimensions
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
   if (x < 0 || y < 0 || x + width > screenWidth || y + height > screenHeight) {
     LOG_ERR("IMG", "Invalid render position: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
             screenHeight);
@@ -327,8 +332,7 @@ bool ImageBlock::positionOnScreen(GfxRenderer& renderer, const int x, const int 
   return true;
 }
 
-bool ImageBlock::decodeImage(GfxRenderer& renderer, const int x, const int y, const std::string& cachePath,
-                             const bool cacheOnly) const {
+bool ImageBlock::decodeImage(const DecodeTarget& target, const int x, const int y, const std::string& cachePath) const {
   // The build only header-probed the image for dimensions; pull the actual
   // file out of the book now, on first visit to the page.
   if (!srcPath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
@@ -368,9 +372,9 @@ bool ImageBlock::decodeImage(GfxRenderer& renderer, const int x, const int y, co
   config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
-  config.cacheOnly = cacheOnly;
+  config.cacheOnly = !target.writeFramebuffer;
 
-  if (!decoder->decodeToFramebuffer(imagePath, renderer, config)) {
+  if (!decoder->decodeToFramebuffer(imagePath, target, config)) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
     return false;
   }
@@ -388,7 +392,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
-  if (!positionOnScreen(renderer, x, y)) {
+  if (!positionOnScreen(renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
     return;
   }
 
@@ -414,23 +418,26 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;  // Successfully rendered from cache
   }
 
-  LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
-  if (!decodeImage(renderer, x, y, cachePath, false)) {
-    rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
+  // Cache miss: ask the decoder task to produce the .pxc, then render from it.
+  // The render path never decodes inline, so .pxc has a single writer and a
+  // page turn can never race the idle prefetch.
+  const DecodeTarget target = captureDecodeTarget(renderer, /*writeFramebuffer=*/false);
+  if (ImageCacheService::getInstance().ensureCached(*this, target, x, y) &&
+      renderFromCache(renderer, cachePath, x, y, width, height)) {
+    renderer.preserveImagePolarity(x, y, width, height);
     return;
   }
 
-  renderer.preserveImagePolarity(x, y, width, height);
-  LOG_DBG("IMG", "Decode successful");
+  rememberImageFailure(imagePath);
+  renderPlaceholder(renderer, x, y);
 }
 
-bool ImageBlock::prefetch(GfxRenderer& renderer, const int x, const int y) const {
+bool ImageBlock::prefetch(const DecodeTarget& target, const int x, const int y) const {
   if (!needsDecode()) return true;
-  if (!positionOnScreen(renderer, x, y)) return false;
+  if (!positionOnScreen(target.screenWidth, target.screenHeight, x, y)) return false;
 
   LOG_DBG("IMG", "Prefetching image to cache: %s (%dx%d)", imagePath.c_str(), width, height);
-  if (!decodeImage(renderer, x, y, getCachePath(imagePath), true)) {
+  if (!decodeImage(target, x, y, getCachePath(imagePath))) {
     LOG_ERR("IMG", "Failed to prefetch image: %s", imagePath.c_str());
     return false;
   }
