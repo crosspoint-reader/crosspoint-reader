@@ -96,6 +96,7 @@ class ArticleActivity final : public Activity {
   void showPage(int index);
   void savePlace();
   bool handleLinkTap();
+  bool handlePictureTap();
   void followLink(const char* href);
   void goBack();
   void openContents(bool atOpen = false);

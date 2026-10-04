@@ -32,6 +32,7 @@
 #include "CrossPointSettings.h"
 #include "LibraryActivities.h"
 #include "MappedInputManager.h"
+#include "PictureActivity.h"
 #include "PocketLibrary.h"
 #include "ReaderFontSizes.h"
 #include "ReadingHistory.h"
@@ -225,6 +226,7 @@ void ArticleActivity::loop() {
   }
 
   if (handleLinkTap()) return;
+  if (handlePictureTap()) return;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     openContents();
@@ -578,6 +580,27 @@ bool ArticleActivity::handleLinkTap() {
       followLink(href.c_str());
       return true;
     }
+  }
+  return false;
+}
+
+// A tap on a picture shows it full screen.
+bool ArticleActivity::handlePictureTap() {
+  if (!page_ || !mappedInput.hasTouch()) return false;
+  int x = 0;
+  int y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return false;
+  for (const auto& el : page_->elements) {
+    if (el->getTag() != TAG_PageImage) continue;
+    const ImageBlock& img = static_cast<const PageImage&>(*el).getImageBlock();
+    const int left = marginLeft_ + el->xPos;
+    const int top = marginTop_ + el->yPos;
+    if (x < left || x >= left + img.getWidth() || y < top || y >= top + img.getHeight()) continue;
+    if (!img.imageExists()) return false;  // not drawn yet: nothing to enlarge
+    auto picture = makeUniqueNoThrow<PictureActivity>(renderer, mappedInput, img.getImagePath());
+    if (!picture) return false;
+    startActivityForResult(std::move(picture), [this](const ActivityResult&) { requestUpdate(); });
+    return true;
   }
   return false;
 }
