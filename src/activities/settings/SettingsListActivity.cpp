@@ -34,9 +34,9 @@ void SettingsListActivity::onExit() {
 }
 
 void SettingsListActivity::loop() {
-  if (pendingSection != SettingsSection::Count) {
+  if (pendingSection != SettingsSection::End) {
     const SettingsSection section = pendingSection;
-    pendingSection = SettingsSection::Count;
+    pendingSection = SettingsSection::End;
     openSection(section);
     return;
   }

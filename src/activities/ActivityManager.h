@@ -85,8 +85,8 @@ class ActivityManager {
   void goToFileTransfer();
   void goToJoinNetwork();  // File Transfer straight into Join Network (post heap-defrag reboot)
   void goToUsbDrive();
-  // openSection jumps straight into one group (Count = the section list).
-  void goToSettings(SettingsSection openSection = SettingsSection::Count);
+  // openSection jumps straight into one group (End = the section list).
+  void goToSettings(SettingsSection openSection = SettingsSection::End);
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
   void goToBrowser();

@@ -51,7 +51,7 @@ std::vector<SettingInfo>& sectionOf(SettingsBySection& out, const SettingsSectio
 SettingsSection sectionFor(const SettingInfo& setting);
 
 bool showOnDevice(const SettingInfo& setting) {
-  if (sectionFor(setting) == SettingsSection::Count || home_button::isSetting(setting.valuePtr)) return false;
+  if (sectionFor(setting) == SettingsSection::End || home_button::isSetting(setting.valuePtr)) return false;
   // The sunlight fading fix is a grayscale-waveform compensation that does
   // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
   if (setting.valuePtr == &CrossPointSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
@@ -81,14 +81,14 @@ SettingsSection systemSectionFor(const StrId nameId) {
   }
 }
 
-// Count = not a row here: other categories (KOReader Sync, Status Bar, ...)
+// End = not a row here: other categories (KOReader Sync, Status Bar, ...)
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
   if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
   if (setting.category == StrId::STR_CAT_CONTROLS) return SettingsSection::Controls;
   if (setting.category == StrId::STR_CAT_SYSTEM) return systemSectionFor(setting.nameId);
-  return SettingsSection::Count;
+  return SettingsSection::End;
 }
 
 // Device-only action rows added per section, beyond the shared list.
