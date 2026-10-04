@@ -259,9 +259,11 @@ zim::Archive* Library::ensureOpen(size_t i, zim::Error* error) {
   }
   zim::Options options;
   options.allocator = &kPsramAllocator;
-  // Two decoded ~2 MiB clusters: the article being read and the one before
-  // it (back navigation). PSRAM also holds the article text and SD fonts.
-  options.clusterCacheSize = 2;
+  // Three decoded clusters (up to ~2 MiB each): the article being read, a
+  // picture's, and the article before it (Back), so a picture no longer
+  // pushes the article out. PSRAM also holds the article text and SD fonts;
+  // the caches are dropped when PSRAM runs short (see below).
+  options.clusterCacheSize = 3;
   const uint32_t t0 = millis();
   const zim::Error e = archive->open(std::move(source), options);
   if (e != zim::Error::None) {

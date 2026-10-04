@@ -34,9 +34,9 @@ class Page;
 // laid out; the first one is shown as soon as it exists and the rest are laid
 // out between page turns.
 //
-// Reading, after the Wikipedia app: tap a link for a preview card (its
-// article's first sentences; tap the card to open it in this screen); Back
-// returns through the articles followed, to the place left in each. A tap in
+// Reading, after the Wikipedia app: tap a link to open its article in this
+// screen; Back returns through the articles followed, to the place left in
+// each. A tap in
 // the middle of the page shows a toolbar (Back, Contents, Search, Text size,
 // Images); Confirm opens the contents: the introduction, then each section
 // with its first sentence and length, the one being read marked. Articles can
@@ -55,7 +55,12 @@ class ArticleActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
-  bool preventAutoSleep() override { return state_.load() != State::Reading || building_; }
+  // Awake while an article loads or lays out; never for a failed one (that
+  // would keep the reader awake until the battery ran out).
+  bool preventAutoSleep() override {
+    const State s = state_.load();
+    return s == State::Loading || (s == State::Reading && building_);
+  }
   bool skipLoopDelay() override { return building_; }
 
   static constexpr size_t kMaxBack = 32;
@@ -96,13 +101,11 @@ class ArticleActivity final : public Activity {
   void openContents(bool atOpen = false);
   void openTextSize();
   void openSearch();
-  // The overlays drawn over the page: the toolbar and the link preview.
+  // The toolbar drawn over the page.
   bool handleOverlayInput();
-  void showPreview(const zim::Entry& to, const std::string& fragment);
   void openLinked(uint32_t entry, const std::string& fragment);
   void hideOverlays();
   void drawToolbar() const;
-  void drawPreview() const;
   // Page of each heading (-1 while not laid out yet), from the layout's
   // anchors; refreshed as layout runs. Callers hold the render lock.
   void refreshHeadingPages();
@@ -149,14 +152,8 @@ class ArticleActivity final : public Activity {
   bool outlineReturn_ = false;  // a section chosen in the outline: Back returns to it
   bool offerOutline_ = false;   // open the outline once the first page is up
   bool toolbar_ = false;        // guarded by RenderLock
-  struct Preview {
-    bool shown = false;
-    uint32_t entry = 0;
-    std::string fragment;
-    std::string title;
-    std::string text;
-  } preview_;                                              // guarded by RenderLock
-  mutable std::atomic<int> previewTop_{0};                 // set when the card is drawn, read by taps
+  static constexpr uint8_t kTurnsPerSave = 10;
+  uint8_t turnsSinceSave_ = 0;
   std::vector<std::pair<std::string, uint16_t>> anchors_;  // copied from the parser when layout ends
   bool building_ = false;
   uint32_t layoutStartMs_ = 0;

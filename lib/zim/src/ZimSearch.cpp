@@ -105,15 +105,52 @@ Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::strin
   if (key.empty()) return Error::None;
   Error err = index.seek(key, cursor);
   if (err != Error::None) return err;
+
+  // Records whose key is the query itself come first, in entry order. Every
+  // title that ends in the query's word ("Siege of Paris") is one of them, so
+  // in a big archive there are thousands, and the title itself ("Paris") can
+  // sit far past the window. Read the whole run (bounded): keep its whole
+  // titles, and only its most popular word matches.
+  std::vector<SearchCandidate> runWords;
   TitleRecord rec;
-  while (out.size() < kSearchWindow) {
+  bool haveNext = false;  // `rec` holds the first record after the run
+  bool runCut = false;
+  for (size_t scanned = 0;; scanned++) {
+    if (scanned >= kExactRunLimit) {
+      runCut = true;
+      break;
+    }
     err = index.next(cursor, rec);
     if (err == Error::NotFound) break;
     if (err != Error::None) return err;
+    if (rec.key != key) {
+      haveNext = true;
+      break;
+    }
+    if (rec.word)
+      runWords.push_back({rec.entry, rec.score, false});
+    else
+      out.push_back({rec.entry, rec.score, true});
+  }
+  std::stable_sort(runWords.begin(), runWords.end(),
+                   [](const SearchCandidate& a, const SearchCandidate& b) { return a.score > b.score; });
+  if (runWords.size() > kSearchWindow / 2) runWords.resize(kSearchWindow / 2);
+  out.insert(out.end(), runWords.begin(), runWords.end());
+
+  // Then titles that go on past the query ("Paris Hilton"), up to the window.
+  if (runCut) {
+    err = index.seek(key + '\x01', cursor);  // the first key longer than the query
+    if (err != Error::None) return err;
+  }
+  for (size_t taken = 0; taken < kSearchWindow; taken++) {
+    if (!haveNext) {
+      err = index.next(cursor, rec);
+      if (err == Error::NotFound) break;
+      if (err != Error::None) return err;
+    }
+    haveNext = false;
     if (!keyHasPrefix(rec.key, key)) break;
-    // Only a whole title is an exact match; a word inside one ranks by
-    // popularity with the rest.
-    out.push_back({rec.entry, rec.score, rec.key == key && !rec.word});
+    out.push_back({rec.entry, rec.score, false});
   }
   if (out.empty() && key.size() >= 4) return fuzzyCandidates(index, cursor, key, out);
   // Exact first, then popularity; key order (the scan order) breaks ties.

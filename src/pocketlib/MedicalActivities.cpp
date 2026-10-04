@@ -180,10 +180,23 @@ void CuratedListActivity::onEnter() {
   UiListActivity::onEnter();
 }
 
-// Finds each row's article on the card when the screen opens.
+// Finds each row's article on the card, once per session: the card does not
+// change while the reader is on, and the lookups cost dozens of reads.
 void CuratedListActivity::resolve() {
   auto& lib = pocketlib::Library::instance();
   const auto& cols = lib.collections();
+  struct Cached {
+    bool done = false;
+    size_t collections = 0;
+    std::vector<Row> rows;
+  };
+  static Cached cache[2];
+  Cached& c = cache[kind_ == Kind::FirstAid ? 0 : 1];
+  if (c.done && c.collections == cols.size()) {
+    rows_ = c.rows;
+    fillItems();
+    return;
+  }
   int collectionOf[kSources];
   for (int s = 0; s < kSources; s++) {
     collectionOf[s] = -1;
@@ -201,7 +214,11 @@ void CuratedListActivity::resolve() {
   if (rows_.empty() || (kind_ == Kind::Encyclopedia && rows_.size() == 1)) {
     LOG_INF("PLIB", "%s: nothing found on the card", title_.c_str());
   }
+  c = {true, cols.size(), rows_};
+  fillItems();
+}
 
+void CuratedListActivity::fillItems() {
   items_.assign(rows_.size(), fui::ListItem{});
   for (size_t i = 0; i < rows_.size(); i++) {
     items_[i].label = rows_[i].label.c_str();

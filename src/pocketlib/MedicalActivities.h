@@ -42,6 +42,7 @@ class CuratedListActivity final : public UiListActivity {
   void activateIndex(int index) override;
   const char* headerTitle() const override { return title_.c_str(); }
   void resolve();
+  void fillItems();
   void resolveFirstAid(int medline, int wikibooks);
   void resolveTopics(const int* collectionOf);  // indexed by source
 

@@ -232,8 +232,8 @@ void ActivityManager::loop() {
 // Screens redraw with the panel's fast waveform, which leaves a faint trace of
 // the screen before; the dithered gray selection bar makes it plain. A half
 // refresh clears it but flashes the panel, so it is spent sparingly: on every
-// return to Home (where the trace showed most) and otherwise on every fourth
-// screen change, before the traces build up. Readers keep their own refresh
+// fifth screen change, before the traces build up (not on every return to
+// Home: the owner found that flash on each visit too much). Readers keep their own refresh
 // choices, and the control center opens over the screen as is.
 void ActivityManager::cleanNextScreen() {
   // "Article" (Pocket Library) opens on a near-blank "Opening" screen that
@@ -244,8 +244,8 @@ void ActivityManager::cleanNextScreen() {
       currentActivity->name == "Article" || currentActivity->name == "KeyboardEntry" ||
       currentActivity->name == "PocketSearch")
     return;
-  constexpr uint8_t kScreensPerClean = 4;
-  if (currentActivity->name != "Home" && ++screensSinceClean_ < kScreensPerClean) return;
+  constexpr uint8_t kScreensPerClean = 5;
+  if (++screensSinceClean_ < kScreensPerClean) return;
   screensSinceClean_ = 0;
   renderer.promoteNextRefreshAtLeast(HalDisplay::HALF_REFRESH);
 }

@@ -43,6 +43,9 @@ struct SearchHit {
 };
 
 constexpr size_t kSearchWindow = 256;
+// Records read, at most, among those whose key is the query itself (every
+// title ending in that word, in a word index), to find the title itself.
+constexpr size_t kExactRunLimit = 16384;
 
 struct SearchStats {
   uint32_t recordsRead = 0;
@@ -56,7 +59,9 @@ struct SearchCandidate {
   uint8_t score = 0;
   bool exact = false;
 };
-// Up to kSearchWindow records starting with `query`, ranked (exact, score, key).
+// The records starting with `query`, ranked (exact, score, key): every whole
+// title equal to it, the most popular titles that end in it, and up to
+// kSearchWindow that go on past it.
 Error searchCandidates(TitleIndex& index, TitleIndex::Cursor& cursor, std::string_view query,
                        std::vector<SearchCandidate>& out);
 // Reads `c`'s entry into a hit unless its article is in `seenArticles`

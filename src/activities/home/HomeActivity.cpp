@@ -490,6 +490,14 @@ void HomeActivity::render(RenderLock&&) {
     }
     if (!firstRenderDone) {
       firstRenderDone = true;
+#ifdef POCKET_LIBRARY
+      // Load the recents' covers now, so the next pass draws them once
+      // instead of drawing the grid twice more (one panel refresh each).
+      if (!recentsLoaded && !recentsLoading) {
+        loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);
+        coverGridUi->refreshCoverPaths();
+      }
+#endif
       requestUpdate();
     } else if (!recentsLoaded && !recentsLoading) {
       loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);

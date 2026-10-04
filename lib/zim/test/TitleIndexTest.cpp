@@ -25,6 +25,7 @@
 #include "TitleIndexWriter.h"
 #include "ZimArchive.h"
 #include "ZimFold.h"
+#include "ZimSearch.h"
 #include "ZimTitleIndex.h"
 
 namespace {
@@ -267,5 +268,33 @@ TEST_P(RealFiles, IndexFindsTitlesWhateverTheCase) {
   zim::Archive other;
   ASSERT_EQ(other.open(zim::openArchiveSource(kData + "/" + GetParam() + "/small.zim")), zim::Error::None);
   EXPECT_FALSE(index.matches(other));
+  std::remove(path.c_str());
+}
+
+// "Paris" in English Wikipedia: thousands of titles end in the word ("Siege
+// of Paris"), and each is a word record keyed "paris", in entry order around
+// the title itself. The title must still come first, and titles that go on
+// past the query must still be offered.
+TEST(TitleSearch, ExactTitleAmongThousandsEndingInIt) {
+  zim::TitleIndexWriter w;
+  for (uint32_t i = 0; i < 3000; ++i) w.add("paris", i, static_cast<uint8_t>(i % 200), /*word=*/true);
+  w.add("paris", 1500 + 100000, 250);                       // the city, mid-run by entry
+  w.add("paris hilton", 200000, 240);                       // goes on past the query
+  w.add("paris (band)", 200001, 10);
+  const std::string path = tempPath("paris.pltitles");
+  std::string why;
+  ASSERT_TRUE(w.write(path, kUuid, 300000, &why)) << why;
+  zim::TitleIndex index;
+  ASSERT_EQ(openIndex(index, path), zim::Error::None);
+  zim::TitleIndex::Cursor cursor;
+  std::vector<zim::SearchCandidate> found;
+  ASSERT_EQ(zim::searchCandidates(index, cursor, "Paris", found), zim::Error::None);
+  ASSERT_FALSE(found.empty());
+  EXPECT_TRUE(found[0].exact);
+  EXPECT_EQ(found[0].entry, 101500u);
+  bool hilton = false;
+  for (const auto& c : found) hilton |= c.entry == 200000;
+  EXPECT_TRUE(hilton) << "titles longer than the query are still offered";
+  EXPECT_LE(found.size(), zim::kSearchWindow / 2 + zim::kSearchWindow + 1);
   std::remove(path.c_str());
 }

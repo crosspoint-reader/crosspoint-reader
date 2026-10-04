@@ -64,11 +64,6 @@ const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search",
 constexpr const char* kImageDir = "/.pocketlib/img";
 constexpr const char* kImageBase = "/.pocketlib/img/";
 
-class NullSink final : public zim::HtmlSink {
- public:
-  bool write(const char*, size_t) override { return true; }
-};
-
 // Streams the cleaner's output to the card.
 class FileSink final : public zim::HtmlSink {
  public:
@@ -175,7 +170,7 @@ void ArticleActivity::openEntry(uint32_t entry, uint32_t offset, const std::stri
 }
 
 void ArticleActivity::loop() {
-  if (state_ == State::Reading && (toolbar_ || preview_.shown)) {
+  if (state_ == State::Reading && toolbar_) {
     if (handleOverlayInput()) return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -261,7 +256,9 @@ void ArticleActivity::loop() {
     }
     if (target >= static_cast<int>(pageOffsets_.size())) return;
     showPage(target);
-    savePlace();
+    // The history file is rewritten on each save: on page turns, only every
+    // few pages (leaving the article, or sleep, saves the exact page).
+    if (++turnsSinceSave_ >= kTurnsPerSave) savePlace();
     requestUpdate();
     return;
   }
@@ -344,7 +341,7 @@ bool ArticleActivity::load() {
     lead_.clear();
     options.lead = &lead_;
     images_.clear();
-    options.images = allImages_ ? zim::HtmlImages::All : zim::HtmlImages::Lead;
+    options.images = allImages_ ? zim::HtmlImages::All : zim::HtmlImages::None;  // pictures on request (Images)
     options.imageList = &images_;
     zim::HtmlCleanStats stats;
     const bool ok = zim::cleanArticleHtml(html, options, sink, &stats);
@@ -553,7 +550,6 @@ void ArticleActivity::showPage(int index) {
   currentPage_ = index;
   notice_.clear();
   toolbar_ = false;
-  preview_.shown = false;
 }
 
 void ArticleActivity::savePlace() {
@@ -566,6 +562,7 @@ void ArticleActivity::savePlace() {
   place.title = title_;
   place.offset = pageVisible_[currentPage_];
   pocketlib::ReadingHistory::instance().record(place);
+  turnsSinceSave_ = 0;
 }
 
 bool ArticleActivity::handleLinkTap() {
@@ -634,7 +631,7 @@ void ArticleActivity::followLink(const char* href) {
     return;
   }
 
-  showPreview(to, target.fragment);
+  openLinked(to.index, target.fragment);
 }
 
 void ArticleActivity::openLinked(uint32_t entry, const std::string& fragment) {
@@ -873,13 +870,11 @@ void ArticleActivity::hideOverlays() {
   {
     RenderLock lock(*this);
     toolbar_ = false;
-    preview_.shown = false;
   }
   requestUpdate();
 }
 
-// With the toolbar or a preview up, input goes to them first. Returns true
-// when it was theirs.
+// With the toolbar up, input goes to it first. Returns true when it was its.
 bool ArticleActivity::handleOverlayInput() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     hideOverlays();
@@ -892,18 +887,6 @@ bool ArticleActivity::handleOverlayInput() {
     // the overlays.
     return false;
   }
-  if (preview_.shown) {
-    if (y >= previewTop_.load()) {
-      const uint32_t entry = preview_.entry;
-      const std::string fragment = preview_.fragment;
-      hideOverlays();
-      openLinked(entry, fragment);
-    } else {
-      hideOverlays();
-    }
-    return true;
-  }
-  // Toolbar.
   if (y >= kToolbarHeight) {
     hideOverlays();
     return true;
@@ -933,41 +916,6 @@ bool ArticleActivity::handleOverlayInput() {
   return true;
 }
 
-// A link's target: its title and first sentences, over the page. One read
-// of its cluster and a cleaning pass that keeps only the lead.
-void ArticleActivity::showPreview(const zim::Entry& to, const std::string& fragment) {
-  zim::Archive* archive = pocketlib::Library::instance().open(collection_);
-  std::string text;
-  if (archive) {
-    RenderLock lock(*this);  // drawing a page may be reading the archive for a picture
-    std::string storage;
-    std::string_view html;
-    if (archive->readView(to, storage, html) == zim::Error::None) {
-      std::string lead;
-      zim::HtmlCleanOptions options;
-      options.lead = &lead;
-      options.leadLimit = 500;
-      NullSink sink;
-      zim::cleanArticleHtml(html, options, sink);
-      text = zim::firstSentences(lead, 3, 360);
-    }
-  }
-  if (!archive || text.empty()) {
-    openLinked(to.index, fragment);  // nothing to preview: just open it
-    return;
-  }
-  {
-    RenderLock lock(*this);
-    preview_.shown = true;
-    preview_.entry = to.index;
-    preview_.fragment = fragment;
-    preview_.title = to.title;
-    preview_.text = std::move(text);
-    toolbar_ = false;
-  }
-  requestUpdate();
-}
-
 void ArticleActivity::drawToolbar() const {
   const int w = renderer.getScreenWidth();
   renderer.fillRect(0, 0, w, kToolbarHeight, false);
@@ -982,37 +930,6 @@ void ArticleActivity::drawToolbar() const {
     const int tw = renderer.getTextWidth(SMALL_FONT_ID, kToolbarLabels[i]);
     renderer.drawText(SMALL_FONT_ID, cx - tw / 2, kToolbarHeight - labelHeight - 8, kToolbarLabels[i], true);
   }
-}
-
-void ArticleActivity::drawPreview() const {
-  const int w = renderer.getScreenWidth();
-  const int h = renderer.getScreenHeight();
-  constexpr int kMargin = 12;
-  constexpr int kPad = 16;
-  const int inner = w - 2 * kMargin - 2 * kPad;
-  const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, preview_.title.c_str(), inner, 2, EpdFontFamily::BOLD);
-  const auto textLines = renderer.wrappedText(UI_10_FONT_ID, preview_.text.c_str(), inner, 7);
-  const int titleLh = renderer.getLineHeight(UI_12_FONT_ID);
-  const int textLh = renderer.getLineHeight(UI_10_FONT_ID);
-  const int smallLh = renderer.getLineHeight(SMALL_FONT_ID);
-  const int cardH = kPad + static_cast<int>(titleLines.size()) * titleLh + 8 +
-                    static_cast<int>(textLines.size()) * textLh + 12 + smallLh + kPad;
-  const int top = h - kMargin - cardH - 40;  // above the status bar
-  renderer.fillRect(kMargin, top, w - 2 * kMargin, cardH, false);
-  renderer.drawRoundedRect(kMargin, top, w - 2 * kMargin, cardH, 3, 12, true);
-  int y = top + kPad;
-  for (const auto& line : titleLines) {
-    renderer.drawText(UI_12_FONT_ID, kMargin + kPad, y, line.c_str(), true, EpdFontFamily::BOLD);
-    y += titleLh;
-  }
-  y += 8;
-  for (const auto& line : textLines) {
-    renderer.drawText(UI_10_FONT_ID, kMargin + kPad, y, line.c_str(), true);
-    y += textLh;
-  }
-  y += 12;
-  renderer.drawText(SMALL_FONT_ID, kMargin + kPad, y, "Tap here to open \xC2\xB7 tap the page to close", true);
-  previewTop_.store(top);
 }
 
 void ArticleActivity::fail(const char* message) {
@@ -1084,9 +1001,8 @@ void ArticleActivity::render(RenderLock&&) {
   renderStatusBar();
   // Overlays draw over the page in black and white (the anti-aliasing pass
   // would put grey text under them).
-  const bool overlay = toolbar_ || preview_.shown;
+  const bool overlay = toolbar_;
   if (toolbar_) drawToolbar();
-  if (preview_.shown) drawPreview();
   if (SETTINGS.textAntiAliasing && !overlay) {
     ReaderUtils::displayBaseWithRefreshCycle(renderer, pagesUntilFullRefresh_);
     ReaderUtils::renderAntiAliased(renderer,

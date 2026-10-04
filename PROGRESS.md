@@ -550,3 +550,23 @@ containing "Forbidden City"; see the session summary for the download.
   screens are unchanged.
 - Device checklist: Settings → Sleep Screen → Dark; press power: white
   DON'T PANIC on black, centred, edges crisp; Light gives black on white.
+
+## 2026-10-04 — Performance update; Home flash; Paris
+
+- Owner, on the device (newest build, after the wrong-file flashes were
+  traced: every flash had sent an old pocketlib-x4pro.bin; flashing now
+  downloads the release asset straight to ~/Downloads/pocketlib-new.bin):
+  DON'T PANIC good; Home flashed on every visit; "paris" did not find the
+  city until "paris france"; result list cut off; Wikivoyage pictures work;
+  wants a tapped picture full screen (later).
+- Fixed: Home flash (see DECISIONS); search finds the exact title among
+  thousands of word matches (test: ExactTitleAmongThousandsEndingInIt).
+- Cut or trimmed per the owner's table: link previews, pictures on request,
+  search pause. Free fixes: failed article sleep bug, place saves, Medical
+  cache, three-cluster cache. Builds name their commit on About; "Check for
+  updates" hidden.
+- 93 zim host tests, 387 firmware host tests pass; release build OK.
+- Device checklist: Home: no flash on return; search "paris": Paris first;
+  tap a link: opens straight away, Back returns; an article opens without a
+  picture, Images shows them; Medical opens instantly the second time;
+  About ends in -pocketlib-<commit>.

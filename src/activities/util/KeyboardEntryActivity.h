@@ -133,6 +133,8 @@ class KeyboardEntryActivity : public Activity {
 #ifdef POCKET_LIBRARY
   LiveFill liveFill;
   std::string liveFor;  // text the rows were computed for
+  std::string livePendingFor;     // text typed since, waiting for a pause
+  uint32_t livePendingSince = 0;  // millis() of the last edit
   bool liveComputed = false;
   std::vector<LiveRow> liveRows;  // guarded by the render lock
   std::string liveStatus;

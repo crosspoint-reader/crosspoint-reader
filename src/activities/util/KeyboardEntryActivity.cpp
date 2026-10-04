@@ -1034,6 +1034,15 @@ void KeyboardEntryActivity::onComplete(std::string text) {
 #ifdef POCKET_LIBRARY
 void KeyboardEntryActivity::refreshLive() {
   if (!liveFill || (liveComputed && liveFor == text && liveRowsFor == liveScopeSel)) return;
+  // While typing, search once the keys pause: a word typed quickly is one
+  // search instead of one per letter (each can read several collections).
+  // A new scope searches at once.
+  constexpr uint32_t kPauseMs = 300;
+  if (text != livePendingFor) {
+    livePendingFor = text;
+    livePendingSince = millis();
+  }
+  if (liveComputed && liveRowsFor == liveScopeSel && millis() - livePendingSince < kPauseMs) return;
   std::vector<LiveRow> rows;
   std::string status;
   liveFill(text, liveScopeSel, rows, status);

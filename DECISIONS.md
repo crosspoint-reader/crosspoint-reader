@@ -74,6 +74,8 @@ Release tags are what we rebase onto.
 | `src/activities/home/HomeActivity.{h,cpp}`, `src/activities/ActivityManager.h` (`HomeMenuItem::SEARCH`), `src/components/CoverGridHomeUi.{h,cpp}` | `#ifdef POCKET_LIBRARY`: a sixth tab (magnifier) on the Cover Grid home opens search; the list homes are unchanged; its icon is drawn upright (`pocketlib/icons/UprightIcon.h`) | search entry point (owner's choice) |
 | `src/activities/boot_sleep/SleepActivity.cpp` | `#ifdef POCKET_LIBRARY`: the Dark and Light sleep screens show DON'T PANIC (a 1-bit picture, `pocketlib/images/DontPanic.h`, lettered in Fredoka, OFL) with "Sleeping" small under it, in place of the CrossPoint logo | owner's request, after the Guide's cover |
 | `src/activities/settings/SettingsActivity.cpp` | `#ifdef POCKET_LIBRARY`: "Check for updates" hidden | it downloads upstream CrossPoint into the other app slot and boots it, replacing Pocket Library |
+| `src/activities/util/KeyboardEntryActivity.{h,cpp}` (live rows, already fenced) | live search waits for a 300 ms pause in typing | one search per word instead of per letter |
+| `src/activities/home/HomeActivity.cpp` | `#ifdef POCKET_LIBRARY`: the Cover Grid loads the recents' covers on its first pass | two panel redraws per Home visit instead of three |
 | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
 | `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: a half refresh on every return to Home and on every fourth other screen change (push, pop, replace), never weakening a deeper one already promoted; readers and the control center are left alone. (First version did it on every change: it cleared the ghosting but flashed the panel on each tap; owner report) | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
 | `lib/LibraryIndex/LibraryBuilder.cpp`, `lib/LibraryIndex/LibraryFormat.h`, `src/activities/library/LibraryListActivity.cpp`, `test/CMakeLists.txt` | `#ifdef POCKET_LIBRARY`: the title sort and the letter groups skip a leading "The", "A" or "An" (`TitleSortKey.h`, ours); `CLIX_FOLD_VERSION` 5 so existing indexes rebuild once; one `add_subdirectory(pocketlib_title_sort)` | "The" shouldn't decide where a book files (owner) |
@@ -640,3 +642,27 @@ optional features cut where they cost too much.
 
 Release builds show `1.6.5-pocketlib-<commit>` on Settings → About (CI sets
 POCKETLIB_BUILD), so the owner and I can tell which build is on the device.
+
+## 2026-10-04 — Performance cuts (owner approved the table)
+
+- Link previews cut: a tapped link opens its article (Back returns). A
+  preview decoded the target's cluster and cleaned the whole target article
+  for 500 characters, then did it again when opened.
+- Pictures only on request: articles open with none; the toolbar's Images
+  shows them all. Supersedes "the lead picture always" (2026-10-03). Note the
+  card's Wikipedia is the nopic edition: it has no pictures at all.
+- Live search waits for a 300 ms pause in typing; typo tolerance (already
+  only when nothing matches) therefore runs once per pause, not per letter.
+- Section first sentences in Contents kept: their collection already stops
+  once each section has its sentence, so the cost was small.
+- Cover Grid Home kept, its redraws cut (above); the half refresh on every
+  return to Home removed (owner: the flash each visit was too much); screens
+  get a half refresh every fifth change instead of every fourth.
+- Search: the whole run of records equal to the query is read (up to 16,384)
+  so a title among thousands ending in the same word ("Paris" among "Siege
+  of Paris"…) is found and ranked first; only the run's 128 most popular
+  word matches are kept, then up to 256 titles that go on past the query.
+- Also: a failed article no longer keeps the reader awake; the reading place
+  is saved every 10 page turns (and on leaving or sleep) instead of every
+  turn; Medical lists are looked up once per session; three clusters cached
+  instead of two.
