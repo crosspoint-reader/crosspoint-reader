@@ -67,27 +67,14 @@ bool showOnDevice(const SettingInfo& setting) {
   return true;
 }
 
-// Section for a shared-list System row that has no explicit placement.
-SettingsSection systemSectionFor(const StrId nameId) {
-  switch (nameId) {
-    case StrId::STR_LIBRARY_USE_METADATA:
-      return SettingsSection::Library;
-    case StrId::STR_SHOW_HIDDEN_FILES:
-    case StrId::STR_REMOVE_READ_FROM_RECENTS:
-    case StrId::STR_MOVE_FINISHED_TO_READ:
-      return SettingsSection::FileBrowser;
-    default:
-      return SettingsSection::General;
-  }
-}
-
 // End = not a row here: other categories (KOReader Sync, Status Bar, ...)
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
+  if (setting.section != SettingsSection::End) return setting.section;
   if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
   if (setting.category == StrId::STR_CAT_CONTROLS) return SettingsSection::Controls;
-  if (setting.category == StrId::STR_CAT_SYSTEM) return systemSectionFor(setting.nameId);
+  if (setting.category == StrId::STR_CAT_SYSTEM) return SettingsSection::General;
   return SettingsSection::End;
 }
 
