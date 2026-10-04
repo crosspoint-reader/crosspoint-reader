@@ -1,6 +1,8 @@
 _language_name: "ภาษาไทย"
 _language_code: "TH"
-_order: "17"
+_order: "36"
+_bcp47: "th"
+
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "กำลังบูต"
 STR_SLEEPING: "โหมดสลีป"
