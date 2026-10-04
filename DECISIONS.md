@@ -666,3 +666,23 @@ POCKETLIB_BUILD), so the owner and I can tell which build is on the device.
   is saved every 10 page turns (and on leaving or sleep) instead of every
   turn; Medical lists are looked up once per session; three clusters cached
   instead of two.
+
+## 2026-10-04 — Search part 2, pictures full screen, contents with the toolbar
+
+- Title index: a popular tree in the same .pltitles (header bytes 60–79,
+  still version 3, so older firmware reads the file and ignores it): the
+  records of the best-scored titles, at most 400,000 (zimindex), searched
+  first so a short prefix ("pari") offers Paris. Order of results: exact
+  whole titles, then the popular tree's matches, then the rest; each entry
+  once.
+- All scope: Wikipedia takes three results per round to each other
+  collection's one (SearchSource::weight).
+- The full result list ends in "More results" (80 more each time).
+- A tapped picture opens on its own screen (PictureActivity), as large as
+  fits (at most 3x), grey; any tap or button returns. The page's pixel cache
+  is at page size, so this decodes again (and the page once more on return):
+  a second or two, only when asked.
+- Contents and toolbar are one screen (owner): a tap in the middle of the
+  page, or Confirm, opens the contents with the toolbar across the top
+  (Back/Close, Search, Text size, Images/Hide images). The floating toolbar
+  over the page is gone. ChoiceListActivity::setToolbar.

@@ -58,10 +58,6 @@ constexpr uint32_t kBuildSliceMs = 60;
 // a one-letter link is still tappable.
 constexpr int kTouchSlop = 6;
 constexpr int kMinTouchWidth = 28;
-// The toolbar across the top of the page (a tap in the middle shows it).
-constexpr int kToolbarHeight = 76;
-constexpr int kToolbarItems = 5;
-const char* const kToolbarLabels[kToolbarItems] = {"Back", "Contents", "Search", "Text size", "Images"};
 constexpr const char* kImageDir = "/.pocketlib/img";
 constexpr const char* kImageBase = "/.pocketlib/img/";
 
@@ -171,9 +167,6 @@ void ArticleActivity::openEntry(uint32_t entry, uint32_t offset, const std::stri
 }
 
 void ArticleActivity::loop() {
-  if (state_ == State::Reading && toolbar_) {
-    if (handleOverlayInput()) return;
-  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (outlineReturn_ && state_ == State::Reading) {
       outlineReturn_ = false;
@@ -233,11 +226,7 @@ void ArticleActivity::loop() {
     return;
   }
   if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
-    {
-      RenderLock lock(*this);
-      toolbar_ = true;
-    }
-    requestUpdate();
+    openContents();  // the contents, with the toolbar across the top
     return;
   }
 
@@ -551,7 +540,6 @@ void ArticleActivity::showPage(int index) {
   page_ = std::move(page);
   currentPage_ = index;
   notice_.clear();
-  toolbar_ = false;
 }
 
 void ArticleActivity::savePlace() {
@@ -760,9 +748,34 @@ void ArticleActivity::openContents(const bool atOpen) {
   auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, title_, std::move(labels),
                                                     std::move(subtitles), here);
   if (!list) return;
+  // The reader's toolbar sits across the top of the contents.
+  list->setToolbar({{icon_arrow_left_32_bits, back_.empty() ? "Close" : "Back"},
+                    {icon_search_32_bits, "Search"},
+                    {icon_a_large_small_32_bits, "Text size"},
+                    {icon_image_32_bits, allImages_ ? "Hide images" : "Images"}});
   startActivityForResult(std::move(list), [this, headingOf, atOpen](const ActivityResult& result) {
     if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
     const int row = std::get<MenuResult>(result.data).action;
+    if (row <= ChoiceListActivity::kToolAction) {
+      switch (ChoiceListActivity::kToolAction - row) {
+        case 0:
+          if (!back_.empty())
+            goBack();
+          else
+            finish();
+          break;
+        case 1:
+          openSearch();
+          break;
+        case 2:
+          openTextSize();
+          break;
+        default:
+          toggleImages();
+          break;
+      }
+      return;
+    }
     if (row < 0 || row >= static_cast<int>(headingOf.size())) return;
     if (headingOf[row] == -2) {
       auto& history = pocketlib::ReadingHistory::instance();
@@ -889,72 +902,6 @@ void ArticleActivity::openSearch() {
   startActivityForResult(std::move(search), [this](const ActivityResult&) { requestUpdate(); });
 }
 
-void ArticleActivity::hideOverlays() {
-  {
-    RenderLock lock(*this);
-    toolbar_ = false;
-  }
-  requestUpdate();
-}
-
-// With the toolbar up, input goes to it first. Returns true when it was its.
-bool ArticleActivity::handleOverlayInput() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    hideOverlays();
-    return true;
-  }
-  int x = 0;
-  int y = 0;
-  if (!mappedInput.wasScreenTapped(x, y)) {
-    // A page turn falls through to the reader: showing the new page closes
-    // the overlays.
-    return false;
-  }
-  if (y >= kToolbarHeight) {
-    hideOverlays();
-    return true;
-  }
-  const int item = std::min(kToolbarItems - 1, x * kToolbarItems / std::max(1, renderer.getScreenWidth()));
-  hideOverlays();
-  switch (item) {
-    case 0:
-      if (!back_.empty())
-        goBack();
-      else
-        finish();
-      break;
-    case 1:
-      openContents();
-      break;
-    case 2:
-      openSearch();
-      break;
-    case 3:
-      openTextSize();
-      break;
-    default:
-      toggleImages();
-      break;
-  }
-  return true;
-}
-
-void ArticleActivity::drawToolbar() const {
-  const int w = renderer.getScreenWidth();
-  renderer.fillRect(0, 0, w, kToolbarHeight, false);
-  renderer.fillRect(0, kToolbarHeight - 2, w, 2, true);
-  const uint8_t* icons[kToolbarItems] = {icon_arrow_left_32_bits, icon_list_32_bits, icon_search_32_bits,
-                                         icon_a_large_small_32_bits, icon_image_32_bits};
-  const int cell = w / kToolbarItems;
-  const int labelHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  for (int i = 0; i < kToolbarItems; i++) {
-    const int cx = i * cell + cell / 2;
-    pocketlib::drawUprightIcon(renderer, icons[i], cx - 16, 10, 32);
-    const int tw = renderer.getTextWidth(SMALL_FONT_ID, kToolbarLabels[i]);
-    renderer.drawText(SMALL_FONT_ID, cx - tw / 2, kToolbarHeight - labelHeight - 8, kToolbarLabels[i], true);
-  }
-}
-
 void ArticleActivity::fail(const char* message) {
   // Free memory on the error screen: an out-of-memory report then says which
   // pool ran out (PSRAM holds clusters and article text, internal RAM the
@@ -1022,11 +969,7 @@ void ArticleActivity::render(RenderLock&&) {
 
   page_->render(renderer, fontId, marginLeft_, marginTop_);
   renderStatusBar();
-  // Overlays draw over the page in black and white (the anti-aliasing pass
-  // would put grey text under them).
-  const bool overlay = toolbar_;
-  if (toolbar_) drawToolbar();
-  if (SETTINGS.textAntiAliasing && !overlay) {
+  if (SETTINGS.textAntiAliasing) {
     ReaderUtils::displayBaseWithRefreshCycle(renderer, pagesUntilFullRefresh_);
     ReaderUtils::renderAntiAliased(renderer,
                                    [this, fontId]() { page_->render(renderer, fontId, marginLeft_, marginTop_); });

@@ -85,14 +85,28 @@ class ChoiceListActivity final : public UiListActivity {
                      std::vector<std::string> labels, std::vector<std::string> subtitles = {}, int initial = -1);
   void onEnter() override;
 
+  // An optional row of buttons across the top, above the title (an article's
+  // contents carry the reader's toolbar). Tapping tool i finishes with
+  // MenuResult::action = kToolAction - i.
+  struct Tool {
+    const uint8_t* icon;  // 32x32, upright (libraryIcons.h layout)
+    std::string label;
+  };
+  static constexpr int kToolAction = -100;
+  static constexpr int kToolbarHeight = 76;
+  void setToolbar(std::vector<Tool> tools) { tools_ = std::move(tools); }
+
  private:
   int listCount() const override { return static_cast<int>(items_.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
   const char* headerTitle() const override { return title_.c_str(); }
+  void drawChrome() override;
+  bool handleCustomInput() override;
 
   std::string title_;
+  std::vector<Tool> tools_;
   std::vector<std::string> labels_;
   std::vector<std::string> subtitles_;
   std::vector<freeink::ui::ListItem> items_;

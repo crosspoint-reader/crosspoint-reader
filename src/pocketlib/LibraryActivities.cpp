@@ -36,9 +36,11 @@
 namespace fui = freeink::ui;
 
 namespace {
-void layoutList(UiAppHost::UiScreen& screen, fui::ListProps& props) {
+// `top`: what sits above the header (-1: the theme's top padding).
+void layoutList(UiAppHost::UiScreen& screen, fui::ListProps& props, int top = -1) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+  if (top < 0) top = metrics.topPadding;
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(top + metrics.headerHeight), 0,
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   props.inputMask = fui::InputTouch;
@@ -573,12 +575,47 @@ void ChoiceListActivity::onEnter() {
 
 void ChoiceListActivity::buildScreen(UiScreen& screen) {
   fui::ListProps props;
-  layoutList(screen, props);
+  layoutList(screen, props, tools_.empty() ? -1 : kToolbarHeight);
   props.items = items_.data();
   props.count = static_cast<uint16_t>(items_.size());
   props.action = ACTION_ROW;
   syncListViewport(screen, props);
   screen.list(props);
+}
+
+void ChoiceListActivity::drawChrome() {
+  if (tools_.empty()) {
+    UiListActivity::drawChrome();
+    return;
+  }
+  // The toolbar, then the title under it.
+  const int w = renderer.getScreenWidth();
+  const int n = static_cast<int>(tools_.size());
+  renderer.fillRect(0, kToolbarHeight - 2, w, 2, true);
+  const int cell = w / n;
+  const int labelHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  for (int i = 0; i < n; i++) {
+    const int cx = i * cell + cell / 2;
+    if (tools_[i].icon) pocketlib::drawUprightIcon(renderer, tools_[i].icon, cx - 16, 10, 32);
+    const int tw = renderer.getTextWidth(SMALL_FONT_ID, tools_[i].label.c_str());
+    renderer.drawText(SMALL_FONT_ID, cx - tw / 2, kToolbarHeight - labelHeight - 8, tools_[i].label.c_str(), true);
+  }
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  GUI.drawHeader(renderer, Rect{0, kToolbarHeight, w, metrics.headerHeight}, title_.c_str());
+}
+
+bool ChoiceListActivity::handleCustomInput() {
+  if (tools_.empty()) return false;
+  int x = 0;
+  int y = 0;
+  if (!mappedInput.wasScreenTapped(x, y) || y >= kToolbarHeight) return false;
+  const int n = static_cast<int>(tools_.size());
+  const int i = std::min(n - 1, x * n / std::max(1, renderer.getScreenWidth()));
+  MenuResult r;
+  r.action = kToolAction - i;
+  setResult(std::move(r));
+  finish();
+  return true;
 }
 
 void ChoiceListActivity::activateIndex(int index) {

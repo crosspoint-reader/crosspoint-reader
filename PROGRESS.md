@@ -570,3 +570,18 @@ containing "Forbidden City"; see the session summary for the download.
   tap a link: opens straight away, Back returns; an article opens without a
   picture, Images shows them; Medical opens instantly the second time;
   About ends in -pocketlib-<commit>.
+
+## 2026-10-04 — Search part 2, pictures, contents with toolbar; Wikipedia maxi
+
+- Owner: the full result list (after OK) cut off; wants a tapped picture
+  full screen and the contents and toolbar together; the card has room for
+  Wikipedia with pictures, so library.toml now asks for the maxi edition
+  first. The owner is downloading it; the index must be built with the new
+  zimindex (popular tree) before copying, and copy runs without --only.
+- Built: popular tree in the title index (tests PopularTreeLiftsWellKnownTitles,
+  weighted searchMany), More results, PictureActivity, contents with toolbar.
+- 94 zim host tests, 387 firmware host tests; release build OK.
+- Device checklist: search "pari" offers Paris first (after the new index);
+  "All" shows mostly Wikipedia; OK list ends in More results; tap a picture
+  (Wikivoyage Paris, Images on): full screen, tap returns; tap the middle of a
+  page: contents with the toolbar on top; its buttons work.

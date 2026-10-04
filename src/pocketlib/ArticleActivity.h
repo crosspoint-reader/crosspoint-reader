@@ -36,10 +36,10 @@ class Page;
 //
 // Reading, after the Wikipedia app: tap a link to open its article in this
 // screen; Back returns through the articles followed, to the place left in
-// each. A tap in
-// the middle of the page shows a toolbar (Back, Contents, Search, Text size,
-// Images); Confirm opens the contents: the introduction, then each section
-// with its first sentence and length, the one being read marked. Articles can
+// each. A tap in the middle of the page (or Confirm) opens the contents, with
+// the toolbar across the top (Back, Search, Text size, Images): the
+// introduction, then each section with its first sentence and length, the one
+// being read marked. A tap on a picture shows it full screen. Articles can
 // open at their contents (a setting at its foot). The status bar names the
 // section. Where each
 // article was left is saved (ReadingHistory) and restored on the next open.
@@ -102,11 +102,7 @@ class ArticleActivity final : public Activity {
   void openContents(bool atOpen = false);
   void openTextSize();
   void openSearch();
-  // The toolbar drawn over the page.
-  bool handleOverlayInput();
   void openLinked(uint32_t entry, const std::string& fragment);
-  void hideOverlays();
-  void drawToolbar() const;
   // Page of each heading (-1 while not laid out yet), from the layout's
   // anchors; refreshed as layout runs. Callers hold the render lock.
   void refreshHeadingPages();
@@ -152,7 +148,6 @@ class ArticleActivity final : public Activity {
   bool (*bookExtractFn_)(void*, const char*, const char*) = nullptr;
   bool outlineReturn_ = false;  // a section chosen in the outline: Back returns to it
   bool offerOutline_ = false;   // open the outline once the first page is up
-  bool toolbar_ = false;        // guarded by RenderLock
   static constexpr uint8_t kTurnsPerSave = 10;
   uint8_t turnsSinceSave_ = 0;
   std::vector<std::pair<std::string, uint16_t>> anchors_;  // copied from the parser when layout ends
