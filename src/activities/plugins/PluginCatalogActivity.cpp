@@ -440,17 +440,10 @@ void PluginCatalogActivity::onExit() {
 }
 
 void PluginCatalogActivity::startBrowse() {
-  if (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) {
-    if (!loadBrowseListIndex()) {
-      fail(StrId::STR_FETCH_FEED_FAILED);
-      return;
-    }
-  }
-  // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
-  if (wantsListPicker()) {
-    // Same auth gate as fetchPage: without it a signed-out user is shown the
-    // list picker and only hits the sign-in screen after picking a list.
-    // loadToken() returns true for token-less catalogs, which skip the gate.
+  const bool needsListAuth = (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) || wantsListPicker();
+  if (needsListAuth) {
+    // Dynamic list indexes and list pickers may both use {token}/{cfg.KEY}, so
+    // resolve credentials before either path. Token-less catalogs skip the gate.
     loadConfig();
     if (!loadToken() && !(manifest.hasPasswordGrant() && refreshCredentialToken())) {
       if (manifest.hasDeviceCode()) {
@@ -461,6 +454,15 @@ void PluginCatalogActivity::startBrowse() {
       }
       return;
     }
+  }
+  if (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) {
+    if (!loadBrowseListIndex()) {
+      fail(StrId::STR_FETCH_FEED_FAILED);
+      return;
+    }
+  }
+  // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
+  if (wantsListPicker()) {
     items.clear();
     page = 1;
     hasMore = false;
@@ -1079,9 +1081,12 @@ void PluginCatalogActivity::activateIndex(const int index) {
     app.clearTapFlash();
     const auto& list = manifest.browseLists[index];
     if (list.hasNotice()) {
-      const std::string heading = list.noticeTitle.empty() ? list.title : list.noticeTitle;
-      auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, list.noticeMessage,
-                                                                  list.noticeCancel, list.noticeConfirm);
+      const std::string heading = substituted(list.noticeTitle.empty() ? list.title : list.noticeTitle, nullptr);
+      const std::string message = substituted(list.noticeMessage, nullptr);
+      const std::string cancel = substituted(list.noticeCancel, nullptr);
+      const std::string confirm = substituted(list.noticeConfirm, nullptr);
+      auto confirmation =
+          makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, message, cancel, confirm);
       if (!confirmation) {
         LOG_ERR("PCAT", "OOM: browse-list notice");
         return;
