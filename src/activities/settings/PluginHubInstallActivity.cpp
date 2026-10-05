@@ -12,6 +12,7 @@ namespace {
 constexpr const char* PLUGIN_HUB_BASE_URL =
     "https://raw.githubusercontent.com/jadehawk/PluginHub.crosspoint-plugin/stable/";
 constexpr const char* PLUGIN_HUB_DIR = "/.crosspoint/plugins/pluginhub";
+constexpr const char* PLUGIN_HUB_INSTALL_MARKER = "/.crosspoint/plugins/pluginhub/.installing";
 constexpr const char* PLUGIN_HUB_FILES[] = {"manifest.json", "device.json", "plugin.js", "README.md"};
 
 std::string pluginHubPath(const char* filename) { return std::string(PLUGIN_HUB_DIR) + "/" + filename; }
@@ -22,7 +23,7 @@ PluginHubInstallActivity::PluginHubInstallActivity(GfxRenderer& renderer, Mapped
 
 bool PluginHubInstallActivity::isInstalled() {
   const std::string dir = PluginLocations::findPluginDir("pluginhub");
-  if (dir.empty()) return false;
+  if (dir.empty() || Storage.exists(PLUGIN_HUB_INSTALL_MARKER)) return false;
   for (const char* filename : PLUGIN_HUB_FILES) {
     if (!Storage.exists((dir + "/" + filename).c_str())) return false;
   }
@@ -33,7 +34,7 @@ void PluginHubInstallActivity::onEnter() {
   CatalogActivity::onEnter();
 
   auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_INSTALL_PLUGIN_HUB),
-                                                               tr(STR_PLUGIN_HUB_INSTALL_DESCRIPTION));
+                                                              tr(STR_PLUGIN_HUB_INSTALL_DESCRIPTION));
   if (!confirmation) {
     LOG_ERR("PHUB", "OOM: install confirmation");
     fail(StrId::STR_MEMORY_ERROR);
@@ -88,6 +89,13 @@ HttpDownloader::DownloadError PluginHubInstallActivity::installPluginHub() {
     }
   }
 
+  // Mark the publish phase so a failed/crashed multi-file swap cannot make a
+  // partial bundle appear installed. A retry replaces every runtime file.
+  if (!Storage.writeFile(PLUGIN_HUB_INSTALL_MARKER, String("installing"))) {
+    cleanupStagedFiles();
+    return HttpDownloader::FILE_ERROR;
+  }
+
   // Publish only after all four files arrived. This mirrors the native plugin
   // catalog bundle installer and makes network failures safe to retry.
   for (const char* filename : PLUGIN_HUB_FILES) {
@@ -100,6 +108,10 @@ HttpDownloader::DownloadError PluginHubInstallActivity::installPluginHub() {
     }
   }
 
+  if (!Storage.remove(PLUGIN_HUB_INSTALL_MARKER)) {
+    LOG_ERR("PHUB", "Unable to clear install marker");
+    return HttpDownloader::FILE_ERROR;
+  }
   return HttpDownloader::OK;
 }
 
