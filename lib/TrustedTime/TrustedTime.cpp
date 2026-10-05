@@ -15,6 +15,16 @@ namespace {
 
 // Below this the clock was obviously never set (2025-01-01 UTC).
 constexpr int64_t MIN_VALID_EPOCH = 1735689600LL;
+// Above this a value is a fault, not a date (2100-01-01 UTC). Both RTC chips
+// stop at 2099, so anything past this is a dead battery or a corrupt read --
+// and the floor never lowers again, so adopting one would lock every real clock
+// out from then on.
+constexpr int64_t MAX_VALID_EPOCH = 4102444800LL;
+// How far ahead of the persisted floor an RTC may read. A chip whose calendar is
+// a year past what we have already trusted is faulty rather than right, and the
+// days either side cover a long power-off: past this the clock stays on the
+// floor until SNTP answers.
+constexpr int64_t MAX_RTC_LEAD_SECS = 31536000LL;
 // NVS wear guard: only rewrite the floor when it moved by at least this much.
 constexpr int64_t MIN_ADVANCE_SECS = 60;
 
@@ -85,6 +95,27 @@ void note() {
   if (now < MIN_VALID_EPOCH) return;
   raiseFloor(now);
   if (now - readFloor() >= MIN_ADVANCE_SECS) writeFloor(now);
+}
+
+void adopt(const int64_t epoch) {
+  // Out of range: leave the clock and the floor exactly as they are.
+  if (epoch < MIN_VALID_EPOCH || epoch > MAX_VALID_EPOCH) return;
+  // Compared against the persisted floor, not the in-RAM one: boot calls this
+  // before init(), so the in-RAM floor is still empty and the persisted value is
+  // the only record of a time this device has already lived through.
+  const int64_t stored = readFloor();
+  if (stored >= MIN_VALID_EPOCH && epoch - stored > MAX_RTC_LEAD_SECS) return;
+  // Deep sleep keeps the system clock, so a wake arrives with a live clock and
+  // an empty floor while the RTC may be the older reading: whichever is newer
+  // wins, and only inside the supported window.
+  const int64_t now = static_cast<int64_t>(time(nullptr));
+  const bool nowPlausible = now >= MIN_VALID_EPOCH && now <= MAX_VALID_EPOCH;
+  const int64_t candidate = nowPlausible && now > epoch ? now : epoch;
+  if (candidate < raiseFloor(0)) return;  // never rewind below a time we already trust
+  raiseFloor(candidate);
+  timeval tv = {static_cast<time_t>(candidate), 0};
+  settimeofday(&tv, nullptr);
+  if (candidate - readFloor() >= MIN_ADVANCE_SECS) writeFloor(candidate);
 }
 
 void startSync() {
