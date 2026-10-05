@@ -156,6 +156,7 @@ class CrossPointWebServer {
   void handleRelay();             // POST /api/relay     -> device makes an HTTP(S) call
   void handleCrypto();            // POST /api/crypto    -> generic crypto primitive (base64 I/O)
   void handleFetch();             // POST /api/fetch     -> device downloads a URL to SD
+  void handleBookKey();           // POST /api/book-key  -> store a protected book's wrapped content key
   void handlePluginFs();          // POST /api/plugin-fs -> plugin writes a small file to SD
   void handlePluginFsUpload();    // its multipart file part, streamed to <path>.tmp
 

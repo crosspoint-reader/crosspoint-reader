@@ -138,16 +138,22 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     return;
   }
 
-  const std::string rightsSrcPath = srcPath + ".rights";
-  if (Storage.exists(rightsSrcPath.c_str())) {
-    const std::string rightsDstPath = dstPath + ".rights";
-    if (!Storage.rename(rightsSrcPath.c_str(), rightsDstPath.c_str())) {
-      LOG_ERR("ERS", "Failed to move rights file %s -> %s", rightsSrcPath.c_str(), rightsDstPath.c_str());
-      if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
-        LOG_ERR("ERS", "Failed to restore epub after rights move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
-      }
-      return;
+  // Protected-book sidecars travel with the book; a protected book separated
+  // from its key no longer opens, so a failed move rolls everything back.
+  static constexpr const char* SIDECARS[] = {".key", ".rights"};
+  for (size_t i = 0; i < std::size(SIDECARS); i++) {
+    const std::string from = srcPath + SIDECARS[i];
+    if (!Storage.exists(from.c_str())) continue;
+    const std::string to = dstPath + SIDECARS[i];
+    if (Storage.rename(from.c_str(), to.c_str())) continue;
+    LOG_ERR("ERS", "Failed to move sidecar %s -> %s", from.c_str(), to.c_str());
+    for (size_t j = 0; j < i; j++) {
+      Storage.rename((dstPath + SIDECARS[j]).c_str(), (srcPath + SIDECARS[j]).c_str());
     }
+    if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
+      LOG_ERR("ERS", "Failed to restore epub after sidecar move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
+    }
+    return;
   }
 
   const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));
@@ -449,8 +455,17 @@ void EpubReaderActivity::loop() {
 
   {
     RenderLock lock(RenderLock::Mode::Try);
-    if (lock.ownsLock() && backgroundBuildWanted() && buildTickHeapGate()) {
-      if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
+    // Not under an open toolbar or panel: those repaint straight onto the page in the framebuffer.
+    if (lock.ownsLock() && overlay == Overlay::None && backgroundBuildWanted() && buildTickHeapGate()) {
+      // A build step can lend the framebuffer (image probes), which hands it back white while the
+      // panel still shows the page; redraw so nothing is later painted over the blank buffer.
+      const uint32_t loansBefore = renderer.frameBufferLoanCount();
+      const bool built = section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK);
+      if (renderer.frameBufferLoanCount() != loansBefore) {
+        pageBufferStale = true;
+        requestUpdate();
+      }
+      if (!built) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
         requestUpdate();
@@ -523,10 +538,11 @@ void EpubReaderActivity::loop() {
   }
 
   if (automaticPageTurnActive) {
+    const bool touchStopsAutoTurn = ReaderUtils::isTouchMenuGesture(renderer, mappedInput);
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
+        mappedInput.wasReleased(MappedInputManager::Button::Back) || touchStopsAutoTurn) {
       automaticPageTurnActive = false;
+      if (touchStopsAutoTurn) haptic_feedback::touchAction();
       requestUpdate();
       return;
     }
@@ -624,12 +640,15 @@ void EpubReaderActivity::loop() {
                                                       currentPageLinkMarginTop);
       if (link) {
         navigateToHref(link->href, true);
+        haptic_feedback::touchAction();
         return;
       }
     }
   }
 
-  if (confirmReleased || ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
+  const bool touchMenu = ReaderUtils::isTouchMenuGesture(renderer, mappedInput);
+  if (confirmReleased || touchMenu) {
+    if (touchMenu) haptic_feedback::touchAction();
     // Toolbar style: the page is on screen and in the framebuffer, so paint the
     // toolbar over it (one refresh) instead of pushing a full-screen menu.
     if (usesToolbarMenu() && section) {
@@ -673,6 +692,8 @@ void EpubReaderActivity::loop() {
     pendingManualTurn = 0;
     const bool succeeded = pageTurn(forward);
     notePageTurn(forward, succeeded);
+    if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
+    pendingManualTurnTouch = false;
     requestUpdate();
     return;
   }
@@ -698,6 +719,7 @@ void EpubReaderActivity::loop() {
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
     const bool succeeded = skipPages(nextTriggered ? 1 : -1);
     notePageTurn(false, succeeded);
+    if (succeeded && (touch.prev || touch.next)) haptic_feedback::touchAction(true);
     requestUpdate();
     return;
   }
@@ -707,6 +729,7 @@ void EpubReaderActivity::loop() {
         nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
                       : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
     applyOrientation(newOrientation);
+    if (touch.prev || touch.next) haptic_feedback::touchAction(true);
     requestUpdate();
     return;
   }
@@ -718,16 +741,13 @@ void EpubReaderActivity::loop() {
 
   if (turnGuardActive) {
     pendingManualTurn = prevTriggered ? -1 : 1;
+    pendingManualTurnTouch = touch.prev || touch.next;
     return;
   }
 
-  if (prevTriggered) {
-    const bool succeeded = pageTurn(false);
-    notePageTurn(false, succeeded);
-  } else {
-    const bool succeeded = pageTurn(true);
-    notePageTurn(true, succeeded);
-  }
+  const bool succeeded = pageTurn(!prevTriggered);
+  notePageTurn(!prevTriggered, succeeded);
+  if (succeeded && (touch.prev || touch.next)) haptic_feedback::touchAction();
   requestUpdate();
 }
 
@@ -1242,7 +1262,7 @@ bool EpubReaderActivity::backgroundBuildWanted() const {
 
 bool EpubReaderActivity::skipLoopDelay() {
   // The main loop holds the render lock while querying this hint.
-  return !buildHeapPaused && backgroundBuildWanted();
+  return overlay == Overlay::None && !buildHeapPaused && backgroundBuildWanted();
 }
 
 void EpubReaderActivity::renderBook() {
@@ -1494,6 +1514,7 @@ void EpubReaderActivity::renderBook() {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar();
     renderer.displayBuffer();
+    pageBufferStale = false;
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
@@ -1576,6 +1597,8 @@ void EpubReaderActivity::renderBook() {
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
+
+  pageBufferStale = false;  // the page is back in the framebuffer
 
   // Toolbar menu: overlay the toolbar / panel on top of the freshly rendered page.
   if (overlay != Overlay::None && usesToolbarMenu()) {
@@ -2109,7 +2132,7 @@ void EpubReaderActivity::openOverlay(Overlay target) {
   // Xteink-class panels, whose close path re-renders the page. If text or
   // images ever visibly ghost through the chrome, restore a HALF cleanup on
   // the first open (see #2190 for the mechanism).
-  if (section) {
+  if (section && !pageBufferStale) {
     // Serialize against the render task: renderBook may be mid-page (status
     // bar included) in the shared framebuffer, and painting the chrome from
     // the loop task at the same time interleaves the two frames.
@@ -2131,7 +2154,7 @@ void EpubReaderActivity::openOverlay(Overlay target) {
     renderOverlay();
     pushOverlayRefresh();
   } else {
-    requestUpdate();  // no page yet: renderBook() draws the overlay once it is
+    requestUpdate();  // no page in the framebuffer: renderBook() draws the overlay once it is
   }
 }
 

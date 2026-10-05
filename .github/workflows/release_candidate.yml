@@ -20,6 +20,8 @@ jobs:
             asset: firmware-x4c.bin
           - pio_env: papermono-gh_release_rc
             asset: firmware-papermono.bin
+          - pio_env: metalio_eink4-gh_release_rc
+            asset: firmware-metalio_eink4.bin
     steps:
       - uses: actions/checkout@v6
         with:
