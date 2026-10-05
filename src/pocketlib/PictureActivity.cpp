@@ -61,8 +61,10 @@ void PictureActivity::render(RenderLock&&) {
   const int y = (screenH - h) / 2;
 
   // The page's own cache of this picture is at its page size: this decodes it
-  // afresh at this size (and the page decodes again on return).
+  // afresh at this size (and the page decodes again on return). A failure
+  // remembered from the page is tried again here.
   ImageBlock::releaseRenderCache();
+  ImageBlock::clearRenderFailures();
   ImageBlock block(imagePath_, std::string(), static_cast<int16_t>(w), static_cast<int16_t>(h));
   block.render(renderer, x, y);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);

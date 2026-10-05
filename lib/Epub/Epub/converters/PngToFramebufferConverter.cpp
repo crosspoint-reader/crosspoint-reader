@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalMemory.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -17,6 +18,12 @@
 #include "PixelCache.h"
 
 namespace {
+
+// The heap the decoder object is allocated from. ESP.getFreeHeap() counts
+// internal RAM only, but with PSRAM (X4 Pro) an allocation this size goes
+// to PSRAM, so gating on internal RAM refused pictures that would fit.
+// Without PSRAM the default heap is internal RAM, as before.
+size_t freeHeapForDecoder() { return HalMemory::getDefaultHeap().freeBytes; }
 
 // Context struct passed through PNGdec callbacks to avoid global mutable state.
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
@@ -313,7 +320,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 }  // namespace
 
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
-  size_t freeHeap = ESP.getFreeHeap();
+  size_t freeHeap = freeHeapForDecoder();
   if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
     LOG_ERR("PNG", "Not enough heap for PNG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_PNG);
     return false;
@@ -341,7 +348,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
                                                     const RenderConfig& config) {
   LOG_DBG("PNG", "Decoding PNG: %s", imagePath.c_str());
 
-  size_t freeHeap = ESP.getFreeHeap();
+  size_t freeHeap = freeHeapForDecoder();
   if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
     LOG_ERR("PNG", "Not enough heap for PNG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_PNG);
     return false;

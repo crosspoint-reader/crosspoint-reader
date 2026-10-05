@@ -969,6 +969,9 @@ void ArticleActivity::render(RenderLock&&) {
   if (!page_) return;
 
   const int fontId = SETTINGS.getReaderFontId();
+  // A picture that failed on an earlier page (memory short while the layout
+  // was still running) gets another try; otherwise it stays an empty box.
+  ImageBlock::clearRenderFailures();
   renderer.clearScreen();
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
