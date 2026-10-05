@@ -616,3 +616,15 @@ containing "Forbidden City"; see the session summary for the download.
 - Device checklist: Lorne Michaels → Images: the photos show; tap one: full
   screen. In any article, swipe up: next page; down: previous; a swipe from
   the top edge still opens the light panel or contents.
+
+## 2026-10-05 — Every picture showed Lorne Michaels
+
+- Owner: after de2b23c, pictures in other articles showed the first one seen
+  (Lorne Michaels), sometimes in the wrong place. The article view never
+  released ImageBlock's RAM pixel slot after a page render (the book reader
+  does), so the first picture loaded stayed resident and was drawn for any
+  later picture with the same cache name, /.pocketlib/img/0.pxc in every
+  article, at its own size. The slot is now released at the end of each page
+  render and when an article's pictures are cleared.
+- Device checklist: Lorne Michaels → Images, then open another article with
+  pictures → Images: its own pictures, in place; tap one: that picture.

@@ -330,6 +330,7 @@ bool ArticleActivity::load() {
   // The previous article's pictures: their numbers would be reused.
   Storage.removeDir(kImageDir);
   Storage.ensureDirectoryExists(kImageDir);
+  ImageBlock::releaseRenderCache();
   {
     HalFile out;
     if (!Storage.openFileForWrite("PLIB", kXhtmlPath, out)) {
@@ -984,6 +985,12 @@ void ArticleActivity::render(RenderLock&&) {
   // A picture that failed on an earlier page (memory short while the layout
   // was still running) gets another try; otherwise it stays an empty box.
   ImageBlock::clearRenderFailures();
+  // The picture held in RAM for this render's passes goes when it ends, as in
+  // the book reader: kept, it was drawn for the next picture with the same
+  // file name (picture 0 of every later article), at its own size.
+  struct PxcSlotGuard {
+    ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+  } pxcSlotGuard;
   renderer.clearScreen();
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
