@@ -194,7 +194,7 @@ class ChapterHtmlSlimParser {
   void addTableRowSeparator();
   bool addTableGridSegment(uint8_t columnCount, int16_t topY, int16_t bottomY);
   void setCurrentPageVisibleOffset(uint32_t offset);
-  void makePages();
+  void makePages(bool includeLastLine = true);
   void failLayout();
   bool ensureCurrentPage();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);

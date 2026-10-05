@@ -14,6 +14,7 @@
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
+#include "network/ProtectedPaths.h"
 
 namespace {
 
@@ -114,6 +115,13 @@ bool anySubscriber(const Event e) {
     if (sub.name[0] != '\0' && (sub.mask & eventBit(e))) return true;
   }
   return false;
+}
+
+uint8_t subscriptionMask(const char* plugin) {
+  for (const auto& sub : subscribers) {
+    if (sub.name[0] != '\0' && strcmp(sub.name, plugin) == 0) return sub.mask;
+  }
+  return 0;
 }
 
 bool wantsConnectAny() {
@@ -224,9 +232,9 @@ bool loadDrainManifest(const Subscriber& sub, DrainManifest& out) {
   JsonDocument doc;
   if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return false;
 
-  out.tokenFile = doc["token"]["file"] | "";
+  out.tokenFile = pluginhttp::inPluginDir(sub.dir, doc["token"]["file"] | "");
   out.tokenPath = doc["token"]["path"] | "token";
-  out.configFile = doc["config"]["file"] | "";
+  out.configFile = pluginhttp::inPluginDir(sub.dir, doc["config"]["file"] | "");
   JsonVariantConst auth = doc["auth"];
   out.authType = auth["type"] | "device_code";
   pluginhttp::readRequest(auth["request"], "POST", out.authReq);
@@ -314,9 +322,9 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
     }
     if (handler->isDownload()) {
       const std::string dest = drainSubstituted(handler->dest, tok, config, meta, vars, ts, id);
-      // Substituted fields must not climb out of the tree (same guard as the
-      // catalog sidecar writer).
-      if (dest.empty() || dest[0] != '/' || dest.find("..") != std::string::npos) {
+      // Substituted fields must not climb out of the tree or land on a
+      // credential store (same guard as the catalog sidecar writer).
+      if (!protectedpaths::isPluginPath(dest)) {
         LOG_ERR("PEVT", "unsafe download dest rejected: %s", dest.c_str());
         return 200;  // treat as delivered: retrying can never fix the manifest
       }

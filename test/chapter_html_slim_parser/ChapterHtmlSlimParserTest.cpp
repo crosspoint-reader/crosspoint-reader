@@ -93,6 +93,48 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   }
 };
 
+TEST_F(ChapterHtmlSlimParserTest, SoftFlushAppliesParagraphSpacingOnlyOnce) {
+  parser.viewportWidth = 40;
+  parser.viewportHeight = 2000;
+  parser.extraParagraphSpacing = true;
+  BlockStyle style;
+  style.alignment = CssTextAlign::Left;
+  style.marginTop = 7;
+  style.paddingTop = 3;
+  style.marginBottom = 11;
+  style.paddingBottom = 2;
+  parser.currentTextBlock = std::make_unique<ParsedText>(false, false, style, 2);
+  for (int i = 0; i < 20; ++i) parser.currentTextBlock->addWord("word", EpdFontFamily::REGULAR);
+
+  parser.makePages(false);
+  ASSERT_FALSE(parser.layoutFailed);
+  ASSERT_NE(parser.currentPage, nullptr);
+  ASSERT_GT(parser.currentPage->elements.size(), 0u);
+  ASSERT_GT(parser.currentTextBlock->size(), 0u);
+  const int lineHeight = renderer.getLineHeight(0, 1.0f);
+  const size_t partialLines = parser.currentPage->elements.size();
+  EXPECT_EQ(parser.currentPageNextY, 10 + partialLines * lineHeight);
+  parser.makePages();
+
+  ASSERT_FALSE(parser.layoutFailed);
+  EXPECT_EQ(parser.currentTextBlock->size(), 0u);
+  EXPECT_EQ(parser.currentPageNextY, 10 + parser.currentPage->elements.size() * lineHeight + 13 + lineHeight / 2);
+  for (size_t i = 0; i < parser.currentPage->elements.size(); ++i) {
+    const auto& line = static_cast<const PageLine&>(*parser.currentPage->elements[i]);
+    EXPECT_EQ(line.yPos, 10 + i * lineHeight);
+    EXPECT_EQ(line.getBlock()->wordXpos(0), i == 0 ? 8 : 0);
+  }
+}
+
+TEST_F(ChapterHtmlSlimParserTest, SoftFlushPropagatesLineAllocationFailure) {
+  parser.viewportWidth = 40;
+  parser.currentPage = std::make_unique<Page>();
+  for (int i = 0; i < 20; ++i) parser.currentTextBlock->addWord("word", EpdFontFamily::REGULAR);
+  allocationSizeToFail = sizeof(PageLine);
+  parser.makePages(false);
+  EXPECT_TRUE(parser.layoutFailed);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
   ParsedText text;
   text.addWord("a", EpdFontFamily::REGULAR);

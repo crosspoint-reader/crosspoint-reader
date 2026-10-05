@@ -202,4 +202,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   int apiRequest(const pluginhttp::RequestSpec& req, String& out);
   pluginhttp::RequestSpec substitutedRequest(const pluginhttp::RequestSpec& req, const Item* item = nullptr) const;
   std::string substituted(std::string tpl, const Item* item) const;
+  // Where downloads land: a "dest_dir" in the plugin's config.json (its web
+  // card can offer the setting), else the manifest's download.dest_dir.
+  std::string downloadDir() const;
 };

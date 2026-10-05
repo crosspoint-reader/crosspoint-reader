@@ -4,44 +4,11 @@
 #include <PowerManager.h>
 #include <Preferences.h>
 #include <SPI.h>
-#include <Wire.h>
 #include <XteinkDetect.h>
-#include <esp_mac.h>
 #include <esp_sleep.h>
 
 // Global HalGPIO instance
 HalGPIO gpio;
-
-namespace X3GPIO {
-
-bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
-  }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
-    while (Wire.available()) {
-      Wire.read();
-    }
-    return false;
-  }
-  const uint8_t lo = Wire.read();
-  const uint8_t hi = Wire.read();
-  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
-  return true;
-}
-
-bool readBQ27220CurrentMA(int16_t* outCurrent) {
-  uint16_t raw = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
-    return false;
-  }
-  *outCurrent = static_cast<int16_t>(raw);
-  return true;
-}
-
-}  // namespace X3GPIO
 
 namespace {
 constexpr char HW_NAMESPACE[] = "cphw";
@@ -114,18 +81,6 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 
 }  // namespace
 
-bool HalGPIO::getFactoryMac(char (&address)[18]) const {
-  uint8_t mac[6] = {};
-  address[0] = '\0';
-  const esp_err_t err = esp_efuse_mac_get_default(mac);
-  if (err != ESP_OK) {
-    LOG_ERR("GPIO", "Factory MAC read failed: %d", static_cast<int>(err));
-    return false;
-  }
-  snprintf(address, sizeof(address), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return true;
-}
-
 void HalGPIO::begin() {
 #if FREEINK_MCU_C3
   _deviceType = detectDeviceTypeWithFingerprint();
@@ -154,6 +109,9 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  const uint8_t pageButtons = inputMgr.capacitivePageButtonMask();
+  capacitivePagePressed = (pageButtons & ~previousCapacitivePageButtons) != 0;
+  previousCapacitivePageButtons = pageButtons;
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -256,22 +214,11 @@ bool HalGPIO::verifyPowerButtonWakeup() {
 }
 
 bool HalGPIO::isUsbConnected() const {
-  if (deviceIsX3()) {
-    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
-    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-      int16_t currentMa = 0;
-      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        return currentMa > 0;
-      }
-      delay(2);
-    }
-    return false;
-  }
-  if (BoardConfig::ACTIVE.usbDetect >= 0) {
+  if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
     return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
   }
-  // No digital USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog
+  // X3 uses GPIO20 for I2C, not USB detection. Boards without a digital
+  // USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog
   // divider): infer external power from charging state instead. BatteryMonitor
   // picks the board's best source — charger IC status, gauge Current() sign, or
   // a /STAT pin — and reports false on boards with no battery telemetry at all.

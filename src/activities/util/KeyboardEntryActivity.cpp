@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "HapticFeedback.h"
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -542,6 +543,7 @@ void KeyboardEntryActivity::loop() {
 
   size_t touchedCursorPos = 0;
   if (mappedInput.wasScreenTapped(tx, ty) && cursorPositionFromPoint(tx, ty, touchedCursorPos)) {
+    haptic_feedback::touchAction();
     cursorPos = std::min(touchedCursorPos, text.length());
     // The masked text field maps taps per byte; snap back to a boundary so
     // the cursor never lands inside a multi-byte character.
@@ -571,6 +573,7 @@ void KeyboardEntryActivity::loop() {
     if (result.event) {
       syncSelectionToValue(result.event.value);
       if (activateValue(result.event.value, result.event.longPress)) {
+        haptic_feedback::touchAction(result.event.longPress);
         requestUpdate();
       }
       return;
@@ -886,28 +889,24 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   }
 
-  if (hintVisible && !text.empty()) {
+  if (hintVisible && cursorMode && !text.empty()) {
     const int hintLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int underlineY = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing;
     const int hintY = underlineY + 4;
-    if (cursorMode) {
-      int hintLineY = hintY;
-      if (inputType == InputType::Password && togglePos) {
-        renderer.drawCenteredText(
-            SMALL_FONT_ID, hintLineY,
-            passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD), true);
-        hintLineY += hintLh;
-        renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, tr(STR_KB_HINT_RETURN_CURSOR), true);
-      } else {
-        renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, tr(STR_KB_HINT_MOVE_CURSOR), true);
-        hintLineY += hintLh;
-        if (inputType == InputType::Password) {
-          const char* passTip = passwordVisible ? tr(STR_KB_HINT_HIDE_PASSWORD) : tr(STR_KB_HINT_SHOW_PASSWORD);
-          renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, passTip, true);
-        }
-      }
+    int hintLineY = hintY;
+    if (inputType == InputType::Password && togglePos) {
+      renderer.drawCenteredText(
+          SMALL_FONT_ID, hintLineY,
+          passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD), true);
+      hintLineY += hintLh;
+      renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, tr(STR_KB_HINT_RETURN_CURSOR), true);
     } else {
-      renderer.drawCenteredText(SMALL_FONT_ID, hintY, tr(STR_KB_HINT_EDIT_ENTRY), true);
+      renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, tr(STR_KB_HINT_MOVE_CURSOR), true);
+      hintLineY += hintLh;
+      if (inputType == InputType::Password) {
+        const char* passTip = passwordVisible ? tr(STR_KB_HINT_HIDE_PASSWORD) : tr(STR_KB_HINT_SHOW_PASSWORD);
+        renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, passTip, true);
+      }
     }
   }
 
@@ -920,21 +919,20 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int underlineBottom = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
   auto drawTip = [&](const char* tip, int y) { renderer.drawCenteredText(SMALL_FONT_ID, y, tip, true); };
 
-  int tipCount = 0;
-  if (cursorMode) {
-    tipCount = 1;
-  } else if (urlPanel) {
-    tipCount = 1 + (!text.empty() ? 1 : 0);
-  } else if (symbols) {
-    tipCount = !text.empty() ? 1 : 0;
-  } else {
-    tipCount = 1 + (inputType == InputType::Url ? 1 : 0) + (!text.empty() ? 1 : 0);
-  }
+  // Reserve the Clear Text row even when the entry is empty.
+  const int tipCount = cursorMode ? 1 : urlPanel ? 3 : symbols ? 2 : 3 + (inputType == InputType::Url ? 1 : 0);
+  const int tipsHeight = (tipCount + 1) * tipsLh;
+  // Reserve cursor instructions even for an empty field; passwords need a second row.
+  const int tipsTop = underlineBottom + (cursorMode ? (isPassword ? 2 : 1) * tipsLh : 0);
 
-  if (tipCount > 0) {
-    int y = (underlineBottom + kbRect.y) / 2 - (tipCount + 1) * tipsLh / 2;
+  if (kbRect.y - tipsTop >= tipsHeight) {
+    int y = tipsTop + (kbRect.y - tipsTop - tipsHeight) / 2;
     drawTip(tr(STR_KB_TIPS), y);
     y += tipsLh;
+    if (!cursorMode) {
+      drawTip(tr(STR_KB_HINT_EDIT_ENTRY), y);
+      y += tipsLh;
+    }
     if (cursorMode) {
       drawTip(tr(STR_KB_HINT_RETURN_KEYBOARD), y);
     } else if (urlPanel) {
