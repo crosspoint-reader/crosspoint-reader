@@ -178,7 +178,13 @@ Two browse formats:
     "lists": [                              // optional named sub-catalogs (json only):
       { "title": "All Books" },             // a picker screen precedes browsing;
       { "title": "Favorites",               // each entry may override url and/or
-        "body": "{\"page\":{page},\"per_page\":{limit},\"list\":\"favorites\"}" }
+        "body": "{\"page\":{page},\"per_page\":{limit},\"list\":\"favorites\"}",
+        "notice": {                            // optional confirmation before opening
+          "title": "Community content",        // defaults to the list title
+          "message": "Review this notice before continuing.",
+          "confirm": "Continue",               // defaults to translated Confirm
+          "cancel": "Go Back"                  // defaults to translated Cancel
+        } }
     ],                                      // omitted keys fall back to browse's
 
     // --- xml format (ignore the json fields above; fields become selectors) ---
@@ -257,8 +263,12 @@ Two browse formats:
   them while more pages exist — tappable and button-reachable like any row.
 - **Lists** (json): with `browse.lists`, opening the catalog shows a picker
   of the named entries first; each entry browses with its own url/body
-  overrides (server-side categories, shelves, sort orders). Back from the
-  book list returns to the picker.
+  overrides (server-side categories, shelves, sort orders). A list with
+  `notice.message` shows a confirmation before browsing; Back/cancel returns
+  to the picker, while confirm continues into the selected list. `notice.title`
+  defaults to the list title, and omitted button labels use the firmware's
+  translated Cancel/Confirm defaults. Back from the book list returns to the
+  picker.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
