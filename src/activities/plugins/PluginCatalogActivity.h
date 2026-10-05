@@ -64,8 +64,12 @@ class PluginCatalogActivity final : public CatalogActivity {
     // Named JSON views override the browse URL/body; Back returns to their picker.
     struct BrowseList {
       std::string title, url, body;
+      std::string noticeTitle, noticeMessage, noticeConfirm, noticeCancel;
+      bool hasNotice() const { return !noticeMessage.empty(); }
     };
     std::vector<BrowseList> browseLists;
+    // Optional remote index that supplies the named JSON views dynamically.
+    std::string browseListsUrl;
     // JSON search overrides URL/body independently; empty fields reuse browse.
     std::string searchUrl, searchBody;
     bool hasSearch() const { return (!searchUrl.empty() || !searchBody.empty()) && browseFormat != "xml"; }
@@ -150,6 +154,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   // JSON catalog with named lists and none picked yet.
   bool wantsListPicker() const;
   bool loadManifest();
+  bool loadBrowseListIndex();
   bool loadToken();
   void loadConfig();
   bool saveToken(const std::string& value);

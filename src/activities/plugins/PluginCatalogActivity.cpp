@@ -21,6 +21,7 @@
 
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
+#include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "network/HttpDownloader.h"
@@ -51,6 +52,7 @@ constexpr size_t MAX_API_RESPONSE = 48 * 1024;
 // response until leaving the catalog so downloads can release the parsed rows.
 constexpr char BROWSE_TMP_PATH[] = "/.pcat_tmp.json";
 constexpr size_t MAX_BROWSE_RESPONSE = 1024 * 1024;
+constexpr size_t MAX_BROWSE_LIST_INDEX_RESPONSE = 16 * 1024;
 constexpr int MAX_PAGE_SIZE = 16;
 
 std::string md5Hex(const std::string& text) {
@@ -179,12 +181,18 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.pageSize = browse["page_size"] | 8;
   // Documented bounds: each row costs an Item (strings) and a screen slot.
   manifest.pageSize = std::clamp(manifest.pageSize, 1, MAX_PAGE_SIZE);
+  manifest.browseListsUrl = browse["lists_url"] | "";
   manifest.browseLists.reserve(browse["lists"].size());
   for (JsonVariantConst l : browse["lists"].as<JsonArrayConst>()) {
     Manifest::BrowseList entry;
     entry.title = l["title"] | "";
     entry.url = l["url"] | "";
     entry.body = l["body"] | "";
+    JsonVariantConst notice = l["notice"];
+    entry.noticeTitle = notice["title"] | "";
+    entry.noticeMessage = notice["message"] | "";
+    entry.noticeConfirm = notice["confirm"] | "";
+    entry.noticeCancel = notice["cancel"] | "";
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
   manifest.searchUrl = browse["search"]["url"] | "";
@@ -231,6 +239,49 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.authErrorPath = auth["error_path"] | "error";
 
   return !manifest.browseReq.url.empty();
+}
+
+bool PluginCatalogActivity::loadBrowseListIndex() {
+  if (manifest.browseListsUrl.empty()) return true;
+
+  String response;
+  const std::string url = substituted(manifest.browseListsUrl, nullptr);
+  const int status = pluginhttp::request(session.get(), url, "GET", "", {}, response, MAX_BROWSE_LIST_INDEX_RESPONSE);
+  if (status < 200 || status >= 300) {
+    LOG_ERR("PCAT", "browse list index fetch failed: status=%d %s", status, url.c_str());
+    return false;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, response) != DeserializationError::Ok) {
+    LOG_ERR("PCAT", "browse list index parse failed: %s", url.c_str());
+    return false;
+  }
+  JsonArrayConst lists = doc["lists"].as<JsonArrayConst>();
+  if (lists.isNull() || lists.size() == 0) {
+    LOG_ERR("PCAT", "browse list index has no lists: %s", url.c_str());
+    return false;
+  }
+
+  manifest.browseLists.clear();
+  manifest.browseLists.reserve(lists.size());
+  for (JsonVariantConst l : lists) {
+    Manifest::BrowseList entry;
+    entry.title = l["title"] | "";
+    entry.url = l["url"] | "";
+    entry.body = l["body"] | "";
+    JsonVariantConst notice = l["notice"];
+    entry.noticeTitle = notice["title"] | "";
+    entry.noticeMessage = notice["message"] | "";
+    entry.noticeConfirm = notice["confirm"] | "";
+    entry.noticeCancel = notice["cancel"] | "";
+    if (!entry.title.empty() && !entry.url.empty()) manifest.browseLists.push_back(std::move(entry));
+  }
+  if (manifest.browseLists.empty()) {
+    LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
+    return false;
+  }
+  return true;
 }
 
 bool PluginCatalogActivity::saveToken(const std::string& value) {
@@ -389,6 +440,12 @@ void PluginCatalogActivity::onExit() {
 }
 
 void PluginCatalogActivity::startBrowse() {
+  if (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) {
+    if (!loadBrowseListIndex()) {
+      fail(StrId::STR_FETCH_FEED_FAILED);
+      return;
+    }
+  }
   // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
   if (wantsListPicker()) {
     // Same auth gate as fetchPage: without it a signed-out user is shown the
@@ -933,7 +990,7 @@ bool PluginCatalogActivity::handleCustomInput() {
 void PluginCatalogActivity::retryBrowse() {
   if (state == State::NO_TOKEN && manifest.hasDeviceCode()) {
     beginAuth();
-  } else if (wantsListPicker()) {
+  } else if ((!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) || wantsListPicker()) {
     startBrowse();
   } else {
     beginLoading();
@@ -1020,6 +1077,22 @@ void PluginCatalogActivity::activateIndex(const int index) {
   if (state == State::LIST_PICKER) {
     if (index < 0 || index >= static_cast<int>(manifest.browseLists.size())) return;
     app.clearTapFlash();
+    const auto& list = manifest.browseLists[index];
+    if (list.hasNotice()) {
+      const std::string heading = list.noticeTitle.empty() ? list.title : list.noticeTitle;
+      auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, list.noticeMessage,
+                                                                  list.noticeCancel, list.noticeConfirm);
+      if (!confirmation) {
+        LOG_ERR("PCAT", "OOM: browse-list notice");
+        return;
+      }
+      startActivityForResult(std::move(confirmation), [this, index](const ActivityResult& result) {
+        if (result.isCancelled) return;
+        currentList = index;
+        startBrowse();
+      });
+      return;
+    }
     currentList = index;
     startBrowse();
     return;
