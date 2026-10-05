@@ -399,7 +399,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
 
-  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoderForFile(imagePath);
   if (!decoder) {
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
     rememberImageFailure(imagePath);

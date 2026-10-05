@@ -229,10 +229,23 @@ void ArticleActivity::loop() {
     return;
   }
 
-  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  // Articles scroll like a web page: swipe up for the next page, down for the
+  // previous one (the owner's choice; books keep their sideways swipes).
+  // Sideways swipes do nothing here; taps and the side buttons turn as in books.
+  bool swipeNext = false;
+  bool swipePrev = false;
+  ReaderUtils::TouchPageTurn touch{false, false, 0};
+  const auto swipe = mappedInput.hasTouch() ? mappedInput.wasSwipe() : MappedInputManager::SwipeDir::None;
+  if (swipe == MappedInputManager::SwipeDir::None) {
+    touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  } else if (SETTINGS.touchReaderControls) {
+    swipeNext = swipe == MappedInputManager::SwipeDir::Up;
+    // A swipe down from the top edge belongs to the light panel and menus.
+    swipePrev = swipe == MappedInputManager::SwipeDir::Down && !mappedInput.wasMenuGesture();
+  }
   const auto turn = ReaderUtils::detectPageTurn(mappedInput);
-  const bool prev = turn.prev || touch.prev;
-  const bool next = turn.next || touch.next;
+  const bool prev = turn.prev || touch.prev || swipePrev;
+  const bool next = turn.next || touch.next || swipeNext;
   if (next || prev) {
     const int target = currentPage_ + (next ? 1 : -1);
     if (target < 0) return;
@@ -874,25 +887,24 @@ bool ArticleActivity::extractImage(void* ctx, const char* src, const char* dest)
   const bool isWebp = bytes.size() >= 12 && memcmp(data, "RIFF", 4) == 0 && memcmp(data + 8, "WEBP", 4) == 0;
   const bool isPng = bytes.size() >= 8 && memcmp(data, "\x89PNG", 4) == 0;
   const bool isJpeg = bytes.size() >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF;
-  const bool wantJpeg = strlen(dest) > 4 && strcmp(dest + strlen(dest) - 4, ".jpg") == 0;
   std::vector<uint8_t> png;
   zim::ImageSize size;
   const uint8_t* write = data;
   size_t writeSize = bytes.size();
-  if (isWebp && !wantJpeg) {
-    // Kiwix's WebP: decoded, scaled and turned grey here (the reader has no
-    // WebP decoder).
+  if (isWebp) {
+    // Kiwix's WebP, often under its original .jpg or .png name (Wikipedia
+    // since 2026): decoded, scaled and turned grey here (the reader has no
+    // WebP decoder). The reader picks its decoder by the file's first bytes,
+    // so a PNG under a .jpg name is shown.
     if (!zim::webpToGrayPng(data, bytes.size(), self->viewportWidth_, self->viewportHeight_ * 2 / 3, png, &size)) {
       LOG_ERR("PLIB", "image %u: not a WebP the decoder reads", static_cast<unsigned>(n));
       return false;
     }
     write = png.data();
     writeSize = png.size();
-  } else if (!(wantJpeg ? isJpeg : isPng)) {
-    // A JPEG or PNG goes to the reader's own decoder as it is, if it is what
-    // its name says.
-    LOG_ERR("PLIB", "image %u (%s): contents do not match its name", static_cast<unsigned>(n),
-            self->images_[n].src.c_str());
+  } else if (!isJpeg && !isPng) {
+    // A JPEG or PNG goes to the reader's own decoder as it is.
+    LOG_ERR("PLIB", "image %u (%s): not a WebP, JPEG or PNG", static_cast<unsigned>(n), self->images_[n].src.c_str());
     return false;
   }
   HalFile out;

@@ -41,7 +41,7 @@ void PictureActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   ImageDimensions dims{0, 0};
-  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath_);
+  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoderForFile(imagePath_);
   if (!decoder || !decoder->getDimensions(imagePath_, dims) || dims.width <= 0 || dims.height <= 0) {
     LOG_ERR("PLIB", "picture %s: cannot read", imagePath_.c_str());
     renderer.drawCenteredText(UI_10_FONT_ID, screenH / 2, "This picture cannot be shown");

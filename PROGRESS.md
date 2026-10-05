@@ -597,3 +597,22 @@ containing "Forbidden City"; see the session summary for the download.
 - Device checklist (after the pack is made and copied): Medical shows Pet
   First Aid with a paw; Bleeding opens the emergency page at Bleeding;
   Poisoning: foods opens Food Hazards; Every pet page lists them all.
+
+## 2026-10-05 — Wikipedia pictures were empty boxes; articles scroll up and down
+
+- Owner: with the maxi Wikipedia, Images showed empty boxes. The serial log
+  said why: the 2026 file keeps each picture's original name
+  (`_assets_/<hash>/Name.jpg`) but stores WebP, and the reader trusted the
+  name. Now any WebP is turned into a grey PNG whatever its name, and the
+  reader picks its decoder by the file's first bytes
+  (ImageDecoderFactory::getDecoderForFile). Earlier the same day (4d0e3e5):
+  decoders gated on the heap they really use (PSRAM on the X4 Pro), and a
+  failed picture is tried again on the next page and full screen.
+- Owner: everything but books should scroll up and down. Articles (every
+  collection) turn pages on a swipe up (next) or down (previous); sideways
+  swipes do nothing there. Lists already scrolled up and down. Books are
+  unchanged.
+- 387 host tests; release build OK; clang-format clean.
+- Device checklist: Lorne Michaels → Images: the photos show; tap one: full
+  screen. In any article, swipe up: next page; down: previous; a swipe from
+  the top edge still opens the light panel or contents.
