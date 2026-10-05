@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include <algorithm>
+
 #include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
 #include "util/PluginLocations.h"
@@ -24,10 +26,8 @@ PluginHubInstallActivity::PluginHubInstallActivity(GfxRenderer& renderer, Mapped
 bool PluginHubInstallActivity::isInstalled() {
   const std::string dir = PluginLocations::findPluginDir("pluginhub");
   if (dir.empty() || Storage.exists(PLUGIN_HUB_INSTALL_MARKER)) return false;
-  for (const char* filename : PLUGIN_HUB_FILES) {
-    if (!Storage.exists((dir + "/" + filename).c_str())) return false;
-  }
-  return true;
+  return std::all_of(std::begin(PLUGIN_HUB_FILES), std::end(PLUGIN_HUB_FILES),
+                     [&dir](const char* filename) { return Storage.exists((dir + "/" + filename).c_str()); });
 }
 
 void PluginHubInstallActivity::onEnter() {
