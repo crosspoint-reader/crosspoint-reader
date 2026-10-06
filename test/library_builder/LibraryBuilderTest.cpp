@@ -400,3 +400,86 @@ TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(index.bookCount(), 513);
 }
+
+// --- readings (file-as) --------------------------------------------------------
+
+TEST_F(LibraryBuilderTest, ReadingsOrderKanjiTitlesAndGroupAuthorsByTheirKana) {
+  fake::add("/c.epub");
+  // Three titles that would sort by codepoint — 漢字 (U+6F22) after every kana —
+  // but whose readings put them in gojūon order: かんじ < さくら < やま.
+  bookMetadata["/a.epub"].title = "山";
+  bookMetadata["/a.epub"].titleFileAs = "ヤマ";
+  bookMetadata["/b.epub"].title = "漢字";
+  bookMetadata["/b.epub"].titleFileAs = "かんじ";
+  bookMetadata["/c.epub"].title = "桜";
+  bookMetadata["/c.epub"].titleFileAs = "サクラ";
+  // Authors: the reading decides the shelf order (す < や), and one author's
+  // books stay one group whatever the illustrator-free display name says.
+  bookMetadata["/a.epub"].author = "鈴木花子";
+  bookMetadata["/a.epub"].authorFileAs = "スズキ ハナコ";
+  bookMetadata["/b.epub"].author = "山田太郎";
+  bookMetadata["/b.epub"].authorFileAs = "ヤマダ タロウ";
+  bookMetadata["/c.epub"].author = "山田太郎";
+  bookMetadata["/c.epub"].authorFileAs = "ヤマダ タロウ";
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), "/b.epub");   // かんじ
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 1), "/c.epub");   // さくら
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 2), "/a.epub");   // やま
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 0), "/a.epub");  // すずき
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 1), "/b.epub");  // やまだ, titles かんじ then さくら
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 2), "/c.epub");
+
+  // The fold is the reading, so the group initial is a kana row head, and the
+  // display strings are untouched.
+  ClixRecord record{};
+  ASSERT_TRUE(index.readRecord(index.ordinalForRow(SortOrder::TitleAsc, 0), record));
+  EXPECT_EQ(std::string(record.fold, record.foldLen), "かんじ");
+  std::string title;
+  ASSERT_TRUE(index.readTitle(record, title));
+  EXPECT_EQ(title, "漢字");
+  std::string reading;
+  ASSERT_TRUE(index.readAuthorReading(record, reading));
+  EXPECT_EQ(reading, "やまだ たろう");
+}
+
+TEST_F(LibraryBuilderTest, SeriesVolumesSharingAKeyPrefixOrderByTheirFullReading) {
+  // Eleven kana fill the packed 12-byte key before the volume number; keyed
+  // alone these tie and fall back to disk-walk order (3, 1, 2 here).
+  fake::add("/c.epub");
+  bookMetadata["/a.epub"].titleFileAs = "リアデイルノダイチニテ 3";
+  bookMetadata["/b.epub"].titleFileAs = "リアデイルノダイチニテ 1";
+  bookMetadata["/c.epub"].titleFileAs = "リアデイルノダイチニテ 2";
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), "/b.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 1), "/c.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 2), "/a.epub");
+}
+
+TEST_F(LibraryBuilderTest, UnchangedRebuildKeepsTheAuthorReadingWithoutReparsing) {
+  bookMetadata["/a.epub"].author = "山田太郎";
+  bookMetadata["/a.epub"].authorFileAs = "ヤマダ タロウ";
+  bookMetadata["/b.epub"].author = "鈴木花子";
+  bookMetadata["/b.epub"].authorFileAs = "スズキ ハナコ";
+  initial();
+  fake::parses = 0;
+  // A new book forces a real rebuild; the two old ones reuse their metadata,
+  // and their readings must survive the reuse for the author order to hold.
+  fake::add("/c.epub");
+  bookMetadata["/c.epub"].author = "田中一郎";
+  bookMetadata["/c.epub"].authorFileAs = "タナカ イチロウ";
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+
+  EXPECT_EQ(fake::parses, 1u);
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 0), "/b.epub");  // すずき
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 1), "/c.epub");  // たなか
+  EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 2), "/a.epub");  // やまだ
+}

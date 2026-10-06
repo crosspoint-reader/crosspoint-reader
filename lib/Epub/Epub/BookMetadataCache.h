@@ -14,6 +14,10 @@ class BookMetadataCache {
   struct BookMetadata {
     std::string title;
     std::string author;
+    // Sort forms from the package's file-as metadata (the kana reading of a
+    // Japanese title or name); empty when the book carries none.
+    std::string titleFileAs;
+    std::string authorFileAs;
     std::string language;
     std::string coverItemHref;
     std::string textReferenceHref;
