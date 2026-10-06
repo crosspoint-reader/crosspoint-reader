@@ -46,8 +46,9 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 ### UITheme (The GUI Macro)
 
-* Rule: All UI rendering must go through the GUI macro (UITheme).
-* Do not hardcode fonts, colors, or positioning. This ensures orientation-aware layout consistency.
+* Use the shared FreeInkUI hosts for controls and interaction; see Shared UI and input below.
+* Use `GUI` (UITheme) for theme metrics and shared chrome, and `GfxRenderer` for drawing and oriented geometry.
+* Derive fonts, colors, and layout from those contracts rather than hardcoding them.
 
 ---
 

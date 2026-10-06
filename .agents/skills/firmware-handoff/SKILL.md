@@ -44,6 +44,9 @@ Explain the old behavior, new behavior, architecture, affected files, and remain
 
 Give a concrete hardware test plan: actions, expected results, relevant orientations, resource or cache observations, and likely failure signs. Remind the human that hardware testing is their responsibility and must happen before a PR is opened. Never claim hardware verification yourself.
 
-Do not write a PR description. You may provide concise factual notes. Create or amend a local commit only after explicit human approval; never push.
+Do not write a PR description. You may provide concise factual notes. Create or
+amend a local commit only after explicit human approval. Push only when the
+human explicitly instructs you to push; editing or commit approval does not
+authorize it. Follow the [Git rule](../../rules/git-workflow.md) for remote selection.
 
 **Done when:** every hard checklist item in the root `AGENTS.md` is satisfied. If the human rejects the architecture, stop and revise it before calling the work ready.

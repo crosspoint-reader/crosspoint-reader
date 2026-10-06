@@ -1,6 +1,13 @@
 ---
 name: heap-discipline
-description: Memory allocation discipline for the ESP32-C3 (~380KB RAM, no PSRAM, single 48KB framebuffer). Use whenever writing or reviewing code that allocates: new / malloc / std::vector / std::string, buffers, caches, or anything held across a loop or an activity lifecycle. Covers makeUniqueNoThrow vs raw new/malloc, fragmentation avoidance, reserve-before-push_back, alloc-once-reuse, stack vs heap sizing, and the chunked grayscale buffer pattern.
+description: >
+  Memory allocation discipline with the ESP32-C3 as the resource baseline
+  (~380KB RAM, no PSRAM, one panel-sized framebuffer). Use whenever writing or
+  reviewing code that allocates: new / malloc / std::vector / std::string,
+  buffers, caches, or anything held across a loop or an activity lifecycle.
+  Covers makeUniqueNoThrow vs raw new/malloc, fragmentation avoidance,
+  reserve-before-push_back, alloc-once-reuse, stack vs heap sizing, and the
+  chunked grayscale buffer pattern.
 ---
 
 # Heap Discipline (ESP32-C3)
@@ -8,8 +15,9 @@ description: Memory allocation discipline for the ESP32-C3 (~380KB RAM, no PSRAM
 The hardware and coding rule files state the allocation rules. This is the
 procedure you run while writing the code and the gate before handoff.
 
-The constraint that makes every call matter: ~380KB RAM, no PSRAM, one 48KB
-framebuffer. **Fragmentation, not total usage, is what kills this device.**
+The C3 baseline: ~380KB RAM, no PSRAM, one panel-sized framebuffer (48,000
+bytes on X4; 52,272 on X3).
+**Fragmentation, not total usage, is what kills this device.**
 Free-heap can read fine while the largest free block is too small for the next
 allocation. Optimize for not leaving holes, not just for using fewer bytes.
 
@@ -19,7 +27,9 @@ Ask in order; stop at the first yes.
 
 1. **Stack?** Local, bounded, under ~256 bytes total: plain array/struct. No
    heap, no fragmentation. Keep frames lean; the task stack is small.
-2. **Compile-time constant?** `static constexpr` lives in flash, costs zero DRAM.
+2. **Compile-time constant?** Use `static constexpr` for constant evaluation;
+   check the build map when its storage placement matters. Data used while the
+   flash cache is disabled must remain in accessible internal RAM.
 3. **Allocated once and reused for an activity's lifetime?** Allocate in
    `onEnter`, hold in a member, release in `onExit`. Never per-frame, never
    per-iteration.
@@ -40,8 +50,8 @@ Bare `new` / `new[]` is never correct here: under `-fno-exceptions` it calls
   Hoist the allocation out of the loop.
 - Large contiguous blocks fragment worst. Full-screen-class buffers use the
   chunked `storeBwBuffer` / `restoreBwBuffer` path in `GfxRenderer` so they
-  never demand one contiguous 48KB block. Reuse that path. Do not malloc a
-  second full-screen buffer.
+  avoid a contiguous panel-sized backup allocation. Reuse that path. Do not
+  malloc a second full-screen buffer.
 - During chapter builds, reuse `GfxRenderer::FrameBufferLoan` and the exclusive
   `buildscratch` claim/release protocol. No drawing is allowed during the loan;
   restoration requires a redraw. For PSRAM-only working sets, use
@@ -58,6 +68,10 @@ Bare `new` / `new[]` is never correct here: under `-fno-exceptions` it calls
 Per the root evidence rule: when you add a heap allocation, state in one line
 why stack/static/reuse was rejected and the worst-case size. If you cannot name
 the size, you cannot budget it, and you should not allocate it.
+
+Reuse existing buffers before adding working storage. Simplifying ownership
+must preserve allocation-failure handling, cleanup on every exit path, and the
+required internal-RAM or PSRAM placement.
 
 ## Self-review before handoff
 

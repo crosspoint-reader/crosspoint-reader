@@ -22,15 +22,25 @@ Before adding a feature, activity, lib, setting, or dependency, answer in order:
    that adds steady-state RAM or a large transient allocation needs a reading
    benefit that clearly outweighs it. Quantify with `firmware_size_history.py`
    and `script_profile_mem.sh` rather than guessing.
-4. **Can it be done with no new code?** Prefer an existing activity, an existing
-   setting, or a doc over a new code path. The cheapest feature is the one
-   already built.
+4. **Can an existing mechanism meet the requirement?** Follow the reuse ladder
+   below before adding a code path.
 
 If a request fails the gate, push back with the specific reason and the
 `SCOPE.md` basis, and offer the in-scope alternative. Make the call and say why;
 do not just hand over a menu.
 
 ## Surface awareness
+
+Before writing new code, trace the affected flow and stop at the first option
+that fully meets the requirement:
+
+1. An existing setting, activity, configuration, or documentation change.
+2. An existing helper, type, or interface in this codebase.
+3. An appropriate standard-library facility within the resource budget.
+4. An existing SDK capability through the HAL, or an installed dependency.
+5. The minimum new code with a clear owner and a demonstrated need.
+
+Leave speculative hooks and future scaffolding for a concrete requirement.
 
 The firmware already carries dozens of activities. Each new one is permanent
 RAM, permanent maintenance, and another thing every future refactor must not

@@ -6,7 +6,8 @@
 
 1. **VS Code Extension** (Recommended):
 
-   * Extension ID: `platformio.platformio-ide` (see `.vscode/extensions.json`)
+   * Use the [pioarduino IDE](https://github.com/pioarduino/pioarduino-vscode-ide)
+     and the pinned core described in [getting started](../../docs/contributing/getting-started.md).
 
    * Provides: Toolbar buttons, IntelliSense, integrated build/upload/monitor
 
@@ -16,9 +17,12 @@
 
 2. **CLI Tool** (`pio` command):
 
-   * **Installation**: Python package (typically `pip install platformio`)
+   * **First-time setup**: Use the pinned pioarduino Core from
+     [getting started](../../docs/contributing/getting-started.md#first-time-toolchain-setup),
+     matching CI. For routine builds, use the
+     [existing environment](environment.md#build-in-an-existing-environment).
 
-   * **Windows Location**: `C:\Users\<user>\AppData\Local\Programs\Python\Python3xx\Scripts\pio.exe`
+   * **Location**: The activated Python environment or the IDE's configured core
 
    * **Verify**: `which pio` (Git Bash) or `where.exe pio` (cmd)
 
@@ -41,8 +45,8 @@
   * `slim`: Minimal build (no serial logging)
 
 These are the C3 profiles. Select the matching board environment in
-`platformio.ini` for Sticky, X4 Pro, X4 Classic, or Metalio E-Ink 4; other SDK
-boards may need local profiles. Check the environment's inheritance, not just
+`platformio.ini` for Sticky, X4 Pro, X4 Classic, Paper Mono, or Metalio E-Ink 4;
+other SDK boards may need local profiles. Check the environment's inheritance, not just
 its name: USB-MSC profiles use the prebuilt Arduino/TinyUSB graph rather than
 the `firmware_tuned` core rebuild. Preserve the repository's pinned platform,
 dependencies, and patch scripts when changing build configuration.
@@ -52,7 +56,7 @@ dependencies, and patch scripts when changing build configuration.
 These flags in `platformio.ini` fundamentally affect firmware behavior:
 
 ```cpp
--DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (saves 48KB RAM!)
+-DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // One framebuffer; size depends on the selected panel
 -DARDUINO_USB_MODE=1                 // Select native USB Serial/JTAG on applicable boards
 -DARDUINO_USB_CDC_ON_BOOT=1          // Serial available immediately at boot
 -DXML_CONTEXT_BYTES=1024             // XML parser memory limit (EPUB parsing)

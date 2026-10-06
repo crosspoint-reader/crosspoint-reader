@@ -25,6 +25,17 @@ uname -s
 
 Never invoke or probe `clang-format` directly. The repository wrapper is the only sanctioned entry point.
 
+### Build in an existing environment
+
+Use the installed toolchain and existing packages. Run `pio run -e <environment>`
+directly (`pio run` selects `default`). Preserve local configuration and build
+caches. Install, upgrade, re-pin, or re-download tools only when the human
+requests setup or a concrete build failure establishes a missing or incompatible
+dependency. Diagnose that failure first and repair only the affected component.
+
+The [getting-started setup commands](../../docs/contributing/getting-started.md#first-time-toolchain-setup)
+are for first-time setup or an identified environment problem, not routine builds.
+
 ---
 
 
@@ -51,6 +62,11 @@ monitor_port = COM7
 
 build_flags =
   ${base.build_flags}
+  -DFREEINK_DEVICE_X4=1
+  -DFREEINK_DEVICE_X3=1
+  -DENABLE_SERIAL_LOG
+  -DCROSSPOINT_WAIT_FOR_USB_SERIAL
+  -DLOG_LEVEL=2
   -DMY_DEBUG_FLAG=1             # Personal debug flags
   -DTEST_FEATURE_ENABLED=1
 ```
@@ -65,13 +81,16 @@ build_flags =
 
 - **NEVER commit** `platformio.local.ini`
 - **NEVER put** personal info (serial ports, credentials) in main `platformio.ini`
-- Use `${base.build_flags}` to extend (not replace) base flags
+- A local `build_flags` value replaces the selected environment's list.
+  Include `${base.build_flags}` plus that environment's device, capability,
+  logging, and version flags before adding personal flags. The example above
+  preserves the current `default` flags; check `platformio.ini` for other boards.
 
 Select an existing board profile from `platformio.ini` before creating a local
 one; non-Xteink examples are in
 [docs/contributing/touch-and-ui.md](../../docs/contributing/touch-and-ui.md).
-Read [getting started](../../docs/contributing/getting-started.md) for the
-current setup. Git branch/SHA version flags apply only to sources that use
+Consult [getting started](../../docs/contributing/getting-started.md) when setup
+is needed. Git branch/SHA version flags apply only to sources that use
 `CROSSPOINT_VERSION`; changing branches does not require a clean rebuild.
 
 If an interrupted custom-core rebuild leaves duplicate `app_main` definitions,

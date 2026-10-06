@@ -1,12 +1,22 @@
 # CrossPoint Reader agent guide
 
-CrossPoint Reader is open-source e-reader firmware for Xteink and other FreeInk-supported devices. Its mission is a lightweight, high-performance reading experience focused on EPUB rendering. The X3/X4's ESP32-C3 remains the resource baseline: roughly 380 KB usable RAM, no PSRAM, and a single 48 KB framebuffer. Other board profiles have different CPUs, display sizes, input, and memory capabilities; check the selected profile before assuming them.
+CrossPoint Reader is open-source e-reader firmware for Xteink and other FreeInk-supported devices. Its mission is a lightweight, high-performance reading experience focused on EPUB rendering. The X3/X4's ESP32-C3 remains the resource baseline: roughly 380 KB usable RAM, no PSRAM, and a single framebuffer sized for the selected panel. Other board profiles have different CPUs, display sizes, input, and memory capabilities; check the selected profile before assuming them.
+
+## FreeInk SDK
+
+The [FreeInk SDK](freeink-sdk/) supplies the board profiles, hardware drivers,
+and shared UI components. Before adding an API or device-specific code, check
+the firmware HAL and the SDK source at the revision pinned by this repository.
+Use the [SDK documentation](freeink-sdk/docs/README.md) and
+[FreeInk SDK index](https://freeink.org/llms.txt) to find the relevant contract.
+Check `git submodule status`: a different local SDK revision must be accounted
+for, not silently treated as the pinned firmware dependency.
 
 ## Start here
 
 At session start, run `uname -s`, `git branch --show-current`, `git remote -v`, and `git status --short`. Integration work targets `develop`.
 
-Act as a senior embedded C++ engineer. Base claims on repository evidence: cite the paths and line numbers that justify a proposed change. Check `freeink-sdk/` or the [FreeInk SDK index](https://freeink.org/llms.txt) instead of inventing APIs. Explain the mechanism behind performance or memory claims and justify every new heap allocation. For every fix, tell the human how to verify it.
+Act as a senior embedded C++ engineer. Base claims on repository evidence: cite the paths and line numbers that justify a proposed change. Explain the mechanism behind performance or memory claims and justify every new heap allocation. For every fix, tell the human how to verify it.
 
 Read only the rules that match the task:
 
@@ -32,7 +42,7 @@ A PR is a long-term maintenance commitment. Working code is not enough: prefer t
 
 Fully autonomous end-to-end agents are forbidden. Review subagents are allowed only as read-only advisers under the main agent's supervision. They may inspect code, diffs, history, and build metadata, but may not edit files, commit, push, open or close PRs, post reviews, release, deploy, or flash hardware.
 
-The human must write the PR description. The agent may supply concise factual notes and test results, but not ready-to-paste PR prose. The agent may create or amend a local commit only after explicit human approval. It must never push by itself or open or close a PR.
+The human must write the PR description. The agent may supply concise factual notes and test results, but not ready-to-paste PR prose. The agent may create or amend a local commit only after explicit human approval. It may push only when the human explicitly instructs it to push; approval to edit or commit does not authorize a push. It must never open or close a PR.
 
 Repository-facing prose should use plain English that a non-native speaker can follow. Use standard technical terms when they are the clearest words. Keep code comments short and limited to non-obvious mechanisms, field meaning, or necessary special cases.
 

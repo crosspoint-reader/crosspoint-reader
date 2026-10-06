@@ -24,6 +24,14 @@ next change easier is the win, not lines added.
 
 ## Keep the diff narrow
 
+- For a bug fix, trace the triggering input and state through every affected
+  caller before editing. Fix the shared cause where those callers route;
+  account for callers with different contracts instead of copying guards into
+  individual screens.
+- Reuse existing helpers and interfaces before adding a wrapper, factory, or
+  configuration option. Keep a new abstraction only when it owns a real
+  contract or hides a demonstrated implementation choice.
+
 - Extract a helper to remove real duplication or to name a concept, not to chase
   abstraction. Three-plus copies, or a block that needs a name to be understood:
   extract. Two similar lines: leave them.
@@ -41,6 +49,14 @@ decomposition candidate. Extract a cohesive sub-responsibility into its own
 unit, as a standalone behavior-preserving refactor, verified on its own, never
 mixed into a feature change.
 
+## Preserve requirements and verification
+
+The smallest diff must still meet the full requirement. Preserve trust-boundary
+validation, data-loss prevention, security, accessibility, and required hardware
+calibration. For changed non-trivial behavior, use the smallest meaningful
+regression check in the existing test infrastructure and the relevant device
+checks; follow the [testing rule](../../rules/testing-debugging.md).
+
 ## Comments earn their place
 
 Comments explain why: an invariant, a defense, a past incident, a non-obvious
@@ -55,5 +71,7 @@ the code it sits on say the same thing, the comment is the thing to cut.
 - [ ] No "while I'm here" creep; rename/signature ripples are split out.
 - [ ] Extractions remove real duplication or name a real concept, not
       speculative abstraction.
+- [ ] The fix accounts for affected callers; simplicity preserves the required
+      failure handling and behavior, with relevant regression checks.
 - [ ] New comments say why, not what; no narration or phase markers.
 - [ ] A reviewer can understand the diff without running it.

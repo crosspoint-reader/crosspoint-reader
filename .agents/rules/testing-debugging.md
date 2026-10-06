@@ -2,6 +2,9 @@
 
 ### Build Commands
 
+Follow the [existing-environment protocol](environment.md#build-in-an-existing-environment):
+run the selected build directly and use setup instructions only when needed.
+
 **Via CLI**:
 
 ```bash
