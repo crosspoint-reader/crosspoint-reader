@@ -106,7 +106,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   OpdsParser parser;
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
+    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password, server.activeCustomHeaders())) {
       fail(StrId::STR_FETCH_FEED_FAILED);
       return;
     }
@@ -229,7 +229,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   releaseEntries();
 
   // downloadFile() (CatalogActivity) releases font caches and checks the TLS heap floor.
-  const auto result = downloadFile(downloadUrl, filename, server.username, server.password);
+  const auto result =
+      downloadFile(downloadUrl, filename, server.username, server.password, server.activeCustomHeaders());
   if (result == HttpDownloader::OK) {
     clearBookCache(filename);
     library::markLibraryIndexDirty();

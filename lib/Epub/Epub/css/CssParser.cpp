@@ -1,6 +1,7 @@
 #include "CssParser.h"
 
 #include <Arduino.h>
+#include <AsciiText.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -53,15 +54,6 @@ constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
 // Prevents parsing of extremely long or malformed selectors
 constexpr size_t MAX_SELECTOR_LENGTH = 256;
 
-// Check if character is CSS whitespace
-constexpr bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
-
-constexpr std::string_view trimCssWhitespace(std::string_view s) {
-  while (!s.empty() && isCssWhitespace(s.front())) s.remove_prefix(1);
-  while (!s.empty() && isCssWhitespace(s.back())) s.remove_suffix(1);
-  return s;
-}
-
 constexpr char asciiToLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
 
 // Case-insensitive equality on ASCII. lowercaseKeyword MUST already be
@@ -80,7 +72,7 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
   size_t start = 0;
   for (size_t i = 0; i <= s.size(); ++i) {
     if (i == s.size() || isDelimiter(s[i])) {
-      const std::string_view trimmed = trimCssWhitespace(s.substr(start, i - start));
+      const std::string_view trimmed = trimAsciiWhitespace(s.substr(start, i - start));
       if (!trimmed.empty()) {
         fn(trimmed);
       }
@@ -108,7 +100,7 @@ bool tryParseNumber(std::string_view s, T& out) {
 // fallback rule using the returned count.
 size_t collectEdgeValueTokens(std::string_view s, std::string_view (&out)[4]) {
   size_t count = 0;
-  forEachDelimitedToken(s, isCssWhitespace, [&](std::string_view tok) {
+  forEachDelimitedToken(s, isAsciiWhitespace, [&](std::string_view tok) {
     if (count < 4) out[count++] = tok;
   });
   return count;
@@ -117,7 +109,7 @@ size_t collectEdgeValueTokens(std::string_view s, std::string_view (&out)[4]) {
 std::string_view stripTrailingImportant(std::string_view value) {
   constexpr std::string_view IMPORTANT = "!important";
 
-  while (!value.empty() && isCssWhitespace(value.back())) {
+  while (!value.empty() && isAsciiWhitespace(value.back())) {
     value.remove_suffix(1);
   }
 
@@ -131,7 +123,7 @@ std::string_view stripTrailingImportant(std::string_view value) {
   }
 
   value.remove_suffix(IMPORTANT.size());
-  while (!value.empty() && isCssWhitespace(value.back())) {
+  while (!value.empty() && isAsciiWhitespace(value.back())) {
     value.remove_suffix(1);
   }
   return value;
@@ -435,7 +427,7 @@ CssParser::RuleInsertResult CssParser::insertOrMerge(const std::string_view sele
 // Property value interpreters
 
 CssTextAlign CssParser::interpretAlignment(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   if (iequalsAscii(val, "left") || iequalsAscii(val, "start")) return CssTextAlign::Left;
   if (iequalsAscii(val, "right") || iequalsAscii(val, "end")) return CssTextAlign::Right;
@@ -446,14 +438,14 @@ CssTextAlign CssParser::interpretAlignment(std::string_view val) {
 }
 
 CssFontStyle CssParser::interpretFontStyle(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   if (iequalsAscii(val, "italic") || iequalsAscii(val, "oblique")) return CssFontStyle::Italic;
   return CssFontStyle::Normal;
 }
 
 CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   // Named values
   if (iequalsAscii(val, "bold") || iequalsAscii(val, "bolder")) return CssFontWeight::Bold;
@@ -474,7 +466,7 @@ CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
   // so malformed values like "notunderline" do not accidentally enable a line.
   CssTextDecoration result = CssTextDecoration::None;
   bool explicitNone = false;
-  forEachDelimitedToken(val, isCssWhitespace, [&](const std::string_view token) {
+  forEachDelimitedToken(val, isAsciiWhitespace, [&](const std::string_view token) {
     if (iequalsAscii(token, "none")) {
       explicitNone = true;
     } else if (iequalsAscii(token, "underline")) {
@@ -493,7 +485,7 @@ CssLength CssParser::interpretLength(std::string_view val) {
 }
 
 bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
   if (val.empty()) {
     out = CssLength{};
     return false;
@@ -536,8 +528,8 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
   const size_t colonPos = decl.find(':');
   if (colonPos == std::string_view::npos || colonPos == 0) return;
 
-  const std::string_view name = trimCssWhitespace(decl.substr(0, colonPos));
-  std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));
+  const std::string_view name = trimAsciiWhitespace(decl.substr(0, colonPos));
+  std::string_view value = trimAsciiWhitespace(decl.substr(colonPos + 1));
 
   if (name.empty() || value.empty()) return;
 
@@ -750,7 +742,7 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
     }
 
     if (bodyDepth == 0) {
-      if (selector.empty() && isCssWhitespace(c)) {
+      if (selector.empty() && isAsciiWhitespace(c)) {
         return;
       }
       if (c == '@' && selector.empty()) {
@@ -891,7 +883,7 @@ CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view clas
 
   // TODO: Support combinations of classes (e.g. style on .class1.class2)
   // 2. Apply class styles (medium priority).
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
+  forEachDelimitedToken(classAttr, isAsciiWhitespace, [&](std::string_view cls) {
     if (const CssStyle* style = findStyle(".", cls)) {
       result.applyOver(*style);
     }
@@ -899,7 +891,7 @@ CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view clas
 
   // TODO: Support combinations of classes (e.g. style on p.class1.class2)
   // 3. Apply element.class styles (higher priority).
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
+  forEachDelimitedToken(classAttr, isAsciiWhitespace, [&](std::string_view cls) {
     if (const CssStyle* style = findStyle(tagName, ".", cls)) {
       result.applyOver(*style);
     }
