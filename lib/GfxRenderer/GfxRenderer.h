@@ -234,10 +234,6 @@ class GfxRenderer {
   // support. See HalDisplay::displayBufferAsync for the baseline contract.
   void displayBufferAsync(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   void waitRefreshComplete() const;
-  // Hold the panel's periodic anti-ghost full refresh through a live interaction
-  // (e.g. a slider drag); clear it and force one full afterward. No-op on panels
-  // without the cadence. See HalDisplay::holdPeriodicFullRefresh.
-  void holdPeriodicFullRefresh(bool hold) const { display.holdPeriodicFullRefresh(hold); }
   // True when displayBufferAsync() genuinely overlaps: panel defers and
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.

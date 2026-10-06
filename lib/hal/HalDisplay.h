@@ -58,11 +58,6 @@ class HalDisplay {
   void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
   // Block until a pending deferred refresh completes (no-op when none is).
   void waitRefreshComplete();
-
-  // Hold the panel's periodic anti-ghost full refresh through a live interaction
-  // (e.g. a slider drag) so it stays flash-free; clear it and force one full
-  // afterward to scrub any ghost. No-op on panels without the cadence.
-  void holdPeriodicFullRefresh(bool hold);
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;

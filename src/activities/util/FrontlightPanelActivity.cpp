@@ -101,8 +101,6 @@ void FrontlightPanelActivity::persistLightSettings() {
 }
 
 void FrontlightPanelActivity::onExit() {
-  // Never leave the periodic-full hold armed if the panel closes mid-drag.
-  renderer.holdPeriodicFullRefresh(false);
   persistLightSettings();
   Activity::onExit();
 }
@@ -230,13 +228,7 @@ void FrontlightPanelActivity::loop() {
   if (touch.routed) {
     if (app.invalidated()) requestUpdate();
     if (touch) {
-      if (touch.event.dragPermille >= 0) {
-        // Hold the panel's periodic anti-ghost full refresh for the duration of
-        // the drag so live slider ticks stay on the flash-free fast path; the
-        // release below clears it and takes one clean full.
-        if (!draggingSlider) renderer.holdPeriodicFullRefresh(true);
-        draggingSlider = true;
-      }
+      if (touch.event.dragPermille >= 0) draggingSlider = true;
       return;
     }
     // Swipe up dismisses the sheet, the way it was pulled down from the top
@@ -258,9 +250,6 @@ void FrontlightPanelActivity::loop() {
   if (draggingSlider) {
     if (!touch.snap.touchHeld) {
       draggingSlider = false;
-      // Drag ended: resume the normal cadence and scrub the accumulated ghost
-      // once with a clean full refresh.
-      renderer.holdPeriodicFullRefresh(false);
       cleanRefreshPending = true;
       requestUpdate();
     }
