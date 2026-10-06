@@ -134,15 +134,17 @@ content-based. Replacing contents at the same path does not change this hash.
 
 **Manual Cache Clear** (back up progress and settings before deleting):
 
+Replace `HASH` below with the actual cache directory suffix.
+
 ```bash
 # Delete the whole CrossPoint directory (also deletes settings and saved state)
 rm -rf /path/to/sd/.crosspoint/
 
 # Delete specific book cache
-rm -rf /path/to/sd/.crosspoint/epub_<hash>/
+rm -rf /path/to/sd/.crosspoint/epub_HASH/
 
 # Keep progress, delete only rendered sections
-rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
+rm -rf /path/to/sd/.crosspoint/epub_HASH/sections/
 ```
 
 **When to Clear Cache**:

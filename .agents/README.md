@@ -2,7 +2,9 @@
 
 The root `AGENTS.md` is the always-loaded policy and router. Detailed repository facts live in `rules/`; reusable procedures and review axes live in `skills/`.
 
-Load rules and skills only when the root routing table or skill description matches the task. The only mandatory multi-skill load is the firmware handoff gate.
+Load all task-matched rules and skills. Firmware handoff is the only fixed
+multi-skill bundle; other tasks require every skill matched by the root routing
+table or its description.
 
 `CLAUDE.md` links to the root guide. Each skill lives in a directory containing
 `SKILL.md`, with a matching frontmatter `name`. Descriptions identify when an

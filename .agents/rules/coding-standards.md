@@ -103,13 +103,16 @@ This applies to all cache deserialization code and any raw buffer-to-struct cast
 
 #### Template and `std::function` Bloat
 
-Each template instantiation generates a separate binary copy. `std::function<void()>` adds ~2–4 KB per unique signature and heap-allocates its closure. Avoid both in library code and any path called from the render loop:
+Template instantiations can increase binary size. `std::function` code size and
+allocation depend on the implementation, callable, and compiler/linker settings;
+some callables use inline storage without heap allocation. Avoid both in library
+code and any path called from the render loop:
 
 ```cpp
-// Avoid — heap-allocating, large binary footprint:
+// Avoid — may allocate and increase binary size:
 std::function<void()> callback;
 
-// Prefer — zero overhead:
+// Prefer — no wrapper allocation:
 void (*callback)() = nullptr;
 
 // For member function + context (common activity callback pattern):

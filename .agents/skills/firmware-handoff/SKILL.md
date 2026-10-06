@@ -21,7 +21,9 @@ Run relevant tests and `./bin/clang-format-fix -g`. Build the relevant firmware 
 
 ## 3. Dispatch independent reviews
 
-Launch these four read-only reviewers in parallel:
+Launch a separate independent read-only subagent for each axis below. Schedule
+reviews in batches that fit the available slots, reserving a slot for the main
+agent. Never substitute the main agent for a reviewer:
 
 - [review-correctness](../review-correctness/SKILL.md)
 - [review-architecture](../review-architecture/SKILL.md)
@@ -30,7 +32,8 @@ Launch these four read-only reviewers in parallel:
 
 Give each reviewer the requirement, comparison base, diff, and repository path. Reviewers inspect only: they do not edit, commit, push, publish, or flash hardware.
 
-**Done when:** all four return either concrete findings or a clean result.
+**Done when:** all four independent subagents have returned concrete findings
+or a clean result.
 
 ## 4. Resolve findings
 
