@@ -1,5 +1,6 @@
 #pragma once
 #include <ArduinoJson.h>
+#include <HttpHeader.h>
 #include <PersistableStore.h>
 
 #include <array>
@@ -21,7 +22,7 @@ struct OpdsServer {
   std::array<HttpHeader, MAX_CUSTOM_HEADERS> customHeaders;
 
   // Headers with a non-empty name, ready to hand to HttpDownloader.
-  std::vector<HttpHeader> activeCustomHeaders() const;
+  std::vector<HttpDownloader::Header> activeCustomHeaders() const;
 };
 
 /**

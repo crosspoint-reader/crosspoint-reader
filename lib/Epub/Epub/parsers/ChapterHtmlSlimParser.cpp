@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MemoryManager.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
 #include <expat.h>
@@ -323,6 +324,8 @@ void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
 
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
+  // Block creation failed (OOM): drop the buffered text; parseStep() is about
+  // to fail the build via layoutOom.
   if (!currentTextBlock) {
     partWordBufferIndex = 0;
     nextWordContinues = false;
@@ -417,7 +420,18 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  currentTextBlock =
+      makeUniqueNoThrow<ParsedText>(hyphenationEnabled, focusReadingEnabled, blockStyle, paragraphIndentSpaces);
+  if (!currentTextBlock) {
+    // Evict rebuildable caches and retry once before failing the build.
+    freeink::MemoryManager::instance().ensureFree(4 * 1024);
+    currentTextBlock =
+        makeUniqueNoThrow<ParsedText>(hyphenationEnabled, focusReadingEnabled, blockStyle, paragraphIndentSpaces);
+  }
+  if (!currentTextBlock) {
+    LOG_ERR("EHP", "OOM: ParsedText");
+    layoutOom = true;  // parseStep() turns this into ParseStatus::Error
+  }
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }
@@ -516,6 +530,13 @@ void ChapterHtmlSlimParser::closeTableCell() {
     return;
   }
 
+  // Latch before the cell leaves currentTextBlock: parseStep()'s dropped-word
+  // check only inspects currentTextBlock, so a cell parsed and moved (or reset
+  // while empty) within one XML buffer would otherwise lose its OOM flag.
+  if (currentTextBlock->hadDroppedWords()) {
+    layoutOom = true;
+  }
+
   if (!tableRowStacked &&
       (tableRowCells.size() >= MAX_GRID_TABLE_COLUMNS || currentTextBlock->size() > MAX_GRID_TABLE_CELL_WORDS)) {
     fallbackTableRowToStacked();
@@ -596,15 +617,22 @@ void ChapterHtmlSlimParser::finishTableRow() {
       lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
     }
     tableRowCells[column]->layoutAndExtractLines(
-        renderer, fontId, textWidth, [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
+        renderer, fontId, textWidth,
+        [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
           const size_t lineIndex = lines.size();
           lines.push_back(std::move(line));
           if (tableLineVisibleOffsets.size() <= lineIndex) {
             tableLineVisibleOffsets.resize(lineIndex + 1, UINT32_MAX);
           }
           tableLineVisibleOffsets[lineIndex] = std::min(tableLineVisibleOffsets[lineIndex], offset);
-        });
+        },
+        true, characterSpacing, wordSpacingPercent);
     maxLineCount = std::max(maxLineCount, lines.size());
+  }
+  // Cell layout itself can drop lines (TextBlock arena OOM in extractLine);
+  // latch that before the cells are destroyed.
+  for (const auto& cell : tableRowCells) {
+    if (cell && cell->hadDroppedWords()) layoutOom = true;
   }
   tableRowCells.clear();
   const auto clearLayoutLines = [this]() {
@@ -873,8 +901,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
     }
 
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->hyphenationEnabled,
-                                                           self->focusReadingEnabled, tableCellBlockStyle);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->focusReadingEnabled,
+                                                           tableCellBlockStyle, self->paragraphIndentSpaces);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
       self->skipUntilDepth = self->depth;
@@ -977,6 +1005,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               bool gotDimensions = headerProbe.getDimensions(dims);
 
               if (!gotDimensions) {
+                // Retry with framebuffer scratch when the heap cannot fit the inflate window.
+                GfxRenderer::FrameBufferLoan probeLoan(self->renderer);
+                ImageDimsProbe retryProbe;
+                self->epub->readItemContentsToStream(resolvedPath, retryProbe, 1024, /*allowEarlyStop=*/true);
+                gotDimensions = retryProbe.getDimensions(dims);
+              }
+
+              if (!gotDimensions) {
                 // No header within the stream (rare) — fall back to extracting the
                 // whole image and probing the file. That can take seconds, so
                 // surface the indexing popup first (single-shot per parser).
@@ -987,7 +1023,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 HalFile cachedImageFile;
                 bool extractSuccess = false;
                 if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
-                  extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+                  {
+                    // Same 32 KB inflate window as the probe; the popup is already up.
+                    GfxRenderer::FrameBufferLoan extractLoan(self->renderer);
+                    extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+                  }
                   cachedImageFile.flush();
                   cachedImageFile.close();
                 }
@@ -1387,6 +1427,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                                                                                   BlockStyle::CombineAxis::Horizontal);
       self->blockStyleStack.push_back(accumulated);
       self->startNewTextBlock(accumulated.withoutBottom());
+      if (!self->currentTextBlock) {
+        // OOM: layoutOom is latched; bail before the <li> marker path below
+        // dereferences the missing block. parseStep() fails the build.
+        return;
+      }
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
@@ -1570,8 +1615,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   if (!self->currentTextBlock) {
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->hyphenationEnabled,
-                                                           self->focusReadingEnabled, flowStyle);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->focusReadingEnabled,
+                                                           flowStyle, self->paragraphIndentSpaces);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
       return;
@@ -1737,6 +1782,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
 
+  // Block creation failed (OOM): nothing to soft-flush.
+  if (!self->currentTextBlock) {
+    return;
+  }
+
   // Keep token growth bounded: CSS-heavy spans can fragment text into many tiny
   // words, so flush earlier when embedded CSS is active. We still keep the
   // "exclude last line" behavior to preserve paragraph flow across chunks.
@@ -1745,16 +1795,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
   if (blockWordCount > softFlushThreshold && !self->inRuby) {
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [self](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
-          self->addLineToPage(std::move(textBlock), offset);
-        },
-        false);
+    self->makePages(/*includeLastLine=*/false);
   }
 }
 
@@ -1926,8 +1967,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->hyphenationEnabled,
-                                                           self->focusReadingEnabled, flowStyle);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->focusReadingEnabled,
+                                                           flowStyle, self->paragraphIndentSpaces);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block after table");
     }
@@ -2063,6 +2104,13 @@ bool ChapterHtmlSlimParser::beginParse() {
 }
 
 ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
+  // Layout OOM latched during the previous buffer's callbacks: fail the build
+  // instead of emitting pages with silently missing text.
+  if (layoutOom || (currentTextBlock && currentTextBlock->hadDroppedWords())) {
+    LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
+    return ParseStatus::Error;
+  }
+
   void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
   if (!buf) {
     LOG_ERR("EHP", "Couldn't allocate memory for buffer");
@@ -2103,6 +2151,13 @@ void ChapterHtmlSlimParser::abortParse() {
 }
 
 bool ChapterHtmlSlimParser::finishParse() {
+  // Same check as parseStep(): drops in the final buffer would otherwise slip
+  // through because Done is returned before the next step's check runs.
+  if (layoutOom || (currentTextBlock && currentTextBlock->hadDroppedWords())) {
+    LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
+    return false;
+  }
+
   if (xmlParser_) {
     LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - parseStartTime_);
     destroyXmlParser(xmlParser_);
@@ -2113,6 +2168,12 @@ bool ChapterHtmlSlimParser::finishParse() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
+    // Re-check: makePages() latches layoutOom for lines dropped DURING this
+    // final layout, which the entry check above cannot have seen.
+    if (layoutOom) {
+      LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
+      return false;
+    }
     if (!pendingAnchorId.empty()) {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
@@ -2193,10 +2254,17 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   currentPageNextY += lineHeight;
 }
 
-void ChapterHtmlSlimParser::makePages() {
+void ChapterHtmlSlimParser::makePages(const bool includeLastLine) {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
+  }
+
+  // Latch before layout: startNewTextBlock() replaces the block right after
+  // this returns, which would otherwise lose its dropped-words flag before
+  // parseStep()/finishParse() get to check it.
+  if (currentTextBlock->hadDroppedWords()) {
+    layoutOom = true;
   }
 
   if (!currentPage) {
@@ -2207,45 +2275,60 @@ void ChapterHtmlSlimParser::makePages() {
 
   const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
 
-  // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
-  }
 
   // Calculate effective width accounting for horizontal margins/padding
   const int horizontalInset = blockStyle.totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
-  currentTextBlock->layoutAndExtractLines(renderer, fontId, effectiveWidth,
-                                          [this](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
-                                            addLineToPage(std::move(textBlock), offset);
-                                          });
+  currentTextBlock->layoutAndExtractLines(
+      renderer, fontId, effectiveWidth,
+      [this](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
+        // Apply top spacing before the paragraph (stored in pixels) only on the first line of this block
+        if (wordsExtractedInBlock == 0) {
+          const auto& blockStyle = currentTextBlock->getBlockStyle();
+          if (blockStyle.marginTop > 0) {
+            currentPageNextY += blockStyle.marginTop;
+          }
+          if (blockStyle.paddingTop > 0) {
+            currentPageNextY += blockStyle.paddingTop;
+          }
+        }
+        addLineToPage(std::move(textBlock), offset);
+      },
+      includeLastLine, characterSpacing, wordSpacingPercent);
 
-  // Fallback: transfer any remaining pending footnotes to current page.
-  // Normally addLineToPage handles this via word-index tracking, but this catches
-  // edge cases where a footnote's word index equals the exact block size.
-  if (!pendingFootnotes.empty() && currentPage) {
-    for (const auto& [idx, fn] : pendingFootnotes) {
-      currentPage->addFootnote(fn.number, fn.href);
+  // Latch again after layout: extractLine can drop a whole line (TextBlock
+  // arena OOM) during the call above, after the pre-layout latch ran, and the
+  // block is replaced right after this returns.
+  if (currentTextBlock->hadDroppedWords()) {
+    layoutOom = true;
+  }
+
+  // Trailing spacing and footnotes only apply when the block is finalized
+  if (includeLastLine) {
+    // Fallback: transfer any remaining pending footnotes to current page.
+    // Normally addLineToPage handles this via word-index tracking, but this catches
+    // edge cases where a footnote's word index equals the exact block size.
+    if (!pendingFootnotes.empty() && currentPage) {
+      for (const auto& [idx, fn] : pendingFootnotes) {
+        currentPage->addFootnote(fn.number, fn.href);
+      }
+      pendingFootnotes.clear();
     }
-    pendingFootnotes.clear();
-  }
 
-  // Apply bottom spacing after the paragraph (stored in pixels)
-  if (blockStyle.marginBottom > 0) {
-    currentPageNextY += blockStyle.marginBottom;
-  }
-  if (blockStyle.paddingBottom > 0) {
-    currentPageNextY += blockStyle.paddingBottom;
-  }
+    // Apply bottom spacing after the paragraph (stored in pixels)
+    if (blockStyle.marginBottom > 0) {
+      currentPageNextY += blockStyle.marginBottom;
+    }
+    if (blockStyle.paddingBottom > 0) {
+      currentPageNextY += blockStyle.paddingBottom;
+    }
 
-  // Extra paragraph spacing if enabled (default behavior)
-  if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
+    // Extra paragraph spacing if enabled (default behavior)
+    if (extraParagraphSpacing) {
+      currentPageNextY += lineHeight / 2;
+    }
   }
 }

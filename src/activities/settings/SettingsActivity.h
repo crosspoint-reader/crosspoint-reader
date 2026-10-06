@@ -21,12 +21,12 @@ enum class SettingAction {
   OPDSBrowser,
   Network,
   ClearCache,
-  RebuildLibraryIndex,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
   DownloadFonts,
   TextSettings,
+  Plugins,
   KeyboardLayouts,
   HomeButton,
   About,
@@ -52,7 +52,6 @@ struct SettingInfo {
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
   bool inTextSettings = false;           // Surfaced in the Text Settings screen; hidden from the flat Reader list
-  bool sensitive = false;                // Web UI: render as a masked password input regardless of label text
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
@@ -66,11 +65,6 @@ struct SettingInfo {
 
   SettingInfo& withObfuscated() {
     obfuscated = true;
-    return *this;
-  }
-
-  SettingInfo& withSensitive() {
-    sensitive = true;
     return *this;
   }
 
@@ -227,13 +221,15 @@ class SettingsActivity final : public UiTabListActivity {
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
-  void rebuildLibraryIndex();
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
+
+  void drawChrome() override;
+  void drawFooter() override;
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
   void onExit() override;
-  void render(RenderLock&&) override;
+  void render(RenderLock&& lock) override;
 };

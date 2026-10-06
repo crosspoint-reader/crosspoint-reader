@@ -98,11 +98,11 @@ const OpdsServer* OpdsServerStore::getServer(size_t index) const {
   return &servers[index];
 }
 
-std::vector<HttpHeader> OpdsServer::activeCustomHeaders() const {
-  std::vector<HttpHeader> active;
+std::vector<HttpDownloader::Header> OpdsServer::activeCustomHeaders() const {
+  std::vector<HttpDownloader::Header> active;
   active.reserve(MAX_CUSTOM_HEADERS);
   for (const auto& header : customHeaders) {
-    if (!header.name.empty()) active.push_back(header);
+    if (!header.name.empty()) active.emplace_back(header.name, header.value);
   }
   return active;
 }

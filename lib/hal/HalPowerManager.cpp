@@ -11,6 +11,10 @@
 
 #include "HalGPIO.h"
 
+#if FREEINK_DEVICE_EEGO_A4
+#include <HalFrontlight.h>
+#endif
+
 #if FREEINK_DEVICE_PAPERMONO
 #include <M5Pm1.h>
 #endif
@@ -42,14 +46,16 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     enabled = false;
   }
 
-  // Note: We don't use mutex here to avoid too much overhead,
-  // it's not very important if we read a slightly stale value for currentLockMode
+  // Held across the check and the switch: a Lock taken in between would find full speed, do
+  // nothing, and then run at LOW_POWER_FREQ until the next key press.
+  xSemaphoreTake(modeMutex, portMAX_DELAY);
   const LockMode mode = currentLockMode;
 
   if (mode == None && enabled && !isLowPower) {
     LOG_DBG("PWR", "Going to low-power mode");
     if (!setCpuFrequencyMhz(LOW_POWER_FREQ)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", LOW_POWER_FREQ);
+      xSemaphoreGive(modeMutex);
       return;
     }
     isLowPower = true;
@@ -58,15 +64,22 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     LOG_DBG("PWR", "Restoring normal CPU frequency");
     if (!setCpuFrequencyMhz(normalFreq)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", normalFreq);
+      xSemaphoreGive(modeMutex);
       return;
     }
     isLowPower = false;
   }
 
   // Otherwise, no change needed
+  xSemaphoreGive(modeMutex);
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+#if FREEINK_DEVICE_EEGO_A4
+  // LM3630A and GSL share I2C; turn the light off before touch releases the bus.
+  Frontlight.setOn(false);
+  gpio.prepareForDeepSleep();
+#endif
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
   // doesn't hold power domains that interfere with USB-powered GPIO wake.
@@ -125,6 +138,15 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // device down; a button click then restarts it through a cold boot.
   if (freeink::m5pm1::requestShutdown()) {
     delay(1000);  // allow the PMIC firmware time to drop power
+  }
+#endif
+#if FREEINK_DEVICE_METALIO_EINK4
+  // ESP deep sleep leaves the whole board powered (main and screen/SD rails,
+  // 4G modem, audio module). Pulse the power-switch chip the way the vendor
+  // firmware does; the power button then cold-boots. USB can keep the board
+  // alive, so fall through to deep sleep if power is still on.
+  for (int i = 0; i < 3; i++) {
+    freeink::metalio::powerOff();
   }
 #endif
 

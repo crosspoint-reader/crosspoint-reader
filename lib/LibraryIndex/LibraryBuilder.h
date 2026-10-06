@@ -70,4 +70,9 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadat
 // Live index path, shared by the builder and activity.
 const char* libraryIndexPath();
 
+// A successful book transfer marks the retained index stale. The next Library
+// entry rebuilds it through the normal reconciliation path.
+bool markLibraryIndexDirty();
+bool isLibraryIndexDirty();
+
 }  // namespace library

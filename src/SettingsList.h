@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <HalClock.h>
+#include <HalFrontlight.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
@@ -17,6 +18,7 @@
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
+#include "components/UITheme.h"
 #include "util/DictionaryRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
@@ -150,6 +152,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
   SettingInfo s;
   s.nameId = StrId::STR_DICTIONARY;
+  s.key = "dictionaryName";  // web settings API; persisted by name, not by the generic loop
   s.type = SettingType::ENUM;
   s.enumStringValues.reserve(folderNames.size() + 1);
   s.enumStringValues.push_back(I18N.get(StrId::STR_NONE_OPT));
@@ -186,6 +189,13 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   return {VALUES, VALUES + count};
 }
 
+inline std::vector<StrId> homeThemeValues() {
+  static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
+  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
+  return {VALUES, VALUES + count};
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -196,8 +206,14 @@ inline std::vector<StrId> buildLongPressMenuValues() {
 // the font-family entry is replaced in that copy with a registry-aware version.
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
+// forPersistence: fromJson()/toJson() pass true so the runtime frontlight probe
+// cannot drop a persisted key. Frontlight.present() is false until
+// Frontlight.begin() runs the I2C probe, which happens AFTER SETTINGS.loadFromFile();
+// filtering the persistence list on it would fail to restore (and later overwrite)
+// STR_RESTORE_LIGHT_ON_WAKE on frontlit EEGO A4 units. The UI list still filters it.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                bool forPersistence = false) {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -235,10 +251,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                            StrId::STR_PAGES_30, StrId::STR_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme, homeThemeValues(), "uiTheme",
+                          StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 #if FREEINK_CAP_FRONTLIGHT
@@ -263,6 +277,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
                           {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE}, "lineSpacing",
                           StrId::STR_CAT_READER)
+            .withTextSettings(),
+        SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
+                           {CrossPointSettings::WORD_SPACING_MIN, CrossPointSettings::WORD_SPACING_MAX,
+                            CrossPointSettings::WORD_SPACING_STEP},
+                           "wordSpacing", StrId::STR_CAT_READER)
+            .withTextSettings(),
+        SettingInfo::Enum(StrId::STR_CHARACTER_SPACING, &CrossPointSettings::characterSpacing,
+                          {StrId::STR_SPACING_MINUS_2, StrId::STR_SPACING_MINUS_1, StrId::STR_SPACING_ZERO,
+                           StrId::STR_SPACING_PLUS_1, StrId::STR_SPACING_PLUS_2},
+                          "characterSpacing", StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin,
                            {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX,
@@ -290,6 +314,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
                             "extraParagraphSpacing", StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Value(StrId::STR_PARAGRAPH_INDENTATION, &CrossPointSettings::paragraphIndentSpaces, {0, 5, 1},
+                           "paragraphIndentSpaces", StrId::STR_CAT_READER)
+            .withTextSettings(),
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
@@ -299,14 +326,29 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_READER_MENU_STYLE, &CrossPointSettings::readerMenuStyle,
                           {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                           StrId::STR_CAT_READER),
-        // --- Controls ---
-        SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                          {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
+    // --- Controls ---
+#if FREEINK_CAP_HAPTIC
+        SettingInfo::Enum(StrId::STR_VIBRATION, &CrossPointSettings::vibration,
+                          {StrId::STR_VIBRATION_TOUCH, StrId::STR_VIBRATION_TOUCH_PAGE, StrId::STR_STATE_OFF},
+                          "vibration", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_HAPTIC_INTENSITY, &CrossPointSettings::hapticIntensity,
+                          {StrId::STR_HAPTIC_LOW, StrId::STR_HAPTIC_MEDIUM, StrId::STR_HAPTIC_HIGH}, "hapticIntensity",
                           StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(
-            StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-            {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
-            "touchReaderControls", StrId::STR_CAT_CONTROLS),
+#endif
+        SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
+                          {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT,
+                           StrId::STR_PREV_PREV},
+                          "sideButtonLayout", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+                            "touchReaderControls", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture,
+                          {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
+                           StrId::STR_INVERTED_TAP, StrId::STR_DISABLED},
+                          "pageTurnGesture", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_PREV_PAGE_GESTURE, &CrossPointSettings::previousPageGesture,
+                          {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
+                           StrId::STR_INVERTED_TAP, StrId::STR_DISABLED},
+                          "previousPageGesture", StrId::STR_CAT_CONTROLS),
         // Persisted under the legacy "tapForReaderMenu" key: old saves map
         // 0 = Off, 1 = Tap.
         SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
@@ -391,7 +433,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koPassword", StrId::STR_KOREADER_SYNC)
-            .withSensitive(),
+            .withObfuscated(),
         SettingInfo::DynamicString(
             StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
             [](const std::string& v) {
@@ -413,7 +455,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koHeader1Value", StrId::STR_KOREADER_SYNC)
-            .withSensitive(),
+            .withObfuscated(),
         SettingInfo::DynamicString(
             StrId::STR_KOREADER_CUSTOM_HEADER_2_NAME, [] { return KOREADER_STORE.getCustomHeaders()[1].name; },
             [](const std::string& v) {
@@ -428,7 +470,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koHeader2Value", StrId::STR_KOREADER_SYNC)
-            .withSensitive(),
+            .withObfuscated(),
         SettingInfo::DynamicEnum(
             StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
@@ -513,7 +555,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // The reader menu style stays available on button boards (the toolbar
     // chrome is button-navigable); only the touch controls are hidden.
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_READER_CONTROLS; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
+                                    s.nameId == StrId::STR_NEXT_PAGE_GESTURE ||
+                                    s.nameId == StrId::STR_PREV_PAGE_GESTURE;
+                           }),
             v.end());
   }
   // The reader-menu gesture choice only makes sense where the menu stays
@@ -539,6 +585,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     s.nameId == StrId::STR_SUNLIGHT_FADING_FIX ||
                                     s.nameId == StrId::STR_BACK_SHORT_TO_FILE_BROWSER;
                            }),
+            v.end());
+  }
+  // Frontlit and lightless variants of a board share one binary (EEGO A4);
+  // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
+  // has not run at load time, so persistence must keep the key (forPersistence).
+  if (!forPersistence && !Frontlight.present()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());
   }
   if (registry && registry->getFamilyCount() > 0) {

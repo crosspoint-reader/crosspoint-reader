@@ -3,13 +3,16 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
+#include <HalMemory.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <memory>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "components/CoverGridHomeUi.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
@@ -27,18 +30,34 @@ void UITheme::reload() {
   setTheme(themeType);
 }
 
+bool UITheme::supportsCoverGrid() { return HalMemory::getPsramHeap().totalBytes > 0; }
+
+bool UITheme::hasCoverGridHome() { return SETTINGS.uiTheme == CrossPointSettings::COVER_GRID && supportsCoverGrid(); }
+
+void UITheme::drawCoverGridHome(CoverGridHomeUi& home) { home.renderUi(); }
+
 void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
+  if (type == CrossPointSettings::COVER_GRID && !supportsCoverGrid()) type = CrossPointSettings::LYRA;
+
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");
       currentTheme = std::make_unique<BaseTheme>();
       currentMetrics = &BaseMetrics::values;
       break;
-    case CrossPointSettings::UI_THEME::LYRA:
-      LOG_DBG("UI", "Using Lyra theme");
-      currentTheme = std::make_unique<LyraTheme>();
+    case CrossPointSettings::UI_THEME::COVER_GRID:
+    case CrossPointSettings::UI_THEME::LYRA: {
+      // The cover home owns its screen-lifetime UI state; other screens retain Lyra styling.
+      auto theme = makeUniqueNoThrow<LyraTheme>();
+      if (!theme) {
+        LOG_ERR("UI", "OOM: Lyra theme");
+        return;
+      }
+      currentTheme = std::move(theme);
       currentMetrics = &LyraMetrics::values;
+      LOG_DBG("UI", "Using Lyra theme");
       break;
+    }
     case CrossPointSettings::UI_THEME::ROUNDEDRAFF:
       LOG_DBG("UI", "Using RoundedRaff theme");
       currentTheme = std::make_unique<RoundedRaffTheme>();
@@ -68,12 +87,21 @@ const ThemeMetrics& UITheme::getMetrics() const {
   return adjustedMetrics;
 }
 
-// Screen area excluding the button hints
+// Full drawable content area: screen minus the board's viewable insets (bezel /
+// rounded-corner clearance), oriented to the current rotation. The single place
+// the inset math lives; every screen derives its content bounds from here (or
+// from getScreenSafeArea, which builds on it).
+Rect UITheme::getContentArea(const GfxRenderer& renderer) {
+  int viTop = 0, viRight = 0, viBottom = 0, viLeft = 0;
+  renderer.getOrientedViewableTRBL(&viTop, &viRight, &viBottom, &viLeft);
+  return Rect{viLeft, viTop, renderer.getScreenWidth() - viLeft - viRight,
+              renderer.getScreenHeight() - viTop - viBottom};
+}
+
+// Content area excluding the button hints.
 Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
   auto orientation = renderer.getOrientation();
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
-  Rect safeArea = Rect{0, 0, screenWidth, screenHeight};
+  Rect safeArea = getContentArea(renderer);
   const ThemeMetrics metrics = getMetrics();
   switch (orientation) {
     case GfxRenderer::Orientation::Portrait:

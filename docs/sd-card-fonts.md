@@ -3,9 +3,14 @@
 CrossPoint supports loading additional fonts from the SD card, including fonts
 with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
 
+If CrossPoint enables external RAM on your device, you can load `.ttf`, `.otf`,
+and `.ttc` files directly. Otherwise, convert them to `.cpfont` files first.
+All devices can use `.cpfont` files.
+
 ## Installing Fonts
 
-There are three ways to install fonts:
+There are three ways to install `.cpfont` fonts. Direct TTF/OTF/TTC loading uses
+the manual SD card copy method below.
 
 ### Option 1: Download from device (recommended)
 
@@ -52,6 +57,32 @@ There are three ways to install fonts:
 
 3. Insert the SD card and power on your CrossPoint reader
 
+### Direct TTF/OTF/TTC fonts
+
+If CrossPoint enables external RAM on your device, copy a `.ttf`, `.otf`, or
+`.ttc` file directly into `/fonts/` or `/.fonts/`. The filename without its
+extension becomes the family name. For example, `/fonts/Bookerly.ttf` appears as
+`Bookerly` in **Settings > Reader > Font Family**.
+
+For a family with separate styles, put its files in one subfolder. The folder
+name becomes the family name. For example:
+
+    /fonts/Bookerly/Bookerly-Regular.ttf
+    /fonts/Bookerly/Bookerly-Bold.ttf
+    /fonts/Bookerly/Bookerly-Italic.ttf
+    /fonts/Bookerly/Bookerly-BoldItalic.ttf
+
+The reader selects regular, bold, italic, and bold italic faces from the font
+files. One regular file is enough; the reader derives missing styles. A `.cpfont`
+file in the same family folder takes priority over TTF/OTF/TTC files, so keep
+the two formats in separate folders. If both font roots contain the same family
+name, the copy in `/.fonts/` takes priority.
+
+Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. The **Fonts**
+tab in File Transfer accepts `.cpfont` files only. Copy direct fonts to the SD
+card instead. To remove a loose font file, delete that file from the SD card.
+The Fonts page can delete families stored in subfolders.
+
 ## CJK in the User Interface
 
 The built-in UI fonts are Latin-only, so by default the interface (book titles
@@ -68,11 +99,12 @@ The fallback is **size-matched**. The built-in UI fonts render at 8 pt
 (small/author lines), 10 pt (list rows) and 12 pt (book-cover titles, headers),
 so CrossPoint loads your SD family at those sizes too and maps each UI font to
 its same-size SD font. CJK book names therefore appear at the same size as the
-Latin text around them. For this to work the family must contain `.cpfont`
-files at sizes **8, 10 and 12** (in addition to the reader sizes 12–18); any UI
-size missing from the family simply keeps showing boxes for CJK at that size.
+Latin text around them. A `.cpfont` family must contain files at sizes
+**8, 10 and 12** for this UI fallback (in addition to the reader sizes 12–18).
+Any missing UI size keeps showing boxes for CJK at that size. Direct
+TTF/OTF/TTC families use the same file at all three UI sizes.
 
-Note that **Settings > Reader > Font Size** lists every size the family ships,
+For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships,
 so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
 sizes are not hidden from the list. Reading at 8 pt is your call; if you would
 rather not see the small sizes there, convert two families (one with the UI
@@ -92,7 +124,7 @@ What this means in practice:
 
 - Select a CJK-capable SD font under **Settings > Reader > Font Family**
   (see [Installing Fonts](#installing-fonts) and the `cjk` / `hangul` presets
-  under [Converting Custom Fonts](#converting-custom-fonts)). That single
+  for `.cpfont` under [Converting Custom Fonts](#converting-custom-fonts)). That single
   selection drives both book content *and* size-matched CJK fallback in the UI.
 - Pure-Latin UI strings keep the crisp built-in font; only strings that
   actually contain CJK are routed to the SD font.
@@ -111,7 +143,7 @@ The current list of pre-built fonts is maintained in the
 
 ## Converting Custom Fonts
 
-To convert your own TrueType/OpenType fonts:
+To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 
 ### Prerequisites
 

@@ -4,18 +4,27 @@
 #include <string>
 #include <vector>
 
+#include "VectorFontSupport.h"
+
 struct SdCardFontFileInfo {
   std::string path;   // v4 on-disk naming: "/<root>/<Family>/<Family>_<size>.cpfont"
                       // where <root> is "/.fonts" (preferred, hidden) or "/fonts" (visible).
                       // e.g. "/.fonts/NotoSansCJK/NotoSansCJK_14.cpfont"
-  uint8_t pointSize;  // parsed from filename: 14
-  uint8_t style;      // always 0 in v4 (all 4 styles bundled in one file);
-                      // kept for potential future formats
+  uint8_t pointSize;  // parsed from filename: 14 (0 for size-free vector fonts)
+  uint8_t style;      // .cpfont: always 0 (all 4 styles bundled in one file).
+                      // Vector family in a folder: the style ROLE of this file —
+                      // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
+                      // the filename). A loose vector file is always role 0.
 };
 
 struct SdCardFontFamilyInfo {
   std::string name;  // directory name, e.g. "NotoSansCJK"
   std::vector<SdCardFontFileInfo> files;
+  // true for a loose TrueType/OpenType file (.ttf/.otf/.ttc) rendered at any
+  // size via the FreeInkFont engine (see TtfEpdFont / SdCardFontSystem). For a
+  // vector family `files` holds a single entry — the font path, pointSize 0
+  // (size-free). false = a directory of pre-rasterized .cpfont files.
+  bool vector = false;
 
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   // Installed file closest to `pointSize` (ties → smaller). nullptr when the
@@ -51,10 +60,29 @@ class SdCardFontRegistry {
   int getFamilyIndex(const std::string& name) const;
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
+#if CROSSPOINT_VECTOR_FONTS
+  // FtFont::ReadFn over a HalFile* ctx (absolute-offset reads; count 0 is a
+  // seek probe). Shared by face inspection here and streamed TTF sources
+  // (SdCardFontSystem).
+  static unsigned long halFileRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
+#endif
+
  private:
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 
   static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
+#if CROSSPOINT_VECTOR_FONTS
+  // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
+  // return the length of the base name (extension stripped) in `baseLen`.
+  static bool parseVectorFontName(const char* filename, size_t& baseLen);
+  // Style role (0=regular, 1=bold, 2=italic, 3=bold-italic) inferred from a
+  // vector font's base name (case-insensitive "bold"/"italic"/"oblique" tokens).
+  static uint8_t parseVectorStyle(const char* baseName, size_t baseLen);
+  // Refine each vector file's style role from its real face metadata
+  // (FtFont::inspectStream: OS/2 weight + italic flag), keeping the
+  // filename-derived role when the face can't be read. Then dedup by role.
+  static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
+#endif
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
   // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
   static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);

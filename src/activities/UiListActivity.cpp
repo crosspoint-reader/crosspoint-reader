@@ -94,25 +94,48 @@ void UiListActivity::loop() {
 }
 
 void UiListActivity::navigateButtons() {
-  const int count = listCount();
-  auto& n = activeNav();
-  buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
-  buttonNavigator.onPreviousRelease(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
+  buttonNavigator.onNextPress(
+      [this] { moveSelectionTo(ButtonNavigator::nextIndex(activeNav().selected, listCount())); });
+  buttonNavigator.onPreviousPress(
+      [this] { moveSelectionTo(ButtonNavigator::previousIndex(activeNav().selected, listCount())); });
   // Page by the rows the last build actually drew (pageRows), not the
   // fixed-height visibleRows estimate: with wrapped labels the estimate
   // overshoots and rows between pages would never be shown. The measurement
   // can be one build old while a refresh is in flight; the next layout's
   // feedback corrects the viewport.
-  buttonNavigator.onNextContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.inputPageRows())); });
-  buttonNavigator.onPreviousContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.inputPageRows())); });
+  buttonNavigator.onNextContinuous([this] {
+    const auto& n = activeNav();
+    moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, listCount(), n.inputPageRows()));
+  });
+  buttonNavigator.onPreviousContinuous([this] {
+    const auto& n = activeNav();
+    moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, listCount(), n.inputPageRows()));
+  });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const int selectionOffset) {
+  props.toggleCheckbox = true;
+  props.toggleWidth = 28;
+  props.toggleHeight = 28;
   props.partialTrailingRow = true;
-  screen.syncListViewport(activeNav(), props, listCount(), selectionOffset);
+  auto& n = activeNav();
+  const int prevTop = n.top;
+  const bool trusted = n.trusts(listCount());
+  const int drawn = n.drawnRows;
+
+  screen.syncListViewport(n, props, listCount(), selectionOffset);
+
+  // When the selection is already visible in the current viewport (based on
+  // the measured drawnRows rather than the unweighted visibleRows estimate),
+  // keep selection-follow anchored instead of jumping to top. Explicit swipe
+  // scrolling clears followPending and must retain its new viewport.
+  if (n.followPending && trusted && drawn > 0) {
+    const int sel = props.selectedIndex;
+    if (sel >= prevTop && sel < prevTop + drawn) {
+      n.top = prevTop;
+      props.topIndex = static_cast<uint16_t>(prevTop);
+    }
+  }
 }
 
 void UiListActivity::drawChrome() {

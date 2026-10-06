@@ -240,4 +240,26 @@ typedef struct {
   /// answer from RAM-resident data without storage I/O.  Shares glyphMissCtx.
   /// nullptr for fonts whose interval table is already complete (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
+
+  /// Vector-font bitmap accessor (FreeInkFont / TtfEpdFont). When non-null,
+  /// GfxRenderer::getGlyphBitmap() returns vectorBitmapHandler(glyphMissCtx, glyph)
+  /// instead of indexing ->bitmap or going through the SdCardFont overflow path.
+  /// This lets a runtime-rasterized TTF fault + cache glyphs on ANY draw path
+  /// (via glyphMissHandler) without pre-warming. nullptr for every other font,
+  /// so the SD/built-in bitmap paths are unaffected (all fonts zero-init this).
+  const uint8_t* (*vectorBitmapHandler)(void* ctx, const EpdGlyph* glyph);
+
+  /// Dynamic kerning for handler-backed fonts (TTF via FreeInkFont): returns
+  /// the 4.4 fixed-point pixel adjustment for the pair, 0 when none. Checked
+  /// by getKerning() before the static class tables (handler fonts carry
+  /// none). Shares glyphMissCtx. nullptr for built-in and SD fonts, whose
+  /// kerning is baked into the tables above (all fonts zero-init this).
+  int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
 } EpdFontData;
+
+// Solid Unicode symbols can be drawn as rectangles when the font lacks them.
+namespace syntheticGlyph {
+constexpr uint32_t FULL_BLOCK = 0x2588;
+constexpr uint32_t BLACK_SQUARE = 0x25A0;
+constexpr bool isSolid(uint32_t cp) { return cp == FULL_BLOCK || cp == BLACK_SQUARE; }
+}  // namespace syntheticGlyph

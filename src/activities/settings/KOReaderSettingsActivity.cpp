@@ -180,7 +180,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
       rowValues_[i] =
           KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY);
     } else if (i == IDX_SEND_METADATA) {
-      rowValues_[i] = KOREADER_STORE.getSendMetadata() ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      rowValues_[i].clear();
     } else if (i == IDX_SYNC_BEHAVIOR) {
       rowValues_[i] =
           KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? tr(STR_SMART_SYNC) : tr(STR_ASK_EVERY_TIME);
@@ -189,6 +189,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
   }
+  GUI.setCheckboxRow(rowItems_[IDX_SEND_METADATA], KOREADER_STORE.getSendMetadata());
 
   fui::ListProps props;
   props.items = rowItems_;

@@ -33,6 +33,7 @@
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/plugins/PluginCatalogActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
@@ -104,11 +105,11 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_LIBRARY_REBUILD, SettingAction::RebuildLibraryIndex));
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
@@ -398,9 +399,6 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
-      case SettingAction::RebuildLibraryIndex:
-        rebuildLibraryIndex();
-        break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -431,6 +429,9 @@ void SettingsActivity::toggleCurrentSetting() {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsLists();
                                });
+        break;
+      case SettingAction::Plugins:
+        startActivityForResult(std::make_unique<PluginCatalogActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KeyboardLayouts:
         if (auto activity = makeUniqueNoThrow<KeyboardLayoutsActivity>(renderer, mappedInput)) {
@@ -485,29 +486,6 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
   }
 }
 
-void SettingsActivity::rebuildLibraryIndex() {
-  // Prevent SD-backed fonts from opening a second reader while EPUB metadata is scanned.
-  // Keep the popup static because an e-ink refresh per folder would dominate the rebuild.
-  RenderLock lock(*this);
-  GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
-
-  library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
-  if (ok) {
-    LOG_INF("LIB", "rebuild: %u books (%u new, %u renamed, %u removed, %u enriched) in %ums",
-            static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.added),
-            static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
-            static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.walkMs));
-    if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
-  } else {
-    LOG_ERR("LIB", "index rebuild failed");
-  }
-
-  GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
-  delay(1200);
-  requestUpdate(true);
-}
-
 void SettingsActivity::openSleepTimeoutPicker() {
   startActivityForResult(
       std::make_unique<IntervalSelectionActivity>(
@@ -525,9 +503,6 @@ void SettingsActivity::openSleepTimeoutPicker() {
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
-  if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-    return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-  }
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
     // byte must not index past the enum table.
@@ -577,8 +552,19 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   // render.
   const auto& settings = *currentSettings;
   for (size_t i = 0; i < settings.size(); i++) {
-    rowValues_[i] = settingValueText(settings[i]);
-    rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    const auto& setting = settings[i];
+    const auto labels = setting.enumLabels();
+    const bool checkbox = setting.type == SettingType::TOGGLE ||
+                          (setting.type == SettingType::ENUM && setting.enumStringValues.empty() &&
+                           labels.size() == 2 && labels[0] == StrId::STR_STATE_OFF && labels[1] == StrId::STR_STATE_ON);
+    if (checkbox && (setting.valuePtr || setting.valueGetter)) {
+      const bool checked = setting.valuePtr ? SETTINGS.*(setting.valuePtr) != 0 : setting.valueGetter() != 0;
+      rowValues_[i].clear();
+      GUI.setCheckboxRow(rowItems_[i], checked);
+    } else {
+      rowValues_[i] = settingValueText(setting);
+      rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    }
   }
 
   fui::ListProps props;
@@ -598,11 +584,7 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   screen.list(props);
 }
 
-void SettingsActivity::render(RenderLock&&) {
-  if (optionPopup.processRender(renderer, mappedInput)) return;
-
-  renderer.clearScreen();
-
+void SettingsActivity::drawChrome() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
@@ -612,9 +594,9 @@ void SettingsActivity::render(RenderLock&&) {
   // conflicts with button hints on non-touch devices.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
                  CROSSPOINT_VERSION);
+}
 
-  renderUi();
-
+void SettingsActivity::drawFooter() {
   const int ring = ringPos();
   const auto confirmLabel =
       (ring == 0) ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
@@ -623,7 +605,9 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
 
-  // Always use standard refresh for settings screen
-  renderer.displayBuffer();
+void SettingsActivity::render(RenderLock&& lock) {
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+  UiListActivity::render(std::move(lock));
 }
