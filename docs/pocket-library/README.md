@@ -1,5 +1,7 @@
 # Pocket Library
 
+<img src="../images/pocket-library.png" width="520" alt="Pocket Library on two Xteink X4 Pro readers: the Library shelf and a Wikipedia article">
+
 All of English Wikipedia, with its pictures, in your pocket and offline. Also
 Wiktionary, Wikivoyage, Wikiquote, Wikisource, Wikibooks and a medical
 encyclopedia with first-aid pages, all on a microSD card in an

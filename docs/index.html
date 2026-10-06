@@ -36,10 +36,12 @@ a:hover { text-decoration-color: var(--fg); }
 a:focus-visible, button:focus-visible { outline: 1px solid var(--fg); outline-offset: 3px; }
 .label { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
 
-header { padding-block: 120px 72px; display: grid; gap: 20px; }
+header { padding-block: 120px 40px; display: grid; gap: 20px; }
 header h1 { font-size: clamp(2.4rem, 6vw, 3.4rem); line-height: 1.1; letter-spacing: -.01em; }
 header p { color: var(--mute); max-width: 34ch; }
 
+.shot { margin: 0 -8px 8px; }
+.shot img { display: block; width: 100%; height: auto; }
 section { border-top: 1px solid var(--rule); padding-block: 40px; display: grid; gap: 28px; }
 
 .need { display: grid; gap: 18px; }
@@ -80,6 +82,8 @@ footer { border-top: 1px solid var(--rule); padding-top: 24px; font-size: .85rem
     <h1>Wikipedia, entire and offline, in a reader that fits in your hand.</h1>
     <p>With pictures, a dictionary, travel guides and first aid. No signal required.</p>
   </header>
+
+  <figure class="shot"><img src="images/pocket-library.png" width="820" height="660" alt="Two Xteink X4 Pro readers: one shows the Library shelf with Wikipedia, Medical, eBooks, Recent and More; the other shows the Wikipedia article Library of Alexandria."></figure>
 
   <section>
     <p class="label">You need</p>
