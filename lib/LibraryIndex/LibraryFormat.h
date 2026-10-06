@@ -10,9 +10,10 @@
 //
 //   header        64 bytes of struct, padded to 512
 //   folders       F variable-length records; the id of a folder IS its ordinal
-//   records       N x exactly 128 bytes, in folded-title order
+//   records       N x exactly 128 bytes, in folded sort-title order
 //   permutations  authorOrder[N] then arrivalOrder[N], both u16
-//   names         path hash, filename, display author, title, and source author blobs
+//   names         path hash, filename, display author, title, source author, and
+//                 author sort (file-as) blobs
 //
 // The fixed 128-byte record stride is the load-bearing choice: record k lives at
 // recordStart + 128k, so paging is O(1) in every sort order with no offset
@@ -33,7 +34,9 @@ inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
 // Bump when the fold or a permutation's sort key changes.
 // Forces fold and ranks to be rebuilt while firstSeen values are preserved, so
 // arrival history survives.
-inline constexpr uint8_t CLIX_FOLD_VERSION = 4;
+// v5: records fold the book's title sort (file-as) when it has one, the author
+// order uses the author's file-as, and the name blob gains an author-sort field.
+inline constexpr uint8_t CLIX_FOLD_VERSION = 5;
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_FOLD_BYTES = 96;
@@ -100,6 +103,8 @@ struct ClixRecord {
   uint8_t foldLen;
   uint8_t authorKeyLen;
   uint8_t metadataStatus;
+  // Folded title sort when the book has one, else the folded shown title. The
+  // records are in this order; search also matches the shown title's fold.
   char fold[CLIX_FOLD_BYTES];
   char authorKey[CLIX_AUTHOR_KEY_BYTES];
   uint32_t modificationTime;

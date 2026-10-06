@@ -231,6 +231,89 @@ bool LibraryIndexFile::readSourceAuthor(const ClixRecord& record, std::string& o
   return readBlobField(record, 2, out);
 }
 
+bool LibraryIndexFile::readAuthorSort(const ClixRecord& record, std::string& out) {
+  return readBlobField(record, 3, out);
+}
+
+bool LibraryIndexFile::readBlobFields(const ClixRecord& record, const uint8_t fieldCount, std::string& buf,
+                                      uint32_t* offsets, uint8_t* lengths) {
+  buf.clear();
+  if (!opened || record.nameLen == 0) return false;
+  if (record.nameOff > head.nameLen || sizeof(uint64_t) > head.nameLen - record.nameOff ||
+      record.nameLen > head.nameLen - record.nameOff - sizeof(uint64_t))
+    return false;
+
+  // One read instead of one per length byte. It starts small because the card
+  // is read in 512-byte sectors: typical fields fit in the first chunk, and
+  // reading the largest possible run (up to 1 KiB) would pull in sectors of
+  // other books' blobs. A field that runs past the chunk extends the read once.
+  constexpr uint32_t FIRST_CHUNK = 128;
+  const uint32_t start = record.nameOff + sizeof(uint64_t) + record.nameLen;
+  if (start >= head.nameLen) return false;
+  const uint32_t limit = std::min<uint32_t>(head.nameLen - start, fieldCount * (1u + UINT8_MAX));
+  uint32_t have = std::min(limit, FIRST_CHUNK);
+  buf.resize(have);
+  if (!readAt(head.nameStart + start, buf.data(), have)) {
+    buf.clear();
+    return false;
+  }
+
+  uint32_t at = 0;
+  for (uint8_t i = 0; i < fieldCount; i++) {
+    // Length byte plus field, rounded up to the rest of the possible run.
+    const uint32_t needed = at + 1u + (at < have ? static_cast<uint8_t>(buf[at]) : UINT8_MAX);
+    if (needed > have && have < limit) {
+      const uint32_t more = std::min(limit, std::max(needed, have + FIRST_CHUNK)) - have;
+      buf.resize(have + more);
+      if (!readAt(head.nameStart + start + have, buf.data() + have, more)) {
+        buf.clear();
+        return false;
+      }
+      have += more;
+    }
+    if (at >= have) {
+      buf.clear();
+      return false;
+    }
+    lengths[i] = static_cast<uint8_t>(buf[at]);
+    offsets[i] = at + 1;
+    at += 1u + lengths[i];
+    if (at > have) {
+      buf.clear();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool LibraryIndexFile::readAuthorAndTitle(const ClixRecord& record, std::string& author, std::string& title) {
+  author.clear();
+  uint32_t offsets[2];
+  uint8_t lengths[2];
+  // `title` doubles as the read buffer; its own field is cut out of it last.
+  if (!readBlobFields(record, 2, title, offsets, lengths)) return false;
+  author.assign(title, offsets[0], lengths[0]);
+  title.erase(0, offsets[1]);
+  title.resize(lengths[1]);
+  return true;
+}
+
+bool LibraryIndexFile::readRebuildFields(const ClixRecord& record, std::string& title, std::string& sourceAuthor,
+                                         std::string& authorSort) {
+  sourceAuthor.clear();
+  authorSort.clear();
+  uint32_t offsets[4];
+  uint8_t lengths[4];
+  // Fields: display author, title, source author, author sort. `title` doubles
+  // as the read buffer; its own field is cut out of it last.
+  if (!readBlobFields(record, 4, title, offsets, lengths)) return false;
+  sourceAuthor.assign(title, offsets[2], lengths[2]);
+  authorSort.assign(title, offsets[3], lengths[3]);
+  title.erase(0, offsets[1]);
+  title.resize(lengths[1]);
+  return true;
+}
+
 bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {
   out.clear();
   if (!opened || record.folderId >= head.folderCount) return false;

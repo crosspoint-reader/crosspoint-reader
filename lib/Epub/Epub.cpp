@@ -60,7 +60,8 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip) c
 }
 
 bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool writeSpineEntries,
-                           const bool metadataOnly, ZipFile* sharedZip) {
+                           const bool metadataOnly, ZipFile* sharedZip,
+                           BookMetadataCache::ExtendedMetadata* extendedMetadata) {
   std::string contentOpfFilePath;
   if (!findContentOpfFile(&contentOpfFilePath, sharedZip)) {
     LOG_ERR("EBP", "Could not find content.opf in zip");
@@ -98,6 +99,13 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.title = utf8ComposeNfc(opfParser.title);
   bookMetadata.author = utf8ComposeNfc(opfParser.author);
   bookMetadata.language = opfParser.language;
+  if (extendedMetadata) {
+    extendedMetadata->titleSort = utf8ComposeNfc(opfParser.titleSort);
+    extendedMetadata->authorSort = utf8ComposeNfc(opfParser.authorSort);
+    extendedMetadata->series = utf8ComposeNfc(opfParser.series);
+    extendedMetadata->seriesIndex = std::move(opfParser.seriesIndex);
+    extendedMetadata->tags = utf8ComposeNfc(opfParser.tags);
+  }
 
   if (metadataOnly) {
     LOG_DBG("EBP", "Successfully parsed package metadata");
@@ -560,11 +568,18 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // OPF Pass
   const uint32_t opfStart = millis();
   BookMetadataCache::BookMetadata bookMetadata;
+  // Heap, not stack: it must live until buildBookBin, across the TOC pass.
+  auto extendedMetadata = makeUniqueNoThrow<BookMetadataCache::ExtendedMetadata>();
+  if (!extendedMetadata) {
+    LOG_ERR("EBP", "OOM: extended metadata");
+    return false;
+  }
   if (!bookMetadataCache->beginContentOpfPass()) {
     LOG_ERR("EBP", "Could not begin writing content.opf pass");
     return false;
   }
-  if (!parseContentOpf(bookMetadata)) {
+  if (!parseContentOpf(bookMetadata, /*writeSpineEntries=*/true, /*metadataOnly=*/false, nullptr,
+                       extendedMetadata.get())) {
     LOG_ERR("EBP", "Could not parse content.opf");
     return false;
   }
@@ -615,10 +630,12 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   // Build final book.bin
   const uint32_t buildStart = millis();
-  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
+  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata, *extendedMetadata)) {
     LOG_ERR("EBP", "Could not update mappings and sizes");
     return false;
   }
+  // Freed before the CSS parse below, which wants every byte of heap.
+  extendedMetadata.reset();
   LOG_DBG("EBP", "buildBookBin completed in %lu ms", millis() - buildStart);
   LOG_DBG("EBP", "Total indexing completed in %lu ms", millis() - indexingStart);
 
@@ -645,9 +662,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::loadMetadata(std::string& title, std::string& author) {
+bool Epub::loadMetadata(std::string& title, std::string& author, BookMetadataCache::ExtendedMetadata* extended) {
   title.clear();
   author.clear();
+  if (extended) *extended = {};
 
   if (Txt::isTxtOrMd(filepath)) {
     title = utf8ComposeNfc(FsHelpers::getFileNameWithoutExtension(filepath));
@@ -658,6 +676,9 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
   if (metadataCache && metadataCache->load()) {
     title = metadataCache->coreMetadata.title;
     author = metadataCache->coreMetadata.author;
+    if (extended && !metadataCache->loadExtendedMetadata(*extended)) {
+      LOG_ERR("EBP", "Could not read extended metadata from cache");
+    }
     return true;
   }
   if (!metadataCache) {
@@ -672,7 +693,7 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
   }
 
   BookMetadataCache::BookMetadata metadata;
-  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
+  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip, extended);
   zip.close();
   if (!loaded) return false;
 

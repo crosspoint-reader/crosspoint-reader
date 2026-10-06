@@ -12,7 +12,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 10;  // v10: ignore ambiguous guide text references
+constexpr uint8_t BOOK_CACHE_VERSION = 11;  // v11: sort keys, series and tags
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -165,7 +165,8 @@ bool BookMetadataCache::endWrite() {
   return true;
 }
 
-bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
+bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata,
+                                     const ExtendedMetadata& extended) {
   // Open all three files, writing to meta, reading from spine and toc
   if (!Storage.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
@@ -196,7 +197,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
                                 metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
-                                sizeof(uint32_t) * 5;
+                                extended.titleSort.size() + extended.authorSort.size() + extended.series.size() +
+                                extended.seriesIndex.size() + extended.tags.size() + sizeof(uint32_t) * 10;
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
@@ -211,6 +213,11 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   serialization::writeString(bookOut, metadata.language);
   serialization::writeString(bookOut, metadata.coverItemHref);
   serialization::writeString(bookOut, metadata.textReferenceHref);
+  serialization::writeString(bookOut, extended.titleSort);
+  serialization::writeString(bookOut, extended.authorSort);
+  serialization::writeString(bookOut, extended.series);
+  serialization::writeString(bookOut, extended.seriesIndex);
+  serialization::writeString(bookOut, extended.tags);
 
   // Loop through spine entries, writing LUT positions
   spineIn.seek(0);
@@ -476,6 +483,8 @@ bool BookMetadataCache::load() {
   serialization::readString(bookFile, coreMetadata.language);
   serialization::readString(bookFile, coreMetadata.coverItemHref);
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
+  // Extended metadata follows; the seek below skips it.
+  extendedMetadataOffset = bookFile.position();
 
   // Cache cumulative spine sizes in RAM. The progress bar (every render) and percent
   // jumps otherwise pay 2 seeks + a heap-allocating SpineEntry read per access. Spine
@@ -491,6 +500,21 @@ bool BookMetadataCache::load() {
 
   loaded = true;
   LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
+  return true;
+}
+
+bool BookMetadataCache::loadExtendedMetadata(ExtendedMetadata& out) {
+  if (!loaded) {
+    LOG_ERR("BMC", "loadExtendedMetadata called but cache not loaded");
+    return false;
+  }
+
+  bookFile.seek(extendedMetadataOffset);
+  if (!serialization::readString(bookFile, out.titleSort) || !serialization::readString(bookFile, out.authorSort) ||
+      !serialization::readString(bookFile, out.series) || !serialization::readString(bookFile, out.seriesIndex) ||
+      !serialization::readString(bookFile, out.tags)) {
+    return false;
+  }
   return true;
 }
 
