@@ -65,3 +65,6 @@ If you'd like to add your name to this list, please open a PR adding yourself an
 
 ## Danish
 - [hajisan](https://github.com/hajisan)
+
+## Polish
+- [marczykm](https://github.com/marczykm)
