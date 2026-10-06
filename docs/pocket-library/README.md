@@ -9,6 +9,9 @@ searches by touch and needs no network, account or phone.
 It's a set of additions to [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader),
 the open-source e-reader firmware, so your books keep working as before.
 
+The short version, six steps on one page: **[noah-pi.github.io/pocket-library](https://noah-pi.github.io/pocket-library/)**.
+This guide is the long version.
+
 ## What it does
 
 - **Library** on the Home screen: a tile for each collection, your ebooks,

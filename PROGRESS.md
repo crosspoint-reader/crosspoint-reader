@@ -649,3 +649,10 @@ containing "Forbidden City"; see the session summary for the download.
 - Owner to do: merge this branch into pocket-library so the dev release
   carries it; set the repository's default branch to pocket-library; try
   `bash flash.sh` once from ~/PocketLib (it offers a backup first).
+
+## 2026-10-06 — The one-page site
+
+- `docs/index.html`: two things to buy, six steps, four fixes; the owner
+  asked for spare text and no checkboxes. Served by GitHub Pages once the
+  owner turns it on (Settings → Pages → Deploy from a branch →
+  pocket-library, /docs) at https://noah-pi.github.io/pocket-library/.

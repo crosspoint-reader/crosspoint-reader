@@ -82,6 +82,7 @@ Release tags are what we rebase onto.
 | `lib/Epub/Epub/converters/{Png,Jpeg}ToFramebufferConverter.cpp` | `#ifdef POCKET_LIBRARY`: the decoder's free-heap gate reads the default heap (`HalMemory::getDefaultHeap()`), not `ESP.getFreeHeap()` (internal RAM only) | with PSRAM the decoder is allocated there; the internal-RAM gate refused pictures (2026-10-05) |
 | `lib/Epub/Epub/converters/ImageDecoderFactory.{h,cpp}`, `lib/Epub/Epub/blocks/ImageBlock.cpp` | `#ifdef POCKET_LIBRARY`: `getDecoderForFile()` picks JPEG or PNG by the file's first bytes; ImageBlock uses it | Wikipedia 2026 stores WebP under .jpg names; the reader converts them to PNG under that name (2026-10-05) |
 | `README.md` | three-line note at the top pointing to `docs/pocket-library/README.md` | the repository's front page leads to the guide |
+| `docs/index.html`, `docs/.nojekyll` | the one-page site, served by GitHub Pages from `pocket-library` /docs; `.nojekyll` so upstream's Markdown docs are served as files, not built | a short address to share |
 
 ## 2026-10-01 — Licensing layout
 

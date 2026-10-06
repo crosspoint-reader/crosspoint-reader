@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Make your own offline Wikipedia e-reader: two things to buy, six steps.">
+<!-- Pocket Library for CrossPoint. SPDX-License-Identifier: GPL-3.0-or-later -->
+<title>Pocket Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;1,7..72,300&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* One narrow column, wide margins; numbered steps hang in the left margin. */
+:root {
+  --bg: #f4f4f1;
+  --fg: #161716;
+  --mute: #6e716d;
+  --rule: #d6d7d2;
+  --code-bg: #e9e9e5;
+  --serif: "Literata", "Iowan Old Style", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #121312; --fg: #e4e5e1; --mute: #8d908b; --rule: #2a2c2a; --code-bg: #1c1e1c; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #121312; --fg: #e4e5e1; --mute: #8d908b; --rule: #2a2c2a; --code-bg: #1c1e1c; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--serif); font-weight: 300; font-size: 18px; line-height: 1.6; padding-inline: 20px; padding-block: 0 96px; }
+main { max-width: 620px; margin: 0 auto; }
+h1, h2 { font-weight: 300; margin: 0; text-wrap: balance; }
+p, ol { margin: 0; }
+a { color: inherit; text-decoration-color: var(--mute); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--fg); }
+a:focus-visible, button:focus-visible { outline: 1px solid var(--fg); outline-offset: 3px; }
+.label { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+
+header { padding-block: 120px 72px; display: grid; gap: 20px; }
+header h1 { font-size: clamp(2.4rem, 6vw, 3.4rem); line-height: 1.1; letter-spacing: -.01em; }
+header p { color: var(--mute); max-width: 34ch; }
+
+section { border-top: 1px solid var(--rule); padding-block: 40px; display: grid; gap: 28px; }
+
+.need { display: grid; gap: 18px; }
+.need div { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; }
+.need b { font-weight: 400; }
+.need span { font-family: var(--mono); font-size: .85rem; color: var(--mute); }
+.need p { grid-column: 1 / -1; color: var(--mute); font-size: .95rem; }
+
+ol.steps { list-style: none; padding: 0; display: grid; gap: 48px; counter-reset: s; }
+ol.steps > li { counter-increment: s; position: relative; display: grid; gap: 14px; }
+ol.steps > li::before { content: counter(s); position: absolute; left: -48px; top: .1em; font-family: var(--mono); font-size: .85rem; color: var(--mute); }
+ol.steps h2 { font-size: 1.35rem; }
+ol.steps p { color: var(--fg); }
+.mute { color: var(--mute); }
+.sub { padding-left: 1.1em; display: grid; gap: 4px; }
+
+.cmd { display: grid; grid-template-columns: 1fr auto; align-items: start; background: var(--code-bg); min-width: 0; }
+.cmd pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.6; min-width: 0; }
+.cmd button { font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); background: none; border: 0; padding: 15px 14px; cursor: pointer; }
+.cmd button:hover { color: var(--fg); }
+
+.help { display: grid; gap: 10px; color: var(--mute); font-size: .95rem; }
+.help b { font-weight: 400; color: var(--fg); }
+
+footer { border-top: 1px solid var(--rule); padding-top: 24px; font-size: .85rem; color: var(--mute); }
+
+@media (max-width: 760px) {
+  header { padding-block: 64px 48px; }
+  ol.steps > li { padding-left: 32px; }
+  ol.steps > li::before { left: 0; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="label">Pocket Library</p>
+    <h1>Wikipedia, entire and offline, in a reader that fits in your hand.</h1>
+    <p>With pictures, a dictionary, travel guides and first aid. No signal required.</p>
+  </header>
+
+  <section>
+    <p class="label">You need</p>
+    <div class="need">
+      <div>
+        <b><a href="https://www.xteink.com/products/xteink-x4-pro-pocket-ereader" target="_blank" rel="noopener">Xteink X4 Pro</a></b><span>$99</span>
+        <p>The Pro. Other Xteink models won't work.</p>
+      </div>
+      <div>
+        <b>256 GB microSD card</b><span>about $25</span>
+        <p>A name brand, such as <a href="https://www.amazon.com/SAMSUNG-microSD-MicroSDXC-MB-MD256SA-AM/dp/B0C1PPWTWT" target="_blank" rel="noopener">Samsung PRO Plus</a> or <a href="https://www.amazon.com/s?k=sandisk+extreme+256gb+microsd" target="_blank" rel="noopener">SanDisk Extreme</a>.</p>
+      </div>
+    </div>
+    <p class="mute">And a Mac, with the USB-C cable that charges it.</p>
+  </section>
+
+  <section>
+    <p class="label">Steps</p>
+    <ol class="steps">
+      <li>
+        <h2>Install Python</h2>
+        <p>Download the macOS installer from <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org</a> and run it.</p>
+      </li>
+
+      <li>
+        <h2>Install CrossPoint</h2>
+        <p>Connect the reader with its magnetic adapter and wake it. Open Terminal and run this to back it up:</p>
+        <div class="cmd"><pre>mkdir -p ~/PocketLib &amp;&amp; cd ~/PocketLib &amp;&amp; curl -fsSLO https://github.com/noah-pi/pocket-library/releases/download/dev/flash.sh &amp;&amp; bash flash.sh backup</pre><button type="button">Copy</button></div>
+        <p>Then, in Chrome, open <a href="https://crosspointreader.com" target="_blank" rel="noopener">crosspointreader.com</a> → Flash tools → Xteink X4 Pro, and install.</p>
+      </li>
+
+      <li>
+        <h2>Install Pocket Library</h2>
+        <div class="cmd"><pre>cd ~/PocketLib &amp;&amp; bash flash.sh</pre><button type="button">Copy</button></div>
+        <p class="mute">The reader restarts when it's done.</p>
+      </li>
+
+      <li>
+        <h2>Format the card</h2>
+        <p>In Disk Utility, choose View → Show All Devices, select the card, and click Erase.</p>
+        <p class="mute">Name POCKETLIB · Format ExFAT · Scheme Master Boot Record</p>
+      </li>
+
+      <li>
+        <h2>Fill the card</h2>
+        <div class="cmd"><pre>cd ~/PocketLib &amp;&amp; curl -fsSLO https://github.com/noah-pi/pocket-library/releases/download/dev/get-tools.sh &amp;&amp; bash get-tools.sh</pre><button type="button">Copy</button></div>
+        <div class="cmd"><pre>cd ~/PocketLib/cardbuilder &amp;&amp; caffeinate -i python3 cardbuilder.py all --card /Volumes/POCKETLIB --verify</pre><button type="button">Copy</button></div>
+        <p class="mute">This takes several hours. Leave it overnight. If it stops, run it again; it picks up where it left off.</p>
+      </li>
+
+      <li>
+        <h2>Insert the card</h2>
+        <p>Eject it, put it in the reader, and open Library.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <p class="label">If something fails</p>
+    <div class="help">
+      <p><b>Reader not found.</b> Press its power button and run the command again.</p>
+      <p><b>Python too old.</b> Open a new Terminal window after installing Python.</p>
+      <p><b>To undo.</b> <code>bash flash.sh restore</code> returns the reader to how it came.</p>
+      <p><b>Anything else.</b> <a href="https://github.com/noah-pi/pocket-library/issues" target="_blank" rel="noopener">Open an issue</a>.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Built on <a href="https://github.com/crosspoint-reader/crosspoint-reader" target="_blank" rel="noopener">CrossPoint</a>. Collections from <a href="https://kiwix.org" target="_blank" rel="noopener">Kiwix</a>. <a href="https://github.com/noah-pi/pocket-library" target="_blank" rel="noopener">Source</a>.</p>
+  </footer>
+</main>
+
+<script>
+document.querySelectorAll(".cmd button").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var pre = btn.parentElement.querySelector("pre");
+    var reset = function () { setTimeout(function () { btn.textContent = "Copy"; }, 1500); };
+    var select = function () { var r = document.createRange(); r.selectNodeContents(pre); var s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "⌘C"; reset(); };
+    try { navigator.clipboard.writeText(pre.textContent).then(function () { btn.textContent = "Copied"; reset(); }, select); } catch (e) { select(); }
+  });
+});
+</script>
+</body>
+</html>
