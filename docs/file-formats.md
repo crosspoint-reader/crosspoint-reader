@@ -94,10 +94,17 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
+### Version 53
+
+Version 53 adds a fixed-size table-grid-row page element containing its bounds
+and equal-width column count.
+
 ### Version 52
 
-Version 52 adds a fixed-size table-grid-row page element containing its bounds
-and equal-width column count.
+The serialized layout is unchanged. Missing full-block (`U+2588`) and black-square
+(`U+25A0`) symbols now use font-sized solid rectangles instead of replacement
+glyphs. Rebuild older sections so cached line breaks and word positions match
+their new widths.
 
 ### Version 51
 
@@ -217,7 +224,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 52
+#define EXPECTED_VERSION 53
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
