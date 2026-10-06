@@ -425,6 +425,8 @@ TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
   const EpdFont font(&data);
   EpdGlyph fallback;
   EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &fallback);
+  EXPECT_EQ(fallback.advanceX, fp4::fromPixel(9));
+  EXPECT_EQ(fallback.width, 9);
   EXPECT_EQ(fallback.height, 12);
   EXPECT_EQ(font.getGlyphMetrics('Z', fallback), &replacement);
 }

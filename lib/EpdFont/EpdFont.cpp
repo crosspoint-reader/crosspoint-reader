@@ -267,7 +267,7 @@ const EpdGlyph* EpdFont::getGlyphMetrics(const uint32_t cp, EpdGlyph& solidFallb
   if (!syntheticGlyph::isSolid(cp) || hasCodepoint(cp)) return getGlyph(cp);
 
   // Match the current font's em width and ascender without allocating a bitmap.
-  const EpdGlyph* emGlyph = getGlyph('M');
+  const EpdGlyph* emGlyph = hasCodepoint('M') ? getGlyph('M') : nullptr;
   const int ascender = data->ascender > 0 ? data->ascender : 8;
   const uint16_t advance = emGlyph && emGlyph->advanceX > 0
                                ? emGlyph->advanceX
