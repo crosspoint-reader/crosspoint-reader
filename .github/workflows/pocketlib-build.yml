@@ -22,10 +22,12 @@ on:
 permissions:
   contents: read
 
-# One build at a time, newest last, so the dev release always ends on the
-# latest commit (two overlapping runs could otherwise publish out of order).
+# One build at a time per branch, newest last, so each release ends on its
+# branch's latest commit. Per branch: GitHub keeps one pending run per group
+# and cancels the older one, so a shared group let a review-branch push cancel
+# the queued build of a merge, and "dev" was never published (2026-10-06).
 concurrency:
-  group: pocketlib-build
+  group: pocketlib-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

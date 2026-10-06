@@ -110,7 +110,7 @@ footer { border-top: 1px solid var(--rule); padding-top: 24px; font-size: .85rem
 
       <li>
         <h2>Install CrossPoint</h2>
-        <p>Connect the reader with its magnetic adapter and wake it. Open Terminal and run this to back it up:</p>
+        <p>Connect the reader with its magnetic adapter and press the power button to wake it. There's no special mode to enter; it only needs to be awake. Open Terminal and run this to back it up:</p>
         <div class="cmd"><pre>mkdir -p ~/PocketLib &amp;&amp; cd ~/PocketLib &amp;&amp; curl -fsSLO https://github.com/noah-pi/pocket-library/releases/download/dev/flash.sh &amp;&amp; bash flash.sh backup</pre><button type="button">Copy</button></div>
         <p>Then, in Chrome, open <a href="https://crosspointreader.com" target="_blank" rel="noopener">crosspointreader.com</a> → Flash tools → Xteink X4 Pro, and install.</p>
       </li>
@@ -145,6 +145,7 @@ footer { border-top: 1px solid var(--rule); padding-top: 24px; font-size: .85rem
     <p class="label">If something fails</p>
     <div class="help">
       <p><b>Reader not found.</b> Press its power button and run the command again.</p>
+      <p><b>Still not found, in Chrome too.</b> The reader may be locked. <a href="https://crosspointreader.com/unlock" target="_blank" rel="noopener">Unlock it first</a>.</p>
       <p><b>Python too old.</b> Open a new Terminal window after installing Python.</p>
       <p><b>To undo.</b> <code>bash flash.sh restore</code> returns the reader to how it came.</p>
       <p><b>Anything else.</b> <a href="https://github.com/noah-pi/pocket-library/issues" target="_blank" rel="noopener">Open an issue</a>.</p>

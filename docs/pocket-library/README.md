@@ -47,7 +47,8 @@ This guide is the long version.
 Skip this step if your reader already runs CrossPoint.
 
 Open **Terminal** (in Applications → Utilities), plug in the reader, press its
-power button to wake it, and paste these two lines:
+power button to wake it (no special button combination is needed; a sleeping
+reader just doesn't show up), and paste these two lines:
 
 ```sh
 mkdir -p ~/PocketLib && cd ~/PocketLib && curl -fsSLO https://github.com/noah-pi/pocket-library/releases/download/dev/flash.sh
@@ -154,6 +155,7 @@ open **Library** from Home.
 | What you see | What to do |
 |---|---|
 | `no reader found` or `could not open port` | The reader is asleep or the cable only charges. Press the power button and run the command again; try another cable. |
+| Not found even at crosspointreader.com in Chrome | The reader may be locked (some units sold outside Xteink's own store). Unlock it with [CrossPoint's unlock tool](https://crosspointreader.com/unlock), then start again. |
 | `This reader doesn't have CrossPoint on it yet` | Do step 1's CrossPoint install first. |
 | `pip: externally-managed-environment`, `command not found: esptool` | You don't need either. `flash.sh` sets up its own copy of esptool. |
 | `This needs Python 3.11 or newer` | Install Python from python.org, then use `python3.13` (or your version) in place of `python3`. |
