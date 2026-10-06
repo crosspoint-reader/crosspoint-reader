@@ -1,5 +1,6 @@
 #pragma once
 #include <ArduinoJson.h>
+#include <HttpHeader.h>
 #include <PersistableStore.h>
 
 #include <array>
@@ -10,13 +11,6 @@
 enum class DocumentMatchMethod : uint8_t {
   FILENAME = 0,  // Match by filename (simpler, works across different file sources)
   BINARY = 1,    // Match by partial MD5 of file content (more accurate, but files must be identical)
-};
-
-// A single extra header sent with every sync request (e.g. a Cloudflare
-// Access service token), on top of KOSync's own auth headers.
-struct KOReaderCustomHeader {
-  std::string name;
-  std::string value;
 };
 
 // Namespace-scope (not a class member) so it's usable as the std::array size
@@ -48,7 +42,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
 
   // Fixed-size to avoid vector growth on the settings edit path; an empty
   // name marks an unused slot.
-  std::array<KOReaderCustomHeader, KOREADER_MAX_CUSTOM_HEADERS> customHeaders;
+  std::array<HttpHeader, KOREADER_MAX_CUSTOM_HEADERS> customHeaders;
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
@@ -101,7 +95,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
 
   // Custom headers sent with every sync request (index must be < MAX_CUSTOM_HEADERS)
   void setCustomHeader(size_t index, const std::string& name, const std::string& value);
-  const std::array<KOReaderCustomHeader, MAX_CUSTOM_HEADERS>& getCustomHeaders() const { return customHeaders; }
+  const std::array<HttpHeader, MAX_CUSTOM_HEADERS>& getCustomHeaders() const { return customHeaders; }
 };
 
 // Helper macro to access credential store

@@ -1,6 +1,7 @@
 #include "KOReaderSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HttpHeader.h>
 #include <I18n.h>
 
 #include <memory>
@@ -30,36 +31,6 @@ const StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
     StrId::STR_USERNAME,        StrId::STR_PASSWORD,          StrId::STR_SYNC_SERVER_URL, StrId::STR_CUSTOM_HEADER_1,
     StrId::STR_CUSTOM_HEADER_2, StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA,   StrId::STR_SYNC_BEHAVIOR,
     StrId::STR_SIGN_UP,         StrId::STR_AUTHENTICATE};
-
-std::string trim(const std::string& s) {
-  const size_t start = s.find_first_not_of(" \t");
-  if (start == std::string::npos) return "";
-  const size_t end = s.find_last_not_of(" \t");
-  return s.substr(start, end - start + 1);
-}
-
-// "Name: Value" -> trimmed name/value. A missing colon treats the whole
-// entry as a bare header name with no value.
-void parseCustomHeader(const std::string& line, KOReaderCustomHeader& header) {
-  const size_t colon = line.find(':');
-  if (colon == std::string::npos) {
-    header.name = trim(line);
-    header.value.clear();
-  } else {
-    header.name = trim(line.substr(0, colon));
-    header.value = trim(line.substr(colon + 1));
-  }
-}
-
-std::string formatCustomHeader(const KOReaderCustomHeader& header) {
-  if (header.name.empty()) return "";
-  return header.value.empty() ? header.name : header.name + ": " + header.value;
-}
-
-std::string formatCustomHeaderMasked(const KOReaderCustomHeader& header) {
-  if (header.name.empty()) return "";
-  return header.value.empty() ? header.name : header.name + ": ******";
-}
 }  // namespace
 
 KOReaderSettingsActivity::KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -122,14 +93,14 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
     // Custom Header 1 or 2 - single "Name: Value" line, parsed on save.
     const size_t slot = static_cast<size_t>(index == IDX_CUSTOM_HEADER_1 ? 0 : 1);
     const StrId label = index == IDX_CUSTOM_HEADER_1 ? StrId::STR_CUSTOM_HEADER_1 : StrId::STR_CUSTOM_HEADER_2;
-    const std::string prefill = formatCustomHeader(KOREADER_STORE.getCustomHeaders()[slot]);
+    const std::string prefill = formatHttpHeaderLine(KOREADER_STORE.getCustomHeaders()[slot]);
     startActivityForResult(
         std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(label), prefill, 160, InputType::Text),
         [this, slot](const ActivityResult& result) {
           if (!result.isCancelled) {
             const auto& kb = std::get<KeyboardResult>(result.data);
-            KOReaderCustomHeader header;
-            parseCustomHeader(kb.text, header);
+            HttpHeader header;
+            parseHttpHeaderLine(kb.text, header);
             KOREADER_STORE.setCustomHeader(slot, header.name, header.value);
             KOREADER_STORE.saveToFile();
           }
@@ -203,7 +174,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
       }
     } else if (i == IDX_CUSTOM_HEADER_1 || i == IDX_CUSTOM_HEADER_2) {
       const size_t slot = static_cast<size_t>(i == IDX_CUSTOM_HEADER_1 ? 0 : 1);
-      rowValues_[i] = formatCustomHeaderMasked(KOREADER_STORE.getCustomHeaders()[slot]);
+      rowValues_[i] = formatHttpHeaderLine(KOREADER_STORE.getCustomHeaders()[slot], true);
       if (rowValues_[i].empty()) rowValues_[i] = tr(STR_NOT_SET);
     } else if (i == IDX_MATCH_METHOD) {
       rowValues_[i] =

@@ -1,6 +1,7 @@
 #include "OpdsSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HttpHeader.h>
 #include <I18n.h>
 #include <Logging.h>
 
@@ -17,36 +18,6 @@ namespace {
 constexpr int BASE_ITEMS = 6;
 constexpr int CUSTOM_HEADER_1_INDEX = 4;
 constexpr int CUSTOM_HEADER_2_INDEX = 5;
-
-std::string trim(const std::string& s) {
-  const size_t start = s.find_first_not_of(" \t");
-  if (start == std::string::npos) return "";
-  const size_t end = s.find_last_not_of(" \t");
-  return s.substr(start, end - start + 1);
-}
-
-// "Name: Value" -> trimmed name/value. A missing colon treats the whole
-// entry as a bare header name with no value.
-void parseCustomHeader(const std::string& line, HttpHeader& header) {
-  const size_t colon = line.find(':');
-  if (colon == std::string::npos) {
-    header.name = trim(line);
-    header.value.clear();
-  } else {
-    header.name = trim(line.substr(0, colon));
-    header.value = trim(line.substr(colon + 1));
-  }
-}
-
-std::string formatCustomHeader(const HttpHeader& header) {
-  if (header.name.empty()) return "";
-  return header.value.empty() ? header.name : header.name + ": " + header.value;
-}
-
-std::string formatCustomHeaderMasked(const HttpHeader& header) {
-  if (header.name.empty()) return "";
-  return header.value.empty() ? header.name : header.name + ": ******";
-}
 }  // namespace
 
 OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -187,11 +158,11 @@ void OpdsSettingsActivity::handleSelection() {
     // Custom Header 1 or 2 - single "Name: Value" line, parsed on save.
     const size_t slot = static_cast<size_t>(nav.selected == CUSTOM_HEADER_1_INDEX ? 0 : 1);
     const StrId label = nav.selected == CUSTOM_HEADER_1_INDEX ? StrId::STR_CUSTOM_HEADER_1 : StrId::STR_CUSTOM_HEADER_2;
-    const std::string prefill = formatCustomHeader(editServer.customHeaders[slot]);
+    const std::string prefill = formatHttpHeaderLine(editServer.customHeaders[slot]);
     auto handler = [this, slot](const ActivityResult& result) {
       if (!result.isCancelled) {
         const auto& kb = std::get<KeyboardResult>(result.data);
-        parseCustomHeader(kb.text, editServer.customHeaders[slot]);
+        parseHttpHeaderLine(kb.text, editServer.customHeaders[slot]);
         saveServer();
         requestUpdate();
       }
@@ -236,7 +207,7 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
   fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
   for (size_t i = 0; i < OpdsServer::MAX_CUSTOM_HEADERS; i++) {
-    headerDisplayBuf[i] = formatCustomHeaderMasked(editServer.customHeaders[i]);
+    headerDisplayBuf[i] = formatHttpHeaderLine(editServer.customHeaders[i], true);
     fieldRowItems[CUSTOM_HEADER_1_INDEX + i].value =
         headerDisplayBuf[i].empty() ? tr(STR_NOT_SET) : headerDisplayBuf[i].c_str();
   }

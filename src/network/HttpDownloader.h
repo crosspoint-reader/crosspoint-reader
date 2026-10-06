@@ -1,16 +1,10 @@
 #pragma once
 #include <HalStorage.h>
+#include <HttpHeader.h>
 
 #include <functional>
 #include <string>
 #include <vector>
-
-// A single extra header sent with a request, on top of whatever auth/UA
-// headers the transport already sets (e.g. a Cloudflare Access service token).
-struct HttpHeader {
-  std::string name;
-  std::string value;
-};
 
 /**
  * HTTP client utility for fetching content and downloading files. Built on
