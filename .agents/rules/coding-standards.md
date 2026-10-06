@@ -14,9 +14,10 @@
 
 ### Comment Style
 
-* Keep comments short and write them for the merged state, as if the code had always worked this way.
-* Remove before/after narration, investigation measurements, and rationale that belongs in the commit message.
-* Keep only non-obvious mechanism, field/parameter meaning, or the reason a special case exists.
+* Write code first. Add comments only for non-obvious constraints, mechanisms, ownership, field/parameter meaning, or necessary special cases.
+* Use plain English and 1-2 short lines; use more only when a necessary contract cannot fit. Keep technical facts; cut filler and code restatements.
+* Describe the current code for a future maintainer with no PR or chat context. Keep comparisons with earlier drafts, investigation logs, and change history in review notes or commit messages.
+* Before handoff, read every added or changed comment without the diff. Delete or rewrite anything that will not help after merge.
 
 ### Memory Safety and RAII
 

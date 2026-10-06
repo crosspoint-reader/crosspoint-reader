@@ -44,7 +44,7 @@ Fully autonomous end-to-end agents are forbidden. Review subagents are allowed o
 
 The human must write the PR description. The agent may supply concise factual notes and test results, but not ready-to-paste PR prose. The agent may create or amend a local commit only after explicit human approval. It may push only when the human explicitly instructs it to push; approval to edit or commit does not authorize a push. It must never open or close a PR.
 
-Repository-facing prose should use plain English that a non-native speaker can follow. Use standard technical terms when they are the clearest words. Keep code comments short and limited to non-obvious mechanisms, field meaning, or necessary special cases.
+Repository-facing prose should use plain English that a non-native speaker can follow. Use standard technical terms when they are the clearest words. Code comments must be short and useful after merge; follow the [comment rules](.agents/rules/coding-standards.md#comment-style).
 
 ## Mandatory firmware handoff
 

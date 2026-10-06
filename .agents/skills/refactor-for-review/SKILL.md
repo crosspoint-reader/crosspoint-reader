@@ -59,10 +59,7 @@ checks; follow the [testing rule](../../rules/testing-debugging.md).
 
 ## Comments earn their place
 
-Comments explain why: an invariant, a defense, a past incident, a non-obvious
-constraint. Never what the next line already says. Delete narration, phase-marker
-comments ("now we loop over..."), and restated function names. If a comment and
-the code it sits on say the same thing, the comment is the thing to cut.
+Apply the [comment rules](../../rules/coding-standards.md#comment-style).
 
 ## Self-review before handoff
 
@@ -73,5 +70,5 @@ the code it sits on say the same thing, the comment is the thing to cut.
       speculative abstraction.
 - [ ] The fix accounts for affected callers; simplicity preserves the required
       failure handling and behavior, with relevant regression checks.
-- [ ] New comments say why, not what; no narration or phase markers.
+- [ ] Added or changed comments are short and useful without the diff or PR history.
 - [ ] A reviewer can understand the diff without running it.
