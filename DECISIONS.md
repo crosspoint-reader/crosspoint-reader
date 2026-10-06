@@ -81,7 +81,7 @@ Release tags are what we rebase onto.
 | `lib/LibraryIndex/LibraryBuilder.cpp`, `lib/LibraryIndex/LibraryFormat.h`, `src/activities/library/LibraryListActivity.cpp`, `test/CMakeLists.txt` | `#ifdef POCKET_LIBRARY`: the title sort and the letter groups skip a leading "The", "A" or "An" (`TitleSortKey.h`, ours); `CLIX_FOLD_VERSION` 5 so existing indexes rebuild once; one `add_subdirectory(pocketlib_title_sort)` | "The" shouldn't decide where a book files (owner) |
 | `lib/Epub/Epub/converters/{Png,Jpeg}ToFramebufferConverter.cpp` | `#ifdef POCKET_LIBRARY`: the decoder's free-heap gate reads the default heap (`HalMemory::getDefaultHeap()`), not `ESP.getFreeHeap()` (internal RAM only) | with PSRAM the decoder is allocated there; the internal-RAM gate refused pictures (2026-10-05) |
 | `lib/Epub/Epub/converters/ImageDecoderFactory.{h,cpp}`, `lib/Epub/Epub/blocks/ImageBlock.cpp` | `#ifdef POCKET_LIBRARY`: `getDecoderForFile()` picks JPEG or PNG by the file's first bytes; ImageBlock uses it | Wikipedia 2026 stores WebP under .jpg names; the reader converts them to PNG under that name (2026-10-05) |
-| `README.md` | three-line note at the top pointing to `docs/pocket-library/README.md` | the repository's front page leads to the guide |
+| `README.md` | Pocket Library's own README on top; CrossPoint's, unchanged, folded into a `<details>` block below | the front page is about Pocket Library; CrossPoint's stays one click away (owner, 2026-10-06) |
 | `docs/index.html`, `docs/.nojekyll` | the one-page site, served by GitHub Pages from `pocket-library` /docs; `.nojekyll` so upstream's Markdown docs are served as files, not built | a short address to share |
 
 ## 2026-10-01 — Licensing layout

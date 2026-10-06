@@ -1,11 +1,38 @@
-# CrossPoint Reader
+# Pocket Library
 
-> **This is Pocket Library**, a fork of CrossPoint that puts all of English Wikipedia (with pictures),
-> its sister projects and a medical encyclopedia on an Xteink X4 Pro, offline and searchable by touch.
->
-> <img src="docs/images/pocket-library.png" width="520" alt="Pocket Library on two Xteink X4 Pro readers: the Library shelf and a Wikipedia article">
->
-> **[How to make your own →](https://noah-pi.github.io/pocket-library/)** ([the long version](docs/pocket-library/README.md)). The rest of this page is CrossPoint's own README.
+Wikipedia, entire and offline, in a reader that fits in your hand. With pictures, a dictionary, travel guides and first aid. No signal required.
+
+<img src="docs/images/pocket-library.png" width="560" alt="Pocket Library on two Xteink X4 Pro readers: the Library shelf and a Wikipedia article">
+
+**[Make your own →](https://noah-pi.github.io/pocket-library/)** Two things to buy, six steps.
+
+## You need
+
+- An **Xteink X4 Pro** ($99). Other Xteink models won't work.
+- A **256 GB microSD card** (about $25), from a name brand.
+- A Mac.
+
+## What it does
+
+- All of English Wikipedia, with pictures, plus Wiktionary, Wikivoyage, Wikiquote, Wikisource, Wikibooks and a medical encyclopedia.
+- Search across everything as you type.
+- Articles read like a book: tap a link to follow it, swipe up for the next page.
+- First aid one tap from the shelf.
+
+## More
+
+- [The full guide](docs/pocket-library/README.md): every step, updating, going back, troubleshooting.
+- [Releases](https://github.com/noah-pi/pocket-library/releases/tag/dev): the firmware and the card tools.
+- For developers: [`PLAN.md`](PLAN.md), [`DECISIONS.md`](DECISIONS.md), [`PROGRESS.md`](PROGRESS.md).
+
+Pocket Library is built on [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader), open-source e-reader firmware; its additions are GPL-3.0-or-later. The collections come from [Kiwix](https://kiwix.org).
+
+---
+
+<details>
+<summary><b>CrossPoint's own README</b></summary>
+
+# CrossPoint Reader
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
@@ -302,3 +329,5 @@ Want to build your own device? Be sure to check out the [de-link](https://github
 ---
 
 CrossPoint Reader is **not affiliated with Xteink or any device manufacturer**.
+
+</details>
