@@ -1,6 +1,6 @@
 ---
 name: refactor-for-review
-description: Producing small, single-concern, reviewable changes. Use when refactoring, cleaning up, restructuring, decomposing, or preparing a change for PR, especially in this multi-contributor AI-assisted codebase that is prone to sprawl diffs. Covers one-concern-per-commit, extracting helpers without widening scope, not bundling unrelated edits, decomposing oversized activities, comment hygiene, and a pre-handoff self-review checklist.
+description: Keep changes small and reviewable. Use when refactoring, cleaning up, restructuring, decomposing, or preparing a PR change.
 ---
 
 # Refactor for Review

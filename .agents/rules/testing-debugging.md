@@ -31,15 +31,7 @@ pio run -t clean
 
 ### Monitoring and Debugging
 
-```bash
-# Enhanced monitor with color/logging (recommended)
-python3 scripts/debugging_monitor.py
-
-# Standard PlatformIO monitor
-pio device monitor
-```
-
-**Via VS Code**: Click Monitor (🔌) button in PlatformIO toolbar
+Use the [serial monitor options](#serial-monitor-options) below.
 
 ### Code Quality
 
@@ -169,7 +161,7 @@ that naming. Preserve the pinned pioarduino core/package setup across workflows.
 
 ### Serial Monitor Options
 
-1. **Enhanced**: `python3 scripts/debugging_monitor.py` (color-coded, recommended)
+1. **Enhanced**: `python3 scripts/debugging_monitor.py` (color-coded logging, recommended)
 2. **Standard**: `pio device monitor` (basic, no colors)
 3. **VS Code**: Monitor (🔌) button (IDE-integrated)
 

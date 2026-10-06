@@ -1,29 +1,18 @@
 ## Development Environment Awareness
 
-**CRITICAL**: Detect the host platform at session start to choose appropriate tools and commands.
-
 ### Platform Detection
 
-```bash
-# Detect platform (run once per session)
-uname -s
-# Returns: MINGW64_NT-* (Windows Git Bash), Linux, Darwin (macOS)
-```
-
-**Detection Required**: Run `uname -s` at session start to determine platform
+Run `uname -s` once at session start and select tools/commands for the host:
+`MINGW64_NT-*` = Windows Git Bash, `Linux` = Linux, `Darwin` = macOS.
 
 ### Platform-Specific Behaviors
 
-- **Windows (Git Bash)**: Unix commands, `C:\` paths in Windows but `/` in bash, limited glob (use `find`+`xargs`)
-- **Linux/WSL**: Full bash, Unix paths, native glob support
+- Windows Git Bash: Unix commands; Windows `C:\` paths, `/` in bash;
+  limited glob support, so use `find` + `xargs`.
+- Linux/WSL: full bash, Unix paths, native glob support.
 
-**Cross-Platform Code Formatting**:
-
-```bash
-./bin/clang-format-fix -g
-```
-
-Never invoke or probe `clang-format` directly. The repository wrapper is the only sanctioned entry point.
+For formatting on every host, use `./bin/clang-format-fix -g` exclusively.
+Never invoke or probe `clang-format` directly.
 
 ### Build in an existing environment
 

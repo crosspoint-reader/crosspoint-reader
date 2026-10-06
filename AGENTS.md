@@ -22,15 +22,15 @@ Read only the rules that match the task:
 
 | When the task touches... | Read |
 | --- | --- |
-| Host setup, PlatformIO usage, or local configuration | [.agents/rules/environment.md](.agents/rules/environment.md) |
-| RAM, allocation, flash, strings, or hardware limits | [.agents/rules/hardware-resources.md](.agents/rules/hardware-resources.md) and the `heap-discipline` skill |
-| Build flags, storage, input, display, settings, i18n, rendering, or SDK boundaries | [.agents/rules/architecture-hal.md](.agents/rules/architecture-hal.md) and the `hal-and-abstractions` skill |
-| C or C++ implementation | [.agents/rules/coding-standards.md](.agents/rules/coding-standards.md); also load `control-flow-clarity` for branching or state changes |
-| Activities, orientation, buttons, UI, tasks, fonts, or lifecycle | [.agents/rules/ui-activities.md](.agents/rules/ui-activities.md) |
-| Plugins, service integrations, web endpoints, or protected books | [.agents/rules/architecture-hal.md](.agents/rules/architecture-hal.md) and its contract links |
-| Builds, formatting, CI, serial logs, crashes, or verification | [.agents/rules/testing-debugging.md](.agents/rules/testing-debugging.md) |
-| Git, branches, commits, remotes, or publication | [.agents/rules/git-workflow.md](.agents/rules/git-workflow.md) |
-| Generated HTML/i18n, caches, EPUB formats, or invalidation | [.agents/rules/generated-files-cache.md](.agents/rules/generated-files-cache.md) |
+| Host setup, PlatformIO usage, or local configuration | [environment.md](.agents/rules/environment.md) |
+| RAM, allocation, flash, strings, or hardware limits | [hardware-resources.md](.agents/rules/hardware-resources.md) and the `heap-discipline` skill |
+| Build flags, storage, input, display, settings, i18n, rendering, or SDK boundaries | [architecture-hal.md](.agents/rules/architecture-hal.md) and the `hal-and-abstractions` skill |
+| C or C++ implementation | [coding-standards.md](.agents/rules/coding-standards.md); also load `control-flow-clarity` for branching or state changes |
+| Activities, orientation, buttons, UI, tasks, fonts, or lifecycle | [ui-activities.md](.agents/rules/ui-activities.md) |
+| Plugins, service integrations, web endpoints, or protected books | [architecture-hal.md](.agents/rules/architecture-hal.md) and its contract links |
+| Builds, formatting, CI, serial logs, crashes, or verification | [testing-debugging.md](.agents/rules/testing-debugging.md) |
+| Git, branches, commits, remotes, or publication | [git-workflow.md](.agents/rules/git-workflow.md) |
+| Generated HTML/i18n, caches, EPUB formats, or invalidation | [generated-files-cache.md](.agents/rules/generated-files-cache.md) |
 | New features, activities, settings, libraries, or dependencies | `SCOPE.md` and the `scope-discipline` skill |
 | Refactoring or preparing a change for review | the `refactor-for-review` skill |
 
@@ -40,11 +40,18 @@ Repository-local skills live under `.agents/skills/`. Load a skill when its fron
 
 A PR is a long-term maintenance commitment. Working code is not enough: prefer the simplest design that meets the real requirement, fits `SCOPE.md`, and can be understood and maintained by its human owner.
 
-Fully autonomous end-to-end agents are forbidden. Review subagents are allowed only as read-only advisers under the main agent's supervision. They may inspect code, diffs, history, and build metadata, but may not edit files, commit, push, open or close PRs, post reviews, release, deploy, or flash hardware.
+Fully autonomous end-to-end agents are forbidden. Review subagents under the main
+agent's supervision may inspect code, diffs, history, and build metadata only; they may
+not edit, commit, push, open/close PRs, post reviews, release, deploy, or flash.
 
-The human must write the PR description. The agent may supply concise factual notes and test results, but not ready-to-paste PR prose. The agent may create or amend a local commit only after explicit human approval. It may push only when the human explicitly instructs it to push; approval to edit or commit does not authorize a push. It must never open or close a PR.
+The human must write PR descriptions; agents may give concise factual notes and test
+results, never ready-to-paste PR prose. Creating/amending local commits requires
+explicit human approval. Push only on an explicit human instruction to push;
+edit/commit approval does not authorize it. Never open or close a PR.
 
-Repository-facing prose should use plain English that a non-native speaker can follow. Use standard technical terms when they are the clearest words. Code comments must be short and useful after merge; follow the [comment rules](.agents/rules/coding-standards.md#comment-style).
+Repository-facing prose: use plain English for non-native readers and standard
+technical terms when clearest. Code comments must be short and useful after merge; follow the
+[comment rules](.agents/rules/coding-standards.md#comment-style).
 
 ## Mandatory firmware handoff
 

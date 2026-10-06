@@ -2,31 +2,13 @@
 
 ### Repository Detection Protocol
 
-**CRITICAL**: ALWAYS verify repository context before git operations. This could be:
-
-- A **fork** with `origin` pointing to personal repo, `upstream` to main repo
-- A **direct clone** with `origin` pointing to main repo
-- Multiple collaborator remotes
-
-**Verification Commands** (run at session start):
-
-```bash
-# Check current branch
-git branch --show-current
-
-# Check all remotes
-git remote -v
-
-# Check working tree status
-git status --short
-```
-
-**Example Output** (forked repository):
-
-```text
-origin      https://github.com/<your-username>/crosspoint-reader.git (fetch/push)
-upstream    https://github.com/crosspoint-reader/crosspoint-reader.git (fetch/push)
-```
+Always verify repository context before Git operations. At session start run
+`git branch --show-current`, `git remote -v`, and `git status --short`.
+Remotes may describe a fork (`origin` personal, `upstream` main), a direct
+clone (`origin` main), or multiple collaborators; inspect them rather than
+assuming their roles. A fork may use
+`https://github.com/<your-username>/crosspoint-reader.git` for `origin` and
+`https://github.com/crosspoint-reader/crosspoint-reader.git` for `upstream`.
 
 ### Git Operation Rules
 

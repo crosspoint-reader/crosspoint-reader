@@ -1,6 +1,6 @@
 ---
 name: review-i18n-docs
-description: Read-only English-string and user-documentation review required at firmware handoff. Checks tr() usage, English source strings, generated-file workflow, and docs for user-visible changes.
+description: Read-only firmware-handoff review of tr(), English source strings, generated-file workflow, and user documentation for visible changes.
 ---
 
 # English strings and user documentation review

@@ -1,6 +1,6 @@
 ---
 name: review-embedded
-description: Read-only ESP32 resource and hardware review required at firmware handoff. Checks RAM, fragmentation, stack, flash, timing, HAL boundaries, lifecycle, input, display, storage, and orientation risks.
+description: "Read-only firmware-handoff review of ESP32 resources and hardware: RAM, fragmentation, stack, flash, timing, HAL, lifecycle, input, display, storage, and orientation."
 ---
 
 # Embedded constraints review

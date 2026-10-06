@@ -1,6 +1,6 @@
 ---
 name: review-architecture
-description: Read-only architecture audit required at firmware handoff. Adapts the PR architecture audit to the current logical diff and asks whether a working change has the right long-term shape.
+description: "Read-only architecture audit of the current logical diff at firmware handoff: assess its long-term shape."
 ---
 
 # Architecture review

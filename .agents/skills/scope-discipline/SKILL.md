@@ -1,6 +1,6 @@
 ---
 name: scope-discipline
-description: Feature-scope discipline for a dedicated e-reader (not a Swiss Army knife). Use when adding a feature, a new activity, a new lib, a setting, or a dependency, or when a request would grow the firmware's surface. Covers the SCOPE.md test, the RAM-cost vs reading-benefit gate, preferring no-code or existing-mechanism solutions, awareness of the existing activity surface, and how to push back on out-of-scope asks.
+description: Dedicated e-reader feature scope. Use when adding features, activities, libraries, settings, dependencies, or expanding the firmware surface.
 ---
 
 # Scope Discipline

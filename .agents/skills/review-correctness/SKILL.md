@@ -1,6 +1,6 @@
 ---
 name: review-correctness
-description: Read-only bug hunt required at firmware handoff. Finds regressions introduced or made reachable by the current diff and reports concrete failure paths without editing code.
+description: Read-only firmware-handoff review for regressions introduced or made reachable by the current diff; require concrete failure paths.
 ---
 
 # Correctness review

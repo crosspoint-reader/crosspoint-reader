@@ -1,6 +1,6 @@
 ---
 name: firmware-handoff
-description: Mandatory final gate for every logical change that can affect shipped CrossPoint firmware or its build. Runs the final checks and four independent read-only reviews, fixes verified findings, and prepares the human-controlled handoff.
+description: Mandatory final checks, four independent read-only reviews, and human handoff for every logical change that can affect shipped CrossPoint firmware or its build.
 ---
 
 # Firmware handoff

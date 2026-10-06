@@ -135,83 +135,32 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Heap Buffer Allocation
 
-**Prefer `makeUniqueNoThrow` over `malloc`.** Both are nothrow (return `nullptr` on OOM rather than calling `abort()`), but `malloc` requires a manual `free` on every return path — a common source of leaks. `makeUniqueNoThrow<uint8_t[]>(size)` from `lib/Memory/Memory.h` frees automatically when it goes out of scope.
+Prefer `makeUniqueNoThrow<T>(args)` for objects and `makeUniqueNoThrow<T[]>(size)`
+for buffers, from `lib/Memory/Memory.h` (`<Memory.h>`). It wraps `new (std::nothrow)`,
+returns null on OOM, and uses `std::unique_ptr` to free storage on every exit path.
+`malloc` also returns null on OOM. Bare `new` is forbidden: with `-fno-exceptions`, OOM calls `abort()`, not null.
 
-**Preferred pattern**:
-
-```cpp
-#include <Memory.h>
-
-auto buffer = makeUniqueNoThrow<uint8_t[]>(bufferSize);
-if (!buffer) {
-  LOG_ERR("MODULE", "OOM: %d bytes", bufferSize);
-  return false;
-}
-
-processData(buffer.get(), bufferSize);
-// freed automatically — no manual free needed, no leak on early return
-```
-
-**`malloc` or `new (std::nothrow)` are still acceptable** when the buffer must be passed to a C API that takes ownership and frees it itself (e.g., certain SDK callbacks). In that case follow the manual pattern:
-
-```cpp
-auto* buffer = static_cast<uint8_t*>(malloc(bufferSize));  // or new (std::nothrow) uint8_t[bufferSize]
-if (!buffer) {
-  LOG_ERR("MODULE", "OOM: %d bytes", bufferSize);
-  return false;
-}
-sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
-```
-
-**Rules**:
-
-- **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
-- **ALWAYS check for nullptr** after any allocation and `LOG_ERR` before returning false
-- **Raw allocation only** when a C API takes ownership; document why in a comment
-
-**Examples in codebase**:
-
-- Memory utilities: [Memory.h](../../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
-- Cover image buffers: [HomeActivity.cpp:166](../../src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](../../lib/GfxRenderer/GfxRenderer.cpp)
-
-### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
-
-**CRITICAL**: With `-fno-exceptions`, bare `new` on OOM calls `abort()` — it does NOT return `nullptr`. Always use `makeUniqueNoThrow` from `lib/Memory/Memory.h`, which wraps `new (std::nothrow)` and returns a `std::unique_ptr` that is null on OOM and automatically frees on scope exit.
-
-**Preferred pattern**:
+Null-check every allocation; `LOG_ERR` before returning false on OOM.
+Pass borrowed pointers through `.get()`; ownership stays with the `unique_ptr`.
+Use raw `malloc` or `new (std::nothrow)` only when a C API takes ownership and
+frees storage itself; comment why and identify the owner. Raw allocations
+otherwise require manual cleanup on every return path and risk leaks.
 
 ```cpp
 #include <Memory.h>
-
 auto obj = makeUniqueNoThrow<MyClass>(args);
 if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
-
 auto buf = makeUniqueNoThrow<uint8_t[]>(size);
 if (!buf) { LOG_ERR("MOD", "OOM: %d bytes", size); return false; }
-
-// Pass to C APIs via .get(); unique_ptr frees automatically on return
-someApi(buf.get(), size);
+someApi(buf.get(), size);  // borrowed; unique_ptr retains ownership
 ```
 
-**`new (std::nothrow)` directly is acceptable** when the object must be passed to a C API that takes ownership and calls `delete` itself:
+For ownership transfer, allocate with `malloc`/`new (std::nothrow)`, apply the
+same OOM check, then transfer to the API that calls `free`/`delete[]`/`delete`
+as appropriate.
 
-```cpp
-auto* obj = new (std::nothrow) MyClass(args);
-if (!obj) { LOG_ERR("MOD", "OOM: MyClass"); return false; }
-sdkApiThatTakesOwnership(obj);  // SDK calls delete
-```
-
-**Rules**:
-
-- **Prefer `makeUniqueNoThrow`** — automatic cleanup eliminates leak risk on error paths
-- **NEVER use bare `new`** — always `makeUniqueNoThrow` or `new (std::nothrow)`
-- **ALWAYS `LOG_ERR` before returning false** on OOM
-- **Use `.get()`** to pass the raw pointer to C-style APIs; ownership stays with the `unique_ptr`
-- **`new (std::nothrow)` directly only** when a C API takes ownership; document why in a comment
-
-**Examples in codebase**:
-
-- Memory utilities: [Memory.h](../../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
+Examples: [Memory.h](../../lib/Memory/Memory.h),
+[HomeActivity.cpp](../../src/activities/home/HomeActivity.cpp), and
+[GfxRenderer.cpp](../../lib/GfxRenderer/GfxRenderer.cpp).
 
 ---

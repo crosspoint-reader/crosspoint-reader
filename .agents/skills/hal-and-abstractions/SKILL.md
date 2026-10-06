@@ -1,6 +1,6 @@
 ---
 name: hal-and-abstractions
-description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay), MappedInputManager logical buttons, shared FreeInkUI hosts, UITheme/GUI, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
+description: Firmware layering and abstraction discipline. Use for storage, input, display, settings, i18n, rendering, or code that could reach the SDK.
 ---
 
 # HAL and Abstractions
