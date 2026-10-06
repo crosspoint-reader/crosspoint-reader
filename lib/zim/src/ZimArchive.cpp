@@ -554,6 +554,13 @@ Error Archive::readBlob(uint32_t cluster, uint32_t blob, std::string& out) {
   const Error err = locateBlob(cluster, blob, loc);
   if (err != Error::None) return err;
   if (loc.size > options_.maxClusterBytes) return Error::TooLarge;
+  // Built without exceptions, a failed resize would abort: check there is
+  // room first.
+  if (loc.size > out.capacity()) {
+    void* probe = allocator_->allocate(static_cast<size_t>(loc.size) + 1);
+    if (!probe) return Error::NoMemory;
+    allocator_->release(probe);
+  }
   out.resize(static_cast<size_t>(loc.size));
   if (loc.size == 0) return Error::None;
   if (loc.memory) {
@@ -566,6 +573,21 @@ Error Archive::readBlob(uint32_t cluster, uint32_t blob, std::string& out) {
 Error Archive::read(const Entry& entry, std::string& out) {
   if (!entry.isContent()) return Error::NotContent;
   return readBlob(entry.cluster, entry.blob, out);
+}
+
+Error Archive::readView(const Entry& entry, std::string& storage, std::string_view& out) {
+  out = {};
+  if (!entry.isContent()) return Error::NotContent;
+  BlobLocation loc;
+  const Error err = locateBlob(entry.cluster, entry.blob, loc);
+  if (err != Error::None) return err;
+  if (loc.memory) {
+    out = std::string_view(reinterpret_cast<const char*>(loc.memory), static_cast<size_t>(loc.size));
+    return Error::None;
+  }
+  const Error e = readBlob(entry.cluster, entry.blob, storage);
+  if (e == Error::None) out = storage;
+  return e;
 }
 
 Error Archive::loadCluster(uint32_t cluster, const ClusterInfo& info, CachedCluster*& out) {

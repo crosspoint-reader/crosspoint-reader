@@ -293,3 +293,366 @@ containing "Forbidden City"; see the session summary for the download.
   popularity ranking (needs the indexes rebuilt on the Mac); then Wiktionary
   lookup, CJK font, Standard Ebooks. Open a pull request merging M3–M5 into
   `pocket-library`.
+
+## 2026-10-03 — PR #1 merged; ghost text fix
+
+- PR #1 (M3–M5, SD speed) merged into `pocket-library`.
+- Owner: faint text from the previous screen shows inside the gray selection
+  bar, on every return to Home too. Cause: list screens draw with the fast
+  waveform, which leaves a trace of the screen before; the bar is a dither, so
+  the trace breaks its pattern. Stock CrossPoint behaves the same (seen on
+  Diagnostics). Fix: one half refresh on the first draw after any screen
+  change (a brief flash); moving the selection stays fast. Workaround on
+  older builds: control center → Force refresh, or Settings → Controls →
+  Short power button → Force refresh.
+- Also in this build: ranked search (works with the current cards; results
+  rank by popularity once the indexes are rebuilt as v2).
+- Device checklist: Home → Library → a collection → Back → Home: no ghost
+  text in the selection bars; Settings → About → Diagnostics → Back: same;
+  turning article pages is unchanged (no extra flashes); control center's
+  Force refresh still does its full refresh.
+
+## 2026-10-03 — Milestone 6 (part 1): Library grid and search everything
+
+- Owner's design: Library is a grid, two across: Recent, eBooks, Wikipedia,
+  Maps (placeholder), Medical, More, each with a small icon; Medical and More
+  open sub-grids. Search: chips (All · eBooks · Wikipedia · More), results as
+  you type across every collection and the EPUBs; opened from a magnifier tab
+  on the Cover Grid home, from a collection, or by the power button (Settings
+  → Controls → Short power button → Search).
+- Built: `zim::searchMany` (host-tested), `Library` keeps every collection
+  open, `SearchActivity`, the tile grid, keyboard chips and tagged rows, the
+  Home tab, the power-button option. 70 host tests pass; firmware 88.1% of
+  the app slot.
+- Ranked results need the indexes rebuilt on the Mac (v2); until then each
+  collection's results are alphabetical, merged as above.
+- Device checklist:
+  1. Home (Cover Grid) shows a magnifier as the last tab; tapping it opens
+     search with **All** chosen.
+  2. Type `paris`: an exact row with "N sources" first; tapping it lists the
+     collections; each opens its article. Back returns to the results.
+  3. Tap **eBooks**: your EPUBs matching by title or author; one opens in the
+     book reader. Tap **More**: a list of Medical and each collection.
+  4. Empty field: recent searches (tap fills the field) and recent articles.
+  5. Library: the 2×3 grid with icons; Medical and More open sub-grids; Maps
+     shows "coming"; eBooks opens the book list; Recent lists articles.
+  6. Inside a collection, Search starts with that collection's chip chosen.
+  7. Settings → Controls → Short power button → Search; a short press opens
+     search from Home and from inside a book; Back returns there.
+
+
+## 2026-10-03 — Owner feedback on the M6 build; next work chosen
+
+- Grid and search work on the device. Fixed: tile names spilling into the
+  next tile; long titles on "Opening" running off the screen (37282e0).
+- A crash (abort() on core 1) seen once; waiting for crash_report.txt and
+  what was on screen. CI now keeps the firmware .elf to decode such reports.
+- Owner's choices for what comes next:
+  - Collection home like the Wikipedia app: a search bar with the
+    collection's icon first, then continue reading, recent, main page and
+    random; About moves to a menu.
+  - Full-screen search results that scroll (swipe or buttons) after OK.
+  - Article navigation from the Wikipedia app: toolbar on a centre tap,
+    contents as navigation (current section marked, page numbers), section
+    name in the status bar, link previews, and **outline mode** (lead plus
+    section headings; tap a heading to read that section).
+  - Search: A any word in a title, B typo tolerance, C search of each
+    article's opening paragraph (its own milestone).
+  - Medical: a First Aid screen (organised by emergency, MedlinePlus pages
+    first, Wikibooks First Aid for detail) and a Medical Encyclopedia
+    (MedlinePlus and MDWiki behind one search, browsable by body system).
+- Fewer clean refreshes: keep them for list and grid screens, not the
+  keyboard or articles.
+
+## 2026-10-03 — Crash opening "Giant panda": out of PSRAM
+
+- crash_report.txt: after "Josephoartigasia" (108 KB HTML, 33 pages) PSRAM
+  was down to 816 KB free (largest piece 431 KB); opening "Giant panda" then
+  aborted. Built without exceptions, a failed std::string allocation aborts.
+- Fixes: articles are cleaned straight from the decoded cluster
+  (`Archive::readView`, no copy); `readBlob` checks for room and returns
+  NoMemory instead of aborting; other collections drop their decoded
+  clusters on every article open and after every search; with under 1.5 MB
+  of PSRAM in one piece after cleaning, the article's own clusters are
+  dropped before layout. Host tests: ReadViewMatchesRead,
+  CopyThatDoesNotFitIsNoMemory (72 pass).
+- Open question: what held the other ~4 MB between "PANDA experiment"
+  (4857 KB free) and "Josephoartigasia" (816 KB free). Watch the
+  "PSRAM free" log line across several articles.
+- Measured on the device (same log): article read 425–464 ms when its
+  cluster is decoded, 2 ms when cached; clean 34–111 ms; first page
+  185–1018 ms; a 33-page article lays out in 3.4 s in the background.
+
+## 2026-10-03 — Next update, build 1: collection home, full-screen results
+
+- Collection home (owner's request, like the Wikipedia app): a rounded
+  search bar with the collection's icon ("Search Wikipedia"), then Continue
+  reading and up to three recent articles from this collection, Main page,
+  Random article, and About (titles, date, size, last article's timings).
+- Search: OK now opens every result (up to 80) as a full-screen list that
+  scrolls by swipe or the side buttons; Back returns to the keyboard, and
+  Back from an article opened there returns to the list. A tapped
+  suggestion still opens directly. An exact title in several collections
+  names them ("Wikipedia · Wiktionary · +1").
+- Clean refresh no longer on the keyboard or the search screen under it.
+- Device checklist:
+  1. Library → Wikipedia: the search bar with the globe, then Continue
+     reading / Recent (if any), Main page, Random article, About.
+  2. Tap the bar: search opens with the Wikipedia chip chosen.
+  3. Type `paris`, press OK: a full list; swipe up/down; open one; Back
+     returns to the list; Back again to the keyboard.
+  4. Opening search and typing feel quicker (no flash on the keyboard).
+  5. Lists and grids still open with one clean flash (no ghosts).
+
+## 2026-10-03 — Next update, build 2: article navigation
+
+- A tap in the middle of an article shows a toolbar across the top: Back,
+  Contents, Search, Outline (tap elsewhere, turn the page or Back closes it).
+- Contents mark the section being read (•), select it, and give each
+  section's page.
+- The status bar names the section being read (when the title is shown).
+- Link previews: tapping a link shows its article's title and first
+  sentences in a card; tap the card to open it, the page to close it.
+- Outline: Introduction (the lead's first sentences) and the sections, each
+  with its page and length; choose one to read it, Back returns to the
+  outline. "Open articles here first: On/Off" at its foot.
+- The cleaner keeps each article's lead (`HtmlCleanOptions::lead`,
+  `firstSentences`); 4 new host tests, 76 in all.
+- Device checklist:
+  1. Open Climate change; tap the middle: the toolbar; each of its four
+     buttons works.
+  2. Contents: the current section marked, page numbers beside sections.
+  3. Tap a link: a preview card; tap it to open; Back returns.
+  4. Outline: sections with pages and lengths; pick one; Back returns to the
+     outline. Turn "Open articles here first" On and open another article.
+
+## 2026-10-03 — Article images (lead picture; all on request)
+
+- Built and host-tested: WebP → greyscale PNG (`ZimImage`, every WebP in the
+  sample converts; PNGs read back, and Pillow opens them), the cleaner's
+  lead/all picture modes (3 new tests), the reader's lazy extractor and a
+  fifth toolbar button, **Images**. 84 host tests pass.
+- Device test needs a ZIM with pictures ("maxi"); the card's files are
+  "nopic". Cheapest test: Wikivoyage maxi.
+- Device checklist (with a maxi file):
+  1. An article with an infobox shows its picture on page 1, in grey.
+  2. Toolbar → Images: the article is laid out again at the same place with
+     every picture and its caption; Images again returns to the lead picture.
+  3. Pages without pictures turn as fast as before; a page with one takes a
+     moment the first time only.
+
+
+## 2026-10-03 — Medical: First Aid and Medical Encyclopedia
+
+- Medical opens on two guides, then its collections: **First Aid** (29
+  emergencies, most urgent first: CPR, choking, bleeding, shock, heart
+  attack, stroke, anaphylaxis, burns, …) and **Medical Encyclopedia** (search
+  over MedlinePlus and MDWiki, then 17 body systems and topics). Each row
+  names the page it wants, MedlinePlus first (US National Library of
+  Medicine, public domain), then MDWiki or Wikipedia; titles are looked up
+  exactly when the screen opens, and rows nothing answers are left out.
+- The MedlinePlus titles are from the website's naming and not yet checked
+  against the card's file: the Mac session lists which resolve (zimcat).
+- Wikivoyage switched to the edition with pictures (maxi) in library.toml,
+  to test article images.
+- Device checklist: Library → Medical → First Aid: rows with their sources;
+  each opens; Encyclopedia: search row opens search scoped to Medical; a
+  body system opens.
+
+## 2026-10-03 — Search: words inside titles, typos (index v3)
+
+- Index version 3 (`zimindex`, `cardbuilder.py` rebuilds older ones): each
+  article's title is also indexed from each later word on (up to six, words
+  of three letters or more, a few stop words skipped), flagged as a word
+  record. "panda" now finds Giant panda and Red panda, ranked by popularity
+  with the titles that start with "panda"; only a whole title is an exact
+  match. The sample's index grows 2.1x (96 KB → 204 KB).
+- Typos: when nothing matches, the search tries the query with one of its
+  first letter pairs swapped, then trims letters from the end (keeping three)
+  until titles turn up, and keeps those within one typo (two for queries of
+  eight letters or more). "climte change", "clmiate change", "climate
+  chnage" and "climate changee" all find Climate change. Works with older
+  indexes too (device-side).
+- 90 host tests, 12 card builder tests pass.
+
+## 2026-10-03 — The owner's books: sorting, tidying, shelf order
+
+- The owner's 907 converted EPUBs were sorted into High / Medium / Low
+  (shown to the owner first; nothing deleted). The list lives outside the
+  repo; it is the owner's library.
+- `booklist.py prune books.csv [--apply]`: moves every book not marked keep
+  to the macOS Trash (File > Put Back undoes it). Prints the list first and
+  does nothing without `--apply`.
+- `booklist.py tidy books.csv [--apply]`: writes Title Case titles and mended
+  authors into the kept books with Calibre's ebook-meta ("The demolished man"
+  → "The Demolished Man", "Cormac Mccarthy" → McCarthy), drops bare "a novel"
+  subtitles, and turns "Joe Pitt 1 - Already Dead" into the title plus a
+  series. Deliberate capitals (UR, H.M.S., V., Less Than Zero) are kept.
+  8 tests (`python3 -m unittest test_booklist` in tools/books).
+- Device: the Library's title sort and letter groups ignore a leading "The",
+  "A" or "An" ("The Road" files under R; "A Is for Alibi" stays under A).
+  Search still matches the whole title. Index fold version 5: the book index
+  rebuilds once on the first boot after the update.
+- Device checklist: Library sorted by title: The Road between Rabbit and
+  Rant, under R; the letter jump shows R for it.
+
+## 2026-10-03 — Owner's first look at M6 on the device: fixes
+
+- Icons (Library tiles, the article toolbar, Home's search tab) were on their
+  side: ours are generated upright, and CrossPoint's drawIcon expects icons
+  stored a quarter turn round. Drawn with `drawUprightIcon` now.
+- The screen flashed on every tap: the ghost-text fix gave every screen change
+  a half refresh. Now on every return to Home and every fourth other change.
+- No pictures in Wikivoyage: the cleaner took only WebP pictures. It now takes
+  JPEG and PNG too (a JPEG goes to the reader's JPEG decoder as it is, a PNG to
+  its PNG decoder; WebP is still converted), and a picture with no size on its
+  tag uses data-file-width/height. The owner's Wikivoyage (zimcat on Paris)
+  holds JPEG photos and PNG maps under ./_assets_/<hash>/, so it had no WebP
+  at all; a link test covers that path.
+- Contents and Outline say "Page 12" and "3 pages long, from page 12" instead
+  of "p. 12".
+- 91 host tests pass.
+- Contents and Outline merged into one Contents (owner's choice), after the
+  Wikipedia app: Introduction with the article's opening sentences, then each
+  section and subsection (to level 4) with its first sentence (new
+  `HtmlHeading::summary`, from its first paragraph or list item) and length,
+  the one being read marked "You are here"; the foot row "Open articles at
+  their contents". Back after a jump returns to the page left (or to the
+  contents when they opened with the article). The toolbar's freed slot is
+  Text size (the reader's own point sizes, same setting books use; the article
+  is laid out again at the same place). 92 host tests, 7 layout tests pass.
+
+## 2026-10-03 — First Aid rebuilt around instructions
+
+- The owner found First Aid opening encyclopedia articles about the condition
+  (Wikipedia, MDWiki) instead of what to do. First Aid now uses only sources
+  written as instructions: MedlinePlus pages named by their permanent address
+  on medlineplus.gov (ency/article/000030.htm is Burns), opened at their
+  "First Aid" section; else a chapter of the Wikibooks First Aid manual. 33
+  rows (CPR by age, choking by age, unconscious person, bleeding, stroke, …);
+  Wikipedia and MDWiki are no longer used there.
+- Every address was checked against the live site's titles. On the card, a
+  page found at an address must also carry the expected title, so a wrong
+  number opens nothing rather than the wrong page.
+- Articles can open at a named section: `ArticleActivity(…, landing)`, and a
+  fragment now also matches a heading's text in any case.
+- Device checklist: Medical → First Aid lists the rows with "MedlinePlus ·
+  …" under them; Burns opens on its First Aid section; Stroke (no MedlinePlus
+  first-aid page) shows only if the Wikibooks collection is on the card.
+
+## 2026-10-03 — Sleep screen: DON'T PANIC
+
+- The Dark and Light sleep screens show DON'T PANIC in large, friendly
+  letters (about a quarter of the screen's height, 368 px wide), "Sleeping"
+  small under it. The lettering is a 1-bit picture made by
+  `tools/sleep/make_dont_panic.py` from Fredoka (SIL OFL), the heaviest
+  weight; the font itself is not in the firmware. Custom and Cover sleep
+  screens are unchanged.
+- Device checklist: Settings → Sleep Screen → Dark; press power: white
+  DON'T PANIC on black, centred, edges crisp; Light gives black on white.
+
+## 2026-10-04 — Performance update; Home flash; Paris
+
+- Owner, on the device (newest build, after the wrong-file flashes were
+  traced: every flash had sent an old pocketlib-x4pro.bin; flashing now
+  downloads the release asset straight to ~/Downloads/pocketlib-new.bin):
+  DON'T PANIC good; Home flashed on every visit; "paris" did not find the
+  city until "paris france"; result list cut off; Wikivoyage pictures work;
+  wants a tapped picture full screen (later).
+- Fixed: Home flash (see DECISIONS); search finds the exact title among
+  thousands of word matches (test: ExactTitleAmongThousandsEndingInIt).
+- Cut or trimmed per the owner's table: link previews, pictures on request,
+  search pause. Free fixes: failed article sleep bug, place saves, Medical
+  cache, three-cluster cache. Builds name their commit on About; "Check for
+  updates" hidden.
+- 93 zim host tests, 387 firmware host tests pass; release build OK.
+- Device checklist: Home: no flash on return; search "paris": Paris first;
+  tap a link: opens straight away, Back returns; an article opens without a
+  picture, Images shows them; Medical opens instantly the second time;
+  About ends in -pocketlib-<commit>.
+
+## 2026-10-04 — Search part 2, pictures, contents with toolbar; Wikipedia maxi
+
+- Owner: the full result list (after OK) cut off; wants a tapped picture
+  full screen and the contents and toolbar together; the card has room for
+  Wikipedia with pictures, so library.toml now asks for the maxi edition
+  first. The owner is downloading it; the index must be built with the new
+  zimindex (popular tree) before copying, and copy runs without --only.
+- Built: popular tree in the title index (tests PopularTreeLiftsWellKnownTitles,
+  weighted searchMany), More results, PictureActivity, contents with toolbar.
+- 94 zim host tests, 387 firmware host tests; release build OK.
+- Device checklist: search "pari" offers Paris first (after the new index);
+  "All" shows mostly Wikipedia; OK list ends in More results; tap a picture
+  (Wikivoyage Paris, Images on): full screen, tap returns; tap the middle of a
+  page: contents with the toolbar on top; its buttons work.
+
+## 2026-10-04 — Pet First Aid
+
+- tools/webpack (fetch, extract, write ZIM; tested against a local mock
+  site and read back with zimcat and zimindex), recipes/pets.toml (MSD pages,
+  not fetchable from this container: first real run is the owner's).
+- cardbuilder `file =` collections (two new tests; 14 pass with the test
+  data). Firmware: Pet First Aid list and tile. 94 + 387 host tests; release
+  build OK; clang-format 21 clean.
+- Device checklist (after the pack is made and copied): Medical shows Pet
+  First Aid with a paw; Bleeding opens the emergency page at Bleeding;
+  Poisoning: foods opens Food Hazards; Every pet page lists them all.
+
+## 2026-10-05 — Wikipedia pictures were empty boxes; articles scroll up and down
+
+- Owner: with the maxi Wikipedia, Images showed empty boxes. The serial log
+  said why: the 2026 file keeps each picture's original name
+  (`_assets_/<hash>/Name.jpg`) but stores WebP, and the reader trusted the
+  name. Now any WebP is turned into a grey PNG whatever its name, and the
+  reader picks its decoder by the file's first bytes
+  (ImageDecoderFactory::getDecoderForFile). Earlier the same day (4d0e3e5):
+  decoders gated on the heap they really use (PSRAM on the X4 Pro), and a
+  failed picture is tried again on the next page and full screen.
+- Owner: everything but books should scroll up and down. Articles (every
+  collection) turn pages on a swipe up (next) or down (previous); sideways
+  swipes do nothing there. Lists already scrolled up and down. Books are
+  unchanged.
+- 387 host tests; release build OK; clang-format clean.
+- Device checklist: Lorne Michaels → Images: the photos show; tap one: full
+  screen. In any article, swipe up: next page; down: previous; a swipe from
+  the top edge still opens the light panel or contents.
+
+## 2026-10-05 — Every picture showed Lorne Michaels
+
+- Owner: after de2b23c, pictures in other articles showed the first one seen
+  (Lorne Michaels), sometimes in the wrong place. The article view never
+  released ImageBlock's RAM pixel slot after a page render (the book reader
+  does), so the first picture loaded stayed resident and was drawn for any
+  later picture with the same cache name, /.pocketlib/img/0.pxc in every
+  article, at its own size. The slot is now released at the end of each page
+  render and when an article's pictures are cleared.
+- Device checklist: Lorne Michaels → Images, then open another article with
+  pictures → Images: its own pictures, in place; tap one: that picture.
+
+## 2026-10-06 — Shareable: a guide and two scripts
+
+- Owner: wants to share Pocket Library so others can make their own.
+- `docs/pocket-library/README.md` (linked from the top of README.md): what it
+  does, what you need, back up, install CrossPoint, install Pocket Library,
+  build the card, updating, going back, troubleshooting from this week.
+- `tools/flash/flash.sh` (install, backup, restore, stock, log) and
+  `tools/cardbuilder/get-tools.sh`; both published to the release with
+  checksums. Tested here: syntax, esptool 5.4 command names, the partition
+  check against this build's table (accepted) and a blank one (refused), and
+  a checksum-checked download from the preview release. Not yet run against
+  a reader.
+- The picture fixes' changes to CrossPoint files are now fenced in
+  `#ifdef POCKET_LIBRARY` and listed in DECISIONS.
+- library.toml's staging default is `~/PocketLib/downloads`; cardbuilder and
+  webpack say plainly when Python is older than 3.11; download retries 20.
+- 387 firmware host tests, 14 card builder tests, booklist tests; release build OK.
+- Owner to do: merge this branch into pocket-library so the dev release
+  carries it; set the repository's default branch to pocket-library; try
+  `bash flash.sh` once from ~/PocketLib (it offers a backup first).
+
+## 2026-10-06 — The one-page site
+
+- `docs/index.html`: two things to buy, six steps, four fixes; the owner
+  asked for spare text and no checkboxes. Served by GitHub Pages once the
+  owner turns it on (Settings → Pages → Deploy from a branch →
+  pocket-library, /docs) at https://noah-pi.github.io/pocket-library/.

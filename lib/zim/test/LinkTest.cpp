@@ -41,6 +41,11 @@ TEST(Link, Parse) {
   EXPECT_EQ(t.path, "Earth's_energy_budget");
   EXPECT_EQ(t.fragment, "Outgoing");
 
+  // Wikivoyage's pictures (mwoffliner's _assets_ folder).
+  ASSERT_TRUE(zim::parseLink(entry('C', "Paris"), "./_assets_/d1f33b1c/View_of_the_Seine.jpg", t));
+  EXPECT_EQ(t.ns, 'C');
+  EXPECT_EQ(t.path, "_assets_/d1f33b1c/View_of_the_Seine.jpg");
+
   ASSERT_TRUE(zim::parseLink(entry('C', "Book/Chapter_1"), "Chapter_2", t));
   EXPECT_EQ(t.path, "Book/Chapter_2");
   ASSERT_TRUE(zim::parseLink(entry('C', "Book/Part/Ch"), "../Intro", t));

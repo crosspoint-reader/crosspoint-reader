@@ -25,6 +25,7 @@
 #include "TitleIndexWriter.h"
 #include "ZimArchive.h"
 #include "ZimFold.h"
+#include "ZimSearch.h"
 #include "ZimTitleIndex.h"
 
 namespace {
@@ -240,19 +241,95 @@ TEST_P(RealFiles, IndexFindsTitlesWhateverTheCase) {
   }
   EXPECT_TRUE(found);
 
-  // Every indexed record points at an entry whose folded title is its key.
+  // Every indexed record points at an entry whose folded title is its key,
+  // or, for a word record, ends with it after a space ("change" for
+  // "Climate change").
   const auto all = scanFrom(index, "", w.size() + 1);
   ASSERT_EQ(all.size(), w.size());
+  size_t words = 0;
   for (size_t i = 0; i < all.size(); i += 37) {
     zim::Entry e;
     ASSERT_EQ(a.entryAt(all[i].entry, e), zim::Error::None);
-    EXPECT_EQ(zim::foldKey(e.title), all[i].key);
+    const std::string title = zim::foldKey(e.title);
+    if (all[i].word) {
+      words++;
+      EXPECT_FALSE(e.isRedirect()) << all[i].key;
+      ASSERT_GT(title.size(), all[i].key.size()) << all[i].key;
+      EXPECT_EQ(title.compare(title.size() - all[i].key.size(), all[i].key.size(), all[i].key), 0) << title;
+      EXPECT_EQ(title[title.size() - all[i].key.size() - 1], ' ') << title;
+    } else {
+      EXPECT_EQ(title, all[i].key);
+    }
     EXPECT_EQ(e.ns, a.contentNamespace());
   }
+  EXPECT_GT(words, 0u) << "version 3 indexes words inside titles";
 
   // An index built for one file is refused for another.
   zim::Archive other;
   ASSERT_EQ(other.open(zim::openArchiveSource(kData + "/" + GetParam() + "/small.zim")), zim::Error::None);
   EXPECT_FALSE(index.matches(other));
+  std::remove(path.c_str());
+}
+
+// "Paris" in English Wikipedia: thousands of titles end in the word ("Siege
+// of Paris"), and each is a word record keyed "paris", in entry order around
+// the title itself. The title must still come first, and titles that go on
+// past the query must still be offered.
+TEST(TitleSearch, ExactTitleAmongThousandsEndingInIt) {
+  zim::TitleIndexWriter w;
+  for (uint32_t i = 0; i < 3000; ++i) w.add("paris", i, static_cast<uint8_t>(i % 200), /*word=*/true);
+  w.add("paris", 1500 + 100000, 250);  // the city, mid-run by entry
+  w.add("paris hilton", 200000, 240);  // goes on past the query
+  w.add("paris (band)", 200001, 10);
+  const std::string path = tempPath("paris.pltitles");
+  std::string why;
+  ASSERT_TRUE(w.write(path, kUuid, 300000, &why)) << why;
+  zim::TitleIndex index;
+  ASSERT_EQ(openIndex(index, path), zim::Error::None);
+  zim::TitleIndex::Cursor cursor;
+  std::vector<zim::SearchCandidate> found;
+  ASSERT_EQ(zim::searchCandidates(index, cursor, "Paris", found), zim::Error::None);
+  ASSERT_FALSE(found.empty());
+  EXPECT_TRUE(found[0].exact);
+  EXPECT_EQ(found[0].entry, 101500u);
+  bool hilton = false;
+  for (const auto& c : found) hilton |= c.entry == 200000;
+  EXPECT_TRUE(hilton) << "titles longer than the query are still offered";
+  EXPECT_LE(found.size(), zim::kSearchWindow / 2 + zim::kSearchWindow + 1);
+  std::remove(path.c_str());
+}
+
+// A short prefix shared by thousands of rare titles still offers the popular
+// one first, from the popular tree ("pari" -> Paris).
+TEST(TitleSearch, PopularTreeLiftsWellKnownTitles) {
+  zim::TitleIndexWriter w;
+  for (uint32_t i = 0; i < 5000; ++i) w.add("pari" + std::string(1, 'a' + i % 17) + std::to_string(i), i, 1);
+  w.add("paris", 900000, 200);         // the city
+  w.add("paris hilton", 900001, 150);  // also well known
+  const std::string path = tempPath("popular.pltitles");
+  std::string why;
+  ASSERT_TRUE(w.write(path, kUuid, 1000000, &why, /*popularMax=*/100)) << why;
+  EXPECT_EQ(w.popularRecords(), 2u);
+  zim::TitleIndex index;
+  ASSERT_EQ(openIndex(index, path), zim::Error::None);
+  ASSERT_TRUE(index.hasPopularTree());
+  zim::TitleIndex::Cursor cursor;
+  std::vector<zim::SearchCandidate> found;
+  ASSERT_EQ(zim::searchCandidates(index, cursor, "pari", found), zim::Error::None);
+  ASSERT_GE(found.size(), 2u);
+  EXPECT_EQ(found[0].entry, 900000u) << "Paris first, though 5000 'pari…' titles sort before it";
+  EXPECT_EQ(found[1].entry, 900001u);
+  size_t paris = 0;
+  for (const auto& c : found) paris += c.entry == 900000;
+  EXPECT_EQ(paris, 1u) << "listed once";
+
+  // Without the tree (an older index), the same file layout still reads.
+  zim::TitleIndexWriter plain;
+  for (uint32_t i = 0; i < 50; ++i) plain.add("x" + std::to_string(i), i, 3);
+  ASSERT_TRUE(plain.write(path, kUuid, 100, &why, /*popularMax=*/100)) << why;
+  EXPECT_EQ(plain.popularRecords(), 0u) << "too small to need one";
+  zim::TitleIndex small;
+  ASSERT_EQ(openIndex(small, path), zim::Error::None);
+  EXPECT_FALSE(small.hasPopularTree());
   std::remove(path.c_str());
 }

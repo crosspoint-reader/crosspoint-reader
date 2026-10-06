@@ -15,6 +15,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace pocketlib {
@@ -23,6 +24,9 @@ constexpr const char* kDir = "/.pocketlib";
 constexpr const char* kPath = "/.pocketlib/history.tsv";
 constexpr const char* kTmpPath = "/.pocketlib/history.tsv.tmp";
 constexpr size_t kMaxFileBytes = 64 * 1024;
+constexpr const char* kSearchesPath = "/.pocketlib/searches.txt";
+constexpr const char* kSearchesTmpPath = "/.pocketlib/searches.txt.tmp";
+constexpr const char* kOutlinePath = "/.pocketlib/outline-first";  // exists = on
 
 std::string clean(const std::string& s) {
   std::string out = s;
@@ -128,6 +132,64 @@ void ReadingHistory::record(const Place& place) {
   places_.insert(places_.begin(), place);
   if (places_.size() > kMaxPlaces) places_.resize(kMaxPlaces);
   save();
+}
+
+const std::vector<std::string>& ReadingHistory::searches() {
+  if (searchesLoaded_) return searches_;
+  searchesLoaded_ = true;
+  HalFile f;
+  if (!Storage.openFileForRead("PLIB", kSearchesPath, f)) return searches_;
+  const size_t size = f.fileSize();
+  if (size == 0 || size > 4096) return searches_;
+  std::string text(size, '\0');
+  if (f.read(text.data(), size) != static_cast<int>(size)) return searches_;
+  size_t pos = 0;
+  while (pos < text.size() && searches_.size() < kMaxSearches) {
+    size_t eol = text.find('\n', pos);
+    if (eol == std::string::npos) eol = text.size();
+    if (eol > pos) searches_.push_back(text.substr(pos, eol - pos));
+    pos = eol + 1;
+  }
+  return searches_;
+}
+
+void ReadingHistory::recordSearch(const std::string& query) {
+  const std::string q = clean(query);
+  if (q.empty()) return;
+  searches();
+  auto it = std::find(searches_.begin(), searches_.end(), q);
+  if (it == searches_.begin() && it != searches_.end()) return;
+  if (it != searches_.end()) searches_.erase(it);
+  searches_.insert(searches_.begin(), q);
+  if (searches_.size() > kMaxSearches) searches_.resize(kMaxSearches);
+  Storage.ensureDirectoryExists(kDir);
+  std::string text;
+  for (const auto& s : searches_) text += s + "\n";
+  HalFile f;
+  if (!Storage.openFileForWrite("PLIB", kSearchesTmpPath, f)) return;
+  const bool ok = f.write(reinterpret_cast<const uint8_t*>(text.data()), text.size()) == text.size();
+  f.flush();
+  f.close();
+  if (ok) {
+    Storage.remove(kSearchesPath);
+    Storage.rename(kSearchesTmpPath, kSearchesPath);
+  }
+}
+
+bool ReadingHistory::outlineByDefault() {
+  if (outline_ < 0) outline_ = Storage.exists(kOutlinePath) ? 1 : 0;
+  return outline_ == 1;
+}
+
+void ReadingHistory::setOutlineByDefault(bool on) {
+  outline_ = on ? 1 : 0;
+  if (on) {
+    Storage.ensureDirectoryExists(kDir);
+    HalFile f;
+    if (Storage.openFileForWrite("PLIB", kOutlinePath, f)) f.close();
+  } else {
+    Storage.remove(kOutlinePath);
+  }
 }
 
 }  // namespace pocketlib

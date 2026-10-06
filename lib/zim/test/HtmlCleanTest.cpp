@@ -269,3 +269,174 @@ TEST(HtmlClean, LargeInputStreamsInChunks) {
 }
 
 }  // namespace
+
+namespace {
+std::string leadOf(std::string_view html, size_t limit = 600) {
+  zim::StringHtmlSink sink;
+  std::string lead;
+  zim::HtmlCleanOptions o;
+  o.lead = &lead;
+  o.leadLimit = limit;
+  EXPECT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  return lead;
+}
+}  // namespace
+
+TEST(HtmlClean, LeadIsTheOpeningProse) {
+  const std::string lead = leadOf(
+      "<h1>Panda</h1><table class=infobox><tr><td><p>Infobox text</p></td></tr></table>"
+      "<p class=mw-empty-elt></p><p>The <b>giant panda</b> is a bear.\n It eats   bamboo.</p>"
+      "<ul><li>a list</li></ul><p>Second paragraph.</p><h2>History</h2><p>Later text.</p>");
+  EXPECT_EQ(lead, "The giant panda is a bear. It eats bamboo. Second paragraph.");
+}
+
+TEST(HtmlClean, LeadIsCutAtAWord) {
+  std::string body = "<p>";
+  for (int i = 0; i < 100; i++) body += "word" + std::to_string(i) + " ";
+  body += "</p>";
+  const std::string lead = leadOf(body, 50);
+  EXPECT_LE(lead.size(), 53u);
+  EXPECT_EQ(lead.compare(lead.size() - 3, 3, "\xE2\x80\xA6"), 0) << lead;
+  EXPECT_EQ(lead.find("  "), std::string::npos);
+}
+
+TEST(HtmlClean, FirstSentences) {
+  EXPECT_EQ(zim::firstSentences("The U.S. Army is big. It has tanks. It is old.", 2, 200),
+            "The U.S. Army is big. It has tanks.");
+  EXPECT_EQ(zim::firstSentences("Paris (c. 250 BC) is a city. More.", 1, 200), "Paris (c. 250 BC) is a city.");
+  EXPECT_EQ(zim::firstSentences("No stop at all", 2, 200), "No stop at all");
+}
+
+TEST_F(Sample, RealLeadStartsWithTheArticle) {
+  const std::string html = article("Climate change");
+  zim::StringHtmlSink sink;
+  std::string lead;
+  zim::HtmlCleanOptions o;
+  o.lead = &lead;
+  ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  EXPECT_EQ(lead.rfind("In common usage, climate change describes global warming", 0), 0u) << lead;
+  EXPECT_EQ(lead.find('{'), std::string::npos);
+  EXPECT_LE(lead.size(), 603u);
+}
+
+namespace {
+const char* kPictures =
+    "<h1>Panda</h1><table class=\"infobox\"><tr><td class=\"infobox-image\">"
+    "<a href=\"./File:P.jpg\"><img src=\"../I/P.jpg.webp\" width=\"220\" height=\"330\" alt=\"A &amp; panda\"></a>"
+    "<div class=\"infobox-caption\">Lead caption</div></td></tr></table>"
+    "<p>Text <img src=\"./I/flag.svg.png.webp\" width=\"20\" height=\"14\"> here.</p>"
+    "<figure typeof=\"mw:File/Thumb\"><a href=\"./File:Q.jpg\"><img src=\"./I/Q.jpg.webp\" width=\"200\" "
+    "height=\"150\"></a><figcaption>Second caption</figcaption></figure>"
+    "<h2>Range</h2><div class=\"thumb tright\"><div class=\"thumbinner\"><img src=\"R.png.webp\" width=\"300\" "
+    "height=\"200\"><div class=\"thumbcaption\">Third caption</div></div></div>"
+    "<p><img class=\"mwe-math-fallback-image-inline\" src=\"m.svg\" width=\"90\" height=\"40\"></p>";
+
+std::string cleanPictures(zim::HtmlImages mode, std::vector<zim::HtmlImage>& images) {
+  zim::StringHtmlSink sink;
+  zim::HtmlCleanOptions o;
+  o.images = mode;
+  o.imageList = &images;
+  EXPECT_TRUE(zim::cleanArticleHtml(kPictures, o, sink));
+  EXPECT_TRUE(parseXml(sink.out).ok) << sink.out;
+  return sink.out;
+}
+}  // namespace
+
+TEST(HtmlClean, NoImagesByDefault) {
+  std::vector<zim::HtmlImage> images;
+  const std::string out = cleanPictures(zim::HtmlImages::None, images);
+  EXPECT_TRUE(images.empty());
+  EXPECT_EQ(out.find("<img"), std::string::npos);
+  EXPECT_EQ(out.find("caption"), std::string::npos) << "frames go with their pictures";
+}
+
+TEST(HtmlClean, LeadImageOnly) {
+  std::vector<zim::HtmlImage> images;
+  const std::string out = cleanPictures(zim::HtmlImages::Lead, images);
+  ASSERT_EQ(images.size(), 1u);
+  EXPECT_EQ(images[0].src, "../I/P.jpg.webp");
+  EXPECT_EQ(images[0].width, 220);
+  EXPECT_EQ(images[0].height, 330);
+  EXPECT_NE(out.find("<img src=\"/pl-img/0.png\" width=\"220\" height=\"330\" alt=\"A &amp; panda\"/>"),
+            std::string::npos)
+      << out;
+  EXPECT_NE(out.find("Lead caption"), std::string::npos);
+  EXPECT_EQ(out.find("Second caption"), std::string::npos);
+  EXPECT_EQ(out.find("Third caption"), std::string::npos);
+}
+
+TEST(HtmlClean, SectionSummaries) {
+  // Each section's first sentence, for the contents: from its first paragraph
+  // or list item, not from a table; empty when it opens with a subsection.
+  const char* html =
+      "<h1>Paris</h1><p>Lead text here.</p>"
+      "<h2>Understand</h2><p>Paris is the capital of France. It is big.</p>"
+      "<h2>Get in</h2><h3>By plane</h3><ul><li>Charles de Gaulle Airport is the main hub. More.</li></ul>"
+      "<h2>Data</h2><table><tr><td>Not this.</td></tr></table><p>But this one. Not this.</p>";
+  zim::StringHtmlSink sink;
+  std::vector<zim::HtmlHeading> headings;
+  zim::HtmlCleanOptions o;
+  o.headings = &headings;
+  ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  ASSERT_EQ(headings.size(), 5u);
+  EXPECT_EQ(headings[1].summary, "Paris is the capital of France.");
+  EXPECT_EQ(headings[2].summary, "");
+  EXPECT_EQ(headings[3].summary, "Charles de Gaulle Airport is the main hub.");
+  EXPECT_EQ(headings[4].summary, "But this one.");
+}
+
+TEST(HtmlClean, JpegAndPngPicturesToo) {
+  // Collections Kiwix doesn't convert to WebP (Wikivoyage): a JPEG keeps its
+  // .jpg (the reader shows it as it is), a PNG its .png; a tag without a size
+  // borrows the original's; an SVG or GIF stays out.
+  const char* html =
+      "<h1>Paris</h1><p>Lead.</p><h2>See</h2>"
+      "<figure><img src=\"../I/Louvre.JPG\" width=\"300\" height=\"200\"><figcaption>Louvre</figcaption></figure>"
+      "<figure><img src=\"../I/Map.png?x=1\" data-file-width=\"1200\" data-file-height=\"900\"></figure>"
+      "<figure><img src=\"../I/Logo.svg\" width=\"300\" height=\"200\"></figure>"
+      "<figure><img src=\"../I/Anim.gif\" width=\"300\" height=\"200\"></figure>";
+  zim::StringHtmlSink sink;
+  std::vector<zim::HtmlImage> images;
+  zim::HtmlCleanOptions o;
+  o.images = zim::HtmlImages::All;
+  o.imageList = &images;
+  ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+  EXPECT_TRUE(parseXml(sink.out).ok) << sink.out;
+  ASSERT_EQ(images.size(), 2u) << sink.out;
+  EXPECT_EQ(images[0].format, zim::ImageFormat::Jpeg);
+  EXPECT_EQ(images[1].format, zim::ImageFormat::Png);
+  EXPECT_EQ(images[1].width, 1200);
+  EXPECT_EQ(images[1].height, 900);
+  EXPECT_NE(sink.out.find("/pl-img/0.jpg\" width=\"300\""), std::string::npos) << sink.out;
+  EXPECT_NE(sink.out.find("/pl-img/1.png\" width=\"1200\""), std::string::npos) << sink.out;
+  EXPECT_NE(sink.out.find("Louvre"), std::string::npos);
+}
+
+TEST(HtmlClean, AllImages) {
+  std::vector<zim::HtmlImage> images;
+  const std::string out = cleanPictures(zim::HtmlImages::All, images);
+  ASSERT_EQ(images.size(), 3u) << "the flag icon and the formula stay out";
+  EXPECT_EQ(images[1].src, "./I/Q.jpg.webp");
+  EXPECT_EQ(images[2].src, "R.png.webp");
+  EXPECT_NE(out.find("/pl-img/2.png"), std::string::npos);
+  EXPECT_NE(out.find("Second caption"), std::string::npos);
+  EXPECT_NE(out.find("Third caption"), std::string::npos);
+}
+
+TEST_F(Sample, EveryArticleWithAllImagesIsWellFormed) {
+  for (uint32_t i = 0; i < archive.entryCount(); i++) {
+    zim::Entry e;
+    ASSERT_EQ(archive.entryAt(i, e), zim::Error::None);
+    if (!e.isContent() || archive.mimeType(e.mime).rfind("text/html", 0) != 0) continue;
+    std::string html;
+    ASSERT_EQ(archive.read(e, html), zim::Error::None);
+    zim::StringHtmlSink sink;
+    std::vector<zim::HtmlImage> images;
+    zim::HtmlCleanOptions o;
+    o.keepLinks = true;
+    o.images = zim::HtmlImages::All;
+    o.imageList = &images;
+    ASSERT_TRUE(zim::cleanArticleHtml(html, o, sink));
+    ASSERT_TRUE(parseXml(sink.out).ok) << e.path;
+  }
+}

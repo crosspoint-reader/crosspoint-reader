@@ -35,6 +35,13 @@ class ImageBlock final : public Block {
   // Epub, cleared on its exit.
   using ExtractFn = bool (*)(void* ctx, const char* srcPath, const char* destPath);
   static void setExtractor(void* ctx, ExtractFn fn);
+#ifdef POCKET_LIBRARY
+  // So a Pocket Library article opened over a book can put the book's back.
+  static void getExtractor(void*& ctx, ExtractFn& fn) {
+    ctx = extractCtx;
+    fn = extractFn;
+  }
+#endif
 
   BlockType getType() override { return IMAGE_BLOCK; }
   bool isEmpty() override { return false; }

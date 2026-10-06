@@ -10,6 +10,8 @@
 #include "ZimHtml.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -612,6 +614,18 @@ class Cleaner {
       }
     }
 
+    if (options_.images != HtmlImages::None && options_.imageList) {
+      if (name == "img") {
+        keepImage(tag);
+        return;  // void: nothing to push
+      }
+      // Picture frames (infobox image cells, figures, thumbnails) stay while
+      // pictures are wanted, so their image and caption come through.
+      if (wantImages() && !styleHidden(tag.attr("style")) && isPictureFrame(name, tag.attr("class"))) {
+        action = Action::Unwrap;
+      }
+    }
+
     if (name == "math") {
       // Kiwix keeps the TeX source; show it instead of a missing image.
       mathAltText(tag.attr("alttext"));
@@ -665,6 +679,11 @@ class Cleaner {
     }
     if (!isVoidTag) stack_.push_back({name, outTag});
     if (opensHeading) headingDepth_ = stack_.size();
+    // The lead ends at the first section heading.
+    if (outTag && isHeadingTag(outTag) && outTag[1] != '1') {
+      leadDone_ = true;
+      sawSection_ = true;
+    }
     flush(false);
   }
 
@@ -744,6 +763,16 @@ class Cleaner {
           strcmp(top.out, "tr") == 0)
         out_ += '\n';
     }
+    // A section's opening text: paragraphs and list items joined by a space.
+    if (top.out && (strcmp(top.out, "p") == 0 || strcmp(top.out, "li") == 0) && options_.headings &&
+        !options_.headings->empty() && !options_.headings->back().summary.empty()) {
+      options_.headings->back().summary += ' ';
+    }
+    // Paragraphs of the lead are joined by a space; one long enough is the lead.
+    if (top.out && strcmp(top.out, "p") == 0 && options_.lead && !leadDone_ && !options_.lead->empty()) {
+      *options_.lead += ' ';
+      if (options_.lead->size() >= 280) leadDone_ = true;
+    }
     stack_.pop_back();
     if (dropDepth_ > stack_.size()) dropDepth_ = 0;
     if (headingDepth_ > stack_.size()) {
@@ -759,8 +788,112 @@ class Cleaner {
       std::string& h = options_.headings->back().text;
       if (h.size() < 200) appendText(h, t, false);
     }
+    if (options_.headings && !options_.headings->empty() && headingDepth_ == 0) {
+      std::string& summary = options_.headings->back().summary;
+      if (summary.size() < kSummaryCollect && inSectionProse()) appendText(summary, t, false);
+    }
+    if (options_.lead && !leadDone_ && inLeadParagraph()) {
+      std::string& lead = *options_.lead;
+      appendText(lead, t, false);
+      if (lead.size() >= options_.leadLimit) leadDone_ = true;
+    }
     appendText(out_, t);
     flush(false);
+  }
+
+  bool wantImages() const {
+    return options_.images == HtmlImages::All ||
+           (options_.images == HtmlImages::Lead && !leadImageTaken_ && !sawSection_);
+  }
+
+  static bool isPictureFrame(const std::string& name, std::string_view cls) {
+    if (name == "figure") return true;
+    size_t i = 0;
+    while (i < cls.size()) {
+      while (i < cls.size() && isSpace(cls[i])) i++;
+      size_t j = i;
+      while (j < cls.size() && !isSpace(cls[j])) j++;
+      const std::string_view t = cls.substr(i, j - i);
+      if (t == "infobox-image" || t == "thumb" || t == "tmulti" || t == "thumbinner") return true;
+      i = j;
+    }
+    return false;
+  }
+
+  // The picture format an <img src> names, by its extension: WebP (Kiwix's
+  // Wikipedia), JPEG or PNG (other collections, e.g. Wikivoyage). Anything
+  // else (SVG, GIF) is not one the reader can show.
+  static ImageFormat imageFormat(std::string_view src) {
+    const size_t cut = src.find_first_of("?#");
+    if (cut != std::string_view::npos) src = src.substr(0, cut);
+    const size_t dot = src.rfind('.');
+    if (dot == std::string_view::npos) return ImageFormat::Unknown;
+    std::string ext(src.substr(dot + 1));
+    for (char& c : ext) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    if (ext == "webp") return ImageFormat::WebP;
+    if (ext == "png") return ImageFormat::Png;
+    if (ext == "jpg" || ext == "jpeg") return ImageFormat::Jpeg;
+    return ImageFormat::Unknown;
+  }
+
+  // An <img> while pictures are wanted: a WebP, JPEG or PNG of a useful size
+  // becomes <img src="/pl-img/N.png" width height> (N.jpg for a JPEG, which
+  // the reader shows as it is); anything else is dropped.
+  void keepImage(const Tag& tag) {
+    if (!wantImages() || classDropped(tag.attr("class"))) return;
+    const std::string_view src = tag.attr("src");
+    int w = atoi(std::string(tag.attr("width")).c_str());
+    int h = atoi(std::string(tag.attr("height")).c_str());
+    if (w <= 0 || h <= 0) {
+      // No size on the tag: the original's, which has the same shape.
+      w = atoi(std::string(tag.attr("data-file-width")).c_str());
+      h = atoi(std::string(tag.attr("data-file-height")).c_str());
+    }
+    const ImageFormat format = imageFormat(src);
+    if (format == ImageFormat::Unknown || w < 60 || h < 40) return;
+    const size_t n = options_.imageList->size();
+    options_.imageList->push_back({std::string(src), w, h, format});
+    if (options_.images == HtmlImages::Lead) leadImageTaken_ = true;
+    out_ += "<img src=\"";
+    out_ += kArticleImagePrefix;
+    out_ += std::to_string(n);
+    out_ += format == ImageFormat::Jpeg ? ".jpg" : ".png";
+    out_ += "\" width=\"" + std::to_string(w) + "\" height=\"" + std::to_string(h) + "\"";
+    if (tag.hasAttr("alt")) {
+      out_ += " alt=\"";
+      appendText(out_, tag.attr("alt"));
+      out_ += '"';
+    }
+    out_ += "/>";
+    stats_.elementsKept++;
+    flush(false);
+  }
+
+  // Text of a <p> or <li> outside tables and headings: what a section opens
+  // with, for its line in the contents.
+  bool inSectionProse() const {
+    bool prose = false;
+    for (const Open& o : stack_) {
+      if (!o.out) continue;
+      if (strcmp(o.out, "p") == 0 || strcmp(o.out, "li") == 0) prose = true;
+      if (strcmp(o.out, "td") == 0 || strcmp(o.out, "th") == 0 || strcmp(o.out, "table") == 0 || isHeadingTag(o.out))
+        return false;
+    }
+    return prose;
+  }
+  static constexpr size_t kSummaryCollect = 400;
+
+  // Text of a <p> that isn't inside a table, list or heading: body prose.
+  bool inLeadParagraph() const {
+    bool para = false;
+    for (const Open& o : stack_) {
+      if (!o.out) continue;
+      if (strcmp(o.out, "p") == 0) para = true;
+      if (strcmp(o.out, "td") == 0 || strcmp(o.out, "th") == 0 || strcmp(o.out, "li") == 0 ||
+          strcmp(o.out, "table") == 0 || isHeadingTag(o.out) || strcmp(o.out, "blockquote") == 0)
+        return false;
+    }
+    return para;
   }
 
   void flush(bool force) {
@@ -779,6 +912,9 @@ class Cleaner {
   std::string out_;
   std::vector<Open> stack_;
   size_t dropDepth_ = 0;
+  bool leadDone_ = false;
+  bool sawSection_ = false;
+  bool leadImageTaken_ = false;
   size_t headingDepth_ = 0;  // stack size at which the open heading began; 0 = none
 
   static void collapseSpaces(std::string& s) {
@@ -850,10 +986,68 @@ uint32_t decodeHtmlEntity(std::string_view name) {
   return 0;
 }
 
+namespace {
+// Whitespace runs -> one space, trimmed; then at most `limit` bytes, cut at a
+// word (or a UTF-8 boundary) with "…".
+void tidyLead(std::string& s, size_t limit) {
+  std::string out;
+  out.reserve(s.size());
+  bool space = false;
+  for (const char c : s) {
+    if (c == ' ' || c == '\n' || c == '\t' || c == '\r') {
+      space = !out.empty();
+      continue;
+    }
+    if (space) out += ' ';
+    space = false;
+    out += c;
+  }
+  if (out.size() > limit) {
+    size_t cut = out.rfind(' ', limit);
+    if (cut == std::string::npos || cut < limit / 2) {
+      cut = limit;
+      while (cut > 0 && (static_cast<unsigned char>(out[cut]) & 0xC0) == 0x80) cut--;
+    }
+    out.resize(cut);
+    while (!out.empty() && (out.back() == ',' || out.back() == ';' || out.back() == ':')) out.pop_back();
+    out += "\xE2\x80\xA6";
+  }
+  s = std::move(out);
+}
+}  // namespace
+
+std::string firstSentences(std::string_view text, size_t maxSentences, size_t maxBytes) {
+  size_t end = 0;
+  size_t found = 0;
+  for (size_t i = 0; i + 2 < text.size() && found < maxSentences; i++) {
+    const char c = text[i];
+    if ((c == '.' || c == '!' || c == '?') && text[i + 1] == ' ' &&
+        (std::isupper(static_cast<unsigned char>(text[i + 2])) || static_cast<unsigned char>(text[i + 2]) >= 0x80)) {
+      // "U.S. " and "c. 1500": a one-letter word before the stop is an abbreviation.
+      const bool initial = i < 2 || text[i - 2] == ' ' || text[i - 2] == '.';
+      if (initial) continue;
+      end = i + 1;
+      found++;
+    }
+  }
+  std::string out(found >= maxSentences && end > 0 ? text.substr(0, end) : text);
+  tidyLead(out, maxBytes);
+  return out;
+}
+
 bool cleanArticleHtml(std::string_view html, const HtmlCleanOptions& options, HtmlSink& sink, HtmlCleanStats* stats) {
   HtmlCleanStats local;
   Cleaner cleaner(options, sink, stats ? *stats : local);
-  return cleaner.run(html);
+  const bool ok = cleaner.run(html);
+  if (options.lead) tidyLead(*options.lead, options.leadLimit);
+  if (options.headings) {
+    for (HtmlHeading& h : *options.headings) {
+      if (h.summary.empty()) continue;
+      tidyLead(h.summary, 400);
+      h.summary = firstSentences(h.summary, 1, 160);
+    }
+  }
+  return ok;
 }
 
 }  // namespace zim

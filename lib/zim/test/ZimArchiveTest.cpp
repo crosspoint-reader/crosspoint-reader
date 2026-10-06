@@ -471,3 +471,51 @@ TEST_P(BothSchemes, CorruptFilesFailCleanly) {
     EXPECT_TRUE(sawError) << "corruption went unnoticed";
   }
 }
+
+// readView hands out the decoded cluster without copying it; its bytes must
+// equal read()'s for every article.
+TEST(Zim, ReadViewMatchesRead) {
+  zim::Archive a;
+  ASSERT_EQ(openFile(a, dataPath("nons", "wikipedia_en_climate_change_mini_2024-06.zim")), zim::Error::None);
+  int checked = 0;
+  int zeroCopy = 0;
+  for (uint32_t i = 0; i < a.entryCount(); i++) {
+    zim::Entry e;
+    ASSERT_EQ(a.entryAt(i, e), zim::Error::None);
+    if (!e.isContent()) continue;
+    std::string copy;
+    ASSERT_EQ(a.read(e, copy), zim::Error::None);
+    std::string storage;
+    std::string_view view;
+    ASSERT_EQ(a.readView(e, storage, view), zim::Error::None);
+    EXPECT_EQ(view, copy) << e.path;
+    if (storage.empty() && !view.empty()) zeroCopy++;
+    checked++;
+  }
+  EXPECT_GT(checked, 10);
+  EXPECT_GT(zeroCopy, 0) << "compressed clusters should be read without a copy";
+}
+
+// Regression (device, 2026-10-03): opening "Giant panda" aborted the
+// firmware. Built without exceptions, a copy that does not fit must come back
+// as NoMemory instead.
+TEST(Zim, CopyThatDoesNotFitIsNoMemory) {
+  zim::Options o;
+  o.allocator = &kBudget;
+  zim::Archive a;
+  ASSERT_EQ(openFile(a, dataPath("nons", "wikipedia_en_climate_change_mini_2024-06.zim"), o), zim::Error::None);
+  zim::Entry e;
+  ASSERT_EQ(a.findByTitle('C', "Climate change", e), zim::Error::None);
+  ASSERT_EQ(a.resolve(e), zim::Error::None);
+  std::string html;
+  ASSERT_EQ(a.read(e, html), zim::Error::None);  // cluster now cached
+  const size_t articleBytes = html.size();
+  gBudget = gBudgetLive + articleBytes / 2;  // room for the cache, not for a copy
+  std::string fresh;
+  EXPECT_EQ(a.read(e, fresh), zim::Error::NoMemory);
+  std::string storage;
+  std::string_view view;
+  EXPECT_EQ(a.readView(e, storage, view), zim::Error::None) << "the view needs no copy";
+  EXPECT_EQ(view.size(), articleBytes);
+  gBudget = SIZE_MAX;
+}

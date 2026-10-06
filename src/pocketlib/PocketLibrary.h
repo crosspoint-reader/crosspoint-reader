@@ -10,12 +10,14 @@
 #pragma once
 
 // The card's library: what /library/manifest.json (written by the card
-// builder) says is there, and the one ZIM archive that is open at a time.
+// builder) says is there, and its ZIM archives.
 //
 // Opening an archive reads only its header, MIME list and the start of its
-// listings, so switching collections is cheap; the archive and its title
-// index stay open until another collection is opened, so going back and forth
-// between the shelf and an article costs nothing.
+// listings (a few KB of RAM), so archives are opened on first use and then
+// stay open: searching every collection at once needs them all. What is
+// large is the decoded-cluster cache (two ~2 MiB clusters in PSRAM); only the
+// collection being read (the "focused" one, open()) keeps it, the others' are
+// dropped when the focus moves.
 
 #include <ZimArchive.h>
 #include <ZimTitleIndex.h>
@@ -36,6 +38,8 @@ struct Collection {
   std::vector<std::string> parts;  // absolute card paths, in order
   uint64_t bytes = 0;
   std::string indexPath;  // .pltitles, may be empty
+  std::string group;      // "Medicine": shown together under one tile; may be empty
+  std::string iconPath;   // 1-bit BMP from the ZIM's own illustration; may be empty
 };
 
 // Timings of the last article opened, for the collection screen and serial log.
@@ -62,25 +66,30 @@ class Library {
   const std::vector<Collection>& collections() const { return collections_; }
   const std::string& loadError() const { return loadError_; }
 
-  // Opens (or returns the already-open) archive for collections()[i].
+  // Opens (or returns the already-open) archive for collections()[i] and
+  // makes it the focused one: the other archives drop their cluster caches.
   zim::Archive* open(size_t i, zim::Error* error = nullptr);
-  // The open collection's title index, or null if it has none / it is stale.
-  zim::TitleIndex* titleIndex() { return index_ && index_->isOpen() ? index_.get() : nullptr; }
-  const Collection* openCollection() const {
-    return openIndex_ < collections_.size() ? &collections_[openIndex_] : nullptr;
-  }
+  // collections()[i]'s title index, or null if it has none / it is stale /
+  // the archive is not open.
+  zim::TitleIndex* titleIndex(size_t i);
   void close();
 
-  // Titles in the open collection starting with `query`, best first, at most
-  // `max`, redirects to the same article collapsed. Uses the card's .pltitles
-  // index (case- and accent-insensitive) when there is one, else the ZIM's
-  // own byte-ordered title list (case-sensitive). Returns false if nothing
-  // is open.
+  // Titles starting with `query`, best first, at most `max`, redirects to
+  // the same article collapsed (zim::searchTitles / zim::searchMany). Uses
+  // the card's .pltitles index (case- and accent-insensitive) where there is
+  // one, else the ZIM's own byte-ordered title list (case-sensitive). With
+  // several collections: exact matches first, then the collections take
+  // turns. Collections that cannot be opened are left out.
   struct Hit {
+    size_t collection = 0;
     uint32_t entry = 0;  // directory index (may be a redirect; the reader resolves it)
     std::string title;
+    bool exact = false;
   };
-  bool search(std::string_view query, size_t max, std::vector<Hit>& out);
+  bool search(const std::vector<size_t>& scope, std::string_view query, size_t max, std::vector<Hit>& out);
+  bool search(size_t collection, std::string_view query, size_t max, std::vector<Hit>& out) {
+    return search(std::vector<size_t>{collection}, query, max, out);
+  }
 
   OpenTimings lastOpen;
   uint32_t lastSearchMs = 0;
@@ -90,12 +99,20 @@ class Library {
   bool loadManifest();
   void scanFolders();
 
+  struct Slot {
+    std::unique_ptr<zim::Archive> archive;
+    std::unique_ptr<zim::TitleIndex> index;
+    std::unique_ptr<zim::TitleIndex::Cursor> cursor;  // one 4 KB leaf page, reused per keystroke
+    bool failed = false;                              // don't retry a broken collection every keystroke
+  };
+  // Opens collections()[i] without changing the focus.
+  zim::Archive* ensureOpen(size_t i, zim::Error* error);
+  void dropOtherCaches(size_t keep);  // keep = SIZE_MAX drops every cache
+
   std::vector<Collection> collections_;
   std::string loadError_;
-  std::unique_ptr<zim::Archive> archive_;
-  std::unique_ptr<zim::TitleIndex> index_;
-  std::unique_ptr<zim::TitleIndex::Cursor> cursor_;  // one 4 KB leaf page, reused per keystroke
-  size_t openIndex_ = SIZE_MAX;
+  std::vector<Slot> slots_;  // parallel to collections_
+  size_t focus_ = SIZE_MAX;
 };
 
 // "52.7 GB", "272 MB"

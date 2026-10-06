@@ -777,6 +777,13 @@ void loop() {
     }
   }
 
+#ifdef POCKET_LIBRARY
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SEARCH &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    activityManager.openPocketSearch();
+  }
+#endif
+
   // Refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
   // Not while reading: there a repaint is a full page re-render (visible

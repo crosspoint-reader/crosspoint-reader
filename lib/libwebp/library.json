@@ -1,0 +1,15 @@
+{
+  "name": "libwebp",
+  "version": "1.4.0",
+  "description": "WebP decoder only (Google libwebp 1.4.0, BSD-3-Clause; see COPYING and PATENTS). Encoder, mux, demux and SIMD variants removed.",
+  "license": "BSD-3-Clause",
+  "build": {
+    "includeDir": ".",
+    "srcDir": "src",
+    "flags": [
+      "-O2",
+      "-DHAVE_CONFIG_H",
+      "-Wno-unused-function"
+    ]
+  }
+}

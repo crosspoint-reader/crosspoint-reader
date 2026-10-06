@@ -55,10 +55,33 @@ struct HtmlHeading {
   uint8_t level = 2;                 // 1..6
   std::string text;                  // plain UTF-8, whitespace collapsed
   std::vector<std::string> aliases;  // the page's own ids on or inside it ("History"), for #fragment links
+  // The section's opening sentence (its first paragraph or list item before
+  // the next heading), for the contents list; empty when it opens straight
+  // into a subsection or a table.
+  std::string summary;
 };
 
 // "pl-h3"
 std::string headingAnchor(size_t index);
+
+// An image the cleaner kept: written as <img src="/pl-img/<n>.png"
+// width=.. height=..> (<n>.jpg for a JPEG), where n is its position in
+// HtmlCleanOptions::imageList. The reader makes that file from `src` (the
+// article's own reference to the picture in the archive) when the image's
+// page is first drawn: a WebP is converted, a JPEG or PNG copied.
+enum class ImageFormat : uint8_t { Unknown, WebP, Png, Jpeg };
+struct HtmlImage {
+  std::string src;
+  int width = 0;
+  int height = 0;
+  ImageFormat format = ImageFormat::Unknown;  // from the src's extension
+};
+enum class HtmlImages : uint8_t {
+  None,  // drop every image (and its frame and caption)
+  Lead,  // the first picture before the first section (an infobox photo)
+  All,
+};
+constexpr const char* kArticleImagePrefix = "/pl-img/";
 
 struct HtmlCleanOptions {
   // Written into <title>; the article's own <h1> stays in the body.
@@ -69,7 +92,20 @@ struct HtmlCleanOptions {
   // When set, headings are collected here and get the "pl-h<N>" ids above
   // (instead of the page's own ids).
   std::vector<HtmlHeading>* headings = nullptr;
+  // When set, the article's opening paragraphs as plain text (before its
+  // first section heading, outside tables and lists), at most leadLimit
+  // bytes, cut at a word: for outlines and link previews.
+  std::string* lead = nullptr;
+  size_t leadLimit = 600;
+  // Images to keep, collected in imageList (required unless None). Only
+  // WebP pictures at least 60x40: icons, flags and formula images stay out.
+  HtmlImages images = HtmlImages::None;
+  std::vector<HtmlImage>* imageList = nullptr;
 };
+
+// Up to `maxSentences` sentences of `text` (cut at ". ", "! " or "? "
+// followed by a capital), at most `maxBytes`, ending with "…" if cut short.
+std::string firstSentences(std::string_view text, size_t maxSentences, size_t maxBytes);
 
 struct HtmlCleanStats {
   size_t inputBytes = 0;

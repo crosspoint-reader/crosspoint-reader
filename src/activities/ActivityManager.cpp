@@ -28,6 +28,9 @@
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#ifdef POCKET_LIBRARY
+#include "pocketlib/SearchActivity.h"
+#endif
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -158,6 +161,9 @@ void ActivityManager::loop() {
       } else {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
+#ifdef POCKET_LIBRARY
+        cleanNextScreen();
+#endif
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
         // Handle result if necessary
         if (currentActivity->resultHandler) {
@@ -201,6 +207,9 @@ void ActivityManager::loop() {
       }
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
+#ifdef POCKET_LIBRARY
+      cleanNextScreen();
+#endif
 
       lock.unlock();  // onEnter may acquire its own lock
       currentActivity->onEnter();
@@ -218,6 +227,41 @@ void ActivityManager::loop() {
     }
   }
 }
+
+#ifdef POCKET_LIBRARY
+// Screens redraw with the panel's fast waveform, which leaves a faint trace of
+// the screen before; the dithered gray selection bar makes it plain. A half
+// refresh clears it but flashes the panel, so it is spent sparingly: on every
+// fifth screen change, before the traces build up (not on every return to
+// Home: the owner found that flash on each visit too much). Readers keep their own refresh
+// choices, and the control center opens over the screen as is.
+void ActivityManager::cleanNextScreen() {
+  // "Article" (Pocket Library) opens on a near-blank "Opening" screen that
+  // needs no cleanup, and a half refresh there would delay the article. The
+  // keyboard (and the search screen under it) is mostly white and redrawn
+  // on every key: a clean refresh there costs more than it saves.
+  if (!currentActivity || currentActivity->isReaderActivity() || currentActivity->name == "FrontlightPanel" ||
+      currentActivity->name == "Article" || currentActivity->name == "KeyboardEntry" ||
+      currentActivity->name == "PocketSearch")
+    return;
+  constexpr uint8_t kScreensPerClean = 5;
+  if (++screensSinceClean_ < kScreensPerClean) return;
+  screensSinceClean_ = 0;
+  renderer.promoteNextRefreshAtLeast(HalDisplay::HALF_REFRESH);
+}
+#endif
+
+#ifdef POCKET_LIBRARY
+void ActivityManager::openPocketSearch() {
+  if (!currentActivity || pendingActivity || pendingAction != PendingAction::None) return;
+  const auto& name = currentActivity->name;
+  if (name == "PocketSearch" || name == "KeyboardEntry" || currentActivity->requiresExclusiveStorageLoop()) return;
+  for (const auto& a : stackActivities) {
+    if (a->name == "PocketSearch") return;  // one search at a time
+  }
+  if (auto search = makeUniqueNoThrow<SearchActivity>(renderer, mappedInput)) pushActivity(std::move(search));
+}
+#endif
 
 void ActivityManager::exitActivity(const RenderLock& lock) {
   // Note: lock must be held by the caller

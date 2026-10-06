@@ -1,5 +1,12 @@
 # CrossPoint Reader
 
+> **This is Pocket Library**, a fork of CrossPoint that puts all of English Wikipedia (with pictures),
+> its sister projects and a medical encyclopedia on an Xteink X4 Pro, offline and searchable by touch.
+>
+> <img src="docs/images/pocket-library.png" width="520" alt="Pocket Library on two Xteink X4 Pro readers: the Library shelf and a Wikipedia article">
+>
+> **[How to make your own →](https://noah-pi.github.io/pocket-library/)** ([the long version](docs/pocket-library/README.md)). The rest of this page is CrossPoint's own README.
+
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
 CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.

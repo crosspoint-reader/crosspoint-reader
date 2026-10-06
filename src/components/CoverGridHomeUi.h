@@ -60,5 +60,10 @@ class CoverGridHomeUi final : public UiAppHost {
   freeink::ui::CoverGridProps grid;
   freeink::ui::Rect gridBounds{};
   freeink::ui::TabBarProps tabs;
-  std::array<freeink::ui::TabItem, 5> tabItems;
+#ifdef POCKET_LIBRARY
+  static constexpr int TAB_COUNT = 6;  // + Pocket Library search
+#else
+  static constexpr int TAB_COUNT = 5;
+#endif
+  std::array<freeink::ui::TabItem, TAB_COUNT> tabItems;
 };

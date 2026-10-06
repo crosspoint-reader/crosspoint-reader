@@ -76,13 +76,18 @@ jobs:
           uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
 
       - name: Build
-        run: pio run -e "${{ matrix.env }}" -j1
+        run: |
+          # Pocket Library builds name their commit on Settings > About.
+          export POCKETLIB_BUILD="${GITHUB_SHA::7}"
+          pio run -e "${{ matrix.env }}" -j1
 
       - name: Prepare files
         run: |
           set -euo pipefail
           mkdir out
           cp ".pio/build/${{ matrix.env }}/firmware.bin" "out/${{ matrix.name }}.bin"
+          # Symbols for decoding crash_report.txt addresses (artifact only, not the release).
+          cp ".pio/build/${{ matrix.env }}/firmware.elf" "out/${{ matrix.name }}.elf"
           (cd out && sha256sum "${{ matrix.name }}.bin" > "${{ matrix.name }}.bin.sha256")
           ls -l out
           cat out/*.sha256
@@ -106,8 +111,11 @@ jobs:
           cmake --build build/zim -j --target zimcat zimindex
           lipo -info build/zim/zimcat build/zim/zimindex
           mkdir out && cp build/zim/zimcat build/zim/zimindex out/
-          cp tools/cardbuilder/cardbuilder.py tools/cardbuilder/library.toml out/
-          (cd out && for f in zimcat zimindex cardbuilder.py library.toml; do shasum -a 256 "$f" > "$f.sha256"; done)
+          cp tools/cardbuilder/cardbuilder.py tools/cardbuilder/library.toml tools/books/booklist.py out/
+          cp tools/webpack/webpack.py tools/webpack/zimwrite.py tools/webpack/recipes/pets.toml out/
+          cp tools/flash/flash.sh tools/cardbuilder/get-tools.sh out/
+          (cd out && for f in zimcat zimindex cardbuilder.py library.toml booklist.py webpack.py zimwrite.py pets.toml \
+            flash.sh get-tools.sh; do shasum -a 256 "$f" > "$f.sha256"; done)
       - uses: actions/upload-artifact@v6
         with:
           name: zimcat-macos
@@ -146,9 +154,14 @@ jobs:
           gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
             --title "${what} ${short}" \
             --notes "Latest build of ${GITHUB_REF_NAME} (commit ${short}). X4 Pro only.
-          - pocketlib-x4pro.bin: Pocket Library firmware. Flash with crosspointreader.com, Xteink X4 Pro, Custom .bin.
+          How to make your own: https://github.com/${GITHUB_REPOSITORY}/blob/pocket-library/docs/pocket-library/README.md
+          - flash.sh: installs the firmware from a Mac's Terminal (bash flash.sh), with a full backup first.
+          - get-tools.sh: fetches the card-building tools below into ~/PocketLib/cardbuilder.
+          - pocketlib-x4pro.bin: Pocket Library firmware. Or flash it with crosspointreader.com, Xteink X4 Pro, Custom .bin.
           - stock-1.6.5-x4pro.bin: unmodified CrossPoint 1.6.5, the known-good fallback.
           - zimcat: command-line ZIM reader for macOS (Intel and Apple silicon).
           - zimindex: builds the search index (.pltitles) the device uses, for macOS.
           - cardbuilder.py + library.toml: builds the microSD card (python3 cardbuilder.py plan).
+          - booklist.py: lists, prunes and tidies a folder of ebooks before they go on the card.
+          - webpack.py + zimwrite.py + pets.toml: optional, makes the Pet First Aid pack (personal use).
           Each file has a .sha256 alongside it."

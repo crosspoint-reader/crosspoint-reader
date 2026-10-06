@@ -171,6 +171,12 @@ class Archive {
   // Copies the entry's bytes into `out`. The entry must be content (resolve
   // redirects first).
   Error read(const Entry& entry, std::string& out);
+  // The entry's bytes without copying them when its cluster is decoded in
+  // the cache: `out` then points into the cache and stays valid until the
+  // next read from this archive. Otherwise the bytes are read into
+  // `storage` and `out` points there. NoMemory (never an abort) when there
+  // is no room for the copy.
+  Error readView(const Entry& entry, std::string& storage, std::string_view& out);
   Error readBlob(uint32_t cluster, uint32_t blob, std::string& out);
   // Part of a blob; used for large listings without loading them whole.
   Error readBlobRange(uint32_t cluster, uint32_t blob, uint64_t offset, size_t len, void* dst);

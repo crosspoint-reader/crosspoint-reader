@@ -29,6 +29,15 @@
 //    36  u32     levels above the leaves (0: the root is the only leaf)
 //    40  u8[16]  UUID of the ZIM it indexes
 //    56  u32     entry count of that ZIM
+//    60  u32     popular tree: record count (0: none; older files)
+//    64  u32     popular tree: first leaf page
+//    68  u32     popular tree: leaf page count
+//    72  u32     popular tree: root page
+//    76  u32     popular tree: levels above the leaves
+//   The popular tree is a second B-tree in the same file, of the same pages,
+//   holding only the records of the most popular titles (by score), so a short
+//   prefix ("pari") finds Paris before the thousands of rarer titles that
+//   share it. Readers that predate it ignore it.
 //   leaf page   u8 type (1), u8 0, u16 count, then per record:
 //               u8 shared prefix with the previous key in this page,
 //               u8 suffix length, suffix bytes, u32 ZIM entry index
@@ -46,7 +55,11 @@
 
 namespace zim {
 
-constexpr uint32_t kTitleIndexVersion = 1;
+// 2 adds a popularity byte to every record (see collectTitles); 3 adds a
+// flags byte and "word" records (a title from a later word on). 1 and 2 are
+// still read: scores 0 and no word records respectively.
+constexpr uint32_t kTitleIndexVersion = 3;
+constexpr uint32_t kTitleIndexMinVersion = 1;
 constexpr uint32_t kTitleIndexPageSize = 4096;
 constexpr char kTitleIndexMagic[8] = {'P', 'L', 'T', 'I', 'T', 'L', 'E', '\0'};
 
@@ -61,11 +74,21 @@ struct TitleIndexHeader {
   uint32_t levels = 0;
   uint8_t zimUuid[16] = {};
   uint32_t zimEntryCount = 0;
+  // The popular tree (zero when the file has none).
+  uint32_t topRecordCount = 0;
+  uint32_t topFirstLeaf = 0;
+  uint32_t topLeafCount = 0;
+  uint32_t topRoot = 0;
+  uint32_t topLevels = 0;
 };
 
 struct TitleRecord {
   std::string key;  // folded title
   uint32_t entry = 0;
+  uint8_t score = 0;  // popularity, 0..255 (version 2); 0 in version 1 files
+  // Version 3: the record is the title from one of its later words on
+  // ("panda" for "Giant panda"), so a search finds words inside titles.
+  bool word = false;
 };
 
 class TitleIndex {
@@ -77,6 +100,7 @@ class TitleIndex {
 
    private:
     friend class TitleIndex;
+    bool top_ = false;   // which tree it walks
     uint32_t page_ = 0;  // 0 = past the end
     uint16_t remaining_ = 0;
     size_t offset_ = 0;
@@ -91,8 +115,10 @@ class TitleIndex {
   // True when this index was built for `archive` (same UUID and entry count).
   bool matches(const Archive& archive) const;
 
-  // Places `cursor` on the first record whose key is >= foldedKey.
-  Error seek(std::string_view foldedKey, Cursor& cursor);
+  // Places `cursor` on the first record whose key is >= foldedKey, in the
+  // whole index or (top) in its popular tree.
+  Error seek(std::string_view foldedKey, Cursor& cursor, bool top = false);
+  bool hasPopularTree() const { return header_.topRecordCount > 0; }
   // Reads the record under the cursor and advances. NotFound at the end.
   Error next(Cursor& cursor, TitleRecord& out);
 

@@ -68,6 +68,21 @@ Release tags are what we rebase onto.
 | `src/activities/util/KeyboardEntryActivity.{h,cpp}` | `#ifdef POCKET_LIBRARY`: optional live-suggestion rows between the text field and the keys, refilled after each edit; a tapped row (or OK) is reported in the result | search as you type (M4) |
 | `src/activities/ActivityResult.h` | `#ifdef POCKET_LIBRARY`: `KeyboardResult::picked` | which suggestion was chosen |
 | `freeink-sdk` (submodule, patched at build time) | `SdmmcBlockDevice.{h,cpp}`: 40 MHz with 20 MHz fallback, 32-sector transfers, all behind `POCKET_LIBRARY_SD_FAST` | SD speed |
+| `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp` | `#ifdef POCKET_LIBRARY`: with no Epub (an article), an `<img>`'s size comes from its width/height attributes and no file is extracted at layout time | article images (lead image, "Images") |
+| `lib/Epub/Epub/blocks/ImageBlock.h` | `#ifdef POCKET_LIBRARY`: `getExtractor()`, so an article opened over a book puts the book's image extractor back | article images |
+| `src/activities/util/KeyboardEntryActivity.{h,cpp}` (extended) | `#ifdef POCKET_LIBRARY`: live rows carry a source tag and can refill the field (past searches); scope chips above the rows, the last opening a list | search everything (M6) |
+| `src/activities/home/HomeActivity.{h,cpp}`, `src/activities/ActivityManager.h` (`HomeMenuItem::SEARCH`), `src/components/CoverGridHomeUi.{h,cpp}` | `#ifdef POCKET_LIBRARY`: a sixth tab (magnifier) on the Cover Grid home opens search; the list homes are unchanged; its icon is drawn upright (`pocketlib/icons/UprightIcon.h`) | search entry point (owner's choice) |
+| `src/activities/boot_sleep/SleepActivity.cpp` | `#ifdef POCKET_LIBRARY`: the Dark and Light sleep screens show DON'T PANIC (a 1-bit picture, `pocketlib/images/DontPanic.h`, lettered in Fredoka, OFL) with "Sleeping" small under it, in place of the CrossPoint logo | owner's request, after the Guide's cover |
+| `src/activities/settings/SettingsActivity.cpp` | `#ifdef POCKET_LIBRARY`: "Check for updates" hidden | it downloads upstream CrossPoint into the other app slot and boots it, replacing Pocket Library |
+| `src/activities/util/KeyboardEntryActivity.{h,cpp}` (live rows, already fenced) | live search waits for a 300 ms pause in typing | one search per word instead of per letter |
+| `src/activities/home/HomeActivity.cpp` | `#ifdef POCKET_LIBRARY`: the Cover Grid loads the recents' covers on its first pass | two panel redraws per Home visit instead of three |
+| `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
+| `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: a half refresh on every return to Home and on every fourth other screen change (push, pop, replace), never weakening a deeper one already promoted; readers and the control center are left alone. (First version did it on every change: it cleared the ghosting but flashed the panel on each tap; owner report) | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
+| `lib/LibraryIndex/LibraryBuilder.cpp`, `lib/LibraryIndex/LibraryFormat.h`, `src/activities/library/LibraryListActivity.cpp`, `test/CMakeLists.txt` | `#ifdef POCKET_LIBRARY`: the title sort and the letter groups skip a leading "The", "A" or "An" (`TitleSortKey.h`, ours); `CLIX_FOLD_VERSION` 5 so existing indexes rebuild once; one `add_subdirectory(pocketlib_title_sort)` | "The" shouldn't decide where a book files (owner) |
+| `lib/Epub/Epub/converters/{Png,Jpeg}ToFramebufferConverter.cpp` | `#ifdef POCKET_LIBRARY`: the decoder's free-heap gate reads the default heap (`HalMemory::getDefaultHeap()`), not `ESP.getFreeHeap()` (internal RAM only) | with PSRAM the decoder is allocated there; the internal-RAM gate refused pictures (2026-10-05) |
+| `lib/Epub/Epub/converters/ImageDecoderFactory.{h,cpp}`, `lib/Epub/Epub/blocks/ImageBlock.cpp` | `#ifdef POCKET_LIBRARY`: `getDecoderForFile()` picks JPEG or PNG by the file's first bytes; ImageBlock uses it | Wikipedia 2026 stores WebP under .jpg names; the reader converts them to PNG under that name (2026-10-05) |
+| `README.md` | three-line note at the top pointing to `docs/pocket-library/README.md` | the repository's front page leads to the guide |
+| `docs/index.html`, `docs/.nojekyll` | the one-page site, served by GitHub Pages from `pocket-library` /docs; `.nojekyll` so upstream's Markdown docs are served as files, not built | a short address to share |
 
 ## 2026-10-01 — Licensing layout
 
@@ -431,6 +446,69 @@ branches. A review branch publishes to a separate **preview** pre-release, so
 a change can be flashed and tried before it is merged without replacing the
 known-good **dev** build of `pocket-library`.
 
+## 2026-10-03 — Milestone 6: search everything, Library grid
+
+- **Library grid** (owner's design): two across, Recent · eBooks /
+  Wikipedia · Maps / Medical · More. Medical and More open the same grid for
+  their members. Groups come from the manifest's `group` field when the card
+  builder writes one, else from the collection's name (`tileGroupFor`), so the
+  grid works on the current card. Maps is a placeholder tile. The selected
+  tile is solid black, never dithered (see the ghosting fix), and appears only
+  once the buttons move it (touch users see no stray selection).
+- **Icons**: stock Lucide SVGs from the SDK, made with the SDK's own
+  `gen_icons.py` (`src/pocketlib/icons/libraryIcons.manifest`). Wikimedia's
+  logos are trademarks and not used.
+- **All collections stay open** once used (`Library::ensureOpen`): an archive
+  costs a few KB plus open files; only the focused one keeps decoded clusters
+  in PSRAM (`Library::open` drops the others' caches).
+- **Merging across collections** (`zim::searchMany`): exact matches from every
+  source first, then the sources take turns. Popularity scores count
+  redirects inside one archive, so they don't compare across archives; taking
+  turns keeps a small collection's best match beside Wikipedia's.
+- **An exact title in several collections** is one row ("4 sources"); tapping
+  asks which to open.
+- **eBooks** are searched through CrossPoint's own book index
+  (`/.crosspoint/library.idx`, every EPUB on the card, title and author), read
+  once per search screen. "eBooks" means the owner's EPUBs only, whatever
+  their source; Wikisource and Wikibooks stay under More.
+- **Scope follows where search was opened** (a collection, a group, Home).
+- **Recent searches** (`/.pocketlib/searches.txt`, six) and recent articles
+  fill the empty search field.
+
+## 2026-10-03 — Article images: the lead picture, and every picture on request
+
+- Owner's choice: options 1 and 2 (the infobox/lead picture always; all
+  pictures when asked, from the article toolbar's **Images**).
+- Kiwix stores Wikipedia's pictures as **WebP** (checked: the 2024 sample has
+  100, about 23 KB each). The reader's image pipeline reads JPEG and PNG, so
+  the decoder of Google's **libwebp 1.4.0** (BSD-3-Clause + patent grant) is
+  vendored in `lib/libwebp` (decoder only, no SIMD; +96 KB of flash, app
+  slot 89.7%).
+- Lazy, using CrossPoint's own mechanism: the cleaner writes each kept
+  picture as `<img src="/pl-img/N.png" width height>`, the layout engine
+  sizes it from those attributes (fenced patch), and ImageBlock's extractor
+  hook calls `ArticleActivity::extractImage` when the picture's page is first
+  drawn: one read of the WebP, decoded already scaled (libwebp's scaler, so a
+  big picture never sits in memory full size), composited on white, turned
+  grey, written as an uncompressed 8-bit greyscale PNG in
+  `/.pocketlib/img/` (emptied for each article). Opening an article costs
+  nothing more; a picture costs its decode only on the page that shows it.
+- Kept: WebP pictures at least 60×40 (no flags, icons or formula images), in
+  infobox image cells, figures and thumbnails, with their captions. Lead
+  mode keeps the first such picture before the first section heading.
+- Needs a "maxi" ZIM: the card's "nopic" files have no pictures, so this
+  build changes nothing on them.
+
+## 2026-10-03 — Search index v3: words inside titles; typo tolerance on the device
+
+- Word records over a full-text index: a few hundred MB more on the card
+  (estimate from the sample's 2.1x) instead of a separate index of article
+  text, and the device's search code is unchanged but for one flag. Only
+  articles (not redirects) get word records, at most six each.
+- Typos are handled on the device, only when nothing matches, so a correct
+  query costs nothing extra; a typo in the first three letters is found only
+  as a swap of two of them.
+
 ## Dependencies
 
 | Dependency | License | Use | Status |
@@ -441,6 +519,8 @@ known-good **dev** build of `pocket-library`.
 | zstd 1.5.7 single-file decoder | BSD-3-Clause (dual BSD/GPLv2) | ZIM clusters | in use, `lib/zim/src/third_party/zstd` |
 | xz-embedded v20240322 | 0BSD | older (pre-2020) ZIM clusters; the 2017 test files use it | in use, `lib/zim/src/third_party/xz` |
 | zim-testing-suite (openZIM) @ 2edf720 | test data, fetched at test time, not vendored | host tests | in use |
+| libwebp 1.4.0 (decoder only) | BSD-3-Clause + WebM patent grant | article images (WebP) | in use, `lib/libwebp` |
+| Lucide icons (via freeink-sdk `libs/assets/Icons/lucide`) | ISC | Library tile icons, generated into `src/pocketlib/icons/libraryIcons.h` | in use |
 | GoogleTest 1.17.0 | BSD-3-Clause | host tests (same as upstream) | in use |
 | python-libzim | GPL-3.0 | **test oracle only**, run by hand to cross-check zimcat output; not shipped, no code used | used once, 2026-10-02 |
 
@@ -541,3 +621,119 @@ To be measured in M3.
 | Open article, cluster cached | ≤ 300 ms | |
 | Page turn layout | ≤ 100 ms | |
 | Wake to usable screen | ≤ 1 s excl. refresh | |
+
+## 2026-10-03 — First Aid: instructions only, by permanent address
+
+First Aid rows name a MedlinePlus page by its path under medlineplus.gov and
+open it at its "First Aid" heading; the fallback is the Wikibooks First Aid
+manual. Encyclopedia articles (Wikipedia, MDWiki) describe a condition at
+length and bury what to do, so they stay out of First Aid (they still serve
+the Medical Encyclopedia). Lookup by path is stable across MedlinePlus
+retitlings; a title check guards against a wrong address. Stroke, drowning,
+dehydration and the recovery position have no MedlinePlus first-aid page, so
+they come from Wikibooks or are folded into other rows (recovery position is
+in "Unconscious person").
+
+## 2026-10-04 — Scope: performance first
+
+Owner: the Wiktionary tap-to-look-up is overkill (dropped); CJK waits (fonts
+download over Wi-Fi when needed); the last missing-symbol fixes come later;
+the six failed book conversions are dropped. From here the priority is
+everything working excellently: speed, battery life, fast loading, with
+optional features cut where they cost too much.
+
+## 2026-10-04 — Builds name their commit
+
+Release builds show `1.6.5-pocketlib-<commit>` on Settings → About (CI sets
+POCKETLIB_BUILD), so the owner and I can tell which build is on the device.
+
+## 2026-10-04 — Performance cuts (owner approved the table)
+
+- Link previews cut: a tapped link opens its article (Back returns). A
+  preview decoded the target's cluster and cleaned the whole target article
+  for 500 characters, then did it again when opened.
+- Pictures only on request: articles open with none; the toolbar's Images
+  shows them all. Supersedes "the lead picture always" (2026-10-03). Note the
+  card's Wikipedia is the nopic edition: it has no pictures at all.
+- Live search waits for a 300 ms pause in typing; typo tolerance (already
+  only when nothing matches) therefore runs once per pause, not per letter.
+- Section first sentences in Contents kept: their collection already stops
+  once each section has its sentence, so the cost was small.
+- Cover Grid Home kept, its redraws cut (above); the half refresh on every
+  return to Home removed (owner: the flash each visit was too much); screens
+  get a half refresh every fifth change instead of every fourth.
+- Search: the whole run of records equal to the query is read (up to 16,384)
+  so a title among thousands ending in the same word ("Paris" among "Siege
+  of Paris"…) is found and ranked first; only the run's 128 most popular
+  word matches are kept, then up to 256 titles that go on past the query.
+- Also: a failed article no longer keeps the reader awake; the reading place
+  is saved every 10 page turns (and on leaving or sleep) instead of every
+  turn; Medical lists are looked up once per session; three clusters cached
+  instead of two.
+
+## 2026-10-04 — Search part 2, pictures full screen, contents with the toolbar
+
+- Title index: a popular tree in the same .pltitles (header bytes 60–79,
+  still version 3, so older firmware reads the file and ignores it): the
+  records of the best-scored titles, at most 400,000 (zimindex), searched
+  first so a short prefix ("pari") offers Paris. Order of results: exact
+  whole titles, then the popular tree's matches, then the rest; each entry
+  once.
+- All scope: Wikipedia takes three results per round to each other
+  collection's one (SearchSource::weight).
+- The full result list ends in "More results" (80 more each time).
+- A tapped picture opens on its own screen (PictureActivity), as large as
+  fits (at most 3x), grey; any tap or button returns. The page's pixel cache
+  is at page size, so this decodes again (and the page once more on return):
+  a second or two, only when asked.
+- Contents and toolbar are one screen (owner): a tap in the middle of the
+  page, or Confirm, opens the contents with the toolbar across the top
+  (Back/Close, Search, Text size, Images/Hide images). The floating toolbar
+  over the page is gone. ChoiceListActivity::setToolbar.
+
+## 2026-10-04 — Pet First Aid from a pack made on the Mac
+
+- No pet first aid exists in the Kiwix library. The best owner-facing source
+  is the MSD Veterinary Manual's pet-owner edition (vet-written, plain
+  language); its Emergencies and Poisoning pages are copied for personal use
+  by `tools/webpack` (our own small ZIM writer in Python, no libzim) and
+  nothing of it goes in this repository. Zimit was the alternative; webpack
+  needs no account or e-mail and keeps pages at stable addresses the reader's
+  list can name.
+- cardbuilder: a collection can be `file = "pattern"`: the newest match in
+  the staging folder; optional ones are skipped until made.
+- Medical shows "Pet First Aid" (paw icon) when the "pets" collection is on
+  the card: 16 rows by page address, several opening at a heading of the
+  emergency page (a landing may name the heading's start: "Heat"), and
+  "Every pet page". The pack is not shown again as a collection.
+- Military working-dog guidelines (K9TCCC) were considered and left out:
+  written for combat medics.
+
+## 2026-10-04 — Ideas parked (owner: not now)
+
+Survival shelf (FM 21-76, Where There Is No Doctor, FEMA Are You Ready?, SAS
+if DRM-free), notes app (Bluetooth keyboard untested), emergency-card sleep
+screen, QR hand-off to a phone, Wi-Fi hotspot library, face-down sleep,
+flashlight, CPR metronome. Recorded so they can be picked up later.
+
+## 2026-10-06 — Shareable: a guide and two scripts
+
+- `docs/pocket-library/README.md`: the guide for someone starting from a new
+  X4 Pro, linked from the top of `README.md` and the release notes.
+- `tools/flash/flash.sh`: esptool in its own environment under ~/PocketLib
+  (Homebrew's Python refuses `pip install`, and `brew install esptool`
+  compiles LLVM and Rust on macOS 13); full 16 MB backup before the first
+  install; refuses unless the flash already has CrossPoint's layout (app0 at
+  0x10000, otadata at 0xe000), since a factory reader's layout differs and
+  the CrossPoint web installer is the tested way to change it; checks the
+  release checksum; writes app0 and erases otadata so the new app starts
+  whichever slot was active. Also backup, restore, stock and log (miniterm
+  with RTS/DTR low, which doesn't reset the chip). Reasons: every step the
+  owner found by hand on 2026-10-05.
+- `tools/cardbuilder/get-tools.sh`: the card tools from the release, each
+  checksum-checked, into ~/PocketLib/cardbuilder; keeps an existing
+  library.toml. Both scripts require Python 3.11+ (macOS's own is 3.9;
+  tomllib and esptool 5 need newer) and say where to get it.
+- `library.toml` staging now defaults to `~/PocketLib/downloads` (created if
+  missing; a path under /Volumes still has to exist). The owner's own copy on
+  the Mac keeps `/Volumes/SSK Drive`.

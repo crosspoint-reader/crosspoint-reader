@@ -34,20 +34,33 @@ class Page;
 // laid out; the first one is shown as soon as it exists and the rest are laid
 // out between page turns.
 //
-// Reading: tap a link to follow it (the same screen loads the new article);
-// Back returns through the articles followed, to the place left in each;
-// Confirm or a tap in the middle of the screen opens the contents. Where each
+// Reading, after the Wikipedia app: tap a link to open its article in this
+// screen; Back returns through the articles followed, to the place left in
+// each. A tap in the middle of the page (or Confirm) opens the contents, with
+// the toolbar across the top (Back, Search, Text size, Images): the
+// introduction, then each section with its first sentence and length, the one
+// being read marked. A tap on a picture shows it full screen. Articles can
+// open at their contents (a setting at its foot). The status bar names the
+// section. Where each
 // article was left is saved (ReadingHistory) and restored on the next open.
 class ArticleActivity final : public Activity {
  public:
-  ArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection, uint32_t entryIndex);
+  // `landing` (a fragment or a heading's text, "First Aid") opens the article
+  // at that section instead of where it was left; "" for the usual place.
+  ArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection, uint32_t entryIndex,
+                  std::string landing = {});
   ~ArticleActivity() override;
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
-  bool preventAutoSleep() override { return state_.load() != State::Reading || building_; }
+  // Awake while an article loads or lays out; never for a failed one (that
+  // would keep the reader awake until the battery ran out).
+  bool preventAutoSleep() override {
+    const State s = state_.load();
+    return s == State::Loading || (s == State::Reading && building_);
+  }
   bool skipLoopDelay() override { return building_; }
 
   static constexpr size_t kMaxBack = 32;
@@ -76,20 +89,34 @@ class ArticleActivity final : public Activity {
   // (render lock held by the caller). -1 when not found.
   int pageForAnchor(const std::string& anchor);
   int pageForOffset(uint32_t offset);
-  // "#History" -> "pl-h3" through the headings' aliases; "" if unknown.
+  // "#History" -> "pl-h3" through the headings' aliases, else a heading whose
+  // text matches (any case: "first aid"); "" if unknown.
   std::string anchorForFragment(const std::string& fragment) const;
   std::unique_ptr<Page> loadPage(int index);
   void showPage(int index);
   void savePlace();
   bool handleLinkTap();
+  bool handlePictureTap();
   void followLink(const char* href);
   void goBack();
-  void openContents();
+  void openContents(bool atOpen = false);
+  void openTextSize();
+  void openSearch();
+  void openLinked(uint32_t entry, const std::string& fragment);
+  // Page of each heading (-1 while not laid out yet), from the layout's
+  // anchors; refreshed as layout runs. Callers hold the render lock.
+  void refreshHeadingPages();
+  void toggleImages();
+  // ImageBlock's extractor: makes /.pocketlib/img/<n>.png from the article's
+  // n-th picture (a WebP in the archive) when its page is first drawn.
+  static bool extractImage(void* ctx, const char* src, const char* dest);
+  int currentSection() const;  // heading index, or -1 before the first section
   void fail(const char* message);
   void renderStatusBar() const;
 
   const size_t collection_;
-  uint32_t entry_;      // directory index as asked for (may be a redirect)
+  uint32_t entry_;  // directory index as asked for (may be a redirect)
+  const std::string landing_;
   zim::Entry article_;  // the resolved content entry being read
   std::string collectionKey_;
   std::atomic<State> state_{State::Loading};
@@ -112,6 +139,17 @@ class ArticleActivity final : public Activity {
   std::vector<uint32_t> pageOffsets_;  // file offset of each page
   std::vector<uint32_t> pageVisible_;  // visible-text offset where each page starts
   std::vector<zim::HtmlHeading> headings_;
+  std::vector<int> headingPages_;
+  std::string lead_;                    // the article's opening paragraphs, for the outline
+  std::vector<zim::HtmlImage> images_;  // pictures kept by the cleaner, by number
+  bool allImages_ = false;              // this article with every picture, not just the lead one
+  bool keepImageMode_ = false;          // the next openEntry is that same article again
+  void* bookExtractCtx_ = nullptr;      // a book's image extractor, put back on exit
+  bool (*bookExtractFn_)(void*, const char*, const char*) = nullptr;
+  bool outlineReturn_ = false;  // a section chosen in the outline: Back returns to it
+  bool offerOutline_ = false;   // open the outline once the first page is up
+  static constexpr uint8_t kTurnsPerSave = 10;
+  uint8_t turnsSinceSave_ = 0;
   std::vector<std::pair<std::string, uint16_t>> anchors_;  // copied from the parser when layout ends
   bool building_ = false;
   uint32_t layoutStartMs_ = 0;

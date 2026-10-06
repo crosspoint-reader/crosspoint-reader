@@ -15,42 +15,86 @@
 
 #include "activities/UiListActivity.h"
 
-// Home -> Library: Recent (articles left part-read), the collections on the
-// card, then CrossPoint's own book library as the last row.
+namespace pocketlib {
+struct Place;
+struct Collection;
+}  // namespace pocketlib
+namespace freeink {
+struct Icon;
+}
+
+// The collection and directory entry of a saved place; false if its
+// collection or article is no longer on the card.
+bool locatePlace(const pocketlib::Place& place, size_t& collection, uint32_t& entry);
+
+// Home -> Library: a grid of tiles, two across. The top level is Recent,
+// eBooks (CrossPoint's own book library), then one tile per group of
+// collections: Wikipedia, Maps (not yet), Medical and More. A group with one
+// collection opens it; with several, it opens the same grid for its members.
+// Groups come from the manifest's "group" field, else from the collection's
+// name (tileGroupFor).
 class ShelfActivity final : public UiListActivity {
  public:
-  ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  ShelfActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string group = "");
   void onEnter() override;
 
  private:
-  int listCount() const override;
+  int listCount() const override { return static_cast<int>(tiles_.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
-  const char* headerTitle() const override { return "Library"; }
+  void navigateButtons() override;
+  void drawFooter() override;
+  const char* headerTitle() const override { return title_.c_str(); }
 
-  enum class RowKind : uint8_t { Recent, Collection, Books, Empty };
-  struct Row {
-    RowKind kind;
-    int collection;
+  enum class TileKind : uint8_t { Recent, Books, Group, Collection, Maps, FirstAid, Encyclopedia, PetFirstAid };
+  struct Tile {
+    TileKind kind;
+    std::string label;
+    const freeink::Icon* icon;
+    int collection;     // TileKind::Collection
+    std::string group;  // TileKind::Group
   };
-  void rebuildRows();
+  void rebuildTiles();
   void openRecent();
+  void openCollection(size_t collection);
 
-  std::vector<Row> rows_;
-  std::vector<std::string> labels_;
-  std::vector<std::string> subtitles_;
-  std::vector<std::string> values_;
-  std::vector<freeink::ui::ListItem> items_;
+  const std::string group_;  // "" = the top level
+  std::string title_;
+  std::vector<Tile> tiles_;
+  std::vector<freeink::ui::TileGridItem> items_;
+  bool buttonsUsed_ = false;  // show the selection only once buttons move it
+  // Grid geometry from the last build: drawFooter() draws each tile's icon
+  // and name itself (icon above, name below, cut to the tile's width).
+  freeink::ui::Rect gridRect_{};
+  int16_t tileHeight_ = 0;
+  std::string notice_;  // a one-line popup over the grid, cleared on the next input
 };
+
+// "Wikipedia", "Medical" or "More": the manifest's group, else by name.
+std::string tileGroupFor(const pocketlib::Collection& collection);
+// A collection's name short enough for a tile: "MedlinePlus", not
+// "MedlinePlus - Health Information from the National Library of Medicine".
+std::string shortTitle(const pocketlib::Collection& collection);
 
 // A titled list of choices; finishes with MenuResult::action = the row picked
 // (cancelled on Back). Used for an article's contents and the Recent list.
 class ChoiceListActivity final : public UiListActivity {
  public:
   ChoiceListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
-                     std::vector<std::string> labels, std::vector<std::string> subtitles = {});
+                     std::vector<std::string> labels, std::vector<std::string> subtitles = {}, int initial = -1);
   void onEnter() override;
+
+  // An optional row of buttons across the top, above the title (an article's
+  // contents carry the reader's toolbar). Tapping tool i finishes with
+  // MenuResult::action = kToolAction - i.
+  struct Tool {
+    const uint8_t* icon;  // 32x32, upright (libraryIcons.h layout)
+    std::string label;
+  };
+  static constexpr int kToolAction = -100;
+  static constexpr int kToolbarHeight = 76;
+  void setToolbar(std::vector<Tool> tools) { tools_ = std::move(tools); }
 
  private:
   int listCount() const override { return static_cast<int>(items_.size()); }
@@ -58,24 +102,34 @@ class ChoiceListActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   const char* headerTitle() const override { return title_.c_str(); }
+  void drawChrome() override;
+  bool handleCustomInput() override;
 
   std::string title_;
+  std::vector<Tool> tools_;
   std::vector<std::string> labels_;
   std::vector<std::string> subtitles_;
   std::vector<freeink::ui::ListItem> items_;
+  const int initial_;  // row selected on entry (-1: the first)
 };
 
-// One collection: ways into it. Search (live, as you type), the main page and
-// a random article.
+// One collection's home, like the Wikipedia app's: a search bar with the
+// collection's icon first, then the article to continue, recent articles,
+// the main page, a random article, and About (size, index, last timings).
 class CollectionActivity final : public UiListActivity {
  public:
   CollectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, size_t collection);
   void onEnter() override;
 
  private:
-  enum Row { ROW_SEARCH = 0, ROW_MAIN, ROW_RANDOM, ROW_ABOUT, ROW_LAST_OPEN, ROW_COUNT };
+  static constexpr freeink::ui::ActionId ACTION_SEARCH_BAR = ACTION_USER;
+  enum class RowKind : uint8_t { Search, Place, Main, Random, About };
+  struct Row {
+    RowKind kind;
+    size_t place;  // RowKind::Place: index into ReadingHistory::places()
+  };
 
-  int listCount() const override { return ROW_COUNT; }
+  int listCount() const override { return static_cast<int>(rows_.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override { return title_.c_str(); }
@@ -85,13 +139,17 @@ class CollectionActivity final : public UiListActivity {
   void openRandom();
   void openMain();
   void openSearch();
+  void openPlace(size_t place);
   void showMessage(const std::string& message);
+  void drawFooter() override;
 
   const size_t collection_;
   std::string title_;
-  std::string values_[ROW_COUNT];
-  std::string subtitles_[ROW_COUNT];
-  freeink::ui::ListItem items_[ROW_COUNT]{};
-  std::string lastQuery_;
-  std::vector<uint32_t> liveEntries_;  // entries behind the keyboard's suggestion rows
+  std::string searchLabel_;
+  std::string notice_;  // a popup over the screen, cleared by the next choice
+  const freeink::Icon* icon_ = nullptr;
+  std::vector<Row> rows_;  // rows_[0] is the search bar
+  std::vector<std::string> labels_;
+  std::vector<std::string> subtitles_;
+  std::vector<freeink::ui::ListItem> items_;  // rows_[1..]
 };

@@ -1,16 +1,18 @@
 # Card builder
 
 Builds the Pocket Library microSD card on a Mac from `library.toml`.
-Standard-library Python 3.11+ only (macOS's `python3` is fine). It needs
-`zimindex` from the dev release next to it.
+Standard-library Python 3.11+ only (macOS's own `python3` is 3.9, too old:
+install one from python.org). It needs `zimindex` from the dev release next
+to it; `bash get-tools.sh` fetches both. The step-by-step guide for everyone
+is [docs/pocket-library/README.md](../../docs/pocket-library/README.md).
 
 ```sh
 python3 cardbuilder.py plan                          # what, how big, does it fit (writes nothing)
 python3 cardbuilder.py download                      # fetch + SHA-256 check, resumable
 python3 cardbuilder.py index                         # build .pltitles search indexes
-python3 cardbuilder.py copy --card "/Volumes/POCKET LIB" --dry-run
-python3 cardbuilder.py copy --card "/Volumes/POCKET LIB"
-python3 cardbuilder.py all  --card "/Volumes/POCKET LIB"
+python3 cardbuilder.py copy --card /Volumes/POCKETLIB --dry-run
+python3 cardbuilder.py copy --card /Volumes/POCKETLIB
+python3 cardbuilder.py all  --card /Volumes/POCKETLIB
 ```
 
 Options: `--only KEY` (one collection), `--verify` (read every copied file

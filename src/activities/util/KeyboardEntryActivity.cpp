@@ -11,6 +11,9 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#ifdef POCKET_LIBRARY
+#include "pocketlib/LibraryActivities.h"
+#endif
 
 namespace fui = freeink::ui;
 
@@ -1017,8 +1020,8 @@ void KeyboardEntryActivity::onComplete(std::string text) {
 #ifdef POCKET_LIBRARY
   KeyboardResult result{std::move(text)};
   if (liveFill) {
-    // OK opens the best match; a tapped row opens that one.
-    result.picked = pickedRow >= 0 ? pickedRow : (liveRows.empty() || liveFor != result.text ? -1 : 0);
+    // A tapped row opens that one; OK (picked -1) asks for every result.
+    result.picked = pickedRow;
     liveFill = nullptr;  // finishing: no refill on the way out
   }
   setResult(std::move(result));
@@ -1030,45 +1033,158 @@ void KeyboardEntryActivity::onComplete(std::string text) {
 
 #ifdef POCKET_LIBRARY
 void KeyboardEntryActivity::refreshLive() {
-  if (!liveFill || (liveComputed && liveFor == text)) return;
-  std::vector<std::string> rows;
+  if (!liveFill || (liveComputed && liveFor == text && liveRowsFor == liveScopeSel)) return;
+  // While typing, search once the keys pause: a word typed quickly is one
+  // search instead of one per letter (each can read several collections).
+  // A new scope searches at once.
+  constexpr uint32_t kPauseMs = 300;
+  if (text != livePendingFor) {
+    livePendingFor = text;
+    livePendingSince = millis();
+  }
+  if (liveComputed && liveRowsFor == liveScopeSel && millis() - livePendingSince < kPauseMs) return;
+  std::vector<LiveRow> rows;
   std::string status;
-  liveFill(text, rows, status);
+  liveFill(text, liveScopeSel, rows, status);
   {
     RenderLock lock(*this);
     liveRows = std::move(rows);
     liveStatus = std::move(status);
     liveFor = text;
+    liveRowsFor = liveScopeSel;
     liveComputed = true;
   }
   requestUpdate();
 }
 
+namespace {
+constexpr int kChipPadX = 12;
+constexpr int kChipGap = 8;
+}  // namespace
+
+// Chip positions, left to right. The shared last chip shows the chosen
+// unpinned scope's name when one is chosen, else "More".
+std::vector<KeyboardEntryActivity::ChipBox> KeyboardEntryActivity::chipLayout() const {
+  std::vector<ChipBox> boxes;
+  const int side = UITheme::getInstance().getMetrics().contentSidePadding;
+  int x = side;
+  auto add = [&](const char* label, int scope) {
+    const int w = renderer.getTextWidth(SMALL_FONT_ID, label) + 2 * kChipPadX;
+    boxes.push_back({x, w, scope});
+    x += w + kChipGap;
+  };
+  for (size_t i = 0; i < livePinned; i++) add(liveScopes[i].c_str(), static_cast<int>(i));
+  if (liveScopes.size() > livePinned) {
+    const bool chosen = liveScopeSel >= static_cast<int>(livePinned);
+    add(chosen ? liveScopes[liveScopeSel].c_str() : "More", -1);
+    boxes.back().w += 14;  // room for the triangle
+  }
+  return boxes;
+}
+
+void KeyboardEntryActivity::openScopeList() {
+  std::vector<std::string> labels(liveScopes.begin() + static_cast<long>(livePinned), liveScopes.end());
+  auto list = makeUniqueNoThrow<ChoiceListActivity>(renderer, mappedInput, "Search in", std::move(labels));
+  if (!list) return;
+  startActivityForResult(std::move(list), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<MenuResult>(result.data)) return;
+    liveScopeSel = static_cast<int>(livePinned) + std::get<MenuResult>(result.data).action;
+    refreshLive();
+  });
+}
+
 bool KeyboardEntryActivity::handleLiveTap() {
+  if (!liveFill) return false;
   const int count = liveRowCount.load();
   const int rowHeight = liveRowHeight.load();
-  if (!liveFill || count == 0 || rowHeight <= 0) return false;
+  const int chipTop = liveChipTop.load();
+  const int chipHeight = liveChipHeight.load();
+  if (count == 0 && chipTop < 0) return false;
   int x = 0;
   int y = 0;
   if (!mappedInput.wasScreenTapped(x, y)) return false;
+  if (chipTop >= 0 && y >= chipTop && y < chipTop + chipHeight) {
+    std::vector<ChipBox> boxes;
+    {
+      RenderLock lock(*this);  // measures text with the renderer
+      boxes = chipLayout();
+    }
+    for (const ChipBox& b : boxes) {
+      if (x < b.x - kChipGap / 2 || x >= b.x + b.w + kChipGap / 2) continue;
+      if (b.scope < 0) {
+        openScopeList();
+      } else if (b.scope != liveScopeSel) {
+        liveScopeSel = b.scope;
+      }
+      return true;  // the refill after this pass redraws
+    }
+    return true;
+  }
   const int top = liveTop.load();
-  if (y < top || y >= top + count * rowHeight) return false;
-  pickedRow = (y - top) / rowHeight;
+  if (count == 0 || rowHeight <= 0 || y < top || y >= top + count * rowHeight) return false;
+  const int row = (y - top) / rowHeight;
+  if (row < static_cast<int>(liveRows.size()) && liveRows[row].fillsText) {
+    text = liveRows[row].text;
+    cursorPos = text.size();
+    requestUpdate();
+    return true;
+  }
+  pickedRow = row;
   onComplete(text);
   return true;
 }
 
-void KeyboardEntryActivity::drawLive(const int top, const int bottom) {
+void KeyboardEntryActivity::drawLive(int top, const int bottom) {
   const int pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int side = metrics.contentSidePadding;
+
+  if (!liveScopes.empty()) {
+    const int smallHeight = renderer.getLineHeight(SMALL_FONT_ID);
+    const int chipHeight = smallHeight + 12;
+    for (const ChipBox& b : chipLayout()) {
+      const bool on = b.scope < 0 ? liveScopeSel >= static_cast<int>(livePinned) : b.scope == liveScopeSel;
+      const char* label = b.scope >= 0                                   ? liveScopes[b.scope].c_str()
+                          : liveScopeSel >= static_cast<int>(livePinned) ? liveScopes[liveScopeSel].c_str()
+                                                                         : "More";
+      // Solid black when chosen, outlined otherwise: no dithered gray.
+      if (on) {
+        renderer.fillRoundedRect(b.x, top, b.w, chipHeight, chipHeight / 2, Color::Black);
+      } else {
+        renderer.drawRoundedRect(b.x, top, b.w, chipHeight, 2, chipHeight / 2, true);
+      }
+      renderer.drawText(SMALL_FONT_ID, b.x + kChipPadX, top + (chipHeight - smallHeight) / 2, label, !on);
+      if (b.scope < 0) {
+        const int tx = b.x + b.w - kChipPadX - 8;
+        const int ty = top + chipHeight / 2 - 2;
+        const int xs[3] = {tx, tx + 8, tx + 4};
+        const int ys[3] = {ty, ty, ty + 5};
+        renderer.fillPolygon(xs, ys, 3, !on);
+      }
+    }
+    liveChipTop.store(top);
+    liveChipHeight.store(chipHeight);
+    top += chipHeight + 6;
+  } else {
+    liveChipTop.store(-1);
+  }
+
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int smallHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int rowHeight = std::max(lineHeight + 14, static_cast<int>(metrics.listRowHeight));
   const int fit = std::max(0, (bottom - top) / rowHeight);
   const int count = std::min(fit, static_cast<int>(liveRows.size()));
   for (int i = 0; i < count; i++) {
+    const LiveRow& row = liveRows[i];
     const int y = top + i * rowHeight;
-    const std::string shown = renderer.truncatedText(UI_12_FONT_ID, liveRows[i].c_str(), pageWidth - 2 * side);
+    int tagWidth = 0;
+    if (!row.tag.empty()) {
+      const std::string tag = renderer.truncatedText(SMALL_FONT_ID, row.tag.c_str(), pageWidth / 3);
+      tagWidth = renderer.getTextWidth(SMALL_FONT_ID, tag.c_str()) + 10;
+      renderer.drawText(SMALL_FONT_ID, pageWidth - side - tagWidth + 10, y + (rowHeight - smallHeight) / 2, tag.c_str(),
+                        true);
+    }
+    const std::string shown = renderer.truncatedText(UI_12_FONT_ID, row.text.c_str(), pageWidth - 2 * side - tagWidth);
     renderer.drawText(UI_12_FONT_ID, side, y + (rowHeight - lineHeight) / 2, shown.c_str(), true);
     renderer.drawLine(side, y + rowHeight - 1, pageWidth - side, y + rowHeight - 1, true);
   }

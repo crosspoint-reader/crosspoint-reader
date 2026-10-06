@@ -29,6 +29,10 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#ifdef POCKET_LIBRARY
+#include "pocketlib/icons/UprightIcon.h"
+#include "pocketlib/images/DontPanic.h"
+#endif
 
 namespace {
 
@@ -621,9 +625,21 @@ void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
+#ifdef POCKET_LIBRARY
+  // The Guide's cover: DON'T PANIC in large, friendly letters, and under it,
+  // small, that the reader is asleep.
+  {
+    const int x = (pageWidth - pocketlib::kDontPanicWidth) / 2;
+    const int y = (pageHeight - pocketlib::kDontPanicHeight) / 2 - 20;
+    pocketlib::drawUprightBitmap(renderer, pocketlib::kDontPanicBits, x, y, pocketlib::kDontPanicWidth,
+                                 pocketlib::kDontPanicHeight);
+    renderer.drawCenteredText(SMALL_FONT_ID, y + pocketlib::kDontPanicHeight + 40, tr(STR_SLEEPING));
+  }
+#else
   renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+#endif
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {

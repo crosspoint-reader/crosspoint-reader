@@ -1,5 +1,8 @@
 #include "ImageDecoderFactory.h"
 
+#ifdef POCKET_LIBRARY
+#include <HalStorage.h>
+#endif
 #include <Logging.h>
 
 #include <memory>
@@ -38,5 +41,21 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
   LOG_ERR("DEC", "No decoder found for image: %s", imagePath.c_str());
   return nullptr;
 }
+
+#ifdef POCKET_LIBRARY
+ImageToFramebufferDecoder* ImageDecoderFactory::getDecoderForFile(const std::string& imagePath) {
+  uint8_t magic[4] = {};
+  HalFile file;
+  if (Storage.openFileForRead("DEC", imagePath, file)) {
+    const int got = file.read(magic, sizeof(magic));
+    file.close();
+    if (got == static_cast<int>(sizeof(magic))) {
+      if (magic[0] == 0xFF && magic[1] == 0xD8 && magic[2] == 0xFF) return getDecoder(".jpg");
+      if (magic[0] == 0x89 && magic[1] == 'P' && magic[2] == 'N' && magic[3] == 'G') return getDecoder(".png");
+    }
+  }
+  return getDecoder(imagePath);
+}
+#endif
 
 bool ImageDecoderFactory::isFormatSupported(const std::string& imagePath) { return getDecoder(imagePath) != nullptr; }

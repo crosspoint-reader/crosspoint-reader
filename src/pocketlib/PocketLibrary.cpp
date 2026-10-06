@@ -107,6 +107,8 @@ size_t Library::load() {
   collections_.clear();
   loadError_.clear();
   if (!loadManifest()) scanFolders();
+  slots_.clear();
+  slots_.resize(collections_.size());
   LOG_INF("PLIB", "%u collections on the card", static_cast<unsigned>(collections_.size()));
   return collections_.size();
 }
@@ -148,6 +150,9 @@ bool Library::loadManifest() {
     }
     const char* ix = c["index"]["path"] | "";
     if (*ix) col.indexPath = ix[0] == '/' ? std::string(ix) : std::string("/") + ix;
+    col.group = c["group"] | "";
+    const char* icon = c["icon"]["path"] | "";
+    if (*icon) col.iconPath = icon[0] == '/' ? std::string(icon) : std::string("/") + icon;
     if (col.title.empty()) col.title = col.key;
     if (!col.parts.empty()) collections_.push_back(std::move(col));
   }
@@ -200,13 +205,28 @@ void Library::scanFolders() {
 }
 
 zim::Archive* Library::open(size_t i, zim::Error* error) {
+  zim::Archive* archive = ensureOpen(i, error);
+  if (!archive) return archive;
+  // Only the collection being read keeps decoded clusters in PSRAM. Every
+  // time, not only when the focus moves: a search may have decoded listing
+  // clusters in the others since.
+  dropOtherCaches(i);
+  focus_ = i;
+  return archive;
+}
+
+zim::Archive* Library::ensureOpen(size_t i, zim::Error* error) {
   if (error) *error = zim::Error::None;
-  if (i >= collections_.size()) {
+  if (i >= collections_.size() || i >= slots_.size()) {
     if (error) *error = zim::Error::NotFound;
     return nullptr;
   }
-  if (archive_ && openIndex_ == i) return archive_.get();
-  close();
+  Slot& slot = slots_[i];
+  if (slot.archive) return slot.archive.get();
+  if (slot.failed) {
+    if (error) *error = zim::Error::Io;
+    return nullptr;
+  }
 
   const Collection& col = collections_[i];
   std::unique_ptr<zim::Source> source;
@@ -227,6 +247,7 @@ zim::Archive* Library::open(size_t i, zim::Error* error) {
     source = std::move(split);
   }
   if (!source) {
+    slot.failed = true;
     if (error) *error = zim::Error::Io;
     return nullptr;
   }
@@ -238,60 +259,86 @@ zim::Archive* Library::open(size_t i, zim::Error* error) {
   }
   zim::Options options;
   options.allocator = &kPsramAllocator;
-  // Two decoded ~2 MiB clusters: the article being read and the one before
-  // it (back navigation). PSRAM also holds the article text and SD fonts.
-  options.clusterCacheSize = 2;
+  // Three decoded clusters (up to ~2 MiB each): the article being read, a
+  // picture's, and the article before it (Back), so a picture no longer
+  // pushes the article out. PSRAM also holds the article text and SD fonts;
+  // the caches are dropped when PSRAM runs short (see below).
+  options.clusterCacheSize = 3;
   const uint32_t t0 = millis();
   const zim::Error e = archive->open(std::move(source), options);
   if (e != zim::Error::None) {
     LOG_ERR("PLIB", "open %s: %s", col.key.c_str(), zim::errorName(e));
+    slot.failed = e != zim::Error::NoMemory;
     if (error) *error = e;
     return nullptr;
   }
   LOG_INF("PLIB", "opened %s: %u parts, %u entries, %u titles in %u ms", col.key.c_str(),
           static_cast<unsigned>(col.parts.size()), static_cast<unsigned>(archive->entryCount()),
           static_cast<unsigned>(archive->titleCount()), static_cast<unsigned>(millis() - t0));
+  // Opening may have decoded a listing; that belongs to no article yet.
+  if (focus_ != i) archive->clearCache();
 
   if (!col.indexPath.empty()) {
     auto index = makeUniqueNoThrow<zim::TitleIndex>();
     auto src = HalFileSource::open(col.indexPath);
     if (index && src && index->open(std::move(src)) == zim::Error::None && index->matches(*archive)) {
-      index_ = std::move(index);
+      slot.index = std::move(index);
     } else {
       LOG_ERR("PLIB", "title index %s missing or built for another file", col.indexPath.c_str());
     }
   }
-  archive_ = std::move(archive);
-  openIndex_ = i;
-  return archive_.get();
+  slot.archive = std::move(archive);
+  return slot.archive.get();
 }
 
-bool Library::search(std::string_view query, size_t max, std::vector<Hit>& out) {
+void Library::dropOtherCaches(size_t keep) {
+  for (size_t k = 0; k < slots_.size(); k++) {
+    if (k != keep && slots_[k].archive) slots_[k].archive->clearCache();
+  }
+}
+
+zim::TitleIndex* Library::titleIndex(size_t i) {
+  if (i >= slots_.size()) return nullptr;
+  const Slot& slot = slots_[i];
+  return slot.archive && slot.index && slot.index->isOpen() ? slot.index.get() : nullptr;
+}
+
+bool Library::search(const std::vector<size_t>& scope, std::string_view query, size_t max, std::vector<Hit>& out) {
   out.clear();
-  zim::Archive* archive = archive_.get();
-  if (!archive) return false;
-  zim::TitleIndex* index = titleIndex();
-  if (index && !cursor_) cursor_ = makeUniqueNoThrow<zim::TitleIndex::Cursor>();
-  if (index && !cursor_) return false;
   const uint32_t t0 = millis();
-  std::vector<zim::SearchHit> hits;
-  zim::SearchStats stats;
-  const zim::Error err = zim::searchTitles(*archive, index, cursor_.get(), query, max, hits, &stats);
+  std::vector<zim::SearchSource> sources;
+  std::vector<size_t> owners;
+  sources.reserve(scope.size());
+  owners.reserve(scope.size());
+  for (size_t i : scope) {
+    zim::Archive* archive = ensureOpen(i, nullptr);
+    if (!archive) continue;
+    Slot& slot = slots_[i];
+    zim::TitleIndex* index = titleIndex(i);
+    if (index && !slot.cursor) slot.cursor = makeUniqueNoThrow<zim::TitleIndex::Cursor>();
+    if (index && !slot.cursor) continue;
+    // The encyclopedia gets three results for each one of the others.
+    const uint8_t weight = collections_[i].key == "wikipedia" ? 3 : 1;
+    sources.push_back({archive, index, index ? slot.cursor.get() : nullptr, weight});
+    owners.push_back(i);
+  }
+  if (sources.empty()) return false;
+  std::vector<zim::MultiHit> hits;
+  const zim::Error err = zim::searchMany(sources, query, max, hits);
   lastSearchMs = millis() - t0;
   if (err != zim::Error::None) LOG_ERR("PLIB", "search: %s", zim::errorName(err));
-  LOG_DBG("PLIB", "search \"%.*s\": %u hits, %u read, %u ms", static_cast<int>(query.size()), query.data(),
-          static_cast<unsigned>(hits.size()), static_cast<unsigned>(stats.recordsRead),
+  LOG_DBG("PLIB", "search \"%.*s\" in %u: %u hits, %u ms", static_cast<int>(query.size()), query.data(),
+          static_cast<unsigned>(sources.size()), static_cast<unsigned>(hits.size()),
           static_cast<unsigned>(lastSearchMs));
+  dropOtherCaches(focus_);  // collections without an index may have decoded title listings
   out.reserve(hits.size());
-  for (auto& h : hits) out.push_back({h.entry, std::move(h.title)});
-  return true;
+  for (auto& h : hits) out.push_back({owners[h.source], h.hit.entry, std::move(h.hit.title), h.hit.exact});
+  return err == zim::Error::None;
 }
 
 void Library::close() {
-  cursor_.reset();
-  index_.reset();
-  archive_.reset();
-  openIndex_ = SIZE_MAX;
+  for (Slot& slot : slots_) slot = Slot();
+  focus_ = SIZE_MAX;
 }
 
 std::string formatBytes(uint64_t bytes) {

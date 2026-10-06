@@ -13,8 +13,8 @@ Status date: 2026-10-03.
 | 3 | First article on device | **Passed 2026-10-03** (owner, after the out-of-memory fix) |
 | 4 | Search | **Passed 2026-10-03** (owner) |
 | 5 | Full reader | **Passed 2026-10-03** (owner) |
-| 6 | Whole library (shelves, cross-search, Wiktionary, CJK) | **In progress**: search everything + ranking first (owner's order) |
-| 7 | Power and polish | — |
+| 6 | Whole library (shelves, cross-search) | **In progress**: built, awaiting device test. Wiktionary look-up dropped and CJK deferred (owner, 2026-10-04); Standard Ebooks and search part C still planned |
+| 7 | Power and polish | **Next, owner's priority**: speed, battery, fast loading; cut features where they cost too much |
 | 8 | Atlas (stretch) | — |
 | 9 | Release | — |
 

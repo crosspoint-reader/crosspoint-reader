@@ -40,12 +40,25 @@ class ReadingHistory {
 
   static constexpr size_t kMaxPlaces = 50;
 
+  // What was searched for, newest first (a search counts once something
+  // from its results is opened).
+  const std::vector<std::string>& searches();
+  void recordSearch(const std::string& query);
+  static constexpr size_t kMaxSearches = 6;
+
+  // Open articles in outline (the lead and the section headings) first.
+  bool outlineByDefault();
+  void setOutlineByDefault(bool on);
+
  private:
   ReadingHistory() = default;
   void load();
   void save() const;
   bool loaded_ = false;
   std::vector<Place> places_;
+  bool searchesLoaded_ = false;
+  int outline_ = -1;  // -1 = not read yet
+  std::vector<std::string> searches_;
 };
 
 }  // namespace pocketlib

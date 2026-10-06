@@ -39,7 +39,11 @@ import struct
 import subprocess
 import sys
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 or older (macOS's own python3 is 3.9)
+    sys.exit("This needs Python 3.11 or newer: install it from https://www.python.org/downloads/ "
+             "and run it with python3.13 (or the version you installed).")
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,6 +56,10 @@ CATALOG = "https://library.kiwix.org/catalog/v2/entries"
 PART_SIZE = 4000 * 1024 * 1024  # 4,000 MiB: under FAT32's 4 GiB file limit
 CARD_DIR = "library"
 MANIFEST = "manifest.json"
+# Title index format the current zimindex writes; older indexes are rebuilt
+# (version 2 added the popularity score that ranks search results; version 3
+# adds words inside titles, so "panda" finds Giant panda).
+INDEX_VERSION = 3
 STATE_FILE = ".cardbuilder-state.json"
 CHUNK = 4 * 1024 * 1024
 USER_AGENT = f"PocketLibraryCardBuilder/{VERSION}"
@@ -149,6 +157,7 @@ class Want:
     optional: bool = False
     url: str = ""       # direct .zim URL instead of the catalog
     note: str = ""
+    file: str = ""      # a ZIM you made (tools/webpack), in the staging folder; may hold * for the date
 
 
 def load_library(path: Path) -> tuple[dict, list[Want]]:
@@ -164,16 +173,17 @@ def load_library(path: Path) -> tuple[dict, list[Want]]:
     for i, c in enumerate(data.get("collection", [])):
         name = c.get("name", "")
         url = c.get("url", "")
-        if not name and not url:
-            raise BuildError(f"{path}: collection #{i + 1} needs a name or a url")
-        key = c.get("key") or name or Path(urllib.parse.urlparse(url).path).stem
+        file = c.get("file", "")
+        if not name and not url and not file:
+            raise BuildError(f"{path}: collection #{i + 1} needs a name, a url or a file")
+        key = c.get("key") or name or Path(urllib.parse.urlparse(url).path).stem or Path(file).stem
         if key in seen:
             raise BuildError(f"{path}: two collections use the folder name {key!r}")
         seen.add(key)
         fl = c.get("flavour", [])
         wants.append(Want(key=key, name=name, flavours=[fl] if isinstance(fl, str) else list(fl),
                           lang=c.get("lang", ""), optional=bool(c.get("optional", False)),
-                          url=url, note=c.get("note", "")))
+                          url=url, note=c.get("note", ""), file=file))
     if not wants:
         raise BuildError(f"{path} lists no [[collection]] entries")
     return settings, wants
@@ -275,9 +285,30 @@ def resolve(want: Want, catalog: str = CATALOG) -> Edition | None:
     return None
 
 
-def resolve_all(wants: list[Want], catalog: str) -> list[Edition]:
+def resolve_local(want: Want, staging: Path) -> Edition | None:
+    """A ZIM made on this Mac (tools/webpack): the newest file in the staging
+    folder that matches the pattern."""
+    found = sorted(staging.glob(want.file)) if staging.is_dir() else []
+    if not found:
+        return None
+    z = found[-1]
+    return Edition(want, title=want.key, name=want.name or want.key, flavour="", language=want.lang,
+                   date=z.stem.rsplit("_", 1)[-1], url=z.resolve().as_uri(), size=z.stat().st_size)
+
+
+def resolve_all(wants: list[Want], catalog: str, staging: Path) -> list[Edition]:
     out = []
     for w in wants:
+        if w.file:
+            ed = resolve_local(w, staging)
+            if ed is None:
+                msg = f"{w.key}: no {w.file} in {staging} yet (make it with tools/webpack)"
+                if w.optional:
+                    say(f"  skipped (optional) {msg}")
+                    continue
+                raise BuildError(msg)
+            out.append(ed)
+            continue
         ed = resolve(w, catalog)
         if ed is None:
             msg = f"{w.name}: no edition with flavour {' or '.join(w.flavours) or 'any'} in the catalog"
@@ -333,8 +364,13 @@ def fetch_checksum(url: str) -> str:
     return digest.lower()
 
 
-def download(ed: Edition, staging: Path, state: State, retries: int = 8) -> Path:
+def download(ed: Edition, staging: Path, state: State, retries: int = 20) -> Path:
     dest = staging / ed.filename
+    if ed.want.file:  # made on this Mac: nothing to download, only to check once
+        if not state.verified(dest):
+            state.mark(dest, sha256_file(dest))
+        say(f"  {dest.name}: made locally")
+        return dest
     expected = fetch_checksum(ed.url)
     if dest.exists():
         known = state.verified(dest)
@@ -385,7 +421,7 @@ def download(ed: Edition, staging: Path, state: State, retries: int = 8) -> Path
         attempt += 1
         if attempt > retries:
             raise BuildError(f"download of {ed.url} keeps failing ({err}); run download again to resume")
-        wait = min(2 ** attempt, 120)
+        wait = min(2 ** attempt, 180)  # 20 tries ride out about 45 minutes offline
         say(f"\n  interrupted ({err}); resuming in {wait} s (try {attempt} of {retries})")
         time.sleep(wait)
 
@@ -426,9 +462,12 @@ def build_index(zim: Path, zimindex: Path) -> Path:
     out = index_path(zim)
     if out.exists() and out.stat().st_mtime >= zim.stat().st_mtime:
         try:
-            if read_index_header(out)["zim_uuid"] == read_zim_uuid(zim):
+            head = read_index_header(out)
+            if head["zim_uuid"] == read_zim_uuid(zim) and head["version"] >= INDEX_VERSION:
                 say(f"  {out.name}: already built")
                 return out
+            if head["version"] < INDEX_VERSION:
+                say(f"  {out.name}: older index format (v{head['version']}), rebuilding (ranked, words inside titles)")
         except BuildError:
             pass
     say(f"  building {out.name} (large collections take several minutes)")
@@ -484,7 +523,17 @@ def plan_placement(ed: Edition, zim: Path, sha: str, card: Path, part_size: int)
 
 
 def item_done(it: Item) -> bool:
-    return it.dest.exists() and it.dest.stat().st_size == it.size
+    if not it.dest.exists() or it.dest.stat().st_size != it.size:
+        return False
+    if it.src.suffix == ".pltitles":
+        # A rebuilt index can keep its size; its header (format version,
+        # record count, ZIM UUID) tells the copies apart.
+        try:
+            with open(it.src, "rb") as a, open(it.dest, "rb") as b:
+                return a.read(64) == b.read(64)
+        except OSError:
+            return False
+    return True
 
 
 def uncached(f) -> None:
@@ -685,13 +734,15 @@ def main(argv: list[str] | None = None) -> int:
         card = Path(os.path.expanduser(card_s)) if card_s else None
 
         say(f"Looking up {len(wants)} collection(s) in the Kiwix catalog...")
-        eds = resolve_all(wants, a.catalog)
+        eds = resolve_all(wants, a.catalog, staging)
         if a.command == "plan":
             cmd_plan(eds, staging, card)
             return 0
 
         if not staging.is_dir():
-            raise BuildError(f"staging folder {staging} not found (is the drive plugged in?)")
+            if str(staging).startswith("/Volumes/"):
+                raise BuildError(f"staging folder {staging} not found (is the drive plugged in?)")
+            staging.mkdir(parents=True, exist_ok=True)  # a folder on this Mac, e.g. ~/PocketLib/downloads
         state = State(staging)
         if a.command in ("download", "all"):
             for ed in eds:
