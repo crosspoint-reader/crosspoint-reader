@@ -14,9 +14,6 @@ serve as review rubrics. Keep them short, anchor them on durable API/type/file
 names, and avoid line-number references that drift. Edit the skill at its new
 home rather than restoring `.skills/` or duplicating the root policy.
 
-[rules/MIGRATION.md](rules/MIGRATION.md) records the original section mapping
-and the upstream changes reconciled during the rebase.
-
 ## Rules
 
 - `environment.md`: host detection, PlatformIO, and local configuration

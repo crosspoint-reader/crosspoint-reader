@@ -44,6 +44,69 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 **Rule**: Always use `MappedInputManager::Button::*` enums, never raw `HalGPIO::BTN_*` indices (except in ButtonRemapActivity).
 
+### Input frames and ownership
+
+Sources: [main.cpp](../../src/main.cpp),
+[MappedInputManager](../../src/MappedInputManager.cpp), and
+[ActivityManager::loop()](../../src/activities/ActivityManager.cpp).
+
+The main loop updates `MappedInputManager` before dispatching the active activity.
+Normal activity loops read this shared snapshot. A second `update()` can erase
+an edge before another input owner sees it. Consume input through the existing
+input and UI protocols, not another update or a delay.
+
+| Query | Physical-button meaning | Typical use |
+| --- | --- | --- |
+| `wasPressed(button)` | Press edge in this frame | Immediate action |
+| `wasReleased(button)` | Release edge in this frame | Short action after a complete gesture |
+| `isPressed(button)` | Current held state | Hold timing and transition checks |
+| `wasLongPressed(button, thresholdMs)` | One threshold event during a hold | Long action with shared release suppression |
+
+Logical touch, Home, and shared-button actions can publish both edges in one frame.
+Trace these synthesized events before treating a logical edge as a physical hold.
+Keep each physical gesture with one input owner and one semantic action.
+Preserve intentional navigation repeats and their existing cadence.
+For short and long actions on one button, the long action must not also trigger
+the short action on release.
+
+`MappedInputManager::wasLongPressed()` already suppresses the following release.
+`ActivityManager::loop()` consumes suppressed releases before activity dispatch.
+Reuse that contract when it fits the caller. Check shared popup and FreeInkUI
+host handling before adding a separate long-press flag or release guard.
+
+### Activity and popup transitions
+
+Before changing edge handling, trace the main-loop update, originating owner,
+child or popup, result callback, and resumed parent. Identify all press, release,
+held-state, and long-press consumers along that path.
+
+Prefer completing the gesture in its original owner when that preserves every caller's contract.
+If a transition occurs while a button is held, check whether existing handling
+already prevents the next owner from acting on that hold or release.
+Add a local release guard only for a demonstrated gap.
+
+If a guard is needed, initialize it from the logical button's `isPressed()` state.
+The result callback can run after the original edge's frame.
+Clear the guard on release and consume that release frame too.
+Keep independent touch input usable. Do not block the whole input loop for an
+inherited physical hold when the shared UI can route unrelated touch actions.
+
+### Input verification matrix
+
+Use these cases for changed input behavior. Run applicable host checks and give
+the human device steps with expected results. Include button remapping and
+relevant orientations. Host checks do not establish hardware behavior.
+
+| Scenario | Expected result |
+| --- | --- |
+| Press opens a child or popup | The inherited hold and release cause no unintended action there |
+| Release opens a child or popup | The new owner waits for a new gesture |
+| Child closes on press | The resumed parent does not act on that gesture's release |
+| Long press fires | The long action runs once and release does not run the short action |
+| Held navigation repeats | Repeats keep their intended cadence without an extra release action |
+| Logical buttons are remapped or orientation changes | Each gesture still reaches the intended logical action |
+| Touch activates the same UI | A physical-button guard does not block independent touch actions |
+
 ### UITheme (The GUI Macro)
 
 * Use the shared FreeInkUI hosts for controls and interaction; see Shared UI and input below.

@@ -1,6 +1,6 @@
 ---
 name: hal-and-abstractions
-description: Firmware layering and abstraction discipline. Use for storage, input, display, settings, i18n, rendering, or code that could reach the SDK.
+description: Firmware layering and abstraction discipline. Use for storage, input, activity/popup transitions, display, settings, i18n, rendering, or code that could reach the SDK.
 ---
 
 # HAL and Abstractions
@@ -29,6 +29,10 @@ This is when and how to route through them, and where to draw a new boundary.
   and orientation; raw indices do not.
 - **Shared state:** the singleton macros (`SETTINGS`, `APP_STATE`, `GUI`,
   `Storage`, `I18N`), not threaded pointers.
+
+For input edges, long presses, or activity/popup transitions, follow
+[input frames and ownership](../../rules/ui-activities.md#input-frames-and-ownership)
+through the transition checks and verification matrix before choosing a fix.
 
 ## User-facing text
 
