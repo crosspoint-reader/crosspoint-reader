@@ -399,7 +399,12 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
 
+#ifdef POCKET_LIBRARY
+  // Article pictures can be a PNG under a .jpg name (a converted WebP).
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoderForFile(imagePath);
+#else
+  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+#endif
   if (!decoder) {
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
     rememberImageFailure(imagePath);

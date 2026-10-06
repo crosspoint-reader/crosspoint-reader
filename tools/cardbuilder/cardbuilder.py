@@ -39,7 +39,11 @@ import struct
 import subprocess
 import sys
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 or older (macOS's own python3 is 3.9)
+    sys.exit("This needs Python 3.11 or newer: install it from https://www.python.org/downloads/ "
+             "and run it with python3.13 (or the version you installed).")
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -360,7 +364,7 @@ def fetch_checksum(url: str) -> str:
     return digest.lower()
 
 
-def download(ed: Edition, staging: Path, state: State, retries: int = 8) -> Path:
+def download(ed: Edition, staging: Path, state: State, retries: int = 20) -> Path:
     dest = staging / ed.filename
     if ed.want.file:  # made on this Mac: nothing to download, only to check once
         if not state.verified(dest):
@@ -417,7 +421,7 @@ def download(ed: Edition, staging: Path, state: State, retries: int = 8) -> Path
         attempt += 1
         if attempt > retries:
             raise BuildError(f"download of {ed.url} keeps failing ({err}); run download again to resume")
-        wait = min(2 ** attempt, 120)
+        wait = min(2 ** attempt, 180)  # 20 tries ride out about 45 minutes offline
         say(f"\n  interrupted ({err}); resuming in {wait} s (try {attempt} of {retries})")
         time.sleep(wait)
 
@@ -736,7 +740,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if not staging.is_dir():
-            raise BuildError(f"staging folder {staging} not found (is the drive plugged in?)")
+            if str(staging).startswith("/Volumes/"):
+                raise BuildError(f"staging folder {staging} not found (is the drive plugged in?)")
+            staging.mkdir(parents=True, exist_ok=True)  # a folder on this Mac, e.g. ~/PocketLib/downloads
         state = State(staging)
         if a.command in ("download", "all"):
             for ed in eds:

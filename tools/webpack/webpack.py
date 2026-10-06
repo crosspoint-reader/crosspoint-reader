@@ -23,7 +23,11 @@ import posixpath
 import re
 import sys
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 or older (macOS's own python3 is 3.9)
+    sys.exit("This needs Python 3.11 or newer: install it from https://www.python.org/downloads/ "
+             "and run it with python3.13 (or the version you installed).")
 import urllib.error
 import urllib.parse
 import urllib.request

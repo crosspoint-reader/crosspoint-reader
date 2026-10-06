@@ -628,3 +628,24 @@ containing "Forbidden City"; see the session summary for the download.
   render and when an article's pictures are cleared.
 - Device checklist: Lorne Michaels → Images, then open another article with
   pictures → Images: its own pictures, in place; tap one: that picture.
+
+## 2026-10-06 — Shareable: a guide and two scripts
+
+- Owner: wants to share Pocket Library so others can make their own.
+- `docs/pocket-library/README.md` (linked from the top of README.md): what it
+  does, what you need, back up, install CrossPoint, install Pocket Library,
+  build the card, updating, going back, troubleshooting from this week.
+- `tools/flash/flash.sh` (install, backup, restore, stock, log) and
+  `tools/cardbuilder/get-tools.sh`; both published to the release with
+  checksums. Tested here: syntax, esptool 5.4 command names, the partition
+  check against this build's table (accepted) and a blank one (refused), and
+  a checksum-checked download from the preview release. Not yet run against
+  a reader.
+- The picture fixes' changes to CrossPoint files are now fenced in
+  `#ifdef POCKET_LIBRARY` and listed in DECISIONS.
+- library.toml's staging default is `~/PocketLib/downloads`; cardbuilder and
+  webpack say plainly when Python is older than 3.11; download retries 20.
+- 387 firmware host tests, 14 card builder tests, booklist tests; release build OK.
+- Owner to do: merge this branch into pocket-library so the dev release
+  carries it; set the repository's default branch to pocket-library; try
+  `bash flash.sh` once from ~/PocketLib (it offers a backup first).

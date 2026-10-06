@@ -79,6 +79,9 @@ Release tags are what we rebase onto.
 | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/main.cpp`, `src/activities/ActivityManager.{h,cpp}` | `#ifdef POCKET_LIBRARY`: short power button option **Search** (value 6, appended), opening search over whatever is open | search entry point (owner's choice) |
 | `src/activities/ActivityManager.{h,cpp}`, `lib/GfxRenderer/GfxRenderer.h` | `#ifdef POCKET_LIBRARY`: a half refresh on every return to Home and on every fourth other screen change (push, pop, replace), never weakening a deeper one already promoted; readers and the control center are left alone. (First version did it on every change: it cleared the ghosting but flashed the panel on each tap; owner report) | ghost text from the previous screen, plainest in the dithered selection bar (owner report) |
 | `lib/LibraryIndex/LibraryBuilder.cpp`, `lib/LibraryIndex/LibraryFormat.h`, `src/activities/library/LibraryListActivity.cpp`, `test/CMakeLists.txt` | `#ifdef POCKET_LIBRARY`: the title sort and the letter groups skip a leading "The", "A" or "An" (`TitleSortKey.h`, ours); `CLIX_FOLD_VERSION` 5 so existing indexes rebuild once; one `add_subdirectory(pocketlib_title_sort)` | "The" shouldn't decide where a book files (owner) |
+| `lib/Epub/Epub/converters/{Png,Jpeg}ToFramebufferConverter.cpp` | `#ifdef POCKET_LIBRARY`: the decoder's free-heap gate reads the default heap (`HalMemory::getDefaultHeap()`), not `ESP.getFreeHeap()` (internal RAM only) | with PSRAM the decoder is allocated there; the internal-RAM gate refused pictures (2026-10-05) |
+| `lib/Epub/Epub/converters/ImageDecoderFactory.{h,cpp}`, `lib/Epub/Epub/blocks/ImageBlock.cpp` | `#ifdef POCKET_LIBRARY`: `getDecoderForFile()` picks JPEG or PNG by the file's first bytes; ImageBlock uses it | Wikipedia 2026 stores WebP under .jpg names; the reader converts them to PNG under that name (2026-10-05) |
+| `README.md` | three-line note at the top pointing to `docs/pocket-library/README.md` | the repository's front page leads to the guide |
 
 ## 2026-10-01 — Licensing layout
 
@@ -711,3 +714,25 @@ Survival shelf (FM 21-76, Where There Is No Doctor, FEMA Are You Ready?, SAS
 if DRM-free), notes app (Bluetooth keyboard untested), emergency-card sleep
 screen, QR hand-off to a phone, Wi-Fi hotspot library, face-down sleep,
 flashlight, CPR metronome. Recorded so they can be picked up later.
+
+## 2026-10-06 — Shareable: a guide and two scripts
+
+- `docs/pocket-library/README.md`: the guide for someone starting from a new
+  X4 Pro, linked from the top of `README.md` and the release notes.
+- `tools/flash/flash.sh`: esptool in its own environment under ~/PocketLib
+  (Homebrew's Python refuses `pip install`, and `brew install esptool`
+  compiles LLVM and Rust on macOS 13); full 16 MB backup before the first
+  install; refuses unless the flash already has CrossPoint's layout (app0 at
+  0x10000, otadata at 0xe000), since a factory reader's layout differs and
+  the CrossPoint web installer is the tested way to change it; checks the
+  release checksum; writes app0 and erases otadata so the new app starts
+  whichever slot was active. Also backup, restore, stock and log (miniterm
+  with RTS/DTR low, which doesn't reset the chip). Reasons: every step the
+  owner found by hand on 2026-10-05.
+- `tools/cardbuilder/get-tools.sh`: the card tools from the release, each
+  checksum-checked, into ~/PocketLib/cardbuilder; keeps an existing
+  library.toml. Both scripts require Python 3.11+ (macOS's own is 3.9;
+  tomllib and esptool 5 need newer) and say where to get it.
+- `library.toml` staging now defaults to `~/PocketLib/downloads` (created if
+  missing; a path under /Volumes still has to exist). The owner's own copy on
+  the Mac keeps `/Volumes/SSK Drive`.

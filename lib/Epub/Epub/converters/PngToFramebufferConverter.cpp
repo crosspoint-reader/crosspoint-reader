@@ -2,7 +2,9 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#ifdef POCKET_LIBRARY
 #include <HalMemory.h>
+#endif
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -22,8 +24,13 @@ namespace {
 // The heap the decoder object is allocated from. ESP.getFreeHeap() counts
 // internal RAM only, but with PSRAM (X4 Pro) an allocation this size goes
 // to PSRAM, so gating on internal RAM refused pictures that would fit.
-// Without PSRAM the default heap is internal RAM, as before.
+// Without PSRAM the default heap is internal RAM, as before. Pocket Library
+// builds only; stock builds keep ESP.getFreeHeap().
+#ifdef POCKET_LIBRARY
 size_t freeHeapForDecoder() { return HalMemory::getDefaultHeap().freeBytes; }
+#else
+size_t freeHeapForDecoder() { return ESP.getFreeHeap(); }
+#endif
 
 // Context struct passed through PNGdec callbacks to avoid global mutable state.
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
