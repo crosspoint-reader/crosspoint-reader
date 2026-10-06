@@ -33,3 +33,4 @@ lib/EpdFont/scripts/output/
 sdkconfig.sticky
 sdkconfig.x4pro
 flake.*
+/debugging-monitor-output/

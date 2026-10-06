@@ -18,22 +18,26 @@ Features:
 Usage:
     python debugging_monitor.py [port] [options]
 
-The script will open a matplotlib window showing memory usage over time and provide
-an interactive command prompt for sending commands to the device. Press Ctrl-C or
-close the graph window to exit gracefully.
+Use --serve for a localhost HTTP API, with --headless to omit the graph and stdin.
+See docs/debugging-monitor.md for the API and benchmark control workflow.
+Press Ctrl-C or close the graph window to exit gracefully.
 """
 
 from __future__ import annotations
 
 import argparse
 import glob
+import importlib
 import platform
 import re
 import signal
-import sys
+import tempfile
 import threading
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
+
+from monitor_session import DeviceSession, SessionError
 
 DEFAULT_BAUDRATE = 115200
 
@@ -66,48 +70,39 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="",
         help="Suppress lines containing this keyword (case-insensitive)",
     )
+    parser.add_argument(
+        "--serve", action="store_true", help="Expose the local device API"
+    )
+    parser.add_argument(
+        "--headless", action="store_true", help="Run without graph or interactive stdin"
+    )
+    parser.add_argument(
+        "--http-port", type=int, default=8765, help="Local API port (default: 8765)"
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="debugging-monitor-output",
+        help="Parent directory for serial logs and screenshots",
+    )
     return parser
 
 
-if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-    build_arg_parser().parse_args()
-
-# Try to import potentially missing packages
-PACKAGE_MAPPING: dict[str, str] = {
-    "serial": "pyserial",
-    "colorama": "colorama",
-    "matplotlib": "matplotlib",
-    "PIL": "Pillow",
-}
-
+# Colors are optional; headless mode requires only pyserial.
 try:
-    import matplotlib.pyplot as plt
-    import serial
     from colorama import Fore, Style, init
-    from matplotlib import animation
+except ImportError:
 
-    try:
-        from PIL import Image
-    except ImportError:
-        Image = None
-except ImportError as e:
-    ERROR_MSG = str(e).lower()
-    missing_packages = [pkg for mod, pkg in PACKAGE_MAPPING.items() if mod in ERROR_MSG]
+    class PlainColors:
+        def __getattr__(self, _name):
+            return ""
 
-    if not missing_packages:
-        # Fallback if mapping doesn't cover
-        missing_packages = ["pyserial", "colorama", "matplotlib"]
+    Fore = Style = PlainColors()
 
-    print("\n" + "!" * 50)
-    print(f" Error: Required package(s) not installed: {', '.join(missing_packages)}")
-    print("!" * 50)
+    def init(**_kwargs):
+        pass
 
-    print("\nTo fix this, please run the following command in your terminal:\n")
-    INSTALL_CMD = "pip install " if sys.platform.startswith("win") else "pip3 install "
-    print(f"    {INSTALL_CMD}{' '.join(missing_packages)}")
 
-    print("\nExiting...")
-    sys.exit(1)
+plt = None
 
 # --- Global Variables for Data Sharing ---
 # Store last 50 data points
@@ -199,7 +194,6 @@ def signal_handler(signum, frame):
     del frame  # Explicitly mark as unused to satisfy linters
     print(f"\n{Fore.YELLOW}Received signal {signum}. Shutting down...{Style.RESET_ALL}")
     shutdown_event.set()
-    plt.close("all")
 
 
 # pylint: disable=R0912
@@ -220,6 +214,7 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     Format: Free: N bytes, Total: N bytes, Min Free: N bytes, MaxAlloc: N bytes
     Returns: (free_bytes, total_bytes, max_alloc_bytes)
     """
+
     def _find(pattern: str) -> int | None:
         m = re.search(pattern, line)
         if m:
@@ -236,137 +231,88 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     )
 
 
-def serial_worker(ser, kwargs: dict[str, str]) -> None:
-    """
-    Runs in a background thread. Handles reading serial data, printing to console,
-    updating memory usage data for graphing, and processing screenshot data.
-    Monitors the global shutdown event for graceful termination.
-    """
-    print(f"{Fore.CYAN}--- Opening serial port ---{Style.RESET_ALL}")
-    filter_keyword = kwargs.get("filter", "").lower()
-    suppress = kwargs.get("suppress", "").lower()
-    if filter_keyword and suppress and filter_keyword == suppress:
-        print(
-            f"{Fore.YELLOW}Warning: Filter and Suppress keywords are the same. "
-            f"This may result in no output.{Style.RESET_ALL}"
-        )
-    if filter_keyword:
-        print(
-            f"{Fore.YELLOW}Filtering lines to only show those containing: "
-            f"'{filter_keyword}'{Style.RESET_ALL}"
-        )
-    if suppress:
-        print(
-            f"{Fore.YELLOW}Suppressing lines containing: '{suppress}'{Style.RESET_ALL}"
-        )
-
-    expecting_screenshot = False
-    screenshot_size = 0
-    screenshot_data = b""
-
-    try:
-        while not shutdown_event.is_set():
-            if expecting_screenshot:
-                data = ser.read(screenshot_size - len(screenshot_data))
-                if not data:
-                    continue
-                screenshot_data += data
-                if len(screenshot_data) == screenshot_size:
-                    if Image:
-                        img = Image.frombytes("1", (800, 480), screenshot_data)
-                        # We need to rotate the image because the raw data is in landscape mode
-                        img = img.transpose(Image.ROTATE_270)
-                        img.save("screenshot.bmp")
-                        print(
-                            f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}"
+def presentation_worker(session, args):
+    """Consume session events without blocking serial reads on terminal output."""
+    cursor = 0
+    while not shutdown_event.is_set():
+        batch = session.read_events(cursor, wait=0.2)
+        cursor = batch["cursor"]
+        if batch["dropped"]:
+            print(
+                "Monitor display fell behind; full output remains in the session logs."
+            )
+        for event in batch["events"]:
+            if event["type"] == "screenshot":
+                print(
+                    "Screenshot saved to " + event.get("image_path", event["raw_path"])
+                )
+                continue
+            if event["type"] != "log":
+                if event["type"] in ("connection", "screenshot_error"):
+                    print(event)
+                continue
+            line = event["line"]
+            pc_time = (
+                datetime.fromtimestamp(event["time"], timezone.utc)
+                .astimezone()
+                .strftime("%H:%M:%S")
+            )
+            if "[MEM]" in line:
+                free_val, total_val, max_alloc_val = parse_memory_line(line)
+                if free_val is not None and total_val is not None:
+                    with data_lock:
+                        series = (
+                            (
+                                psram_time_data,
+                                psram_free_mem_data,
+                                psram_total_mem_data,
+                                psram_max_alloc_data,
+                            )
+                            if "PSRAM:" in line
+                            else (
+                                time_data,
+                                free_mem_data,
+                                total_mem_data,
+                                max_alloc_data,
+                            )
                         )
-                    else:
-                        with open("screenshot.raw", "wb") as f:
-                            f.write(screenshot_data)
-                        print(
-                            f"{Fore.GREEN}Screenshot saved to screenshot.raw (PIL not available){Style.RESET_ALL}"
-                        )
-                    expecting_screenshot = False
-                    screenshot_data = b""
-            else:
-                try:
-                    raw_data = ser.readline().decode("utf-8", errors="replace")
-
-                    if not raw_data:
-                        continue
-
-                    clean_line = raw_data.strip()
-                    if not clean_line:
-                        continue
-
-                    if clean_line.startswith("SCREENSHOT_START:"):
-                        screenshot_size = int(clean_line.split(":")[1])
-                        expecting_screenshot = True
-                        continue
-                    elif clean_line == "SCREENSHOT_END":
-                        continue  # ignore
-
-                    # Add PC timestamp
-                    pc_time = datetime.now().strftime("%H:%M:%S")
-                    formatted_line = re.sub(r"^\[\d+\]", f"[{pc_time}]", clean_line)
-
-                    # Check for Memory Line
-                    if "[MEM]" in formatted_line:
-                        free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
-                        if free_val is not None and total_val is not None:
-                            with data_lock:
-                                if "PSRAM:" in formatted_line:
-                                    psram_time_data.append(pc_time)
-                                    psram_free_mem_data.append(free_val / 1024)
-                                    psram_total_mem_data.append(total_val / 1024)
-                                    psram_max_alloc_data.append((max_alloc_val or 0) / 1024)
-                                else:
-                                    time_data.append(pc_time)
-                                    free_mem_data.append(free_val / 1024)
-                                    total_mem_data.append(total_val / 1024)
-                                    max_alloc_data.append((max_alloc_val or 0) / 1024)
-                    # Apply filters
-                    if filter_keyword and filter_keyword not in formatted_line.lower():
-                        continue
-                    if suppress and suppress in formatted_line.lower():
-                        continue
-                    # Print to console
-                    line_color = get_color_for_line(formatted_line)
-                    print(f"{line_color}{formatted_line}")
-
-                except (OSError, UnicodeDecodeError):
-                    print(
-                        f"{Fore.RED}Device disconnected or data error.{Style.RESET_ALL}"
-                    )
-                    break
-    except KeyboardInterrupt:
-        # If thread is killed violently (e.g. main exit), silence errors
-        pass
-    finally:
-        pass  # ser closed in main
+                        for target, value in zip(
+                            series,
+                            (
+                                pc_time,
+                                free_val / 1024,
+                                total_val / 1024,
+                                (max_alloc_val or 0) / 1024,
+                            ),
+                        ):
+                            target.append(value)
+            if args.filter and args.filter.lower() not in line.lower():
+                continue
+            if args.suppress and args.suppress.lower() in line.lower():
+                continue
+            formatted = re.sub(r"^\[\d+\]", f"[{pc_time}]", line)
+            print(f"{get_color_for_line(line)}{formatted}")
+        if session.stopped.is_set():
+            shutdown_event.set()
 
 
-def input_worker(ser) -> None:
-    """
-    Runs in a background thread. Handles user input to send commands to the ESP32 device.
-    Monitors the global shutdown event for graceful termination on Ctrl-C.
-    """
+def input_worker(session):
     while not shutdown_event.is_set():
         try:
-            cmd = input("Command: ")
-            ser.write(f"CMD:{cmd}\n".encode())
+            command = input("Command: ")
+            session.request("command", command)
+        except SessionError as exc:
+            print(f"Command rejected: {exc}")
         except (EOFError, KeyboardInterrupt):
             break
 
 
 def update_graph(frame) -> list:  # pylint: disable=unused-argument
     """
-    Called by Matplotlib animation to redraw the memory usage chart.
-    Monitors the global shutdown event and closes the plot when shutdown is requested.
+    Redraw the memory usage chart unless shutdown is requested.
     Shows DRAM metrics (free, total, max contiguous alloc) and an optional PSRAM subplot.
     """
     if shutdown_event.is_set():
-        plt.close("all")
         return []
 
     with data_lock:
@@ -401,9 +347,18 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
     if px:
         ax2 = fig.add_subplot(212)
         ax2.plot(px, py_total, label="Total PSRAM (KB)", color="red", linestyle="--")
-        ax2.plot(px, py_free, label="Free PSRAM (KB)", color="green", marker="o", markersize=3)
+        ax2.plot(
+            px,
+            py_free,
+            label="Free PSRAM (KB)",
+            color="green",
+            marker="o",
+            markersize=3,
+        )
         if any(v > 0 for v in py_max_alloc):
-            ax2.plot(px, py_max_alloc, label="Max Alloc (KB)", color="orange", linestyle="-.")
+            ax2.plot(
+                px, py_max_alloc, label="Max Alloc (KB)", color="orange", linestyle="-."
+            )
         ax2.fill_between(px, py_free, color="green", alpha=0.1)
         ax2.set_title("ESP32 PSRAM Monitor")
         ax2.set_ylabel("Memory (KB)")
@@ -452,98 +407,85 @@ def get_auto_detected_port() -> list[str]:
 
 
 def main() -> None:
-    """
-    Main entry point for the ESP32 monitor application.
-
-    Sets up argument parsing, initializes serial communication, starts background threads
-    for serial monitoring and command input, and launches the memory usage graph.
-    Implements graceful shutdown handling with signal processing for clean termination.
-
-    Features:
-    - Serial port monitoring with color-coded output
-    - Real-time memory usage graphing
-    - Interactive command interface
-    - Screenshot capture capability
-    - Graceful shutdown on Ctrl-C or window close
-    """
+    global plt
     parser = build_arg_parser()
     args = parser.parse_args()
+    if not 0 <= args.http_port <= 65535:
+        parser.error("--http-port must be between 0 and 65535")
+    try:
+        importlib.import_module("serial")
+        if not args.headless:
+            from matplotlib import pyplot
+
+            plt = pyplot
+    except ImportError as exc:
+        parser.error(
+            f"Missing dependency: {exc}. Install pyserial; graph mode also needs matplotlib."
+        )
+
     port = args.port
     if port is None:
-        port_list = get_auto_detected_port()
-        if len(port_list) == 1:
-            port = port_list[0]
-            print(f"{Fore.CYAN}Auto-detected serial port: {port}{Style.RESET_ALL}")
-        elif len(port_list) > 1:
-            print(f"{Fore.YELLOW}Multiple serial ports found:{Style.RESET_ALL}")
-            for p in port_list:
-                print(f"  - {p}")
-            print(
-                f"{Fore.YELLOW}Please specify the desired port as a command-line argument.{Style.RESET_ALL}"
+        ports = get_auto_detected_port()
+        if len(ports) != 1:
+            parser.error(
+                "Specify a serial port; detected: " + (", ".join(ports) or "none")
             )
-    if port is None:
-        print(f"{Fore.RED}Error: No suitable serial port found.{Style.RESET_ALL}")
-        sys.exit(1)
-
-    try:
-        ser = serial.Serial(port, args.baud, timeout=0.1)
-        ser.dtr = False
-        ser.rts = False
-    except serial.SerialException as e:
-        print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
-        return
-
-    # Set up signal handler for graceful shutdown
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # 1. Start the Serial Reader in a separate thread
-    # Daemon=True means this thread dies when the main program closes
-    myargs = vars(args)  # Convert Namespace to dict for easier passing
-    t = threading.Thread(target=serial_worker, args=(ser, myargs), daemon=True)
-    t.start()
-
-    # Start input thread
-    input_thread = threading.Thread(target=input_worker, args=(ser,), daemon=True)
-    input_thread.start()
-
-    # 2. Set up the Graph (Main Thread)
-    try:
-        import matplotlib.style as mplstyle  # pylint: disable=import-outside-toplevel
-
-        default_styles = (
-            "light_background",
-            "ggplot",
-            "seaborn",
-            "dark_background",
-        )
-        styles = list(mplstyle.available)
-        for default_style in default_styles:
-            if default_style in styles:
-                print(
-                    f"\n{Fore.CYAN}--- Using Matplotlib style: {default_style} ---{Style.RESET_ALL}"
-                )
-                mplstyle.use(default_style)
-                break
-    except (AttributeError, ValueError):
-        pass
-
-    fig = plt.figure(figsize=(10, 6))
-
-    # Update graph every 1000ms
-    _ = animation.FuncAnimation(
-        fig, update_graph, interval=1000, cache_frame_data=False
+        port = ports[0]
+    output_parent = Path(args.output_dir)
+    output_parent.mkdir(parents=True, exist_ok=True)
+    output_dir = tempfile.mkdtemp(
+        prefix=datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S-"),
+        dir=output_parent,
     )
+    session = DeviceSession(port, args.baud, output_dir)
+    server = None
+    server_thread = None
+    if args.serve:
+        from monitor_server import create_server
 
+        try:
+            server = create_server(session, args.http_port)
+        except OSError as exc:
+            parser.error(f"Cannot start local API: {exc}")
+    shutdown_event.clear()
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     try:
-        print(
-            f"{Fore.YELLOW}Starting Graph Window... (Close window or press Ctrl-C to exit){Style.RESET_ALL}"
-        )
-        plt.show()
-    except KeyboardInterrupt:
-        print(f"\n{Fore.YELLOW}Exiting...{Style.RESET_ALL}")
+        session.start()
+        if server:
+            server_thread = threading.Thread(
+                target=server.serve_forever, name="monitor-api", daemon=True
+            )
+            server_thread.start()
+            print(f"Device API: http://127.0.0.1:{server.server_port}")
+        print(f"Session output: {session.output_dir}")
+        threading.Thread(
+            target=presentation_worker, args=(session, args), daemon=True
+        ).start()
+        if args.headless:
+            while not shutdown_event.wait(0.2):
+                if session.stopped.is_set():
+                    break
+        else:
+            threading.Thread(target=input_worker, args=(session,), daemon=True).start()
+            fig = plt.figure(figsize=(10, 6))
+
+            plt.show(block=False)
+            while not shutdown_event.is_set() and plt.fignum_exists(fig.number):
+                update_graph(0)
+                fig.canvas.draw_idle()
+                # Pump GUI events with a deadline so shutdown returns to cleanup.
+                fig.canvas.start_event_loop(1.0)
     finally:
-        shutdown_event.set()  # Ensure all threads know to stop
-        plt.close("all")  # Force close any lingering plot windows
+        shutdown_event.set()
+        session.close()
+        if server:
+            if server_thread:
+                server.shutdown()
+                server_thread.join()
+            server.server_close()
+        if plt is not None:
+            plt.close("all")
 
 
 if __name__ == "__main__":
