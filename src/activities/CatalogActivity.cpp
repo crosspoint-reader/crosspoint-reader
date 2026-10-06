@@ -70,7 +70,7 @@ void CatalogActivity::launchWifiSelection() {
 }
 
 void CatalogActivity::launchSearch() {
-  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH), searchPrefill());
   if (!keyboard) {
     LOG_ERR("CAT", "OOM: search keyboard");
     fail(StrId::STR_MEMORY_ERROR);
@@ -170,7 +170,8 @@ void CatalogActivity::onDownloadProgress(const size_t downloaded, const size_t t
 
 HttpDownloader::DownloadError CatalogActivity::downloadFile(const std::string& url, const std::string& dest,
                                                             const std::string& user, const std::string& password,
-                                                            const std::vector<HttpDownloader::Header>& headers) {
+                                                            const std::vector<HttpDownloader::Header>& headers,
+                                                            const std::string* postBody, const char* postContentType) {
   downloadProgress = downloadTotal = 0;
   lastRenderedPercent = -1;
   lastProgressUpdateMs = 0;
@@ -183,6 +184,11 @@ HttpDownloader::DownloadError CatalogActivity::downloadFile(const std::string& u
       ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
     LOG_ERR("CAT", "Low heap for download (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     return HttpDownloader::HTTP_ERROR;
+  }
+  if (postBody) {
+    return HttpDownloader::postToFile(
+        url, *postBody, postContentType ? postContentType : "application/octet-stream", dest,
+        [this](size_t downloaded, size_t total) { onDownloadProgress(downloaded, total); }, &cancelDownload);
   }
   return HttpDownloader::downloadToFile(
       url, dest, [this](size_t downloaded, size_t total) { onDownloadProgress(downloaded, total); }, &cancelDownload,

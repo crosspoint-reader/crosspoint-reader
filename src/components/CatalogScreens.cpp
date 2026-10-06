@@ -34,6 +34,10 @@ void catalogScreenHeader(UiAppHost::UiScreen& screen, const GfxRenderer& rendere
     static constexpr fui::ActionId PAINT_ONLY_BACK = 0xFFFF;
     header.leadingIcon = fui::bitmapFromIcon(icon_header_back_32);
     header.leadingAction = PAINT_ONLY_BACK;
+    // Every state identical, like the trailing icon: no filled active box,
+    // and a tap flash (never cleared, since no handler owns this action)
+    // renders the same as the resting state instead of sticking.
+    header.leadingStyles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
     HeaderBackTapTarget::set(frameRect.x + 4, metrics.topPadding + 4 + header.actionOffsetY, header.leadingSize,
                              header.leadingSize);
   }
@@ -140,6 +144,12 @@ void catalogDownloadScreen(UiAppHost::UiScreen& screen, const char* status, cons
     fui::ButtonProps cancel;
     cancel.label = tr(STR_CANCEL);
     cancel.action = cancelAction;
+    // Themed button with an outline and the theme's control rounding, same
+    // as the publication page's acquire button.
+    cancel.styles = screen.theme().button;
+    cancel.styles.normal.border = fui::Paint::solid(fui::Color::Black);
+    cancel.styles.normal.borderWidth = 1;
+    cancel.radius = screen.theme().controlRadius;
     screen.button(cancel,
                   fui::Rect{static_cast<int16_t>(btnArea.x + (btnArea.width - btnW) / 2), btnArea.y, btnW, btnH});
   }

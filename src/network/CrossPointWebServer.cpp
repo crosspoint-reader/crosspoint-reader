@@ -2410,7 +2410,7 @@ void CrossPointWebServer::handlePluginFs() {
   st.started = false;
 }
 
-// POST /api/book-key {path, key (base64, 16 bytes), expires?} -> {ok}
+// POST /api/book-key {path, key (base64, 16 or 32 bytes), expires?} -> {ok}
 // Stores a protected book's content key, wrapped to this device, as
 // "<path>.key" for the reader to open the book with.
 void CrossPointWebServer::handleBookKey() {
@@ -2419,13 +2419,13 @@ void CrossPointWebServer::handleBookKey() {
   const std::string path = req["path"] | "";
   const char* keyB64 = req["key"] | "";
   const int64_t expires = req["expires"] | static_cast<int64_t>(0);
-  uint8_t key[bookkey::KEY_LEN];
+  uint8_t key[bookkey::MAX_KEY_LEN];
   const int32_t n = freeink::content::base64Decode(keyB64, strlen(keyB64), key, sizeof(key));
-  if (!protectedpaths::isPluginPath(path) || n != static_cast<int32_t>(sizeof(key)) || expires < 0) {
+  if (!protectedpaths::isPluginPath(path) || (n != 16 && n != 32) || expires < 0) {
     server->send(400, "application/json", "{\"error\":\"bad path/key\"}");
     return;
   }
-  if (!bookkey::write(path, key, expires)) {
+  if (!bookkey::write(path, key, static_cast<size_t>(n), expires)) {
     server->send(500, "application/json", "{\"error\":\"cannot store key\"}");
     return;
   }

@@ -89,7 +89,16 @@ jobs:
       - name: Build CrossPoint
         env:
           PIO_ENV: ${{ github.event.release.prerelease && matrix.rc_env || matrix.release_env }}
-        run: CROSSPOINT_RC_HASH="$(git rev-parse --short=7 HEAD)" pio run -e "$PIO_ENV" -j1
+          # Enrollment gate for the LCP service: official releases carry this
+          # key, self-builds do not (and lose only LCP). Rotate per release by
+          # updating the repo secret; retire old values in the service's
+          # RELEASE_KEYS list.
+          FREEINK_LCP_RELEASE_KEY: ${{ secrets.FREEINK_LCP_RELEASE_KEY }}
+        run: |
+          if [ -n "$FREEINK_LCP_RELEASE_KEY" ]; then
+            export PLATFORMIO_BUILD_FLAGS="-DFREEINK_LCP_RELEASE_KEY=\\\"$FREEINK_LCP_RELEASE_KEY\\\""
+          fi
+          CROSSPOINT_RC_HASH="$(git rev-parse --short=7 HEAD)" pio run -e "$PIO_ENV" -j1
 
       - name: Prepare firmware asset
         id: asset

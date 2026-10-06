@@ -15,6 +15,7 @@ class CatalogActivity : public UiListActivity {
     SEARCH_INPUT,
     LOADING,
     BROWSING,
+    DETAIL,  // publication detail page (OPDS)
     DOWNLOADING,
     ERROR,
     PLUGIN_PICKER,
@@ -42,6 +43,8 @@ class CatalogActivity : public UiListActivity {
   virtual bool hasSearch() const = 0;
   virtual void performSearch(const std::string& query) = 0;
   virtual void downloadFinished(bool cancelled) = 0;
+  // Initial keyboard text when search opens (refining the active query).
+  virtual std::string searchPrefill() const { return {}; }
 
   bool handleCustomInput() override;
   void navigateButtons() override;
@@ -60,9 +63,14 @@ class CatalogActivity : public UiListActivity {
   void launchSearch();
   void beginDownload(const std::string& title);
   void finishDownload(HttpDownloader::DownloadError result);
+  // postBody non-null turns the transfer into a POST of that body (e.g. an
+  // LCP license to the fulfillment service), with postContentType as its
+  // Content-Type. Same heap gating and cancel/progress pump either way.
   HttpDownloader::DownloadError downloadFile(const std::string& url, const std::string& dest,
                                              const std::string& user = {}, const std::string& password = {},
-                                             const std::vector<HttpDownloader::Header>& headers = {});
+                                             const std::vector<HttpDownloader::Header>& headers = {},
+                                             const std::string* postBody = nullptr,
+                                             const char* postContentType = nullptr);
   void screenHeader(UiScreen& screen, const char* title);
   bool buildStatusScreen(UiScreen& screen, bool boldError = true, bool showDownloadTotal = false);
 
