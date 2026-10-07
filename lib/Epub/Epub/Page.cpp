@@ -205,11 +205,18 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
 
 bool Page::serialize(HalFile& file) const {
   const uint16_t count = elements.size();
-  serialization::writePod(file, count);
+  if (file.write(reinterpret_cast<const uint8_t*>(&count), sizeof(count)) != sizeof(count)) {
+    LOG_ERR("PGE", "Failed to write element count");
+    return false;
+  }
 
   for (const auto& el : elements) {
     // Use getTag() method to determine type
-    serialization::writePod(file, static_cast<uint8_t>(el->getTag()));
+    const uint8_t tag = el->getTag();
+    if (file.write(tag) != sizeof(tag)) {
+      LOG_ERR("PGE", "Failed to write element tag");
+      return false;
+    }
 
     if (!el->serialize(file)) {
       return false;
@@ -218,7 +225,10 @@ bool Page::serialize(HalFile& file) const {
 
   // Serialize footnotes (clamp to MAX_FOOTNOTES_PER_PAGE to match addFootnote/deserialize limits)
   const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), MAX_FOOTNOTES_PER_PAGE);
-  serialization::writePod(file, fnCount);
+  if (file.write(reinterpret_cast<const uint8_t*>(&fnCount), sizeof(fnCount)) != sizeof(fnCount)) {
+    LOG_ERR("PGE", "Failed to write footnote count");
+    return false;
+  }
   for (uint16_t i = 0; i < fnCount; i++) {
     const auto& fn = footnotes[i];
     if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
@@ -229,17 +239,23 @@ bool Page::serialize(HalFile& file) const {
   }
 
   const uint16_t linkCount = std::min<uint16_t>(links.size(), MAX_LINKS_PER_PAGE);
-  serialization::writePod(file, linkCount);
+  if (file.write(reinterpret_cast<const uint8_t*>(&linkCount), sizeof(linkCount)) != sizeof(linkCount)) {
+    LOG_ERR("PGE", "Failed to write link count");
+    return false;
+  }
   for (uint16_t i = 0; i < linkCount; i++) {
     const auto& link = links[i];
     if (file.write(link.href, sizeof(link.href)) != sizeof(link.href)) {
       LOG_ERR("PGE", "Failed to write link %u", i);
       return false;
     }
-    serialization::writePod(file, link.x);
-    serialization::writePod(file, link.y);
-    serialization::writePod(file, link.width);
-    serialization::writePod(file, link.height);
+    if (file.write(reinterpret_cast<const uint8_t*>(&link.x), sizeof(link.x)) != sizeof(link.x) ||
+        file.write(reinterpret_cast<const uint8_t*>(&link.y), sizeof(link.y)) != sizeof(link.y) ||
+        file.write(reinterpret_cast<const uint8_t*>(&link.width), sizeof(link.width)) != sizeof(link.width) ||
+        file.write(reinterpret_cast<const uint8_t*>(&link.height), sizeof(link.height)) != sizeof(link.height)) {
+      LOG_ERR("PGE", "Failed to write link coordinates %u", i);
+      return false;
+    }
   }
 
   return true;

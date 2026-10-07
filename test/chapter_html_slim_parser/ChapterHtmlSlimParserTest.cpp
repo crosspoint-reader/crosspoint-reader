@@ -278,7 +278,7 @@ TEST_F(ChapterHtmlSlimParserTest, GridSerializationRejectsEveryShortWrite) {
 TEST_F(ChapterHtmlSlimParserTest, PageSerializationPropagatesShortGridWrites) {
   const auto path = std::filesystem::temp_directory_path() / "crosspoint-page-grid-short-write.bin";
   constexpr size_t pageBytes =
-      sizeof(uint16_t) + sizeof(uint8_t) + sizeof(int16_t) * 2 + sizeof(uint16_t) * 2 + sizeof(uint8_t);
+      sizeof(uint16_t) * 3 + sizeof(uint8_t) + sizeof(int16_t) * 2 + sizeof(uint16_t) * 2 + sizeof(uint8_t);
   Page page;
   ASSERT_TRUE(page.elements.push_back(std::make_unique<PageTableGridRow>(240, 20, 2, 0, 0)));
   for (size_t limit = 0; limit <= pageBytes; ++limit) {
@@ -287,6 +287,27 @@ TEST_F(ChapterHtmlSlimParserTest, PageSerializationPropagatesShortGridWrites) {
     ASSERT_TRUE(output.open(path.c_str(), "wb"));
     output.limitWritesTo(limit);
     EXPECT_EQ(page.serialize(output), limit == pageBytes);
+    EXPECT_EQ(output.position(), limit);
+  }
+  std::filesystem::remove(path);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PageSerializationRejectsEveryShortMetadataWrite) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-page-metadata-short-write.bin";
+  constexpr size_t pageBytes = sizeof(uint16_t) * 3 + sizeof(FootnoteEntry::number) + sizeof(FootnoteEntry::href) +
+                               sizeof(PageLink::href) + sizeof(int16_t) * 4;
+  Page page;
+  page.footnotes.reserve(1);
+  page.links.reserve(1);
+  page.addFootnote("1", "#note");
+  ASSERT_TRUE(page.addLink("#target", 1, 2, 3, 4));
+  for (size_t limit = 0; limit <= pageBytes; ++limit) {
+    SCOPED_TRACE(limit);
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    output.limitWritesTo(limit);
+    EXPECT_EQ(page.serialize(output), limit == pageBytes);
+    EXPECT_EQ(output.position(), limit);
   }
   std::filesystem::remove(path);
 }
