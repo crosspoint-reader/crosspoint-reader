@@ -18,13 +18,7 @@ class HalFile {
   }
   int available() const { return file_ ? static_cast<int>(size() - position()) : 0; }
   size_t read(void* buffer, size_t count) { return file_ ? std::fread(buffer, 1, count, file_) : 0; }
-  size_t write(const void* buffer, size_t count) {
-    const size_t allowed = count < writeBytesLeft_ ? count : writeBytesLeft_;
-    const size_t written = file_ ? std::fwrite(buffer, 1, allowed, file_) : 0;
-    writeBytesLeft_ -= written;
-    return written;
-  }
-  void limitWritesTo(size_t count) { writeBytesLeft_ = count; }
+  size_t write(const void* buffer, size_t count) { return file_ ? std::fwrite(buffer, 1, count, file_) : 0; }
   size_t write(uint8_t byte) { return write(&byte, 1); }
   bool flush() { return file_ && std::fflush(file_) == 0; }
   bool seekCur(size_t offset) { return file_ && std::fseek(file_, static_cast<long>(offset), SEEK_CUR) == 0; }
@@ -45,6 +39,14 @@ class HalFile {
     std::fseek(file_, offset, SEEK_SET);
     return end > 0 ? static_cast<size_t>(end) : 0;
   }
+
+  size_t write(const uint8_t* buffer, size_t count) {
+    const size_t allowed = count < writeBytesLeft_ ? count : writeBytesLeft_;
+    const size_t written = write(static_cast<const void*>(buffer), allowed);
+    writeBytesLeft_ -= written;
+    return written;
+  }
+  void limitWritesTo(size_t count) { writeBytesLeft_ = count; }
 
  private:
   std::FILE* file_ = nullptr;
