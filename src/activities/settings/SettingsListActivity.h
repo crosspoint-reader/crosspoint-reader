@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <string>
 
 #include "SettingsSection.h"
 #include "activities/UiListActivity.h"
@@ -12,9 +13,15 @@ class SettingsListActivity final : public UiListActivity {
   // Network after the Wi-Fi rows' silent restart.
   SettingsSection pendingSection;
 
+  // Comma-joined setting names per section, and the subtitle shown for it:
+  // the whole list, or as many leading names as fit in two lines plus ", …".
+  std::array<std::string, SETTINGS_SECTION_COUNT> nameLists_;
+  std::array<std::string, SETTINGS_SECTION_COUNT> subtitles_;
   std::array<freeink::ui::ListItem, SETTINGS_SECTION_COUNT> rowItems_{};
+  int16_t subtitleWidth_ = -1;  // width the subtitles were last fitted to
 
   void rebuildRows();
+  void fitSubtitles(UiScreen& screen, const freeink::ui::ListProps& props);
   void openSection(SettingsSection section);
 
   int listCount() const override { return static_cast<int>(SETTINGS_SECTION_COUNT); }
