@@ -28,7 +28,10 @@ class HalFile {
       HalFileTest::failNextWrite = false;
       return 0;
     }
-    return file_ ? std::fwrite(buffer, 1, count, file_) : 0;
+    const size_t allowed = count < writeBytesLeft_ ? count : writeBytesLeft_;
+    const size_t written = file_ ? std::fwrite(buffer, 1, allowed, file_) : 0;
+    writeBytesLeft_ -= written;
+    return written;
   }
   size_t write(uint8_t byte) { return write(&byte, 1); }
   bool flush() { return file_ && std::fflush(file_) == 0; }
@@ -55,8 +58,12 @@ class HalFile {
     return end > 0 ? static_cast<size_t>(end) : 0;
   }
 
+  size_t write(const uint8_t* buffer, size_t count) { return write(static_cast<const void*>(buffer), count); }
+  void limitWritesTo(size_t count) { writeBytesLeft_ = count; }
+
  private:
   std::FILE* file_ = nullptr;
+  size_t writeBytesLeft_ = SIZE_MAX;
 };
 
 class HalStorage {
