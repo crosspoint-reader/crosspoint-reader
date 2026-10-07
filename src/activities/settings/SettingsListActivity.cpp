@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "SettingsActivity.h"
 #include "components/UITheme.h"
@@ -12,10 +14,11 @@
 namespace fui = freeink::ui;
 
 namespace {
+constexpr int16_t ICON_SIZE = 32;
 // Row icons, indexed by SettingsSection.
 constexpr const freeink::Icon* SECTION_ICONS[SETTINGS_SECTION_COUNT] = {
-    &icon_settings_24, &icon_sun_moon_24, &icon_book_open_24, &icon_pointer_24,
-    &icon_folder_24,   &icon_library_24,  &icon_wifi_24,      &icon_cpu_24,
+    &icon_settings_32, &icon_sun_moon_32, &icon_book_open_32, &icon_pointer_32,
+    &icon_folder_32,   &icon_library_32,  &icon_wifi_32,      &icon_cpu_32,
 };
 }  // namespace
 
@@ -43,65 +46,14 @@ void SettingsListActivity::loop() {
   UiListActivity::loop();
 }
 
-// Rebuilds labels and name lists; call when entering and after a section
-// returns (its rows or the UI language may have changed).
+// Rebuilds row labels; call when entering and after a section returns (the
+// UI language may have changed).
 void SettingsListActivity::rebuildRows() {
-  SettingsBySection sections;
-  buildSettingsSections(sections);
   for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
-    auto& names = nameLists_[i];
-    names.clear();
-    for (const auto& setting : sections[i]) {
-      if (!names.empty()) names += ", ";
-      names += I18N.get(setting.nameId);
-    }
     auto& item = rowItems_[i];
-    item.subtitle = nullptr;
     item.label = I18N.get(SETTINGS_SECTION_TITLES[i]);
     item.icon = fui::bitmapFromIcon(*SECTION_ICONS[i]);
     item.actionValue = static_cast<int16_t>(i);
-  }
-  subtitleWidth_ = -1;
-}
-
-// Sets each row's subtitle to its whole name list when that fits the
-// subtitle's line limit, otherwise to as many leading names as fit on one line
-// plus ", …".
-void SettingsListActivity::fitSubtitles(UiScreen& screen, const fui::ListProps& props) {
-  const auto& theme = screen.theme();
-  // Reserve the scroll indicator too so the fit doesn't change when the list
-  // starts to scroll.
-  const int16_t width =
-      static_cast<int16_t>(screen.contentRect().width - 2 * (theme.listInset + theme.listSidePadding) -
-                           theme.listScrollWidth - theme.listScrollInset);
-  if (width == subtitleWidth_) return;
-  subtitleWidth_ = width;
-
-  const fui::TextStyle& style = props.subtitleText;
-  const int16_t lineHeight = screen.target().lineHeight(style.font);
-  for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
-    const std::string& names = nameLists_[i];
-    std::string& subtitle = subtitles_[i];
-    // The icon and its gap sit beside the subtitle, narrowing it.
-    const auto& icon = rowItems_[i].icon;
-    const int16_t textWidth = static_cast<int16_t>(width - (icon ? icon.width + props.textGap : 0));
-    const auto fitsIn = [&](const uint8_t lines) {
-      fui::TextStyle probe = style;
-      probe.maxLines = static_cast<uint8_t>(lines + 1);  // one extra line reveals overflow
-      return fui::measureWrappedText(screen.target(), subtitle.c_str(), probe, textWidth).height <= lines * lineHeight;
-    };
-    subtitle = names;
-    if (textWidth > 0 && !fitsIn(style.maxLines)) {
-      size_t cut = names.size();
-      do {
-        cut = names.rfind(", ", cut - 1);
-        if (cut == std::string::npos || cut == 0) break;  // first name alone; the renderer ellipsizes it
-        subtitle.assign(names, 0, cut);
-        subtitle += ", ";
-        subtitle += fui::TEXT_ELLIPSIS;
-      } while (!fitsIn(1));
-    }
-    rowItems_[i].subtitle = subtitle.empty() ? nullptr : subtitle.c_str();
   }
 }
 
@@ -117,9 +69,12 @@ void SettingsListActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rowItems_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.subtitleText = screen.theme().smallText;
-  props.subtitleText.maxLines = 2;
-  fitSubtitles(screen, props);
+  // Rows are as tall as a label plus a small second line, giving the icons air.
+  const auto& theme = screen.theme();
+  const int16_t textHeight = static_cast<int16_t>(screen.target().lineHeight(theme.bodyText.font) +
+                                                  screen.target().lineHeight(theme.smallText.font));
+  const int16_t paddingY = mappedInput.hasTouch() ? theme.listTouchRowPaddingY : theme.listRowPaddingY;
+  props.rowHeight = static_cast<int16_t>(std::max<int16_t>(textHeight, ICON_SIZE) + 2 * paddingY);
   syncListViewport(screen, props);
   screen.list(props);
 }
