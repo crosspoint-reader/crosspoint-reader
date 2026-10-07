@@ -18,6 +18,15 @@ OVERRIDES = f"""
    heap, and TLS cert verification allocates dozens at once. */
 #undef FP_MAX_BITS
 #define FP_MAX_BITS 8192
+/* Seed the DRBG from the hardware RNG. user_settings.h undefines
+   WOLFSSL_ESPIDF, so wc_GenerateSeed would otherwise take its ARDUINO branch
+   and read libc random(), which nothing seeds on most tasks. */
+#include <esp_random.h>
+static inline int crosspoint_wolfssl_seed(unsigned char* output, unsigned int sz) {{
+  esp_fill_random(output, sz);
+  return 0;
+}}
+#define CUSTOM_RAND_GENERATE_SEED crosspoint_wolfssl_seed
 """
 
 
