@@ -77,3 +77,10 @@ add_subdirectory(gif_support)
 
 add_subdirectory(sd_card_font)
 add_subdirectory(glyph_bitmap)
+
+add_subdirectory(reader_session)
+add_subdirectory(plugin_manifest_classification)
+add_subdirectory(protected_paths)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)

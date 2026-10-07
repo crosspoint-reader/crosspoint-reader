@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <HalClock.h>
+#include <HalFrontlight.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
@@ -151,6 +152,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
   SettingInfo s;
   s.nameId = StrId::STR_DICTIONARY;
+  s.key = "dictionaryName";  // web settings API; persisted by name, not by the generic loop
   s.type = SettingType::ENUM;
   s.enumStringValues.reserve(folderNames.size() + 1);
   s.enumStringValues.push_back(I18N.get(StrId::STR_NONE_OPT));
@@ -204,8 +206,14 @@ inline std::vector<StrId> homeThemeValues() {
 // the font-family entry is replaced in that copy with a registry-aware version.
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
+// forPersistence: fromJson()/toJson() pass true so the runtime frontlight probe
+// cannot drop a persisted key. Frontlight.present() is false until
+// Frontlight.begin() runs the I2C probe, which happens AFTER SETTINGS.loadFromFile();
+// filtering the persistence list on it would fail to restore (and later overwrite)
+// STR_RESTORE_LIGHT_ON_WAKE on frontlit EEGO A4 units. The UI list still filters it.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                bool forPersistence = false) {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -306,6 +314,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
                             "extraParagraphSpacing", StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Value(StrId::STR_PARAGRAPH_INDENTATION, &CrossPointSettings::paragraphIndentSpaces, {0, 5, 1},
+                           "paragraphIndentSpaces", StrId::STR_CAT_READER)
+            .withTextSettings(),
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
@@ -315,7 +326,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_READER_MENU_STYLE, &CrossPointSettings::readerMenuStyle,
                           {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                           StrId::STR_CAT_READER),
-        // --- Controls ---
+    // --- Controls ---
+#if FREEINK_CAP_HAPTIC
+        SettingInfo::Enum(StrId::STR_VIBRATION, &CrossPointSettings::vibration,
+                          {StrId::STR_VIBRATION_TOUCH, StrId::STR_VIBRATION_TOUCH_PAGE, StrId::STR_STATE_OFF},
+                          "vibration", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_HAPTIC_INTENSITY, &CrossPointSettings::hapticIntensity,
+                          {StrId::STR_HAPTIC_LOW, StrId::STR_HAPTIC_MEDIUM, StrId::STR_HAPTIC_HIGH}, "hapticIntensity",
+                          StrId::STR_CAT_CONTROLS),
+#endif
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT,
                            StrId::STR_PREV_PREV},
@@ -413,7 +432,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), v);
               KOREADER_STORE.saveToFile();
             },
-            "koPassword", StrId::STR_KOREADER_SYNC),
+            "koPassword", StrId::STR_KOREADER_SYNC)
+            .withObfuscated(),
         SettingInfo::DynamicString(
             StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
             [](const std::string& v) {
@@ -421,6 +441,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koServerUrl", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicEnum(
+            StrId::STR_SERVER_TYPE, {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC, StrId::STR_OTHER},
+            [] { return static_cast<uint8_t>(KOREADER_STORE.getServerType()); },
+            [](uint8_t v) {
+              KOREADER_STORE.setServerType(static_cast<KOReaderServerType>(v));
+              KOREADER_STORE.saveToFile();
+            },
+            "koServerType", StrId::STR_KOREADER_SYNC),
         SettingInfo::DynamicEnum(
             StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
@@ -535,6 +563,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     s.nameId == StrId::STR_SUNLIGHT_FADING_FIX ||
                                     s.nameId == StrId::STR_BACK_SHORT_TO_FILE_BROWSER;
                            }),
+            v.end());
+  }
+  // Frontlit and lightless variants of a board share one binary (EEGO A4);
+  // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
+  // has not run at load time, so persistence must keep the key (forPersistence).
+  if (!forPersistence && !Frontlight.present()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());
   }
   if (registry && registry->getFamilyCount() > 0) {

@@ -50,8 +50,9 @@ bool XtcReaderActivity::handleFormatInput() {
   }
 
   // Enter chapter selection activity on Confirm release or touch menu gesture
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-      ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
+  const bool touchMenu = ReaderUtils::isTouchMenuGesture(renderer, mappedInput);
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || touchMenu) {
+    if (touchMenu && xtc->hasChapters() && !xtc->getChapters().empty()) haptic_feedback::touchAction();
     openChapterSelection();
     return true;
   }

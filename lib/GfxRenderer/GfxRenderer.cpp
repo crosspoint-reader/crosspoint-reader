@@ -216,6 +216,7 @@ void GfxRenderer::releaseFrameBufferForBuild() {
   uint32_t size = 0;
   uint8_t* scratch = display.lendFrameBufferStorage(&size);
   frameBuffer = nullptr;
+  frameBufferLoans++;
   if (scratch) {
     buildscratch::lend(scratch, size);
   }
@@ -345,11 +346,11 @@ void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, con
   // SUP/SUB bits don't select a distinct .cpfont style bitstream — mask to the
   // base style. resolveStyleMask() inside prewarm folds absent styles.
   // loadKernLig=false: redirected fallback strings (CJK titles, filenames)
-  // have no useful kern pairs, and the ~3KB class-table load plus per-rebuild
-  // mini-matrix build cost heap and SD time exactly where these strings live
-  // (heap-tight UI screens). The reader's PrewarmScope path keeps kern; a
-  // kern-wanting request that subset-hits a kern-free mini tops the matrix up
-  // in prewarmStyle without re-reading glyphs.
+  // have no useful kern pairs, and the per-rebuild mini-matrix build costs
+  // heap and SD time exactly where these strings live (heap-tight UI
+  // screens). The reader's PrewarmScope path keeps kern; a kern-wanting
+  // request that subset-hits a kern-free mini tops the matrix up in
+  // prewarmStyle without re-reading glyphs.
   const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
   sdIt->second->prewarm(text, styleMask, metadataOnly, /*loadKernLig=*/false);
 }
@@ -454,14 +455,18 @@ enum class TextRotation { None, Rotated90CW };
 //
 // The advance width is also halved in drawText() so layout reserves exactly the right
 // horizontal space for the scaled glyph.
-static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
-                             const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
-                             const bool pixelState, const EpdFontFamily::Style style) {
-  if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
-  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+static void renderCharScaled(const GfxRenderer& renderer, const EpdFontFamily& fontFamily, const uint32_t cp,
+                             int cursorX, int cursorY, const bool pixelState, const EpdFontFamily::Style style) {
+  EpdGlyph solidFallback;
+  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style);
   if (!glyph) return;
 
   const EpdFontData* fontData = fontFamily.getData(style);
+  if (glyph == &solidFallback) {
+    renderer.fillRect(cursorX + glyph->left / 2, cursorY - glyph->top / 2, (glyph->width + 1) / 2,
+                      (glyph->height + 1) / 2, pixelState);
+    return;
+  }
   const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
   if (!bitmap) return;
 
@@ -527,7 +532,8 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
   if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
-  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  EpdGlyph solidFallback;
+  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style);
   if (!glyph) {
     LOG_ERR("GFX", "No glyph for codepoint %d", cp);
     return;
@@ -557,6 +563,14 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     }
   }
 
+  if (glyph == &solidFallback) {
+    if constexpr (rotation == TextRotation::Rotated90CW) {
+      renderer.fillRect(cursorX + fontData->ascender - top, cursorY - left - width + 1, height, width, pixelState);
+    } else {
+      renderer.fillRect(cursorX + left, cursorY - top, width, height, pixelState);
+    }
+    return;
+  }
   const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
   if (bitmap == nullptr) return;
 
@@ -761,7 +775,8 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, cp, tracking);
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
@@ -777,7 +792,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     if (isSupSub) {
       // yPos already carries the vertical offset applied by TextBlock::render().
-      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+      renderCharScaled(*this, font, cp, lastBaseX, yPos, black, style);
     } else {
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
     }
@@ -916,9 +931,7 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
     const int width = std::abs(x1 - x0) + 1;
     const int py = cy + yDir * dy;
 
-    if (width > 0) {
-      fillRect(left, py, width, 1, state);
-    }
+    fillRect(left, py, width, 1, state);
   }
 };
 
@@ -2133,8 +2146,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       }
       int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
       if (!utf8IsCombiningMark(cp)) {
-        if (advFP == 0) {
-          const EpdGlyph* glyph = font.getGlyph(cp, style);
+        if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
+          EpdGlyph solidFallback;
+          const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
           advFP = glyph ? glyph->advanceX : 0;
         }
         trackingPx += trackingBetween(prevCp, cp, tracking);
@@ -2173,7 +2187,8 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       widthPx += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, cp, tracking);
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
     if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
       prevAdvanceFP = (prevAdvanceFP + 1) / 2;
@@ -2277,7 +2292,8 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;

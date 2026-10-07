@@ -80,6 +80,9 @@ pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run
 ```
 
+Development builds apply the Git version only to sources that use
+`CROSSPOINT_VERSION`, so a branch/SHA change does not invalidate unrelated objects.
+
 ## What to read next
 
 - [Architecture Overview](./architecture.md)
