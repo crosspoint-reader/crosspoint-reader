@@ -224,4 +224,12 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
   output[i] = '\0';
 }
 
+std::optional<int> imageIndexAfterRemove(const bool removeOk, const int oldCount, const int deletedIndex) {
+  if (!removeOk) return std::nullopt;  // stay on the current image
+  const int newCount = oldCount - 1;
+  if (newCount <= 0) return -1;                                // folder becomes empty: exit to the file browser
+  if (deletedIndex < 0 || deletedIndex >= oldCount) return 0;  // degenerate index: keep first
+  return deletedIndex < newCount ? deletedIndex : newCount - 1;
+}
+
 }  // namespace FsHelpers
