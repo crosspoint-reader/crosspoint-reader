@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "PluginEventAsset.h"
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
@@ -211,6 +212,8 @@ struct DrainManifest {
     // "download" variant: the response streams to `dest` on SD (e.g. a fresh
     // sleep image) instead of being read as an acknowledgement.
     std::string dest;
+    bool checkedBmp = false, invalidFormat = false;
+    int width = 0, height = 0;
     bool isDownload() const { return !dest.empty(); }
   };
   std::vector<Handler> handlers;
@@ -250,6 +253,14 @@ bool loadDrainManifest(const Subscriber& sub, DrainManifest& out) {
     if (dl["url"].as<const char*>()) {
       pluginhttp::readRequest(dl, "GET", h.req);
       h.dest = dl["dest"] | "";
+      if (!dl["format"].isUnbound()) {
+        const char* format = dl["format"].as<const char*>();
+        h.checkedBmp = format && strcmp(format, "bmp") == 0;
+        h.invalidFormat = !h.checkedBmp;
+        // Dimensions must be JSON integers, not coerced strings or fractions.
+        if (dl["width"].is<int>()) h.width = dl["width"].as<int>();
+        if (dl["height"].is<int>()) h.height = dl["height"].as<int>();
+      }
       if (h.dest.empty()) continue;  // a download without a destination is meaningless
     } else {
       pluginhttp::readRequest(kv.value()["request"], "POST", h.req);
@@ -328,6 +339,11 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
         LOG_ERR("PEVT", "unsafe download dest rejected: %s", dest.c_str());
         return 200;  // treat as delivered: retrying can never fix the manifest
       }
+      if (handler->invalidFormat) return -1;
+      if (handler->checkedBmp && (handler->width <= 0 || handler->width > 2048 || handler->height <= 0 ||
+                                  handler->height > 3072 || !plugineventasset::recover(dest))) {
+        return -1;
+      }
       // Generous for images (a 4-bit 800x480 BMP is ~192KB), still bounded.
       constexpr size_t MAX_EVENT_DOWNLOAD = 1024 * 1024;
       // Stream to a sibling temp and swap it in only on a clean 2xx, so a
@@ -338,6 +354,14 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
           drainSubstituted(handler->req.body, tok, config, meta, vars, ts, id), headers, tmp.c_str(),
           MAX_EVENT_DOWNLOAD);
       if (st >= 200 && st < 300) {
+        if (handler->checkedBmp) {
+          // Only a complete 200 BMP may replace the previous image.
+          if (!plugineventasset::commit(dest, handler->width, handler->height, st)) {
+            Storage.remove(tmp.c_str());
+            return -1;
+          }
+          return st;
+        }
         // rename won't overwrite an existing file, so park the old dest as a
         // backup and restore it if the swap fails: a failed commit must not
         // lose both the old file and the fresh download. -1 (local failure,
