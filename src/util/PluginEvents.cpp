@@ -1,5 +1,6 @@
 #include "PluginEvents.h"
 
+#include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -11,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "PluginDrainBudget.h"
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
@@ -286,7 +288,7 @@ std::string drainSubstituted(std::string tpl, const std::string& token, const pl
 // `token` is shared across the drain: a 401-minted refresh persists to the
 // remaining lines instead of re-minting per line.
 bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::string& token,
-                 const pluginhttp::Headers& config, GfxRenderer* renderer) {
+                 const pluginhttp::Headers& config, GfxRenderer* renderer, DrainBudget& budget) {
   JsonDocument doc;
   if (deserializeJson(doc, lineText) != DeserializationError::Ok) return true;  // corrupt line: drop
   const int e = eventFromName(doc["e"] | "");
@@ -314,6 +316,10 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
     for (auto& kv : meta) kv.first = "{meta." + kv.first + "}";
   }
 
+  // The final allowed operation may finish; count exhaustion only blocks starts.
+  const std::function<bool()> shouldAbort = budget.hasDeadline()
+                                                ? std::function<bool()>([&budget] { return !budget.timeAvailable(); })
+                                                : std::function<bool()>{};
   const auto run = [&](const std::string& tok) {
     pluginhttp::Headers headers;
     headers.reserve(handler->req.headers.size());
@@ -333,10 +339,11 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
       // Stream to a sibling temp and swap it in only on a clean 2xx, so a
       // 404/500 error body can never replace an existing dest (e.g. /sleep.bmp).
       const std::string tmp = dest + ".part";
+      if (!budget.beginAttempt()) return -1;
       const int st = pluginhttp::requestToFile(
           nullptr, drainSubstituted(handler->req.url, tok, config, meta, vars, ts, id), handler->req.method,
           drainSubstituted(handler->req.body, tok, config, meta, vars, ts, id), headers, tmp.c_str(),
-          MAX_EVENT_DOWNLOAD);
+          MAX_EVENT_DOWNLOAD, shouldAbort);
       if (st >= 200 && st < 300) {
         // rename won't overwrite an existing file, so park the old dest as a
         // backup and restore it if the swap fails: a failed commit must not
@@ -362,15 +369,17 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
       }
       return st;
     }
+    if (!budget.beginAttempt()) return -1;
     String response;
-    return pluginhttp::request(
-        nullptr, drainSubstituted(handler->req.url, tok, config, meta, vars, ts, id), handler->req.method,
-        drainSubstituted(handler->req.body, tok, config, meta, vars, ts, id), headers, response, MAX_EVENT_RESPONSE);
+    return pluginhttp::request(nullptr, drainSubstituted(handler->req.url, tok, config, meta, vars, ts, id),
+                               handler->req.method,
+                               drainSubstituted(handler->req.body, tok, config, meta, vars, ts, id), headers, response,
+                               MAX_EVENT_RESPONSE, nullptr, shouldAbort);
   };
 
   int status = run(token);
   // A password-grant token expires; on 401/403 mint a fresh one and retry once.
-  if ((status == 401 || status == 403) && mf.hasPasswordGrant()) {
+  if ((status == 401 || status == 403) && mf.hasPasswordGrant() && budget.beginAttempt()) {
     std::string minted;
     // Same template vocabulary as the delivery request (e.g. a {cfg.*} client
     // secret in an auth header).
@@ -382,7 +391,7 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
     if (pluginhttp::mintPasswordToken(nullptr, drainSubstituted(mf.authReq.url, token, config, meta, vars, ts, id),
                                       mf.authReq.method,
                                       drainSubstituted(mf.authReq.body, token, config, meta, vars, ts, id), authHeaders,
-                                      mf.authTokenPath, minted)) {
+                                      mf.authTokenPath, minted, shouldAbort)) {
       pluginhttp::saveTokenToFile(mf.tokenFile, mf.tokenPath, minted);
       token = minted;
       status = run(token);
@@ -398,10 +407,14 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
 
 }  // namespace
 
-void drain(GfxRenderer* renderer, const size_t maxEvents) {
-  size_t budget = maxEvents;
+void drain(GfxRenderer* renderer, const size_t maxEvents) { drain(renderer, maxEvents, {0, 0}); }
+
+void drain(GfxRenderer* renderer, const size_t maxEvents, const DrainLimits limits) {
+  size_t remainingEvents = maxEvents;
+  DrainBudget budget(limits.maxAttempts, limits.maxElapsedMs,
+                     []() -> uint32_t { return static_cast<uint32_t>(millis()); });
   for (const auto& sub : subscribers) {
-    if (budget == 0) break;
+    if (remainingEvents == 0 || !budget.available()) break;
     if (sub.name[0] == '\0') continue;
     const std::string path = outboxPath(sub);
     if (!Storage.exists(path.c_str())) continue;
@@ -429,13 +442,13 @@ void drain(GfxRenderer* renderer, const size_t maxEvents) {
     // Walk lines; stop at the first failure so order is preserved.
     size_t pos = 0;
     bool stalled = false;
-    while (pos < raw.size() && budget > 0 && !stalled) {
+    while (pos < raw.size() && remainingEvents > 0 && budget.available() && !stalled) {
       size_t nl = raw.find('\n', pos);
       if (nl == std::string::npos) nl = raw.size();
       const std::string lineText = raw.substr(pos, nl - pos);
       if (!lineText.empty()) {
-        if (deliverLine(mf, lineText, token, config, renderer)) {
-          budget--;
+        if (deliverLine(mf, lineText, token, config, renderer, budget)) {
+          remainingEvents--;
         } else {
           stalled = true;
           break;

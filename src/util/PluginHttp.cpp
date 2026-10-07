@@ -188,10 +188,12 @@ void loadConfigFile(const std::string& file, Headers& out) {
 int request(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
             const std::string& body, const Headers& headers, String& out, const size_t maxResponse,
             Headers* responseHeaders, const std::function<bool()>& shouldAbort) {
+  if (shouldAbort && shouldAbort()) return -1;
   WifiPowerSaveGuard psGuard;
   freeink::SecureHttpClient tmp;
   freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers);
   if (!httpPtr) return -1;
+  if (shouldAbort && shouldAbort()) return -1;
   freeink::SecureHttpClient& http = *httpPtr;
 
   out.remove(0);
@@ -217,7 +219,7 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
   if (responseHeaders) *responseHeaders = http.getHeaders();
   // Error statuses still return their body: OAuth device-code polling carries
   // its state ("authorization_pending") in 4xx response bodies.
-  if (overflow || status < 0 || !http.responseComplete()) {
+  if (overflow || status < 0 || !http.responseComplete() || (shouldAbort && shouldAbort())) {
     LOG_ERR("PHTP", "API request failed: status=%d overflow=%d complete=%d %s", status, overflow,
             http.responseComplete(), url.c_str());
     return -1;
@@ -226,11 +228,14 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
 }
 
 int requestToFile(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
-                  const std::string& body, const Headers& headers, const char* destPath, const size_t maxResponse) {
+                  const std::string& body, const Headers& headers, const char* destPath, const size_t maxResponse,
+                  const std::function<bool()>& shouldAbort) {
+  if (shouldAbort && shouldAbort()) return -1;
   WifiPowerSaveGuard psGuard;
   freeink::SecureHttpClient tmp;
   freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers);
   if (!httpPtr) return -1;
+  if (shouldAbort && shouldAbort()) return -1;
   freeink::SecureHttpClient& http = *httpPtr;
 
   int status = -1;
@@ -239,23 +244,25 @@ int requestToFile(freeink::SecureHttpClient* session, const std::string& url, co
   {
     HalFile file;
     if (!Storage.openFileForWrite("PHTP", destPath, file)) return -1;
-    status = http.sendRequest(method.c_str(), reinterpret_cast<const uint8_t*>(body.data()), body.size(),
-                              [&](const uint8_t* data, size_t len) {
-                                if (written + len > maxResponse) {
-                                  writeOk = false;
-                                  return false;
-                                }
-                                if (file.write(data, len) != len) {
-                                  writeOk = false;
-                                  return false;
-                                }
-                                written += len;
-                                return true;
-                              });
+    status = http.sendRequest(
+        method.c_str(), reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+        [&](const uint8_t* data, size_t len) {
+          if (written + len > maxResponse) {
+            writeOk = false;
+            return false;
+          }
+          if (file.write(data, len) != len) {
+            writeOk = false;
+            return false;
+          }
+          written += len;
+          return true;
+        },
+        shouldAbort);
     file.flush();
     // file closed at scope exit, before any Storage.remove of destPath
   }
-  if (!writeOk || status < 0 || !http.responseComplete()) {
+  if (!writeOk || status < 0 || !http.responseComplete() || (shouldAbort && shouldAbort())) {
     LOG_ERR("PHTP", "API request (to file) failed: status=%d writeOk=%d complete=%d %s", status, writeOk,
             http.responseComplete(), url.c_str());
     Storage.remove(destPath);
@@ -266,10 +273,10 @@ int requestToFile(freeink::SecureHttpClient* session, const std::string& url, co
 
 bool mintPasswordToken(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
                        const std::string& body, const Headers& headers, const std::string& tokenPath,
-                       std::string& outToken) {
+                       std::string& outToken, const std::function<bool()>& shouldAbort) {
   String response;
   constexpr size_t MAX_AUTH_RESPONSE = 8 * 1024;
-  const int status = request(session, url, method, body, headers, response, MAX_AUTH_RESPONSE);
+  const int status = request(session, url, method, body, headers, response, MAX_AUTH_RESPONSE, nullptr, shouldAbort);
   if (status < 200 || status >= 300) return false;
   JsonDocument doc;
   if (deserializeJson(doc, response) != DeserializationError::Ok) return false;
