@@ -12,10 +12,10 @@
 namespace fui = freeink::ui;
 
 namespace {
-// Row icons, indexed by SettingsSection; 32px since every row has a subtitle.
+// Row icons, indexed by SettingsSection.
 constexpr const freeink::Icon* SECTION_ICONS[SETTINGS_SECTION_COUNT] = {
-    &icon_settings_32, &icon_sun_moon_32, &icon_book_open_32, &icon_pointer_32,
-    &icon_folder_32,   &icon_library_32,  &icon_wifi_32,      &icon_cpu_32,
+    &icon_settings_24, &icon_sun_moon_24, &icon_book_open_24, &icon_pointer_24,
+    &icon_folder_24,   &icon_library_24,  &icon_wifi_24,      &icon_cpu_24,
 };
 }  // namespace
 
@@ -43,51 +43,14 @@ void SettingsListActivity::loop() {
   UiListActivity::loop();
 }
 
-// Rebuilds labels and name lists; call when entering and after a section
-// returns (its rows or the UI language may have changed).
+// Rebuilds row labels; call when entering and after a section returns (the
+// UI language may have changed).
 void SettingsListActivity::rebuildRows() {
-  SettingsBySection sections;
-  buildSettingsSections(sections);
   for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
-    auto& names = nameLists_[i];
-    names.clear();
-    for (const auto& setting : sections[i]) {
-      if (!names.empty()) names += ", ";
-      names += I18N.get(setting.nameId);
-    }
     auto& item = rowItems_[i];
     item.label = I18N.get(SETTINGS_SECTION_TITLES[i]);
-    item.subtitle = nullptr;
     item.icon = fui::bitmapFromIcon(*SECTION_ICONS[i]);
     item.actionValue = static_cast<int16_t>(i);
-  }
-  subtitleWidth_ = -1;
-}
-
-// Picks each row's subtitle: the setting names when they wrap into at most
-// two lines at the list's text width, otherwise the section summary.
-void SettingsListActivity::chooseSubtitles(UiScreen& screen, const fui::ListProps& props) {
-  const auto& theme = screen.theme();
-  // Subtitles span the row's content width; reserve the scroll indicator too
-  // so the choice doesn't flip when the list starts to scroll.
-  const int16_t width =
-      static_cast<int16_t>(screen.contentRect().width - 2 * (theme.listInset + theme.listSidePadding) -
-                           theme.listScrollWidth - theme.listScrollInset);
-  if (width == subtitleWidth_) return;
-  subtitleWidth_ = width;
-
-  const fui::TextStyle& style = props.subtitleText;
-  fui::TextStyle probe = style;
-  probe.maxLines = static_cast<uint8_t>(style.maxLines + 1);  // one extra line reveals overflow
-  const int16_t maxHeight = static_cast<int16_t>(style.maxLines * screen.target().lineHeight(style.font));
-  for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
-    const auto& names = nameLists_[i];
-    // The icon and its gap sit beside the subtitle, narrowing it.
-    const auto& icon = rowItems_[i].icon;
-    const int16_t textWidth = static_cast<int16_t>(width - (icon ? icon.width + props.textGap : 0));
-    const bool fits = !names.empty() && textWidth > 0 &&
-                      fui::measureWrappedText(screen.target(), names.c_str(), probe, textWidth).height <= maxHeight;
-    rowItems_[i].subtitle = fits ? names.c_str() : I18N.get(SETTINGS_SECTION_SUMMARIES[i]);
   }
 }
 
@@ -103,9 +66,6 @@ void SettingsListActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rowItems_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.subtitleText = screen.theme().smallText;
-  props.subtitleText.maxLines = 2;
-  chooseSubtitles(screen, props);
   syncListViewport(screen, props);
   screen.list(props);
 }
