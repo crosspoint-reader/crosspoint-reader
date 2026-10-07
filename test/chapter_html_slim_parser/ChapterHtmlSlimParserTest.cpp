@@ -260,6 +260,37 @@ TEST_F(ChapterHtmlSlimParserTest, PageGridDeserializeRejectsAllocationFailure) {
   std::filesystem::remove(path);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, GridSerializationRejectsEveryShortWrite) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-grid-short-write.bin";
+  constexpr size_t recordBytes = sizeof(int16_t) * 2 + sizeof(uint16_t) * 2 + sizeof(uint8_t);
+  for (size_t limit = 0; limit <= recordBytes; ++limit) {
+    SCOPED_TRACE(limit);
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    output.limitWritesTo(limit);
+    PageTableGridRow grid(240, 20, 2, 0, 0);
+    EXPECT_EQ(grid.serialize(output), limit == recordBytes);
+    EXPECT_EQ(output.position(), limit);
+  }
+  std::filesystem::remove(path);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PageSerializationPropagatesShortGridWrites) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-page-grid-short-write.bin";
+  constexpr size_t pageBytes =
+      sizeof(uint16_t) + sizeof(uint8_t) + sizeof(int16_t) * 2 + sizeof(uint16_t) * 2 + sizeof(uint8_t);
+  Page page;
+  ASSERT_TRUE(page.elements.push_back(std::make_unique<PageTableGridRow>(240, 20, 2, 0, 0)));
+  for (size_t limit = 0; limit <= pageBytes; ++limit) {
+    SCOPED_TRACE(limit);
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    output.limitWritesTo(limit);
+    EXPECT_EQ(page.serialize(output), limit == pageBytes);
+  }
+  std::filesystem::remove(path);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, PageElementReserveIsNotASerializedCountLimit) {
   const auto path = std::filesystem::temp_directory_path() / "crosspoint-page-reserve-cache.bin";
   constexpr size_t count = 257;

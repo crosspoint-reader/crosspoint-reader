@@ -146,11 +146,14 @@ void PageTableGridRow::render(GfxRenderer& renderer, const int fontId, const int
 }
 
 bool PageTableGridRow::serialize(HalFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, width);
-  serialization::writePod(file, height);
-  serialization::writePod(file, columnCount);
+  if (file.write(reinterpret_cast<const uint8_t*>(&xPos), sizeof(xPos)) != sizeof(xPos) ||
+      file.write(reinterpret_cast<const uint8_t*>(&yPos), sizeof(yPos)) != sizeof(yPos) ||
+      file.write(reinterpret_cast<const uint8_t*>(&width), sizeof(width)) != sizeof(width) ||
+      file.write(reinterpret_cast<const uint8_t*>(&height), sizeof(height)) != sizeof(height) ||
+      file.write(reinterpret_cast<const uint8_t*>(&columnCount), sizeof(columnCount)) != sizeof(columnCount)) {
+    LOG_ERR("PGE", "Failed to write table grid row");
+    return false;
+  }
   return true;
 }
 
