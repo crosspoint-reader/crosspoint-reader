@@ -44,8 +44,6 @@ aside { padding-top: 3px; font-size: 13px; }
 .primary:hover { background: #284c38; }
 input[type=file] { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
 .drop-zone p.muted { font-size: 11px; margin-bottom: 0; }
-#book-list { padding-left: 18px; font-size: 11px; overflow-wrap: anywhere; }
-#book-list:empty { display: none; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
 .actions button:last-child { grid-column: 1 / -1; }
 .scope { font-size: 11px; color: #637068; margin: 22px 0; }
@@ -59,3 +57,27 @@ footer { font-size: 11px; color: #637068; margin-top: 20px; }
   .build { gap: 5px; }
   .intro { margin-bottom: 24px; }
 }
+dialog { width: min(760px, calc(100% - 28px)); max-height: 90vh; padding: 24px; border: 1px solid #cdd3c7; border-radius: 14px; background: #f5f4ef; color: inherit; }
+dialog::backdrop { background: #18241d80; }
+.sd-heading, .sd-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.sd-heading h2 { font-size: 20px; margin: 0; }
+.sd-hint { font-size: 12px; color: #637068; }
+#sd-path { display: flex; flex-wrap: wrap; gap: 5px; margin: 16px 0; }
+#sd-path button { padding: 6px 9px; }
+.sd-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sd-toolbar label:has(input:disabled) { opacity: .5; }
+.sd-selection { margin: 16px 0 8px; }
+.sd-selection > label { font-size: 12px; margin-left: auto; }
+.sd-files { max-height: 320px; min-height: 150px; overflow: auto; }
+.sd-files table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.sd-files th, .sd-files td { padding: 6px; border-bottom: 1px solid #dcded5; }
+.sd-files th { color: #637068; font-weight: 500; }
+.sd-files td:first-child { width: 100%; overflow-wrap: anywhere; }
+.sd-files td:not(:first-child) { white-space: nowrap; }
+.sd-files button { padding: 6px 8px; font-size: 12px; }
+.sd-files .file-name { border: 0; background: transparent; text-align: left; width: 100%; }
+.sd-files .selected { background: #dce8d5; }
+.sd-files .selected .file-name { font-weight: 650; }
+#sd-message { font-size: 12px; overflow-wrap: anywhere; }
+#sd-usage { font-size: 11px; color: #637068; white-space: nowrap; }
+@media (max-width: 480px) { dialog { padding: 16px; } #sd-drop-zone { padding: 12px; } .sd-footer { align-items: start; flex-direction: column; gap: 0; } }

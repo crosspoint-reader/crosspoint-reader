@@ -27,8 +27,7 @@ Each build produces a self-contained HTML file in `build/preview/`:
 
 Double-click the file for your device, or open it in Chrome. Each file works
 on its own, offline, with no server or installation. It includes the firmware,
-sample book, frontend, build information, and license notices. Reset and EPUB
-import work the same way as in the hosted preview. Each file contains one device;
+sample book, frontend, build information, and license notices. The virtual SD card manager works the same way as in the hosted preview. Each file contains one device;
 open a different file to try another device.
 
 The multi-device website remains available through `index.html`. Serve it with:
@@ -86,13 +85,40 @@ Mode on X4/X3, or use the center tap and **More** panel on X4 Pro.
 Screenshots save the actual rendered canvas as PNG. Diagnostic logs and
 build information can be downloaded or copied when reporting a problem.
 
-Drag EPUB files into the import panel to try your own books. The total limit is
-20 MiB. Importing starts a fresh firmware instance with those books and the
-sample; old caches and settings are discarded. Books are copied into the
-instance's in-memory SD card before the firmware boots. They are not uploaded
-to a server or saved in browser storage. **Reset preview**, switching devices,
-or reloading stops the task timer and tears down the old firmware iframe. Reset and reload also discard imported books; switching devices retains
-them for comparison.
+Choose **Browse SD card** to manage the running reader's files. The manager opens
+at `/books`; use the breadcrumbs to browse other directories. Upload any files,
+upload a folder with its directory structure, or drag files and folders into the
+manager. You can create folders, rename or delete items, download individual
+files, and show hidden files. Deleting a folder removes its contents too.
+Replacing a file and deleting an item require confirmation.
+
+Uploads copy files immediately and preserve the current book, page, and settings.
+Reopen **Browse Files** to refresh its list. Use **Restart firmware** to reload
+fonts and other data read at startup; it preserves the virtual SD card and saved
+settings. The browser preview does not modify core firmware code.
+For SD fonts, create `/fonts` and upload a family folder such as `RIDIBatang`
+containing its `.cpfont` files. Restart firmware, then choose the family in the
+reader's font settings. Network font downloads from **Manage Fonts** remain unavailable in the offline preview.
+
+Close a book before replacing, renaming, or deleting it. Select another font
+before changing the active font family. Other open files are protected, and
+`/.crosspoint` firmware settings and caches are read-only in the manager; they
+can still be browsed and downloaded. Changing a closed book clears its old
+path-based reading cache so replacement content is parsed again.
+
+Uploads are limited to **64 MiB of total SD card contents**, including generated
+caches, with at most 8,192 entries and 32 directory levels. The usage indicator
+includes firmware-generated files; those files can grow as books are read.
+Uploads run one file at a time. If a batch fails, completed files remain on the
+card and the error identifies the item to check. These limits bound browser
+storage, not the physical device's RAM.
+
+Files stay in this tab's memory and are never sent to a server or saved in browser
+storage. **Restart firmware** keeps the card; **Clear SD card** asks for
+confirmation, restores the sample card, and restarts the reader. Reloading the page also discards files and settings.
+Switching device profiles on the hosted page carries the virtual card, including
+settings and reading progress, into a new firmware instance. The old instance's
+task timer is stopped when it is replaced.
 
 The generated sample EPUB contains original fixture text. Every build starts
 without pre-rendered book or section caches, so opening it exercises EPUB
@@ -157,10 +183,15 @@ python3 tools/wasm/smoke_test.py
 Pass `--device x4`, `--device x3`, or `--device x4pro` when only one target is built. The test opens
 the real sample EPUB, turns pages using pointer and keyboard input, selects all
 four orientations through the reader menu, changes Night Mode, saves a PNG,
-imports an EPUB, and resets. It also checks for JavaScript errors, unexpected
+uploads files without resetting reading state, and clears the card. It also checks for JavaScript errors, unexpected
 external requests, and worker creation. Tests require a server without isolation
 headers and confirm that SharedArrayBuffer is unavailable, including after reset.
-Screenshots and logs go
+The SD card checks cover nested Unicode folders, hidden and empty files, binary
+download integrity, overwrite/rename/delete, open-book protection, path traversal,
+upload size limits, and narrow-screen layout. The X4 checks also cover cache
+invalidation, directory drops, cancelling an upload during reset, and preserving
+the card across device switches on the hosted site. Restart checks verify that
+uploaded files and saved settings survive on all three profiles. Screenshots and logs go
 to `build/preview-test/`. X4 Pro additionally exercises direct touch and mouse
 navigation, swipes in all four orientations, single-move mouse flicks, short and
 diagonal drags, slow drags, drags released past the screen edge, short and held

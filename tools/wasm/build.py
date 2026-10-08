@@ -123,13 +123,14 @@ def main():
                   "  command = " + shlex.join(command).replace("$", "$$")]
         obj_paths.append(obj)
     exports = ["_main", "_preview_start", "_preview_step", "_preview_stop", "_preview_take_frame", "_preview_width", "_preview_height",
-               "_preview_rotation", "_preview_button", "_preview_release_buttons", "_preview_touch", "_preview_mouse_swipe"]
+               "_preview_rotation", "_preview_button", "_preview_release_buttons", "_preview_touch", "_preview_mouse_swipe",
+               "_preview_active_book", "_preview_active_font", "_preview_path_hash"]
     module = target / "firmware.js"
     link = [empp, *map(str, obj_paths), "-o", str(module), "-Oz",
             "-sASYNCIFY=1", "-sSTACK_SIZE=1MB",
             "-sINITIAL_MEMORY=67108864", "-sMAXIMUM_MEMORY=268435456", "-sALLOW_MEMORY_GROWTH=1", "-sEXIT_RUNTIME=0",
             "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sEXPORT_NAME=createCrosspoint",
-            "-sENVIRONMENT=web", "-sEXPORTED_RUNTIME_METHODS=FS,HEAPU32",
+            "-sENVIRONMENT=web", "-sEXPORTED_RUNTIME_METHODS=FS,HEAPU32,UTF8ToString,ccall",
             "-sINCOMING_MODULE_JS_API=wasmBinary,locateFile,print,printErr,onAbort,preRun",
             "-sEXPORTED_FUNCTIONS=" + ",".join(exports), "-sASSERTIONS=1",
             "--preload-file", f"{seed}@/fs_"]

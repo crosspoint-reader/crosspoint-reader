@@ -7,8 +7,14 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <functional>
+#include <string_view>
 
+#include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "SDL.h"
+#include "activities/Activity.h"
+#include "activities/ActivityManager.h"
 
 extern void setup();
 extern void loop();
@@ -53,6 +59,14 @@ EMSCRIPTEN_KEEPALIVE int preview_start() {
 EMSCRIPTEN_KEEPALIVE uintptr_t preview_take_frame() { return reinterpret_cast<uintptr_t>(browser::takeFrame()); }
 EMSCRIPTEN_KEEPALIVE int preview_step() { return browser::stepTasks(); }
 EMSCRIPTEN_KEEPALIVE void preview_stop() { browser::stopTasks(); }
+EMSCRIPTEN_KEEPALIVE const char* preview_active_book() {
+  return activityManager.isReaderActivity() ? APP_STATE.openEpubPath.c_str() : "";
+}
+EMSCRIPTEN_KEEPALIVE const char* preview_active_font() { return SETTINGS.sdFontFamilyName; }
+EMSCRIPTEN_KEEPALIVE uint32_t preview_path_hash(const char* path) {
+  // libc++ uses the same byte hash for string and string_view (the book cache key).
+  return std::hash<std::string_view>{}(path);
+}
 EMSCRIPTEN_KEEPALIVE int preview_width() { return HalDisplay::DISPLAY_WIDTH; }
 EMSCRIPTEN_KEEPALIVE int preview_height() { return HalDisplay::DISPLAY_HEIGHT; }
 EMSCRIPTEN_KEEPALIVE int preview_rotation() { return browser::rotation(); }

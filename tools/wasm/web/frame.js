@@ -1,3 +1,4 @@
+import { createSdCard } from './sd-card.js';
 import { devices, keyMap } from './devices.js';
 import { embedded, messageOrigin, targetOrigin, firmwareOptions } from './assets.js';
 
@@ -5,6 +6,7 @@ const canvas = document.querySelector('#display');
 const context = canvas.getContext('2d');
 const send = (type, extra = {}) => parent.postMessage({ type, ...extra }, targetOrigin);
 let module;
+let sdCard;
 let initialized = false;
 let firstFrame = false;
 let bootTimer;
@@ -143,7 +145,7 @@ function fail(error) {
 window.addEventListener('error', (e) => fail(e.error || e.message));
 window.addEventListener('unhandledrejection', (e) => fail(e.reason));
 
-async function start({ device, books }) {
+async function start({ device, entries }) {
   if (!Object.hasOwn(devices, device)) throw new Error('Unknown device');
   profile = devices[device];
   canvas.classList.toggle('touch', profile.touch);
@@ -158,13 +160,8 @@ async function start({ device, books }) {
   await createCrosspoint(module);
   if (disposed) return;
   module.FS.chdir('/');
-  let bytes = 0;
-  for (const book of books) {
-    if (!/^[^/\\\0]+\.epub$/i.test(book.name) || !(book.bytes instanceof ArrayBuffer)) throw new Error('Invalid book');
-    bytes += book.bytes.byteLength;
-    if (bytes > 20 * 1024 * 1024) throw new Error('Books exceed the preview limit');
-    module.FS.writeFile(`/fs_/books/${book.name}`, new Uint8Array(book.bytes));
-  }
+  sdCard = createSdCard(module);
+  if (entries) sdCard({ operation: 'restore', entries });
   send('booting');
   if (!module._preview_start()) throw new Error('Firmware task did not start');
   function step() {
@@ -231,6 +228,17 @@ window.addEventListener('message', (event) => {
   if (data.type === 'init' && !initialized) {
     initialized = true;
     start(data).catch(fail);
+  } else if (data.type === 'sd-request') {
+    try {
+      if (!firstFrame || !sdCard) throw { code: 'notReady' };
+      if (!['list', 'download', 'snapshot', 'mkdir', 'write', 'rename', 'delete'].includes(data.operation)) throw { code: 'invalidOperation' };
+      const result = sdCard(data);
+      const buffers = result.bytes ? [result.bytes] : result.entries?.filter(entry => entry.bytes).map(entry => entry.bytes) ?? [];
+      parent.postMessage({ type: 'sd-response', id: data.id, result }, targetOrigin, buffers);
+    } catch (error) {
+      if (!error.code || error.errno) send('log', { text: `SD ${data.operation}: ${error.stack || error}` });
+      send('sd-response', { id: data.id, error: { code: error.errno ? 'fileError' : error.code || 'fileError', path: error.path || data.path || '' } });
+    }
   } else if (data.type === 'button') {
     if (profile?.buttons.includes(data.button)) module?._preview_button?.(data.button, data.down);
   } else if (data.type === 'release') {

@@ -35,14 +35,14 @@
       <aside>
         <div class="status"><span id="status-dot"></span><p id="status" role="status" aria-live="polite"></p></div>
         <label class="device-select"><span data-i18n="device"></span><select id="device-select"><option value="x4">X4</option><option value="x3">X3</option><option value="x4pro">X4 Pro</option></select></label>
-        <div id="drop-zone" class="drop-zone">
-          <strong data-i18n="yourBook"></strong>
-          <p data-i18n="dropHint"></p>
-          <label class="button primary"><span data-i18n="openBook"></span><input id="book-input" type="file" accept=".epub" multiple></label>
+        <div class="drop-zone">
+          <strong data-i18n="sdTitle"></strong>
+          <p data-i18n="sdIntro"></p>
+          <button id="open-sd" class="primary" data-i18n="browseSd" disabled></button>
           <p class="muted" data-i18n="privacy"></p>
-          <ul id="book-list"></ul>
         </div>
         <div class="actions">
+          <button id="restart" data-i18n="restartFirmware" disabled></button>
           <button id="reset" data-i18n="reset"></button>
           <button id="screenshot" data-i18n="screenshot" disabled></button>
           <button id="logs" data-i18n="logs"></button>
@@ -53,6 +53,31 @@
       </aside>
     </div>
   </main>
+  <dialog id="sd-dialog" aria-labelledby="sd-title">
+    <div class="sd-heading"><h2 id="sd-title" data-i18n="sdTitle"></h2><button id="sd-close" data-i18n="close"></button></div>
+    <p class="sd-hint" data-i18n="sdHelp"></p>
+    <nav id="sd-path" aria-label="SD card"></nav>
+    <div id="sd-drop-zone" class="drop-zone">
+      <div class="sd-toolbar">
+        <label class="button primary"><span data-i18n="uploadFiles"></span><input id="file-input" type="file" multiple></label>
+        <label class="button"><span data-i18n="uploadFolder"></span><input id="folder-input" type="file" webkitdirectory multiple></label>
+        <button id="sd-new-folder" data-i18n="newFolder"></button>
+        <button id="sd-refresh" data-i18n="refresh"></button>
+      </div>
+      <p><span data-i18n="dropHint"></span> <code id="sd-location">/books</code></p>
+      <div class="sd-files"><table><thead><tr><th data-i18n="fileName"></th><th data-i18n="fileSize"></th><th></th></tr></thead><tbody id="sd-list"></tbody></table><p id="sd-empty" data-i18n="emptyFolder" hidden></p></div>
+    </div>
+    <div class="sd-toolbar sd-selection">
+      <button id="sd-download" data-i18n="downloadFile" disabled></button>
+      <button id="sd-rename" data-i18n="renameFile" disabled></button>
+      <button id="sd-delete" data-i18n="delete" disabled></button>
+      <label><input id="sd-hidden" type="checkbox"> <span data-i18n="showHidden"></span></label>
+    </div>
+    <div class="sd-footer"><p id="sd-message" role="status" aria-live="polite"></p><span id="sd-usage"></span></div>
+    <p class="sd-hint" data-i18n="fontHelp"></p>
+    <button id="sd-restart" data-i18n="restartFirmware" disabled></button>
+    <p class="sd-hint" data-i18n="restartHelp"></p>
+  </dialog>
   <footer><span data-i18n="credits"></span> <a href="LICENSE.crossplay.txt">CrossPlay</a> · <a href="LICENSE.txt">MIT</a></footer>
 </body>
 </html>

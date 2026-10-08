@@ -1,3 +1,4 @@
+import { createFileManager } from './file-manager.js';
 import { tr, locale } from './strings.js';
 import { devices, keyMap } from './devices.js';
 import { embedded, messageOrigin, targetOrigin } from './assets.js';
@@ -14,7 +15,9 @@ if (embedded) {
   deviceSelect.disabled = true;
 }
 let frame;
-let books = [];
+let cardSnapshot = null;
+let requestId = 0;
+const pending = new Map();
 let logLines = [];
 let buildInfo = {};
 let generation = 0;
@@ -44,8 +47,44 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function sdRequest(payload) {
+  return new Promise((resolve, reject) => {
+    if (!frame) { reject({ code: 'notReady' }); return; }
+    const id = ++requestId;
+    const timer = setTimeout(() => { pending.delete(id); reject({ code: 'fileError' }); }, 30000);
+    pending.set(id, { resolve, reject, timer });
+    send('sd-request', { id, ...payload });
+  });
+}
+const fileManager = createFileManager(sdRequest, download, release, restartFirmware);
+
+async function restartFirmware() {
+  const current = generation;
+  const previous = buildInfo.device;
+  const running = frame && !$('#screenshot').disabled;
+  fileManager.reset();
+  deviceSelect.disabled = true;
+  release();
+  try {
+    const snapshot = running ? (await sdRequest({ operation: 'snapshot' })).entries : null;
+    if (current !== generation) return;
+    cardSnapshot = snapshot;
+    $('#sd-dialog').close();
+    await restart();
+  } catch (error) {
+    if (current !== generation) return;
+    deviceSelect.value = previous;
+    if (running) fileManager.ready();
+    log(error);
+    status(error.code || 'fileError', 'error');
+  }
+}
+
 async function restart() {
   const current = ++generation;
+  fileManager.reset();
+  for (const request of pending.values()) { clearTimeout(request.timer); request.reject({ code: 'notReady' }); }
+  pending.clear();
   release();
   frame?.contentWindow.disposePreview?.();
   frame?.remove();
@@ -89,16 +128,21 @@ window.addEventListener('message', async (event) => {
   if (!frame || event.source !== frame.contentWindow || event.origin !== messageOrigin) return;
   const data = event.data;
   if (data.type === 'frame-ready') {
-    const current = generation;
-    try {
-      const files = await Promise.all(books.map(async (file) => ({ name: file.name, bytes: await file.arrayBuffer() })));
-      if (current !== generation) return;
-      frame.contentWindow.postMessage({ type: 'init', device: deviceSelect.value, books: files }, targetOrigin, files.map((file) => file.bytes));
-    } catch (error) { log(error); status('fileError', 'error'); }
+    const entries = cardSnapshot;
+    cardSnapshot = null;
+    frame.contentWindow.postMessage({ type: 'init', device: deviceSelect.value, entries }, targetOrigin,
+      entries?.filter(entry => entry.bytes).map(entry => entry.bytes) ?? []);
   } else if (data.type === 'booting') status('booting');
-  else if (data.type === 'running') { status('ready', 'ready'); $('#screenshot').disabled = false; }
+  else if (data.type === 'running') { status('ready', 'ready'); $('#screenshot').disabled = false; fileManager.ready(); }
   else if (data.type === 'failed') status('error', 'error');
   else if (data.type === 'timeout') status('timeout', 'error');
+  else if (data.type === 'sd-response') {
+    const request = pending.get(data.id);
+    if (!request) return;
+    pending.delete(data.id);
+    clearTimeout(request.timer);
+    if (data.error) request.reject(data.error); else request.resolve(data.result);
+  }
   else if (data.type === 'log') log(data.text);
   else if (data.type === 'geometry') {
     $('#screen').style.aspectRatio = `${data.width} / ${data.height}`;
@@ -131,7 +175,7 @@ for (const button of document.querySelectorAll('[data-button]')) {
   });
 }
 window.addEventListener('keydown', (event) => {
-  if (event.target.closest('button, input, select, summary, a')) return;
+  if (fileManager.isOpen || event.target.closest('button, input, select, summary, a')) return;
   const button = keyMap[event.key];
   if (!devices[deviceSelect.value].buttons.includes(button) || event.repeat) return;
   event.preventDefault();
@@ -147,27 +191,13 @@ window.addEventListener('keyup', (event) => {
 window.addEventListener('blur', release);
 document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
 
-function addBooks(files) {
-  const next = new Map(books.map((file) => [file.name, file]));
-  for (const file of files) {
-    if (!/^[^/\\\0]+\.epub$/i.test(file.name) || !file.size) { status('fileError', 'error'); return; }
-    next.set(file.name, file);
-  }
-  if ([...next.values()].reduce((sum, file) => sum + file.size, 0) > 20 * 1024 * 1024) { status('fileError', 'error'); return; }
-  books = [...next.values()];
-  $('#book-list').replaceChildren(...books.map((file) => {
-    const item = document.createElement('li');
-    item.textContent = file.name;
-    return item;
-  }));
+deviceSelect.addEventListener('change', restartFirmware);
+$('#restart').addEventListener('click', restartFirmware);
+$('#reset').addEventListener('click', () => {
+  if (!window.confirm(tr('resetConfirm'))) return;
+  cardSnapshot = null;
   restart();
-}
-$('#book-input').addEventListener('change', (event) => { addBooks(event.target.files); event.target.value = ''; });
-$('#drop-zone').addEventListener('dragover', (event) => { event.preventDefault(); $('#drop-zone').classList.add('dragging'); });
-$('#drop-zone').addEventListener('dragleave', () => $('#drop-zone').classList.remove('dragging'));
-$('#drop-zone').addEventListener('drop', (event) => { event.preventDefault(); $('#drop-zone').classList.remove('dragging'); addBooks(event.dataTransfer.files); });
-deviceSelect.addEventListener('change', restart);
-$('#reset').addEventListener('click', () => { books = []; $('#book-list').replaceChildren(); restart(); });
+});
 $('#screenshot').addEventListener('click', () => send('screenshot'));
 $('#logs').addEventListener('click', () => download(new Blob([JSON.stringify(buildInfo, null, 2), '\n', logLines.join('\n')], { type: 'text/plain' }), 'crosspoint-preview.log'));
 $('#copy').addEventListener('click', async () => {

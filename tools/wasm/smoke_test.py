@@ -12,6 +12,8 @@ from urllib.request import urlopen
 
 from playwright.sync_api import sync_playwright
 
+from sd_card_test import exercise_sd_card, exercise_card_lifecycle, exercise_restart
+
 ROOT = Path(__file__).resolve().parents[2]
 BUTTONS = {"confirm": "Confirm", "back": "Back", "next": "↓ Next page", "previous": "↑ Previous page", "home": "Home button"}
 
@@ -67,6 +69,21 @@ def press(page, button):
         "previous => document.querySelector('canvas').toDataURL() !== previous", arg=before
     )
     painted(page)
+
+
+def reset_card(page):
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#reset").click()
+    page.wait_for_function("document.querySelector('#status-dot').className === 'ready'")
+
+
+def upload_file(page, name, data):
+    page.locator("#open-sd").click()
+    page.wait_for_function("document.querySelector('#sd-message').textContent.startsWith('Ready.')")
+    page.locator("#file-input").set_input_files({"name": name, "mimeType": "application/octet-stream", "buffer": data})
+    page.wait_for_function("document.querySelector('#sd-message').textContent.startsWith('Ready.')")
+    assert name in page.locator("#sd-list").text_content()
+    page.locator("#sd-close").click()
 
 
 def open_book(page):
@@ -221,7 +238,7 @@ def exercise_touch(browser, url, device, output):
     # Start each rotation from portrait and use the real More / Orientation UI.
     for orientation in range(4):
         if orientation:
-            page.locator('#reset').click()
+            reset_card(page)
         open_touch_book(page)
         if orientation:
             touch_tap(page, 0.5, 0.5)  # reader toolbar
@@ -286,11 +303,13 @@ def exercise_touch(browser, url, device, output):
     screen(page).focus()
     page.keyboard.press('h', delay=60)
     wait_log(page, "Entering activity: Home", before)
-    # Imported files start in portrait, with the same touch-only navigation.
+    # Reset rotation explicitly; uploads preserve the running firmware.
     sample = ROOT / f".cache/wasm/{device}/sdcard/books/A Small Book of Pages.epub"
-    page.locator('#book-input').set_input_files({"name": "00-upload.epub", "mimeType": "application/epub+zip", "buffer": sample.read_bytes()})
+    reset_card(page)
+    upload_file(page, "00-upload.epub", sample.read_bytes())
     open_touch_book(page)
     wait_log(page, "Loading ePub: /books/00-upload.epub")
+    exercise_sd_card(page, output, device, "/books/00-upload.epub")
     # A held Home key opens the reader menu; its release must not also go Home.
     before = log_count(page, "Entering activity: Home")
     initial = screen(page).evaluate("c => c.toDataURL()")
@@ -304,9 +323,13 @@ def exercise_touch(browser, url, device, output):
         page.locator('#screenshot').click()
     capture.value.save_as(output / f"{device}-download.png")
     assert (output / f"{device}-download.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    page.locator('#reset').click()
+    exercise_restart(page, device)
+    reset_card(page)
     wait_log(page, "Entering activity: Home")
-    assert page.locator('#book-list').text_content() == ''
+    page.locator('#open-sd').click()
+    page.wait_for_function("document.querySelector('#sd-list').textContent.includes('A Small Book')")
+    assert '00-upload' not in page.locator('#sd-list').text_content()
+    page.locator('#sd-close').click()
     deadline = time.monotonic() + 5
     while page.workers and time.monotonic() < deadline:
         page.wait_for_timeout(100)
@@ -366,7 +389,7 @@ def exercise_mouse_scheduling(browser, url):
         assert screen(page).evaluate('c => c.toDataURL()') == initial
     page.evaluate("window.oldPreviewState = document.querySelector('iframe').contentWindow.runtimeTrace")
     assert page.evaluate('oldPreviewState.steps > 0')
-    page.locator('#reset').click()
+    reset_card(page)
     wait_log(page, "Entering activity: Home")
     assert page.evaluate('oldPreviewState.stops') >= 1
     stopped_at = page.evaluate('oldPreviewState.steps')
@@ -439,16 +462,23 @@ def exercise(browser, url, device, output):
     assert (output / f"{device}-download.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
     sample = ROOT / f".cache/wasm/{device}/sdcard/books/A Small Book of Pages.epub"
-    page.locator("#book-input").set_input_files({"name": "00-upload.epub", "mimeType": "application/epub+zip", "buffer": sample.read_bytes()})
-    page.wait_for_function("document.querySelector('#book-list').textContent.includes('00-upload.epub')")
-    open_book(page)
-    wait_log(page, "Loading ePub: /books/00-upload.epub")
-    assert dark_fraction(page) < 0.5, "Import should start a fresh session"
-    page.locator("#book-input").set_input_files({"name": "bad.txt", "mimeType": "text/plain", "buffer": b"not an EPUB"})
-    assert "Choose EPUB files" in page.locator("#status").text_content()
-    page.get_by_role("button", name="Reset preview", exact=True).click()
+    original_frame = frame(page)
+    before_upload = screen(page).evaluate("c => c.toDataURL()")
+    upload_file(page, "00-upload.epub", sample.read_bytes())
+    assert frame(page) == original_frame, "Upload replaced the running firmware"
+    assert screen(page).evaluate("c => c.toDataURL()") == before_upload, "Upload changed the reading page"
+    assert dark_fraction(page) > 0.5, "Upload reset Night Mode"
+    upload_file(page, "notes.txt", b"An ordinary text file on the card.")
+    exercise_sd_card(page, output, device, "/books/A Small Book of Pages.epub")
+    if device == "x4":
+        exercise_card_lifecycle(page, url)
+    exercise_restart(page, device)
+    reset_card(page)
     wait_log(page, "Entering activity: Home")
-    assert page.locator("#book-list").text_content() == ""
+    page.locator('#open-sd').click()
+    page.wait_for_function("document.querySelector('#sd-list').textContent.includes('A Small Book')")
+    assert '00-upload' not in page.locator('#sd-list').text_content()
+    page.locator('#sd-close').click()
     assert not errors, errors
     check_requests(requests, url, device)
     deadline = time.monotonic() + 5
