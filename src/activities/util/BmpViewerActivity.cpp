@@ -309,6 +309,19 @@ bool BmpViewerActivity::saveJpegSleepCover() {
   ImageDimensions dimensions;
   if (!decoder.getDimensions(filePath, dimensions)) return false;
   auto config = fitImage(dimensions, renderer);
+  if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP &&
+      (dimensions.width > renderer.getScreenWidth() || dimensions.height > renderer.getScreenHeight())) {
+    const float ratio = static_cast<float>(dimensions.width) / dimensions.height;
+    const float screenRatio = static_cast<float>(renderer.getScreenWidth()) / renderer.getScreenHeight();
+    config.x = config.y = 0;
+    config.maxWidth = renderer.getScreenWidth();
+    config.maxHeight = renderer.getScreenHeight();
+    if (ratio > screenRatio) {
+      config.sourceCropX = 1.0f - screenRatio / ratio;
+    } else {
+      config.sourceCropY = 1.0f - ratio / screenRatio;
+    }
+  }
   config.cachePath = JPEG_SLEEP_TMP_PXC;
   renderer.clearScreen();
   bool cacheWritten;
