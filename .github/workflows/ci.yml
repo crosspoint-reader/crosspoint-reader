@@ -100,6 +100,8 @@ jobs:
             asset: firmware-metalio_eink4.bin
           - env: eego_a4
             asset: firmware-eego_a4.bin
+          - env: picco
+            asset: firmware-picco.bin
     steps:
       - uses: actions/checkout@v6
         with:
