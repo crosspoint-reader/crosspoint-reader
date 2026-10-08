@@ -20,10 +20,11 @@ assuming their roles. A fork may use
 
 ### Branch Naming Convention
 
-**For feature/fix branches**:
+Use `<type>/<short-description>` for new branches, with the same type prefix as
+PR titles: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, or `perf`.
 
 ```text
-feature/<short-description>       # New features
+feat/<short-description>          # New features
 fix/<issue-number>-<description>  # Bug fixes
 refactor/<component-name>         # Code refactoring
 docs/<topic>                      # Documentation updates
@@ -31,7 +32,7 @@ docs/<topic>                      # Documentation updates
 
 **Examples**:
 
-- `feature/sd-download-progress`
+- `feat/sd-download-progress`
 - `fix/123-orientation-crash`
 - `refactor/hal-storage`
 
