@@ -1,7 +1,9 @@
 #include "EpubReaderActivity.h"
 
+#include <Epub/ImageCacheService.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <Epub/converters/DecodeTarget.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -175,6 +177,8 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 }  // namespace
 
 EpubReaderActivity::~EpubReaderActivity() {
+  // Join the decoder task before the Epub/extractor it may be using goes away.
+  ImageCacheService::getInstance().stop();
   ImageBlock::setExtractor(nullptr, nullptr);
   // ActivityManager destroys activities with its RenderLock already held;
   // taking another here self-deadlocks (renderingMutex is non-recursive).
@@ -193,6 +197,17 @@ EpubReaderActivity::~EpubReaderActivity() {
   } else {
     epub.reset();
   }
+}
+
+void EpubReaderActivity::onEnter() {
+  // Start the decoder task before the first render can request a page's cache.
+  ImageCacheService::getInstance().start();
+  ReaderActivity::onEnter();
+}
+
+void EpubReaderActivity::onExit() {
+  ImageCacheService::getInstance().stop();
+  ReaderActivity::onExit();
 }
 
 bool EpubReaderActivity::loadBook() {
@@ -416,11 +431,14 @@ void EpubReaderActivity::loop() {
   }
 
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
+  // A window-paused build keeps build_ alive (isBuilding() true) while doing no
+  // work; skipLoopDelay() is true only while a build actually progresses, so
+  // idle work is not starved for the whole BUILD_WINDOW_AHEAD pause.
   {
     RenderLock lock(RenderLock::Mode::Try);
-    if (lock.ownsLock() && section && !section->isBuilding() && renderer.hasFrameBuffer() &&
-        lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
-        ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP && ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
+    if (lock.ownsLock() && section && !skipLoopDelay() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
+        millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
+        ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
@@ -436,6 +454,40 @@ void EpubReaderActivity::loop() {
           }
         }
       }
+    }
+  }
+
+  // Idle image prefetch: hand the next page to the decoder task, which writes
+  // the .pxc without touching the framebuffer. The render path renders from
+  // that cache, so the first view of an image page skips the placeholder pass.
+  // Skipped while a section build is live: the retained builder holds the bulk
+  // of the free heap, so a decode started under it is likely to be refused.
+  {
+    RenderLock lock(RenderLock::Mode::Try);
+    if (lock.ownsLock() && section && !section->isBuilding() && !skipLoopDelay() && renderer.hasFrameBuffer() &&
+        lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
+        (idlePrefetchSpine != currentSpineIndex || idlePrefetchPage != section->currentPage)) {
+      const int nextPage = section->currentPage + 1;
+      if (nextPage < static_cast<int>(section->pageCount)) {
+        if (auto p = section->loadPage(nextPage)) {
+          // Only queue a decode the decoder will actually accept. The floor is
+          // the decoder's own requirement, so this gate cannot drift from the
+          // check the decoder runs when the worker picks the job up.
+          if (p->hasImagesNeedingDecode() && ESP.getFreeHeap() >= p->decodeFreeHeapFloor() &&
+              ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC) {
+            // Decode at the position the real render will use (same margin
+            // math as renderBook()) so the .pxc matches a decode at view time.
+            int mTop, mRight, mBottom, mLeft;
+            renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
+            mTop += SETTINGS.screenMargin;
+            mLeft += SETTINGS.screenMargin;
+            ImageCacheService::getInstance().prefetchPage(std::move(p), captureDecodeTarget(renderer, false), mLeft,
+                                                          mTop);
+          }
+        }
+      }
+      idlePrefetchSpine = currentSpineIndex;
+      idlePrefetchPage = section->currentPage;
     }
   }
 
@@ -958,6 +1010,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           uint16_t backupSpine = currentSpineIndex;
           uint16_t backupPage = section->currentPage;
           uint16_t backupPageCount = section->pageCount;
+          // Join the decoder task first: it may hold an open .pxc (and be
+          // extracting an image) inside the cache directory about to be removed.
+          ImageCacheService::getInstance().stop();
           section.reset();
           epub->clearCache();
           epub->setupCacheDir();
@@ -1035,6 +1090,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
       nextPageNumber = section->currentPage;
     }
     discardOverlayPage();
+    ImageCacheService::getInstance().stop();
     ImageBlock::releaseRenderCache();
     ImageBlock::setExtractor(nullptr, nullptr);
     section.reset();
@@ -1702,6 +1758,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto tPrewarm = millis();
 
   const bool pageHasImages = page->hasImages();
+  // The decoder task owns every .pxc write. Make sure this page's images are
+  // cached before deciding whether the placeholder pass is needed, so a first
+  // view renders straight from cache with no placeholder flash.
+  if (pageHasImages && page->hasImagesNeedingDecode()) {
+    const DecodeTarget target = captureDecodeTarget(renderer, /*writeFramebuffer=*/false);
+    ImageCacheService::getInstance().ensurePageCached(*page, target, orientedMarginLeft, orientedMarginTop);
+  }
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;

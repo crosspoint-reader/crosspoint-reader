@@ -23,7 +23,7 @@ namespace {
 // The file I/O callbacks receive the HalFile* via pFile->fHandle (set by pngOpen()).
 struct PngContext {
   PNG* decoder{nullptr};
-  GfxRenderer* renderer{nullptr};
+  const DecodeTarget* target{nullptr};
   const RenderConfig* config{nullptr};
   int screenWidth{0};
   int screenHeight{0};
@@ -214,7 +214,7 @@ void convertLineToGray(const uint8_t* pPixels, uint8_t* grayLine, int width, int
 
 int pngDrawCallback(PNGDRAW* pDraw) {
   PngContext* ctx = reinterpret_cast<PngContext*>(pDraw->pUser);
-  if (!ctx || !ctx->config || !ctx->renderer || !ctx->grayLineBuffer) return 0;
+  if (!ctx || !ctx->config || !ctx->target || !ctx->grayLineBuffer) return 0;
 
   ImageToFramebufferDecoder::yieldDuringDecode(ctx->lastYieldMs);
 
@@ -252,7 +252,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
-  pw.init(*ctx->renderer);
+  pw.init(*ctx->target);
 
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;
@@ -312,6 +312,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
 }  // namespace
 
+size_t PngToFramebufferConverter::minFreeHeapToDecode() const { return MIN_FREE_HEAP_FOR_PNG; }
+
 bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
   size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < MIN_FREE_HEAP_FOR_PNG) {
@@ -337,7 +339,7 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
   return validateAndStoreDimensions(png->getWidth(), png->getHeight(), out, "PNG");
 }
 
-bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
+bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                     const RenderConfig& config) {
   LOG_DBG("PNG", "Decoding PNG: %s", imagePath.c_str());
 
@@ -356,10 +358,10 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   PngContext ctx;
   ctx.decoder = png.get();
-  ctx.renderer = &renderer;
+  ctx.target = &target;
   ctx.config = &config;
-  ctx.screenWidth = renderer.getScreenWidth();
-  ctx.screenHeight = renderer.getScreenHeight();
+  ctx.screenWidth = target.screenWidth;
+  ctx.screenHeight = target.screenHeight;
 
   int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
                      pngDrawCallback);

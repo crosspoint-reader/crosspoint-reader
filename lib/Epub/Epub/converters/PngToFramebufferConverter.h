@@ -6,7 +6,9 @@ class PngToFramebufferConverter final : public ImageToFramebufferDecoder {
  public:
   static bool getDimensionsStatic(const std::string& imagePath, ImageDimensions& out);
 
-  bool decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer, const RenderConfig& config) override;
+  using ImageToFramebufferDecoder::decodeToFramebuffer;
+  bool decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
+                           const RenderConfig& config) override;
 
   bool getDimensions(const std::string& imagePath, ImageDimensions& dims) const override {
     return getDimensionsStatic(imagePath, dims);
@@ -14,4 +16,5 @@ class PngToFramebufferConverter final : public ImageToFramebufferDecoder {
 
   static bool supportsFormat(const std::string& extension);
   const char* getFormatName() const override { return "PNG"; }
+  size_t minFreeHeapToDecode() const override;
 };

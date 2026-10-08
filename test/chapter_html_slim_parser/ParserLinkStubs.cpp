@@ -21,6 +21,7 @@ ImageBlock::ImageBlock(const std::string& imagePath, const std::string& srcPath,
 
 bool ImageDecoderFactory::isFormatSupported(const std::string&) { return false; }
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string&) { return nullptr; }
+size_t ImageDecoderFactory::minFreeHeapToDecode(const std::string&) { return 0; }
 bool ImageToFramebufferDecoder::validateAndStoreDimensions(int64_t, int64_t, ImageDimensions&, const char*) {
   return false;
 }
@@ -28,5 +29,6 @@ bool ImageToFramebufferDecoder::validateAndStoreDimensions(int64_t, int64_t, Ima
 void ImageBlock::render(GfxRenderer&, int, int) {}
 void ImageBlock::renderPlaceholder(GfxRenderer&, int, int) const {}
 bool ImageBlock::needsDecode() const { return false; }
+bool ImageBlock::prefetch(const DecodeTarget&, int, int) const { return false; }
 bool ImageBlock::serialize(HalFile&) { return false; }
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile&) { return nullptr; }
