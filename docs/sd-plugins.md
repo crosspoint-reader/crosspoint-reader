@@ -14,10 +14,12 @@ and the firmware carries no vendor names, URLs, or file-format knowledge.
     ...assets
 ```
 
-**Discovery and the on-device list.** Every plugin folder (anything holding a
-`manifest.json`, `plugin.js`, or `device.json`) appears under **Settings →
-System → Plugins** on the reader, showing its `title` and one-line
-`description`. Selecting a plugin with an on-device catalog (`device.json`
+**Discovery and the on-device list.** The plugin subsystem is controlled by
+**Settings → System → Advanced → Plugin System**. When enabled, **Plugins** is
+shown on the Home screen even when no plugins are installed. Every plugin folder
+(anything holding a `manifest.json`, `plugin.js`, or `device.json`) appears under
+**Home → Plugins**, showing its `title` and one-line `description`. Selecting a
+plugin with an on-device catalog (`device.json`
 with `browse.url`) opens that catalog. Selecting any other plugin shows its
 `README.md` (up to 16KB, as plain paged text) when it has one, so even a
 browser-only plugin (no `device.json`) can explain how to use it from the web
@@ -28,6 +30,35 @@ UI; without a README the row does nothing. `title`/`description` are read from
 first two-dot-free options exist so plugins are easy to copy onto the card
 from a computer. All three roots are scanned; on a name collision the earlier
 root in that order wins.
+
+### Enabling plugins and Plugin Hub
+
+The **Plugin System** switch is the global gate for SD-card plugin discovery and
+execution. New installations default to **Disabled**. Firmware upgrades detect
+existing plugin folders and keep the Plugin System enabled so an upgrade does
+not silently disable an existing setup. Turning the Plugin System off does not
+delete or rename any plugin files; turning it back on makes them discoverable
+again.
+
+Plugin Hub is optional and is not required for sideloaded plugins. When the
+Plugin System is enabled and Plugin Hub is not installed, **Home → Plugins**
+contains a synthetic **Plugin Hub — Download, discover, and update plugins**
+entry. Selecting it offers:
+
+- **Install** — download and install Plugin Hub over Wi-Fi.
+- **Hide** — hide only the synthetic Plugin Hub install entry. Installed and
+  sideloaded plugins continue to work normally.
+- **Cancel** — leave the entry visible and make no changes.
+
+A hidden Plugin Hub entry can be restored by cycling **Settings → System →
+Advanced → Plugin System** from **Disabled** back to **Enabled**. If Plugin Hub
+is still absent, its install entry reappears under **Home → Plugins**.
+
+For users who prefer manual installation, Plugin Hub can be downloaded directly
+from <https://github.com/jadehawk/PluginHub.crosspoint-plugin/releases>. Copy or
+extract the `pluginhub` folder so it ends up at one of these supported locations:
+`/.crosspoint/plugins/pluginhub/`, `/plugins/pluginhub/`, or
+`/.plugins/pluginhub/`.
 
 A plugin can ship any combination: `plugin.js` alone (web-only),
 `device.json` alone (on-device only), or both. A `device.json` may declare only
@@ -95,7 +126,7 @@ api.registerAction('myaction', async (args) => {
 ## Surface 3: on-device manifests and catalog screens (`device.json`)
 
 A declarative manifest the firmware's generic `PluginCatalogActivity` renders
-under **Settings → System → Plugins**. It expresses "authenticated JSON
+under **Home → Plugins**. It expresses "authenticated JSON
 catalog: sign in, browse, download, sidecar" — enough for most book services —
 without any code running on the device. Anything beyond this vocabulary
 belongs in `plugin.js`.
@@ -300,7 +331,7 @@ Two browse formats:
 ### Testing a new manifest
 
 1. Copy the plugin folder to `/.crosspoint/plugins/<name>/` on the SD card.
-2. Settings → System → Plugins → your title. With no token and no `auth`
+2. Enable **Settings → System → Advanced → Plugin System**, then open **Home → Plugins → your title**. With no token and no `auth`
    block you should see the not-signed-in screen; with `auth`, the code/QR
    screen.
 3. Watch serial (`[PCAT]` tag) for request/parse failures — the log includes

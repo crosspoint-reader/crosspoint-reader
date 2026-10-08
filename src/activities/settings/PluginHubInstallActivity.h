@@ -4,12 +4,15 @@
 
 class PluginHubInstallActivity final : public CatalogActivity {
  public:
-  explicit PluginHubInstallActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  explicit PluginHubInstallActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                    bool showConfirmation = true);
 
   static bool isInstalled();
   void onEnter() override;
 
  private:
+  bool showConfirmation = true;
+
   int listCount() const override { return 0; }
   bool hasSearch() const override { return false; }
   void activateIndex(int) override {}

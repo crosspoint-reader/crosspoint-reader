@@ -19,8 +19,10 @@
 #include <cstring>
 #include <new>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
+#include "activities/settings/PluginHubInstallActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
@@ -356,6 +358,16 @@ void PluginCatalogActivity::onEnter() {
 void PluginCatalogActivity::enterPluginPicker() {
   Storage.remove(BROWSE_TMP_PATH);
   installedPlugins = discoverPlugins();
+  pluginHubInstalled = PluginHubInstallActivity::isInstalled();
+  showPluginHubInstallRow = !pluginHubInstalled && !SETTINGS.pluginHubPromptHidden;
+  if (!pluginHubInstalled) {
+    // Hide an incomplete/interrupted Hub install and expose the synthetic install
+    // row instead. A complete Hub remains a normal discovered plugin entry.
+    installedPlugins.erase(
+        std::remove_if(installedPlugins.begin(), installedPlugins.end(),
+                       [](const PluginRef& plugin) { return strcasecmp(plugin.name.c_str(), "pluginhub") == 0; }),
+        installedPlugins.end());
+  }
   // Discovery just re-read the plugin folders; keep the event subscription
   // table in step so a plugin installed since boot starts receiving events
   // (and a removed one stops) without a restart.
@@ -591,7 +603,8 @@ bool PluginCatalogActivity::nextRowVisible() const {
 }
 
 int PluginCatalogActivity::rowCount() const {
-  if (state == State::PLUGIN_PICKER) return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0);
+  if (state == State::PLUGIN_PICKER)
+    return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
   if (state == State::LIST_PICKER) return static_cast<int>(manifest.browseLists.size());
   if (state != State::BROWSING) return 0;
   return static_cast<int>(items.size()) + (prevRowVisible() ? 1 : 0) + (nextRowVisible() ? 1 : 0);
@@ -946,6 +959,8 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 
 // Sign-in and completion states precede the shared catalog input handling.
 bool PluginCatalogActivity::handleCustomInput() {
+  if (pluginHubPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
+
   if (state == State::AUTH) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = State::NO_TOKEN;
@@ -1045,7 +1060,28 @@ void PluginCatalogActivity::activateIndex(const int index) {
       activityManager.goToBrowser();  // replaces this screen with the OPDS browser
       return;
     }
-    const PluginRef& plugin = installedPlugins[index - (showOpds ? 1 : 0)];
+    const int pluginStart = showOpds ? 1 : 0;
+    if (showPluginHubInstallRow && index == pluginStart) {
+      static constexpr StrId OPTIONS[] = {StrId::STR_INSTALL, StrId::STR_HIDE, StrId::STR_CANCEL};
+      pluginHubPopup.show(StrId::STR_PLUGIN_HUB, OPTIONS, 3, 0, [this](const int selected) {
+        if (selected == 0) {
+          auto installer = makeUniqueNoThrow<PluginHubInstallActivity>(renderer, mappedInput, false);
+          if (!installer) {
+            LOG_ERR("PCAT", "OOM: Plugin Hub installer");
+            return;
+          }
+          startActivityForResult(std::move(installer), [this](const ActivityResult&) { enterPluginPicker(); });
+        } else if (selected == 1) {
+          SETTINGS.pluginHubPromptHidden = 1;
+          SETTINGS.saveToFile();
+          enterPluginPicker();
+        }
+      });
+      requestUpdate();
+      return;
+    }
+    const int syntheticHubRows = showPluginHubInstallRow ? 1 : 0;
+    const PluginRef& plugin = installedPlugins[index - pluginStart - syntheticHubRows];
     const auto action = PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty());
     if (action == PluginLocations::PickerAction::Readme) {
       // A plain paged text view, not the book reader: viewing instructions must
@@ -1175,6 +1211,11 @@ void PluginCatalogActivity::drawFooter() {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
+void PluginCatalogActivity::render(RenderLock&& lock) {
+  if (pluginHubPopup.processRender(renderer, mappedInput)) return;
+  CatalogActivity::render(std::move(lock));
+}
+
 void PluginCatalogActivity::buildScreen(UiScreen& screen) {
   const bool listState = state == State::BROWSING || state == State::LIST_PICKER;
   const std::string title = listState ? browsingHeaderLabel() : catalogTitle;
@@ -1285,6 +1326,7 @@ void PluginCatalogActivity::rebuildRowItems() {
   };
   if (state == State::PLUGIN_PICKER) {
     if (showOpds) addRow(tr(STR_OPDS_BROWSER), tr(STR_OPDS_SERVERS));
+    if (showPluginHubInstallRow) addRow(tr(STR_PLUGIN_HUB), tr(STR_PLUGIN_HUB_DESCRIPTION), ">");
     for (const auto& plugin : installedPlugins) {
       //   None       -> web-only hint; chevron only with a readme
       //   Catalog    -> browsable, own description, chevron

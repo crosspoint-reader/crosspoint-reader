@@ -1,14 +1,10 @@
 #include "AdvancedSettingsActivity.h"
 
-#include <Memory.h>
-
 #include <utility>
 
 #include "CrossPointSettings.h"
-#include "PluginHubInstallActivity.h"
 #include "components/UITheme.h"
 #include "util/PluginEvents.h"
-#include "util/PluginLocations.h"
 
 namespace fui = freeink::ui;
 
@@ -35,32 +31,13 @@ void AdvancedSettingsActivity::setPluginSystemEnabled(const bool enabled) {
   const bool changed = SETTINGS.pluginsEnabled != value;
   if (changed) {
     SETTINGS.pluginsEnabled = value;
+    if (enabled) SETTINGS.pluginHubPromptHidden = 0;
     SETTINGS.saveToFile();
   }
 
   // Rebuild immediately so disabling stops event delivery in this session and
   // enabling restores subscriptions without requiring a reboot.
   pluginevents::refreshSubscriptions();
-  requestUpdate();
-
-  if (enabled && changed && !PluginHubInstallActivity::isInstalled()) offerPluginHubInstall();
-}
-
-void AdvancedSettingsActivity::offerPluginHubInstall() {
-  auto activity = makeUniqueNoThrow<PluginHubInstallActivity>(renderer, mappedInput);
-  if (!activity) return;
-
-  startActivityForResult(std::move(activity), [this](const ActivityResult&) {
-    pluginevents::refreshSubscriptions();
-    if (!PluginHubInstallActivity::isInstalled() && !PluginLocations::anyPluginInstalledOnDisk()) showReenableHint();
-    requestUpdate();
-  });
-}
-
-void AdvancedSettingsActivity::showReenableHint() {
-  const char* options[] = {tr(STR_OK_BUTTON)};
-  optionPopup.showMessage(tr(STR_INSTALL_PLUGIN_HUB), tr(STR_PLUGIN_HUB_REENABLE_HINT), options, 1, 0,
-                          [](const int) {});
   requestUpdate();
 }
 
