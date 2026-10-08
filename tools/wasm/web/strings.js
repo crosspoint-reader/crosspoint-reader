@@ -1,0 +1,36 @@
+const strings = {
+  en: {
+    preview: 'Preview', eyebrow: 'TRY THIS BUILD', title: 'A reader, right here.',
+    intro: 'Open a book, turn a page, and try the settings. This preview runs CrossPoint firmware in your browser.',
+    back: 'Back', left: '← Left', right: 'Right →', confirm: 'Confirm', pageBack: '↑ Previous page', pageForward: '↓ Next page',
+    keyboard: 'Use the buttons or arrow keys · Enter to confirm · Escape to go back. X4 and X3 screens do not support touch.', device: 'Device',
+    home: 'Home button', touchHelp: 'Tap to select · Drag or swipe to turn pages · Tap the page center for the menu · ↑ ↓ page buttons · H Home button',
+    yourBook: 'Try your own book', dropHint: 'Drop an EPUB here, or choose a file. Adding books restarts the preview.',
+    openBook: 'Choose EPUB', privacy: 'Books stay in this tab. Up to 20 MiB total. Reloading clears your books and settings.',
+    reset: 'Reset preview', screenshot: 'Save screenshot', logs: 'Download logs', copy: 'Copy build information',
+    diagnostics: 'Diagnostic log', scope: 'For testing reading and menus. Network services, firmware updates, and sleep are not supported. Device memory limits and e-ink refresh behavior are not simulated.',
+    credits: 'Browser bridge adapted from', loading: 'Loading firmware…', booting: 'Starting reader…', ready: 'Ready to read',
+    error: 'The preview could not start. See the diagnostic log.',
+    fileError: 'Choose EPUB files totaling no more than 20 MiB.', missing: 'This device has not been built yet.',
+    copied: 'Build information copied', copyFailed: 'Could not access the clipboard. Download the logs instead.',
+    local: 'local changes', frameTitle: 'CrossPoint reader screen', timeout: 'The reader has not drawn a screen. See the diagnostic log.',
+  },
+  ko: {
+    preview: '미리보기', eyebrow: '이 빌드 체험하기', title: '브라우저에서 책을 읽어보세요.',
+    intro: '책을 열고, 페이지를 넘기고, 설정을 바꿔보세요. CrossPoint 펌웨어가 브라우저에서 실행됩니다.',
+    back: '뒤로', left: '← 왼쪽', right: '오른쪽 →', confirm: '확인', pageBack: '↑ 이전 페이지', pageForward: '↓ 다음 페이지',
+    keyboard: '아래 버튼이나 방향키로 이동 · Enter로 확인 · Escape로 뒤로 가기. X4·X3 화면은 터치를 지원하지 않습니다.', device: '기기',
+    home: '홈 버튼', touchHelp: '화면을 눌러 선택 · 마우스로 끌거나 손가락으로 밀어서 페이지 이동 · 책 중앙을 눌러 메뉴 열기 · ↑ ↓ 페이지 버튼 · H 홈 버튼',
+    yourBook: '내 책으로 테스트', dropHint: 'EPUB를 끌어다 놓거나 파일을 선택하세요. 책을 추가하면 미리보기가 다시 시작됩니다.',
+    openBook: 'EPUB 선택', privacy: '책은 이 탭에만 보관됩니다. 합계 20 MiB까지. 새로고침하면 책과 설정이 초기화됩니다.',
+    reset: '미리보기 초기화', screenshot: '화면 저장', logs: '로그 다운로드', copy: '빌드 정보 복사',
+    diagnostics: '진단 로그', scope: '독서 화면과 메뉴를 테스트할 수 있습니다. 네트워크 서비스, 펌웨어 업데이트, 절전은 지원하지 않습니다. 실기기의 메모리 제한과 전자잉크 갱신 동작은 재현하지 않습니다.',
+    credits: '브라우저 연결 코드 원작', loading: '펌웨어를 불러오는 중…', booting: '리더를 시작하는 중…', ready: '읽을 준비가 됐습니다',
+    error: '미리보기를 시작하지 못했습니다. 진단 로그를 확인하세요.',
+    fileError: '합계 20 MiB 이하의 EPUB 파일을 선택해주세요.', missing: '이 기기의 미리보기 빌드가 아직 없습니다.',
+    copied: '빌드 정보를 복사했습니다', copyFailed: '클립보드에 접근하지 못했습니다. 로그를 다운로드해주세요.',
+    local: '로컬 변경 포함', frameTitle: 'CrossPoint 독서 화면', timeout: '리더 화면이 표시되지 않았습니다. 진단 로그를 확인하세요.',
+  },
+};
+export const locale = navigator.language.startsWith('ko') ? 'ko' : 'en';
+export const tr = (key) => strings[locale][key] ?? strings.en[key] ?? key;

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CrossPoint Preview</title>
+  <link rel="stylesheet" href="preview.css">
+  <script type="module" src="preview.js"></script>
+</head>
+<body>
+  <header>
+    <a class="brand" href="./">CrossPoint <span data-i18n="preview"></span></a>
+    <div class="build"><span id="device-name">X4</span><code id="revision"></code></div>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow" data-i18n="eyebrow"></p>
+      <h1 data-i18n="title"></h1>
+      <p data-i18n="intro"></p>
+    </section>
+    <div class="workspace">
+      <section id="preview-region" class="preview-region" tabindex="0" aria-label="CrossPoint">
+        <div class="device" id="device"><div id="screen"></div><div class="device-brand">CROSSPOINT</div></div>
+        <div class="controls" id="controls">
+          <button data-button="0" data-i18n="back"></button>
+          <button data-button="2" data-i18n="left"></button>
+          <button data-button="3" data-i18n="right"></button>
+          <button data-button="1" data-i18n="confirm"></button>
+          <button data-button="4" data-i18n="pageBack"></button>
+          <button data-button="5" data-i18n="pageForward"></button>
+          <button data-button="6" data-i18n="home" hidden></button>
+        </div>
+        <p id="input-help" class="keyboard" data-i18n="keyboard"></p>
+      </section>
+      <aside>
+        <div class="status"><span id="status-dot"></span><p id="status" role="status" aria-live="polite"></p></div>
+        <label class="device-select"><span data-i18n="device"></span><select id="device-select"><option value="x4">X4</option><option value="x3">X3</option><option value="x4pro">X4 Pro</option></select></label>
+        <div id="drop-zone" class="drop-zone">
+          <strong data-i18n="yourBook"></strong>
+          <p data-i18n="dropHint"></p>
+          <label class="button primary"><span data-i18n="openBook"></span><input id="book-input" type="file" accept=".epub" multiple></label>
+          <p class="muted" data-i18n="privacy"></p>
+          <ul id="book-list"></ul>
+        </div>
+        <div class="actions">
+          <button id="reset" data-i18n="reset"></button>
+          <button id="screenshot" data-i18n="screenshot" disabled></button>
+          <button id="logs" data-i18n="logs"></button>
+          <button id="copy" data-i18n="copy"></button>
+        </div>
+        <p class="scope" data-i18n="scope"></p>
+        <details><summary data-i18n="diagnostics"></summary><pre id="log-output"></pre></details>
+      </aside>
+    </div>
+  </main>
+  <footer><span data-i18n="credits"></span> <a href="LICENSE.crossplay.txt">CrossPlay</a> · <a href="LICENSE.txt">MIT</a></footer>
+</body>
+</html>
