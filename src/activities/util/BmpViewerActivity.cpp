@@ -1,13 +1,13 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
+#include <Epub/converters/JpegToFramebufferConverter.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <JpegToBmpConverter.h>
 #include <Memory.h>
 
 #include <algorithm>
@@ -21,23 +21,6 @@ constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
 constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
 constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
 constexpr size_t COPY_BUFFER_SIZE = 2048;
-constexpr char JPEG_PREVIEW_PATH[] = "/.crosspoint/jpeg_preview.bmp";
-
-// The converter's Print writes do not propagate short writes to its return value.
-class CheckedPreviewWriter final : public Print {
- public:
-  explicit CheckedPreviewWriter(HalFile& file) : file(file) {}
-  size_t write(const uint8_t* buffer, size_t size) override {
-    if (getWriteError()) return 0;
-    const auto written = file.write(buffer, size);
-    if (written != size) setWriteError();
-    return written;
-  }
-  size_t write(uint8_t value) override { return write(&value, 1); }
-
- private:
-  HalFile& file;
-};
 }  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
@@ -101,46 +84,68 @@ bool BmpViewerActivity::canSetSleepCover() const {
           FsHelpers::hasPngExtension(filePath));
 }
 
-bool BmpViewerActivity::prepareJpegPreview() {
-  if (!Storage.ensureDirectoryExists("/.crosspoint")) return false;
-  if (Storage.exists(JPEG_PREVIEW_PATH) && !Storage.remove(JPEG_PREVIEW_PATH)) {
-    LOG_ERR("BMP", "Failed to remove stale JPEG preview");
-    return false;
-  }
-
-  bool prepared = false;
-  {
-    GfxRenderer::FrameBufferLoan loan(renderer);
-    HalFile input, output;
-    if (Storage.openFileForRead("BMP", filePath, input) && Storage.openFileForWrite("BMP", JPEG_PREVIEW_PATH, output)) {
-      CheckedPreviewWriter writer(output);
-      prepared = JpegToBmpConverter::jpegFileToBmpStreamWithSize(input, writer, renderer.getScreenWidth(),
-                                                                 renderer.getScreenHeight(), /*crop=*/false);
-      const bool closed = output.close();  // Check sync before reopening the preview for display.
-      prepared = prepared && !writer.getWriteError() && closed;
-    }
-  }
-  if (!prepared) {
-    LOG_ERR("BMP", "Failed to prepare JPEG preview");
-    Storage.remove(JPEG_PREVIEW_PATH);
-  }
-  return prepared;
-}
-
-bool BmpViewerActivity::renderPng() {
+bool BmpViewerActivity::renderImage() {
+  const bool jpeg = FsHelpers::hasJpgExtension(filePath);
+  JpegToFramebufferConverter jpegDecoder;
+  PngToFramebufferConverter pngDecoder;
+  ImageToFramebufferDecoder& decoder =
+      jpeg ? static_cast<ImageToFramebufferDecoder&>(jpegDecoder) : static_cast<ImageToFramebufferDecoder&>(pngDecoder);
   ImageDimensions dimensions;
-  if (!PngToFramebufferConverter::getDimensionsStatic(filePath, dimensions)) return false;
+  if (!decoder.getDimensions(filePath, dimensions)) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
   const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
                                static_cast<float>(renderer.getScreenHeight()) / dimensions.height);
-  const int width = std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * std::min(scale, 1.0f)));
-  const int height = std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * std::min(scale, 1.0f)));
+  const int width =
+      std::max(1, std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * std::min(scale, 1.0f))));
+  const int height =
+      std::max(1, std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * std::min(scale, 1.0f))));
   RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
                       height};
 
-  PngToFramebufferConverter converter;
-  return converter.decodeToFramebuffer(filePath, renderer, config);
+  config.useExactDimensions = true;
+  const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
+  const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
+                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
+                                            hasPrevious ? "<" : "", hasNext ? ">" : "");
+  const auto drawImage = [&]() {
+    if (!decoder.decodeToFramebuffer(filePath, renderer, config)) return false;
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return true;
+  };
+
+  if (!drawImage()) return false;
+  if (!jpeg) {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    return true;
+  }
+
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute && !renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return false;
+  if (!absolute) renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  bool ready = true;
+  // ponytail: decode each plane; add a pixel cache if large-image latency needs it.
+  for (const auto mode : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+    renderer.clearScreen(absolute ? 0xFF : 0x00);
+    renderer.setRenderMode(mode);
+    if (!drawImage()) {
+      ready = false;
+      break;
+    }
+    if (mode == GfxRenderer::GRAYSCALE_LSB) {
+      renderer.copyGrayscaleLsbBuffers();
+    } else {
+      renderer.copyGrayscaleMsbBuffers();
+    }
+  }
+  if (ready) renderer.displayGrayBuffer();
+
+  renderer.setRenderMode(GfxRenderer::BW);
+  renderer.clearScreen();
+  if (!drawImage()) ready = false;
+  renderer.cleanupGrayscaleWithFrameBuffer();
+  return ready;
 }
 
 void BmpViewerActivity::onEnter() {
@@ -154,30 +159,21 @@ void BmpViewerActivity::onEnter() {
   const auto pageHeight = renderer.getScreenHeight();
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
-  if (FsHelpers::hasPngExtension(filePath)) {
+  if (FsHelpers::hasPngExtension(filePath) || FsHelpers::hasJpgExtension(filePath)) {
     renderer.clearScreen();
-    const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
-    const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
-                         currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
-                                              hasPrevious ? "<" : "", hasNext ? ">" : "");
-    if (renderPng()) {
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    } else {
+    if (!renderImage()) {
+      renderer.clearScreen();
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
       GUI.drawButtonHints(renderer, labels.btn1, "", "", "");
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
     return;
   }
 
-  const bool jpeg = FsHelpers::hasJpgExtension(filePath);
-  const bool prepared = !jpeg || prepareJpegPreview();
-  const char* bitmapPath = jpeg ? JPEG_PREVIEW_PATH : filePath.c_str();
   HalFile file;
   // 1. Open the BMP file
-  if (prepared && Storage.openFileForRead("BMP", bitmapPath, file)) {
+  if (Storage.openFileForRead("BMP", filePath, file)) {
     Bitmap bitmap(file, true,
                   renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
                       display.getController() == HalDisplay::Controller::SSD1677);
@@ -289,7 +285,6 @@ void BmpViewerActivity::onEnter() {
 
 void BmpViewerActivity::onExit() {
   Activity::onExit();
-  if (Storage.exists(JPEG_PREVIEW_PATH)) Storage.remove(JPEG_PREVIEW_PATH);
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }

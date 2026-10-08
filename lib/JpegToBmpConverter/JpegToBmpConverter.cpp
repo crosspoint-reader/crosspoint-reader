@@ -723,8 +723,8 @@ bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, b
 
 // Convert with custom target size (for thumbnails, 2-bit)
 bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
-                                                     int targetMaxHeight, bool crop) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, crop);
+                                                     int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
 }
 
 // Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering
