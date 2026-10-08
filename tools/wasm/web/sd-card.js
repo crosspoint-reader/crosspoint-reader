@@ -98,7 +98,7 @@ export function createSdCard(module) {
       })) };
     }
     if (operation === 'restore') {
-      // Only used before setup() when changing device profiles.
+      // Only used before setup() when restarting or changing device profiles.
       if (!Array.isArray(entries) || entries.length > MAX_ENTRIES || entries.reduce((n, e) => n + (e.bytes?.byteLength || 0), 0) > SD_LIMIT) fail('storageFull');
       for (const entry of entries) pathFor(entry.path);
       for (const entry of walk().filter(entry => entry.path !== '/').reverse()) {
