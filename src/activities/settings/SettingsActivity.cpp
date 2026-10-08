@@ -26,7 +26,6 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
-#include "PluginHubInstallActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -110,9 +109,6 @@ void SettingsActivity::rebuildSettingsLists() {
   // asset isn't published yet just report no update available.
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
-  if (!PluginHubInstallActivity::isInstalled()) {
-    systemSettings.push_back(SettingInfo::Action(StrId::STR_INSTALL_PLUGIN_HUB, SettingAction::InstallPluginHub));
-  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
@@ -433,13 +429,6 @@ void SettingsActivity::toggleCurrentSetting() {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsLists();
                                });
-        break;
-      case SettingAction::InstallPluginHub:
-        if (auto activity = makeUniqueNoThrow<PluginHubInstallActivity>(renderer, mappedInput)) {
-          startActivityForResult(std::move(activity), [this](const ActivityResult&) { rebuildSettingsLists(); });
-        } else {
-          LOG_ERR("SETTINGS", "OOM: PluginHubInstallActivity");
-        }
         break;
       case SettingAction::Plugins:
         startActivityForResult(std::make_unique<PluginCatalogActivity>(renderer, mappedInput), resultHandler);
