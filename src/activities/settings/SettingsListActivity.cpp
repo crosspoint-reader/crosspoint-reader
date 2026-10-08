@@ -115,7 +115,7 @@ void SettingsListActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.subtitleText = screen.theme().smallText;
-  props.subtitleText.maxLines = 1;
+  props.subtitleText.maxLines = 2;
   fitSubtitles(screen, props);
   syncListViewport(screen, props);
   screen.list(props);
