@@ -345,7 +345,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
 
-- **Plugins**: Open installed SD-card plugins that provide an on-device screen or README.
+- **Advanced**: Opens advanced system settings.
+  - **Plugin System**: Globally enable or disable SD-card plugins. Clean installs start disabled; upgrades with existing plugins are kept enabled automatically. Disabling the Plugin System leaves plugin files on the SD card but stops plugin discovery and execution until it is enabled again.
+  - When enabling the Plugin System without Plugin Hub installed, CrossPoint offers to install Plugin Hub over Wi-Fi. If you cancel and have no other plugins installed, turn the Plugin System off and on again to show the install prompt later.
+  - When the Plugin System is enabled and compatible SD-card plugins are installed, **Plugins** appears on the Home screen.
 
 - **Language**: Set the UI language. CrossPoint supports 32 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, European Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, Hebrew, Arabic, Slovak, Bosnian, Vietnamese, Norwegian Bokmål, Indonesian, and Orangutan.
 

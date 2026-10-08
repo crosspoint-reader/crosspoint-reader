@@ -66,12 +66,18 @@ struct Entry {
   bool hasManifest = false;  // web UI card metadata (manifest.json)
 };
 
-// Scans every root. The earliest root containing a folder name claims it —
-// matching findPluginDir, which serves that folder's files — and folders with
-// none of the marker files are omitted. This is the single definition of
-// "what is a plugin"; callers filter by the markers they need.
+// Returns installed plugins only while the global Plugin System is enabled.
+// The physical scan still uses root priority and direct child folders only.
 std::vector<Entry> scanPlugins();
 
-// Directory of the named plugin ("<root>/<name>"), or "" when absent.
+// Raw on-disk probes used only for migration/bootstrap UI. These ignore the
+// global Plugin System switch so firmware can detect pre-existing plugins and
+// offer Plugin Hub while the system is currently disabled.
+std::vector<Entry> scanPluginsOnDisk();
+bool anyPluginInstalledOnDisk();
+std::string findPluginDirOnDisk(const char* name);
+
+// Directory of the named plugin ("<root>/<name>"), or "" when absent or when
+// the global Plugin System setting is disabled.
 std::string findPluginDir(const char* name);
 }  // namespace PluginLocations
