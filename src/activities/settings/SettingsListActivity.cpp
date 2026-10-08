@@ -64,8 +64,9 @@ void SettingsListActivity::rebuildRows() {
   subtitleWidth_ = -1;
 }
 
-// Sets each row's subtitle to its name list, dropping trailing names until
-// it fits the subtitle's line limit at the list's text width.
+// Sets each row's subtitle to its whole name list when that fits the
+// subtitle's line limit, otherwise to as many leading names as fit on one line
+// plus ", …".
 void SettingsListActivity::fitSubtitles(UiScreen& screen, const fui::ListProps& props) {
   const auto& theme = screen.theme();
   // Reserve the scroll indicator too so the fit doesn't change when the list
@@ -77,26 +78,28 @@ void SettingsListActivity::fitSubtitles(UiScreen& screen, const fui::ListProps& 
   subtitleWidth_ = width;
 
   const fui::TextStyle& style = props.subtitleText;
-  fui::TextStyle probe = style;
-  probe.maxLines = static_cast<uint8_t>(style.maxLines + 1);  // one extra line reveals overflow
-  const int16_t maxHeight = static_cast<int16_t>(style.maxLines * screen.target().lineHeight(style.font));
+  const int16_t lineHeight = screen.target().lineHeight(style.font);
   for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
     const std::string& names = nameLists_[i];
     std::string& subtitle = subtitles_[i];
     // The icon and its gap sit beside the subtitle, narrowing it.
     const auto& icon = rowItems_[i].icon;
     const int16_t textWidth = static_cast<int16_t>(width - (icon ? icon.width + props.textGap : 0));
-    const auto fits = [&] {
-      return fui::measureWrappedText(screen.target(), subtitle.c_str(), probe, textWidth).height <= maxHeight;
+    const auto fitsIn = [&](const uint8_t lines) {
+      fui::TextStyle probe = style;
+      probe.maxLines = static_cast<uint8_t>(lines + 1);  // one extra line reveals overflow
+      return fui::measureWrappedText(screen.target(), subtitle.c_str(), probe, textWidth).height <= lines * lineHeight;
     };
     subtitle = names;
-    size_t cut = names.size();
-    while (textWidth > 0 && !fits()) {
-      cut = names.rfind(", ", cut - 1);
-      if (cut == std::string::npos || cut == 0) break;  // first name alone; the renderer ellipsizes it
-      subtitle.assign(names, 0, cut);
-      subtitle += ", ";
-      subtitle += fui::TEXT_ELLIPSIS;
+    if (textWidth > 0 && !fitsIn(style.maxLines)) {
+      size_t cut = names.size();
+      do {
+        cut = names.rfind(", ", cut - 1);
+        if (cut == std::string::npos || cut == 0) break;  // first name alone; the renderer ellipsizes it
+        subtitle.assign(names, 0, cut);
+        subtitle += ", ";
+        subtitle += fui::TEXT_ELLIPSIS;
+      } while (!fitsIn(1));
     }
     rowItems_[i].subtitle = subtitle.empty() ? nullptr : subtitle.c_str();
   }

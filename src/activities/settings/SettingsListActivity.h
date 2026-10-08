@@ -14,7 +14,8 @@ class SettingsListActivity final : public UiListActivity {
   SettingsSection pendingSection;
 
   // Comma-joined setting names per section, and the subtitle shown for it:
-  // the whole list, or as many leading names as fit in two lines plus ", …".
+  // the whole list if it fits in two lines, else the leading names that fit
+  // on one line plus ", …".
   std::array<std::string, SETTINGS_SECTION_COUNT> nameLists_;
   std::array<std::string, SETTINGS_SECTION_COUNT> subtitles_;
   std::array<freeink::ui::ListItem, SETTINGS_SECTION_COUNT> rowItems_{};
