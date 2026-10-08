@@ -21,7 +21,6 @@
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
-
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 
