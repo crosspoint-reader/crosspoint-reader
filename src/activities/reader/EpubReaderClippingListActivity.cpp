@@ -190,7 +190,7 @@ void EpubReaderClippingListActivity::buildScreen(UiScreen& screen) {
     const int helpHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const fui::Rect band = screen.takeBottom(static_cast<int16_t>(helpHeight + metrics.verticalSpacing));
     GUI.drawHelpText(renderer, Rect{band.x, band.y + metrics.verticalSpacing, band.width, helpHeight},
-                     tr(STR_HOLD_OPEN_TO_DELETE));
+                     tr(STR_HOLD_SELECT_TO_DELETE));
   }
 
   fui::ListProps props;
