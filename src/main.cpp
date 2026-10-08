@@ -703,6 +703,11 @@ void setup() {
       }
       wakePowerReleasePending = true;
       break;
+    case HalGPIO::WakeupReason::Timer:
+      // A timer wake is recorded but not acted on: it boots like any
+      // non-power-button wake until a consumer is added.
+      LOG_DBG("MAIN", "Wakeup reason: Timer");
+      break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // Most devices return to sleep after a USB-powered cold boot.
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
