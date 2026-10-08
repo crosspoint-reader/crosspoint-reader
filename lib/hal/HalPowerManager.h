@@ -40,7 +40,11 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
-  void startDeepSleep(HalGPIO& gpio) const;
+  //
+  // timerWakeUs requests an ESP-IDF one-shot timer in microseconds; zero adds
+  // no timer. Existing board shutdown and button-wake behavior is unchanged.
+  // Timer wake requires ESP power through sleep and an IDF-accepted duration.
+  void startDeepSleep(HalGPIO& gpio, uint64_t timerWakeUs = 0) const;
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
