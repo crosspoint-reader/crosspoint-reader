@@ -15,6 +15,9 @@ clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordS
 build_text = "bool ClipSelectionActivity::buildSelectedText" + source.split(
     "bool ClipSelectionActivity::buildSelectedText", 1
 )[1].split("void ClipSelectionActivity::confirmSelection", 1)[0]
+memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + source.split(
+    "  const auto heap = HalMemory::getDefaultHeap();", 1
+)[1].split("  if (lowMemory ||", 1)[0]
 
 def method(name, next_name, text=source):
     signature = text.index(name)
@@ -133,6 +136,15 @@ struct SavedClippings {
 } savedClippings;
 #undef CLIPPINGS
 #define CLIPPINGS savedClippings
+struct HalMemory {
+  struct HeapStats { size_t freeBytes, largestBlockBytes; };
+  static inline HeapStats stats{};
+  static HeapStats getDefaultHeap() { return stats; }
+};
+bool selectionLowMemory(const int first, const int last) {
+""" + memory_guard + r"""
+  return lowMemory;
+}
 """ + clean_word + r"""
 struct ClipSelectionActivity {
 """ + word_box + r"""
@@ -206,6 +218,13 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   assert(text == expected);
 }
 int main() {
+  HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
+  assert(selectionLowMemory(0, 0));
+  HalMemory::stats = {4500, 4200};  // A large enough block still needs spare heap.
+  assert(selectionLowMemory(0, 0));
+  HalMemory::stats = {8192, 6144};
+  assert(!selectionLowMemory(0, 0));
+  assert(!selectionLowMemory(0, 239));
   ClipSelectionActivity activity;
   for (const int8_t tracking : {2, -2}) {
     auto page = std::make_unique<Page>();

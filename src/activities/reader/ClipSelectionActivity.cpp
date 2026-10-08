@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalMemory.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -351,9 +352,13 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
   const int last = std::max(rangeStart, selected);
   ClippingResult result;
   result.action = action;
-  if (!buildSelectedText(first, last, result.text)) {
+  const auto heap = HalMemory::getDefaultHeap();
+  // reserve() aborts on OOM; leave room for the sort order and error popup too.
+  const size_t requiredHeap = CLIPPING_TEXT_MAX + 1 + (last - first + 1) * sizeof(uint16_t) + 1024;
+  const bool lowMemory = heap.largestBlockBytes < CLIPPING_TEXT_MAX + 1 || heap.freeBytes < requiredHeap;
+  if (lowMemory || !buildSelectedText(first, last, result.text)) {
     static constexpr StrId OPTIONS[] = {StrId::STR_BACK};
-    actionPopup.show(StrId::STR_CLIPPING_TOO_LONG, OPTIONS, 1, 0, [](int) {});
+    actionPopup.show(lowMemory ? StrId::STR_MEMORY_ERROR : StrId::STR_CLIPPING_TOO_LONG, OPTIONS, 1, 0, [](int) {});
     requestUpdate();
     return;
   }
