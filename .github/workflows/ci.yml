@@ -35,6 +35,7 @@ jobs:
 
   cppcheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
         with:
@@ -69,10 +70,12 @@ jobs:
           restore-keys: pio-v2-${{ runner.os }}-
 
       - name: Install cppcheck runtime dependency
+        timeout-minutes: 5
         run: |
           # pioarduino's Linux cppcheck binary links against libpcre.so.3.
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpcre3
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends libpcre3
 
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
