@@ -369,7 +369,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // Erased below unless the board is an X4 Pro.
         SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
-#if FREEINK_CAP_TOUCH
+#if FREEINK_DEVICE_PICCO
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM, StrId::STR_BOOKMARK_OPTION, StrId::STR_KOSYNC,
+                           StrId::STR_DICTIONARY, StrId::STR_READER_MENU},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+#elif FREEINK_CAP_TOUCH
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
                            StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},

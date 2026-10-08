@@ -146,7 +146,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions. PWR_CONFIRM is only offered on touch
-  // boards (see SettingsList.h).
+  // boards, the reader shortcuts after it only on the Picco, which has no
+  // Confirm button to long-press (see SettingsList.h). Persisted by index:
+  // append only.
   enum SHORT_PWRBTN {
     IGNORE = 0,
     SLEEP = 1,
@@ -154,6 +156,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
     PWR_CONFIRM = 5,
+    PWR_BOOKMARK = 6,
+    PWR_SYNC = 7,
+    PWR_DICTIONARY = 8,
+    PWR_READER_MENU = 9,
     SHORT_PWRBTN_COUNT
   };
 

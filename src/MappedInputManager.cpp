@@ -33,6 +33,25 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
       HalHaptics::feedback(SETTINGS.vibration != CrossPointSettings::VIBRATION_OFF, true, SETTINGS.hapticIntensity);
     }
   }
+  // Picco: a short power click can carry a reader shortcut (see SHORT_PWRBTN).
+  if (homeAction == HomeButtonAction::Ignore && mapButton(Button::Power, &HalGPIO::wasReleased)) {
+    switch (SETTINGS.shortPwrBtn) {
+      case CrossPointSettings::PWR_BOOKMARK:
+        homeAction = HomeButtonAction::Bookmark;
+        break;
+      case CrossPointSettings::PWR_SYNC:
+        homeAction = HomeButtonAction::Sync;
+        break;
+      case CrossPointSettings::PWR_DICTIONARY:
+        homeAction = HomeButtonAction::Dictionary;
+        break;
+      case CrossPointSettings::PWR_READER_MENU:
+        homeAction = HomeButtonAction::ReaderMenu;
+        break;
+      default:
+        break;
+    }
+  }
   if (deferHomeButtonAction) {
     // Keep the first action observed during a synchronous transfer. Home must
     // still be visible now so the transfer can cancel and unwind promptly.
