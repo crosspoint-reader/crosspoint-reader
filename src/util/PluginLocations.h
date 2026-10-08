@@ -74,4 +74,8 @@ std::vector<Entry> scanPlugins();
 
 // Directory of the named plugin ("<root>/<name>"), or "" when absent.
 std::string findPluginDir(const char* name);
+
+// Resolve a bundle target. Only a single folder directly under a plugin root
+// follows an existing installation across roots; other bundles keep destRoot.
+std::string bundleInstallDir(const std::string& destRoot, const std::string& subdir);
 }  // namespace PluginLocations

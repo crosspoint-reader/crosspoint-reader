@@ -723,13 +723,15 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   session.reset();
   const std::string subdir = substituted(manifest.bundleSubdir, &item);
   // Reject path traversal in the subdir (a hostile catalog could escape).
-  if (subdir.empty() || subdir.find("..") != std::string::npos || subdir.front() == '/') {
+  if (subdir.empty() || subdir == "." || subdir.find("..") != std::string::npos || subdir.front() == '/' ||
+      subdir.find('\\') != std::string::npos) {
     return HttpDownloader::FILE_ERROR;
   }
-  std::string dir = downloadDir();
-  if (!dir.empty() && dir.back() == '/') dir.pop_back();
-  dir += '/';
-  dir += subdir;
+  const std::string dir = PluginLocations::bundleInstallDir(downloadDir(), subdir);
+  {
+    HalFile existing = Storage.open(dir.c_str());
+    if (existing && !existing.isDirectory()) return HttpDownloader::FILE_ERROR;
+  }
   if (!Storage.exists(dir.c_str()) && !Storage.mkdir(dir.c_str())) {
     LOG_ERR("PCAT", "bundle mkdir failed: %s", dir.c_str());
     return HttpDownloader::FILE_ERROR;
