@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -446,14 +447,16 @@ TEST_F(ChapterHtmlSlimParserTest, NfdWordAcrossInlineStyleKeepsSourceRange) {
 class ClippingParagraphTest : public ChapterHtmlSlimParserTest {};
 
 TEST_P(ClippingParagraphTest, CachedBlocksSeparateAdjacentParagraphs) {
-  filepath = (std::filesystem::temp_directory_path() / "crosspoint-clipping-paragraphs.xhtml").string();
   const std::string html = std::string("<html><body>") + GetParam() + "</body></html>";
+  const std::string testId = std::to_string(std::hash<std::string>{}(html));
+  const auto tempDir = std::filesystem::temp_directory_path();
+  filepath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".xhtml")).string();
   {
     HalFile file;
     ASSERT_TRUE(file.open(filepath.c_str(), "wb"));
     ASSERT_EQ(file.write(html.data(), html.size()), html.size());
   }
-  const auto cachePath = (std::filesystem::temp_directory_path() / "crosspoint-clipping-paragraphs.bin").string();
+  const auto cachePath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".bin")).string();
   std::string selected;
   uint32_t previousEnd = 0;
   bool paragraphStartPending = false;
