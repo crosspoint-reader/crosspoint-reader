@@ -568,14 +568,7 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
   }
 
   if (buttons & Input::INPUT_CONFIRM) {
-    if (rangeStart >= 0 && !mappedInput.hasTouch()) {
-      static constexpr StrId OPTIONS[] = {StrId::STR_LOOKUP, StrId::STR_CLIP, StrId::STR_BOOKMARK_OPTION};
-      actionPopup.show(StrId::STR_SELECT, OPTIONS, 3, 0,
-                       [this](const int index) { confirmSelection(SELECTION_ACTIONS[index]); });
-      requestUpdate();
-    } else {
-      confirmSelection();
-    }
+    confirmSelection();
     return true;
   }
 
