@@ -20,8 +20,9 @@ constexpr const char* PLUGIN_HUB_FILES[] = {"manifest.json", "device.json", "plu
 std::string pluginHubPath(const char* filename) { return std::string(PLUGIN_HUB_DIR) + "/" + filename; }
 }  // namespace
 
-PluginHubInstallActivity::PluginHubInstallActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : CatalogActivity("PluginHubInstall", renderer, mappedInput) {}
+PluginHubInstallActivity::PluginHubInstallActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                   const bool showConfirmation)
+    : CatalogActivity("PluginHubInstall", renderer, mappedInput), showConfirmation(showConfirmation) {}
 
 bool PluginHubInstallActivity::isInstalled() {
   const std::string dir = PluginLocations::findPluginDirOnDisk("pluginhub");
@@ -33,9 +34,17 @@ bool PluginHubInstallActivity::isInstalled() {
 void PluginHubInstallActivity::onEnter() {
   CatalogActivity::onEnter();
 
-  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_INSTALL_PLUGIN_HUB),
-                                                               tr(STR_PLUGIN_HUB_INSTALL_DESCRIPTION), tr(STR_CANCEL),
-                                                               tr(STR_YES));
+  if (!showConfirmation) {
+    state = State::CHECK_WIFI;
+    statusMessage = tr(STR_CHECKING_WIFI);
+    requestUpdate();
+    checkAndConnectWifi();
+    return;
+  }
+
+  auto confirmation =
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_INSTALL_PLUGIN_HUB),
+                                              tr(STR_PLUGIN_HUB_INSTALL_DESCRIPTION), tr(STR_CANCEL), tr(STR_YES));
   if (!confirmation) {
     LOG_ERR("PHUB", "OOM: install confirmation");
     fail(StrId::STR_MEMORY_ERROR);

@@ -20,6 +20,4 @@ class AdvancedSettingsActivity final : public UiListActivity {
   void render(RenderLock&&) override;
 
   void setPluginSystemEnabled(bool enabled);
-  void offerPluginHubInstall();
-  void showReenableHint();
 };
