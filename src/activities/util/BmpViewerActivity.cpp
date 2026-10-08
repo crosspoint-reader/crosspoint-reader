@@ -18,9 +18,23 @@
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
+constexpr char CUSTOM_SLEEP_TMP_BMP[] = "/sleep.bmp.tmp";
+constexpr char JPEG_SLEEP_TMP_PXC[] = "/sleep.bmp.pxc.tmp";
 constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
 constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
 constexpr size_t COPY_BUFFER_SIZE = 2048;
+constexpr uint8_t GRAYSCALE_PALETTE[] = {0, 0, 0, 0, 85, 85, 85, 0, 170, 170, 170, 0, 255, 255, 255, 0};
+
+RenderConfig fitImage(const ImageDimensions& dimensions, const GfxRenderer& renderer) {
+  const float scale = std::min({static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
+                                static_cast<float>(renderer.getScreenHeight()) / dimensions.height, 1.0f});
+  const int width = std::max(1, std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * scale)));
+  const int height = std::max(1, std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * scale)));
+  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
+                      height};
+  config.useExactDimensions = true;
+  return config;
+}
 }  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
@@ -79,7 +93,7 @@ void BmpViewerActivity::loadSiblingImages() {
 }
 
 bool BmpViewerActivity::canSetSleepCover() const {
-  return FsHelpers::hasBmpExtension(filePath) ||
+  return FsHelpers::hasBmpExtension(filePath) || FsHelpers::hasJpgExtension(filePath) ||
          (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
           FsHelpers::hasPngExtension(filePath));
 }
@@ -94,16 +108,7 @@ bool BmpViewerActivity::renderImage() {
   if (!decoder.getDimensions(filePath, dimensions)) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
-  const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
-                               static_cast<float>(renderer.getScreenHeight()) / dimensions.height);
-  const int width =
-      std::max(1, std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * std::min(scale, 1.0f))));
-  const int height =
-      std::max(1, std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * std::min(scale, 1.0f))));
-  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
-                      height};
-
-  config.useExactDimensions = true;
+  const auto config = fitImage(dimensions, renderer);
   const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
   const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
                        currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
@@ -289,10 +294,86 @@ void BmpViewerActivity::onExit() {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
+bool BmpViewerActivity::saveJpegSleepCover() {
+  if (Storage.exists(JPEG_SLEEP_TMP_PXC) && !Storage.remove(JPEG_SLEEP_TMP_PXC)) {
+    LOG_ERR("BMP", "Failed to remove previous sleep image pixels");
+    return false;
+  }
+  bool keepBmpTemp = false;
+  const ScopedCleanup cleanup{[&keepBmpTemp]() {
+    Storage.remove(JPEG_SLEEP_TMP_PXC);
+    if (!keepBmpTemp) Storage.remove(CUSTOM_SLEEP_TMP_BMP);
+  }};
+
+  JpegToFramebufferConverter decoder;
+  ImageDimensions dimensions;
+  if (!decoder.getDimensions(filePath, dimensions)) return false;
+  auto config = fitImage(dimensions, renderer);
+  config.cachePath = JPEG_SLEEP_TMP_PXC;
+  renderer.clearScreen();
+  bool cacheWritten;
+  if (!decoder.decodeToFramebuffer(filePath, renderer, config, cacheWritten) || !cacheWritten) {
+    LOG_ERR("BMP", "Failed to decode sleep image pixels");
+    return false;
+  }
+
+  HalFile input, output;
+  if (!Storage.openFileForRead("BMP", JPEG_SLEEP_TMP_PXC, input)) return false;
+  uint16_t width, height;
+  if (input.read(&width, sizeof(width)) != sizeof(width) || input.read(&height, sizeof(height)) != sizeof(height) ||
+      width != config.maxWidth || height != config.maxHeight) {
+    LOG_ERR("BMP", "Invalid sleep image pixels");
+    return false;
+  }
+  const size_t pixelRowBytes = (width + 3) / 4;
+  const size_t bmpRowBytes = (width + 15) / 16 * 4;
+  if (input.size() != 4 + pixelRowBytes * height) {
+    LOG_ERR("BMP", "Incomplete sleep image pixels");
+    return false;
+  }
+  auto row = makeUniqueNoThrow<uint8_t[]>(bmpRowBytes);
+  if (!row) {
+    LOG_ERR("BMP", "OOM: sleep image row");
+    return false;
+  }
+  if (!Storage.openFileForWrite("BMP", CUSTOM_SLEEP_TMP_BMP, output)) return false;
+  BmpHeader header;
+  createBmpHeader(&header, width, height, BmpRowOrder::TopDown);
+  header.infoHeader.biBitCount = 2;
+  header.infoHeader.biClrUsed = header.infoHeader.biClrImportant = 4;
+  header.infoHeader.biSizeImage = bmpRowBytes * height;
+  header.fileHeader.bfOffBits = sizeof(header) - sizeof(header.colors) + sizeof(GRAYSCALE_PALETTE);
+  header.fileHeader.bfSize = header.fileHeader.bfOffBits + header.infoHeader.biSizeImage;
+  if (output.write(&header, sizeof(header) - sizeof(header.colors)) != sizeof(header) - sizeof(header.colors) ||
+      output.write(GRAYSCALE_PALETTE, sizeof(GRAYSCALE_PALETTE)) != sizeof(GRAYSCALE_PALETTE)) {
+    LOG_ERR("BMP", "Failed to write sleep image header");
+    return false;
+  }
+  for (int y = 0; y < height; ++y) {
+    if (input.read(row.get(), pixelRowBytes) != pixelRowBytes || output.write(row.get(), bmpRowBytes) != bmpRowBytes) {
+      LOG_ERR("BMP", "Failed to write sleep image row %d", y);
+      return false;
+    }
+  }
+  if (!output.close()) {
+    LOG_ERR("BMP", "Failed to close sleep image");
+    return false;
+  }
+  if (!Storage.replaceFile(CUSTOM_SLEEP_TMP_BMP, CUSTOM_SLEEP_ROOT_BMP)) {
+    // ponytail: FAT replacement is not atomic; keep the complete temp for recovery.
+    keepBmpTemp = true;
+    LOG_ERR("BMP", "Failed to publish sleep image");
+    return false;
+  }
+  return true;
+}
+
 void BmpViewerActivity::doSetSleepCover() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
-  const bool transparentMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+  const bool jpeg = FsHelpers::hasJpgExtension(filePath);
+  const bool transparentMode =
+      !jpeg && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
   if (!canSetSleepCover()) return;
 
   const char* destination =
@@ -300,7 +381,9 @@ void BmpViewerActivity::doSetSleepCover() {
                       : CUSTOM_SLEEP_ROOT_BMP;
   bool success = filePath == destination;
 
-  if (!success) {
+  if (jpeg) {
+    success = saveJpegSleepCover();
+  } else if (!success) {
     auto buffer = makeUniqueNoThrow<uint8_t[]>(COPY_BUFFER_SIZE);
     if (!buffer) {
       LOG_ERR("BMP", "OOM: sleep cover copy buffer");
