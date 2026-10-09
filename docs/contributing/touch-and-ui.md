@@ -111,13 +111,28 @@ One exception to "always go through a host": `KeyboardEntryActivity` drives the 
 
 ## Global gestures: do not reimplement these
 
-Three gestures are handled once, for every screen. Activities must not add their own edge-swipe handling:
+Edge gestures are recognized once, for every screen. Activities must not add
+their own edge-swipe handling. Touch-down must be in a 3.5 mm edge zone;
+direction locks after 10 px. Release commits at 7 mm inward travel, or with a
+fast inward flick after at least 2 mm. Release below 7 mm without a qualifying
+inward flick cancels, including after reversing back toward the edge.
 
 | Gesture | Trigger | Where it is handled |
 |---|---|---|
-| Back | Right-swipe starting in the left 25% of the screen | Folded into `Button::Back`, so the existing `wasPressed(Button::Back)` in your activity already fires |
-| Home | Up-swipe starting in the bottom 14% | `ActivityManager::loop()`; pops to Home (activities can override via `handleHomeGesture()`) |
-| Menu | Down-swipe starting in the top 14% | Activities that have a menu check `wasMenuGesture()` themselves (the reader does this) |
+| Back | Inward swipe from the left edge | Folded into `Button::Back`, so the activity's existing Back handling fires |
+| Home | Inward swipe from the bottom edge | `ActivityManager::loop()`; activities can override via `handleHomeGesture()` |
+| Menu / frontlight | Inward swipe from the top edge | Global frontlight panel when available; otherwise the activity's menu handling |
+
+`MappedInputManager` recognizes edge gestures and routes their actions.
+`EdgeSwipeIndicator` selects the matching icons. `ActivityManager` services the
+indicator on the render task independently of page renders, waking on input,
+display changes, or a refresh/cleanup deadline. See
+[edge-swipe-indicators.md](../edge-swipe-indicators.md) for tuning, display
+limitations, and device verification.
+
+Hints also appear over antialiased text and grayscale images. Clearing a hint
+over grayscale redraws the active screen to restore its gray pixels; the B/W
+snapshot alone cannot restore them. This redraw can run during a held swipe.
 
 Because the back gesture arrives as `Button::Back`, most button-era activities gain back-swipe support with zero changes.
 

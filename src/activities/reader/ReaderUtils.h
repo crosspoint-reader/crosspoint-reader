@@ -142,8 +142,8 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 
 // Tap in the center third of the screen: the tap path into the reader menu on
 // every touch board. detectTouchPageTurn() excludes this centered rectangle,
-// so it remains free in tap mode. The Off/Swipe Up
-// alternatives are only surfaced on home-key boards (SettingsList), where the
+// so it remains free in tap mode. The Off option
+// is only surfaced on home-key boards (SettingsList), where the
 // menu stays reachable through the key's long-press function.
 inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager& input) {
   if (!input.hasTouch()) return false;
@@ -165,11 +165,6 @@ inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager
 inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input) {
   if (!input.hasTouch()) return false;
   if (input.wasMenuGesture()) return true;
-  // Bottom-edge up-swipe variant: only selectable on home-key boards, where
-  // Home is the capacitive key and the bottom edge is otherwise unused.
-  if (SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_SWIPE_UP && input.wasReaderMenuSwipeUp()) {
-    return true;
-  }
   return isTouchMenuTap(renderer, input);
 }
 

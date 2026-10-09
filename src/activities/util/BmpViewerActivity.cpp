@@ -155,15 +155,25 @@ bool BmpViewerActivity::renderImage() {
 
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
+  RenderLock lock;
 
   if (siblingImages.empty() && !filePath.empty()) {
     loadSiblingImages();
   }
+  showLoading = true;
+  requestUpdate();
+}
 
+void BmpViewerActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
+  const bool loading = showLoading;
+  showLoading = false;
+  Rect popupRect;
+  if (loading) {
+    popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    GUI.fillPopupProgress(renderer, popupRect, 20);
+  }
   if (FsHelpers::hasPngExtension(filePath) || FsHelpers::hasJpgExtension(filePath)) {
     renderer.clearScreen();
     if (!renderImage()) {
@@ -214,7 +224,7 @@ void BmpViewerActivity::onEnter() {
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                                 (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
-      GUI.fillPopupProgress(renderer, popupRect, 50);
+      if (loading) GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
       if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
@@ -382,6 +392,7 @@ bool BmpViewerActivity::saveJpegSleepCover() {
 }
 
 void BmpViewerActivity::doSetSleepCover() {
+  RenderLock lock;
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
   const bool jpeg = FsHelpers::hasJpgExtension(filePath);
@@ -431,7 +442,8 @@ void BmpViewerActivity::doSetSleepCover() {
   }
 
   delay(1000);
-  onEnter();
+  showLoading = true;
+  requestUpdate();
 }
 
 void BmpViewerActivity::loop() {
@@ -439,6 +451,7 @@ void BmpViewerActivity::loop() {
   Activity::loop();
 
   auto openSibling = [this](const int delta) {
+    RenderLock lock;
     if (currentImageIndex < 0) {
       return false;
     }
@@ -450,7 +463,8 @@ void BmpViewerActivity::loop() {
     std::string dirPath = FsHelpers::extractFolderPath(filePath);
     if (dirPath.back() != '/') dirPath += "/";
     filePath = dirPath + siblingImages[currentImageIndex];
-    onEnter();
+    showLoading = true;
+    requestUpdate();
     return true;
   };
 

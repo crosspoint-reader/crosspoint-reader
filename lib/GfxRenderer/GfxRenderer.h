@@ -16,6 +16,7 @@ class SdCardFont;
 class TtfEpdFont;
 
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <map>
 #include <string>
@@ -34,6 +35,7 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  enum class DisplayContent : uint8_t { Unknown, BW, Grayscale };
 
   // Logical screen orientation from the perspective of callers
   enum Orientation {
@@ -49,6 +51,9 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   mutable bool absoluteGrayPlanes = false;
+  mutable DisplayContent displayedContent = DisplayContent::Unknown;
+  mutable std::atomic<uint32_t> displayGeneration{0};
+  mutable bool asyncRefreshPending = false;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
@@ -244,8 +249,10 @@ class GfxRenderer {
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
   // Compatibility queries for Overlay mode.
   bool supportsAsyncGrayscaleBase() const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Finish async work before painting an overlay. Unknown means unavailable;
+  // grayscale content needs a page redraw when the overlay is removed.
+  DisplayContent prepareOverlay() const;
+  uint32_t getDisplayGeneration() const { return displayGeneration; }
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;

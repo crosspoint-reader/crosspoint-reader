@@ -1,10 +1,14 @@
 #pragma once
 
+#include <Icon.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
+
+#include "util/EdgeSwipe.h"
 
 class Bitmap;
 class GfxRenderer;
@@ -230,6 +234,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 
 class BaseTheme {
  public:
+  void drawEdgeSwipeTab(const GfxRenderer& renderer, Rect tab, edge_swipe::Edge edge, const freeink::Icon& icon) const;
   virtual ~BaseTheme() = default;
 
   // Component drawing methods

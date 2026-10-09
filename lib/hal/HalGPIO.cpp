@@ -7,6 +7,8 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#include <algorithm>
+
 // Global HalGPIO instance
 HalGPIO gpio;
 
@@ -171,6 +173,19 @@ bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouc
 bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const { return inputMgr.wasTouchLongPress(nx, ny); }
 
 void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
+
+HalGPIO::TouchContact HalGPIO::touchContact() const {
+  const auto point = inputMgr.getTouchPoint();
+  const bool down = inputMgr.isTouchPressed();
+  float heldX = 0, heldY = 0;
+  const bool cancelled =
+      inputMgr.wasTouchCancelled() || (down && (!point.valid || !inputMgr.isTouchHeldAt(heldX, heldY)));
+  const auto& t = BoardConfig::ACTIVE.touch;
+  const float nx = static_cast<float>(point.x) / std::max<int>(1, t.rawMaxX - t.rawMinX);
+  const float ny = static_cast<float>(point.y) / std::max<int>(1, t.rawMaxY - t.rawMinY);
+  return {down, inputMgr.wasTouchReleased(),           cancelled, inputMgr.touchContactCount(), nx,
+          ny,   static_cast<uint32_t>(point.timestamp)};
+}
 
 unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
 

@@ -112,6 +112,15 @@ class HalGPIO {
   // Ignore the remainder of the current contact (its continued hold and its
   // release edge). Self-clears once the contact ends.
   void suppressTouchContact();
+  struct TouchContact {
+    bool down;
+    bool released;
+    bool cancelled;
+    uint8_t count;
+    float nx, ny;
+    uint32_t sampledAt;
+  };
+  TouchContact touchContact() const;
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
   bool wasTouchActivity() const;
