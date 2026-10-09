@@ -12,6 +12,20 @@ inline constexpr const char* ROOTS[] = {"/.crosspoint/plugins", "/plugins", "/.p
 inline constexpr size_t ROOT_COUNT = sizeof(ROOTS) / sizeof(ROOTS[0]);
 inline constexpr const char* INSTALL_MARKER = ".installing";
 
+inline bool isPluginRoot(const std::string& dir) {
+  for (size_t i = 0; i < ROOT_COUNT; i++) {
+    if (dir == ROOTS[i]) return true;
+  }
+  return false;
+}
+
+// A bundle targeting one direct child of a plugin root may update an existing
+// same-named plugin in place instead of creating a duplicate in another root.
+// Nested and non-plugin bundle destinations keep their configured behavior.
+inline bool shouldReuseInstalledBundleDir(const std::string& destDir, const std::string& subdir) {
+  return !subdir.empty() && subdir.find('/') == std::string::npos && isPluginRoot(destDir);
+}
+
 enum class DeviceKind { None, Catalog, Background };
 enum class PickerAction { None, Catalog, Readme };
 

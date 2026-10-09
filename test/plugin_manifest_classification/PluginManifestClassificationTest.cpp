@@ -10,6 +10,16 @@ TEST(PluginManifestClassification, InstallingMarkerQuarantinesOtherwiseValidPlug
   EXPECT_FALSE(PluginLocations::isDiscoverableEntry(false, false, false, false));
 }
 
+TEST(PluginManifestClassification, DirectPluginBundlesMayReuseInstalledRoot) {
+  EXPECT_TRUE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", "foo"));
+  EXPECT_TRUE(PluginLocations::shouldReuseInstalledBundleDir("/plugins", "foo"));
+  EXPECT_TRUE(PluginLocations::shouldReuseInstalledBundleDir("/.plugins", "foo"));
+
+  EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/downloads", "foo"));
+  EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", "foo/assets"));
+  EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", ""));
+}
+
 TEST(PluginManifestClassification, BrowseUrlIsCatalog) {
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, false), PluginLocations::DeviceKind::Catalog);
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, true), PluginLocations::DeviceKind::Catalog);
