@@ -5,6 +5,7 @@
 #if CROSSPOINT_VECTOR_FONTS
 
 #include <Epub/blocks/TextBlock.h>
+#include <FontPsram.h>
 
 #include <cstdint>
 #include <memory>
@@ -37,17 +38,11 @@ class BookFontSystem {
   bool load(int fontId);
 
  private:
-  // A font file read from the book, in PSRAM.
-  struct FontBytes {
-    uint8_t* data = nullptr;
-    size_t size = 0;
-    ~FontBytes();
-  };
   struct Family {
     uint32_t hash = 0;
-    std::string hrefs[4];  // by TtfEpdFont::Style role; empty = absent
-    std::unique_ptr<FontBytes> bytes[4];
-    bool bytesLoaded = false;  // read attempted
+    std::string hrefs[4];                          // by TtfEpdFont::Style role; empty = absent
+    freeink::font::PsramVector<uint8_t> bytes[4];  // font files, empty = absent
+    bool bytesLoaded = false;                      // read attempted
   };
   struct Loaded {
     int fontId;
@@ -60,7 +55,6 @@ class BookFontSystem {
   static int fontIdFor(uint32_t family, uint8_t pointSize);
   bool readFamilyBytes(Family& family);
   bool loadFont(Family& family, uint8_t pointSize, int fontId);
-  void unloadFonts();
 
   std::shared_ptr<Epub> epub_;
   GfxRenderer* renderer_ = nullptr;

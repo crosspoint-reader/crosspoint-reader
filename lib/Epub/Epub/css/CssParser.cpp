@@ -1476,23 +1476,14 @@ void CssParser::parseFontFace(const std::string_view declBlock, const std::strin
       });
   if (face.family == 0) return;
 
-  // The first url() whose format FreeType reads without gzip: WOFF/WOFF2 and SVG are skipped.
+  // The first url() FreeType reads without gzip: .woff/.woff2 and .svg files are skipped.
   for (size_t pos = 0; (pos = src.find("url(", pos)) != std::string_view::npos;) {
     const size_t close = src.find(')', pos);
     if (close == std::string_view::npos) break;
     const std::string_view url = unquoteCss(src.substr(pos + 4, close - pos - 4));
-    const size_t next = src.find("url(", close);
-    const std::string_view rest =
-        src.substr(close + 1, next == std::string_view::npos ? std::string_view::npos : next - close - 1);
-    const size_t formatPos = rest.find("format(");
-    const std::string_view format =
-        formatPos == std::string_view::npos
-            ? std::string_view{}
-            : unquoteCss(rest.substr(formatPos + 7, rest.find(')', formatPos) - formatPos - 7));
     const size_t dot = url.find_last_of('.');
     const std::string_view extension = dot == std::string_view::npos ? std::string_view{} : url.substr(dot + 1);
-    const bool skipped = iequalsAscii(format, "woff") || iequalsAscii(format, "woff2") || iequalsAscii(format, "svg") ||
-                         iequalsAscii(extension, "woff") || iequalsAscii(extension, "woff2") ||
+    const bool skipped = iequalsAscii(extension, "woff") || iequalsAscii(extension, "woff2") ||
                          iequalsAscii(extension, "svg") || url.empty() || url.substr(0, 5) == "data:";
     if (!skipped) {
       if (fontFaces_.size() >= MAX_FONT_FACES) {

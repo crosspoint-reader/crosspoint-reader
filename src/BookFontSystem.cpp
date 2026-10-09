@@ -48,8 +48,6 @@ class BufferPrint final : public Print {
 
 }  // namespace
 
-BookFontSystem::FontBytes::~FontBytes() { freeink::font::psramDeleteArray(data); }
-
 BookFontSystem::BookFontSystem() = default;
 BookFontSystem::~BookFontSystem() = default;
 
@@ -79,24 +77,20 @@ void BookFontSystem::open(const std::shared_ptr<Epub>& epub, GfxRenderer& render
   // TtfEpdFont needs a regular source; a family declared only in other styles uses its first.
   for (Family& family : families_) {
     for (auto& href : family.hrefs) {
-      if (family.hrefs[TtfEpdFont::Regular].empty() && !href.empty()) family.hrefs[TtfEpdFont::Regular] = href;
+      if (family.hrefs[TtfEpdFont::Regular].empty()) std::swap(family.hrefs[TtfEpdFont::Regular], href);
     }
   }
   LOG_DBG("BKF", "%u embedded font families", static_cast<unsigned>(families_.size()));
 }
 
 void BookFontSystem::close() {
-  unloadFonts();
-  families_.clear();
-  epub_.reset();
-}
-
-void BookFontSystem::unloadFonts() {
   for (const auto& loaded : loaded_) {
     renderer_->unregisterTtfFont(loaded.fontId);
     renderer_->removeFont(loaded.fontId);
   }
   loaded_.clear();
+  families_.clear();
+  epub_.reset();
 }
 
 int BookFontSystem::fontIdFor(const uint32_t family, const uint8_t pointSize) {
@@ -134,44 +128,30 @@ bool BookFontSystem::load(const int fontId) {
 }
 
 bool BookFontSystem::readFamilyBytes(Family& family) {
-  if (family.bytesLoaded) return family.bytes[TtfEpdFont::Regular] != nullptr;
+  if (family.bytesLoaded) return !family.bytes[TtfEpdFont::Regular].empty();
   family.bytesLoaded = true;
   for (int role = 0; role < 4; ++role) {
     const std::string& href = family.hrefs[role];
     if (href.empty()) continue;
-    // Styles sharing a file share its bytes.
-    const auto same = std::find(family.hrefs, family.hrefs + role, href);
-    if (same != family.hrefs + role) continue;
-
     size_t size = 0;
     if (!epub_->getItemSize(href, &size) || size == 0 || size > MAX_FONT_BYTES) {
       LOG_ERR("BKF", "Skipping font %s (%u bytes)", href.c_str(), static_cast<unsigned>(size));
       continue;
     }
-    // psramNewArray falls back to internal RAM; keep that from starving the reader.
+    // PsramAlloc aborts on OOM, so only allocate what PSRAM can hold with room to spare.
     if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < size + PSRAM_HEADROOM) {
       LOG_ERR("BKF", "No PSRAM for font %s (%u bytes)", href.c_str(), static_cast<unsigned>(size));
       continue;
     }
-    auto bytes = makeUniqueNoThrow<FontBytes>();
-    if (!bytes) {
-      LOG_ERR("BKF", "OOM: font bytes holder");
-      continue;
-    }
-    bytes->data = freeink::font::psramNewArray<uint8_t>(size);
-    if (!bytes->data) {
-      LOG_ERR("BKF", "OOM: font %s (%u bytes)", href.c_str(), static_cast<unsigned>(size));
-      continue;
-    }
-    BufferPrint sink(bytes->data, size);
+    auto& bytes = family.bytes[role];
+    bytes.resize(size);
+    BufferPrint sink(bytes.data(), size);
     if (!epub_->readItemContentsToStream(href, sink, 4096) || sink.used() != size) {
       LOG_ERR("BKF", "Failed to read font %s", href.c_str());
-      continue;
+      freeink::font::PsramVector<uint8_t>().swap(bytes);
     }
-    bytes->size = size;
-    family.bytes[role] = std::move(bytes);
   }
-  return family.bytes[TtfEpdFont::Regular] != nullptr;
+  return !family.bytes[TtfEpdFont::Regular].empty();
 }
 
 bool BookFontSystem::loadFont(Family& family, const uint8_t pointSize, const int fontId) {
@@ -196,13 +176,8 @@ bool BookFontSystem::loadFont(Family& family, const uint8_t pointSize, const int
     return false;
   }
   for (int role = 0; role < 4; ++role) {
-    if (family.hrefs[role].empty()) continue;
-    // A role without its own bytes reuses the earlier role that read the same file.
-    const FontBytes* bytes = family.bytes[role].get();
-    for (int other = 0; !bytes && other < 4; ++other) {
-      if (family.bytes[other] && family.hrefs[other] == family.hrefs[role]) bytes = family.bytes[other].get();
-    }
-    if (bytes) font->addResidentSource(static_cast<uint8_t>(role), bytes->data, static_cast<uint32_t>(bytes->size));
+    const auto& bytes = family.bytes[role];
+    if (!bytes.empty()) font->addResidentSource(static_cast<uint8_t>(role), bytes.data(), bytes.size());
   }
   if (!font->load(pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/64 * 1024, /*maxGlyphs=*/512)) {
     LOG_ERR("BKF", "Failed to load embedded font @%upt", pointSize);
