@@ -392,7 +392,10 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
       parseResult = CssParser::ParseResult::Error;
       continue;
     }
-    const CssParser::ParseResult streamResult = cssParser->loadFromStream(tempCssFile);
+    const size_t cssDirEnd = cssPath.find_last_of('/');
+    const std::string_view cssDir =
+        cssDirEnd == std::string::npos ? std::string_view{} : std::string_view(cssPath).substr(0, cssDirEnd + 1);
+    const CssParser::ParseResult streamResult = cssParser->loadFromStream(tempCssFile, cssDir);
     // Explicitly close() file before calling Storage.remove()
     tempCssFile.close();
     Storage.remove(tmpCssPath.c_str());
@@ -427,6 +430,9 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
     LOG_ERR("EBP", "Failed to save CSS rules to cache");
     cssParser->clear();
     return CssParser::ParseResult::Error;
+  }
+  if (!cssParser->saveFontFaces()) {
+    LOG_ERR("EBP", "Failed to save @font-face rules");
   }
 
   LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files (%zu identical duplicates skipped, %s)",

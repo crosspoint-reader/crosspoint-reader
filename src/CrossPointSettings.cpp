@@ -3,6 +3,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
+#include <VectorFontSupport.h>
 
 #include <algorithm>
 #include <cstring>
@@ -308,6 +309,11 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
+#if CROSSPOINT_VECTOR_FONTS
+  if (spec.embeddedStyle && publisherFonts <= static_cast<uint8_t>(PublisherFonts::All)) {
+    spec.publisherFonts = static_cast<PublisherFonts>(publisherFonts);
+  }
+#endif
   return spec;
 }
 

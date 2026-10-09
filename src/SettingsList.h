@@ -6,6 +6,7 @@
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
+#include <VectorFontSupport.h>
 
 #include <algorithm>
 #include <cstring>
@@ -301,6 +302,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
+#if CROSSPOINT_VECTOR_FONTS
+        SettingInfo::Enum(StrId::STR_PUBLISHER_FONTS, &CrossPointSettings::publisherFonts,
+                          {StrId::STR_STATE_OFF, StrId::STR_PUBLISHER_FONTS_ACCENTS, StrId::STR_PUBLISHER_FONTS_ALL},
+                          "publisherFonts", StrId::STR_CAT_READER)
+            .withTextSettings(),
+#endif
         SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
                             StrId::STR_CAT_READER)
             .withTextSettings(),

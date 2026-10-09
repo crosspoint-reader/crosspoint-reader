@@ -90,6 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 54
+
+The header gains a `publisherFonts` byte after `wordSpacingPercent` (0 off, 1 accents,
+2 all). On PSRAM boards, words and blocks whose CSS `font-family` names an
+`@font-face` font embedded in the book are laid out in that font; their font ids
+come from the family and point size, so cached pages reload them by id.
+
+CSS cache version 18 uses defined-property bit 31 for `font-family` and appends the
+family's 32-bit hash to each style. `css_fonts.cache` lists the book's `@font-face`
+rules: a version byte (the CSS cache version), a face count, then per face the
+family hash (u32), flags (bit 0 bold, bit 1 italic), and a length-prefixed (u8)
+source path inside the EPUB.
+
 ### Version 53
 
 Each TextBlock's BlockStyle stores a signed 32-bit `fontId` after

@@ -28,7 +28,15 @@ constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
     StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
-                                        StrId::STR_TEXT_AA};
+                                        StrId::STR_TEXT_AA,
+#if CROSSPOINT_VECTOR_FONTS
+                                        StrId::STR_PUBLISHER_FONTS
+#endif
+};
+#if CROSSPOINT_VECTOR_FONTS
+constexpr StrId PUBLISHER_FONTS_IDS[] = {StrId::STR_STATE_OFF, StrId::STR_PUBLISHER_FONTS_ACCENTS,
+                                         StrId::STR_PUBLISHER_FONTS_ALL};
+#endif
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -230,11 +238,19 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       case Tab::Layout:
         rowValues_[i] = layoutValueText(i);
         break;
+#if CROSSPOINT_VECTOR_FONTS
+      case Tab::Style:
+        if (i == static_cast<int>(StyleRow::PublisherFonts)) {
+          const uint8_t v = SETTINGS.publisherFonts;
+          rowValues_[i] = I18N.get(v < std::size(PUBLISHER_FONTS_IDS) ? PUBLISHER_FONTS_IDS[v] : StrId::STR_STATE_OFF);
+        }
+        break;
+#endif
       default:
         break;
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
-    if (tab_ == Tab::Style) {
+    if (tab_ == Tab::Style && rowValues_[i].empty()) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.extraParagraphSpacing);
@@ -265,6 +281,9 @@ const char* TextSettingsActivity::confirmLabelText() const {
     case Tab::Layout:
       return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
     case Tab::Style:
+#if CROSSPOINT_VECTOR_FONTS
+      if (ringPos() - 1 == static_cast<int>(StyleRow::PublisherFonts)) return tr(STR_SELECT);
+#endif
       return tr(STR_TOGGLE);
     default:
       return tr(STR_SELECT);
@@ -494,6 +513,16 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
       break;
+#if CROSSPOINT_VECTOR_FONTS
+    case StyleRow::PublisherFonts:
+      optionPopup_.show(StrId::STR_PUBLISHER_FONTS, PUBLISHER_FONTS_IDS,
+                        static_cast<int>(std::size(PUBLISHER_FONTS_IDS)), SETTINGS.publisherFonts, [](int idx) {
+                          SETTINGS.publisherFonts = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      return;
+#endif
 
     default:
       return;
@@ -523,7 +552,7 @@ bool TextSettingsActivity::styleRowChecked(int row) const {
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (ringPos() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
+  return row != StyleRow::FocusReading;
 }
 
 void TextSettingsActivity::switchTab(const int direction) {

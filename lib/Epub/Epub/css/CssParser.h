@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "CssStyle.h"
 
@@ -22,10 +23,12 @@
  *   - Grouped: selector1, selector2 { }
  * Matching rules are applied in specificity order (ids, then classes, then elements).
  *
+ * @font-face rules are collected into fontFaces() (family, weight, style, source path).
+ *
  * Not supported (silently ignored):
  *   - Sibling combinators (+, ~), attribute selectors, pseudo-classes and pseudo-elements
  *   - Media queries (content is skipped)
- *   - @import, @font-face, etc.
+ *   - @import and other at-rules
  */
 // Hashed identity of an open element, used to match descendant/child selectors.
 struct CssAncestor {
@@ -34,6 +37,15 @@ struct CssAncestor {
   uint32_t idHash = 0;  // 0 when the element has no id
   uint32_t classHashes[MAX_CLASSES] = {};
   uint8_t classCount = 0;
+};
+
+// One @font-face rule. href is the src url joined to the stylesheet's directory inside the
+// EPUB, not yet normalised (it may contain "../" or %-escapes).
+struct CssFontFace {
+  uint32_t family = 0;  // CssParser::hashFontFamily of the declared name
+  bool bold = false;
+  bool italic = false;
+  std::string href;
 };
 
 class CssParser {
@@ -58,7 +70,7 @@ class CssParser {
   };
 
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 17;
+  static constexpr uint8_t CSS_CACHE_VERSION = 18;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -71,9 +83,23 @@ class CssParser {
    * Load and parse CSS from a file stream.
    * Can be called multiple times to accumulate rules from multiple stylesheets.
    * @param source Open file handle to read from
+   * @param baseDir The stylesheet's directory inside the EPUB (with trailing '/'), prefixed
+   *        to @font-face src urls
    * @return Complete unless bounded storage stopped rule growth or the source was invalid
    */
-  ParseResult loadFromStream(HalFile& source);
+  ParseResult loadFromStream(HalFile& source, std::string_view baseDir = {});
+
+  /** @font-face rules collected by loadFromStream, in source order. */
+  [[nodiscard]] const std::vector<CssFontFace>& fontFaces() const { return fontFaces_; }
+
+  /** Case-insensitive font-family identity; never 0. */
+  [[nodiscard]] static uint32_t hashFontFamily(std::string_view name);
+
+  /** Write fontFaces() next to the rule cache. An empty list removes the file. */
+  bool saveFontFaces() const;
+
+  /** Read the faces saveFontFaces() wrote for the book cached at cachePath. */
+  static bool loadFontFaces(const std::string& cachePath, std::vector<CssFontFace>& out);
 
   /**
    * Look up the style for an HTML element, merging every matching rule in specificity order.
@@ -124,6 +150,7 @@ class CssParser {
     styleCount_ = styleCapacity_ = 0;
     ruleGrowthStopped_ = false;
     hasIdRules_ = hasCompoundRules_ = hasContextualRules_ = hasFirstLetterRules_ = false;
+    fontFaces_.clear();
   }
 
   /**
@@ -210,8 +237,10 @@ class CssParser {
   bool hasFirstLetterRules_ = false;
 
   std::string cachePath;
+  std::vector<CssFontFace> fontFaces_;
 
   // Internal parsing helpers
+  void parseFontFace(std::string_view declBlock, std::string_view baseDir);
   bool restoreCacheBackupIfNeeded() const;
   void processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style);
   [[nodiscard]] int compareEntryToPieces(const SelectorEntry& entry, const KeyPieces& key,

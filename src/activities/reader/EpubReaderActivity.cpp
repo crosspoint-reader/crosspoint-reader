@@ -22,6 +22,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "BookFontSystem.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -184,6 +185,9 @@ EpubReaderActivity::~EpubReaderActivity() {
   if (footnoteDepth > 0 && epub) saveLinkStack();
 
   section.reset();
+#if CROSSPOINT_VECTOR_FONTS
+  bookFontSystem.close();  // holds a reference to epub
+#endif
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
     const std::string oldCachePath = epub->getCachePath();
@@ -222,6 +226,9 @@ bool EpubReaderActivity::loadBook() {
     return false;
   }
   epub = std::move(loadedEpub);
+#if CROSSPOINT_VECTOR_FONTS
+  bookFontSystem.open(epub, renderer);
+#endif
 
   ImageBlock::clearRenderFailures();
   ImageBlock::setExtractor(epub.get(), [](void* ctx, const char* src, const char* dest) {
@@ -1048,6 +1055,9 @@ bool EpubReaderActivity::launchKOReaderSync() {
     }
     // The destructor can no longer save the back-stack once epub is gone.
     if (footnoteDepth > 0) saveLinkStack();
+#if CROSSPOINT_VECTOR_FONTS
+    bookFontSystem.close();
+#endif
     epub.reset();
   }
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
