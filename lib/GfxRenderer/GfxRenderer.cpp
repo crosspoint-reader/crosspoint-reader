@@ -1776,13 +1776,13 @@ void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
 
-bool GfxRenderer::prepareBwOverlay() const {
-  if (displayedContent != DisplayContent::BW || renderMode != BW || !frameBuffer || _stripActive ||
+GfxRenderer::DisplayContent GfxRenderer::prepareOverlay() const {
+  if (displayedContent == DisplayContent::Unknown || renderMode != BW || !frameBuffer || _stripActive ||
       promotedRefreshPending_)
-    return false;
+    return DisplayContent::Unknown;
   waitRefreshComplete();
   if (asyncRefreshPending) cleanupGrayscaleWithFrameBuffer();
-  return true;
+  return displayedContent;
 }
 
 HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay::GrayscaleMode mode) const {

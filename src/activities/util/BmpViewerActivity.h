@@ -13,6 +13,7 @@ class BmpViewerActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(RenderLock&& lock) override;
 
  private:
   void loadSiblingImages();
@@ -24,4 +25,5 @@ class BmpViewerActivity final : public Activity {
   std::string filePath;
   std::vector<std::string> siblingImages;
   int currentImageIndex = -1;
+  bool showLoading = true;
 };

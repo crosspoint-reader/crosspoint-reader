@@ -8,6 +8,7 @@
 class GfxRenderer;
 class EdgeSwipeIndicator {
  public:
+  enum class Cleanup { None, RedrawPage };
   struct Input {
     edge_swipe::State state;
     float dpi = 220;
@@ -18,7 +19,7 @@ class EdgeSwipeIndicator {
   // render-task stack; retaining it avoids allocation during gestures.
   void begin();
   void pageChanged();
-  void render(const GfxRenderer& renderer, const Input& input, uint32_t now);
+  Cleanup render(const GfxRenderer& renderer, const Input& input, uint32_t now);
   static constexpr uint32_t NO_SERVICE = UINT32_MAX;
   uint32_t serviceDelay(uint32_t now) const;
 
@@ -35,6 +36,7 @@ class EdgeSwipeIndicator {
   bool hasRefreshed = false;
   bool exhausted = false;
   bool committed = false;
+  bool grayscaleUnderlay = false;
   uint8_t orientation = 0;
-  void clear(const GfxRenderer& renderer, bool cleanup);
+  Cleanup clear(const GfxRenderer& renderer, bool cleanup);
 };

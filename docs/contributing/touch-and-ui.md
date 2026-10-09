@@ -130,6 +130,10 @@ display changes, or a refresh/cleanup deadline. See
 [edge-swipe-indicators.md](../edge-swipe-indicators.md) for tuning, display
 limitations, and device verification.
 
+Hints also appear over antialiased text and grayscale images. Clearing a hint
+over grayscale redraws the active screen to restore its gray pixels; the B/W
+snapshot alone cannot restore them. This redraw can run during a held swipe.
+
 Because the back gesture arrives as `Button::Back`, most button-era activities gain back-swipe support with zero changes.
 
 ---

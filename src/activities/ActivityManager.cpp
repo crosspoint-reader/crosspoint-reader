@@ -72,12 +72,16 @@ void ActivityManager::notifyRenderWork(uint32_t work) { xTaskNotify(renderTaskHa
 void ActivityManager::renderTaskLoop() {
 #if FREEINK_CAP_TOUCH
   bool deferredPage = false;
+  bool restorePage = false;
 #endif
   while (true) {
 #if FREEINK_CAP_TOUCH
-    const auto delay = edgeIndicator.serviceDelay(millis());
-    const auto timeout =
-        delay == EdgeSwipeIndicator::NO_SERVICE ? portMAX_DELAY : std::max<TickType_t>(1, pdMS_TO_TICKS(delay));
+    TickType_t timeout = 0;
+    if (!restorePage) {
+      RenderLock lock;
+      const auto delay = edgeIndicator.serviceDelay(millis());
+      timeout = delay == EdgeSwipeIndicator::NO_SERVICE ? portMAX_DELAY : std::max<TickType_t>(1, pdMS_TO_TICKS(delay));
+    }
 #else
     const auto timeout = portMAX_DELAY;
 #endif
@@ -89,13 +93,14 @@ void ActivityManager::renderTaskLoop() {
     input = edgeIndicatorInput;
     taskEXIT_CRITICAL(&activityManagerSpinlock);
     deferredPage = deferredPage || (work & PAGE_RENDER);
-    // A normal repaint would flash behind the finger. Keep it pending until
-    // the edge contact ends; indicator-only work never calls activity render.
-    if (input.state.claimed && input.state.tracking)
+    // Defer normal page requests until the edge contact ends. Clearing a hint
+    // over grayscale must restore the page even while the finger is held.
+    if (!restorePage && input.state.claimed && input.state.tracking)
       work &= ~PAGE_RENDER;
-    else if (deferredPage) {
+    else if (deferredPage || restorePage) {
       work |= PAGE_RENDER;
       deferredPage = false;
+      restorePage = false;
     }
 #endif
     if (work & PAGE_RENDER) {
@@ -122,7 +127,7 @@ void ActivityManager::renderTaskLoop() {
       taskENTER_CRITICAL(&activityManagerSpinlock);
       input = edgeIndicatorInput;
       taskEXIT_CRITICAL(&activityManagerSpinlock);
-      edgeIndicator.render(renderer, input, millis());
+      restorePage = edgeIndicator.render(renderer, input, millis()) == EdgeSwipeIndicator::Cleanup::RedrawPage;
     }
 #endif
   }

@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "util/EdgeSwipe.h"
 
@@ -86,7 +90,7 @@ class GfxRenderer {
   void displayBuffer(HalDisplay::RefreshMode mode = HalDisplay::FAST_REFRESH) const;
   void displayBufferAsync(HalDisplay::RefreshMode mode) const;
   void waitRefreshComplete() const;
-  bool prepareBwOverlay() const;
+  DisplayContent prepareOverlay() const;
   void displayGrayscaleBase(HalDisplay::RefreshMode mode) const;
   bool displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const;
   void displayGrayBuffer() const;
@@ -124,13 +128,131 @@ struct TestTheme {
 } GUI;
 
 #include "EdgeSwipeIndicator.cpp"
+
+using TickType_t = uint32_t;
+using TaskHandle_t = void*;
+constexpr TickType_t portMAX_DELAY = UINT32_MAX;
+constexpr TickType_t pdMS_TO_TICKS(uint32_t ms) { return ms; }
+enum NotifyAction { eIncrement };
+int activityManagerSpinlock = 0;
+void taskENTER_CRITICAL(int*) {}
+void taskEXIT_CRITICAL(int*) {}
+void xTaskNotify(TaskHandle_t, uint32_t, NotifyAction) { assert(false); }
+struct RenderLock {
+  RenderLock() {}
+  ~RenderLock() {}
+};
+class MappedInputManager {};
+class Activity {
+ public:
+  virtual void onEnter() {}
+  virtual void onExit() {}
+  virtual void loop() {}
+  virtual void render(RenderLock&&) {}
+};
+#include "activities/util/BmpViewerActivity.h"
+static_assert(std::is_same_v<decltype(&BmpViewerActivity::render), void (BmpViewerActivity::*)(RenderLock&&)>);
+struct HalPowerManager {
+  struct Lock {
+    Lock() {}
+    ~Lock() {}
+  };
+};
+struct {
+  uint8_t screenInverted = 0;
+} SETTINGS;
+struct {
+  void setInverted(bool) {}
+} display;
+struct TestActivity {
+  GfxRenderer& renderer;
+  bool grayscale;
+  unsigned renders = 0;
+  void render(RenderLock) {
+    ++renders;
+    renderer.displayBuffer();
+    if (grayscale) renderer.displayGrayBuffer();
+  }
+};
+class ActivityManager {
+ public:
+  static constexpr uint32_t PAGE_RENDER = 1, INDICATOR_RENDER = 2;
+  EdgeSwipeIndicator edgeIndicator;
+  EdgeSwipeIndicator::Input edgeIndicatorInput;
+  GfxRenderer& renderer;
+  TestActivity* currentActivity;
+  TaskHandle_t waitingTaskHandle = nullptr;
+  ActivityManager(GfxRenderer& renderer, TestActivity& activity) : renderer(renderer), currentActivity(&activity) {}
+  [[noreturn]] void renderTaskLoop();
+};
+struct StopRenderTask {};
+ActivityManager* testManager = nullptr;
+unsigned taskStep = 0;
+bool xTaskNotifyWait(uint32_t entry, uint32_t exit, uint32_t* work, TickType_t timeout) {
+  assert(entry == 0 && exit == UINT32_MAX);
+  auto& manager = *testManager;
+  auto& input = manager.edgeIndicatorInput;
+  auto& panel = manager.renderer.display;
+  switch (taskStep++) {
+    case 0:
+      assert(timeout == portMAX_DELAY);
+      *work = ActivityManager::INDICATOR_RENDER;
+      return true;
+    case 1:
+      assert(panel.glass == 0x00 && manager.currentActivity->renders == 0);
+      fakeNow += 200;
+      input.state.stage = edge_swipe::Stage::Idle;  // reverse while the finger is still held
+      *work = ActivityManager::INDICATOR_RENDER;
+      return true;
+    case 2:
+      if (!manager.currentActivity->grayscale) {
+        assert(timeout == portMAX_DELAY && panel.glass == panel.buffer);
+        assert(manager.currentActivity->renders == 0);
+        throw StopRenderTask{};
+      }
+      assert(timeout == 0 && panel.glass == 0x00 && input.state.tracking);
+      return false;  // no new notification: the task must restore the page immediately
+    case 3:
+      assert(manager.currentActivity->renders == 1 && panel.gray && panel.glass == panel.buffer);
+      throw StopRenderTask{};
+    default:
+      assert(false);
+      throw StopRenderTask{};
+  }
+}
 #include "GfxRendererDisplay.inc"
+
+void checkTaskRestoration(bool grayscale) {
+  fakeNow += 1000;
+  HalDisplay panel;
+  GfxRenderer renderer(panel);
+  renderer.displayBuffer();
+  if (grayscale) renderer.displayGrayBuffer();
+  TestActivity activity{renderer, grayscale};
+  ActivityManager manager(renderer, activity);
+  manager.edgeIndicator.begin();
+  auto& state = manager.edgeIndicatorInput.state;
+  state.contact = 1;
+  state.edge = edge_swipe::Edge::Bottom;
+  state.position = 240;
+  state.tracking = state.claimed = true;
+  state.stage = edge_swipe::Stage::Peek;
+  testManager = &manager;
+  taskStep = 0;
+  try {
+    manager.renderTaskLoop();
+  } catch (const StopRenderTask&) {
+    assert(taskStep == (grayscale ? 4u : 3u));
+  }
+  testManager = nullptr;
+}
 
 int main() {
   using namespace edge_swipe;
+  using Content = GfxRenderer::DisplayContent;
   HalDisplay display;
   GfxRenderer renderer(display);
-  assert(!renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::Unknown);
   renderer.displayBuffer();
   EdgeSwipeIndicator indicator;
   indicator.begin();
@@ -187,29 +309,38 @@ int main() {
   assert(display.refreshes == repainted && indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
 
   renderer.displayGrayBuffer();
-  assert(!renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::Grayscale);
   input.state.tracking = true;
   ++input.state.contact;
   render(Stage::Peek);
-  assert(display.refreshes == repainted);
+  assert(display.refreshes == repainted + 1 && display.glass == 0x00);
+  input.state.stage = Stage::Idle;
+  assert(indicator.render(renderer, input, fakeNow) == EdgeSwipeIndicator::Cleanup::RedrawPage);
+  assert(display.glass == 0x00);  // the activity must redraw, not erase with a B/W frame
+  indicator.pageChanged();
   renderer.displayBuffer();
-  assert(renderer.prepareBwOverlay());
+  renderer.displayGrayBuffer();
+  assert(display.gray && renderer.prepareOverlay() == Content::Grayscale);
+  renderer.displayBuffer();
+  assert(renderer.prepareOverlay() == Content::BW);
+  renderer.renderMode = GfxRenderer::GRAYSCALE_LSB;
   renderer.copyGrayscaleLsbBuffers();
-  assert(!renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::Unknown);
+  renderer.renderMode = GfxRenderer::BW;
   renderer.displayBuffer();
   renderer.releaseFrameBufferForBuild();
-  assert(!renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::Unknown);
   assert(renderer.restoreFrameBufferAfterBuild());
-  assert(!renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::Unknown);
   renderer.displayBuffer();
-  assert(renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::BW);
   renderer.promotedRefreshPending_ = true;
-  assert(!renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::Unknown);
   renderer.displayBuffer();
 
   display.inverted = true;
   renderer.displayGrayBuffer();
-  assert(renderer.prepareBwOverlay());
+  assert(renderer.prepareOverlay() == Content::BW);
   display.inverted = false;
   ++input.state.contact;
   render(Stage::Peek);
@@ -261,6 +392,9 @@ int main() {
   indicator.render(renderer, input, fakeNow);
   assert(display.refreshes == beforeCleanup + 1 && display.glass == 0xAB);
   assert(indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
+  checkTaskRestoration(false);
+  checkTaskRestoration(true);
   std::puts(
-      "Indicator icons, deadlines, cleanup, repaint, grayscale, async baseline and framebuffer-loan checks passed");
+      "Indicator icons, deadlines, grayscale restoration, render task, async baseline and framebuffer-loan checks "
+      "passed");
 }

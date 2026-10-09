@@ -35,6 +35,7 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  enum class DisplayContent : uint8_t { Unknown, BW, Grayscale };
 
   // Logical screen orientation from the perspective of callers
   enum Orientation {
@@ -50,7 +51,6 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   mutable bool absoluteGrayPlanes = false;
-  enum class DisplayContent : uint8_t { Unknown, BW, Grayscale };
   mutable DisplayContent displayedContent = DisplayContent::Unknown;
   mutable std::atomic<uint32_t> displayGeneration{0};
   mutable bool asyncRefreshPending = false;
@@ -249,9 +249,9 @@ class GfxRenderer {
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
   // Compatibility queries for Overlay mode.
   bool supportsAsyncGrayscaleBase() const;
-  // Finish B/W async work before painting a temporary overlay. Grayscale
-  // remains on the glass even after restoring the B/W framebuffer.
-  bool prepareBwOverlay() const;
+  // Finish async work before painting an overlay. Unknown means unavailable;
+  // grayscale content needs a page redraw when the overlay is removed.
+  DisplayContent prepareOverlay() const;
   uint32_t getDisplayGeneration() const { return displayGeneration; }
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;

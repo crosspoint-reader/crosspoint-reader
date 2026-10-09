@@ -11,7 +11,7 @@ source = (ROOT / 'lib/GfxRenderer/GfxRenderer.cpp').read_text()
 methods = [
     'HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh',
     'void GfxRenderer::displayBuffer(', 'void GfxRenderer::displayBufferAsync(',
-    'void GfxRenderer::waitRefreshComplete(', 'bool GfxRenderer::prepareBwOverlay(',
+    'void GfxRenderer::waitRefreshComplete(', 'GfxRenderer::DisplayContent GfxRenderer::prepareOverlay(',
     'void GfxRenderer::displayGrayscaleBase(', 'bool GfxRenderer::displayGrayscaleBase(',
     'void GfxRenderer::displayGrayBuffer(', 'void GfxRenderer::copyGrayscaleLsbBuffers(',
     'void GfxRenderer::copyGrayscaleMsbBuffers(', 'void GfxRenderer::writeGrayscalePlaneStrip(',
@@ -28,11 +28,20 @@ for signature in methods:
         depth += (source[cursor] == '{') - (source[cursor] == '}')
         cursor += 1
     bodies.append(source[start:cursor])
+source = (ROOT / 'src/activities/ActivityManager.cpp').read_text()
+start = source.index('void ActivityManager::renderTaskLoop(')
+cursor = source.index('{', start) + 1
+depth = 1
+while depth:
+    depth += (source[cursor] == '{') - (source[cursor] == '}')
+    cursor += 1
+bodies.append(source[start:cursor])
 with tempfile.TemporaryDirectory(prefix='edge-indicator-test-') as directory:
     root = Path(directory)
     for name in ('EdgeSwipeIndicator.cpp', 'EdgeSwipeIndicator.h'):
         shutil.copy2(ROOT / 'src/components' / name, root / name)
     for name in ('GfxRenderer.h', 'HalDisplay.h', 'HalFrontlight.h', 'UITheme.h',
+                 'MappedInputManager.h', 'activities/Activity.h',
                  'components/themes/BaseTheme.h'):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix='edge-indicator-test-') as directory:
     (root / 'GfxRendererDisplay.inc').write_text('\n\n'.join(bodies))
     exe = root / 'indicator-test'
     subprocess.run([
-        os.environ.get('CXX', 'c++'), '-std=c++20', '-Wall', '-Wextra', '-Werror',
+        os.environ.get('CXX', 'c++'), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-DFREEINK_CAP_TOUCH=1',
         '-I' + str(root), '-I' + str(ROOT / 'src'), '-I' + str(ROOT / 'src/components'),
         '-I' + str(ROOT / 'lib/Memory'),
         '-I' + str(ROOT / 'freeink-sdk/libs/assets/Icons/include'),
