@@ -71,7 +71,6 @@ void ActivityManager::notifyRenderWork(uint32_t work) { xTaskNotify(renderTaskHa
 
 void ActivityManager::renderTaskLoop() {
 #if FREEINK_CAP_TOUCH
-  bool deferredPage = false;
   bool restorePage = false;
 #endif
   while (true) {
@@ -88,18 +87,8 @@ void ActivityManager::renderTaskLoop() {
     uint32_t work = 0;
     xTaskNotifyWait(0, UINT32_MAX, &work, timeout);
 #if FREEINK_CAP_TOUCH
-    EdgeSwipeIndicator::Input input;
-    taskENTER_CRITICAL(&activityManagerSpinlock);
-    input = edgeIndicatorInput;
-    taskEXIT_CRITICAL(&activityManagerSpinlock);
-    deferredPage = deferredPage || (work & PAGE_RENDER);
-    // Defer normal page requests until the edge contact ends. Clearing a hint
-    // over grayscale must restore the page even while the finger is held.
-    if (!restorePage && input.state.claimed && input.state.tracking)
-      work &= ~PAGE_RENDER;
-    else if (deferredPage || restorePage) {
+    if (restorePage) {
       work |= PAGE_RENDER;
-      deferredPage = false;
       restorePage = false;
     }
 #endif
@@ -124,6 +113,7 @@ void ActivityManager::renderTaskLoop() {
     {
       RenderLock lock;
       HalPowerManager::Lock powerLock;
+      EdgeSwipeIndicator::Input input;
       taskENTER_CRITICAL(&activityManagerSpinlock);
       input = edgeIndicatorInput;
       taskEXIT_CRITICAL(&activityManagerSpinlock);
@@ -497,12 +487,6 @@ void ActivityManager::requestUpdate(bool immediate) {
   }
 }
 void ActivityManager::requestUpdateAndWait() {
-#if FREEINK_CAP_TOUCH
-  // A synchronous caller cannot wait for a contact that only its own loop can
-  // release. Cancel the edge gesture before waiting on a page render.
-  mappedInput.cancelEdgeSwipe();
-  updateEdgeIndicator();
-#endif
   if (!renderTaskHandle) {
     return;
   }

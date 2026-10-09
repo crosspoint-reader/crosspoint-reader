@@ -29,8 +29,8 @@ freeink::ui::BitmapRef BaseTheme::checkboxIcon(const bool checked) {
 }
 
 void BaseTheme::setCheckboxRow(freeink::ui::ListItem& item, const bool checked) {
-  item.value = SETTINGS.showCheckbox ? nullptr : (checked ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
-  item.toggle = SETTINGS.showCheckbox != 0;
+  item.value = nullptr;
+  item.toggle = true;
   item.toggleChecked = checked;
 }
 

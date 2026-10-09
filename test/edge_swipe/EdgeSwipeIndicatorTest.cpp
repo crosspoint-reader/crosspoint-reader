@@ -137,7 +137,12 @@ enum NotifyAction { eIncrement };
 int activityManagerSpinlock = 0;
 void taskENTER_CRITICAL(int*) {}
 void taskEXIT_CRITICAL(int*) {}
-void xTaskNotify(TaskHandle_t, uint32_t, NotifyAction) { assert(false); }
+char testWaiter;
+unsigned waiterNotifications = 0;
+void xTaskNotify(TaskHandle_t waiter, uint32_t value, NotifyAction action) {
+  assert(waiter == &testWaiter && value == 1 && action == eIncrement);
+  ++waiterNotifications;
+}
 struct RenderLock {
   RenderLock() {}
   ~RenderLock() {}
@@ -168,8 +173,10 @@ struct TestActivity {
   GfxRenderer& renderer;
   bool grayscale;
   unsigned renders = 0;
+  uint8_t content = 0xFF;
   void render(RenderLock) {
     ++renders;
+    *renderer.frameBuffer = content;
     renderer.displayBuffer();
     if (grayscale) renderer.displayGrayBuffer();
   }
@@ -186,6 +193,8 @@ class ActivityManager {
   [[noreturn]] void renderTaskLoop();
 };
 struct StopRenderTask {};
+enum class TaskScenario { Restoration, PageDuringContact };
+TaskScenario taskScenario = TaskScenario::Restoration;
 ActivityManager* testManager = nullptr;
 unsigned taskStep = 0;
 bool xTaskNotifyWait(uint32_t entry, uint32_t exit, uint32_t* work, TickType_t timeout) {
@@ -193,6 +202,28 @@ bool xTaskNotifyWait(uint32_t entry, uint32_t exit, uint32_t* work, TickType_t t
   auto& manager = *testManager;
   auto& input = manager.edgeIndicatorInput;
   auto& panel = manager.renderer.display;
+  if (taskScenario == TaskScenario::PageDuringContact) {
+    switch (taskStep++) {
+      case 0:
+        *work = ActivityManager::INDICATOR_RENDER;
+        return true;
+      case 1:
+        assert(manager.currentActivity->renders == 0);
+        assert(panel.glass == (input.enabled ? 0x00 : 0xFF));
+        fakeNow += 200;
+        *work = ActivityManager::PAGE_RENDER | ActivityManager::INDICATOR_RENDER;
+        return true;
+      case 2:
+        assert(manager.currentActivity->renders == 1);
+        assert(input.state.tracking && input.state.claimed);
+        assert(manager.waitingTaskHandle == nullptr && waiterNotifications == 1);
+        assert(panel.buffer == 0xAB && panel.glass == (input.enabled ? 0x00 : 0xAB));
+        throw StopRenderTask{};
+      default:
+        assert(false);
+        throw StopRenderTask{};
+    }
+  }
   switch (taskStep++) {
     case 0:
       assert(timeout == portMAX_DELAY);
@@ -238,11 +269,42 @@ void checkTaskRestoration(bool grayscale) {
   state.tracking = state.claimed = true;
   state.stage = edge_swipe::Stage::Peek;
   testManager = &manager;
+  taskScenario = TaskScenario::Restoration;
   taskStep = 0;
   try {
     manager.renderTaskLoop();
   } catch (const StopRenderTask&) {
     assert(taskStep == (grayscale ? 4u : 3u));
+  }
+  testManager = nullptr;
+}
+
+void checkPageDuringContact(bool grayscale, bool hintsEnabled) {
+  fakeNow += 1000;
+  HalDisplay panel;
+  GfxRenderer renderer(panel);
+  renderer.displayBuffer();
+  if (grayscale) renderer.displayGrayBuffer();
+  TestActivity activity{renderer, grayscale};
+  activity.content = 0xAB;
+  ActivityManager manager(renderer, activity);
+  manager.edgeIndicator.begin();
+  manager.edgeIndicatorInput.enabled = hintsEnabled;
+  auto& state = manager.edgeIndicatorInput.state;
+  state.contact = 1;
+  state.edge = edge_swipe::Edge::Bottom;
+  state.position = 240;
+  state.tracking = state.claimed = true;
+  state.stage = edge_swipe::Stage::Armed;
+  manager.waitingTaskHandle = &testWaiter;
+  waiterNotifications = 0;
+  testManager = &manager;
+  taskScenario = TaskScenario::PageDuringContact;
+  taskStep = 0;
+  try {
+    manager.renderTaskLoop();
+  } catch (const StopRenderTask&) {
+    assert(taskStep == 3);
   }
   testManager = nullptr;
 }
@@ -394,7 +456,11 @@ int main() {
   assert(indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
   checkTaskRestoration(false);
   checkTaskRestoration(true);
+  for (const bool grayscale : {false, true}) {
+    for (const bool hintsEnabled : {false, true}) checkPageDuringContact(grayscale, hintsEnabled);
+  }
   std::puts(
-      "Indicator icons, deadlines, grayscale restoration, render task, async baseline and framebuffer-loan checks "
+      "Indicator icons, deadlines, grayscale restoration, page updates during contact, async baseline and "
+      "framebuffer-loan checks "
       "passed");
 }

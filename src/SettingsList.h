@@ -341,8 +341,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "sideButtonLayout", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_SHOW_EDGE_INDICATORS, &CrossPointSettings::showEdgeIndicators,
                             "showEdgeIndicators", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Toggle(StrId::STR_SHOW_CHECKBOX, &CrossPointSettings::showCheckbox, "showCheckbox",
-                            StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
                             "touchReaderControls", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture,

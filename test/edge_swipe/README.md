@@ -13,6 +13,7 @@ python3 test/edge_swipe/run_indicator.py
 
 This compiles the production indicator, renderer display methods, and render-task
 loop against a recording display. It checks cleanup, repaint replacement, hints
-over grayscale, page restoration while a reversed swipe is still held, async
+over grayscale, page updates and completion notifications during a held swipe
+with hints enabled and disabled, page restoration during a reversed swipe, async
 baseline ordering, refresh limits, and framebuffer loans. Hardware tests
 remain required for waveform behavior and ghosting.
