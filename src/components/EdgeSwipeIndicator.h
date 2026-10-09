@@ -19,7 +19,8 @@ class EdgeSwipeIndicator {
   void begin();
   void pageChanged();
   void render(const GfxRenderer& renderer, const Input& input, uint32_t now);
-  bool needsService() const { return visible || pending; }
+  static constexpr uint32_t NO_SERVICE = UINT32_MAX;
+  uint32_t serviceDelay(uint32_t now) const;
 
  private:
   std::unique_ptr<uint8_t[]> underlay;

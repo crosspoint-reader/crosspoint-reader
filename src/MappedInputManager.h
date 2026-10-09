@@ -134,8 +134,7 @@ class MappedInputManager {
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
-  // The action table maps committed edge gestures into existing input routes.
-  bool wasEdgeSwipe(freeink::ui::ScreenEdge edge) const;
+  bool wasEdgeSwipe(edge_swipe::Edge edge) const;
   bool wasTopEdgeDownSwipe() const;
   bool wasBottomEdgeUpSwipe() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords

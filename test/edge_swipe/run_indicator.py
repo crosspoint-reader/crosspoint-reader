@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='edge-indicator-test-') as directory:
     root = Path(directory)
     for name in ('EdgeSwipeIndicator.cpp', 'EdgeSwipeIndicator.h'):
         shutil.copy2(ROOT / 'src/components' / name, root / name)
-    for name in ('GfxRenderer.h', 'HalDisplay.h', 'UITheme.h', 'EdgeSwipeActions.h',
+    for name in ('GfxRenderer.h', 'HalDisplay.h', 'HalFrontlight.h', 'UITheme.h',
                  'components/themes/BaseTheme.h'):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +44,8 @@ with tempfile.TemporaryDirectory(prefix='edge-indicator-test-') as directory:
     exe = root / 'indicator-test'
     subprocess.run([
         os.environ.get('CXX', 'c++'), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-        '-I' + str(root), '-I' + str(ROOT / 'src'), '-I' + str(ROOT / 'lib/Memory'),
+        '-I' + str(root), '-I' + str(ROOT / 'src'), '-I' + str(ROOT / 'src/components'),
+        '-I' + str(ROOT / 'lib/Memory'),
         '-I' + str(ROOT / 'freeink-sdk/libs/assets/Icons/include'),
         str(ROOT / 'test/edge_swipe/EdgeSwipeIndicatorTest.cpp'), '-o', str(exe),
     ], check=True)

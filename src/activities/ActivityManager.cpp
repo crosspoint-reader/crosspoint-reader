@@ -67,10 +67,7 @@ void ActivityManager::renderTaskTrampoline(void* param) {
   self->renderTaskLoop();
 }
 
-void ActivityManager::notifyRenderWork(uint32_t work) {
-  renderWork.fetch_or(work);
-  xTaskNotify(renderTaskHandle, 1, eIncrement);
-}
+void ActivityManager::notifyRenderWork(uint32_t work) { xTaskNotify(renderTaskHandle, work, eSetBits); }
 
 void ActivityManager::renderTaskLoop() {
 #if FREEINK_CAP_TOUCH
@@ -78,28 +75,30 @@ void ActivityManager::renderTaskLoop() {
 #endif
   while (true) {
 #if FREEINK_CAP_TOUCH
-    const auto timeout = edgeIndicator.needsService() || deferredPage ? pdMS_TO_TICKS(20) : portMAX_DELAY;
+    const auto delay = edgeIndicator.serviceDelay(millis());
+    const auto timeout =
+        delay == EdgeSwipeIndicator::NO_SERVICE ? portMAX_DELAY : std::max<TickType_t>(1, pdMS_TO_TICKS(delay));
 #else
     const auto timeout = portMAX_DELAY;
 #endif
-    ulTaskNotifyTake(pdTRUE, timeout);
-    uint32_t work = renderWork.exchange(0);
+    uint32_t work = 0;
+    xTaskNotifyWait(0, UINT32_MAX, &work, timeout);
 #if FREEINK_CAP_TOUCH
     EdgeSwipeIndicator::Input input;
     taskENTER_CRITICAL(&activityManagerSpinlock);
     input = edgeIndicatorInput;
     taskEXIT_CRITICAL(&activityManagerSpinlock);
-    deferredPage = deferredPage || (work & 1);
+    deferredPage = deferredPage || (work & PAGE_RENDER);
     // A normal repaint would flash behind the finger. Keep it pending until
     // the edge contact ends; indicator-only work never calls activity render.
     if (input.state.claimed && input.state.tracking)
-      work &= ~1u;
+      work &= ~PAGE_RENDER;
     else if (deferredPage) {
-      work |= 1;
+      work |= PAGE_RENDER;
       deferredPage = false;
     }
 #endif
-    if (work & 1) {
+    if (work & PAGE_RENDER) {
       RenderLock lock;
       if (currentActivity) {
         HalPowerManager::Lock powerLock;
@@ -136,14 +135,17 @@ void ActivityManager::updateEdgeIndicator() {
   input.dpi = mappedInput.touchDpi();
   input.orientation = static_cast<uint8_t>(renderer.getOrientation());
   input.enabled = SETTINGS.showEdgeIndicators != 0;
+  const auto generation = renderer.getDisplayGeneration();
   taskENTER_CRITICAL(&activityManagerSpinlock);
-  const bool changed =
-      input.state.contact != edgeIndicatorInput.state.contact || input.state.stage != edgeIndicatorInput.state.stage ||
-      input.state.tracking != edgeIndicatorInput.state.tracking ||
-      input.orientation != edgeIndicatorInput.orientation || input.enabled != edgeIndicatorInput.enabled;
+  const bool changed = input.state.contact != edgeIndicatorInput.state.contact ||
+                       input.state.stage != edgeIndicatorInput.state.stage ||
+                       input.state.tracking != edgeIndicatorInput.state.tracking ||
+                       input.orientation != edgeIndicatorInput.orientation ||
+                       input.enabled != edgeIndicatorInput.enabled || generation != edgeIndicatorGeneration;
   edgeIndicatorInput = input;
+  edgeIndicatorGeneration = generation;
   taskEXIT_CRITICAL(&activityManagerSpinlock);
-  if (changed && renderTaskHandle) notifyRenderWork(2);
+  if (changed && renderTaskHandle) notifyRenderWork(INDICATOR_RENDER);
 }
 #endif
 
@@ -156,7 +158,7 @@ void ActivityManager::loop() {
     // processing a pending action here could re-enable filesystem users while
     // the USB host still owns the raw SD card.
     if (requestedUpdate.exchange(false) && renderTaskHandle) {
-      notifyRenderWork(1);
+      notifyRenderWork(PAGE_RENDER);
     }
     return;
   }
@@ -288,7 +290,7 @@ void ActivityManager::loop() {
   if (requestedUpdate.exchange(false)) {
     // Coalesce page work independently from indicator work.
     if (renderTaskHandle) {
-      notifyRenderWork(1);
+      notifyRenderWork(PAGE_RENDER);
     }
   }
 }
@@ -481,7 +483,7 @@ void ActivityManager::prepareForSleep() {
 void ActivityManager::requestUpdate(bool immediate) {
   if (immediate) {
     if (renderTaskHandle) {
-      notifyRenderWork(1);
+      notifyRenderWork(PAGE_RENDER);
     }
   } else {
     // Deferring the update until current loop is finished
@@ -521,7 +523,7 @@ void ActivityManager::requestUpdateAndWait() {
   // Cannot call while holding RenderLock or it will cause a deadlock
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
-  notifyRenderWork(1);
+  notifyRenderWork(PAGE_RENDER);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 

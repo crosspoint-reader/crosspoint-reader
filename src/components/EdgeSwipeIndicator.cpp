@@ -2,11 +2,12 @@
 
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <HalFrontlight.h>
 #include <Logging.h>
 #include <Memory.h>
 
-#include "EdgeSwipeActions.h"
 #include "UITheme.h"
+#include "icons/edgeSwipeIcons.h"
 
 void EdgeSwipeIndicator::begin() {
   underlay = makeUniqueNoThrow<uint8_t[]>(edge_swipe::Config::SNAPSHOT_BYTES);
@@ -17,6 +18,18 @@ void EdgeSwipeIndicator::pageChanged() {
   visible = false;
   pending = false;
   idleAt = 0;
+}
+
+uint32_t EdgeSwipeIndicator::serviceDelay(uint32_t now) const {
+  if (pending) {
+    const auto elapsed = now - refreshedAt;
+    return elapsed < edge_swipe::Config::MIN_REFRESH_MS ? edge_swipe::Config::MIN_REFRESH_MS - elapsed : 0;
+  }
+  if (idleAt) {
+    const auto elapsed = now - idleAt;
+    return elapsed < edge_swipe::Config::CLEANUP_MS ? edge_swipe::Config::CLEANUP_MS - elapsed : 0;
+  }
+  return NO_SERVICE;
 }
 
 void EdgeSwipeIndicator::clear(const GfxRenderer& renderer, bool cleanup) {
@@ -98,15 +111,19 @@ void EdgeSwipeIndicator::render(const GfxRenderer& renderer, const Input& input,
   if (low > high) return;
   const int position = std::clamp(input.state.position, low, high);
   Rect full;
+  const freeink::Icon* icon = nullptr;
   switch (input.state.edge) {
     case Edge::Top:
       full = Rect(position - width / 2, top, width, depth);
+      icon = Frontlight.present() ? &icon_edge_light_24 : &icon_edge_menu_24;
       break;
     case Edge::Bottom:
       full = Rect(position - width / 2, sh - bottom - depth, width, depth);
+      icon = &icon_edge_home_24;
       break;
     case Edge::Left:
       full = Rect(left, position - width / 2, depth, width);
+      icon = &icon_edge_back_24;
       break;
     case Edge::None:
       return;
@@ -117,7 +134,7 @@ void EdgeSwipeIndicator::render(const GfxRenderer& renderer, const Input& input,
   if (!renderer.copyRegionToBuffer(region.x, region.y, region.width, region.height, underlay.get(),
                                    Config::SNAPSHOT_BYTES))
     return;
-  GUI.drawEdgeSwipeTab(renderer, full, input.state.edge, *actionFor(input.state.edge).icon);
+  GUI.drawEdgeSwipeTab(renderer, full, input.state.edge, *icon);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   renderer.copyBufferToRegion(region.x, region.y, region.width, region.height, underlay.get(), Config::SNAPSHOT_BYTES);
   visible = true;

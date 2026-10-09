@@ -111,18 +111,14 @@ class GfxRenderer {
     return true;
   }
 };
-namespace edge_swipe {
-struct ActionConfig {
-  const freeink::Icon* icon;
-};
-const ActionConfig& actionFor(Edge) {
-  static constexpr freeink::Icon icon{24, 24, 0, nullptr};
-  static constexpr ActionConfig config{&icon};
-  return config;
-}
-}  // namespace edge_swipe
+struct TestFrontlight {
+  bool available = false;
+  bool present() const { return available; }
+} Frontlight;
 struct TestTheme {
-  void drawEdgeSwipeTab(const GfxRenderer& renderer, Rect, edge_swipe::Edge, const freeink::Icon&) const {
+  const freeink::Icon* lastIcon = nullptr;
+  void drawEdgeSwipeTab(const GfxRenderer& renderer, Rect, edge_swipe::Edge, const freeink::Icon& icon) {
+    lastIcon = &icon;
     *renderer.frameBuffer = 0x00;
   }
 } GUI;
@@ -146,7 +142,7 @@ int main() {
   rightInput.state = rightSwipe.getState();
   const auto ordinarySwipe = display.refreshes;
   indicator.render(renderer, rightInput, fakeNow + 150);
-  assert(display.refreshes == ordinarySwipe && !indicator.needsService());
+  assert(display.refreshes == ordinarySwipe && indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
   EdgeSwipeIndicator::Input input;
   input.state.contact = 1;
   input.state.edge = Edge::Bottom;
@@ -161,13 +157,15 @@ int main() {
   };
   render(Stage::Peek);
   assert(display.glass == 0x00);
+  assert(GUI.lastIcon == &icon_edge_home_24);
+  assert(indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
   const auto shown = display.refreshes;
   render(Stage::Armed);
   assert(display.glass == 0x00 && display.refreshes == shown);
   render(Stage::Peek);
   assert(display.refreshes == shown);
   render(Stage::Idle);
-  assert(display.glass == 0xFF && !indicator.needsService());
+  assert(display.glass == 0xFF && indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
   render(Stage::Peek);
   render(Stage::Idle);
   const auto exhausted = display.refreshes;
@@ -186,7 +184,7 @@ int main() {
   renderer.displayBuffer();  // a normal repaint absorbs cleanup
   const auto repainted = display.refreshes;
   render(Stage::Idle);
-  assert(display.refreshes == repainted && !indicator.needsService());
+  assert(display.refreshes == repainted && indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
 
   renderer.displayGrayBuffer();
   assert(!renderer.prepareBwOverlay());
@@ -226,5 +224,43 @@ int main() {
   input.state.stage = Stage::Idle;
   indicator.render(renderer, input, fakeNow);
   assert(display.glass == 0xAB && display.cleanups == 1);
-  std::puts("Indicator refresh, cleanup, repaint, grayscale, async baseline and framebuffer-loan checks passed");
+
+  for (const auto edge : {Edge::Left, Edge::Top}) {
+    for (const bool light : {false, true}) {
+      fakeNow += 200;
+      input.state.edge = edge;
+      input.state.tracking = true;
+      input.state.committed = false;
+      input.state.stage = Stage::Peek;
+      ++input.state.contact;
+      Frontlight.available = light;
+      indicator.render(renderer, input, fakeNow);
+      assert(GUI.lastIcon == (edge == Edge::Left ? &icon_edge_back_24
+                              : light            ? &icon_edge_light_24
+                                                 : &icon_edge_menu_24));
+      renderer.displayBuffer();
+      indicator.pageChanged();
+    }
+  }
+
+  fakeNow += 200;
+  ++input.state.contact;
+  indicator.render(renderer, input, fakeNow);
+  const auto beforeCleanup = display.refreshes;
+  input.state.tracking = false;
+  input.state.committed = true;
+  input.state.stage = Stage::Idle;
+  fakeNow += 20;
+  indicator.render(renderer, input, fakeNow);
+  assert(indicator.serviceDelay(fakeNow) == 130);
+  fakeNow += 130;
+  indicator.render(renderer, input, fakeNow);
+  assert(indicator.serviceDelay(fakeNow) == 200);
+  assert(indicator.serviceDelay(fakeNow + 199) == 1);
+  fakeNow += 200;
+  indicator.render(renderer, input, fakeNow);
+  assert(display.refreshes == beforeCleanup + 1 && display.glass == 0xAB);
+  assert(indicator.serviceDelay(fakeNow) == EdgeSwipeIndicator::NO_SERVICE);
+  std::puts(
+      "Indicator icons, deadlines, cleanup, repaint, grayscale, async baseline and framebuffer-loan checks passed");
 }

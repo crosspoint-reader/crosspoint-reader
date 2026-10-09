@@ -66,11 +66,13 @@ class ActivityManager {
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
-  std::atomic<uint32_t> renderWork{0};
+  static constexpr uint32_t PAGE_RENDER = 1;
+  static constexpr uint32_t INDICATOR_RENDER = 2;
   void notifyRenderWork(uint32_t work);
 #if FREEINK_CAP_TOUCH
   EdgeSwipeIndicator edgeIndicator;
   EdgeSwipeIndicator::Input edgeIndicatorInput;
+  uint32_t edgeIndicatorGeneration = 0;
   void updateEdgeIndicator();
 #endif
 

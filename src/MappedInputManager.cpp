@@ -10,7 +10,6 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
-#include "components/EdgeSwipeActions.h"
 #include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
 
@@ -352,14 +351,9 @@ MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
   }
 }
 
-bool MappedInputManager::wasEdgeSwipe(const freeink::ui::ScreenEdge edge) const {
+bool MappedInputManager::wasEdgeSwipe(const edge_swipe::Edge edge) const {
   const auto& state = edgeRecognizer.getState();
-  if (!state.commit) return false;
-  const auto action = edge_swipe::actionFor(state.edge).callback();
-  const bool hit =
-      (edge == fui::ScreenEdge::Left && action == edge_swipe::Action::Back) ||
-      (edge == fui::ScreenEdge::Top && (action == edge_swipe::Action::Menu || action == edge_swipe::Action::Light)) ||
-      (edge == fui::ScreenEdge::Bottom && action == edge_swipe::Action::Home);
+  const bool hit = state.commit && state.edge == edge;
   if (hit) rememberTouchHeldTime();
   return hit;
 }
@@ -380,12 +374,12 @@ bool MappedInputManager::wasBackGesture() const {
     }
   }
   // The left edge reaches Back; other horizontal swipes remain activity input.
-  return wasEdgeSwipe(fui::ScreenEdge::Left);
+  return wasEdgeSwipe(edge_swipe::Edge::Left);
 }
 
-bool MappedInputManager::wasTopEdgeDownSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Top); }
+bool MappedInputManager::wasTopEdgeDownSwipe() const { return wasEdgeSwipe(edge_swipe::Edge::Top); }
 
-bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Bottom); }
+bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(edge_swipe::Edge::Bottom); }
 
 bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); }
 

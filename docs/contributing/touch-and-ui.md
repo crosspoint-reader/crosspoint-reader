@@ -123,9 +123,10 @@ inward flick cancels, including after reversing back toward the edge.
 | Home | Inward swipe from the bottom edge | `ActivityManager::loop()`; activities can override via `handleHomeGesture()` |
 | Menu / frontlight | Inward swipe from the top edge | Global frontlight panel when available; otherwise the activity's menu handling |
 
-The recognizer is in `MappedInputManager`; the action table is in
-`components/EdgeSwipeActions.cpp`. `ActivityManager` services the indicator on
-the render task independently of page renders. See
+`MappedInputManager` recognizes edge gestures and routes their actions.
+`EdgeSwipeIndicator` selects the matching icons. `ActivityManager` services the
+indicator on the render task independently of page renders, waking on input,
+display changes, or a refresh/cleanup deadline. See
 [edge-swipe-indicators.md](../edge-swipe-indicators.md) for tuning, display
 limitations, and device verification.
 

@@ -16,6 +16,7 @@ class SdCardFont;
 class TtfEpdFont;
 
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <map>
 #include <string>
@@ -51,7 +52,7 @@ class GfxRenderer {
   mutable bool absoluteGrayPlanes = false;
   enum class DisplayContent : uint8_t { Unknown, BW, Grayscale };
   mutable DisplayContent displayedContent = DisplayContent::Unknown;
-  mutable uint32_t displayGeneration = 0;
+  mutable std::atomic<uint32_t> displayGeneration{0};
   mutable bool asyncRefreshPending = false;
   Orientation orientation;
   bool fadingFix;
