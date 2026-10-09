@@ -118,8 +118,9 @@ class PluginCatalogActivity final : public CatalogActivity {
   std::string catalogTitle;
   Manifest manifest;
   std::vector<PluginRef> installedPlugins;
-  bool pluginHubInstalled = false;
+  bool pluginHubAvailable = false;
   bool showPluginHubInstallRow = false;
+  bool ignoreHubInstallerBackRelease = false;
   OptionPopup pluginHubPopup;
   bool showOpds = false;
   bool rootMode = false;

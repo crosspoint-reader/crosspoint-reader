@@ -9,10 +9,10 @@ class AdvancedSettingsActivity final : public UiListActivity {
       : UiListActivity("AdvancedSettings", renderer, input) {}
 
  private:
-  freeink::ui::ListItem row{};
+  freeink::ui::ListItem rows[2]{};
   OptionPopup optionPopup;
 
-  int listCount() const override { return 1; }
+  int listCount() const override;
   const char* headerTitle() const override { return tr(STR_ADVANCED); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
@@ -20,4 +20,5 @@ class AdvancedSettingsActivity final : public UiListActivity {
   void render(RenderLock&&) override;
 
   void setPluginSystemEnabled(bool enabled);
+  void restorePluginHubInstaller();
 };

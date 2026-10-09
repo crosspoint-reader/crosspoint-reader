@@ -10,9 +10,15 @@
 namespace PluginLocations {
 inline constexpr const char* ROOTS[] = {"/.crosspoint/plugins", "/plugins", "/.plugins"};
 inline constexpr size_t ROOT_COUNT = sizeof(ROOTS) / sizeof(ROOTS[0]);
+inline constexpr const char* INSTALL_MARKER = ".installing";
 
 enum class DeviceKind { None, Catalog, Background };
 enum class PickerAction { None, Catalog, Readme };
+
+constexpr bool isDiscoverableEntry(const bool quarantined, const bool hasPluginJs, const bool hasDevice,
+                                   const bool hasManifest) {
+  return !quarantined && (hasPluginJs || hasDevice || hasManifest);
+}
 
 constexpr DeviceKind classifyDeviceManifest(const bool hasBrowseUrl, const bool hasEvents) {
   if (hasBrowseUrl) return DeviceKind::Catalog;
@@ -71,13 +77,14 @@ struct Entry {
 std::vector<Entry> scanPlugins();
 
 // Raw on-disk probes used only for migration/bootstrap UI. These ignore the
-// global Plugin System switch so firmware can detect pre-existing plugins and
-// offer Plugin Hub while the system is currently disabled.
+// global Plugin System switch and installation quarantine so recovery can still
+// detect pre-existing or interrupted plugin directories.
 std::vector<Entry> scanPluginsOnDisk();
 bool anyPluginInstalledOnDisk();
 std::string findPluginDirOnDisk(const char* name);
+bool isPluginQuarantined(const std::string& dir);
 
-// Directory of the named plugin ("<root>/<name>"), or "" when absent or when
-// the global Plugin System setting is disabled.
+// Directory of the named plugin ("<root>/<name>"), or "" when absent,
+// globally disabled, or quarantined by an in-progress installation.
 std::string findPluginDir(const char* name);
 }  // namespace PluginLocations

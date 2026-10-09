@@ -2,6 +2,14 @@
 
 #include "util/PluginLocations.h"
 
+TEST(PluginManifestClassification, InstallingMarkerQuarantinesOtherwiseValidPlugins) {
+  EXPECT_TRUE(PluginLocations::isDiscoverableEntry(false, false, true, false));
+  EXPECT_TRUE(PluginLocations::isDiscoverableEntry(false, true, false, false));
+  EXPECT_TRUE(PluginLocations::isDiscoverableEntry(false, false, false, true));
+  EXPECT_FALSE(PluginLocations::isDiscoverableEntry(true, true, true, true));
+  EXPECT_FALSE(PluginLocations::isDiscoverableEntry(false, false, false, false));
+}
+
 TEST(PluginManifestClassification, BrowseUrlIsCatalog) {
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, false), PluginLocations::DeviceKind::Catalog);
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, true), PluginLocations::DeviceKind::Catalog);
