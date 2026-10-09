@@ -346,11 +346,11 @@ void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, con
   // SUP/SUB bits don't select a distinct .cpfont style bitstream — mask to the
   // base style. resolveStyleMask() inside prewarm folds absent styles.
   // loadKernLig=false: redirected fallback strings (CJK titles, filenames)
-  // have no useful kern pairs, and the ~3KB class-table load plus per-rebuild
-  // mini-matrix build cost heap and SD time exactly where these strings live
-  // (heap-tight UI screens). The reader's PrewarmScope path keeps kern; a
-  // kern-wanting request that subset-hits a kern-free mini tops the matrix up
-  // in prewarmStyle without re-reading glyphs.
+  // have no useful kern pairs, and the per-rebuild mini-matrix build costs
+  // heap and SD time exactly where these strings live (heap-tight UI
+  // screens). The reader's PrewarmScope path keeps kern; a kern-wanting
+  // request that subset-hits a kern-free mini tops the matrix up in
+  // prewarmStyle without re-reading glyphs.
   const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
   sdIt->second->prewarm(text, styleMask, metadataOnly, /*loadKernLig=*/false);
 }

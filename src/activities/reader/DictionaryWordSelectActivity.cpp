@@ -13,13 +13,15 @@
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "HapticFeedback.h"
+#include "clippings/SelectionGeometry.h"
 #include "components/UITheme.h"
+#include "util/WordSelectionInput.h"
+
+using Input = WordSelectionInput;
 
 namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;
-constexpr unsigned long WORD_REPEAT_START_MS = 500;
-constexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;
 
 // A token is selectable when it has an ASCII alphanumeric or a non-ASCII
 // codepoint outside U+2000-U+206F (dashes, bullets and other General
@@ -46,6 +48,13 @@ void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
   fontId = SETTINGS.getReaderFontId();
   lineHeight = renderer.getLineHeight(fontId);
+  if (!lookupText.empty()) {
+    lookupPending = true;
+    popupMsg = StrId::STR_DICT_LOOKING_UP;
+    popup = Popup::Busy;
+    requestUpdate();
+    return;
+  }
   // No null check: a failed allocation just disables the differential
   // fast path (drawHighlightWithSnapshot skips the read), keeping the
   // full-repaint path as the fallback.
@@ -154,7 +163,11 @@ void DictionaryWordSelectActivity::moveVertical(const int direction) {
 }
 
 void DictionaryWordSelectActivity::performLookup() {
-  popup = Popup::Busy;
+  {
+    RenderLock lock;
+    popupMsg = StrId::STR_DICT_LOOKING_UP;
+    popup = Popup::Busy;
+  }
   if (!dictOpenAttempted) {
     dictOpenAttempted = true;
     dictOpenOk = dict.open(SETTINGS.dictionaryName);
@@ -163,7 +176,10 @@ void DictionaryWordSelectActivity::performLookup() {
     // the sidecar ourselves, which is handled below.
     dictNeedsIndex = dictOpenOk && dict.needsIndex();
   }
-  popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  {
+    RenderLock lock;
+    popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  }
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
   bool ok = dictOpenOk;
@@ -176,14 +192,32 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  const bool found =
+      ok && dict.lookup(lookupText.empty() ? words[selected].text : lookupText.c_str(), definition, headword, &result);
 
   if (found) {
-    popup = Popup::None;
-    startActivityForResult(
-        std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                       std::move(definition), dict.definitionsAreHtml()),
-        [this](const ActivityResult&) { requestUpdate(); });
+    {
+      RenderLock lock;
+      popup = Popup::None;
+      // Direct lookup returns to the reader; this page is no longer needed.
+      if (!lookupText.empty()) page.reset();
+    }
+    auto activity = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
+                                                                    std::move(definition), dict.definitionsAreHtml());
+    if (!activity) {
+      LOG_ERR("DICT", "OOM: definition activity");
+      popup = Popup::Error;
+      popupMsg = StrId::STR_DICT_LOW_MEMORY;
+      popupTime = millis();
+      requestUpdate();
+      return;
+    }
+    startActivityForResult(std::move(activity), [this](const ActivityResult&) {
+      if (!lookupText.empty())
+        finish();
+      else
+        requestUpdate();
+    });
     return;
   }
   // Name the failure: a genuine miss is "Not found"; a word that WAS found but
@@ -231,19 +265,29 @@ void DictionaryWordSelectActivity::performLookup() {
 }
 
 void DictionaryWordSelectActivity::loop() {
+  const uint8_t buttons = selectionInput.pollButtons(mappedInput, millis());
+  if (lookupPending) {
+    lookupPending = false;
+    performLookup();
+    return;
+  }
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
+      if (!lookupText.empty()) {
+        finish();
+        return;
+      }
       popup = Popup::None;
       requestUpdate();
     }
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if ((buttons & Input::INPUT_BACK)) {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !words.empty()) {
+  if ((buttons & Input::INPUT_CONFIRM) && !words.empty()) {
     performLookup();
     return;
   }
@@ -272,25 +316,14 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
-  const unsigned long now = millis();
-  const bool repeat =
-      mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
-  const bool moveLeft = mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||
-                        (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));
-  const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
-                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));
-  if (moveLeft && selected > 0) {
-    selected--;
-    lastHorizontalMoveTime = now;
+  const int next = selectionGeometry::horizontalIndex(selected, static_cast<int>(words.size()),
+                                                      buttons & Input::INPUT_LEFT, buttons & Input::INPUT_RIGHT);
+  if (next != selected) {
+    selected = next;
     requestUpdate();
-  } else if (moveRight && hasNextWord) {
-    selected++;
-    lastHorizontalMoveTime = now;
-    requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
+  } else if (buttons & Input::INPUT_UP) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
+  } else if (buttons & Input::INPUT_DOWN) {
     moveVertical(1);
   }
 }
@@ -374,9 +407,9 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   // the in-RAM glyph cache during the real draw.
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, fontId, marginLeft, marginTop);
+  if (page) page->render(renderer, fontId, marginLeft, marginTop);
   scope.endScanAndPrewarm();
-  page->render(renderer, fontId, marginLeft, marginTop);
+  if (page) page->render(renderer, fontId, marginLeft, marginTop);
 
   if (!words.empty()) {
     drawHighlightWithSnapshot();

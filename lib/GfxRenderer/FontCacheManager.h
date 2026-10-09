@@ -18,7 +18,7 @@ class FontCacheManager {
 
   void clearCache();
   // Release every rebuildable font cache while keeping the fonts loaded:
-  //   * SD (.cpfont): mini glyph/kern arenas, kern/lig class tables, overflow
+  //   * SD (.cpfont): mini glyph/kern arenas, ligature tables, overflow
   //     rings, advance tables (SdCardFont::releaseResidentCaches).
   //   * TTF (vector): byte arenas, glyph tables, and the lazy bold/italic
   //     FreeType faces (TtfEpdFont::releaseResidentCaches).

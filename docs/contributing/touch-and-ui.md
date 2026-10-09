@@ -12,7 +12,7 @@ The old bridge helpers (`rowTouch`, `colTouch`, `wasTapInRect`, manual rect `con
 
 | Your screen is... | Use | In-tree reference |
 |---|---|---|
-| A single list of rows | subclass `UiListActivity` | [`LanguageSelectActivity`](../../src/activities/settings/LanguageSelectActivity.cpp) (minimal), [`RecentBooksActivity`](../../src/activities/home/RecentBooksActivity.cpp) (long-press) |
+| A single list of rows | subclass `UiListActivity` | [`LanguageSelectActivity`](../../src/activities/settings/LanguageSelectActivity.cpp) (minimal), [`FileBrowserActivity`](../../src/activities/home/FileBrowserActivity.cpp) (long-press and lazy rows) |
 | Tabbed lists | subclass `UiTabListActivity` | [`SettingsActivity`](../../src/activities/settings/SettingsActivity.cpp) |
 | Custom FUI layout (sliders, prompts, state machines) | inherit `UiAppHost` directly | [`EpubReaderPercentSelectionActivity`](../../src/activities/reader/EpubReaderPercentSelectionActivity.cpp), [`WifiSelectionActivity`](../../src/activities/network/WifiSelectionActivity.cpp) |
 | A modal picker or confirm inside a legacy activity | `OptionPopup` (or push `ConfirmationActivity`) | [`OtaUpdateActivity`](../../src/activities/settings/OtaUpdateActivity.cpp) |
@@ -74,7 +74,14 @@ class MyListActivity final : public UiListActivity {
 };
 ```
 
-See [`FileBrowserActivity`](../../src/activities/home/FileBrowserActivity.cpp)'s `rebuildRowItems()` for this pattern applied to a directory listing that can run into the hundreds of entries, and `LanguageSelectActivity.cpp` for the rest of the skeleton (content-margin math, footer, etc.) — note that file still builds its row vector locally inside `buildScreen()`; match `FileBrowserActivity`, not that file, for the row cache. Optional overrides: `onRowLongPress(index)`, `drawFooter()`, `handleButtons()` for extra physical-button handling, and `ACTION_USER`-and-up action ids for non-row elements (register handlers in `onEnter` after the base's).
+For small bounded lists, [`LanguageSelectActivity`](../../src/activities/settings/LanguageSelectActivity.cpp)
+builds a fixed row array in `onEnter()` and reuses it in `buildScreen()`. For
+large lists, follow [`FileBrowserActivity::provideRow()`](../../src/activities/home/FileBrowserActivity.cpp)
+and `fui::ListProps::rowProvider`: format rows on demand into reusable scratch
+storage instead of materializing the whole row list. Optional overrides include
+`onRowLongPress(index)`, `drawFooter()`, and `handleButtons()` for extra physical
+input. Use `ACTION_USER`-and-up action ids for non-row elements and register
+handlers in `onEnter()` after the base's.
 
 ### Rules that apply to every FUI screen
 
@@ -82,7 +89,7 @@ See [`FileBrowserActivity`](../../src/activities/home/FileBrowserActivity.cpp)'s
 - Handlers that leave the current screen call `app.clearTapFlash()` first.
 - Theme tokens are shared and bound by `resetUi()`; never call `app.setTheme` yourself. Metrics flow from the active UITheme through [`UIThemeTokens.h`](../../src/components/UIThemeTokens.h), including the per-board bezel insets that keep scrollbars visible.
 - `TextStyle.maxLines` defaults to 1 and truncates with an ellipsis. Set `maxLines` explicitly on any dialog headline or message that can wrap.
-- Everything stays allocation-free in steady state. A local `std::vector` inside `buildScreen()` is **not** allocation-free even with `reserve()` first: it starts at zero capacity on every call, `reserve()` allocates, and the destructor frees that storage before the call returns — real allocator work and fragmentation risk on every repaint (cursor move, tap flash, ...), not just on data changes. Build `ListItem` rows into activity-owned storage instead, reserved once when the underlying data loads (`onEnter()`/a `load*()` — see the skeleton above and `FileBrowserActivity::rebuildRowItems()`), and reused unchanged by every `buildScreen()` call. Use a fixed-capacity array (e.g. `ListItem rows[MAX]`, as `OptionPopup` and `KOReaderSyncActivity`'s action rows do) when the count is small and bounded. Do not hold FUI `props` across renders — only the row storage they point into.
+- Keep steady-state repaint allocation-free. A local `std::vector` in `buildScreen()` allocates and frees on every repaint even with `reserve()`. For bounded lists, reuse activity-owned row storage, reserved or fixed-size when data loads. For large lists, use `rowProvider` with reusable scratch storage as above. Keep the backing storage alive for rendering; do not retain FUI `props` across renders.
 
 ### Component inventory
 
@@ -134,9 +141,35 @@ As with all input: never call the SDK `InputManager` or read GPIO directly. The 
 
 ---
 
-## Building and testing on non-Xteink devices
+## Building and testing on other devices
 
-Each MCU family is its own binary: X3/X4 are ESP32-C3, Sticky and LilyGo T5 are ESP32-S3, M5Paper v1.1 is a classic ESP32. The Sticky env ships in `platformio.ini` (`pio run -e sticky`). Envs for other devices go in **`platformio.local.ini`**, a gitignored file that PlatformIO merges over `platformio.ini` (see `extra_configs`). Create it next to `platformio.ini`; personal envs, ports, and debug flags live there and never get committed.
+Select a checked-in environment from `platformio.ini` before creating a local
+profile. CrossPoint's CI and release workflows currently cover:
+
+| Device | Development environment | MCU |
+| --- | --- | --- |
+| Xteink X3 / X4 | `default` | ESP32-C3 |
+| Seeed reTerminal Sticky | `sticky` | ESP32-S3 |
+| Xteink X4 Pro | `x4pro` | ESP32-S3 |
+| Xteink X4 Classic | `x4c` | ESP32-S3 |
+| M5Stack Paper Mono | `papermono` | ESP32-S3 |
+| Metalio E-Ink 4 | `metalio_eink4` | ESP32-S3 |
+
+Build with `pio run -e <environment>`. X3 and X4 share a binary with runtime
+board selection; different MCU families require separate binaries. Check the
+current workflow matrices before claiming build coverage or published assets.
+
+The [FreeInk SDK profiles](../../freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h)
+cover additional hardware. An SDK profile does not by itself establish
+CrossPoint release support or hardware verification. The M5Paper v1.1 and
+LilyGo T5 S3 examples below are local profiles outside the current CI matrix.
+
+Put those profiles in **`platformio.local.ini`**, a gitignored file merged over
+`platformio.ini` (see `extra_configs`). Personal ports and debug flags belong
+there too. If overriding `build_flags`, preserve the selected environment's
+device and capability flags as well as `${base.build_flags}`; a local value
+replaces its whole flag list. Follow [getting started](./getting-started.md)
+for the pinned pioarduino setup.
 
 Both envs below extend the repo's `[base]`, so they build against the `freeink-sdk` submodule with all the normal deps and scripts.
 
@@ -197,6 +230,6 @@ lib_deps =
 Then `pio run -e m5paper_v11 -t upload` (or `-e lilygo_t5s3`). Gotchas worth knowing:
 
 - **Flash mode matters.** The M5Paper is `qio`; the X4-family standalone envs need `dio`. A wrong flash-mode header boots into a `partition 0 invalid magic number 0xffff` loop even though esptool verified the write.
-- **One `FREEINK_DEVICE_*` flag per env** selects the board profile (pins, panel, touch controller) from the SDK's `BoardConfig`. See `freeink-sdk/platformio.sample.ini` for reference envs of every supported device.
+- **Device flags select board profiles.** The local examples use one `FREEINK_DEVICE_*` flag; the C3 X3/X4 profile deliberately enables both. See `freeink-sdk/platformio.sample.ini` for SDK reference environments and `BoardConfig` for capability defaults.
 - **Serial logs:** `[base]` does not enable logging; without `-DENABLE_SERIAL_LOG` a non-default env prints nothing.
 - No touch hardware on your desk? The X4 build still exercises the same code paths through buttons; touch-specific behavior (tap zones, gestures) needs a real device.

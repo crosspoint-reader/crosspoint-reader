@@ -70,7 +70,7 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Heap-critical transition: WiFi (~45KB) plus the web server have to fit in
   // what's left of the ~380KB parts. SD-font caches retained for the CJK UI
-  // fallback (mini glyph/kern arenas, kern class tables) are rebuildable on
+  // fallback (mini glyph/kern arenas, ligature tables) are rebuildable on
   // demand — release them up front instead of aborting in startWebServer()
   // when the heap comes up short (observed on X3 with a Korean SD font).
   if (auto* fcm = renderer.getFontCacheManager()) {

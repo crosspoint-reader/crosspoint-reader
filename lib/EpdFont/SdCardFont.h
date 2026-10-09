@@ -58,9 +58,8 @@ class SdCardFont {
   // in a bare-new string append is exactly what this avoids). A null getter
   // result skips that index. Unique codepoints cap at MAX_PAGE_GLYPHS.
   // loadKernLig=false skips kern/ligature loading and the mini kern matrix:
-  // UI fallback text (CJK titles) has no useful kern pairs, and the ~3KB class
-  // tables plus per-rebuild matrix work were enough to OOM the batch on
-  // heap-tight screens. Reader-quality paths keep the default.
+  // UI fallback text (CJK titles) has no useful kern pairs, and the per-rebuild
+  // class-table and matrix work is wasted there. Reader-quality paths keep the default.
   using TextGetter = const char* (*)(const void* ctx, uint32_t index);
   int prewarm(TextGetter getter, const void* ctx, uint32_t textCount, uint8_t styleMask = 0x0F,
               bool metadataOnly = false, bool loadKernLig = true, bool accumulate = true);
@@ -95,7 +94,7 @@ class SdCardFont {
   void clearPersistentCache();
 
   // Release every rebuildable cache while keeping the font loaded and usable:
-  // mini glyph/kern arenas, kern/ligature class tables, the overflow ring, and
+  // mini glyph/kern arenas, ligature tables, the overflow ring, and
   // the persistent advance tables. Coverage intervals stay so hasCodepoint()
   // and reloads keep working; glyphs fault back in on demand and the next
   // prewarm rebuilds the arenas. For heap-critical transitions (e.g. starting
@@ -192,16 +191,17 @@ class SdCardFont {
     // paid for once per style. Only the owning style frees it -- see freeStyleAll().
     bool intervalsShared = false;
 
-    // Persistent kern-class + ligature tables (lazy-loaded on first prewarm).
-    // The full kern MATRIX is NOT resident — on Literata-class fonts a single
-    // style's matrix is ~36-42KB contiguous, and 4 styles' worth won't fit
-    // alongside bitmaps + framebuffer on a 380KB device. Only kernLeftClasses
-    // and kernRightClasses (small codepoint→classId tables, ~3KB each) stay
-    // resident; the matrix is reconstructed per-page as miniKernMatrix.
-    EpdKernClassEntry* kernLeftClasses = nullptr;
-    EpdKernClassEntry* kernRightClasses = nullptr;
+    // Ligature table (lazy-loaded on first prewarm). No kern table is resident:
+    // buildMiniKernMatrix reads the class-table blocks (~3KB per side per style
+    // in total) and the matrix rows it needs from SD for each page.
     EpdLigaturePair* ligaturePairs = nullptr;
-    bool kernLigLoaded = false;
+    bool ligaturesLoaded = false;
+    // First codepoint of each block of the left, then the right, kern class table,
+    // each followed by the table's last codepoint. Sized at load so it sits with the
+    // other load-time tables, and filled by the first full read so later pages read
+    // only the blocks holding their codepoints.
+    uint16_t* kernBlockIndex = nullptr;
+    bool kernBlockIndexReady = false;
 
     // Stub EpdFontData returned when not prewarmed
     EpdFontData stubData{};
@@ -263,8 +263,8 @@ class SdCardFont {
     uint16_t miniKernLeftCapacity = 0;
     uint16_t miniKernRightCapacity = 0;
     uint32_t miniKernMatrixCapacity = 0;
-    // True once the mini kern tables cover the resident mini glyph set (possibly
-    // with no pairs). Subset hits skip the rebuild.
+    // True once the mini kern tables match the resident mini glyph set (possibly
+    // with no pairs). Subset hits skip the rebuild, which streams from SD.
     bool miniKernBuilt = false;
 
     // The EpdFont whose data pointer we manage
@@ -310,10 +310,16 @@ class SdCardFont {
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 768;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
+  // Allocated entries. Merges fill spare capacity in place, and growth doubles it,
+  // so a table moves a few times per section instead of on every layout pass.
+  uint32_t advanceTableCapacity_[MAX_STYLES] = {};
   bool advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
+  // Grows the table only when the merge exceeds its capacity.
   void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
+  // Ensures room for `needed` entries, at least doubling the capacity when it grows.
+  bool growAdvanceTable(uint8_t styleIdx, uint32_t needed);
 
   Stats stats_;
   uint32_t contentHash_ = 0;
@@ -326,9 +332,9 @@ class SdCardFont {
   // or sustained underuse.
   void resetStyleMiniData(PerStyle& s);
   void freeStyleAll(PerStyle& s);
-  void freeStyleKernLigatureData(PerStyle& s);
+  void freeStyleLigatures(PerStyle& s);
   void freeStyleMiniKern(PerStyle& s);
-  bool loadStyleKernLigatureData(PerStyle& s);
+  bool loadStyleLigatures(PerStyle& s);
   bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);

@@ -1,6 +1,6 @@
 ---
 name: refactor-for-review
-description: Producing small, single-concern, reviewable changes. Use when refactoring, cleaning up, restructuring, decomposing, or preparing a change for PR, especially in this multi-contributor AI-assisted codebase that is prone to sprawl diffs. Covers one-concern-per-commit, extracting helpers without widening scope, not bundling unrelated edits, decomposing oversized activities, comment hygiene, and a pre-handoff self-review checklist.
+description: Keep changes small and reviewable. Use when refactoring, cleaning up, restructuring, decomposing, or preparing a PR change.
 ---
 
 # Refactor for Review
@@ -24,6 +24,14 @@ next change easier is the win, not lines added.
 
 ## Keep the diff narrow
 
+- For a bug fix, trace the triggering input and state through every affected
+  caller before editing. Fix the shared cause where those callers route;
+  account for callers with different contracts instead of copying guards into
+  individual screens.
+- Reuse existing helpers and interfaces before adding a wrapper, factory, or
+  configuration option. Keep a new abstraction only when it owns a real
+  contract or hides a demonstrated implementation choice.
+
 - Extract a helper to remove real duplication or to name a concept, not to chase
   abstraction. Three-plus copies, or a block that needs a name to be understood:
   extract. Two similar lines: leave them.
@@ -41,12 +49,17 @@ decomposition candidate. Extract a cohesive sub-responsibility into its own
 unit, as a standalone behavior-preserving refactor, verified on its own, never
 mixed into a feature change.
 
+## Preserve requirements and verification
+
+The smallest diff must still meet the full requirement. Preserve trust-boundary
+validation, data-loss prevention, security, accessibility, and required hardware
+calibration. For changed non-trivial behavior, use the smallest meaningful
+regression check in the existing test infrastructure and the relevant device
+checks; follow the [testing rule](../../rules/testing-debugging.md).
+
 ## Comments earn their place
 
-Comments explain why: an invariant, a defense, a past incident, a non-obvious
-constraint. Never what the next line already says. Delete narration, phase-marker
-comments ("now we loop over..."), and restated function names. If a comment and
-the code it sits on say the same thing, the comment is the thing to cut.
+Apply the [comment rules](../../rules/coding-standards.md#comment-style).
 
 ## Self-review before handoff
 
@@ -55,5 +68,7 @@ the code it sits on say the same thing, the comment is the thing to cut.
 - [ ] No "while I'm here" creep; rename/signature ripples are split out.
 - [ ] Extractions remove real duplication or name a real concept, not
       speculative abstraction.
-- [ ] New comments say why, not what; no narration or phase markers.
+- [ ] The fix accounts for affected callers; simplicity preserves the required
+      failure handling and behavior, with relevant regression checks.
+- [ ] Added or changed comments are short and useful without the diff or PR history.
 - [ ] A reviewer can understand the diff without running it.
