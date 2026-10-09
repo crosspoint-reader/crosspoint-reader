@@ -9,29 +9,6 @@
 #include <algorithm>
 #include <cstring>
 
-namespace {
-
-char* appendUtf8Codepoint(char* output, const uint32_t codepoint) {
-  if (codepoint < 0x80) {
-    *output++ = static_cast<char>(codepoint);
-  } else if (codepoint < 0x800) {
-    *output++ = static_cast<char>(0xC0 | (codepoint >> 6));
-    *output++ = static_cast<char>(0x80 | (codepoint & 0x3F));
-  } else if (codepoint < 0x10000) {
-    *output++ = static_cast<char>(0xE0 | (codepoint >> 12));
-    *output++ = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-    *output++ = static_cast<char>(0x80 | (codepoint & 0x3F));
-  } else {
-    *output++ = static_cast<char>(0xF0 | (codepoint >> 18));
-    *output++ = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
-    *output++ = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-    *output++ = static_cast<char>(0x80 | (codepoint & 0x3F));
-  }
-  return output;
-}
-
-}  // namespace
-
 FontCacheManager::FontCacheManager(const std::map<int, EpdFontFamily>& fontMap,
                                    const std::map<int, SdCardFont*>& sdCardFonts,
                                    const std::map<int, TtfEpdFont*>& ttfFonts)
@@ -157,8 +134,10 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
   const uint8_t group = fontSlot * 4 + resolvedStyle;
   const unsigned char* cursor = reinterpret_cast<const unsigned char*>(text);
   while (*cursor) {
-    const uint32_t codepoint = utf8NextCodepoint(&cursor);
+    uint32_t codepoint = utf8NextCodepoint(&cursor);
     if (codepoint == 0) break;
+    // Small caps draw lowercase letters with their uppercase glyphs.
+    if (style & EpdFontFamily::SMALL_CAPS) codepoint = utf8SmallCapsUpper(codepoint);
 
     const uint32_t packed = (static_cast<uint32_t>(fontSlot) << SCAN_FONT_SHIFT) |
                             (static_cast<uint32_t>(resolvedStyle) << SCAN_STYLE_SHIFT) | codepoint;
@@ -220,7 +199,7 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
     char* output = utf8Text;
     for (uint16_t i = 0; i < groupCount; i++) {
       const uint32_t codepoint = manager_->scanCodepoints_[groupStart + i] & SCAN_CODEPOINT_MASK;
-      output = appendUtf8Codepoint(output, codepoint);
+      output = utf8AppendCodepoint(output, codepoint);
     }
     *output = '\0';
 

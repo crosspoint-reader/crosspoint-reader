@@ -90,12 +90,57 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 53
+
+Each TextBlock's BlockStyle stores a signed 32-bit `fontId` after
+`characterSpacing`: the renderer font the line was laid out in, or 0 for the
+section font. Each TextBlock ends with a `hasWordFonts` flag. When set, it is
+followed by three signed 32-bit font ids and one slot byte per word: 0 draws the
+word in the block's font, `n` in font `n - 1`. Mixed-size words share the baseline
+of the tallest font. SD (.cpfont) and vector fonts use sized variants for
+headings, CSS font-size blocks, inline runs and drop caps. A font-size span
+holding a whole paragraph sizes that paragraph.
+
+Word style bit 128 (`SMALL_CAPS`) marks CSS small caps; the word text keeps its
+original case.
+
+Pages gain two element types. `TAG_PageDropCap` (4) is an initial letter drawn
+scaled up from a font's glyph: position (its `yPos` is the baseline of the last
+spanned line), the renderer font id, the scale in 1/256ths, the word style and
+up to 12 bytes of UTF-8 text. `TAG_PageBorderBox` (5) is a CSS border and/or
+background shade around one page's slice of a block element: position, size,
+width and style for the top, right, bottom and left edges (a side split off by a
+page break has width 0), and a shade flag.
+
+Layout changes keep headings with following content and avoid leaving a
+paragraph's first line alone at a page bottom or its last line alone at a page
+top. Preserved whitespace and inherited block emphasis affect word placement
+and styles. Inline `<br>` breaks omit paragraph spacing, while standalone and
+consecutive breaks add blank lines.
+
+Table columns are sized from a markup pre-scan rather than equal widths.
+Bordered tables frame each grid cell with `PageBorderBox` elements. Cells honor
+CSS padding in grid and stacked layouts. Plain-text rows share a 160-token /
+2 KB budget; rows containing blocks or images use full-width flow to preserve
+paragraphs and illustrations. Older sections are rebuilt for the serialized
+font data, page elements and layout changes.
+
+CSS cache version 16 adds a boolean `preserveWhitespace` byte after `initialLetter`
+and uses defined-property bit 30 for `white-space`.
+CSS cache version 17 stores rules in source order and retains nonadjacent repeated
+selectors so equal-specificity declarations cascade in stylesheet order.
+
 ### Version 52
 
 The serialized layout is unchanged. Missing full-block (`U+2588`) and black-square
 (`U+25A0`) symbols now use font-sized solid rectangles instead of replacement
 glyphs. Rebuild older sections so cached line breaks and word positions match
 their new widths.
+
+### Version 51
+
+The serialized layout is unchanged. Paragraph continuity and top spacing are
+preserved across soft flushes. Older sections are rebuilt for the updated layout.
 
 ### Version 50
 
@@ -214,7 +259,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 50
+#define EXPECTED_VERSION 53
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -234,7 +279,9 @@ fn format_string(String s) {
 enum PageElementTag : u8 {
     TAG_PageLine = 1,
     TAG_PageImage = 2,
-    TAG_PageHorizontalRule = 3
+    TAG_PageHorizontalRule = 3,
+    TAG_PageDropCap = 4,
+    TAG_PageBorderBox = 5
 };
 
 enum WordStyle : u8 {
@@ -245,7 +292,8 @@ enum WordStyle : u8 {
     UNDERLINE = 4,
     STRIKETHROUGH = 8,
     SUP = 16,
-    SUB = 32
+    SUB = 32,
+    SMALL_CAPS = 128  // lowercase letters drawn as 3/4-scale capitals
 };
 
 enum TextAlign : u8 {
@@ -272,6 +320,7 @@ struct BlockStyle {
     bool isRtl;
     bool directionDefined;
     s8 characterSpacing;
+    s32 fontId;
 };
 
 struct TextBlock {
@@ -293,6 +342,11 @@ struct TextBlock {
     }
 
     BlockStyle blockStyle;
+    u8 hasWordFonts;
+    if (hasWordFonts != 0) {
+        s32 wordFonts[3];
+        u8 wordFontSlot[wordCount] [[comment("0 = block font, n = wordFonts[n - 1]")]];
+    }
 };
 
 struct ImageBlock {
@@ -321,6 +375,30 @@ struct PageHorizontalRule {
     u8 thickness;
 };
 
+struct PageDropCap {
+    s16 xPos;
+    s16 yPos;  // baseline of the last spanned line
+    s32 fontId;
+    u16 scale256;
+    WordStyle style;
+    u8 length;
+    char text[length];
+};
+
+struct BorderSide {
+    u8 width;
+    u8 style;  // 0 none, 1 solid, 2 double, 3 dotted, 4 dashed
+};
+
+struct PageBorderBox {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u16 height;
+    BorderSide sides[4];  // top, right, bottom, left
+    bool shaded;
+};
+
 struct PageElement {
     PageElementTag pageElementType;
     if (pageElementType == TAG_PageLine) {
@@ -329,6 +407,10 @@ struct PageElement {
         PageImage pageImage [[inline]];
     } else if (pageElementType == TAG_PageHorizontalRule) {
         PageHorizontalRule horizontalRule [[inline]];
+    } else if (pageElementType == TAG_PageDropCap) {
+        PageDropCap dropCap [[inline]];
+    } else if (pageElementType == TAG_PageBorderBox) {
+        PageBorderBox borderBox [[inline]];
     } else {
         std::error(std::format("Unknown page element type: {}", pageElementType));
     }

@@ -4,11 +4,14 @@
 #include <Utf8.h>
 
 #include <deque>
+#include <map>
 #include <string>
 
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 }
+
+enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
 
 class GfxRenderer {
  public:
@@ -24,7 +27,23 @@ class GfxRenderer {
     return left == 0 || left == ' ' || right == ' ' ? 0 : tracking;
   }
   bool isFontCacheScanning() const { return false; }
-  void drawLine(int, int, int, int, int, bool) const {}
+  mutable int lastLineY = -1;
+  mutable int drawnLineCount = 0;
+  void drawLine(int, int y, int, int, int, bool) const {
+    lastLineY = y;
+    ++drawnLineCount;
+  }
+  void fillRect(int, int, int, int, bool = true) const {}
+  void fillRectDither(int, int, int, int, Color) const {}
+  // Fixture glyphs: 8 px advance, capitals 10 px tall.
+  int drawScaledCodepoint(int, uint32_t, EpdFontFamily::Style, int, int, int scale256) const {
+    return 8 * scale256 / 256;
+  }
+  bool getCodepointMetrics(int, uint32_t, EpdFontFamily::Style, int32_t& advanceFP, int& top) const {
+    advanceFP = 8 << 4;
+    top = 10;
+    return true;
+  }
   void drawText(int, int, int, const char*, bool, EpdFontFamily::Style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {}
   int getTextWidth(int font, const char* text, EpdFontFamily::Style style,
@@ -34,6 +53,14 @@ class GfxRenderer {
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
   int getLineHeight(int, float = 1.0f) const { return 16; }
+  const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
+  // Fixture variant provider: maps (fontId, scale) to fontId * 1000 + scale * 100 when set.
+  bool variantsEnabled = false;
+  int resolveFontVariant(int fontId, float scale) const {
+    return variantsEnabled ? fontId * 1000 + static_cast<int>(scale * 100 + 0.5f) : 0;
+  }
+  bool ensureFontLoaded(int fontId) const { return variantsEnabled || fontMap.count(fontId) != 0 || fontId == 0; }
+  std::map<int, EpdFontFamily> fontMap;
   int getFontAscenderSize(int) const { return 12; }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 4; }
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t tracking = 0,

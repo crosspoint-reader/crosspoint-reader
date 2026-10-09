@@ -4,6 +4,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <Serialization.h>
+#include <Utf8.h>
 
 namespace {
 
@@ -15,6 +16,42 @@ void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>&
       element->render(renderer, fontId, xOffset, yOffset);
     }
   }
+}
+
+bool isBorderBox(const PageElement& element) { return element.getTag() == TAG_PageBorderBox; }
+
+// Draws one border edge as a strip along a box side.
+void drawBorderEdge(const GfxRenderer& renderer, const int x, const int y, const int length, const CssBorderSide& side,
+                    const bool horizontal) {
+  const int thickness = side.width;
+  const auto strip = [&](const int offset, const int along, const int span, const int depth) {
+    if (horizontal) {
+      renderer.fillRect(x + along, y + offset, span, depth, true);
+    } else {
+      renderer.fillRect(x + offset, y + along, depth, span, true);
+    }
+  };
+  switch (side.style) {
+    case CssBorderStyle::Double:
+      if (thickness >= 3) {
+        const int line = std::max(1, thickness / 3);
+        strip(0, 0, length, line);
+        strip(thickness - line, 0, length, line);
+        return;
+      }
+      break;
+    case CssBorderStyle::Dotted:
+    case CssBorderStyle::Dashed: {
+      const int dash = side.style == CssBorderStyle::Dotted ? thickness : std::max(3, thickness * 3);
+      const int gap = side.style == CssBorderStyle::Dotted ? std::max(2, thickness) : std::max(2, thickness * 2);
+      for (int along = 0; along < length; along += dash + gap)
+        strip(0, along, std::min(dash, length - along), thickness);
+      return;
+    }
+    default:
+      break;
+  }
+  strip(0, 0, length, thickness);
 }
 
 }  // namespace
@@ -128,8 +165,120 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
   return rule;
 }
 
+PageDropCap::PageDropCap(const int32_t fontId, const uint16_t scale256, const EpdFontFamily::Style style,
+                         const char* utf8, const int16_t xPos, const int16_t yPos)
+    : PageElement(xPos, yPos), fontId(fontId), scale256(scale256), style(style) {
+  strncpy(text, utf8, MAX_TEXT_BYTES);
+}
+
+void PageDropCap::render(GfxRenderer& renderer, const int sectionFontId, const int xOffset, const int yOffset) {
+  // A sized variant that can no longer be loaded draws from the section font instead.
+  const int drawFontId = renderer.ensureFontLoaded(fontId) ? fontId : sectionFontId;
+  int x = xPos + xOffset;
+  const auto* cursor = reinterpret_cast<const unsigned char*>(text);
+  while (const uint32_t cp = utf8NextCodepoint(&cursor)) {
+    x += renderer.drawScaledCodepoint(drawFontId, cp, style, x, yPos + yOffset, scale256);
+  }
+}
+
+bool PageDropCap::serialize(HalFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, fontId);
+  serialization::writePod(file, scale256);
+  serialization::writePod(file, static_cast<uint8_t>(style));
+  const auto length = static_cast<uint8_t>(strnlen(text, MAX_TEXT_BYTES));
+  serialization::writePod(file, length);
+  return file.write(text, length) == length;
+}
+
+std::unique_ptr<PageDropCap> PageDropCap::deserialize(HalFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  int32_t fontId = 0;
+  uint16_t scale256 = 0;
+  uint8_t style = 0;
+  uint8_t length = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, fontId);
+  serialization::readPod(file, scale256);
+  serialization::readPod(file, style);
+  serialization::readPod(file, length);
+  char text[MAX_TEXT_BYTES + 1] = {};
+  if (length == 0 || length > MAX_TEXT_BYTES || scale256 == 0 || file.read(text, length) != length) {
+    LOG_ERR("PGE", "Deserialization failed: invalid drop cap");
+    return nullptr;
+  }
+  auto dropCap =
+      makeUniqueNoThrow<PageDropCap>(fontId, scale256, static_cast<EpdFontFamily::Style>(style), text, xPos, yPos);
+  if (!dropCap) LOG_ERR("PGE", "Deserialization failed: could not allocate PageDropCap");
+  return dropCap;
+}
+
+void PageBorderBox::render(GfxRenderer& renderer, const int, const int xOffset, const int yOffset) {
+  const int x = xPos + xOffset;
+  const int y = yPos + yOffset;
+  if (shaded) renderer.fillRectDither(x, y, width, height, Color::LightGray);
+  const CssBorderSide& top = sides[0];
+  const CssBorderSide& right = sides[1];
+  const CssBorderSide& bottom = sides[2];
+  const CssBorderSide& left = sides[3];
+  if (top.visible()) drawBorderEdge(renderer, x, y, width, top, true);
+  if (bottom.visible()) drawBorderEdge(renderer, x, y + height - bottom.width, width, bottom, true);
+  if (left.visible()) drawBorderEdge(renderer, x, y, height, left, false);
+  if (right.visible()) drawBorderEdge(renderer, x + width - right.width, y, height, right, false);
+}
+
+bool PageBorderBox::serialize(HalFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, width);
+  serialization::writePod(file, height);
+  for (const CssBorderSide& side : sides) {
+    serialization::writePod(file, side.width);
+    serialization::writePod(file, static_cast<uint8_t>(side.style));
+  }
+  serialization::writePod(file, shaded);
+  return true;
+}
+
+std::unique_ptr<PageBorderBox> PageBorderBox::deserialize(HalFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  CssBorderSide sides[4];
+  bool shaded = false;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, width);
+  serialization::readPod(file, height);
+  for (CssBorderSide& side : sides) {
+    uint8_t style = 0;
+    serialization::readPod(file, side.width);
+    serialization::readPod(file, style);
+    if (style > static_cast<uint8_t>(CssBorderStyle::Dashed)) {
+      LOG_ERR("PGE", "Deserialization failed: invalid border style %u", style);
+      return nullptr;
+    }
+    side.style = static_cast<CssBorderStyle>(style);
+  }
+  serialization::readPod(file, shaded);
+  if (width == 0 || height == 0) {
+    LOG_ERR("PGE", "Deserialization failed: empty border box");
+    return nullptr;
+  }
+  auto box = makeUniqueNoThrow<PageBorderBox>(width, height, sides, shaded, xPos, yPos);
+  if (!box) LOG_ERR("PGE", "Deserialization failed: could not allocate PageBorderBox");
+  return box;
+}
+
+// Border boxes draw first so their shading sits under the text they frame.
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
-  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, isBorderBox);
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset,
+                             [](const PageElement& element) { return !isBorderBox(element); });
 }
 
 void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
@@ -139,7 +288,9 @@ void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffs
 
 void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, const int xOffset,
                                        const int yOffset) const {
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, isBorderBox);
   for (const auto& element : elements) {
+    if (isBorderBox(*element)) continue;
     if (element->getTag() == TAG_PageImage) {
       static_cast<const PageImage&>(*element).renderPlaceholder(renderer, xOffset, yOffset);
     } else {
@@ -232,6 +383,18 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
         return nullptr;
       }
       page->elements.push_back(std::move(rule));
+    } else if (tag == TAG_PageDropCap) {
+      auto dropCap = PageDropCap::deserialize(file);
+      if (!dropCap) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(dropCap));
+    } else if (tag == TAG_PageBorderBox) {
+      auto box = PageBorderBox::deserialize(file);
+      if (!box) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(box));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;

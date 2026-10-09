@@ -17,6 +17,8 @@ enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
   TAG_PageImage = 2,
   TAG_PageHorizontalRule = 3,
+  TAG_PageDropCap = 4,
+  TAG_PageBorderBox = 5,
 };
 
 // represents something that has been added to a page
@@ -72,6 +74,50 @@ class PageHorizontalRule final : public PageElement {
   bool serialize(HalFile& file) override;
   PageElementTag getTag() const override { return TAG_PageHorizontalRule; }
   static std::unique_ptr<PageHorizontalRule> deserialize(HalFile& file);
+};
+
+// An initial letter spanning several lines, drawn scaled up from a font's glyph.
+// yPos is the baseline of the last spanned line.
+class PageDropCap final : public PageElement {
+ public:
+  static constexpr size_t MAX_TEXT_BYTES = 12;  // leading punctuation plus the letter
+
+ private:
+  int32_t fontId;
+  uint16_t scale256;
+  EpdFontFamily::Style style;
+  char text[MAX_TEXT_BYTES + 1] = {};
+
+ public:
+  PageDropCap(int32_t fontId, uint16_t scale256, EpdFontFamily::Style style, const char* utf8, int16_t xPos,
+              int16_t yPos);
+  const char* getText() const { return text; }
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(HalFile& file) override;
+  PageElementTag getTag() const override { return TAG_PageDropCap; }
+  static std::unique_ptr<PageDropCap> deserialize(HalFile& file);
+};
+
+// A CSS border and/or background shade around a block element's slice on this page.
+// Sides split off by a page break have zero width.
+class PageBorderBox final : public PageElement {
+  uint16_t width;
+  uint16_t height;
+  CssBorderSide sides[4];  // top, right, bottom, left
+  bool shaded;
+
+ public:
+  PageBorderBox(uint16_t width, uint16_t height, const CssBorderSide (&sides)[4], bool shaded, int16_t xPos,
+                int16_t yPos)
+      : PageElement(xPos, yPos),
+        width(width),
+        height(height),
+        sides{sides[0], sides[1], sides[2], sides[3]},
+        shaded(shaded) {}
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(HalFile& file) override;
+  PageElementTag getTag() const override { return TAG_PageBorderBox; }
+  static std::unique_ptr<PageBorderBox> deserialize(HalFile& file);
 };
 
 class Page {

@@ -65,6 +65,10 @@ class TextBlock final : public Block {
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
   const char* textArr = nullptr;
   std::vector<std::string> rubyTexts;
+  // Words sized apart from the line (CSS font-size spans): MAX_WORD_FONTS int32 font ids,
+  // then one slot per word (0 = block font, n = font n-1). Null when every word uses the
+  // block font, so ordinary lines pay only this pointer.
+  std::unique_ptr<uint8_t[]> wordFontData;
   // Layout-only metadata. ChapterHtmlSlimParser moves it into Page::links
   // immediately; cached TextBlocks therefore keep the same compact format.
   std::vector<LinkSpan> linkSpans;
@@ -87,6 +91,21 @@ class TextBlock final : public Block {
 
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  // The font this line was laid out in: a CSS font-size override, else the section font.
+  int blockFontId(const int sectionFontId) const { return blockStyle.fontId ? blockStyle.fontId : sectionFontId; }
+
+  static constexpr uint8_t MAX_WORD_FONTS = 3;
+  // slots[i] picks word i's font: 0 = the block font, n = fonts[n-1]. Returns false on OOM.
+  bool setWordFonts(const uint8_t* slots, const int32_t (&fonts)[MAX_WORD_FONTS]);
+  int wordFontId(uint16_t i, int sectionFontId) const;
+  // fontId when it is (or can be) registered with the renderer, else the section font.
+  static int renderFontId(const GfxRenderer& renderer, int fontId, int sectionFontId);
+  // Ascent of the line's shared baseline: the tallest font among its words.
+  int lineAscent(const GfxRenderer& renderer, int sectionFontId) const;
+  // Offset from the line top at which to draw word i so every word shares the baseline.
+  int wordYOffset(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
+  // Extra height the line needs beyond its block font for taller words.
+  int extraAscent(const GfxRenderer& renderer, int sectionFontId) const;
   bool isEmpty() override { return numWords == 0; }
   bool valid() const { return isValid; }
   uint16_t wordCount() const { return numWords; }

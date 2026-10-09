@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -45,6 +46,15 @@ class ParsedText {
   // Zero means plain text; non-zero indexes linkTargets. Kept at one byte per
   // token and discarded after layout, never added to the page-cache TextBlock.
   std::vector<uint8_t> wordLinkIds;
+  // Words sized by an inline font-size span: a slot per word into sizeSlotScales (absolute
+  // multiples of the reader's body size). Slot 0 follows the block's own size; the parser
+  // resolves each slot's font before layout.
+  std::vector<uint8_t> wordSizeSlots;
+  static constexpr uint8_t MAX_SIZE_SLOTS = TextBlock::MAX_WORD_FONTS + 1;
+  float sizeSlotScales[MAX_SIZE_SLOTS] = {1.0f};
+  int32_t sizeSlotFontIds[MAX_SIZE_SLOTS] = {};
+  uint8_t sizeSlotCount = 1;
+  int wordFontId(size_t wordIndex, int blockFontId) const;
   std::vector<std::string> linkTargets;
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
   // uint16_t deltas from a shared base to keep this layout-only metadata small.
@@ -66,6 +76,7 @@ class ParsedText {
   bool isNaturalAlign;
   bool hasRtlWord;
   bool droppedWords = false;
+  int linesAfterCurrent = -1;
   bool firstLineConsumed = false;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
@@ -113,7 +124,7 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
-               uint32_t visibleTextOffset = 0, uint8_t linkId = 0);
+               uint32_t visibleTextOffset = 0, uint8_t linkId = 0, uint8_t sizeSlot = 0, bool noSpaceBefore = false);
   uint8_t addLinkTarget(const char* href);
   bool linkTargetMatches(uint8_t linkId, const char* href) const;
   void setRubyForWordAt(size_t index, const std::string& ruby);
@@ -123,6 +134,8 @@ class ParsedText {
   }
   std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
   void ensureRubyCapacity();
+  void suppressFirstLineIndent() { firstLineConsumed = true; }
+  void resetFirstLineIndent() { firstLineConsumed = false; }
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
@@ -130,8 +143,16 @@ class ParsedText {
   // True once any word was dropped because the text arena could not allocate.
   // Callers must treat the block as incomplete and fail the section build.
   bool hadDroppedWords() const { return droppedWords; }
+  // While a line is being handed to layoutAndExtractLines' callback: how many lines of the
+  // paragraph follow it, or -1 when the rest of the paragraph is not laid out yet.
+  int linesAfterCurrentLine() const { return linesAfterCurrent; }
+  // Slot for words at an absolute size; reuses a matching slot, or the nearest once all are taken.
+  uint8_t sizeSlotFor(float scale);
+  uint8_t sizeSlotsInUse() const { return sizeSlotCount; }
+  float sizeSlotScale(uint8_t slot) const { return sizeSlotScales[slot]; }
+  void setSizeSlotFontId(uint8_t slot, int32_t fontId) { sizeSlotFontIds[slot] = fontId; }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
-                             bool includeLastLine = true, int8_t characterSpacing = 0,
-                             uint8_t wordSpacingPercent = 100);
+                             bool includeLastLine = true, int8_t characterSpacing = 0, uint8_t wordSpacingPercent = 100,
+                             size_t maxLines = SIZE_MAX);
 };

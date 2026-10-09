@@ -96,6 +96,46 @@ inline bool utf8IsCjkCodepoint(const uint32_t cp) {
          || (cp >= 0x30000 && cp <= 0x323AF);  // CJK Extensions G-H
 }
 
+// Writes cp as UTF-8 (1-4 bytes, no terminator) and returns the position after it.
+inline char* utf8AppendCodepoint(char* output, const uint32_t codepoint) {
+  if (codepoint < 0x80) {
+    *output++ = static_cast<char>(codepoint);
+  } else if (codepoint < 0x800) {
+    *output++ = static_cast<char>(0xC0 | (codepoint >> 6));
+    *output++ = static_cast<char>(0x80 | (codepoint & 0x3F));
+  } else if (codepoint < 0x10000) {
+    *output++ = static_cast<char>(0xE0 | (codepoint >> 12));
+    *output++ = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+    *output++ = static_cast<char>(0x80 | (codepoint & 0x3F));
+  } else {
+    *output++ = static_cast<char>(0xF0 | (codepoint >> 18));
+    *output++ = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+    *output++ = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+    *output++ = static_cast<char>(0x80 | (codepoint & 0x3F));
+  }
+  return output;
+}
+
+// Uppercase partner of a lowercase Latin, Greek or Cyrillic letter; other codepoints are
+// returned unchanged. Used to synthesize small caps, so letters without a single-codepoint
+// uppercase form (e.g. U+00DF) stay as they are.
+inline uint32_t utf8SmallCapsUpper(const uint32_t cp) {
+  if (cp >= 'a' && cp <= 'z') return cp - 0x20;
+  if (cp < 0xE0) return cp;
+  if (cp <= 0xFE) return cp == 0xF7 ? cp : cp - 0x20;  // Latin-1 (skips the division sign)
+  if (cp == 0xFF) return 0x178;
+  if (cp <= 0x17F) {
+    // Latin Extended-A pairs: lowercase on odd codepoints, except the two odd-aligned runs.
+    const bool oddAligned = (cp >= 0x139 && cp <= 0x148) || (cp >= 0x179 && cp <= 0x17E);
+    if (cp == 0x131 || cp == 0x138 || cp == 0x149 || cp == 0x17F) return cp;
+    return (cp % 2 == (oddAligned ? 0u : 1u)) ? cp - 1 : cp;
+  }
+  if (cp >= 0x3B1 && cp <= 0x3C9) return cp == 0x3C2 ? 0x3A3 : cp - 0x20;  // Greek (final sigma -> Sigma)
+  if (cp >= 0x430 && cp <= 0x44F) return cp - 0x20;                        // Cyrillic
+  if (cp >= 0x450 && cp <= 0x45F) return cp - 0x50;
+  return cp;
+}
+
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.
 inline bool utf8IsCombiningMark(const uint32_t cp) {
   return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks

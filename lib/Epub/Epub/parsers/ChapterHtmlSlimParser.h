@@ -79,10 +79,19 @@ class ChapterHtmlSlimParser {
     CssTextAlign textAlign = CssTextAlign::Left;
     bool hasSup = false, sup = false;
     bool hasSub = false, sub = false;
+    bool hasSmallCaps = false, smallCaps = false;
+    bool hasWhiteSpace = false, preserveWhitespace = false;
+    // Inline font size: a multiple of the parent size, or of the body size when rem.
+    bool hasFontScale = false, fontScaleRem = false;
+    float fontScale = 1.0f;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
   CssStyle currentCssStyle;
+  // Open elements by depth, for descendant/child CSS selectors. Deeper elements
+  // resolve without ancestors, so contextual rules simply don't match there.
+  static constexpr size_t MAX_CSS_ANCESTORS = 16;
+  std::array<CssAncestor, MAX_CSS_ANCESTORS> cssAncestors{};
   bool effectiveBold = false;
   bool effectiveItalic = false;
   CssTextDecoration effectiveTextDecoration = CssTextDecoration::None;
@@ -92,19 +101,85 @@ class ChapterHtmlSlimParser {
   CssTextAlign effectiveTextAlign = CssTextAlign::Left;
   bool effectiveSup = false;
   bool effectiveSub = false;
+  bool effectiveSmallCaps = false;
+  bool effectivePreserveWhitespace = false;
+  bool pendingPageBreak = false;  // set when a page-break-after element closes
+
+  // Initial letter captured from a ::first-letter block or a leading float/initial-letter span,
+  // drawn as a PageDropCap when its block is laid out.
+  static constexpr size_t MAX_DROP_CAP_BYTES = 12;
+  struct DropCapState {
+    char text[MAX_DROP_CAP_BYTES + 1] = {};
+    uint8_t length = 0;
+    uint8_t codepoints = 0;
+    uint8_t lines = 0;  // text lines the letter spans
+    bool bold = false;
+    bool firstLetterPending = false;  // capture the current block's first letter
+    int spanDepth = -1;               // capturing the text of the span at this depth
+  } dropCap;
+
+  // Open elements with a CSS border or background shade. Each emits a PageBorderBox around
+  // its content on every page it spans.
+  struct BoxScope {
+    int depth = 0;
+    int16_t left = 0;
+    int16_t right = 0;
+    int16_t padTop = 0;  // outer edge to content, border included
+    int16_t padBottom = 0;
+    CssBorderSide sides[4];  // top, right, bottom, left
+    bool shaded = false;
+    int16_t top = -1;  // content extent on the current page
+    int16_t bottom = -1;
+    bool continued = false;  // sliced onto an earlier page
+  };
+  static constexpr size_t MAX_BOX_SCOPES = 8;
+
+  // Page-break carry-over: a paragraph's orphan/widow lines and a heading kept with what
+  // follows move to the next page instead of being left behind.
+  static constexpr size_t MAX_CARRIED_LINES = 6;
+  const ParsedText* layoutParagraph = nullptr;
+  bool layoutParagraphHasDropCap = false;
+  uint8_t paragraphLinesOnPage = 0;
+  uint8_t keepWithNextLines = 0;                       // trailing heading lines on this page
+  uint32_t recentLineOffsets[MAX_CARRIED_LINES] = {};  // visible offsets of this page's last lines, newest last
+  uint8_t recentLineCount = 0;
+  size_t linesToCarry(size_t& paragraphLines) const;
+  size_t keepWithNextCarry() const;
+  bool canCarry(size_t carry) const;
+  void breakPageCarryingLines(size_t carry, size_t paragraphLines, uint32_t visibleOffset);
+  std::vector<BoxScope> boxScopes;
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
-  static constexpr size_t MAX_GRID_TABLE_CELL_WORDS = 32;
-  static constexpr size_t MAX_GRID_TABLE_CELL_BYTES = 512;
+  // ponytail: buffer at most 160 tokens / 2 KB per row; larger rows use stacked flow.
+  static constexpr size_t MAX_GRID_TABLE_ROW_WORDS = 160;
+  static constexpr size_t MAX_GRID_TABLE_ROW_BYTES = 2048;
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
   bool tableRowRtl = false;
   uint16_t tableRowsSpannedRemaining = 0;
-  size_t tableCellTextBytes = 0;
+  size_t tableRowTextBytes = 0;
   std::vector<std::unique_ptr<ParsedText>> tableRowCells;
   std::array<std::vector<std::unique_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
   std::vector<uint32_t> tableLineVisibleOffsets;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
+  CssBorderSide tableBorder;        // grid lines for the current table; invisible when unbordered
+  // Column widths planned from a pre-scan of the table's markup; 0 columns = equal widths.
+  std::array<uint16_t, MAX_GRID_TABLE_COLUMNS> tableColumnWidths{};
+  uint8_t tableColumnCount = 0;
+  struct TableColumnMeasure {
+    uint16_t minWidth[MAX_GRID_TABLE_COLUMNS] = {};   // longest word
+    uint16_t prefWidth[MAX_GRID_TABLE_COLUMNS] = {};  // longest unwrapped line
+    uint8_t columns = 0;
+  };
+
+  // A font-size span that opens a block and holds all of its text sizes the whole block,
+  // e.g. <p><span class="big">Chapter One</span></p>. Text after the span cancels it.
+  struct InlineSizeState {
+    float scale = 1.0f;
+    int depth = -1;  // outermost sizing span
+    bool valid = false;
+    bool open = false;
+  } inlineSize;
 
   // Tracks the innermost open <ul>/<ol> so <li> knows whether to number itself,
   // bullet itself, or (list-style-type: none) emit no marker at all. Pushed on
@@ -163,20 +238,43 @@ class ChapterHtmlSlimParser {
   uint32_t parseStartTime_ = 0;
 
   void updateEffectiveInlineStyle();
-  void startNewTextBlock(const BlockStyle& blockStyle);
+  void startNewTextBlock(const BlockStyle& blockStyle, bool paragraphEnd = true);
   void flushPendingAnchor();
+  void completeCurrentPage();
+  void emitCurrentPage();
+  void noteContent(int top, int bottom);
+  void openBoxScope(BlockStyle& ownStyle, const CssStyle& cssStyle);
+  void closeBoxScope();
+  void emitBoxSegment(const BoxScope& box, bool closing);
+  void armFirstLetterDropCap(const char* tagName, const std::string& classAttr, const char* idAttr);
+  bool captureDropCapCodepoint(const char* bytes, int length);
+  void cancelDropCapToWord();
+  void layoutCurrentBlock(bool includeLastLine);
+  void layoutDropCapLines(int layoutFontId, uint16_t effectiveWidth,
+                          const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& emitLine,
+                          bool includeLastLine);
+  static uint8_t dropCapLines(const CssStyle& style);
+  bool measureTableColumns(HalFile& file, TableColumnMeasure& out) const;
+  void planTableColumns(const TableColumnMeasure& measure);
+  void applyPendingPageBreak();
+  void pushBlockStyle(const BlockStyle& accumulated);
   void flushPartWordBuffer();
+  void breakTextLine(const BlockStyle& style);
   void fallbackTableRowToStacked();
   void closeTableCell();
   void finishTableRow();
   void addTableRowSeparator();
   void setCurrentPageVisibleOffset(uint32_t offset);
-  void makePages(bool includeLastLine = true);
+  void makePages(bool includeLastLine = true, bool paragraphEnd = true);
+  void applyBlockFontScale(BlockStyle& blockStyle, const CssStyle& cssStyle, const char* tagName) const;
+  int fontIdForScale(float scale) const;
+  int prepareBlockFont();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
+  static void applyInlinePresentationToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css);
-  void pushTableTextStyleEntry(const CssStyle& cssStyle);
+  void pushBlockTextStyleEntry(const CssStyle& cssStyle);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);
   // XML callbacks

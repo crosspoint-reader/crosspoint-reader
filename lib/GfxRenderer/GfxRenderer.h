@@ -31,6 +31,16 @@ struct Frame;
 // 0 = transparent, 1-16 = gray levels (white to black)
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
 
+// Sized variants of the reader font (installed .cpfont sizes, vector faces), supplied by
+// the SD font system. resolve returns a font id registered with the renderer for `fontId`
+// scaled by `scale`, or 0 when there is none; load re-registers a previously resolved id
+// after it was evicted or the device rebooted, returning false when it cannot.
+struct FontVariantProvider {
+  void* ctx = nullptr;
+  int (*resolve)(void* ctx, int fontId, float scale) = nullptr;
+  bool (*load)(void* ctx, int fontId) = nullptr;
+};
+
 class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
@@ -104,6 +114,7 @@ class GfxRenderer {
   // appears at the same point size as the surrounding UI text. Populated by the
   // app-level SD font setup when an SD family is loaded. See resolveTextFontId().
   std::map<int, int> fallbackFontMap_;
+  FontVariantProvider fontVariantProvider_;
 
   // If `text` contains a CJK codepoint that `fontId` cannot render and `fontId`
   // has a registered fallback, returns the fallback id; otherwise returns
@@ -196,6 +207,17 @@ class GfxRenderer {
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
   void clearFallbackFonts() { fallbackFontMap_.clear(); }
+
+  void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
+  int resolveFontVariant(const int fontId, const float scale) const {
+    return fontVariantProvider_.resolve ? fontVariantProvider_.resolve(fontVariantProvider_.ctx, fontId, scale) : 0;
+  }
+  // True when fontId is registered, loading it through the variant provider if needed.
+  bool ensureFontLoaded(const int fontId) const {
+    if (fontMap.count(fontId) != 0) return true;
+    return fontVariantProvider_.load && fontVariantProvider_.load(fontVariantProvider_.ctx, fontId) &&
+           fontMap.count(fontId) != 0;
+  }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
@@ -334,6 +356,13 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
+  // Draws one glyph at scale256/256 of its size with its baseline at baselineY (drop caps).
+  // Outlines are bilinearly resampled from the font bitmap, so no larger font is loaded.
+  // Returns the scaled advance in pixels.
+  int drawScaledCodepoint(int fontId, uint32_t cp, EpdFontFamily::Style style, int x, int baselineY,
+                          int scale256) const;
+  // Unscaled metrics for laying out drawScaledCodepoint: advance (12.4 fixed point) and top bearing.
+  bool getCodepointMetrics(int fontId, uint32_t cp, EpdFontFamily::Style style, int32_t& advanceFP, int& top) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are

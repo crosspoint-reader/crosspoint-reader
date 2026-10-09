@@ -33,7 +33,9 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t x;
     int16_t y;
     int16_t width;
+    int16_t height;
     uint16_t row;
+    int fontId;  // the line's font; headings may use a larger size than the section font
     const char* text;
     EpdFontFamily::Style style;
   };
@@ -52,7 +54,6 @@ class DictionaryWordSelectActivity final : public Activity {
   const int marginLeft;
   const int marginTop;
   int fontId = 0;
-  int lineHeight = 0;
 
   std::vector<WordBox> words;
   int selected = 0;
