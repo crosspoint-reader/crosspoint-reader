@@ -12,11 +12,21 @@ bool AdvancedSettingsActivity::handleCustomInput() {
   return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
+int AdvancedSettingsActivity::listCount() const {
+  return SETTINGS.pluginsEnabled && SETTINGS.pluginHubPromptHidden ? 2 : 1;
+}
+
 void AdvancedSettingsActivity::activateIndex(const int index) {
-  if (index != 0 || optionPopup.isActive()) return;
-  nav.selected = 0;
+  if (optionPopup.isActive()) return;
   app.clearTapFlash();
 
+  if (index == 1 && listCount() == 2) {
+    restorePluginHubInstaller();
+    return;
+  }
+  if (index != 0) return;
+
+  nav.selected = 0;
   static constexpr StrId OPTIONS[] = {StrId::STR_ENABLED, StrId::STR_DISABLED, StrId::STR_CANCEL};
   const int current = SETTINGS.pluginsEnabled ? 0 : 1;
   optionPopup.show(StrId::STR_PLUGIN_SYSTEM, OPTIONS, 3, current, [this](const int selected) {
@@ -31,13 +41,19 @@ void AdvancedSettingsActivity::setPluginSystemEnabled(const bool enabled) {
   const bool changed = SETTINGS.pluginsEnabled != value;
   if (changed) {
     SETTINGS.pluginsEnabled = value;
-    if (enabled) SETTINGS.pluginHubPromptHidden = 0;
     SETTINGS.saveToFile();
   }
 
   // Rebuild immediately so disabling stops event delivery in this session and
   // enabling restores subscriptions without requiring a reboot.
   pluginevents::refreshSubscriptions();
+  requestUpdate();
+}
+
+void AdvancedSettingsActivity::restorePluginHubInstaller() {
+  SETTINGS.pluginHubPromptHidden = 0;
+  SETTINGS.saveToFile();
+  nav.selected = 0;
   requestUpdate();
 }
 
@@ -55,13 +71,20 @@ void AdvancedSettingsActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  row.label = tr(STR_PLUGIN_SYSTEM);
-  row.value = SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
-  row.actionValue = 0;
+  rows[0].label = tr(STR_PLUGIN_SYSTEM);
+  rows[0].value = SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
+  rows[0].actionValue = 0;
+
+  const int count = listCount();
+  if (count == 2) {
+    rows[1].label = tr(STR_RESTORE_PLUGIN_HUB_INSTALLER);
+    rows[1].value = "";
+    rows[1].actionValue = 1;
+  }
 
   fui::ListProps props;
-  props.items = &row;
-  props.count = 1;
+  props.items = rows;
+  props.count = count;
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;
   props.labelText = screen.theme().smallText;

@@ -3,8 +3,9 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <WiFi.h>
 
-#include <algorithm>
+#include <utility>
 
 #include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
@@ -24,11 +25,9 @@ PluginHubInstallActivity::PluginHubInstallActivity(GfxRenderer& renderer, Mapped
                                                    const bool showConfirmation)
     : CatalogActivity("PluginHubInstall", renderer, mappedInput), showConfirmation(showConfirmation) {}
 
-bool PluginHubInstallActivity::isInstalled() {
+bool PluginHubInstallActivity::isAvailable() {
   const std::string dir = PluginLocations::findPluginDirOnDisk("pluginhub");
-  if (dir.empty() || Storage.exists(PLUGIN_HUB_INSTALL_MARKER)) return false;
-  return std::all_of(std::begin(PLUGIN_HUB_FILES), std::end(PLUGIN_HUB_FILES),
-                     [&dir](const char* filename) { return Storage.exists((dir + "/" + filename).c_str()); });
+  return !dir.empty() && !PluginLocations::isPluginQuarantined(dir) && Storage.exists((dir + "/device.json").c_str());
 }
 
 void PluginHubInstallActivity::onEnter() {
@@ -123,6 +122,15 @@ void PluginHubInstallActivity::cleanupStagedFiles() {
     const std::string staged = pluginHubPath(filename) + ".new";
     Storage.remove(staged.c_str());
   }
+}
+
+void PluginHubInstallActivity::wifiSelectionCancelled() {
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
 }
 
 void PluginHubInstallActivity::downloadFinished(const bool cancelled) {

@@ -48,7 +48,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
 
-- **SD-card plugins**: Optional plugin support can be enabled from **Settings → System → Advanced → Plugin System**. Sideloaded plugins work independently of Plugin Hub; see the [User Guide](USER_GUIDE.md) and [SD-card plugin documentation](docs/sd-plugins.md).
+- **SD-card plugins**: Optional plugin support can be enabled from **Settings → System → Advanced → Plugin System**. Sideloaded plugins work independently of Plugin Hub; a hidden Hub installer can be restored from Advanced settings. See the [User Guide](USER_GUIDE.md) and [SD-card plugin documentation](docs/sd-plugins.md).
 
 ### Coming soon:
 

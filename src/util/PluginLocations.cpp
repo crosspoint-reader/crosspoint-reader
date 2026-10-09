@@ -39,7 +39,14 @@ std::vector<Entry> scanPluginsOnDisk() {
 
 std::vector<Entry> scanPlugins() {
   if (!SETTINGS.pluginsEnabled) return {};
-  return scanPluginsOnDisk();
+  auto plugins = scanPluginsOnDisk();
+  plugins.erase(std::remove_if(plugins.begin(), plugins.end(),
+                               [](const Entry& entry) {
+                                 return !isDiscoverableEntry(isPluginQuarantined(entry.dir), entry.hasPluginJs,
+                                                             entry.hasDevice, entry.hasManifest);
+                               }),
+                plugins.end());
+  return plugins;
 }
 
 bool anyPluginInstalledOnDisk() {
@@ -68,9 +75,13 @@ std::string findPluginDirOnDisk(const char* name) {
   return {};
 }
 
+bool isPluginQuarantined(const std::string& dir) { return Storage.exists((dir + "/" + INSTALL_MARKER).c_str()); }
+
 std::string findPluginDir(const char* name) {
   if (!SETTINGS.pluginsEnabled) return {};
-  return findPluginDirOnDisk(name);
+  const std::string dir = findPluginDirOnDisk(name);
+  if (dir.empty() || isPluginQuarantined(dir)) return {};
+  return dir;
 }
 
 }  // namespace PluginLocations

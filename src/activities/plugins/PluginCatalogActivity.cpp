@@ -358,16 +358,8 @@ void PluginCatalogActivity::onEnter() {
 void PluginCatalogActivity::enterPluginPicker() {
   Storage.remove(BROWSE_TMP_PATH);
   installedPlugins = discoverPlugins();
-  pluginHubInstalled = PluginHubInstallActivity::isInstalled();
-  showPluginHubInstallRow = !pluginHubInstalled && !SETTINGS.pluginHubPromptHidden;
-  if (!pluginHubInstalled) {
-    // Hide an incomplete/interrupted Hub install and expose the synthetic install
-    // row instead. A complete Hub remains a normal discovered plugin entry.
-    installedPlugins.erase(
-        std::remove_if(installedPlugins.begin(), installedPlugins.end(),
-                       [](const PluginRef& plugin) { return strcasecmp(plugin.name.c_str(), "pluginhub") == 0; }),
-        installedPlugins.end());
-  }
+  pluginHubAvailable = PluginHubInstallActivity::isAvailable();
+  showPluginHubInstallRow = !pluginHubAvailable && !SETTINGS.pluginHubPromptHidden;
   // Discovery just re-read the plugin folders; keep the event subscription
   // table in step so a plugin installed since boot starts receiving events
   // (and a removed one stops) without a restart.
@@ -959,6 +951,13 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 
 // Sign-in and completion states precede the shared catalog input handling.
 bool PluginCatalogActivity::handleCustomInput() {
+  if (ignoreHubInstallerBackRelease) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      ignoreHubInstallerBackRelease = false;
+      return true;
+    }
+    if (!mappedInput.isPressed(MappedInputManager::Button::Back)) ignoreHubInstallerBackRelease = false;
+  }
   if (pluginHubPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
 
   if (state == State::AUTH) {
@@ -1070,7 +1069,11 @@ void PluginCatalogActivity::activateIndex(const int index) {
             LOG_ERR("PCAT", "OOM: Plugin Hub installer");
             return;
           }
-          startActivityForResult(std::move(installer), [this](const ActivityResult&) { enterPluginPicker(); });
+          startActivityForResult(std::move(installer), [this](const ActivityResult& result) {
+            ignoreHubInstallerBackRelease =
+                result.isCancelled && mappedInput.isPressed(MappedInputManager::Button::Back);
+            enterPluginPicker();
+          });
         } else if (selected == 1) {
           SETTINGS.pluginHubPromptHidden = 1;
           SETTINGS.saveToFile();

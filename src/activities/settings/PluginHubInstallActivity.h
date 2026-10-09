@@ -7,7 +7,7 @@ class PluginHubInstallActivity final : public CatalogActivity {
   explicit PluginHubInstallActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                     bool showConfirmation = true);
 
-  static bool isInstalled();
+  static bool isAvailable();
   void onEnter() override;
 
  private:
@@ -23,6 +23,7 @@ class PluginHubInstallActivity final : public CatalogActivity {
   void retryBrowse() override { startBrowse(); }
   void performSearch(const std::string&) override {}
   void downloadFinished(bool cancelled) override;
+  void wifiSelectionCancelled() override;
 
   HttpDownloader::DownloadError installPluginHub();
   static void cleanupStagedFiles();

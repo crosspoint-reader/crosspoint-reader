@@ -31,6 +31,13 @@ first two-dot-free options exist so plugins are easy to copy onto the card
 from a computer. All three roots are scanned; on a name collision the earlier
 root in that order wins.
 
+During firmware-managed plugin installation, a plugin directory may contain a
+`.installing` marker. Normal plugin discovery and file resolution quarantine that
+directory until the transaction completes, even if `manifest.json`, `plugin.js`,
+or `device.json` is already present. Raw on-disk probes used for migration and
+installer recovery can still see the directory. The marker describes transaction
+state; it does not change the normal plugin validity contract once removed.
+
 ### Enabling plugins and Plugin Hub
 
 The **Plugin System** switch is the global gate for SD-card plugin discovery and
@@ -40,19 +47,26 @@ not silently disable an existing setup. Turning the Plugin System off does not
 delete or rename any plugin files; turning it back on makes them discoverable
 again.
 
-Plugin Hub is optional and is not required for sideloaded plugins. When the
-Plugin System is enabled and Plugin Hub is not installed, **Home → Plugins**
-contains a synthetic **Plugin Hub — Download, discover, and update plugins**
-entry. Selecting it offers:
+Plugin Hub is optional and is not required for sideloaded plugins. The native
+Hub is considered available when the first matching `pluginhub` directory has a
+`device.json` and is not quarantined by `.installing`; `manifest.json`,
+`plugin.js`, and `README.md` are not required for native availability. When the
+Plugin System is enabled, no native Hub is available, and the installer has not
+been hidden, **Home → Plugins** contains a synthetic **Plugin Hub — Download,
+discover, and update plugins** entry. Selecting it offers:
 
-- **Install** — download and install Plugin Hub over Wi-Fi.
+- **Install** — download and install Plugin Hub over Wi-Fi. Backing out of the
+  Wi-Fi selector cancels installation, turns Wi-Fi back off, and returns to the
+  Plugins picker without changing the Hide preference.
 - **Hide** — hide only the synthetic Plugin Hub install entry. Installed and
   sideloaded plugins continue to work normally.
 - **Cancel** — leave the entry visible and make no changes.
 
-A hidden Plugin Hub entry can be restored by cycling **Settings → System →
-Advanced → Plugin System** from **Disabled** back to **Enabled**. If Plugin Hub
-is still absent, its install entry reappears under **Home → Plugins**.
+The **Hide** preference persists across reboots and Plugin System disable/enable
+cycles. While the Plugin System is enabled and the Hub installer is hidden,
+**Settings → System → Advanced** shows **Restore Plugin Hub installer**. Selecting
+it clears only the hidden preference; installed and sideloaded plugins are not
+restarted or changed.
 
 For users who prefer manual installation, Plugin Hub can be downloaded directly
 from <https://github.com/jadehawk/PluginHub.crosspoint-plugin/releases>. Copy or
