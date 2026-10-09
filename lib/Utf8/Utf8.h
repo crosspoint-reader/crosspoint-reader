@@ -18,7 +18,9 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 // because the device fonts have no combining-mark positioning and carry only
 // precomposed Hangul syllables, so NFD text (some EPUB chapter titles; every
 // filename written by macOS) otherwise renders broken or blank.
-std::string utf8ComposeNfc(const std::string& in);
+// Report absorbed input codepoint positions when requested; return empty if the callback fails.
+std::string utf8ComposeNfc(const std::string& in, bool (*onAbsorbed)(uint32_t, void*) = nullptr,
+                           void* context = nullptr);
 
 // Compose a null-terminated display buffer without allocating or growing it.
 // Uncomposed bytes (including malformed UTF-8) are preserved unchanged.

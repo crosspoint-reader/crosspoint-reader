@@ -21,6 +21,7 @@
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "clippings/ClippingSync.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"  // list icons for the compare rows
 #include "fontIds.h"
@@ -155,6 +156,23 @@ void KOReaderSyncActivity::performSync() {
   const std::string primaryHash = documentHash;
 
   LOG_DBG("KOSync", "Document hash (%s): %s", matchMethodName(primaryMethod), documentHash.c_str());
+
+  if (KOREADER_STORE.getSyncClippings()) {
+    {
+      RenderLock lock(*this);
+      statusMessage = tr(STR_SYNCING_CLIPPINGS);
+    }
+    requestUpdateAndWait();
+    if (!clippingSync::run(epubPath, documentHash)) {
+      {
+        RenderLock lock(*this);
+        state = SYNC_FAILED;
+        statusMessage = tr(STR_CLIPPING_SYNC_FAILED);
+      }
+      requestUpdate(true);
+      return;
+    }
+  }
 
   {
     RenderLock lock(*this);
@@ -316,10 +334,9 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
 
-  // Rich CrossPoint position for the default CrossPoint sync server (lossless
-  // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
-  // before serializing the extension.
-  if (KOREADER_STORE.usesCrossPointSyncServer()) {
+  // Rich position for server profiles that explicitly support the CrossPoint extension.
+  // The HTTP client enforces the same boundary before serializing the extension.
+  if (KOREADER_STORE.supportsRichProgress()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f
@@ -348,6 +365,17 @@ void KOReaderSyncActivity::performUpload() {
     if (epub) {
       meta.title = epub->getTitle();
       meta.authors = epub->getAuthor();
+      if (KOREADER_STORE.supportsExtendedMetadata()) {
+        Epub::SyncMetadata syncMetadata;
+        if (epub->loadSyncMetadata(syncMetadata)) {
+          meta.isbn = std::move(syncMetadata.isbn);
+          meta.asin = std::move(syncMetadata.asin);
+          meta.series = std::move(syncMetadata.series);
+          meta.seriesIndex = syncMetadata.seriesIndex;
+        } else {
+          LOG_DBG("KOSync", "Could not read extended EPUB metadata; sending core metadata only");
+        }
+      }
     } else {
       LOG_ERR("KOSync", "Epub unavailable for metadata; sending filename only");
     }
