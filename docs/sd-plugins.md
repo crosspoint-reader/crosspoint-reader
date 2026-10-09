@@ -31,6 +31,13 @@ first two-dot-free options exist so plugins are easy to copy onto the card
 from a computer. All three roots are scanned; on a name collision the earlier
 root in that order wins.
 
+For bundle installs that target one of those plugin roots with a single direct
+folder name, firmware first reuses an existing same-named plugin directory from
+any supported root. This keeps updates in place with their local settings and
+tokens. If no installed copy exists, the bundle uses its configured destination
+root as before. Nested bundle subdirectories and non-plugin destinations are
+unchanged.
+
 During firmware-managed plugin installation, a plugin directory may contain a
 `.installing` marker. Normal plugin discovery and file resolution quarantine that
 directory until the transaction completes, even if `manifest.json`, `plugin.js`,

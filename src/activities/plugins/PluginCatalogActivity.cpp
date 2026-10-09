@@ -790,11 +790,24 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   if (subdir.empty() || subdir.find("..") != std::string::npos || subdir.front() == '/') {
     return HttpDownloader::FILE_ERROR;
   }
-  std::string dir = downloadDir();
-  if (!dir.empty() && dir.back() == '/') dir.pop_back();
-  dir += '/';
-  dir += subdir;
-  if (!Storage.exists(dir.c_str()) && !Storage.mkdir(dir.c_str())) {
+  std::string root = downloadDir();
+  if (!root.empty() && root.back() == '/') root.pop_back();
+  std::string dir;
+  if (PluginLocations::shouldReuseInstalledBundleDir(root, subdir)) {
+    dir = PluginLocations::findPluginDir(subdir.c_str());
+  }
+  if (dir.empty()) {
+    dir = root;
+    dir += '/';
+    dir += subdir;
+  }
+  if (Storage.exists(dir.c_str())) {
+    HalFile target = Storage.open(dir.c_str());
+    if (!target || !target.isDirectory()) {
+      LOG_ERR("PCAT", "bundle target is not a directory: %s", dir.c_str());
+      return HttpDownloader::FILE_ERROR;
+    }
+  } else if (!Storage.mkdir(dir.c_str())) {
     LOG_ERR("PCAT", "bundle mkdir failed: %s", dir.c_str());
     return HttpDownloader::FILE_ERROR;
   }
