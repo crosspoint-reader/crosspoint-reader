@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -31,10 +32,28 @@ constexpr int SIDE_PADDING = 20;
 // path, which holds no per-page copies.
 constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
 
+constexpr unsigned long POPUP_DURATION_MS = 1500;
+
+StrId readFailureMessage(const Dictionary::LookupResult result) {
+  switch (result) {
+    case Dictionary::LookupResult::LowMemory:
+      return StrId::STR_DICT_LOW_MEMORY;
+    case Dictionary::LookupResult::Decompress:
+      return StrId::STR_DICT_DECOMPRESS_ERROR;
+    default:
+      return StrId::STR_DICT_READ_FAILED;
+  }
+}
+
 }  // namespace
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  layoutDefinition();
+  requestUpdate();
+}
+
+void DictionaryDefinitionActivity::layoutDefinition() {
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
@@ -42,6 +61,36 @@ void DictionaryDefinitionActivity::onEnter() {
     definition = htmlToPlainText(definition);
     wrapText();
   }
+}
+
+// Swap to entries[index]. The current layout is freed before reading so only
+// one definition is resident; if the new one can't be read, the entry that was
+// showing is re-read (it read fine moments ago) and an error popup explains.
+void DictionaryDefinitionActivity::showEntry(const size_t index) {
+  RenderLock lock;  // the render task draws from pages/lines/definition
+  pages.clear();
+  pages.shrink_to_fit();
+  lines.clear();
+  lines.shrink_to_fit();
+  definition.clear();
+  definition.shrink_to_fit();
+
+  Dictionary::LookupResult result = Dictionary::LookupResult::Found;
+  if (dict->readEntry(entries[index], definition, &result)) {
+    entryIndex = index;
+  } else {
+    LOG_ERR("DICT", "Failed to read entry %u of %u", static_cast<unsigned>(index + 1),
+            static_cast<unsigned>(entries.size()));
+    if (!dict->readEntry(entries[entryIndex], definition)) {
+      finish();
+      return;
+    }
+    popupMsg = readFailureMessage(result);
+    popupTime = millis();
+    popupVisible = true;
+  }
+  headword = entries[entryIndex].headword;
+  layoutDefinition();
   requestUpdate();
 }
 
@@ -199,17 +248,35 @@ void DictionaryDefinitionActivity::wrapText() {
 }
 
 void DictionaryDefinitionActivity::loop() {
+  if (popupVisible && millis() - popupTime >= POPUP_DURATION_MS) {
+    popupVisible = false;
+    requestUpdate();
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return;
   }
 
+  if (hasMultipleEntries() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    showEntry((entryIndex + 1) % entries.size());
+    return;
+  }
+
   // Same tap zones as the reader page turns: left third = previous page,
-  // the rest = next. Back is the usual left-edge swipe.
+  // the rest = next. Back is the usual left-edge swipe. A tap on the header
+  // (headword and entry counter) moves to the next entry.
   int tx = 0;
   int ty = 0;
   if (mappedInput.wasScreenTapped(tx, ty)) {
-    if (tx < renderer.getScreenWidth() / 3) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int headerBottom =
+        (renderer.getOrientation() == GfxRenderer::Orientation::PortraitInverted ? metrics.buttonHintsHeight : 0) +
+        metrics.topPadding + metrics.headerHeight;
+    if (hasMultipleEntries() && ty < headerBottom) {
+      haptic_feedback::touchAction();
+      showEntry((entryIndex + 1) % entries.size());
+    } else if (tx < renderer.getScreenWidth() / 3) {
       if (currentPage > 0) {
         haptic_feedback::touchAction();
         currentPage--;
@@ -273,9 +340,19 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
   const int contentY = isInverted ? metrics.buttonHintsHeight : 0;
 
-  // Header: matched headword left, page counter right.
+  // Header: matched headword left (with "(2/3)" when the lookup matched
+  // several entries), page counter right.
   const int headerY = contentY + metrics.topPadding + 10;
   renderer.drawText(UI_12_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true, EpdFontFamily::BOLD);
+  if (hasMultipleEntries()) {
+    char entryCounter[16];
+    snprintf(entryCounter, sizeof(entryCounter), "(%u/%u)", static_cast<unsigned>(entryIndex + 1),
+             static_cast<unsigned>(entries.size()));
+    const int headwordWidth = renderer.getTextWidth(UI_12_FONT_ID, headword.c_str(), EpdFontFamily::BOLD);
+    const int baselineShift = renderer.getFontAscenderSize(UI_12_FONT_ID) - renderer.getFontAscenderSize(UI_10_FONT_ID);
+    renderer.drawText(UI_10_FONT_ID, contentX + SIDE_PADDING + headwordWidth + 8, headerY + baselineShift,
+                      entryCounter);
+  }
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
@@ -294,8 +371,15 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), hasMultipleEntries() ? tr(STR_DICT_NEXT_ENTRY) : "",
+                                            (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (popupVisible) {
+    // drawPopup overlays the framebuffer and refreshes the display itself.
+    // I18N.get directly: tr() only accepts literal key names.
+    GUI.drawPopup(renderer, I18N.get(popupMsg));
+    return;
+  }
   renderer.displayBuffer();
 }

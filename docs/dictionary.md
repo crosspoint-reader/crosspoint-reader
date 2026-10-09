@@ -52,6 +52,8 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 
 When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions.
 
+Some dictionaries have more than one entry for the same word, such as a common word and a proper noun that differ only in case (`husk` and the surname `Husk`), or a word listed twice. When the lookup matches several entries, the header shows which one you are viewing (e.g. `(1/2)`) and **Confirm** (labelled **Next**) moves to the next entry; on touch devices, tapping the header does the same. The entry whose case matches the word on the page comes first, then lowercase entries, so a lowercase `husk` in the text opens the common noun.
+
 HTML dictionaries that declare `sametypesequence=h` use the EPUB text-layout engine for semantic formatting such as headings, bold, italics, lists, and line breaks. Images and CSS styling are ignored. Definitions that are too large or cannot be laid out within the available memory fall back to plain text.
 
 - **Left/Right** or side **Up/Down** — previous / next page

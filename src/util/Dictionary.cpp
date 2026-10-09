@@ -8,7 +8,9 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 
+#include "DictWordUtils.h"
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
@@ -60,9 +62,28 @@ uint32_t readBe32(const uint8_t* p) {
          (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
 }
 
-// Word characters for cleaning: ASCII alphanumerics plus any UTF-8
-// continuation/lead byte, so accented words keep their edges.
-bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
+// Add an entry unless it is already present (a .syn can list the same
+// synonym→headword pair twice). Once the list is full, a better-ranked entry
+// for textWord replaces the latest worst-ranked one, so the closest matches
+// survive however many equivalent headwords the index holds. Entries stay in
+// index order.
+void appendEntry(std::vector<Dictionary::Entry>& out, const char* textWord, const char* headword, uint32_t offset,
+                 uint32_t size) {
+  if (std::any_of(out.begin(), out.end(),
+                  [offset, size](const Dictionary::Entry& e) { return e.offset == offset && e.size == size; })) {
+    return;
+  }
+  if (out.size() >= Dictionary::MAX_ENTRIES) {
+    const auto rankOf = [textWord](const Dictionary::Entry& e) {
+      return DictWordUtils::headwordRank(e.headword.c_str(), textWord);
+    };
+    const auto worst = std::max_element(out.rbegin(), out.rend(),
+                                        [&rankOf](const auto& a, const auto& b) { return rankOf(a) < rankOf(b); });
+    if (DictWordUtils::headwordRank(headword, textWord) >= rankOf(*worst)) return;
+    out.erase(std::next(worst).base());
+  }
+  out.push_back({headword, offset, size});
+}
 
 // Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
 // headers are tiny and both keys always appear early when present.
@@ -371,7 +392,7 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
       lo = 0;  // unreadable sample: abandon the descent and scan from the start
       break;
     }
-    if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+    if (StringUtils::asciiCaseCmp(wordBuf, target) < 0) {
       lo = mid;
     } else {
       hi = mid - 1;
@@ -383,21 +404,19 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
 
 // Both files stay open across the stem-variant probes; every read below seeks
 // absolutely first, so a shared handle carries no position state between calls.
-DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
-  DictLocation result;
-
-  // Bisect the sampled offsets to the last sample whose headword <= target.
+bool Dictionary::locate(LookupSession& session, const char* target, std::vector<Entry>& out) {
+  // Bisect the sampled offsets to the last sample whose headword < target.
   const uint32_t startByte = bisectSamples(session.qidx, session.idx, session.sampleCount, target);
 
-  // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
-  // BE32 size. The index is sorted, so stop at the first headword > target.
+  // Linear scan of at most SAMPLE_INTERVAL entries to the first match: headword
+  // NUL, BE32 offset, BE32 size. The index is sorted, so collect the adjacent
+  // matches and stop at the first headword > target.
   if (!session.idx.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
-    result.readError = true;
-    return result;
+    return false;
   }
   while (static_cast<uint32_t>(session.idx.position()) < session.idxSize) {
-    // Not flagged as readError: readWordInto returns -1 for EOF and IO error
+    // Not flagged as a read error: readWordInto returns -1 for EOF and IO error
     // alike, so a short tail can't be told from a truncated .idx. Treat it as
     // the end of the index rather than risk reporting a read failure for what
     // is really a miss.
@@ -406,21 +425,13 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
     if (session.idx.read(suffix, 8) != 8) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) {
-      result.offset = readBe32(suffix);
-      result.size = readBe32(suffix + 4);
-      result.found = true;
-      if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-      return result;
-    }
+    if (cmp == 0) appendEntry(out, session.textWord, wordBuf, readBe32(suffix), readBe32(suffix + 4));
     if (cmp > 0) break;
   }
-  return result;
+  return true;
 }
 
-DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut) {
-  DictLocation result;
-
+bool Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::vector<Entry>& out) {
   // The .qidx samples are taken at fixed entry-count boundaries (every
   // SAMPLE_INTERVAL entries), so sample (ordinal / SAMPLE_INTERVAL) lands on
   // entry (ordinal / SAMPLE_INTERVAL) * SAMPLE_INTERVAL; scan forward the
@@ -428,7 +439,7 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
   uint32_t startByte = 0;
   uint32_t startOrdinal = 0;
   if (session.sampleCount > 0) {
-    if (session.entryCount != 0 && ordinal >= session.entryCount) return result;  // out of range
+    if (session.entryCount != 0 && ordinal >= session.entryCount) return true;  // out of range
     uint32_t sampleIndex = ordinal / SAMPLE_INTERVAL;
     if (sampleIndex >= session.sampleCount) sampleIndex = session.sampleCount - 1;
     if (readSampleOffset(session.qidx, sampleIndex, &startByte)) {
@@ -442,41 +453,33 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
   // guarding against EOF for a malformed .syn ordinal past the last entry.
   if (!session.idx.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
-    result.readError = true;
-    return result;
+    return false;
   }
   uint8_t suffix[8];
   for (uint32_t e = startOrdinal; e < ordinal; e++) {
-    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
-    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;  // ordinal past last entry
+    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return true;
+    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return true;  // ordinal past last entry
   }
-  if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;
-  if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
-  result.offset = readBe32(suffix);
-  result.size = readBe32(suffix + 4);
-  result.found = true;
-  if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-  return result;
+  if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return true;
+  if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return true;
+  appendEntry(out, session.textWord, wordBuf, readBe32(suffix), readBe32(suffix + 4));
+  return true;
 }
 
-DictLocation Dictionary::locateSynonym(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
-  DictLocation result;
-  if (!openSynonyms(session)) {
-    result.readError = session.synFailed;  // false when there is simply no .syn
-    return result;
-  }
+bool Dictionary::locateSynonym(LookupSession& session, const char* target, std::vector<Entry>& out) {
+  if (!openSynonyms(session)) return !session.synFailed;  // no .syn is a miss, not a failure
 
-  // Bisect the sampled offsets to the last synonym <= target, same descent
+  // Bisect the sampled offsets to the last synonym < target, same descent
   // locate() runs over .qidx/.idx.
   const uint32_t startByte = bisectSamples(session.sidx, session.syn, session.synSampleCount, target);
 
-  // Linear scan of at most SAMPLE_INTERVAL entries: synonym NUL, BE32 ordinal.
-  // Sorted, so stop at the first synonym > target. Reading the ordinal before
-  // calling locateByOrdinal() (which reuses wordBuf) avoids any aliasing.
+  // Linear scan of at most SAMPLE_INTERVAL entries to the first match: synonym
+  // NUL, BE32 ordinal. Sorted, so stop at the first synonym > target. The
+  // comparison is done before locateByOrdinal() reuses wordBuf, and the next
+  // iteration re-reads it from .syn, so the aliasing is harmless.
   if (!session.syn.seekSet(startByte)) {
     LOG_ERR("DICT", "Synonym seek to %lu failed", static_cast<unsigned long>(startByte));
-    result.readError = true;
-    return result;
+    return false;
   }
   while (static_cast<uint32_t>(session.syn.position()) < session.synSize) {
     if (readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) break;
@@ -484,19 +487,19 @@ DictLocation Dictionary::locateSynonym(LookupSession& session, const char* targe
     if (session.syn.read(ordBytes, 4) != 4) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) return locateByOrdinal(session, readBe32(ordBytes), matchedHeadwordOut);
     if (cmp > 0) break;
+    if (cmp == 0 && !locateByOrdinal(session, readBe32(ordBytes), out)) return false;
   }
-  return result;
+  return true;
 }
 
-bool Dictionary::readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult) {
+bool Dictionary::readEntry(const Entry& entry, std::string& out, LookupResult* outResult) {
   const auto fail = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
     return false;
   };
-  if (!location.found) return fail(LookupResult::NotFound);
-  const uint32_t size = std::min(location.size, MAX_DEFINITION_BYTES);
+  if (!isOpen()) return fail(LookupResult::ReadError);
+  const uint32_t size = std::min(entry.size, MAX_DEFINITION_BYTES);
   if (size == 0) {
     LOG_ERR("DICT", "Zero-length definition entry");
     return fail(LookupResult::ReadError);
@@ -515,7 +518,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
   uint32_t offset = 0;
   if (hasPlainDict) {
     if (!buildPath(pathBuf, sizeof(pathBuf), ".dict")) return fail(LookupResult::ReadError);
-    offset = location.offset;
+    offset = entry.offset;
   } else {
     if (!buildPath(pathBuf, sizeof(pathBuf), ".dict.dz")) return fail(LookupResult::ReadError);
     HalFile tmp = Storage.open(DICT_TMP_FILE, O_WRITE | O_CREAT | O_TRUNC);
@@ -524,7 +527,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
       return fail(LookupResult::ReadError);
     }
     DictZip::ExtractError xerr = DictZip::ExtractError::None;
-    if (!DictZip::extractEntry(pathBuf, location.offset, size, tmp, &xerr)) {
+    if (!DictZip::extractEntry(pathBuf, entry.offset, size, tmp, &xerr)) {
       // Map the specific extraction cause to the lookup result: allocation
       // failure (heap fragmentation) vs corrupt/truncated .dz vs an IO error.
       LOG_ERR("DICT", "dictzip extraction failed for %s (error %d)", basePath.c_str(), static_cast<int>(xerr));
@@ -562,36 +565,12 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     out.clear();
     return fail(LookupResult::ReadError);
   }
+  if (outResult) *outResult = LookupResult::Found;
   return true;
 }
 
 std::string Dictionary::cleanWord(const char* word) {
-  if (!word) return "";
-  const auto* b = reinterpret_cast<const unsigned char*>(word);
-  size_t start = 0;
-  size_t end = strlen(word);
-  // Curly quotes and dashes (General Punctuation U+2000-U+206F = E2 80/81 xx)
-  // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
-  // from the edges too, or EPUB text like garage.” never matches a headword.
-  while (start < end) {
-    if (!isWordByte(b[start]))
-      start++;
-    else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
-      start += 3;
-    else
-      break;
-  }
-  while (end > start) {
-    if (!isWordByte(b[end - 1]))
-      end--;
-    else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
-      end -= 3;
-    else
-      break;
-  }
-  if (start >= end) return "";
-
-  std::string result(word + start, end - start);
+  std::string result = DictWordUtils::trimWordEdges(word);
   std::transform(result.begin(), result.end(), result.begin(),
                  [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
   return result;
@@ -627,22 +606,23 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
   }
 }
 
-bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-                        LookupResult* outResult) {
+bool Dictionary::lookup(const char* word, std::vector<Entry>& entriesOut, LookupResult* outResult) {
   const auto setResult = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
   };
   setResult(LookupResult::NotFound);
+  entriesOut.clear();
   const std::string cleaned = cleanWord(word);
+  const std::string textWord = DictWordUtils::trimWordEdges(word);
   if (cleaned.empty() || !isOpen()) return false;
+  entriesOut.reserve(MAX_ENTRIES);
 
   // One set of open handles for the exact-match probe, the synonym probe and
-  // every stem variant, scoped so .idx/.qidx (and .syn/.sidx) close before
-  // readDefinition() opens the data file.
-  DictLocation location;
+  // every stem variant.
   bool searchFailed = false;
   {
     LookupSession session;
+    session.textWord = textWord.c_str();
     // Couldn't open .idx: the search never reached a verdict, so this is a read
     // failure, not a miss.
     if (!openSession(session)) {
@@ -650,39 +630,34 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       return false;
     }
 
-    location = locate(session, cleaned.c_str(), &matchedHeadwordOut);
-    searchFailed = location.readError;
+    searchFailed = !locate(session, cleaned.c_str(), entriesOut);
 
     // Dictionary-authored synonyms (alternate spellings, irregular forms) take
     // precedence over the English-only stemmer, and are language-agnostic.
-    if (!location.found && hasSyn) {
-      location = locateSynonym(session, cleaned.c_str(), &matchedHeadwordOut);
-      searchFailed = searchFailed || location.readError;
+    if (entriesOut.empty() && hasSyn) {
+      searchFailed = !locateSynonym(session, cleaned.c_str(), entriesOut) || searchFailed;
     }
 
-    if (!location.found) {
+    if (entriesOut.empty()) {
       std::vector<std::string> variants;
       stemVariants(cleaned, variants);
       for (const auto& variant : variants) {
-        location = locate(session, variant.c_str(), &matchedHeadwordOut);
-        searchFailed = searchFailed || location.readError;
-        if (location.found) break;
+        searchFailed = !locate(session, variant.c_str(), entriesOut) || searchFailed;
+        if (!entriesOut.empty()) break;
       }
     }
   }
-  if (!location.found) {
+  if (entriesOut.empty()) {
     // A search that never reached a verdict (couldn't open or seek .idx) is a
-    // read failure, not a miss — reporting "Not found" is the bug this PR exists
-    // for. Otherwise the word is genuinely not in the dictionary.
+    // read failure, not a miss.
     if (searchFailed) setResult(LookupResult::ReadError);
     return false;
   }
 
-  // Found in the index — propagate the precise failure reason from readDefinition
-  // (decompression / low memory / read error) so the caller can name it.
-  if (readDefinition(location, definitionOut, outResult)) {
-    setResult(LookupResult::Found);
-    return true;
-  }
-  return false;
+  std::stable_sort(entriesOut.begin(), entriesOut.end(), [&textWord](const Entry& a, const Entry& b) {
+    return DictWordUtils::headwordRank(a.headword.c_str(), textWord.c_str()) <
+           DictWordUtils::headwordRank(b.headword.c_str(), textWord.c_str());
+  });
+  setResult(LookupResult::Found);
+  return true;
 }

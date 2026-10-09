@@ -173,17 +173,29 @@ void DictionaryWordSelectActivity::performLookup() {
     dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
   }
 
+  std::vector<Dictionary::Entry> entries;
   std::string definition;
-  std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  bool found = false;
+  if (ok && dict.lookup(words[selected].text, entries, &result)) {
+    // Open on the first entry that reads, so one damaged entry doesn't hide the
+    // rest. A low-memory failure would fail again for every entry, so stop there.
+    auto readable = entries.begin();
+    while (readable != entries.end() && !dict.readEntry(*readable, definition, &result) &&
+           result != Dictionary::LookupResult::LowMemory) {
+      ++readable;
+    }
+    found = readable != entries.end() && result == Dictionary::LookupResult::Found;
+    if (found) entries.erase(entries.begin(), readable);
+  }
 
   if (found) {
     popup = Popup::None;
-    startActivityForResult(
-        std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                       std::move(definition), dict.definitionsAreHtml()),
-        [this](const ActivityResult&) { requestUpdate(); });
+    std::string headword = entries[0].headword;
+    startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
+                               renderer, mappedInput, std::move(headword), std::move(definition),
+                               dict.definitionsAreHtml(), &dict, std::move(entries)),
+                           [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
   // Name the failure: a genuine miss is "Not found"; a word that WAS found but

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Epub/Page.h>
+#include <I18n.h>
 
 #include <cstdint>
 #include <memory>
@@ -9,19 +10,29 @@
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
 
 // Paged viewer for one dictionary definition. HTML definitions are laid out
 // through the EPUB chapter parser into styled Pages; anything else (plain
 // text, or HTML too damaged to parse) is word-wrapped once on entry and each
 // page renders spans of the original string, so no per-line copies are held.
+//
+// When a lookup matched several entries (e.g. "laconic" and "Laconic"), pass
+// the dictionary and the entries: `definition` is entries[0]'s text and
+// Confirm cycles through the rest, reading each from the dictionary on demand
+// so only one definition is resident at a time. `dict` is owned by the
+// word-select activity stacked underneath, which outlives this one.
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
-                                        std::string definition, bool htmlDefinition = false)
+                                        std::string definition, bool htmlDefinition = false, Dictionary* dict = nullptr,
+                                        std::vector<Dictionary::Entry> entries = {})
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
-        htmlDefinition(htmlDefinition) {}
+        htmlDefinition(htmlDefinition),
+        dict(dict),
+        entries(std::move(entries)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -43,16 +54,26 @@ class DictionaryDefinitionActivity final : public Activity {
   };
 
   BodyArea bodyArea() const;
+  void layoutDefinition();
+  void showEntry(size_t index);
+  bool hasMultipleEntries() const { return dict && entries.size() > 1; }
   bool layoutHtmlPages();
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
   void drawBody(int fontId, int x, int startY) const;
 
-  const std::string headword;
-  // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
+  std::string headword;
+  // Not const: layoutDefinition() normalizes embedded NULs (StarDict multi-type
   // separators) to newlines so C-string APIs see the whole text.
   std::string definition;
   const bool htmlDefinition;
+  Dictionary* const dict;
+  const std::vector<Dictionary::Entry> entries;
+  size_t entryIndex = 0;
+  // Shown when switching entries fails to read the next definition.
+  StrId popupMsg = StrId::STR_DICT_READ_FAILED;
+  unsigned long popupTime = 0;
+  bool popupVisible = false;
   // Styled path: reader-identical Pages laid out from the HTML definition.
   // Empty means the plain-text span path below is active.
   std::vector<std::unique_ptr<Page>> pages;
