@@ -51,7 +51,7 @@ class CssParserTest : public ::testing::Test {
     output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
   }
 
-  CssParser::ParseResult loadCss(CssParser& parser, const std::string& css) const {
+  CssParser::ParseResult loadCss(CssParser& parser, const std::string& css, std::string_view baseDir = {}) const {
     const fs::path sourcePath = directory_ / "input.css";
     std::ofstream output(sourcePath, std::ios::binary);
     output.write(css.data(), static_cast<std::streamsize>(css.size()));
@@ -59,7 +59,7 @@ class CssParserTest : public ::testing::Test {
 
     HalFile source;
     EXPECT_TRUE(HalStorage::getInstance().openFileForRead("TST", sourcePath.string(), source));
-    return parser.loadFromStream(source);
+    return parser.loadFromStream(source, baseDir);
   }
 
   fs::path directory_;
@@ -573,4 +573,48 @@ TEST_F(CssParserTest, WhiteSpacePreservationValuesAndUnsupportedOverrides) {
   EXPECT_TRUE(style.preserveWhitespace);
   style.applyOver(unsupported);
   EXPECT_TRUE(style.preserveWhitespace);
+}
+
+TEST_F(CssParserTest, CollectsFontFacesAndFontFamilies) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer,
+                    "@font-face { font-family: \"KubisHandscript\"; src: url(Fonts/kubis.otf); }\n"
+                    "@font-face { font-family: 'Garamond'; font-weight: bold; font-style: italic;\n"
+                    "  src: url('g.woff2') format('woff2'), url(\"../Fonts/g-bi.otf\") format(\"opentype\"); }\n"
+                    "@font-face { font-family: Web; src: url(w.woff) format(\"woff\"); }\n"
+                    "@media screen { .x { color: red; } }\n"
+                    ".end { font-family: \"kubishandscript\", serif; text-align: center; }\n"
+                    ".plain { font-family: serif; }\n",
+                    "OEBPS/Styles/"),
+            CssParser::ParseResult::Complete);
+
+  const auto& faces = writer.fontFaces();
+  ASSERT_EQ(faces.size(), 2u);  // the WOFF-only face is skipped
+  EXPECT_EQ(faces[0].family, CssParser::hashFontFamily("KUBISHANDSCRIPT"));
+  EXPECT_FALSE(faces[0].bold);
+  EXPECT_EQ(faces[0].href, "OEBPS/Styles/Fonts/kubis.otf");
+  EXPECT_EQ(faces[1].family, CssParser::hashFontFamily("garamond"));
+  EXPECT_TRUE(faces[1].bold);
+  EXPECT_TRUE(faces[1].italic);
+  EXPECT_EQ(faces[1].href, "OEBPS/Styles/../Fonts/g-bi.otf");
+
+  const CssStyle end = writer.resolveStyle("p", "end");
+  ASSERT_TRUE(end.defined.fontFamily);
+  EXPECT_EQ(end.fontFamily, faces[0].family);
+  EXPECT_EQ(end.textAlign, CssTextAlign::Center);
+  const CssStyle plain = writer.resolveStyle("p", "plain");
+  ASSERT_TRUE(plain.defined.fontFamily);
+  EXPECT_EQ(plain.fontFamily, 0u);
+
+  // Families survive the rule cache; faces survive their own file.
+  ASSERT_TRUE(writer.saveToCache(true));
+  ASSERT_TRUE(writer.saveFontFaces());
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  EXPECT_EQ(reader.resolveStyle("p", "end").fontFamily, faces[0].family);
+  std::vector<CssFontFace> loaded;
+  ASSERT_TRUE(CssParser::loadFontFaces(cachePath(), loaded));
+  ASSERT_EQ(loaded.size(), 2u);
+  EXPECT_EQ(loaded[1].href, faces[1].href);
+  EXPECT_TRUE(loaded[1].bold && loaded[1].italic);
 }

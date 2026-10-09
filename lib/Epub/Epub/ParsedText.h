@@ -46,12 +46,14 @@ class ParsedText {
   // Zero means plain text; non-zero indexes linkTargets. Kept at one byte per
   // token and discarded after layout, never added to the page-cache TextBlock.
   std::vector<uint8_t> wordLinkIds;
-  // Words sized by an inline font-size span: a slot per word into sizeSlotScales (absolute
-  // multiples of the reader's body size). Slot 0 follows the block's own size; the parser
-  // resolves each slot's font before layout.
+  // Words set apart from the block's font by an inline font-size span or an embedded
+  // font-family: a slot per word into sizeSlotScales (absolute multiples of the reader's body
+  // size) and sizeSlotFamilies (0 = reader font). Slot 0 follows the block's own font; the
+  // parser resolves each slot's font before layout.
   std::vector<uint8_t> wordSizeSlots;
   static constexpr uint8_t MAX_SIZE_SLOTS = TextBlock::MAX_WORD_FONTS + 1;
   float sizeSlotScales[MAX_SIZE_SLOTS] = {1.0f};
+  uint32_t sizeSlotFamilies[MAX_SIZE_SLOTS] = {};
   int32_t sizeSlotFontIds[MAX_SIZE_SLOTS] = {};
   uint8_t sizeSlotCount = 1;
   int wordFontId(size_t wordIndex, int blockFontId) const;
@@ -147,9 +149,10 @@ class ParsedText {
   // paragraph follow it, or -1 when the rest of the paragraph is not laid out yet.
   int linesAfterCurrentLine() const { return linesAfterCurrent; }
   // Slot for words at an absolute size; reuses a matching slot, or the nearest once all are taken.
-  uint8_t sizeSlotFor(float scale);
+  uint8_t sizeSlotFor(float scale, uint32_t family = 0);
   uint8_t sizeSlotsInUse() const { return sizeSlotCount; }
   float sizeSlotScale(uint8_t slot) const { return sizeSlotScales[slot]; }
+  uint32_t sizeSlotFamily(uint8_t slot) const { return sizeSlotFamilies[slot]; }
   void setSizeSlotFontId(uint8_t slot, int32_t fontId) { sizeSlotFontIds[slot] = fontId; }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,

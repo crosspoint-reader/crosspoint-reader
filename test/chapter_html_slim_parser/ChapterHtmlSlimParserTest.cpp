@@ -801,6 +801,56 @@ TEST_F(ChapterBlockDecorationTest, SdAndVectorFontsSizeThroughTheVariantProvider
   EXPECT_EQ(body.wordFontId(1, SD_FONT), SD_FONT * 1000 + 80);
 }
 
+TEST_F(ChapterBlockDecorationTest, EmbeddedFamiliesFollowPublisherFontsMode) {
+  const uint32_t body = CssParser::hashFontFamily("Garamond");
+  const uint32_t hand = CssParser::hashFontFamily("Handscript");
+  renderer.embeddedFamilies = {body, hand};
+  constexpr int BODY_FONT = 900100;
+  constexpr int HAND_FONT = 901100;
+  const auto parse = [this] {
+    open("body", "font-family: Garamond, serif");
+    open("p", nullptr);
+    text("Plain ");
+    open("span", "font-family: 'handscript'");
+    text("inked");
+    close("span");
+    close("p");
+    open("p", "font-family: \"Handscript\"");
+    text("Letter");
+    close("p");
+    close("body");
+  };
+
+  parser.setPublisherFonts(PublisherFonts::Accents);
+  parse();
+  auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& mixed = *static_cast<const PageLine*>(lines[0])->getBlock();
+  EXPECT_EQ(mixed.getBlockStyle().fontId, 0);  // the body family stays in the reader font
+  EXPECT_EQ(mixed.wordFontId(0, NOTOSERIF_14_FONT_ID), NOTOSERIF_14_FONT_ID);
+  EXPECT_EQ(mixed.wordFontId(1, NOTOSERIF_14_FONT_ID), HAND_FONT);
+  EXPECT_EQ(static_cast<const PageLine*>(lines[1])->getBlock()->getBlockStyle().fontId, HAND_FONT);
+
+  pages.clear();
+  parser.beginParse();
+  parser.setPublisherFonts(PublisherFonts::All);
+  parse();
+  lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& all = *static_cast<const PageLine*>(lines[0])->getBlock();
+  EXPECT_EQ(all.getBlockStyle().fontId, BODY_FONT);
+  EXPECT_EQ(all.wordFontId(0, NOTOSERIF_14_FONT_ID), BODY_FONT);
+  EXPECT_EQ(all.wordFontId(1, NOTOSERIF_14_FONT_ID), HAND_FONT);
+
+  pages.clear();
+  parser.beginParse();
+  parser.setPublisherFonts(PublisherFonts::Off);
+  parse();
+  lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(static_cast<const PageLine*>(lines[1])->getBlock()->getBlockStyle().fontId, 0);
+}
+
 TEST_F(ChapterBlockDecorationTest, UnloadableVariantFallsBackToSectionFont) {
   EXPECT_EQ(TextBlock::renderFontId(renderer, 12345, 7), 7);
   renderer.variantsEnabled = true;

@@ -118,6 +118,7 @@ struct CssPropertyFlags {
   uint16_t floatLeft : 1;
   uint16_t initialLetter : 1;
   uint16_t whiteSpace : 1;
+  uint16_t fontFamily : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -150,21 +151,22 @@ struct CssPropertyFlags {
         shaded(0),
         floatLeft(0),
         initialLetter(0),
-        whiteSpace(0) {}
+        whiteSpace(0),
+        fontFamily(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
            imageWidth || display || direction || verticalAlign || listStyleType || fontSize || smallCaps ||
            pageBreakBefore || pageBreakAfter || borderTop || borderRight || borderBottom || borderLeft || shaded ||
-           floatLeft || initialLetter || whiteSpace;
+           floatLeft || initialLetter || whiteSpace || fontFamily;
   }
 };
 
-// Cache serializes defined flags as uint32_t with bit indices 0..30.
+// Cache serializes defined flags as uint32_t with bit indices 0..31.
 static_assert(sizeof(CssPropertyFlags) <= sizeof(uint32_t),
               "CssPropertyFlags exceeds 32 bits; update cache read/write in CssParser.cpp");
-static_assert(sizeof(CssPropertyFlags) * 8 >= 31,
+static_assert(sizeof(CssPropertyFlags) * 8 >= 32,
               "CssPropertyFlags has fewer bits than properties; update bitfield widths");
 
 // Represents a collection of CSS style properties
@@ -201,6 +203,9 @@ struct CssStyle {
   uint8_t initialLetter = 0;  // initial-letter: lines a drop cap spans, 0 = normal
 
   bool preserveWhitespace = false;  // white-space: pre, pre-wrap or break-spaces
+  // First font-family name, hashed case-insensitively (CssParser::hashFontFamily); 0 for a
+  // generic family, which selects the reader font.
+  uint32_t fontFamily = 0;
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
@@ -330,6 +335,10 @@ struct CssStyle {
     if (base.defined.initialLetter) {
       initialLetter = base.initialLetter;
       defined.initialLetter = 1;
+    }
+    if (base.defined.fontFamily) {
+      fontFamily = base.fontFamily;
+      defined.fontFamily = 1;
     }
   }
 

@@ -923,14 +923,19 @@ int ParsedText::wordFontId(const size_t wordIndex, const int blockFontId) const 
   return slot == 0 || sizeSlotFontIds[slot] == 0 ? blockFontId : sizeSlotFontIds[slot];
 }
 
-uint8_t ParsedText::sizeSlotFor(const float scale) {
+uint8_t ParsedText::sizeSlotFor(const float scale, const uint32_t family) {
+  // Once the slots run out, prefer the nearest size in the same family.
   uint8_t nearest = 1;
+  const auto distance = [&](const uint8_t slot) {
+    return std::fabs(sizeSlotScales[slot] - scale) + (sizeSlotFamilies[slot] == family ? 0.0f : 100.0f);
+  };
   for (uint8_t slot = 1; slot < sizeSlotCount; ++slot) {
-    if (std::fabs(sizeSlotScales[slot] - scale) < 0.01f) return slot;
-    if (std::fabs(sizeSlotScales[slot] - scale) < std::fabs(sizeSlotScales[nearest] - scale)) nearest = slot;
+    if (sizeSlotFamilies[slot] == family && std::fabs(sizeSlotScales[slot] - scale) < 0.01f) return slot;
+    if (distance(slot) < distance(nearest)) nearest = slot;
   }
   if (sizeSlotCount < MAX_SIZE_SLOTS) {
     sizeSlotScales[sizeSlotCount] = scale;
+    sizeSlotFamilies[sizeSlotCount] = family;
     return sizeSlotCount++;
   }
   return nearest;

@@ -6,6 +6,7 @@
 #include <deque>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
@@ -58,6 +59,15 @@ class GfxRenderer {
   bool variantsEnabled = false;
   int resolveFontVariant(int fontId, float scale) const {
     return variantsEnabled ? fontId * 1000 + static_cast<int>(scale * 100 + 0.5f) : 0;
+  }
+  // Fixture embedded fonts: family i resolves to 900000 + i * 1000 + scale * 100.
+  std::vector<uint32_t> embeddedFamilies;
+  int resolveFontFamily(uint32_t family, float scale) const {
+    for (size_t i = 0; i < embeddedFamilies.size(); ++i) {
+      if (embeddedFamilies[i] == family)
+        return 900000 + static_cast<int>(i) * 1000 + static_cast<int>(scale * 100 + 0.5f);
+    }
+    return 0;
   }
   bool ensureFontLoaded(int fontId) const { return variantsEnabled || fontMap.count(fontId) != 0 || fontId == 0; }
   std::map<int, EpdFontFamily> fontMap;

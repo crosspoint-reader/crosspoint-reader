@@ -35,10 +35,13 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 // the SD font system. resolve returns a font id registered with the renderer for `fontId`
 // scaled by `scale`, or 0 when there is none; load re-registers a previously resolved id
 // after it was evicted or the device rebooted, returning false when it cannot.
+// resolveFamily returns a font id for a book-embedded family (CssParser::hashFontFamily)
+// at `scale` times the reader size, or 0 when the open book does not embed it.
 struct FontVariantProvider {
   void* ctx = nullptr;
   int (*resolve)(void* ctx, int fontId, float scale) = nullptr;
   bool (*load)(void* ctx, int fontId) = nullptr;
+  int (*resolveFamily)(void* ctx, uint32_t family, float scale) = nullptr;
 };
 
 class GfxRenderer {
@@ -211,6 +214,11 @@ class GfxRenderer {
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
   int resolveFontVariant(const int fontId, const float scale) const {
     return fontVariantProvider_.resolve ? fontVariantProvider_.resolve(fontVariantProvider_.ctx, fontId, scale) : 0;
+  }
+  int resolveFontFamily(const uint32_t family, const float scale) const {
+    return fontVariantProvider_.resolveFamily
+               ? fontVariantProvider_.resolveFamily(fontVariantProvider_.ctx, family, scale)
+               : 0;
   }
   // True when fontId is registered, loading it through the variant provider if needed.
   bool ensureFontLoaded(const int fontId) const {
