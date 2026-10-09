@@ -37,6 +37,8 @@ struct BlockStyle {
   // Computed CSS font size relative to the reader's body size. Layout-time only.
   float fontScale = 1.0f;
   bool fontScaleDefined = false;
+  // Embedded font-family of the block's first word (0 = reader font). Layout-only.
+  uint32_t fontFamily = 0;
   // Renderer font for this block's lines; 0 means the section's reader font.
   int32_t fontId = 0;
   // Forced page breaks from CSS. Layout-time only; never inherited by children.

@@ -6,6 +6,7 @@
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
+#include <VectorFontSupport.h>
 
 #include <algorithm>
 #include <cstring>

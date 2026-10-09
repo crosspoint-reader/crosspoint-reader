@@ -309,6 +309,18 @@ TEST(ClippingHighlight, LegacySignatureIncludesCharacterAndWordSpacing) {
   EXPECT_NE(readerRenderSpecSignature(spec), original);
 }
 
+TEST(ClippingHighlight, LegacySignatureIncludesPublisherFontMode) {
+  ReaderRenderSpec spec;
+  const auto off = readerRenderSpecSignature(spec);
+  spec.publisherFonts = PublisherFonts::Accents;
+  const auto accents = readerRenderSpecSignature(spec);
+  spec.publisherFonts = PublisherFonts::All;
+  const auto all = readerRenderSpecSignature(spec);
+  EXPECT_NE(off, accents);
+  EXPECT_NE(off, all);
+  EXPECT_NE(accents, all);
+}
+
 TEST(SelectionGeometry, KeepsCursorClearOfHintsOnEitherAxis) {
   EXPECT_EQ(selectionGeometry::keepVisible(0, 20, 40, 700), 40);
   EXPECT_EQ(selectionGeometry::keepVisible(735, 20, 40, 700), -15);

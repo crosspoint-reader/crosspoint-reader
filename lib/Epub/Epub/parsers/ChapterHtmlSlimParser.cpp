@@ -186,6 +186,10 @@ void ChapterHtmlSlimParser::applyInlinePresentationToEntry(StyleStackEntry& entr
     entry.hasSmallCaps = true;
     entry.smallCaps = css.smallCaps;
   }
+  if (css.defined.fontFamily) {
+    entry.hasFontFamily = true;
+    entry.fontFamily = css.fontFamily;
+  }
 }
 
 void ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css) {
@@ -205,7 +209,7 @@ void ChapterHtmlSlimParser::pushBlockTextStyleEntry(const CssStyle& cssStyle) {
                                             [](const StyleStackEntry& entry) { return entry.hasFontScale; });
   if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
       !cssStyle.hasSmallCaps() && !cssStyle.defined.whiteSpace && !cssStyle.hasDirection() &&
-      !cssStyle.hasTextAlign() && !sized) {
+      !cssStyle.hasTextAlign() && !sized && !cssStyle.defined.fontFamily) {
     return;
   }
 
@@ -279,9 +283,11 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveTextAlign = currentCssStyle.textAlign;
   effectiveSup = false;
   effectiveSub = false;
+  uint32_t fontFamily = 0;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
+    if (entry.hasFontFamily) fontFamily = entry.fontFamily;
     if (entry.hasBold) {
       effectiveBold = entry.bold;
     }
@@ -318,6 +324,11 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
       if (entry.sub) effectiveSup = false;
     }
   }
+  if (publisherFonts == PublisherFonts::Off ||
+      (publisherFonts == PublisherFonts::Accents && fontFamily == bodyFontFamily)) {
+    fontFamily = 0;
+  }
+  effectiveFontFamily = fontFamily;
 
   // Keep flow direction in the active empty text block. Inline direction remains
   // available for CSS inheritance without replacing the paragraph's base direction.
@@ -583,7 +594,7 @@ void ChapterHtmlSlimParser::layoutDropCapLines(
   dropCap = DropCapState{};
 
   // Enlarging the family's largest built-in size keeps outlines smoothest.
-  const int capFontId = fontIdForScale(3.0f);
+  const int capFontId = fontIdFor(3.0f, currentTextBlock->getBlockStyle().fontFamily);
   const int lineHeight = renderer.getLineHeight(layoutFontId, lineCompression);
   const int ascender = renderer.getFontAscenderSize(layoutFontId);
   int32_t advanceFP = 0;
@@ -743,10 +754,16 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     const float base = inlineScale > 0.0f ? inlineScale : currentTextBlock->getBlockStyle().fontScale;
     inlineScale = entry.fontScaleRem ? entry.fontScale : base * entry.fontScale;
   }
-  const uint8_t sizeSlot =
-      inlineScale > 0.0f && (inlineSize.valid || inlineScale != currentTextBlock->getBlockStyle().fontScale)
-          ? currentTextBlock->sizeSlotFor(std::clamp(inlineScale, 0.5f, 3.0f))
-          : 0;
+  // The paragraph's first word picks the block's family; words in another family get a slot.
+  BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
+  if (currentTextBlock->isEmpty() || listItemBulletOnly) blockStyle.fontFamily = effectiveFontFamily;
+  uint8_t sizeSlot = 0;
+  if ((inlineScale > 0.0f && (inlineSize.valid || inlineScale != blockStyle.fontScale)) ||
+      effectiveFontFamily != blockStyle.fontFamily) {
+    const float scale = inlineScale > 0.0f ? std::clamp(inlineScale, 0.5f, 3.0f)
+                                           : (inlineSize.valid ? inlineSize.scale : blockStyle.fontScale);
+    sizeSlot = currentTextBlock->sizeSlotFor(scale, effectiveFontFamily);
+  }
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId,
                             sizeSlot, effectivePreserveWhitespace);
   if (insideTableCell && !tableRowStacked) {
@@ -2266,9 +2283,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // <small>/<big> default to the browser's relative sizes.
     const float tagScale = strcmp(name, "small") == 0 ? 0.83f : (strcmp(name, "big") == 0 ? 1.2f : 0.0f);
     const bool sized = cssStyle.hasFontSize() || tagScale > 0.0f;
+    if (cssStyle.defined.fontFamily && (strcmp(name, "html") == 0 || strcmp(name, "body") == 0)) {
+      self->bodyFontFamily = cssStyle.fontFamily;
+    }
     if (sized || cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
         cssStyle.hasSmallCaps() || cssStyle.defined.whiteSpace || cssStyle.hasDirection() ||
-        cssStyle.hasVerticalAlign() || inheritedTableTextAlign) {
+        cssStyle.hasVerticalAlign() || inheritedTableTextAlign || cssStyle.defined.fontFamily) {
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -3035,11 +3055,19 @@ int ChapterHtmlSlimParser::fontIdForScale(const float scale) const {
   return variant != 0 ? variant : fontId;
 }
 
+int ChapterHtmlSlimParser::fontIdFor(const float scale, const uint32_t family) const {
+  if (family != 0) {
+    const int embedded = renderer.resolveFontFamily(family, scale);
+    if (embedded != 0) return embedded;
+  }
+  return fontIdForScale(scale);
+}
+
 int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale) {
   BlockStyle& blockStyle = text.getBlockStyle();
-  const int layoutFontId = fontIdForScale(scale);
+  const int layoutFontId = fontIdFor(scale, blockStyle.fontFamily);
   for (uint8_t slot = 1; slot < text.sizeSlotsInUse(); ++slot) {
-    text.setSizeSlotFontId(slot, fontIdForScale(text.sizeSlotScale(slot)));
+    text.setSizeSlotFontId(slot, fontIdFor(text.sizeSlotScale(slot), text.sizeSlotFamily(slot)));
   }
   blockStyle.fontId = layoutFontId == fontId ? 0 : layoutFontId;
   return layoutFontId;
