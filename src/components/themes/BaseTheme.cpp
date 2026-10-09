@@ -29,9 +29,75 @@ freeink::ui::BitmapRef BaseTheme::checkboxIcon(const bool checked) {
 }
 
 void BaseTheme::setCheckboxRow(freeink::ui::ListItem& item, const bool checked) {
-  item.value = nullptr;
-  item.toggle = true;
+  item.value = SETTINGS.showCheckbox ? nullptr : (checked ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
+  item.toggle = SETTINGS.showCheckbox != 0;
   item.toggleChecked = checked;
+}
+
+void BaseTheme::drawEdgeSwipeTab(const GfxRenderer& renderer, Rect tab, edge_swipe::Edge edge,
+                                 const freeink::Icon& icon) const {
+  if (edge == edge_swipe::Edge::None) return;
+  const bool horizontal = edge == edge_swipe::Edge::Top || edge == edge_swipe::Edge::Bottom;
+  const int span = horizontal ? tab.width : tab.height;
+  const int depth = horizontal ? tab.height : tab.width;
+  if (span <= 0 || depth <= 0) return;
+  const int spanSquared = (span - 1) * (span - 1);
+  const int depthSquared = depth * depth;
+  int inset = 0;
+  // Scan a half ellipse from the screen edge inward, without a working buffer.
+  for (int inward = 0; inward < depth; ++inward) {
+    while (inset < span / 2 && (span - 1 - 2 * inset) * (span - 1 - 2 * inset) * depthSquared >
+                                   (depthSquared - inward * inward) * spanSquared) {
+      ++inset;
+    }
+    switch (edge) {
+      case edge_swipe::Edge::Top:
+        renderer.fillRectDither(tab.x + inset, tab.y + inward, span - 2 * inset, 1, Color::LightGray);
+        break;
+      case edge_swipe::Edge::Bottom:
+        renderer.fillRectDither(tab.x + inset, tab.y + depth - 1 - inward, span - 2 * inset, 1, Color::LightGray);
+        break;
+      case edge_swipe::Edge::Left:
+        renderer.fillRectDither(tab.x + inward, tab.y + inset, 1, span - 2 * inset, Color::LightGray);
+        break;
+      case edge_swipe::Edge::None:
+        return;
+    }
+  }
+  const int padding = 3;
+  int x = tab.x + (tab.width - icon.w) / 2;
+  int y = tab.y + (tab.height - icon.h) / 2;
+  switch (edge) {
+    case edge_swipe::Edge::Top:
+      y = tab.y + padding;
+      break;
+    case edge_swipe::Edge::Bottom:
+      y = tab.y + tab.height - icon.h - padding;
+      break;
+    case edge_swipe::Edge::Left:
+      x = tab.x + padding;
+      break;
+    case edge_swipe::Edge::None:
+      return;
+  }
+  // A white outline keeps thin icon strokes distinct from the dither dots.
+  for (bool outline : {true, false}) {
+    for (unsigned row = 0; row < icon.h; ++row) {
+      for (unsigned col = 0; col < icon.w; ++col) {
+        if (!(icon.bits[row * ((icon.w + 7) / 8) + col / 8] & (0x80 >> (col % 8)))) {
+          const int px = x + col, py = y + row;
+          if (outline) {
+            renderer.drawPixel(px - 1, py, false);
+            renderer.drawPixel(px + 1, py, false);
+            renderer.drawPixel(px, py - 1, false);
+            renderer.drawPixel(px, py + 1, false);
+          } else {
+            renderer.drawPixel(px, py);
+          }
+        }
+      }
+    }
+  }
 }
 
 // Internal constants

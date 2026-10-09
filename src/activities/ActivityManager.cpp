@@ -34,6 +34,9 @@
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
 void ActivityManager::begin() {
+#if FREEINK_CAP_TOUCH
+  if (mappedInput.hasTouch()) edgeIndicator.begin();
+#endif
 #if defined(configNUM_CORES) && configNUM_CORES > 1
   constexpr BaseType_t renderTaskCore = 1;
 #else
@@ -64,30 +67,85 @@ void ActivityManager::renderTaskTrampoline(void* param) {
   self->renderTaskLoop();
 }
 
+void ActivityManager::notifyRenderWork(uint32_t work) {
+  renderWork.fetch_or(work);
+  xTaskNotify(renderTaskHandle, 1, eIncrement);
+}
+
 void ActivityManager::renderTaskLoop() {
+#if FREEINK_CAP_TOUCH
+  bool deferredPage = false;
+#endif
   while (true) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    // Acquire the lock before reading currentActivity to avoid a TOCTOU race
-    // where the main task deletes the activity between the null-check and render().
-    RenderLock lock;
-    if (currentActivity) {
-      HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-      // Night mode is a global output polarity applied to every activity.
-      // The sleep screen forces normal polarity itself (SleepActivity).
-      display.setInverted(SETTINGS.screenInverted != 0);
-      currentActivity->render(std::move(lock));
-    }
-    // Notify any task blocked in requestUpdateAndWait() that the render is done.
-    TaskHandle_t waiter = nullptr;
+#if FREEINK_CAP_TOUCH
+    const auto timeout = edgeIndicator.needsService() || deferredPage ? pdMS_TO_TICKS(20) : portMAX_DELAY;
+#else
+    const auto timeout = portMAX_DELAY;
+#endif
+    ulTaskNotifyTake(pdTRUE, timeout);
+    uint32_t work = renderWork.exchange(0);
+#if FREEINK_CAP_TOUCH
+    EdgeSwipeIndicator::Input input;
     taskENTER_CRITICAL(&activityManagerSpinlock);
-    waiter = waitingTaskHandle;
-    waitingTaskHandle = nullptr;
+    input = edgeIndicatorInput;
     taskEXIT_CRITICAL(&activityManagerSpinlock);
-    if (waiter) {
-      xTaskNotify(waiter, 1, eIncrement);
+    deferredPage = deferredPage || (work & 1);
+    // A normal repaint would flash behind the finger. Keep it pending until
+    // the edge contact ends; indicator-only work never calls activity render.
+    if (input.state.claimed && input.state.tracking)
+      work &= ~1u;
+    else if (deferredPage) {
+      work |= 1;
+      deferredPage = false;
     }
+#endif
+    if (work & 1) {
+      RenderLock lock;
+      if (currentActivity) {
+        HalPowerManager::Lock powerLock;
+#if FREEINK_CAP_TOUCH
+        edgeIndicator.pageChanged();
+#endif
+        display.setInverted(SETTINGS.screenInverted != 0);
+        currentActivity->render(std::move(lock));
+      }
+      TaskHandle_t waiter = nullptr;
+      taskENTER_CRITICAL(&activityManagerSpinlock);
+      waiter = waitingTaskHandle;
+      waitingTaskHandle = nullptr;
+      taskEXIT_CRITICAL(&activityManagerSpinlock);
+      if (waiter) xTaskNotify(waiter, 1, eIncrement);
+    }
+#if FREEINK_CAP_TOUCH
+    {
+      RenderLock lock;
+      HalPowerManager::Lock powerLock;
+      taskENTER_CRITICAL(&activityManagerSpinlock);
+      input = edgeIndicatorInput;
+      taskEXIT_CRITICAL(&activityManagerSpinlock);
+      edgeIndicator.render(renderer, input, millis());
+    }
+#endif
   }
 }
+
+#if FREEINK_CAP_TOUCH
+void ActivityManager::updateEdgeIndicator() {
+  EdgeSwipeIndicator::Input input;
+  input.state = mappedInput.edgeSwipeState();
+  input.dpi = mappedInput.touchDpi();
+  input.orientation = static_cast<uint8_t>(renderer.getOrientation());
+  input.enabled = SETTINGS.showEdgeIndicators != 0;
+  taskENTER_CRITICAL(&activityManagerSpinlock);
+  const bool changed =
+      input.state.contact != edgeIndicatorInput.state.contact || input.state.stage != edgeIndicatorInput.state.stage ||
+      input.state.tracking != edgeIndicatorInput.state.tracking ||
+      input.orientation != edgeIndicatorInput.orientation || input.enabled != edgeIndicatorInput.enabled;
+  edgeIndicatorInput = input;
+  taskEXIT_CRITICAL(&activityManagerSpinlock);
+  if (changed && renderTaskHandle) notifyRenderWork(2);
+}
+#endif
 
 void ActivityManager::loop() {
   if (mappedInput.consumeSuppressedRelease()) return;
@@ -98,10 +156,14 @@ void ActivityManager::loop() {
     // processing a pending action here could re-enable filesystem users while
     // the USB host still owns the raw SD card.
     if (requestedUpdate.exchange(false) && renderTaskHandle) {
-      xTaskNotify(renderTaskHandle, 1, eIncrement);
+      notifyRenderWork(1);
     }
     return;
   }
+
+#if FREEINK_CAP_TOUCH
+  updateEdgeIndicator();
+#endif
 
   if (currentActivity) {
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
@@ -136,8 +198,15 @@ void ActivityManager::loop() {
   }
 
   while (pendingAction != PendingAction::None) {
+#if FREEINK_CAP_TOUCH
+    mappedInput.cancelEdgeSwipe();
+    updateEdgeIndicator();
+#endif
     if (pendingAction == PendingAction::Pop) {
       RenderLock lock;
+#if FREEINK_CAP_TOUCH
+      edgeIndicator.pageChanged();
+#endif
 
       if (!currentActivity) {
         // Should never happen in practice
@@ -185,6 +254,9 @@ void ActivityManager::loop() {
     } else if (pendingActivity) {
       // Current activity has requested a new activity to be launched
       RenderLock lock;
+#if FREEINK_CAP_TOUCH
+      edgeIndicator.pageChanged();
+#endif
 
       if (pendingAction == PendingAction::Replace) {
         // Destroy the current activity
@@ -214,10 +286,9 @@ void ActivityManager::loop() {
   }
 
   if (requestedUpdate.exchange(false)) {
-    // Using direct notification to signal the render task to update
-    // Increment counter so multiple rapid calls won't be lost
+    // Coalesce page work independently from indicator work.
     if (renderTaskHandle) {
-      xTaskNotify(renderTaskHandle, 1, eIncrement);
+      notifyRenderWork(1);
     }
   }
 }
@@ -398,6 +469,11 @@ ScreenshotInfo ActivityManager::getScreenshotInfo() const {
 
 void ActivityManager::prepareForSleep() {
   RenderLock lock;
+#if FREEINK_CAP_TOUCH
+  mappedInput.cancelEdgeSwipe();
+  updateEdgeIndicator();
+  edgeIndicator.pageChanged();
+#endif
   for (const auto& activity : stackActivities) activity->prepareForSleep();
   if (currentActivity) currentActivity->prepareForSleep();
 }
@@ -405,7 +481,7 @@ void ActivityManager::prepareForSleep() {
 void ActivityManager::requestUpdate(bool immediate) {
   if (immediate) {
     if (renderTaskHandle) {
-      xTaskNotify(renderTaskHandle, 1, eIncrement);
+      notifyRenderWork(1);
     }
   } else {
     // Deferring the update until current loop is finished
@@ -414,6 +490,12 @@ void ActivityManager::requestUpdate(bool immediate) {
   }
 }
 void ActivityManager::requestUpdateAndWait() {
+#if FREEINK_CAP_TOUCH
+  // A synchronous caller cannot wait for a contact that only its own loop can
+  // release. Cancel the edge gesture before waiting on a page render.
+  mappedInput.cancelEdgeSwipe();
+  updateEdgeIndicator();
+#endif
   if (!renderTaskHandle) {
     return;
   }
@@ -439,7 +521,7 @@ void ActivityManager::requestUpdateAndWait() {
   // Cannot call while holding RenderLock or it will cause a deadlock
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
-  xTaskNotify(renderTaskHandle, 1, eIncrement);
+  notifyRenderWork(1);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 

@@ -10,6 +10,7 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
+#include "components/EdgeSwipeActions.h"
 #include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
 
@@ -20,6 +21,7 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
   const bool pagePressed =
       SETTINGS.vibration == CrossPointSettings::VIBRATION_TOUCH_PAGE && gpio.wasCapacitivePagePressed();
   HalHaptics::feedback(SETTINGS.vibration != CrossPointSettings::VIBRATION_OFF, pagePressed, SETTINGS.hapticIntensity);
+  updateEdgeSwipe();
   homeAction = HomeButtonAction::Ignore;
   if (gpio.hasHomeKey()) {
     homeAction = homeButtonInput.update(millis(), gpio.wasHomeKeyTapped(), gpio.wasHomeKeyLongPressed(),
@@ -46,6 +48,55 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
   for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
     if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
   }
+}
+
+float MappedInputManager::touchDpi() const {
+  // 800x480 / 3.97-inch panels are 235 ppi; the 4.26-inch X4 family is 220.
+  return (BoardConfig::isSticky() || BoardConfig::isPaperMono()) ? edge_swipe::Config::COMPACT_PANEL_DPI
+                                                                 : edge_swipe::Config::DEFAULT_DPI;
+}
+
+void MappedInputManager::updateEdgeSwipe() const {
+  edgeRecognizer.nextFrame();
+  if (!gpio.hasTouch()) return;
+#ifdef SIMULATOR
+  float nx = 0, ny = 0;
+  const bool down = gpio.isTouchHeldAt(nx, ny);
+  const struct {
+    bool down, released, cancelled;
+    uint8_t count;
+    float nx, ny;
+  } touch = {down, gpio.wasTouchReleased(), false, static_cast<uint8_t>(down ? 1 : 0), nx, ny};
+#else
+  const auto touch = gpio.touchContact();
+#endif
+  const auto orientation = static_cast<uint8_t>(renderer.getOrientation());
+  int x = 0, y = 0;
+  renderer.tapToLogical(touch.nx, touch.ny, x, y);
+  const uint32_t now = millis();
+  if (touch.down && !touchWasDown) {
+    touchOrientation = orientation;
+    edgeContactCancelled = false;
+    edgeRecognizer.begin(x, y, renderer.getScreenWidth(), renderer.getScreenHeight(), touchDpi(), now);
+  }
+  if (orientation != touchOrientation || touch.count > 1 || touch.cancelled) {
+    edgeRecognizer.cancel();
+    edgeContactCancelled = true;
+  }
+  if (!edgeContactCancelled) {
+    if (touch.down)
+      edgeRecognizer.move(x, y, now);
+    else if (touch.released && touchWasDown) {
+#ifndef SIMULATOR
+      edgeRecognizer.move(x, y, now);
+#endif
+      edgeRecognizer.release(now);
+    } else if (touchWasDown) {
+      edgeRecognizer.cancel();
+      edgeContactCancelled = true;
+    }
+  }
+  touchWasDown = touch.down;
 }
 
 bool MappedInputManager::isNavDirectionSwapped() const {
@@ -176,7 +227,7 @@ void MappedInputManager::rememberTouchHeldTime() const {
 bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   float nx = 0.0f;
   float ny = 0.0f;
-  if (!gpio.wasTouchTap(nx, ny)) return false;
+  if (edgeRecognizer.getState().claimed || edgeContactCancelled || !gpio.wasTouchTap(nx, ny)) return false;
   int tapX = 0;
   int tapY = 0;
   renderer.tapToLogical(nx, ny, tapX, tapY);
@@ -194,7 +245,9 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
   float nx = 0.0f;
   float ny = 0.0f;
   unsigned long heldMs = 0;
-  if (!gpio.isTouchTapCandidate(nx, ny, heldMs)) return false;
+  if (edgeRecognizer.getState().claimed || edgeRecognizer.pendingDirection() || edgeContactCancelled ||
+      !gpio.isTouchTapCandidate(nx, ny, heldMs))
+    return false;
   if (heldMs < TOUCH_DOWN_SELECT_DELAY_MS) return false;
   renderer.tapToLogical(nx, ny, x, y);
   return true;
@@ -203,7 +256,7 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
 bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   float nx = 0.0f;
   float ny = 0.0f;
-  if (!gpio.wasTouchLongPress(nx, ny)) return false;
+  if (edgeRecognizer.getState().claimed || edgeContactCancelled || !gpio.wasTouchLongPress(nx, ny)) return false;
   // Consuming the long-press implies acting on it: suppress the rest of the
   // contact so the finger lift can't also tap whatever the action opened.
   gpio.suppressTouchContact();
@@ -215,7 +268,9 @@ bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   // Live contact position while the finger is down (no tap-slop gate) — drag tracking.
   float nx = 0.0f;
   float ny = 0.0f;
-  if (!gpio.isTouchHeldAt(nx, ny)) return false;
+  if (edgeRecognizer.getState().claimed || edgeRecognizer.pendingDirection() || edgeContactCancelled ||
+      !gpio.isTouchHeldAt(nx, ny))
+    return false;
   renderer.tapToLogical(nx, ny, x, y);
   return true;
 }
@@ -282,7 +337,7 @@ MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  if (!decodeSwipe(sx, sy, ex, ey)) return SwipeDir::None;
+  if (edgeRecognizer.getState().claimed || edgeContactCancelled || !decodeSwipe(sx, sy, ex, ey)) return SwipeDir::None;
   switch (fui::swipeDirection(sx, sy, ex, ey)) {
     case fui::SwipeDir::Left:
       return SwipeDir::Left;
@@ -297,16 +352,14 @@ MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
   }
 }
 
-// Edge classification (which swipe counts as an edge gesture) lives in the
-// SDK; only the MEANING of each edge — back, menu, home, light panel, and the
-// home-key remap — is decided here.
 bool MappedInputManager::wasEdgeSwipe(const freeink::ui::ScreenEdge edge) const {
-  int sx = 0;
-  int sy = 0;
-  int ex = 0;
-  int ey = 0;
-  if (!decodeSwipe(sx, sy, ex, ey)) return false;
-  const bool hit = fui::edgeSwipe(edge, sx, sy, ex, ey, renderer.getScreenWidth(), renderer.getScreenHeight());
+  const auto& state = edgeRecognizer.getState();
+  if (!state.commit) return false;
+  const auto action = edge_swipe::actionFor(state.edge).callback();
+  const bool hit =
+      (edge == fui::ScreenEdge::Left && action == edge_swipe::Action::Back) ||
+      (edge == fui::ScreenEdge::Top && (action == edge_swipe::Action::Menu || action == edge_swipe::Action::Light)) ||
+      (edge == fui::ScreenEdge::Bottom && action == edge_swipe::Action::Home);
   if (hit) rememberTouchHeldTime();
   return hit;
 }
@@ -317,7 +370,7 @@ bool MappedInputManager::wasBackGesture() const {
   // swipe so every activity's existing Back handling picks it up.
   float nx = 0.0f;
   float ny = 0.0f;
-  if (gpio.wasTouchTap(nx, ny)) {
+  if (!edgeRecognizer.getState().claimed && !edgeContactCancelled && gpio.wasTouchTap(nx, ny)) {
     int tapX = 0;
     int tapY = 0;
     renderer.tapToLogical(nx, ny, tapX, tapY);
@@ -326,9 +379,7 @@ bool MappedInputManager::wasBackGesture() const {
       return true;
     }
   }
-  // Back = left-to-right swipe starting near the left edge. Edge-anchored so that
-  // mid-screen horizontal swipes stay available to activities that consume
-  // SwipeDir::Left/Right (e.g. percent selection, image viewer).
+  // The left edge reaches Back; other horizontal swipes remain activity input.
   return wasEdgeSwipe(fui::ScreenEdge::Left);
 }
 
@@ -338,10 +389,8 @@ bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(fui:
 
 bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); }
 
-bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
-
 bool MappedInputManager::wasHomeGesture() const {
-  return gpio.hasHomeKey() ? homeAction == HomeButtonAction::Home : wasBottomEdgeUpSwipe();
+  return homeAction == HomeButtonAction::Home || wasBottomEdgeUpSwipe();
 }
 
 bool MappedInputManager::wasLightPanelGesture() const {

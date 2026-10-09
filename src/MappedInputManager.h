@@ -2,6 +2,7 @@
 
 #include <HalGPIO.h>
 
+#include "util/EdgeSwipe.h"
 #include "util/HomeButtonInput.h"
 
 class GfxRenderer;
@@ -57,6 +58,12 @@ class MappedInputManager {
   bool consumeSuppressedRelease() const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
+  const edge_swipe::State& edgeSwipeState() const { return edgeRecognizer.getState(); }
+  float touchDpi() const;
+  void cancelEdgeSwipe() const {
+    edgeRecognizer.cancel();
+    edgeContactCancelled = true;
+  }
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   // One-shot long-press from the SDK touch classifier, fired WHILE the finger
@@ -86,12 +93,10 @@ class MappedInputManager {
   RowTouch colTouch(int& col, int left, int colStep, int colCount, int yStart, int yEnd, int colWidth = 0) const;
 
   SwipeDir wasSwipe() const;
-  // Back = left-to-right swipe anchored at the left edge. Public so swipe-mode
+  // Back = an inward swipe from the left edge. Public so swipe-mode
   // page turns (reader) can exclude it from a plain SwipeDir::Right.
   bool wasBackGesture() const;
-  // Home-key boards use a short Home-key tap to exit; their bottom-edge swipe
-  // is intentionally unused. Other boards retain the bottom-edge Home gesture.
-  // The reader menu remains on its existing top-edge gesture and middle tap.
+  // Bottom-edge swipe and the configured Home-key action both reach Home.
   bool wasHomeGesture() const;
   // Configured one-frame action, independent of the gesture that triggered it.
   HomeButtonAction homeButtonAction() const { return homeAction; }
@@ -100,11 +105,6 @@ class MappedInputManager {
     deferredHomeAction = HomeButtonAction::Ignore;
   }
   bool wasMenuGesture() const;
-  // Bottom-edge up-swipe as the reader-menu gesture (SHOW_READER_MENU's Swipe
-  // Up option). Only meaningful on home-key boards, where Home lives on the
-  // key and the bottom edge is free; elsewhere the same swipe is the Home
-  // gesture and this returns false.
-  bool wasReaderMenuSwipeUp() const;
   // Top-edge down-swipe opens the light panel when the active board actually
   // has a frontlight. ActivityManager consumes it before activity input.
   bool wasLightPanelGesture() const;
@@ -134,8 +134,7 @@ class MappedInputManager {
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
-  // SDK edge classification (fui::edgeSwipe) + the shared decode/held-time
-  // bookkeeping; the wrappers below give each edge its board meaning.
+  // The action table maps committed edge gestures into existing input routes.
   bool wasEdgeSwipe(freeink::ui::ScreenEdge edge) const;
   bool wasTopEdgeDownSwipe() const;
   bool wasBottomEdgeUpSwipe() const;
@@ -147,6 +146,11 @@ class MappedInputManager {
   void rememberTouchHeldTime() const;
   void suppressNextRelease(Button button) const;
 
+  void updateEdgeSwipe() const;
+  mutable edge_swipe::Recognizer edgeRecognizer;
+  mutable bool touchWasDown = false;
+  mutable uint8_t touchOrientation = 0;
+  mutable bool edgeContactCancelled = false;
   mutable HomeButtonInput homeButtonInput;
   mutable HomeButtonAction homeAction = HomeButtonAction::Ignore;
   mutable HomeButtonAction deferredHomeAction = HomeButtonAction::Ignore;

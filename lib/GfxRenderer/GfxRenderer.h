@@ -49,6 +49,10 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   mutable bool absoluteGrayPlanes = false;
+  enum class DisplayContent : uint8_t { Unknown, BW, Grayscale };
+  mutable DisplayContent displayedContent = DisplayContent::Unknown;
+  mutable uint32_t displayGeneration = 0;
+  mutable bool asyncRefreshPending = false;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
@@ -244,8 +248,10 @@ class GfxRenderer {
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
   // Compatibility queries for Overlay mode.
   bool supportsAsyncGrayscaleBase() const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Finish B/W async work before painting a temporary overlay. Grayscale
+  // remains on the glass even after restoring the B/W framebuffer.
+  bool prepareBwOverlay() const;
+  uint32_t getDisplayGeneration() const { return displayGeneration; }
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;

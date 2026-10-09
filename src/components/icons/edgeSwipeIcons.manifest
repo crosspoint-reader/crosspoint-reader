@@ -1,0 +1,5 @@
+# python3 freeink-sdk/libs/assets/Icons/tools/gen_icons.py --manifest src/components/icons/edgeSwipeIcons.manifest --svgdir freeink-sdk/libs/assets/Icons/lucide/icons --sizes 24 --out src/components/icons/edgeSwipeIcons.h
+edge-home = house
+edge-back = chevron-left
+edge-menu = menu
+edge-light = sun

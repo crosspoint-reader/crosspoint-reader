@@ -217,6 +217,8 @@ void GfxRenderer::releaseFrameBufferForBuild() {
   uint8_t* scratch = display.lendFrameBufferStorage(&size);
   frameBuffer = nullptr;
   frameBufferLoans++;
+  displayedContent = DisplayContent::Unknown;
+  ++displayGeneration;
   if (scratch) {
     buildscratch::lend(scratch, size);
   }
@@ -1751,6 +1753,9 @@ void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   refreshMode = applyPromotedRefresh(refreshMode);
   display.displayBuffer(refreshMode, fadingFix);
+  displayedContent = DisplayContent::BW;
+  ++displayGeneration;
+  asyncRefreshPending = false;
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
@@ -1758,15 +1763,27 @@ void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const 
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
-    display.displayBuffer(refreshMode, fadingFix);
+    displayBuffer(refreshMode);
     return;
   }
   display.displayBufferAsync(refreshMode);
+  displayedContent = DisplayContent::BW;
+  ++displayGeneration;
+  asyncRefreshPending = true;
 }
 
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
+
+bool GfxRenderer::prepareBwOverlay() const {
+  if (displayedContent != DisplayContent::BW || renderMode != BW || !frameBuffer || _stripActive ||
+      promotedRefreshPending_)
+    return false;
+  waitRefreshComplete();
+  if (asyncRefreshPending) cleanupGrayscaleWithFrameBuffer();
+  return true;
+}
 
 HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay::GrayscaleMode mode) const {
   auto caps = display.grayscaleCapabilities(mode);
@@ -2315,11 +2332,15 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
   display.displayGrayscaleBase(fallback, fadingFix);
+  displayedContent = DisplayContent::Grayscale;
+  ++displayGeneration;
 }
 
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
   if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
+  displayedContent = DisplayContent::Grayscale;
+  ++displayGeneration;
   absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
   return true;
 }
@@ -2344,13 +2365,22 @@ void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {
                                 static_cast<uint16_t>(x1 - x0 + 1), static_cast<uint16_t>(y1 - y0 + 1));
 }
 
-void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(frameBuffer); }
+void GfxRenderer::copyGrayscaleLsbBuffers() const {
+  displayedContent = DisplayContent::Grayscale;
+  display.copyGrayscaleLsbBuffers(frameBuffer);
+}
 
-void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
+void GfxRenderer::copyGrayscaleMsbBuffers() const {
+  displayedContent = DisplayContent::Grayscale;
+  display.copyGrayscaleMsbBuffers(frameBuffer);
+}
 
 void GfxRenderer::displayGrayBuffer() const {
   display.displayGrayBuffer(fadingFix);
   absoluteGrayPlanes = false;
+  displayedContent = display.isInverted() ? DisplayContent::BW : DisplayContent::Grayscale;
+  ++displayGeneration;
+  asyncRefreshPending = false;
 }
 
 void GfxRenderer::setRenderMode(RenderMode mode) {
@@ -2364,6 +2394,7 @@ void GfxRenderer::setRenderMode(RenderMode mode) {
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.
   assert(yStart >= 0 && numRows > 0 && yStart <= static_cast<int>(panelHeight) - numRows);
+  displayedContent = DisplayContent::Grayscale;
   display.writeGrayscalePlaneStrip(lsbPlane, scratch, static_cast<uint16_t>(yStart), static_cast<uint16_t>(numRows));
 }
 
@@ -2457,6 +2488,7 @@ void GfxRenderer::restoreBwBuffer(const bool resyncPanelBaseline) {
 void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   if (frameBuffer) {
     display.cleanupGrayscaleBuffers(frameBuffer);
+    asyncRefreshPending = false;
   }
 }
 

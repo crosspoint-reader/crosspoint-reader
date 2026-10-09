@@ -12,6 +12,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "components/EdgeSwipeIndicator.h"
 #include "util/ScreenshotInfo.h"
 
 class Activity;    // forward declaration
@@ -65,6 +66,13 @@ class ActivityManager {
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
+  std::atomic<uint32_t> renderWork{0};
+  void notifyRenderWork(uint32_t work);
+#if FREEINK_CAP_TOUCH
+  EdgeSwipeIndicator edgeIndicator;
+  EdgeSwipeIndicator::Input edgeIndicatorInput;
+  void updateEdgeIndicator();
+#endif
 
  public:
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
