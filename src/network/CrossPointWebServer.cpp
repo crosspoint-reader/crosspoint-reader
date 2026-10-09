@@ -30,6 +30,7 @@
 #include <cstring>
 #include <string_view>
 
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
@@ -1098,8 +1099,8 @@ void CrossPointWebServer::handleRename() const {
   }
 
   clearBookCache(itemPath.c_str());
-  const bool success = file.rename(newPath.c_str());
   file.close();
+  const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1196,8 +1197,8 @@ void CrossPointWebServer::handleMove() const {
   }
 
   clearBookCache(itemPath.c_str());
-  const bool success = file.rename(newPath.c_str());
   file.close();
+  const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1308,8 +1309,7 @@ void CrossPointWebServer::handleDelete() const {
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
-      success = Storage.remove(itemPath.c_str());
-      clearBookCache(itemPath.c_str());
+      success = removeBookFile(itemPath.c_str());
     }
 
     if (!success) {

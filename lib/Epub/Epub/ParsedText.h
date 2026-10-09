@@ -49,7 +49,7 @@ class ParsedText {
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
   // uint16_t deltas from a shared base to keep this layout-only metadata small.
   // Pathological spans wider than uint16_t use sparse rebases; rendered
-  // TextBlocks do not carry any of this metadata.
+  // TextBlocks retain absolute ranges for portable clipping anchors.
   struct VisibleOffsetRebase {
     size_t wordIndex;
     uint32_t base;
@@ -57,6 +57,24 @@ class ParsedText {
   std::vector<uint16_t> wordVisibleOffsetDeltas;
   uint32_t visibleOffsetBase = 0;
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
+  // Sparse NFC source positions, in small nothrow chunks rather than a large contiguous array.
+  struct AbsorbedSourceChunk {
+    std::unique_ptr<AbsorbedSourceChunk> next;
+    uint32_t base = 0;
+    uint16_t deltas[64] = {};
+    uint8_t begin = 0;
+    uint8_t count = 0;
+    ~AbsorbedSourceChunk() {
+      while (next) {
+        auto retired = std::move(next);
+        next = std::move(retired->next);
+      }
+    }
+  };
+  std::unique_ptr<AbsorbedSourceChunk> absorbedSourceHead;
+  AbsorbedSourceChunk* absorbedSourceTail = nullptr;
+  mutable const AbsorbedSourceChunk* absorbedSourceCursor = nullptr;
+  mutable uint32_t absorbedSourceCursorStart = 0;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
   uint8_t wordSpacingPercent = 100;
@@ -79,6 +97,9 @@ class ParsedText {
   bool storeWord(std::string_view text, WordStore::StoredWord& out);
   uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
   uint32_t visibleOffsetAt(size_t wordIndex) const;
+  uint32_t sourceOffsetAfter(uint32_t start, uint32_t renderedLength) const;
+  bool recordAbsorbedSourceOffset(uint32_t offset);
+  void retireAbsorbedSourceOffsets(uint32_t remainingStart);
   void pushVisibleOffset(uint32_t offset);
   void insertVisibleOffset(size_t wordIndex, uint32_t offset);
   void eraseVisibleOffsetPrefix(size_t count);
@@ -119,7 +140,9 @@ class ParsedText {
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
   EpdFontFamily::Style getWordStyleAt(size_t index) const {
-    return index < wordStyles.size() ? wordStyles[index] : EpdFontFamily::REGULAR;
+    return index < wordStyles.size()
+               ? static_cast<EpdFontFamily::Style>(wordStyles[index] & ~TextBlock::DISCRETIONARY_HYPHEN_FLAG)
+               : EpdFontFamily::REGULAR;
   }
   std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
   void ensureRubyCapacity();
