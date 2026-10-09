@@ -1024,6 +1024,18 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
   const size_t totalWordCount = words.size();
 
+  // The gap before word j (kerning for a continuation, character spacing for a
+  // no-space boundary, else the scaled space advance) depends on j alone, but the
+  // DP below revisits it for every line start that reaches it (~one line of words).
+  // Measure each gap once into a fixed stack window instead of a per-paragraph heap vector
+  // (a transient allocation here shifts where the pages built next land and splits the
+  // largest free block). Line start i fills the slot of word i + 1; since i only decreases,
+  // the slots of words i + 1 .. i + GAP_WINDOW always hold their own gaps. A line longer
+  // than the window measures the words beyond it directly, as before. 32 entries (64 B)
+  // cover ordinary lines and keep this frame, which sits under the font lookups, small.
+  constexpr size_t GAP_WINDOW = 32;
+  int16_t gapWindow[GAP_WINDOW] = {};  // pixel distances, like the uint16_t word widths
+
   // DP table to store the minimum badness (cost) of lines starting at index i
   std::vector<int> dp(totalWordCount);
   // 'ans[i]' stores the index 'j' of the *last word* in the optimal line starting at 'i'
@@ -1040,19 +1052,34 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     // First line has reduced width due to text-indent
     const int effectivePageWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
 
+    const size_t lineStart = static_cast<size_t>(i);
+
     for (size_t j = i; j < totalWordCount; ++j) {
-      // Add space before word j, unless it's the first word on the line or a continuation
+      // Add space before word j, unless it's the first word on the line. One measuring site
+      // serves both the window fill (word i + 1, as line i starts) and words beyond the window.
       int gap = 0;
-      if (j > static_cast<size_t>(i) && continuesVec[j]) {
-        // Attached and breakable-attached boundaries both use kerning when kept on one line.
-        gap = renderer.getKerning(fontId, lastCodepoint(wordAt(j - 1)), firstCodepoint(wordAt(j)), wordStyles[j - 1],
-                                  blockStyle.characterSpacing);
-      } else if (j > static_cast<size_t>(i) && noSpaceBeforeVec[j]) {
-        gap = blockStyle.characterSpacing;
-      } else if (j > static_cast<size_t>(i)) {
-        gap = scaleSpace(renderer.getSpaceAdvance(fontId, lastCodepoint(wordAt(j - 1)), firstCodepoint(wordAt(j)),
-                                                  wordStyles[j - 1]),
-                         wordSpacingPercent);
+      const bool fillsWindow = j == lineStart;
+      if (fillsWindow || j - lineStart > GAP_WINDOW) {
+        const size_t k = fillsWindow ? j + 1 : j;
+        int measured;
+        if (continuesVec[k]) {
+          // Attached and breakable-attached boundaries both use kerning when kept on one line.
+          measured = renderer.getKerning(fontId, lastCodepoint(wordAt(k - 1)), firstCodepoint(wordAt(k)),
+                                         wordStyles[k - 1], blockStyle.characterSpacing);
+        } else if (noSpaceBeforeVec[k]) {
+          measured = blockStyle.characterSpacing;
+        } else {
+          measured = scaleSpace(renderer.getSpaceAdvance(fontId, lastCodepoint(wordAt(k - 1)),
+                                                         firstCodepoint(wordAt(k)), wordStyles[k - 1]),
+                                wordSpacingPercent);
+        }
+        if (fillsWindow) {
+          gapWindow[k % GAP_WINDOW] = static_cast<int16_t>(measured);
+        } else {
+          gap = measured;
+        }
+      } else {
+        gap = gapWindow[j % GAP_WINDOW];
       }
 
       // Calculate extraStartOffset for the first word on the line (i) (protect left margin)
