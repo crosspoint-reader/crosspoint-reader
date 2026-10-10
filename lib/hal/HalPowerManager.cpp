@@ -11,7 +11,7 @@
 
 #include "HalGPIO.h"
 
-#if FREEINK_DEVICE_EEGO_A4
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO
 #include <HalFrontlight.h>
 #endif
 
@@ -78,8 +78,9 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton) const {
-#if FREEINK_DEVICE_EEGO_A4
-  // LM3630A and GSL share I2C; turn the light off before touch releases the bus.
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO
+  // The frontlight driver and touch share I2C; turn the light off before touch
+  // releases the bus. On Picco this also puts the TMA525C to sleep.
   Frontlight.setOn(false);
   gpio.prepareForDeepSleep();
 #endif
