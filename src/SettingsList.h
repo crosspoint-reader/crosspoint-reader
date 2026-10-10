@@ -290,6 +290,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_RIGHT] = StrId::STR_DIR_RIGHT;
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_LEFT] = StrId::STR_DIR_LEFT;
 
+    std::vector<StrId> libraryGroupByValues(CrossPointSettings::GROUP_BY_COUNT);
+    libraryGroupByValues[CrossPointSettings::GROUP_BY_NONE] = StrId::STR_NONE_OPT;
+    libraryGroupByValues[CrossPointSettings::GROUP_BY_SERIES] = StrId::STR_LIBRARY_TAB_SERIES;
+    libraryGroupByValues[CrossPointSettings::GROUP_BY_PUBLISHER] = StrId::STR_LIBRARY_TAB_PUBLISHER;
+    libraryGroupByValues[CrossPointSettings::GROUP_BY_LANGUAGE] = StrId::STR_LIBRARY_TAB_LANGUAGE;
+    libraryGroupByValues[CrossPointSettings::GROUP_BY_SUBJECT] = StrId::STR_LIBRARY_TAB_SUBJECT;
+
     std::vector<SettingInfo> v = {
         // --- Display ---
         SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
@@ -441,6 +448,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
                             "libraryUseMetadata", StrId::STR_CAT_SYSTEM),
+        SettingInfo::Enum(StrId::STR_LIBRARY_GROUP_BY, &CrossPointSettings::libraryGroupBy,
+                          std::move(libraryGroupByValues), "libraryGroupBy", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
                             "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,

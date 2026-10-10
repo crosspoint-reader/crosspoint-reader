@@ -3,11 +3,10 @@
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <Utf8.h>
 #include <XmlParserUtils.h>
 
 #include <cctype>
-#include <cmath>
-#include <cstdlib>
 #include <cstring>
 
 #include "Epub/BookMetadataCache.h"
@@ -34,25 +33,66 @@ bool startsWithImageMediaType(const std::string& mediaType) {
   return true;
 }
 
-bool isXmlWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
-
 // Metadata text comes straight from the (untrusted) OPF; unbounded growth on
 // a multi-megabyte title would exhaust the heap. Downstream consumers truncate
 // far below this anyway, so overflow is clamped, not fatal.
 constexpr size_t MAX_METADATA_TEXT = 512;
-constexpr size_t MAX_COLLECTION_CANDIDATES = 8;
+
+void assignBoundedAttribute(std::string& out, const char* value) {
+  out.clear();
+  if (value == nullptr) {
+    return;
+  }
+
+  size_t length = 0;
+  while (length < MAX_METADATA_TEXT && value[length] != '\0') {
+    length++;
+  }
+  const size_t safeLength = static_cast<size_t>(utf8SafeTruncateBuffer(value, static_cast<int>(length)));
+  out.assign(value, safeLength);
+  if (value[length] != '\0') {
+    LOG_DBG("COF", "Metadata attribute exceeds %u bytes; truncating", static_cast<unsigned>(MAX_METADATA_TEXT));
+  }
+}
+
+void truncateToCodepoint(std::string& text) {
+  text.resize(static_cast<size_t>(utf8SafeTruncateBuffer(text.data(), static_cast<int>(text.size()))));
+}
+
+void collapseAttributeText(std::string& text) {
+  size_t writeIndex = 0;
+  bool spacePending = false;
+  for (const char c : text) {
+    if (isAsciiWhitespace(c)) {
+      spacePending = true;
+      continue;
+    }
+    if (spacePending && writeIndex != 0) {
+      text[writeIndex++] = ' ';
+    }
+    spacePending = false;
+    text[writeIndex++] = c;
+  }
+  text.resize(writeIndex);
+}
 
 void appendMetadataText(std::string& out, const XML_Char* text, const int len, bool& spacePending,
                         bool* separatorPending = nullptr) {
   if (out.size() >= MAX_METADATA_TEXT) return;  // already clamped and logged
   for (int i = 0; i < len; i++) {
     const char c = text[i];
-    if (isXmlWhitespace(c)) {
+    if (isAsciiWhitespace(c)) {
       spacePending = true;
       continue;
     }
 
-    if (out.size() >= MAX_METADATA_TEXT) {
+    size_t prefixLength = 0;
+    if (separatorPending != nullptr && *separatorPending) {
+      prefixLength = 2;
+    } else if (spacePending && !out.empty()) {
+      prefixLength = 1;
+    }
+    if (out.size() + prefixLength + 1 > MAX_METADATA_TEXT) {
       LOG_DBG("COF", "Metadata text exceeds %u bytes; truncating", static_cast<unsigned>(MAX_METADATA_TEXT));
       return;
     }
@@ -71,13 +111,6 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
 std::string lowerAscii(std::string value) {
   for (char& c : value) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   return value;
-}
-
-std::string boundedMetadataValue(const XML_Char* value) {
-  if (!value) return {};
-  size_t length = 0;
-  while (length < MAX_METADATA_TEXT && value[length] != '\0') ++length;
-  return std::string(value, length);
 }
 
 bool hasMetadataPrefix(const std::string& value, const char* prefix) {
@@ -101,15 +134,27 @@ std::string stripMetadataPrefix(const std::string& value, const char* prefix) {
   while (offset < value.size() && (value[offset] == ':' || value[offset] == ' ' || value[offset] == '	')) ++offset;
   return value.substr(offset);
 }
-
-std::optional<float> parseFiniteFloat(const std::string& value) {
-  if (value.empty()) return std::nullopt;
-  char* end = nullptr;
-  const float parsed = std::strtof(value.c_str(), &end);
-  if (end == value.c_str() || *end != '\0' || !std::isfinite(parsed)) return std::nullopt;
-  return parsed;
-}
 }  // namespace
+
+// Combined FNV-1a and SDBM hash (for collision reduction)
+ContentOpfParser::AttributeFingerprint ContentOpfParser::fingerprint(const char* value) {
+  AttributeFingerprint result;
+  if (value == nullptr || value[0] == '\0') {
+    return result;
+  }
+
+  result.fnv = 2166136261u;
+  result.sdbm = 0;
+  result.present = true;
+  for (const char* cursor = value; *cursor != '\0'; cursor++) {
+    const auto byte = static_cast<unsigned char>(*cursor);
+    result.fnv ^= byte;
+    result.fnv *= 16777619u;
+    result.sdbm = byte + (result.sdbm << 6) + (result.sdbm << 16) - result.sdbm;
+    result.length++;
+  }
+  return result;
+}
 
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
@@ -178,6 +223,14 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
   return size;
 }
 
+void ContentOpfParser::enterSingleValueElement(const ParserState capturing, const std::string& value) {
+  if (!value.empty()) {
+    return;
+  }
+  state = capturing;
+  metadataSpacePending = false;
+}
+
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ContentOpfParser*>(userData);
   if (self->metadataOnly && self->metadataComplete) {
@@ -216,8 +269,17 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "language")) {
-    self->state = IN_BOOK_LANGUAGE;
-    self->metadataSpacePending = false;
+    self->enterSingleValueElement(IN_BOOK_LANGUAGE, self->language);
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "publisher")) {
+    self->enterSingleValueElement(IN_BOOK_PUBLISHER, self->publisher);
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "subject")) {
+    self->enterSingleValueElement(IN_BOOK_SUBJECT, self->subject);
     return;
   }
 
@@ -227,7 +289,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     self->identifierScheme.clear();
     self->metadataSpacePending = false;
     for (int i = 0; atts[i]; i += 2) {
-      if (xmlLocalNameEquals(atts[i], "scheme")) self->identifierScheme = boundedMetadataValue(atts[i + 1]);
+      if (xmlLocalNameEquals(atts[i], "scheme")) assignBoundedAttribute(self->identifierScheme, atts[i + 1]);
     }
     return;
   }
@@ -270,39 +332,56 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "meta")) {
-    std::string metaName;
-    std::string content;
-    self->metaProperty.clear();
-    self->metaRefines.clear();
-    self->metaId.clear();
-    self->metaText.clear();
+    const char* metaName = nullptr;
+    const char* property = nullptr;
+    const char* content = nullptr;
+    const char* id = nullptr;
+    const char* refines = nullptr;
 
     for (int i = 0; atts[i]; i += 2) {
-      if (xmlLocalNameEquals(atts[i], "name")) {
-        metaName = boundedMetadataValue(atts[i + 1]);
-      } else if (xmlLocalNameEquals(atts[i], "content")) {
-        content = boundedMetadataValue(atts[i + 1]);
-      } else if (xmlLocalNameEquals(atts[i], "property")) {
-        self->metaProperty = boundedMetadataValue(atts[i + 1]);
-      } else if (xmlLocalNameEquals(atts[i], "refines")) {
-        self->metaRefines = boundedMetadataValue(atts[i + 1]);
-        if (!self->metaRefines.empty() && self->metaRefines[0] == '#') self->metaRefines.erase(0, 1);
-      } else if (xmlLocalNameEquals(atts[i], "id")) {
-        self->metaId = boundedMetadataValue(atts[i + 1]);
+      if (strcmp(atts[i], "name") == 0) {
+        metaName = atts[i + 1];
+      } else if (strcmp(atts[i], "content") == 0) {
+        content = atts[i + 1];
+      } else if (strcmp(atts[i], "property") == 0) {
+        property = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        id = atts[i + 1];
+      } else if (strcmp(atts[i], "refines") == 0) {
+        refines = atts[i + 1];
       }
     }
 
-    const std::string lowerName = lowerAscii(metaName);
-    if (lowerName == "cover") self->coverItemId = content;
-    if (lowerName == "calibre:series" && self->calibreSeries.empty()) self->calibreSeries = content;
-    if (lowerName == "calibre:series_index" && !self->calibreSeriesIndex.has_value()) {
-      self->calibreSeriesIndex = parseFiniteFloat(content);
+    if (metaName != nullptr && strcmp(metaName, "cover") == 0) {
+      self->coverItemId = fingerprint(content);
     }
 
-    const std::string property = lowerAscii(self->metaProperty);
-    if (property == "belongs-to-collection" || property == "collection-type" || property == "group-position") {
-      self->state = IN_META_TEXT;
+    // EPUB 2 Calibre series values are attributes
+    if (metaName != nullptr && strcmp(metaName, "calibre:series") == 0) {
+      if (self->calibreSeries.empty()) {
+        assignBoundedAttribute(self->calibreSeries, content);
+      }
+      return;
+    }
+    if (metaName != nullptr && strcmp(metaName, "calibre:series_index") == 0) {
+      if (self->calibreSeriesIndex.empty()) {
+        assignBoundedAttribute(self->calibreSeriesIndex, content);
+      }
+      return;
+    }
+
+    const bool isCollection = property != nullptr && strcmp(property, "belongs-to-collection") == 0;
+    const bool hasLocalRefines = refines != nullptr && refines[0] == '#' && refines[1] != '\0';
+    const bool isCollectionType = hasLocalRefines && property != nullptr && strcmp(property, "collection-type") == 0;
+    const bool isGroupPosition = hasLocalRefines && property != nullptr && strcmp(property, "group-position") == 0;
+    if (isCollection || isCollectionType || isGroupPosition) {
+      self->metaText.clear();
+      self->metaId = fingerprint(id);
+      self->metaRefines = hasLocalRefines ? fingerprint(refines + 1) : AttributeFingerprint{};
+      self->metaIsCollection = isCollection;
+      self->metaIsCollectionType = isCollectionType;
       self->metadataSpacePending = false;
+      self->state = IN_META_VALUE;
     }
     return;
   }
@@ -339,7 +418,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       serialization::writeString(self->tempItemStore, href);
     }
 
-    if (itemId == self->coverItemId) {
+    if (self->coverItemId.present && fingerprint(itemId.c_str()) == self->coverItemId) {
       // Some EPUBs set meta name="cover" to an XHTML wrapper item.
       // Only treat it as a cover image when the manifest media-type is image/*.
       if (startsWithImageMediaType(mediaType)) {
@@ -493,7 +572,17 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     return;
   }
 
-  if (self->state == IN_META_TEXT) {
+  if (self->state == IN_BOOK_PUBLISHER) {
+    appendMetadataText(self->publisher, s, len, self->metadataSpacePending);
+    return;
+  }
+
+  if (self->state == IN_BOOK_SUBJECT) {
+    appendMetadataText(self->subject, s, len, self->metadataSpacePending);
+    return;
+  }
+
+  if (self->state == IN_META_VALUE) {
     appendMetadataText(self->metaText, s, len, self->metadataSpacePending);
     return;
   }
@@ -526,16 +615,19 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_TITLE && xmlLocalNameEquals(name, "title")) {
+    truncateToCodepoint(self->title);
     self->state = IN_METADATA;
     return;
   }
 
   if (self->state == IN_BOOK_AUTHOR && xmlLocalNameEquals(name, "creator")) {
+    truncateToCodepoint(self->author);
     self->state = IN_METADATA;
     return;
   }
 
   if (self->state == IN_BOOK_LANGUAGE && xmlLocalNameEquals(name, "language")) {
+    truncateToCodepoint(self->language);
     self->state = IN_METADATA;
     return;
   }
@@ -554,61 +646,43 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
 
-  if (self->state == IN_META_TEXT && xmlLocalNameEquals(name, "meta")) {
-    const std::string property = lowerAscii(self->metaProperty);
-    if (property == "belongs-to-collection" && !self->metaId.empty()) {
-      CollectionMetadata* candidate = nullptr;
-      for (auto& collection : self->collectionCandidates) {
-        if (collection.id == self->metaId) {
-          candidate = &collection;
-          break;
-        }
-      }
-      if (candidate != nullptr) {
-        candidate->title = self->metaText;
-      } else if (self->collectionCandidates.size() < MAX_COLLECTION_CANDIDATES) {
-        self->collectionCandidates.push_back({self->metaId, self->metaText, std::nullopt, false});
-      } else {
-        LOG_DBG("COF", "Ignoring collection metadata beyond %u entries",
-                static_cast<unsigned>(MAX_COLLECTION_CANDIDATES));
-      }
-    } else if (!self->metaRefines.empty() && (property == "collection-type" || property == "group-position")) {
-      CollectionMetadata* candidate = nullptr;
-      for (auto& collection : self->collectionCandidates) {
-        if (collection.id == self->metaRefines) {
-          candidate = &collection;
-          break;
-        }
-      }
-      if (candidate == nullptr && self->collectionCandidates.size() < MAX_COLLECTION_CANDIDATES) {
-        self->collectionCandidates.push_back({self->metaRefines, {}, std::nullopt, false});
-        candidate = &self->collectionCandidates.back();
-      }
-      if (candidate != nullptr) {
-        if (property == "collection-type" && lowerAscii(self->metaText) == "series") {
-          candidate->isSeries = true;
-        } else if (property == "group-position") {
-          candidate->index = parseFiniteFloat(self->metaText);
-        }
-      }
-    }
+  if (self->state == IN_BOOK_PUBLISHER && xmlLocalNameEquals(name, "publisher")) {
+    truncateToCodepoint(self->publisher);
     self->state = IN_METADATA;
     return;
   }
 
-  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "metadata")) {
-    if (!self->calibreSeries.empty()) {
-      self->series = self->calibreSeries;
-      self->seriesIndex = self->calibreSeriesIndex;
-    } else {
-      for (const auto& candidate : self->collectionCandidates) {
-        if (!candidate.isSeries || candidate.title.empty()) continue;
-        self->series = candidate.title;
-        self->seriesIndex = candidate.index;
-        break;
+  if (self->state == IN_BOOK_SUBJECT && xmlLocalNameEquals(name, "subject")) {
+    truncateToCodepoint(self->subject);
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_META_VALUE && xmlLocalNameEquals(name, "meta")) {
+    truncateToCodepoint(self->metaText);
+    self->state = IN_METADATA;
+    if (self->metaIsCollection) {
+      if (self->collectionCount < MAX_COLLECTIONS) {
+        self->collections[self->collectionCount].id = self->metaId;
+        self->collections[self->collectionCount].name = self->metaText;
+        self->collectionCount++;
       }
+    } else if (self->refineCount < MAX_REFINES) {
+      StagedRefine& refine = self->refines[self->refineCount];
+      refine.target = self->metaRefines;
+      if (self->metaIsCollectionType) {
+        refine.type = asciiEqualsIgnoreCase(self->metaText, "series") ? CollectionType::Series : CollectionType::Other;
+      } else {
+        refine.position = self->metaText;
+      }
+      self->refineCount++;
     }
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "metadata")) {
     self->state = IN_PACKAGE;
+    self->resolveSeries();
     self->metadataComplete = true;
     return;
   }
@@ -617,4 +691,68 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     self->state = START;
     return;
   }
+}
+
+void ContentOpfParser::resolveCollection(const AttributeFingerprint& id, CollectionType& type,
+                                         std::string& position) const {
+  type = CollectionType::Untyped;
+  position.clear();
+  if (!id.present) {
+    return;
+  }
+
+  for (size_t i = 0; i < refineCount; i++) {
+    if (refines[i].target != id) {
+      continue;
+    }
+    if (refines[i].type != CollectionType::Untyped) {
+      type = refines[i].type;
+    }
+    if (!refines[i].position.empty()) {
+      position = refines[i].position;
+    }
+  }
+}
+
+void ContentOpfParser::resolveSeries() {
+  // prefer Calibre series metadata over EPUB 3 collections
+  if (!calibreSeries.empty()) {
+    collapseAttributeText(calibreSeries);
+    if (!calibreSeries.empty()) {
+      collapseAttributeText(calibreSeriesIndex);
+      series = std::move(calibreSeries);
+      seriesIndexText = std::move(calibreSeriesIndex);
+      return;
+    }
+  }
+
+  // prefer the first series-typed collection followed by the first untyped collection
+  // ignore collections explicitly marked as another type
+  std::string chosenName;
+  std::string chosenPosition;
+  for (size_t c = 0; c < collectionCount; c++) {
+    CollectionType type = CollectionType::Untyped;
+    std::string position;
+    resolveCollection(collections[c].id, type, position);
+    if (type == CollectionType::Other) {
+      continue;
+    }
+    if (collections[c].name.empty()) {
+      continue;
+    }
+    if (!chosenName.empty() && type != CollectionType::Series) {
+      continue;
+    }
+    chosenName = collections[c].name;
+    chosenPosition = position;
+    if (type == CollectionType::Series) {
+      break;
+    }
+  }
+  if (chosenName.empty()) {
+    return;
+  }
+
+  series = std::move(chosenName);
+  seriesIndexText = std::move(chosenPosition);
 }

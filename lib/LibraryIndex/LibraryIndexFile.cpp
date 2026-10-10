@@ -86,6 +86,12 @@ uint16_t LibraryIndexFile::ordinalForRow(const SortOrder order, const uint16_t r
       return readAt(arrivalOrderOffset(head, k), &ordinal, sizeof(ordinal)) && ordinal < head.bookCount ? ordinal
                                                                                                         : NONE;
     }
+    case SortOrder::GroupAsc:
+    case SortOrder::GroupDesc: {
+      const uint16_t k = order == SortOrder::GroupAsc ? row : static_cast<uint16_t>(head.bookCount - 1 - row);
+      uint16_t ordinal = NONE;
+      return readAt(groupOrderOffset(head, k), &ordinal, sizeof(ordinal)) && ordinal < head.bookCount ? ordinal : NONE;
+    }
   }
   return NONE;
 }
@@ -151,6 +157,32 @@ bool LibraryIndexFile::recentRowsFor(const BookIdentity* books, const size_t cou
   return true;
 }
 
+bool LibraryIndexFile::readGroupRef(const uint16_t ordinal, ClixGroupRef& out) {
+  out.groupId = CLIX_GROUP_NONE;
+  out.position = GROUP_POSITION_NONE;
+  if (!opened || ordinal >= head.bookCount) return false;
+  if (!readAt(groupRefOffset(head, ordinal), &out, sizeof(out))) return false;
+  // Treat out-of-range group IDs as ungrouped.
+  if (out.groupId >= head.groupCount) {
+    out.groupId = CLIX_GROUP_NONE;
+    out.position = GROUP_POSITION_NONE;
+  }
+  return true;
+}
+
+bool LibraryIndexFile::readGroup(const uint16_t groupId, std::string& name, uint16_t& bookCount) {
+  name.clear();
+  bookCount = 0;
+  if (!opened || groupId >= head.groupCount) return false;
+
+  ClixGroupEntry entry{};
+  if (!readAt(groupEntryOffset(head, groupId), &entry, sizeof(entry))) return false;
+  const size_t len = std::min<size_t>(entry.nameLen, CLIX_GROUP_NAME_BYTES);
+  name.assign(entry.name, len);
+  bookCount = entry.bookCount;
+  return true;
+}
+
 bool LibraryIndexFile::readRecord(const uint16_t ordinal, ClixRecord& out) {
   if (!opened || ordinal >= head.bookCount) return false;
   if (!readAt(recordOffset(head, ordinal), &out, sizeof(out))) return false;
@@ -194,27 +226,93 @@ bool LibraryIndexFile::readPathHash(const ClixRecord& record, uint64_t& out) {
   return readAt(head.nameStart + record.nameOff, &out, sizeof(out));
 }
 
-bool LibraryIndexFile::readBlobField(const ClixRecord& record, const uint8_t field, std::string& out) {
-  out.clear();
+// Buffer nearby blob fields to avoid an SD read for each length prefix.
+// Callers check bounds before take(); skip() only advances the cursor.
+class LibraryIndexFile::BlobWindow {
+ public:
+  BlobWindow(LibraryIndexFile& file, const uint32_t start) : file(file), at(start) {}
+
+  uint32_t position() const { return at; }
+  void skip(const uint32_t len) { at += len; }
+
+  bool take(void* dst, size_t len) {
+    auto* outBytes = static_cast<uint8_t*>(dst);
+    while (len > 0) {
+      if (at >= windowAt + windowLen) {
+        if (len >= WINDOW_BYTES) {
+          if (!file.readAt(file.head.nameStart + at, outBytes, len)) return false;
+          at += static_cast<uint32_t>(len);
+          return true;
+        }
+        windowAt = at;
+        windowLen = std::min<size_t>(WINDOW_BYTES, file.head.nameLen - at);
+        if (!file.readAt(file.head.nameStart + at, window, windowLen)) return false;
+      }
+      const size_t offset = at - windowAt;
+      const size_t count = std::min(len, windowLen - offset);
+      memcpy(outBytes, window + offset, count);
+      outBytes += count;
+      at += static_cast<uint32_t>(count);
+      len -= count;
+    }
+    return true;
+  }
+
+ private:
+  static constexpr size_t WINDOW_BYTES = 128;
+  LibraryIndexFile& file;
+  uint32_t at;
+  uint32_t windowAt = 0;
+  size_t windowLen = 0;
+  uint8_t window[WINDOW_BYTES];
+};
+
+bool LibraryIndexFile::blobTailStart(const ClixRecord& record, uint32_t& at) const {
   if (!opened || record.nameLen == 0) return false;
   if (record.nameOff > head.nameLen || sizeof(uint64_t) > head.nameLen - record.nameOff ||
       record.nameLen > head.nameLen - record.nameOff - sizeof(uint64_t))
     return false;
+  at = record.nameOff + sizeof(uint64_t) + record.nameLen;
+  return true;
+}
 
-  uint32_t at = record.nameOff + sizeof(uint64_t) + record.nameLen;
-  for (uint8_t i = 0; i <= field; i++) {
-    if (at >= head.nameLen) return false;
-    uint8_t len = 0;
-    if (!readAt(head.nameStart + at, &len, sizeof(len))) return false;
-    ++at;
-    if (len > head.nameLen - at) return false;
-    if (i == field) {
-      out.resize(len);
-      return len == 0 || readAt(head.nameStart + at, out.data(), len);
-    }
-    at += len;
+bool LibraryIndexFile::takeShortField(BlobWindow& blob, std::string* out) {
+  if (blob.position() >= head.nameLen) return false;
+  uint8_t len = 0;
+  if (!blob.take(&len, sizeof(len))) return false;
+  if (len > head.nameLen - blob.position()) return false;
+  if (out == nullptr) {
+    blob.skip(len);
+    return true;
+  }
+  out->resize(len);
+  if (len > 0 && !blob.take(out->data(), len)) {
+    out->clear();
+    return false;
+  }
+  return true;
+}
+
+bool LibraryIndexFile::takeSourceGroup(BlobWindow& blob, std::string& out) {
+  const uint8_t wanted = groupFieldIndex(groupKind());
+  if (sizeof(uint16_t) > head.nameLen - blob.position()) return false;
+  blob.skip(sizeof(uint16_t));  // the series position
+  for (uint8_t field = 0; field < GROUP_FIELD_COUNT; field++) {
+    if (!takeShortField(blob, field == wanted ? &out : nullptr)) return false;
+    if (field == wanted) return true;
   }
   return false;
+}
+
+bool LibraryIndexFile::readBlobField(const ClixRecord& record, const uint8_t field, std::string& out) {
+  out.clear();
+  uint32_t at = 0;
+  if (!blobTailStart(record, at)) return false;
+  BlobWindow blob(*this, at);
+  for (uint8_t i = 0; i < field; i++) {
+    if (!takeShortField(blob, nullptr)) return false;
+  }
+  return takeShortField(blob, &out);
 }
 
 bool LibraryIndexFile::readAuthor(const ClixRecord& record, std::string& out) {
@@ -229,6 +327,52 @@ bool LibraryIndexFile::readTitle(const ClixRecord& record, std::string& out) {
 
 bool LibraryIndexFile::readSourceAuthor(const ClixRecord& record, std::string& out) {
   return readBlobField(record, 2, out);
+}
+
+bool LibraryIndexFile::readSourceFields(const ClixRecord& record, SourceFields& out) {
+  out.seriesPosition = GROUP_POSITION_NONE;
+  for (std::string& field : out.field) field.clear();
+  uint32_t at = 0;
+  if (!blobTailStart(record, at)) return false;
+  BlobWindow blob(*this, at);
+  for (uint8_t i = 0; i < 3; i++) {
+    if (!takeShortField(blob, nullptr)) return false;
+  }
+  if (sizeof(uint16_t) > head.nameLen - blob.position() || !blob.take(&out.seriesPosition, sizeof(uint16_t))) {
+    out.seriesPosition = GROUP_POSITION_NONE;
+    return false;
+  }
+  for (std::string& field : out.field) {
+    if (!takeShortField(blob, &field)) return false;
+  }
+  return true;
+}
+
+bool LibraryIndexFile::readSourceGroup(const ClixRecord& record, std::string& out) {
+  out.clear();
+  if (!opened) return false;
+  if (groupKind() == GroupKind::None) return record.nameLen != 0;
+  uint32_t at = 0;
+  if (!blobTailStart(record, at)) return false;
+  BlobWindow blob(*this, at);
+  for (uint8_t i = 0; i < 3; i++) {
+    if (!takeShortField(blob, nullptr)) return false;
+  }
+  return takeSourceGroup(blob, out);
+}
+
+bool LibraryIndexFile::readSearchFields(const ClixRecord& record, std::string* title, std::string& author,
+                                        std::string& sourceGroup) {
+  if (title != nullptr) title->clear();
+  author.clear();
+  sourceGroup.clear();
+  uint32_t at = 0;
+  if (!blobTailStart(record, at)) return false;
+  BlobWindow blob(*this, at);
+  // Display author, title and source author; a null title is skipped.
+  if (!takeShortField(blob, &author) || !takeShortField(blob, title) || !takeShortField(blob, nullptr)) return false;
+  if (groupKind() == GroupKind::None) return true;
+  return takeSourceGroup(blob, sourceGroup);
 }
 
 bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {

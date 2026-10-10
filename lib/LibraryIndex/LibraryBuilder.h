@@ -1,9 +1,8 @@
 #pragma once
-
 // Builds the CLX1 index by walking the SD card once.
 //
-// The walk derives filename fallbacks and can read title and author metadata from
-// EPUBs. Fresh metadata is reused from the previous index.
+// The walk derives filename fallbacks and can read title, author and grouping
+// metadata from EPUBs. Fresh metadata is reused from the previous index.
 //
 // Shape of the build, and why:
 //
@@ -20,7 +19,6 @@
 //     index untouched rather than a half-written one.
 
 #include <cstdint>
-#include <string>
 
 #include "LibraryFormat.h"
 
@@ -45,15 +43,20 @@ struct BuildStats {
   uint32_t walkMs = 0;
   // Reconciliation against the previous index. Their sum over a rebuild with no
   // card changes should be: unchanged == books, everything else zero.
-  uint16_t unchanged = 0;  // same full path: keeps its place in "Recently added"
-  uint16_t added = 0;      // matched nothing, not even by size
-  uint16_t renamed = 0;    // matched a leftover entry by size alone
-  uint16_t removed = 0;    // previous entry no book claimed
-  uint16_t enriched = 0;   // took its title or author from the book rather than the filename
-  uint16_t parsed = 0;     // EPUB metadata reads performed by this build
-  uint16_t metadataReused = 0;
+  uint16_t unchanged = 0;       // same full path: keeps its place in "Recently added"
+  uint16_t added = 0;           // matched nothing, not even by size
+  uint16_t renamed = 0;         // matched a leftover entry by size alone
+  uint16_t removed = 0;         // previous entry no book claimed
+  uint16_t enriched = 0;        // took its title or author from the book rather than the filename
+  uint16_t parsed = 0;          // EPUB package reads attempted by this build, including failures
+  uint16_t metadataCached = 0;  // metadata loaded without a package read
+  uint16_t metadataReused = 0;  // carried over from the previous index
+  uint16_t groups = 0;          // distinct groups for the configured field
+  uint16_t grouped = 0;         // books assigned to a group
   bool indexReplaced = false;
   bool ranksDegraded = false;
+  // Group table allocation failed. The index retains the requested kind and source fields.
+  bool groupsDegraded = false;
   bool dedupDegraded = false;
 };
 
@@ -62,10 +65,18 @@ struct BuildStats {
 // internally so callers cannot accidentally split one rebuild state across two
 // file opens.
 // `readMetadata` makes the walk prefer the title and author held inside each
-// book over its filename. It reads an existing cache when available; otherwise
-// it stops the normal EPUB parser at the end of <metadata>, before the manifest,
-// without building the reader's spine, TOC, CSS, or section caches.
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false);
+// book over its filename. It reads an existing cache when available and not
+// stale; otherwise it stops the normal EPUB parser at the end of <metadata>,
+// before the manifest, without building the reader's spine, TOC, CSS, or section
+// caches.
+// `groupKind` selects the grouping field and requires `readMetadata`. The reader's
+// cache doesn't have group fields so grouped builds always read the package document.
+// When kind is `None`, grouping (and group reading/building) is disabled completely.
+// When grouping is enabled, grouped builds store all four fields so they can be
+// reused if the kind changes without a complete rebuild (however enabling grouping
+// after None requires rebuilding since `None` nukes the build). Group allocation
+// failure still writes an index but sets `groupsDegraded`.
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata, GroupKind groupKind);
 
 // Live index path, shared by the builder and activity.
 const char* libraryIndexPath();

@@ -222,6 +222,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
+  // Persisted values must match library::GroupKind.
+  enum LIBRARY_GROUP_BY {
+    GROUP_BY_NONE = 0,
+    GROUP_BY_SERIES = 1,
+    GROUP_BY_PUBLISHER = 2,
+    GROUP_BY_LANGUAGE = 3,
+    GROUP_BY_SUBJECT = 4,
+    GROUP_BY_COUNT
+  };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Night mode: inverted output polarity, applied to every activity per
@@ -343,6 +353,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Show the title and author read from inside each book rather than its
   // filename. Users can disable this to make index rebuilds skip EPUB parsing.
   uint8_t libraryUseMetadata = 1;
+  // Optional Library grouping field; requires libraryUseMetadata.
+  uint8_t libraryGroupBy = GROUP_BY_NONE;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)

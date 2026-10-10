@@ -4,6 +4,7 @@ add_executable(LibraryBuilderTest
   ${REPO_ROOT}/lib/LibraryIndex/LibraryIndexFile.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryFormat.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryText.cpp
+  ${REPO_ROOT}/lib/I18n/LanguageTag.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 target_include_directories(LibraryBuilderTest PRIVATE
@@ -12,5 +13,6 @@ target_include_directories(LibraryBuilderTest PRIVATE
   ${REPO_ROOT}/lib/Serialization
   ${REPO_ROOT}/lib/Utf8
 )
-target_link_libraries(LibraryBuilderTest PRIVATE crosspoint_test_common GTest::gtest_main)
+target_link_libraries(LibraryBuilderTest PRIVATE crosspoint_test_common crosspoint_i18n_tables crosspoint_language_code
+  GTest::gtest_main)
 gtest_discover_tests(LibraryBuilderTest)

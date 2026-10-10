@@ -3,6 +3,7 @@
 #include <ContentProtection.h>
 #include <Print.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -10,9 +11,16 @@
 #include <vector>
 
 #include "Epub/BookMetadataCache.h"
+#include "Epub/PackageGroupFields.h"
 #include "Epub/css/CssParser.h"
 
 class ZipFile;
+
+// Controls whether title and author may be read from book.bin.
+enum class MetadataCachePolicy : uint8_t { Allow, Bypass };
+
+// Cached includes filename fallbacks for TXT and Markdown; neither reads the package document.
+enum class MetadataSource : uint8_t { Failed, Cached, Parsed };
 
 class Epub {
  public:
@@ -48,7 +56,10 @@ class Epub {
 
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
-                       bool metadataOnly = false, ZipFile* sharedZip = nullptr);
+                       bool metadataOnly = false, ZipFile* sharedZip = nullptr,
+                       PackageGroupFields* groupFieldsOut = nullptr);
+  MetadataSource loadPackageMetadata(std::string& title, std::string& author, PackageGroupFields* fields,
+                                     MetadataCachePolicy policy);
   bool generateThumbBmpForCover(int height, const std::string& coverImageHref) const;
   bool openProtection();
   bool parseTocNcxFile() const;
@@ -61,7 +72,10 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
-  bool loadMetadata(std::string& title, std::string& author);
+  // Allow reads from book.bin only with MetadataCachePolicy::Allow.
+  MetadataSource loadMetadata(std::string& title, std::string& author, MetadataCachePolicy policy);
+  // Read title, author and group fields from the package document, stopping before the manifest.
+  MetadataSource loadMetadata(std::string& title, std::string& author, PackageGroupFields& fields);
   bool loadSyncMetadata(SyncMetadata& metadata);
   bool clearCache() const;
   void setupCacheDir() const;

@@ -19,6 +19,8 @@
 class TextSettingsActivity final : public UiTabListActivity {
  public:
   enum class Tab : uint8_t { Family, Size, Layout, Style, Count };
+  static_assert(static_cast<uint8_t>(Tab::Count) <= UiTabListActivity::MAX_TAB_COUNT,
+                "text settings tabs must fit the tab bar");
 
   TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
                        Tab initialTab = Tab::Family);

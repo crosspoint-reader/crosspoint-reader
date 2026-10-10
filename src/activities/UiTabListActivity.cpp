@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 
+#include <algorithm>
 #include <cassert>
 
 #include "MappedInputManager.h"
@@ -11,7 +12,26 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr int16_t TOUCH_TAB_BAR_HEIGHT = 50;
+// The SDK needs a nonzero inset to size pills to their labels
+constexpr int16_t MIN_TAB_PILL_PAD = 2;
+
+// Reserve arrow space on every label so widths stay stable when switching tabs
+int16_t fittedTabPillPad(const fui::DrawTarget& target, const fui::TabBarProps& props, const int16_t barWidth,
+                         const int16_t maxPad) {
+  const int16_t slotWidth = static_cast<int16_t>((barWidth - props.gap * (props.count - 1)) / props.count);
+  const int16_t room = static_cast<int16_t>(slotWidth - props.tabInset.left - props.tabInset.right);
+  int16_t widest = 0;
+  for (uint8_t i = 0; i < props.count; i++) {
+    const char* label = props.tabs[i].label;
+    const int16_t labelWidth = label ? target.measureText(props.text.font, label, props.text).width : 0;
+    const int16_t rowWidth = static_cast<int16_t>(labelWidth + props.indicatorGap + props.indicatorSize);
+    if (rowWidth > widest) widest = rowWidth;
+  }
+  const int16_t pad = static_cast<int16_t>((room - widest) / 2);
+  if (pad < MIN_TAB_PILL_PAD) return MIN_TAB_PILL_PAD;
+  return pad < maxPad ? pad : maxPad;
 }
+}  // namespace
 
 UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                                      const bool wantsTouchLongPress)
@@ -20,15 +40,27 @@ UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, Ma
 void UiTabListActivity::onEnter() {
   // Size the per-tab state before the base resets activeNav() (which indexes
   // into it).
-  tabNavs.assign(static_cast<size_t>(tabCount()), fui::ListNav{});
+  tabNavs = {};
+  syncTabNavigation();
   UiListActivity::onEnter();
   app.on(ACTION_TAB, &UiTabListActivity::tabActionTrampoline, this);
 }
 
+void UiTabListActivity::syncTabNavigation() {
+  const int count = tabCount();
+  assert(count > 0 && count <= MAX_TAB_COUNT && "tab count must fit the fixed navigation slots");
+  const size_t nextCount = static_cast<size_t>(count);
+  const size_t previousCount = tabNavs.size();
+  for (size_t i = std::min(previousCount, nextCount); i < std::max(previousCount, nextCount); i++) {
+    tabNavStorage[i] = fui::ListNav{};
+  }
+  tabNavs = std::span<fui::ListNav>(tabNavStorage.data(), nextCount);
+}
+
 fui::ListNav& UiTabListActivity::activeNav() {
   if (tabNavs.empty()) return nav;  // pre-onEnter fallback
-  // Invariant: subclasses keep activeTab() inside [0, tabCount()), and
-  // tabCount() does not change after onEnter() sized tabNavs.
+  // Invariant: subclasses keep activeTab() inside [0, tabCount()), and call
+  // syncTabNavigation() whenever tabCount() changes.
   assert(activeTab() >= 0 && static_cast<size_t>(activeTab()) < tabNavs.size());
   return tabNavs[static_cast<size_t>(activeTab())];
 }
@@ -98,9 +130,8 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   // the list (the legacy focused/unfocused tab distinction).
   // Stack array, not a heap vector: this runs on every render and the tab
   // count is small and fixed.
-  constexpr int MAX_TABS = 8;
-  const int count = tabCount() < MAX_TABS ? tabCount() : MAX_TABS;
-  fui::TabItem tabs[MAX_TABS];
+  const int count = tabCount() < MAX_TAB_COUNT ? tabCount() : MAX_TAB_COUNT;
+  fui::TabItem tabs[MAX_TAB_COUNT];
   for (int i = 0; i < count; i++) {
     tabs[i].label = tabLabel(i);
     tabs[i].value = static_cast<int16_t>(i);
@@ -143,8 +174,10 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     // stretching across the whole slot. The SDK shrinks the pill to content
     // width and centers it in its slot when the horizontal contentInset is
     // nonzero.
-    tabProps.contentInset.left = tabPillMaxPad;
-    tabProps.contentInset.right = tabPillMaxPad;
+    const auto slotsWidth = static_cast<int16_t>(screen.frame().screen().width - 2 * metrics.contentSidePadding);
+    const int16_t pad = fittedTabPillPad(screen.target(), tabProps, slotsWidth, tabPillMaxPad);
+    tabProps.contentInset.left = pad;
+    tabProps.contentInset.right = pad;
   }
 
   // Legacy Lyra two-state treatment: with the selection on the tab band, the

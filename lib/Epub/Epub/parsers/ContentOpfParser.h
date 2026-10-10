@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <deque>
-#include <optional>
 #include <vector>
 
 #include "Epub.h"
@@ -20,10 +19,36 @@ class ContentOpfParser final : public Print {
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
     IN_BOOK_IDENTIFIER,
-    IN_META_TEXT,
+    IN_BOOK_PUBLISHER,
+    IN_BOOK_SUBJECT,
+    IN_META_VALUE,
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
+  };
+
+  enum class CollectionType : uint8_t { Untyped, Series, Other };
+
+  static constexpr size_t MAX_COLLECTIONS = 4;
+  static constexpr size_t MAX_REFINES = 8;
+
+  struct AttributeFingerprint {
+    uint32_t fnv = 0;
+    uint32_t sdbm = 0;
+    size_t length = 0;
+    bool present = false;
+
+    bool operator==(const AttributeFingerprint&) const = default;
+  };
+
+  struct StagedCollection {
+    AttributeFingerprint id;
+    std::string name;
+  };
+  struct StagedRefine {
+    AttributeFingerprint target;
+    std::string position;
+    CollectionType type = CollectionType::Untyped;
   };
 
   const std::string& cachePath;
@@ -35,7 +60,7 @@ class ContentOpfParser final : public Print {
   const bool metadataOnly;
   bool metadataComplete = false;
   HalFile tempItemStore;
-  std::string coverItemId;
+  AttributeFingerprint coverItemId;
   bool hasExplicitStartReference = false;
   // XML character data is allowed to arrive in several callbacks for one text
   // node (notably around character references). Keep whitespace and creator
@@ -46,18 +71,23 @@ class ContentOpfParser final : public Print {
   std::string identifierText;
   std::string identifierScheme;
   std::string metaText;
-  std::string metaProperty;
-  std::string metaRefines;
-  std::string metaId;
-  struct CollectionMetadata {
-    std::string id;
-    std::string title;
-    std::optional<float> index;
-    bool isSeries = false;
-  };
-  std::vector<CollectionMetadata> collectionCandidates;
+  AttributeFingerprint metaId;
+  AttributeFingerprint metaRefines;
+  bool metaIsCollection = false;
+  bool metaIsCollectionType = false;
+
+  StagedCollection collections[MAX_COLLECTIONS];
+  size_t collectionCount = 0;
+  StagedRefine refines[MAX_REFINES];
+  size_t refineCount = 0;
   std::string calibreSeries;
-  std::optional<float> calibreSeriesIndex;
+  std::string calibreSeriesIndex;
+
+  void resolveSeries();
+  // Collect the first non-blank value of a dc: element
+  void enterSingleValueElement(ParserState capturing, const std::string& value);
+  // Resolve collection type and position by ID
+  void resolveCollection(const AttributeFingerprint& id, CollectionType& type, std::string& position) const;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
@@ -67,6 +97,8 @@ class ContentOpfParser final : public Print {
   };
   std::deque<ItemIndexEntry> itemIndex;
   bool useItemIndex = false;
+
+  static AttributeFingerprint fingerprint(const char* value);
 
   // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {
@@ -88,14 +120,16 @@ class ContentOpfParser final : public Print {
   std::string language;
   std::string isbn;
   std::string asin;
-  std::string series;
-  std::optional<float> seriesIndex;
+  std::string publisher;
+  std::string subject;
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;
   std::string guideCoverPageHref;  // Guide reference with type="cover" or "cover-page" (points to XHTML wrapper)
   std::string textReferenceHref;
   std::vector<std::string> cssFiles;  // CSS stylesheet paths
+  std::string series;
+  std::string seriesIndexText;  // Original position text
 
   explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
                             BookMetadataCache* cache, const bool metadataOnly = false)

@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LanguageTag.h>
 #include <LibraryBuilder.h>
 #include <LibraryText.h>
 #include <Logging.h>
@@ -11,14 +12,15 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/library/LibraryGroupKind.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
-#include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/icons/headerIcons.h"
 #include "components/icons/listIcons.h"
@@ -35,11 +37,12 @@ constexpr unsigned long LONG_PRESS_MS = 1000;
 constexpr int RECENT_TAB = 0;
 constexpr int TITLE_TAB = 1;
 constexpr int AUTHOR_TAB = 2;
-constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
+// Keep the optional group tab last so the other tab indices remain stable
+constexpr int GROUP_TAB = 3;
 
 constexpr bool isDescending(const library::SortOrder order) {
   return order == library::SortOrder::RecentDesc || order == library::SortOrder::TitleDesc ||
-         order == library::SortOrder::AuthorDesc;
+         order == library::SortOrder::AuthorDesc || order == library::SortOrder::GroupDesc;
 }
 
 constexpr bool isRecentSort(const library::SortOrder order) {
@@ -50,25 +53,65 @@ constexpr bool isAuthorSort(const library::SortOrder order) {
   return order == library::SortOrder::AuthorAsc || order == library::SortOrder::AuthorDesc;
 }
 
+constexpr bool isGroupSort(const library::SortOrder order) {
+  return order == library::SortOrder::GroupAsc || order == library::SortOrder::GroupDesc;
+}
+
 constexpr library::SortOrder orderForTab(const int tab, const uint8_t descendingTabs) {
   const bool descending = (descendingTabs & (1u << tab)) != 0;
   if (tab == TITLE_TAB) return descending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
   if (tab == AUTHOR_TAB) return descending ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
+  if (tab == GROUP_TAB) return descending ? library::SortOrder::GroupDesc : library::SortOrder::GroupAsc;
   return descending ? library::SortOrder::RecentDesc : library::SortOrder::RecentAsc;
 }
 
-const char* tabLabelFor(const int tab) {
-  if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
-  if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  return tr(STR_LIBRARY_TAB_RECENT);
+const char* groupTabLabelFor(const library::GroupKind kind) {
+  switch (kind) {
+    case library::GroupKind::None:
+    case library::GroupKind::Series:
+      return tr(STR_LIBRARY_TAB_SERIES);
+    case library::GroupKind::Publisher:
+      return tr(STR_LIBRARY_TAB_PUBLISHER);
+    case library::GroupKind::Language:
+      return tr(STR_LIBRARY_TAB_LANGUAGE);
+    case library::GroupKind::Subject:
+      return tr(STR_LIBRARY_TAB_SUBJECT);
+  }
+  return tr(STR_LIBRARY_TAB_SERIES);
+}
+
+const char* ungroupedHeadingFor(const library::GroupKind kind) {
+  switch (kind) {
+    case library::GroupKind::None:
+    case library::GroupKind::Series:
+      return tr(STR_LIBRARY_STANDALONE);
+    case library::GroupKind::Publisher:
+      return tr(STR_LIBRARY_UNKNOWN_PUBLISHER);
+    case library::GroupKind::Language:
+      return tr(STR_LIBRARY_UNKNOWN_LANGUAGE);
+    case library::GroupKind::Subject:
+      return tr(STR_LIBRARY_NO_SUBJECT);
+  }
+  return tr(STR_LIBRARY_STANDALONE);
+}
+
+void languageDisplayName(const std::string& tag, std::string& out) {
+  if (const char* name = languageNameForTag(tag.c_str())) {
+    out = name;
+    return;
+  }
+  out = tag;
+  std::transform(out.begin(), out.end(), out.begin(),
+                 [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
 }
 
 }  // namespace
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiTabListActivity("Library", renderer, mappedInput, true) {
-  // Three short tab labels: a full-slot pill would stretch across a third of
-  // the screen, so cap it at the label plus padding (slots stay put).
+  // Three or four short tab labels: a full-slot pill would stretch across a
+  // quarter to a third of the screen, so cap it at the label plus padding
+  // (slots stay put).
   tabPillMaxPad = 16;
 }
 
@@ -79,31 +122,33 @@ void LibraryListActivity::onEnter() {
   // render task's SD-loaded fonts read glyph data at draw time, and the walk
   // needs the card to itself.
   RenderLock lock(*this);
-  UiTabListActivity::onEnter();
-  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
-  app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
-  app.on(ACTION_BACK, &LibraryListActivity::backActionTrampoline, this);
 
   // Recent is backed by the resident store. Prune before opening the index so
   // its persistence write never overlaps the long-lived index reader.
   if (RECENT_BOOKS.pruneMissing()) RECENT_BOOKS.saveToFile();
 
   // Rebuild when the index is missing, invalid, or was built with the other
-  // metadata mode. Otherwise entering the screen stays instant.
+  // metadata mode or group kind. Otherwise entering the screen stays instant.
+  // Open the index before the base initialises navigation as it determines tabCount().
   const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
-  const bool rebuildNeeded = library::isLibraryIndexDirty() || !index.open(library::libraryIndexPath()) ||
-                             index.header().metadataEnabled != readMetadata;
+  const bool rebuildNeeded = [&] {
+    if (library::isLibraryIndexDirty() || !index.open(library::libraryIndexPath())) return true;
+    if (index.header().metadataEnabled != readMetadata) return true;
+    return index.groupKind() != configuredLibraryGroupKind();
+  }();
   if (rebuildNeeded) {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     rebuildIndex();
     if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   }
-  degraded = index.isOpen() && index.ranksDegraded();
-  if (index.isOpen() && index.dedupDegraded()) {
-    LOG_ERR("LIB", "index was built without duplicate detection");
-  }
+  syncIndexState();
   resolvePinned();
+
+  UiTabListActivity::onEnter();
+  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
+  app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
+  app.on(ACTION_BACK, &LibraryListActivity::backActionTrampoline, this);
 
   // Entered while Confirm was still held (typical when launched from the home
   // menu): ignore its release, or we would open whatever sits at row 0.
@@ -118,7 +163,8 @@ void LibraryListActivity::onExit() {
 
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  const bool ok =
+      library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0, configuredLibraryGroupKind());
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;
@@ -128,8 +174,16 @@ bool LibraryListActivity::rebuildIndex() {
           static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
           static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.duplicatesDropped),
           static_cast<unsigned>(stats.unreadableSkipped));
+  LOG_INF("LIB", "groups: %u books across %u groups", static_cast<unsigned>(stats.grouped),
+          static_cast<unsigned>(stats.groups));
   if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
   return true;
+}
+
+void LibraryListActivity::logIndexDegradations() const {
+  if (!index.isOpen()) return;
+  if (index.dedupDegraded()) LOG_ERR("LIB", "index was built without duplicate detection");
+  if (index.groupsDegraded()) LOG_ERR("LIB", "index was built without its group table");
 }
 
 void LibraryListActivity::swallowHeldReleases() {
@@ -318,7 +372,39 @@ void LibraryListActivity::promptRebuildIndex() {
   requestUpdate(true);
 }
 
+void LibraryListActivity::clearGroupCache() {
+  cachedGroupId = library::CLIX_GROUP_NONE;
+  cachedGroupBooks = 0;
+  cachedGroupName.clear();
+}
+
+// Keep the tab state when temporarily closing the index for a book or dialog.
+// Refresh it here after opening or rebuilding the index.
+void LibraryListActivity::syncIndexState() {
+  clearGroupCache();
+  degraded = index.isOpen() && index.ranksDegraded();
+  logIndexDegradations();
+  groupTabAvailable = index.hasGroups();
+  groupTabKind = index.groupKind();
+}
+
 void LibraryListActivity::resetAfterRebuild() {
+  // restore book navigation before discarding the old group positions
+  if (groupsCollapsed) {
+    groupsCollapsed = false;
+    activeNav() = expandedNav;
+  }
+
+  const bool hadGroupTab = groupTabAvailable;
+  const library::GroupKind previousGroupTabKind = groupTabKind;
+  syncIndexState();
+  const bool groupTabChanged =
+      hadGroupTab != groupTabAvailable || (groupTabAvailable && previousGroupTabKind != groupTabKind);
+  if (!groupTabAvailable && activeTabIndex == GROUP_TAB) activeTabIndex = AUTHOR_TAB;
+  syncTabNavigation();
+  if (groupTabChanged && groupTabAvailable) tabNavs[GROUP_TAB] = fui::ListNav{};
+
+  sortOrder = orderForTab(activeTabIndex, descendingTabs);
   // Sort positions, group starts, and pinned rows all point into the old order.
   applyFilter();
   resolvePinned();
@@ -402,11 +488,10 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
         if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
         GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
         rebuildIndex();
-      }
-      if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
-      if (!result.isCancelled) {
+        if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
         resetAfterRebuild();
       }
+      if (result.isCancelled && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
     }
     if (!result.isCancelled) {
       closeRouting();
@@ -446,7 +531,8 @@ void LibraryListActivity::openSearch() {
 }
 
 void LibraryListActivity::stepTab(const int direction) {
-  const int next = (activeTab() + (direction > 0 ? 1 : TAB_SLOTS - 1)) % TAB_SLOTS;
+  const int slots = tabCount();
+  const int next = (activeTab() + (direction > 0 ? 1 : slots - 1)) % slots;
   selectTab(next, false);
 }
 
@@ -456,7 +542,7 @@ void LibraryListActivity::onTabAction(const int index) {
 }
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
-  if (index < 0 || index >= TAB_SLOTS) return;
+  if (index < 0 || index >= tabCount()) return;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   sortOrder = orderForTab(index, descendingTabs);
   // The filter and the overlap rows hold positions in the old order, so they
@@ -474,11 +560,19 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
 
 void LibraryListActivity::toggleSortDirection() { selectTab(activeTab(), true); }
 
-int LibraryListActivity::tabCount() const { return TAB_SLOTS; }
+int LibraryListActivity::tabCount() const {
+  static_assert(TAB_SLOTS == GROUP_TAB + 1, "the group tab is the last slot");
+  return groupTabAvailable ? TAB_SLOTS : TAB_SLOTS - 1;
+}
 
 int LibraryListActivity::activeTab() const { return activeTabIndex; }
 
-const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
+const char* LibraryListActivity::tabLabel(const int index) const {
+  if (index == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
+  if (index == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
+  if (index == GROUP_TAB) return groupTabLabelFor(groupTabKind);
+  return tr(STR_LIBRARY_TAB_RECENT);
+}
 
 fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
   if (index != activeTab()) return fui::TabIndicator::None;
@@ -515,6 +609,55 @@ int LibraryListActivity::rowFor(const int entry) const {
 
 bool LibraryListActivity::groupable() const { return !degraded && !isRecentSort(sortOrder) && bookRowCount() > 0; }
 
+// Return the row's group and optional series position.
+// For ungrouped books return false and set bookCount to the size of the ungrouped block.
+bool LibraryListActivity::groupFor(const int entry, std::string& name, library::ClixGroupRef& ref,
+                                   uint16_t& bookCount) {
+  name.clear();
+  ref = {library::CLIX_GROUP_NONE, library::GROUP_POSITION_NONE};
+  bookCount = 0;
+  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  if (ordinal == 0xFFFF) return false;
+  if (!index.readGroupRef(ordinal, ref)) {
+    ref = {library::CLIX_GROUP_NONE, library::GROUP_POSITION_NONE};
+    return false;
+  }
+  if (ref.groupId == library::CLIX_GROUP_NONE) {
+    bookCount = static_cast<uint16_t>(index.bookCount() - index.groupedCount());
+    return false;
+  }
+  if (ref.groupId != cachedGroupId) {
+    uint16_t books = 0;
+    if (!index.readGroup(ref.groupId, cachedGroupName, books) || cachedGroupName.empty()) {
+      cachedGroupId = library::CLIX_GROUP_NONE;
+      cachedGroupName.clear();
+      cachedGroupBooks = 0;
+      ref = {library::CLIX_GROUP_NONE, library::GROUP_POSITION_NONE};
+      return false;
+    }
+    cachedGroupId = ref.groupId;
+    cachedGroupBooks = books;
+  }
+  name = cachedGroupName;
+  bookCount = cachedGroupBooks;
+  return true;
+}
+
+void LibraryListActivity::formatGroupHeading(const std::string& name, const uint16_t bookCount,
+                                             std::string& out) const {
+  if (name.empty()) {
+    out = ungroupedHeadingFor(groupTabKind);
+  } else if (groupTabKind == library::GroupKind::Language) {
+    languageDisplayName(name, out);
+  } else {
+    out = name;
+  }
+  if (bookCount == 0) return;
+  char suffix[16];
+  snprintf(suffix, sizeof(suffix), " (%u)", static_cast<unsigned>(bookCount));
+  out += suffix;
+}
+
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
   library::ClixRecord record{};
@@ -538,9 +681,12 @@ bool LibraryListActivity::buildGroupStarts() {
   groupCount = 0;
   uint32_t previousInitial = 0;
   std::string previousAuthor;
+  uint16_t previousGroupId = library::CLIX_GROUP_NONE;
+  std::string group;
   std::string title;
   std::string author;
   previousAuthor.reserve(128);
+  group.reserve(128);
   title.reserve(128);
   author.reserve(128);
   for (int entry = 0; entry < count; entry++) {
@@ -549,6 +695,12 @@ bool LibraryListActivity::buildGroupStarts() {
       rowTextFor(entry, title, author);
       startsGroup = startsGroup || author != previousAuthor;
       previousAuthor = author;
+    } else if (isGroupSort(sortOrder)) {
+      library::ClixGroupRef ref{};
+      uint16_t groupBooks = 0;
+      groupFor(entry, group, ref, groupBooks);
+      startsGroup = startsGroup || ref.groupId != previousGroupId;
+      previousGroupId = ref.groupId;
     } else {
       const uint32_t initial = titleInitialFor(entry);
       startsGroup = startsGroup || initial != previousInitial;
@@ -624,6 +776,10 @@ void LibraryListActivity::applyFilter() {
 
   uint16_t matchCount = 0;
   std::string author;
+  std::string group;
+  std::string groupName;
+  // degraded indexes retain source fields for search
+  const library::GroupKind searchGroupKind = index.groupKind();
   for (int row = 0; row < total; row++) {
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
     library::ClixRecord record{};
@@ -635,10 +791,21 @@ void LibraryListActivity::applyFilter() {
     // The stored fold covers the title only, so the author has to be read and
     // folded here. That is the search most worth having: the reader who knows
     // the author usually also knows where the book is, while "emily" finding
-    // Alice Hunter is the case the shelf exists to answer.
-    author.clear();
-    if (index.readAuthor(record, author) && library::matchesQuery(library::fold(author), needle)) {
+    // Alice Hunter is the case the shelf exists to answer. The group field is
+    // read in the same pass.
+    const bool groupRead = index.readSearchFields(record, nullptr, author, group);
+    if (!author.empty() && library::matchesQuery(library::fold(author), needle)) {
       matches[matchCount++] = static_cast<uint16_t>(row);
+      continue;
+    }
+    // also match the displayed native name for language searches
+    if (groupRead && searchGroupKind != library::GroupKind::None) {
+      bool hit = library::matchesQuery(library::fold(group), needle);
+      if (!hit && searchGroupKind == library::GroupKind::Language) {
+        languageDisplayName(group, groupName);
+        hit = library::matchesQuery(library::fold(groupName), needle);
+      }
+      if (hit) matches[matchCount++] = static_cast<uint16_t>(row);
     }
   }
   filtered = std::move(matches);
@@ -809,6 +976,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = listCount();
   const bool authorGrouped = isAuthorSort(sortOrder);
+  const bool groupSorted = isGroupSort(sortOrder);
   const bool grouped = !isRecentSort(sortOrder);
 
   fui::ListProps props;
@@ -834,8 +1002,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   int rows = 0;
   int headers = 0;
   uint32_t previousInitial = 0;
-  std::string rowFile;
-  rowFile.reserve(128);
+  uint16_t previousGroupId = library::CLIX_GROUP_NONE;
   // Capture this after syncTabListViewport(), which may clamp nav.top.
   const int windowStart = static_cast<int>(props.topIndex);
   for (int entry = windowStart; entry < count && rows < static_cast<int>(cap); entry++) {
@@ -847,15 +1014,28 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
       if (authorGrouped) {
         rowTextFor(bookEntry, title, author);
         formatAuthorHeading(author, title);
+      } else if (groupSorted) {
+        library::ClixGroupRef ref{};
+        uint16_t groupBooks = 0;
+        groupFor(bookEntry, author, ref, groupBooks);
+        formatGroupHeading(author, groupBooks, title);
       } else {
         formatInitialHeading(titleInitialFor(bookEntry), title);
       }
     } else {
-      if (!rowTextFor(entry, title, author, &rowFile)) continue;
+      if (!rowTextFor(entry, title, author, &winRowFile)) continue;
       uint32_t initial = 0;
       bool startsGroup = false;
+      winGroup.clear();
+      library::ClixGroupRef ref{};
+      uint16_t groupBooks = 0;
+      bool inGroup = false;
       if (authorGrouped) {
         startsGroup = rows == 0 || author != winAuthors[static_cast<size_t>(rows - 1)];
+      } else if (groupSorted) {
+        inGroup = groupFor(entry, winGroup, ref, groupBooks);
+        startsGroup = rows == 0 || ref.groupId != previousGroupId;
+        previousGroupId = ref.groupId;
       } else if (grouped) {
         initial = titleInitialFor(entry);
         startsGroup = rows == 0 || initial != previousInitial;
@@ -865,16 +1045,27 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
         std::string& heading = winHeaders[static_cast<size_t>(headers++)];
         if (authorGrouped)
           formatAuthorHeading(author, heading);
+        else if (groupSorted)
+          formatGroupHeading(winGroup, groupBooks, heading);
         else
           formatInitialHeading(initial, heading);
         item.sectionHeading = heading.c_str();
+      }
+      if (groupSorted && inGroup) {
+        char positionText[12];
+        if (library::formatSeriesIndex(ref.position, positionText, sizeof(positionText))) {
+          static constexpr char SEPARATOR[] = " · ";
+          char prefix[sizeof(positionText) + sizeof(SEPARATOR) - 1];
+          snprintf(prefix, sizeof(prefix), "%s%s", positionText, author.empty() ? "" : SEPARATOR);
+          author.insert(0, prefix);
+        }
       }
       if (!authorGrouped && !author.empty()) item.subtitle = author.c_str();
     }
 
     item.label = title.c_str();
     // Group headings stay bare; every book row gets its file-type icon.
-    if (!groupsCollapsed && !rowFile.empty()) item.icon = listIconFor(UITheme::getFileIcon(rowFile), 32);
+    if (!groupsCollapsed && !winRowFile.empty()) item.icon = listIconFor(UITheme::getFileIcon(winRowFile), 32);
     item.actionValue = static_cast<int16_t>(entry);
     winItems.push_back(item);
     rows++;
