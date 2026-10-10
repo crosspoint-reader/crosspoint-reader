@@ -12,7 +12,7 @@ struct Config {
   static constexpr float DEFAULT_DPI = 220.0f;
   static constexpr float COMPACT_PANEL_DPI = 235.0f;
   static constexpr float EDGE_MM = 3.5f;
-  static constexpr float PEEK_MM = 2.0f;
+  static constexpr float FLICK_MIN_MM = 2.0f;
   static constexpr float ARMED_MM = 7.0f;
   static constexpr float FLICK_MM_PER_SECOND = 100.0f;
   static constexpr float TAB_WIDTH_MM = 7.0f;
@@ -94,16 +94,16 @@ class Recognizer {
         break;
     }
     addSample(state.travel, now);
-    state.stage = state.travel >= Config::pixels(Config::ARMED_MM, dpi)  ? Stage::Armed
-                  : state.travel >= Config::pixels(Config::PEEK_MM, dpi) ? Stage::Peek
-                                                                         : Stage::Idle;
+    state.stage = state.travel >= Config::pixels(Config::ARMED_MM, dpi) ? Stage::Armed
+                  : state.travel >= Config::LOCK_PX                     ? Stage::Peek
+                                                                        : Stage::Idle;
   }
 
   void release(uint32_t now) {
     state.commit = false;
     if (state.claimed) {
       addSample(state.travel, now);
-      state.commit = state.stage == Stage::Armed || (state.travel >= Config::pixels(Config::PEEK_MM, dpi) &&
+      state.commit = state.stage == Stage::Armed || (state.travel >= Config::pixels(Config::FLICK_MIN_MM, dpi) &&
                                                      state.velocity > Config::pixels(Config::FLICK_MM_PER_SECOND, dpi));
     }
     state.committed = state.commit;

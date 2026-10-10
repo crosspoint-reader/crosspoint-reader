@@ -24,7 +24,7 @@ int main() {
 
   r.begin(100, 799, 480, 800, dpi, 0);
   r.move(100, 780, 100);
-  assert(r.getState().stage == Stage::Idle);
+  assert(r.getState().stage == Stage::Peek);
   r.move(115, 779, 200);
   assert(r.getState().stage == Stage::Peek);
   assert(r.getState().position == 100);  // lateral drift never moves the tab
@@ -47,6 +47,16 @@ int main() {
   r.move(30, 308, 20);
   r.release(21);
   assert(r.getState().commit);  // flick commits without Armed ever appearing
+
+  for (const float deviceDpi : {Config::DEFAULT_DPI, Config::COMPACT_PANEL_DPI}) {
+    r.begin(0, 300, 480, 800, deviceDpi, 0);
+    r.move(Config::LOCK_PX - 1, 300, 10);
+    assert(!r.getState().claimed && r.getState().stage == Stage::Idle);
+    r.move(Config::LOCK_PX, 300, 20);
+    assert(r.getState().claimed && r.getState().stage == Stage::Peek);
+    r.release(21);
+    assert(!r.getState().commit);  // feedback at direction lock still needs 2 mm to commit a flick
+  }
 
   r.begin(0, 300, 480, 800, dpi, 0);
   r.move(30, 300, 20);
@@ -77,6 +87,8 @@ int main() {
   r.move(70, 300, 300);
   assert(r.getState().stage == Stage::Armed);
   r.move(10, 300, 500);
+  assert(r.getState().stage == Stage::Peek);
+  r.move(9, 300, 510);
   assert(r.getState().stage == Stage::Idle);
   r.release(600);
   assert(!r.getState().commit);

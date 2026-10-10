@@ -309,7 +309,105 @@ void checkPageDuringContact(bool grayscale, bool hintsEnabled) {
   testManager = nullptr;
 }
 
+void checkNewContactLatency(bool grayscale, bool pageRedraw, bool sampleIdle) {
+  using namespace edge_swipe;
+  fakeNow += 1000;
+  HalDisplay panel;
+  GfxRenderer renderer(panel);
+  renderer.displayBuffer();
+  if (grayscale) renderer.displayGrayBuffer();
+  EdgeSwipeIndicator indicator;
+  indicator.begin();
+  EdgeSwipeIndicator::Input input;
+  input.state.contact = 1;
+  input.state.edge = Edge::Bottom;
+  input.state.position = 240;
+  input.state.tracking = input.state.claimed = true;
+  input.state.stage = Stage::Peek;
+  indicator.render(renderer, input, fakeNow);
+  assert(panel.glass == 0x00);
+  if (pageRedraw) {
+    indicator.pageChanged();
+    renderer.displayBuffer();
+    if (grayscale) renderer.displayGrayBuffer();
+  } else {
+    fakeNow += Config::MIN_REFRESH_MS;
+    input.state.tracking = false;
+    input.state.stage = Stage::Idle;
+    const auto cleanup = indicator.render(renderer, input, fakeNow);
+    if (grayscale) {
+      assert(cleanup == EdgeSwipeIndicator::Cleanup::RedrawPage);
+      indicator.pageChanged();
+      renderer.displayBuffer();
+      renderer.displayGrayBuffer();
+    }
+  }
+  assert(panel.glass == 0xFF);
+  fakeNow += 10;
+  ++input.state.contact;
+  input.state.tracking = true;
+  if (sampleIdle) {
+    input.state.stage = Stage::Idle;
+    indicator.render(renderer, input, fakeNow);
+    fakeNow += 10;
+  }
+  input.state.stage = Stage::Peek;
+  const auto beforeHint = panel.refreshes;
+  indicator.render(renderer, input, fakeNow);
+  assert(panel.glass == 0x00 && panel.refreshes == beforeHint + 1);
+  assert(panel.buffer == 0xFF);
+
+  input.state.stage = Stage::Idle;
+  fakeNow += 10;
+  indicator.render(renderer, input, fakeNow);
+  assert(panel.glass == 0x00 && indicator.serviceDelay(fakeNow) == Config::MIN_REFRESH_MS - 10);
+}
+
+void checkNewContactReplacement(bool grayscale, bool sampleIdle) {
+  using namespace edge_swipe;
+  fakeNow += 1000;
+  HalDisplay panel;
+  GfxRenderer renderer(panel);
+  renderer.displayBuffer();
+  if (grayscale) renderer.displayGrayBuffer();
+  EdgeSwipeIndicator indicator;
+  indicator.begin();
+  EdgeSwipeIndicator::Input input;
+  input.state.contact = 1;
+  input.state.edge = Edge::Bottom;
+  input.state.position = 240;
+  input.state.tracking = input.state.claimed = true;
+  input.state.stage = Stage::Peek;
+  indicator.render(renderer, input, fakeNow);
+  assert(GUI.lastIcon == &icon_edge_home_24);
+  fakeNow += 10;
+  ++input.state.contact;
+  input.state.edge = Edge::Left;
+  if (sampleIdle) {
+    input.state.stage = Stage::Idle;
+    indicator.render(renderer, input, fakeNow);
+    fakeNow += 10;
+  }
+  input.state.stage = Stage::Peek;
+  const auto beforeHint = panel.refreshes;
+  indicator.render(renderer, input, fakeNow);
+  assert(GUI.lastIcon == &icon_edge_back_24);
+  assert(panel.refreshes == beforeHint + 1 && panel.buffer == 0xFF);
+  fakeNow += Config::MIN_REFRESH_MS;
+  input.state.tracking = false;
+  input.state.stage = Stage::Idle;
+  const auto cleanup = indicator.render(renderer, input, fakeNow);
+  assert(cleanup == (grayscale ? EdgeSwipeIndicator::Cleanup::RedrawPage : EdgeSwipeIndicator::Cleanup::None));
+  assert(panel.glass == (grayscale ? 0x00 : 0xFF));
+}
+
 int main() {
+  for (const bool grayscale : {false, true}) {
+    for (const bool pageRedraw : {false, true}) {
+      for (const bool sampleIdle : {false, true}) checkNewContactLatency(grayscale, pageRedraw, sampleIdle);
+    }
+    for (const bool sampleIdle : {false, true}) checkNewContactReplacement(grayscale, sampleIdle);
+  }
   using namespace edge_swipe;
   using Content = GfxRenderer::DisplayContent;
   HalDisplay display;
@@ -460,7 +558,8 @@ int main() {
     for (const bool hintsEnabled : {false, true}) checkPageDuringContact(grayscale, hintsEnabled);
   }
   std::puts(
-      "Indicator icons, deadlines, grayscale restoration, page updates during contact, async baseline and "
+      "Indicator first-hint latency, contact replacement, icons, deadlines, grayscale restoration, "
+      "page updates during contact, async baseline and "
       "framebuffer-loan checks "
       "passed");
 }

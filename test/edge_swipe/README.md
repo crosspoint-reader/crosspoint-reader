@@ -15,5 +15,6 @@ This compiles the production indicator, renderer display methods, and render-tas
 loop against a recording display. It checks cleanup, repaint replacement, hints
 over grayscale, page updates and completion notifications during a held swipe
 with hints enabled and disabled, page restoration during a reversed swipe, async
-baseline ordering, refresh limits, and framebuffer loans. Hardware tests
+baseline ordering, refresh limits, first-hint latency after cleanup or a page
+redraw, replacing a previous contact's hint, and framebuffer loans. Hardware tests
 remain required for waveform behavior and ghosting.

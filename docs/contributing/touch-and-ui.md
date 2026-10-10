@@ -113,7 +113,9 @@ One exception to "always go through a host": `KeyboardEntryActivity` drives the 
 
 Edge gestures are recognized once, for every screen. Activities must not add
 their own edge-swipe handling. Touch-down must be in a 3.5 mm edge zone;
-direction locks after 10 px. Release commits at 7 mm inward travel, or with a
+direction locks after 10 px, when the hint becomes eligible to render. A new
+contact's first hint does not wait for the previous contact's refresh cooldown.
+Release commits at 7 mm inward travel, or with a
 fast inward flick after at least 2 mm. Release below 7 mm without a qualifying
 inward flick cancels, including after reversing back toward the edge.
 

@@ -65,22 +65,27 @@ EdgeSwipeIndicator::Cleanup EdgeSwipeIndicator::render(const GfxRenderer& render
     pageChanged();
     return Cleanup::None;
   }
-  if (hasRefreshed && now - refreshedAt < Config::MIN_REFRESH_MS) {
+  const bool hintRequested = input.enabled && input.state.tracking && input.state.stage != Stage::Idle;
+  const bool firstHint = contact != input.state.contact && hintRequested;
+  if (!firstHint && hasRefreshed && now - refreshedAt < Config::MIN_REFRESH_MS) {
     pending = true;
     return Cleanup::None;
   }
   if (contact != input.state.contact) {
-    if (visible) {
+    if (visible && !hintRequested) {
       return clear(renderer, true);
     }
+    // The framebuffer holds the page; a new contact can replace a visible hint in one refresh.
+    visible = false;
     contact = input.state.contact;
     refreshes = 0;
     exhausted = false;
     committed = false;
     idleAt = 0;
+    hasRefreshed = false;
   }
   committed = committed || input.state.committed;
-  const bool show = input.enabled && input.state.tracking && input.state.stage != Stage::Idle && !exhausted;
+  const bool show = hintRequested && !exhausted;
   if (!show) {
     if (!visible) return Cleanup::None;
     // Navigation paints over a committed indicator. Only a commit that did
@@ -143,7 +148,7 @@ EdgeSwipeIndicator::Cleanup EdgeSwipeIndicator::render(const GfxRenderer& render
   displayGeneration = renderer.getDisplayGeneration();
   refreshedAt = millis();
   hasRefreshed = true;
-  grayscaleUnderlay = background == GfxRenderer::DisplayContent::Grayscale;
+  grayscaleUnderlay = grayscaleUnderlay || background == GfxRenderer::DisplayContent::Grayscale;
   ++refreshes;
   LOG_DBG("EDGE", "contact=%lu hint=shown refresh=%u rect=%d,%d %dx%d", static_cast<unsigned long>(contact), refreshes,
           region.x, region.y, region.width, region.height);
