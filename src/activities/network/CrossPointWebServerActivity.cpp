@@ -9,6 +9,7 @@
 #include <WiFi.h>
 
 #include <cstddef>
+#include <cstdio>
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
@@ -26,6 +27,9 @@ namespace {
 constexpr const char* AP_SSID = "CrossPoint-Reader";
 constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
+// Longest case is a translated "or http://" prefix plus <hostname>.local/ — snprintf truncates
+// rather than overruns, and this stays far inside the 256-byte guidance for stack locals.
+constexpr size_t URL_BUF_LEN = 96;
 constexpr uint8_t AP_CHANNEL = 1;
 constexpr uint8_t AP_MAX_CONNECTIONS = 4;
 constexpr int QR_CODE_WIDTH = 198;
@@ -43,13 +47,16 @@ void stopDnsServer() {
   dnsServer = nullptr;
 }
 
-void restartMdns(const char* hostname, const char* tag) {
+// Returns false when the responder did not come up; the caller must then fall back to the raw IP.
+// mdns_init() allocates a task and its stack, so this is a plausible casualty of low heap.
+bool restartMdns(const char* hostname, const char* tag) {
   MDNS.end();
-  if (MDNS.begin(hostname)) {
-    LOG_DBG(tag, "mDNS started: http://%s.local/", hostname);
-  } else {
-    LOG_DBG(tag, "WARNING: mDNS failed to start");
+  if (!MDNS.begin(hostname)) {
+    LOG_ERR(tag, "mDNS failed to start; only the IP address will be reachable");
+    return false;
   }
+  LOG_DBG(tag, "mDNS started: http://%s.local/", hostname);
+  return true;
 }
 
 // 0..4 bars from RSSI (dBm), with 3 dBm hysteresis on currentBars to suppress flicker.
@@ -115,6 +122,7 @@ void CrossPointWebServerActivity::onExit() {
   state = WebServerActivityState::SHUTTING_DOWN;
   stopDnsServer();
   MDNS.end();
+  mdnsActive = false;
 
   // Web uploads may have installed or removed plugins. Non-touch devices
   // reboot below (setup() re-reads everything), but touch devices end the
@@ -216,7 +224,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     isApMode = false;
 
     // Start mDNS for hostname resolution
-    restartMdns(AP_HOSTNAME, "WEBACT");
+    mdnsActive = restartMdns(AP_HOSTNAME, "WEBACT");
 
     // Start the web server
     startWebServer();
@@ -272,7 +280,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
   LOG_DBG("WEBACT", "IP: %s", connectedIP.c_str());
 
   // Start mDNS for hostname resolution
-  restartMdns(AP_HOSTNAME, "WEBACT");
+  mdnsActive = restartMdns(AP_HOSTNAME, "WEBACT");
 
   // Start DNS server for captive portal behavior
   // This redirects all DNS queries to our IP, making any domain typed resolve to us
@@ -503,18 +511,26 @@ void CrossPointWebServerActivity::renderServerRunning() const {
                       EpdFontFamily::BOLD);
     startY += height10 + metrics.verticalSpacing * 2;
 
-    std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
-    std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
+    // Without a responder the .local name resolves nowhere, so lead with the IP instead.
+    char primaryUrl[URL_BUF_LEN];
+    if (mdnsActive) {
+      snprintf(primaryUrl, sizeof(primaryUrl), "http://%s.local/", AP_HOSTNAME);
+    } else {
+      snprintf(primaryUrl, sizeof(primaryUrl), "http://%s/", connectedIP.c_str());
+    }
 
     // Show QR code for URL
     const Rect qrBoundsUrl(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
-    QrUtils::drawQrCode(renderer, qrBoundsUrl, hostnameUrl);
+    QrUtils::drawQrCode(renderer, qrBoundsUrl, primaryUrl);
 
-    // Show IP address as fallback
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
-                      hostnameUrl.c_str());
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 100,
-                      ipUrl.c_str());
+                      primaryUrl);
+    if (mdnsActive) {
+      char ipUrl[URL_BUF_LEN];
+      snprintf(ipUrl, sizeof(ipUrl), "%s%s/", tr(STR_OR_HTTP_PREFIX), connectedIP.c_str());
+      renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing,
+                        startY + 100, ipUrl);
+    }
   } else {
     startY += metrics.verticalSpacing * 2;
 
@@ -535,9 +551,12 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(UI_10_FONT_ID, startY, webInfo.c_str(), true);
     startY += height10 + 5;
 
-    // Also show hostname URL
-    std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
-    renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
+    // Also show hostname URL, but only when the responder actually claimed it.
+    if (mdnsActive) {
+      char hostnameUrl[URL_BUF_LEN];
+      snprintf(hostnameUrl, sizeof(hostnameUrl), "%s%s.local/", tr(STR_OR_HTTP_PREFIX), AP_HOSTNAME);
+      renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl, true);
+    }
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
