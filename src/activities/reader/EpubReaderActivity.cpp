@@ -1029,6 +1029,14 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
   requestUpdate();
 }
 
+int EpubReaderActivity::currentTocIndex() const {
+  if (!epub) return 0;
+  if (section) return std::max(0, section->getTocIndexForPage(section->currentPage));
+  // Child screens may have released the section; its saved anchor map remains readable.
+  Section cachedSection(epub, currentSpineIndex, renderer);
+  return std::max(0, cachedSection.getTocIndexForPage(nextPageNumber));
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
     loadCachedBookmarks();
@@ -1043,7 +1051,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
-      const int spineIdx = currentSpineIndex;
+      int tocIndex;
       // Release the section while the chapter list is up (mirrors the
       // TEXT_SETTINGS path): picking a chapter resets it anyway, and its
       // tens-of-KB footprint is the difference between the chapter list
@@ -1052,6 +1060,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // cached-position rebuild TEXT_SETTINGS uses.
       {
         RenderLock lock;
+        tocIndex = currentTocIndex();
         if (section) {
           rememberCurrentContentOffset();
           cachedSpineIndex = currentSpineIndex;
@@ -1061,7 +1070,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         section.reset();
       }
       startActivityForResult(
-          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx),
+          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, tocIndex),
           [this](const ActivityResult& result) {
             if (result.isCancelled) {
               openReaderMenu();
@@ -2428,12 +2437,14 @@ void EpubReaderActivity::openOverlay(Overlay target) {
     case Overlay::Toolbar:
       focusedTool = 0;
       break;
-    case Overlay::Contents:
-      panelIndex = std::max(0, epub->getTocIndexForSpineIndex(currentSpineIndex));
+    case Overlay::Contents: {
+      RenderLock lock;
+      panelIndex = currentTocIndex();
       // Fresh viewport opening on the current chapter, cursor shown or not.
       toolbarUi->nav().reset(panelIndex);
       toolbarUi->nav().top = panelIndex;
       break;
+    }
     case Overlay::Text:
       panelIndex = 0;
       toolbarUi->nav().reset();
