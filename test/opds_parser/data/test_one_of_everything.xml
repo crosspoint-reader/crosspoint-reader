@@ -1,0 +1,22 @@
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/"
+  xmlns:ns3="http://calibre-ebook.com" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <link rel="search" href="/search/{searchTerms}.xml" />
+  <link rel="next" href="/page-3.xml" type="application/atom+xml" />
+  <link rel="previous" href="/page-1.xml" type="application/atom+xml" />
+
+  <entry>
+    <id>navid</id>
+    <title>nav</title>
+    <link rel="subsection" href="navhref" type="application/atom+xml" />
+  </entry>
+  <entry>
+    <id>bookid</id>
+    <title>book</title>
+    <author>
+      <name>author</name>
+    </author>
+    <link rel="http://opds-spec.org/acquisition"
+      href="bookhref"
+      type="application/epub+zip" />
+  </entry>
+</feed>

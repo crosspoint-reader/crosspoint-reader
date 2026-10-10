@@ -1,0 +1,89 @@
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/"
+  xmlns:ns3="http://calibre-ebook.com" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <entry>
+    <title>invalid-1</title>
+    <link rel="http://opds-spec.org.invalid/acquisition"
+      href="invalid-1"
+      type="application/epub+zip" />
+  </entry>
+  <entry>
+    <title>invalid-2</title>
+    <link rel="http://opds-spec.org/acquisition"
+      href="invalid-2"
+      type="application/epub+zip+invalid" />
+  </entry>
+  <entry>
+    <title>onlybook</title>
+    <link rel="http://opds-spec.org/acquisition"
+      href="onlybook"
+      type="application/epub+zip" />
+  </entry>
+
+  <entry>
+    <title>Prefers paths containing /epub/</title>
+    <link rel="http://opds-spec.org/acquisition"
+      href="a"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="b.kepub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="/epub/c.somethingelse"
+      type="application/epub+zip" />
+  </entry>
+
+  <entry>
+    <title>Prefers explicit epubs</title>
+    <link rel="http://opds-spec.org/acquisition"
+      href="a"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="b.kepub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="/epub/c.somethingelse"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="d.epub"
+      type="application/epub+zip" />
+  </entry>
+
+  <entry>
+    <title>Prefers compact epubs</title>
+    <link rel="http://opds-spec.org/acquisition"
+      href="a"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="b.kepub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="/epub/c.somethingelse"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="d.epub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="e.x3.epub"
+      type="application/epub+zip" />
+  </entry>
+
+
+  <entry>
+    <title>Ignores order to choose compact epub</title>
+    <link rel="http://opds-spec.org/acquisition"
+      href="d.epub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="/epub/c.somethingelse"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="e.x3.epub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="b.kepub"
+      type="application/epub+zip" />
+    <link rel="http://opds-spec.org/acquisition"
+      href="a"
+      type="application/epub+zip" />
+  </entry>
+</feed>

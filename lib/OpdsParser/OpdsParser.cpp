@@ -14,9 +14,37 @@ constexpr size_t MAX_ID_CHARS = 128;
 constexpr size_t MAX_HREF_CHARS = 768;
 constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
 constexpr size_t MAX_PAGE_URL_CHARS = 768;
+
+constexpr char EPUB_DIRECTORY[] = "/epub/";
+constexpr char* NO_PREFERRED_FORMAT = nullptr;
+constexpr uint8_t PREFERRED_FORMAT_SCORE = 5;
+constexpr uint8_t OPTIMIZED_EPUB_SCORE = 4;
+constexpr uint8_t EPUB_EXTENSION_SCORE = 3;
+constexpr uint8_t INCLUDES_EPUB_DIR_SCORE = 2;
+// For now, we are _only_ allowing downloads of files with type application/epub+zip
+constexpr uint8_t IS_APPLICATION_EPUB_ZIP_SCORE = 1;
+
+/// @brief A score is calculated for each download link, and the highest one is chosen
+uint8_t get_file_score(const char* download_href, const char* preferred_format) {
+  if (preferred_format != nullptr && strstr(download_href, preferred_format) != nullptr) {
+    return PREFERRED_FORMAT_SCORE;
+  }
+  if (strstr(download_href, OpdsParser::X4_EPUB_EXT) != nullptr || strstr(download_href, OpdsParser::X3_EPUB_EXT)) {
+    return OPTIMIZED_EPUB_SCORE;
+  }
+  if (strstr(download_href, OpdsParser::EPUB_EXT) != nullptr) {
+    return EPUB_EXTENSION_SCORE;
+  }
+  if (strstr(download_href, EPUB_DIRECTORY) != nullptr) {
+    return INCLUDES_EPUB_DIR_SCORE;
+  }
+  return IS_APPLICATION_EPUB_ZIP_SCORE;
+}
+
 }  // namespace
 
-OpdsParser::OpdsParser() {
+OpdsParser::OpdsParser() : OpdsParser(NO_PREFERRED_FORMAT) {}
+OpdsParser::OpdsParser(const char* passed_preferred_format) {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
     errorOccured = true;
@@ -27,9 +55,25 @@ OpdsParser::OpdsParser() {
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
+  if (passed_preferred_format != nullptr) {
+    preferredFormat = new (std::nothrow) char[strlen(passed_preferred_format) + 1];
+    if (preferredFormat == nullptr) {
+      // If it can't allocate the few bytes necessary to store the format, bigger problems
+      // are happening, and the user won't mind if they download the slightly incorrect optimized file,
+      // so log and ignore
+      LOG_DBG("OPDS", "Failed to allocate space to store the preferred file extension format");
+    } else {
+      strcpy(preferredFormat, passed_preferred_format);
+    }
+  }
 }
 
-OpdsParser::~OpdsParser() { destroyXmlParser(parser); }
+OpdsParser::~OpdsParser() {
+  if (preferredFormat != nullptr) {
+    delete[] preferredFormat;
+  }
+  destroyXmlParser(parser);
+}
 
 size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 
@@ -125,6 +169,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     self->feedTruncated = self->feedTruncated || !self->collectCurrentEntry;
     self->currentEntry = OpdsEntry{};
     self->currentText.clear();
+    self->currentEntryFileScore = 0;
     self->inTitle = self->inAuthor = self->inAuthorName = self->inId = false;
     return;
   }
@@ -148,14 +193,11 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       if (self->inEntry && self->collectCurrentEntry) {
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
-          // Prefer plain EPUB links over derived formats when multiple
-          // acquisition links are present for one entry.
-          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                            self->currentEntry.href.find("/epub/") != std::string::npos);
-          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
+          const uint8_t file_score = get_file_score(href, self->preferredFormat);
+
+          if (self->currentEntry.type != OpdsEntryType::BOOK || file_score > self->currentEntryFileScore) {
             self->currentEntry.type = OpdsEntryType::BOOK;
+            self->currentEntryFileScore = file_score;
             assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
