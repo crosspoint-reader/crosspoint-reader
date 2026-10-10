@@ -48,6 +48,7 @@ class ZipFile {
   uint32_t lastCentralDirPos = 0;
   bool lastCentralDirPosValid = false;
   // Reuse the lookup when extraction follows a size query for the same entry
+  // while the archive stays open
   std::string lastLookupName;
   FileStatSlim lastLookup = {};
   bool lastLookupValid = false;

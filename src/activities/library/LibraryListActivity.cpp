@@ -101,9 +101,8 @@ void languageDisplayName(const std::string& tag, std::string& out) {
     return;
   }
   out = tag;
-  for (char& c : out) {
-    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-  }
+  std::transform(out.begin(), out.end(), out.begin(),
+                 [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
 }
 
 }  // namespace

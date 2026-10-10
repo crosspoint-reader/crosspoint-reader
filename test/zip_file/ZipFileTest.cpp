@@ -213,17 +213,20 @@ TEST_F(ZipFileTest, StreamsEntriesInChunks) {
   EXPECT_EQ(stored.text(), "application/epub+zip");
 }
 
-TEST_F(ZipFileTest, RepeatedSizeLookupDoesNotReopenTheArchive) {
-  ZipBuilder builder;
-  builder.addStored("a.txt", "aaaa").addStored("b.txt", "bb");
-  install(builder);
+TEST_F(ZipFileTest, LookupCacheDoesNotOutliveTheOpenArchive) {
+  ZipBuilder before;
+  before.addStored("a.txt", "aaaa").addStored("b.txt", "bb");
+  install(before);
 
   ZipFile zip(path);
   EXPECT_EQ(sizeOf(zip, "b.txt"), 2u);
-  const int opensAfterFirst = Storage.openCount;
-  EXPECT_GT(opensAfterFirst, 0);
-  EXPECT_EQ(sizeOf(zip, "b.txt"), 2u);
-  EXPECT_EQ(Storage.openCount, opensAfterFirst);
+
+  // replace the archive while the ZipFile lives on; same total length keeps
+  // the central directory where the remembered zip details expect it
+  ZipBuilder after;
+  after.addStored("a.txt", "aa").addStored("b.txt", "bbbb");
+  install(after);
+  EXPECT_EQ(sizeOf(zip, "b.txt"), 4u);
 }
 
 TEST_F(ZipFileTest, ExtractAfterSizeQuerySkipsTheCentralDirectory) {
@@ -232,6 +235,8 @@ TEST_F(ZipFileTest, ExtractAfterSizeQuerySkipsTheCentralDirectory) {
   install(builder);
 
   ZipFile zip(path);
+  // the lookup is only remembered while the archive stays open
+  ASSERT_TRUE(zip.open());
   EXPECT_EQ(sizeOf(zip, "b.txt"), 2u);
   HalFile::readOffsets.clear();
   EXPECT_EQ(extract(zip, "b.txt"), "bb");

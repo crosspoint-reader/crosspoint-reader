@@ -303,6 +303,8 @@ bool ZipFile::close() {
   }
   lastCentralDirPos = 0;
   lastCentralDirPosValid = false;
+  // the archive may change before the next open
+  lastLookupValid = false;
   return true;
 }
 
