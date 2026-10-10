@@ -274,6 +274,9 @@ void DictionaryWordSelectActivity::loop() {
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
       if (!lookupText.empty()) {
+        ActivityResult res;
+        res.isCancelled = true;
+        setResult(std::move(res));
         finish();
         return;
       }
