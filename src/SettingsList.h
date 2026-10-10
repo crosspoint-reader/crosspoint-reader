@@ -188,6 +188,7 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   values.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
   if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
   values.push_back(StrId::STR_SAVE_CLIPPING);
+  values.push_back(StrId::STR_FOOTNOTES);
   return values;
 }
 
@@ -195,20 +196,17 @@ inline uint8_t longPressMenuDisplayValue() {
   const uint8_t raw = SETTINGS.longPressMenuFunction;
   if (raw <= CrossPointSettings::LP_MENU_DICTIONARY) return raw;
   if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
-    return BoardConfig::hasHomeKey() ? 4 : CrossPointSettings::LP_MENU_DISABLED;
+    return BoardConfig::hasHomeKey() ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_DISABLED;
   }
-  if (raw == CrossPointSettings::LP_MENU_CREATE_CLIPPING) return BoardConfig::hasHomeKey() ? 5 : 4;
+  if (raw < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT) return BoardConfig::hasHomeKey() ? raw : raw - 1;
   return CrossPointSettings::LP_MENU_DISABLED;
 }
 
 inline void setLongPressMenuFromDisplayValue(const uint8_t displayValue) {
   if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) {
     SETTINGS.longPressMenuFunction = displayValue;
-  } else if (BoardConfig::hasHomeKey()) {
-    SETTINGS.longPressMenuFunction =
-        displayValue == 4 ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_CREATE_CLIPPING;
   } else {
-    SETTINGS.longPressMenuFunction = CrossPointSettings::LP_MENU_CREATE_CLIPPING;
+    SETTINGS.longPressMenuFunction = BoardConfig::hasHomeKey() ? displayValue : displayValue + 1;
   }
 }
 
