@@ -42,9 +42,6 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
       case CrossPointSettings::PWR_SYNC:
         homeAction = HomeButtonAction::Sync;
         break;
-      case CrossPointSettings::PWR_DICTIONARY:
-        homeAction = HomeButtonAction::Dictionary;
-        break;
       case CrossPointSettings::PWR_READER_MENU:
         homeAction = HomeButtonAction::ReaderMenu;
         break;

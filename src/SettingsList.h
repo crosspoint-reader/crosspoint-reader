@@ -235,7 +235,6 @@ inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
 #if FREEINK_DEVICE_PICCO
   options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
   options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
-  options.push_back({StrId::STR_DICTIONARY, CrossPointSettings::PWR_DICTIONARY});
   options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
 #endif
   return options;
