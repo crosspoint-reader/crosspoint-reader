@@ -240,8 +240,7 @@ bool HalGPIO::coldBootImpliesPowerButton() const {
   // post-flash boots as battery button boots, and STAT-only boards like the
   // EEGO A4 misread them the same way once the charger terminates at 100%
   // (STAT inactive reads as "no USB").
-  // The Metalio sleeps powered off, and its power-switch chip only turns the board on from the
-  // power button, so a no-USB POWERON is that button too.
+  // The Metalio sleeps powered off and only its button turns it back on.
   return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky() || BoardConfig::isMetalioEInk4();
 }
 

@@ -141,10 +141,8 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   }
 #endif
 #if FREEINK_DEVICE_METALIO_EINK4
-  // ESP deep sleep leaves the whole board powered (main and screen/SD rails, 4G modem, Bluetooth
-  // audio module), so sleep means off: powerOff() runs the vendor's power-key sequence and does not
-  // return on battery. The power button then cold-boots. With USB holding power up it returns, and
-  // the device deep-sleeps instead.
+  // Deep sleep leaves the board, 4G modem and audio module powered, so cut
+  // power instead; the button cold-boots it. Returns only on USB power.
   freeink::metalio::powerOff();
 #endif
 
