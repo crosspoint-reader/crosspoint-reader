@@ -644,10 +644,12 @@ void EpubReaderActivity::loop() {
           int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
           if (newPage >= section->pageCount) newPage = section->pageCount - 1;
           section->currentPage = newPage;
+          clearDeferredReposition();
           pendingPercentJump = false;
           repositioned = true;
         } else if (pendingLastPageJump && section->pageCount > 0) {
           section->currentPage = section->pageCount - 1;
+          clearDeferredReposition();
           pendingLastPageJump = false;
           repositioned = true;
         } else {
@@ -1703,6 +1705,7 @@ void EpubReaderActivity::renderBook() {
         int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
         if (newPage >= section->pageCount) newPage = section->pageCount - 1;
         section->currentPage = newPage;
+        clearDeferredReposition();
       }
       pendingPercentJump = false;
     }
@@ -1715,6 +1718,7 @@ void EpubReaderActivity::renderBook() {
       }
       if (section->pageCount > 0) {
         section->currentPage = section->pageCount - 1;
+        clearDeferredReposition();
       }
       pendingLastPageJump = false;
     }
