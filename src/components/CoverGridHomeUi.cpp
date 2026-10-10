@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <utility>
 
 #include "MappedInputManager.h"
@@ -267,8 +268,10 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
 
 void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   static constexpr const uint8_t* ICONS[] = {FolderIcon, LibraryIcon, BlocksIcon, TransferIcon, Settings2Icon};
+  static_assert(std::size(ICONS) == static_cast<size_t>(TAB_COUNT),
+                "ICONS must have exactly TAB_COUNT entries, matching tabItems' size");
   int count = 0;
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < TAB_COUNT; ++i) {
     if (i == 2 && !hasOpds) continue;
     auto& tab = tabItems[count];
     tab.value = books->size() + count;
