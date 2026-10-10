@@ -76,6 +76,7 @@ add_subdirectory(absolute_grayscale)
 add_subdirectory(sd_card_font)
 add_subdirectory(clipping_preview)
 add_subdirectory(glyph_bitmap)
+add_subdirectory(reading_speed)
 
 add_subdirectory(clipping_store)
 add_subdirectory(reader_session)
