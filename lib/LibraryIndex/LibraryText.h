@@ -27,8 +27,11 @@
 //     "Austen, Jane" and "Jane Austen" as two people is worse than the guess.
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+
+#include "LibraryFormat.h"
 
 namespace library {
 
@@ -49,6 +52,11 @@ std::string joinLibraryPath(std::string_view folder, std::string_view name);
 // dropped. Apostrophes survive as ASCII '\'' so names and elisions keep their
 // shape.
 std::string fold(std::string_view text);
+
+// Fold without allocation into a buffer at least as large as text.
+// The returned view is not NUL-terminated. Input and output may share a buffer;
+// folding never increases the byte length.
+std::string_view foldInto(std::string_view text, std::span<char> buffer);
 
 // First letter of an already-folded sort key, or 0 when the key starts with a
 // number/non-letter. The Library renders 0 as its shared '#' group.
@@ -113,5 +121,14 @@ bool matchesQuery(std::string_view haystack, std::string_view needle);
 // this card and wrong for some others, which is a limit worth stating rather than
 // hiding: a single word name simply keys on itself.
 std::string surnameKey(std::string_view displayAuthor);
+
+// Parse a series position into hundredths, accepting a dot or comma decimal separator.
+// Round to the nearest hundredth, with ties rounded up; clamp to GROUP_POSITION_MAX.
+// Return GROUP_POSITION_NONE when no unsigned numeric prefix follows leading whitespace.
+uint16_t parseSeriesIndex(std::string_view text);
+
+// Format a position without trailing decimal zeros ("3", "3.5").
+// Return false for GROUP_POSITION_NONE or a null/zero-size buffer. Clear out when possible.
+bool formatSeriesIndex(uint16_t index, char* out, size_t outSize);
 
 }  // namespace library

@@ -38,10 +38,31 @@ target_compile_options(crosspoint_test_common INTERFACE
 enable_testing()
 include(GoogleTest)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(I18N_DIR ${REPO_ROOT}/lib/I18n)
+file(GLOB I18N_TRANSLATIONS CONFIGURE_DEPENDS ${I18N_DIR}/translations/*.yaml)
+add_custom_command(
+  OUTPUT ${I18N_DIR}/I18nKeys.h ${I18N_DIR}/I18nStrings.h ${I18N_DIR}/I18nStrings.cpp
+  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/gen_i18n.py ${I18N_DIR}/translations ${I18N_DIR}/
+  DEPENDS ${REPO_ROOT}/scripts/gen_i18n.py ${I18N_TRANSLATIONS}
+  WORKING_DIRECTORY ${REPO_ROOT}
+  COMMENT "Generating I18n string tables"
+  VERBATIM
+)
+add_library(crosspoint_i18n_tables STATIC ${I18N_DIR}/I18nStrings.cpp ${I18N_DIR}/I18nKeys.h)
+target_include_directories(crosspoint_i18n_tables PUBLIC ${I18N_DIR})
+
+add_library(crosspoint_language_code STATIC ${REPO_ROOT}/lib/LanguageCode/LanguageCode.cpp)
+target_include_directories(crosspoint_language_code PUBLIC ${REPO_ROOT}/lib/LanguageCode PRIVATE ${REPO_ROOT}/lib/Utf8)
+target_link_libraries(crosspoint_language_code PRIVATE crosspoint_test_common)
+
 add_subdirectory(streaming_json_parser)
 add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
+add_subdirectory(language_code)
+add_subdirectory(language_tag)
 add_subdirectory(utf8_compose)
 add_subdirectory(opds_filename)
 add_subdirectory(html_to_plain_text)
@@ -83,5 +104,4 @@ add_subdirectory(reader_session)
 add_subdirectory(plugin_manifest_classification)
 add_subdirectory(protected_paths)
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)

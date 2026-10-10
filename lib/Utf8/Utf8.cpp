@@ -29,7 +29,19 @@ uint32_t utf8ComposePair(const uint32_t base, const uint32_t mark) {
   }
   return 0;
 }
+
+constexpr bool decomposedBasesFitTheirSource() {
+  for (const auto& e : kUtf8ComposeTable) {
+    if (utf8EncodedLength(e.base) > utf8EncodedLength(e.composed)) {
+      return false;
+    }
+  }
+  return true;
+}
 }  // namespace
+
+// In-place folding requires decomposed bases to fit within the source encoding.
+static_assert(decomposedBasesFitTheirSource(), "decomposed base is longer than its precomposed codepoint");
 
 uint32_t utf8DecomposedBase(const uint32_t cp) {
   if (cp < 0x00C0) return 0;  // no precomposed Latin letter below this

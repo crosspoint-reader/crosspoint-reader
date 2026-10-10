@@ -1,5 +1,6 @@
 #include "Hyphenator.h"
 
+#include <LanguageCode.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -14,38 +15,11 @@ const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
 
 namespace {
 
-// Normalize ISO 639-2 (three-letter) codes to ISO 639-1 (two-letter) codes used by the
-// hyphenation registry.  EPUBs may use either form in their dc:language metadata (e.g.
-// "eng" instead of "en").  Both the bibliographic ("fre"/"ger") and terminological
-// ("fra"/"deu") ISO 639-2 variants are mapped.
-struct Iso639Mapping {
-  const char* iso639_2;
-  const char* iso639_1;
-};
-static constexpr Iso639Mapping kIso639Mappings[] = {{"eng", "en"}, {"fra", "fr"}, {"fre", "fr"}, {"deu", "de"},
-                                                    {"ger", "de"}, {"rus", "ru"}, {"spa", "es"}, {"ita", "it"},
-                                                    {"ukr", "uk"}, {"swe", "sv"}, {"fin", "fi"}};
-
 // Maps a BCP-47 or ISO 639-2 language tag to a language-specific hyphenator.
 const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
-  if (langTag.empty()) return nullptr;
-
-  // Extract primary subtag and normalize to lowercase (e.g., "en-US" -> "en", "ENG" -> "en").
-  std::string primary;
-  primary.reserve(langTag.size());
-  for (char c : langTag) {
-    if (c == '-' || c == '_') break;
-    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-    primary.push_back(c);
-  }
-  if (primary.empty()) return nullptr;
-
-  // Normalize ISO 639-2 three-letter codes to two-letter equivalents.
-  for (const auto& mapping : kIso639Mappings) {
-    if (primary == mapping.iso639_2) {
-      primary = mapping.iso639_1;
-      break;
-    }
+  char primary[PRIMARY_LANGUAGE_SUBTAG_BUFFER_SIZE];
+  if (!normalisePrimaryLanguageSubtag(langTag, primary, sizeof(primary))) {
+    return nullptr;
   }
 
   return getLanguageHyphenatorForPrimaryTag(primary);

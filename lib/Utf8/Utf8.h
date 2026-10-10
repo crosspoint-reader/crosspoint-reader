@@ -1,8 +1,22 @@
 #pragma once
 
+#include <cctype>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #define REPLACEMENT_GLYPH 0xFFFD
+
+constexpr int utf8EncodedLength(const uint32_t cp) { return cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4; }
+
+constexpr bool isAsciiWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+
+inline bool asciiEqualsIgnoreCase(const std::string_view a, const char* b) {
+  size_t i = 0;
+  for (; i < a.size() && b[i] != '\0'; i++) {
+    if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) return false;
+  }
+  return i == a.size() && b[i] == '\0';
+}
 
 uint32_t utf8NextCodepoint(const unsigned char** string);
 // Appends a Unicode codepoint to a std::string in UTF-8 encoding.
@@ -36,6 +50,8 @@ void utf8ComposeNfcInPlace(char* buffer);
 // sorted by (base, mark), which this lookup searches against the grain. Adding
 // a second table sorted by composed would cost more flash than sharing this one
 // saves.
+//
+// In-place since a base always uses <= cp bytes
 uint32_t utf8DecomposedBase(uint32_t cp);
 
 // Truncate a raw char buffer to the last complete UTF-8 codepoint boundary.

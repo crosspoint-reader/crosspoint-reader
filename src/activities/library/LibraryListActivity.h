@@ -63,6 +63,9 @@ class LibraryListActivity final : public UiTabListActivity {
   static constexpr freeink::ui::ActionId ACTION_SEARCH = ACTION_TAB_USER;
   static constexpr freeink::ui::ActionId ACTION_REBUILD = ACTION_SEARCH + 1;
   static constexpr freeink::ui::ActionId ACTION_BACK = ACTION_REBUILD + 1;
+  // Recent, Title, Author, and optional Group; GROUP_TAB is the final slot.
+  static constexpr int TAB_SLOTS = 4;
+  static_assert(TAB_SLOTS <= UiTabListActivity::MAX_TAB_COUNT, "library tabs must fit the tab bar");
 
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the
@@ -75,7 +78,9 @@ class LibraryListActivity final : public UiTabListActivity {
   // Shared tail of row activation and the options menu's Open entry.
   void openBookByPath(const std::string& path);
   void promptRebuildIndex();
+  void syncIndexState();
   void resetAfterRebuild();
+  void clearGroupCache();
   // Recent-row long-press menu: open / remove from recents / delete / rebuild.
   void showRecentBookOptions(int entry);
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
@@ -116,6 +121,9 @@ class LibraryListActivity final : public UiTabListActivity {
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
   static void formatInitialHeading(uint32_t initial, std::string& out);
+  void logIndexDegradations() const;
+  bool groupFor(int entry, std::string& name, library::ClixGroupRef& ref, uint16_t& bookCount);
+  void formatGroupHeading(const std::string& name, uint16_t bookCount, std::string& out) const;
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
   void drawHoldHelp() const;
@@ -146,6 +154,14 @@ class LibraryListActivity final : public UiTabListActivity {
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
 
+  bool groupTabAvailable = false;
+  // Use the installed kind for labels, even if a settings rebuild failed.
+  library::GroupKind groupTabKind = library::GroupKind::None;
+  // Cached heading for consecutive rows in the same group.
+  uint16_t cachedGroupId = library::CLIX_GROUP_NONE;
+  uint16_t cachedGroupBooks = 0;
+  std::string cachedGroupName;
+
   // Rows surviving the current query, as positions in the active sort order.
   // Empty query means no filtering and this owns no allocation, so the ordinary
   // shelf pays nothing proportional to the library for the feature.
@@ -174,6 +190,9 @@ class LibraryListActivity final : public UiTabListActivity {
   std::vector<std::string> winTitles;
   std::vector<std::string> winAuthors;
   std::vector<std::string> winHeaders;
+  // Per-row scratch for the group name and file name, so a repaint allocates nothing.
+  std::string winGroup;
+  std::string winRowFile;
 
   // Pinned overlay state: per store entry its RecentAsc row (0xFFFF when the
   // book is not in the index), and the current-direction rows to skip, sorted

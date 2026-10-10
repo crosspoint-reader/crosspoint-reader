@@ -125,24 +125,32 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library indexes up to 4,096 supported books on the SD card and shows their titles and authors without requiring you to remember their folders. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
+The Library indexes up to 4,096 supported books on the SD card. Its tabs show books by recent use, title, author, or an optional metadata field. An arrow beside the active tab shows the sort direction.
 
-- **Recent** lists the ten books you opened most recently. Hold a book to remove it from this list.
-- **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first.
-- **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
+- **Recent** shows recently opened books first, followed by the remaining books in file modification order. Down puts newer files first; up puts older files first. Hold a book to open its options menu.
+- **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts have their own groups.
 - **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
+- **Series**, **Publisher**, **Language**, or **Subject** is an optional fourth tab. Enable it under **Settings → System → Group Library By**, with **Use Book Metadata** enabled. The tab appears when at least one book has a usable value for the selected field. Choose **None** to turn grouping off; this is the default.
+
+The optional tab shows a book count beside each group heading. Groups sort A-Z by their stored names or language codes. Books without a value appear at the end under **Standalone**, **Unknown publisher**, **Unknown language**, or **No subject**. The down arrow reverses the whole list, including the order within each group.
+
+- **Series** reads Calibre and EPUB 3 series metadata, preferring Calibre when both are present. Books in a series are sorted by series number then title. The number appears before the author. Books without a number are listed after numbered books in ascending order.
+- **Publisher** and **Subject** use the first non-blank metadata value in the EPUB file. Each book appears in one group, sorted by title. See [Choosing the Subject Sent to the Device](#choosing-the-subject-sent-to-the-device) to choose the subject in Calibre.
+- **Language** uses the first non-blank language value. It shows a native name (e.g. *Français*) when available or the uppercase language code when not. Tags such as `en`, `EN`, `en-US`, and `eng` all count as the same language. Placeholder codes (`und`, `mul`, `zxx`, `mis`) appear under **Unknown language**. Books are sorted by title within each group. Search matches both the stored language code and the displayed name.
+
+Changing **Group Library By** rebuilds the index the next time the Library opens. Switching between enabled fields reuses metadata from unchanged books. Enabling grouping after **None** reads the books' metadata again. Use **Refresh library** to pick up added or removed books and metadata changes. On a touch device, tap the refresh icon in the Library header. On any device, hold a book in **Recent** and choose **Refresh library** from the options menu.
 
 On a button-only device:
 
-- Use **Up/Down** or **Left/Right** to move one row at a time. Hold a direction to move a page at a time.
+- Use the direction buttons to move between books. Hold a direction to move a page at a time.
 - Press **Confirm** to open the selected book.
-- Press **Back** from the book list to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the list.
-- While the tabs are focused, hold **Confirm** to open Search.
-- In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
+- Press **Back** from the book list to focus the tabs. Press **Confirm** to select the next tab, or hold it to reverse the sort direction. Hold a direction to switch tabs.
+- With the tabs focused, press the previous-item button to open Search or the next-item button to return to the list.
+- In Title, Author, or the optional grouping tab, hold **Confirm** on a book to show only group headings. Press **Confirm** to open a group or **Back** to return to the previous book position. Clear an active search first; holding a search result opens the delete prompt.
 
-On a touch device, tap tabs, books, and the Search icon directly. Tap an active indexed tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent view to remove it from the list. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Added** view is not grouped; tapping or long-pressing a book opens it.
+On a touch device, tap tabs, books, and the Search icon directly. Tap the active tab again to reverse its sort direction. Swipe to scroll. Long-press a book in Recent to open its options menu. In a grouped view, long-press a book to show group headings, then tap a heading to expand it. With a search active, long-press opens the delete prompt.
 
-The index is created automatically the first time the Library is opened. To pick up later file changes or updated metadata, use **Settings → System → Rebuild library index**. The **Use book metadata** setting controls whether the index reads titles and authors stored inside books.
+The index is created when the Library first opens. **Use Book Metadata** controls whether the index reads titles, authors, and grouping fields from books. Without metadata, the Library uses filenames and hides the optional grouping tab.
 
 ### 3.5 File Transfer Screen
 
@@ -198,6 +206,17 @@ To upload a book using the CrossPoint plugin in Calibre:
 The CrossPoint plugin will connect to your device, create a folder for the book's author in the root folder (or the folder you configured for the plugin), then copy the book into that folder.
 
 <img width="783" height="310" alt="Image" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
+
+#### Choosing the Subject Sent to the Device
+
+The Library's **Subject** tab uses the first non-blank subject in the EPUB. To choose the subject sent by Calibre, you can create a metadata plugboard:
+
+1. Open **Preferences → Import/Export → Metadata plugboards**.
+2. Add a plugboard for format **EPUB** and device **CROSSPOINT_READER**.
+3. Set the destination field to **tags**. Use a template such as `{#genre}` for a custom column, `{series}` for the series name, or a fixed name such as `Fantasy`.
+4. Save the plugboard and send the book to the device again.
+
+Use a template that produces one non-blank value without commas to send a single subject. Note: Calibre splits comma-separated values into multiple tags. The plugboard changes metadata in the sent copy. See [Calibre's plugboard documentation](https://manual.calibre-ebook.com/template_lang.html#templates-and-plugboards) for details.
 
 #### Removing a Book
 
@@ -339,9 +358,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Clear Reading Cache**: Clear the internal SD card cache.
 
-- **Use book metadata**: Read the title and author stored inside each book when the Library index is rebuilt. When disabled or unavailable, the Library uses the filename.
+- **Use Book Metadata**: Read titles, authors, and grouping fields from books when rebuilding the Library index. When disabled, the Library uses filenames and hides the optional grouping tab.
 
-- **Rebuild library index**: Rescan the SD card for books while preserving the arrival history of books already in the index.
+- **Group Library By**: Choose **None** (default), **Series**, **Publisher**, **Language**, or **Subject** for the optional Library tab. Requires **Use Book Metadata**. See [Library Screen](#34-library-screen).
 
 - **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
 

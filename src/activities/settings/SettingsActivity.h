@@ -199,6 +199,7 @@ class SettingsActivity final : public UiTabListActivity {
   void rebuildRowItems();
 
   static constexpr int categoryCount = 4;
+  static_assert(categoryCount <= UiTabListActivity::MAX_TAB_COUNT, "settings categories must fit the tab bar");
   static constexpr StrId categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                          StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 

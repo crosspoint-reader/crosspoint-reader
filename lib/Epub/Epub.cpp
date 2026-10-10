@@ -10,6 +10,7 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
@@ -18,6 +19,17 @@
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
+
+namespace {
+// KOSync sends series_index as a JSON number, so the position text is only parsed here.
+std::optional<float> parseSeriesPosition(const std::string& text) {
+  if (text.empty()) return std::nullopt;
+  char* end = nullptr;
+  const float parsed = std::strtof(text.c_str(), &end);
+  if (end == text.c_str() || *end != '\0' || !std::isfinite(parsed)) return std::nullopt;
+  return parsed;
+}
+}  // namespace
 
 Epub::Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
   cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
@@ -60,7 +72,7 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip) c
 }
 
 bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool writeSpineEntries,
-                           const bool metadataOnly, ZipFile* sharedZip) {
+                           const bool metadataOnly, ZipFile* sharedZip, PackageGroupFields* groupFieldsOut) {
   std::string contentOpfFilePath;
   if (!findContentOpfFile(&contentOpfFilePath, sharedZip)) {
     LOG_ERR("EBP", "Could not find content.opf in zip");
@@ -79,15 +91,21 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
     return false;
   }
 
-  ContentOpfParser opfParser(getCachePath(), getBasePath(), contentOpfSize,
-                             writeSpineEntries ? bookMetadataCache.get() : nullptr, metadataOnly);
-  if (!opfParser.setup()) {
+  // The parser buffers collections and refinements, so keep it off the task stack.
+  auto opfParser =
+      makeUniqueNoThrow<ContentOpfParser>(getCachePath(), getBasePath(), contentOpfSize,
+                                          writeSpineEntries ? bookMetadataCache.get() : nullptr, metadataOnly);
+  if (!opfParser) {
+    LOG_ERR("EBP", "OOM: content.opf parser");
+    return false;
+  }
+  if (!opfParser->setup()) {
     LOG_ERR("EBP", "Could not setup content.opf parser");
     return false;
   }
 
-  const bool read = sharedZip ? sharedZip->readFileToStream(contentOpfFilePath.c_str(), opfParser, 1024, metadataOnly)
-                              : readItemContentsToStream(contentOpfFilePath, opfParser, 1024, metadataOnly);
+  const bool read = sharedZip ? sharedZip->readFileToStream(contentOpfFilePath.c_str(), *opfParser, 1024, metadataOnly)
+                              : readItemContentsToStream(contentOpfFilePath, *opfParser, 1024, metadataOnly);
   if (!read) {
     LOG_ERR("EBP", "Could not read content.opf");
     return false;
@@ -95,32 +113,39 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
 
   // Grab data from opfParser into epub. Normalize titles to NFC so NFD (combining
   // mark) text renders correctly — the device fonts have no mark positioning.
-  bookMetadata.title = utf8ComposeNfc(opfParser.title);
-  bookMetadata.author = utf8ComposeNfc(opfParser.author);
-  bookMetadata.language = opfParser.language;
+  bookMetadata.title = utf8ComposeNfc(opfParser->title);
+  bookMetadata.author = utf8ComposeNfc(opfParser->author);
+  bookMetadata.language = opfParser->language;
+  if (groupFieldsOut != nullptr) {
+    groupFieldsOut->series = utf8ComposeNfc(opfParser->series);
+    groupFieldsOut->seriesIndexText = opfParser->seriesIndexText;
+    groupFieldsOut->publisher = utf8ComposeNfc(opfParser->publisher);
+    groupFieldsOut->language = opfParser->language;
+    groupFieldsOut->subject = utf8ComposeNfc(opfParser->subject);
+  }
 
   if (metadataOnly) {
     LOG_DBG("EBP", "Successfully parsed package metadata");
     return true;
   }
 
-  bookMetadata.coverItemHref = opfParser.coverItemHref;
+  bookMetadata.coverItemHref = opfParser->coverItemHref;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
-  if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
-    LOG_DBG("EBP", "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
+  if (bookMetadata.coverItemHref.empty() && !opfParser->guideCoverPageHref.empty()) {
+    LOG_DBG("EBP", "No cover from metadata, trying guide cover page: %s", opfParser->guideCoverPageHref.c_str());
     size_t coverPageSize;
-    uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
+    uint8_t* coverPageData = readItemContentsToBytes(opfParser->guideCoverPageHref, &coverPageSize, true);
     if (coverPageData) {
       const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData), coverPageSize);
       free(coverPageData);
 
       // Determine base path of the cover page for resolving relative image references
       std::string coverPageBase;
-      const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
+      const auto lastSlash = opfParser->guideCoverPageHref.rfind('/');
       if (lastSlash != std::string::npos) {
-        coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
+        coverPageBase = opfParser->guideCoverPageHref.substr(0, lastSlash + 1);
       }
 
       // Search for image references: xlink:href="..." (SVG) and src="..." (img)
@@ -151,18 +176,18 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
     }
   }
 
-  bookMetadata.textReferenceHref = opfParser.textReferenceHref;
+  bookMetadata.textReferenceHref = opfParser->textReferenceHref;
 
-  if (!opfParser.tocNcxPath.empty()) {
-    tocNcxItem = opfParser.tocNcxPath;
+  if (!opfParser->tocNcxPath.empty()) {
+    tocNcxItem = opfParser->tocNcxPath;
   }
 
-  if (!opfParser.tocNavPath.empty()) {
-    tocNavItem = opfParser.tocNavPath;
+  if (!opfParser->tocNavPath.empty()) {
+    tocNavItem = opfParser->tocNavPath;
   }
 
-  if (!opfParser.cssFiles.empty()) {
-    cssFiles = opfParser.cssFiles;
+  if (!opfParser->cssFiles.empty()) {
+    cssFiles = opfParser->cssFiles;
   }
 
   LOG_DBG("EBP", "Successfully parsed content.opf");
@@ -645,40 +670,62 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::loadMetadata(std::string& title, std::string& author) {
+MetadataSource Epub::loadMetadata(std::string& title, std::string& author, const MetadataCachePolicy policy) {
+  return loadPackageMetadata(title, author, nullptr, policy);
+}
+
+MetadataSource Epub::loadMetadata(std::string& title, std::string& author, PackageGroupFields& fields) {
+  // Group fields are absent from book.bin; read them from the package document.
+  return loadPackageMetadata(title, author, &fields, MetadataCachePolicy::Bypass);
+}
+
+MetadataSource Epub::loadPackageMetadata(std::string& title, std::string& author, PackageGroupFields* fields,
+                                         const MetadataCachePolicy policy) {
   title.clear();
   author.clear();
+  if (fields != nullptr) *fields = PackageGroupFields{};
 
   if (Txt::isTxtOrMd(filepath)) {
     title = utf8ComposeNfc(FsHelpers::getFileNameWithoutExtension(filepath));
-    return true;
+    return MetadataSource::Cached;
   }
 
-  auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
-  if (metadataCache && metadataCache->load()) {
-    title = metadataCache->coreMetadata.title;
-    author = metadataCache->coreMetadata.author;
-    return true;
+  if (policy == MetadataCachePolicy::Allow) {
+    auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+    if (!metadataCache) {
+      LOG_ERR("EBP", "Could not allocate metadata cache reader");
+    } else if (metadataCache->load()) {
+      title = metadataCache->coreMetadata.title;
+      author = metadataCache->coreMetadata.author;
+      return MetadataSource::Cached;
+    }
   }
-  if (!metadataCache) {
-    LOG_ERR("EBP", "Could not allocate metadata cache reader");
-  }
-  metadataCache.reset();
 
   ZipFile zip(filepath);
   if (!zip.open()) {
     LOG_DBG("EBP", "Could not open ePub for package metadata: %s", filepath.c_str());
-    return false;
+    return MetadataSource::Failed;
   }
 
-  BookMetadataCache::BookMetadata metadata;
-  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
+  // Keep the combined metadata objects off the task stack.
+  struct ParsedPackage {
+    BookMetadataCache::BookMetadata metadata;
+    PackageGroupFields fields;
+  };
+  auto parsed = makeUniqueNoThrow<ParsedPackage>();
+  if (!parsed) {
+    LOG_ERR("EBP", "OOM: package metadata");
+    return MetadataSource::Failed;
+  }
+  const bool loaded =
+      parseContentOpf(parsed->metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip, &parsed->fields);
   zip.close();
-  if (!loaded) return false;
+  if (!loaded) return MetadataSource::Failed;
 
-  title = std::move(metadata.title);
-  author = std::move(metadata.author);
-  return true;
+  title = std::move(parsed->metadata.title);
+  author = std::move(parsed->metadata.author);
+  if (fields != nullptr) *fields = std::move(parsed->fields);
+  return MetadataSource::Parsed;
 }
 
 bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
@@ -703,20 +750,26 @@ bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
   }
 
   const std::string basePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
-  ContentOpfParser parser(cachePath, basePath, contentOpfSize, nullptr, true);
-  if (!parser.setup()) {
+  // The parser buffers collections and refinements, so keep it off the task stack.
+  auto parser = makeUniqueNoThrow<ContentOpfParser>(cachePath, basePath, contentOpfSize, nullptr, true);
+  if (!parser) {
+    LOG_ERR("EBP", "OOM: content.opf parser");
+    zip.close();
+    return false;
+  }
+  if (!parser->setup()) {
     zip.close();
     return false;
   }
 
-  const bool read = zip.readFileToStream(contentOpfFilePath.c_str(), parser, 1024, true);
+  const bool read = zip.readFileToStream(contentOpfFilePath.c_str(), *parser, 1024, true);
   zip.close();
   if (!read) return false;
 
-  metadata.isbn = std::move(parser.isbn);
-  metadata.asin = std::move(parser.asin);
-  metadata.series = std::move(parser.series);
-  metadata.seriesIndex = parser.seriesIndex;
+  metadata.isbn = std::move(parser->isbn);
+  metadata.asin = std::move(parser->asin);
+  metadata.series = std::move(parser->series);
+  metadata.seriesIndex = parseSeriesPosition(parser->seriesIndexText);
   return true;
 }
 

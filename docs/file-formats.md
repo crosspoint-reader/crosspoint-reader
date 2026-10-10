@@ -454,7 +454,7 @@ Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. On
 file describing every book on the card, so the shelf can sort and search
 thousands of titles without opening any of them.
 
-Format version 2. An index written by another version fails validation on open
+Format version 3. An index written by another version fails validation on open
 and is rebuilt; that is the entire migration mechanism.
 
 ### Layout
@@ -464,8 +464,10 @@ and is rebuilt; that is the entire migration mechanism.
 | Header | 0 | 64 bytes, `ClixHeader` |
 | Folders | `folderStart` | length-prefixed paths, one per folder |
 | Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
-| Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
-| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author (see below) |
+| Permutations | `permStart` | Three arrays of `bookCount` u16 values: author, arrival, and group order |
+| Groups | `groupStart` | `groupCount` × 64-byte `ClixGroupEntry` |
+| Group refs | `groupRefStart` | `bookCount` × 4-byte `ClixGroupRef`, parallel to the records |
+| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author, series position, the four group fields (see below) |
 
 The arrival permutation runs oldest first, keyed by the record's FAT
 modification time (when the file landed on the card); `firstSeen` — the
@@ -497,16 +499,159 @@ The header records whether EPUB metadata extraction was enabled for the build.
 This prevents a metadata-disabled rebuild from making filename fallbacks look
 fresh to a later metadata-enabled build.
 
+### Groups
+
+`groupKind` selects the metadata field used for grouping. All kinds use the same
+sections. Series stores a position within a group.
+
+| Kind      | `groupKind` | OPF source                                  | Position     | Ungrouped heading |
+|-----------|-------------|---------------------------------------------|--------------|-------------------|
+| None      | 0           | none                                        | none         | none              |
+| Series    | 1           | `calibre:series` or `belongs-to-collection` | series index | Standalone        |
+| Publisher | 2           | first non-blank `dc:publisher`              | none         | Unknown publisher |
+| Language  | 3           | first non-blank `dc:language`, normalised   | none         | Unknown language  |
+| Subject   | 4           | first non-blank `dc:subject`                | none         | No subject        |
+
+Calibre series tags take precedence over EPUB 3 collections. Otherwise, use
+the first collection typed as `series`, or the first untyped collection if no
+series is found. Ignore collections marked as another type. The parser stores
+up to four collections and eight refinements per package document.
+
+Language tags use a lowercase primary subtag and map ISO 639-2 codes to ISO
+639-1 (`eng` to `en`, `fre` and `fra` to `fr`). The second subtag is kept only
+when it matches a firmware translation (`pt-BR`, `pt-PT`, `ca-valencia`);
+later subtags are discarded. For example, `en`, `EN`, `en-US` and `eng` all
+use the stored tag `en`.
+
+Placeholder codes `und`, `mul`, `zxx` and `mis` are treated as missing values.
+The UI displays a native language name when available, otherwise the uppercase
+tag. Stored tags are independent of the selected UI language.
+
+#### Header fields
+
+| Field           | Type | Meaning                                                              |
+|-----------------|------|----------------------------------------------------------------------|
+| `groupCount`    | u16  | Number of group table entries                                        |
+| `groupStart`    | u32  | Group table offset                                                   |
+| `groupRefStart` | u32  | Per-book group reference offset                                      |
+| `groupedCount`  | u16  | Number of grouped books; start of the ungrouped block in group order |
+| `groupKind`     | u8   | Configured `GroupKind`, retained if table allocation fails           |
+
+#### Group entries and references
+
+Group data is stored separately to keep book records at 128 bytes.
+`ClixGroupEntry` has a fixed 64-byte stride: group *g* is at
+`groupStart + 64g`, and eight entries fit in one sector. Its ID is its ordinal
+in alphabetical group order.
+
+```cpp
+struct ClixGroupEntry {        // 64 bytes
+  uint16_t bookCount;
+  uint8_t  nameLen;            // <= 61
+  char     name[61];           // heading, truncated at a UTF-8 boundary
+};
+```
+
+The heading stores a byte length and has no terminating NUL. Identity and
+sorting use the source value in the name blob, capped per field by the writer.
+Distinct groups can have the same shortened heading so the UI detects group
+boundaries by ID.
+
+`ClixGroupRef` has a four-byte stride, parallel to the book records:
+
+```cpp
+struct ClixGroupRef {          // 4 bytes
+  uint16_t groupId;            // CLIX_GROUP_NONE (0xFFFF) if ungrouped
+  uint16_t position;           // hundredths; GROUP_POSITION_NONE (0xFFFF) if absent
+};
+```
+
+Series positions use hundredths: 250 means 2.5. Zero is valid. Values above
+`GROUP_POSITION_MAX` (0xFFFE, or 655.34) are clamped. Missing positions use
+`GROUP_POSITION_NONE`, which sorts after numbered books. Other group kinds
+always use `GROUP_POSITION_NONE` and sort books by title.
+
+The group permutation lists grouped books first, groups A-Z by folded source
+value, then books by position and title within each group. Ungrouped books
+follow in title order. A source value whose fold is empty is treated as missing.
+Descending order reverses the entire permutation.
+
+#### Building and allocation failures
+
+When grouping is enabled, each book's four fields and series position are
+staged in a 512-byte record: two bytes for the position, four for lengths,
+and 506 for field data. The record is exactly one sector, so each random read
+during sorting touches one aligned block. Fields are capped at 180 bytes
+(series), 120 (publisher), 16 (language) and 190 (subject) and truncated at a
+UTF-8 boundary. A normalised language tag is at most 15 bytes, so its slack
+goes to series and subject. Fields are packed in series, publisher, language,
+subject order. Unused space in one field does not increase another field's
+limit. With grouping off, no group staging file is created.
+
+Sorting compares folded names in 12-byte chunks, reading more chunks when
+prefixes match. The key array uses 16 bytes per book. Names are read into one
+reusable scratch buffer and folded in place. Order and group ID arrays use
+another four bytes per book until the index is written. Series also needs a
+two-byte position per book for in-series ordinals. SD reads finish before each
+in-memory sort. A staging read or seek failure stops the build and preserves the
+previous index.
+
+If group sorting cannot allocate its buffers or the core sort arrays are
+unavailable, the builder writes zero group counts and sets `GROUPS_DEGRADED`.
+It retains `groupKind` and the source fields for search and later rebuilds.
+The group tab is hidden. Keeping the kind prevents repeated rebuilds on
+Library entry; an explicit rebuild retries the table even if no books changed.
+Failure to allocate required staging buffers stops the build.
+
+#### Validation
+
+The header is rejected unless:
+
+- `groupKind` is a known value, and is None when metadata extraction is disabled.
+- None has both group counts zero.
+- `GROUPS_DEGRADED` has an enabled kind and both group counts zero.
+- Both counts are at most `bookCount`.
+- Zero `groupCount` has zero `groupedCount`.
+- `groupCount` is at most `groupedCount`.
+- Group section offsets match `layoutSections` for the stored counts.
+
+Enabled kinds may have zero counts when no books have usable values.
+These checks validate the header, not the contents of individual groups.
+Out-of-range group IDs in book references are treated as ungrouped on read.
+
+#### Kind changes and metadata reuse
+
+Grouped builds retain all four source fields and the series position including
+when table allocation fails. Changing between enabled kinds can therefore
+reuse unchanged books' fields and sort by the new kind without opening those
+books. If a book's stored fields are malformed or unreadable, only that book
+is parsed again.
+
+An index of kind None stores empty group fields. Enabling grouping after None
+requires package document reads; disabling grouping can reuse unchanged titles
+and authors. Metadata reuse still requires the freshness checks below.
+When grouping is off, `book.bin` may supply title and author unless the book
+changed, has no timestamp, or previously failed metadata extraction.
+
+The Library rebuilds when the installed kind differs from the configured kind.
+If replacement fails, the tab uses the previous index's kind. Disabling metadata
+stores None. The group tab requires at least one group.
+
 ### The name blob
 
 Per record, at `nameStart + nameOff`:
 
 ```text
-[u64 pathHash]    FNV-1a fingerprint of the complete path
+[u64 pathHash]   FNV-1a fingerprint of the complete path
 [nameLen bytes]  filename, without the directory
 [u8][author]     display author, one spelling chosen per authorKey across the library
 [u8][title]      the book's own title, or length 0 if it never gave one
 [u8][source]     cleaned author spelling before the library-wide spelling vote
+[u16 position]   series position in hundredths, or GROUP_POSITION_NONE
+[u8][series]     source fields, capped per field by the writer
+[u8][publisher]  zero length when absent; truncated at UTF-8 boundaries
+[u8][language]   normalised language tag
+[u8][subject]    all four empty, position NONE, when groupKind is None
 ```
 
 The filename must stay the first textual field and stay the filename: `readPath`
@@ -517,11 +662,19 @@ The source author is separate from the displayed canonical author so a later
 rebuild can repeat the spelling vote after books are added or removed. Existing
 display reads still stop at the author or title fields and retain their offsets.
 
+Blob readers accept source fields up to `CLIX_SOURCE_GROUP_BYTES` (255 bytes).
+The writer's per-field caps mean source values that differ only after the cap
+can share a group. Series position is stored here for metadata reuse;
+`ClixGroupRef` also stores it when grouping by Series.
+
 ### Freshness and unchanged rebuilds
 
 Reconciliation treats the persisted 64-bit complete-path fingerprint as the
 book identity. Metadata is reused only when the fingerprint, size, nonzero FAT
 timestamp, fold version, metadata mode, and expected extraction status agree.
+Grouped metadata can be reused from any previous enabled kind. An unchanged
+index is retained only if the group kind matches and `GROUPS_DEGRADED` is clear;
+otherwise the builder writes a replacement using the reused fields.
 EPUBs with a zero timestamp or a previous extraction failure are parsed again.
 
 If every current record reuses metadata, the old and new counts agree, and no
@@ -543,6 +696,10 @@ buffer, or that its fallible 8 KiB allocation failed. The walk still indexes
 every enumerated book; it only stops remembering additional identities for
 duplicate-dirent detection, so a damaged FAT may expose duplicates but cannot
 make a real book disappear.
+
+`GROUPS_DEGRADED` means the build could not allocate the arrays or buffers
+needed for grouping. The configured kind and source fields are retained, with
+zero group counts. See [Groups](#groups).
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
