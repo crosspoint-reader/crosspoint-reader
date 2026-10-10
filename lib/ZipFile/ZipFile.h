@@ -47,6 +47,10 @@ class ZipFile {
   // Cursor for sequential central-dir scanning optimization
   uint32_t lastCentralDirPos = 0;
   bool lastCentralDirPosValid = false;
+  // Reuse the lookup when extraction follows a size query for the same entry
+  std::string lastLookupName;
+  FileStatSlim lastLookup = {};
+  bool lastLookupValid = false;
 
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
   long getDataOffset(const FileStatSlim& fileStat);
