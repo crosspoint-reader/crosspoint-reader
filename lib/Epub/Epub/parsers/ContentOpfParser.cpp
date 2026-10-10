@@ -178,6 +178,14 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
   return size;
 }
 
+void ContentOpfParser::enterSingleValueElement(const ParserState capturing, const std::string& value) {
+  if (!value.empty()) {
+    return;
+  }
+  state = capturing;
+  metadataSpacePending = false;
+}
+
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ContentOpfParser*>(userData);
   if (self->metadataOnly && self->metadataComplete) {
@@ -216,8 +224,17 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "language")) {
-    self->state = IN_BOOK_LANGUAGE;
-    self->metadataSpacePending = false;
+    self->enterSingleValueElement(IN_BOOK_LANGUAGE, self->language);
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "publisher")) {
+    self->enterSingleValueElement(IN_BOOK_PUBLISHER, self->publisher);
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "subject")) {
+    self->enterSingleValueElement(IN_BOOK_SUBJECT, self->subject);
     return;
   }
 
@@ -493,6 +510,16 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     return;
   }
 
+  if (self->state == IN_BOOK_PUBLISHER) {
+    appendMetadataText(self->publisher, s, len, self->metadataSpacePending);
+    return;
+  }
+
+  if (self->state == IN_BOOK_SUBJECT) {
+    appendMetadataText(self->subject, s, len, self->metadataSpacePending);
+    return;
+  }
+
   if (self->state == IN_META_TEXT) {
     appendMetadataText(self->metaText, s, len, self->metadataSpacePending);
     return;
@@ -550,6 +577,16 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
                                hasMetadataPrefix(self->identifierText, "asin"))) {
       self->asin = stripMetadataPrefix(self->identifierText, "asin");
     }
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_PUBLISHER && xmlLocalNameEquals(name, "publisher")) {
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_SUBJECT && xmlLocalNameEquals(name, "subject")) {
     self->state = IN_METADATA;
     return;
   }

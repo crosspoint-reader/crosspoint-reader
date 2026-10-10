@@ -267,3 +267,42 @@ TEST(ContentOpfParserCover, ReadingParserStillOpensManifestCache) {
   EXPECT_EQ(Storage.writeOpens, 1);
   EXPECT_EQ(Storage.readOpens, 1);
 }
+
+TEST(ContentOpfParserMetadata, KeepsTheFirstPublisherAndSubject) {
+  const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
+    <dc:publisher> Victor   Gollancz </dc:publisher>
+    <dc:publisher>Orbit</dc:publisher>
+    <dc:subject>Science &amp; Fiction</dc:subject>
+    <dc:subject>Humour</dc:subject>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.publisher, "Victor Gollancz");
+  EXPECT_EQ(parser.subject, "Science & Fiction");
+}
+
+TEST(ContentOpfParserMetadata, SkipsABlankFirstElement) {
+  const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
+    <dc:subject>  </dc:subject>
+    <dc:subject>Fantasy</dc:subject>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.subject, "Fantasy");
+}
+
+TEST(ContentOpfParserMetadata, KeepsTheFirstLanguage) {
+  const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
+    <dc:language>en-GB</dc:language>
+    <dc:language>fr</dc:language>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.language, "en-GB");
+}

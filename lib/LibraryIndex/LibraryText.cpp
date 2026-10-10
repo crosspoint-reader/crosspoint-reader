@@ -3,6 +3,9 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdio>
 
 namespace library {
 
@@ -50,6 +53,16 @@ constexpr CharMap EXPLICIT_MAP[] = {
     {0x2018, "'"},   // ‘
 };
 
+// In-place folding requires replacements to fit within the source encoding.
+// Utf8.cpp checks the same constraint for decomposed bases.
+constexpr bool explicitReplacementsFitTheirSource() {
+  for (const auto& e : EXPLICIT_MAP) {
+    if (std::string_view(e.replacement).size() > static_cast<size_t>(utf8EncodedLength(e.cp))) return false;
+  }
+  return true;
+}
+static_assert(explicitReplacementsFitTheirSource(), "explicit fold replacement is longer than its source codepoint");
+
 const char* explicitMapping(const uint32_t cp) {
   for (const auto& e : EXPLICIT_MAP) {
     if (e.cp == cp) return e.replacement;
@@ -77,10 +90,6 @@ uint32_t stripDiacritics(uint32_t cp) {
 
 bool isAsciiAlnum(const uint32_t cp) {
   return (cp >= '0' && cp <= '9') || (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z');
-}
-
-void appendLowerAscii(const uint32_t cp, std::string& out) {
-  out.push_back(static_cast<char>(cp >= 'A' && cp <= 'Z' ? cp - 'A' + 'a' : cp));
 }
 
 struct CodepointRange {
@@ -167,8 +176,16 @@ bool isSingleCodepoint(const std::string_view text) {
 }  // namespace
 
 std::string fold(const std::string_view text) {
-  std::string out;
-  out.reserve(text.size());
+  std::string out(text.size(), '\0');
+  out.resize(foldInto(text, std::span<char>(out.data(), out.size())).size());
+  return out;
+}
+
+std::string_view foldInto(const std::string_view text, const std::span<char> buffer) {
+  assert(buffer.size() >= text.size() && "fold output fits the input byte length");
+  if (text.empty()) return {};
+  char* const out = buffer.data();
+  size_t length = 0;
 
   const auto* cursor = reinterpret_cast<const unsigned char*>(text.data());
   const auto* end = cursor + text.size();
@@ -193,33 +210,43 @@ std::string fold(const std::string_view text) {
 
     const char* mapped = explicitMapping(cp);
     if (mapped != nullptr) {
-      if (pendingSpace && !out.empty()) out.push_back(' ');
+      if (pendingSpace && length != 0) out[length++] = ' ';
       pendingSpace = false;
-      out.append(mapped);
+      while (*mapped != '\0') out[length++] = *mapped++;
       continue;
     }
 
     const uint32_t base = stripDiacritics(cp);
     if (isAsciiAlnum(base)) {
-      if (pendingSpace && !out.empty()) out.push_back(' ');
+      if (pendingSpace && length != 0) out[length++] = ' ';
       pendingSpace = false;
-      appendLowerAscii(base, out);
+      out[length++] = static_cast<char>(base >= 'A' && base <= 'Z' ? base - 'A' + 'a' : base);
       continue;
     }
 
     if (base >= 0x80 && (isUnicodeLetter(base) || isUnicodeNumber(base))) {
-      if (pendingSpace && !out.empty()) out.push_back(' ');
+      if (pendingSpace && length != 0) out[length++] = ' ';
       pendingSpace = false;
-      utf8AppendCodepoint(base, out);
+      if (base < 0x800) {
+        out[length++] = static_cast<char>(0xC0 | (base >> 6));
+      } else if (base < 0x10000) {
+        out[length++] = static_cast<char>(0xE0 | (base >> 12));
+        out[length++] = static_cast<char>(0x80 | ((base >> 6) & 0x3F));
+      } else {
+        out[length++] = static_cast<char>(0xF0 | (base >> 18));
+        out[length++] = static_cast<char>(0x80 | ((base >> 12) & 0x3F));
+        out[length++] = static_cast<char>(0x80 | ((base >> 6) & 0x3F));
+      }
+      out[length++] = static_cast<char>(0x80 | (base & 0x3F));
       continue;
     }
 
     // Everything else — punctuation, symbols, unmapped scripts — separates
     // words. Deferring the space keeps runs collapsed and drops trailing ones.
-    if (!out.empty()) pendingSpace = true;
+    if (length != 0) pendingSpace = true;
   }
 
-  return out;
+  return std::string_view(out, length);
 }
 
 uint32_t foldedGroupInitial(const std::string_view folded) {
@@ -396,6 +423,30 @@ std::string surnameKey(const std::string_view displayAuthor) {
   key.push_back(' ');
   key.append(folded.substr(0, sep));
   return key;
+}
+
+uint16_t roundSeriesIndex(const std::optional<float> index) {
+  if (!index.has_value() || !std::isfinite(*index) || *index < 0.0f) return GROUP_POSITION_NONE;
+  // scale in double so the multiply doesn't add its own float error
+  const double hundredths = std::round(static_cast<double>(*index) * 100.0);
+  return hundredths >= GROUP_POSITION_NONE ? GROUP_POSITION_MAX : static_cast<uint16_t>(hundredths);
+}
+
+bool formatSeriesIndex(const uint16_t index, char* out, const size_t outSize) {
+  if (out == nullptr || outSize == 0) return false;
+  out[0] = '\0';
+  if (index == GROUP_POSITION_NONE) return false;
+
+  const unsigned whole = index / 100u;
+  const unsigned frac = index % 100u;
+  if (frac == 0) {
+    snprintf(out, outSize, "%u", whole);
+  } else if (frac % 10 == 0) {
+    snprintf(out, outSize, "%u.%u", whole, frac / 10u);
+  } else {
+    snprintf(out, outSize, "%u.%02u", whole, frac);
+  }
+  return true;
 }
 
 }  // namespace library

@@ -60,7 +60,7 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip) c
 }
 
 bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool writeSpineEntries,
-                           const bool metadataOnly, ZipFile* sharedZip) {
+                           const bool metadataOnly, ZipFile* sharedZip, PackageGroupFields* groupFieldsOut) {
   std::string contentOpfFilePath;
   if (!findContentOpfFile(&contentOpfFilePath, sharedZip)) {
     LOG_ERR("EBP", "Could not find content.opf in zip");
@@ -98,6 +98,13 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.title = utf8ComposeNfc(opfParser.title);
   bookMetadata.author = utf8ComposeNfc(opfParser.author);
   bookMetadata.language = opfParser.language;
+  if (groupFieldsOut != nullptr) {
+    groupFieldsOut->series = utf8ComposeNfc(opfParser.series);
+    groupFieldsOut->seriesIndex = opfParser.seriesIndex;
+    groupFieldsOut->publisher = utf8ComposeNfc(opfParser.publisher);
+    groupFieldsOut->language = opfParser.language;
+    groupFieldsOut->subject = utf8ComposeNfc(opfParser.subject);
+  }
 
   if (metadataOnly) {
     LOG_DBG("EBP", "Successfully parsed package metadata");
@@ -645,25 +652,27 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::loadMetadata(std::string& title, std::string& author) {
+bool Epub::loadMetadata(std::string& title, std::string& author, PackageGroupFields* fields) {
   title.clear();
   author.clear();
+  if (fields != nullptr) *fields = PackageGroupFields{};
 
   if (Txt::isTxtOrMd(filepath)) {
     title = utf8ComposeNfc(FsHelpers::getFileNameWithoutExtension(filepath));
     return true;
   }
 
-  auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
-  if (metadataCache && metadataCache->load()) {
-    title = metadataCache->coreMetadata.title;
-    author = metadataCache->coreMetadata.author;
-    return true;
+  // book.bin doesn't have group fields so only a title/author read can use it
+  if (fields == nullptr) {
+    auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+    if (!metadataCache) {
+      LOG_ERR("EBP", "Could not allocate metadata cache reader");
+    } else if (metadataCache->load()) {
+      title = metadataCache->coreMetadata.title;
+      author = metadataCache->coreMetadata.author;
+      return true;
+    }
   }
-  if (!metadataCache) {
-    LOG_ERR("EBP", "Could not allocate metadata cache reader");
-  }
-  metadataCache.reset();
 
   ZipFile zip(filepath);
   if (!zip.open()) {
@@ -672,7 +681,7 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
   }
 
   BookMetadataCache::BookMetadata metadata;
-  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
+  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip, fields);
   zip.close();
   if (!loaded) return false;
 
