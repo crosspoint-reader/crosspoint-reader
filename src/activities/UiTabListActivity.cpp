@@ -12,7 +12,26 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr int16_t TOUCH_TAB_BAR_HEIGHT = 50;
+// The SDK needs a nonzero inset to size pills to their labels
+constexpr int16_t MIN_TAB_PILL_PAD = 2;
+
+// Reserve arrow space on every label so widths stay stable when switching tabs
+int16_t fittedTabPillPad(const fui::DrawTarget& target, const fui::TabBarProps& props, const int16_t barWidth,
+                         const int16_t maxPad) {
+  const int16_t slotWidth = static_cast<int16_t>((barWidth - props.gap * (props.count - 1)) / props.count);
+  const int16_t room = static_cast<int16_t>(slotWidth - props.tabInset.left - props.tabInset.right);
+  int16_t widest = 0;
+  for (uint8_t i = 0; i < props.count; i++) {
+    const char* label = props.tabs[i].label;
+    const int16_t labelWidth = label ? target.measureText(props.text.font, label, props.text).width : 0;
+    const int16_t rowWidth = static_cast<int16_t>(labelWidth + props.indicatorGap + props.indicatorSize);
+    if (rowWidth > widest) widest = rowWidth;
+  }
+  const int16_t pad = static_cast<int16_t>((room - widest) / 2);
+  if (pad < MIN_TAB_PILL_PAD) return MIN_TAB_PILL_PAD;
+  return pad < maxPad ? pad : maxPad;
 }
+}  // namespace
 
 UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                                      const bool wantsTouchLongPress)
@@ -26,10 +45,12 @@ void UiTabListActivity::onEnter() {
   app.on(ACTION_TAB, &UiTabListActivity::tabActionTrampoline, this);
 }
 
+void UiTabListActivity::syncTabNavigation() { tabNavs.resize(static_cast<size_t>(tabCount())); }
+
 fui::ListNav& UiTabListActivity::activeNav() {
   if (tabNavs.empty()) return nav;  // pre-onEnter fallback
-  // Invariant: subclasses keep activeTab() inside [0, tabCount()), and
-  // tabCount() does not change after onEnter() sized tabNavs.
+  // Invariant: subclasses keep activeTab() inside [0, tabCount()), and call
+  // syncTabNavigation() whenever tabCount() changes.
   assert(activeTab() >= 0 && static_cast<size_t>(activeTab()) < tabNavs.size());
   return tabNavs[static_cast<size_t>(activeTab())];
 }
@@ -141,16 +162,6 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
       mappedInput.hasTouch() ? TOUCH_TAB_BAR_HEIGHT : static_cast<int16_t>(metrics.tabBarHeight);
   const int16_t tabBand = preferredTabHeight > tabLineHeight + 10 ? preferredTabHeight : tabLineHeight + 10;
 
-  if (tabPillMaxPad > 0) {
-    // Cap each pill at its label plus this padding: the equal-width slots (and
-    // so the tab positions) stay exactly where they were, only the pill stops
-    // stretching across the whole slot. The SDK shrinks the pill to content
-    // width and centers it in its slot when the horizontal contentInset is
-    // nonzero.
-    tabProps.contentInset.left = tabPillMaxPad;
-    tabProps.contentInset.right = tabPillMaxPad;
-  }
-
   // Legacy Lyra two-state treatment: with the selection on the tab band, the
   // band fills gray and the active tab is a solid pill; with the selection
   // down in the list, the band is plain and the active tab keeps a gray box
@@ -198,6 +209,16 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   const fui::Rect slotsRect{static_cast<int16_t>(contentTabRect.x + side), tabRect.y,
                             static_cast<int16_t>(contentTabRect.width - 2 * side),
                             static_cast<int16_t>(tabRect.height - divider)};
+  if (tabPillMaxPad > 0) {
+    // Cap each pill at its label plus this padding: the equal-width slots (and
+    // so the tab positions) stay exactly where they were, only the pill stops
+    // stretching across the whole slot. The SDK shrinks the pill to content
+    // width and centers it in its slot when the horizontal contentInset is
+    // nonzero.
+    const int16_t pad = fittedTabPillPad(screen.target(), tabProps, slotsRect.width, tabPillMaxPad);
+    tabProps.contentInset.left = pad;
+    tabProps.contentInset.right = pad;
+  }
   tabProps.divider = false;
   fui::tabBar(screen.frame(), slotsRect, tabProps);
   screen.target().fill(fui::Rect{tabRect.x, static_cast<int16_t>(tabRect.bottom() - divider), tabRect.width, divider},

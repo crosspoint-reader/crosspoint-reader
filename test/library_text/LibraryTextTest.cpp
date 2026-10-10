@@ -1,7 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "LibraryText.h"
 
@@ -284,4 +289,59 @@ TEST(LibraryPath, RootDoesNotGainASecondSeparator) {
 
 TEST(LibraryPath, NestedFolderGetsOneSeparator) {
   EXPECT_EQ(library::joinLibraryPath("/Books", "book.epub"), "/Books/book.epub");
+}
+
+TEST(LibrarySeriesIndexRound, HidesFloatErrorBehindTheNearestHundredth) {
+  EXPECT_EQ(library::roundSeriesIndex(0.1f), 10);
+  EXPECT_EQ(library::roundSeriesIndex(2.9999998f), 300);
+  EXPECT_EQ(library::roundSeriesIndex(2.567f), 257);
+  EXPECT_EQ(library::roundSeriesIndex(2.564f), 256);
+}
+
+TEST(LibrarySeriesIndexRound, RejectsMissingNegativeAndNonFiniteIndices) {
+  EXPECT_EQ(library::roundSeriesIndex(std::nullopt), library::GROUP_POSITION_NONE);
+  EXPECT_EQ(library::roundSeriesIndex(-1.0f), library::GROUP_POSITION_NONE);
+  EXPECT_EQ(library::roundSeriesIndex(std::numeric_limits<float>::quiet_NaN()), library::GROUP_POSITION_NONE);
+  EXPECT_EQ(library::roundSeriesIndex(std::numeric_limits<float>::infinity()), library::GROUP_POSITION_NONE);
+}
+
+TEST(LibrarySeriesIndexRound, ClampsRatherThanWrapsAnAbsurdPosition) {
+  EXPECT_EQ(library::roundSeriesIndex(99999.0f), library::GROUP_POSITION_MAX);
+}
+
+TEST(LibrarySeriesIndexFormat, DropsTrailingZeros) {
+  char buf[16];
+  ASSERT_TRUE(library::formatSeriesIndex(300, buf, sizeof(buf)));
+  EXPECT_STREQ(buf, "3");
+  ASSERT_TRUE(library::formatSeriesIndex(350, buf, sizeof(buf)));
+  EXPECT_STREQ(buf, "3.5");
+  ASSERT_TRUE(library::formatSeriesIndex(325, buf, sizeof(buf)));
+  EXPECT_STREQ(buf, "3.25");
+}
+
+TEST(LibrarySeriesIndexFormat, WritesNothingForAnAbsentPosition) {
+  char buf[16] = "stale";
+  EXPECT_FALSE(library::formatSeriesIndex(library::GROUP_POSITION_NONE, buf, sizeof(buf)));
+  EXPECT_STREQ(buf, "");
+}
+
+TEST(LibrarySeriesIndexFormat, RoundTripsEveryRepresentablePosition) {
+  char buf[16];
+  for (uint32_t v = 0; v < library::GROUP_POSITION_NONE; v++) {
+    const auto index = static_cast<uint16_t>(v);
+    ASSERT_TRUE(library::formatSeriesIndex(index, buf, sizeof(buf)));
+    // the parser reads the displayed text back as a float
+    EXPECT_EQ(library::roundSeriesIndex(std::strtof(buf, nullptr)), index) << "at " << v << " formatted as " << buf;
+  }
+}
+
+TEST(LibraryFold, ReusableBufferSupportsAliasingAndPreservesItsBounds) {
+  for (const std::string text : {"", "  L'Énéide, Œuvres — 世界!  ", "Straße", "\nA\tB", "𠀀 韓国", "a\xF0\x9F"}) {
+    std::vector<char> buffer(text.size() + 1, '#');
+    std::copy(text.begin(), text.end(), buffer.begin());
+    const auto result =
+        library::foldInto(std::string_view(buffer.data(), text.size()), std::span<char>(buffer.data(), text.size()));
+    EXPECT_EQ(result, fold(text));
+    EXPECT_EQ(buffer.back(), '#');
+  }
 }

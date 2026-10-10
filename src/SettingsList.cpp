@@ -209,6 +209,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                            StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
                            "libraryUseMetadata", StrId::STR_CAT_SYSTEM));
+  // In library::GroupKind order, which is persisted and append-only.
+  emit(SettingInfo::Enum(StrId::STR_LIBRARY_GROUP_BY, &CrossPointSettings::libraryGroupBy,
+                         {StrId::STR_NONE_OPT, StrId::STR_LIBRARY_TAB_SERIES, StrId::STR_LIBRARY_TAB_PUBLISHER,
+                          StrId::STR_LIBRARY_TAB_LANGUAGE, StrId::STR_LIBRARY_TAB_SUBJECT},
+                         "libraryGroupBy", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
                            "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,

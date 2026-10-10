@@ -501,6 +501,9 @@ def generate_keys_header(
     lines.append("// Language display names (defined in I18nStrings.cpp)")
     lines.append("extern const char* const LANGUAGE_NAMES[];")
     lines.append("")
+    lines.append("// BCP 47 tags, parallel to LANGUAGE_NAMES (defined in I18nStrings.cpp)")
+    lines.append("extern const char* const LANGUAGE_BCP47[];")
+    lines.append("")
     lines.append("// Character sets for each language (defined in I18nStrings.cpp)")
     lines.append("extern const char* const CHARACTER_SETS[];")
     lines.append("")
@@ -623,6 +626,7 @@ def generate_strings_header(
 def generate_strings_cpp(
     languages: List[str],
     language_names: List[str],
+    language_bcp47: List[str],
     string_keys: List[str],
     translations: Dict[str, List[str]],
     output_path: str,
@@ -653,6 +657,13 @@ def generate_strings_cpp(
     lines.append("const char* const LANGUAGE_NAMES[] = {")
     for name in language_names:
         _append_string_entry(lines, name)
+    lines.append("};")
+    lines.append("")
+
+    lines.append("// BCP 47 tags, parallel to LANGUAGE_NAMES")
+    lines.append("const char* const LANGUAGE_BCP47[] = {")
+    for tag in language_bcp47:
+        _append_string_entry(lines, tag)
     lines.append("};")
     lines.append("")
 
@@ -993,6 +1004,7 @@ def main(
         generate_strings_cpp(
             languages,
             language_names,
+            language_bcp47,
             string_keys,
             translations,
             str(out / "I18nStrings.cpp"),
