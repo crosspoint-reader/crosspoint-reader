@@ -146,9 +146,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions. PWR_CONFIRM is only offered on touch
-  // boards, the reader shortcuts after it only on the Picco, which has no
-  // Confirm button to long-press (see SettingsList.h). Persisted by index:
-  // append only.
+  // boards, the reader shortcuts after CREATE_CLIPPING only on the Picco, which
+  // has no Confirm button to long-press (see SettingsList.h). Persisted by
+  // index: append only.
   enum SHORT_PWRBTN {
     IGNORE = 0,
     SLEEP = 1,
@@ -156,23 +156,23 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
     PWR_CONFIRM = 5,
-    PWR_BOOKMARK = 6,
-    PWR_SYNC = 7,
-    PWR_DICTIONARY = 8,
-    PWR_READER_MENU = 9,
+    CREATE_CLIPPING = 6,
+    PWR_BOOKMARK = 7,
+    PWR_SYNC = 8,
+    PWR_DICTIONARY = 9,
+    PWR_READER_MENU = 10,
     SHORT_PWRBTN_COUNT
   };
 
-  // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
-  // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
-  // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
-  // stored indices shift and existing saves are silently misinterpreted.
+  // Long-press Confirm action while reading an EPUB. Persisted values are stable;
+  // SettingsList maps them to the device-specific option list shown to the user.
   enum LONG_PRESS_MENU_FUNCTION {
     LP_MENU_KOSYNC = 0,
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
     LP_MENU_READER_MENU = 4,
+    LP_MENU_CREATE_CLIPPING = 5,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 

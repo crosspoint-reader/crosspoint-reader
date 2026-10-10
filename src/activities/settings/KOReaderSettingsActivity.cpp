@@ -16,13 +16,14 @@
 namespace fui = freeink::ui;
 
 namespace {
-const StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
-    StrId::STR_USERNAME,      StrId::STR_PASSWORD,          StrId::STR_SYNC_SERVER_URL,
-    StrId::STR_SERVER_TYPE,   StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA,
-    StrId::STR_SYNC_BEHAVIOR, StrId::STR_SIGN_UP,           StrId::STR_AUTHENTICATE};
+constexpr StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
+    StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL, StrId::STR_SERVER_TYPE,
+    StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,   StrId::STR_SYNC_CLIPPINGS,
+    StrId::STR_SIGN_UP,           StrId::STR_AUTHENTICATE};
 
 constexpr int SERVER_TYPE_ITEMS = 3;
-constexpr StrId serverTypeNames[SERVER_TYPE_ITEMS] = {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC, StrId::STR_OTHER};
+constexpr StrId serverTypeNames[SERVER_TYPE_ITEMS] = {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC_SERVER,
+                                                      StrId::STR_OTHER};
 }  // namespace
 
 KOReaderSettingsActivity::KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -110,11 +111,15 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (index == 7) {
+    KOREADER_STORE.setSyncClippings(!KOREADER_STORE.getSyncClippings());
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (index == 8) {
     if (!KOREADER_STORE.hasCredentials()) return;
     startActivityForResult(
         std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::SIGN_UP),
         [](const ActivityResult&) {});
-  } else if (index == 8) {
+  } else if (index == 9) {
     if (!KOREADER_STORE.hasCredentials()) return;
     startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
   }
@@ -148,12 +153,12 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     } else if (i == 3) {
       const auto type = KOREADER_STORE.getServerType();
       rowValues_[i] = type == KOReaderServerType::CROSSPOINT ? tr(STR_CROSSPOINT)
-                      : type == KOReaderServerType::KOSYNC   ? tr(STR_KOSYNC)
+                      : type == KOReaderServerType::KOSYNC   ? tr(STR_KOSYNC_SERVER)
                                                              : tr(STR_OTHER);
     } else if (i == 4) {
       rowValues_[i] =
           KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY);
-    } else if (i == 5) {
+    } else if (i == 5 || i == 7) {
       rowValues_[i].clear();
     } else if (i == 6) {
       rowValues_[i] =
@@ -164,6 +169,7 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
   }
   GUI.setCheckboxRow(rowItems_[5], KOREADER_STORE.getSendMetadata());
+  GUI.setCheckboxRow(rowItems_[7], KOREADER_STORE.getSyncClippings());
 
   fui::ListProps props;
   props.items = rowItems_;

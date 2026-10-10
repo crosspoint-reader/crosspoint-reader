@@ -183,10 +183,86 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 }
 
 inline std::vector<StrId> buildLongPressMenuValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
-                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
-  const size_t count = BoardConfig::hasHomeKey() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  std::vector<StrId> values = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
+                               StrId::STR_DICTIONARY};
+  values.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
+  if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
+  values.push_back(StrId::STR_SAVE_CLIPPING);
+  return values;
+}
+
+inline uint8_t longPressMenuDisplayValue() {
+  const uint8_t raw = SETTINGS.longPressMenuFunction;
+  if (raw <= CrossPointSettings::LP_MENU_DICTIONARY) return raw;
+  if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
+    return BoardConfig::hasHomeKey() ? 4 : CrossPointSettings::LP_MENU_DISABLED;
+  }
+  if (raw == CrossPointSettings::LP_MENU_CREATE_CLIPPING) return BoardConfig::hasHomeKey() ? 5 : 4;
+  return CrossPointSettings::LP_MENU_DISABLED;
+}
+
+inline void setLongPressMenuFromDisplayValue(const uint8_t displayValue) {
+  if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) {
+    SETTINGS.longPressMenuFunction = displayValue;
+  } else if (BoardConfig::hasHomeKey()) {
+    SETTINGS.longPressMenuFunction =
+        displayValue == 4 ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_CREATE_CLIPPING;
+  } else {
+    SETTINGS.longPressMenuFunction = CrossPointSettings::LP_MENU_CREATE_CLIPPING;
+  }
+}
+
+inline SettingInfo buildLongPressMenuSetting() {
+  return SettingInfo::DynamicEnum(StrId::STR_LONG_PRESS_MENU, buildLongPressMenuValues(), longPressMenuDisplayValue,
+                                  setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
+}
+
+struct ShortPowerButtonOption {
+  StrId label;
+  uint8_t value;
+};
+
+// Menu order differs from the persisted enum order, so map by value.
+inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
+  std::vector<ShortPowerButtonOption> options = {{StrId::STR_IGNORE, CrossPointSettings::IGNORE},
+                                                 {StrId::STR_SLEEP, CrossPointSettings::SLEEP},
+                                                 {StrId::STR_PAGE_TURN, CrossPointSettings::PAGE_TURN},
+                                                 {StrId::STR_FORCE_REFRESH, CrossPointSettings::FORCE_REFRESH},
+                                                 {StrId::STR_FOOTNOTES, CrossPointSettings::FOOTNOTES}};
+  options.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  if (BoardConfig::hasTouch()) options.push_back({StrId::STR_CONFIRM, CrossPointSettings::PWR_CONFIRM});
+  options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
+#if FREEINK_DEVICE_PICCO
+  options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
+  options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
+  options.push_back({StrId::STR_DICTIONARY, CrossPointSettings::PWR_DICTIONARY});
+  options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
+#endif
+  return options;
+}
+
+inline std::vector<StrId> buildShortPowerButtonValues() {
+  std::vector<StrId> values;
+  for (const auto& option : shortPowerButtonOptions()) values.push_back(option.label);
+  return values;
+}
+
+inline uint8_t shortPowerButtonDisplayValue() {
+  const auto options = shortPowerButtonOptions();
+  for (size_t i = 0; i < options.size(); i++) {
+    if (options[i].value == SETTINGS.shortPwrBtn) return static_cast<uint8_t>(i);
+  }
+  return CrossPointSettings::IGNORE;
+}
+
+inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
+  const auto options = shortPowerButtonOptions();
+  SETTINGS.shortPwrBtn = displayValue < options.size() ? options[displayValue].value : CrossPointSettings::IGNORE;
+}
+
+inline SettingInfo buildShortPowerButtonSetting() {
+  return SettingInfo::DynamicEnum(StrId::STR_SHORT_PWR_BTN, buildShortPowerButtonValues(), shortPowerButtonDisplayValue,
+                                  setShortPowerButtonFromDisplayValue, "shortPwrBtn", StrId::STR_CAT_CONTROLS);
 }
 
 inline std::vector<StrId> homeThemeValues() {
@@ -364,28 +440,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                          buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
+        buildLongPressMenuSetting(),
         // Erased below unless the board is an X4 Pro.
         SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
-#if FREEINK_DEVICE_PICCO
-        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM, StrId::STR_BOOKMARK_OPTION, StrId::STR_KOSYNC,
-                           StrId::STR_DICTIONARY, StrId::STR_READER_MENU},
-                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#elif FREEINK_CAP_TOUCH
-        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
-                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#endif
+        buildShortPowerButtonSetting(),
         // Erased below unless the QMI8658 IMU is present (X3).
         SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                           {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
@@ -452,7 +511,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             },
             "koServerUrl", StrId::STR_KOREADER_SYNC),
         SettingInfo::DynamicEnum(
-            StrId::STR_SERVER_TYPE, {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC, StrId::STR_OTHER},
+            StrId::STR_SERVER_TYPE, {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC_SERVER, StrId::STR_OTHER},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getServerType()); },
             [](uint8_t v) {
               KOREADER_STORE.setServerType(static_cast<KOReaderServerType>(v));
@@ -483,6 +542,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koSyncBehavior", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicEnum(
+            StrId::STR_SYNC_CLIPPINGS, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+            [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncClippings()); },
+            [](uint8_t v) {
+              if (KOREADER_STORE.getSyncClippings() == (v != 0)) return;
+              KOREADER_STORE.setSyncClippings(v != 0);
+              KOREADER_STORE.saveToFile();
+            },
+            "koSyncClippings", StrId::STR_KOREADER_SYNC),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),

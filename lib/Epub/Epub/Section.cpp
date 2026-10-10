@@ -60,7 +60,10 @@ namespace {
 // v50: Paragraph indentation width in the header for cache validation.
 // v51: Preserve paragraph continuity and top spacing across soft flushes.
 // v52: Missing full-block and black-square symbols now have visible widths.
-constexpr uint8_t SECTION_FILE_VERSION = 52;
+// v53: Persist per-word source ranges alongside the redaction layout changes.
+// v54: Source ranges retain codepoints absorbed by NFC composition.
+// v55: Persist the first logical word of each paragraph for clipping separators.
+constexpr uint8_t SECTION_FILE_VERSION = 55;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

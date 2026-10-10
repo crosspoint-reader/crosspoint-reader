@@ -49,6 +49,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [5. Reader Menu](#5-reader-menu)
     - [5.1 Chapter Selection](#51-chapter-selection)
     - [5.2 Bookmarks](#52-bookmarks)
+    - [5.3 Clippings and Highlights](#53-clippings-and-highlights)
   - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
   - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
@@ -312,8 +313,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Page Scroll" - Long-pressing scrolls a page up/down
 - **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
   - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
-  - "KOSync" - Hold Confirm (~1 second) to launch KOReader sync directly.
+  - "CrossPoint Sync" - Hold Confirm (~1 second) to launch KOReader sync directly.
   - "Dictionary" - Hold Confirm (~0.4 second) to start dictionary word selection on the current page (see [docs/dictionary.md](docs/dictionary.md)).
+  - "Create Clipping" - Hold Confirm (~0.4 second) to start clipping selection on the current page.
   - "Disabled" - Long-press is ignored; only short-press opens the reader menu.
 
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
@@ -331,7 +333,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
 
-- **KOReader Sync**: Options for setting up KOReader for syncing book progress. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
+- **CrossPoint Sync**: Settings for syncing book progress with CrossPoint Sync or a compatible KOSync server. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
 
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
@@ -412,7 +414,7 @@ When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync
 
 1. On each CrossPoint device:
 
-   - Go to **Settings -> System -> KOReader Sync**.
+   - Go to **Settings -> System -> CrossPoint Sync**.
 
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
 
@@ -430,7 +432,7 @@ Use this if you already sync KOReader devices against the official public server
 
 1. On each CrossPoint device:
 
-   - Go to **Settings -> System -> KOReader Sync**.
+   - Go to **Settings -> System -> CrossPoint Sync**.
 
    - Set **Sync Server URL** to `https://sync.koreader.rocks` (required; an empty URL now points at the CrossPoint server instead).
 
@@ -518,7 +520,7 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
 
 4. On each CrossPoint device:
    
-   - Go to **Settings -> System -> KOReader Sync**.
+   - Go to **Settings -> System -> CrossPoint Sync**.
    
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
    
@@ -532,8 +534,9 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 
 ##### Syncing While Reading
 
-Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **KOSync** and hold Confirm to launch sync directly.
+Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **CrossPoint Sync** and hold Confirm to launch sync directly.
 
+- **Sync Clippings** is off by default. Enable it only for a compatible CrossPoint Sync server; manual **Sync Progress** then uploads and downloads this book’s clippings too. Leave it off for ordinary KOSync servers.
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
@@ -649,7 +652,7 @@ See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and w
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
+* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — including bookmarks, KOReader Sync, dictionary lookup, or clipping selection. A short press always opens the Reader Menu.
 
 ### Supported Languages
 
@@ -672,6 +675,8 @@ Available options include:
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
 - **Links and footnotes** – Select an internal link on the current page. This option appears when the page contains links.
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
+- **Create Clipping** – Select a range of text on the current page and save it as a highlighted clipping.
+- **View Clippings** – Open this book's saved clippings *(shown after the first clipping is saved)*.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
 - **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
@@ -702,6 +707,18 @@ To create a bookmark, hold **Confirm** for about half a second while inside a bo
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
+
+### 5.3 Clippings and Highlights
+
+Select **Create Clipping** from the Reader Menu, move to the first word, and press **Confirm**. Move to the last word and press **Select** again to choose **Look Up**, **Clip**, or **Bookmark**. **Back** closes that popup without losing the selection. On touch devices, press and hold a word in the reader to select it. Drag either selection handle to adjust the range, then tap **Look Up**, **Clip**, or **Bookmark** above it. Hold the ending handle at the bottom edge or over the final word for one second to extend onto the next preloaded page. Selection covers up to three pages in the same chapter, subject to the 240 selectable-word limit. The toolbar overlays the page without shifting the text. Releasing a handle keeps the selection open; tapping outside the text dismisses it. **Look Up** searches the selected text in your dictionary; **Bookmark** toggles the bookmark on the selection’s final page. Saved ranges with source offsets remain highlighted after changes to font, spacing, orientation, or pagination. Ranges without source offsets can only be highlighted when their saved layout still matches. Press and hold highlighted text to remove that clipping; its deletion is sent on the next manual sync when **Sync Clippings** is enabled.
+
+Select **View Clippings** to browse saved excerpts for the current book. Press **Confirm** to choose **Open** or **Go to Passage**, or hold **Confirm** for about 0.7 seconds to delete it. **Go to Passage** uses the saved text offset and is available for new, source-anchored clippings. Older clippings can still be read or deleted. Touch devices can open a clipping with a tap or delete it with a long press.
+
+Each book can store up to **1,024 clippings on ESP32-S3 devices** or **256 on ESP32-C3 devices**. These limits also apply to clippings downloaded through sync.
+
+The structured clipping store under `.crosspoint/clippings` keeps up to **4 KiB of UTF-8 text per clipping**. Longer selections must be shortened before saving. CrossPoint also appends up to **2,000 UTF-8 bytes** of each saved excerpt to `My Clippings.txt` in the root of the SD card, using Kindle-compatible formatting. If that export fails, the clipping remains saved and the message reports the export failure.
+
+Local book and folder moves carry clipping data with them. Deleting a local book removes its local clipping data; it does not delete already synced server copies or historical entries in `My Clippings.txt`. Deleting an individual clipping likewise leaves the text export untouched, but queues its server deletion for the next enabled manual sync. `My Clippings.txt` is an independent append-only export, not the source used to restore or sync highlights.
 
 ## 6. Current Limitations & Roadmap
 

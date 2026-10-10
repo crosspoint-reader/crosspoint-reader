@@ -8,19 +8,22 @@
 
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
+#include "util/WordSelectionInput.h"
 
 // Word selection over the current reader page: Left/Right step through words
-// in reading order, Up/Down jump rows, Confirm looks the word up and opens
+// in visual order, Up/Down jump rows, Confirm looks the word up and opens
 // DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
 // touch-down moves the highlight and a tap on a word looks it up directly.
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop,
+                                        std::string lookupText = {})
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
-        marginTop(marginTop) {}
+        marginTop(marginTop),
+        lookupText(std::move(lookupText)) {}
 
   void onEnter() override;
   void loop() override;
@@ -57,8 +60,10 @@ class DictionaryWordSelectActivity final : public Activity {
   std::vector<WordBox> words;
   int selected = 0;
   uint16_t rowCount = 0;
-  unsigned long lastHorizontalMoveTime = 0;
+  WordSelectionInput selectionInput;
 
+  std::string lookupText;
+  bool lookupPending = false;
   Dictionary dict;
   bool dictOpenAttempted = false;
   bool dictOpenOk = false;
