@@ -230,13 +230,17 @@ inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
                                                  {StrId::STR_FORCE_REFRESH, CrossPointSettings::FORCE_REFRESH},
                                                  {StrId::STR_FOOTNOTES, CrossPointSettings::FOOTNOTES}};
   options.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
-  if (BoardConfig::hasTouch()) options.push_back({StrId::STR_CONFIRM, CrossPointSettings::PWR_CONFIRM});
-  options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
-#if FREEINK_DEVICE_PICCO
-  options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
-  options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
-  options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
-#endif
+  if (BoardConfig::hasTouch()) {
+    options.push_back({StrId::STR_CONFIRM, CrossPointSettings::PWR_CONFIRM});
+  } else {
+    options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
+  }
+  // Touch boards without a home key have no button for these shortcuts.
+  if (BoardConfig::hasTouch() && !BoardConfig::hasHomeKey()) {
+    options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
+    options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
+    options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
+  }
   return options;
 }
 
