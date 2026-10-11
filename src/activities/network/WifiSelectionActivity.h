@@ -83,6 +83,10 @@ class WifiSelectionActivity final : public Activity {
   size_t autoCycleCandidateIndex = 0;
   bool autoCycleAfterScan = false;  // Scan was triggered to build cycle candidates
 
+  // A network whose saved password failed like a wrong one this session. Picking it from the list
+  // asks for the password instead of failing the same way again.
+  std::string passwordSuspectSsid;
+
   // Connection timeouts
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   static constexpr unsigned long AUTO_CYCLE_TIMEOUT_MS = 5000;
@@ -121,9 +125,13 @@ class WifiSelectionActivity final : public Activity {
   void showNetworkListFromAutoConnect();
   void selectNetwork(int index);
   void promptHiddenSsid();
-  void promptPasswordEntry();
+  // `title` replaces "Enter WiFi Password" when there is a reason to give.
+  void promptPasswordEntry(const char* title = nullptr);
   void attemptConnection();
   void checkConnectionStatus();
+  void abandonConnectAttempt();
+  bool passwordLikelyWrong() const;
+  bool askForPasswordIfLikelyWrong();
   // Issues WiFi.begin() with a full, signal-sorted scan. See the definition for why the cached
   // channel/BSSID hint that used to shortcut this was removed.
   void issueWifiBegin();

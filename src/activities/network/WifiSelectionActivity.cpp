@@ -34,6 +34,30 @@ namespace {
 std::atomic<uint32_t> wifiEventGeneration{0};
 std::atomic<unsigned long> wifiEventConnectionStartMs{0};
 std::atomic<bool> wifiEventAttemptAssociated{false};
+// What the failures of the current attempt say about its password; see passwordLikelyWrong().
+std::atomic<uint8_t> wifiEventKeyFailures{0};
+std::atomic<uint8_t> wifiEventOtherFailures{0};
+
+// Sorts one disconnect reason into the counters above.
+void countDisconnectReason(const uint8_t reason) {
+  switch (reason) {
+    // The key exchange failed after the AP let us in. WPA2 never says "wrong password": the AP
+    // ignores a message signed with the wrong key, and the station reports the silence as a
+    // handshake timeout. AUTH_FAIL is how WPA3 (SAE) reports the same.
+    case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_AUTH_FAIL:
+      wifiEventKeyFailures.fetch_add(1, std::memory_order_relaxed);
+      break;
+    // Our own disconnect, not a verdict on the network.
+    case WIFI_REASON_ASSOC_LEAVE:
+    case WIFI_REASON_STA_LEAVING:
+      break;
+    default:
+      wifiEventOtherFailures.fetch_add(1, std::memory_order_relaxed);
+      break;
+  }
+}
 
 void readDeviceBaseMac(uint8_t mac[6]) { esp_efuse_mac_get_default(mac); }
 
@@ -104,6 +128,7 @@ void WifiSelectionActivity::onEnter() {
       [eventGeneration](WiFiEvent_t /*event*/, WiFiEventInfo_t info) {
         if (wifiEventGeneration.load(std::memory_order_acquire) != eventGeneration) return;
         const uint8_t reason = info.wifi_sta_disconnected.reason;
+        countDisconnectReason(reason);
         // bssid/rssi name the AP that failed and how loud it was at the moment it gave up, which
         // is what separates "the driver picked a node it cannot actually hold" from "the whole
         // SSID is too weak here".
@@ -142,6 +167,7 @@ void WifiSelectionActivity::onEnter() {
   autoCycleCandidates.clear();
   autoCycleCandidateIndex = 0;
   autoCycleAfterScan = false;
+  passwordSuspectSsid.clear();
 
   const std::string persistedMac = formatMacDashed(mac);
   if (WIFI_STORE.getLastKnownMacAddress() != persistedMac) {
@@ -224,6 +250,10 @@ void WifiSelectionActivity::onExit() {
   // Note: We do NOT disconnect WiFi here - the parent activity
   // (CrossPointWebServerActivity) manages WiFi connection state. We just clean
   // up the scan and task.
+  //
+  // An abandoned attempt turned the core's automatic reconnection off (abandonConnectAttempt());
+  // give the next WiFi user its default back. KOReaderSyncWorker calls WiFi.begin() itself.
+  WiFi.setAutoReconnect(true);
 
   LOG_DBG("WIFI", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
@@ -236,9 +266,10 @@ void WifiSelectionActivity::startWifiScan() {
   realNetworkCount = 0;
   requestUpdate();
 
-  // Set WiFi mode to station
+  // Set WiFi mode to station. Abandoned rather than merely disconnected: a reconnect the core
+  // starts by itself would take the radio away from the scan.
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
+  abandonConnectAttempt();
   delay(100);
 
   // Start async scan
@@ -344,7 +375,7 @@ void WifiSelectionActivity::showNetworkListFromAutoConnect() {
     return;
   }
 
-  WiFi.disconnect();
+  abandonConnectAttempt();
   state = WifiSelectionState::NETWORK_LIST;
   selectedNetworkIndex = 0;
   requestUpdate();
@@ -456,6 +487,13 @@ void WifiSelectionActivity::selectNetwork(const int index) {
 
   // Check if we have saved credentials for this network
   const auto* savedCred = WIFI_STORE.findCredential(selectedSSID);
+  if (savedCred && !savedCred->password.empty() && selectedSSID == passwordSuspectSsid) {
+    // The saved-network attempt already failed the way a wrong password does; trying it again
+    // would only cost another full timeout.
+    LOG_DBG("WIFI", "Saved password for %s failed earlier, asking for it", selectedSSID.c_str());
+    promptPasswordEntry(tr(STR_WIFI_SAVED_PASSWORD_WRONG));
+    return;
+  }
   if (savedCred && !savedCred->password.empty()) {
     // Use saved password - connect directly
     enteredPassword = savedCred->password;
@@ -473,22 +511,23 @@ void WifiSelectionActivity::selectNetwork(const int index) {
   }
 }
 
-void WifiSelectionActivity::promptPasswordEntry() {
+void WifiSelectionActivity::promptPasswordEntry(const char* title) {
   // Show password entry
   state = WifiSelectionState::PASSWORD_ENTRY;
   // Don't allow screen updates while changing activity
-  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
-                                                                 "",  // No initial text
-                                                                 64,  // Max password length
-                                                                 InputType::Password),
-                         [this](const ActivityResult& result) {
-                           if (result.isCancelled) {
-                             state = WifiSelectionState::NETWORK_LIST;
-                           } else {
-                             enteredPassword = std::get<KeyboardResult>(result.data).text;
-                             // state will be updated in next loop iteration
-                           }
-                         });
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, title ? title : tr(STR_ENTER_WIFI_PASSWORD),
+                                              "",  // No initial text
+                                              64,  // Max password length
+                                              InputType::Password),
+      [this](const ActivityResult& result) {
+        if (result.isCancelled) {
+          state = WifiSelectionState::NETWORK_LIST;
+        } else {
+          enteredPassword = std::get<KeyboardResult>(result.data).text;
+          // state will be updated in next loop iteration
+        }
+      });
 }
 
 void WifiSelectionActivity::promptHiddenSsid() {
@@ -625,6 +664,11 @@ void WifiSelectionActivity::applyScanBudget() {
 
 void WifiSelectionActivity::issueWifiBegin() {
   wifiEventAttemptAssociated.store(false, std::memory_order_relaxed);
+  wifiEventKeyFailures.store(0, std::memory_order_relaxed);
+  wifiEventOtherFailures.store(0, std::memory_order_relaxed);
+  // The core's own retries are wanted within an attempt: a key exchange lost once on a weak link
+  // gets another go before our timeout. Only an abandoned attempt turns them off.
+  WiFi.setAutoReconnect(true);
 
   // Always a full, signal-sorted scan. The cached channel/BSSID hint that used to shortcut this
   // is gone, and the device data is unambiguous about why:
@@ -710,6 +754,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
     autoConnecting = false;
+    if (selectedSSID == passwordSuspectSsid) passwordSuspectSsid.clear();
 
     LOG_DBG("WIFI", "Connected to %s in %lu ms (rssi=%d ch=%d ip=%s gw=%s mask=%s dns=%s)", selectedSSID.c_str(),
             millis() - connectionStartTime, WiFi.RSSI(), WiFi.channel(), ipStr, WiFi.gatewayIP().toString().c_str(),
@@ -770,6 +815,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
       state == WifiSelectionState::AUTO_CYCLING ? AUTO_CYCLE_TIMEOUT_MS : CONNECTION_TIMEOUT_MS;
 
   if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+    // Stopped here too, not only on timeout: the core keeps retrying a failed connect by itself.
+    abandonConnectAttempt();
+    if (passwordLikelyWrong()) passwordSuspectSsid = selectedSSID;
     if (state == WifiSelectionState::AUTO_CONNECTING) {
       // Primary SSID failed — scan and try remaining saved credentials
       autoCycleAfterScan = true;
@@ -780,6 +828,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
       tryNextAutoCycleCandidate();
       return;
     }
+    if (askForPasswordIfLikelyWrong()) return;
     connectionError = tr(STR_ERROR_GENERAL_FAILURE);
     if (status == WL_NO_SSID_AVAIL) {
       connectionError = tr(STR_ERROR_NETWORK_NOT_FOUND);
@@ -791,7 +840,8 @@ void WifiSelectionActivity::checkConnectionStatus() {
 
   // Check for timeout
   if (millis() - connectionStartTime > timeout) {
-    WiFi.disconnect();
+    abandonConnectAttempt();
+    if (passwordLikelyWrong()) passwordSuspectSsid = selectedSSID;
     if (state == WifiSelectionState::AUTO_CONNECTING) {
       autoCycleAfterScan = true;
       startWifiScan();
@@ -801,11 +851,43 @@ void WifiSelectionActivity::checkConnectionStatus() {
       tryNextAutoCycleCandidate();
       return;
     }
+    if (askForPasswordIfLikelyWrong()) return;
     connectionError = tr(STR_ERROR_CONNECTION_TIMEOUT);
     state = WifiSelectionState::CONNECTION_FAILED;
     requestUpdate();
     return;
   }
+}
+
+// Stops the attempt in flight and keeps it stopped. WiFi.disconnect() alone does not: the Arduino
+// core reconnects by itself after every failure it counts as retryable (handshake timeout, no AP
+// found, ...), and an attempt still running when we disconnect fails afterwards and starts the
+// next one. On a T5S3 with a rejected password the failures went on at 18, 23 and 35 s after the
+// 15 s timeout had already shown the error. issueWifiBegin() turns the retries back on.
+void WifiSelectionActivity::abandonConnectAttempt() {
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect();
+}
+
+// A saved password the network turned down: every failure of the attempt was a failed key
+// exchange, and nothing else (no AP found, no beacon, no association) went wrong. A weak link can
+// lose a key exchange too, so this is a likelihood, and the prompt says "may be wrong".
+bool WifiSelectionActivity::passwordLikelyWrong() const {
+  return usedSavedPassword && wifiEventKeyFailures.load(std::memory_order_relaxed) > 0 &&
+         wifiEventOtherFailures.load(std::memory_order_relaxed) == 0;
+}
+
+// For a connect the user started: instead of the timeout message and the network options, go
+// straight to typing the password, saying why. Cancel returns to the list with the saved password
+// kept; a password that works is offered for saving over the old one.
+bool WifiSelectionActivity::askForPasswordIfLikelyWrong() {
+  if (state != WifiSelectionState::CONNECTING || !passwordLikelyWrong()) return false;
+  LOG_DBG("WIFI", "Saved password for %s rejected (%u key-exchange failures), asking for it", selectedSSID.c_str(),
+          static_cast<unsigned>(wifiEventKeyFailures.load(std::memory_order_relaxed)));
+  usedSavedPassword = false;
+  enteredPassword.clear();
+  promptPasswordEntry(tr(STR_WIFI_SAVED_PASSWORD_WRONG));
+  return true;
 }
 
 void WifiSelectionActivity::loop() {
@@ -831,7 +913,7 @@ void WifiSelectionActivity::loop() {
       state == WifiSelectionState::AUTO_CYCLING) {
     if (isAutoConnectInProgress()) {
       if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-        WiFi.disconnect();
+        abandonConnectAttempt();
         onComplete(false);
         return;
       }
@@ -843,7 +925,7 @@ void WifiSelectionActivity::loop() {
       // A manual connect always starts from the list, so Back abandons the attempt and returns
       // there. Without it a hidden SSID that does not exist holds the screen for the whole timeout.
       LOG_DBG("WIFI", "User abandoned connect to %s", selectedSSID.c_str());
-      WiFi.disconnect();
+      abandonConnectAttempt();
       state = WifiSelectionState::NETWORK_LIST;
       requestUpdate();
       return;
