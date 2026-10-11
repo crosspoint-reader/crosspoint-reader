@@ -20,6 +20,9 @@
 namespace PluginLocations {
 inline constexpr const char* kRoots[] = {"/.crosspoint/plugins", "/plugins", "/.plugins"};
 inline constexpr size_t kRootCount = sizeof(kRoots) / sizeof(kRoots[0]);
+// Where the Plugins page installs: the canonical root, which the web file endpoints cannot write,
+// so a plugin there changes only through that page.
+inline constexpr const char* kInstallRoot = kRoots[0];
 
 // Directories examined per root before the scan gives up. Each candidate costs
 // two SD stats to classify, and the scan runs inside a single request, so an
@@ -33,6 +36,8 @@ struct Entry {
   std::string dir;           // "<root>/<name>"
   bool hasPluginJs = false;  // browser-side plugin (plugin.js)
   bool hasManifest = false;  // optional card metadata (manifest.json)
+  bool disabled = false;     // a "disabled" marker file: listed, but the pages do not load it
+  const char* root = "";     // the kRoots entry it was found in
 };
 
 // Scans every root. The earliest root holding a folder name claims it - matching
