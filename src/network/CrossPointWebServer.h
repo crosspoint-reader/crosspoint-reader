@@ -142,6 +142,8 @@ class CrossPointWebServer {
   void handleFontUploadData();
   void handleFontDelete();
 
+  void handleDictionaryPage() const;
+
   struct FontUploadState {
     FsFile file;
     std::string familyName;

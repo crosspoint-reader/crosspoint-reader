@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>%%CROSSPOINT%% - Dictionaries</title>
+    <script src="/js/jszip.min.js"></script>
+    <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+        --danger-color: #e74c3c;
+        --danger-hover: #c0392b;
+        --notice-bg: #fff8e1;
+        --notice-border: #ffd54f;
+        --notice-color: #5d4e0a;
+        --ok-bg: #d4edda;
+        --ok-color: #155724;
+        --err-bg: #f8d7da;
+        --err-color: #721c24;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          --notice-bg: #4a4030;
+          --notice-border: #b89a3e;
+          --notice-color: #f3e5a0;
+          --ok-bg: #2e4a35;
+          --ok-color: #cdebd3;
+          --err-bg: #5a3034;
+          --err-color: #f6d5d8;
+          color-scheme: dark;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: var(--bg);
+        color: var(--font-color);
+      }
+      h1 {
+        color: var(--title-color);
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+      }
+      h2 { color: var(--title-color); margin-top: 0; }
+      h3 { margin: 0 0 4px 0; }
+      .card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links {
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .nav-links a.active {
+        background-color: var(--accent-color);
+        color: white;
+      }
+      .nav-links a:not(.active):hover {
+        background-color: var(--accent-hover-color);
+        color: white;
+      }
+      .dict {
+        border-bottom: 1px solid var(--border-color);
+        padding: 12px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .dict:last-child { border-bottom: none; }
+      .dict-info { flex: 1; min-width: 0; }
+      .meta { color: var(--label-color); font-size: 0.9em; overflow-wrap: anywhere; }
+      .msgs { margin: 6px 0 0; padding-left: 18px; font-size: 0.9em; }
+      .msg-error { color: var(--danger-color); }
+      .msg-warn { color: var(--label-color); }
+      .badge {
+        display: inline-block;
+        font-size: 0.7em;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 10px;
+        vertical-align: middle;
+        margin-left: 6px;
+      }
+      .badge-ok { background: var(--ok-bg); color: var(--ok-color); }
+      .badge-warn { background: var(--notice-bg); color: var(--notice-color); border: 1px solid var(--notice-border); }
+      .badge-error { background: var(--err-bg); color: var(--err-color); }
+      .btn {
+        padding: 6px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+      }
+      .btn-danger { background: var(--danger-color); color: white; }
+      .btn-danger:hover { background: var(--danger-hover); }
+      .btn-primary { background: var(--accent-color); color: white; }
+      .btn-primary:hover { background: var(--accent-hover-color); }
+      .btn[disabled] { opacity: 0.5; cursor: default; }
+      .empty { color: var(--label-color); text-align: center; padding: 20px; }
+      .hint { color: var(--label-color); font-size: 0.9em; margin: 0 0 8px; }
+      .notice {
+        background: var(--notice-bg);
+        border: 1px solid var(--notice-border);
+        color: var(--notice-color);
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin: 0 0 12px;
+        font-size: 0.95em;
+      }
+      .notice a { color: inherit; font-weight: 600; }
+      .drop-zone {
+        border: 2px dashed var(--border-color);
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+      }
+      .drop-zone.over { border-color: var(--accent-color); }
+      .drop-zone p { margin: 8px 0 0; color: var(--label-color); font-size: 0.9em; }
+      .pending {
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 12px 14px;
+        margin-top: 12px;
+      }
+      .pending.excluded { opacity: 0.6; }
+      .pending label { display: block; margin-top: 8px; }
+      .pending input[type="text"] {
+        padding: 4px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--bg);
+        color: var(--font-color);
+        min-width: 200px;
+      }
+      .files { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.9em; }
+      .files td { padding: 3px 6px 3px 0; border-top: 1px solid var(--border-color); overflow-wrap: anywhere; }
+      .files td.size { text-align: right; white-space: nowrap; }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 12px;
+      }
+      .progress { margin-top: 12px; }
+      .bar { height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+      .bar > div { height: 100%; width: 0; background: var(--accent-color); transition: width 0.2s; }
+      #status {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 4px;
+        display: none;
+      }
+      .status-ok { background: var(--ok-bg); color: var(--ok-color); display: block !important; }
+      .status-err { background: var(--err-bg); color: var(--err-color); display: block !important; }
+    </style>
+  </head>
+  <body>
+    <h1>📚 %%CROSSPOINT%%</h1>
+
+    <div class="nav-links">
+      <a href="/files">File Manager</a>
+      <a href="/settings">Settings</a>
+      <a href="/fonts">Font Manager</a>
+      <a href="/dictionary" class="active">Dictionaries</a>
+      <a href="/stats">Reading Stats</a>
+      <a href="/systeminfo">System Info</a>
+    </div>
+
+    <div class="card">
+      <h2>Installed Dictionaries</h2>
+      <p class="hint">Choose the one to look words up in on the reader: Settings → Reader → Dictionary.</p>
+      <div id="installed"><p class="empty">Loading...</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Install a Dictionary</h2>
+      <p class="notice">
+        StarDict dictionaries only. Choose the archive you downloaded (.zip, .tar.gz, .tgz, .tar.bz2 or .tar)
+        or the dictionary's own files (.ifo, .idx or .idx.gz, .dict or .dict.dz, and an optional .syn).
+        Compressed parts are unpacked here in your browser, so the reader gets files it can use.
+        <a href="https://github.com/jpirnay/witchhunt-reader/blob/master/docs/dictionary.md#where-to-find-dictionaries"
+          target="_blank" rel="noopener">Where to find dictionaries</a>
+      </p>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="dictFiles" multiple />
+        <p>or drop the files here</p>
+      </div>
+      <div id="found"></div>
+      <div class="toolbar" id="installBar" hidden>
+        <button id="installBtn" class="btn btn-primary" type="button">Install</button>
+        <span class="meta" id="installTotal"></span>
+      </div>
+      <div class="progress" id="progress" hidden>
+        <div class="meta" id="progressLabel"></div>
+        <div class="bar"><div id="progressBar"></div></div>
+      </div>
+      <div id="status"></div>
+    </div>
+
+  <script>
+<!--#include file="js/bunzip2.js.inc" -->
+<!--#include file="js/stardict.js.inc" -->
+
+    // --- talking to the device ---------------------------------------------
+    // The device serves one request at a time and answers 503 while its heap is
+    // too tight, so everything below is sequential and a 503 is retried.
+
+    const DICT_ROOT = '/dictionaries';
+    // Also read by the reader; listed only when the user has turned on hidden
+    // files, since the server refuses dot folders otherwise.
+    const HIDDEN_ROOT = '/.dictionaries';
+
+    async function deviceFetch(url, options) {
+      for (let attempt = 0; ; attempt++) {
+        const res = await fetch(url, options);
+        if (res.status !== 503 || attempt >= 3) return res;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    // A folder's entries, or null where the server will not show it.
+    async function listDir(path) {
+      const res = await deviceFetch('/api/files?path=' + encodeURIComponent(path));
+      if (res.status === 403) return null;
+      if (!res.ok) throw new Error('Could not list ' + path + ' (' + res.status + ')');
+      return await res.json();
+    }
+
+    async function mkdir(parent, name) {
+      const form = new FormData();
+      form.append('name', name);
+      form.append('path', parent);
+      const res = await deviceFetch('/mkdir', { method: 'POST', body: form });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        if (!/exists/i.test(text)) throw new Error('Could not create ' + parent + '/' + name + ': ' + (text || res.status));
+      }
+    }
+
+    // Every path under `path`, children before their folder: /delete removes
+    // only empty folders and works through the list in order.
+    async function collectTree(path) {
+      const out = [];
+      for (const e of (await listDir(path)) || []) {
+        const p = path + '/' + e.name;
+        if (e.isDirectory) out.push(...(await collectTree(p)));
+        else out.push(p);
+      }
+      out.push(path);
+      return out;
+    }
+
+    async function deleteTree(path) {
+      const paths = await collectTree(path);
+      const res = await deviceFetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'paths=' + encodeURIComponent(JSON.stringify(paths)),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error((text || 'Delete failed (' + res.status + ')') +
+          (/not empty/.test(text) ? ' The folder holds hidden files; delete it on the device or a computer.' : ''));
+      }
+    }
+
+    // Multipart, as the File Manager uploads without WebSockets: the body
+    // streams from the blob, so a dictionary of tens of MB is never copied.
+    function uploadFile(dir, name, blob, onProgress) {
+      return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('file', blob, name);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload?path=' + encodeURIComponent(dir), true);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(e.loaded, e.total);
+        };
+        xhr.onload = () => {
+          if (xhr.status === 200) resolve();
+          else reject(new Error(name + ': ' + (xhr.responseText || 'upload failed (' + xhr.status + ')')));
+        };
+        xhr.onerror = () => reject(new Error(name + ': network error'));
+        xhr.send(form);
+      });
+    }
+
+    // --- page helpers --------------------------------------------------------
+
+    function el(tag, className, text) {
+      const e = document.createElement(tag);
+      if (className) e.className = className;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function setStatus(text, ok) {
+      const s = document.getElementById('status');
+      s.className = ok === undefined ? '' : ok ? 'status-ok' : 'status-err';
+      s.style.display = text ? 'block' : 'none';
+      s.textContent = text || '';
+    }
+
+    function showProgress(label, fraction) {
+      document.getElementById('progress').hidden = false;
+      document.getElementById('progressLabel').textContent = label;
+      document.getElementById('progressBar').style.width = Math.round(Math.max(0, Math.min(1, fraction)) * 100) + '%';
+    }
+
+    function hideProgress() {
+      document.getElementById('progress').hidden = true;
+    }
+
+    let busy = false;
+    function setBusy(on) {
+      busy = on;
+      document.getElementById('dictFiles').disabled = on;
+      document.getElementById('installBtn').disabled = on;
+      document.querySelectorAll('#installed button').forEach((b) => (b.disabled = on));
+    }
+
+    window.addEventListener('beforeunload', (e) => {
+      if (busy) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // --- installed dictionaries ---------------------------------------------
+
+    async function readIfo(path, size) {
+      // The .ifo is a few hundred bytes; a huge one is not worth the transfer.
+      if (size > 65536) return null;
+      const res = await deviceFetch('/download?path=' + encodeURIComponent(path));
+      return res.ok ? parseIfo(await res.text()) : null;
+    }
+
+    function renderInstalledRow(container, root, folder, entries, verdict, ifo) {
+      const row = el('div', 'dict');
+      const info = el('div', 'dict-info');
+      const title = el('h3', '', (ifo && ifo.bookname) || folder);
+      const labels = { ok: 'Ready', warn: 'Works', error: 'Not usable' };
+      title.appendChild(el('span', 'badge badge-' + verdict.level, labels[verdict.level]));
+      info.appendChild(title);
+
+      const files = entries.filter((e) => !e.isDirectory);
+      const total = files.reduce((n, e) => n + e.size, 0);
+      const meta = [root + '/' + folder];
+      if (ifo && ifo.wordcount) meta.push(Number(ifo.wordcount).toLocaleString() + ' words');
+      meta.push(formatSize(total));
+      info.appendChild(el('div', 'meta', meta.join(' · ')));
+      info.appendChild(el('div', 'meta', files.map((e) => e.name + ' (' + formatSize(e.size) + ')').join(', ') || 'empty folder'));
+      if (verdict.messages.length) {
+        const list = el('ul', 'msgs');
+        verdict.messages.forEach((m) => list.appendChild(el('li', verdict.level === 'error' ? 'msg-error' : 'msg-warn', m)));
+        info.appendChild(list);
+      }
+      row.appendChild(info);
+
+      const remove = el('button', 'btn btn-danger', 'Remove');
+      remove.type = 'button';
+      remove.addEventListener('click', () => removeDictionary(root + '/' + folder, (ifo && ifo.bookname) || folder));
+      row.appendChild(remove);
+      container.appendChild(row);
+    }
+
+    async function loadInstalled() {
+      const container = document.getElementById('installed');
+      container.textContent = '';
+      container.appendChild(el('p', 'empty', 'Loading...'));
+      const rows = el('div');
+      let count = 0;
+      try {
+        for (const root of [DICT_ROOT, HIDDEN_ROOT]) {
+          const entries = await listDir(root);
+          if (!entries) continue;
+          const stray = entries.filter((e) => !e.isDirectory && classifyDictFile(e.name));
+          if (stray.length) {
+            const row = el('div', 'dict');
+            const info = el('div', 'dict-info');
+            const title = el('h3', '', 'Loose files in ' + root);
+            title.appendChild(el('span', 'badge badge-error', 'Not usable'));
+            info.appendChild(title);
+            info.appendChild(el('div', 'meta', stray.map((e) => e.name).join(', ')));
+            const list = el('ul', 'msgs');
+            list.appendChild(el('li', 'msg-error', 'The reader only looks inside folders: each dictionary needs a folder of its own. Install it again from this page.'));
+            info.appendChild(list);
+            row.appendChild(info);
+            rows.appendChild(row);
+          }
+          for (const dir of entries.filter((e) => e.isDirectory)) {
+            const list = (await listDir(root + '/' + dir.name)) || [];
+            const verdict = evaluateInstalled(dir.name, list);
+            let ifo = null;
+            if (verdict.ifoName) {
+              const ifoEntry = list.find((e) => e.name === verdict.ifoName);
+              ifo = await readIfo(root + '/' + dir.name + '/' + verdict.ifoName, ifoEntry.size).catch(() => null);
+              if (ifo && ifo.idxoffsetbits === '64') {
+                verdict.level = 'error';
+                verdict.messages.unshift('It uses 64-bit index offsets (idxoffsetbits=64), which the reader does not support.');
+              }
+            }
+            renderInstalledRow(rows, root, dir.name, list, verdict, ifo);
+            count++;
+          }
+        }
+        container.textContent = '';
+        if (count === 0 && !rows.childNodes.length) {
+          container.appendChild(el('p', 'empty', 'No dictionaries installed yet.'));
+        } else {
+          container.appendChild(rows);
+        }
+      } catch (e) {
+        container.textContent = '';
+        container.appendChild(el('p', 'empty', 'Could not read the dictionaries: ' + e.message));
+      }
+    }
+
+    async function removeDictionary(path, label) {
+      if (busy) return;
+      if (!confirm('Remove "' + label + '"?\n\nThis deletes ' + path + ' and everything in it from the card.')) return;
+      setBusy(true);
+      setStatus('Removing ' + label + '...');
+      try {
+        await deleteTree(path);
+        setStatus('Removed "' + label + '".', true);
+      } catch (e) {
+        setStatus('Could not remove "' + label + '": ' + e.message, false);
+      }
+      setBusy(false);
+      await loadInstalled();
+    }
+
+    // --- installing ---------------------------------------------------------
+
+    // Dictionaries found in the chosen files, waiting for Install:
+    // [{ group, analysis, include, unpackDict, folder }]
+    let pending = [];
+
+    async function readSelection(fileList) {
+      const sources = [];
+      const ignored = [];
+      for (const file of Array.from(fileList)) {
+        const kind = archiveKind(file.name);
+        if (kind === 'unsupported') {
+          throw new Error(file.name + ': this kind of archive cannot be read here. Repack it as .zip or .tar.gz.');
+        }
+        if (kind) {
+          const label = 'Reading ' + file.name;
+          showProgress(label, 0);
+          const reader = { zip: readZip, 'tar.gz': readTarGz, 'tar.bz2': readTarBz2, tar: readTar }[kind];
+          let files;
+          try {
+            files = await reader(file, keepDictFile, (done, total) => showProgress(label, done / total));
+          } catch (e) {
+            throw new Error(file.name + ': ' + (e.message || 'the archive is damaged or cut off.'));
+          }
+          files.forEach((f) => sources.push({ path: f.path, blob: f.blob, origin: file.name }));
+        } else if (classifyDictFile(file.name)) {
+          sources.push({ path: file.name, blob: file, origin: null });
+        } else {
+          ignored.push(file.name);
+        }
+      }
+      return { sources, ignored };
+    }
+
+    async function analyseSelection(fileList) {
+      if (busy || !fileList || !fileList.length) return;
+      pending = [];
+      renderPending([], []);
+      setStatus('');
+      setBusy(true);
+      try {
+        const { sources, ignored } = await readSelection(fileList);
+        const { dicts, stray } = groupDictionaries(sources);
+        if (!dicts.length) {
+          throw new Error('No StarDict dictionary found: there is no .idx or .idx.gz file' +
+            (ignored.length ? ' (not used: ' + ignored.join(', ') + ')' : '') + '.');
+        }
+        showProgress('Checking...', 1);
+        for (const group of dicts) {
+          // Without a title in the .ifo, an archive holding just this one
+          // dictionary lends it its name.
+          const alone = group.origin && dicts.filter((d) => d.origin === group.origin).length === 1;
+          const analysis = await analyseDictionary(group, alone ? archiveStem(group.origin) : null);
+          pending.push({ group, analysis, include: analysis.errors.length === 0, unpackDict: true, folder: analysis.folder });
+        }
+        // Two dictionaries in one batch must not land in the same folder.
+        const used = new Set();
+        for (const p of pending) {
+          let name = p.folder;
+          for (let n = 2; used.has(name.toLowerCase()); n++) name = p.folder + ' ' + n;
+          used.add(name.toLowerCase());
+          p.folder = name;
+        }
+        renderPending(stray, ignored);
+      } catch (e) {
+        setStatus(e.message, false);
+        // Cleared so that choosing the same file again, once fixed, is noticed.
+        document.getElementById('dictFiles').value = '';
+      }
+      hideProgress();
+      setBusy(false);
+    }
+
+    function uploadSize(p) {
+      return p.analysis.uploads.reduce((n, u) => n + (u.unpack === true || (u.unpack === 'offer' && p.unpackDict) ? u.unpackedSize : u.packedSize), 0);
+    }
+
+    function updateTotal() {
+      const chosen = pending.filter((p) => p.include);
+      document.getElementById('installBar').hidden = pending.length === 0;
+      document.getElementById('installBtn').disabled = busy || chosen.length === 0;
+      document.getElementById('installTotal').textContent = chosen.length
+        ? chosen.length + ' dictionar' + (chosen.length === 1 ? 'y' : 'ies') + ', ' + formatSize(chosen.reduce((n, p) => n + uploadSize(p), 0)) + ' to upload'
+        : 'Nothing to install';
+    }
+
+    function renderFiles(table, p) {
+      table.textContent = '';
+      for (const u of p.analysis.uploads) {
+        const unpack = u.unpack === true || (u.unpack === 'offer' && p.unpackDict);
+        const tr = el('tr');
+        tr.appendChild(el('td', '', unpack || u.unpack === false ? u.name : u.packedName));
+        tr.appendChild(el('td', 'meta', unpack ? 'unpacked from ' + baseName(u.source.path) : ''));
+        tr.appendChild(el('td', 'size', formatSize(unpack ? u.unpackedSize : u.packedSize)));
+        table.appendChild(tr);
+      }
+    }
+
+    function renderPending(stray, ignored) {
+      const found = document.getElementById('found');
+      found.textContent = '';
+      pending.forEach((p) => {
+        const a = p.analysis;
+        const box = el('div', 'pending' + (p.include ? '' : ' excluded'));
+        const head = el('h3');
+        if (pending.length > 1 || a.errors.length) {
+          const include = el('input');
+          include.type = 'checkbox';
+          include.checked = p.include;
+          include.disabled = a.errors.length > 0;
+          include.addEventListener('change', () => {
+            p.include = include.checked;
+            box.classList.toggle('excluded', !p.include);
+            updateTotal();
+          });
+          head.appendChild(include);
+          head.appendChild(document.createTextNode(' '));
+        }
+        head.appendChild(document.createTextNode(a.title));
+        box.appendChild(head);
+        const meta = [];
+        if (a.words) meta.push(a.words.toLocaleString() + ' words');
+        meta.push('from ' + (p.group.origin || 'the chosen files') + (p.group.dir ? ' (' + p.group.dir + ')' : ''));
+        box.appendChild(el('div', 'meta', meta.join(' · ')));
+
+        if (!a.errors.length) {
+          const label = el('label', '', 'Folder: ' + DICT_ROOT + '/');
+          const input = el('input');
+          input.type = 'text';
+          input.value = p.folder;
+          input.addEventListener('change', () => {
+            input.value = sanitizeFolderName(input.value) || a.folder;
+            p.folder = input.value;
+          });
+          label.appendChild(input);
+          box.appendChild(label);
+
+          const table = el('table', 'files');
+          renderFiles(table, p);
+          box.appendChild(table);
+
+          const dz = a.uploads.find((u) => u.unpack === 'offer');
+          if (dz) {
+            const label2 = el('label', 'meta');
+            const unpack = el('input');
+            unpack.type = 'checkbox';
+            unpack.checked = p.unpackDict;
+            unpack.addEventListener('change', () => {
+              p.unpackDict = unpack.checked;
+              renderFiles(table, p);
+              updateTotal();
+            });
+            label2.appendChild(unpack);
+            label2.appendChild(document.createTextNode(
+              ' Unpack ' + baseName(dz.source.path) + ' to .dict (' + formatSize(dz.unpackedSize) + ' instead of ' +
+              formatSize(dz.packedSize) + '). Recommended: a plain .dict needs no 32 KB inflate buffer per lookup, ' +
+              'which the reader cannot always find while a book is open.'));
+            box.appendChild(label2);
+          }
+        }
+
+        if (a.errors.length || a.warnings.length) {
+          const list = el('ul', 'msgs');
+          a.errors.forEach((m) => list.appendChild(el('li', 'msg-error', m)));
+          a.warnings.forEach((m) => list.appendChild(el('li', 'msg-warn', m)));
+          box.appendChild(list);
+        }
+        found.appendChild(box);
+      });
+      const notes = [];
+      if (stray.length) notes.push('Not part of any dictionary (no matching .idx): ' + stray.map(baseName).join(', '));
+      if (ignored.length) notes.push('Not dictionary files, ignored: ' + ignored.join(', '));
+      notes.forEach((n) => found.appendChild(el('p', 'hint', n)));
+      updateTotal();
+    }
+
+    async function install() {
+      const chosen = pending.filter((p) => p.include && !p.analysis.errors.length);
+      if (busy || !chosen.length) return;
+      // A folder edited into another's name would end up holding two
+      // dictionaries, which the reader skips.
+      const names = chosen.map((p) => p.folder.toLowerCase());
+      const twice = names.find((n, i) => names.indexOf(n) !== i);
+      if (twice) {
+        setStatus('Two dictionaries would go into the same folder "' + twice + '". Give each its own name.', false);
+        return;
+      }
+      setBusy(true);
+      setStatus('');
+      const done = [];
+      let current = null;
+      try {
+        showProgress('Preparing the card...', 0);
+        const top = (await listDir('/')) || [];
+        if (!top.some((e) => e.isDirectory && e.name.toLowerCase() === DICT_ROOT.slice(1))) await mkdir('/', DICT_ROOT.slice(1));
+        const existing = (await listDir(DICT_ROOT)) || [];
+
+        for (const p of chosen) {
+          const folder = p.folder;
+          const clash = existing.find((e) => e.name.toLowerCase() === folder.toLowerCase());
+          if (clash) {
+            if (!confirm('The card already has ' + DICT_ROOT + '/' + clash.name + '. Replace it?\n\nEverything in that folder is deleted first.')) continue;
+            showProgress('Removing the old ' + clash.name + '...', 0);
+            await deleteTree(DICT_ROOT + '/' + clash.name);
+          }
+          current = folder;
+          await mkdir(DICT_ROOT, folder);
+          existing.push({ name: folder, isDirectory: true });
+          const uploads = p.analysis.uploads;
+          for (let i = 0; i < uploads.length; i++) {
+            const u = uploads[i];
+            const unpack = u.unpack === true || (u.unpack === 'offer' && p.unpackDict);
+            const name = unpack || u.unpack === false ? u.name : u.packedName;
+            const step = folder + ' (' + (i + 1) + '/' + uploads.length + '): ';
+            let blob = u.source.blob;
+            if (unpack) {
+              showProgress(step + 'unpacking ' + baseName(u.source.path), 0);
+              blob = await gunzipBlob(blob, (n, total) => showProgress(step + 'unpacking ' + baseName(u.source.path), n / total));
+            }
+            const started = Date.now();
+            await uploadFile(DICT_ROOT + '/' + folder, name, blob, (n, total) => {
+              const secs = (Date.now() - started) / 1000;
+              const rate = secs > 1 ? ', ' + formatSize(n / secs) + '/s' : '';
+              showProgress(step + 'uploading ' + name + ' - ' + formatSize(n) + ' of ' + formatSize(total) + rate, n / total);
+            });
+          }
+          done.push(folder);
+          current = null;
+        }
+        pending = pending.filter((p) => !done.includes(p.folder));
+        renderPending([], []);
+        document.getElementById('dictFiles').value = '';
+        setStatus(done.length
+          ? 'Installed ' + done.map((f) => '"' + f + '"').join(', ') + '. Choose ' + (done.length === 1 ? 'it' : 'one') +
+            ' on the reader under Settings → Reader → Dictionary; the first lookup takes a few seconds while it indexes the dictionary.'
+          : 'Nothing was installed.', done.length > 0);
+      } catch (e) {
+        setStatus('Install failed: ' + e.message + (current ? ' ' + DICT_ROOT + '/' + current + ' is incomplete; remove it below and try again.' : ''), false);
+      }
+      hideProgress();
+      setBusy(false);
+      updateTotal();
+      await loadInstalled();
+    }
+
+    document.getElementById('dictFiles').addEventListener('change', (e) => analyseSelection(e.target.files));
+    document.getElementById('installBtn').addEventListener('click', install);
+
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('over');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('over');
+      analyseSelection(e.dataTransfer.files);
+    });
+
+    loadInstalled();
+  </script>
+  </body>
+</html>

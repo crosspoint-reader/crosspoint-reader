@@ -373,6 +373,9 @@ void CrossPointWebServer::begin() {
   server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
   server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
 
+  // Singular, so it cannot be mistaken for the /dictionaries folder on the card.
+  server->on("/dictionary", HTTP_GET, [this] { handleDictionaryPage(); });
+
   // OPDS server endpoints
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
   server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
@@ -2134,6 +2137,11 @@ bool installRemoteFamily(HttpDownloader::Session& session, const FontCatalog& fa
 }  // namespace
 
 void CrossPointWebServer::handleFontsPage() const { serveBundlePage(web_bundle::FontsPageHtml); }
+
+// The page unpacks and checks a dictionary in the browser and writes it through /mkdir,
+// /upload and /delete: the device has neither the heap to inflate a .idx.gz nor any reason
+// to learn archive formats, so serving the page is all the firmware does.
+void CrossPointWebServer::handleDictionaryPage() const { serveBundlePage(web_bundle::DictionaryPageHtml); }
 
 void CrossPointWebServer::handleFontList() {
   if (rejectIfLowMemory(server.get())) return;
