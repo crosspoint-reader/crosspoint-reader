@@ -204,6 +204,9 @@ class CrossPointWebServer {
   // /.crosspoint/plugins, which the web file endpoints cannot write; one copied by hand into
   // /plugins or /.plugins is listed and managed the same way.
   void handlePluginsPage() const;
+  // The File Manager's Details dialog: its script, and an EPUB's own OPF to read metadata from.
+  void handleMetadataEditorJs() const;
+  void handleBookOpf() const;
   void handlePluginInstallBegin() const;  // POST /api/plugins/begin?name -> fresh staging folder
   void handlePluginInstallFile();         // POST /api/plugins/file?name&file (raw body) -> one file
   void handlePluginInstallFileData();

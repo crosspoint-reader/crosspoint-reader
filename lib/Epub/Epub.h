@@ -275,6 +275,10 @@ class Epub {
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
                                 const bool* stop = nullptr) const;
+  // Where the OPF package document sits inside the book, read from META-INF/container.xml without
+  // loading anything else: for handing the OPF out as it is, sidecar or not (the web interface's
+  // Details dialog reads a book's own metadata from it).
+  bool contentOpfPath(std::string* out) const { return findContentOpfFile(out); }
   // Read up to maxBytes decompressed bytes from a ZIP entry — no SD write, header-only use.
   size_t readItemHeaderBytes(const std::string& itemHref, uint8_t* outBuf, size_t maxBytes) const;
   // Arena bytes one extractItemToFile() needs to keep its inflate ring off the heap:

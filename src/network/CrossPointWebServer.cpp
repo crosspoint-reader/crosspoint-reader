@@ -284,9 +284,29 @@ HttpDownloader::RedirectFilter redirectsWithinAllowlist(const String& plugin) {
   };
 }
 
+// A host matches an allowlist entry exactly, or ends with one that starts with a dot.
+bool hostMatches(const std::string& host, const std::string& pattern) {
+  if (pattern.empty()) return false;
+  if (pattern[0] == '.') {
+    return host.size() > pattern.size() && host.compare(host.size() - pattern.size(), pattern.size(), pattern) == 0;
+  }
+  return host == pattern;
+}
+
+// The File Manager's Details dialog is part of the web interface, not a plugin, but its cover search
+// reads Goodreads and Google Books covers through the relay like the plugin it grew from. Its scope
+// carries a ':', which no FAT folder name can, so no plugin can claim this list.
+constexpr char DETAILS_RELAY_SCOPE[] = ":details";
+constexpr const char* DETAILS_RELAY_HOSTS[] = {"www.goodreads.com", ".gr-assets.com", "books.google.com"};
+
 bool relayHostAllowed(const String& plugin, const std::string& url) {
   const std::string host = urlHost(url);
-  if (host.empty() || !isSafePathComponent(plugin)) return false;
+  if (host.empty()) return false;
+  if (plugin == DETAILS_RELAY_SCOPE) {
+    return std::any_of(std::begin(DETAILS_RELAY_HOSTS), std::end(DETAILS_RELAY_HOSTS),
+                       [&host](const char* pattern) { return hostMatches(host, pattern); });
+  }
+  if (!isSafePathComponent(plugin)) return false;
 
   const std::string dir = PluginLocations::findPluginDir(plugin.c_str());
   if (dir.empty()) return false;
@@ -299,13 +319,7 @@ bool relayHostAllowed(const String& plugin, const std::string& url) {
 
   for (JsonVariant entry : m["allowedHosts"].as<JsonArray>()) {
     const char* pattern = entry.as<const char*>();
-    if (!pattern || !*pattern) continue;
-    const std::string pat = pattern;
-    if (pat[0] == '.') {
-      if (host.size() > pat.size() && host.compare(host.size() - pat.size(), pat.size(), pat) == 0) return true;
-    } else if (host == pat) {
-      return true;
-    }
+    if (pattern && hostMatches(host, pattern)) return true;
   }
   return false;
 }
@@ -440,6 +454,8 @@ void CrossPointWebServer::begin() {
   server->on("/api/fetch", HTTP_POST, [this] { handleFetchToSd(); });
   server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsData(); });
   server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
+  server->on("/js/metadata-editor.js", HTTP_GET, [this] { handleMetadataEditorJs(); });
+  server->on("/api/book/opf", HTTP_GET, [this] { handleBookOpf(); });
   server->on("/api/plugins/begin", HTTP_POST, [this] { handlePluginInstallBegin(); });
   server->on(
       "/api/plugins/file", HTTP_POST, [this] { handlePluginInstallFile(); }, [this] { handlePluginInstallFileData(); });
@@ -3205,6 +3221,62 @@ std::string pluginStagingDir(const String& name) { return pluginInstallDir(name)
 }  // namespace
 
 void CrossPointWebServer::handlePluginsPage() const { serveBundlePage(web_bundle::PluginsPageHtml); }
+
+void CrossPointWebServer::handleMetadataEditorJs() const {
+  if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
+  // A script, so no redirect to a page: the File Manager says Details is not available.
+  if (!WebAssets::serve(*server, web_bundle::metadata_editorJs)) server->send(404, "text/plain", "Not installed");
+}
+
+namespace {
+// Epub::readItemContentsToStream writes into a Print; this one feeds the response body, which
+// ChunkedResponse coalesces into TCP-sized chunks.
+class ChunkedResponsePrint : public Print {
+ public:
+  explicit ChunkedResponsePrint(ChunkedResponse& out) : out_(out) {}
+  size_t write(uint8_t b) override {
+    const char c = static_cast<char>(b);
+    out_.append(&c, 1);
+    return 1;
+  }
+  size_t write(const uint8_t* buffer, size_t size) override {
+    out_.append(reinterpret_cast<const char*>(buffer), size);
+    return size;
+  }
+
+ private:
+  ChunkedResponse& out_;
+};
+}  // namespace
+
+// GET /api/book/opf?path=<epub> -> the OPF package document from inside the book, as it is.
+//
+// What the Details dialog reads a book's own metadata from when no sidecar overrides it. The dialog
+// used to download the whole EPUB, often tens of MB over the device's one connection, to read a few
+// KB of it in the browser.
+void CrossPointWebServer::handleBookOpf() const {
+  if (rejectIfLowMemory(server.get())) return;
+  const String path = normalizeWebPath(server->arg("path"));
+  if (!FsHelpers::hasEpubExtension(path) || isProtectedWebPath(path, Target::Item, hiddenAllowed()) ||
+      !Storage.exists(path.c_str())) {
+    server->send(404, "application/json", "{\"error\":\"no such EPUB\"}");
+    return;
+  }
+  const Epub epub(path.c_str(), "/.crosspoint");
+  std::string opfPath;
+  if (!epub.contentOpfPath(&opfPath)) {
+    server->send(422, "application/json", "{\"error\":\"no OPF in this EPUB\"}");
+    return;
+  }
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/oebps-package+xml", "");
+  ChunkedResponse out(server.get());
+  ChunkedResponsePrint body(out);
+  // A failure from here on reaches the page as truncated XML, which it treats as unreadable and
+  // falls back to downloading the book.
+  if (!epub.readItemContentsToStream(opfPath, body, 1024)) LOG_ERR("WEB", "Reading the OPF of %s failed", path.c_str());
+  out.finish();
+}
 
 void CrossPointWebServer::handlePluginInstallBegin() const {
   const String name = server->arg("name");
