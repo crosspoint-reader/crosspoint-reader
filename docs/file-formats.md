@@ -473,6 +473,7 @@ build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
 fold bump rebuilds ranks while preserving `firstSeen`.
 Fold version 4 preserves leading articles in title sort and search keys.
+Fold version 5 stores `authorKey` as a hash of the full normalised name.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
@@ -483,8 +484,8 @@ offset table, and read a screenful in one 4 KB block. `static_assert` enforces i
 
 Each record carries `fold[96]`, the title normalised for search and sorting —
 accents stripped, case dropped, leading articles preserved — and `authorKey[12]`,
-the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
-one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
+a 96-bit hash of the author's words folded and sorted so that "Victor Hugo" and
+"Hugo Victor" group as one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
 The byte before the folded title records metadata extraction status: not

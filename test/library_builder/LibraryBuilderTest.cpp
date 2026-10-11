@@ -194,6 +194,45 @@ TEST_F(LibraryBuilderTest, RebuildVotesFromSourceAuthorInsteadOfPriorCanonicalAu
   EXPECT_EQ(author, "Victor Hugo");
 }
 
+TEST_F(LibraryBuilderTest, AuthorsSharingASurnamePrefixStayGrouped) {
+  // Both surname keys cut to "sanderson br"; title order alternates the authors.
+  const char* books[][3] = {
+      {"/p1.epub", "Brandon Sanderson", "Alpha"},   {"/p2.epub", "Brian Sanderson", "Bravo"},
+      {"/p3.epub", "Brandon Sanderson", "Charlie"}, {"/p4.epub", "Brian Sanderson", "Delta"},
+      {"/p5.epub", "Christopher Paolini", "Echo"},  {"/p6.epub", "Christopher Ruocchio", "Foxtrot"},
+      {"/p7.epub", "Christopher Paolini", "Golf"}};
+  for (const auto& book : books) {
+    fake::add(book[0]);
+    bookMetadata[book[0]].author = book[1];
+    bookMetadata[book[0]].title = book[2];
+  }
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  std::vector<std::string> authors;
+  for (uint16_t row = 0; row < index.header().bookCount; row++) {
+    ClixRecord record{};
+    std::string author;
+    ASSERT_TRUE(index.readRecord(index.ordinalForRow(SortOrder::AuthorAsc, row), record));
+    ASSERT_TRUE(index.readAuthor(record, author));
+    if (author == "Author") continue;  // the fixture's own books
+    authors.push_back(author);
+  }
+
+  // One run per author: Paolini is no longer merged into Ruocchio (#3780) and
+  // the two Sandersons do not interleave.
+  std::vector<std::string> runs;
+  for (const auto& author : authors) {
+    if (runs.empty() || runs.back() != author) runs.push_back(author);
+  }
+  ASSERT_EQ(runs.size(), 4u);
+  EXPECT_EQ(runs[0], "Christopher Paolini");
+  EXPECT_EQ(runs[1], "Christopher Ruocchio");
+  EXPECT_TRUE((runs[2] == "Brandon Sanderson" && runs[3] == "Brian Sanderson") ||
+              (runs[2] == "Brian Sanderson" && runs[3] == "Brandon Sanderson"));
+}
+
 TEST_F(LibraryBuilderTest, EqualBasenamesInDifferentFoldersReconcileIndependently) {
   fake::add("/one/same.epub");
   fake::add("/two/same.epub");

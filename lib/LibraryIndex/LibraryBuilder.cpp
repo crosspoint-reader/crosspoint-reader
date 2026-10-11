@@ -819,9 +819,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // --- re-sort by surname --------------------------------------------------
   //
   // The pass above had to run in authorKey order, because that is what puts one
-  // author's books in a single run for the spelling vote. But authorKey sorts a
-  // name's WORDS — the property that lets "Victor Hugo" and "Hugo Victor" be
-  // recognised as one person — so ordering by it files Herman Melville under B.
+  // author's books in a single run for the spelling vote. authorKey is a hash, so
+  // that order carries no meaning on the shelf.
   //
   // Now that every book carries its canonical display name, the shelf is ordered
   // by surname, as a library would. Keying off the canonical name rather than the
@@ -858,7 +857,16 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     }
     if (!ioFailed) {
       delay(1);
-      std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
+      // surnameKey is cut to the key width, so two authors can tie on it
+      // ("sanderson br"). Breaking the tie on the group's canonical book keeps
+      // each author's books contiguous; title order applies within the group.
+      std::sort(authorSort.get(), authorSort.get() + n,
+                [canon = canonicalFrom.get()](const SortKey& a, const SortKey& b) {
+                  const int cmp = memcmp(a.key, b.key, sizeof(a.key));
+                  if (cmp != 0) return cmp < 0;
+                  if (canon[a.ordinal] != canon[b.ordinal]) return canon[a.ordinal] < canon[b.ordinal];
+                  return a.ordinal < b.ordinal;
+                });
       delay(1);
     }
   }

@@ -155,25 +155,23 @@ TEST(LibraryAuthorKey, DistinctPeopleDoNotCollide) {
   EXPECT_NE(authorKey("Victor Hugo"), authorKey("Jules Verne"));
 }
 
-TEST(LibraryAuthorKey, FitsTheRecordFieldWithoutCollapsingToAForename) {
-  const std::string key = authorKey("Bartholomew Fitzgerald Wellington");
-  ASSERT_FALSE(key.empty());
-  EXPECT_LE(key.size(), library::AUTHOR_KEY_MAX_BYTES);
-  EXPECT_NE(key.back(), ' ');
+TEST(LibraryAuthorKey, SharedLeadingWordsDoNotCollide) {
+  // Issue #3780: "christopher" fills eleven of the twelve bytes, so a byte
+  // prefix filed Paolini's books under Ruocchio.
+  EXPECT_NE(authorKey("Christopher Paolini"), authorKey("Christopher Ruocchio"));
+  EXPECT_NE(authorKey("Alexandre Dumas"), authorKey("Alexandre Dumont"));
+  EXPECT_NE(authorKey("Wollstonecraft, Mary"), authorKey("Mary Trevelyan"));
+  EXPECT_NE(authorKey("Wollstonecraft, Mary"), authorKey("Wollstonecraft, Maryse"));
+  EXPECT_EQ(authorKey("Paolini, Christopher"), authorKey("Christopher Paolini"));
+}
 
-  // Sorting puts a short forename first, so cutting on a token boundary would
-  // reduce this to "mary" and merge every Alex in the library. The byte cut must
-  // keep enough of the surname to discriminate.
-  const std::string mary = authorKey("Wollstonecraft, Mary");
-  EXPECT_GT(mary.size(), 5u);
-  EXPECT_NE(mary, "mary");
-  EXPECT_NE(mary, authorKey("Mary Trevelyan"));
-
-  // A truncated key stays a prefix of the untruncated one, so grouping is stable
-  // however long the name is.
-  EXPECT_EQ(authorKey("Wollstonecraft, Maryse").rfind("mary", 0), 0u);
-
-  EXPECT_FALSE(authorKey("Nebuchadnezzarson").empty());
+TEST(LibraryAuthorKey, FillsTheRecordField) {
+  for (const char* name : {"Bartholomew Fitzgerald Wellington", "Nebuchadnezzarson", "Lu Xun", "Christopher Paolini"}) {
+    const std::string key = authorKey(name);
+    EXPECT_EQ(key.size(), library::AUTHOR_KEY_MAX_BYTES) << name;
+    // 0xFF in the first byte is the builder's unknown-author sentinel.
+    EXPECT_NE(static_cast<unsigned char>(key[0]), 0xFFu) << name;
+  }
   EXPECT_TRUE(authorKey("").empty());
   EXPECT_TRUE(authorKey("Q. X. Z.").empty());  // initials only: no identity
 }
