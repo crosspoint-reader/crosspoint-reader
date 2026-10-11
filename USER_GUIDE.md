@@ -129,6 +129,11 @@ they are (**Cancel** or **No**) first, and the one that goes ahead (**Update**, 
 second. Press the front button whose hint names your answer, or tap the answer on a touch screen.
 **Back** always answers **Cancel**; on the X4 Pro and the T5 S3, so does holding the Home key.
 
+A few questions have a third answer between the two, such as **Reset info** in a saved Wi-Fi
+network's options (**Cancel**, **Reset info**, **Forget**). Their buttons are stacked one above the
+other. **Back** answers **Cancel** and carries its hint, and the two front buttons answer the other
+two.
+
 ### Taking a Screenshot
 When the Power Button and Volume Down button are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
 
