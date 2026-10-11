@@ -3161,7 +3161,7 @@ void CrossPointWebServer::RawFileUpload::feed(const HTTPRaw& raw) {
 
 bool CrossPointWebServer::RawFileUpload::answerFailure(WebServer& server) {
   if (!started) {
-    // A form-encoded body is parsed into arguments and never streams.
+    // A multipart body is parsed as a form and never streams; every other content type does.
     server.send(415, "application/json", "{\"error\":\"send the file as the raw request body\"}");
     return true;
   }
@@ -3178,7 +3178,8 @@ bool CrossPointWebServer::RawFileUpload::answerFailure(WebServer& server) {
 // Writes one small file to the card. /upload already does this, so this exists
 // for compatibility with plugins written against the upstream API rather than
 // because the web UI needs it - hence the modest cap, which keeps it to the
-// small-file job it advertises and leaves bulk transfers to /upload.
+// small-file job it advertises and leaves bulk transfers to /upload. The body streams through
+// rawUpload, never held whole, so it needs no low-memory gate.
 void CrossPointWebServer::handlePluginFs() {
   if (rawUpload.answerFailure(*server)) return;
   LOG_DBG("WEB", "plugin-fs wrote %u bytes to %s", static_cast<unsigned>(rawUpload.written), rawUpload.path.c_str());

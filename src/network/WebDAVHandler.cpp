@@ -8,6 +8,7 @@
 #include <Txt.h>
 #include <Xtc.h>
 
+#include "BookRelocation.h"
 #include "ChunkedResponse.h"
 #include "HttpFileStreamer.h"
 #include "WebPathGuard.h"
@@ -536,6 +537,8 @@ void WebDAVHandler::handleMove(WebServer& s) {
 
   if (dstExists) {
     Storage.remove(dstPath.c_str());
+    // The book being replaced takes its reading state with it.
+    clearEpubCacheIfNeeded(dstPath);
   }
 
   FsFile file = Storage.open(srcPath.c_str());
@@ -544,11 +547,12 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  clearEpubCacheIfNeeded(srcPath);
   bool success = file.rename(dstPath.c_str());
   file.close();
 
   if (success) {
+    // Like a move in the File Manager: the book keeps its position, bookmarks and stats.
+    BookRelocation::moved(srcPath.c_str(), dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");

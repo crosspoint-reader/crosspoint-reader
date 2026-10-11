@@ -435,6 +435,25 @@
             if (!r.ok) throw new Error(name + ': ' + r.status);
             return { name, data: await r.arrayBuffer() };
           }));
+          // The relay enforces the downloaded manifest, not the catalog entry, so ask if the two
+          // disagree on the sites the plugin may reach (possible for an entry hosted elsewhere).
+          const manifestFile = files.find((f) => f.name === 'manifest.json');
+          if (manifestFile) {
+            let manifest;
+            try {
+              manifest = JSON.parse(new TextDecoder().decode(manifestFile.data));
+            } catch (e) {
+              throw new Error('its manifest.json is not valid JSON');
+            }
+            const sites = (list) => (Array.isArray(list) ? list.slice().sort().join(' ') : '');
+            if (sites(manifest.allowedHosts) !== sites(c.allowedHosts) &&
+                !confirm(title + ' reaches other sites than the catalog says.\n\n' +
+                  describeReach(manifest.allowedHosts) + '\n\nInstall it anyway?')) {
+              setStatus(title + ' was not installed.', '');
+              button.disabled = false;
+              return;
+            }
+          }
           await installFiles(c.name, title, files);
           setStatus(title + ' is installed. Open the ' + (MOUNT_LABELS[c.mount] || 'page') + ' page to use it.', 'ok');
         } catch (e) {

@@ -20,8 +20,9 @@
 namespace PluginLocations {
 inline constexpr const char* kRoots[] = {"/.crosspoint/plugins", "/plugins", "/.plugins"};
 inline constexpr size_t kRootCount = sizeof(kRoots) / sizeof(kRoots[0]);
-// Where the Plugins page installs: the canonical root, which the web file endpoints cannot write,
-// so a plugin there changes only through that page.
+// Where the Plugins page installs: the canonical root. Being inside a dot folder, the web file
+// endpoints leave it alone unless Show Hidden Files is on, so a plugin there normally changes only
+// through that page.
 inline constexpr const char* kInstallRoot = kRoots[0];
 
 // Directories examined per root before the scan gives up. Each candidate costs
