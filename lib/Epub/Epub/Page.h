@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "FootnoteEntry.h"
+#include "LayoutBuffer.h"
 #include "PageLink.h"
 #include "blocks/ImageBlock.h"
 #include "blocks/TextBlock.h"
@@ -17,6 +18,7 @@ enum PageElementTag : uint8_t {
   TAG_PageLine = 1,
   TAG_PageImage = 2,
   TAG_PageHorizontalRule = 3,
+  TAG_PageTableGridRow = 4,
 };
 
 // represents something that has been added to a page
@@ -74,10 +76,27 @@ class PageHorizontalRule final : public PageElement {
   static std::unique_ptr<PageHorizontalRule> deserialize(HalFile& file);
 };
 
+class PageTableGridRow final : public PageElement {
+  uint16_t width;
+  uint16_t height;
+  uint8_t columnCount;
+
+ public:
+  static constexpr uint8_t MAX_COLUMNS = 16;
+
+  PageTableGridRow(uint16_t width, uint16_t height, uint8_t columnCount, const int16_t xPos, const int16_t yPos)
+      : PageElement(xPos, yPos), width(width), height(height), columnCount(columnCount) {}
+
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
+  bool serialize(HalFile& file) override;
+  PageElementTag getTag() const override { return TAG_PageTableGridRow; }
+  static std::unique_ptr<PageTableGridRow> deserialize(HalFile& file);
+};
+
 class Page {
  public:
   // the list of block index and line numbers on this page
-  std::vector<std::unique_ptr<PageElement>> elements;
+  LayoutBuffer<std::unique_ptr<PageElement>> elements;
   std::vector<FootnoteEntry> footnotes;
   static constexpr uint16_t MAX_FOOTNOTES_PER_PAGE = 16;
   std::vector<PageLink> links;

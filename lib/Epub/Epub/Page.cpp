@@ -8,7 +8,7 @@
 namespace {
 
 template <typename Predicate>
-void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
+void renderFilteredPageElements(const LayoutBuffer<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
                                 const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
   for (const auto& element : elements) {
     if (predicate(*element)) {
@@ -128,6 +128,61 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
   return rule;
 }
 
+void PageTableGridRow::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  (void)fontId;
+  if (width < columnCount || height < 2 || columnCount < 2 || columnCount > MAX_COLUMNS) {
+    return;
+  }
+
+  const int16_t x = xPos + xOffset;
+  const int16_t y = yPos + yOffset;
+  renderer.drawRect(x, y, width, height, true);
+
+  const uint16_t cellWidth = width / columnCount;
+  for (uint8_t column = 1; column < columnCount; ++column) {
+    const int16_t dividerX = static_cast<int16_t>(x + column * cellWidth);
+    renderer.drawLine(dividerX, y, dividerX, y + height - 1, true);
+  }
+}
+
+bool PageTableGridRow::serialize(HalFile& file) {
+  if (file.write(reinterpret_cast<const uint8_t*>(&xPos), sizeof(xPos)) != sizeof(xPos) ||
+      file.write(reinterpret_cast<const uint8_t*>(&yPos), sizeof(yPos)) != sizeof(yPos) ||
+      file.write(reinterpret_cast<const uint8_t*>(&width), sizeof(width)) != sizeof(width) ||
+      file.write(reinterpret_cast<const uint8_t*>(&height), sizeof(height)) != sizeof(height) ||
+      file.write(reinterpret_cast<const uint8_t*>(&columnCount), sizeof(columnCount)) != sizeof(columnCount)) {
+    LOG_ERR("PGE", "Failed to write table grid row");
+    return false;
+  }
+  return true;
+}
+
+std::unique_ptr<PageTableGridRow> PageTableGridRow::deserialize(HalFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  uint8_t columnCount = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, width);
+  serialization::readPod(file, height);
+  serialization::readPod(file, columnCount);
+
+  if (width < columnCount || height < 2 || columnCount < 2 || columnCount > MAX_COLUMNS) {
+    LOG_ERR("PGE", "Deserialization failed: invalid table grid metadata (width=%u height=%u columns=%u)", width, height,
+            columnCount);
+    return nullptr;
+  }
+
+  auto grid = makeUniqueNoThrow<PageTableGridRow>(width, height, columnCount, xPos, yPos);
+  if (!grid) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageTableGridRow");
+    return nullptr;
+  }
+  return grid;
+}
+
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
 }
@@ -150,11 +205,18 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
 
 bool Page::serialize(HalFile& file) const {
   const uint16_t count = elements.size();
-  serialization::writePod(file, count);
+  if (file.write(reinterpret_cast<const uint8_t*>(&count), sizeof(count)) != sizeof(count)) {
+    LOG_ERR("PGE", "Failed to write element count");
+    return false;
+  }
 
   for (const auto& el : elements) {
     // Use getTag() method to determine type
-    serialization::writePod(file, static_cast<uint8_t>(el->getTag()));
+    const uint8_t tag = el->getTag();
+    if (file.write(tag) != sizeof(tag)) {
+      LOG_ERR("PGE", "Failed to write element tag");
+      return false;
+    }
 
     if (!el->serialize(file)) {
       return false;
@@ -163,7 +225,10 @@ bool Page::serialize(HalFile& file) const {
 
   // Serialize footnotes (clamp to MAX_FOOTNOTES_PER_PAGE to match addFootnote/deserialize limits)
   const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), MAX_FOOTNOTES_PER_PAGE);
-  serialization::writePod(file, fnCount);
+  if (file.write(reinterpret_cast<const uint8_t*>(&fnCount), sizeof(fnCount)) != sizeof(fnCount)) {
+    LOG_ERR("PGE", "Failed to write footnote count");
+    return false;
+  }
   for (uint16_t i = 0; i < fnCount; i++) {
     const auto& fn = footnotes[i];
     if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
@@ -174,17 +239,23 @@ bool Page::serialize(HalFile& file) const {
   }
 
   const uint16_t linkCount = std::min<uint16_t>(links.size(), MAX_LINKS_PER_PAGE);
-  serialization::writePod(file, linkCount);
+  if (file.write(reinterpret_cast<const uint8_t*>(&linkCount), sizeof(linkCount)) != sizeof(linkCount)) {
+    LOG_ERR("PGE", "Failed to write link count");
+    return false;
+  }
   for (uint16_t i = 0; i < linkCount; i++) {
     const auto& link = links[i];
     if (file.write(link.href, sizeof(link.href)) != sizeof(link.href)) {
       LOG_ERR("PGE", "Failed to write link %u", i);
       return false;
     }
-    serialization::writePod(file, link.x);
-    serialization::writePod(file, link.y);
-    serialization::writePod(file, link.width);
-    serialization::writePod(file, link.height);
+    if (file.write(reinterpret_cast<const uint8_t*>(&link.x), sizeof(link.x)) != sizeof(link.x) ||
+        file.write(reinterpret_cast<const uint8_t*>(&link.y), sizeof(link.y)) != sizeof(link.y) ||
+        file.write(reinterpret_cast<const uint8_t*>(&link.width), sizeof(link.width)) != sizeof(link.width) ||
+        file.write(reinterpret_cast<const uint8_t*>(&link.height), sizeof(link.height)) != sizeof(link.height)) {
+      LOG_ERR("PGE", "Failed to write link coordinates %u", i);
+      return false;
+    }
   }
 
   return true;
@@ -200,15 +271,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   uint16_t count;
   serialization::readPod(file, count);
 
-  // Reserve up front so a page load costs one allocation for the element vector
-  // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
-  // comes straight off the SD cache), so clamp it: a real page holds a few dozen
-  // elements, while a corrupt header could ask for 65535 * sizeof(unique_ptr) and
-  // abort() on the failed allocation (vector's operator new is throwing, and this
-  // firmware builds with -fno-exceptions). Under-reserving is harmless -- the
-  // push_back path below still grows normally.
+  // Limit speculative allocation for untrusted cache counts. Larger valid pages
+  // grow through checked allocations as their elements are decoded.
   static constexpr uint16_t RESERVE_CAP = 256;
-  page->elements.reserve(std::min(count, RESERVE_CAP));
+  if (!page->elements.reserve(std::min(count, RESERVE_CAP))) return nullptr;
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
@@ -219,19 +285,25 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
       if (!pl) {
         return nullptr;
       }
-      page->elements.push_back(std::move(pl));
+      if (!page->elements.push_back(std::move(pl))) return nullptr;
     } else if (tag == TAG_PageImage) {
       auto pi = PageImage::deserialize(file);
       if (!pi) {
         return nullptr;
       }
-      page->elements.push_back(std::move(pi));
+      if (!page->elements.push_back(std::move(pi))) return nullptr;
     } else if (tag == TAG_PageHorizontalRule) {
       auto rule = PageHorizontalRule::deserialize(file);
       if (!rule) {
         return nullptr;
       }
-      page->elements.push_back(std::move(rule));
+      if (!page->elements.push_back(std::move(rule))) return nullptr;
+    } else if (tag == TAG_PageTableGridRow) {
+      auto grid = PageTableGridRow::deserialize(file);
+      if (!grid) {
+        return nullptr;
+      }
+      if (!page->elements.push_back(std::move(grid))) return nullptr;
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;
