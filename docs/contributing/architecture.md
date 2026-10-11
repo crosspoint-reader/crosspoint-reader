@@ -202,7 +202,7 @@ Endpoint reference: `docs/webserver-endpoints.md`.
 
 Some sources are generated and should not be edited manually.
 
-- `scripts/build_html.py` generates `src/network/html/*.generated.h` from HTML files
+- `scripts/build_html.py` builds the web pages: the setup page into `src/network/html/WebSetupPageHtml.generated.h`, the rest into the SD-card bundle `web-<hash>.bin` in the env's build folder, described to the firmware by `src/network/html/WebBundle.generated.h` (see [the design record](../design/web-assets-on-sd.md))
 - `scripts/generate_hyphenation_trie.py` generates hyphenation headers under `lib/Epub/Epub/hyphenation/generated/`
 
 When editing related source assets, regenerate via normal build steps/scripts.
