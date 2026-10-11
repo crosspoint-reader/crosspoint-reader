@@ -279,21 +279,26 @@ bool mmap(const char* familyName, uint8_t pointSize, const uint8_t** outPtr, siz
   const uint32_t dataOff = entries[idx].dataOffset;
   const uint32_t dataSize = entries[idx].dataSize;
 
-  // Map from the start of the partition up to the end of this entry's data,
-  // rounded up to 64 KB (mmap alignment). This keeps the mapped region small.
-  size_t mapBytes = static_cast<size_t>(dataOff) + dataSize;
-  mapBytes = (mapBytes + 0xFFFF) & ~static_cast<size_t>(0xFFFF);
-  if (mapBytes > part->size) mapBytes = part->size;
+  // Map this entry's own pages and nothing below it. The C3 has 128 MMU pages of
+  // 64 KB shared by the app's code, its rodata and every mapping, and the app
+  // leaves ~32 of them free. Mapping from the partition start needed the whole
+  // family below the entry as well: a family's largest sizes (Bitter 18 pt: 41
+  // pages) could not be mapped at all and loaded from SD instead.
+  // esp_partition_mmap aligns the offset down to a page itself and returns a
+  // pointer already advanced to `dataOff`.
+  const size_t mapBytes =
+      ((dataOff & 0xFFFFu) + static_cast<size_t>(dataSize) + 0xFFFFu) & ~static_cast<size_t>(0xFFFFu);
 
   const void* rawPtr = nullptr;
-  if (esp_partition_mmap(part, 0, mapBytes, ESP_PARTITION_MMAP_DATA, &rawPtr, &s_mmapHandle) != ESP_OK) {
-    LOG_ERR("FFP", "mmap: esp_partition_mmap failed (size=%u)", static_cast<unsigned>(mapBytes));
+  if (esp_partition_mmap(part, dataOff, dataSize, ESP_PARTITION_MMAP_DATA, &rawPtr, &s_mmapHandle) != ESP_OK) {
+    LOG_ERR("FFP", "mmap: esp_partition_mmap failed (offset=%u, map=%u B)", static_cast<unsigned>(dataOff),
+            static_cast<unsigned>(mapBytes));
     return false;
   }
 
   s_mmapPtr = static_cast<const uint8_t*>(rawPtr);
 
-  *outPtr = s_mmapPtr + dataOff;
+  *outPtr = s_mmapPtr;
   *outSize = dataSize;
 
   LOG_DBG("FFP", "mmap: %s@%u → ptr=%p size=%u (map=%u B)", familyName, pointSize, *outPtr,
