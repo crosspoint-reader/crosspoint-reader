@@ -63,9 +63,9 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
       continue;
     }
     std::string name{nameBuffer.get()};
-    // Keep only files ordering strictly after the current one; equal names (the book
-    // itself, or a case-variant of it) compare "not less" both ways and drop out here.
-    if (!FsHelpers::naturalLess(currentName, name)) {
+    // The deterministic spelling tie-break orders case/numeric-equivalent names too;
+    // they still represent the current book for next-book suggestions.
+    if (FsHelpers::naturalEquivalent(currentName, name) || !FsHelpers::naturalLess(currentName, name)) {
       continue;
     }
     // Bounded insertion sort: keep the maxCount lowest-ordering candidates
