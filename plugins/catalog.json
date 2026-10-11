@@ -19,31 +19,6 @@
       ]
     },
     {
-      "name": "metadata-editor",
-      "title": "Metadata Editor",
-      "version": "1.0.0",
-      "description": "Corrects a book's title, author, series and description, and sets its cover, in files beside the book. The book itself is not changed.",
-      "mount": "files",
-      "requires": [
-        "relay"
-      ],
-      "allowedHosts": [
-        "www.goodreads.com",
-        ".gr-assets.com",
-        "books.google.com"
-      ],
-      "files": [
-        {
-          "name": "manifest.json",
-          "size": 350
-        },
-        {
-          "name": "plugin.js",
-          "size": 27706
-        }
-      ]
-    },
-    {
       "name": "organize-by-author",
       "title": "Organize by Author",
       "version": "1.0.0",
