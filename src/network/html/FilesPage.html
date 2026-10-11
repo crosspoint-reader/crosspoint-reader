@@ -1269,7 +1269,8 @@
     /* Action button styles */
     .delete-btn,
     .rename-btn,
-    .move-btn {
+    .move-btn,
+    .details-btn {
       background: none;
       border: none;
       cursor: pointer;
@@ -1304,8 +1305,12 @@
       background-color: #e6f7f4;
     }
 
+    .details-btn:hover {
+      background-color: #e8f4fd;
+    }
+
     .actions-col {
-      width: 140px;
+      width: 180px;
       text-align: center;
     }
 
@@ -2424,6 +2429,9 @@
           fileTableContent += `<td>${file.name.includes('.') ? file.name.split('.').pop().toUpperCase() : '-'}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
+          if (isBookFile(file.name)) {
+            fileTableContent += `<button class="details-btn" data-action="details" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Title, author, series and cover">ℹ️</button>`;
+          }
           fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Move file">📂</button>`;
           fileTableContent += `<button class="rename-btn" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Rename file">✏️</button>`;
           fileTableContent += `<button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-is-folder="false" title="Delete file">🗑️</button>`;
@@ -2457,7 +2465,25 @@
         if (action === 'move') openMoveModalForItem(name, path, isFolder);
         else if (action === 'rename') openRenameModal(name, path, isFolder);
         else if (action === 'delete') openDeleteModal(name, path, isFolder);
+        else if (action === 'details') openDetails(path);
       });
+    }
+
+    // The formats the reader opens; must stay in step with js/metadata-editor.js.
+    function isBookFile(name) {
+      return /\.(epub|xtc|xtch|txt|md)$/i.test(name);
+    }
+
+    // The Details dialog (js/metadata-editor.js) loads on first use: most visits never open it. The page
+    // reloads when the dialog saved something, so the new sidecar files show in the list.
+    function openDetails(path) {
+      const show = () => window.MetadataEditor.open(path, () => window.location.reload());
+      if (window.MetadataEditor) return show();
+      const script = document.createElement('script');
+      script.src = '/js/metadata-editor.js';
+      script.onload = show;
+      script.onerror = () => alert('The Details dialog could not be loaded. Reinstall the web interface at /setup.');
+      document.head.appendChild(script);
     }
 
     // Modal functions

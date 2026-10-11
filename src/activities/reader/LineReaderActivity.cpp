@@ -12,6 +12,7 @@
 #include "ReaderActivity.h"
 #include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
+#include "activities/home/BookDetails.h"
 #include "components/UITheme.h"
 
 void LineReaderActivity::onEnter() {
@@ -41,11 +42,19 @@ void LineReaderActivity::onEnter() {
   const std::string fileName = filePath.substr(filePath.rfind('/') + 1);
   APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(filePath, fileName, "", "", ReaderActivity::coverThumbPlaceholder(filePath));
+  // A text book has no metadata of its own: it is listed under its .opf sidecar's title and author
+  // when it has one (the web interface's Details dialog writes it), and its file name otherwise.
+  BookDetails details;
+  if (!BookDetailsLookup::cached(filePath, 0, details)) BookDetailsLookup::parse(filePath, 0, details);
+  const std::string title = details.title.empty() ? fileName : details.title;
+  const std::string series = !details.series.empty() && !details.seriesIndex.empty()
+                                 ? details.series + " #" + details.seriesIndex
+                                 : details.series;
+  RECENT_BOOKS.addBook(filePath, title, details.author, series, ReaderActivity::coverThumbPlaceholder(filePath));
 
-  // Start reading-stats session. Same filename-hash policy as EPUB so renamed
-  // files start fresh; author is unknown for plain text formats.
-  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(filePath), fileName, "");
+  // Start reading-stats session. Same filename-hash policy as EPUB, so the history is keyed by the
+  // file name; BookRelocation carries it over when the file is renamed.
+  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(filePath), title, details.author);
 
   // Trigger first update
   requestUpdate();

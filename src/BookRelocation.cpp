@@ -24,16 +24,6 @@ constexpr char CACHE_ROOT[] = "/.crosspoint";
 // A long file name is up to 255 UTF-16 units, so up to 765 bytes of UTF-8.
 constexpr size_t NAME_BUFFER_BYTES = 768;
 
-// The cache folder the reader uses for a book at `path`; empty for a file that is not a book.
-std::string cacheDirFor(const std::string& path) {
-  if (FsHelpers::hasEpubExtension(path)) return Epub(path, CACHE_ROOT).getCachePath();
-  if (FsHelpers::hasXtcExtension(path)) return Xtc(path, CACHE_ROOT).getCachePath();
-  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    return Txt(path, CACHE_ROOT).getCachePath();
-  }
-  return {};
-}
-
 // "epub", "xtc" or "txt": a cache made by one reader is no use to another.
 std::string cacheKind(const std::string& cacheDir) {
   const size_t slash = cacheDir.rfind('/');
@@ -43,6 +33,15 @@ std::string cacheKind(const std::string& cacheDir) {
 }
 
 }  // namespace
+
+std::string cacheDirFor(const std::string& path) {
+  if (FsHelpers::hasEpubExtension(path)) return Epub(path, CACHE_ROOT).getCachePath();
+  if (FsHelpers::hasXtcExtension(path)) return Xtc(path, CACHE_ROOT).getCachePath();
+  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
+    return Txt(path, CACHE_ROOT).getCachePath();
+  }
+  return {};
+}
 
 void bookMoved(const std::string& oldPath, const std::string& newPath) {
   const std::string oldCache = cacheDirFor(oldPath);

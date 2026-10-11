@@ -15,27 +15,6 @@
       ]
     },
     {
-      "name": "metadata-editor",
-      "title": "Metadata Editor",
-      "description": "Corrects a book's title, author, series and description, and sets its cover, in files beside the book. The book itself is not changed.",
-      "author": "jpirnay",
-      "version": "1.0.0",
-      "mount": "files",
-      "requires": [
-        "relay"
-      ],
-      "allowedHosts": [
-        "www.goodreads.com",
-        ".gr-assets.com",
-        "books.google.com"
-      ],
-      "base": "metadata-editor/",
-      "files": [
-        "manifest.json",
-        "plugin.js"
-      ]
-    },
-    {
       "name": "organize-by-author",
       "title": "Organize by Author",
       "description": "Sorts the EPUBs of one folder into a folder per author, taking their cover and metadata files along. Shows a preview first.",

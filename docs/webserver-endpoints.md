@@ -70,6 +70,7 @@ the setup page and every other page redirects (`302`) to `/setup`.
 | `/stats`      | Reading Stats                              |
 | `/fonts`      | Font Manager                               |
 | `/plugins`    | Plugins: install, switch off and remove web-interface plugins |
+| `/js/metadata-editor.js` | The File Manager's Details dialog, loaded on first use |
 | `/systeminfo` | System Info                                |
 
 `GET /js/jszip.min.js` serves the gzipped JSZip library (`Content-Encoding: gzip`),
@@ -759,6 +760,19 @@ curl http://crosspoint.local/api/plugins
 | `description`, `version`, `requires`, `allowedHosts` | From `manifest.json`, when present |
 
 Always 200 with an array; an unreadable or absent plugins folder yields `[]`.
+
+### GET `/api/book/opf` - An EPUB's Own Metadata
+
+`?path=<epub>` answers the OPF package document from inside the book, as it is
+(`application/oebps-package+xml`), without the `.opf` sidecar that may override
+it. The File Manager's Details dialog reads a book's own metadata from it instead
+of downloading the whole book. `404` for a path that is not an EPUB, `422` when
+the book has no OPF. A read that fails part-way ends the response early, which a
+client sees as malformed XML.
+
+```bash
+curl "http://crosspoint.local/api/book/opf?path=/Books/mybook.epub"
+```
 
 ### Installing and managing plugins
 

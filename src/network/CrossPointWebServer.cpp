@@ -104,7 +104,47 @@ String lastDeleteName;
 size_t lastDeleteCount = 0;
 unsigned long lastDeleteAt = 0;
 
+// A cover sidecar ("book.jpg" beside "book.epub") was written: the book's thumbnails were drawn from
+// the old cover. They are rebuilt only when the sidecar is newer than them, which a reader without a
+// set clock cannot tell, and the single-height thumb_<H>.bmp some Home themes draw is never compared
+// at all (docs/sidecar-files.md). Deleting them makes every view draw the new cover.
+void dropThumbnailsForCover(const String& imagePath) {
+  static constexpr const char* kCoverExtensions[] = {".jpg", ".jpeg", ".png", ".bmp"};
+  static constexpr const char* kBookExtensions[] = {".epub", ".xtc", ".xtch", ".txt", ".md"};
+  String lower = imagePath;
+  lower.toLowerCase();
+  const char* const* coverExt = std::find_if(std::begin(kCoverExtensions), std::end(kCoverExtensions),
+                                             [&lower](const char* ext) { return lower.endsWith(ext); });
+  if (coverExt == std::end(kCoverExtensions)) return;
+  const std::string base(imagePath.c_str(), imagePath.length() - strlen(*coverExt));
+
+  for (const char* bookExt : kBookExtensions) {
+    const std::string bookPath = base + bookExt;
+    if (!Storage.exists(bookPath.c_str())) continue;
+    const std::string cacheDir = BookRelocation::cacheDirFor(bookPath);
+    FsFile dir = Storage.open(cacheDir.c_str());
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
+      continue;
+    }
+    std::vector<std::string> stale;
+    char name[64];
+    for (FsFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+      entry.getName(name, sizeof(name));
+      entry.close();
+      const size_t len = strlen(name);
+      const bool thumb = strncmp(name, "thumb_", 6) == 0 && len > 4 && strcmp(name + len - 4, ".bmp") == 0;
+      if (thumb || strcmp(name, "cover.bmp") == 0) stale.emplace_back(cacheDir + "/" + name);
+    }
+    dir.close();
+    for (const std::string& file : stale) Storage.remove(file.c_str());
+    LOG_DBG("WEB", "New cover for %s: dropped %u cached cover images", bookPath.c_str(),
+            static_cast<unsigned>(stale.size()));
+  }
+}
+
 void clearBookCacheIfNeeded(const String& filePath) {
+  dropThumbnailsForCover(filePath);
   if (FsHelpers::hasEpubExtension(filePath)) {
     Epub(filePath.c_str(), "/.crosspoint").clearCache();
     LOG_DBG("WEB", "Cleared epub cache for: %s", filePath.c_str());
@@ -244,9 +284,29 @@ HttpDownloader::RedirectFilter redirectsWithinAllowlist(const String& plugin) {
   };
 }
 
+// A host matches an allowlist entry exactly, or ends with one that starts with a dot.
+bool hostMatches(const std::string& host, const std::string& pattern) {
+  if (pattern.empty()) return false;
+  if (pattern[0] == '.') {
+    return host.size() > pattern.size() && host.compare(host.size() - pattern.size(), pattern.size(), pattern) == 0;
+  }
+  return host == pattern;
+}
+
+// The File Manager's Details dialog is part of the web interface, not a plugin, but its cover search
+// reads Goodreads and Google Books covers through the relay like the plugin it grew from. Its scope
+// carries a ':', which no FAT folder name can, so no plugin can claim this list.
+constexpr char DETAILS_RELAY_SCOPE[] = ":details";
+constexpr const char* DETAILS_RELAY_HOSTS[] = {"www.goodreads.com", ".gr-assets.com", "books.google.com"};
+
 bool relayHostAllowed(const String& plugin, const std::string& url) {
   const std::string host = urlHost(url);
-  if (host.empty() || !isSafePathComponent(plugin)) return false;
+  if (host.empty()) return false;
+  if (plugin == DETAILS_RELAY_SCOPE) {
+    return std::any_of(std::begin(DETAILS_RELAY_HOSTS), std::end(DETAILS_RELAY_HOSTS),
+                       [&host](const char* pattern) { return hostMatches(host, pattern); });
+  }
+  if (!isSafePathComponent(plugin)) return false;
 
   const std::string dir = PluginLocations::findPluginDir(plugin.c_str());
   if (dir.empty()) return false;
@@ -259,13 +319,7 @@ bool relayHostAllowed(const String& plugin, const std::string& url) {
 
   for (JsonVariant entry : m["allowedHosts"].as<JsonArray>()) {
     const char* pattern = entry.as<const char*>();
-    if (!pattern || !*pattern) continue;
-    const std::string pat = pattern;
-    if (pat[0] == '.') {
-      if (host.size() > pat.size() && host.compare(host.size() - pat.size(), pat.size(), pat) == 0) return true;
-    } else if (host == pat) {
-      return true;
-    }
+    if (pattern && hostMatches(host, pattern)) return true;
   }
   return false;
 }
@@ -400,6 +454,8 @@ void CrossPointWebServer::begin() {
   server->on("/api/fetch", HTTP_POST, [this] { handleFetchToSd(); });
   server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsData(); });
   server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
+  server->on("/js/metadata-editor.js", HTTP_GET, [this] { handleMetadataEditorJs(); });
+  server->on("/api/book/opf", HTTP_GET, [this] { handleBookOpf(); });
   server->on("/api/plugins/begin", HTTP_POST, [this] { handlePluginInstallBegin(); });
   server->on(
       "/api/plugins/file", HTTP_POST, [this] { handlePluginInstallFile(); }, [this] { handlePluginInstallFileData(); });
@@ -3166,6 +3222,41 @@ std::string pluginStagingDir(const String& name) { return pluginInstallDir(name)
 }  // namespace
 
 void CrossPointWebServer::handlePluginsPage() const { serveBundlePage(web_bundle::PluginsPageHtml); }
+
+void CrossPointWebServer::handleMetadataEditorJs() const {
+  if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
+  // A script, so no redirect to a page: the File Manager says Details is not available.
+  if (!WebAssets::serve(*server, web_bundle::metadata_editorJs)) server->send(404, "text/plain", "Not installed");
+}
+
+// GET /api/book/opf?path=<epub> -> the OPF package document from inside the book, as it is.
+//
+// What the Details dialog reads a book's own metadata from when no sidecar overrides it. The dialog
+// used to download the whole EPUB, often tens of MB over the device's one connection, to read a few
+// KB of it in the browser.
+void CrossPointWebServer::handleBookOpf() const {
+  if (rejectIfLowMemory(server.get())) return;
+  const String path = normalizeWebPath(server->arg("path"));
+  if (!FsHelpers::hasEpubExtension(path) || isProtectedWebPath(path, Target::Item, hiddenAllowed()) ||
+      !Storage.exists(path.c_str())) {
+    server->send(404, "application/json", "{\"error\":\"no such EPUB\"}");
+    return;
+  }
+  const Epub epub(path.c_str(), "/.crosspoint");
+  std::string opfPath;
+  if (!epub.contentOpfPath(&opfPath)) {
+    server->send(422, "application/json", "{\"error\":\"no OPF in this EPUB\"}");
+    return;
+  }
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/oebps-package+xml", "");
+  ChunkedResponse out(server.get());
+  ChunkedPrint body(out);
+  // A failure from here on reaches the page as truncated XML, which it treats as unreadable and
+  // falls back to downloading the book.
+  if (!epub.readItemContentsToStream(opfPath, body, 1024)) LOG_ERR("WEB", "Reading the OPF of %s failed", path.c_str());
+  out.finish();
+}
 
 void CrossPointWebServer::handlePluginInstallBegin() const {
   const String name = server->arg("name");

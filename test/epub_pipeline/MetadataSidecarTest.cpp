@@ -146,9 +146,9 @@ TEST_F(MetadataSidecarFixture, OversizedSidecarIsIgnored) {
   EXPECT_EQ(epub.getTitle(), kEmbeddedTitle);
 }
 
-// Contract with the metadata-editor plugin (plugins/metadata-editor): the exact
-// document its freshDoc() + writeInto() produce must be readable here, for all
-// six fields it edits. The plugin's XML handling runs in a browser and cannot be
+// Contract with the File Manager's Details dialog (src/network/html/js/metadata-editor.js):
+// the exact document its freshDoc() + writeInto() produce must be readable here, for
+// all six fields it edits. Its XML handling runs in a browser and cannot be
 // unit-tested from this suite, so this pins the format they agree on - if the
 // editor's output shape ever drifts, this is what catches it.
 TEST_F(MetadataSidecarFixture, ReadsTheShapeTheMetadataEditorWrites) {
