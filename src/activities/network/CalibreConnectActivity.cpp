@@ -12,6 +12,7 @@
 #include "WifiSelectionActivity.h"
 #include "activities/NetworkMemoryTrim.h"
 #include "activities/network/SignalStrengthWidget.h"
+#include "components/TouchExitButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -130,7 +131,7 @@ void CalibreConnectActivity::stopWebServer() {
 }
 
 void CalibreConnectActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || TouchExitButton::tapped(mappedInput)) {
     exitRequested = true;
   }
 
@@ -248,6 +249,8 @@ void CalibreConnectActivity::render(RenderLock&&) {
     drawWifiSignalStrength(renderer, textX, y, textWidth, signalHeight, currentRssi);
     renderer.drawText(SMALL_FONT_ID, textX, y + signalHeight + 2, rssiLabel(currentRssi).c_str());
     y += signalHeight + lineHeightSmall + metrics.verticalSpacing * 3;
+    const int belowExit = TouchExitButton::draw(renderer, mappedInput, textX, y, textWidth);
+    if (belowExit != y) y = belowExit + metrics.verticalSpacing * 3;
 
     renderer.drawText(UI_12_FONT_ID, textX, y, tr(STR_CALIBRE_SETUP), true, EpdFontFamily::BOLD);
     y += heightText12 + metrics.verticalSpacing * 2;
