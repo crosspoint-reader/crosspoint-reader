@@ -135,14 +135,20 @@ input side matches against that record:
 |---|---|---|
 | `ButtonHintStrip` | the four bottom hints and the two side hints | a raw button index |
 | `ListTouchBand` | a contiguous run of full-width rows, heights may differ | an item index |
-| `TapTargets` | arbitrary rectangles: Home covers, Home menu, links on the reader page | a value |
+| `TapTargets` | arbitrary rectangles: Home covers, Home menu, links on the reader page, the Exit button of the connection screens | a value |
 
 Recorders are written on the render task and read on the loop task, so they publish without
-tearing. All of them are cleared at the start of every render pass, so they describe exactly the
-last frame; a screen can stop drawing its list without changing activity. The exception is
-`TapTargets::readerLinks()`: the reader has passes that draw without displaying (the pre-render),
-so its links are cleared on activity transitions and republished by every path that puts a page on
-screen.
+tearing. All of them are cleared on every activity transition. The list band and the Home covers
+and menu are also cleared at the start of every render pass, so they describe exactly the last
+frame; a screen can stop drawing its list without changing activity. The others are not:
+
+- `TapTargets::readerLinks()`: the reader has passes that draw without displaying (the
+  pre-render), so its links are republished by every path that puts a page on screen.
+- `TapTargets::screenActions()`, the Exit button of the connection screens
+  (`components/TouchExitButton.h`): File Transfer paints its screen once and then releases the
+  frame buffer, so its later passes draw nothing and the button has to outlive them. A screen that
+  stops offering the button calls `TouchExitButton::forget()`.
+- The button hint strips, which a screen records again whenever it draws them.
 
 **Their own hit test**, for shapes too large or too regular to record: the file browser's cover
 grid (`CoverGridLayout::hitTest()`), sliders (`SliderGeometry`) and the dictionary word selector.

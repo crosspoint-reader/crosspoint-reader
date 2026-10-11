@@ -19,6 +19,7 @@
 #include "activities/NetworkMemoryTrim.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "activities/network/SignalStrengthWidget.h"
+#include "components/TouchExitButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/QrUtils.h"
@@ -354,6 +355,11 @@ void CrossPointWebServerActivity::startWebServer() {
 void CrossPointWebServerActivity::loop() {
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
+    if (TouchExitButton::tapped(mappedInput)) {
+      onGoHome();
+      return;
+    }
+
     // Handle DNS requests for captive portal (AP mode only)
     if (isApMode && dnsServer) {
       dnsServer->processNextRequest();
@@ -414,11 +420,13 @@ void CrossPointWebServerActivity::loop() {
         // Yield and check for exit button every 64 iterations
         if ((i & 0x3F) == 0x3F) {
           yield();
-          // Force trigger an update of which buttons are being pressed so be have accurate state
-          // for back button checking
-          mappedInput.update();
-          // Check for exit button inside loop for responsiveness
-          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+          // Check for exit button inside loop for responsiveness. Read without update(): that
+          // would replace this tick's input snapshot, touch included, so a tap on the hint strip
+          // or the Exit button was gone before anything looked at it. hasPendingPress() sees a
+          // key pressed since the tick began without draining anything, as the upload cancel
+          // check above does.
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+              mappedInput.hasPendingPress(MappedInputManager::Button::Back)) {
             onGoHome();
             return;
           }
@@ -520,6 +528,9 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     const int signalY = startY + 120;
     drawWifiSignalStrength(renderer, contentRect.x + metrics.contentSidePadding, signalY, signalWidth, signalHeight, 0);
     renderer.drawCenteredText(SMALL_FONT_ID, signalY + signalHeight + 2, tr(STR_HOTSPOT_MODE));
+    TouchExitButton::draw(
+        renderer, mappedInput, contentRect.x + metrics.contentSidePadding,
+        signalY + signalHeight + 2 + renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing * 2, signalWidth);
   } else {
     startY += metrics.verticalSpacing * 2;
 
@@ -554,6 +565,9 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     drawWifiSignalStrength(renderer, contentRect.x + metrics.contentSidePadding, signalY, signalWidth, signalHeight,
                            currentRssi);
     renderer.drawCenteredText(SMALL_FONT_ID, signalY + signalHeight + 2, rssiLabel(currentRssi).c_str(), true);
+    TouchExitButton::draw(
+        renderer, mappedInput, contentRect.x + metrics.contentSidePadding,
+        signalY + signalHeight + 2 + renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing * 2, signalWidth);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");

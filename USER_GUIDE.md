@@ -716,6 +716,10 @@ you can already see which tab you are choosing, so there is nothing to confirm.
 hints, do exactly what the physical button under each label does — including any remapping
 you have configured. *Holding* a hint is the same as holding that button.
 
+**Exit buttons.** File Transfer, its hotspot, Calibre Wireless and USB Drive (while it waits for
+a computer) also show an **Exit** button below their status on a touch screen. It does what
+**Back** does.
+
 | Gesture | What it does |
 | --- | --- |
 | Tap a row, cover, folder or button hint | Select it; tap again to open it |
