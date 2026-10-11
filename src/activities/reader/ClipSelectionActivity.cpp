@@ -47,13 +47,15 @@ const char* cleanWordStart(const char* text) {
 
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::vector<std::unique_ptr<Page>> pages, const int marginLeft,
-                                             const int marginTop, const int initialX, const int initialY)
+                                             const int marginTop, const int initialX, const int initialY,
+                                             const Mode mode)
     : Activity("ClipSelection", renderer, mappedInput),
       pages(std::move(pages)),
       marginLeft(marginLeft),
       marginTop(marginTop),
       initialX(initialX),
-      initialY(initialY) {}
+      initialY(initialY),
+      mode(mode) {}
 
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
@@ -568,7 +570,7 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
   }
 
   if (buttons & Input::INPUT_CONFIRM) {
-    confirmSelection();
+    confirmSelection(mode == Mode::Lookup ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
     return true;
   }
 
@@ -742,7 +744,8 @@ bool ClipSelectionActivity::renderIncremental() {
 
   // Case 2: Transition from rangeStart < 0 to rangeStart >= 0 (user just confirmed rangeStart)
   if (rangeStart >= 0 && lastRenderedRangeStart < 0 && rangeStart == selected && selected == lastRenderedSelected) {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), mode == Mode::Lookup ? tr(STR_LOOKUP) : tr(STR_DONE),
+                                              tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
@@ -783,7 +786,8 @@ bool ClipSelectionActivity::renderIncremental() {
     const WordBox& cursor = words[selected];
     renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
 
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), mode == Mode::Lookup ? tr(STR_LOOKUP) : tr(STR_DONE),
+                                              tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
@@ -845,8 +849,9 @@ void ClipSelectionActivity::render(RenderLock&&) {
   if (wordCount != 0) drawSelection();
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : tr(STR_DONE),
-                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (mode == Mode::Lookup ? tr(STR_LOOKUP) : tr(STR_DONE)),
+      tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 

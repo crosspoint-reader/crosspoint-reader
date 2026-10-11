@@ -1,6 +1,6 @@
 ---
 name: hal-and-abstractions
-description: Firmware layering and abstraction discipline. Use for storage, input, activity/popup transitions, display, settings, i18n, rendering, or code that could reach the SDK.
+description: HAL and UI ownership contracts. Use when changing hardware/storage access, input or activity ownership, rendering contracts, or SDK boundaries.
 ---
 
 # HAL and Abstractions

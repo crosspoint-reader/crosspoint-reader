@@ -115,7 +115,7 @@ Do not run raw `clang-format` or probe it with `command -v`; use the wrapper eve
 
 **AI agent scope** (what you CAN verify):
 
-1. ✅ **Build**: Build once after the last code edit with the relevant `pio run` target. Do not clean by default, repeat a target that already passed, or rebuild after formatting/comment-only/documentation-only changes.
+1. ✅ **Build**: Build each relevant `pio run` target once after accepted review fixes and the last substantive firmware/build edit. Build earlier only to resolve a concrete compilation or build-configuration question. Do not clean by default, repeat a target that already passed without an invalidating change, or rebuild after formatting/comment-only/documentation-only changes.
 2. ✅ **Quality**: `pio check` when relevant + `./bin/clang-format-fix -g`
 3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.gitignore`-excluded files staged (e.g., `*.generated.h`, `.pio/`, `platformio.local.ini`)
 4. ✅ **CI**: Fix GitHub Actions failures before review

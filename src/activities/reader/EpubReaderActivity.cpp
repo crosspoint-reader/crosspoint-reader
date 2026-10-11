@@ -369,22 +369,11 @@ void EpubReaderActivity::openDictionaryWordSelect() {
     requestUpdate();
     return;
   }
-  if (!section) return;
-  auto page = section->loadPage(section->currentPage);
-  if (!page) return;
-
-  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                   &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
-  orientedMarginLeft += SETTINGS.screenMargin;
-
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
-                                                                        orientedMarginLeft, orientedMarginTop),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  startClipSelection(-1, -1, ClipSelectionActivity::Mode::Lookup);
 }
 
-void EpubReaderActivity::startClipSelection(const int initialX, const int initialY) {
+void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
+                                            const ClipSelectionActivity::Mode mode) {
   if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount) return;
 
   const int pageNumber = section->currentPage;
@@ -437,7 +426,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   std::string author = epub->getAuthor();
 
   auto activity = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(pages), marginLeft,
-                                                           marginTop, initialX, initialY);
+                                                           marginTop, initialX, initialY, mode);
   if (!activity) {
     LOG_ERR("CLIP", "Failed to allocate clipping selection activity");
     requestUpdate();
@@ -481,7 +470,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         requestUpdate();
         return;
       }
-      startActivityForResult(std::move(lookup), [this](const ActivityResult&) { requestUpdate(); });
+      startActivityForResult(std::move(lookup), [this](const ActivityResult&) { openDictionaryWordSelect(); });
       return;
     }
     const uint16_t paragraphIndex =

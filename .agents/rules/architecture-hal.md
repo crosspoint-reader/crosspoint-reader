@@ -2,31 +2,9 @@
 
 ### Build System: PlatformIO
 
-**PlatformIO is BOTH a VS Code extension AND a CLI tool**:
-
-1. **VS Code Extension** (Recommended):
-
-   * Use the [pioarduino IDE](https://github.com/pioarduino/pioarduino-vscode-ide)
-     and the pinned core described in [getting started](../../docs/contributing/getting-started.md).
-
-   * Provides: Toolbar buttons, IntelliSense, integrated build/upload/monitor
-
-   * Configuration: `.vscode/c_cpp_properties.json`, `.vscode/tasks.json`
-
-   * Usage: Click Build (✓), Upload (→), or Monitor (🔌) buttons
-
-2. **CLI Tool** (`pio` command):
-
-   * **First-time setup**: Use the pinned pioarduino Core from
-     [getting started](../../docs/contributing/getting-started.md#first-time-toolchain-setup),
-     matching CI. For routine builds, use the
-     [existing environment](environment.md#build-in-an-existing-environment).
-
-   * **Location**: The activated Python environment or the IDE's configured core
-
-   * **Verify**: `which pio` (Git Bash) or `where.exe pio` (cmd)
-
-   * **Usage**: `pio run`, `pio run -t upload`, etc.
+Use the [existing environment](environment.md#build-in-an-existing-environment)
+for routine builds. First-time IDE/toolchain setup and the pinned pioarduino Core
+are documented in [getting started](../../docs/contributing/getting-started.md).
 
 **Configuration Files**:
 

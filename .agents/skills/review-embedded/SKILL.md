@@ -5,7 +5,9 @@ description: "Read-only firmware-handoff review of ESP32 resources and hardware:
 
 # Embedded constraints review
 
-Read the rule files and project skills that match the diff, especially hardware resources, architecture/HAL, coding standards, UI/activity lifecycle, heap discipline, and control-flow clarity. Do not edit files.
+Review the pinned logical change. Consult relevant sections of hardware, HAL,
+coding, or lifecycle rules for the contracts it changes; use project skills only
+when their decision procedure is needed. Do not edit files or run handoff.
 
 Review the diff for:
 

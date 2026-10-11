@@ -61,12 +61,12 @@ Tested in all 4 orientations with 5MB+ files.
 
 ### When to Commit
 
-**A local commit may be made when**:
+**A local commit requires all of the following**:
 
-- User explicitly requests: "commit these changes"
-- Feature or bug fix is complete and the human has approved the local commit
-- Refactoring preserves all functionality
-- All tests pass (`pio run` succeeds)
+- The human explicitly approves creating or amending that local commit
+- The requested work is complete; unrelated user work is excluded
+- Relevant checks pass; firmware changes have completed `firmware-handoff`
+- Any change described as a pure refactor preserves behavior
 
 **DO NOT commit when**:
 

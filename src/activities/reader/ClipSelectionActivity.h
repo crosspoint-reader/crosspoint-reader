@@ -16,9 +16,11 @@
 
 class ClipSelectionActivity final : public Activity {
  public:
+  enum class Mode : uint8_t { Clip, Lookup };
+
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX = -1,
-                        int initialY = -1);
+                        int initialY = -1, Mode mode = Mode::Clip);
 
   void onEnter() override;
   void loop() override;
@@ -80,6 +82,7 @@ class ClipSelectionActivity final : public Activity {
   const int marginTop;
   const int initialX;
   const int initialY;
+  const Mode mode;
   OptionPopup actionPopup;
   // ponytail: retain 16 button frames during refresh; increase only if overflow is observed.
   std::array<uint8_t, 16> pendingButtons{};

@@ -1,6 +1,6 @@
 ---
 name: heap-discipline
-description: Allocation discipline for the ESP32-C3 baseline (~380KB RAM, no PSRAM, one panel-sized framebuffer). Use when writing/reviewing allocations, new/malloc/vector/string, buffers, caches, or data held across loops or activity lifecycles.
+description: ESP32-C3 allocation discipline. Use when changing allocation size/failure handling, buffer or cache lifetime, or hot-path container growth.
 ---
 
 # Heap Discipline (ESP32-C3)

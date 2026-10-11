@@ -2,9 +2,12 @@
 
 The root `AGENTS.md` is the always-loaded policy and router. Detailed repository facts live in `rules/`; reusable procedures and review axes live in `skills/`.
 
-Load all task-matched rules and skills. Firmware handoff is the only fixed
-multi-skill bundle; other tasks require every skill matched by the root routing
-table or its description.
+Inspect the relevant code and current behavior first. Use the root routing table
+to find guidance for changed decisions, then read only the relevant sections.
+Skill descriptions identify procedures, not an obligation to load every keyword
+match. Reuse instructions already in context. Firmware handoff is the only fixed
+multi-skill bundle; load it after implementation and main-agent self-review.
+Read-only inquiries and reviewers do not run implementation handoff.
 
 `CLAUDE.md` links to the root guide. Each skill lives in a directory containing
 `SKILL.md`, with a matching frontmatter `name`. Descriptions identify when an
@@ -34,4 +37,8 @@ home rather than restoring `.skills/` or duplicating the root policy.
 - `review-embedded`
 - `review-i18n-docs`
 
-The main agent verifies and fixes their findings before asking the human to review the diff and architecture.
+The handoff skill owns the workflow and completion criteria. The main agent
+collects all initial results, verifies findings, and fixes accepted findings as
+one batch. At most one targeted follow-up round is allowed. The final build
+follows accepted fixes. Human acceptance concerns the actual behavior, design,
+and maintenance responsibility, and is recorded once per logical change.

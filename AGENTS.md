@@ -18,23 +18,27 @@ At session start, run `uname -s`, `git branch --show-current`, `git remote -v`, 
 
 Act as a senior embedded C++ engineer. Base claims on repository evidence: cite the paths and line numbers that justify a proposed change. Explain the mechanism behind performance or memory claims and justify every new heap allocation. For every fix, tell the human how to verify it.
 
-Read only the rules that match the task:
+First inspect the relevant code and current behavior to establish whether a change is needed. Before adding an API, setting, task, persistent state, driver change, or scheduling dependency, tie it to the human requirement and check existing mechanisms. Identify unexplained scope inherited from a stash or branch.
 
-| When the task touches... | Read |
+Use the table to find guidance for the decisions being changed. Read relevant sections, not every file associated with a touched subsystem. Load implementation skills when implementation is needed and `firmware-handoff` at final handoff. Reuse guidance already in context unless it changed or a concrete question requires another read.
+
+| Decision being changed | Relevant guidance |
 | --- | --- |
 | Host setup, PlatformIO usage, or local configuration | [environment.md](.agents/rules/environment.md) |
-| RAM, allocation, flash, strings, or hardware limits | [hardware-resources.md](.agents/rules/hardware-resources.md) and the `heap-discipline` skill |
-| Build flags, storage, input, display, settings, i18n, rendering, or SDK boundaries | [architecture-hal.md](.agents/rules/architecture-hal.md) and the `hal-and-abstractions` skill |
-| C or C++ implementation | [coding-standards.md](.agents/rules/coding-standards.md); also load `control-flow-clarity` for branching or state changes |
-| Activities, orientation, buttons, UI, tasks, fonts, or lifecycle | [ui-activities.md](.agents/rules/ui-activities.md) |
-| Plugins, service integrations, web endpoints, or protected books | [architecture-hal.md](.agents/rules/architecture-hal.md) and its contract links |
+| Allocation size/failure, buffer or cache lifetime, hot-path containers, or hardware limits | [hardware-resources.md](.agents/rules/hardware-resources.md); use `heap-discipline` for allocation decisions |
+| Hardware/storage access, rendering contracts, input ownership, or SDK boundaries | [HAL contracts](.agents/rules/architecture-hal.md#hardware-abstraction-layer-hal) and relevant sections of `hal-and-abstractions` |
+| Build flags, dependencies, or board profiles | [build environment and flags](.agents/rules/architecture-hal.md#build-environment) |
+| C or C++ implementation | [coding-standards.md](.agents/rules/coding-standards.md); use `control-flow-clarity` for state modeling or discrete-value dispatch |
+| Activity lifecycle, input behavior, layout/orientation, or font ownership | [ui-activities.md](.agents/rules/ui-activities.md) |
+| Plugin, service, web endpoint, or protected-book contracts | [service contracts](.agents/rules/architecture-hal.md#service-and-plugin-contracts) and the linked contract that applies |
 | Builds, formatting, CI, serial logs, crashes, or verification | [testing-debugging.md](.agents/rules/testing-debugging.md) |
-| Git, branches, commits, remotes, or publication | [git-workflow.md](.agents/rules/git-workflow.md) |
-| Generated HTML/i18n, caches, EPUB formats, or invalidation | [generated-files-cache.md](.agents/rules/generated-files-cache.md) |
+| Branch creation, merges, commits, or publication | [git-workflow.md](.agents/rules/git-workflow.md) |
+| User-facing strings, translation keys, or generated HTML/i18n | [generated-source workflow](.agents/rules/generated-files-cache.md#modifying-generated-content-workflow) |
+| Cache formats, layout persistence, or invalidation | [cache contracts](.agents/rules/generated-files-cache.md#cache-management-and-invalidation) |
 | New features, activities, settings, libraries, or dependencies | `SCOPE.md` and the `scope-discipline` skill |
-| Refactoring or preparing a change for review | the `refactor-for-review` skill |
+| Restructuring, extraction, or separating unrelated cleanup | the `refactor-for-review` skill |
 
-Repository-local skills live under `.agents/skills/`. Load a skill when its frontmatter description matches the task; do not load every skill speculatively.
+Repository-local skills live under `.agents/skills/`. Their descriptions identify specific procedures to use when needed; a keyword match alone does not require loading a skill.
 
 ## Human ownership
 
@@ -55,18 +59,6 @@ technical terms when clearest. Code comments must be short and useful after merg
 
 ## Mandatory firmware handoff
 
-For every logical change that can affect shipped firmware or its build—including C/C++, build configuration, partitions, code-generation sources, translations, and release scripts—the main agent must complete [.agents/skills/firmware-handoff/SKILL.md](.agents/skills/firmware-handoff/SKILL.md) before declaring the work ready or making an approved local commit.
+For every logical change that can affect shipped firmware or its build—including C/C++, build configuration, partitions, code-generation sources, translations, and release scripts—the main agent must complete [firmware-handoff](.agents/skills/firmware-handoff/SKILL.md) before declaring the work ready or making an approved local commit. That skill owns the required checks, four independent reviews, bounded follow-up, and explicit human acceptance of behavior, architecture, and maintenance ownership.
 
-Pure tests, diagnostics, documentation, and host-only Python scripts use a lighter review unless they alter firmware output or its build.
-
-This concise handoff checklist is a hard requirement:
-
-- [ ] Relevant tests and `./bin/clang-format-fix -g` completed; firmware built once after the final code edit.
-- [ ] Read-only reviews completed for correctness, architecture, embedded constraints, and i18n/user documentation.
-- [ ] The main agent verified, deduplicated, and fixed findings, then reran affected reviews after material fixes.
-- [ ] The main agent explained the behavior and architecture in plain English to someone unfamiliar with the codebase.
-- [ ] The human was told to review the diff and explicitly confirmed understanding of the behavior and architecture and ownership of maintenance.
-- [ ] The agent gave a concrete hardware test plan and reminded the human that hardware testing is required before a PR can be opened.
-- [ ] The agent did not claim hardware verification and did not write a PR description.
-
-If the human rejects the architecture, stop the handoff, ask what must change, and revise before calling the work ready. Hardware testing is entirely the human's responsibility; explain what to test and what failures to watch for.
+Read-only inquiries, audits, and reviewers do not run implementation handoff. Pure tests, diagnostics, documentation, and host-only Python scripts use a lighter review unless they alter firmware output or its build. Hardware testing remains the human's responsibility and is required before a PR is opened.

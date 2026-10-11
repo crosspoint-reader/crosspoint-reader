@@ -1,6 +1,6 @@
 ---
 name: refactor-for-review
-description: Keep changes small and reviewable. Use when refactoring, cleaning up, restructuring, decomposing, or preparing a PR change.
+description: Keep structural changes reviewable. Use when restructuring code, extracting helpers, or separating unrelated cleanup.
 ---
 
 # Refactor for Review
@@ -18,9 +18,9 @@ next change easier is the win, not lines added.
 - When the working tree has bundled two changes, separate them with the
   copy-affected-files-aside, reset, re-apply one concern, restore the rest
   pattern, not by committing the tangle.
-- Refactor and behavior change do not ride together. A pure refactor must not
-  alter behavior; a behavior change should not drag a refactor along. If both
-  are needed: two commits, refactor first.
+- Keep unrelated refactoring separate from behavior changes. A small structural
+  change needed for the requested fix may stay with it; explain why it is needed.
+  A change described as a pure refactor must preserve behavior.
 
 ## Keep the diff narrow
 
@@ -64,7 +64,7 @@ Apply the [comment rules](../../rules/coding-standards.md#comment-style).
 ## Self-review before handoff
 
 - [ ] The change does exactly one thing; nothing unrelated rode along.
-- [ ] Refactor and behavior change are not mixed in one commit.
+- [ ] Structural changes serve the requirement; unrelated refactoring is separate.
 - [ ] No "while I'm here" creep; rename/signature ripples are split out.
 - [ ] Extractions remove real duplication or name a real concept, not
       speculative abstraction.
