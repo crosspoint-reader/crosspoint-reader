@@ -298,7 +298,7 @@ While the drive is connected the reader is a disk and nothing else — buttons, 
 
 Once at least one OPDS server is set up (see [OPDS Servers](#375-opds-servers-multiple-libraries)), **File Transfer** lists **OPDS Browser**. It connects to WiFi by itself and opens the catalog; with more than one server, you pick the server first. Books you download are saved to the **Download folder** chosen under **Settings → System → OPDS Servers** (the card's root unless you change it). How to move through a catalog is described under [Browsing a catalog](#375-opds-servers-multiple-libraries).
 
-**Back** from the top of the catalog returns to Home. If the browser had connected to WiFi, the device restarts quietly on the way, as it does after the other WiFi modes.
+**Back** from the server list or the top of the catalog returns to File Transfer, with **OPDS Browser** selected; hold **Back** to go Home instead. If the browser had connected to WiFi, the device restarts quietly on the way, as it does after the other WiFi modes. A catalog opened from a finished book's author search returns to Home.
 
 ### 3.7 Settings
 

@@ -462,8 +462,8 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
-void ActivityManager::goToFileTransfer() {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
+void ActivityManager::goToFileTransfer(const NetworkMode selected) {
+  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, selected));
 }
 
 void ActivityManager::goToSerialTransfer() {
@@ -514,18 +514,21 @@ void ActivityManager::goToBrowser() {
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
   if (servers.size() == 1) {
-    replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
+    replaceActivity(
+        std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0], OpdsBackTo::FileTransfer));
   } else {
-    replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
+    replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true, OpdsBackTo::FileTransfer));
   }
 }
 
 void ActivityManager::goToBrowserWithSearch(std::string query) {
   const auto& servers = OPDS_STORE.getServers();
   if (servers.size() == 1) {
-    replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0], std::move(query)));
+    replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0], OpdsBackTo::Home,
+                                                              std::move(query)));
   } else {
-    replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true, std::move(query)));
+    replaceActivity(
+        std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true, OpdsBackTo::Home, std::move(query)));
   }
 }
 

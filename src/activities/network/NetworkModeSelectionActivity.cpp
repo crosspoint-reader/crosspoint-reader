@@ -60,8 +60,9 @@ fui::BitmapRef rowIcon(const uint8_t* bits) {
 }
 }  // namespace
 
-NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiListActivity("NetworkModeSelection", renderer, mappedInput) {
+NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                           const NetworkMode selected)
+    : UiListActivity("NetworkModeSelection", renderer, mappedInput), selectedOnEnter(selected) {
   for (const ModeRow& row : kRows) {
     if (!isListed(row)) continue;
     fui::ListItem item;
@@ -72,6 +73,17 @@ NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer
     rowItems[rowCount] = item;
     rowModes[rowCount] = row.mode;
     rowCount++;
+  }
+}
+
+void NetworkModeSelectionActivity::onEnter() {
+  // The base resets the selection to the top row; move it after.
+  UiListActivity::onEnter();
+  for (int i = 1; i < rowCount; i++) {
+    if (rowModes[i] == selectedOnEnter) {
+      moveSelectionTo(i);
+      break;
+    }
   }
 }
 

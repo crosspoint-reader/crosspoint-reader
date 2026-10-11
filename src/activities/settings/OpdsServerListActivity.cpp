@@ -55,9 +55,10 @@ fui::ListItem makeRow(const char* label, const char* subtitle, const int actionV
 }  // namespace
 
 OpdsServerListActivity::OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                               const bool pickerMode, std::string initialQuery)
+                                               const bool pickerMode, const OpdsBackTo backTo, std::string initialQuery)
     : UiListActivity("OpdsServerList", renderer, mappedInput),
       pickerMode(pickerMode),
+      backTo(backTo),
       initialQuery_(std::move(initialQuery)) {}
 
 int OpdsServerListActivity::serverRows() const {
@@ -112,16 +113,23 @@ int OpdsServerListActivity::rebuildRowItems() {
 }
 
 void OpdsServerListActivity::onBackButton() {
-  if (pickerMode) {
-    activityManager.goHome();
-  } else {
+  if (!pickerMode) {
     finish();
+    return;
+  }
+  switch (backTo) {
+    case OpdsBackTo::FileTransfer:
+      activityManager.goToFileTransfer(NetworkMode::OPDS_BROWSER);
+      return;
+    case OpdsBackTo::Home:
+      activityManager.goHome();
+      return;
   }
 }
 
 void OpdsServerListActivity::homeFromList() {
   if (pickerMode) {
-    onBackButton();
+    activityManager.goHome();
   } else {
     UiListActivity::homeFromList();
   }
@@ -147,7 +155,7 @@ void OpdsServerListActivity::handleSelection(const int index) {
       const auto* server = OPDS_STORE.getServer(static_cast<size_t>(index));
       if (server) {
         activityManager.replaceActivity(
-            std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server, initialQuery_));
+            std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server, backTo, initialQuery_));
       }
     }
     return;

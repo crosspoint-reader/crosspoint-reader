@@ -4,6 +4,7 @@
 
 #include "OpdsServerStore.h"
 #include "activities/UiListActivity.h"
+#include "activities/browser/OpdsBackTo.h"
 
 // Adapted from upstream crosspoint-reader's OpdsServerListActivity (develop @ cdac66ffe,
 // src/activities/settings/OpdsServerListActivity.cpp).
@@ -11,11 +12,12 @@
 // The list of configured OPDS servers. Settings mode lists the servers, then "Add Server",
 // "Download folder" and "Filename format"; a server row opens its editor. Picker mode (from File
 // Transfer, or a finished book's author search) lists the servers only, and a server row opens the
-// OPDS browser on that server, carrying the search query it was opened with.
+// OPDS browser on that server, carrying the search query and the Back destination it was opened
+// with.
 class OpdsServerListActivity final : public UiListActivity {
  public:
   explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false,
-                                  std::string initialQuery = {});
+                                  OpdsBackTo backTo = OpdsBackTo::FileTransfer, std::string initialQuery = {});
 
   void onEnter() override;
 
@@ -27,9 +29,10 @@ class OpdsServerListActivity final : public UiListActivity {
   int listCount() const override { return getItemCount(); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  // Picker mode backs out to Home rather than finishing.
+  // Picker mode backs out to backTo rather than finishing: it was opened by replacing, so there is
+  // no parent to finish to.
   void onBackButton() override;
-  // Long Back goes Home like short Back in picker mode; the base would return to a stale parent.
+  // Long Back in picker mode goes Home; the base would return to a stale parent.
   void homeFromList() override;
   const char* headerTitle() const override;
 
@@ -40,6 +43,7 @@ class OpdsServerListActivity final : public UiListActivity {
   void handleSelection(int index);
 
   bool pickerMode = false;
+  OpdsBackTo backTo;
   std::string initialQuery_;
   // The rows: pointers into OPDS_STORE's strings, SETTINGS and the string table. rebuildRowItems()
   // refills them at the start of every build, so only the render task writes them, and they can

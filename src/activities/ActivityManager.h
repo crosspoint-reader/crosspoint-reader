@@ -16,7 +16,9 @@
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "TouchUi.h"
+#include "activities/browser/OpdsBackTo.h"
 #include "activities/home/LibraryTab.h"
+#include "activities/network/NetworkMode.h"
 
 class Activity;                       // forward declaration
 class RenderLock;                     // forward declaration
@@ -144,7 +146,8 @@ class ActivityManager {
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 
   // goTo... functions are convenient wrapper for replaceActivity()
-  void goToFileTransfer();
+  // File Transfer, its menu opening on `selected`'s row.
+  void goToFileTransfer(NetworkMode selected = NetworkMode::JOIN_NETWORK);
   void goToSerialTransfer();  // direct entry (also used by the boot-into-transfer path)
   void goToUsbDrive();        // no-op logging an error on boards without FREEINK_CAP_USB_MSC
   void goToSettings();
@@ -156,7 +159,10 @@ class ActivityManager {
                    std::optional<uint32_t> author = std::nullopt);
   void goToGlobalBookmarks();
   void goToGlobalBookmarks(ReturnHint hint);
+  // The OPDS catalog, or the server picker first when more than one server is configured. Opened
+  // from File Transfer, so Back returns there.
   void goToBrowser();
+  // The same, searching `query` on arrival: a finished book's "more by this author". Back goes Home.
   void goToBrowserWithSearch(std::string query);
   void goToReader(std::string path);
   void goToKOReaderSync();

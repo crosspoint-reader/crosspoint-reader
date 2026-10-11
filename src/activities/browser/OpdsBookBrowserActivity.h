@@ -8,6 +8,7 @@
 
 #include "../Activity.h"
 #include "../ListController.h"
+#include "OpdsBackTo.h"
 #include "OpdsServerStore.h"
 
 /**
@@ -29,9 +30,10 @@ class OpdsBookBrowserActivity final : public Activity {
   };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server,
-                                   std::string initialQuery = {})
+                                   OpdsBackTo backTo, std::string initialQuery = {})
       : Activity("OpdsBookBrowser", renderer, mappedInput),
         server(std::move(server)),
+        backTo(backTo),
         initialQuery_(std::move(initialQuery)) {}
 
   void onEnter() override;
@@ -63,6 +65,9 @@ class OpdsBookBrowserActivity final : public Activity {
   size_t downloadTotal = 0;
 
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
+  OpdsBackTo backTo;
+  // Set by leave() on its way to File Transfer, so onExit()'s reboot lands there and not on Home.
+  bool leavingToFileTransfer = false;
   std::string initialQuery_;
 
   OpdsEntry getEntry(size_t index) const;
@@ -73,6 +78,8 @@ class OpdsBookBrowserActivity final : public Activity {
   void fetchFeed(const std::string& path);
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
+  // Back from the top of the catalog: to backTo.
+  void leave();
   void downloadBook(const OpdsEntry& book, const OpdsAcquisitionLink& acquisition);
   void chooseBookFormat(const OpdsEntry& book);
   void fetchOsdTemplate(const std::string& osdUrl);
