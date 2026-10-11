@@ -69,6 +69,7 @@ the setup page and every other page redirects (`302`) to `/setup`.
 | `/settings`   | Settings                                   |
 | `/stats`      | Reading Stats                              |
 | `/fonts`      | Font Manager                               |
+| `/plugins`    | Plugins: install, switch off and remove web-interface plugins |
 | `/systeminfo` | System Info                                |
 
 `GET /js/jszip.min.js` serves the gzipped JSZip library (`Content-Encoding: gzip`),
@@ -744,16 +745,44 @@ curl http://crosspoint.local/api/plugins
 
 **Response (200 OK):**
 ```json
-[{"name":"organize-by-author","title":"Organize by Author","mount":"files"}]
+[{"name":"organize-by-author","title":"Organize by Author","mount":"files","root":"/.crosspoint/plugins",
+  "disabled":false,"description":"Sorts the EPUBs of one folder ...","version":"1.0.0"}]
 ```
 
-| Field   | Description                                                              |
-| ------- | ------------------------------------------------------------------------ |
-| `name`  | Folder name; the value to pass to `/plugin`                              |
-| `title` | From `manifest.json`, falling back to `name`                             |
-| `mount` | `settings` (default) or `files` — which page loads the plugin            |
+| Field          | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `name`         | Folder name; the value to pass to `/plugin`                              |
+| `title`        | From `manifest.json`, falling back to `name`                             |
+| `mount`        | `settings` (default) or `files` — which page loads the plugin            |
+| `root`         | The plugins folder it was found in                                       |
+| `disabled`     | Switched off on the Plugins page; the pages do not load it               |
+| `description`, `version`, `requires`, `allowedHosts` | From `manifest.json`, when present |
 
 Always 200 with an array; an unreadable or absent plugins folder yields `[]`.
+
+### Installing and managing plugins
+
+What the Plugins page (`GET /plugins`) uses. Installs go to
+`/.crosspoint/plugins/<name>`, which the file endpoints leave alone unless
+**Show Hidden Files** is on. `name` and `file` must each be a single path
+component.
+
+| Endpoint | Does |
+| --- | --- |
+| `POST /api/plugins/begin?name=` | Starts an install: an empty staging folder `<name>.new` |
+| `POST /api/plugins/file?name=&file=` | One file into the staging folder; the raw request body is the file (binary-safe, at most 512 KB) |
+| `POST /api/plugins/commit?name=` | Replaces the installed plugin with the staging folder in one rename; `400` without a `plugin.js` |
+| `POST /api/plugins/remove?name=` | Removes the plugin from every plugins folder; `404` if there is none |
+| `POST /api/plugins/enable?name=&on=0` | Switches the plugin off (a `disabled` file in its folder); `on=1` switches it back on |
+
+```bash
+curl -X POST "http://crosspoint.local/api/plugins/begin?name=my-plugin"
+curl -X POST -H "Content-Type: application/octet-stream" --data-binary @plugin.js \
+  "http://crosspoint.local/api/plugins/file?name=my-plugin&file=plugin.js"
+curl -X POST "http://crosspoint.local/api/plugins/commit?name=my-plugin"
+```
+
+Each answers `{"ok":true}`, or an error status with `{"error":"..."}`.
 
 ### GET `/api/relay` - Fetch a URL for a Plugin
 

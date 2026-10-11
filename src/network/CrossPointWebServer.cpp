@@ -399,6 +399,13 @@ void CrossPointWebServer::begin() {
   server->on("/api/relay", HTTP_GET, [this] { handleRelay(); });
   server->on("/api/fetch", HTTP_POST, [this] { handleFetchToSd(); });
   server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsData(); });
+  server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
+  server->on("/api/plugins/begin", HTTP_POST, [this] { handlePluginInstallBegin(); });
+  server->on(
+      "/api/plugins/file", HTTP_POST, [this] { handlePluginInstallFile(); }, [this] { handlePluginInstallFileData(); });
+  server->on("/api/plugins/commit", HTTP_POST, [this] { handlePluginInstallCommit(); });
+  server->on("/api/plugins/remove", HTTP_POST, [this] { handlePluginRemove(); });
+  server->on("/api/plugins/enable", HTTP_POST, [this] { handlePluginEnable(); });
 
   server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
   server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
@@ -2795,19 +2802,29 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
   server->send(200, "text/plain", "OK");
 }
 
-// GET /api/plugins -> [{"name","title","mount"}, ...]
-// Only folders carrying a plugin.js are listed, since the page's whole job is
-// to load that file; manifest.json just supplies the label and mount point.
+// GET /api/plugins -> [{"name","title","mount","description","version","requires","allowedHosts",
+//                       "root","disabled"}, ...]
+// Only folders carrying a plugin.js are listed, since the pages' whole job is
+// to load that file; manifest.json supplies the label, mount point and what the
+// Plugins page shows about it. The pages skip a disabled plugin; the Plugins
+// page lists it with the rest.
 // Streamed rather than assembled: a JsonDocument holding every entry plus a
 // manifest string each would be the largest allocation on this path.
 void CrossPointWebServer::handlePluginList() const {
   if (rejectIfLowMemory(server.get())) return;
 
+  // An entry with a description and a host list can pass 1 KB; on the heap, not the stack.
+  constexpr size_t kEntryBytes = 1536;
+  auto output = makeUniqueNoThrow<char[]>(kEntryBytes);
+  if (!output) {
+    server->send(500, "application/json", "{\"error\":\"OOM\"}");
+    return;
+  }
+
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
   ChunkedJsonArray out(server.get());
 
-  char output[384];
   JsonDocument doc;
   size_t listed = 0;
 
@@ -2818,6 +2835,8 @@ void CrossPointWebServer::handlePluginList() const {
     doc["name"] = e.name;
     doc["title"] = e.name;      // manifest overrides below
     doc["mount"] = "settings";  // default page
+    doc["root"] = e.root;
+    doc["disabled"] = e.disabled;
 
     std::string manifest;
     if (e.hasManifest &&
@@ -2826,20 +2845,24 @@ void CrossPointWebServer::handlePluginList() const {
       if (deserializeJson(m, manifest) == DeserializationError::Ok) {
         if (m["title"].is<const char*>()) doc["title"] = m["title"];
         if (m["mount"].is<const char*>()) doc["mount"] = m["mount"];
+        if (m["description"].is<const char*>()) doc["description"] = m["description"];
+        if (m["version"].is<const char*>()) doc["version"] = m["version"];
         // The page refuses a plugin whose required capabilities it lacks (missingCapabilities() in
         // PluginHost.js.inc), which it can only do if the list says what those are.
         if (m["requires"].is<JsonArrayConst>()) doc["requires"] = m["requires"];
+        // Shown on the Plugins page, so who a plugin can reach is visible before it is used.
+        if (m["allowedHosts"].is<JsonArrayConst>()) doc["allowedHosts"] = m["allowedHosts"];
       } else {
         LOG_DBG("WEB", "Plugin %s: unparseable manifest.json", e.name.c_str());
       }
     }
 
-    const size_t written = serializeJson(doc, output, sizeof(output));
-    if (written >= sizeof(output)) {
+    const size_t written = serializeJson(doc, output.get(), kEntryBytes);
+    if (written >= kEntryBytes) {
       LOG_DBG("WEB", "Plugin %s: entry too long, skipped", e.name.c_str());
       continue;
     }
-    out.addEntry(output, written);
+    out.addEntry(output.get(), written);
     listed++;
   }
 
@@ -3019,93 +3042,58 @@ void CrossPointWebServer::handleFetchToSd() {
   sendJson(server.get(), 200, doc);
 }
 
-// POST /api/plugin-fs?plugin=<name>&path=<sd path>  (raw body = file contents)
-//
-// Writes one small file to the card. /upload already does this, so this exists
-// for compatibility with plugins written against the upstream API rather than
-// because the web UI needs it - hence the modest cap, which keeps it to the
-// small-file job it advertises and leaves bulk transfers to /upload.
-//
-// The body arrives through handlePluginFsData() in raw chunks. It used to be read
-// from the buffered "plain" argument, which the framework builds as a C string:
-// binary content ended at its first NUL byte and was still reported written.
-// Streaming also retires the low-memory gate the buffered version needed: the
-// body is never held whole, only one framework-sized chunk at a time.
-void CrossPointWebServer::handlePluginFs() {
-  PluginFsUpload& up = pluginFsUpload;
-  if (!up.started) {
-    // A multipart body is parsed as a form and never streams; every other content type does.
-    server->send(415, "application/json", "{\"error\":\"send the file as the raw request body\"}");
-    return;
-  }
-  up.started = false;
-  if (up.status != 0) {
-    JsonDocument err;
-    err["error"] = up.error;
-    sendJson(server.get(), up.status, err);
-    return;
-  }
+// ---- Raw request bodies --------------------------------------------------------------------------
 
-  LOG_DBG("WEB", "plugin-fs wrote %u bytes to %s", static_cast<unsigned>(up.written), up.path.c_str());
-  clearBookCacheIfNeeded(up.path);
-  JsonDocument doc;
-  doc["ok"] = true;
-  doc["path"] = up.path.c_str();
-  sendJson(server.get(), 200, doc);
+void CrossPointWebServer::RawFileUpload::start(const String& target, const size_t maxBytes) {
+  if (file) file.close();  // left by a request the client dropped mid-body
+  started = true;
+  status = 0;
+  error = "";
+  written = 0;
+  cap = maxBytes;
+  path = target;
+  temp = "";
+  if (path.isEmpty()) {
+    fail(400, "missing or invalid target");
+    return;
+  }
+  temp = path + ".part";
+  if (!Storage.openFileForWrite("WEB", temp.c_str(), file)) {
+    temp = "";
+    fail(500, "could not create file");
+  }
 }
 
-void CrossPointWebServer::handlePluginFsData() {
-  PluginFsUpload& up = pluginFsUpload;
-  const HTTPRaw& raw = server->raw();
-  const auto fail = [&up](const int status, const char* error) {
-    up.status = status;
-    up.error = error;
-    if (up.file) up.file.close();
-    if (!up.temp.isEmpty()) Storage.remove(up.temp.c_str());
-  };
+void CrossPointWebServer::RawFileUpload::fail(const int httpStatus, const char* message) {
+  status = httpStatus;
+  error = message;
+  if (file) file.close();
+  if (!temp.isEmpty()) Storage.remove(temp.c_str());
+}
 
+void CrossPointWebServer::RawFileUpload::feed(const HTTPRaw& raw) {
   switch (raw.status) {
-    case RAW_START: {
-      if (up.file) up.file.close();  // left by a request the client dropped mid-body
-      up.started = true;
-      up.status = 0;
-      up.error = "";
-      up.written = 0;
-      up.temp = "";
-      const String plugin = server->arg("plugin");
-      up.path = pluginWriteTarget(server->arg("path"));
-      if (!isSafePathComponent(plugin) || up.path.isEmpty()) {
-        fail(400, "missing plugin or path");
-        return;
-      }
-      // Written aside and renamed over the target at the end, so a body that turns out too large,
-      // or a client that goes away, never replaces a file that was already there.
-      up.temp = up.path + ".part";
-      if (!Storage.openFileForWrite("WEB", up.temp.c_str(), up.file)) {
-        up.temp = "";
-        fail(500, "could not create file");
-      }
+    case RAW_START:  // start() handles it, once the caller knows the target
       return;
-    }
     case RAW_WRITE:
-      if (up.status != 0) return;
-      if (up.written + raw.currentSize > PLUGIN_FS_MAX_BYTES) {
-        fail(413, "file too large, use /upload");
+      if (status != 0) return;
+      if (written + raw.currentSize > cap) {
+        fail(413, "file too large");
         return;
       }
-      if (up.file.write(raw.buf, raw.currentSize) != raw.currentSize) {
-        LOG_ERR("WEB", "plugin-fs short write at %u B to %s", static_cast<unsigned>(up.written), up.temp.c_str());
+      if (file.write(raw.buf, raw.currentSize) != raw.currentSize) {
+        LOG_ERR("WEB", "raw upload short write at %u B to %s", static_cast<unsigned>(written), temp.c_str());
         fail(500, "short write");
         return;
       }
-      up.written += raw.currentSize;
+      written += raw.currentSize;
       HalSystem::feedWatchdog();
       return;
     case RAW_END:
-      if (up.status != 0) return;
-      up.file.close();
-      if ((Storage.exists(up.path.c_str()) && !Storage.remove(up.path.c_str())) ||
-          !Storage.rename(up.temp.c_str(), up.path.c_str())) {
+      if (status != 0) return;
+      file.close();
+      if ((Storage.exists(path.c_str()) && !Storage.remove(path.c_str())) ||
+          !Storage.rename(temp.c_str(), path.c_str())) {
         fail(500, "could not replace file");
       }
       return;
@@ -3113,6 +3101,182 @@ void CrossPointWebServer::handlePluginFsData() {
       fail(400, "upload interrupted");
       return;
   }
+}
+
+bool CrossPointWebServer::RawFileUpload::answerFailure(WebServer& server) {
+  if (!started) {
+    // A multipart body is parsed as a form and never streams; every other content type does.
+    server.send(415, "application/json", "{\"error\":\"send the file as the raw request body\"}");
+    return true;
+  }
+  started = false;
+  if (status == 0) return false;
+  JsonDocument err;
+  err["error"] = error;
+  sendJson(&server, status, err);
+  return true;
+}
+
+// POST /api/plugin-fs?plugin=<name>&path=<sd path>  (raw body = file contents)
+//
+// Writes one small file to the card. /upload already does this, so this exists
+// for compatibility with plugins written against the upstream API rather than
+// because the web UI needs it - hence the modest cap, which keeps it to the
+// small-file job it advertises and leaves bulk transfers to /upload. The body streams through
+// rawUpload, never held whole, so it needs no low-memory gate.
+void CrossPointWebServer::handlePluginFs() {
+  if (rawUpload.answerFailure(*server)) return;
+  LOG_DBG("WEB", "plugin-fs wrote %u bytes to %s", static_cast<unsigned>(rawUpload.written), rawUpload.path.c_str());
+  clearBookCacheIfNeeded(rawUpload.path);
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["path"] = rawUpload.path.c_str();
+  sendJson(server.get(), 200, doc);
+}
+
+void CrossPointWebServer::handlePluginFsData() {
+  const HTTPRaw& raw = server->raw();
+  if (raw.status == RAW_START) {
+    const String plugin = server->arg("plugin");
+    rawUpload.start(isSafePathComponent(plugin) ? pluginWriteTarget(server->arg("path")) : String(),
+                    PLUGIN_FS_MAX_BYTES);
+    return;
+  }
+  rawUpload.feed(raw);
+}
+
+// ---- The Plugins page ----------------------------------------------------------------------------
+//
+// The browser does the fetching and unpacking (from a .zip the user picked, or from the catalog on
+// GitHub, which allows cross-origin reads); the device only stores what it is sent. An install goes
+// into a staging folder file by file and replaces the plugin in one rename, so a half-sent plugin
+// never runs.
+
+namespace {
+
+constexpr size_t PLUGIN_FILE_MAX_BYTES = 512u * 1024u;
+constexpr char PLUGIN_DISABLED_MARKER[] = "disabled";
+
+std::string pluginInstallDir(const String& name) {
+  return std::string(PluginLocations::kInstallRoot) + "/" + name.c_str();
+}
+
+std::string pluginStagingDir(const String& name) { return pluginInstallDir(name) + ".new"; }
+
+}  // namespace
+
+void CrossPointWebServer::handlePluginsPage() const { serveBundlePage(web_bundle::PluginsPageHtml); }
+
+void CrossPointWebServer::handlePluginInstallBegin() const {
+  const String name = server->arg("name");
+  if (!isSafePathComponent(name)) {
+    server->send(400, "application/json", "{\"error\":\"invalid plugin name\"}");
+    return;
+  }
+  const std::string staging = pluginStagingDir(name);
+  Storage.mkdir(PluginLocations::kInstallRoot);
+  if (Storage.exists(staging.c_str())) Storage.removeDir(staging.c_str());  // left by a cut install
+  if (!Storage.mkdir(staging.c_str())) {
+    server->send(500, "application/json", "{\"error\":\"could not create the staging folder\"}");
+    return;
+  }
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void CrossPointWebServer::handlePluginInstallFile() {
+  if (rawUpload.answerFailure(*server)) return;
+  LOG_DBG("WEB", "plugin file %s (%u B)", rawUpload.path.c_str(), static_cast<unsigned>(rawUpload.written));
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void CrossPointWebServer::handlePluginInstallFileData() {
+  const HTTPRaw& raw = server->raw();
+  if (raw.status == RAW_START) {
+    // Flat files only: /plugin serves single path components, so a nested one could never load.
+    const String name = server->arg("name");
+    const String fileName = server->arg("file");
+    const std::string staging = pluginStagingDir(name);
+    const bool valid = isSafePathComponent(name) && isSafePathComponent(fileName) && Storage.exists(staging.c_str());
+    rawUpload.start(valid ? String((staging + "/" + fileName.c_str()).c_str()) : String(), PLUGIN_FILE_MAX_BYTES);
+    return;
+  }
+  rawUpload.feed(raw);
+}
+
+void CrossPointWebServer::handlePluginInstallCommit() const {
+  const String name = server->arg("name");
+  if (!isSafePathComponent(name)) {
+    server->send(400, "application/json", "{\"error\":\"invalid plugin name\"}");
+    return;
+  }
+  const std::string staging = pluginStagingDir(name);
+  if (!Storage.exists((staging + "/plugin.js").c_str())) {
+    server->send(400, "application/json", "{\"error\":\"no plugin.js was sent\"}");
+    return;
+  }
+  const std::string live = pluginInstallDir(name);
+  if ((Storage.exists(live.c_str()) && !Storage.removeDir(live.c_str())) ||
+      !Storage.rename(staging.c_str(), live.c_str())) {
+    server->send(500, "application/json", "{\"error\":\"could not replace the plugin\"}");
+    return;
+  }
+  LOG_INF("WEB", "Plugin %s installed", name.c_str());
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+// Removes the plugin from every root, so a copy in another root does not take its place.
+void CrossPointWebServer::handlePluginRemove() const {
+  const String name = server->arg("name");
+  if (!isSafePathComponent(name)) {
+    server->send(400, "application/json", "{\"error\":\"invalid plugin name\"}");
+    return;
+  }
+  bool removed = false;
+  for (const char* root : PluginLocations::kRoots) {
+    const std::string dir = std::string(root) + "/" + name.c_str();
+    if (!Storage.exists(dir.c_str())) continue;
+    if (!Storage.removeDir(dir.c_str())) {
+      server->send(500, "application/json", "{\"error\":\"could not remove the plugin\"}");
+      return;
+    }
+    removed = true;
+  }
+  if (!removed) {
+    server->send(404, "application/json", "{\"error\":\"no such plugin\"}");
+    return;
+  }
+  LOG_INF("WEB", "Plugin %s removed", name.c_str());
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+// A disabled plugin keeps its folder and carries a "disabled" marker, which /api/plugins reports and
+// the pages honour: kept on the card rather than in one browser, so it holds for every browser.
+void CrossPointWebServer::handlePluginEnable() const {
+  const String name = server->arg("name");
+  if (!isSafePathComponent(name)) {
+    server->send(400, "application/json", "{\"error\":\"invalid plugin name\"}");
+    return;
+  }
+  const std::string dir = PluginLocations::findPluginDir(name.c_str());
+  if (dir.empty()) {
+    server->send(404, "application/json", "{\"error\":\"no such plugin\"}");
+    return;
+  }
+  const std::string marker = dir + "/" + PLUGIN_DISABLED_MARKER;
+  const bool enable = server->arg("on") != "0";
+  bool ok = true;
+  if (enable) {
+    if (Storage.exists(marker.c_str())) ok = Storage.remove(marker.c_str());
+  } else if (!Storage.exists(marker.c_str())) {
+    FsFile f;
+    ok = Storage.openFileForWrite("WEB", marker.c_str(), f);
+    if (ok) f.close();
+  }
+  if (!ok) {
+    server->send(500, "application/json", "{\"error\":\"could not change the plugin\"}");
+    return;
+  }
+  server->send(200, "application/json", "{\"ok\":true}");
 }
 
 // WebSocket callback trampoline

@@ -181,10 +181,58 @@ the title, author and series shown on the device come from `book.opf` when one
 is present, so a plugin writing one changes what the reader displays. See
 [sidecar-files.md](sidecar-files.md) for the device-side rules.
 
+## Installing and managing plugins: the Plugins page
+
+`/plugins` in the web interface (linked from every page) lists every installed
+plugin with its description, the page it adds itself to and the hosts it may
+reach (`allowedHosts`), and offers **Switch off** / **Switch on** and **Remove**.
+Plugin management lives here and nowhere on the reader: it is only ever useful
+while a browser is connected.
+
+It installs in two ways, both done by the browser; the reader only stores what
+it is sent:
+
+- **From the catalog**: `plugins/catalog.json` in this repository, read with the
+  plugins' files straight from `raw.githubusercontent.com` (which allows
+  cross-origin reads). It needs a browser with internet, so not hotspot mode.
+  `?ref=<branch>` on the page reads another branch's catalog, to try plugins
+  before they are merged. Regenerate the catalog with
+  `scripts/build_plugin_catalog.py` after changing a plugin; CI fails when it is
+  out of date. A manifest with `"catalog": false` stays out of it.
+
+  Entries have the shape of crosspoint-reader's plugin catalog: `name`, `title`,
+  `description`, `author`, `version`, `base` (the folder the files are read
+  from) and `files` (their names), plus this firmware's `mount`, `requires` and
+  `allowedHosts`. `base` is resolved against the catalog's own URL. The script
+  gives this repository's plugins a relative one (`find-duplicates/`), so a
+  catalog read from another branch installs that branch's files. A plugin hosted
+  elsewhere is added to `catalog.json` by hand with an absolute `base`; the
+  script keeps such entries, and the page shows where they come from. The
+  crosspoint-reader catalog itself is not offered: most of its plugins need
+  on-device screens (`device.json`) or a relay this firmware does not have.
+- **From a `.zip`**: the plugin's files side by side, or inside one folder. The
+  page shows the manifest's title, description and `allowedHosts` and asks
+  before installing.
+
+Installs go to `/.crosspoint/plugins/<name>`, through endpoints of their own
+(`/api/plugins/begin`, `/file`, `/commit`; see
+[webserver-endpoints.md](webserver-endpoints.md)): files are staged in
+`<name>.new` and switched in with one rename, so a plugin cut off half-way never
+runs. A folder copied by hand into `/plugins` or `/.plugins` still works and is
+listed and managed the same way.
+
+**Switch off** puts a `disabled` file in the plugin's folder: the pages skip the
+plugin, and the setting holds for every browser. It only stops the pages loading
+it: `/plugin`, `/api/relay` and `/api/fetch` still answer for it. That is no
+loss of protection, since any script in a page already has the same reach.
+
+Manifest fields the page shows: `title`, `version`, `description`, `mount`,
+`allowedHosts` (see [Layout](#layout) for the rest).
+
 ## Bundled plugins
 
-`plugins/` in this repository. Copy a folder onto the card to install it; they
-are never compiled, so they cost no flash.
+`plugins/` in this repository, offered by the Plugins page's catalog. They are
+never compiled, so they cost no flash.
 
 | Plugin | Mount | What it does |
 |---|---|---|
@@ -240,8 +288,8 @@ only be enabled on networks you trust — that is true with or without plugins.
 - `manifest.json` is read with a 4KB cap; a larger file is ignored (the plugin
   still loads, falling back to its folder name and the `settings` mount).
 - An unparseable manifest is logged (`[WEB]`) and ignored the same way.
-- A plugin whose listing entry would exceed 384 bytes of JSON is skipped —
-  in practice this means keeping `title` short.
+- A plugin whose listing entry would exceed 1536 bytes of JSON is skipped —
+  in practice this means keeping `description` to a sentence or two.
 - At most 64 directories are examined per root. The scan runs inside one
   request and each candidate costs two SD stats, so an unbounded walk over a
   folder holding hundreds of subdirectories could outlast the task watchdog.
@@ -249,8 +297,8 @@ only be enabled on networks you trust — that is true with or without plugins.
   is why a plugins root should be a dedicated folder, not a general-purpose one.
 - `/api/plugins` and `/plugin` return 503 with `Retry-After` when the heap is
   too fragmented to serve them, like the other allocating endpoints.
-- The scan reports the folders it finds; there is no install or update
-  mechanism. Copy a folder onto the card and reload the page.
+- Install, update and removal go through the Plugins page (above); copying a
+  folder onto the card works too.
 
 ## Debugging
 

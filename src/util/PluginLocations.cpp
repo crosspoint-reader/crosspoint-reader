@@ -4,6 +4,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 
 namespace PluginLocations {
 
@@ -27,6 +28,9 @@ std::vector<Entry> scanPlugins() {
       }
       char name[128];
       if (entry.getName(name, sizeof(name)) == 0 || name[0] == '.') continue;
+      // The Plugins page's staging folder for an install in progress, or one a cut install left.
+      const size_t nameLength = strlen(name);
+      if (nameLength > 4 && strcmp(name + nameLength - 4, ".new") == 0) continue;
       if (std::find(seen.begin(), seen.end(), name) != seen.end()) continue;
       // Claimed even when it carries no marker: findPluginDir resolves this name
       // to this root, so a same-named folder in a later root must not be
@@ -38,6 +42,8 @@ std::vector<Entry> scanPlugins() {
       e.dir = std::string(kRoots[r]) + "/" + name;
       e.hasPluginJs = Storage.exists((e.dir + "/plugin.js").c_str());
       e.hasManifest = Storage.exists((e.dir + "/manifest.json").c_str());
+      e.disabled = Storage.exists((e.dir + "/disabled").c_str());
+      e.root = kRoots[r];
       if (e.hasPluginJs || e.hasManifest) plugins.push_back(std::move(e));
     }
   }

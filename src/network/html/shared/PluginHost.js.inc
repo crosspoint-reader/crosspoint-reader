@@ -55,6 +55,7 @@ async function loadPlugins(mount) {
 
   for (const p of list) {
     if ((p.mount || 'settings') !== mount) continue;
+    if (p.disabled) continue;  // switched off on the Plugins page; still installed
 
     const container = document.createElement('div');
     container.className = 'card';

@@ -1,0 +1,52 @@
+{
+  "name": "Witch Reader plugins",
+  "plugins": [
+    {
+      "name": "find-duplicates",
+      "title": "Find Duplicates",
+      "description": "Lists files that share an exact size, usually the same book stored twice. Reads only the folder listing and changes nothing.",
+      "author": "jpirnay",
+      "version": "1.0.0",
+      "mount": "files",
+      "base": "find-duplicates/",
+      "files": [
+        "manifest.json",
+        "plugin.js"
+      ]
+    },
+    {
+      "name": "metadata-editor",
+      "title": "Metadata Editor",
+      "description": "Corrects a book's title, author, series and description, and sets its cover, in files beside the book. The book itself is not changed.",
+      "author": "jpirnay",
+      "version": "1.0.0",
+      "mount": "files",
+      "requires": [
+        "relay"
+      ],
+      "allowedHosts": [
+        "www.goodreads.com",
+        ".gr-assets.com",
+        "books.google.com"
+      ],
+      "base": "metadata-editor/",
+      "files": [
+        "manifest.json",
+        "plugin.js"
+      ]
+    },
+    {
+      "name": "organize-by-author",
+      "title": "Organize by Author",
+      "description": "Sorts the EPUBs of one folder into a folder per author, taking their cover and metadata files along. Shows a preview first.",
+      "author": "jpirnay",
+      "version": "1.0.0",
+      "mount": "files",
+      "base": "organize-by-author/",
+      "files": [
+        "manifest.json",
+        "plugin.js"
+      ]
+    }
+  ]
+}
