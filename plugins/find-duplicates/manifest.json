@@ -1,4 +1,6 @@
 {
   "title": "Find Duplicates",
+  "version": "1.0.0",
+  "description": "Lists files that share an exact size, usually the same book stored twice. Reads only the folder listing and changes nothing.",
   "mount": "files"
 }

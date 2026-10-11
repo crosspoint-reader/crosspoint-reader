@@ -33,6 +33,11 @@ jobs:
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
           git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
 
+      # The web Plugins page installs from plugins/catalog.json on master; a plugin changed without
+      # regenerating it would be offered with stale file names or versions.
+      - name: Check the plugin catalog
+        run: python3 scripts/build_plugin_catalog.py --check
+
   cppcheck:
     runs-on: ubuntu-latest
     steps:
