@@ -154,18 +154,36 @@ sleep that ends the reading turn.
 
 If WiFi is not already up, the device brings it up for the drain: with battery at
 least 20% and a saved credential for the last-connected network, it shows a
-popup, joins with a 10-second deadline, drains, and proceeds to sleep. Sleep is
-never blocked on the network — a failed join, low battery, or a mid-drain failure
-just sleeps with the previous image, and the queued events retry on the next
-drain like any other (at-least-once; a handler whose action only made sense for
-that particular sleep should tolerate or ignore the late retry, e.g. by checking
-`{event.ts}`). Other events already queued for the same plugin (`reader.exit` and
-friends) ride along in the sleep-time drain.
+popup, joins with a 10-second deadline, drains, and proceeds to sleep. Both
+sleep paths use a per-drain budget shared across plugins: four caller HTTP
+operations and a 15-second **cooperative** window measured from the start of
+the drain, after joining.
+A delivery request, password-token mint after 401/403, and its retry consume
+three operations; failed operations count too. SDK-internal connection retries,
+TLS fallback, redirects and handshakes are not counted separately. The existing
+cap of four delivered lines is independent of the operation budget. The web
+server and WiFi-selection drains retain their existing delivered-line limit.
+
+The SDK polls cancellation during HTTP waits and TLS handshakes, but its blocking
+DNS/TCP connect can exceed this window. WiFi join and SD I/O also have no hard
+bound from the drain. These settings do not guarantee wall-clock latency or
+energy use. When the HTTP helper observes cancellation at its checks, it rejects the
+response before file replacement. The elapsed window can still expire after
+the final check, during SD commit. File contents are not validated by this
+budget.
+
+A failed join, low battery or a failed delivery leaves queued events for a later
+drain. Delivery remains at-least-once: a remote effect can precede cancellation
+of its local acknowledgement, so servers should deduplicate by `{event.id}`.
+A handler whose action only made sense for one sleep should tolerate or ignore
+a late retry, for example by checking `{event.ts}`. Plugins keep their scan
+order; earlier backlogs or repeated failures can consume the budget on every
+drain and indefinitely defer later plugins. The budget provides no fairness or
+eventual-delivery guarantee.
 
 Auth reuses the catalog vocabulary from the same `device.json`: `{token}` is
-read from the declared token file, and on a 401/403 a `"password"`-type auth
-section mints a fresh token and retries once — same behavior as catalog
-browsing.
+read from the declared token file. On a 401/403, a `"password"`-type auth section
+mints a fresh token and retries once if the shared budget permits each operation.
 
 ## Substitution variables
 
@@ -234,7 +252,9 @@ belongs on the service's server, keyed by the id in the sidecar.
 | Request response               | 8KB (discarded)                |
 | Download                       | 1MB, streamed to SD            |
 | Subscribed plugins             | 8                              |
-| Handlers run per drain         | 4 (backlog continues next drain) |
+| Delivered lines per drain      | 4 (remaining lines stay queued) |
+| Sleep drain HTTP operations    | 4, including failed requests, auth mint and retry |
+| Sleep drain elapsed window     | 15 seconds, cooperative; DNS/TCP can exceed it |
 | Sidecar / config / token files | 2KB each                       |
 
 ## Worked example: hands-free progress sync
