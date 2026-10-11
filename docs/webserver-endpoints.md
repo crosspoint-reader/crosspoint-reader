@@ -321,7 +321,9 @@ Folder created: NewFolder
 
 ### POST `/rename` - Rename File or Folder
 
-Renames an item in place. Book layout caches under the item are cleared first.
+Renames an item in place. Books keep their reading position, bookmarks, place in
+the recent list and reading history: everything the reader keeps under a book's
+path moves with it (`BookRelocation`). Sidecar files are not renamed with the book.
 
 **Request:**
 ```bash
@@ -357,7 +359,8 @@ Sidecar files are not renamed with the book (see [sidecar-files.md](sidecar-file
 
 ### POST `/move` - Move File or Folder
 
-Moves an item into another folder, keeping its name.
+Moves an item into another folder, keeping its name. As for `/rename`, books
+keep their reading position, bookmarks, recent-list row and reading history.
 
 **Request:**
 ```bash

@@ -42,6 +42,10 @@ class GlobalBookmarkIndex {
   // Drop an entry (e.g. when a book is deleted). No-op if not indexed.
   void removeBySourcePath(const std::string& sourcePath);
 
+  // A book renamed or moved on the card (BookRelocation): its entry follows it, and so does the
+  // cache folder its bookmarks are read from. No-op if not indexed.
+  void relocate(const std::string& oldPath, const std::string& newPath, const std::string& newCacheDir);
+
   // Convenience wrapper that pulls bookmarks out of a BookmarkStore and upserts.
   // Also removes the entry if the store is empty.
   void syncFromStore(const BookmarkStore& store, const std::string& sourcePath, const std::string& cacheDir,

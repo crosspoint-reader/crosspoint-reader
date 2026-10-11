@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "BookRelocation.h"
 #include "ChunkedResponse.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -1377,16 +1378,18 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  if (isDir) {
-    clearBookCachesInDirectory(itemPath);
-  } else {
-    clearBookCacheIfNeeded(itemPath);
-  }
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
     LOG_DBG("WEB", "Renamed: %s -> %s", itemPath.c_str(), newPath.c_str());
+    // The books keep their reading position, bookmarks and history. They used to lose them: the
+    // caches were cleared before the rename, as if the books were new.
+    if (isDir) {
+      BookRelocation::folderMoved(itemPath.c_str(), newPath.c_str());
+    } else {
+      BookRelocation::bookMoved(itemPath.c_str(), newPath.c_str());
+    }
     server->send(200, "text/plain", "Renamed successfully");
   } else {
     LOG_ERR("WEB", "Failed to rename: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1478,16 +1481,16 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  if (isDir) {
-    clearBookCachesInDirectory(itemPath);
-  } else {
-    clearBookCacheIfNeeded(itemPath);
-  }
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
     LOG_DBG("WEB", "Moved: %s -> %s", itemPath.c_str(), newPath.c_str());
+    if (isDir) {
+      BookRelocation::folderMoved(itemPath.c_str(), newPath.c_str());
+    } else {
+      BookRelocation::bookMoved(itemPath.c_str(), newPath.c_str());
+    }
     server->send(200, "text/plain", "Moved successfully");
   } else {
     LOG_ERR("WEB", "Failed to move: %s -> %s", itemPath.c_str(), newPath.c_str());
