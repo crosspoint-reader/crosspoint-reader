@@ -438,13 +438,17 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
             "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
-                            StrId::STR_CAT_SYSTEM),
+                            StrId::STR_CAT_SYSTEM)
+            .inSection(SettingsSection::FileBrowser),
         SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
-                            "libraryUseMetadata", StrId::STR_CAT_SYSTEM),
+                            "libraryUseMetadata", StrId::STR_CAT_SYSTEM)
+            .inSection(SettingsSection::Library),
         SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
-                            "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM),
+                            "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM)
+            .inSection(SettingsSection::FileBrowser),
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
-                            "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM),
+                            "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM)
+            .inSection(SettingsSection::FileBrowser),
 
         // OPDS download folder: persisted + web-exposed, but category-less so it
         // is hidden from the on-device Settings screen (edited via OPDS UI).

@@ -4,7 +4,6 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
-#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -42,15 +41,48 @@
 
 namespace fui = freeink::ui;
 
-SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiTabListActivity("Settings", renderer, mappedInput) {}
+namespace {
+std::vector<SettingInfo>& sectionOf(SettingsBySection& out, const SettingsSection section) {
+  return out[static_cast<size_t>(section)];
+}
 
-void SettingsActivity::rebuildSettingsLists() {
-  displaySettings.clear();
-  readerSettings.clear();
-  controlsSettings.clear();
-  systemSettings.clear();
+// Shared-list filtering for this board; false drops the row from the device UI
+// (it stays in the shared list for the web settings API).
+SettingsSection sectionFor(const SettingInfo& setting);
 
+bool showOnDevice(const SettingInfo& setting) {
+  if (sectionFor(setting) == SettingsSection::End || home_button::isSetting(setting.valuePtr)) return false;
+  // The sunlight fading fix is a grayscale-waveform compensation that does
+  // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
+  if (setting.valuePtr == &CrossPointSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
+    return false;
+  }
+  // Merged into the Text Settings screen.
+  if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
+  if (BoardConfig::hasHomeKey() && setting.valuePtr == &CrossPointSettings::longPressMenuFunction) return false;
+  if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
+      SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
+    return false;
+  }
+  return true;
+}
+
+// End = not a row here: other categories (KOReader Sync, Status Bar, ...)
+// only group the web UI; their rows live on their own sub-screens.
+SettingsSection sectionFor(const SettingInfo& setting) {
+  if (setting.section != SettingsSection::End) return setting.section;
+  if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
+  if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
+  if (setting.category == StrId::STR_CAT_CONTROLS) return SettingsSection::Controls;
+  if (setting.category == StrId::STR_CAT_SYSTEM) return SettingsSection::General;
+  return SettingsSection::End;
+}
+
+// Device-only action rows added per section, beyond the shared list.
+constexpr size_t EXTRA_ROWS_PER_SECTION = 4;
+}  // namespace
+
+void buildSettingsSections(SettingsBySection& out) {
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
@@ -60,125 +92,87 @@ void SettingsActivity::rebuildSettingsLists() {
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
 
-  for (const auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
-    if (setting.category == StrId::STR_NONE_OPT || home_button::isSetting(setting.valuePtr)) continue;
-    if (setting.category == StrId::STR_CAT_DISPLAY) {
-      // The sunlight fading fix is a grayscale-waveform compensation that does
-      // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
-      if (setting.valuePtr == &CrossPointSettings::fadingFix &&
-          (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
-        continue;
-      }
-      displaySettings.push_back(setting);
-    } else if (setting.category == StrId::STR_CAT_READER) {
-      // Settings merged into "Text Settings"
-      // (they stay in the shared list for the web settings API)
-      if (setting.inTextSettings) continue;
-      readerSettings.push_back(setting);
-    } else if (setting.category == StrId::STR_CAT_CONTROLS) {
-      if (BoardConfig::hasHomeKey() && setting.valuePtr == &CrossPointSettings::longPressMenuFunction) continue;
-      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
-          SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
-        continue;
-      }
-      controlsSettings.push_back(setting);
-    } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      systemSettings.push_back(setting);
-    }
+  auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
+
+  std::array<size_t, SETTINGS_SECTION_COUNT> counts{};
+  for (const auto& setting : all) {
+    if (showOnDevice(setting)) ++counts[static_cast<size_t>(sectionFor(setting))];
+  }
+  for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
+    out[i].clear();
+    out[i].reserve(counts[i] + EXTRA_ROWS_PER_SECTION);
   }
 
-  // Append device-only ACTION items
-  if (!BoardConfig::hasTouch()) {
-    controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
-  }
+  auto& general = sectionOf(out, SettingsSection::General);
+  auto& reader = sectionOf(out, SettingsSection::Reader);
+  auto& controls = sectionOf(out, SettingsSection::Controls);
+  auto& fileBrowser = sectionOf(out, SettingsSection::FileBrowser);
+  auto& network = sectionOf(out, SettingsSection::Network);
+  auto& system = sectionOf(out, SettingsSection::System);
+
+  // Language leads so a user stuck in an unfamiliar language finds it first.
+  general.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  general.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
+  reader.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
+  reader.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   if (BoardConfig::hasHomeKey()) {
-    controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
+    controls.push_back(SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
   }
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  // Clock configuration only exists where the RTC probe found hardware; on
-  // clockless boards there is nothing to set.
+  if (!BoardConfig::hasTouch()) {
+    controls.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  }
+
+  for (auto& setting : all) {
+    if (!showOnDevice(setting)) continue;
+    sectionOf(out, sectionFor(setting)).push_back(std::move(setting));
+  }
+
+  // Clock configuration only exists where the RTC probe found hardware.
   if (halClock.isAvailable()) {
-    systemSettings.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
+    general.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
   }
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  reader.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  fileBrowser.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+
+  network.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
+  network.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  network.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  readerSettings.insert(readerSettings.begin(),
-                        SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
-  readerSettings.insert(readerSettings.begin() + 1,
-                        SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
-  readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
-
-  // Update currentSettings pointer and count for the active category
-  switch (selectedCategoryIndex) {
-    case 0:
-      currentSettings = &displaySettings;
-      break;
-    case 1:
-      currentSettings = &readerSettings;
-      break;
-    case 2:
-      currentSettings = &controlsSettings;
-      break;
-    case 3:
-      currentSettings = &systemSettings;
-      break;
-  }
-  settingsCount = static_cast<int>(currentSettings->size());
-  rebuildRowItems();
+  system.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  system.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  system.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
+  system.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
 }
 
-void SettingsActivity::onEnter() {
-  UiTabListActivity::onEnter();
+SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                   const SettingsSection section)
+    : UiListActivity("Settings", renderer, mappedInput), section(section) {}
 
-  // Reset selection to first category (ring position 0, the tab bar, comes
-  // from the base's per-tab nav reset)
-  selectedCategoryIndex = 0;
+void SettingsActivity::onEnter() {
+  UiListActivity::onEnter();
+
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
   syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
 
-  rebuildSettingsLists();
+  rebuildSettings();
 }
 
-void SettingsActivity::selectCategory(const int categoryIndex) {
-  selectedCategoryIndex = categoryIndex;
-  switch (selectedCategoryIndex) {
-    case 0:
-      currentSettings = &displaySettings;
-      break;
-    case 1:
-      currentSettings = &readerSettings;
-      break;
-    case 2:
-      currentSettings = &controlsSettings;
-      break;
-    case 3:
-      currentSettings = &systemSettings;
-      break;
-  }
-  settingsCount = static_cast<int>(currentSettings->size());
-  activeNav().top = 0;  // category switches start the list at the top (no per-tab memory here)
+void SettingsActivity::rebuildSettings() {
+  SettingsBySection all;
+  buildSettingsSections(all);
+  settings = std::move(all[static_cast<size_t>(section)]);
   rebuildRowItems();
 }
 
-// Rebuilds rowValues_/rowItems_ (label + actionValue) for *currentSettings.
-// Structural — call only when the active category or a category's setting
-// list changes, never from buildScreen(), which only refreshes rowValues_
-// content and rowItems_[].value pointers in place.
+// Rebuilds rowValues_/rowItems_ (label + actionValue) for settings.
+// Structural — call only when the setting list changes, never from
+// buildScreen(), which only refreshes rowValues_ content and rowItems_[].value
+// pointers in place.
 void SettingsActivity::rebuildRowItems() {
-  const auto& settings = *currentSettings;
   rowValues_.assign(settings.size(), std::string());
   rowItems_.clear();
   rowItems_.reserve(settings.size());
@@ -190,35 +184,18 @@ void SettingsActivity::rebuildRowItems() {
   }
 }
 
-void SettingsActivity::onTabAction(const int index) {
-  if (optionPopup.isActive()) return;
-  selectCategory(index);
-  activeNav().selected = 0;  // tab taps land with the tab bar focused
-  // The switched-to tab repaints as the selected pill; a flash overlay on top
-  // of it just repaints the pill in the focused style.
-  app.clearTapFlash();
+const char* SettingsActivity::headerTitle() const {
+  return I18N.get(SETTINGS_SECTION_TITLES[static_cast<size_t>(section)]);
 }
 
 void SettingsActivity::activateIndex(const int index) {
   if (optionPopup.isActive()) return;
-  (void)index;  // toggleCurrentSetting reads the ring position
   // Most rows repaint a different surface (popup, sub-activity, new value);
   // a lingering tap flash would gray an unrelated element.
   app.clearTapFlash();
-  toggleCurrentSetting();
-  // Tap-first: a tapped row is not a cursor position. Leaving it focused
-  // (inverted) after the tap meant the row stayed black once its sub-screen or
-  // popup closed, and Back then had to clear that focus before a second Back
-  // left Settings. Hand the focus back to the tab band; the viewport stays put.
-  if (mappedInput.hasTouch()) {
-    activeNav().selected = 0;
-  }
-}
-
-void SettingsActivity::onExit() {
-  Activity::onExit();
-
-  UITheme::getInstance().reload();  // Re-apply theme in case it was changed
+  nav.selected = index;
+  toggleSelectedSetting();
+  requestUpdate();
 }
 
 void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr) {
@@ -237,50 +214,14 @@ bool SettingsActivity::handleCustomInput() {
   return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
-void SettingsActivity::stepTab(const int direction) {
-  // Ring position 0 stays on the tab bar; a row selection collapses to the
-  // new category's first row (per-tab memory is deliberately not kept here).
-  const bool onTabBar = ringPos() == 0;
-  selectedCategoryIndex = direction > 0 ? ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount)
-                                        : ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
-  selectCategory(selectedCategoryIndex);
-  activeNav().selected = onTabBar ? 0 : 1;
-  requestUpdate();
-}
-
-bool SettingsActivity::handleButtons() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (ringPos() == 0) {
-      stepTab(1);
-    } else {
-      toggleCurrentSetting();
-      requestUpdate();
-    }
-    return true;
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (ringPos() > 0) {
-      activeNav().selected = 0;
-      requestUpdate();
-    } else {
-      SETTINGS.saveToFile();
-      onGoHome();
-    }
-    return true;
-  }
-
-  return false;
-}
-
-void SettingsActivity::toggleCurrentSetting() {
+void SettingsActivity::toggleSelectedSetting() {
   mappedInput.resetHomeButtonInput();
-  int selectedSetting = ringPos() - 1;
-  if (selectedSetting < 0 || selectedSetting >= settingsCount) {
+  const int selectedSetting = nav.selected;
+  if (selectedSetting < 0 || selectedSetting >= static_cast<int>(settings.size())) {
     return;
   }
 
-  const auto& setting = (*currentSettings)[selectedSetting];
+  const auto& setting = settings[selectedSetting];
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
   const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
 
@@ -303,7 +244,7 @@ void SettingsActivity::toggleCurrentSetting() {
                          SETTINGS.*valuePtr = idx;
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
-                         rebuildSettingsLists();
+                         rebuildSettings();
                          applyUiSettingChange(valuePtr);
                        });
       requestUpdate();
@@ -321,7 +262,7 @@ void SettingsActivity::toggleCurrentSetting() {
         valueSetter(idx);
         syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
         SETTINGS.saveToFile();
-        rebuildSettingsLists();
+        rebuildSettings();
       };
       if (!setting.enumStringValues.empty()) {
         optionPopup.show(setting.nameId, setting.enumStringValues, cur, std::move(onSelect));
@@ -409,7 +350,7 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
-                                 rebuildSettingsLists();
+                                 rebuildSettings();
                                });
         break;
       case SettingAction::TextSettings:
@@ -417,7 +358,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                                                       TextSettingsActivity::Tab::Family),
                                [this](const ActivityResult&) {
                                  // TextSettingsActivity saves on each change; no save needed here.
-                                 rebuildSettingsLists();
+                                 rebuildSettings();
                                });
         break;
       case SettingAction::Language:
@@ -427,7 +368,7 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
-                                 rebuildSettingsLists();
+                                 rebuildSettings();
                                });
         break;
       case SettingAction::Plugins:
@@ -458,9 +399,11 @@ void SettingsActivity::toggleCurrentSetting() {
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
-  rebuildSettingsLists();
-  applyUiSettingChange(setting.valuePtr);
-  activeNav().selected = std::min(ringPos(), settingsCount);
+  const auto valuePtr = setting.valuePtr;  // rebuildSettings() replaces `setting`
+  rebuildSettings();
+  applyUiSettingChange(valuePtr);
+  // Rows can appear/disappear with a change (e.g. the footnote-back toggle).
+  nav.selected = std::min(selectedSetting, static_cast<int>(settings.size()) - 1);
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
@@ -542,15 +485,11 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   // Content below the GUI.drawHeader band, above the button hints.
   screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  buildTabBar(screen);
-
-  // rowItems_ (label/actionValue) was built by rebuildRowItems() when the
-  // category was last selected/rebuilt; only the live value text needs
-  // refreshing here, by assigning into the existing rowValues_ strings (no
-  // vector growth) rather than building a new items/values vector on every
-  // render.
-  const auto& settings = *currentSettings;
+  // rowItems_ (label/actionValue) was built by rebuildRowItems(); only the
+  // live value text needs refreshing here, by assigning into the existing
+  // rowValues_ strings (no vector growth).
   for (size_t i = 0; i < settings.size(); i++) {
     const auto& setting = settings[i];
     const auto labels = setting.enumLabels();
@@ -576,34 +515,20 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (an all-default smallText
-  // fails textStyleUnset and the list would substitute bodyText back); the
-  // common fits-on-one-line case takes the renderer's fast path anyway.
+  // fails textStyleUnset and the list would substitute bodyText back).
   props.labelText = screen.theme().smallText;
   props.labelText.maxLines = 2;
-  syncTabListViewport(screen, props);
+  syncListViewport(screen, props);
   screen.list(props);
 }
 
-void SettingsActivity::drawChrome() {
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-
-  // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
-  // indicator; the rest of the screen renders through the app.
-  // Version rides in the header's trailing label slot: the footer position
-  // conflicts with button hints on non-touch devices.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
-}
-
 void SettingsActivity::drawFooter() {
-  const int ring = ringPos();
-  const auto confirmLabel =
-      (ring == 0) ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-                  : (ring > 0 && (*currentSettings)[ring - 1].nameId == StrId::STR_TIME_TO_SLEEP ? tr(STR_SELECT)
-                                                                                                 : tr(STR_TOGGLE));
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const int selected = nav.selected;
+  const bool picker =
+      selected >= 0 && selected < static_cast<int>(settings.size()) &&
+      (settings[selected].type == SettingType::ACTION || settings[selected].nameId == StrId::STR_TIME_TO_SLEEP);
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), picker ? tr(STR_SELECT) : tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
