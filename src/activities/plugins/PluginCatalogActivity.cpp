@@ -786,8 +786,9 @@ void PluginCatalogActivity::downloadFinished(const bool cancelled) {
 HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& item) {
   session.reset();
   const std::string subdir = substituted(manifest.bundleSubdir, &item);
-  // Reject path traversal in the subdir (a hostile catalog could escape).
-  if (subdir.empty() || subdir.find("..") != std::string::npos || subdir.front() == '/') {
+  // Reject traversal, the current-directory alias, and ambiguous backslash separators.
+  if (subdir.empty() || subdir == "." || subdir.find("..") != std::string::npos ||
+      subdir.find('\\') != std::string::npos || subdir.front() == '/') {
     return HttpDownloader::FILE_ERROR;
   }
   std::string root = downloadDir();
