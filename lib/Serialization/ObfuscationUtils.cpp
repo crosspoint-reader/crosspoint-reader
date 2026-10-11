@@ -5,6 +5,9 @@
 #include <esp_mac.h>
 #include <wolfssl/wolfcrypt/coding.h>
 
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 
@@ -50,7 +53,8 @@ std::string deobfuscateFromBase64(const char* encoded, bool* ok) {
   return deobfuscateFromBase64(encoded, std::numeric_limits<size_t>::max(), ok, nullptr);
 }
 
-std::string deobfuscateFromBase64(const char* encoded, const size_t maxDecodedLength, bool* ok, bool* tooLong) {
+std::string deobfuscateFromBase64(const char* encoded, const size_t maxDecodedLength, bool* ok, bool* tooLong,
+                                  const uint8_t* writerKey) {
   if (tooLong) *tooLong = false;
   if (encoded == nullptr || encoded[0] == '\0') {
     if (ok) *ok = false;
@@ -88,8 +92,32 @@ std::string deobfuscateFromBase64(const char* encoded, const size_t maxDecodedLe
     if (tooLong) *tooLong = true;
     return "";
   }
-  xorTransform(result);
+  if (writerKey) {
+    xorTransform(result, writerKey, HW_KEY_LEN);
+  } else {
+    xorTransform(result);
+  }
   return result;
+}
+
+std::string deviceKeyId() {
+  const uint8_t* key = getHwKey();
+  char id[18];
+  snprintf(id, sizeof(id), "%02x-%02x-%02x-%02x-%02x-%02x", key[0], key[1], key[2], key[3], key[4], key[5]);
+  return std::string(id);
+}
+
+bool parseKeyId(const std::string& id, uint8_t key[6]) {
+  if (id.size() != 17) return false;
+  for (size_t i = 0; i < HW_KEY_LEN; i++) {
+    const size_t at = i * 3;
+    if (i > 0 && id[at - 1] != '-') return false;
+    if (!std::isxdigit(static_cast<unsigned char>(id[at])) || !std::isxdigit(static_cast<unsigned char>(id[at + 1]))) {
+      return false;
+    }
+    key[i] = static_cast<uint8_t>(std::strtoul(id.substr(at, 2).c_str(), nullptr, 16));
+  }
+  return true;
 }
 
 void selfTest() {
