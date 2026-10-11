@@ -202,4 +202,43 @@ class CrossPointWebServer {
   // POST /api/plugin-fs?plugin&path -> write one small file. /upload already
   // covers this; kept for compatibility with upstream-written plugins.
   void handlePluginFs();
+  void handlePluginFsData();
+
+  // The Plugins page (/plugins): install, remove, enable and disable. Plugins installed here go to
+  // /.crosspoint/plugins, which the web file endpoints leave alone unless Show Hidden Files is on;
+  // one copied by hand into /plugins or /.plugins is listed and managed the same way.
+  void handlePluginsPage() const;
+  // The File Manager's Details dialog: its script, and an EPUB's own OPF to read metadata from.
+  void handleMetadataEditorJs() const;
+  void handleBookOpf() const;
+  void handlePluginInstallBegin() const;  // POST /api/plugins/begin?name -> fresh staging folder
+  void handlePluginInstallFile();         // POST /api/plugins/file?name&file (raw body) -> one file
+  void handlePluginInstallFileData();
+  void handlePluginInstallCommit() const;  // POST /api/plugins/commit?name -> staging replaces the plugin
+  void handlePluginRemove() const;         // POST /api/plugins/remove?name
+  void handlePluginEnable() const;         // POST /api/plugins/enable?name&on=0|1
+
+  // A raw request body streamed to a file. Raw, so binary-safe: the framework's buffered "plain"
+  // argument is built with String(char*) and ends at the first NUL byte. Written to <path>.part,
+  // capped as it arrives, and renamed over <path> only once complete, so a body that turns out too
+  // large, or a client that goes away, never replaces a file that was there. One instance serves
+  // every such route: the server handles one request at a time.
+  struct RawFileUpload {
+    FsFile file;
+    String path;  // the validated target
+    String temp;  // written here, renamed over `path` once complete
+    size_t cap = 0;
+    size_t written = 0;
+    bool started = false;    // a raw body arrived
+    int status = 0;          // 0 while all is well, else the HTTP status to answer with
+    const char* error = "";  // its message
+
+    // RAW_START: `target` is the validated path, or empty when the request named none it may write.
+    void start(const String& target, size_t maxBytes);
+    // RAW_WRITE, RAW_END and RAW_ABORTED.
+    void feed(const HTTPRaw& raw);
+    void fail(int httpStatus, const char* message);
+    // The response once the body is in: false (and an error sent) when it failed or never streamed.
+    bool answerFailure(WebServer& server);
+  } rawUpload;
 };

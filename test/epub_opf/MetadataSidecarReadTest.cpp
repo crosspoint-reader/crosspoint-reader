@@ -62,10 +62,10 @@ TEST_F(MetadataSidecarReadTest, ReadsTheSidecarOfABookThatIsNotAnEpub) {
   EXPECT_EQ(out.asin, "B008H8SP6Q");
 }
 
-// Contract with plugins/metadata-editor, which now edits sidecars for every book format: the document
-// its freshDoc() + writeInto() produce, with the "Sort author as" field filled, must give the Library
-// its primary author and filing name. The editor runs in a browser and cannot be tested here, so this
-// pins the shape the two sides agree on.
+// Contract with the File Manager's Details dialog (src/network/html/js/metadata-editor.js), which edits
+// sidecars for every book format: the document its freshDoc() + writeInto() produce, with the "Sort
+// author as" field filled, must give the Library its primary author and filing name. The editor runs in
+// a browser and cannot be tested here, so this pins the shape the two sides agree on.
 TEST_F(MetadataSidecarReadTest, ReadsTheShapeTheMetadataEditorWritesWithASortName) {
   writeSidecar(
       "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"

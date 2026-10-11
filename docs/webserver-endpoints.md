@@ -71,6 +71,8 @@ the setup page and every other page redirects (`302`) to `/setup`.
 | `/stats`      | Reading Stats                              |
 | `/fonts`      | Font Manager                               |
 | `/dictionary` | Dictionaries: lists, installs and removes StarDict dictionaries |
+| `/plugins`    | Plugins: install, switch off and remove web-interface plugins |
+| `/js/metadata-editor.js` | The File Manager's Details dialog, loaded on first use |
 | `/systeminfo` | System Info                                |
 | `/diagnostics`| Diagnostics: device status, boot and sleep history, and a report to download |
 
@@ -433,7 +435,9 @@ Folder created: NewFolder
 
 ### POST `/rename` - Rename File or Folder
 
-Renames an item in place. Book layout caches under the item are cleared first.
+Renames an item in place. Books keep their reading position, bookmarks, place in
+the recent list and reading history: everything the reader keeps under a book's
+path moves with it (`BookRelocation`). Sidecar files are not renamed with the book.
 
 **Request:**
 ```bash
@@ -469,7 +473,8 @@ Sidecar files are not renamed with the book (see [sidecar-files.md](sidecar-file
 
 ### POST `/move` - Move File or Folder
 
-Moves an item into another folder, keeping its name.
+Moves an item into another folder, keeping its name. As for `/rename`, books
+keep their reading position, bookmarks, recent-list row and reading history.
 
 **Request:**
 ```bash
@@ -801,16 +806,57 @@ curl http://crosspoint.local/api/plugins
 
 **Response (200 OK):**
 ```json
-[{"name":"organize-by-author","title":"Organize by Author","mount":"files"}]
+[{"name":"organize-by-author","title":"Organize by Author","mount":"files","root":"/.crosspoint/plugins",
+  "disabled":false,"description":"Sorts the EPUBs of one folder ...","version":"1.0.0"}]
 ```
 
-| Field   | Description                                                              |
-| ------- | ------------------------------------------------------------------------ |
-| `name`  | Folder name; the value to pass to `/plugin`                              |
-| `title` | From `manifest.json`, falling back to `name`                             |
-| `mount` | `settings` (default) or `files` — which page loads the plugin            |
+| Field          | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `name`         | Folder name; the value to pass to `/plugin`                              |
+| `title`        | From `manifest.json`, falling back to `name`                             |
+| `mount`        | `settings` (default) or `files` — which page loads the plugin            |
+| `root`         | The plugins folder it was found in                                       |
+| `disabled`     | Switched off on the Plugins page; the pages do not load it               |
+| `description`, `version`, `requires`, `allowedHosts` | From `manifest.json`, when present |
 
 Always 200 with an array; an unreadable or absent plugins folder yields `[]`.
+
+### GET `/api/book/opf` - An EPUB's Own Metadata
+
+`?path=<epub>` answers the OPF package document from inside the book, as it is
+(`application/oebps-package+xml`), without the `.opf` sidecar that may override
+it. The File Manager's Details dialog reads a book's own metadata from it instead
+of downloading the whole book. `404` for a path that is not an EPUB, `422` when
+the book has no OPF. A read that fails part-way ends the response early, which a
+client sees as malformed XML.
+
+```bash
+curl "http://crosspoint.local/api/book/opf?path=/Books/mybook.epub"
+```
+
+### Installing and managing plugins
+
+What the Plugins page (`GET /plugins`) uses. Installs go to
+`/.crosspoint/plugins/<name>`, which the file endpoints leave alone unless
+**Show Hidden Files** is on. `name` and `file` must each be a single path
+component.
+
+| Endpoint | Does |
+| --- | --- |
+| `POST /api/plugins/begin?name=` | Starts an install: an empty staging folder `<name>.new` |
+| `POST /api/plugins/file?name=&file=` | One file into the staging folder; the raw request body is the file (binary-safe, at most 512 KB) |
+| `POST /api/plugins/commit?name=` | Replaces the installed plugin with the staging folder in one rename; `400` without a `plugin.js` |
+| `POST /api/plugins/remove?name=` | Removes the plugin from every plugins folder; `404` if there is none |
+| `POST /api/plugins/enable?name=&on=0` | Switches the plugin off (a `disabled` file in its folder); `on=1` switches it back on |
+
+```bash
+curl -X POST "http://crosspoint.local/api/plugins/begin?name=my-plugin"
+curl -X POST -H "Content-Type: application/octet-stream" --data-binary @plugin.js \
+  "http://crosspoint.local/api/plugins/file?name=my-plugin&file=plugin.js"
+curl -X POST "http://crosspoint.local/api/plugins/commit?name=my-plugin"
+```
+
+Each answers `{"ok":true}`, or an error status with `{"error":"..."}`.
 
 ### GET `/api/relay` - Fetch a URL for a Plugin
 
@@ -840,9 +886,10 @@ forwarded, so the caller infers the type from what it asked for.
 - **Allowlisted per plugin.** The host must appear in that plugin's
   `manifest.json` `allowedHosts`. A bare entry matches exactly; one starting
   with a dot matches that suffix. No list, no access.
-- **Redirects are not followed.** A 3xx is returned as-is. Following them would
-  mean the host actually fetched was never checked against the allowlist — the
-  plugin may relay the `Location` itself, which is judged on its own merits.
+- **Redirects stay inside the allowlist.** A redirect is followed only to a host
+  the same `allowedHosts` list allows; one to any other host fails the request
+  (`502`). Following them blindly would mean the host actually fetched was never
+  checked against the allowlist.
 - **Streamed, not buffered**, with a 4MB ceiling. Nothing large is resident:
   during a web session the largest free block is around 53KB, so a buffered
   response would fail on an ordinary cover image.
@@ -870,7 +917,7 @@ curl -X POST "http://crosspoint.local/api/fetch?plugin=my-plugin&url=https%3A%2F
 # -> {"ok":true,"dest":"/Books/book.epub"}
 ```
 
-Same allowlist and no-redirect rules as `/api/relay`. `dest` is normalised, so `..`
+Same allowlist and redirect rules as `/api/relay`. `dest` is normalised, so `..`
 cannot climb above the card root, must name a file (not `/` and no trailing `/`), and is
 judged as an item under [Protected paths](#protected-paths), as `/upload` judges its target
 (`pluginWriteTarget()`). The book's layout cache is invalidated on success.
@@ -893,14 +940,19 @@ curl -X POST --data-binary @cover.jpg \
 # -> {"ok":true,"path":"/Books/book.jpg"}
 ```
 
-Capped at 64KB — the body is buffered by the web server, so bulk transfers
-belong in `/upload`, which streams. `path` passes the same check as `dest` above.
+The body is streamed to the card as it arrives, so binary files arrive intact,
+with any content type except `multipart/form-data` (which the web server parses
+as a form; send the bytes themselves). It is written to `<path>.part` and renamed
+over `path` at the end, so a body that is too large or cut off never replaces an
+existing file. Capped at 64KB, to keep it to small files; bulk transfers belong
+in `/upload`. `path` passes the same check as `dest` above.
 
 | Status | Cause                                   |
 | ------ | --------------------------------------- |
-| 400    | Missing `plugin`/`path`, or a refused path |
+| 400    | Missing `plugin`/`path`, or a refused path; or the upload was cut off |
 | 413    | Body over 64KB — use `/upload`          |
-| 500    | Could not create the file, or short write |
+| 415    | A `multipart/form-data` body            |
+| 500    | Could not create the file, short write, or could not replace the existing file |
 
 ### GET `/plugin` - Serve a Plugin File
 

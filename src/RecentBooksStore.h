@@ -98,6 +98,10 @@ class RecentBooksStore {
 
   // Remove a book from the recent list by path
   void removeBook(const std::string& path);
+  // A book renamed or moved on the card (BookRelocation): its row follows it, keeping its place and
+  // its per-book overrides. Its cover thumbnail lives in the book's cache folder, which moved too.
+  void relocate(const std::string& oldPath, const std::string& newPath, const std::string& oldCacheDir,
+                const std::string& newCacheDir);
 
   // Get the list of recent books (most recent first). The reference is good while a Hold lives.
   // Called without one, the list is loaded and stays until the next Hold to end lets it go.

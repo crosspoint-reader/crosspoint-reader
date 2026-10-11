@@ -1,4 +1,7 @@
 {
   "title": "Organize by Author",
+  "version": "1.0.0",
+  "author": "jpirnay",
+  "description": "Sorts the EPUBs of one folder into a folder per author, taking their cover and metadata files along. Shows a preview first.",
   "mount": "files"
 }

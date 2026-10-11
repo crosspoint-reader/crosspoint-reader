@@ -177,6 +177,16 @@ void GlobalBookmarkIndex::removeBySourcePath(const std::string& sourcePath) {
   }
 }
 
+void GlobalBookmarkIndex::relocate(const std::string& oldPath, const std::string& newPath,
+                                   const std::string& newCacheDir) {
+  if (!loaded) load();
+  auto it = findBySourcePath(oldPath);
+  if (it == entries.end()) return;
+  it->sourcePath = newPath;
+  it->cacheDir = newCacheDir;
+  save();
+}
+
 bool GlobalBookmarkIndex::reconcile() {
   if (!loaded) load();
   const size_t before = entries.size();

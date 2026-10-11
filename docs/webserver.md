@@ -146,6 +146,7 @@ same links along its top:
 - **Font Manager**: install and remove SD-card fonts (below)
 - **Dictionaries**: install and remove dictionaries for word lookup (below)
 - **Reading Stats**: your reading history (below)
+- **Plugins**: install, switch off and remove web-interface plugins (below)
 - **System Info**: device status and version, WiFi state, IP address, free memory and SD card usage
 - **Diagnostics**: how the device last slept and started, and a report for bug reports (below)
 
@@ -254,9 +255,12 @@ the firmware version, as one file to attach to a bug report. It leaves out the I
 
 ### Plugins
 
-Small add-ons kept on the SD card can add cards to the File Manager and Settings pages, for example
-to edit a book's cover and metadata. They appear on their own once installed. See
-[SD-card web plugins](./sd-plugins.md).
+Small add-ons kept on the SD card can add cards to the File Manager and Settings pages. The
+**Plugins** page lists the installed ones and lets you switch each off or remove it, installs new
+ones from the catalog of this project's plugins (your browser needs an internet connection for
+that) or from a `.zip` file, and shows which internet sites each plugin may contact through the
+reader. Only install plugins you trust: a plugin can do anything this web interface can do with your
+SD card. See [SD-card web plugins](./sd-plugins.md).
 
 ### Other ways in
 

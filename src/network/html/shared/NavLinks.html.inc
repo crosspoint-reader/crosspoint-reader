@@ -8,6 +8,7 @@
   <a href="/fonts">Font Manager</a>
   <a href="/dictionary">Dictionaries</a>
   <a href="/stats">Reading Stats</a>
+  <a href="/plugins">Plugins</a>
   <a href="/systeminfo">System Info</a>
   <a href="/diagnostics">Diagnostics</a>
 </nav>

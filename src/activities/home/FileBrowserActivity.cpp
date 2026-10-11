@@ -33,6 +33,7 @@
 #include "../util/KeyboardEntryActivity.h"
 #include "BookDetails.h"
 #include "BookInfoActivity.h"
+#include "BookRelocation.h"
 #include "CoverThumbLoader.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -1321,7 +1322,8 @@ void FileBrowserActivity::moveToFolder(const std::string& fullPath, const std::s
           renderer.setNextDisplayRefreshMode(HalDisplay::HALF_REFRESH);
           GUI.drawPopup(renderer, message);
         } else {
-          clearFileMetadata(fullPath);
+          // The book keeps its reading position, bookmarks and history under the new path.
+          BookRelocation::moved(fullPath, target);
           bookRows.clear();
           model.load();
           resetNavigation(nav.selected);

@@ -2,18 +2,19 @@
 // Ported from crosspoint-reader PR #2734 ("feat: Add browser-side plugin system
 // with SD card support", Justin Mitchell / @itsthisjustin). The discovery flow,
 // the registerPlugin handshake and the mount convention are his design; this
-// version drops the device-capability API (relay/crypto/fetch/plugin-fs) and
-// the plugin job queue, keeping only the loader.
+// version leaves out crypto (the browser's crypto.subtle covers it) and the
+// plugin job queue.
 //
 // Discovers plugins from the SD card via /api/plugins, loads each plugin.js,
 // and hands it a container element to render into. A plugin is just JS on the
 // card, so adding one needs no firmware build.
 //
 // Plugins run in the page with full same-origin authority: they call the web
-// server's existing endpoints (/api/files, /mkdir, /move, /delete, /upload,
-// /download) directly with fetch(). The firmware deliberately exposes no
-// outbound-request or crypto endpoint - a plugin can reach the SD card, not
-// the internet.
+// server's endpoints (/api/files, /mkdir, /move, /delete, /upload, /download)
+// directly with fetch(). Beyond the card, the device fetches on a plugin's
+// behalf through relay (GET /api/relay) and fetchToSd (POST /api/fetch), and
+// writeFile (POST /api/plugin-fs) stores a small file. Both outbound calls reach
+// only the hosts in the plugin's manifest "allowedHosts", redirects included.
 window.CrossPoint = window.CrossPoint || {
   _pending: null,
   // Called by a plugin at top level; loadPlugins() picks the function up after
@@ -54,6 +55,7 @@ async function loadPlugins(mount) {
 
   for (const p of list) {
     if ((p.mount || 'settings') !== mount) continue;
+    if (p.disabled) continue;  // switched off on the Plugins page; still installed
 
     const container = document.createElement('div');
     container.className = 'card';

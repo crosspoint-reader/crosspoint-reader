@@ -1,1 +1,8 @@
-{ "title": "Hello Plugin", "mount": "settings" }
+{
+  "title": "Hello Plugin",
+  "version": "1.0.0",
+  "author": "jpirnay",
+  "description": "The smallest working plugin, as a starting point for plugin authors.",
+  "mount": "settings",
+  "catalog": false
+}
