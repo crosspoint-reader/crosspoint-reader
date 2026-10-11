@@ -123,6 +123,9 @@ class MappedInputManager {
   // Same, for one logical button. Only sees presses since the last update(); one drained before
   // it is in wasPressed() instead, so a caller that cannot call update() itself checks both.
   bool hasPendingPress(Button button) const;
+  // Whether taps reach the app: off when the user turned the touch controls off. Says nothing
+  // about whether the board has a digitiser; pair it with hasTouch().
+  bool touchEventsEnabled() const { return touchEventsEnabled_; }
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
 

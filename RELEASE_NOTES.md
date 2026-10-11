@@ -46,6 +46,8 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 ### Touch
 
 - **Fix: a swipe on Bookmarks, Starred pages, Wi-Fi or the OPDS catalog no longer acts on the selected row.** A vertical swipe over these lists was passed on as a Left/Right press. Swiping up on Bookmarks or Starred pages deleted the highlighted entry, and on Wi-Fi it started a rescan. On Bookmarks, Starred pages and Wi-Fi a swipe now does nothing, while the OPDS catalog pages (see OPDS below). On other lists it still pages.
+- **File Transfer, its hotspot, Calibre Wireless and USB Drive have an Exit button on a touch screen**, below their status. It does what **Back** does. USB Drive shows it only until a computer has the card, as it does Back.
+- **Fix: tapping Back at the bottom of File Transfer and the hotspot did nothing.** On a reader without a Back key, such as the T5 S3 or the X4 Pro, a held home key was the only way out.
 
 ### OPDS
 
@@ -105,6 +107,9 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
   - A plugin's requests through the reader now follow a redirect only to a site the plugin is allowed to reach.
   - A file a plugin saves is no longer cut short at the first zero byte.
   - A plugin that needs something this firmware lacks is refused with a message instead of failing.
+- **A saved Wi-Fi password that stopped working is asked for again.** When the network turns the saved password down (it was changed on the router, say), the reader used to report only a timeout. Now the keyboard opens headed **Saved password may be wrong**, and a password that works can be saved over the old one. On the automatic connect, the reader first tries your other saved networks in range.
+- **Fix: after a failed connect, the reader kept trying in the background.** It went on retrying the network with the error already on screen.
+- **Saved Wi-Fi passwords work after the card moves to another reader.** Passwords are stored scrambled with the reader's own key, so on another reader, or from a copied `wifi.json`, they came out wrong and the network turned them down. They are now read with the key of the reader that saved them, and stored again under the new reader's key. A card that an older firmware has already opened on the other reader cannot be recovered this way: type those passwords once more.
 
 ### Languages
 
