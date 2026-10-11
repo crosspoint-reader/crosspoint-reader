@@ -9,12 +9,16 @@ card on that page. Adding or changing a plugin never needs a firmware build.
 > ("feat: Add browser-side plugin system with SD card support") by Justin
 > Mitchell ([@itsthisjustin](https://github.com/itsthisjustin)). The folder
 > layout, the `/api/plugins` and `/plugin` contract, the `registerPlugin`
-> handshake and the `mount` convention are his design, and are kept compatible
-> so a plugin written for either firmware works on both. This port takes a
-> subset of that branch: the relay, fetch-to-SD and small-file endpoints are
-> here (with the host allowlist upstream had removed), while its crypto
-> endpoint, job queue, on-device catalog screens and content-protection work
-> are not — see [Trust](#trust) and `allowedHosts` below.
+> handshake and the `mount` convention are his design and are kept compatible: a
+> plugin that only uses the page and these two endpoints runs on both firmwares.
+> The device-side `api` calls are not: upstream has since changed them
+> (`relay(method, url, headers, body)` returning `{status, headers, body}`, a
+> base64 `writeFile`), so a plugin that relays or writes files is written for one
+> firmware or the other. This port takes a subset of that branch: the relay,
+> fetch-to-SD and small-file endpoints are here (with the host allowlist upstream
+> had removed), while its crypto endpoint, job queue, on-device catalog screens
+> and content-protection work are not — see [Trust](#trust) and `allowedHosts`
+> below.
 
 Plugins extend the **web interface**, not the reader. Nothing runs on the
 device: the firmware only enumerates the folders and serves their bytes, and the

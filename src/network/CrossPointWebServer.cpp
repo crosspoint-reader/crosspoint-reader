@@ -2793,6 +2793,9 @@ void CrossPointWebServer::handlePluginList() const {
       if (deserializeJson(m, manifest) == DeserializationError::Ok) {
         if (m["title"].is<const char*>()) doc["title"] = m["title"];
         if (m["mount"].is<const char*>()) doc["mount"] = m["mount"];
+        // The page refuses a plugin whose required capabilities it lacks (missingCapabilities() in
+        // PluginHost.js.inc), which it can only do if the list says what those are.
+        if (m["requires"].is<JsonArrayConst>()) doc["requires"] = m["requires"];
       } else {
         LOG_DBG("WEB", "Plugin %s: unparseable manifest.json", e.name.c_str());
       }
