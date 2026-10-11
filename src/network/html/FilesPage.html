@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Files - CrossPoint Reader</title>
+  <title>Files - %%CROSSPOINT%%</title>
   <script src="/js/jszip.min.js"></script>
   <style>
     html {
@@ -1904,7 +1904,7 @@
 
   <div class="card">
     <p style="text-align: center; color: #95a5a6; margin: 0;">
-      CrossPoint E-Reader • Open Source
+      %%CROSSPOINT%% • Open Source
     </p>
   </div>
 
@@ -2170,7 +2170,7 @@
     const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
     if (currentPath !== '/') {
       const leaf = currentPath.split('/').filter(Boolean).pop();
-      if (leaf) document.title = leaf + ' - Files - CrossPoint Reader';
+      if (leaf) document.title = leaf + ' - Files - %%CROSSPOINT%%';
     }
     
     // Network status monitoring
@@ -4158,7 +4158,7 @@
       }
       // Extract text from log entries
       const entries = logContainer.querySelectorAll('.log-entry');
-      let logText = `CrossPoint Reader ${crosspointVersion} - EPUB Conversion Log\n`;
+      let logText = `%%CROSSPOINT%% ${crosspointVersion} - EPUB Conversion Log\n`;
       logText += `Generated: ${new Date().toLocaleString()}\n`;
       logText += `${'='.repeat(60)}\n\n`;
 
