@@ -201,8 +201,8 @@ class CrossPointWebServer {
   void handlePluginFsData();
 
   // The Plugins page (/plugins): install, remove, enable and disable. Plugins installed here go to
-  // /.crosspoint/plugins, which the web file endpoints cannot write; one copied by hand into
-  // /plugins or /.plugins is listed and managed the same way.
+  // /.crosspoint/plugins, which the web file endpoints leave alone unless Show Hidden Files is on;
+  // one copied by hand into /plugins or /.plugins is listed and managed the same way.
   void handlePluginsPage() const;
   void handlePluginInstallBegin() const;  // POST /api/plugins/begin?name -> fresh staging folder
   void handlePluginInstallFile();         // POST /api/plugins/file?name&file (raw body) -> one file

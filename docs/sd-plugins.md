@@ -222,7 +222,9 @@ runs. A folder copied by hand into `/plugins` or `/.plugins` still works and is
 listed and managed the same way.
 
 **Switch off** puts a `disabled` file in the plugin's folder: the pages skip the
-plugin, and the setting holds for every browser.
+plugin, and the setting holds for every browser. It only stops the pages loading
+it: `/plugin`, `/api/relay` and `/api/fetch` still answer for it. That is no
+loss of protection, since any script in a page already has the same reach.
 
 Manifest fields the page shows: `title`, `version`, `description`, `mount`,
 `allowedHosts` (see [Layout](#layout) for the rest).

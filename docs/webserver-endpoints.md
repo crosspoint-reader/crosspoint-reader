@@ -763,8 +763,9 @@ Always 200 with an array; an unreadable or absent plugins folder yields `[]`.
 ### Installing and managing plugins
 
 What the Plugins page (`GET /plugins`) uses. Installs go to
-`/.crosspoint/plugins/<name>`, which the file endpoints cannot write. `name` and
-`file` must each be a single path component.
+`/.crosspoint/plugins/<name>`, which the file endpoints leave alone unless
+**Show Hidden Files** is on. `name` and `file` must each be a single path
+component.
 
 | Endpoint | Does |
 | --- | --- |
