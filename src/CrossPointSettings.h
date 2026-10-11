@@ -726,13 +726,12 @@ class CrossPointSettings {
   // which of the two it sits on is showWeatherOnHome.
   uint8_t useWeather = 1;
   // Which entries sit on the home screen (1) rather than behind its "More" entry (0). An entry
-  // with nothing behind it (no bookmarks, no OPDS server, weather off) shows in neither place.
+  // with nothing behind it (no bookmarks, weather off) shows in neither place.
   // Settings has no switch: it is where these are turned back on. See HomeMenu.cpp.
   uint8_t showLibraryOnHome = 1;
   // On by default, because a screen nobody can find is a screen nobody reads.
   uint8_t showReadingStatsOnHome = 1;
   uint8_t showBookmarksOnHome = 1;
-  uint8_t showOpdsBrowserOnHome = 1;
   uint8_t showFileTransferOnHome = 1;
   uint8_t showWeatherOnHome = 1;
   // Include release candidate builds when checking for OTA updates.

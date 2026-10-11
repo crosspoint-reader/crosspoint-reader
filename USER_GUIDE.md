@@ -19,6 +19,7 @@ Welcome to **Witch Reader** firmware. This guide outlines the hardware controls,
       - [3.6.1 Calibre Wireless Transfers](#361-calibre-wireless-transfers)
       - [3.6.2 USB Transfer (over the cable)](#362-usb-transfer-over-the-cable)
       - [3.6.3 USB Drive (X4 Pro and LilyGo T5 S3)](#363-usb-drive-x4-pro-and-lilygo-t5-s3)
+      - [3.6.4 OPDS Catalogs](#364-opds-catalogs)
     - [3.7 Settings](#37-settings)
       - [3.7.1 Display](#371-display)
       - [3.7.2 Reader](#372-reader)
@@ -158,11 +159,11 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. It shows the most recently read book as a cover thumbnail and provides navigation to **[Reading Mode](#4-reading-mode)**, the **[Library](#33-library-screen)**, **Reading Stats**, the **[File Transfer](#36-file-transfer-screen)** screen, and **[Settings](#37-settings)**. Bookmarks, the OPDS browser and a weather panel appear as well once they have something to show.
+The Home screen is the main entry point to the firmware. It shows the most recently read book as a cover thumbnail and provides navigation to **[Reading Mode](#4-reading-mode)**, the **[Library](#33-library-screen)**, **Reading Stats**, the **[File Transfer](#36-file-transfer-screen)** screen, and **[Settings](#37-settings)**. Bookmarks and a weather panel appear as well once they have something to show.
 
 Under each book's cover is a line of its reading history, such as *Read 3h 18m over 5 days - last 6m ago*. It counts the days you opened the book on, not the number of times you opened it. Each theme shows as much of it as it has room for: where the full line would not fit, as on the X3's Lyra Carousel or at the Large UI font size, a short form such as *3h 18m · 5d* sits in the cover's badge instead. The day count is left out until the device's clock has been set.
 
-**Choosing what is on the Home screen:** **Settings → Display → Home screen** has one switch each for Library, Reading stats, Bookmarks, OPDS browser, File transfer and Weather. Everything is on by default. Anything you switch off moves behind a **More** row above Settings, so it is still one step away. More only appears when something has been moved there. Settings itself cannot be switched off, because it is where you undo the choice.
+**Choosing what is on the Home screen:** **Settings → Display → Home screen** has one switch each for Library, Reading stats, Bookmarks, File transfer and Weather. Everything is on by default. Anything you switch off moves behind a **More** row above Settings, so it is still one step away. More only appears when something has been moved there. Settings itself cannot be switched off, because it is where you undo the choice.
 
 **Correcting a book's title or author:** a metadata file next to a book with the same name (`Some Book.opf` beside `Some Book.epub`) takes precedence over the details inside the book. It works for every format the reader opens: EPUB, XTC, and TXT and Markdown, which have no details of their own. The metadata editor plugin in the web interface writes one for you, including the name the author is sorted under in the Library's **Authors** tab (**Sort author as**). When that file is added, changed or removed, over USB or from the plugin, the Library's Details and Covers views show the new details without the book having to be opened first, and so does the Home screen for an EPUB.
 
@@ -292,6 +293,12 @@ Choose **File Transfer → USB Drive**, then connect the cable. The screen says 
 While the drive is connected the reader is a disk and nothing else — buttons, sleep and the page you were reading are all suspended until you eject.
 
 > These two boards can do this because their USB-C port is wired straight to the processor's own USB hardware. The X3 and X4 cannot: their ESP32-C3 has no USB device controller for it.
+
+### 3.6.4 OPDS Catalogs
+
+Once at least one OPDS server is set up (see [OPDS Servers](#375-opds-servers-multiple-libraries)), **File Transfer** lists **OPDS Browser**. It connects to WiFi by itself and opens the catalog; with more than one server, you pick the server first. Books you download are saved to the **Download folder** chosen under **Settings → System → OPDS Servers** (the card's root unless you change it). How to move through a catalog is described under [Browsing a catalog](#375-opds-servers-multiple-libraries).
+
+**Back** from the top of the catalog returns to Home. If the browser had connected to WiFi, the device restarts quietly on the way, as it does after the other WiFi modes.
 
 ### 3.7 Settings
 
@@ -438,7 +445,6 @@ Moving within a tab follows **[Moving through lists](#moving-through-lists)**.
 - **Check for Updates**: Check for and download Witch Reader firmware updates over WiFi. When a newer release is found, the question to update shows the release's title and the first few lines of its release notes, so you can see what it brings before you install it. The download is always checked against the certificate of GitHub's servers (**Skip HTTPS validation** does not apply), and the firmware against the SHA-256 checksum the release lists, before the reader switches to it. The reader restarts when you leave this screen.
 - **Include Beta Updates**: Whether to include release-candidate builds in update checks. "ON" / "OFF"
 - **SD Firmware Update**: Flash a firmware `.bin` file from the SD card. Press **Confirm** on a file to flash it. The **Options** button hint in the file picker opens a smaller menu than the Library's: the sort and visibility options, **Search**, **Search all folders**, and **Remove** to delete a `.bin` you no longer need.
-- **Switch to USB Drive**: Reboot the device into USB mass-storage mode to access the SD card directly from a computer.
 
 #### 3.7.5 OPDS Servers (Multiple Libraries)
 
@@ -464,7 +470,7 @@ You can also manage OPDS servers from the web interface while in File Transfer m
 3. Use the **OPDS Servers** card to add, edit, or delete entries.
 For web-based WiFi network management, see [Web Settings (WiFi + OPDS)](#376-web-settings-wifi--opds).
 
-**Browsing a catalog.** The catalog follows **[Moving through lists](#moving-through-lists)**.
+**Browsing a catalog.** Open it from **File Transfer → OPDS Browser**. The catalog follows **[Moving through lists](#moving-through-lists)**.
 A short **Left** opens **Search** when the catalog offers one, and a short **Right** opens **Info**
 for the selected book. Where either does not apply, that button does nothing on a short press,
 and its hint shows only the arrow. Hold **Left** / **Right**, or swipe on a touch screen, to page

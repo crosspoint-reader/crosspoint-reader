@@ -32,7 +32,6 @@ class HomeActivity final : public Activity {
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
-  bool hasOpdsServers = false;
   bool coverRendered = false;
   bool coverBufferStored = false;
   // True while the ~52 KB secondary framebuffer is LENT to the cold-cache cover pipeline as

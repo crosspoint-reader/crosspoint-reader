@@ -9,9 +9,9 @@
 // src/activities/settings/OpdsServerListActivity.cpp).
 //
 // The list of configured OPDS servers. Settings mode lists the servers, then "Add Server",
-// "Download folder" and "Filename format"; a server row opens its editor. Picker mode (from Home)
-// lists the servers only, and a server row opens the OPDS browser on that server, carrying the
-// search query it was opened with.
+// "Download folder" and "Filename format"; a server row opens its editor. Picker mode (from File
+// Transfer, or a finished book's author search) lists the servers only, and a server row opens the
+// OPDS browser on that server, carrying the search query it was opened with.
 class OpdsServerListActivity final : public UiListActivity {
  public:
   explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false,
