@@ -227,9 +227,12 @@ access), upload a `.cpfont` file from your computer, or delete a family.
 
 ### Plugins
 
-Small add-ons kept on the SD card can add cards to the File Manager and Settings pages, for example
-to edit a book's cover and metadata. They appear on their own once installed. See
-[SD-card web plugins](./sd-plugins.md).
+Small add-ons kept on the SD card can add cards to the File Manager and Settings pages. The
+**Plugins** page lists the installed ones and lets you switch each off or remove it, installs new
+ones from the catalog of this project's plugins (your browser needs an internet connection for
+that) or from a `.zip` file, and shows which internet sites each plugin may contact through the
+reader. Only install plugins you trust: a plugin can do anything this web interface can do with your
+SD card. See [SD-card web plugins](./sd-plugins.md).
 
 ### Other ways in
 
