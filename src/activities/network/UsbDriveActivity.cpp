@@ -8,6 +8,7 @@
 
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
+#include "components/TouchExitButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -107,7 +108,8 @@ void UsbDriveActivity::loop() {
   // the way out is to eject or unplug.
   const bool canExitWithInput = state == UsbDriveState::WaitingForHost || startFailed;
   if (canExitWithInput && (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-                           mappedInput.wasPressed(MappedInputManager::Button::Power) || mappedInput.wasHomeGesture())) {
+                           mappedInput.wasPressed(MappedInputManager::Button::Power) || mappedInput.wasHomeGesture() ||
+                           TouchExitButton::tapped(mappedInput))) {
     restartToHome();
     return;
   }
@@ -220,8 +222,11 @@ void UsbDriveActivity::render(RenderLock&&) {
 
   // Only offer Back when it actually works — see the gate in loop().
   if (state == UsbDriveState::WaitingForHost || startFailed) {
+    TouchExitButton::draw(renderer, mappedInput, x, y + metrics.verticalSpacing * 3, maxWidth);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else {
+    TouchExitButton::forget();
   }
 
   renderer.displayBuffer();

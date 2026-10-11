@@ -20,6 +20,7 @@ void Activity::onEnter() {
   TapTargets::homeCovers().invalidate();
   TapTargets::homeMenu().invalidate();
   TapTargets::readerLinks().invalidate();
+  TapTargets::screenActions().invalidate();
   LOG_DBG("ACT", "Entering activity: %s", name.c_str());
 }
 
@@ -30,6 +31,7 @@ void Activity::onExit() {
   TapTargets::homeCovers().invalidate();
   TapTargets::homeMenu().invalidate();
   TapTargets::readerLinks().invalidate();
+  TapTargets::screenActions().invalidate();
   LOG_DBG("ACT", "Exiting activity: %s", name.c_str());
 }
 
