@@ -2,6 +2,24 @@
 
 #include "util/PluginLocations.h"
 
+TEST(PluginManifestClassification, InstallingMarkerQuarantinesOtherwiseValidPlugins) {
+  EXPECT_TRUE(PluginLocations::isDiscoverableEntry(false, false, true, false));
+  EXPECT_TRUE(PluginLocations::isDiscoverableEntry(false, true, false, false));
+  EXPECT_TRUE(PluginLocations::isDiscoverableEntry(false, false, false, true));
+  EXPECT_FALSE(PluginLocations::isDiscoverableEntry(true, true, true, true));
+  EXPECT_FALSE(PluginLocations::isDiscoverableEntry(false, false, false, false));
+}
+
+TEST(PluginManifestClassification, DirectPluginBundlesMayReuseInstalledRoot) {
+  EXPECT_TRUE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", "foo"));
+  EXPECT_TRUE(PluginLocations::shouldReuseInstalledBundleDir("/plugins", "foo"));
+  EXPECT_TRUE(PluginLocations::shouldReuseInstalledBundleDir("/.plugins", "foo"));
+
+  EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/downloads", "foo"));
+  EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", "foo/assets"));
+  EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", ""));
+}
+
 TEST(PluginManifestClassification, BrowseUrlIsCatalog) {
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, false), PluginLocations::DeviceKind::Catalog);
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, true), PluginLocations::DeviceKind::Catalog);

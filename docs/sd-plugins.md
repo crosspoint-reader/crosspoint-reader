@@ -14,10 +14,12 @@ and the firmware carries no vendor names, URLs, or file-format knowledge.
     ...assets
 ```
 
-**Discovery and the on-device list.** Every plugin folder (anything holding a
-`manifest.json`, `plugin.js`, or `device.json`) appears under **Settings →
-System → Plugins** on the reader, showing its `title` and one-line
-`description`. Selecting a plugin with an on-device catalog (`device.json`
+**Discovery and the on-device list.** The plugin subsystem is controlled by
+**Settings → System → Advanced → Plugin System**. When enabled, **Plugins** is
+shown on the Home screen even when no plugins are installed. Every plugin folder
+(anything holding a `manifest.json`, `plugin.js`, or `device.json`) appears under
+**Home → Plugins**, showing its `title` and one-line `description`. Selecting a
+plugin with an on-device catalog (`device.json`
 with `browse.url`) opens that catalog. Selecting any other plugin shows its
 `README.md` (up to 16KB, as plain paged text) when it has one, so even a
 browser-only plugin (no `device.json`) can explain how to use it from the web
@@ -28,6 +30,56 @@ UI; without a README the row does nothing. `title`/`description` are read from
 first two-dot-free options exist so plugins are easy to copy onto the card
 from a computer. All three roots are scanned; on a name collision the earlier
 root in that order wins.
+
+For bundle installs that target one of those plugin roots with a single direct
+folder name, firmware first reuses an existing same-named plugin directory from
+any supported root. This keeps updates in place with their local settings and
+tokens. If no installed copy exists, the bundle uses its configured destination
+root as before. Nested bundle subdirectories and non-plugin destinations are
+unchanged.
+
+During firmware-managed plugin installation, a plugin directory may contain a
+`.installing` marker. Normal plugin discovery and file resolution quarantine that
+directory until the transaction completes, even if `manifest.json`, `plugin.js`,
+or `device.json` is already present. Raw on-disk probes used for migration and
+installer recovery can still see the directory. The marker describes transaction
+state; it does not change the normal plugin validity contract once removed.
+
+### Enabling plugins and Plugin Hub
+
+The **Plugin System** switch is the global gate for SD-card plugin discovery and
+execution. New installations default to **Disabled**. Firmware upgrades detect
+existing plugin folders and keep the Plugin System enabled so an upgrade does
+not silently disable an existing setup. Turning the Plugin System off does not
+delete or rename any plugin files; turning it back on makes them discoverable
+again.
+
+Plugin Hub is optional and is not required for sideloaded plugins. The native
+Hub is considered available when the first matching `pluginhub` directory has a
+`device.json` and is not quarantined by `.installing`; `manifest.json`,
+`plugin.js`, and `README.md` are not required for native availability. When the
+Plugin System is enabled, no native Hub is available, and the installer has not
+been hidden, **Home → Plugins** contains a synthetic **Plugin Hub — Download,
+discover, and update plugins** entry. Selecting it offers:
+
+- **Install** — download and install Plugin Hub over Wi-Fi. Backing out of the
+  Wi-Fi selector cancels installation, turns Wi-Fi back off, and returns to the
+  Plugins picker without changing the Hide preference.
+- **Hide** — hide only the synthetic Plugin Hub install entry. Installed and
+  sideloaded plugins continue to work normally.
+- **Cancel** — leave the entry visible and make no changes.
+
+The **Hide** preference persists across reboots and Plugin System disable/enable
+cycles. While the Plugin System is enabled and the Hub installer is hidden,
+**Settings → System → Advanced** shows **Restore Plugin Hub installer**. Selecting
+it clears only the hidden preference; installed and sideloaded plugins are not
+restarted or changed.
+
+For users who prefer manual installation, Plugin Hub can be downloaded directly
+from <https://github.com/jadehawk/PluginHub.crosspoint-plugin/releases>. Copy or
+extract the `pluginhub` folder so it ends up at one of these supported locations:
+`/.crosspoint/plugins/pluginhub/`, `/plugins/pluginhub/`, or
+`/.plugins/pluginhub/`.
 
 A plugin can ship any combination: `plugin.js` alone (web-only),
 `device.json` alone (on-device only), or both. A `device.json` may declare only
@@ -95,7 +147,7 @@ api.registerAction('myaction', async (args) => {
 ## Surface 3: on-device manifests and catalog screens (`device.json`)
 
 A declarative manifest the firmware's generic `PluginCatalogActivity` renders
-under **Settings → System → Plugins**. It expresses "authenticated JSON
+under **Home → Plugins**. It expresses "authenticated JSON
 catalog: sign in, browse, download, sidecar" — enough for most book services —
 without any code running on the device. Anything beyond this vocabulary
 belongs in `plugin.js`.
@@ -178,7 +230,13 @@ Two browse formats:
     "lists": [                              // optional named sub-catalogs (json only):
       { "title": "All Books" },             // a picker screen precedes browsing;
       { "title": "Favorites",               // each entry may override url and/or
-        "body": "{\"page\":{page},\"per_page\":{limit},\"list\":\"favorites\"}" }
+        "body": "{\"page\":{page},\"per_page\":{limit},\"list\":\"favorites\"}",
+        "notice": {                            // optional confirmation before opening
+          "title": "Community content",        // defaults to the list title
+          "message": "Review this notice before continuing.",
+          "confirm": "Continue",               // defaults to translated Confirm
+          "cancel": "Go Back"                  // defaults to translated Cancel
+        } }
     ],                                      // omitted keys fall back to browse's
 
     // --- xml format (ignore the json fields above; fields become selectors) ---
@@ -257,8 +315,12 @@ Two browse formats:
   them while more pages exist — tappable and button-reachable like any row.
 - **Lists** (json): with `browse.lists`, opening the catalog shows a picker
   of the named entries first; each entry browses with its own url/body
-  overrides (server-side categories, shelves, sort orders). Back from the
-  book list returns to the picker.
+  overrides (server-side categories, shelves, sort orders). A list with
+  `notice.message` shows a confirmation before browsing; Back/cancel returns
+  to the picker, while confirm continues into the selected list. `notice.title`
+  defaults to the list title, and omitted button labels use the firmware's
+  translated Cancel/Confirm defaults. Back from the book list returns to the
+  picker.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
@@ -290,7 +352,7 @@ Two browse formats:
 ### Testing a new manifest
 
 1. Copy the plugin folder to `/.crosspoint/plugins/<name>/` on the SD card.
-2. Settings → System → Plugins → your title. With no token and no `auth`
+2. Enable **Settings → System → Advanced → Plugin System**, then open **Home → Plugins → your title**. With no token and no `auth`
    block you should see the not-signed-in screen; with `auth`, the code/QR
    screen.
 3. Watch serial (`[PCAT]` tag) for request/parse failures — the log includes

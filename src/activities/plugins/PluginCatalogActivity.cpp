@@ -19,8 +19,11 @@
 #include <cstring>
 #include <new>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
+#include "activities/settings/PluginHubInstallActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "network/HttpDownloader.h"
@@ -51,6 +54,7 @@ constexpr size_t MAX_API_RESPONSE = 48 * 1024;
 // response until leaving the catalog so downloads can release the parsed rows.
 constexpr char BROWSE_TMP_PATH[] = "/.pcat_tmp.json";
 constexpr size_t MAX_BROWSE_RESPONSE = 1024 * 1024;
+constexpr size_t MAX_BROWSE_LIST_INDEX_RESPONSE = 16 * 1024;
 constexpr int MAX_PAGE_SIZE = 16;
 
 std::string md5Hex(const std::string& text) {
@@ -179,12 +183,18 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.pageSize = browse["page_size"] | 8;
   // Documented bounds: each row costs an Item (strings) and a screen slot.
   manifest.pageSize = std::clamp(manifest.pageSize, 1, MAX_PAGE_SIZE);
+  manifest.browseListsUrl = browse["lists_url"] | "";
   manifest.browseLists.reserve(browse["lists"].size());
   for (JsonVariantConst l : browse["lists"].as<JsonArrayConst>()) {
     Manifest::BrowseList entry;
     entry.title = l["title"] | "";
     entry.url = l["url"] | "";
     entry.body = l["body"] | "";
+    JsonVariantConst notice = l["notice"];
+    entry.noticeTitle = notice["title"] | "";
+    entry.noticeMessage = notice["message"] | "";
+    entry.noticeConfirm = notice["confirm"] | "";
+    entry.noticeCancel = notice["cancel"] | "";
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
   manifest.searchUrl = browse["search"]["url"] | "";
@@ -231,6 +241,49 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.authErrorPath = auth["error_path"] | "error";
 
   return !manifest.browseReq.url.empty();
+}
+
+bool PluginCatalogActivity::loadBrowseListIndex() {
+  if (manifest.browseListsUrl.empty()) return true;
+
+  String response;
+  const std::string url = substituted(manifest.browseListsUrl, nullptr);
+  const int status = pluginhttp::request(session.get(), url, "GET", "", {}, response, MAX_BROWSE_LIST_INDEX_RESPONSE);
+  if (status < 200 || status >= 300) {
+    LOG_ERR("PCAT", "browse list index fetch failed: status=%d %s", status, url.c_str());
+    return false;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, response) != DeserializationError::Ok) {
+    LOG_ERR("PCAT", "browse list index parse failed: %s", url.c_str());
+    return false;
+  }
+  JsonArrayConst lists = doc["lists"].as<JsonArrayConst>();
+  if (lists.isNull() || lists.size() == 0) {
+    LOG_ERR("PCAT", "browse list index has no lists: %s", url.c_str());
+    return false;
+  }
+
+  manifest.browseLists.clear();
+  manifest.browseLists.reserve(lists.size());
+  for (JsonVariantConst l : lists) {
+    Manifest::BrowseList entry;
+    entry.title = l["title"] | "";
+    entry.url = l["url"] | "";
+    entry.body = l["body"] | "";
+    JsonVariantConst notice = l["notice"];
+    entry.noticeTitle = notice["title"] | "";
+    entry.noticeMessage = notice["message"] | "";
+    entry.noticeConfirm = notice["confirm"] | "";
+    entry.noticeCancel = notice["cancel"] | "";
+    if (!entry.title.empty() && !entry.url.empty()) manifest.browseLists.push_back(std::move(entry));
+  }
+  if (manifest.browseLists.empty()) {
+    LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
+    return false;
+  }
+  return true;
 }
 
 bool PluginCatalogActivity::saveToken(const std::string& value) {
@@ -305,6 +358,8 @@ void PluginCatalogActivity::onEnter() {
 void PluginCatalogActivity::enterPluginPicker() {
   Storage.remove(BROWSE_TMP_PATH);
   installedPlugins = discoverPlugins();
+  pluginHubAvailable = PluginHubInstallActivity::isAvailable();
+  showPluginHubInstallRow = !pluginHubAvailable && !SETTINGS.pluginHubPromptHidden;
   // Discovery just re-read the plugin folders; keep the event subscription
   // table in step so a plugin installed since boot starts receiving events
   // (and a removed one stops) without a restart.
@@ -389,11 +444,10 @@ void PluginCatalogActivity::onExit() {
 }
 
 void PluginCatalogActivity::startBrowse() {
-  // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
-  if (wantsListPicker()) {
-    // Same auth gate as fetchPage: without it a signed-out user is shown the
-    // list picker and only hits the sign-in screen after picking a list.
-    // loadToken() returns true for token-less catalogs, which skip the gate.
+  const bool needsListAuth = (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) || wantsListPicker();
+  if (needsListAuth) {
+    // Dynamic list indexes and list pickers may both use {token}/{cfg.KEY}, so
+    // resolve credentials before either path. Token-less catalogs skip the gate.
     loadConfig();
     if (!loadToken() && !(manifest.hasPasswordGrant() && refreshCredentialToken())) {
       if (manifest.hasDeviceCode()) {
@@ -404,6 +458,15 @@ void PluginCatalogActivity::startBrowse() {
       }
       return;
     }
+  }
+  if (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) {
+    if (!loadBrowseListIndex()) {
+      fail(StrId::STR_FETCH_FEED_FAILED);
+      return;
+    }
+  }
+  // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
+  if (wantsListPicker()) {
     items.clear();
     page = 1;
     hasMore = false;
@@ -532,7 +595,8 @@ bool PluginCatalogActivity::nextRowVisible() const {
 }
 
 int PluginCatalogActivity::rowCount() const {
-  if (state == State::PLUGIN_PICKER) return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0);
+  if (state == State::PLUGIN_PICKER)
+    return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
   if (state == State::LIST_PICKER) return static_cast<int>(manifest.browseLists.size());
   if (state != State::BROWSING) return 0;
   return static_cast<int>(items.size()) + (prevRowVisible() ? 1 : 0) + (nextRowVisible() ? 1 : 0);
@@ -726,11 +790,24 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   if (subdir.empty() || subdir.find("..") != std::string::npos || subdir.front() == '/') {
     return HttpDownloader::FILE_ERROR;
   }
-  std::string dir = downloadDir();
-  if (!dir.empty() && dir.back() == '/') dir.pop_back();
-  dir += '/';
-  dir += subdir;
-  if (!Storage.exists(dir.c_str()) && !Storage.mkdir(dir.c_str())) {
+  std::string root = downloadDir();
+  if (!root.empty() && root.back() == '/') root.pop_back();
+  std::string dir;
+  if (PluginLocations::shouldReuseInstalledBundleDir(root, subdir)) {
+    dir = PluginLocations::findPluginDir(subdir.c_str());
+  }
+  if (dir.empty()) {
+    dir = root;
+    dir += '/';
+    dir += subdir;
+  }
+  if (Storage.exists(dir.c_str())) {
+    HalFile target = Storage.open(dir.c_str());
+    if (!target || !target.isDirectory()) {
+      LOG_ERR("PCAT", "bundle target is not a directory: %s", dir.c_str());
+      return HttpDownloader::FILE_ERROR;
+    }
+  } else if (!Storage.mkdir(dir.c_str())) {
     LOG_ERR("PCAT", "bundle mkdir failed: %s", dir.c_str());
     return HttpDownloader::FILE_ERROR;
   }
@@ -887,6 +964,15 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 
 // Sign-in and completion states precede the shared catalog input handling.
 bool PluginCatalogActivity::handleCustomInput() {
+  if (ignoreHubInstallerBackRelease) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      ignoreHubInstallerBackRelease = false;
+      return true;
+    }
+    if (!mappedInput.isPressed(MappedInputManager::Button::Back)) ignoreHubInstallerBackRelease = false;
+  }
+  if (pluginHubPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
+
   if (state == State::AUTH) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = State::NO_TOKEN;
@@ -933,7 +1019,7 @@ bool PluginCatalogActivity::handleCustomInput() {
 void PluginCatalogActivity::retryBrowse() {
   if (state == State::NO_TOKEN && manifest.hasDeviceCode()) {
     beginAuth();
-  } else if (wantsListPicker()) {
+  } else if ((!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) || wantsListPicker()) {
     startBrowse();
   } else {
     beginLoading();
@@ -986,7 +1072,32 @@ void PluginCatalogActivity::activateIndex(const int index) {
       activityManager.goToBrowser();  // replaces this screen with the OPDS browser
       return;
     }
-    const PluginRef& plugin = installedPlugins[index - (showOpds ? 1 : 0)];
+    const int pluginStart = showOpds ? 1 : 0;
+    if (showPluginHubInstallRow && index == pluginStart) {
+      static constexpr StrId OPTIONS[] = {StrId::STR_INSTALL, StrId::STR_HIDE, StrId::STR_CANCEL};
+      pluginHubPopup.show(StrId::STR_PLUGIN_HUB, OPTIONS, 3, 0, [this](const int selected) {
+        if (selected == 0) {
+          auto installer = makeUniqueNoThrow<PluginHubInstallActivity>(renderer, mappedInput, false);
+          if (!installer) {
+            LOG_ERR("PCAT", "OOM: Plugin Hub installer");
+            return;
+          }
+          startActivityForResult(std::move(installer), [this](const ActivityResult& result) {
+            ignoreHubInstallerBackRelease =
+                result.isCancelled && mappedInput.isPressed(MappedInputManager::Button::Back);
+            enterPluginPicker();
+          });
+        } else if (selected == 1) {
+          SETTINGS.pluginHubPromptHidden = 1;
+          SETTINGS.saveToFile();
+          enterPluginPicker();
+        }
+      });
+      requestUpdate();
+      return;
+    }
+    const int syntheticHubRows = showPluginHubInstallRow ? 1 : 0;
+    const PluginRef& plugin = installedPlugins[index - pluginStart - syntheticHubRows];
     const auto action = PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty());
     if (action == PluginLocations::PickerAction::Readme) {
       // A plain paged text view, not the book reader: viewing instructions must
@@ -1020,6 +1131,25 @@ void PluginCatalogActivity::activateIndex(const int index) {
   if (state == State::LIST_PICKER) {
     if (index < 0 || index >= static_cast<int>(manifest.browseLists.size())) return;
     app.clearTapFlash();
+    const auto& list = manifest.browseLists[index];
+    if (list.hasNotice()) {
+      const std::string heading = substituted(list.noticeTitle.empty() ? list.title : list.noticeTitle, nullptr);
+      const std::string message = substituted(list.noticeMessage, nullptr);
+      const std::string cancel = substituted(list.noticeCancel, nullptr);
+      const std::string confirm = substituted(list.noticeConfirm, nullptr);
+      auto confirmation =
+          makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, message, cancel, confirm);
+      if (!confirmation) {
+        LOG_ERR("PCAT", "OOM: browse-list notice");
+        return;
+      }
+      startActivityForResult(std::move(confirmation), [this, index](const ActivityResult& result) {
+        if (result.isCancelled) return;
+        currentList = index;
+        startBrowse();
+      });
+      return;
+    }
     currentList = index;
     startBrowse();
     return;
@@ -1095,6 +1225,11 @@ void PluginCatalogActivity::drawFooter() {
       break;
   }
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void PluginCatalogActivity::render(RenderLock&& lock) {
+  if (pluginHubPopup.processRender(renderer, mappedInput)) return;
+  CatalogActivity::render(std::move(lock));
 }
 
 void PluginCatalogActivity::buildScreen(UiScreen& screen) {
@@ -1207,6 +1342,7 @@ void PluginCatalogActivity::rebuildRowItems() {
   };
   if (state == State::PLUGIN_PICKER) {
     if (showOpds) addRow(tr(STR_OPDS_BROWSER), tr(STR_OPDS_SERVERS));
+    if (showPluginHubInstallRow) addRow(tr(STR_PLUGIN_HUB), tr(STR_PLUGIN_HUB_DESCRIPTION), ">");
     for (const auto& plugin : installedPlugins) {
       //   None       -> web-only hint; chevron only with a readme
       //   Catalog    -> browsable, own description, chevron

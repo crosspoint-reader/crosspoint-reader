@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "activities/CatalogActivity.h"
+#include "components/OptionPopup.h"
 #include "network/HttpDownloader.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
@@ -64,8 +65,12 @@ class PluginCatalogActivity final : public CatalogActivity {
     // Named JSON views override the browse URL/body; Back returns to their picker.
     struct BrowseList {
       std::string title, url, body;
+      std::string noticeTitle, noticeMessage, noticeConfirm, noticeCancel;
+      bool hasNotice() const { return !noticeMessage.empty(); }
     };
     std::vector<BrowseList> browseLists;
+    // Optional remote index that supplies the named JSON views dynamically.
+    std::string browseListsUrl;
     // JSON search overrides URL/body independently; empty fields reuse browse.
     std::string searchUrl, searchBody;
     bool hasSearch() const { return (!searchUrl.empty() || !searchBody.empty()) && browseFormat != "xml"; }
@@ -113,6 +118,10 @@ class PluginCatalogActivity final : public CatalogActivity {
   std::string catalogTitle;
   Manifest manifest;
   std::vector<PluginRef> installedPlugins;
+  bool pluginHubAvailable = false;
+  bool showPluginHubInstallRow = false;
+  bool ignoreHubInstallerBackRelease = false;
+  OptionPopup pluginHubPopup;
   bool showOpds = false;
   bool rootMode = false;
   int pickerReturnRow = 0;  // picker row to reselect after leaving a catalog
@@ -150,6 +159,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   // JSON catalog with named lists and none picked yet.
   bool wantsListPicker() const;
   bool loadManifest();
+  bool loadBrowseListIndex();
   bool loadToken();
   void loadConfig();
   bool saveToken(const std::string& value);
@@ -169,6 +179,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   int listCount() const override { return rowCount(); }
   // Row dispatch: pager rows page, picker rows pick, item rows open/download.
   void activateIndex(int index) override;
+  void render(RenderLock&& lock) override;
   void buildScreen(UiScreen& screen) override;
   bool handleCustomInput() override;
   void onBackButton() override;
