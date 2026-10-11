@@ -172,7 +172,7 @@ bool loadOpdsDiscovery(const std::string& serverUrl, std::string& searchTemplate
   JsonDocument doc;
   if (deserializeJson(doc, json)) return false;
 
-  if ((doc["v"] | 0) != 1) return false;  // unknown or pre-versioned format — discard
+  if (doc["v"].as<int>() != 1) return false;  // unknown or pre-versioned format — discard
 
   searchTemplateOut = doc["st"] | std::string{};
 
