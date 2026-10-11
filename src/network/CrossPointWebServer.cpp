@@ -3228,27 +3228,6 @@ void CrossPointWebServer::handleMetadataEditorJs() const {
   if (!WebAssets::serve(*server, web_bundle::metadata_editorJs)) server->send(404, "text/plain", "Not installed");
 }
 
-namespace {
-// Epub::readItemContentsToStream writes into a Print; this one feeds the response body, which
-// ChunkedResponse coalesces into TCP-sized chunks.
-class ChunkedResponsePrint : public Print {
- public:
-  explicit ChunkedResponsePrint(ChunkedResponse& out) : out_(out) {}
-  size_t write(uint8_t b) override {
-    const char c = static_cast<char>(b);
-    out_.append(&c, 1);
-    return 1;
-  }
-  size_t write(const uint8_t* buffer, size_t size) override {
-    out_.append(reinterpret_cast<const char*>(buffer), size);
-    return size;
-  }
-
- private:
-  ChunkedResponse& out_;
-};
-}  // namespace
-
 // GET /api/book/opf?path=<epub> -> the OPF package document from inside the book, as it is.
 //
 // What the Details dialog reads a book's own metadata from when no sidecar overrides it. The dialog
@@ -3271,7 +3250,7 @@ void CrossPointWebServer::handleBookOpf() const {
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/oebps-package+xml", "");
   ChunkedResponse out(server.get());
-  ChunkedResponsePrint body(out);
+  ChunkedPrint body(out);
   // A failure from here on reaches the page as truncated XML, which it treats as unreadable and
   // falls back to downloading the book.
   if (!epub.readItemContentsToStream(opfPath, body, 1024)) LOG_ERR("WEB", "Reading the OPF of %s failed", path.c_str());
