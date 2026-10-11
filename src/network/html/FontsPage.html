@@ -57,26 +57,8 @@
         margin: 15px 0;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
-      }
+      <!--#include file="shared/NavLinks.css.inc" -->
+
       .family {
         border-bottom: 1px solid var(--border-color);
         padding: 12px 0;
@@ -193,14 +175,7 @@
   <body>
     <h1>📚 %%CROSSPOINT%%</h1>
 
-    <div class="nav-links">
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
-      <a href="/fonts" class="active">Font Manager</a>
-      <a href="/stats">Reading Stats</a>
-      <a href="/plugins">Plugins</a>
-      <a href="/systeminfo">System Info</a>
-    </div>
+    <!--#include file="shared/NavLinks.html.inc" -->
 
     <div class="card">
       <h2>Installed Fonts</h2>
