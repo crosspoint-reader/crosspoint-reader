@@ -14,6 +14,7 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_CANCEL = 1;
 constexpr fui::ActionId ACTION_CONFIRM = 2;
+constexpr fui::ActionId ACTION_ALTERNATE = 3;
 }  // namespace
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -30,6 +31,7 @@ void ConfirmationActivity::onEnter() {
   resetUi();
   app.on(ACTION_CANCEL, &ConfirmationActivity::onCancelEvent, this);
   app.on(ACTION_CONFIRM, &ConfirmationActivity::onConfirmEvent, this);
+  app.on(ACTION_ALTERNATE, &ConfirmationActivity::onAlternateEvent, this);
   app.setScreen(&ConfirmationActivity::dialogScreen, this);
   requestUpdate(true);
 }
@@ -39,19 +41,24 @@ void ConfirmationActivity::onExit() {
   Activity::onExit();
 }
 
-void ConfirmationActivity::finishWith(const bool cancelled) {
+void ConfirmationActivity::finishWith(const Answer answer) {
   ActivityResult res;
-  res.isCancelled = cancelled;
+  res.isCancelled = answer == Answer::Cancel;
+  if (!res.isCancelled) res.data = ConfirmResult{answer == Answer::Alternate};
   setResult(std::move(res));
   finish();
 }
 
 void ConfirmationActivity::onCancelEvent(const fui::ActionEvent&, void* user) {
-  static_cast<ConfirmationActivity*>(user)->finishWith(true);
+  static_cast<ConfirmationActivity*>(user)->finishWith(Answer::Cancel);
 }
 
 void ConfirmationActivity::onConfirmEvent(const fui::ActionEvent&, void* user) {
-  static_cast<ConfirmationActivity*>(user)->finishWith(false);
+  static_cast<ConfirmationActivity*>(user)->finishWith(Answer::Accept);
+}
+
+void ConfirmationActivity::onAlternateEvent(const fui::ActionEvent&, void* user) {
+  static_cast<ConfirmationActivity*>(user)->finishWith(Answer::Alternate);
 }
 
 void ConfirmationActivity::dialogScreen(UiScreen& screen, void* user) {
@@ -65,8 +72,10 @@ void ConfirmationActivity::buildDialogScreen(UiScreen& screen) {
   spec.message = question.message.empty() ? nullptr : question.message.c_str();
   spec.cancelLabel = I18N.get(question.cancelLabel);
   spec.acceptLabel = I18N.get(question.acceptLabel);
+  spec.alternateLabel = question.alternateLabel ? I18N.get(*question.alternateLabel) : nullptr;
   spec.cancelAction = ACTION_CANCEL;
   spec.acceptAction = ACTION_CONFIRM;
+  spec.alternateAction = ACTION_ALTERNATE;
   spec.titleMaxLines = question.titleMaxLines;
   spec.headlineMaxLines = question.headlineMaxLines;
   spec.messageMaxLines = question.messageMaxLines;
@@ -79,8 +88,13 @@ void ConfirmationActivity::render(RenderLock&& lock) {
   renderUi();
 
   // Still drawn, and not redundant: this is how the PHYSICAL buttons are labelled, and on a board
-  // with no digitiser it is the only affordance there is.
-  const auto labels = mappedInput.mapLabels("", "", I18N.get(question.cancelLabel), I18N.get(question.acceptLabel));
+  // with no digitiser it is the only affordance there is. With a third answer the front pair answers
+  // alternate and accept, and Back, which cancels either way, carries the Cancel label.
+  const char* cancelLabel = I18N.get(question.cancelLabel);
+  const char* acceptLabel = I18N.get(question.acceptLabel);
+  const auto labels = question.alternateLabel
+                          ? mappedInput.mapLabels(cancelLabel, "", I18N.get(*question.alternateLabel), acceptLabel)
+                          : mappedInput.mapLabels("", "", cancelLabel, acceptLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::RefreshMode::FAST_REFRESH);
@@ -111,21 +125,21 @@ void ConfirmationActivity::loop() {
   // Back leaves every screen, so it leaves this one too, as Cancel. Tested before the answer keys: if
   // a remap ever put Back on the accepting key, the press must not be taken as a yes.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finishWith(true);
+    finishWith(Answer::Cancel);
     return;
   }
 
-  // Cancel and Confirm are not travel across a screen, so they do not follow the logical
-  // directions onto the side buttons: they stay on the front strip, which is the only strip this
-  // prompt draws hints on. What does follow the orientation is which of the two is drawn first —
-  // and these are the very buttons mapLabels() puts those two labels on.
+  // The answers are not travel across a screen, so they do not follow the logical directions onto
+  // the side buttons: they stay on the front strip, which is the only strip this prompt draws hints
+  // on. What does follow the orientation is which of the two is drawn first — and these are the
+  // very buttons mapLabels() puts those two labels on (Cancel or the alternate, then accept).
   if (mappedInput.wasReleased(MappedInputManager::frontStripNext())) {
-    finishWith(false);
+    finishWith(Answer::Accept);
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::frontStripPrevious())) {
-    finishWith(true);
+    finishWith(question.alternateLabel ? Answer::Alternate : Answer::Cancel);
     return;
   }
 }

@@ -103,9 +103,15 @@ struct StarredPageResult {
   int pageNumber = 0;
 };
 
+// Which answer ConfirmationActivity was given, when it was not Cancel. Only a question with an
+// alternate answer needs to look: for a yes/no question isCancelled already says it all.
+struct ConfirmResult {
+  bool alternate = false;
+};
+
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
                                    PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult,
-                                   StarredPageResult, PrintedPageResult, DictionarySwitchResult>;
+                                   StarredPageResult, PrintedPageResult, DictionarySwitchResult, ConfirmResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

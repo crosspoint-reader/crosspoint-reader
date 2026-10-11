@@ -138,7 +138,6 @@ void WifiSelectionActivity::onEnter() {
   connectionError.clear();
   enteredPassword.clear();
   usedSavedPassword = false;
-  forgetPromptSelection = 0;
   autoConnecting = false;
   autoCycleCandidates.clear();
   autoCycleCandidateIndex = 0;
@@ -875,48 +874,6 @@ void WifiSelectionActivity::loop() {
     return;
   }
 
-  // Handle forget prompt state (connection failed with saved credentials)
-  if (state == WifiSelectionState::FORGET_PROMPT) {
-    if (mappedInput.wasLogicalPressed(MappedInputManager::Direction::Up) ||
-        mappedInput.wasLogicalPressed(MappedInputManager::Direction::Left)) {
-      if (forgetPromptSelection > 0) {
-        forgetPromptSelection--;
-        requestUpdate();
-      }
-    } else if (mappedInput.wasLogicalPressed(MappedInputManager::Direction::Down) ||
-               mappedInput.wasLogicalPressed(MappedInputManager::Direction::Right)) {
-      if (forgetPromptSelection < 2) {
-        forgetPromptSelection++;
-        requestUpdate();
-      }
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (forgetPromptSelection == 1) {
-        RenderLock lock(*this);
-        // User chose "Reset info" - drop the recorded BSSID/channel + IP/gw/mask/DNS but keep
-        // the saved password. Connects already do a full scan + DHCP unconditionally, so this is
-        // now about clearing the diagnostic record rather than changing what the next connect
-        // does.
-        WIFI_STORE.clearConnectionCache(selectedSSID);
-      } else if (forgetPromptSelection == 2) {
-        RenderLock lock(*this);
-        // User chose "Forget network" - forget the network
-        WIFI_STORE.removeCredential(selectedSSID);
-        // Update the network list to reflect the change
-        const auto network = find_if(networks.begin(), networks.end(),
-                                     [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
-        if (network != networks.end()) {
-          network->hasSavedPassword = false;
-        }
-      }
-      // Go back to network list (whichever action, including Cancel, was selected)
-      startWifiScan();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      // Skip forgetting, go back to network list
-      startWifiScan();
-    }
-    return;
-  }
-
   // Handle captive portal state - user must authorize on another device
   if (state == WifiSelectionState::CAPTIVE_PORTAL) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
@@ -949,12 +906,11 @@ void WifiSelectionActivity::loop() {
       // the network
       if (autoConnecting || usedSavedPassword) {
         autoConnecting = false;
-        state = WifiSelectionState::FORGET_PROMPT;
-        forgetPromptSelection = 0;  // Default to "Cancel"
-      } else {
-        // Go back to network list on failure for non-saved credentials
-        state = WifiSelectionState::NETWORK_LIST;
+        promptNetworkOptions();
+        return;
       }
+      // Go back to network list on failure for non-saved credentials
+      state = WifiSelectionState::NETWORK_LIST;
       requestUpdate();
       return;
     }
@@ -988,9 +944,7 @@ void WifiSelectionActivity::loop() {
       const bool hasSavedPassword = !networks.empty() && networks[selectedNetworkIndex].hasSavedPassword;
       if (hasSavedPassword) {
         selectedSSID = networks[selectedNetworkIndex].ssid;
-        state = WifiSelectionState::FORGET_PROMPT;
-        forgetPromptSelection = 0;  // Default to "Cancel"
-        requestUpdate();
+        promptNetworkOptions();
         return;
       }
     }
@@ -1021,10 +975,10 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
 }
 
 void WifiSelectionActivity::render(RenderLock&&) {
-  // Don't render while a child has the screen: the keyboard (we're just transitioning back from it)
-  // or the save-password question.
+  // Don't render while a child has the screen: the keyboard (we're just transitioning back from it),
+  // the save-password question or the network-options question.
   if (state == WifiSelectionState::PASSWORD_ENTRY || state == WifiSelectionState::HIDDEN_SSID_ENTRY ||
-      state == WifiSelectionState::SAVE_PROMPT) {
+      state == WifiSelectionState::SAVE_PROMPT || state == WifiSelectionState::FORGET_PROMPT) {
     return;
   }
 
@@ -1065,9 +1019,6 @@ void WifiSelectionActivity::render(RenderLock&&) {
       break;
     case WifiSelectionState::CONNECTION_FAILED:
       renderConnectionFailed();
-      break;
-    case WifiSelectionState::FORGET_PROMPT:
-      renderForgetPrompt();
       break;
     case WifiSelectionState::CAPTIVE_PORTAL:
       renderCaptivePortal();
@@ -1204,58 +1155,6 @@ void WifiSelectionActivity::renderConnectionFailed() const {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-void WifiSelectionActivity::renderForgetPrompt() const {
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (pageHeight - height * 3) / 2;
-
-  renderer.drawCenteredText(UI_12_FONT_ID, top - 40, tr(STR_NETWORK_OPTIONS), true, EpdFontFamily::BOLD);
-
-  std::string ssidInfo = std::string(tr(STR_NETWORK_PREFIX)) + selectedSSID;
-  if (ssidInfo.length() > 28) {
-    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
-  }
-  renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
-
-  // Contextual description for the highlighted action (Cancel has none).
-  const char* desc = forgetPromptSelection == 1   ? tr(STR_RESET_INFO_DESC)
-                     : forgetPromptSelection == 2 ? tr(STR_FORGET_AND_REMOVE)
-                                                  : "";
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int hintWidth = pageWidth - 2 * metrics.contentSidePadding;
-  const auto descLines = renderer.wrappedText(UI_10_FONT_ID, desc, hintWidth, 3);
-  int descY = top + 40;
-  for (const auto& line : descLines) {
-    renderer.drawCenteredText(UI_10_FONT_ID, descY, line.c_str());
-    descY += height;
-  }
-
-  // Draw Cancel / Reset info / Forget buttons
-  const int buttonY = top + 80;
-  constexpr int buttonWidth = 150;
-  constexpr int buttonSpacing = 20;
-  constexpr int totalWidth = buttonWidth * 3 + buttonSpacing * 2;
-  const int startX = (pageWidth - totalWidth) / 2;
-  const char* const buttonLabels[3] = {tr(STR_CANCEL), tr(STR_RESET_INFO_BUTTON), tr(STR_FORGET_BUTTON)};
-  for (int i = 0; i < 3; i++) {
-    const int x = startX + i * (buttonWidth + buttonSpacing);
-    if (forgetPromptSelection == i) {
-      std::string text = "[" + std::string(buttonLabels[i]) + "]";
-      renderer.drawText(UI_10_FONT_ID, x, buttonY, text.c_str());
-    } else {
-      renderer.drawText(UI_10_FONT_ID, x + 4, buttonY, buttonLabels[i]);
-    }
-  }
-
-  // Use centralized button hints
-  const auto labels =
-      mappedInput
-          .mapHints(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN))
-          .front;
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-}
-
 void WifiSelectionActivity::renderCaptivePortal() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
@@ -1325,6 +1224,44 @@ void WifiSelectionActivity::askToSavePassword() {
                          });
 }
 
+// A saved network's options: forget it, or only reset what was recorded about its connections.
+// Every answer, Cancel included, rescans and returns to the list; Back answers Cancel.
+void WifiSelectionActivity::promptNetworkOptions() {
+  state = WifiSelectionState::FORGET_PROMPT;
+  ConfirmationActivity::Question question;
+  question.title = tr(STR_NETWORK_OPTIONS);
+  question.headline = selectedSSID;
+  question.message =
+      std::string(tr(STR_RESET_INFO_BUTTON)) + ": " + tr(STR_RESET_INFO_DESC) + "\n" + tr(STR_FORGET_AND_REMOVE);
+  question.messageMaxLines = 6;
+  question.alternateLabel = StrId::STR_RESET_INFO_BUTTON;
+  question.acceptLabel = StrId::STR_FORGET_BUTTON;
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, std::move(question)),
+                         [this](const ActivityResult& result) { onNetworkOptionsAnswer(result); });
+}
+
+void WifiSelectionActivity::onNetworkOptionsAnswer(const ActivityResult& result) {
+  if (!result.isCancelled) {
+    RenderLock lock(*this);
+    const auto* answer = std::get_if<ConfirmResult>(&result.data);
+    if (answer && answer->alternate) {
+      // Reset info: drop the recorded BSSID/channel + IP/gw/mask/DNS but keep the saved password.
+      // Connects already do a full scan + DHCP unconditionally, so this is now about clearing the
+      // diagnostic record rather than changing what the next connect does.
+      WIFI_STORE.clearConnectionCache(selectedSSID);
+    } else {
+      WIFI_STORE.removeCredential(selectedSSID);
+      // Update the network list to reflect the change
+      const auto network = find_if(networks.begin(), networks.end(),
+                                   [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
+      if (network != networks.end()) {
+        network->hasSavedPassword = false;
+      }
+    }
+  }
+  startWifiScan();
+}
+
 void WifiSelectionActivity::onComplete(const bool connected) {
   ActivityResult result;
   result.isCancelled = !connected;
@@ -1336,6 +1273,9 @@ void WifiSelectionActivity::onComplete(const bool connected) {
 }
 
 ListRowTap::Result WifiSelectionActivity::selectListRow(const int index) {
+  // `state` is read on the loop task and may have moved on since the render that recorded the
+  // band: only the list state draws these rows.
+  if (state != WifiSelectionState::NETWORK_LIST) return ListRowTap::Result::Rejected;
   return ListRowTap::apply(index, static_cast<int>(networks.size()), selectedNetworkIndex);
 }
 
