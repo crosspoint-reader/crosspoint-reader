@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>%%CROSSPOINT%% - Plugins</title>
+    <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+        --danger-color: #e74c3c;
+        --danger-hover: #c0392b;
+        --notice-bg: #fff8e1;
+        --notice-border: #ffd54f;
+        --notice-color: #5d4e0a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          --notice-bg: #4a4030;
+          --notice-border: #b89a3e;
+          --notice-color: #f3e5a0;
+          color-scheme: dark;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: var(--bg);
+        color: var(--font-color);
+      }
+      h1 {
+        color: var(--title-color);
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+      }
+      h2 { color: var(--title-color); margin-top: 0; }
+      .card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .nav-links a.active { background-color: var(--accent-color); color: white; }
+      .nav-links a:not(.active):hover { background-color: var(--accent-hover-color); color: white; }
+      .plugin {
+        border-bottom: 1px solid var(--border-color);
+        padding: 12px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .plugin:last-child { border-bottom: none; }
+      .plugin-info { flex: 1; min-width: 0; }
+      .plugin-meta { color: var(--label-color); font-size: 0.9em; margin-top: 4px; }
+      .plugin-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      .off { opacity: 0.6; }
+      .badge {
+        display: inline-block;
+        font-size: 0.75em;
+        padding: 1px 8px;
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+        color: var(--label-color);
+        margin-left: 6px;
+        vertical-align: middle;
+      }
+      .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+      .btn-primary { background: var(--accent-color); color: white; }
+      .btn-primary:hover { background: var(--accent-hover-color); }
+      .btn-secondary { background: var(--border-color); color: var(--font-color); }
+      .btn-danger { background: var(--danger-color); color: white; }
+      .btn-danger:hover { background: var(--danger-hover); }
+      .btn[disabled] { opacity: 0.5; cursor: default; }
+      .empty { color: var(--label-color); text-align: center; padding: 20px; }
+      .notice {
+        background: var(--notice-bg);
+        border: 1px solid var(--notice-border);
+        color: var(--notice-color);
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin: 0 0 12px;
+        font-size: 0.95em;
+      }
+      .upload-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .upload-form input[type="file"] { flex: 1; min-width: 200px; }
+      #status { margin-top: 10px; padding: 8px; border-radius: 4px; display: none; }
+      .status-ok { background: #d4edda; color: #155724; display: block !important; }
+      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
+      .status-busy { background: var(--notice-bg); color: var(--notice-color); display: block !important; }
+    </style>
+  </head>
+  <body>
+    <h1>📚 %%CROSSPOINT%%</h1>
+
+    <div class="nav-links">
+      <a href="/files">File Manager</a>
+      <a href="/settings">Settings</a>
+      <a href="/fonts">Font Manager</a>
+      <a href="/stats">Reading Stats</a>
+      <a href="/plugins" class="active">Plugins</a>
+      <a href="/systeminfo">System Info</a>
+    </div>
+
+    <div class="card">
+      <h2>Installed Plugins</h2>
+      <p class="plugin-meta" style="margin-top:0">
+        Plugins add cards to the File Manager or Settings page. They run in your browser, not on the
+        reader, and can do anything this web interface can do with your SD card.
+      </p>
+      <div id="installed"><p class="empty">Loading...</p></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Available Plugins</h2>
+      <div id="catalog"><p class="empty">Loading the catalog...</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Install from a File</h2>
+      <p class="notice">
+        Only install plugins you trust: a plugin can read, change and delete anything on the SD card
+        through this web interface. The <b>Reaches</b> line says which internet sites it may contact
+        through the reader.
+      </p>
+      <form class="upload-form" id="zipForm">
+        <input type="file" id="zipFile" accept=".zip" required />
+        <button type="submit" class="btn btn-primary">Install</button>
+      </form>
+      <p class="plugin-meta">
+        A <code>.zip</code> holding a plugin folder: <code>plugin.js</code>, usually a
+        <code>manifest.json</code>, and any files they use, all side by side.
+      </p>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const INSTALL_ROOT = '/.crosspoint/plugins';
+      const MOUNT_LABELS = { files: 'File Manager', settings: 'Settings' };
+      let installed = [];
+      let repo = 'jpirnay/witchhunt-reader';
+
+      function setStatus(text, kind) {
+        const el = $('status');
+        el.className = kind ? 'status-' + kind : '';
+        el.textContent = text;
+      }
+
+      function el(tag, props, children) {
+        const node = document.createElement(tag);
+        Object.assign(node, props || {});
+        (children || []).forEach((c) => node.append(c));
+        return node;
+      }
+
+      function describeReach(hosts) {
+        return hosts && hosts.length ? 'Reaches: ' + hosts.join(', ') : 'No internet access through the reader';
+      }
+
+      async function post(url) {
+        const r = await fetch(url, { method: 'POST' });
+        if (!r.ok) {
+          let message = r.status + '';
+          try { message = (await r.json()).error || message; } catch (e) { /* not JSON */ }
+          throw new Error(message);
+        }
+        return r;
+      }
+
+      // ---- Installed ------------------------------------------------------------------------------
+
+      async function loadInstalled() {
+        try {
+          installed = await (await fetch('/api/plugins')).json();
+        } catch (e) {
+          installed = [];
+          $('installed').replaceChildren(el('p', { className: 'empty', textContent: 'Could not read the plugin list.' }));
+          return;
+        }
+        renderInstalled();
+        renderCatalogButtons();
+      }
+
+      function renderInstalled() {
+        const host = $('installed');
+        if (!installed.length) {
+          host.replaceChildren(el('p', {
+            className: 'empty',
+            textContent: 'No plugins installed. Install one from the catalog below, or from a .zip file.'
+          }));
+          return;
+        }
+        host.replaceChildren(...installed.map((p) => {
+          const title = el('strong', { textContent: p.title || p.name });
+          if (p.version) title.append(el('span', { className: 'badge', textContent: 'v' + p.version }));
+          if (p.disabled) title.append(el('span', { className: 'badge', textContent: 'switched off' }));
+          const meta = [
+            'Adds itself to: ' + (MOUNT_LABELS[p.mount] || p.mount),
+            describeReach(p.allowedHosts)
+          ];
+          if (p.root && p.root !== INSTALL_ROOT) meta.push('Copied by hand into ' + p.root + '/' + p.name);
+          const info = el('div', { className: 'plugin-info' }, [
+            title,
+            p.description ? el('div', { textContent: p.description }) : '',
+            ...meta.map((m) => el('div', { className: 'plugin-meta', textContent: m }))
+          ]);
+          const toggle = el('button', {
+            className: 'btn btn-secondary',
+            textContent: p.disabled ? 'Switch on' : 'Switch off',
+            onclick: () => setEnabled(p, p.disabled)
+          });
+          const remove = el('button', { className: 'btn btn-danger', textContent: 'Remove', onclick: () => removePlugin(p) });
+          return el('div', { className: 'plugin' + (p.disabled ? ' off' : '') }, [
+            info, el('div', { className: 'plugin-actions' }, [toggle, remove])
+          ]);
+        }));
+      }
+
+      async function setEnabled(p, on) {
+        try {
+          await post('/api/plugins/enable?name=' + encodeURIComponent(p.name) + '&on=' + (on ? 1 : 0));
+          setStatus((p.title || p.name) + (on ? ' is switched on.' : ' is switched off.'), 'ok');
+        } catch (e) {
+          setStatus('Could not change ' + (p.title || p.name) + ': ' + e.message, 'err');
+        }
+        loadInstalled();
+      }
+
+      async function removePlugin(p) {
+        if (!confirm('Remove ' + (p.title || p.name) + ' from the SD card?')) return;
+        try {
+          await post('/api/plugins/remove?name=' + encodeURIComponent(p.name));
+          setStatus((p.title || p.name) + ' is removed.', 'ok');
+        } catch (e) {
+          setStatus('Could not remove ' + (p.title || p.name) + ': ' + e.message, 'err');
+        }
+        loadInstalled();
+      }
+
+      // ---- Installing -----------------------------------------------------------------------------
+
+      // `files` is [{ name, data }] with data a Blob or ArrayBuffer. Staged on the reader and switched in
+      // with one rename at the end, so a plugin cut off half-way never runs.
+      async function installFiles(name, title, files) {
+        await post('/api/plugins/begin?name=' + encodeURIComponent(name));
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          setStatus('Installing ' + title + ': ' + f.name + ' (' + (i + 1) + '/' + files.length + ')...', 'busy');
+          const r = await fetch('/api/plugins/file?name=' + encodeURIComponent(name) + '&file=' + encodeURIComponent(f.name), {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f.data
+          });
+          if (!r.ok) {
+            let message = r.status + '';
+            try { message = (await r.json()).error || message; } catch (e) { /* not JSON */ }
+            throw new Error(f.name + ': ' + message);
+          }
+        }
+        await post('/api/plugins/commit?name=' + encodeURIComponent(name));
+      }
+
+      function safeName(name) {
+        const cleaned = (name || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+|[.-]+$/g, '');
+        return cleaned.endsWith('.new') ? cleaned.slice(0, -4) : cleaned;
+      }
+
+      function loadJsZip() {
+        if (window.JSZip) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = '/js/jszip.min.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('could not load the zip reader'));
+          document.head.appendChild(s);
+        });
+      }
+
+      async function installFromZip(file) {
+        await loadJsZip();
+        const zip = await JSZip.loadAsync(file);
+        // Leaves out folders, hidden files, and the __MACOSX folder a Mac adds to every zip it makes.
+        const entries = Object.values(zip.files).filter((e) =>
+          !e.dir && !e.name.startsWith('__MACOSX/') && !e.name.split('/').pop().startsWith('.'));
+        if (!entries.length) throw new Error('the zip is empty');
+        // A zip of the plugin folder has every file under one top folder; a zip of its contents has none.
+        const parts = entries.map((e) => e.name.split('/'));
+        const top = parts[0].length === 2 && parts.every((p) => p.length === 2 && p[0] === parts[0][0]) ? parts[0][0] : null;
+        if (!top && parts.some((p) => p.length !== 1)) {
+          throw new Error('plugin files must sit side by side, without subfolders');
+        }
+        const files = await Promise.all(entries.map(async (e) => ({
+          name: e.name.split('/').pop(), data: await e.async('arraybuffer')
+        })));
+        if (!files.some((f) => f.name === 'plugin.js')) throw new Error('there is no plugin.js in the zip');
+
+        let manifest = {};
+        const manifestFile = files.find((f) => f.name === 'manifest.json');
+        if (manifestFile) {
+          try { manifest = JSON.parse(new TextDecoder().decode(manifestFile.data)); } catch (e) {
+            throw new Error('manifest.json is not valid JSON');
+          }
+        }
+        const name = safeName(top || file.name.replace(/\.zip$/i, ''));
+        if (!name) throw new Error('could not make a folder name from the zip');
+        const title = manifest.title || name;
+        const question = 'Install ' + title + (manifest.version ? ' ' + manifest.version : '') + '?\n\n' +
+          (manifest.description ? manifest.description + '\n\n' : '') +
+          'Adds itself to: ' + (MOUNT_LABELS[manifest.mount || 'settings'] || manifest.mount) + '\n' +
+          describeReach(manifest.allowedHosts) +
+          (installed.some((p) => p.name === name) ? '\n\nThis replaces the installed ' + name + '.' : '');
+        if (!confirm(question)) return;
+        await installFiles(name, title, files);
+        setStatus(title + ' is installed. Open the ' + (MOUNT_LABELS[manifest.mount || 'settings'] || 'page') +
+          ' page to use it.', 'ok');
+      }
+
+      $('zipForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const file = $('zipFile').files[0];
+        if (!file) return;
+        try {
+          await installFromZip(file);
+        } catch (err) {
+          setStatus('Could not install ' + file.name + ': ' + err.message, 'err');
+        }
+        $('zipFile').value = '';
+        loadInstalled();
+      });
+
+      // ---- Catalog --------------------------------------------------------------------------------
+      //
+      // plugins/catalog.json in the firmware's repository. Read by the browser straight from GitHub,
+      // which allows cross-origin reads, so the reader downloads nothing itself; it needs a browser
+      // with internet, which in hotspot mode it may not have.
+
+      let catalog = null;
+
+      // ?ref=<branch> reads the catalog of another branch, to try plugins before they are merged.
+      const catalogRef = new URLSearchParams(location.search).get('ref') || 'master';
+      function rawUrl(path) {
+        return 'https://raw.githubusercontent.com/' + repo + '/' + catalogRef + '/plugins/' + path;
+      }
+
+      async function loadCatalog() {
+        try {
+          const s = await (await fetch('/api/web/status')).json();
+          if (s.repo) repo = s.repo;
+        } catch (e) { /* keep the default */ }
+        try {
+          const r = await fetch(rawUrl('catalog.json'), { cache: 'no-cache' });
+          if (!r.ok) throw new Error(r.status + '');
+          catalog = await r.json();
+        } catch (e) {
+          $('catalog').replaceChildren(el('p', {
+            className: 'empty',
+            textContent: 'The catalog could not be loaded. It comes from GitHub, so this browser needs an internet ' +
+              'connection; in hotspot mode, install from a file instead.'
+          }));
+          return;
+        }
+        renderCatalogButtons();
+      }
+
+      function renderCatalogButtons() {
+        if (!catalog) return;
+        const list = (catalog.plugins || []);
+        if (!list.length) {
+          $('catalog').replaceChildren(el('p', { className: 'empty', textContent: 'The catalog is empty.' }));
+          return;
+        }
+        $('catalog').replaceChildren(...list.map((c) => {
+          const have = installed.find((p) => p.name === c.name);
+          const current = have && (have.version || '') === (c.version || '');
+          const button = el('button', {
+            className: 'btn ' + (current ? 'btn-secondary' : 'btn-primary'),
+            textContent: current ? 'Installed' : have ? 'Update' : 'Install',
+            disabled: !!current,
+            onclick: () => installFromCatalog(c, button)
+          });
+          const title = el('strong', { textContent: c.title || c.name });
+          if (c.version) title.append(el('span', { className: 'badge', textContent: 'v' + c.version }));
+          return el('div', { className: 'plugin' }, [
+            el('div', { className: 'plugin-info' }, [
+              title,
+              c.description ? el('div', { textContent: c.description }) : '',
+              el('div', { className: 'plugin-meta', textContent: 'Adds itself to: ' + (MOUNT_LABELS[c.mount] || c.mount) }),
+              el('div', { className: 'plugin-meta', textContent: describeReach(c.allowedHosts) })
+            ]),
+            el('div', { className: 'plugin-actions' }, [button])
+          ]);
+        }));
+      }
+
+      async function installFromCatalog(c, button) {
+        button.disabled = true;
+        const title = c.title || c.name;
+        try {
+          setStatus('Downloading ' + title + '...', 'busy');
+          const files = await Promise.all((c.files || []).map(async (f) => {
+            const r = await fetch(rawUrl(c.name + '/' + f.name), { cache: 'no-cache' });
+            if (!r.ok) throw new Error(f.name + ': ' + r.status);
+            return { name: f.name, data: await r.arrayBuffer() };
+          }));
+          await installFiles(c.name, title, files);
+          setStatus(title + ' is installed. Open the ' + (MOUNT_LABELS[c.mount] || 'page') + ' page to use it.', 'ok');
+        } catch (e) {
+          setStatus('Could not install ' + title + ': ' + e.message, 'err');
+        }
+        loadInstalled();
+      }
+
+      loadInstalled();
+      loadCatalog();
+    </script>
+  </body>
+</html>
