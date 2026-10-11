@@ -62,6 +62,12 @@ class SecureHttpClient {
   // the downgrade silently drops transport security; when refused, following
   // stops and the caller sees the 3xx status.
   void setAllowRedirectDowngrade(bool allow) { _allowRedirectDowngrade = allow; }
+  // Asked with the absolute URL of each redirect before it is followed. False
+  // stops there and the caller sees the 3xx status, as for a refused downgrade.
+  // For requests made on someone else's behalf whose reach is fenced to an
+  // allowlist: without it, an allowed host could send the request anywhere.
+  using RedirectFilter = std::function<bool(const std::string& url)>;
+  void setRedirectFilter(RedirectFilter filter) { _redirectFilter = std::move(filter); }
   // Ask for bytes first..last (inclusive) of the resource: a "Range: bytes=first-last" header on
   // every request, redirect hops included, until clearRange(). The response is a 206 with a
   // Content-Range (lastContentRange()), or a 200 from a server that ignores Range.
@@ -212,6 +218,7 @@ class SecureHttpClient {
   bool _quietRequests = false;
   int _maxRedirects = 5;
   bool _allowRedirectDowngrade = false;
+  RedirectFilter _redirectFilter;
 
   // per-request result
   std::string _body;

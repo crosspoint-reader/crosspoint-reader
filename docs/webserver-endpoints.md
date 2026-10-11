@@ -728,9 +728,10 @@ forwarded, so the caller infers the type from what it asked for.
 - **Allowlisted per plugin.** The host must appear in that plugin's
   `manifest.json` `allowedHosts`. A bare entry matches exactly; one starting
   with a dot matches that suffix. No list, no access.
-- **Redirects are not followed.** A 3xx is returned as-is. Following them would
-  mean the host actually fetched was never checked against the allowlist — the
-  plugin may relay the `Location` itself, which is judged on its own merits.
+- **Redirects stay inside the allowlist.** A redirect is followed only to a host
+  the same `allowedHosts` list allows; one to any other host fails the request
+  (`502`). Following them blindly would mean the host actually fetched was never
+  checked against the allowlist.
 - **Streamed, not buffered**, with a 4MB ceiling. Nothing large is resident:
   during a web session the largest free block is around 53KB, so a buffered
   response would fail on an ordinary cover image.
@@ -758,7 +759,7 @@ curl -X POST "http://crosspoint.local/api/fetch?plugin=my-plugin&url=https%3A%2F
 # -> {"ok":true,"dest":"/Books/book.epub"}
 ```
 
-Same allowlist and no-redirect rules as `/api/relay`. `dest` is normalised, so `..`
+Same allowlist and redirect rules as `/api/relay`. `dest` is normalised, so `..`
 cannot climb above the card root, must name a file (not `/` and no trailing `/`), and is
 judged as an item under [Protected paths](#protected-paths), as `/upload` judges its target
 (`pluginWriteTarget()`). The book's layout cache is invalidated on success.

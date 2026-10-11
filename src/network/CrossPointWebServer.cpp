@@ -234,6 +234,19 @@ std::string urlHost(const std::string& url) {
 // matches that suffix (".example.org" allows "covers.example.org"). Absent or
 // empty list means nothing is allowed - the relay is opt-in per plugin, and a
 // plugin's reach is readable in its own folder before it is installed.
+bool relayHostAllowed(const String& plugin, const std::string& url);
+
+// The redirect check for the relay and fetch-to-SD: a redirect is followed only to a host the
+// plugin's manifest allows as well, so the allowlist decides where the device actually connects
+// and not merely where the first request went.
+HttpDownloader::RedirectFilter redirectsWithinAllowlist(const String& plugin) {
+  return [plugin](const std::string& next) {
+    if (relayHostAllowed(plugin, next)) return true;
+    LOG_DBG("WEB", "Redirect refused for %s: %s not in allowedHosts", plugin.c_str(), urlHost(next).c_str());
+    return false;
+  };
+}
+
 bool relayHostAllowed(const String& plugin, const std::string& url) {
   const std::string host = urlHost(url);
   if (host.empty() || !isSafePathComponent(plugin)) return false;
@@ -2851,11 +2864,12 @@ void CrossPointWebServer::handlePluginFile() const {
 // fetches on the page's behalf and answers same-origin.
 //
 // That is a real capability, so it is fenced: GET only, and only to hosts the
-// calling plugin declares in its own manifest. Redirects are NOT followed -
-// otherwise an allowed host could 302 anywhere and the host actually fetched
-// would never have been checked, which is how upstream's version could be
-// bypassed. A 3xx is returned to the plugin, which may relay the new location
-// and have it judged on its own merits.
+// calling plugin declares in its own manifest. A redirect is followed only to a
+// host the manifest allows too, and one elsewhere fails the request: otherwise an
+// allowed host could 302 anywhere and the host actually fetched would never have
+// been checked, which is how upstream's version could be bypassed. (Handing the
+// 3xx back for the plugin to follow could not work: a page's fetch() follows
+// redirects itself.)
 //
 // The body is streamed straight through rather than buffered: during a web
 // session the heap has around 110KB free with a ~53KB largest block, and a
@@ -2889,23 +2903,26 @@ void CrossPointWebServer::handleRelay() {
   bool overLimit = false;
   size_t total = 0;
 
-  const bool ok = HttpDownloader::fetchUrl(url, [&](const uint8_t* data, size_t len) {
-    if (total + len > MAX_RELAY_BYTES) {
-      overLimit = true;
-      return false;  // aborts the transfer
-    }
-    if (!headerSent) {
-      // Content type is not forwarded - HttpDownloader does not surface response
-      // headers - so the caller infers it from what it asked for.
-      server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-      server->send(200, "application/octet-stream", "");
-      headerSent = true;
-    }
-    HalSystem::feedWatchdog();
-    server->sendContent(reinterpret_cast<const char*>(data), len);
-    total += len;
-    return true;
-  });
+  const bool ok = HttpDownloader::fetchUrl(
+      url,
+      [&](const uint8_t* data, size_t len) {
+        if (total + len > MAX_RELAY_BYTES) {
+          overLimit = true;
+          return false;  // aborts the transfer
+        }
+        if (!headerSent) {
+          // Content type is not forwarded - HttpDownloader does not surface response
+          // headers - so the caller infers it from what it asked for.
+          server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+          server->send(200, "application/octet-stream", "");
+          headerSent = true;
+        }
+        HalSystem::feedWatchdog();
+        server->sendContent(reinterpret_cast<const char*>(data), len);
+        total += len;
+        return true;
+      },
+      false, "", "", redirectsWithinAllowlist(plugin));
 
   if (!headerSent) {
     server->send(502, "application/json", "{\"error\":\"fetch failed\"}");
@@ -2926,8 +2943,8 @@ void CrossPointWebServer::handleRelay() {
 // would move the file twice over WiFi and hold all of it in browser memory;
 // for a cover that is merely wasteful, for a book it is prohibitive.
 //
-// Same fence as the relay - allowlisted per plugin manifest, no redirects -
-// plus the write target must pass the same check /upload applies.
+// Same fence as the relay - allowlisted per plugin manifest, redirects only within
+// it - plus the write target must pass the same check /upload applies.
 void CrossPointWebServer::handleFetchToSd() {
   if (rejectIfLowMemory(server.get())) return;
 
@@ -2950,7 +2967,8 @@ void CrossPointWebServer::handleFetchToSd() {
   }
 
   LOG_DBG("WEB", "Fetch %s -> %s", url.c_str(), dest.c_str());
-  const HttpDownloader::DownloadError result = HttpDownloader::downloadToFile(url, dest.c_str());
+  const HttpDownloader::DownloadError result = HttpDownloader::downloadToFile(
+      url, dest.c_str(), nullptr, "", "", HttpDownloader::TlsPolicy::Verified, redirectsWithinAllowlist(plugin));
   if (result != HttpDownloader::OK) {
     LOG_ERR("WEB", "Fetch to SD failed (%d): %s", static_cast<int>(result), url.c_str());
     server->send(502, "application/json", "{\"error\":\"download failed\"}");

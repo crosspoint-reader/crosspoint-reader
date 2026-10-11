@@ -127,8 +127,9 @@ own `manifest.json`, so a plugin's reach is readable before you install it.
 ```
 
 No list means no access. `GET` only — a plugin cannot make the device POST
-anywhere. Redirects are **not** followed: a 3xx comes back as-is, and the plugin
-may relay the `Location` itself so the new host is judged on its own merits.
+anywhere. A redirect is followed only to a host the list allows too; one to any
+other host fails the request, so add the hosts a service redirects to (a CDN, say)
+to the list.
 The body streams back rather than being buffered, so a large image does not have
 to fit in the device's largest free block.
 
