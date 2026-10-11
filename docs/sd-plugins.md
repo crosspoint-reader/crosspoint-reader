@@ -121,7 +121,7 @@ own `manifest.json`, so a plugin's reach is readable before you install it.
 
 ```jsonc
 {
-  "title": "Metadata Editor",
+  "title": "Cover Finder",
   "mount": "files",
   "allowedHosts": [
     "openlibrary.org",        // exact match
@@ -226,11 +226,18 @@ never compiled, so they cost no flash.
 | `hello-plugin` | settings | Minimal reference and smoke test - renders a card and lists `/` |
 | `find-duplicates` | files | Reports files sharing an exact size. Report only: never writes, and never downloads a book |
 | `organize-by-author` | files | Sorts loose EPUBs into `<Author>/` folders. Preview first, moves only on Apply, carries sidecars along |
-| `metadata-editor` | files | Edits title, author and how it sorts (`opf:file-as`), language, series, series index and description into a `book.opf` sidecar, for every book format the reader opens (EPUB, XTC, TXT, Markdown), and manages the cover sidecar (local file, clipboard paste, or a search of Open Library / Goodreads / Google Books). Never rewrites the book |
+
+The metadata editor that used to be a plugin here is now part of the web
+interface: the File Manager's **Details** button on a book
+(`src/network/html/js/metadata-editor.js`). A copy installed as a plugin still
+loads; remove it on the Plugins page.
 
 ### Cover sources, and why they differ
 
-`metadata-editor` is the worked example of the CORS rules above:
+The Details dialog is the worked example of the CORS rules above. It is not a
+plugin, so its relay requests use the scope `:details`, whose host list is built
+into the firmware (`www.goodreads.com`, `.gr-assets.com`, `books.google.com`); a
+`:` cannot appear in a folder name, so no plugin can claim it.
 
 | Source | Search | Cover bytes |
 |---|---|---|

@@ -22,10 +22,11 @@ When present it replaces the book's embedded cover on the home screen and in the
 Library, and the firmware skips extracting the embedded cover entirely.
 Implemented by `ReaderActivity::sidecarCoverPath()`.
 
-The bundled `metadata-editor` plugin manages this from the web UI — preview the
+The File Manager's **Details** dialog manages this from the web UI: preview the
 current cover, replace it from a local file, paste an image copied from any
-website, search Open Library / Goodreads / Google Books, or remove it. See
-[sd-plugins.md](sd-plugins.md).
+website, search Open Library / Goodreads / Google Books, or remove it. Saving a
+cover there also deletes the book's cached thumbnails, so every view, on any
+clock, draws the new one.
 
 **Replacing a cover takes effect on the next load.** The rendered thumbnail is
 cached per book, and `ReaderActivity::ensureCoverThumb()` compares the sidecar's
@@ -55,10 +56,12 @@ Fields taken from the sidecar, when non-empty:
 | description | `<dc:description>` |
 | ISBN, ASIN | the first `<dc:identifier>` of each kind: `opf:scheme` naming it (`ISBN`; `MOBI-ASIN` or `AMAZON`), or a `urn:isbn:` / `isbn:` (`asin`) prefix on the value |
 
-The bundled `metadata-editor` plugin writes these from the web UI, so you do not
-have to hand-edit XML — see [sd-plugins.md](sd-plugins.md). It edits an existing
-sidecar in place rather than regenerating it, so publisher, identifiers, dates
-and other fields it does not manage survive untouched.
+The File Manager's **Details** dialog writes these from the web UI, so you do not
+have to hand-edit XML. It edits an existing sidecar in place rather than
+regenerating it, so publisher, identifiers, dates and other fields it does not
+manage survive untouched. It refuses to save a sidecar over the 16KB cap. For an
+EPUB without a sidecar it reads the book's own OPF through `GET /api/book/opf`
+rather than downloading the book.
 
 A minimal sidecar:
 
