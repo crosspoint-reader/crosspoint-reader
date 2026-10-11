@@ -235,12 +235,14 @@ void toggleFrontlight() {
   LOG_INF("LIGHT", "Frontlight toggled %s", lightOn ? "on" : "off");
 }
 
-// Applies the slide switch's position to the bound function at boot and on each
-// change; the physical position stays the source of truth, as on stock.
+// Applies the slide switch's position to the bound function at boot, on each
+// change, and when its binding changes; the physical position stays the source
+// of truth, as on stock.
 void handleSlideSwitch() {
-  static bool applied = false;
-  if (!gpio.hasToggleSwitch() || (applied && !gpio.wasToggleSwitchChanged())) return;
-  applied = true;
+  static int appliedAction = -1;
+  if (!gpio.hasToggleSwitch()) return;
+  if (!gpio.wasToggleSwitchChanged() && appliedAction == SETTINGS.slideSwitchAction) return;
+  appliedAction = SETTINGS.slideSwitchAction;
   const bool on = gpio.isToggleSwitchOn();
   if (SETTINGS.slideSwitchAction == CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE) {
     if ((SETTINGS.screenInverted != 0) == on) return;
@@ -758,7 +760,6 @@ void loop() {
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   mappedInputManager.update();
-  handleSlideSwitch();
 
   if (activityManager.requiresExclusiveStorageLoop()) {
     // USB Drive handed the raw SD card to the host. Do not run screenshots,
@@ -776,6 +777,8 @@ void loop() {
     return;
   }
 
+  // After the exclusive-storage return: it saves settings to the SD card.
+  handleSlideSwitch();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   // Under the render lock, so a step never overlaps the themes' gauge reads.
