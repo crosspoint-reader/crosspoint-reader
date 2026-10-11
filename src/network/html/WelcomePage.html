@@ -103,7 +103,7 @@
     <div class="logo">📚</div>
     <h1>%%CROSSPOINT%%</h1>
     <div class="subtitle">Welcome to your reader</div>
-    <div class="version">Version %%VERSION%%</div>
+    <div class="version" id="version">&nbsp;</div>
     <div class="nav-links">
       <a href="/files">Open File Manager</a>
       <a href="/settings">Settings</a>
@@ -113,6 +113,14 @@
     </div>
     <div class="footer">Fast start page designed for weak connections</div>
   </div>
+  <script>
+    // Asked for rather than built in: this page is served from the SD card bundle,
+    // which a firmware update keeps when the pages themselves did not change.
+    fetch('/api/status/fast')
+      .then((r) => r.json())
+      .then((s) => { document.getElementById('version').textContent = 'Version ' + s.version; })
+      .catch(() => {});
+  </script>
 </body>
 
 </html>

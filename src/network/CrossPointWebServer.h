@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "html/WebBundle.generated.h"
+
 // Structure to hold file information
 struct FileInfo {
   String name;
@@ -106,14 +108,17 @@ class CrossPointWebServer {
   bool isEpubFile(const String& filename) const;
 
   // Request handlers
+  void serveBundlePage(web_bundle::Index page) const;
   void handleRoot() const;
   void handleWelcomePage() const;
+  void handleWebSetupPage() const;
+  void handleWebStatus() const;
+  void handleWebInstall() const;
   void handleSystemInfoPage() const;
   void handleJszip() const;
   void handleNotFound() const;
   void handleStatus() const;
   void handleStatusFast() const;
-  void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
   void handleUpload(UploadState& state) const;
