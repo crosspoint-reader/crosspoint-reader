@@ -92,6 +92,26 @@ void RecentBooksStore::removeBook(const std::string& path) {
   }
 }
 
+void RecentBooksStore::relocate(const std::string& oldPath, const std::string& newPath, const std::string& oldCacheDir,
+                                const std::string& newCacheDir) {
+  const Hold hold;
+  const auto at = [](const std::string& path) { return [&path](const RecentBook& book) { return book.path == path; }; };
+  if (std::none_of(recentBooks.begin(), recentBooks.end(), at(oldPath))) return;
+  // A row left for a book deleted from the new path would now name this one twice.
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), at(newPath)), recentBooks.end());
+
+  RecentBook& book = *std::find_if(recentBooks.begin(), recentBooks.end(), at(oldPath));
+  book.path = newPath;
+  const std::string oldPrefix = oldCacheDir + "/";
+  if (!oldCacheDir.empty() && book.coverBmpPath.compare(0, oldPrefix.size(), oldPrefix) == 0) {
+    book.coverBmpPath = newCacheDir + book.coverBmpPath.substr(oldCacheDir.size());
+  }
+  // TXT and Markdown books are listed under their file name.
+  const auto nameOf = [](const std::string& path) { return path.substr(path.rfind('/') + 1); };
+  if (book.title == nameOf(oldPath)) book.title = nameOf(newPath);
+  saveToFile();
+}
+
 bool RecentBooksStore::refreshSidecarMetadata(const size_t maxBooks) {
   const Hold hold;
   bool changed = false;

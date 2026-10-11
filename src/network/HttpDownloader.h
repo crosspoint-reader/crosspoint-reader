@@ -20,6 +20,10 @@ class HttpDownloader {
   // Called with each response chunk as it arrives; return false to abort.
   using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;
 
+  // Asked with each redirect's target URL before it is followed; false fails the transfer at the
+  // 3xx (HTTP_ERROR). For fetching on behalf of something whose reach is fenced to an allowlist.
+  using RedirectFilter = std::function<bool(const std::string& url)>;
+
   enum DownloadError {
     OK = 0,
     HTTP_ERROR,
@@ -101,7 +105,8 @@ class HttpDownloader {
    * fields are found, to avoid depending on full-body tail reads.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, bool treatAbortAsSuccess,
-                       const std::string& username = "", const std::string& password = "");
+                       const std::string& username = "", const std::string& password = "",
+                       const RedirectFilter& redirectAllowed = {});
 
   /**
    * Streaming fetch that ALWAYS fails closed on TLS verification failure — it
@@ -133,7 +138,8 @@ class HttpDownloader {
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, const std::string& username = "",
-                                      const std::string& password = "", TlsPolicy tls = TlsPolicy::Verified);
+                                      const std::string& password = "", TlsPolicy tls = TlsPolicy::Verified,
+                                      const RedirectFilter& redirectAllowed = {});
 
   /**
    * Session-based variant. The first call on a fresh session opens the

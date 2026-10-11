@@ -52,6 +52,10 @@ class ReadingStatsStore {
   // show — a book keeps its newest kMaxBookDays buckets, which always cover the 30-day sparkline
   // and the current streak. The persisted longest-streak record stays.
   WriteResult removeBook(const std::string& docId);
+  // Carries a book's history over to a new document id: the id is a hash of the file NAME, so a
+  // book renamed on the card would otherwise start a second, empty history. NotFound when `fromDocId`
+  // has none; Failed when `toDocId` already has one (the two are left apart rather than merged).
+  WriteResult renameBook(const std::string& fromDocId, const std::string& toDocId);
 
   // ---- Queries ----------------------------------------------------------------------------------
   //
@@ -174,11 +178,12 @@ class ReadingStatsStore {
   static constexpr size_t kMaxGlobalDays = 400;
 
  private:
-  enum class Edit : uint8_t { Session, Finish, Remove };
-  // The update shared by the three writes. `apply` changes the book and the totals and returns
-  // false when there is nothing to write.
+  enum class Edit : uint8_t { Session, Finish, Remove, Rekey };
+  // The update shared by the writes. `apply` changes the book and the totals and returns false when
+  // there is nothing to write. A Rekey stores the book under `newDocId` in place of `docId`.
   WriteResult write(Edit edit, const std::string& docId,
-                    const std::function<bool(BookReadingStats& book, ReadingTotals& totals, bool existed)>& apply);
+                    const std::function<bool(BookReadingStats& book, ReadingTotals& totals, bool existed)>& apply,
+                    const std::string& newDocId = "");
   // Before anything reads the history: a create or an import cut short is discarded, and the
   // legacy JSON imported once. Ok from its first success on.
   ReadResult prepare();
