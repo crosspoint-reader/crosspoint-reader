@@ -65,7 +65,9 @@ If the network requires a password:
 If the network turns the saved password down (it has been changed on the router, say), the keyboard
 appears again headed **Saved password may be wrong**. Type the current password; once it connects you
 are asked whether to save it over the old one. **Back** returns to the list and keeps the saved one.
-Picking that network again in the same session goes straight to the keyboard.
+When this happens on the automatic connect, the reader first tries your other saved networks in range
+and asks only if none of them works. Picking that network again in the same session goes straight to
+the keyboard.
 
 Saved passwords travel with the SD card: a card moved from another reader keeps working.
 

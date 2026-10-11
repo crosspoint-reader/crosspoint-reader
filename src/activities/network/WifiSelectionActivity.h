@@ -132,6 +132,7 @@ class WifiSelectionActivity final : public Activity {
   void abandonConnectAttempt();
   bool passwordLikelyWrong() const;
   bool askForPasswordIfLikelyWrong();
+  bool promptForSuspectNetwork();
   // Issues WiFi.begin() with a full, signal-sorted scan. See the definition for why the cached
   // channel/BSSID hint that used to shortcut this was removed.
   void issueWifiBegin();

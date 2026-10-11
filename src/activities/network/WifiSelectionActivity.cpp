@@ -310,6 +310,10 @@ void WifiSelectionActivity::tryNextAutoCycleCandidate() {
     LOG_DBG("WIFI", "Auto-cycle exhausted, falling through to network list");
     state = WifiSelectionState::NETWORK_LIST;
     selectedNetworkIndex = 0;
+    // Nothing else worked, and a saved password was turned down along the way: ask for it now,
+    // with the list behind the keyboard, rather than leaving the user to find the network and
+    // pick it first.
+    if (promptForSuspectNetwork()) return;
     requestUpdate();
     return;
   }
@@ -875,6 +879,19 @@ void WifiSelectionActivity::abandonConnectAttempt() {
 bool WifiSelectionActivity::passwordLikelyWrong() const {
   return usedSavedPassword && wifiEventKeyFailures.load(std::memory_order_relaxed) > 0 &&
          wifiEventOtherFailures.load(std::memory_order_relaxed) == 0;
+}
+
+// Opens the keyboard for passwordSuspectSsid if the scan found it, selecting its row so that
+// Cancel lands there. False, with nothing changed, when there is no such network in range.
+bool WifiSelectionActivity::promptForSuspectNetwork() {
+  if (passwordSuspectSsid.empty()) return false;
+  for (size_t i = 0; i < realNetworkCount; i++) {
+    if (networks[i].ssid != passwordSuspectSsid) continue;
+    selectedNetworkIndex = static_cast<int>(i);
+    selectNetwork(selectedNetworkIndex);  // a suspect network goes to the keyboard, see there
+    return true;
+  }
+  return false;
 }
 
 // For a connect the user started: instead of the timeout message and the network options, go
