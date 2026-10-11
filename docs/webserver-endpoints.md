@@ -69,6 +69,7 @@ Query parameters:
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `path` | No | `/` | Directory to list |
+| `hidden` | No | `false` | `true` includes dotfiles regardless of the `showHiddenFiles` setting |
 
 Response:
 
@@ -80,7 +81,8 @@ Response:
 ```
 
 Hidden dotfiles are omitted unless the device setting `showHiddenFiles` is
-enabled. `System Volume Information` and `XTCache` are always hidden/protected.
+enabled or `hidden=true` is passed. `System Volume Information` and `XTCache`
+are always hidden/protected.
 
 The saved-credential stores (`/.crosspoint/wifi.json`, `opds.json`,
 `koreader.json`) can never be downloaded, uploaded, renamed, moved, deleted or
