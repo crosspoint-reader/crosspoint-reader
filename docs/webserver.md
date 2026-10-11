@@ -129,9 +129,10 @@ stops you adding books. It stays available at `http://<device-ip>/setup`.
 
 ### Welcome Page
 
-The page you land on at `http://<device-ip>/` has one link per page:
+The page you land on at `http://<device-ip>/` has one link per page, and every other page shows the
+same links along its top:
 
-- **Open File Manager**: browse and manage the SD card (below)
+- **File Manager**: browse and manage the SD card (below)
 - **Settings**: device settings and saved networks (below)
 - **Font Manager**: install and remove SD-card fonts (below)
 - **Dictionaries**: install and remove dictionaries for word lookup (below)
