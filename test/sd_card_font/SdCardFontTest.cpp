@@ -498,3 +498,20 @@ TEST(SdCardFontTest, OnePageWithMoreCodepointsThanTheTableKeepsTheLowestInAnyOrd
     ASSERT_EQ(cp < FIRST + CACHE_LIMIT ? 32U << 4 : 0U, font.getAdvance(cp, 0)) << std::hex << cp;
   }
 }
+
+TEST(SdCardFontTest, CodepointsTheFontLacksDoNotTakeTableSlotsWithoutAReplacementGlyph) {
+  constexpr uint32_t CACHE_LIMIT = 768;  // SdCardFont::ADVANCE_CACHE_LIMIT
+  makeFont(1001);
+  put32(76, 0xFFFC);  // the last glyph is U+FFFC instead of U+FFFD
+  put32(80, 0xFFFC);
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  // 300 codepoints below FIRST that the font lacks, each twice, then a full
+  // table's worth it has. Only the latter can be cached, so all should be.
+  const std::string lacking = page(0x4E00, 300);
+  const std::string text = lacking + lacking + page(FIRST, CACHE_LIMIT);
+  EXPECT_EQ(300, font.buildAdvanceTable(text.c_str(), 1));
+  for (uint32_t cp = FIRST; cp < FIRST + CACHE_LIMIT; ++cp) {
+    ASSERT_EQ(32U << 4, font.getAdvance(cp, 0)) << std::hex << cp;
+  }
+}

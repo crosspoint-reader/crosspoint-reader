@@ -1716,28 +1716,46 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
   }
 
   // One pass per style: each skips the codepoints its own table already holds,
-  // so the lowest-entries bound above holds per style.
+  // and those it can never cache (no glyph and no replacement glyph), so the
+  // lowest-entries bound above holds per style. The latter are counted as
+  // missed in a second pass, run only when any were seen.
   int totalMissed = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(openStyles & (1 << si))) continue;
-    const auto uncached = [this, si](const uint32_t cp) { return !advanceTableLookup(si, cp, nullptr); };
-    LowestCodepoints collected(codepoints, ADVANCE_CACHE_LIMIT);
-
-    // Each segment holds consecutive NUL-terminated words; walk word by word.
-    for (size_t seg = 0; seg < segmentCount; ++seg) {
-      const char* p = segments[seg];
-      const char* const end = p + segmentLens[seg];
-      while (p < end) {
-        collectCodepoints(p, collected, uncached);
-        p += strlen(p) + 1;
+    const PerStyle& style = styles_[si];
+    const bool hasReplacement = findGlobalGlyphIndex(style, REPLACEMENT_GLYPH) >= 0;
+    const auto resolves = [&](const uint32_t cp) { return hasReplacement || findGlobalGlyphIndex(style, cp) >= 0; };
+    const auto collect = [&](LowestCodepoints& into, auto wanted) {
+      // Each segment holds consecutive NUL-terminated words; walk word by word.
+      for (size_t seg = 0; seg < segmentCount; ++seg) {
+        const char* p = segments[seg];
+        const char* const end = p + segmentLens[seg];
+        while (p < end) {
+          collectCodepoints(p, into, wanted);
+          p += strlen(p) + 1;
+        }
       }
-    }
-    if (extraText) collectCodepoints(extraText, collected, uncached);
-    if (includeSpace) collected.addReserved(' ');
-    if (includeHyphen) collected.addReserved('-');
+      if (extraText) collectCodepoints(extraText, into, wanted);
+      if (includeSpace && wanted(' ')) into.addReserved(' ');
+      if (includeHyphen && wanted('-')) into.addReserved('-');
+    };
 
+    bool anyLacking = false;
+    LowestCodepoints collected(codepoints, ADVANCE_CACHE_LIMIT);
+    collect(collected, [&](const uint32_t cp) {
+      if (advanceTableLookup(si, cp, nullptr)) return false;
+      if (resolves(cp)) return true;
+      anyLacking = true;
+      return false;
+    });
     std::sort(collected.data(), collected.data() + collected.size());
     totalMissed += fetchAdvancesForCodepoints(collected.data(), collected.size(), 1 << si);
+
+    if (anyLacking) {
+      LowestCodepoints lacking(codepoints, ADVANCE_CACHE_LIMIT);
+      collect(lacking, [&](const uint32_t cp) { return !resolves(cp); });
+      totalMissed += static_cast<int>(lacking.size());
+    }
   }
   delete[] codepoints;
   stats_.prewarmTotalMs = millis() - startMs;
