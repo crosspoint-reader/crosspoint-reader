@@ -19,7 +19,7 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **Folder book counts are remembered until the device sleeps**, so going back to a folder no longer shows "..." while it counts again. Moving, removing or uploading a book counts the folders it changes again.
 - **Covers draw about three and a half times faster**: a grid cover takes 12 ms instead of 40 ms on the X3, and a page of the Recent Books grid 79 ms instead of 168 ms.
 - **Fix: a book could be marked as having no cover for good.** When the Home carousel or the Recent Books grid moved from one book to the next, the next book's cover was read from where the previous book's cover sat in its file, which failed, and the book was recorded as coverless. A cover that fails for want of memory, or because a button was pressed, is also tried again later instead of being given up.
-- **Fix: a moved or renamed book started over.** Moving a book with **Move to folder**, or moving or renaming it, or its folder, in the web interface, lost its reading position, bookmarks and place in Recent, and a rename also lost its reading stats. They now go with the book.
+- **Fix: a moved or renamed book started over.** Moving a book with **Move to folder**, or moving or renaming it, or its folder, in the web interface or over WebDAV, lost its reading position, bookmarks and place in Recent, and a rename also lost its reading stats. They now go with the book.
 
 ### Fonts
 

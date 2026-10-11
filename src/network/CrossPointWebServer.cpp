@@ -3029,10 +3029,12 @@ void CrossPointWebServer::handleFetchToSd() {
 // The body arrives through handlePluginFsData() in raw chunks. It used to be read
 // from the buffered "plain" argument, which the framework builds as a C string:
 // binary content ended at its first NUL byte and was still reported written.
+// Streaming also retires the low-memory gate the buffered version needed: the
+// body is never held whole, only one framework-sized chunk at a time.
 void CrossPointWebServer::handlePluginFs() {
   PluginFsUpload& up = pluginFsUpload;
   if (!up.started) {
-    // A form-encoded body is parsed into arguments and never streams.
+    // A multipart body is parsed as a form and never streams; every other content type does.
     server->send(415, "application/json", "{\"error\":\"send the file as the raw request body\"}");
     return;
   }

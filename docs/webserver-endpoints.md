@@ -837,14 +837,19 @@ curl -X POST --data-binary @cover.jpg \
 # -> {"ok":true,"path":"/Books/book.jpg"}
 ```
 
-Capped at 64KB — the body is buffered by the web server, so bulk transfers
-belong in `/upload`, which streams. `path` passes the same check as `dest` above.
+The body is streamed to the card as it arrives, so binary files arrive intact,
+with any content type except `multipart/form-data` (which the web server parses
+as a form; send the bytes themselves). It is written to `<path>.part` and renamed
+over `path` at the end, so a body that is too large or cut off never replaces an
+existing file. Capped at 64KB, to keep it to small files; bulk transfers belong
+in `/upload`. `path` passes the same check as `dest` above.
 
 | Status | Cause                                   |
 | ------ | --------------------------------------- |
-| 400    | Missing `plugin`/`path`, or a refused path |
+| 400    | Missing `plugin`/`path`, or a refused path; or the upload was cut off |
 | 413    | Body over 64KB — use `/upload`          |
-| 500    | Could not create the file, or short write |
+| 415    | A `multipart/form-data` body            |
+| 500    | Could not create the file, short write, or could not replace the existing file |
 
 ### GET `/plugin` - Serve a Plugin File
 
