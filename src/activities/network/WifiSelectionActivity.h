@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "components/themes/TapTargets.h"
 #include "util/ButtonNavigator.h"
 
 // Structure to hold WiFi network information
@@ -85,6 +86,10 @@ class WifiSelectionActivity final : public Activity {
 
   // Forget prompt selection (0 = Cancel, 1 = Reset info, 2 = Forget)
   int forgetPromptSelection = 0;
+  // Where the forget prompt's three buttons were painted, value = button index. They sit side by
+  // side, which ListTouchBand's full-width rows cannot describe. Republished on every render pass
+  // (empty unless the prompt was drawn), so a tap only ever matches buttons that are on screen.
+  TapTargets::Recorder forgetPromptTargets;
 
   // Connection timeouts
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
@@ -111,7 +116,7 @@ class WifiSelectionActivity final : public Activity {
   void renderConnecting() const;
   void renderConnected() const;
   void renderConnectionFailed() const;
-  void renderForgetPrompt() const;
+  void renderForgetPrompt(TapTargets::Recorder::Builder& targets) const;
   void renderCaptivePortal() const;
 
   void startWifiScan();

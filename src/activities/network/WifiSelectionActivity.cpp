@@ -20,6 +20,7 @@
 #include <cstring>
 #include <ctime>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/NetworkMemoryTrim.h"
@@ -877,6 +878,25 @@ void WifiSelectionActivity::loop() {
 
   // Handle forget prompt state (connection failed with saved credentials)
   if (state == WifiSelectionState::FORGET_PROMPT) {
+    // A tap on a button follows the list rule: the first tap moves the selection there, which also
+    // shows what that button does, and a tap on the selected one presses Confirm, so it runs the
+    // same branch below as the key does.
+    int tapX = 0;
+    int tapY = 0;
+    const int tappedButton = mappedInput.wasScreenTapped(tapX, tapY) ? forgetPromptTargets.hitTest(tapX, tapY) : -1;
+    if (tappedButton >= 0) {
+      constexpr int buttonCount = 3;
+      const auto tapResult = listTapActivation.applyPreference(
+          tappedButton, ListRowTap::apply(tappedButton, buttonCount, forgetPromptSelection),
+          SETTINGS.touchListActivation == CrossPointSettings::TOUCH_LIST_ACTIVATE_IMMEDIATELY);
+      if (tapResult == ListRowTap::Result::Selected) {
+        requestUpdate();
+      } else if (tapResult == ListRowTap::Result::Activate) {
+        mappedInput.injectRawPress(mappedInput.rawIndex(MappedInputManager::Button::Confirm));
+      }
+      return;
+    }
+
     if (mappedInput.wasLogicalPressed(MappedInputManager::Direction::Up) ||
         mappedInput.wasLogicalPressed(MappedInputManager::Direction::Left)) {
       if (forgetPromptSelection > 0) {
@@ -1043,6 +1063,7 @@ void WifiSelectionActivity::render(RenderLock&&) {
       renderer, Rect{contentRect.x, metrics.topPadding + metrics.headerHeight, contentRect.width, metrics.tabBarHeight},
       cachedMacAddress.c_str());
 
+  TapTargets::Recorder::Builder promptTargets;
   switch (state) {
     case WifiSelectionState::AUTO_CONNECTING:
     case WifiSelectionState::AUTO_CYCLING:
@@ -1067,12 +1088,13 @@ void WifiSelectionActivity::render(RenderLock&&) {
       renderConnectionFailed();
       break;
     case WifiSelectionState::FORGET_PROMPT:
-      renderForgetPrompt();
+      renderForgetPrompt(promptTargets);
       break;
     case WifiSelectionState::CAPTIVE_PORTAL:
       renderCaptivePortal();
       break;
   }
+  forgetPromptTargets.record(promptTargets);
 
   renderer.displayBuffer();
 }
@@ -1204,7 +1226,7 @@ void WifiSelectionActivity::renderConnectionFailed() const {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-void WifiSelectionActivity::renderForgetPrompt() const {
+void WifiSelectionActivity::renderForgetPrompt(TapTargets::Recorder::Builder& targets) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
@@ -1238,8 +1260,12 @@ void WifiSelectionActivity::renderForgetPrompt() const {
   constexpr int totalWidth = buttonWidth * 3 + buttonSpacing * 2;
   const int startX = (pageWidth - totalWidth) / 2;
   const char* const buttonLabels[3] = {tr(STR_CANCEL), tr(STR_RESET_INFO_BUTTON), tr(STR_FORGET_BUTTON)};
+  // Each button's target is its whole slot, widened into the gaps and padded to a finger's
+  // height: the label alone is one text line, far smaller than a fingertip.
+  constexpr int touchPadY = 10;
   for (int i = 0; i < 3; i++) {
     const int x = startX + i * (buttonWidth + buttonSpacing);
+    targets.add(x - buttonSpacing / 2, buttonY - touchPadY, buttonWidth + buttonSpacing, height + 2 * touchPadY, i);
     if (forgetPromptSelection == i) {
       std::string text = "[" + std::string(buttonLabels[i]) + "]";
       renderer.drawText(UI_10_FONT_ID, x, buttonY, text.c_str());
@@ -1336,6 +1362,10 @@ void WifiSelectionActivity::onComplete(const bool connected) {
 }
 
 ListRowTap::Result WifiSelectionActivity::selectListRow(const int index) {
+  // `state` is read on the loop task and may have moved on since the render that recorded the
+  // band: Options opens the forget prompt over a list whose rows still answer until the next
+  // render, and a synthesized Confirm there would press the prompt's Cancel.
+  if (state != WifiSelectionState::NETWORK_LIST) return ListRowTap::Result::Rejected;
   return ListRowTap::apply(index, static_cast<int>(networks.size()), selectedNetworkIndex);
 }
 
