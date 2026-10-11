@@ -341,13 +341,32 @@
       // plugins/catalog.json in the firmware's repository. Read by the browser straight from GitHub,
       // which allows cross-origin reads, so the reader downloads nothing itself; it needs a browser
       // with internet, which in hotspot mode it may not have.
+      //
+      // Entries have the shape of crosspoint-reader's catalog: each names its files and the folder
+      // they are read from (base), resolved against the catalog's URL. This repository's plugins
+      // use a relative base; a plugin hosted elsewhere has an absolute one.
 
       let catalog = null;
 
       // ?ref=<branch> reads the catalog of another branch, to try plugins before they are merged.
       const catalogRef = new URLSearchParams(location.search).get('ref') || 'master';
-      function rawUrl(path) {
-        return 'https://raw.githubusercontent.com/' + repo + '/' + catalogRef + '/plugins/' + path;
+      function catalogUrl() {
+        return 'https://raw.githubusercontent.com/' + repo + '/' + catalogRef + '/plugins/catalog.json';
+      }
+
+      // The folder an entry's files are read from.
+      function entryBase(c) {
+        return new URL(c.base || c.name + '/', catalogUrl());
+      }
+
+      // "From github.com/someone/repo" for a plugin hosted outside this repository, else ''.
+      function describeSource(c) {
+        const base = entryBase(c);
+        if (base.href.startsWith(new URL('./', catalogUrl()).href)) return '';
+        const parts = base.pathname.split('/').filter(Boolean);
+        const where = base.host === 'raw.githubusercontent.com' ? 'github.com/' + parts.slice(0, 2).join('/')
+          : base.host + base.pathname;
+        return 'From ' + where;
       }
 
       async function loadCatalog() {
@@ -356,7 +375,7 @@
           if (s.repo) repo = s.repo;
         } catch (e) { /* keep the default */ }
         try {
-          const r = await fetch(rawUrl('catalog.json'), { cache: 'no-cache' });
+          const r = await fetch(catalogUrl(), { cache: 'no-cache' });
           if (!r.ok) throw new Error(r.status + '');
           catalog = await r.json();
         } catch (e) {
@@ -388,10 +407,13 @@
           });
           const title = el('strong', { textContent: c.title || c.name });
           if (c.version) title.append(el('span', { className: 'badge', textContent: 'v' + c.version }));
+          const source = describeSource(c);
           return el('div', { className: 'plugin' }, [
             el('div', { className: 'plugin-info' }, [
               title,
               c.description ? el('div', { textContent: c.description }) : '',
+              c.author ? el('div', { className: 'plugin-meta', textContent: 'By ' + c.author }) : '',
+              source ? el('div', { className: 'plugin-meta', textContent: source }) : '',
               el('div', { className: 'plugin-meta', textContent: 'Adds itself to: ' + (MOUNT_LABELS[c.mount] || c.mount) }),
               el('div', { className: 'plugin-meta', textContent: describeReach(c.allowedHosts) })
             ]),
@@ -405,10 +427,13 @@
         const title = c.title || c.name;
         try {
           setStatus('Downloading ' + title + '...', 'busy');
-          const files = await Promise.all((c.files || []).map(async (f) => {
-            const r = await fetch(rawUrl(c.name + '/' + f.name), { cache: 'no-cache' });
-            if (!r.ok) throw new Error(f.name + ': ' + r.status);
-            return { name: f.name, data: await r.arrayBuffer() };
+          const base = entryBase(c);
+          const files = await Promise.all((c.files || []).map(async (name) => {
+            // A plugin's files sit side by side; the reader refuses anything else as well.
+            if (typeof name !== 'string' || !name || name.includes('/')) throw new Error('bad file name in the catalog');
+            const r = await fetch(new URL(name, base), { cache: 'no-cache' });
+            if (!r.ok) throw new Error(name + ': ' + r.status);
+            return { name, data: await r.arrayBuffer() };
           }));
           await installFiles(c.name, title, files);
           setStatus(title + ' is installed. Open the ' + (MOUNT_LABELS[c.mount] || 'page') + ' page to use it.', 'ok');
