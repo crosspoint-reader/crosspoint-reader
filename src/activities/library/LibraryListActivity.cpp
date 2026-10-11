@@ -1034,11 +1034,13 @@ void LibraryListActivity::drawFooter() {
   drawPositionReadout();
   drawHoldHelp();
 
-  const bool backGoesHome = tabsFocused() && !groupsCollapsed && query.empty();
-  const char* backLabel = backGoesHome ? tr(STR_HOME) : tr(STR_BACK);
+  // Mirrors the stages of handleBackAction().
+  const char* backLabel = tr(STR_BACK);
+  if (query.empty() && !groupsCollapsed) backLabel = tabsFocused() || degraded ? tr(STR_HOME) : tr(STR_TABS);
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
+  if (tabsFocused()) confirmLabel = tabLabel((activeTab() + 1) % tabCount());
   const bool canSearch = tabsFocused() && !degraded;
-  const auto labels = mappedInput.mapLabels(backLabel, tabsFocused() ? tr(STR_TOGGLE) : confirmLabel,
-                                            canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels =
+      mappedInput.mapLabels(backLabel, confirmLabel, canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
