@@ -465,7 +465,9 @@ void setup() {
   // boot — but defer the sleep-or-boot decision until SETTINGS is loaded below:
   // click-to-wake is a setting, and an X4 battery power-off cuts all power, so
   // only SD state survives to the next boot.
-  const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || gpio.verifyPowerButtonWakeup();
+  // The Metalio boots after the button is released, so it skips the check.
+  const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || BoardConfig::isMetalioEInk4() ||
+                                gpio.verifyPowerButtonWakeup();
 
   // X4 Pro and X4 Classic both map BTN_UP to GPIO0 — an ESP32-S3 boot strap — so
   // gate recovery on the non-strap Down key (GPIO7) to avoid a stuck-in-recovery loop.
@@ -697,6 +699,13 @@ void loop() {
   }
 
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
+
+  // Under the render lock, so a step never overlaps the themes' gauge reads.
+  static bool gaugeCapacityPending = true;
+  if (gaugeCapacityPending) {
+    RenderLock lock(RenderLock::Mode::Try);
+    if (lock.ownsLock()) gaugeCapacityPending = BatteryMonitor::loadDesignCapacity();
+  }
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

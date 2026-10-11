@@ -15,7 +15,7 @@ constexpr char DEFAULT_SERVER_URL[] = "https://sync.crosspointreader.com";
 constexpr char LEGACY_DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
 // Bumped when a change to defaults would alter behavior for existing configs.
-constexpr uint8_t CONFIG_VERSION = 2;
+constexpr uint8_t CONFIG_VERSION = 3;
 }  // namespace
 
 void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
@@ -23,8 +23,10 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["username"] = getUsername();
   doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
   doc["serverUrl"] = getServerUrl();
+  doc["serverType"] = static_cast<uint8_t>(getServerType());
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
   doc["sendMetadata"] = getSendMetadata();
+  doc["syncClippings"] = getSyncClippings();
   doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
 }
 
@@ -42,12 +44,30 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   // against the old default — pin that URL so the upgrade doesn't switch servers
   // out from under the user. Fresh setups get the new default.
   const uint8_t cfgVersion = doc["cfgVersion"] | (uint8_t)1;
-  if (cfgVersion < CONFIG_VERSION) {
+  if (cfgVersion < 2) {
     if (getServerUrl().empty() && hasCredentials()) {
       LOG_DBG("KRS", "Pre-v2 config used the old default server; pinning %s", LEGACY_DEFAULT_SERVER_URL);
       setServerUrl(LEGACY_DEFAULT_SERVER_URL);
     }
-    needsResave = true;  // stamp cfgVersion so this migration runs once
+    needsResave = true;
+  }
+
+  // v3 replaces hostname-based enhanced-progress detection with an explicit
+  // protocol profile. Preserve previous behavior on upgrade: only the built-in
+  // CrossPoint URL was enhanced, while every custom URL was strict KOSync.
+  const JsonVariantConst serverTypeValue = doc["serverType"];
+  if (cfgVersion < CONFIG_VERSION || serverTypeValue.isNull()) {
+    setServerType(getBaseUrl() == DEFAULT_SERVER_URL ? KOReaderServerType::CROSSPOINT : KOReaderServerType::KOSYNC);
+    needsResave = true;
+  } else {
+    const uint8_t type = serverTypeValue.as<uint8_t>();
+    if (type <= static_cast<uint8_t>(KOReaderServerType::OTHER)) {
+      setServerType(static_cast<KOReaderServerType>(type));
+    } else {
+      LOG_DBG("KRS", "Invalid serverType %u in JSON, resetting to KOSYNC", type);
+      setServerType(KOReaderServerType::KOSYNC);
+      needsResave = true;
+    }
   }
 
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
@@ -58,6 +78,7 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
     setMatchMethod(DocumentMatchMethod::FILENAME);
   }
   setSendMetadata(doc["sendMetadata"] | false);
+  setSyncClippings(doc["syncClippings"] | false);
 
   const JsonVariantConst behaviorValue = doc["syncBehavior"];
   const bool missingBehavior = behaviorValue.isNull();
@@ -132,7 +153,13 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
   return url;
 }
 
-bool KOReaderCredentialStore::usesCrossPointSyncServer() const { return getBaseUrl() == DEFAULT_SERVER_URL; }
+void KOReaderCredentialStore::setServerType(KOReaderServerType type) {
+  if (static_cast<uint8_t>(type) > static_cast<uint8_t>(KOReaderServerType::OTHER)) {
+    type = KOReaderServerType::KOSYNC;
+  }
+  serverType = type;
+  LOG_DBG("KRS", "Set server type: %u", static_cast<unsigned>(type));
+}
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;

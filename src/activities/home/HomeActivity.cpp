@@ -405,12 +405,17 @@ void HomeActivity::loop() {
     return;
   }
 
+  // Match the rendered cover grid, which lays tiles inside getContentArea()
+  // (origin content.x + contentSidePadding, span content.width). Using
+  // screen-relative getScreenWidth()/contentSidePadding here offset the touch
+  // targets from the drawn covers by content.x on bezel-inset panels (EEGO A4).
+  const Rect content = UITheme::getInstance().getContentArea(renderer);
   const int coverColumnCount = std::max(1, metrics.homeRecentBooksCount);
   const int recentCount = std::min(static_cast<int>(recentBooks.size()), coverColumnCount);
-  const int coverColumnWidth = (renderer.getScreenWidth() - 2 * metrics.contentSidePadding) / coverColumnCount;
+  const int coverColumnWidth = (content.width - 2 * metrics.contentSidePadding) / coverColumnCount;
   int touchedBook = -1;
-  const auto coverTouch = mappedInput.colTouch(touchedBook, metrics.contentSidePadding, coverColumnWidth, recentCount,
-                                               metrics.homeTopPadding,
+  const auto coverTouch = mappedInput.colTouch(touchedBook, content.x + metrics.contentSidePadding, coverColumnWidth,
+                                               recentCount, metrics.homeTopPadding,
                                                metrics.homeTopPadding + metrics.homeCoverTileHeight, coverColumnWidth);
   if (coverTouch != MappedInputManager::RowTouch::None) {
     if (coverTouch == MappedInputManager::RowTouch::Down) {
@@ -460,6 +465,9 @@ void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  // Content columns clear the bezel insets on rounded panels. The header
+  // self-insets in drawHeader, so only the cover/menu need it here.
+  const Rect content = UITheme::getInstance().getContentArea(renderer);
 
   renderer.clearScreen();
   if (coverGridUi) {
@@ -504,12 +512,12 @@ void HomeActivity::render(RenderLock&&) {
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
   // instead of the 48 KB full framebuffer the previous bind captured.
-  coverRectX = 0;
+  coverRectX = content.x;
   coverRectY = metrics.homeTopPadding;
-  coverRectW = pageWidth;
+  coverRectW = content.width;
   coverRectH = metrics.homeCoverTileHeight;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+  GUI.drawRecentBookCover(renderer, Rect{content.x, metrics.homeTopPadding, content.width, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
@@ -531,7 +539,7 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+      Rect{content.x, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, content.width,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()),
