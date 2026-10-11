@@ -508,7 +508,10 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
 bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path) {
   JsonDocument doc;
   doc["lastConnectedSsid"] = store.getLastConnectedSsid();
-  doc["lastKnownMacAddress"] = store.getLastKnownMacAddress();
+  // The key the passwords below are obfuscated with, whatever the store last recorded: a save that
+  // did not pass through the WiFi screen (the web settings page in hotspot mode) must still say
+  // which key it used. loadWifi() relies on it to read a file another reader wrote.
+  doc["lastKnownMacAddress"] = obfuscation::deviceKeyId();
 
   JsonArray arr = doc["credentials"].to<JsonArray>();
   for (const auto& cred : store.getCredentials()) {
@@ -583,6 +586,24 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
     }
   }
 
+  // Passwords are XORed with the key of the reader that wrote them, and lastKnownMacAddress names
+  // that reader: saveWifi() records its own key, and older firmware re-saved the file under its own
+  // key whenever it recorded a new one. A file from another reader (a card moved over, a copied
+  // wifi.json) is therefore read with the writer's key and re-saved under ours. Read with ours it
+  // gave passwords of the right length and the wrong bytes, which the router rejects as a 4-way
+  // handshake timeout - indistinguishable from a weak signal on the device.
+  uint8_t ownKey[6];
+  uint8_t writerKey[6];
+  const bool fromOtherReader = obfuscation::parseKeyId(obfuscation::deviceKeyId(), ownKey) &&
+                               obfuscation::parseKeyId(store.lastKnownMacAddress, writerKey) &&
+                               std::memcmp(ownKey, writerKey, sizeof(ownKey)) != 0;
+  if (fromOtherReader) {
+    LOG_INF("WCS", "wifi.json was written by reader %s; re-keying its passwords for this one",
+            store.lastKnownMacAddress.c_str());
+    store.lastKnownMacAddress = obfuscation::deviceKeyId();
+    if (needsResave) *needsResave = true;
+  }
+
   store.credentials.clear();
   JsonArray arr = doc["credentials"].as<JsonArray>();
   for (JsonObject obj : arr) {
@@ -591,7 +612,8 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
     cred.ssid = obj["ssid"] | std::string("");
     bool ok = false;
     bool tooLong = false;
-    cred.password = obfuscation::deobfuscateFromBase64(obj["password_obf"] | "", MAX_PASSWORD_LENGTH, &ok, &tooLong);
+    cred.password = obfuscation::deobfuscateFromBase64(obj["password_obf"] | "", MAX_PASSWORD_LENGTH, &ok, &tooLong,
+                                                       fromOtherReader ? writerKey : nullptr);
     if (tooLong) {
       LOG_ERR("WCS", "Discarding oversized password for %s", cred.ssid.c_str());
       if (needsResave) *needsResave = true;
