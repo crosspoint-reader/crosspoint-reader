@@ -199,6 +199,17 @@ it is sent:
   before they are merged. Regenerate the catalog with
   `scripts/build_plugin_catalog.py` after changing a plugin; CI fails when it is
   out of date. A manifest with `"catalog": false` stays out of it.
+
+  Entries have the shape of crosspoint-reader's plugin catalog: `name`, `title`,
+  `description`, `author`, `version`, `base` (the folder the files are read
+  from) and `files` (their names), plus this firmware's `mount`, `requires` and
+  `allowedHosts`. `base` is resolved against the catalog's own URL. The script
+  gives this repository's plugins a relative one (`find-duplicates/`), so a
+  catalog read from another branch installs that branch's files. A plugin hosted
+  elsewhere is added to `catalog.json` by hand with an absolute `base`; the
+  script keeps such entries, and the page shows where they come from. The
+  crosspoint-reader catalog itself is not offered: most of its plugins need
+  on-device screens (`device.json`) or a relay this firmware does not have.
 - **From a `.zip`**: the plugin's files side by side, or inside one folder. The
   page shows the manifest's title, description and `allowedHosts` and asks
   before installing.

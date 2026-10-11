@@ -1,28 +1,25 @@
 {
-  "version": 1,
+  "name": "Witch Reader plugins",
   "plugins": [
     {
       "name": "find-duplicates",
       "title": "Find Duplicates",
-      "version": "1.0.0",
       "description": "Lists files that share an exact size, usually the same book stored twice. Reads only the folder listing and changes nothing.",
+      "author": "jpirnay",
+      "version": "1.0.0",
       "mount": "files",
+      "base": "find-duplicates/",
       "files": [
-        {
-          "name": "manifest.json",
-          "size": 220
-        },
-        {
-          "name": "plugin.js",
-          "size": 5583
-        }
+        "manifest.json",
+        "plugin.js"
       ]
     },
     {
       "name": "metadata-editor",
       "title": "Metadata Editor",
-      "version": "1.0.0",
       "description": "Corrects a book's title, author, series and description, and sets its cover, in files beside the book. The book itself is not changed.",
+      "author": "jpirnay",
+      "version": "1.0.0",
       "mount": "files",
       "requires": [
         "relay"
@@ -32,32 +29,23 @@
         ".gr-assets.com",
         "books.google.com"
       ],
+      "base": "metadata-editor/",
       "files": [
-        {
-          "name": "manifest.json",
-          "size": 350
-        },
-        {
-          "name": "plugin.js",
-          "size": 27706
-        }
+        "manifest.json",
+        "plugin.js"
       ]
     },
     {
       "name": "organize-by-author",
       "title": "Organize by Author",
-      "version": "1.0.0",
       "description": "Sorts the EPUBs of one folder into a folder per author, taking their cover and metadata files along. Shows a preview first.",
+      "author": "jpirnay",
+      "version": "1.0.0",
       "mount": "files",
+      "base": "organize-by-author/",
       "files": [
-        {
-          "name": "manifest.json",
-          "size": 222
-        },
-        {
-          "name": "plugin.js",
-          "size": 10379
-        }
+        "manifest.json",
+        "plugin.js"
       ]
     }
   ]

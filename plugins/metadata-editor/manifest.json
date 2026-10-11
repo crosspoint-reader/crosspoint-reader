@@ -1,6 +1,7 @@
 {
   "title": "Metadata Editor",
   "version": "1.0.0",
+  "author": "jpirnay",
   "description": "Corrects a book's title, author, series and description, and sets its cover, in files beside the book. The book itself is not changed.",
   "mount": "files",
   "requires": ["relay"],

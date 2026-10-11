@@ -5,6 +5,13 @@ The page reads it, and each plugin's files, straight from GitHub (raw.githubuser
 allows cross-origin reads), so the catalog names every file a plugin needs. A plugin whose
 manifest says "catalog": false (the developer example) is left out.
 
+The entries have the shape of crosspoint-reader's plugin catalog (name, title, description,
+author, version, base, files), plus this firmware's mount, requires and allowedHosts. `base` is
+the folder the files are read from, resolved against the catalog's own URL: a plugin in this
+repository gets "<name>/", so a catalog read from another branch (?ref= on the page) installs
+that branch's files. An entry with an absolute base names a plugin hosted elsewhere; it is
+written into catalog.json by hand and kept as it is.
+
 Run it after adding or changing a plugin. --check exits 1 when the committed catalog is out of
 date, for CI.
 """
@@ -12,6 +19,7 @@ date, for CI.
 import argparse
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +27,20 @@ PLUGINS = os.path.join(ROOT, "plugins")
 CATALOG = os.path.join(PLUGINS, "catalog.json")
 # Copied from the manifest into the catalog entry, so the page can describe a plugin before
 # downloading it.
-MANIFEST_FIELDS = ("title", "version", "description", "mount", "requires", "allowedHosts")
+MANIFEST_FIELDS = ("title", "description", "author", "version", "mount", "requires", "allowedHosts")
+CATALOG_NAME = "Witch Reader plugins"
+
+
+def is_external(entry: dict) -> bool:
+    return bool(re.match(r"^https?://", entry.get("base", "")))
+
+
+def external_entries() -> list:
+    """The hand-written entries of plugins hosted elsewhere, from the committed catalog."""
+    if not os.path.exists(CATALOG):
+        return []
+    with open(CATALOG, encoding="utf-8") as f:
+        return [e for e in json.load(f).get("plugins", []) if is_external(e)]
 
 
 def build() -> str:
@@ -38,15 +59,21 @@ def build() -> str:
         entry = {"name": name}
         entry.update({k: manifest[k] for k in MANIFEST_FIELDS if k in manifest})
         entry.setdefault("mount", "settings")
+        entry["base"] = name + "/"
         files = []
         for file_name in sorted(os.listdir(folder)):
-            path = os.path.join(folder, file_name)
-            if os.path.isdir(path):
+            if os.path.isdir(os.path.join(folder, file_name)):
                 sys.exit(f"ERROR: {name}/{file_name}: plugin files must sit side by side, without subfolders")
-            files.append({"name": file_name, "size": os.path.getsize(path)})
+            files.append(file_name)
         entry["files"] = files
         entries.append(entry)
-    return json.dumps({"version": 1, "plugins": entries}, indent=2, ensure_ascii=False) + "\n"
+    local = {e["name"] for e in entries}
+    for entry in external_entries():
+        if entry.get("name") in local:
+            sys.exit(f"ERROR: catalog entry {entry.get('name')} is both in plugins/ and hosted elsewhere")
+        entries.append(entry)
+    entries.sort(key=lambda e: e.get("name", ""))
+    return json.dumps({"name": CATALOG_NAME, "plugins": entries}, indent=2, ensure_ascii=False) + "\n"
 
 
 def main() -> None:
