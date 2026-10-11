@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CrossPoint Preview</title>
+  <link rel="stylesheet" href="preview.css">
+  <script type="module" src="preview.js"></script>
+</head>
+<body>
+  <header>
+    <a class="brand" href="./">CrossPoint <span data-i18n="preview"></span></a>
+    <div class="build"><span id="device-name">X4</span><code id="revision"></code></div>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow" data-i18n="eyebrow"></p>
+      <h1 data-i18n="title"></h1>
+      <p data-i18n="intro"></p>
+    </section>
+    <div class="workspace">
+      <section id="preview-region" class="preview-region" tabindex="0" aria-label="CrossPoint">
+        <div class="device" id="device"><div id="screen"></div><div class="device-brand">CROSSPOINT</div></div>
+        <div class="controls" id="controls">
+          <button data-button="0" data-i18n="back"></button>
+          <button data-button="2" data-i18n="left"></button>
+          <button data-button="3" data-i18n="right"></button>
+          <button data-button="1" data-i18n="confirm"></button>
+          <button data-button="4" data-i18n="pageBack"></button>
+          <button data-button="5" data-i18n="pageForward"></button>
+          <button data-button="6" data-i18n="home" hidden></button>
+        </div>
+        <p id="input-help" class="keyboard" data-i18n="keyboard"></p>
+      </section>
+      <aside>
+        <div class="status"><span id="status-dot"></span><p id="status" role="status" aria-live="polite"></p></div>
+        <label class="device-select"><span data-i18n="device"></span><select id="device-select"><option value="x4">X4</option><option value="x3">X3</option><option value="x4pro">X4 Pro</option></select></label>
+        <div class="drop-zone">
+          <strong data-i18n="sdTitle"></strong>
+          <p data-i18n="sdIntro"></p>
+          <button id="open-sd" class="primary" data-i18n="browseSd" disabled></button>
+          <p class="muted" data-i18n="privacy"></p>
+        </div>
+        <div class="actions">
+          <button id="restart" data-i18n="restartFirmware" disabled></button>
+          <button id="reset" data-i18n="reset"></button>
+          <button id="screenshot" data-i18n="screenshot" disabled></button>
+          <button id="logs" data-i18n="logs"></button>
+          <button id="copy" data-i18n="copy"></button>
+        </div>
+        <p class="scope" data-i18n="scope"></p>
+        <details><summary data-i18n="diagnostics"></summary><pre id="log-output"></pre></details>
+      </aside>
+    </div>
+  </main>
+  <dialog id="sd-dialog" aria-labelledby="sd-title">
+    <div class="sd-heading"><h2 id="sd-title" data-i18n="sdTitle"></h2><button id="sd-close" data-i18n="close"></button></div>
+    <p class="sd-hint" data-i18n="sdHelp"></p>
+    <nav id="sd-path" aria-label="SD card"></nav>
+    <div id="sd-drop-zone" class="drop-zone">
+      <div class="sd-toolbar">
+        <label class="button primary"><span data-i18n="uploadFiles"></span><input id="file-input" type="file" multiple></label>
+        <label class="button"><span data-i18n="uploadFolder"></span><input id="folder-input" type="file" webkitdirectory multiple></label>
+        <button id="sd-new-folder" data-i18n="newFolder"></button>
+        <button id="sd-refresh" data-i18n="refresh"></button>
+      </div>
+      <p><span data-i18n="dropHint"></span> <code id="sd-location">/books</code></p>
+      <div class="sd-files"><table><thead><tr><th data-i18n="fileName"></th><th data-i18n="fileSize"></th><th></th></tr></thead><tbody id="sd-list"></tbody></table><p id="sd-empty" data-i18n="emptyFolder" hidden></p></div>
+    </div>
+    <div class="sd-toolbar sd-selection">
+      <button id="sd-download" data-i18n="downloadFile" disabled></button>
+      <button id="sd-rename" data-i18n="renameFile" disabled></button>
+      <button id="sd-delete" data-i18n="delete" disabled></button>
+      <label><input id="sd-hidden" type="checkbox"> <span data-i18n="showHidden"></span></label>
+    </div>
+    <div class="sd-footer"><p id="sd-message" role="status" aria-live="polite"></p><span id="sd-usage"></span></div>
+    <p class="sd-hint" data-i18n="fontHelp"></p>
+    <button id="sd-restart" data-i18n="restartFirmware" disabled></button>
+    <p class="sd-hint" data-i18n="restartHelp"></p>
+  </dialog>
+  <footer><span data-i18n="credits"></span> <a href="LICENSE.crossplay.txt">CrossPlay</a> · <a href="LICENSE.txt">MIT</a></footer>
+</body>
+</html>
