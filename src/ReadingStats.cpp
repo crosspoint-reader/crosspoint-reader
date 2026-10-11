@@ -371,14 +371,33 @@ ReadingStatsStore::WriteResult ReadingStatsStore::removeBook(const std::string& 
   });
 }
 
+ReadingStatsStore::WriteResult ReadingStatsStore::renameBook(const std::string& fromDocId, const std::string& toDocId) {
+  if (fromDocId == toDocId) return WriteResult::Done;
+  return write(
+      Edit::Rekey, fromDocId,
+      [&](BookReadingStats& book, ReadingTotals&, bool) {
+        book.docId = toDocId;
+        return true;
+      },
+      toDocId);
+}
+
 ReadingStatsStore::WriteResult ReadingStatsStore::write(
     const Edit edit, const std::string& docId,
-    const std::function<bool(BookReadingStats&, ReadingTotals&, bool)>& apply) {
+    const std::function<bool(BookReadingStats&, ReadingTotals&, bool)>& apply, const std::string& newDocId) {
+  // Neither edit can create a book: a removal or a rekey of one the history does not hold is NotFound.
+  const bool needsBook = edit == Edit::Remove || edit == Edit::Rekey;
   DocKey key{};
   if (!ReadingStatsSlotFile::parseDocId(docId, key)) {
     // KOReaderDocumentId always gives 32 hex characters; anything else is no book of ours.
     LOG_ERR("RST", "Not a document id: '%s'", docId.c_str());
-    return edit == Edit::Remove ? WriteResult::NotFound : WriteResult::Failed;
+    return needsBook ? WriteResult::NotFound : WriteResult::Failed;
+  }
+  // The key the book is written under: its own, or for a rekey the one it moves to.
+  DocKey writeKey = key;
+  if (edit == Edit::Rekey && !ReadingStatsSlotFile::parseDocId(newDocId, writeKey)) {
+    LOG_ERR("RST", "Not a document id: '%s'", newDocId.c_str());
+    return WriteResult::Failed;
   }
   [[maybe_unused]] const uint32_t started = millis();
   const ReadResult prepared = prepare();
@@ -403,9 +422,9 @@ ReadingStatsStore::WriteResult ReadingStatsStore::write(
       case Load::IoError:
         return WriteResult::Failed;
       case Load::Corrupt:
-        // A removal has nothing to remove from an unreadable file; only a write that adds reading
-        // starts a fresh history over it.
-        if (edit == Edit::Remove) return WriteResult::Failed;
+        // A removal or a rekey has nothing to work on in an unreadable file; only a write that adds
+        // reading starts a fresh history over it.
+        if (needsBook) return WriteResult::Failed;
         break;
       case Load::Ok:
         fresh = false;
@@ -420,7 +439,11 @@ ReadingStatsStore::WriteResult ReadingStatsStore::write(
   }
   if (fresh) meta->clear();
   const bool existed = index != kEntryCount;
-  if (!existed && edit == Edit::Remove) return WriteResult::NotFound;
+  if (!existed && needsBook) return WriteResult::NotFound;
+  if (edit == Edit::Rekey && meta->find(writeKey) != kEntryCount) {
+    LOG_INF("RST", "%s already has a history; not merging %s into it", newDocId.c_str(), docId.c_str());
+    return WriteResult::Failed;
+  }
   if (!existed) book.docId = docId;
 
   // 2. Merge the one book in memory.
@@ -458,10 +481,10 @@ ReadingStatsStore::WriteResult ReadingStatsStore::write(
                 ReadingStatsSlotFile::formatDocId(meta->entry(index).key).c_str());
       }
     }
-    ReadingStatsSlotFile::encodeSlot(key, book, image.get());
+    ReadingStatsSlotFile::encodeSlot(writeKey, book, image.get());
     if (!ReadingStatsSlotFile::writeSlot(file, slot, image.get())) return WriteResult::Failed;
     file.flush();  // on the card before any meta refers to it
-    meta->setEntry(index, ReadingStatsSlotFile::entryFor(key, book, slot));
+    meta->setEntry(index, ReadingStatsSlotFile::entryFor(writeKey, book, slot));
   }
   [[maybe_unused]] const uint32_t slotted = millis();
   if (!meta->writeTotals(totals)) {
