@@ -166,14 +166,54 @@ nothing stays resident. Browser-only plugins (`plugin.js` without a
 `device.json`) are listed as inert "Web-only plugin" rows — an install is
 visibly installed — while their UI lives in the web interface.
 
+### Firmware identity and plugin capabilities
+
+Plugin compatibility is expressed by the firmware itself so any catalog or plugin
+can decide whether an entry is safe to offer or use on a particular build. Plugin
+Hub is the first consumer that motivated this contract, but these are generic
+plugin-system capabilities, not Plugin Hub-specific flags. These values are part
+of the plugin-system contract, not hardware detection.
+
+| Value | Stock CrossPoint value | Purpose |
+|---|---|---|
+| `firmware_family` | `crosspoint` | Broad compatibility family. Forks that intentionally keep the same plugin contract can advertise the same family. |
+| `firmware_id` | `crosspoint` | Exact firmware implementation ID. Use this when a plugin depends specifically on stock CrossPoint behavior rather than the wider family. |
+| `plugin_api` | `1` | Numeric plugin contract level for requirements that need a minimum firmware API generation. |
+| `plugin_capabilities` | comma-separated names below | Fine-grained feature advertisement. A catalog entry may require one or more capabilities without hard-coding a firmware version. |
+
+Stock CrossPoint currently advertises these catalog capabilities:
+
+| Capability | What it means | Why it exists in the plugin system |
+|---|---|---|
+| `catalog.lists` | The catalog manifest can expose named browse lists, including lists supplied dynamically through `browse.lists_url`. | Any plugin can split or dynamically publish multiple catalog views without adding plugin-specific firmware logic. Plugin Hub currently uses this for Official/Community catalogs. |
+| `catalog.notices` | A browse list can display an optional confirmation notice with custom title, message, Confirm, and Cancel labels before opening. | Any plugin can require a generic user notice before entering a catalog or section. Plugin Hub currently uses this for the Community-plugin warning. |
+| `catalog.bundle_install` | A catalog entry can install a multi-file plugin bundle from a base URL plus a file list into the plugin directory. | Any catalog can distribute a plugin or other supported bundle made of multiple files without a dedicated installer in firmware. Plugin Hub currently uses this to install complete plugins. |
+| `catalog.version_tracking` | Catalog item versions are compared with installed plugin manifests to show Installed or Update status. | Any catalog can expose install/update state using the generic installed-plugin version contract. Plugin Hub currently uses it to identify available updates. |
+| `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, exact firmware ID, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
+
+Capability names describe firmware behavior available to the entire plugin system.
+They must not encode Plugin Hub policy or ownership, and another plugin may use the
+same capability whenever it depends on the same generic firmware behavior.
+Additional firmware features should advertise their own capability names only when
+the corresponding runtime support is actually present. Catalog entries that omit
+compatibility metadata remain visible for backward compatibility.
+
 ### Schema
 
-Every string field is a template. Available substitutions:
+String fields explicitly passed through the template resolver support substitutions.
+Template-bearing fields include request URLs, bodies, and header values;
+`browse.lists_url`; list notice title/message/Confirm/Cancel text; `bundle.subdir`;
+download filename/username/password; and sidecar path/body.
 
 | Variable | Meaning | Available in |
 |---|---|---|
-| `{token}` | contents of the token file at `token.path` | everywhere |
-| `{cfg.KEY}` | value of `KEY` in the flat JSON config file at `config.file` | everywhere |
+| `{token}` | contents of the token file at `token.path` | template fields |
+| `{cfg.KEY}` | value of `KEY` in the flat JSON config file at `config.file` | template fields |
+| `{firmware_family}` | stable firmware family (`crosspoint` on stock CrossPoint) | template fields |
+| `{firmware_id}` | exact firmware implementation ID (`crosspoint` on stock CrossPoint) | template fields |
+| `{firmware_version}` | current `CROSSPOINT_VERSION` value | template fields |
+| `{plugin_api}` | numeric plugin API level | template fields |
+| `{plugin_capabilities}` | comma-separated advertised capability names | template fields |
 | `{page}` | current 1-based page | browse |
 | `{limit}` | `page_size + 1` (the extra row detects "more pages") | browse |
 | `{id}` `{title}` `{author}` `{url}` | fields of the selected item | download, sidecar |
@@ -189,6 +229,8 @@ Two browse formats:
   `PROPFIND` multistatus, an OPDS/Atom feed, or any XML list is all manifest
   config. XML field selectors are `"elem"` (child element text), `"elem@attr"`
   (child element attribute), or `"@attr"` (attribute on the item element).
+
+For JSON catalogs, `browse.compatibility` maps optional catalog-entry fields to firmware checks. If a catalog entry omits compatibility metadata, it is accepted and displayed normally. When an entry declares restrictions, `firmware_family` and `firmware` are comma-separated allow-lists, `plugin_api_min` requires the device API to be at least that value, and every comma-separated `requires` capability must be advertised by the firmware. Any mismatch silently omits that entry.
 
 ```jsonc
 {
@@ -224,6 +266,12 @@ Two browse formats:
                                             // installed plugin's manifest.json (found by id).
                                             // Both are MAJOR.MINOR.PATCH ("1.2.0"); only a
                                             // newer catalog version shows Update.
+    },
+    "compatibility": {                    // optional JSON-only catalog filtering
+      "firmware_family": "compatibility.firmware_family",
+      "firmware": "compatibility.firmware",
+      "plugin_api_min": "compatibility.plugin_api_min",
+      "requires": "compatibility.requires"
     },
     "page_size": 8,                         // 1..16; response should honor {limit}
 

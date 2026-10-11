@@ -60,7 +60,14 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::string titlePath, authorPath, idPath, urlPath;
     // Compare this item field against the installed manifest version for badges.
     std::string versionPath;
+    // Optional catalog-entry compatibility fields. Empty paths mean no
+    // restriction; entries that omit the mapped values remain visible.
+    std::string compatFamilyPath, compatFirmwarePath, compatApiMinPath, compatRequiresPath;
     bool tracksInstalls() const { return !versionPath.empty(); }
+    bool filtersCompatibility() const {
+      return !compatFamilyPath.empty() || !compatFirmwarePath.empty() || !compatApiMinPath.empty() ||
+             !compatRequiresPath.empty();
+    }
     int pageSize = 8;
     // Named JSON views override the browse URL/body; Back returns to their picker.
     struct BrowseList {

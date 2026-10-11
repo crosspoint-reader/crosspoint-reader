@@ -34,6 +34,10 @@ Response:
 ```json
 {
   "version": "1.0.0",
+  "firmwareFamily": "crosspoint",
+  "firmwareId": "crosspoint",
+  "pluginApi": 1,
+  "pluginCapabilities": "catalog.lists,catalog.notices,catalog.bundle_install,catalog.version_tracking,catalog.compatibility",
   "ip": "192.168.1.100",
   "mode": "STA",
   "rssi": -45,
@@ -46,6 +50,10 @@ Response:
 | Field | Type | Description |
 |-------|------|-------------|
 | `version` | string | Firmware version |
+| `firmwareFamily` | string | Stable compatibility family; stock CrossPoint uses `crosspoint` |
+| `firmwareId` | string | Exact firmware implementation ID; stock CrossPoint uses `crosspoint` |
+| `pluginApi` | number | Numeric plugin API level used for catalog compatibility |
+| `pluginCapabilities` | string | Comma-separated firmware capabilities used for catalog compatibility |
 | `ip` | string | Device IP address |
 | `mode` | string | `"STA"` for joined Wi-Fi or `"AP"` for hotspot mode |
 | `rssi` | number | Wi-Fi RSSI in dBm; `0` in AP mode |

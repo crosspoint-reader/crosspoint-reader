@@ -16,8 +16,10 @@
 #include <strings.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <new>
+#include <string_view>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -29,6 +31,7 @@
 #include "network/HttpDownloader.h"
 #include "network/ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
+#include "util/FirmwareIdentity.h"
 #include "util/PluginEvents.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
@@ -68,6 +71,58 @@ std::string md5Hex(const std::string& text) {
 // Returns `override` unless it's empty, in which case `fallback` applies.
 const std::string& pick(const std::string& override, const std::string& fallback) {
   return override.empty() ? fallback : override;
+}
+
+std::string_view trimCsvToken(std::string_view token) {
+  while (!token.empty() && (token.front() == ' ' || token.front() == '	')) token.remove_prefix(1);
+  while (!token.empty() && (token.back() == ' ' || token.back() == '	')) token.remove_suffix(1);
+  return token;
+}
+
+bool csvContainsToken(std::string_view csv, const std::string_view wanted) {
+  size_t start = 0;
+  while (start <= csv.size()) {
+    size_t end = csv.find(',', start);
+    if (end == std::string_view::npos) end = csv.size();
+    if (trimCsvToken(csv.substr(start, end - start)) == wanted) return true;
+    if (end == csv.size()) break;
+    start = end + 1;
+  }
+  return false;
+}
+
+bool matchesCsvRestriction(const std::string& restriction, const std::string_view current) {
+  return restriction.empty() || csvContainsToken(restriction, current);
+}
+
+bool matchesPluginApiMinimum(const std::string& minimum) {
+  if (minimum.empty()) return true;
+  char* end = nullptr;
+  const long parsed = strtol(minimum.c_str(), &end, 10);
+  return end != minimum.c_str() && *end == '\0' && parsed >= 0 && parsed <= firmwareidentity::PLUGIN_API_VERSION;
+}
+
+bool matchesCapabilities(const std::string& required) {
+  if (required.empty()) return true;
+  const std::string_view available = firmwareidentity::PLUGIN_CAPABILITIES;
+  const std::string_view requested = required;
+  size_t start = 0;
+  while (start <= requested.size()) {
+    size_t end = requested.find(',', start);
+    if (end == std::string_view::npos) end = requested.size();
+    const std::string_view capability = trimCsvToken(requested.substr(start, end - start));
+    if (capability.empty() || !csvContainsToken(available, capability)) return false;
+    if (end == requested.size()) break;
+    start = end + 1;
+  }
+  return true;
+}
+
+bool catalogEntryCompatible(const std::string& family, const std::string& firmware, const std::string& apiMin,
+                            const std::string& requiredCapabilities) {
+  return matchesCsvRestriction(family, firmwareidentity::FAMILY) &&
+         matchesCsvRestriction(firmware, firmwareidentity::ID) && matchesPluginApiMinimum(apiMin) &&
+         matchesCapabilities(requiredCapabilities);
 }
 
 // Plugin folder name from its "<root>/<name>/device.json" manifest path.
@@ -180,6 +235,11 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.idPath = browse["fields"]["id"] | "";
   manifest.urlPath = browse["fields"]["url"] | "";
   manifest.versionPath = browse["fields"]["version"] | "";
+  JsonVariantConst compatibility = browse["compatibility"];
+  manifest.compatFamilyPath = compatibility["firmware_family"] | "";
+  manifest.compatFirmwarePath = compatibility["firmware"] | "";
+  manifest.compatApiMinPath = compatibility["plugin_api_min"] | "";
+  manifest.compatRequiresPath = compatibility["requires"] | "";
   manifest.pageSize = browse["page_size"] | 8;
   // Documented bounds: each row costs an Item (strings) and a screen slot.
   manifest.pageSize = std::clamp(manifest.pageSize, 1, MAX_PAGE_SIZE);
@@ -312,7 +372,13 @@ pluginhttp::RequestSpec PluginCatalogActivity::substitutedRequest(const pluginht
 std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item) const {
   substituteAll(tpl, "{token}", token);
   for (const auto& kv : config) substituteAll(tpl, ("{cfg." + kv.first + "}").c_str(), kv.second);
+  substituteAll(tpl, "{firmware_family}", firmwareidentity::FAMILY);
+  substituteAll(tpl, "{firmware_id}", firmwareidentity::ID);
+  substituteAll(tpl, "{firmware_version}", CROSSPOINT_VERSION);
+  substituteAll(tpl, "{plugin_capabilities}", firmwareidentity::PLUGIN_CAPABILITIES);
   char num[16];
+  snprintf(num, sizeof(num), "%d", firmwareidentity::PLUGIN_API_VERSION);
+  substituteAll(tpl, "{plugin_api}", num);
   snprintf(num, sizeof(num), "%d", page);
   substituteAll(tpl, "{page}", num);
   snprintf(num, sizeof(num), "%d", manifest.pageSize + 1);
@@ -626,11 +692,56 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
 bool PluginCatalogActivity::parseBrowseResponse() {
   if (manifest.isXmlList()) return parseXmlList();
 
+  // Compatibility is opt-in. If the manifest does not map compatibility
+  // fields, the normal single streaming pass is unchanged. When it does, make
+  // a bounded first pass that remembers compatible indexes only from the
+  // displayed page. The extra titled row remains pagination lookahead.
+  // Catalog entries that omit compatibility values match by default; explicit
+  // restrictions must match this firmware.
+  std::vector<int> compatibleRows;
+  bool rawHasMore = false;
+  if (manifest.filtersCompatibility()) {
+    compatibleRows.reserve(manifest.pageSize);
+    int rowIndex = 0;
+    int titledRows = 0;
+    const std::string unused;
+    auto selectCompatible = [&](JsonListParser::Row& row) {
+      const int thisRow = rowIndex++;
+      if (row.field[JsonListParser::F_TITLE].empty()) return;
+      if (++titledRows > manifest.pageSize) {
+        rawHasMore = true;
+        return;
+      }
+      if (catalogEntryCompatible(row.field[JsonListParser::F_AUTHOR], row.field[JsonListParser::F_ID],
+                                 row.field[JsonListParser::F_URL], row.field[JsonListParser::F_VERSION]))
+        compatibleRows.push_back(thisRow);
+    };
+    const std::string* const compatibilityFields[] = {&manifest.titlePath,          &manifest.compatFamilyPath,
+                                                      &manifest.compatFirmwarePath, &manifest.compatApiMinPath,
+                                                      &manifest.compatRequiresPath, &unused};
+    auto compatibilityParser = makeUniqueNoThrow<JsonListParser>(
+        manifest.itemsPath, compatibilityFields, unused,
+        [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(selectCompatible)*>(context))(row); },
+        &selectCompatible);
+    if (!streamBrowseFile(compatibilityParser.get())) {
+      fail(StrId::STR_PARSE_FEED_FAILED);
+      return false;
+    }
+  }
+
   releaseRows();
   items.clear();
   items.reserve(manifest.pageSize + 1);
-  // One extra row reveals whether a next page exists.
+  int rowIndex = 0;
+  size_t compatibleIndex = 0;
+  // The unfiltered extra row controls server pagination; compatibility only
+  // controls which rows from this page are displayed.
   auto append = [&](JsonListParser::Row& row) {
+    const int thisRow = rowIndex++;
+    if (manifest.filtersCompatibility()) {
+      if (compatibleIndex >= compatibleRows.size() || compatibleRows[compatibleIndex] != thisRow) return;
+      compatibleIndex++;
+    }
     if (row.field[JsonListParser::F_TITLE].empty() || static_cast<int>(items.size()) > manifest.pageSize) return;
     Item item;
     item.title = std::move(row.field[JsonListParser::F_TITLE]);
@@ -653,8 +764,8 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     fail(StrId::STR_PARSE_FEED_FAILED);
     return false;
   }
-  hasMore = static_cast<int>(items.size()) > manifest.pageSize;
-  if (hasMore) items.resize(manifest.pageSize);
+  hasMore = manifest.filtersCompatibility() ? rawHasMore : static_cast<int>(items.size()) > manifest.pageSize;
+  if (static_cast<int>(items.size()) > manifest.pageSize) items.resize(manifest.pageSize);
   computeInstallStatus();
   return true;
 }
