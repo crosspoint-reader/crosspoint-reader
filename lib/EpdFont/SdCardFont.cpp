@@ -63,13 +63,15 @@ class LowestCodepoints {
   LowestCodepoints(uint32_t* buffer, const uint32_t limit) : codepoints_(buffer), limit_(limit) {}
 
   void add(const uint32_t cp) {
+    // Once full, nothing at or above the largest held can enter, duplicate or
+    // not, so reject it before the linear duplicate search.
+    if (count_ == limit_ && cp >= codepoints_[largestAt_]) return;
     if (contains(cp)) return;
     if (count_ < limit_) {
       codepoints_[count_++] = cp;
       if (count_ == limit_) findLargest();
       return;
     }
-    if (cp >= codepoints_[largestAt_]) return;
     codepoints_[largestAt_] = cp;
     findLargest();
   }
