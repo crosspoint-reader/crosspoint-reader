@@ -90,6 +90,23 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 56
+
+Version 56 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
+shaping data form conjuncts, reph and positioned marks from the font's
+OpenType tables (lib/OtShaper), and other fonts reorder pre-base vowel signs;
+both change word widths, so cached word positions from version 55 no longer
+match. TextBlock's former `hasFocus` byte became a flags byte: bit 1 adds a
+`displayBytes` count (after `paragraphStartWord`), a `displayOff[]` table and
+a `display[]` blob that hold each complex-script word in the form layout
+measured it in (ShapingTokens.h glyph, advance and offset tokens, or reordered
+vowel signs from a font without shaping data), so page renders draw exactly
+that without running the shaper. Words without a display entry, among them
+words a shaping font could not shape while memory was short, are resolved from
+`text[]` when drawn. Older completed and partial section caches rebuild
+automatically; book metadata and reading progress are kept.
+
 ### Version 55
 
 Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
@@ -238,7 +255,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 50
+#define EXPECTED_VERSION 56
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -300,20 +317,31 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 hasFocus;
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v56)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+    u16 paragraphStartWord [[comment("Visual index of the paragraph's first logical word, 0xFFFF = continuation line")]];
+    if ((flags & 2) != 0) {
+        u16 displayBytes [[comment("Total size of display[], including one NUL per stored entry")]];
+    }
 
     if (wordCount > 0) {
+        u32 sourceRange[wordCount * 2] [[comment("Chapter codepoint range of each word: start, end (exclusive)")]];
         u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
         s16 wordXPos[wordCount];
-        if (hasFocus != 0) {
+        if ((flags & 1) != 0) {
             u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
         }
+        if ((flags & 2) != 0) {
+            u16 displayOff[wordCount] [[comment("Offset within display[], 0xFFFF = resolve text[] when drawn")]];
+        }
         WordStyle wordStyle[wordCount];
-        if (hasFocus != 0) {
+        if ((flags & 1) != 0) {
             u8 wordFocusBoundary[wordCount] [[comment("UTF-8 byte boundary between bold prefix and suffix")]];
         }
         char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
+        if ((flags & 2) != 0) {
+            char display[displayBytes] [[comment("Measured form of complex-script words (shaped glyph tokens, or reordered text from a font without shaping data)")]];
+        }
     }
 
     BlockStyle blockStyle;
@@ -546,6 +574,94 @@ make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
+
+## `.cpfont` shaping section
+
+A style that shapes an Indic script carries a shaping section after every
+style's bitmap data. Its absolute file offset is the style TOC's last `u32`
+(`shapingOffset`); 0 means the style has none. Readers that predate the
+section never look past the bitmaps.
+
+The section header is little-endian:
+
+| Field | Type | Meaning |
+|---|---|---|
+| magic | `char[4]` | `CPSH` |
+| version | `u16` | 2 (the layout font carries `CPpl`; firmware ignores version 1) |
+| reserved | `u16` | 0 |
+| ppem26_6 | `u32` | size the section was built for, in 26.6 pixels |
+| blobLength | `u32` | bytes of layout font that follow |
+| blobHash | `u32` | FNV-1a of the layout font; keys its flash slot and shared face |
+
+The layout font that follows is an OpenType font holding only `head`, `hhea`,
+`maxp`, `hmtx`, `cmap`, `GDEF`, `GSUB`, `GPOS`, `CPpl` and (when it fits the
+128 KB flash slot) `CPac`. Its glyph order is the one the style's glyph tokens
+(U+F0000 + glyph ID) index.
+
+### `CPac`: lookup filters
+
+`CPac` lets `lib/OtShaper` skip lookups and subtables that cannot match
+without computing filters on the device. A font without it (or whose counts
+do not match its lookups) has them computed on the heap instead.
+
+Every field is big-endian except the digest records:
+
+| Field | Type | Meaning |
+|---|---|---|
+| version | `u16` | 1 |
+| reserved | `u16` | 0 |
+| gsubLookups, gposLookups | `u16` each | lookups in GSUB and GPOS |
+| gsubSubtables, gposSubtables | `u32` each | subtables across those lookups |
+
+Then, for GSUB and then GPOS:
+
+1. one digest record per lookup: the glyphs any of its subtables can start at;
+2. one `u32` per lookup: the index of its first subtable record;
+3. one digest record per subtable.
+
+A digest record is HarfBuzz's set digest: three 64-bit masks (bit
+`(glyph >> shift) & 63`, shifts 4, 0 and 6), stored as little-endian `u64`s
+so the device can copy them into memory as they are.
+
+### `CPpl`: shaping plans
+
+`CPpl` holds the plans `lib/OtShaper` would otherwise build from `GSUB` and
+`GPOS` on the device (`ot::Plan`): which lookups run, in which stages, with
+which masks. The converter (`shaping_blob.py`) stores one per script and pair
+of language systems a request of up to three language tags can select;
+identical plans are stored once. Firmware without TTF support reads plans
+only from here. Every field is big-endian:
+
+| Field | Type | Meaning |
+|---|---|---|
+| version | `u16` | 1 |
+| planCount | `u16` | plan records that follow |
+
+Each plan record is 14 bytes:
+
+| Field | Type | Meaning |
+|---|---|---|
+| script | `u8` | `ot::Script` (0 Devanagari … 9 Sinhala) |
+| reserved | `u8` | 0 |
+| gsubKey, gposKey | `u32` each | the language system chosen in GSUB and GPOS: its tag, `dflt`, or 0 for the script's default |
+| offset | `u32` | from the start of `CPpl` to the plan |
+
+A plan:
+
+| Field | Type | Meaning |
+|---|---|---|
+| chosenScript | `u32` | the GSUB script tag the plan follows (`dev2`, `deva`, …) |
+| shaper | `u8` | 0 default, 1 Indic, 2 USE |
+| reserved | `u8[3]` | 0 |
+| globalMask | `u32` | mask of the features on by default |
+| masks | `u32[10]` | glyph mask bit of `rphf pref blwf abvf half pstf init isol medi fina` (0 = absent) |
+| wouldStages | `u8[5]` | GSUB stage of `rphf pref blwf pstf vatu`; 0xFF = absent |
+| reserved | `u8[3]` | 0 |
+
+Then, for GSUB and then GPOS: `stageCount` and `lookupCount` (`u16` each),
+`stageCount` stages (`u16` lookups before the stage ends, `u8` `ot::Pause`
+run after it, `u8` reserved) and `lookupCount` lookups (`u16` lookup index,
+`u8` lookup flags, `u8` reserved, `u32` mask).
 
 ## Clipping store (`/.crosspoint/clippings/epub_<path-hash>.bin`)
 

@@ -88,6 +88,10 @@ class SdCardFontSystem {
   void addTtfSources(TtfEpdFont& font);
   // Close/free all style sources.
   void freeTtfSources();
+  // Fingerprint of the open style files (their sizes), part of the reader
+  // font id: page caches store shaped glyph IDs, which a replaced font file
+  // can renumber, so a new file must not reuse the old file's pages.
+  uint32_t ttfFilesKey() const;
   // ReadFn for streamed sources: serves the PSRAM prefix cache first, SD after.
   static unsigned long prefixRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
 #endif  // CROSSPOINT_VECTOR_FONTS

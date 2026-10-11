@@ -109,8 +109,9 @@ families use the same file at all three UI sizes.
 
 These UI sizes only take effect if the reader-size font also matches one of
 CrossPoint's built-in fallback-detection codepoints — see `kFallbackProbes` in
-`src/SdCardFontSystem.cpp` for the current list. A script outside that list
-gets no UI fallback even with the correct `.cpfont` sizes present.
+`src/SdCardFontSystem.cpp` for the current list, plus one probe per Indic
+script (`indic::SCRIPTS`). A script outside those gets no UI fallback even with
+the correct `.cpfont` sizes present.
 
 For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships,
 so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
@@ -145,6 +146,69 @@ What this means in practice:
 - If no SD font is selected (a built-in reading font is active), there is no
   fallback and the UI again shows boxes for non-Latin text — pick an SD font
   covering that script to restore it.
+
+## Indic scripts
+
+Indic scripts need shaping: vowel signs move around their consonants,
+consonant clusters join into conjuncts (क्ष, ক্ষ, ஸ்ரீ), ra + virama becomes
+a reph above the next letter, and marks sit where the font places them.
+CrossPoint shapes these scripts with its own OpenType shaper (`lib/OtShaper`),
+which follows HarfBuzz's Indic and Universal Shaping Engine rules and is tested
+to produce identical glyphs, using the font's own OpenType tables, on every
+device:
+
+| Script | Languages (examples) | Preset | Download families |
+|---|---|---|---|
+| Devanagari | Hindi, Marathi, Nepali, Sanskrit, Konkani | `devanagari` | `NotoSansDevanagari`, `NotoSerifDevanagari` |
+| Bengali | Bengali (Bangla), Assamese, Manipuri | `bengali` | `NotoSansBengali`, `NotoSerifBengali` |
+| Gurmukhi | Punjabi | `gurmukhi` | `NotoSansGurmukhi`, `NotoSerifGurmukhi` |
+| Gujarati | Gujarati | `gujarati` | `NotoSansGujarati`, `NotoSerifGujarati` |
+| Odia | Odia (Oriya) | `oriya` | `NotoSansOriya`, `NotoSerifOriya` |
+| Tamil | Tamil | `tamil` | `NotoSansTamil`, `NotoSerifTamil` |
+| Telugu | Telugu | `telugu` | `NotoSansTelugu`, `NotoSerifTelugu` |
+| Kannada | Kannada, Tulu | `kannada` | `NotoSansKannada`, `NotoSerifKannada` |
+| Malayalam | Malayalam | `malayalam` | `NotoSansMalayalam`, `NotoSerifMalayalam` |
+| Sinhala | Sinhala | `sinhala` | `NotoSansSinhala`, `NotoSerifSinhala` |
+
+- **Fonts.** The families above are on the font download page and already
+  carry shaping data and Latin letters. Select one under
+  **Settings > Reader > Font Family**.
+- **Language.** Text is shaped in the book's language (its `dc:language`), so
+  fonts that draw a script differently per language get it right: Marathi and
+  Nepali use their own Devanagari letterforms and digits.
+- **Your own `.cpfont`.** Converting with a script's preset embeds the shaping
+  data automatically when the font has an OpenType `GSUB` table. Indic fonts
+  rarely include Latin letters, so add a Latin fallback, and build the UI
+  sizes as well:
+
+      python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+        --regular MyHindi-Regular.ttf --bold MyHindi-Bold.ttf \
+        --fallback-regular NotoSans-Regular.ttf --fallback-bold NotoSans-Bold.ttf \
+        --intervals devanagari,latin-ext,punctuation \
+        --sizes 8,10,12,14,16,18 \
+        --name MyHindi --output-dir ./MyHindi/
+
+  A font that covers several scripts can combine presets
+  (`--intervals devanagari,bengali,latin-ext`); its shaping data then covers
+  all of them. Pass `--no-shaping` to leave the shaping data out. Older
+  firmware ignores it, so the same files work everywhere.
+- **Direct TTF/OTF/TTC fonts** (devices with external RAM) shape straight from
+  the font file.
+- **Fonts without shaping data** still get their vowel signs in the right
+  order, but conjuncts show a visible virama (प्‌र, প্‌র).
+
+Book titles and other interface text in these scripts use the selected family
+as a size-matched fallback, as described above, which is why the
+families include 8 and 10 pt.
+
+On the X3 and X4, the first time an Indic font is used its shaping tables
+(5-80 KB per style, depending on the script) are copied once into a reserved
+area of the device's internal flash and read from there, keeping the reader's
+RAM free. The converter warns when a font's tables exceed the 128 KB that
+area holds per font; such a font may not be shaped on those devices. Opening
+a chapter for the first time takes longer than a Latin one, because every
+word is shaped while the chapter is laid out. Page turns do no shaping: the
+shaped words are stored with the chapter's cached layout.
 
 ## Available Pre-Built Fonts
 
@@ -198,6 +262,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 | `cyrillic` | Cyrillic + Supplement |
 | `hebrew` | Hebrew + Alphabetic Presentation Forms |
 | `arabic` | Arabic + Supplement + Extended-A + Presentation Forms A/B (RTL, contextual shaping) |
+| `devanagari`, `bengali`, `gurmukhi`, `gujarati`, `oriya`, `tamil`, `telugu`, `kannada`, `malayalam`, `sinhala` | One Indic script's block + dandas + joiners; embeds OpenType shaping data (see [Indic scripts](#indic-scripts)) |
 | `georgian` | Georgian + Georgian Supplement |
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |

@@ -40,11 +40,14 @@ class ClipSelectionActivity final : public Activity {
     uint16_t pageWordIndex = 0;
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
-    const char* text = nullptr;
+    const char* text = nullptr;     // logical text, for clipping and lookup
+    const char* display = nullptr;  // TextBlock::displayForm(): what layout measured, or nullptr
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;
+
+    GfxRenderer::LaidOutText laidOut() const { return {text, display}; }
   };
 
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
