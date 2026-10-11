@@ -4,12 +4,15 @@
 
 // A monotonic floor under the system clock, for loan-expiry enforcement.
 //
-// The ESP32-C3 keeps time through deep sleep but loses it on power-off, and
-// the device has no battery-backed RTC — so a cold boot starts near epoch 0
-// and a date-based check would never fire offline. This module persists the
-// last known-good time in NVS (on-flash, not on the removable SD card) and
-// restores it into the system clock at boot, so time only ever moves forward
-// across power cycles. Real time snaps in whenever Wi-Fi is up via SNTP.
+// The ESP32-C3 keeps time through deep sleep but loses it on power-off, so a
+// cold boot starts near epoch 0 and a date-based check would never fire
+// offline. Two things lift the clock off that: a battery-backed RTC, seeded
+// into the system clock at boot through adopt() — the DS3231 keeps running
+// across power-off, so it is the only real clock while Wi-Fi is down — and
+// SNTP whenever Wi-Fi is up. Between those, this module persists the last
+// known-good time in NVS (on-flash, not on the removable SD card) and restores
+// it into the system clock at boot, so time only ever moves forward across
+// power cycles.
 //
 // The floor can lag real time while the device sits powered off; it can never
 // run behind a moment the device has already seen. Enforcement that needs a
@@ -19,6 +22,15 @@ namespace trustedtime {
 // Restore the persisted floor into the system clock. Call once at boot,
 // before anything reads time().
 void init();
+
+// Seed the system clock from a battery-backed RTC epoch. Call at boot, before
+// init(), so init()'s floor restore can veto a lagging RTC. Deep sleep keeps
+// the system clock, so a clock that is already running is never rewound to an
+// older RTC reading; ignored when the epoch falls outside the plausible
+// 2025-2100 window, runs more than a year ahead of the persisted floor (a chip
+// reading that far ahead is faulty, and the floor never lowers again), or
+// predates the trusted floor.
+void adopt(int64_t epoch);
 
 // Persist the floor when the clock advanced past it. Cheap (one NVS read,
 // a write only when it moved). Call at sleep entry and after a time sync.

@@ -21,6 +21,7 @@
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
+#include <time.h>
 
 #include <cstring>
 
@@ -523,6 +524,18 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   pluginevents::refreshSubscriptions();
+  // Seed the system clock from the battery-backed RTC: on RTC boards it is the
+  // only real clock across power-off, and time() is what plugin event
+  // timestamps, TLS and file dates read. Placed before trustedtime::init(),
+  // whose floor restore vetoes a lagging RTC and restores the floor instead.
+  struct tm rtcLocal;
+  if (halClock.localTime(rtcLocal)) {
+    // localTime() renders the RTC's UTC epoch under the TZ rule applied above,
+    // so mktime() inverts it exactly (tm_isdst included).
+    trustedtime::adopt(static_cast<int64_t>(mktime(&rtcLocal)));
+    LOG_INF("CLK", "RTC clock read: %04d-%02d-%02d %02d:%02d", rtcLocal.tm_year + 1900, rtcLocal.tm_mon + 1,
+            rtcLocal.tm_mday, rtcLocal.tm_hour, rtcLocal.tm_min);
+  }
   // Restore the monotonic clock floor before anything reads time() (event
   // timestamps, loan-expiry checks).
   trustedtime::init();
