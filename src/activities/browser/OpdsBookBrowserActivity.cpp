@@ -22,6 +22,7 @@
 #include "OpdsFormatLabel.h"
 #include "SilentRestart.h"
 #include "activities/NetworkMemoryTrim.h"
+#include "activities/network/NetworkMode.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -286,7 +287,11 @@ void OpdsBookBrowserActivity::onExit() {
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
     delay(30);
-    silentRestart();
+    if (leavingToFileTransfer) {
+      silentRestartToFileTransferOpds();
+    } else {
+      silentRestart();
+    }
   }
 }
 
@@ -327,7 +332,7 @@ void OpdsBookBrowserActivity::loop() {
       }
     } else if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
       if (button == MappedInputManager::Button::Back) {
-        state == BrowserState::CHECK_WIFI ? onGoHome() : navigateBack();
+        state == BrowserState::CHECK_WIFI ? leave() : navigateBack();
         return;
       }
     } else if (state == BrowserState::BOOK_DETAIL) {
@@ -795,13 +800,25 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
 
 void OpdsBookBrowserActivity::navigateBack() {
   if (navigationHistory.empty()) {
-    onGoHome();
+    leave();
   } else {
     currentPath = navigationHistory.back();
     navigationHistory.pop_back();
     entryOffsets.clear();
     selectorIndex = 0;
     checkAndConnectWifi();
+  }
+}
+
+void OpdsBookBrowserActivity::leave() {
+  switch (backTo) {
+    case OpdsBackTo::FileTransfer:
+      leavingToFileTransfer = true;
+      activityManager.goToFileTransfer(NetworkMode::OPDS_BROWSER);
+      return;
+    case OpdsBackTo::Home:
+      onGoHome();
+      return;
   }
 }
 

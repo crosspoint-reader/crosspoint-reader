@@ -15,7 +15,6 @@ enum class HomeMenuAction : uint8_t {
   Library,
   ReadingStats,
   GlobalBookmarks,
-  OpdsBrowser,
   FileTransfer,
   Weather,
   More,
@@ -28,11 +27,10 @@ struct HomeMenuEntry {
   UIIcon icon;
 };
 
-// What exists right now. An entry with nothing behind it (no bookmarks, no OPDS server) is left
-// out of both lists: the per-item settings choose where an entry goes, not whether it exists.
+// What exists right now. An entry with nothing behind it (no bookmarks) is left out of both
+// lists: the per-item settings choose where an entry goes, not whether it exists.
 struct HomeMenuAvailability {
   bool hasBookmarks = false;
-  bool hasOpdsServers = false;
 };
 
 enum class HomeMenuPlacement : uint8_t { Home, More };

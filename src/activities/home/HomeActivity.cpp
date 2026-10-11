@@ -124,9 +124,8 @@ int getHomeCoverRenderHeight(const HomeScreenLayout& layout) {
 // dispatches Confirm based on action) and render() (which draws labels/icons).
 void HomeActivity::rebuildMenuEntries() {
   menuEntries.clear();
-  menuEntries.reserve(8);  // all eight shown, or seven plus More
-  const HomeMenuAvailability availability{.hasBookmarks = !GLOBAL_BOOKMARKS.isEmpty(),
-                                          .hasOpdsServers = hasOpdsServers};
+  menuEntries.reserve(6);  // all six shown, or five plus More
+  const HomeMenuAvailability availability{.hasBookmarks = !GLOBAL_BOOKMARKS.isEmpty()};
   collectHomeMenuEntries(HomeMenuPlacement::Home, availability, menuEntries);
   menuEntriesDirty = false;
 }
@@ -509,8 +508,6 @@ void HomeActivity::onEnter() {
       return;
     }
   }
-
-  hasOpdsServers = OPDS_STORE.hasServers();
 
   selectorIndex = 0;
   recentsLoading = false;

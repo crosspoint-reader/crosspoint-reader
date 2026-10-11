@@ -70,7 +70,7 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
-  startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput, initialSelection),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
                              onGoHome();

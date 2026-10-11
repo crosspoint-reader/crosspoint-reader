@@ -32,6 +32,8 @@ class CrossPointWebServerActivity final : public Activity {
 
   // Network mode
   NetworkMode networkMode = NetworkMode::JOIN_NETWORK;
+  // The row the mode picker opens on the first time (see ActivityManager::goToFileTransfer).
+  NetworkMode initialSelection;
   bool isApMode = false;
 
   // Track whether the web server was started during this activity.
@@ -75,8 +77,9 @@ class CrossPointWebServerActivity final : public Activity {
   void startWebServer();
 
  public:
-  explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("CrossPointWebServer", renderer, mappedInput) {}
+  explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                       NetworkMode initialSelection = NetworkMode::JOIN_NETWORK)
+      : Activity("CrossPointWebServer", renderer, mappedInput), initialSelection(initialSelection) {}
   void onEnter() override;
   bool usesWifi() const override { return true; }
   void onExit() override;

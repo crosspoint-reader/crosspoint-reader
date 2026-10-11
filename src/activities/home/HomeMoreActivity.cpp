@@ -5,16 +5,14 @@
 
 #include "GlobalBookmarkIndex.h"
 #include "MappedInputManager.h"
-#include "OpdsServerStore.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 
 HomeMoreActivity::HomeMoreActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : MenuListActivity("HomeMore", renderer, mappedInput) {
-  const HomeMenuAvailability availability{.hasBookmarks = !GLOBAL_BOOKMARKS.isEmpty(),
-                                          .hasOpdsServers = OPDS_STORE.hasServers()};
+  const HomeMenuAvailability availability{.hasBookmarks = !GLOBAL_BOOKMARKS.isEmpty()};
   std::vector<HomeMenuEntry> entries;
-  entries.reserve(7);
+  entries.reserve(5);
   collectHomeMenuEntries(HomeMenuPlacement::More, availability, entries);
 
   menuItems.reserve(entries.size());
