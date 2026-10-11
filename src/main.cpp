@@ -315,7 +315,32 @@ static void deliverSleepPluginEvents() {
   // same sleep, and a progress-sync plugin usually subscribes to it alone.
   if (!pluginevents::wantsConnectAny()) return;
   if (powerManager.getBatteryPercentage() < 20) return;
-  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+  // WifiCredentialStore::getInstance() only default-constructs the singleton
+  // (PersistableStore::getInstance() never auto-loads); the actual SD-card
+  // read is a separate call, and the only call site anywhere in this
+  // codebase is WifiSelectionActivity's onEnter(). A boot that goes straight
+  // from Home to sleep without ever visiting that screen (File Transfer's
+  // Join Network, or Settings > WiFi) leaves WIFI_STORE's in-memory
+  // credential list and lastConnectedSsid both at their empty default state
+  // - not stale, never loaded - so every lookup below fails silently
+  // regardless of what's actually saved on the card. Confirmed on-device: a
+  // cold boot straight to sleep showed an empty lastConnectedSsid and no
+  // credential found on every attempt, despite a valid saved network
+  // already on file, so sleep.enter's auto-join never once fired on the
+  // common "read, then let it sleep" cycle. loadFromFile() is a cheap,
+  // idempotent small-JSON read; call it here so this path never depends on
+  // which screens happened to be visited earlier this session.
+  WIFI_STORE.loadFromFile();
+  auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+  // Separately: lastConnectedSsid is only ever set by WifiSelectionActivity's
+  // join flow - a network associated some other way never sets it, even
+  // once loaded. Fall back to the first saved credential rather than giving
+  // up; this only runs when a connect-flagged event is genuinely queued
+  // (wantsConnectAny() above), so a harmless no-saved-network case still
+  // exits via the !cred check below.
+  if (!cred && WIFI_STORE.getCredentialCount() > 0) {
+    cred = WIFI_STORE.getCredentialAt(0);
+  }
   if (!cred) return;
 
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
