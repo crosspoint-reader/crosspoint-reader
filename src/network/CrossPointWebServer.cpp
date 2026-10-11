@@ -400,7 +400,7 @@ void CrossPointWebServer::begin() {
   server->on("/plugin", HTTP_GET, [this] { handlePluginFile(); });
   server->on("/api/relay", HTTP_GET, [this] { handleRelay(); });
   server->on("/api/fetch", HTTP_POST, [this] { handleFetchToSd(); });
-  server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); });
+  server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsData(); });
 
   server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
   server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
@@ -2989,45 +2989,92 @@ void CrossPointWebServer::handleFetchToSd() {
 // for compatibility with plugins written against the upstream API rather than
 // because the web UI needs it - hence the modest cap, which keeps it to the
 // small-file job it advertises and leaves bulk transfers to /upload.
+//
+// The body arrives through handlePluginFsData() in raw chunks. It used to be read
+// from the buffered "plain" argument, which the framework builds as a C string:
+// binary content ended at its first NUL byte and was still reported written.
 void CrossPointWebServer::handlePluginFs() {
-  if (rejectIfLowMemory(server.get())) return;
-
-  const String plugin = server->arg("plugin");
-  const String path = pluginWriteTarget(server->arg("path"));
-  if (!isSafePathComponent(plugin) || path.isEmpty()) {
-    server->send(400, "application/json", "{\"error\":\"missing plugin or path\"}");
+  PluginFsUpload& up = pluginFsUpload;
+  if (!up.started) {
+    // A form-encoded body is parsed into arguments and never streams.
+    server->send(415, "application/json", "{\"error\":\"send the file as the raw request body\"}");
+    return;
+  }
+  up.started = false;
+  if (up.status != 0) {
+    JsonDocument err;
+    err["error"] = up.error;
+    sendJson(server.get(), up.status, err);
     return;
   }
 
-  // WebServer has already buffered the body; "plain" is the raw payload for a
-  // non-form content type.
-  const String body = server->arg("plain");
-  if (body.length() > PLUGIN_FS_MAX_BYTES) {
-    server->send(413, "application/json", "{\"error\":\"file too large, use /upload\"}");
-    return;
-  }
-
-  FsFile out;
-  if (!Storage.openFileForWrite("WEB", path.c_str(), out)) {
-    server->send(500, "application/json", "{\"error\":\"could not create file\"}");
-    return;
-  }
-  const size_t written = body.length() ? out.write(body.c_str(), body.length()) : 0;
-  out.close();
-
-  if (written != static_cast<size_t>(body.length())) {
-    LOG_ERR("WEB", "plugin-fs short write: %u of %u to %s", static_cast<unsigned>(written),
-            static_cast<unsigned>(body.length()), path.c_str());
-    server->send(500, "application/json", "{\"error\":\"short write\"}");
-    return;
-  }
-
-  LOG_DBG("WEB", "plugin-fs wrote %u bytes to %s", static_cast<unsigned>(written), path.c_str());
-  clearBookCacheIfNeeded(path);
+  LOG_DBG("WEB", "plugin-fs wrote %u bytes to %s", static_cast<unsigned>(up.written), up.path.c_str());
+  clearBookCacheIfNeeded(up.path);
   JsonDocument doc;
   doc["ok"] = true;
-  doc["path"] = path.c_str();
+  doc["path"] = up.path.c_str();
   sendJson(server.get(), 200, doc);
+}
+
+void CrossPointWebServer::handlePluginFsData() {
+  PluginFsUpload& up = pluginFsUpload;
+  const HTTPRaw& raw = server->raw();
+  const auto fail = [&up](const int status, const char* error) {
+    up.status = status;
+    up.error = error;
+    if (up.file) up.file.close();
+    if (!up.temp.isEmpty()) Storage.remove(up.temp.c_str());
+  };
+
+  switch (raw.status) {
+    case RAW_START: {
+      if (up.file) up.file.close();  // left by a request the client dropped mid-body
+      up.started = true;
+      up.status = 0;
+      up.error = "";
+      up.written = 0;
+      up.temp = "";
+      const String plugin = server->arg("plugin");
+      up.path = pluginWriteTarget(server->arg("path"));
+      if (!isSafePathComponent(plugin) || up.path.isEmpty()) {
+        fail(400, "missing plugin or path");
+        return;
+      }
+      // Written aside and renamed over the target at the end, so a body that turns out too large,
+      // or a client that goes away, never replaces a file that was already there.
+      up.temp = up.path + ".part";
+      if (!Storage.openFileForWrite("WEB", up.temp.c_str(), up.file)) {
+        up.temp = "";
+        fail(500, "could not create file");
+      }
+      return;
+    }
+    case RAW_WRITE:
+      if (up.status != 0) return;
+      if (up.written + raw.currentSize > PLUGIN_FS_MAX_BYTES) {
+        fail(413, "file too large, use /upload");
+        return;
+      }
+      if (up.file.write(raw.buf, raw.currentSize) != raw.currentSize) {
+        LOG_ERR("WEB", "plugin-fs short write at %u B to %s", static_cast<unsigned>(up.written), up.temp.c_str());
+        fail(500, "short write");
+        return;
+      }
+      up.written += raw.currentSize;
+      HalSystem::feedWatchdog();
+      return;
+    case RAW_END:
+      if (up.status != 0) return;
+      up.file.close();
+      if ((Storage.exists(up.path.c_str()) && !Storage.remove(up.path.c_str())) ||
+          !Storage.rename(up.temp.c_str(), up.path.c_str())) {
+        fail(500, "could not replace file");
+      }
+      return;
+    case RAW_ABORTED:
+      fail(400, "upload interrupted");
+      return;
+  }
 }
 
 // WebSocket callback trampoline
