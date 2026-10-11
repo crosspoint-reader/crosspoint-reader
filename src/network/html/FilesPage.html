@@ -2451,10 +2451,20 @@
 
       fileTableContent += '</tbody></table>';
       fileTable.innerHTML = fileTableContent;
-      document.getElementById('file-table').addEventListener('change', function (e) {
+      attachFileTableListeners(fileTable);
+      updateToolbarState();
+    }
+
+    // Delegated, so they survive the innerHTML swaps above -- and attached once: #file-table itself
+    // is never replaced, so adding them on every render stacked a copy per sort or refresh, and one
+    // click on Move, Rename or Delete then opened its dialog that many times.
+    function attachFileTableListeners(fileTable) {
+      if (fileTable.dataset.listening) return;
+      fileTable.dataset.listening = '1';
+      fileTable.addEventListener('change', function (e) {
         if (e.target.classList.contains('select-item')) updateToolbarState();
       });
-      document.getElementById('file-table').addEventListener('click', function (e) {
+      fileTable.addEventListener('click', function (e) {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const name = btn.dataset.name;
