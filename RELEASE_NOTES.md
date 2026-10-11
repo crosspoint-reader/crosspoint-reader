@@ -19,6 +19,7 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **Folder book counts are remembered until the device sleeps**, so going back to a folder no longer shows "..." while it counts again. Moving, removing or uploading a book counts the folders it changes again.
 - **Covers draw about three and a half times faster**: a grid cover takes 12 ms instead of 40 ms on the X3, and a page of the Recent Books grid 79 ms instead of 168 ms.
 - **Fix: a book could be marked as having no cover for good.** When the Home carousel or the Recent Books grid moved from one book to the next, the next book's cover was read from where the previous book's cover sat in its file, which failed, and the book was recorded as coverless. A cover that fails for want of memory, or because a button was pressed, is also tried again later instead of being given up.
+- **Fix: a moved or renamed book started over.** Moving a book with **Move to folder**, or moving or renaming it, or its folder, in the web interface, lost its reading position, bookmarks and place in Recent, and a rename also lost its reading stats. They now go with the book.
 
 ### Fonts
 
@@ -93,6 +94,13 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **Fix: anyone on the network could download your saved Wi-Fi passwords while File Transfer was running.** The web interface checked only the last part of a file's path, so the files in `/.crosspoint` holding the Wi-Fi, OPDS and KOReader passwords could be fetched by name, and the plugins' write requests could overwrite anything in that folder. Every part of a path is now checked. The three password files, and anything in the card's system folders, can never be downloaded or changed. Folders whose names start with a dot, such as `/.crosspoint`, can be opened only when **Show Hidden Files** is on, as the file list already showed them, and a folder or file whose own name starts with a dot can never be downloaded, overwritten, renamed, moved or deleted. Over WebDAV, nothing inside a dot folder can be downloaded or changed, whatever that setting.
 - **Back leaves File Transfer during a slow upload.** A font upload, or a book the Files page sent the slower way (its fallback when the quick connection fails), kept the screen from responding to Back until the upload finished, which on a slow connection could take minutes. Back now cancels such an upload and deletes the part that arrived.
 - **Fix: a refused font upload deleted the font installed before it.** An upload rejected at the start, for a bad file or family name, removed the file of the previous upload.
+- **The File Manager asks before an upload replaces a file of the same name**: **Replace**, **Keep both** (the upload is saved as "name (2)"), or **Skip**, for that file or for every file of the upload. Re-sending a book from Calibre or a script still replaces it, as before.
+- **Fix: one click on Move, Rename or Delete in the File Manager could open its dialog several times**, once for every time the list had been sorted or refreshed.
+- **Fixes for web-interface plugins:**
+  - A plugin's requests through the reader now follow a redirect only to a site the plugin is allowed to reach.
+  - A file a plugin saves is no longer cut short at the first zero byte.
+  - A plugin that needs something this firmware lacks is refused with a message instead of failing.
+
 ### Languages
 
 - **The Library is translated.** Its tabs, views, book counts and menu entries, the **Compare progress** entry, the TXT/MD font settings and the slider hint now appear in every language the reader offers, instead of in English. In Belarusian, Dutch, French, German, Italian, Polish, Portuguese, Russian, Slovenian, Spanish, Swedish and Ukrainian the menus are fully translated again.
