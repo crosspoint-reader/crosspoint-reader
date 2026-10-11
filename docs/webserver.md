@@ -136,6 +136,7 @@ same links along its top:
 - **Settings**: device settings and saved networks (below)
 - **Font Manager**: install and remove SD-card fonts (below)
 - **Reading Stats**: your reading history (below)
+- **Plugins**: install, switch off and remove web-interface plugins (below)
 - **System Info**: device status and version, WiFi state, IP address, free memory and SD card usage
 
 <img src="./images/wifi/webserver_homepage.png" width="600">
