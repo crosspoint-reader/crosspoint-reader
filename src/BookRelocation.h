@@ -15,6 +15,9 @@
 // Call after the rename itself has succeeded. Files that are not books are ignored.
 namespace BookRelocation {
 
+// The cache folder the reader uses for a book at `path`; empty for a file that is not a book.
+std::string cacheDirFor(const std::string& path);
+
 void bookMoved(const std::string& oldPath, const std::string& newPath);
 
 // Every book now under `newDir`, which was `oldDir`.
