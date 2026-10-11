@@ -134,8 +134,10 @@ The page you land on at `http://<device-ip>/` has one link per page:
 - **Open File Manager**: browse and manage the SD card (below)
 - **Settings**: device settings and saved networks (below)
 - **Font Manager**: install and remove SD-card fonts (below)
+- **Dictionaries**: install and remove dictionaries for word lookup (below)
 - **Reading Stats**: your reading history (below)
 - **System Info**: device status and version, WiFi state, IP address, free memory and SD card usage
+- **Diagnostics**: how the device last slept and started, and a report for bug reports (below)
 
 <img src="./images/wifi/webserver_homepage.png" width="600">
 
@@ -224,6 +226,21 @@ numbers as the Reading Stats screens on the device. From it you can **export** t
 The Fonts page lists the font families installed on the SD card and the families available online.
 You can install or update one or all of them (the device downloads them itself, so it needs internet
 access), upload a `.cpfont` file from your computer, or delete a family.
+
+### Dictionaries
+
+The Dictionaries page lists the StarDict dictionaries in `/dictionaries`, says whether the reader can
+use each one and what is wrong if not, and removes them. To install one, choose the archive you
+downloaded (`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2` or `.tar`) or the dictionary's own files: your
+browser unpacks what the reader cannot read compressed, checks the files and uploads them into a
+folder of their own. You still choose the active dictionary on the device. See
+[Dictionary](./dictionary.md#install-from-the-web-interface).
+
+### Diagnostics
+
+The Diagnostics page shows the device status and the sleep and boot history that the device shows
+under **Settings → System → Boot Diagnostics**, in plain words. **Download report** saves both, with
+the firmware version, as one file to attach to a bug report. It leaves out the IP and MAC address.
 
 ### Plugins
 

@@ -8,6 +8,7 @@ This document describes all HTTP, WebDAV and WebSocket endpoints available on th
   - [Status](#status)
     - [GET `/api/status` - Device Status](#get-apistatus---device-status)
     - [GET `/api/status/fast` - Device Status without SD stats](#get-apistatusfast---device-status-without-sd-stats)
+    - [GET `/api/diagnostics/boot` - Boot and Sleep History](#get-apidiagnosticsboot---boot-and-sleep-history)
   - [Files](#files)
     - [GET `/api/files` - List Files](#get-apifiles---list-files)
     - [GET `/download` - Download File](#get-download---download-file)
@@ -69,7 +70,17 @@ the setup page and every other page redirects (`302`) to `/setup`.
 | `/settings`   | Settings                                   |
 | `/stats`      | Reading Stats                              |
 | `/fonts`      | Font Manager                               |
+| `/dictionary` | Dictionaries: lists, installs and removes StarDict dictionaries |
 | `/systeminfo` | System Info                                |
+| `/diagnostics`| Diagnostics: device status, boot and sleep history, and a report to download |
+
+The Dictionaries page needs no endpoint of its own. It unpacks archives and
+compressed files in the browser, then works through
+[`/api/files`](#get-apifiles---list-files), [`/download`](#get-download---download-file)
+(to read each `.ifo`), [`/mkdir`](#post-mkdir---create-folder),
+[`/upload`](#post-upload---upload-file) and [`/delete`](#post-delete---delete-files-or-folders),
+one request at a time. The route is singular so it is never mistaken for the
+`/dictionaries` folder. See [docs/dictionary.md](dictionary.md#install-from-the-web-interface).
 
 `GET /js/jszip.min.js` serves the gzipped JSZip library (`Content-Encoding: gzip`),
 which the File Manager loads, or `404` while the bundle is not installed. Any
@@ -209,6 +220,55 @@ parameters and never scans the card. The System Info page uses it for its first 
 ```bash
 curl http://crosspoint.local/api/status/fast
 ```
+
+### GET `/api/diagnostics/boot` - Boot and Sleep History
+
+What the device's **Settings → System → Boot Diagnostics** screen shows: the
+hardware variant, how this boot started, and the last 16 sleep and boot events
+kept on the card (`/.crosspoint/bootdiag.bin`). Values are the same short English
+tokens the screen prints, untranslated, so reports from different devices compare.
+The Diagnostics page reads it and saves it, with `/api/status`, as a bug report.
+Streamed; no parameters.
+
+```bash
+curl http://crosspoint.local/api/diagnostics/boot
+```
+
+**Response (200 OK)**, abridged:
+```json
+{
+  "hardware": {"board": "xteink_x4", "displayController": "SSD1677", "promotedByProbe": false,
+               "panelProbe": "ver 00 00 00 00 00 flg 00 v1"},
+  "thisBoot": {
+    "resetReason": "deep-sleep", "wakeCause": "gpio", "previousSessionSlept": true,
+    "wakeGate": {"verdict": "long-hold", "heldMs": 310, "decidedAtMs": 402, "requiredMs": 300},
+    "firstPaintMs": 1830,
+    "phases": [{"name": "entry", "ms": 80}, {"name": "gate", "ms": 402}, {"name": "sd", "ms": 650}],
+    "abortedBoots": {"thisRun": 0, "lifetime": 0, "undrained": 0},
+    "lightSleep": {"sleptMs": 120000, "awakeMs": 40000, "attempts": 55, "gpioWakes": 2}
+  },
+  "history": [
+    {"seq": 41, "kind": "boot", "resetReason": "deep-sleep", "wakeCause": "gpio", "gate": "long-hold",
+     "gateDecidedMs": 402, "gateHeldMs": 310, "sdMountMs": 650},
+    {"seq": 40, "kind": "sleep", "outcome": "slept", "stage": "wake-armed", "trigger": "power-hold",
+     "latchKept": false, "fromReader": true, "releaseWaitMs": 120, "releaseTimedOut": false, "uptimeS": 1200},
+    {"seq": 39, "kind": "aborted", "trigger": "gate-rejected", "gate": "released-early", "count": 3, "capped": false}
+  ]
+}
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `hardware.panelProbe` | The display-bus probe's raw bytes, or `null` when no probe ran |
+| `thisBoot.phases` | The `millis()` stamp of each boot phase this boot reached (`BootDiag::BootPhase`); the page shows the differences |
+| `thisBoot.abortedBoots` | Wakes refused since the last completed boot (`thisRun`, from the card), ever (`lifetime`, NVS), and counted but not yet written to the card (`undrained`) |
+| `history` | Newest first. `kind` is `sleep`, `boot` or `aborted` (a run of wakes that went straight back to sleep, `count` times; `capped` once the count stopped at its limit) |
+| `outcome` | `slept`, `release-timeout`, `powered-off` (the rail was cut, as the sleep asked), `powered-off-unasked`, `did-not-sleep` or `unfinished` (no boot after it yet) |
+
+Token lists: `stage` and `trigger` are `BootDiag::stageName()` / `triggerName()`,
+`resetReason` and `wakeCause` are `BootDiag::resetReasonName()` / `wakeCauseName()`,
+`gate` and `wakeGate.verdict` are `HalGPIO::wakeVerdictName()`. Nothing secret is
+included.
 
 ---
 
