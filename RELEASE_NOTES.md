@@ -45,6 +45,8 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 ### Touch
 
 - **Fix: a swipe on Bookmarks, Starred pages, Wi-Fi or the OPDS catalog no longer acts on the selected row.** A vertical swipe over these lists was passed on as a Left/Right press. Swiping up on Bookmarks or Starred pages deleted the highlighted entry, and on Wi-Fi it started a rescan. On Bookmarks, Starred pages and Wi-Fi a swipe now does nothing, while the OPDS catalog pages (see OPDS below). On other lists it still pages.
+- **File Transfer, its hotspot, Calibre Wireless and USB Drive have an Exit button on a touch screen**, below their status. It does what **Back** does. USB Drive shows it only until a computer has the card, as it does Back.
+- **Fix: tapping Back at the bottom of File Transfer and the hotspot did nothing.** On a reader without a Back key, such as the T5 S3 or the X4 Pro, a held home key was the only way out.
 
 ### OPDS
 
