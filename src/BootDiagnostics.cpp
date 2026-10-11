@@ -372,6 +372,24 @@ const char* triggerName(SleepTrigger trigger) {
   return "?";
 }
 
+const char* outcomeName(SleepOutcome outcome) {
+  switch (outcome) {
+    case SleepOutcome::ReachedDeepSleep:
+      return "slept";
+    case SleepOutcome::ReleaseTimedOut:
+      return "release-timeout";
+    case SleepOutcome::PoweredOffAsAsked:
+      return "powered-off";
+    case SleepOutcome::PoweredOffUnasked:
+      return "powered-off-unasked";
+    case SleepOutcome::DidNotSleep:
+      return "did-not-sleep";
+    case SleepOutcome::Unfinished:
+      return "unfinished";
+  }
+  return "?";
+}
+
 const char* resetReasonName(uint8_t reason) {
   switch (static_cast<esp_reset_reason_t>(reason)) {
     case ESP_RST_UNKNOWN:

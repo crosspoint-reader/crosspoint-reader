@@ -1,9 +1,12 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
+#include <BoardConfig.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalClock.h>
+#include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <HalSystem.h>  // feedWatchdog()
 #include <Logging.h>
@@ -11,12 +14,16 @@
 #include <Txt.h>
 #include <WiFi.h>
 #include <Xtc.h>
+#include <XteinkDetect.h>
+#include <esp_sleep.h>
+#include <esp_system.h>
 
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
 
+#include "BootDiagnostics.h"
 #include "ChunkedResponse.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -332,11 +339,13 @@ void CrossPointWebServer::begin() {
   server->on("/api/web/status", HTTP_GET, [this] { handleWebStatus(); });
   server->on("/api/web/install", HTTP_POST, [this] { handleWebInstall(); });
   server->on("/systeminfo", HTTP_GET, [this] { handleSystemInfoPage(); });
+  server->on("/diagnostics", HTTP_GET, [this] { handleDiagnosticsPage(); });
   server->on("/files", HTTP_GET, [this] { handleRoot(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/status/fast", HTTP_GET, [this] { handleStatusFast(); });
+  server->on("/api/diagnostics/boot", HTTP_GET, [this] { handleBootDiagnostics(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
@@ -688,6 +697,8 @@ void CrossPointWebServer::handleWebInstall() const {
 
 void CrossPointWebServer::handleSystemInfoPage() const { serveBundlePage(web_bundle::HomePageHtml); }
 
+void CrossPointWebServer::handleDiagnosticsPage() const { serveBundlePage(web_bundle::DiagnosticsPageHtml); }
+
 void CrossPointWebServer::handleStatsPage() const { serveBundlePage(web_bundle::StatsPageHtml); }
 
 void CrossPointWebServer::handleStatsApi() const {
@@ -888,6 +899,146 @@ void CrossPointWebServer::handleStatusFast() const {
   doc["sdFree"] = status.sdFreeBytes;
 
   sendJson(server.get(), 200, doc);
+}
+
+namespace {
+
+// The pieces of GET /api/diagnostics/boot. Same accessors and same untranslated tokens as
+// Settings > System > Boot Diagnostics, so a report saved from the browser reads like a photo
+// of that page and two reports stay comparable.
+void fillBootHardware(JsonDocument& doc) {
+  doc["board"] = BoardConfig::ACTIVE.name;
+  doc["displayController"] = displayControllerName(BoardConfig::ACTIVE.displayController);
+  const auto& probe = freeink::getXteinkDisplayProbeDiag();
+  doc["promotedByProbe"] = probe.promoted;
+  if (probe.valid) {
+    char buf[48];
+    snprintf(buf, sizeof(buf), "ver %02X %02X %02X %02X %02X flg %02X v%u%s", probe.ver[0], probe.ver[1], probe.ver[2],
+             probe.ver[3], probe.ver[4], probe.flg, probe.verdict, probe.mtpValid ? " mtp" : "");
+    doc["panelProbe"] = buf;
+  } else {
+    doc["panelProbe"] = nullptr;  // no probe ran: itself a finding
+  }
+}
+
+void fillThisBoot(JsonDocument& doc, const BootDiag::Record* records, const uint8_t count) {
+  doc["resetReason"] = BootDiag::resetReasonName(static_cast<uint8_t>(esp_reset_reason()));
+  doc["wakeCause"] = BootDiag::wakeCauseName(static_cast<uint8_t>(esp_sleep_get_wakeup_cause()));
+  doc["previousSessionSlept"] = !BootDiag::previousSessionEndedWithoutSleep();
+
+  const auto& check = BootDiag::wakeCheck();
+  const JsonObject gate = doc["wakeGate"].to<JsonObject>();
+  gate["verdict"] = HalGPIO::wakeVerdictName(check.verdict);
+  gate["heldMs"] = check.heldMs;
+  gate["decidedAtMs"] = check.decidedAtMs;
+  gate["requiredMs"] = CrossPointSettings::getPowerWakeHoldDuration();
+
+  doc["firstPaintMs"] = BootDiag::phaseMs(BootDiag::BootPhase::FirstPaint);
+  // Absolute stamps of the phases this boot reached; the page turns them into the per-phase
+  // costs the device shows. Unreached phases are left out there too.
+  const JsonArray phases = doc["phases"].to<JsonArray>();
+  for (uint8_t i = 0; i < static_cast<uint8_t>(BootDiag::BootPhase::Count); i++) {
+    const auto phase = static_cast<BootDiag::BootPhase>(i);
+    if (!BootDiag::phaseReached(phase)) continue;
+    const JsonObject entry = phases.add<JsonObject>();
+    entry["name"] = BootDiag::phaseName(phase);
+    entry["ms"] = BootDiag::phaseMs(phase);
+  }
+
+  // The ring's count and the NVS lifetime count side by side, as on the device: a zero in the
+  // first with a non-zero second means aborts were counted but lost on the way to the card.
+  const BootDiag::AbortCounts counts = BootDiag::abortCounts();
+  const JsonObject aborted = doc["abortedBoots"].to<JsonObject>();
+  aborted["thisRun"] = BootDiag::abortsInCurrentRun(records, count);
+  aborted["lifetime"] = counts.lifetime;
+  aborted["undrained"] = counts.undrained;
+
+  const auto& stats = powerManager.lightSleepStats();
+  const JsonObject light = doc["lightSleep"].to<JsonObject>();
+  light["sleptMs"] = stats.sleptMs;
+  light["awakeMs"] = stats.awakeMs;
+  light["attempts"] = stats.attempts;
+  light["gpioWakes"] = stats.wakeGpio;
+}
+
+// One history line. The record's fields mean different things per kind (BootDiagRing.h), so
+// each kind gets its own names rather than the raw slots.
+void fillBootRecord(JsonDocument& doc, const BootDiag::Record& record) {
+  doc["seq"] = record.seq;
+  switch (record.kind) {
+    case BootDiag::KindSleep:
+      doc["kind"] = "sleep";
+      doc["outcome"] = BootDiag::outcomeName(BootDiag::outcomeOf(record));
+      doc["stage"] = BootDiag::stageName(static_cast<BootDiag::SleepStage>(record.code));
+      doc["trigger"] = BootDiag::triggerName(static_cast<BootDiag::SleepTrigger>(record.reason));
+      doc["latchKept"] = (record.flags & BootDiag::kFlagKeepClock) != 0;
+      doc["fromReader"] = (record.flags & BootDiag::kFlagFromReader) != 0;
+      doc["releaseWaitMs"] = record.msA;
+      doc["releaseTimedOut"] = (record.flags & BootDiag::kFlagReleaseTimeout) != 0;
+      doc["uptimeS"] = record.msB;
+      return;
+    case BootDiag::KindBoot:
+      doc["kind"] = "boot";
+      doc["resetReason"] = BootDiag::resetReasonName(record.reason);
+      doc["wakeCause"] = BootDiag::wakeCauseName(record.flags);
+      doc["gate"] = HalGPIO::wakeVerdictName(static_cast<HalGPIO::WakeVerdict>(record.code));
+      doc["gateDecidedMs"] = record.msA;
+      doc["gateHeldMs"] = record.msB;
+      doc["sdMountMs"] = record.msC;
+      return;
+    case BootDiag::KindAborted:
+      doc["kind"] = "aborted";
+      doc["trigger"] = BootDiag::triggerName(static_cast<BootDiag::SleepTrigger>(record.reason));
+      doc["gate"] = HalGPIO::wakeVerdictName(static_cast<HalGPIO::WakeVerdict>(record.code));
+      doc["count"] = record.msA;
+      doc["capped"] = record.msA >= BootDiag::kAbortCountCap;
+      return;
+    default:
+      doc["kind"] = "unknown";
+      return;
+  }
+}
+
+}  // namespace
+
+// GET /api/diagnostics/boot: this boot's start and the persisted sleep/boot history, for the
+// Diagnostics page and the report it saves.
+void CrossPointWebServer::handleBootDiagnostics() const {
+  if (rejectIfLowMemory(server.get())) return;
+  // The ring's 256 bytes go on the heap, not the stack: handleClient() runs on the loop task
+  // beneath the whole activity call chain (see ChunkedResponse).
+  const auto records = makeUniqueNoThrow<BootDiag::Record[]>(BootDiag::kCapacity);
+  if (!records) {
+    server->send(500, "application/json", "{\"error\":\"OOM\"}");
+    return;
+  }
+  const uint8_t count = BootDiag::loadRecords(records.get(), BootDiag::kCapacity);
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  ChunkedResponse response(server.get());
+  ChunkedPrint out(response);
+  // One small document per section and per history line, cleared in between as the file
+  // listing does, rather than one holding all sixteen records at once.
+  JsonDocument doc;
+  out.print("{\"hardware\":");
+  fillBootHardware(doc);
+  serializeJson(doc, out);
+
+  doc.clear();
+  out.print(",\"thisBoot\":");
+  fillThisBoot(doc, records.get(), count);
+  serializeJson(doc, out);
+
+  out.print(",\"history\":[");
+  for (uint8_t i = 0; i < count; i++) {
+    doc.clear();
+    fillBootRecord(doc, records[i]);
+    if (i > 0) out.print(',');
+    serializeJson(doc, out);
+  }
+  out.print("]}");
+  response.finish();
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const FileVisitor visitor, void* context) const {

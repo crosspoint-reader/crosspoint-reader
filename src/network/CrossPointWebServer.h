@@ -115,6 +115,8 @@ class CrossPointWebServer {
   void handleWebStatus() const;
   void handleWebInstall() const;
   void handleSystemInfoPage() const;
+  void handleDiagnosticsPage() const;
+  void handleBootDiagnostics() const;
   void handleJszip() const;
   void handleNotFound() const;
   void handleStatus() const;

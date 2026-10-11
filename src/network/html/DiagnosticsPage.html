@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>%%CROSSPOINT%% - Diagnostics</title>
+  <style>
+    html {
+      scrollbar-gutter: stable;
+    }
+    :root {
+      --font-color: #333;
+      --bg: #f5f5f5;
+      --title-color: #2c3e50;
+      --card-bg: #FFF;
+      --label-color: #7f8c8d;
+      --border-color: #eee;
+      --accent-color: rgb(110, 154, 130);
+      --accent-hover-color: #5a8c73;
+      --danger-color: #e74c3c;
+      --notice-bg: #fff8e1;
+      --notice-border: #ffd54f;
+      --notice-color: #5d4e0a;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --font-color: #f5f5f5;
+        --bg: #333;
+        --title-color: #ecf0f1;
+        --card-bg: #444;
+        --label-color: #bdc3c7;
+        --border-color: #555;
+        --notice-bg: #4a4030;
+        --notice-border: #b89a3e;
+        --notice-color: #f3e5a0;
+        color-scheme: dark;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Oxygen, Ubuntu, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: var(--bg);
+      color: var(--font-color);
+    }
+
+    h1 {
+      color: var(--title-color);
+      border-bottom: 2px solid var(--accent-color);
+      padding-bottom: 10px;
+    }
+
+    h2 {
+      color: var(--title-color);
+      margin-top: 0;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .nav-links {
+      margin: 20px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .nav-links a {
+      padding: 10px 20px;
+      color: var(--font-color);
+      text-decoration: none;
+      border-radius: 4px;
+    }
+
+    .nav-links a.active {
+      background-color: var(--accent-color);
+      color: white;
+    }
+
+    .nav-links a:not(.active):hover {
+      background-color: var(--accent-hover-color);
+      color: white;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .label {
+      font-weight: 600;
+      color: var(--label-color);
+      flex-shrink: 0;
+    }
+
+    .value {
+      color: var(--title-color);
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .alert {
+      color: var(--danger-color);
+      font-weight: 600;
+    }
+
+    .hint {
+      color: var(--label-color);
+      font-size: 0.9em;
+    }
+
+    .notice {
+      background: var(--notice-bg);
+      border: 1px solid var(--notice-border);
+      color: var(--notice-color);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 0 0 12px;
+      font-size: 0.95em;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .action-row button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      background-color: var(--accent-color);
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .action-row button:hover {
+      background-color: var(--accent-hover-color);
+    }
+
+    .action-row button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9em;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 6px 8px 6px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      color: var(--label-color);
+      font-weight: 600;
+    }
+
+    td.num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .kind {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>📚 %%CROSSPOINT%%</h1>
+
+  <div class="nav-links">
+    <a href="/files">File Manager</a>
+    <a href="/settings">Settings</a>
+    <a href="/fonts">Font Manager</a>
+    <a href="/dictionary">Dictionaries</a>
+    <a href="/stats">Reading Stats</a>
+    <a href="/systeminfo">System Info</a>
+    <a href="/diagnostics" class="active">Diagnostics</a>
+  </div>
+
+  <div class="card">
+    <h2>Bug Report</h2>
+    <p class="notice">
+      Reporting a problem? Download this report and attach it to the issue. It holds the firmware version,
+      the device status and the sleep/boot history shown below. It leaves out the IP and MAC address and
+      holds no passwords. The same history is on the reader under Settings → System → Boot Diagnostics.
+    </p>
+    <div class="action-row">
+      <button id="download" type="button" disabled>Download report</button>
+      <span class="hint" id="loadState">Loading...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Device</h2>
+    <div id="device"></div>
+  </div>
+
+  <div class="card">
+    <h2>This Boot</h2>
+    <div id="thisBoot"></div>
+    <h3>Boot phases</h3>
+    <p class="hint">Time each step of starting up took. Steps the boot did not go through are left out.</p>
+    <div class="table-wrap"><table id="phases"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Last Sleep</h2>
+    <div id="lastSleep"></div>
+  </div>
+
+  <div class="card">
+    <h2>Sleep and Boot History</h2>
+    <p class="hint">
+      Newest first. A healthy cycle is a sleep that reached deep sleep (or powered off as asked) followed by a
+      boot that woke from it; two boots in a row mean the session in between ended without sleeping.
+    </p>
+    <div class="table-wrap"><table id="history"></table></div>
+  </div>
+
+  <script>
+    // The device reports short untranslated tokens (the ones its own Boot Diagnostics
+    // screen prints, so reports stay comparable); these are their plain-English readings.
+    const RESET_REASONS = {
+      'power-on': 'Power-on or reset button (this chip cannot tell them apart)',
+      'ext-reset': 'Reset pin',
+      'sw-restart': 'Software restart',
+      'panic': 'Crash (panic)',
+      'int-wdt': 'Interrupt watchdog',
+      'task-wdt': 'Task watchdog',
+      'other-wdt': 'Watchdog',
+      'deep-sleep': 'Woke from deep sleep',
+      'brownout': 'Brownout (the supply voltage dropped)',
+      'sdio': 'SDIO reset',
+      'unknown': 'Unknown',
+      'other': 'Other',
+    };
+    const WAKE_CAUSES = {
+      'none': 'Not a wake from sleep',
+      'timer': 'Timer',
+      'gpio': 'Button (GPIO)',
+      'uart': 'Serial port',
+      'ulp': 'Low-power coprocessor',
+      'other': 'Other',
+    };
+    const GATE_VERDICTS = {
+      'not-pressed': 'button not held',
+      'short': 'short press accepted',
+      'long-hold': 'long hold accepted',
+      'double-click': 'double-click accepted',
+      'released-early': 'released too early',
+      'no-second-press': 'second press never came',
+    };
+    const STAGES = {
+      'none': 'nothing recorded',
+      'requested': 'sleep requested',
+      'state-saved': 'state saved',
+      'screen-painted': 'sleep screen painted',
+      'panel-asleep': 'display asleep',
+      'rails-set': 'power rails set',
+      'await-release': 'waiting for the power button to be released',
+      'release-timeout': 'gave up waiting for the button release',
+      'wake-armed': 'wake-up armed (the last step before deep sleep)',
+    };
+    const TRIGGERS = {
+      'unknown': 'unknown',
+      'power-hold': 'power button held',
+      'timeout': 'inactivity timeout',
+      'button': 'a button set to Sleep',
+      'gate-rejected': 'woke, but the press was not accepted',
+      'usb-boot': 'USB power started it',
+    };
+    const OUTCOMES = {
+      'slept': 'Reached deep sleep',
+      'release-timeout': 'STUCK: the button was never released; slept anyway',
+      'powered-off': 'Powered off as asked (a reset looks the same)',
+      'powered-off-unasked': 'Powered off although the clock was kept alive',
+      'did-not-sleep': 'NEVER REACHED DEEP SLEEP',
+      'unfinished': 'No boot recorded after this sleep',
+    };
+    const BAD_OUTCOMES = ['release-timeout', 'powered-off-unasked', 'did-not-sleep'];
+    const PHASES = {
+      'entry': 'Start-up code begins',
+      'nvs': 'Start-up settings read',
+      'gate': 'Power-button wake decided',
+      'hw': 'Hardware brought up',
+      'ser': 'USB serial opened',
+      'recov': 'Recovery button check',
+      'sd': 'SD card mounted',
+      'cfg': 'Settings and state loaded',
+      'disp': 'Display, memory and fonts',
+      'paint': 'First picture on the screen',
+      'store': 'Clock, recent books, bookmarks, stats',
+      'route': 'First screen opened',
+      'rel': 'Power button released',
+    };
+
+    const word = (map, token) => (token in map ? map[token] : token);
+
+    let statusData = null;
+    let diagData = null;
+    let diagError = null;
+
+    function el(tag, className, text) {
+      const e = document.createElement(tag);
+      if (className) e.className = className;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function addRow(container, label, value, alert) {
+      const row = el('div', 'info-row');
+      row.appendChild(el('span', 'label', label));
+      row.appendChild(el('span', 'value' + (alert ? ' alert' : ''), value));
+      container.appendChild(row);
+    }
+
+    function formatBytes(bytes) {
+      if (bytes == null) return 'N/A';
+      if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return bytes + ' B';
+    }
+
+    function formatUptime(seconds) {
+      if (seconds == null) return 'N/A';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
+    }
+
+    function renderDevice() {
+      const c = document.getElementById('device');
+      c.textContent = '';
+      const s = statusData;
+      const hw = diagData && diagData.hardware;
+      if (s) {
+        addRow(c, 'Firmware', s.version || 'N/A');
+        addRow(c, 'Device', s.deviceType
+          ? s.deviceType + (s.displayWidth ? ' (' + s.displayWidth + ' × ' + s.displayHeight + ' px)' : '')
+          : 'N/A');
+      }
+      if (hw) {
+        addRow(c, 'Board profile', hw.board);
+        addRow(c, 'Panel controller', hw.displayController + (hw.promotedByProbe ? ' (promoted by probe)' : ''));
+        addRow(c, 'Panel probe', hw.panelProbe || 'did not run');
+      }
+      if (s) {
+        addRow(c, 'Chip', (s.chipVersion || 'N/A') + (s.cpuMHz ? ', ' + s.cpuMHz + ' MHz' : ''));
+        addRow(c, 'Heap free / lowest / largest block',
+          formatBytes(s.freeHeap) + ' / ' + formatBytes(s.minFreeHeap) + ' / ' + formatBytes(s.maxAllocHeap));
+        addRow(c, 'Battery', s.batteryPercent != null ? s.batteryPercent + '%' + (s.charging ? ' (charging)' : '') : 'N/A');
+        addRow(c, 'Uptime', formatUptime(s.uptime));
+        addRow(c, 'Wi-Fi', (s.mode || 'N/A') + (s.mode === 'STA' && s.rssi ? ', ' + s.rssi + ' dBm' : ''));
+      }
+      if (!s && !hw) c.appendChild(el('p', 'hint', 'Could not load the device status.'));
+    }
+
+    function renderThisBoot() {
+      const c = document.getElementById('thisBoot');
+      const table = document.getElementById('phases');
+      c.textContent = '';
+      table.textContent = '';
+      if (!diagData) {
+        c.appendChild(el('p', 'hint', diagError || 'Loading...'));
+        return;
+      }
+      const b = diagData.thisBoot;
+      addRow(c, 'Reset reason', word(RESET_REASONS, b.resetReason));
+      addRow(c, 'Previous session', b.previousSessionSlept ? 'ended at the sleep path' : 'ended without sleeping (reset or crash)',
+        !b.previousSessionSlept);
+      addRow(c, 'Wake cause', word(WAKE_CAUSES, b.wakeCause));
+      const g = b.wakeGate;
+      addRow(c, 'Wake gate', word(GATE_VERDICTS, g.verdict) + ' (held ' + g.heldMs + ' ms, needs ' + g.requiredMs +
+        ' ms, decided at ' + g.decidedAtMs + ' ms)');
+      const a = b.abortedBoots;
+      // A device that wakes, refuses the press and sleeps again never touches the screen:
+      // this count is the only sign of it.
+      let aborted = a.thisRun ? a.thisRun + ' woke and refused to start' : 'none';
+      if (a.lifetime) aborted += ' (' + a.lifetime + ' ever recorded)';
+      if (a.undrained) aborted += ', ' + a.undrained + ' counted but not yet filed';
+      addRow(c, 'Aborted boots', aborted, a.thisRun > 0);
+      addRow(c, 'To first picture', b.firstPaintMs + ' ms');
+      const ls = b.lightSleep;
+      const total = ls.sleptMs + ls.awakeMs;
+      addRow(c, 'Light sleep', Math.round(ls.sleptMs / 1000) + ' s slept (' + (total ? Math.round(ls.sleptMs * 100 / total) : 0) +
+        '%), ' + ls.attempts + ' tries, ' + ls.gpioWakes + ' button wakes');
+
+      const head = el('tr');
+      ['Step', 'Took', 'Done at'].forEach((h, i) => head.appendChild(el('th', i ? 'num' : '', h)));
+      table.appendChild(head);
+      let previous = 0;
+      for (const p of b.phases) {
+        const tr = el('tr');
+        tr.appendChild(el('td', '', word(PHASES, p.name) + ' (' + p.name + ')'));
+        tr.appendChild(el('td', 'num', (p.ms - previous) + ' ms'));
+        tr.appendChild(el('td', 'num', p.ms + ' ms'));
+        table.appendChild(tr);
+        previous = p.ms;
+      }
+    }
+
+    function renderLastSleep() {
+      const c = document.getElementById('lastSleep');
+      c.textContent = '';
+      if (!diagData) {
+        c.appendChild(el('p', 'hint', diagError || 'Loading...'));
+        return;
+      }
+      const s = diagData.history.find((r) => r.kind === 'sleep');
+      if (!s) {
+        c.appendChild(el('p', 'hint', 'No sleep recorded yet.'));
+        return;
+      }
+      addRow(c, 'Verdict', word(OUTCOMES, s.outcome), BAD_OUTCOMES.includes(s.outcome));
+      addRow(c, 'Stopped at', word(STAGES, s.stage));
+      addRow(c, 'Trigger', word(TRIGGERS, s.trigger));
+      addRow(c, 'Battery latch', s.latchKept ? 'kept (the chip stays powered)' : 'cut (powers off)');
+      addRow(c, 'Release wait', s.releaseWaitMs + ' ms' + (s.releaseTimedOut ? ' (timed out)' : ''), s.releaseTimedOut);
+    }
+
+    function describeRecord(r) {
+      if (r.kind === 'sleep') {
+        const parts = ['Trigger: ' + word(TRIGGERS, r.trigger), 'reached: ' + word(STAGES, r.stage),
+          'battery latch ' + (r.latchKept ? 'kept' : 'cut')];
+        if (r.fromReader) parts.push('a book was open');
+        if (r.releaseTimedOut) parts.push('button release timed out after ' + r.releaseWaitMs + ' ms');
+        parts.push('awake ' + r.uptimeS + ' s before');
+        return { kind: 'Sleep', details: parts.join('; '), verdict: word(OUTCOMES, r.outcome), bad: BAD_OUTCOMES.includes(r.outcome) };
+      }
+      if (r.kind === 'boot') {
+        const parts = ['Reset: ' + word(RESET_REASONS, r.resetReason), 'wake: ' + word(WAKE_CAUSES, r.wakeCause),
+          'gate: ' + word(GATE_VERDICTS, r.gate) + ' (held ' + r.gateHeldMs + ' ms, decided at ' + r.gateDecidedMs + ' ms)',
+          'SD card mounted at ' + r.sdMountMs + ' ms'];
+        return { kind: 'Boot', details: parts.join('; '), verdict: '', bad: false };
+      }
+      if (r.kind === 'aborted') {
+        return {
+          kind: 'Aborted',
+          details: 'Woke and went straight back to sleep ' + r.count + (r.capped ? '+' : '') + ' time' + (r.count === 1 ? '' : 's') +
+            ': ' + word(TRIGGERS, r.trigger) + (r.trigger === 'gate-rejected' ? ' (' + word(GATE_VERDICTS, r.gate) + ')' : ''),
+          verdict: '',
+          bad: true,
+        };
+      }
+      return { kind: r.kind, details: '', verdict: '', bad: false };
+    }
+
+    function renderHistory() {
+      const table = document.getElementById('history');
+      table.textContent = '';
+      if (!diagData) {
+        const tr = el('tr');
+        tr.appendChild(el('td', 'hint', diagError || 'Loading...'));
+        table.appendChild(tr);
+        return;
+      }
+      if (!diagData.history.length) {
+        const tr = el('tr');
+        tr.appendChild(el('td', 'hint', 'No records yet.'));
+        table.appendChild(tr);
+        return;
+      }
+      const head = el('tr');
+      ['#', 'Event', 'Details', 'Verdict'].forEach((h) => head.appendChild(el('th', '', h)));
+      table.appendChild(head);
+      for (const r of diagData.history) {
+        const d = describeRecord(r);
+        const tr = el('tr');
+        tr.appendChild(el('td', 'num', String(r.seq)));
+        tr.appendChild(el('td', 'kind' + (d.bad ? ' alert' : ''), d.kind));
+        tr.appendChild(el('td', '', d.details));
+        tr.appendChild(el('td', d.bad ? 'alert' : '', d.verdict));
+        table.appendChild(tr);
+      }
+    }
+
+    // What goes into the saved file. The IP and MAC address are dropped: the report is
+    // meant for a public issue tracker, and neither helps to diagnose anything.
+    function buildReport() {
+      let status = null;
+      if (statusData) {
+        status = Object.assign({}, statusData);
+        delete status.ip;
+        delete status.macAddress;
+      }
+      return {
+        report: 'device diagnostics',
+        generated: new Date().toISOString(),
+        firmware: statusData ? statusData.version : null,
+        status: status,
+        bootDiagnostics: diagData,
+        errors: diagError ? [diagError] : undefined,
+      };
+    }
+
+    function downloadReport() {
+      const report = buildReport();
+      const stamp = report.generated.replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-');
+      const version = String(report.firmware || 'unknown').replace(/[^A-Za-z0-9._-]+/g, '_');
+      const blob = new Blob([JSON.stringify(report, null, 2) + '\n'], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'diagnostics-' + version + '-' + stamp + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function getJson(url) {
+      // The device answers 503 while its heap is too tight for a response; try again shortly.
+      for (let attempt = 0; ; attempt++) {
+        const res = await fetch(url);
+        if (res.status === 503 && attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          continue;
+        }
+        if (!res.ok) throw new Error(url + ' answered ' + res.status);
+        return await res.json();
+      }
+    }
+
+    async function load() {
+      // One request after the other: the device serves a single connection at a time.
+      try {
+        statusData = await getJson('/api/status');
+      } catch (e) {
+        statusData = null;
+      }
+      try {
+        diagData = await getJson('/api/diagnostics/boot');
+      } catch (e) {
+        diagError = 'Could not load the boot history: ' + e.message;
+      }
+      renderDevice();
+      renderThisBoot();
+      renderLastSleep();
+      renderHistory();
+      const button = document.getElementById('download');
+      button.disabled = !statusData && !diagData;
+      document.getElementById('loadState').textContent = statusData && diagData ? '' : 'Some information could not be loaded.';
+    }
+
+    document.getElementById('download').addEventListener('click', downloadReport);
+    load();
+  </script>
+</body>
+
+</html>
