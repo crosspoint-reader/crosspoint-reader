@@ -92,6 +92,12 @@ void logSummary();
 const char* stageName(SleepStage stage);
 const char* triggerName(SleepTrigger trigger);
 
+/// Short tokens for an esp_reset_reason() and an esp_sleep_get_wakeup_cause() value, as a boot
+/// record stores them. Deliberately untranslated: they are compared across bug reports, so a
+/// German device and an English one must produce the same word. Point at string literals.
+const char* resetReasonName(uint8_t reason);
+const char* wakeCauseName(uint8_t cause);
+
 /// Open a sleep attempt.  Resets the breadcrumb and records the policy this sleep runs
 /// under, so a later boot can say whether the battery latch was meant to be cut.
 void beginSleep(SleepTrigger trigger, bool keepClockAlive, bool fromReader);
