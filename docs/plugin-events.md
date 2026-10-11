@@ -135,6 +135,25 @@ One handler per event. A handler is either:
   screen renders, and the CUSTOM sleep mode reads `/sleep.bmp` first, so the
   fetched image appears on that very sleep.
 
+For an image that must preserve the last usable frame, opt in with
+`"format": "bmp", "width": 800, "height": 480` inside `download` (use the
+actual raster dimensions). This checked profile accepts only HTTP 200 and
+complete uncompressed BI_RGB BMPs with a 40-byte DIB header, supported by the
+existing Custom sleep decoder, within the 1MB download cap. The declared BMP
+file size must match the received bytes; all pixel rows must be present.
+`width` and `height` must be positive JSON integers within the decoder limits
+(2048 and 3072 respectively), matching the downloaded raster.
+
+Invalid content, 204/206, a failed SD write or replacement keeps the event
+queued and preserves the previous image at `dest` or `dest.bak`. Before the
+next request the handler restores a usable backup left by an interrupted swap.
+A cleanup failure may retain both files until the next drain. This does not
+promise filesystem atomicity across power loss. Unknown, empty, or non-string
+`format`, and invalid dimensions, also keep the event queued without sending a
+request. Fix or remove the handler to unblock it; removing the handler permits
+the existing queue cleanup. Downloads without `format` keep their generic
+response behavior, including all successful 2xx statuses.
+
 Optional per handler:
 
 - **`toast`** — a template shown as the standard popup after the request
