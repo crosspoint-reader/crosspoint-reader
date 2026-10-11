@@ -10,16 +10,18 @@
 
 #include <algorithm>
 
+#include "activities/home/BookDetails.h"
+
 namespace {
 constexpr char RECENT_BOOKS_FILE_JSON[] = "/.crosspoint/recent.json";
 constexpr int MAX_RECENT_BOOKS = 10;
 
 // "Series #3", or just "Series" without an index.
-std::string seriesLabel(const Epub& epub) {
-  std::string series = epub.getSeries();
-  if (!series.empty() && !epub.getSeriesIndex().empty()) series += " #" + epub.getSeriesIndex();
-  return series;
+std::string seriesLabel(const std::string& series, const std::string& index) {
+  return !series.empty() && !index.empty() ? series + " #" + index : series;
 }
+
+std::string seriesLabel(const Epub& epub) { return seriesLabel(epub.getSeries(), epub.getSeriesIndex()); }
 }  // namespace
 
 RecentBooksStore RecentBooksStore::instance;
@@ -47,9 +49,12 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
                                const std::string& series, const std::string& coverBmpPath) {
   const Hold hold;
   RecentBook newBook{path, title, author, series, coverBmpPath};
-  // The EPUB reader passes metadata it has just loaded, sidecar applied; stamp
-  // the sidecar it came from so refreshSidecarMetadata() does not redo it.
-  if (FsHelpers::hasEpubExtension(path)) newBook.metadataStamp = SidecarFiles::metadataStamp(path);
+  // The EPUB and text readers pass metadata they have just loaded, sidecar applied; stamp the sidecar
+  // it came from so refreshSidecarMetadata() does not redo it. The XTC reader passes the book's own
+  // header, so an XTC is left unstamped and its sidecar, if any, applied by the refresh.
+  if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
+    newBook.metadataStamp = SidecarFiles::metadataStamp(path);
+  }
 
   pruneMissing();
 
@@ -121,21 +126,33 @@ bool RecentBooksStore::refreshSidecarMetadata(const size_t maxBooks) {
     if (seen >= maxBooks) break;
     if (isMissing(book)) continue;
     seen++;
-    if (!FsHelpers::hasEpubExtension(book.path)) continue;
     const uint32_t stamp = SidecarFiles::metadataStamp(book.path);
     if (stamp == book.metadataStamp) continue;
 
-    // The same load the reader's metadata comes from, so a removed sidecar
-    // restores the embedded values rather than leaving the old override.
-    Epub epub(book.path, "/.crosspoint");
-    if (!epub.loadForMetadata()) {
-      LOG_DBG("RBS", "Sidecar metadata changed but book did not load, keeping entry: %s", book.path.c_str());
-      continue;  // stamp left stale: retried next time
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      // The same load the reader's metadata comes from, so a removed sidecar
+      // restores the embedded values rather than leaving the old override.
+      Epub epub(book.path, "/.crosspoint");
+      if (!epub.loadForMetadata()) {
+        LOG_DBG("RBS", "Sidecar metadata changed but book did not load, keeping entry: %s", book.path.c_str());
+        continue;  // stamp left stale: retried next time
+      }
+      book.title = epub.getTitle();
+      book.author = epub.getAuthor();
+      book.series = seriesLabel(epub);
+    } else {
+      // XTC, TXT and Markdown: the lookup the Library's Details view uses, the sidecar over the book's
+      // own header (XTC) or file name (TXT, Markdown). Edits made in the web interface's Details
+      // dialog reached Home for EPUBs only.
+      BookDetails details;
+      if (!BookDetailsLookup::cached(book.path, 0, details) && !BookDetailsLookup::parse(book.path, 0, details)) {
+        continue;  // stamp left stale: retried next time
+      }
+      if (!details.title.empty()) book.title = details.title;
+      book.author = details.author;
+      book.series = seriesLabel(details.series, details.seriesIndex);
     }
     LOG_DBG("RBS", "Sidecar metadata changed, refreshing entry: %s", book.path.c_str());
-    book.title = epub.getTitle();
-    book.author = epub.getAuthor();
-    book.series = seriesLabel(epub);
     book.metadataStamp = stamp;
     changed = true;
   }
