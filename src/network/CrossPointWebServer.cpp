@@ -28,16 +28,11 @@
 #include "SdCardFontRegistry.h"
 #include "SettingsList.h"
 #include "SystemStatus.h"
+#include "WebAssets.h"
 #include "WebDAVHandler.h"
 #include "WebPathGuard.h"
 #include "WifiCredentialStore.h"
-#include "html/FilesPageHtml.generated.h"
-#include "html/FontsPageHtml.generated.h"
-#include "html/HomePageHtml.generated.h"
-#include "html/SettingsPageHtml.generated.h"
-#include "html/StatsPageHtml.generated.h"
-#include "html/WelcomePageHtml.generated.h"
-#include "html/js/jszip_minJs.generated.h"
+#include "html/WebSetupPageHtml.generated.h"
 #include "network/HttpDownloader.h"
 #include "util/FontManifestReader.h"
 #include "util/PluginLocations.h"
@@ -52,7 +47,8 @@
 // silently, producing malformed HTTP that the browser rejects.
 // Minimum maxAlloc to serve a JSON response (sendJson malloc + _prepareHeader String).
 static constexpr uint32_t MIN_HEAP_FOR_JSON = 8192;
-// Minimum maxAlloc to serve a large gzip'd HTML page via send_P.
+// Minimum maxAlloc to serve a gzip'd page: the setup page via send_P, or a
+// bundle page streamed from the card through a 4KB buffer (WebAssets::serve).
 // send_P itself needs no payload heap, but _prepareHeader's String + the two
 // sendHeader RequestArgument nodes + the chunk-size malloc(11) add ~1KB of
 // small allocs that fragment badly on an already-tight heap. The log shows
@@ -297,10 +293,6 @@ constexpr size_t MAX_RELAY_BYTES = 4u * 1024u * 1024u;
 
 }  // namespace
 
-// File listing page template - now using generated headers:
-// - HomePageHtml (from html/HomePage.html)
-// - FilesPageHeaderHtml (from html/FilesPageHeader.html)
-// - FilesPageFooterHtml (from html/FilesPageFooter.html)
 CrossPointWebServer::CrossPointWebServer() {}
 
 CrossPointWebServer::~CrossPointWebServer() { stop(); }
@@ -323,6 +315,7 @@ void CrossPointWebServer::begin() {
 
   // Store AP mode flag for later use (e.g., in handleStatus)
   apMode = isInApMode;
+  WebAssets::forget();
 
   LOG_DBG("WEB", "[MEM] Free heap before begin: %d bytes", ESP.getFreeHeap());
   LOG_DBG("WEB", "Network mode: %s", apMode ? "AP" : "STA");
@@ -348,6 +341,10 @@ void CrossPointWebServer::begin() {
   // Setup routes
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleWelcomePage(); });
+  // The pages come from the SD card (WebAssets.h); this one, in flash, installs them.
+  server->on("/setup", HTTP_GET, [this] { handleWebSetupPage(); });
+  server->on("/api/web/status", HTTP_GET, [this] { handleWebStatus(); });
+  server->on("/api/web/install", HTTP_POST, [this] { handleWebInstall(); });
   server->on("/systeminfo", HTTP_GET, [this] { handleSystemInfoPage(); });
   server->on("/files", HTTP_GET, [this] { handleRoot(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
@@ -601,11 +598,12 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   return status;
 }
 
-static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
-  if (rejectIfLowMemory(server, MIN_HEAP_FOR_HTML)) return;
+// The setup page is never cached: it answers at "/" only until the web interface
+// is installed, and a cached copy would keep showing there afterwards.
+static void sendSetupPage(WebServer* server) {
   server->sendHeader("Content-Encoding", "gzip");
-  server->sendHeader("Cache-Control", "max-age=3600");
-  server->send_P(200, "text/html", data, len);
+  server->sendHeader("Cache-Control", "no-store");
+  server->send_P(200, "text/html", WebSetupPageHtml, sizeof(WebSetupPageHtml));
 }
 
 // Serialize a JsonDocument to the wire with no String allocation.
@@ -629,35 +627,79 @@ static void sendJson(WebServer* server, int code, const JsonDocument& doc) {
   HalSystem::feedWatchdog();
 }
 
+// A page from the SD card bundle, or a redirect to the setup page while the
+// bundle is not installed.
+void CrossPointWebServer::serveBundlePage(const web_bundle::Index page) const {
+  // Streaming claims a 4KB chunk buffer, same as /download.
+  if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
+  const int32_t t0 = millis();
+  if (!WebAssets::serve(*server, page)) {
+    server->sendHeader("Location", "/setup");
+    server->send(302, "text/plain", "");
+    return;
+  }
+  LOG_DBG("WEB", "Served %s in %d ms", web_bundle::ENTRIES[page].file, static_cast<int>(millis() - t0));
+}
+
 void CrossPointWebServer::handleRoot() const {
   LOG_WEB_MEM("root_enter");
-  int32_t t0 = millis();
-  sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
-  int32_t t1 = millis();
+  serveBundlePage(web_bundle::FilesPageHtml);
   LOG_WEB_MEM("root_exit");
-  LOG_DBG("WEB", "Served file manager page in %d ms", t1 - t0);
 }
 
+// "/" is the welcome page once the bundle is installed and the setup page until
+// then, so it is revalidated rather than cached: whichever one a browser kept
+// would otherwise outlive the switch.
 void CrossPointWebServer::handleWelcomePage() const {
-  int32_t t0 = millis();
-  sendHtmlContent(server.get(), WelcomePageHtml, sizeof(WelcomePageHtml));
-  int32_t t1 = millis();
-  LOG_DBG("WEB", "Served welcome page in %d ms", t1 - t0);
+  if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
+  if (WebAssets::serve(*server, web_bundle::WelcomePageHtml, "no-cache")) return;
+  sendSetupPage(server.get());
 }
 
-void CrossPointWebServer::handleSystemInfoPage() const {
-  int32_t t0 = millis();
-  sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
-  int32_t t1 = millis();
-  LOG_DBG("WEB", "Served system info page in %d ms", t1 - t0);
+void CrossPointWebServer::handleWebSetupPage() const {
+  if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
+  sendSetupPage(server.get());
 }
 
-void CrossPointWebServer::handleStatsPage() const {
-  int32_t t0 = millis();
-  sendHtmlContent(server.get(), StatsPageHtml, sizeof(StatsPageHtml));
-  int32_t t1 = millis();
-  LOG_DBG("WEB", "Served stats page in %d ms", t1 - t0);
+void CrossPointWebServer::handleWebStatus() const {
+  if (rejectIfLowMemory(server.get())) return;
+  JsonDocument doc;
+  doc["state"] = WebAssets::stateName(WebAssets::state());
+  doc["release"] = WebAssets::releaseTag();
+  doc["repo"] = WebAssets::repository();
+  doc["asset"] = WebAssets::assetName();
+  doc["online"] = !apMode;
+  doc["onCard"] = WebAssets::bundleOnCard();
+  sendJson(server.get(), 200, doc);
 }
+
+// POST /api/web/install?source=release|card
+void CrossPointWebServer::handleWebInstall() const {
+  if (rejectIfLowMemory(server.get())) return;
+  const String source = server->arg("source");
+  WebAssets::InstallError err;
+  if (source == "card") {
+    err = WebAssets::installFromCard();
+  } else if (source == "release") {
+    if (apMode) {
+      server->send(409, "application/json", "{\"ok\":false,\"error\":\"no internet connection in hotspot mode\"}");
+      return;
+    }
+    err = WebAssets::installFromRelease();
+  } else {
+    server->send(400, "application/json", "{\"ok\":false,\"error\":\"unknown source\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  doc["ok"] = (err == WebAssets::InstallError::None);
+  if (err != WebAssets::InstallError::None) doc["error"] = WebAssets::errorText(err);
+  sendJson(server.get(), err == WebAssets::InstallError::None ? 200 : 500, doc);
+}
+
+void CrossPointWebServer::handleSystemInfoPage() const { serveBundlePage(web_bundle::HomePageHtml); }
+
+void CrossPointWebServer::handleStatsPage() const { serveBundlePage(web_bundle::StatsPageHtml); }
 
 void CrossPointWebServer::handleStatsApi() const {
   if (rejectIfLowMemory(server.get())) return;
@@ -759,10 +801,8 @@ void CrossPointWebServer::handleStatsExport() const {
 
 void CrossPointWebServer::handleJszip() const {
   if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
-  server->sendHeader("Content-Encoding", "gzip");
-  server->sendHeader("Cache-Control", "max-age=3600");
-  server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
-  LOG_DBG("WEB", "Served jszip.min.js");
+  // A script, so no redirect to a page: the Files page copes without it.
+  if (!WebAssets::serve(*server, web_bundle::jszip_minJs)) server->send(404, "text/plain", "Not installed");
 }
 
 void CrossPointWebServer::handleNotFound() const {
@@ -914,10 +954,6 @@ void CrossPointWebServer::scanFiles(const char* path, const FileVisitor visitor,
 }
 
 bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
-
-void CrossPointWebServer::handleFileList() const {
-  sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
-}
 
 void CrossPointWebServer::handleFileListData() const {
   if (rejectIfLowMemory(server.get())) return;
@@ -1610,10 +1646,7 @@ void CrossPointWebServer::handleDelete() const {
   }
 }
 
-void CrossPointWebServer::handleSettingsPage() const {
-  sendHtmlContent(server.get(), SettingsPageHtml, sizeof(SettingsPageHtml));
-  LOG_DBG("WEB", "Served settings page");
-}
+void CrossPointWebServer::handleSettingsPage() const { serveBundlePage(web_bundle::SettingsPageHtml); }
 
 void CrossPointWebServer::handleGetSettings() const {
   if (rejectIfLowMemory(server.get())) return;
@@ -2116,10 +2149,7 @@ bool installRemoteFamily(HttpDownloader::Session& session, const FontCatalog& fa
 }
 }  // namespace
 
-void CrossPointWebServer::handleFontsPage() const {
-  sendHtmlContent(server.get(), FontsPageHtml, sizeof(FontsPageHtml));
-  LOG_DBG("WEB", "Served fonts page");
-}
+void CrossPointWebServer::handleFontsPage() const { serveBundlePage(web_bundle::FontsPageHtml); }
 
 void CrossPointWebServer::handleFontList() {
   if (rejectIfLowMemory(server.get())) return;

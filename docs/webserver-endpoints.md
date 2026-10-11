@@ -53,12 +53,18 @@ When the largest free heap block is too small, the JSON endpoints answer
 
 ## Pages
 
-Each page is one HTML file from `src/network/html/`, served from flash as
-`text/html` with `200 OK`. The pages call the API below.
+Each page is one HTML file from `src/network/html/`, gzip-encoded
+(`Content-Encoding: gzip`). The pages call the API below.
+
+Only the setup page is in the firmware. The others are a bundle on the SD card,
+in `/.crosspoint/web/`, which the setup page installs (see
+[Web Interface Bundle](#web-interface-bundle)). Until it is installed, `/` serves
+the setup page and every other page redirects (`302`) to `/setup`.
 
 | Path          | Page                                       |
 | ------------- | ------------------------------------------ |
-| `/`           | Welcome page, with links to the others     |
+| `/`           | Welcome page, with links to the others; the setup page while the bundle is not installed |
+| `/setup`      | Setup page: installs the web interface, and uploads books without it |
 | `/files`      | File Manager                               |
 | `/settings`   | Settings                                   |
 | `/stats`      | Reading Stats                              |
@@ -66,12 +72,58 @@ Each page is one HTML file from `src/network/html/`, served from flash as
 | `/systeminfo` | System Info                                |
 
 `GET /js/jszip.min.js` serves the gzipped JSZip library (`Content-Encoding: gzip`),
-which the File Manager loads. Any other path that WebDAV does not claim answers
-`404` with a plain-text body.
+which the File Manager loads, or `404` while the bundle is not installed. Any
+other path that WebDAV does not claim answers `404` with a plain-text body.
 
 ```bash
 curl http://crosspoint.local/
 ```
+
+---
+
+## Web Interface Bundle
+
+The pages other than `/setup` are built into one file, `web-<hash>.bin`, which
+is attached to each GitHub release. The firmware knows the exact hash of its own
+bundle and installs only that file, from wherever it comes.
+
+### GET `/api/web/status` - Bundle State
+
+```bash
+curl http://crosspoint.local/api/web/status
+```
+
+```json
+{"state":"installed","release":"2.38","repo":"jpirnay/witchhunt-reader","asset":"web-996781e9ef9c.bin","online":true,"onCard":false}
+```
+
+| Field     | Type    | Description |
+| --------- | ------- | ----------- |
+| `state`   | string  | `installed`; `missing` (nothing installed, or a file is gone); `stale` (a bundle from another firmware build) |
+| `release` | string  | Release this firmware is published under, empty for development builds |
+| `repo`    | string  | GitHub repository of that release |
+| `asset`   | string  | File name of this firmware's bundle |
+| `online`  | boolean | `false` in hotspot mode, where the device cannot download |
+| `onCard`  | boolean | A file named `asset` is in the SD card's top folder |
+
+### POST `/api/web/install` - Install the Bundle
+
+| Parameter | Description |
+| --------- | ----------- |
+| `source`  | `release` downloads `asset` from `release`; `card` installs `/<asset>` from the SD card and deletes it |
+
+```bash
+# Download and install from the release
+curl -X POST "http://crosspoint.local/api/web/install?source=release"
+
+# Upload the file to the card's top folder, then install it
+curl -F "file=@web-996781e9ef9c.bin" "http://crosspoint.local/upload?path=/"
+curl -X POST "http://crosspoint.local/api/web/install?source=card"
+```
+
+Answers `{"ok":true}`, or `500` with `{"ok":false,"error":"..."}` when the
+download fails or the file is not this firmware's bundle. `source=release` in
+hotspot mode answers `409`.
 
 ---
 

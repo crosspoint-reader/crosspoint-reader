@@ -105,29 +105,7 @@
       font-weight: 500;
     }
 
-    .nav-links {
-      margin: 20px 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
-      text-decoration: none;
-      border-radius: 4px;
-    }
-
-    .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
-    }
-
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
-      color: white;
-    }
+    <!--#include file="shared/NavLinks.css.inc" -->
 
     /* Action buttons */
     .action-buttons {
@@ -1569,12 +1547,6 @@
         font-size: 0.95em;
       }
 
-      .nav-links a {
-        padding: 8px 12px;
-        margin-right: 6px;
-        font-size: 0.9em;
-      }
-
       .action-buttons {
         gap: 6px;
       }
@@ -1848,13 +1820,7 @@
 </head>
 
 <body>
-  <div class="nav-links">
-    <a href="/files" class="active">File Manager</a>
-    <a href="/settings">Settings</a>
-    <a href="/fonts">Font Manager</a>
-    <a href="/stats">Reading Stats</a>
-    <a href="/systeminfo">System Info</a>
-  </div>
+  <!--#include file="shared/NavLinks.html.inc" -->
 
   <div class="page-header">
     <div class="page-header-left">

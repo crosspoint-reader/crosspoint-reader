@@ -8,6 +8,7 @@ lib/I18n/I18nKeys.h
 lib/I18n/I18nStrings.h
 lib/I18n/I18nStrings.cpp
 *.generated.h
+*.generated.gz
 .vs
 # CMake out-of-source build dirs (build, build2, build-debug, test/build, …)
 build

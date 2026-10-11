@@ -176,4 +176,17 @@ inline Recorder& readerLinks() {
   return r;
 }
 
+// Buttons a screen draws for touch alone, where it would otherwise be left with nothing but the
+// hint strip: the Exit button of the connection screens (components/TouchExitButton.h). Values
+// are the screen's own action ids.
+//
+// Like readerLinks, cleared on activity transitions but NOT at the start of each render pass:
+// File Transfer paints its screen once and then releases the frame buffer, so its later passes
+// draw nothing, and the button has to outlive them. A screen that stops offering the button
+// calls TouchExitButton::forget().
+inline Recorder& screenActions() {
+  static Recorder r;
+  return r;
+}
+
 }  // namespace TapTargets

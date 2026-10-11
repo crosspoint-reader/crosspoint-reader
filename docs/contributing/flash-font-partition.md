@@ -75,7 +75,9 @@ if (FlashFontPartition::mmap("Literata", 16, &ptr, &sz)) {
 }
 ```
 
-**`mmap(familyName, pointSize, outPtr, outSize)`** reads the index from flash, finds the matching entry, and calls `esp_partition_mmap`. The mapped region covers from partition start to `dataOffset + dataSize`, rounded up to 64 KB alignment (the minimum mmap granularity on ESP32). `outPtr` points to the start of the font data within the mapped region; `outSize` is the raw `.cpfont` file size.
+**`mmap(familyName, pointSize, outPtr, outSize)`** reads the index from flash, finds the matching entry, and calls `esp_partition_mmap`. The mapped region covers only the entry: from `dataOffset` rounded down to a 64 KB page (the MMU granularity; `esp_partition_mmap` does the rounding and adjusts the returned pointer) to `dataOffset + dataSize` rounded up. `outPtr` points to the start of the font data; `outSize` is the raw `.cpfont` file size.
+
+Map only what the entry needs. On the ESP32-C3 the app's code, its rodata and every runtime mapping share one 8 MB window of 128 pages, and the app itself takes about 96 of them, so roughly 31 are left for the font with a language pack mapped. Mapping from the partition start, as this once did, needed the whole family below the entry too, and a family's largest sizes (Bitter 18 pt: 41 pages) could not be mapped at all. A single file larger than the free window, such as a CJK face, still cannot be mapped and loads from SD. Every 64 KB the app image grows takes one page away from this window.
 
 Only one mmap handle is active at a time.
 

@@ -255,6 +255,8 @@ The File Transfer screen allows you to upload new e-books to the device. When yo
 
 See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
+The web interface's pages are kept on the SD card, not in the firmware. The first time you open the device's address, and after a firmware update that changed them, a setup page installs them: on your WiFi network it downloads them by itself; in hotspot mode, choose the `web-….bin` file from the release page, or copy it to the top folder of the SD card. The setup page can upload books on its own as well.
+
 The web server has no password, so it keeps away from what it should not touch: the files holding your saved Wi-Fi, OPDS and KOReader passwords can never be downloaded or changed, and folders whose names start with a dot, such as the reader's own `/.crosspoint`, can be opened only when **Show Hidden Files** is on. **Back** leaves the screen even while the web page is uploading a book or a font; the upload is cancelled.
 
 > [!TIP]
@@ -709,6 +711,10 @@ you can already see which tab you are choosing, so there is nothing to confirm.
 **The button hints are tappable.** The labelled boxes along the bottom edge, and the side
 hints, do exactly what the physical button under each label does — including any remapping
 you have configured. *Holding* a hint is the same as holding that button.
+
+**Exit buttons.** File Transfer, its hotspot, Calibre Wireless and USB Drive (while it waits for
+a computer) also show an **Exit** button below their status on a touch screen. It does what
+**Back** does.
 
 | Gesture | What it does |
 | --- | --- |

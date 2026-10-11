@@ -62,6 +62,15 @@ If the network requires a password:
 
 **Note:** If you've previously connected to this network, the saved password will be used automatically.
 
+If the network turns the saved password down (it has been changed on the router, say), the keyboard
+appears again headed **Saved password may be wrong**. Type the current password; once it connects you
+are asked whether to save it over the old one. **Back** returns to the list and keeps the saved one.
+When this happens on the automatic connect, the reader first tries your other saved networks in range
+and asks only if none of them works. Picking that network again in the same session goes straight to
+the keyboard.
+
+Saved passwords travel with the SD card: a card moved from another reader keeps working.
+
 ### Connection Process
 
 The device will display "Connecting..." while establishing the connection. This typically takes 5-10 seconds.
@@ -111,11 +120,28 @@ Once connected, the screen will display:
 
 ## Step 5: Using the Web Interface
 
+### The First Visit
+
+The web interface's pages are kept on the SD card rather than in the firmware.
+The first time you open the device's address, and after a firmware update that
+changed them, a setup page installs them:
+
+- **On your WiFi network** it downloads them from the release by itself and then
+  opens the Welcome page. This takes a few seconds.
+- **In hotspot mode** the device has no internet connection. Download the
+  `web-….bin` file the setup page names from the release page beforehand, and
+  choose it under **Install from a file**. You can also copy that file to the
+  top folder of the SD card and reload the page.
+
+The setup page can upload books on its own too, so a missing web interface never
+stops you adding books. It stays available at `http://<device-ip>/setup`.
+
 ### Welcome Page
 
-The page you land on at `http://<device-ip>/` has one link per page:
+The page you land on at `http://<device-ip>/` has one link per page, and every other page shows the
+same links along its top:
 
-- **Open File Manager**: browse and manage the SD card (below)
+- **File Manager**: browse and manage the SD card (below)
 - **Settings**: device settings and saved networks (below)
 - **Font Manager**: install and remove SD-card fonts (below)
 - **Reading Stats**: your reading history (below)

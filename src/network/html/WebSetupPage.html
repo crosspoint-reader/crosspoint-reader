@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>%%CROSSPOINT%%</title>
+  <!-- The one page kept in flash. The rest of the web interface is a bundle on
+       the SD card (src/network/WebAssets.h); this page installs it, and keeps
+       book uploads working while it is missing. -->
+  <style>
+    :root {
+      --font-color: #333;
+      --bg: #f5f5f5;
+      --card-bg: #fff;
+      --accent-color: #5a8c73;
+      --subtitle-color: #7f8c8d;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --font-color: #f5f5f5;
+        --bg: #222;
+        --card-bg: #333;
+        --accent-color: #6fae83;
+        --subtitle-color: #b0bfc7;
+      }
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg);
+      color: var(--font-color);
+    }
+
+    .card {
+      width: min(100%, 440px);
+      box-sizing: border-box;
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 28px 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.5rem;
+    }
+
+    h2 {
+      margin: 24px 0 4px;
+      font-size: 1rem;
+    }
+
+    p {
+      line-height: 1.45;
+    }
+
+    a {
+      color: var(--accent-color);
+    }
+
+    .muted {
+      color: var(--subtitle-color);
+      font-size: 0.9rem;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent-color);
+      color: #fff;
+      font-size: 1rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    input[type="file"] {
+      display: block;
+      margin: 8px 0;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>%%CROSSPOINT%%</h1>
+    <p id="msg">Checking the web interface…</p>
+    <p id="done" class="hidden"><a class="btn" href="/">Open the web interface</a></p>
+    <p id="retry" class="hidden"><button class="btn" onclick="install('release')">Try the download again</button></p>
+    <div id="manual" class="hidden">
+      <h2>Install from a file</h2>
+      <p class="muted">Download <b id="asset"></b> from <span id="release">the release page</span> and choose
+        it here, or copy it to the top folder of the SD card and reload this page.</p>
+      <input type="file" id="bundle" accept=".bin" />
+      <button class="btn" onclick="uploadBundle()">Install</button>
+      <h2>Upload books</h2>
+      <p class="muted">Works without the web interface. Files go to the top folder of the SD card.</p>
+      <input type="file" id="books" multiple />
+      <button class="btn" onclick="uploadBooks()">Upload</button>
+      <p id="upload" class="muted"></p>
+    </div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let st = {};
+
+    function say(text) { $('msg').textContent = text; }
+    function show(id, on) { $(id).classList.toggle('hidden', !on); }
+
+    function fail(text) {
+      say(text);
+      show('manual', true);
+      show('retry', !!(st.online && st.release));
+    }
+
+    async function install(source) {
+      show('manual', false);
+      show('retry', false);
+      say(source === 'release' ? 'Downloading the web interface…' : 'Installing the web interface…');
+      try {
+        const r = await fetch('/api/web/install?source=' + source, { method: 'POST' });
+        const j = await r.json();
+        if (!j.ok) return fail('Installing failed: ' + j.error + '.');
+        say('The web interface is installed.');
+        location.replace('/');
+      } catch (e) {
+        fail('Installing failed: the device did not answer.');
+      }
+    }
+
+    async function upload(file, name) {
+      const fd = new FormData();
+      fd.append('file', file, name);
+      const r = await fetch('/upload?path=/', { method: 'POST', body: fd });
+      return r.ok ? '' : await r.text();
+    }
+
+    async function uploadBundle() {
+      const file = $('bundle').files[0];
+      if (!file) return;
+      say('Uploading…');
+      // Saved under the release asset's name, which is where the installer looks.
+      const error = await upload(file, st.asset);
+      if (error) return fail('Uploading failed: ' + error);
+      install('card');
+    }
+
+    async function uploadBooks() {
+      const files = $('books').files;
+      for (const file of files) {
+        $('upload').textContent = 'Uploading ' + file.name + '…';
+        const error = await upload(file, file.name);
+        if (error) return ($('upload').textContent = file.name + ': ' + error);
+      }
+      $('upload').textContent = files.length + ' file(s) uploaded.';
+    }
+
+    (async () => {
+      try {
+        st = await (await fetch('/api/web/status')).json();
+      } catch (e) {
+        return fail('The device did not answer.');
+      }
+      $('asset').textContent = st.asset;
+      if (st.release) {
+        const a = document.createElement('a');
+        a.href = 'https://github.com/' + st.repo + '/releases/tag/' + st.release;
+        a.textContent = 'release ' + st.release;
+        $('release').replaceChildren(a);
+      }
+      if (st.state === 'installed') {
+        say('The web interface is installed.');
+        return show('done', true);
+      }
+      if (st.onCard) return install('card');
+      if (st.online && st.release) return install('release');
+      fail(st.release
+        ? 'The web interface is not installed, and in hotspot mode the device cannot download it.'
+        : 'The web interface is not installed. This is a development build, so there is no release to download it from: use the web-*.bin from the build folder.');
+    })();
+  </script>
+</body>
+
+</html>

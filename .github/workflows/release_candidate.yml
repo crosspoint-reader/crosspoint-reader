@@ -158,11 +158,27 @@ jobs:
                ".pio/build/${{ matrix.env }}/${{ matrix.asset }}"
           fi
 
+      # The web interface is not in the firmware: build_html.py writes it as one
+      # bundle, web-<hash>.bin, which the device fetches from the release or the
+      # user uploads (src/network/WebAssets.h). Every leg builds the same bundle,
+      # because the pages are board-independent and the bundle is
+      # byte-reproducible, so the merged download holds one copy for all boards.
+      - name: Check the web bundle
+        run: |
+          set -euo pipefail
+          count=$(ls .pio/build/${{ matrix.env }}/web-*.bin 2>/dev/null | wc -l)
+          if [ "$count" != "1" ]; then
+            echo "::error::expected one web-*.bin in .pio/build/${{ matrix.env }}, found $count"
+            exit 1
+          fi
+
       - name: Upload ${{ matrix.asset }} artifact
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
-          path: .pio/build/${{ matrix.env }}/${{ matrix.asset }}
+          path: |
+            .pio/build/${{ matrix.env }}/${{ matrix.asset }}
+            .pio/build/${{ matrix.env }}/web-*.bin
           if-no-files-found: error
 
   publish-release-candidate:
