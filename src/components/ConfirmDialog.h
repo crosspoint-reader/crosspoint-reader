@@ -4,7 +4,8 @@
 
 #include "components/UiAppHost.h"
 
-// One two-answer dialog, themed once, for every screen that asks a yes/no question.
+// One dialog, themed once, for every screen that asks a yes/no question -- or a question with a
+// third answer between those two.
 //
 // ConfirmationActivity draws it, and every question goes through that activity -- including the
 // ones that are one step of a screen's own work (Check for Updates, Clear Cache), which push it and
@@ -28,8 +29,11 @@ struct Spec {
   const char* message = nullptr;
   const char* cancelLabel = nullptr;
   const char* acceptLabel = nullptr;
+  // Optional: null draws the plain two-answer dialog.
+  const char* alternateLabel = nullptr;
   freeink::ui::ActionId cancelAction = freeink::ui::NO_ACTION;
   freeink::ui::ActionId acceptAction = freeink::ui::NO_ACTION;
+  freeink::ui::ActionId alternateAction = freeink::ui::NO_ACTION;
   // Default 1 keeps `title` a caption, which is what optionDialog assumes. A caller whose title is
   // really a sentence (the clear-cache warning) raises it.
   uint8_t titleMaxLines = 1;
@@ -37,27 +41,35 @@ struct Spec {
   uint8_t messageMaxLines = 4;
 };
 
-// Cancel left, accept right, fixed. The hint strip's order DOES follow the orientation (mapLabels
-// swaps the pair when the front strip runs bottom-to-top), but these are a different control in a
-// different frame: a reader aims at the button that says Clear, not at the one that happens to sit
-// under a physical key. Keeping one order means the destructive answer is never where the safe one
-// was a moment ago.
+// Cancel left, accept right, fixed, and the alternate between them. The hint strip's order DOES
+// follow the orientation (mapLabels swaps the pair when the front strip runs bottom-to-top), but
+// these are a different control in a different frame: a reader aims at the button that says Clear,
+// not at the one that happens to sit under a physical key. Keeping one order means the destructive
+// answer is never where the safe one was a moment ago.
 inline void draw(UiAppHost::UiScreen& screen, const Spec& spec) {
   namespace fui = freeink::ui;
   const auto& theme = screen.theme();
 
-  fui::DialogOption options[2];
-  options[0].label = spec.cancelLabel;
-  options[0].action = spec.cancelAction;
-  options[1].label = spec.acceptLabel;
-  options[1].action = spec.acceptAction;
+  fui::DialogOption options[3];
+  uint8_t optionCount = 0;
+  options[optionCount].label = spec.cancelLabel;
+  options[optionCount++].action = spec.cancelAction;
+  if (spec.alternateLabel) {
+    options[optionCount].label = spec.alternateLabel;
+    options[optionCount++].action = spec.alternateAction;
+  }
+  options[optionCount].label = spec.acceptLabel;
+  options[optionCount++].action = spec.acceptAction;
 
   fui::OptionDialogProps props;
   props.title = spec.title;
   props.headline = spec.headline;
   props.message = spec.message;
   props.options = options;
-  props.optionCount = 2;
+  props.optionCount = optionCount;
+  // Three answers are stacked, one full-width button each: side by side they get a third of the
+  // panel, and translated labels ("Réinitialiser les infos") do not fit in that.
+  props.verticalOptions = optionCount > 2;
 
   props.titleText = theme.smallText;
   props.titleText.align = fui::TextAlign::Center;

@@ -1,13 +1,15 @@
 #pragma once
 #include <I18n.h>
 
+#include <optional>
 #include <string>
 
 #include "../Activity.h"
 #include "components/UiAppHost.h"
 
-// The one way a screen asks a two-answer question. Built on fui::optionDialog rather than
-// hand-drawn text, so the two answers are on-screen buttons a finger can hit.
+// The one way a screen asks a two-answer question, or one with a third answer between Cancel and
+// accept. Built on fui::optionDialog rather than hand-drawn text, so the answers are on-screen
+// buttons a finger can hit.
 //
 // The hint strip is still drawn, because it is how the physical buttons are labelled and it is the
 // only affordance a non-touch board has. The two are alternatives, not duplicates.
@@ -27,6 +29,9 @@ class ConfirmationActivity : public Activity, private UiAppHost {
     std::string message;
     StrId cancelLabel = StrId::STR_CANCEL;
     StrId acceptLabel = StrId::STR_CONFIRM;
+    // A third answer, drawn between the other two and reported as ConfirmResult::alternate. With
+    // one, Back is labelled as Cancel and the two front-strip keys answer alternate and accept.
+    std::optional<StrId> alternateLabel;
     uint8_t titleMaxLines = 1;
     uint8_t headlineMaxLines = 3;
     uint8_t messageMaxLines = 4;
@@ -48,7 +53,10 @@ class ConfirmationActivity : public Activity, private UiAppHost {
   static void dialogScreen(UiScreen& screen, void* user);
   static void onCancelEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onConfirmEvent(const freeink::ui::ActionEvent& event, void* user);
+  static void onAlternateEvent(const freeink::ui::ActionEvent& event, void* user);
+
+  enum class Answer : uint8_t { Cancel, Accept, Alternate };
 
   void buildDialogScreen(UiScreen& screen);
-  void finishWith(bool cancelled);
+  void finishWith(Answer answer);
 };

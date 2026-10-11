@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "activities/Activity.h"
-#include "components/themes/TapTargets.h"
 #include "util/ButtonNavigator.h"
 
 // Structure to hold WiFi network information
@@ -32,7 +31,7 @@ enum class WifiSelectionState {
   CONNECTED,          // Successfully connected
   SAVE_PROMPT,        // Asking whether to save the password (a ConfirmationActivity above)
   CONNECTION_FAILED,  // Connection failed
-  FORGET_PROMPT,      // Asking user if they want to forget the network
+  FORGET_PROMPT,      // Offering to forget the network or reset its info (a ConfirmationActivity above)
   CAPTIVE_PORTAL      // Connected but network requires web-based login
 };
 
@@ -84,13 +83,6 @@ class WifiSelectionActivity final : public Activity {
   size_t autoCycleCandidateIndex = 0;
   bool autoCycleAfterScan = false;  // Scan was triggered to build cycle candidates
 
-  // Forget prompt selection (0 = Cancel, 1 = Reset info, 2 = Forget)
-  int forgetPromptSelection = 0;
-  // Where the forget prompt's three buttons were painted, value = button index. They sit side by
-  // side, which ListTouchBand's full-width rows cannot describe. Republished on every render pass
-  // (empty unless the prompt was drawn), so a tap only ever matches buttons that are on screen.
-  TapTargets::Recorder forgetPromptTargets;
-
   // Connection timeouts
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   static constexpr unsigned long AUTO_CYCLE_TIMEOUT_MS = 5000;
@@ -116,7 +108,6 @@ class WifiSelectionActivity final : public Activity {
   void renderConnecting() const;
   void renderConnected() const;
   void renderConnectionFailed() const;
-  void renderForgetPrompt(TapTargets::Recorder::Builder& targets) const;
   void renderCaptivePortal() const;
 
   void startWifiScan();
@@ -148,6 +139,8 @@ class WifiSelectionActivity final : public Activity {
   std::string captivePortalUrl;
 
   void askToSavePassword();
+  void promptNetworkOptions();
+  void onNetworkOptionsAnswer(const ActivityResult& result);
   void onComplete(bool connected);
 
  public:
