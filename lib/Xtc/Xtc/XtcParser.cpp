@@ -228,6 +228,17 @@ XtcError XtcParser::readFirstPageInfo() {
   m_defaultHeight = entry.height;
 
   LOG_DBG("XTC", "Page table validated: %u pages, default %dx%d", m_header.pageCount, m_defaultWidth, m_defaultHeight);
+  // The pages decide the bit depth: some converters write a 1-bit container
+  // header ("XTC") around 2-bit pages ("XTH"), or the other way round.
+  uint32_t pageMagic = 0;
+  if (entry.dataOffset + sizeof(pageMagic) <= fileSize && m_file.seek64(entry.dataOffset) &&
+      m_file.read(reinterpret_cast<uint8_t*>(&pageMagic), sizeof(pageMagic)) == sizeof(pageMagic)) {
+    const uint8_t pageDepth = pageMagic == XTH_MAGIC ? 2 : pageMagic == XTG_MAGIC ? 1 : 0;
+    if (pageDepth != 0 && pageDepth != m_bitDepth) {
+      LOG_INF("XTC", "Container says %u-bit, pages are %u-bit: following the pages", m_bitDepth, pageDepth);
+      m_bitDepth = pageDepth;
+    }
+  }
   return XtcError::OK;
 }
 
