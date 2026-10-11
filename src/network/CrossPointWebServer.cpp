@@ -225,7 +225,7 @@ std::string urlHost(const std::string& url) {
   const size_t at = host.rfind('@');
   if (at != std::string::npos) host = host.substr(at + 1);
   const size_t colon = host.find(':');
-  if (colon != std::string::npos) host = host.substr(0, colon);
+  if (colon != std::string::npos) host.resize(colon);
   return host;
 }
 
@@ -1058,13 +1058,13 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     return;
   }
 
-  const HTTPUpload& upload = server->upload();
+  const HTTPUpload& up = server->upload();
 
-  if (upload.status == UPLOAD_FILE_START) {
+  if (up.status == UPLOAD_FILE_START) {
     // Reset watchdog - this is the critical 1% crash point
     HalSystem::feedWatchdog();
 
-    state.fileName = upload.filename;
+    state.fileName = up.filename;
     state.size = 0;
     state.success = false;
     state.error = "";
@@ -1129,13 +1129,13 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     HalSystem::feedWatchdog();
 
     LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
-  } else if (upload.status == UPLOAD_FILE_WRITE) {
+  } else if (up.status == UPLOAD_FILE_WRITE) {
     if (dropUploadIfCancelled()) return;
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
-      const uint8_t* data = upload.buf;
-      size_t remaining = upload.currentSize;
+      const uint8_t* data = up.buf;
+      size_t remaining = up.currentSize;
 
       while (remaining > 0) {
         const size_t space = UploadState::UPLOAD_BUFFER_SIZE - state.bufferPos;
@@ -1156,7 +1156,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         }
       }
 
-      state.size += upload.currentSize;
+      state.size += up.currentSize;
 
       // Log progress every 100KB
       if (state.size - lastLoggedSize >= 102400) {
@@ -1167,7 +1167,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         lastLoggedSize = state.size;
       }
     }
-  } else if (upload.status == UPLOAD_FILE_END) {
+  } else if (up.status == UPLOAD_FILE_END) {
     // A cancel on the last chunk still reaches END: WebServer raises it on the closing boundary,
     // then raises ABORTED straight after because the client is gone. ABORTED deletes only a file
     // that is still open, so finishing it here would keep the file of an aborted upload.
@@ -1197,7 +1197,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       }
     }
     state.buffer = {};
-  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+  } else if (up.status == UPLOAD_FILE_ABORTED) {
     state.bufferPos = 0;  // Discard buffered data
     if (state.file) {
       state.file.close();
@@ -1628,7 +1628,7 @@ void CrossPointWebServer::handleGetSettings() const {
     // Enrich font-family entries with current SD card families.
     SettingInfo sLocal;
     const SettingInfo* sPtr = &sBase;
-    if (sBase.key && (std::strcmp(sBase.key, "fontFamily") == 0 || std::strcmp(sBase.key, "txtFontFamily") == 0)) {
+    if (std::strcmp(sBase.key, "fontFamily") == 0 || std::strcmp(sBase.key, "txtFontFamily") == 0) {
       sLocal = sBase;
       const uint8_t n = fontFamilyOptionCount();
       sLocal.enumLabels.clear();
@@ -2191,7 +2191,7 @@ void CrossPointWebServer::handleFontDownload() {
   }
   body.clear();  // Free memory early!
 
-  const bool installAll = req["all"] | false;
+  const bool installAll = req["all"].as<bool>();
   const std::string requestedFamily = req["family"] | "";
   if (!installAll && requestedFamily.empty()) {
     server->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing family\"}");
@@ -3044,7 +3044,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
     case WStype_TEXT: {
       // Parse control messages
-      String msg = String((char*)payload);
+      String msg = String(reinterpret_cast<const char*>(payload));
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
       if (msg.startsWith("START:")) {
