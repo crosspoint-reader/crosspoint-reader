@@ -1157,6 +1157,11 @@ int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
 
 int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
 
+int Epub::getSpineIndexForSize(const size_t bytes) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded() || static_cast<uint64_t>(bytes) > UINT32_MAX) return -1;
+  return bookMetadataCache->getSpineIndexForSize(static_cast<uint32_t>(bytes));
+}
+
 size_t Epub::getBookSize() const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {
     return 0;

@@ -63,10 +63,13 @@ class BookMetadataCache {
   // wrapper serves whichever pass is active (spine, then toc).
   std::unique_ptr<serialization::BufferedFileWriter> passOut;
 
-  // Cumulative spine sizes, cached in RAM at load() so progress/percent lookups are
-  // O(1) instead of 2 seeks + a heap-allocating SpineEntry read per access (4 bytes
-  // per spine item; <1KB for typical books).
-  std::vector<uint32_t> cumulativeSizes;
+  // Cumulative spine sizes stay in book.bin; RAM holds every SIZE_WINDOW-th one and one window.
+  static constexpr int SIZE_WINDOW = 32;
+  std::vector<uint32_t> windowStarts;  // total before item w * SIZE_WINDOW
+  uint32_t bookSize = 0;
+  mutable int windowFirst = -1;
+  mutable uint32_t window[SIZE_WINDOW] = {};
+  bool fillWindow(int first) const;  // caller holds sizeWindowLock
 
   // Index for fast href→spineIndex lookup (used only for large EPUBs)
   struct SpineHrefIndexEntry {
@@ -120,8 +123,10 @@ class BookMetadataCache {
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
   // Cumulative byte size up to and including the given spine item (0 if out of range
-  // or not loaded). Backed by the in-RAM cumulativeSizes cache populated in load().
+  // or not loaded).
   uint32_t getCumulativeSize(int index) const;
+  // First spine index whose cumulative size reaches `size` (-1 past the end or not loaded). Reads at most one window.
+  int getSpineIndexForSize(uint32_t size) const;
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
   bool isLoaded() const { return loaded; }
