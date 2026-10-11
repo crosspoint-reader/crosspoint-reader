@@ -14,7 +14,8 @@
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes,
                             const bool hasDisplay, const uint16_t displayBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
-  size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
+  size_t size =
+      static_cast<size_t>(wordCount) * (sizeof(SourceRange) + sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
   if (hasFocus) {
     size += static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(uint8_t));
   }
@@ -27,6 +28,8 @@ size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const
 void TextBlock::bindArenaPointers() {
   uint8_t* base = arena.get();
   const size_t wc = numWords;
+  sourceRanges = reinterpret_cast<const SourceRange*>(base);
+  base += wc * sizeof(SourceRange);
   textOffArr = reinterpret_cast<const uint16_t*>(base);
   xposArr = reinterpret_cast<const int16_t*>(base + wc * 2);
   size_t off = wc * 4;
@@ -54,8 +57,12 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
                      std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans,
+                     const std::vector<SourceRange>& ranges, const uint16_t paragraphStartWord,
                      const std::vector<std::string>& displayWords)
-    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), linkSpans(std::move(linkSpans)) {
+    : blockStyle(blockStyle),
+      paragraphStartWord(paragraphStartWord),
+      rubyTexts(std::move(rubyTexts)),
+      linkSpans(std::move(linkSpans)) {
   // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
   // ruby-less line costs nothing beyond its arena. The layout engine hands one over for
   // every line it extracts, ruby or not; release it here rather than carrying it for the
@@ -68,7 +75,9 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
   const bool hasDisplay = !displayWords.empty();
-  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() || words.size() > 10000 ||
+  if ((!ranges.empty() && ranges.size() != words.size()) || words.size() != wordXpos.size() ||
+      words.size() != wordStyles.size() || words.size() > 10000 ||
+      (paragraphStartWord != UINT16_MAX && paragraphStartWord >= words.size()) ||
       (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size())) ||
       (hasDisplay && words.size() != displayWords.size())) {
     LOG_ERR("TXB", "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)",
@@ -140,6 +149,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   auto* text = const_cast<char*>(textArr);
   uint16_t off = 0;
   for (uint16_t i = 0; i < numWords; i++) {
+    const_cast<SourceRange*>(sourceRanges)[i] = ranges.empty() ? SourceRange{} : ranges[i];
     textOff[i] = off;
     xpos[i] = wordXpos[i];
     styles[i] = static_cast<uint8_t>(wordStyles[i]);
@@ -208,8 +218,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         }
         int groupActualWidth = 0;
         for (int k = 0; k < groupWordCount; ++k) {
-          const GfxRenderer::LaidOutText word{wordText(i + k), displayForm(i + k)};
-          groupActualWidth += renderer.getTextAdvanceX(fontId, word, wordStyle(i + k), tracking);
+          groupActualWidth += renderer.getTextAdvanceX(fontId, laidOutWord(i + k), wordStyle(i + k), tracking);
         }
         const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, tracking);
         const int leaderWordX = xposArr[i] + x;
@@ -259,10 +268,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   for (uint16_t i = 0; i < numWords; i++) {
     const char* word = wordText(i);
-    // A focus boundary indexes the logical text. ParsedText never splits a
-    // word that has a display form, but a corrupt cache could pair them.
     const uint8_t boundary = focusBoundary(i);
-    const GfxRenderer::LaidOutText laidOut{word, boundary > 0 ? nullptr : displayForm(i)};
+    const GfxRenderer::LaidOutText laidOut = laidOutWord(i);
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
     const auto baseDir =
@@ -370,6 +377,7 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file,
                           static_cast<uint8_t>((focusPresent ? FLAG_FOCUS : 0) | (displayPresent ? FLAG_DISPLAY : 0)));
   serialization::writePod(file, textBytes);
+  serialization::writePod(file, paragraphStartWord);
   if (displayPresent) {
     serialization::writePod(file, displayBytes);
   }
@@ -410,10 +418,12 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint16_t wc;
   uint8_t flags;
   uint16_t textBytes;
+  uint16_t paragraphStartWord;
   uint16_t displayBytes = 0;
   serialization::readPod(file, wc);
   serialization::readPod(file, flags);
   serialization::readPod(file, textBytes);
+  serialization::readPod(file, paragraphStartWord);
   const bool hasDisplay = (flags & FLAG_DISPLAY) != 0;
   if (hasDisplay) {
     serialization::readPod(file, displayBytes);
@@ -425,7 +435,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
-  if (wc > 10000) {
+  if (wc > 10000 || (paragraphStartWord != UINT16_MAX && paragraphStartWord >= wc)) {
     LOG_ERR("TXB", "Deserialization failed: word count %u exceeds maximum", wc);
     return nullptr;
   }
@@ -441,6 +451,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   }
   block->numWords = wc;
   block->textBytes = textBytes;
+  block->paragraphStartWord = paragraphStartWord;
   block->displayBytes = displayBytes;
   block->focusPresent = (flags & FLAG_FOCUS) != 0;
   block->displayPresent = hasDisplay;

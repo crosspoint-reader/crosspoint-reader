@@ -147,6 +147,15 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   for (int i = 0; i < count; i++) {
     const uint32_t cp = shaped[i].wc;
     if (filtered(cp)) continue;
+    // Match the name's base letters in visual order, skipping their niqqud.
+    int end = cp == 0x05D4 || isTransparentMark(cp) ? i : count, matched = 0;
+    for (; end < count && matched < 4; ++end)
+      if (!isTransparentMark(shaped[end].wc)) matched = shaped[end].wc == U"הוהי"[matched] ? matched + 1 : 5;
+    if (matched == 4) {
+      out += "'ה";
+      i = end - 1;
+      continue;
+    }
     if (!isTransparentMark(cp)) {
       utf8AppendCodepoint(cp, out);
       continue;

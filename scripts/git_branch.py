@@ -88,7 +88,16 @@ def inject_version(env):
     short_sha = get_git_short_sha(project_dir)
     version_string = f'{base_version}-dev-{branch}-{short_sha}'
 
-    env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
+    def add_version(build_env, node):
+        # Only these translation units depend on Git metadata. Keep library and
+        # reader objects reusable when the branch or commit changes.
+        if b'CROSSPOINT_VERSION' not in node.srcnode().get_contents():
+            return node
+        version_env = build_env.Clone()
+        version_env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
+        return version_env.Object(node)
+
+    env.AddBuildMiddleware(add_version)
     print(f'CrossPoint build version: {version_string}')
 
 
@@ -100,8 +109,8 @@ try:
     inject_version(env)     # noqa: F821  # type: ignore[name-defined]
 except NameError:
     class _Env(dict):
-        def Append(self, **_):
-            # Validation mode does not need SCons state; this stub only satisfies inject_version().
+        def AddBuildMiddleware(self, _):
+            # Validation mode only reports the computed version.
             return None
 
     _project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

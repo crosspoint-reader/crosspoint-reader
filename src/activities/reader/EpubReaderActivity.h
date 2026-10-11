@@ -12,6 +12,7 @@
 
 #include "BookmarkEntry.h"
 #include "ChapterPosition.h"
+#include "ClipSelectionActivity.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
@@ -33,6 +34,7 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   int8_t pendingManualTurn = 0;
+  bool pendingManualTurnTouch = false;
   bool pendingPercentJump = false;
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
@@ -44,6 +46,9 @@ class EpubReaderActivity final : public ReaderActivity {
   bool showBookmarkMessage = false;
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
+  bool showClippingMessage = false;
+  StrId clippingMessage = StrId::STR_CLIPPING_SAVED;
+  unsigned long clippingMessageTime = 0UL;
   bool currentPageBookmarked = false;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
@@ -82,6 +87,10 @@ class EpubReaderActivity final : public ReaderActivity {
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
+  // A background build step lent the framebuffer: it came back white while the panel still shows the
+  // page. Until renderBook() redraws, nothing may be painted straight onto it. Set by the loop task,
+  // cleared by the render task.
+  std::atomic<bool> pageBufferStale{false};
   // True while a deferred overlay chrome refresh (pushOverlayRefresh) may still
   // be running on the panel. settleOverlayRefresh() must run before the
   // framebuffer is touched or another differential refresh is pushed.
@@ -103,6 +112,10 @@ class EpubReaderActivity final : public ReaderActivity {
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
+  // The back-stack outlives the reader (sleep, home) in links.bin so Back
+  // still returns to where a followed link was tapped.
+  void saveLinkStack() const;
+  void loadLinkStack();
 
   uint16_t buildViewportWidth = 0;
   uint16_t buildViewportHeight = 0;
@@ -164,6 +177,11 @@ class EpubReaderActivity final : public ReaderActivity {
   void activateMoreRow(int row);
   void openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
+  void startClipSelection(int initialX = -1, int initialY = -1,
+                          ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
+  int clippingAtPoint(const Page& page, int x, int y) const;
+  void openClippings();
+  void applyProgressChange(const ProgressChangeResult& progress);
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
@@ -176,6 +194,7 @@ class EpubReaderActivity final : public ReaderActivity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
+  void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;
@@ -185,10 +204,23 @@ class EpubReaderActivity final : public ReaderActivity {
   // to be noticed here rather than assumed away.
   uint8_t appliedOrientation = 0;
 
+  // Modal shown when a protected book refuses to open (loan expired /
+  // date unverified); OK exits, "Sync time" (when offered) verifies the
+  // clock over Wi-Fi and reopens the book.
+  OptionPopup loadFailurePopup;
+  // Protection error captured by loadBook() for handleLoadFailure(); the
+  // failed Epub itself does not outlive loadBook().
+  std::string loadProtectionError;
+
   bool loadBook() override;
+  bool handleLoadFailure() override;
+  // Wi-Fi join + SNTP for a loan whose date could not be verified, then a
+  // clean re-open of the book.
+  void beginLoanTimeSync();
   std::string getBookTitle() const override { return epub ? epub->getTitle() : ""; }
   std::string getBookAuthor() const override { return epub ? epub->getAuthor() : ""; }
   std::string getBookThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }
+  int getProgressBasisPoints() const override;
   void renderBook() override;
   void onEndOfBookRendered() override;
 
@@ -199,6 +231,7 @@ class EpubReaderActivity final : public ReaderActivity {
   ~EpubReaderActivity() override;
 
   void loop() override;
+  void render(RenderLock&& lock) override;
 
   bool pageTurn(bool isForward) override;
   bool skipPages(int amount) override;

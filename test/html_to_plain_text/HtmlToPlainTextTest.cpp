@@ -45,6 +45,8 @@ TEST(HtmlToPlainText, DecodesEntities) {
   // Not entities: left as written rather than swallowed.
   EXPECT_EQ(htmlToPlainText("&notanentity;"), "&notanentity;");
   EXPECT_EQ(htmlToPlainText("100% & up"), "100% & up");
+  EXPECT_EQ(htmlToPlainText("<p>Literal &lt;b&gt;word&lt;/b&gt; and &#60;tag&#62;</p>"),
+            "Literal <b>word</b> and <tag>");
 }
 
 TEST(HtmlToPlainText, TrimsSurroundingWhitespace) {

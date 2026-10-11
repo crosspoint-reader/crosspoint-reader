@@ -90,21 +90,53 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 51
+### Version 56
 
-Version 51 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Version 56 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
 Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
-shaping data form conjuncts, reph and positioned marks from the font's OpenType
-tables (lib/OtShaper), and
-other fonts reorder pre-base vowel signs; both change word widths, so cached
-word positions from version 50 no longer match. TextBlock's former `hasFocus`
-byte became a flags byte: bit 1 adds a `displayBytes` count, a `displayOff[]`
-table and a `display[]` blob that hold each complex-script word in the form
-layout measured it in (ShapingTokens.h glyph, advance and offset tokens, or
-reordered vowel signs from a font without shaping data), so page renders draw
-exactly that without running the shaper. Words without a display entry, among
-them words a shaping font could not shape while memory was short, are resolved
-from `text[]` when drawn.
+shaping data form conjuncts, reph and positioned marks from the font's
+OpenType tables (lib/OtShaper), and other fonts reorder pre-base vowel signs;
+both change word widths, so cached word positions from version 55 no longer
+match. TextBlock's former `hasFocus` byte became a flags byte: bit 1 adds a
+`displayBytes` count (after `paragraphStartWord`), a `displayOff[]` table and
+a `display[]` blob that hold each complex-script word in the form layout
+measured it in (ShapingTokens.h glyph, advance and offset tokens, or reordered
+vowel signs from a font without shaping data), so page renders draw exactly
+that without running the shaper. Words without a display entry, among them
+words a shaping font could not shape while memory was short, are resolved from
+`text[]` when drawn. Older completed and partial section caches rebuild
+automatically; book metadata and reading progress are kept.
+
+### Version 55
+
+Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
+visual index of the paragraph's first logical word, or `UINT16_MAX` for a
+continuation line. Clipping uses this marker independently of source-offset
+gaps. Older completed and partial section caches rebuild automatically;
+book metadata and reading progress are kept.
+
+### Version 54
+
+The serialized layout is unchanged. Word source ranges and split offsets now
+include codepoints absorbed by NFC composition. The high bit of each word's
+style byte marks a discretionary hyphen, so clipping can remove it independently
+of source length. Rebuild completed and partial section caches to correct
+clipping spaces and anchors for decomposed text.
+
+### Version 53
+
+Each TextBlock arena starts with one 8-byte source range per word (two uint32
+chapter-visible Unicode-codepoint offsets, start inclusive and end exclusive).
+Ranges follow words through BiDi ordering and line wrapping. This version also
+includes the version 52 redaction layout changes. Older completed and partial
+section caches are rebuilt automatically; book and progress files are kept.
+
+### Version 52
+
+The serialized layout is unchanged. Missing full-block (`U+2588`) and black-square
+(`U+25A0`) symbols now use font-sized solid rectangles instead of replacement
+glyphs. Rebuild older sections so cached line breaks and word positions match
+their new widths.
 
 ### Version 50
 
@@ -223,7 +255,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 51
+#define EXPECTED_VERSION 56
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -285,13 +317,15 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v51)")]];
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v56)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+    u16 paragraphStartWord [[comment("Visual index of the paragraph's first logical word, 0xFFFF = continuation line")]];
     if ((flags & 2) != 0) {
         u16 displayBytes [[comment("Total size of display[], including one NUL per stored entry")]];
     }
 
     if (wordCount > 0) {
+        u32 sourceRange[wordCount * 2] [[comment("Chapter codepoint range of each word: start, end (exclusive)")]];
         u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
         s16 wordXPos[wordCount];
         if ((flags & 1) != 0) {
@@ -628,3 +662,25 @@ Then, for GSUB and then GPOS: `stageCount` and `lookupCount` (`u16` each),
 `stageCount` stages (`u16` lookups before the stage ends, `u8` `ot::Pause`
 run after it, `u8` reserved) and `lookupCount` lookups (`u16` lookup index,
 `u8` lookup flags, `u8` reserved, `u32` mask).
+
+## Clipping store (`/.crosspoint/clippings/epub_<path-hash>.bin`)
+
+Version 4 retains the version 3 header and page-local range fields. After each
+record's layout signature it stores `startOffset` and `endOffset` (uint32 chapter
+codepoint range, end exclusive; UINT32_MAX means unavailable), `syncRevision`
+(uint64), `pendingUpload` (one byte), and a 65-byte NUL-terminated sync ID. The
+chapter title, text length, and text follow. Versions 1–3 remain readable.
+
+Stable IDs are saved before upload. A sibling `.deleted` file stores fixed
+65-byte IDs awaiting server acknowledgement. Deletions are queued before the
+local record is removed and retried on the next enabled manual sync. A `.bak`
+file is recovered if power interrupted replacement of the main store.
+
+Clipping header strings are limited to 4 KiB on both reads and writes. A failed
+load leaves no usable index and disables writes until a successful load. The
+index is allocated with checked, bounded growth and released on unload.
+
+Book moves rename the store and its `.deleted` journal (plus recovery sidecars)
+together. The stored source path is informational and is refreshed on the next
+save; the current file path selects the store. Local book deletion cleans up all
+of these sidecars but preserves the independent `My Clippings.txt` export.

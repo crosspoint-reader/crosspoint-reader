@@ -205,17 +205,36 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   // its UI sizes would be dead weight in RAM.
   const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
   if (readerIt == renderer.getFontMap().end()) return;
-  // One representative codepoint per script the built-in fonts may lack:
-  // Han, Hiragana, Katakana, Hangul, Greek, Cyrillic, Hebrew, Arabic, Thai,
-  // and every Indic script.
-  static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x03B1,
-                                                 0x0430, 0x05D0, 0x0627, 0x0E01};
-  const EpdFontFamily& readerFont = readerIt->second;
-  const bool hasFallbackScript =
-      std::any_of(std::begin(kFallbackProbes), std::end(kFallbackProbes),
-                  [&](const uint32_t cp) { return readerFont.hasCodepoint(cp); }) ||
-      std::any_of(std::begin(indic::SCRIPTS), std::end(indic::SCRIPTS),
-                  [&](const indic::ScriptInfo& script) { return readerFont.hasCodepoint(script.probe); });
+  // One representative codepoint per script the built-in fonts may lack,
+  // matching the non-Latin interval presets the SD-font converter ships
+  // (docs/sd-card-fonts.md).
+  static constexpr uint32_t kFallbackProbes[] = {
+      0x4E00,  // CJK Unified Ideographs (Han)
+      0x3042,  // Hiragana
+      0x30A2,  // Katakana
+      0xAC00,  // Hangul Syllables
+      0x03B1,  // Greek
+      0x0430,  // Cyrillic
+      0x05D0,  // Hebrew
+      0x0627,  // Arabic
+      0x0531,  // Armenian
+      0x10D0,  // Georgian
+      0x1200,  // Ethiopic
+      0x13A0,  // Cherokee
+      0x2D30,  // Tifinagh
+      0x0259,  // IPA Extensions (ə)
+  };
+  bool hasFallbackScript = false;
+  for (const uint32_t cp : kFallbackProbes) {
+    if (readerIt->second.hasCodepoint(cp)) {
+      hasFallbackScript = true;
+      break;
+    }
+  }
+  // Every Indic script too.
+  hasFallbackScript = hasFallbackScript ||
+                      std::any_of(std::begin(indic::SCRIPTS), std::end(indic::SCRIPTS),
+                                  [&](const indic::ScriptInfo& s) { return readerIt->second.hasCodepoint(s.probe); });
   if (!hasFallbackScript) {
     LOG_DBG("SDFS", "%s has no fallback-script coverage - skipping UI fallback sizes", familyName.c_str());
     return;

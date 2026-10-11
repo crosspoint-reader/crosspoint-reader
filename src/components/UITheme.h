@@ -22,6 +22,12 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() const;
   const BaseTheme& getTheme() const { return currentTheme ? *currentTheme : fallbackTheme; }
+  // The drawable content area: full screen minus the board's viewable insets
+  // (bezel / rounded-corner clearance from BoardConfig::ACTIVE.viewableInsets,
+  // oriented to the current rotation). THE single place activities should get
+  // their content bounds from so every screen clears the bezel identically.
+  // Zero-inset on rectangular panels, so no visible change there.
+  static Rect getContentArea(const GfxRenderer& renderer);
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,

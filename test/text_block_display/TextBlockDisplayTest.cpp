@@ -35,7 +35,7 @@ TEST(TextBlockDisplay, KeepsLogicalAndDisplayTextApart) {
   const std::vector<std::string> words = {"hello", "\xE0\xA6\x95\xE0\xA6\xBF", "world"};  // hello কি world
   const std::vector<std::string> display = {"", kShaped, ""};
   TextBlock block(words, {0, 50, 90}, {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::REGULAR}, {}, {},
-                  BlockStyle(), {}, {}, display);
+                  BlockStyle(), {}, {}, {}, UINT16_MAX, display);
   ASSERT_TRUE(block.valid());
   EXPECT_STREQ(block.wordText(1), words[1].c_str());
   EXPECT_EQ(block.displayForm(1), kShaped);
@@ -65,18 +65,19 @@ TEST(TextBlockDisplay, LinesWithoutComplexScriptStoreNoDisplayRegion) {
 
 TEST(TextBlockDisplay, RejectsACorruptDisplayOffset) {
   const std::vector<std::string> words = {"\xE0\xA6\x95", "\xE0\xA6\x96"};
-  TextBlock block(words, {0, 20}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {},
-                  {kShaped, kShaped});
+  TextBlock block(words, {0, 20}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {}, {},
+                  UINT16_MAX, {kShaped, kShaped});
   const std::string path = tempPath("corrupt.bin");
   {
     HalFile out;
     ASSERT_TRUE(out.open(path.c_str(), "wb"));
     ASSERT_TRUE(block.serialize(out));
   }
-  // Header: wordCount(2) flags(1) textBytes(2) displayBytes(2); then textOff[2], xpos[2], displayOff[2].
+  // Header: wordCount(2) flags(1) textBytes(2) paragraphStartWord(2) displayBytes(2); then
+  // sourceRanges[2], textOff[2], xpos[2], displayOff[2].
   std::FILE* f = std::fopen(path.c_str(), "r+b");
   ASSERT_NE(f, nullptr);
-  const long displayOff1 = 7 + 2 * 2 + 2 * 2 + 2;
+  const long displayOff1 = 9 + 2 * 8 + 2 * 2 + 2 * 2 + 2;
   std::fseek(f, displayOff1, SEEK_SET);
   const uint8_t bad[2] = {3, 0};  // points into the middle of the first entry
   std::fwrite(bad, 1, 2, f);
@@ -92,8 +93,8 @@ TEST(TextBlockDisplay, ComplexScriptLineWithNothingToRedrawRoundTrips) {
   // An Indic line whose words all draw as their own text (unshaped, with no
   // vowel sign to reorder): the display vector exists but every entry is empty.
   const std::vector<std::string> words = {"\xE0\xA4\x95\xE0\xA5\x80", "\xE0\xA4\xB9\xE0\xA5\x88"};  // की है
-  TextBlock block(words, {0, 30}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {},
-                  {"", ""});
+  TextBlock block(words, {0, 30}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {}, {},
+                  UINT16_MAX, {"", ""});
   ASSERT_TRUE(block.valid());
   const auto restored = roundTrip(block, "empty-display.bin");
   ASSERT_NE(restored, nullptr) << "a line with no display forms must not store an empty display region";
@@ -105,7 +106,7 @@ TEST(TextBlockDisplay, FocusSplitWordsDrawTheirLogicalText) {
   // A corrupt cache can pair a focus boundary with a display form shorter than
   // the boundary; the split must still index the logical text.
   const std::vector<std::string> words = {"abcdef"};
-  TextBlock block(words, {0}, {EpdFontFamily::REGULAR}, {3}, {24}, BlockStyle(), {}, {}, {"x"});
+  TextBlock block(words, {0}, {EpdFontFamily::REGULAR}, {3}, {24}, BlockStyle(), {}, {}, {}, UINT16_MAX, {"x"});
   ASSERT_TRUE(block.valid());
   GfxRenderer renderer;
   block.render(renderer, 0, 0, 0);
@@ -116,8 +117,8 @@ TEST(TextBlockDisplay, FocusSplitWordsDrawTheirLogicalText) {
 
 TEST(TextBlockDisplay, RenderDrawsTheStoredDisplayForm) {
   const std::vector<std::string> words = {"hello", "\xE0\xA6\x95\xE0\xA6\xBF"};
-  TextBlock block(words, {0, 50}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {},
-                  {"", kShaped});
+  TextBlock block(words, {0, 50}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {}, {},
+                  UINT16_MAX, {"", kShaped});
   ASSERT_TRUE(block.valid());
   GfxRenderer renderer;
   block.render(renderer, 0, 0, 0);

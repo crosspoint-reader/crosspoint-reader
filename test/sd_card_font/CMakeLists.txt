@@ -1,5 +1,6 @@
 add_executable(SdCardFontTest
   SdCardFontTest.cpp
+  ${REPO_ROOT}/lib/EpdFont/EpdFont.cpp
   ${REPO_ROOT}/lib/EpdFont/SdCardFont.cpp
   ${REPO_ROOT}/lib/EpdFont/ComplexShaper.cpp
   ${REPO_ROOT}/lib/EpdFont/FlashBlobCache.cpp

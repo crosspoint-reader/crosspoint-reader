@@ -1,8 +1,10 @@
 #pragma once
 
+#include <ContentProtection.h>
 #include <Print.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,6 +15,15 @@
 class ZipFile;
 
 class Epub {
+ public:
+  struct SyncMetadata {
+    std::string isbn;
+    std::string asin;
+    std::string series;
+    std::optional<float> seriesIndex;
+  };
+
+ private:
   // the ncx file (EPUB 2)
   std::string tocNcxItem;
   // the nav file (EPUB 3)
@@ -29,11 +40,17 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // Optional encrypted-entry accessor. Entries are decoded in memory and stay
+  // encrypted at rest. Null when the accessor is not needed or unavailable.
+  std::unique_ptr<freeink::content::ContentDecryptor> decryptor;
+  // User-presentable reason the encrypted-entry accessor could not be opened.
+  std::string protectionError;
 
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
                        bool metadataOnly = false, ZipFile* sharedZip = nullptr);
   bool generateThumbBmpForCover(int height, const std::string& coverImageHref) const;
+  bool openProtection();
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
@@ -45,10 +62,13 @@ class Epub {
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool loadMetadata(std::string& title, std::string& author);
+  bool loadSyncMetadata(SyncMetadata& metadata);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;
+  // Empty unless the encrypted-entry accessor failed to open.
+  const std::string& getProtectionError() const { return protectionError; }
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
