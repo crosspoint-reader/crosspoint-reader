@@ -217,29 +217,50 @@ inline SettingInfo buildLongPressMenuSetting() {
                                   setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
 }
 
+struct ShortPowerButtonOption {
+  StrId label;
+  uint8_t value;
+};
+
+// Menu order differs from the persisted enum order, so map by value.
+inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
+  std::vector<ShortPowerButtonOption> options = {{StrId::STR_IGNORE, CrossPointSettings::IGNORE},
+                                                 {StrId::STR_SLEEP, CrossPointSettings::SLEEP},
+                                                 {StrId::STR_PAGE_TURN, CrossPointSettings::PAGE_TURN},
+                                                 {StrId::STR_FORCE_REFRESH, CrossPointSettings::FORCE_REFRESH},
+                                                 {StrId::STR_FOOTNOTES, CrossPointSettings::FOOTNOTES}};
+  options.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  if (BoardConfig::hasTouch()) {
+    options.push_back({StrId::STR_CONFIRM, CrossPointSettings::PWR_CONFIRM});
+  } else {
+    options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
+  }
+  // Touch boards without a home key have no button for these shortcuts.
+  if (BoardConfig::hasTouch() && !BoardConfig::hasHomeKey()) {
+    options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
+    options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
+    options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
+  }
+  return options;
+}
+
 inline std::vector<StrId> buildShortPowerButtonValues() {
-  std::vector<StrId> values = {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                               StrId::STR_FOOTNOTES};
-  values.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
-  if (BoardConfig::hasTouch()) values.push_back(StrId::STR_CONFIRM);
-  values.push_back(StrId::STR_SAVE_CLIPPING);
+  std::vector<StrId> values;
+  for (const auto& option : shortPowerButtonOptions()) values.push_back(option.label);
   return values;
 }
 
 inline uint8_t shortPowerButtonDisplayValue() {
-  const uint8_t raw = SETTINGS.shortPwrBtn;
-  if (raw <= CrossPointSettings::FOOTNOTES) return raw;
-  if (raw == CrossPointSettings::CREATE_CLIPPING) return BoardConfig::hasTouch() ? 6 : 5;
-  if (raw == CrossPointSettings::PWR_CONFIRM && BoardConfig::hasTouch()) return 5;
+  const auto options = shortPowerButtonOptions();
+  for (size_t i = 0; i < options.size(); i++) {
+    if (options[i].value == SETTINGS.shortPwrBtn) return static_cast<uint8_t>(i);
+  }
   return CrossPointSettings::IGNORE;
 }
 
 inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
-  if (!BoardConfig::hasTouch() && displayValue == 5) {
-    SETTINGS.shortPwrBtn = CrossPointSettings::CREATE_CLIPPING;
-    return;
-  }
-  SETTINGS.shortPwrBtn = displayValue;
+  const auto options = shortPowerButtonOptions();
+  SETTINGS.shortPwrBtn = displayValue < options.size() ? options[displayValue].value : CrossPointSettings::IGNORE;
 }
 
 inline SettingInfo buildShortPowerButtonSetting() {
@@ -316,6 +337,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #if FREEINK_CAP_FRONTLIGHT
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                             "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY),
+#endif
+#if FREEINK_DEVICE_PICCO
+        SettingInfo::Enum(StrId::STR_SLIDE_SWITCH, &CrossPointSettings::slideSwitchAction,
+                          {StrId::STR_FRONTLIGHT, StrId::STR_NIGHT_MODE}, "slideSwitchAction", StrId::STR_CAT_DISPLAY),
 #endif
         // Night mode = inverted output polarity everywhere (ActivityManager
         // applies it to every activity), so it lives in the Display category.

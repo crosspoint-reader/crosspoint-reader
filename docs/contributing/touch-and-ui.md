@@ -154,6 +154,7 @@ profile. CrossPoint's CI and release workflows currently cover:
 | Xteink X4 Classic | `x4c` | ESP32-S3 |
 | M5Stack Paper Mono | `papermono` | ESP32-S3 |
 | Metalio E-Ink 4 | `metalio_eink4` | ESP32-S3 |
+| Onyx BOOX Picco | `picco` | ESP32-S3 |
 
 Build with `pio run -e <environment>`. X3 and X4 share a binary with runtime
 board selection; different MCU families require separate binaries. Check the
