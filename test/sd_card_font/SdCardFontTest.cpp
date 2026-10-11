@@ -11,6 +11,7 @@
 
 namespace {
 size_t failNextArraySize = 0;
+size_t nothrowArrayAllocations = 0;
 }  // namespace
 
 // Keep array allocation and deletion paired, including arrays allocated by the test framework.
@@ -24,6 +25,7 @@ void* operator new[](size_t size) {
 }
 
 void* operator new[](size_t size, const std::nothrow_t&) noexcept {
+  ++nothrowArrayAllocations;
   if (failNextArraySize != 0 && size == failNextArraySize) {
     failNextArraySize = 0;
     return nullptr;
@@ -461,9 +463,38 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   ASSERT_TRUE(font.load("fixture"));
   font.buildAdvanceTable("", 1);
   EXPECT_FALSE(font.hasAdvanceTable());
-  failNextArraySize = (4096 + 2) * sizeof(uint32_t);  // the codepoint scratch
+  failNextArraySize = (768 + 2) * sizeof(uint32_t);  // the codepoint scratch
   EXPECT_EQ(-1, font.buildAdvanceTable(page(FIRST, 10).c_str(), 1));
   EXPECT_FALSE(font.hasAdvanceTable());
   ASSERT_EQ(0, font.buildAdvanceTable(page(FIRST, 10).c_str(), 1));
   EXPECT_TRUE(font.hasAdvanceTable());
+}
+
+TEST(SdCardFontTest, AFullAdvanceTableSkipsTheScanWithoutAllocating) {
+  makeFont(1001);
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_EQ(0, font.buildAdvanceTable(page(FIRST, 768).c_str(), 1));
+  ASSERT_EQ(32U << 4, font.getAdvance(FIRST + 767, 0));
+  const size_t allocationsBefore = nothrowArrayAllocations;
+  EXPECT_EQ(0, font.buildAdvanceTable(page(FIRST + 768, 200).c_str(), 1));
+  EXPECT_EQ(allocationsBefore, nothrowArrayAllocations);
+  EXPECT_EQ(0, font.getAdvance(FIRST + 768, 0));
+}
+
+TEST(SdCardFontTest, OnePageWithMoreCodepointsThanTheTableKeepsTheLowestInAnyOrder) {
+  constexpr uint32_t CACHE_LIMIT = 768;  // SdCardFont::ADVANCE_CACHE_LIMIT
+  makeFont(1001);
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  // The top 768 first (ascending, so the largest is not the first held), then
+  // the rest descending: each must displace the largest held. Every codepoint
+  // appears twice, so repeats must not count twice.
+  std::string text;
+  for (uint32_t cp = FIRST + 232; cp < FIRST + 1000; ++cp) text += page(cp, 1) + page(cp, 1);
+  for (uint32_t cp = FIRST + 231; cp + 1 > FIRST; --cp) text += page(cp, 1) + page(cp, 1);
+  ASSERT_EQ(0, font.buildAdvanceTable(text.c_str(), 1));
+  for (uint32_t cp = FIRST; cp < FIRST + 1000; ++cp) {
+    ASSERT_EQ(cp < FIRST + CACHE_LIMIT ? 32U << 4 : 0U, font.getAdvance(cp, 0)) << std::hex << cp;
+  }
 }
