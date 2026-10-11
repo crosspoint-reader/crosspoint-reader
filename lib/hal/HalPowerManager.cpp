@@ -5,6 +5,7 @@
 #include <PowerManager.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
+#include <esp_system.h>
 #include <soc/soc_caps.h>
 
 #include <cassert>
@@ -74,7 +75,23 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   xSemaphoreGive(modeMutex);
 }
 
-void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+void HalPowerManager::startDeepSleep(HalGPIO& gpio, uint64_t timerWakeUs) const {
+  bool timerWakeArmed = false;
+  if (timerWakeUs > 0) {
+    const auto result = esp_sleep_enable_timer_wakeup(timerWakeUs);
+    if (result == ESP_OK) {
+      timerWakeArmed = true;
+    } else {
+      LOG_ERR("PWR", "Timer wake arming failed: %d", static_cast<int>(result));
+      const auto disabled = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+      if (disabled != ESP_OK && disabled != ESP_ERR_INVALID_STATE) {
+        // Do not sleep with a wake source whose state could not be cleared.
+        LOG_ERR("PWR", "Timer wake disable failed: %d; restarting", static_cast<int>(disabled));
+        esp_restart();
+      }
+    }
+  }
+
 #if FREEINK_DEVICE_EEGO_A4
   // LM3630A and GSL share I2C; turn the light off before touch releases the bus.
   Frontlight.setOn(false);
@@ -90,14 +107,17 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 
 #if !SOC_PM_SUPPORT_EXT1_WAKEUP
   if (gpio.isXteinkDevice()) {
-    // GPIO13 gates the battery MOSFET on both Xteink C3 boards; driving it low
-    // is the battery power-off (the SDK wake source still handles USB power).
+    // GPIO13 is the X4 battery latch but the X3 SD-rail switch. A successfully
+    // armed timer needs the C3 X4 to stay powered, so hold its latch HIGH through
+    // deep sleep. X3 still powers its SD rail off, and button-only X4 sleep keeps
+    // the existing battery power-off behavior.
+    const bool keepX4PoweredForTimer = timerWakeArmed && BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
     // Release any surviving pad hold first: hold_en survives deep sleep via
     // the SDK's deepSleep() (esp_sleep_config_gpio_isolate +
     // gpio_deep_sleep_hold_en), and a held pad silently ignores the drive.
     gpio_hold_dis(XTEINK_C3_GPIO13);
     gpio_set_direction(XTEINK_C3_GPIO13, GPIO_MODE_OUTPUT);
-    gpio_set_level(XTEINK_C3_GPIO13, 0);
+    gpio_set_level(XTEINK_C3_GPIO13, keepX4PoweredForTimer ? HIGH : LOW);
     gpio_hold_en(XTEINK_C3_GPIO13);
   }
 #endif
@@ -110,8 +130,8 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // external power leaves (serial/pogo adapter unplugged), and the next power-
   // button press cold-boots instead of fast-waking. holdPowerRails() asserted
   // the latches at boot but arms no sleep hold; arm it here instead. Skips
-  // XTEINK_C3_GPIO13: it IS power.latch0 on the C3 Xteink boards, where the
-  // block above drives it LOW on purpose (battery power-off).
+  // XTEINK_C3_GPIO13: the C3 block above owns that shared pin as either the
+  // X4 battery latch or X3 SD-rail switch, including the timer keep-alive case.
   for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
     if (pin < 0 || static_cast<gpio_num_t>(pin) == XTEINK_C3_GPIO13) continue;
     const auto g = static_cast<gpio_num_t>(pin);
