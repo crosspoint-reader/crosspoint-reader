@@ -148,7 +148,9 @@ bool RecentBooksStore::refreshSidecarMetadata(const size_t maxBooks) {
       if (!BookDetailsLookup::cached(book.path, 0, details) && !BookDetailsLookup::parse(book.path, 0, details)) {
         continue;  // stamp left stale: retried next time
       }
-      if (!details.title.empty()) book.title = details.title;
+      // No title (a TXT or Markdown book whose sidecar was removed) means the file name, as the
+      // reader lists it (LineReaderActivity); keeping the old one would show the removed title.
+      book.title = details.title.empty() ? book.path.substr(book.path.rfind('/') + 1) : details.title;
       book.author = details.author;
       book.series = seriesLabel(details.series, details.seriesIndex);
     }
