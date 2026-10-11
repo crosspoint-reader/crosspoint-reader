@@ -357,6 +357,45 @@ TEST_F(StoreTest, RemoveTakesTheBookOutOfTheTotals) {
   EXPECT_EQ(store.removeBook(id(1)), WriteResult::NotFound);
 }
 
+TEST_F(StoreTest, RenameCarriesTheHistoryToTheNewId) {
+  ReadingStatsStore store(path_, legacy_);
+  ASSERT_NO_FATAL_FAILURE(twoBooks(store));
+
+  ASSERT_EQ(store.renameBook(id(1), id(3)), WriteResult::Done);
+
+  EXPECT_FALSE(bookOf(store, id(1)).found);
+  const auto moved = bookOf(store, id(3));
+  ASSERT_TRUE(moved.found);
+  EXPECT_EQ(moved.book.totalSeconds, 1000u);
+  EXPECT_EQ(moved.book.title, "Book A");
+  EXPECT_EQ(moved.book.docId, id(3));
+  const auto summary = summaryOf(store);
+  EXPECT_EQ(summary.bookCount, 2u);
+  EXPECT_EQ(summary.totalSeconds, 1300u);
+
+  // Reading under the new id adds to the carried history rather than starting another.
+  ASSERT_EQ(store.recordSession(id(3), "Book A", "X", 100, 2, 30, kNoon), WriteResult::Done);
+  EXPECT_EQ(bookOf(store, id(3)).book.totalSeconds, 1100u);
+}
+
+TEST_F(StoreTest, RenameOntoAnIdWithAHistoryLeavesBothApart) {
+  ReadingStatsStore store(path_, legacy_);
+  ASSERT_NO_FATAL_FAILURE(twoBooks(store));
+
+  EXPECT_EQ(store.renameBook(id(1), id(2)), WriteResult::Failed);
+
+  EXPECT_EQ(bookOf(store, id(1)).book.totalSeconds, 1000u);
+  EXPECT_EQ(bookOf(store, id(2)).book.totalSeconds, 300u);
+}
+
+TEST_F(StoreTest, RenameOfABookWithNoHistoryIsNotFound) {
+  ReadingStatsStore store(path_, legacy_);
+  ASSERT_NO_FATAL_FAILURE(twoBooks(store));
+
+  EXPECT_EQ(store.renameBook(id(9), id(3)), WriteResult::NotFound);
+  EXPECT_FALSE(bookOf(store, id(3)).found);
+}
+
 TEST_F(StoreTest, RemoveFromNoHistoryIsNotFound) {
   ReadingStatsStore store(path_, legacy_);
 

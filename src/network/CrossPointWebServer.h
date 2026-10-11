@@ -198,4 +198,17 @@ class CrossPointWebServer {
   // POST /api/plugin-fs?plugin&path -> write one small file. /upload already
   // covers this; kept for compatibility with upstream-written plugins.
   void handlePluginFs();
+  void handlePluginFsData();
+
+  // One /api/plugin-fs body as it streams in. Raw, so binary-safe: the framework's buffered
+  // "plain" argument is built with String(char*) and ends at the first NUL byte.
+  struct PluginFsUpload {
+    FsFile file;
+    String path;  // the validated target
+    String temp;  // written here, renamed over `path` once complete
+    size_t written = 0;
+    bool started = false;    // a raw body arrived
+    int status = 0;          // 0 while all is well, else the HTTP status to answer with
+    const char* error = "";  // its message
+  } pluginFsUpload;
 };

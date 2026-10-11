@@ -114,7 +114,8 @@ size_t largestFreeBlock() { return heap_caps_get_largest_free_block(MALLOC_CAP_D
 // decides whether the curated roots are loaded at all and what happens when the
 // peer fails to verify.
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
-                                           const std::string& password, Sink& sink, HttpDownloader::TlsPolicy tls) {
+                                           const std::string& password, Sink& sink, HttpDownloader::TlsPolicy tls,
+                                           const HttpDownloader::RedirectFilter& redirectAllowed) {
   const WifiPowerSaveGuard psGuard;
   const bool clockReady = logPreCallContext(url);
   const unsigned long startMs = millis();
@@ -133,6 +134,7 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
   if (!username.empty() && !password.empty()) {
     http.setBasicAuth(username, password);
   }
+  if (redirectAllowed) http.setRedirectFilter(redirectAllowed);
 
   bool openLogged = false;
   const auto write = sink.write;
@@ -173,8 +175,9 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
 // to the historic browsing posture; callers that carry credentials, install
 // files, or fetch public data pass their own.
 HttpDownloader::DownloadError runGetDispatch(const std::string& url, const std::string& username,
-                                             const std::string& password, Sink& sink, HttpDownloader::TlsPolicy tls) {
-  return runGetSecure(url, username, password, sink, tls);
+                                             const std::string& password, Sink& sink, HttpDownloader::TlsPolicy tls,
+                                             const HttpDownloader::RedirectFilter& redirectAllowed = {}) {
+  return runGetSecure(url, username, password, sink, tls, redirectAllowed);
 }
 }  // namespace
 
@@ -255,14 +258,15 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, bool treatAbortAsSuccess,
-                              const std::string& username, const std::string& password) {
+                              const std::string& username, const std::string& password,
+                              const RedirectFilter& redirectAllowed) {
   LOG_DBG("HTTP", "Fetching (stream): %s", url.c_str());
   if (!onData) {
     return false;
   }
   Sink sink;
   sink.write = [&onData](const uint8_t* data, size_t len) { return onData(data, len); };
-  const DownloadError result = runGetDispatch(url, username, password, sink, TlsPolicy::Verified);
+  const DownloadError result = runGetDispatch(url, username, password, sink, TlsPolicy::Verified, redirectAllowed);
   if (result == OK) {
     return true;
   }
@@ -334,7 +338,8 @@ HttpDownloader::DownloadError finishFileDownload(HttpDownloader::DownloadError r
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, const std::string& username,
-                                                             const std::string& password, TlsPolicy tls) {
+                                                             const std::string& password, TlsPolicy tls,
+                                                             const RedirectFilter& redirectAllowed) {
   LOG_DBG("HTTP", "Downloading: %s", url.c_str());
   LOG_DBG("HTTP", "Destination: %s", destPath.c_str());
 
@@ -356,7 +361,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return Storage.openFileForWrite("HTTP", destPath.c_str(), file);
   };
 
-  const DownloadError result = runGetDispatch(url, username, password, sink, tls);
+  const DownloadError result = runGetDispatch(url, username, password, sink, tls, redirectAllowed);
   return finishFileDownload(result, destPath, file, sink.downloaded);
 }
 

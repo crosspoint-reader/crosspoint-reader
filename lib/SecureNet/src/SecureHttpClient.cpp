@@ -371,6 +371,7 @@ int SecureHttpClient::get(const std::string& url, const BodySink& sink, const Pr
       // and surface the 3xx to the caller (setAllowRedirectDowngrade opts in).
       Url next;
       if (u.https() && !_allowRedirectDowngrade && parseUrl(current, next) && !next.https()) return meta.status;
+      if (_redirectFilter && !_redirectFilter(current)) return meta.status;
       if (hop == _maxRedirects) return ERR_TOO_MANY_REDIRECTS;
       continue;
     }
@@ -418,6 +419,7 @@ int SecureHttpClient::request(const char* method, const std::string& url, const 
       // and surface the 3xx to the caller (setAllowRedirectDowngrade opts in).
       Url next;
       if (u.https() && !_allowRedirectDowngrade && parseUrl(current, next) && !next.https()) return meta.status;
+      if (_redirectFilter && !_redirectFilter(current)) return meta.status;
       // 303 always -> GET; 301/302 commonly downgrade POST->GET too. 307/308
       // preserve method + body. When downgrading to GET, drop the request body.
       if (meta.status == 303 || meta.status == 301 || meta.status == 302) {

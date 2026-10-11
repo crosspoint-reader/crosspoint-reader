@@ -2120,6 +2120,21 @@
     </div>
   </div>
 
+  <!-- Upload clash: the target folder already has a file of that name -->
+  <div class="modal-overlay" id="clashModal">
+    <div class="modal">
+      <h3>⚠️ File Already Exists</h3>
+      <div class="folder-form">
+        <p class="file-info"><strong id="clashName"></strong> is already in <strong id="clashFolder"></strong>.</p>
+        <label style="display:block; margin:8px 0;"><input type="checkbox" id="clashApplyAll"> Do the same for the
+          other files that already exist</label>
+        <button class="delete-btn-confirm" onclick="answerUploadClash('replace')">Replace</button>
+        <button class="folder-btn" onclick="answerUploadClash('keep')">Keep both</button>
+        <button class="delete-btn-cancel" onclick="answerUploadClash('skip')">Skip</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Rename Modal -->
   <div class="modal-overlay" id="renameModal">
     <div class="modal">
@@ -2278,6 +2293,8 @@
             if (overlay.id === 'deleteModal') return closeDeleteModal();
             if (overlay.id === 'renameModal') return closeRenameModal();
             if (overlay.id === 'moveModal') return closeMoveModal();
+            // The upload is waiting on this answer; a click beside the dialog is not one.
+            if (overlay.id === 'clashModal') return;
             if (overlay.id === 'imagePreviewModal') return closeImagePreview();
             overlay.classList.remove('open');
           }
@@ -2451,10 +2468,20 @@
 
       fileTableContent += '</tbody></table>';
       fileTable.innerHTML = fileTableContent;
-      document.getElementById('file-table').addEventListener('change', function (e) {
+      attachFileTableListeners(fileTable);
+      updateToolbarState();
+    }
+
+    // Delegated, so they survive the innerHTML swaps above -- and attached once: #file-table itself
+    // is never replaced, so adding them on every render stacked a copy per sort or refresh, and one
+    // click on Move, Rename or Delete then opened its dialog that many times.
+    function attachFileTableListeners(fileTable) {
+      if (fileTable.dataset.listening) return;
+      fileTable.dataset.listening = '1';
+      fileTable.addEventListener('change', function (e) {
         if (e.target.classList.contains('select-item')) updateToolbarState();
       });
-      document.getElementById('file-table').addEventListener('click', function (e) {
+      fileTable.addEventListener('click', function (e) {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const name = btn.dataset.name;
@@ -2465,7 +2492,6 @@
         else if (action === 'rename') openRenameModal(name, path, isFolder);
         else if (action === 'delete') openDeleteModal(name, path, isFolder);
       });
-      updateToolbarState();
     }
 
     // Modal functions
@@ -5595,6 +5621,74 @@
       });
     }
 
+    // A file of the same name in the target folder. The device overwrites it on upload -- the Calibre
+    // plugin and scripts re-send a book to update it, so /upload must keep doing that -- which means
+    // the page is where to ask: Replace, Keep both (the upload takes a free "name (2).ext"), or Skip.
+    // One upload asks once per clash unless the answer is applied to the rest.
+    let uploadClash = null;
+    let clashAnswer = null;
+
+    function beginUploadClashes() {
+      uploadClash = { folders: new Map(), applyToAll: null };
+    }
+
+    // Lower-cased names already in `folder`, fetched once per upload and kept up to date as this upload
+    // adds to it. FAT names are case-insensitive, so "Book.epub" and "book.epub" are the same file.
+    async function namesInFolder(folder) {
+      if (!uploadClash.folders.has(folder)) {
+        const names = new Set();
+        try {
+          const response = await fetch('/api/files?path=' + encodeURIComponent(folder) + '&_=' + Date.now());
+          if (response.ok) (await response.json()).forEach(f => names.add(f.name.toLowerCase()));
+        } catch (e) {
+          console.warn('[Upload] Could not list ' + folder + ' for name clashes:', e);
+        }
+        uploadClash.folders.set(folder, names);
+      }
+      return uploadClash.folders.get(folder);
+    }
+
+    function freeNameIn(names, fileName) {
+      const dot = fileName.lastIndexOf('.');
+      const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+      const ext = dot > 0 ? fileName.slice(dot) : '';
+      for (let n = 2; ; n++) {
+        const candidate = `${stem} (${n})${ext}`;
+        if (!names.has(candidate.toLowerCase())) return candidate;
+      }
+    }
+
+    function askUploadClash(fileName, folder) {
+      document.getElementById('clashName').textContent = fileName;
+      document.getElementById('clashFolder').textContent = folder;
+      document.getElementById('clashApplyAll').checked = false;
+      document.getElementById('clashModal').classList.add('open');
+      return new Promise(resolve => { clashAnswer = resolve; });
+    }
+
+    function answerUploadClash(action) {
+      document.getElementById('clashModal').classList.remove('open');
+      if (document.getElementById('clashApplyAll').checked) uploadClash.applyToAll = action;
+      const resolve = clashAnswer;
+      clashAnswer = null;
+      if (resolve) resolve(action);
+    }
+
+    // The file to upload in place of `file` (renamed for Keep both), or null to skip it.
+    async function resolveUploadClash(file, folder) {
+      const names = await namesInFolder(folder);
+      let upload = file;
+      if (names.has(file.name.toLowerCase())) {
+        const action = uploadClash.applyToAll || await askUploadClash(file.name, folder);
+        if (action === 'skip') return null;
+        if (action === 'keep') {
+          upload = new File([file], freeNameIn(names, file.name), { type: file.type, lastModified: file.lastModified });
+        }
+      }
+      names.add(upload.name.toLowerCase());
+      return upload;
+    }
+
     function uploadFile() {
       const fileInput = document.getElementById('fileInput');
       const files = Array.from(fileInput.files);
@@ -5623,6 +5717,8 @@
       const failedFiles = [];
       let useWebSocket = true; // Try WebSocket first
       const stagedFolders = pendingFolderUpload;
+
+      beginUploadClashes();
 
       // Check if we should use batch logging mode
       const epubFilesToConvert = files.filter(f => f.name.toLowerCase().endsWith('.epub') && convertEnabled);
@@ -5843,6 +5939,16 @@
               console.warn('[Upload] Image normalize failed, uploading original:', e);
             }
           }
+
+          // Asked here, after any conversion, so the question is about the name that would land.
+          const toUpload = await resolveUploadClash(file, destPath);
+          if (toUpload === null) {
+            progressText.textContent = `Skipped ${file.name} (${currentIndex + 1}/${files.length})`;
+            currentIndex++;
+            uploadNextFile();
+            return;
+          }
+          file = toUpload;
 
           if (useWebSocket) {
             await uploadFileWebSocket(file, onProgress, null, null, destPath);
