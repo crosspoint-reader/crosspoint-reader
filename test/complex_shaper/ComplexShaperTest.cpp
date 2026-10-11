@@ -468,6 +468,30 @@ TEST_F(ComplexShaperTest, RetriesTheNextWordOnceTheBackoffHasLasted) {
   EXPECT_EQ(glyphIds(out), glyphIds(word));
 }
 
+TEST_F(ComplexShaperTest, ShapesARunLongerThanTheBufferInSyllablesWhenTheHeapIsTight) {
+  // On a tight heap the glyph buffer cannot grow past the longest run shaped
+  // while memory was free; a longer word must still shape, not fall back.
+  // Long enough to need several pieces; the e-kar of দের must not take its
+  // word-start form where a piece begins.
+  const std::string word = std::string(kBengaliShaping[5].utf8) + kBengaliShaping[6].utf8 + kBengaliShaping[7].utf8 +
+                           kBengaliShaping[8].utf8 + "তাঁদের";  // শকুন্তলাপ্রকাশকর্তৃকঅভিজ্ঞানতাঁদের
+  std::string whole;
+  ASSERT_TRUE(shaper.shape(word.c_str(), whole));
+  ComplexShaper::releaseAll();
+
+  std::string out;
+  ASSERT_TRUE(shaper.shape(kBengaliShaping[5].utf8, out));  // sizes the buffer for 8 codepoints
+  ESP.empty = true;                                         // no reservation passes: every piece must fit that buffer
+  ASSERT_TRUE(shaper.shape(word.c_str(), out));
+  ESP.empty = false;
+  EXPECT_EQ(out, whole) << "pieces shaped with their neighbours must match the whole word";
+
+  const uint32_t reused = ComplexShaper::memoryStats().reusedRuns;
+  ASSERT_TRUE(shaper.shape(word.c_str(), out));
+  EXPECT_EQ(ComplexShaper::memoryStats().reusedRuns, reused) << "a run shaped in pieces must not be cached";
+  EXPECT_EQ(out, whole);
+}
+
 TEST_F(ComplexShaperTest, MakesRoomForANewFaceWhenTheBudgetHoldsOnlyOne) {
   // Two faces of the Bengali tables (distinct keys, so not shared) do not fit
   // together; the second shaper must drop the first face rather than give up.

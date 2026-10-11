@@ -232,6 +232,7 @@ TEST(IndicLineBreaks, NeverSplitASyllableInAnyScript) {
   EXPECT_FALSE(indic::syllableBreakAllowed(0x0D15, 0x0D57));  // before Malayalam au length mark
   EXPECT_FALSE(indic::syllableBreakAllowed(0x0DCA, indic::ZWJ));
   EXPECT_FALSE(indic::syllableBreakAllowed(indic::ZWJ, 0x0DC2));
+  EXPECT_FALSE(indic::syllableBreakAllowed(indic::MALAYALAM_DOT_REPH, 0x0D24));  // dot reph, then its base
   EXPECT_TRUE(indic::syllableBreakAllowed(DEVA_I, DEVA_KA));
   EXPECT_TRUE(indic::syllableBreakAllowed(0x0C3F, 0x0C15));  // Telugu: after a vowel sign
 }

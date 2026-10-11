@@ -25,8 +25,17 @@ namespace ot {
 // run could not be shaped: the heap check refused the buffer's reservation
 // (buffer.successful stays true), or the font's lookups failed the run by
 // growing it past its limit, nesting too deep or running too long.
+//
+// `context` marks the first `before` and last `after` codepoints as context:
+// they shape with the rest, so a piece of a longer run sees its neighbours
+// (word-start 'init', lookahead rules, kerning), but their glyphs are dropped
+// from the result.
 bool shape(const Face& face, const Scale& scale, const Plan& plan, const uint32_t* codepoints, unsigned count,
-           Buffer& buffer);
+           Buffer& buffer, const RunContext& context = {});
+
+// The longest run shape() can take without growing the buffer's reservation,
+// so without consulting the heap check.
+unsigned maxRunLength(const Buffer& buffer);
 
 // The OpenType language systems to try for a BCP 47 language tag (the
 // book's dc:language), zero-terminated. Unknown languages select the

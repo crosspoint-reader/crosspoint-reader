@@ -66,6 +66,7 @@ bool Buffer::prepare(const unsigned maxGlyphs) {
   successful = true;
   serial = 0;
   randomState = 1;
+  partialContext = false;
   hasDefaultIgnorables = hasBrokenSyllable = hasGposAttachment = false;
   digest = Digest();
   if (maxGlyphs > UINT16_MAX + 1u) return false;  // `indices` holds glyph positions as uint16_t

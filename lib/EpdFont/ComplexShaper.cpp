@@ -699,30 +699,89 @@ bool ComplexShaper::appendShapedRun(const char* run, const size_t length, const 
   ot::Buffer& buffer = *gBuffer;
   ot::Scale scale;
   scale.set(static_cast<int32_t>(scale26_6_), (scale26_6_ + 32) >> 6, face_->face.upem());
-  const bool shaped =
-      ot::shape(face_->face, scale, *plan, codepoints.data(), static_cast<unsigned>(codepoints.size()), buffer);
-  gShapedRuns++;
-  if (!shaped) return false;
+  const auto appendGlyphs = [&] {
+    for (unsigned i = 0; i < buffer.len(); i++) {
+      const ot::GlyphPosition& pos = buffer.pos[i];
+      const uint32_t glyph = buffer.info[i].codepoint;
+      int32_t xAdvance = pos.xAdvance;
+      // Keep what GPOS added to the hmtx advance; marks it zeroed stay zero.
+      if (advanceSource_ != nullptr && !(buffer.info[i].isMark() && xAdvance == 0)) {
+        const int32_t own = advanceSource_(advanceCtx_, glyph);
+        if (own >= 0) xAdvance += own - scale.emScaleX(face_->face.advance(glyph));
+      }
+      // 26.6 -> 12.4, rounded.
+      appendToken(shaping::advanceToken((xAdvance + 2) >> 2), out);
+      const int dx = roundPixels(pos.xOffset);
+      const int dy = -roundPixels(pos.yOffset);  // font y grows up, the screen's down
+      if (dx != 0 || dy != 0) appendToken(shaping::offsetToken(dx, dy), out);
+      const uint32_t gid = glyph <= shaping::GLYPH_TOKEN_MAX_GID ? glyph : 0;
+      appendToken(shaping::glyphToken(gid), out);
+    }
+  };
 
   const size_t start = out.size();
-  for (unsigned i = 0; i < buffer.len(); i++) {
-    const ot::GlyphPosition& pos = buffer.pos[i];
-    const uint32_t glyph = buffer.info[i].codepoint;
-    int32_t xAdvance = pos.xAdvance;
-    // Keep what GPOS added to the hmtx advance; marks it zeroed stay zero.
-    if (advanceSource_ != nullptr && !(buffer.info[i].isMark() && xAdvance == 0)) {
-      const int32_t own = advanceSource_(advanceCtx_, glyph);
-      if (own >= 0) xAdvance += own - scale.emScaleX(face_->face.advance(glyph));
+  const auto count = static_cast<unsigned>(codepoints.size());
+  gShapedRuns++;
+  if (ot::shape(face_->face, scale, *plan, codepoints.data(), count, buffer)) {
+    appendGlyphs();
+    cacheStore(this, scale26_6_, hash, run, length, out.data() + start, out.size() - start);
+  } else {
+    // A failed run with buffer.successful still set had its reservation
+    // refused: on a tight heap the buffer stays as large as the longest run
+    // shaped while memory was free. Rather than drop a longer word to
+    // unshaped text, shape it in pieces split between syllables: as many
+    // syllables as the buffer holds, or one syllable when it holds fewer
+    // (its smaller reservation may still pass). Each piece shapes with the
+    // syllable on either side as context, so word-start forms, lookahead
+    // rules and kerning across the split match the whole run; when that does
+    // not fit, with one codepoint on either side, before, after, then none.
+    // The cache does not keep the pieces, so the word shapes whole once
+    // memory is back.
+    if (!buffer.successful) return false;
+    const auto breakAt = [&](const unsigned i) {
+      return i == 0 || i == count || indic::syllableBreakAllowed(codepoints[i - 1], codepoints[i]);
+    };
+    const auto prevBreak = [&](unsigned i) {
+      do i--;
+      while (!breakAt(i));
+      return i;
+    };
+    const auto nextBreak = [&](unsigned i) {
+      do i++;
+      while (!breakAt(i));
+      return i;
+    };
+    for (unsigned begin = 0; begin < count;) {
+      const unsigned limit = ot::maxRunLength(buffer);
+      const unsigned from = begin > 0 ? prevBreak(begin) : 0;
+      unsigned end = nextBreak(begin);
+      while (end < count) {
+        const unsigned next = nextBreak(end);
+        if ((next < count ? nextBreak(next) : next) - from > limit) break;
+        end = next;
+      }
+      // Context per attempt, before and after: 2 = the syllable, 1 = one codepoint.
+      static constexpr uint8_t CONTEXT[][2] = {{2, 2}, {1, 1}, {1, 0}, {0, 1}, {0, 0}};
+      bool shaped = false;
+      for (unsigned level = 0; level < sizeof(CONTEXT) / sizeof(CONTEXT[0]) && !shaped; level++) {
+        const uint8_t wantBefore = begin == 0 ? 0 : CONTEXT[level][0];
+        const uint8_t wantAfter = end == count ? 0 : CONTEXT[level][1];
+        const unsigned before = wantBefore == 2 ? begin - from : wantBefore;
+        const unsigned after = wantAfter == 2 ? nextBreak(end) - end : wantAfter;
+        const ot::RunContext context{before, after, wantBefore == 1 || wantAfter == 1};
+        shaped = ot::shape(face_->face, scale, *plan, codepoints.data() + begin - before,
+                           before + (end - begin) + after, buffer, context);
+        if (!buffer.successful) break;
+      }
+      if (!shaped) {
+        out.resize(start);
+        return false;
+      }
+      appendGlyphs();
+      begin = end;
     }
-    // 26.6 -> 12.4, rounded.
-    appendToken(shaping::advanceToken((xAdvance + 2) >> 2), out);
-    const int dx = roundPixels(pos.xOffset);
-    const int dy = -roundPixels(pos.yOffset);  // font y grows up, the screen's down
-    if (dx != 0 || dy != 0) appendToken(shaping::offsetToken(dx, dy), out);
-    const uint32_t gid = glyph <= shaping::GLYPH_TOKEN_MAX_GID ? glyph : 0;
-    appendToken(shaping::glyphToken(gid), out);
   }
-  cacheStore(this, scale26_6_, hash, run, length, out.data() + start, out.size() - start);
+  // The memo keeps either form: a scope's second pass must match its first.
   memoStore(this, scale26_6_, hash, run, length, out.data() + start, out.size() - start);
   return true;
 }

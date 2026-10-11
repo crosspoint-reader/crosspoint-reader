@@ -55,6 +55,8 @@ static_assert(scriptsAreConsecutiveBlocks(), "scriptOf() indexes SCRIPTS by bloc
 constexpr uint32_t ZWNJ = 0x200C;
 constexpr uint32_t ZWJ = 0x200D;
 constexpr uint32_t DOTTED_CIRCLE = 0x25CC;
+// Written before the consonant whose syllable it belongs to.
+constexpr uint32_t MALAYALAM_DOT_REPH = 0x0D4E;
 
 // Codepoints every Indic script uses, which belong to the script of the text
 // around them: the Vedic stress signs and dandas (encoded in the Devanagari
@@ -205,12 +207,13 @@ constexpr bool isDependentSign(const uint32_t cp) {
 }
 
 // False when a line break between `prev` and `cur` would split an Indic
-// syllable: before a dependent sign, after a virama, or at a joiner inside
-// Indic text (after a letter it steers, or before the consonant a ZWJ binds).
+// syllable: before a dependent sign, after a virama or dot reph, or at a
+// joiner inside Indic text (after a letter it steers, or before the consonant
+// a ZWJ binds).
 // Each half of a split syllable would shape on its own. Joiners in other
 // text, such as Persian ZWNJ or emoji ZWJ sequences, never block a break.
 constexpr bool syllableBreakAllowed(const uint32_t prev, const uint32_t cur) {
-  if (isDependentSign(cur) || isVirama(prev)) return false;
+  if (isDependentSign(cur) || isVirama(prev) || prev == MALAYALAM_DOT_REPH) return false;
   if ((cur == ZWNJ || cur == ZWJ) && scriptOf(prev) != nullptr) return false;
   return !(prev == ZWJ && scriptOf(cur) != nullptr);
 }

@@ -61,6 +61,18 @@ void writeDigest(const Digest& digest, uint8_t* record);
 // it takes to rule the glyph out.
 bool digestRecordMayHave(const uint8_t* record, uint32_t glyph);
 
+// Mask bit of context codepoints (see shape()), below the feature bits.
+constexpr uint32_t CONTEXT_MASK = 1u << 0;
+
+// Codepoints around a piece of a longer run, shaped but not output.
+struct RunContext {
+  unsigned before = 0;
+  unsigned after = 0;
+  // The context may start or end inside a syllable: no dotted circle for a
+  // context syllable that looks broken only because it was cut.
+  bool partial = false;
+};
+
 struct GlyphInfo {
   uint32_t codepoint;   // Unicode until glyphs are mapped, then the glyph ID
   uint32_t mask;        // feature bits that apply to this glyph
@@ -151,8 +163,9 @@ struct Buffer {
   // recurse without end.
   int maxOps = 0;
   bool successful = true;
-  uint8_t serial = 0;        // allocates ligature IDs (HarfBuzz's next_serial)
-  uint32_t randomState = 1;  // the 'rand' feature's generator
+  uint8_t serial = 0;           // allocates ligature IDs (HarfBuzz's next_serial)
+  uint32_t randomState = 1;     // the 'rand' feature's generator
+  bool partialContext = false;  // see RunContext::partial
   bool hasDefaultIgnorables = false;
   bool hasBrokenSyllable = false;
   bool hasGposAttachment = false;

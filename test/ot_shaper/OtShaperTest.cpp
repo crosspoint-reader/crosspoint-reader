@@ -68,14 +68,18 @@ const std::vector<Fixture>& fixtures() {
   return all;
 }
 
-// Glyph IDs and positions of a shaped word, flattened for comparison.
-std::vector<int32_t> shapeWord(const ot::Face& face, const ot::Plan& plan, const char* word) {
+// Glyph IDs and positions of a shaped word, flattened for comparison; the
+// first `before` and last `after` codepoints are context only.
+std::vector<int32_t> shapeWord(const ot::Face& face, const ot::Plan& plan, const char* word, const unsigned before = 0,
+                               const unsigned after = 0, const bool partial = false) {
   ot::Scale scale;
   scale.set(2133, 33, face.upem());
   ot::Buffer buffer;
   const std::vector<uint32_t> cps = utf32(word);
   std::vector<int32_t> out;
-  if (!ot::shape(face, scale, plan, cps.data(), static_cast<unsigned>(cps.size()), buffer)) return out;
+  if (!ot::shape(face, scale, plan, cps.data(), static_cast<unsigned>(cps.size()), buffer, {before, after, partial})) {
+    return out;
+  }
   for (unsigned i = 0; i < buffer.len(); i++) {
     out.insert(out.end(), {static_cast<int32_t>(buffer.info[i].codepoint), buffer.pos[i].xAdvance,
                            buffer.pos[i].xOffset, buffer.pos[i].yOffset});
@@ -182,6 +186,39 @@ void expectSamePlan(const ot::Plan& built, const ot::Plan& loaded, const std::st
 // The converter compiles the plans in Python (shaping_blob.py); loading one
 // must give exactly the plan the shaper builds from the font, in every
 // language the firmware maps and for mixed requests.
+TEST(OtShaperContext, PiecesShapedWithTheirNeighboursMatchTheWholeWord) {
+  const std::vector<uint8_t> font = readFixture("NotoSansBengali-Regular.layout");
+  ot::Face face;
+  ASSERT_TRUE(face.init(tablesOf(font)));
+  ot::Plan plan;
+  ASSERT_TRUE(plan.build(face, ot::Script::Bengali, ot::languageTagsFor("")));
+
+  // তাঁ | দের: alone, the second piece's e-kar takes its word-start form.
+  const std::vector<int32_t> whole = shapeWord(face, plan, "তাঁদের");
+  std::vector<int32_t> pieces = shapeWord(face, plan, "তাঁদে", 0, 2);       // দে as context
+  const std::vector<int32_t> tail = shapeWord(face, plan, "তাঁদের", 3, 0);  // তাঁ as context
+  ASSERT_FALSE(pieces.empty());
+  ASSERT_FALSE(tail.empty());
+  pieces.insert(pieces.end(), tail.begin(), tail.end());
+  EXPECT_EQ(pieces, whole);
+  EXPECT_NE(shapeWord(face, plan, "দের"), tail) << "the e-kar should differ without context";
+
+  // One codepoint of a syllable as context: the lone candrabindu would look
+  // like a broken cluster, but gets no dotted circle, so দের stays mid-word.
+  EXPECT_EQ(shapeWord(face, plan, "ঁদের", 1, 0, true), tail);
+
+  // A context syllable broken in the whole word too keeps its dotted circle,
+  // after which the next e-kar does take its word-start form.
+  const std::vector<int32_t> broken = shapeWord(face, plan, "েদের");
+  std::vector<int32_t> brokenPieces = shapeWord(face, plan, "েদে", 0, 2);
+  const std::vector<int32_t> brokenTail = shapeWord(face, plan, "েদের", 1, 0);
+  brokenPieces.insert(brokenPieces.end(), brokenTail.begin(), brokenTail.end());
+  EXPECT_EQ(brokenPieces, broken);
+
+  // Context of the whole word leaves nothing.
+  EXPECT_TRUE(shapeWord(face, plan, "তাঁদের", 3, 3).empty());
+}
+
 TEST(OtPlanCompiled, LoadedPlansMatchBuiltPlans) {
   std::vector<std::vector<uint32_t>> requests = {{0}};
   for (const auto& language : ot::ucd::LANGUAGES) requests.emplace_back(language.tags, language.tags + 3);

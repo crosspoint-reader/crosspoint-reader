@@ -148,7 +148,8 @@ void insertDottedCircles(const Face& face, Buffer& buffer, const uint8_t brokenS
   };
   while (i < len && buffer.successful) {
     const unsigned syllable = buffer.info[i].syllable;
-    if (lastSyllable == syllable || buffer.info[i].syllableType() != brokenSyllableType) {
+    if (lastSyllable == syllable || buffer.info[i].syllableType() != brokenSyllableType ||
+        (buffer.partialContext && (buffer.info[i].mask & CONTEXT_MASK))) {
       push(buffer.info[i++]);
       continue;
     }
@@ -168,8 +169,9 @@ void insertDottedCircles(const Face& face, Buffer& buffer, const uint8_t brokenS
 }
 
 bool shape(const Face& face, const Scale& scale, const Plan& plan, const uint32_t* codepoints, const unsigned count,
-           Buffer& buffer) {
+           Buffer& buffer, const RunContext& context) {
   if (!buffer.prepare(count * MAX_LENGTH_FACTOR + MAX_LENGTH_EXTRA)) return false;
+  buffer.partialContext = context.partial;
   if (!count) return true;
   buffer.maxOps = std::max(static_cast<int>(count) * MAX_OPS_FACTOR, MAX_OPS_MIN);
 
@@ -178,6 +180,7 @@ bool shape(const Face& face, const Scale& scale, const Plan& plan, const uint32_
     GlyphInfo g{};
     g.codepoint = codepoints[i];
     g.mask = plan.globalMask;
+    if (i < context.before || i + context.after >= count) g.mask |= CONTEXT_MASK;
     setUnicodeProps(g, buffer);
     if (g.isZwj()) g.unicodeProps |= uprops::CONTINUATION;
     buffer.info.push_back(g);
@@ -210,7 +213,24 @@ bool shape(const Face& face, const Scale& scale, const Plan& plan, const uint32_
   if (!buffer.successful) return false;
   position(face, scale, plan, buffer);
   hideDefaultIgnorables(face, buffer);
+  if (context.before || context.after) {
+    // Every glyph keeps its source codepoint's mask: drop the context's.
+    unsigned kept = 0;
+    for (unsigned i = 0; i < buffer.len(); i++) {
+      if (buffer.info[i].mask & CONTEXT_MASK) continue;
+      buffer.info[kept] = buffer.info[i];
+      buffer.pos[kept] = buffer.pos[i];
+      kept++;
+    }
+    buffer.info.resize(kept);
+    buffer.pos.resize(kept);
+  }
   return buffer.successful;
+}
+
+unsigned maxRunLength(const Buffer& buffer) {
+  const size_t capacity = buffer.info.capacity();
+  return capacity < MAX_LENGTH_EXTRA ? 0 : static_cast<unsigned>((capacity - MAX_LENGTH_EXTRA) / MAX_LENGTH_FACTOR);
 }
 
 const uint32_t* languageTagsFor(const char* bcp47) {
