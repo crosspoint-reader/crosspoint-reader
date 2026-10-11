@@ -33,7 +33,19 @@ std::string deobfuscateFromBase64(const char* encoded, bool* ok = nullptr);
 // *before* allocating the result buffer, so a corrupt or hand-edited JSON blob
 // cannot make us reserve kilobytes of contiguous heap. Reports that case through
 // tooLong (which also sets *ok to false).
-std::string deobfuscateFromBase64(const char* encoded, size_t maxDecodedLength, bool* ok, bool* tooLong = nullptr);
+//
+// writerKey, when given, is the 6-byte key of the device that obfuscated the
+// value (see parseKeyId()), for data written on another reader.
+std::string deobfuscateFromBase64(const char* encoded, size_t maxDecodedLength, bool* ok, bool* tooLong = nullptr,
+                                  const uint8_t* writerKey = nullptr);
+
+// This device's key as text, lowercase and dashed ("aa-bb-cc-dd-ee-ff"): the form
+// wifi.json records beside the passwords, so a file carried to another reader
+// still says which key its passwords need.
+std::string deviceKeyId();
+
+// Parses a dashed key id back into its 6 bytes. False on anything malformed.
+bool parseKeyId(const std::string& id, uint8_t key[6]);
 
 // Self-test: verifies round-trip obfuscation with hardware key. Logs PASS/FAIL.
 void selfTest();

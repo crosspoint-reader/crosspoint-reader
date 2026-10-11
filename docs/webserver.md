@@ -62,6 +62,13 @@ If the network requires a password:
 
 **Note:** If you've previously connected to this network, the saved password will be used automatically.
 
+If the network turns the saved password down (it has been changed on the router, say), the keyboard
+appears again headed **Saved password may be wrong**. Type the current password; once it connects you
+are asked whether to save it over the old one. **Back** returns to the list and keeps the saved one.
+Picking that network again in the same session goes straight to the keyboard.
+
+Saved passwords travel with the SD card: a card moved from another reader keeps working.
+
 ### Connection Process
 
 The device will display "Connecting..." while establishing the connection. This typically takes 5-10 seconds.
