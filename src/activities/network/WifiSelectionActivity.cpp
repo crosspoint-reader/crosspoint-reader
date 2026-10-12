@@ -413,6 +413,14 @@ void WifiSelectionActivity::processWifiScanResults() {
       continue;
     }
 
+    // Every access point of a saved network, as this scan heard it. The connect's own sweep uses
+    // the same dwell (applyScanBudget()) and picks the strongest it heard, so on a mesh this shows
+    // whether a near AP can go unheard and leave the reader on a far one.
+    if (WIFI_STORE.hasSavedCredential(ssid)) {
+      LOG_DBG("WIFI", "Scan heard %s from %s ch %d at %d dBm", ssid, formatMacDashed(WiFi.BSSID(i)).c_str(),
+              static_cast<int>(WiFi.channel(i)), static_cast<int>(rssi));
+    }
+
     auto it =
         std::find_if(networks.begin(), networks.end(), [&ssid](const WifiNetworkInfo& n) { return n.ssid == ssid; });
     if (it == networks.end()) {
