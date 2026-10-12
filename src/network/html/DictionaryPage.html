@@ -1,207 +1,161 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>%%CROSSPOINT%% - Dictionaries</title>
+    <title>Dictionaries - %%CROSSPOINT%%</title>
     <script src="/js/jszip.min.js"></script>
     <style>
-      :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-        --danger-color: #e74c3c;
-        --danger-hover: #c0392b;
-        --notice-bg: #fff8e1;
-        --notice-border: #ffd54f;
-        --notice-color: #5d4e0a;
-        --ok-bg: #d4edda;
-        --ok-color: #155724;
-        --err-bg: #f8d7da;
-        --err-color: #721c24;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          --notice-bg: #4a4030;
-          --notice-border: #b89a3e;
-          --notice-color: #f3e5a0;
-          --ok-bg: #2e4a35;
-          --ok-color: #cdebd3;
-          --err-bg: #5a3034;
-          --err-color: #f6d5d8;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 { color: var(--title-color); margin-top: 0; }
-      h3 { margin: 0 0 4px 0; }
-      .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
+      <!--#include file="shared/Theme.css.inc" -->
       <!--#include file="shared/NavLinks.css.inc" -->
 
+      /* The theme's .hidden is a class; this page shows and hides with the attribute. */
+      [hidden] { display: none !important; }
+      .card > h2 { margin-bottom: 4px; }
+      .hint { color: var(--text-muted); font-size: 0.875rem; margin: 0 0 12px; }
+      .meta { color: var(--text-muted); font-size: 0.875rem; overflow-wrap: anywhere; }
+      input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; vertical-align: -2px; }
+
+      /* Installed dictionaries: one row each, Remove on the right or under the text on a narrow screen. */
       .dict {
-        border-bottom: 1px solid var(--border-color);
-        padding: 12px 0;
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        gap: 12px;
+        gap: 10px 16px;
+        padding: 14px 0;
       }
-      .dict:last-child { border-bottom: none; }
+      .dict + .dict { border-top: 1px solid var(--border); }
       .dict-info { flex: 1; min-width: 0; }
-      .meta { color: var(--label-color); font-size: 0.9em; overflow-wrap: anywhere; }
-      .msgs { margin: 6px 0 0; padding-left: 18px; font-size: 0.9em; }
-      .msg-error { color: var(--danger-color); }
-      .msg-warn { color: var(--label-color); }
-      .badge {
-        display: inline-block;
-        font-size: 0.7em;
-        font-weight: 600;
-        padding: 2px 8px;
-        border-radius: 10px;
-        vertical-align: middle;
-        margin-left: 6px;
-      }
-      .badge-ok { background: var(--ok-bg); color: var(--ok-color); }
-      .badge-warn { background: var(--notice-bg); color: var(--notice-color); border: 1px solid var(--notice-border); }
-      .badge-error { background: var(--err-bg); color: var(--err-color); }
-      .btn {
-        padding: 6px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9em;
-      }
-      .btn-danger { background: var(--danger-color); color: white; }
-      .btn-danger:hover { background: var(--danger-hover); }
-      .btn-primary { background: var(--accent-color); color: white; }
-      .btn-primary:hover { background: var(--accent-hover-color); }
-      .btn[disabled] { opacity: 0.5; cursor: default; }
-      .empty { color: var(--label-color); text-align: center; padding: 20px; }
-      .hint { color: var(--label-color); font-size: 0.9em; margin: 0 0 8px; }
-      .notice {
-        background: var(--notice-bg);
-        border: 1px solid var(--notice-border);
-        color: var(--notice-color);
-        border-radius: 6px;
-        padding: 10px 14px;
-        margin: 0 0 12px;
-        font-size: 0.95em;
-      }
+      .dict h3 { font-size: 1rem; margin: 0 0 2px; overflow-wrap: anywhere; }
+      .dict > .btn { flex: none; }
+      .msgs { margin: 6px 0 0; padding-left: 18px; font-size: 0.875rem; }
+      .msg-error { color: var(--danger); }
+      .msg-warn { color: var(--text-muted); }
+      h3 .badge { margin-left: 8px; }
+      .badge-warn { background: var(--warn-soft); color: var(--warn-text); }
+      .badge-error { background: var(--danger-soft); color: var(--danger); }
+
+      .card .notice { margin: 12px 0 16px; }
       .notice a { color: inherit; font-weight: 600; }
       .drop-zone {
-        border: 2px dashed var(--border-color);
-        border-radius: 8px;
-        padding: 16px;
+        border: 2px dashed var(--control-border);
+        border-radius: var(--radius);
+        background: var(--surface-2);
+        padding: 24px 16px;
         text-align: center;
+        transition: border-color 0.15s, background 0.15s;
       }
-      .drop-zone.over { border-color: var(--accent-color); }
+      .drop-zone.over { border-color: var(--accent); background: var(--accent-soft); }
+      .drop-zone p { margin: 8px 0 0; color: var(--text-muted); font-size: 0.875rem; }
+      .drop-zone input[type="file"] { font: inherit; max-width: 100%; color: var(--text-muted); }
+      input[type="file"]::file-selector-button {
+        font: inherit;
+        font-weight: 600;
+        padding: 8px 16px;
+        margin-right: 12px;
+        border: 1px solid var(--control-border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      input[type="file"]::file-selector-button:hover { background: var(--border); }
+
       /* A fieldset only so that one switch disables every field while installing. */
       fieldset#found { border: 0; margin: 0; padding: 0; min-width: 0; }
-      .drop-zone p { margin: 8px 0 0; color: var(--label-color); font-size: 0.9em; }
       .pending {
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 12px 16px;
         margin-top: 12px;
       }
       .pending.excluded { opacity: 0.6; }
-      .pending label { display: block; margin-top: 8px; }
-      .pending input[type="text"] {
-        padding: 4px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        background: var(--bg);
-        color: var(--font-color);
-        min-width: 200px;
-      }
-      .files { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.9em; }
-      .files td { padding: 3px 6px 3px 0; border-top: 1px solid var(--border-color); overflow-wrap: anywhere; }
-      .files td.size { text-align: right; white-space: nowrap; }
+      .pending h3 { font-size: 1rem; margin: 0 0 2px; overflow-wrap: anywhere; }
+      .pending label { display: block; margin-top: 10px; }
+      .pending label:not(.meta) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+      .pending input[type="text"] { width: 260px; }
+      .files { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+      .files td { padding: 5px 10px 5px 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; vertical-align: top; }
+      .files td.size { text-align: right; white-space: nowrap; padding-right: 0; }
+      #found > .hint { margin: 12px 0 0; }
+
       .toolbar {
         display: flex;
-        gap: 10px;
+        gap: 12px;
         flex-wrap: wrap;
         align-items: center;
-        margin-top: 12px;
+        margin-top: 16px;
       }
-      .progress { margin-top: 12px; }
-      .bar { height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden; margin-top: 4px; }
-      .bar > div { height: 100%; width: 0; background: var(--accent-color); transition: width 0.2s; }
+      .progress { margin-top: 16px; }
+      .bar { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+      .bar > div { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
       #status {
-        margin-top: 10px;
-        padding: 8px;
-        border-radius: 4px;
+        margin-top: 16px;
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        overflow-wrap: anywhere;
         display: none;
       }
-      .status-ok { background: var(--ok-bg); color: var(--ok-color); display: block !important; }
-      .status-err { background: var(--err-bg); color: var(--err-color); display: block !important; }
+      #status.status-ok { display: block; background: var(--accent-soft); color: var(--accent-text);
+        border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+      #status.status-err { display: block; background: var(--danger-soft); color: var(--danger);
+        border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+
+      @media (max-width: 600px) {
+        .dict { flex-wrap: wrap; }
+        .dict-info { flex-basis: 100%; }
+        /* File name and size on one line, the "unpacked from" note under them. */
+        .files, .files tbody { display: block; }
+        .files tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px;
+          border-top: 1px solid var(--border); padding: 5px 0; }
+        .files td { border-top: 0; padding: 0; }
+        .files td.meta { grid-column: 1 / -1; grid-row: 2; }
+        .files td.meta:empty { display: none; }
+      }
     </style>
   </head>
   <body>
-    <h1>📚 %%CROSSPOINT%%</h1>
+    <!--#include file="shared/PageHeader.html.inc" -->
 
-    <!--#include file="shared/NavLinks.html.inc" -->
+    <main class="page page-narrow">
+      <div class="page-head">
+        <h1>Dictionaries</h1>
+        <p class="page-intro">StarDict dictionaries for looking words up while you read.</p>
+      </div>
 
-    <div class="card">
-      <h2>Installed Dictionaries</h2>
-      <p class="hint">Choose the one to look words up in on the reader: Settings → Reader → Dictionary.</p>
-      <div id="installed"><p class="empty">Loading...</p></div>
-    </div>
+      <section class="card">
+        <h2>Installed dictionaries</h2>
+        <p class="hint">Choose the one to look words up in on the reader: Settings → Reader → Dictionary.</p>
+        <div id="installed"><p class="empty">Loading...</p></div>
+      </section>
 
-    <div class="card">
-      <h2>Install a Dictionary</h2>
-      <p class="notice">
-        StarDict dictionaries only. Choose the archive you downloaded (.zip, .tar.gz, .tgz, .tar.bz2 or .tar)
-        or the dictionary's own files (.ifo, .idx or .idx.gz, .dict or .dict.dz, and an optional .syn).
-        Compressed parts are unpacked here in your browser, so the reader gets files it can use.
-        <a href="https://github.com/jpirnay/witchhunt-reader/blob/master/docs/dictionary.md#where-to-find-dictionaries"
-          target="_blank" rel="noopener">Where to find dictionaries</a>
-      </p>
-      <div class="drop-zone" id="dropZone">
-        <input type="file" id="dictFiles" multiple />
-        <p>or drop the files here</p>
-      </div>
-      <fieldset id="found"></fieldset>
-      <div class="toolbar" id="installBar" hidden>
-        <button id="installBtn" class="btn btn-primary" type="button">Install</button>
-        <span class="meta" id="installTotal"></span>
-      </div>
-      <div class="progress" id="progress" hidden>
-        <div class="meta" id="progressLabel"></div>
-        <div class="bar"><div id="progressBar"></div></div>
-      </div>
-      <div id="status"></div>
-    </div>
+      <section class="card">
+        <h2>Install a dictionary</h2>
+        <p class="notice">
+          StarDict dictionaries only. Choose the archive you downloaded (.zip, .tar.gz, .tgz, .tar.bz2 or .tar)
+          or the dictionary's own files (.ifo, .idx or .idx.gz, .dict or .dict.dz, and an optional .syn).
+          Compressed parts are unpacked here in your browser, so the reader gets files it can use.
+          <a href="https://github.com/jpirnay/witchhunt-reader/blob/master/docs/dictionary.md#where-to-find-dictionaries"
+            target="_blank" rel="noopener">Where to find dictionaries</a>
+        </p>
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="dictFiles" multiple />
+          <p>or drop the files here</p>
+        </div>
+        <fieldset id="found"></fieldset>
+        <div class="toolbar" id="installBar" hidden>
+          <button id="installBtn" class="btn btn-primary" type="button">Install</button>
+          <span class="meta" id="installTotal"></span>
+        </div>
+        <div class="progress" id="progress" hidden>
+          <div class="meta" id="progressLabel"></div>
+          <div class="bar"><div id="progressBar"></div></div>
+        </div>
+        <div id="status"></div>
+      </section>
+    </main>
 
   <script>
 <!--#include file="js/bunzip2.js.inc" -->
@@ -365,7 +319,7 @@
       }
       row.appendChild(info);
 
-      const remove = el('button', 'btn btn-danger', 'Remove');
+      const remove = el('button', 'btn btn-danger btn-small', 'Remove');
       remove.type = 'button';
       remove.addEventListener('click', () => removeDictionary(root + '/' + folder, (ifo && ifo.bookname) || folder));
       row.appendChild(remove);
