@@ -968,6 +968,77 @@ async function realBookChecks(file) {
   check(newAgain.length === 0, `${name}: a second pass breaks no link (${newAgain.slice(0, 3).map((l) => l.value).join('; ')})`);
 }
 
+await test('Auto sizes pictures for the connected reader, whatever its model', async () => {
+  const answer = (status) => async () => ({ ok: true, status: 200, json: async () => status });
+  w.fetch = answer({ version: 't', deviceType: 'X4 Pro', displayWidth: 480, displayHeight: 800 });
+  await w.fetchVersion();
+  run("setDeviceTarget('auto')");
+  check(run('MAX_WIDTH') === 480 && run('MAX_HEIGHT') === 800, `X4 Pro: 480x800 (got ${run('MAX_WIDTH')}x${run('MAX_HEIGHT')})`);
+  w.fetch = answer({ version: 't', deviceType: 'T5S3', displayWidth: 960, displayHeight: 540 });
+  await w.fetchVersion();
+  check(run('MAX_WIDTH') === 540 && run('MAX_HEIGHT') === 960, `a landscape-reported panel is sized upright (got ${run('MAX_WIDTH')}x${run('MAX_HEIGHT')})`);
+  w.fetch = answer({ version: 't', deviceType: 'X3', displayWidth: 528, displayHeight: 792 });
+  await w.fetchVersion();
+  check(run('MAX_WIDTH') === 528 && run('MAX_HEIGHT') === 792, 'X3 keeps its profile');
+  w.fetch = () => Promise.reject(new w.TypeError('Failed to fetch (no device in the test harness)'));
+});
+
+// ---------------------------------------------------------------------------------------------
+// In place: the File Manager's Optimize action on books already on the card
+// ---------------------------------------------------------------------------------------------
+
+// Runs optimizeSelected() over the given books as if they were selected in the listing, with the
+// device answered here: /download hands out each book, /api/book/replace records what it is sent.
+async function optimizeInPlace(books) {
+  const sent = [];
+  w.fetch = async (url, opts = {}) => {
+    const u = new URL(url, 'http://127.0.0.1:8770');
+    if (u.pathname === '/download') {
+      const book = books.find((b) => b.path === u.searchParams.get('path'));
+      if (!book) return { ok: false, status: 404 };
+      return { ok: true, status: 200, blob: async () => new w.Blob([new w.Uint8Array(book.bytes)]) };
+    }
+    if (u.pathname === '/api/book/replace') {
+      sent.push({ path: u.searchParams.get('path'), keep: u.searchParams.get('keep'), bytes: new Uint8Array(await blobBytes(opts.body)) });
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    throw new w.TypeError('unexpected request ' + url);
+  };
+  w.document.getElementById('file-table').innerHTML = books.map((b) =>
+    `<input type="checkbox" class="select-item" checked data-path="${encodeURIComponent(b.path)}" data-name="${b.path.split('/').pop()}" data-type="file">`).join('');
+  setToggle('splitLongSectionsToggle', true);
+  run('openOptimizeSelectedModal()');
+  await w.optimizeSelected();
+  const states = books.map((_, i) => w.document.getElementById('optimizeState' + i).textContent);
+  w.fetch = () => Promise.reject(new w.TypeError('Failed to fetch (no device in the test harness)'));
+  return { sent, states };
+}
+
+await test('in place: a book whose chapters stay as they are keeps its reading state', async () => {
+  const { sent, states } = await optimizeInPlace([{ path: '/Books/small.epub', bytes: await smallBook() }]);
+  check(sent.length === 1 && sent[0].path === '/Books/small.epub', 'the optimized copy goes back to the same path');
+  check(sent[0] && sent[0].keep === '1', `keep=1 when nothing was split or collapsed (got ${sent[0] && sent[0].keep})`);
+  const book = sent[0] && await readBook(sent[0].bytes);
+  check(!!book && book.spine.length === 1, 'what is sent is a readable EPUB');
+  check(/→/.test(states[0]) && !/reset/.test(states[0]), `the row shows the sizes (${states[0]})`);
+});
+
+await test('in place: a split book starts afresh', async () => {
+  const { sent, states } = await optimizeInPlace([{ path: '/Books/long.epub', bytes: await longBook() }]);
+  check(sent.length === 1 && sent[0].keep === '0', `keep=0 when long chapters were split (got ${sent[0] && sent[0].keep})`);
+  check(/reading position reset/.test(states[0]), `the row says the position resets (${states[0]})`);
+});
+
+await test('in place: a DRM book fails on its own and the batch goes on', async () => {
+  const drm = await smallBook({
+    'META-INF/encryption.xml': encryptionXml([['http://www.w3.org/2001/04/xmlenc#aes128-cbc', 'OEBPS/ch1.xhtml']]),
+  });
+  const { sent, states } = await optimizeInPlace([
+    { path: '/Books/drm.epub', bytes: drm }, { path: '/Books/small.epub', bytes: await smallBook() }]);
+  check(/^Failed: .*DRM-protected/.test(states[0]), `the DRM book fails with the reason (${states[0]})`);
+  check(sent.length === 1 && sent[0].path === '/Books/small.epub', 'nothing is sent for it, and the next book is done');
+});
+
 const books = bookArgs.length ? bookArgs : [
   ...fs.readdirSync(path.join(ROOT, 'test', 'epubs')).filter((f) => f.endsWith('.epub')).map((f) => path.join(ROOT, 'test', 'epubs', f)),
   ...fs.readdirSync(path.join(ROOT, 'test', 'fixtures')).filter((f) => f.endsWith('.epub')).map((f) => path.join(ROOT, 'test', 'fixtures', f)),
