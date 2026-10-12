@@ -105,15 +105,17 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
 
   s.openEpubPath = doc["openEpubPath"] | std::string("");
   s.lastSleepImage = doc["lastSleepImage"] | SIZE_MAX;
-  s.readerActivityLoadCount = doc["readerActivityLoadCount"] | (uint8_t)0;
-  s.lastSleepFromReader = doc["lastSleepFromReader"] | false;
+  s.readerActivityLoadCount = doc["readerActivityLoadCount"].as<uint8_t>();
+  s.lastSleepFromReader = doc["lastSleepFromReader"].as<bool>();
   // Before Recent Books became a Browse Files list it had a grid/list switch: the grid is now
-  // the Covers view, the list the Details view.
-  const uint8_t fallbackView = (doc["recentBooksGridView"] | true) ? CrossPointSettings::BROWSER_VIEW_COVERS
-                                                                   : CrossPointSettings::BROWSER_VIEW_DETAILS;
+  // the Covers view, the list the Details view. Only a stored false chose the list.
+  const JsonVariantConst legacyGridView = doc["recentBooksGridView"];
+  const bool legacyListView = legacyGridView.is<bool>() && !legacyGridView.as<bool>();
+  const uint8_t fallbackView =
+      legacyListView ? CrossPointSettings::BROWSER_VIEW_DETAILS : CrossPointSettings::BROWSER_VIEW_COVERS;
   s.recentBooksView = doc["recentBooksView"] | fallbackView;
   if (s.recentBooksView >= CrossPointSettings::FILE_BROWSER_VIEW_COUNT) s.recentBooksView = fallbackView;
-  s.libraryTab = static_cast<uint8_t>(libraryTabFrom(doc["libraryTab"] | uint8_t{0}));
+  s.libraryTab = static_cast<uint8_t>(libraryTabFrom(doc["libraryTab"].as<uint8_t>()));
   s.addedBooksView = doc["addedBooksView"] | uint8_t{CrossPointSettings::BROWSER_VIEW_COVERS};
   if (s.addedBooksView >= CrossPointSettings::FILE_BROWSER_VIEW_COUNT) {
     s.addedBooksView = CrossPointSettings::BROWSER_VIEW_COVERS;
@@ -124,42 +126,42 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   }
   s.showBootScreen = doc["showBootScreen"] | true;
   JsonObject sync = doc["koReaderSyncSession"].as<JsonObject>();
-  s.koReaderSyncSession.active = sync["active"] | false;
+  s.koReaderSyncSession.active = sync["active"].as<bool>();
   s.koReaderSyncSession.epubPath = sync["epubPath"] | std::string("");
-  s.koReaderSyncSession.spineIndex = sync["spineIndex"] | 0;
-  s.koReaderSyncSession.page = sync["page"] | 0;
-  s.koReaderSyncSession.totalPagesInSpine = sync["totalPagesInSpine"] | 0;
-  s.koReaderSyncSession.paragraphIndex = sync["paragraphIndex"] | (uint16_t)0;
-  s.koReaderSyncSession.hasParagraphIndex = sync["hasParagraphIndex"] | false;
-  s.koReaderSyncSession.paragraphIndexBefore = sync["paragraphIndexBefore"] | (uint16_t)0;
-  s.koReaderSyncSession.visibleOffsetAtPage = sync["visibleOffsetAtPage"] | (uint32_t)0;
+  s.koReaderSyncSession.spineIndex = sync["spineIndex"].as<int>();
+  s.koReaderSyncSession.page = sync["page"].as<int>();
+  s.koReaderSyncSession.totalPagesInSpine = sync["totalPagesInSpine"].as<int>();
+  s.koReaderSyncSession.paragraphIndex = sync["paragraphIndex"].as<uint16_t>();
+  s.koReaderSyncSession.hasParagraphIndex = sync["hasParagraphIndex"].as<bool>();
+  s.koReaderSyncSession.paragraphIndexBefore = sync["paragraphIndexBefore"].as<uint16_t>();
+  s.koReaderSyncSession.visibleOffsetAtPage = sync["visibleOffsetAtPage"].as<uint32_t>();
   s.koReaderSyncSession.visibleOffsetAtNextPage = sync["visibleOffsetAtNextPage"] | (uint32_t)UINT32_MAX;
-  s.koReaderSyncSession.hasVisibleOffset = sync["hasVisibleOffset"] | false;
+  s.koReaderSyncSession.hasVisibleOffset = sync["hasVisibleOffset"].as<bool>();
   s.koReaderSyncSession.intent =
       static_cast<KOReaderSyncIntentState>(sync["intent"] | static_cast<uint8_t>(KOReaderSyncIntentState::COMPARE));
   s.koReaderSyncSession.outcome =
       static_cast<KOReaderSyncOutcomeState>(sync["outcome"] | static_cast<uint8_t>(KOReaderSyncOutcomeState::NONE));
-  s.koReaderSyncSession.resultSpineIndex = sync["resultSpineIndex"] | 0;
-  s.koReaderSyncSession.resultPage = sync["resultPage"] | 0;
-  s.koReaderSyncSession.resultParagraphIndex = sync["resultParagraphIndex"] | (uint16_t)0;
-  s.koReaderSyncSession.resultHasParagraphIndex = sync["resultHasParagraphIndex"] | false;
-  s.koReaderSyncSession.resultListItemIndex = sync["resultListItemIndex"] | (uint16_t)0;
-  s.koReaderSyncSession.resultHasListItemIndex = sync["resultHasListItemIndex"] | false;
-  s.koReaderSyncSession.resultVisibleOffset = sync["resultVisibleOffset"] | (uint32_t)0;
-  s.koReaderSyncSession.resultHasVisibleOffset = sync["resultHasVisibleOffset"] | false;
+  s.koReaderSyncSession.resultSpineIndex = sync["resultSpineIndex"].as<int>();
+  s.koReaderSyncSession.resultPage = sync["resultPage"].as<int>();
+  s.koReaderSyncSession.resultParagraphIndex = sync["resultParagraphIndex"].as<uint16_t>();
+  s.koReaderSyncSession.resultHasParagraphIndex = sync["resultHasParagraphIndex"].as<bool>();
+  s.koReaderSyncSession.resultListItemIndex = sync["resultListItemIndex"].as<uint16_t>();
+  s.koReaderSyncSession.resultHasListItemIndex = sync["resultHasListItemIndex"].as<bool>();
+  s.koReaderSyncSession.resultVisibleOffset = sync["resultVisibleOffset"].as<uint32_t>();
+  s.koReaderSyncSession.resultHasVisibleOffset = sync["resultHasVisibleOffset"].as<bool>();
   s.koReaderSyncSession.postAction =
       static_cast<KOReaderSyncPostAction>(sync["postAction"] | static_cast<uint8_t>(KOReaderSyncPostAction::Reader));
   s.koReaderSyncSession.postActionTarget = sync["postActionTarget"] | std::string("");
   s.koReaderSyncSession.autoPullEpubPath = sync["autoPullEpubPath"] | std::string("");
-  if (s.koReaderSyncSession.autoPullEpubPath.empty() && (sync["autoPullOnOpen"] | false)) {
+  if (s.koReaderSyncSession.autoPullEpubPath.empty() && sync["autoPullOnOpen"].as<bool>()) {
     LOG_DBG("CPS", "Legacy autoPullOnOpen state found without epubPath - ignoring");
   }
 
   JsonObject jump = doc["pendingBookmarkJump"].as<JsonObject>();
-  s.pendingBookmarkJump.active = jump["active"] | false;
+  s.pendingBookmarkJump.active = jump["active"].as<bool>();
   s.pendingBookmarkJump.bookPath = jump["bookPath"] | std::string("");
-  s.pendingBookmarkJump.spineIndex = jump["spineIndex"] | (uint16_t)0;
-  s.pendingBookmarkJump.pageNumber = jump["pageNumber"] | (uint16_t)0;
+  s.pendingBookmarkJump.spineIndex = jump["spineIndex"].as<uint16_t>();
+  s.pendingBookmarkJump.pageNumber = jump["pageNumber"].as<uint16_t>();
   return true;
 }
 
@@ -175,7 +177,7 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
     if (!field && !info.stringOffset) return;
 
     if (info.stringOffset) {
-      const char* strPtr = (const char*)&s + info.stringOffset;
+      const char* strPtr = reinterpret_cast<const char*>(&s) + info.stringOffset;
       if (info.obfuscated) {
         doc[std::string(info.key) + "_obf"] = obfuscation::obfuscateToBase64(strPtr);
       } else {
@@ -257,7 +259,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   // ignored below, so the compiled defaults win. Absent (0) counts as older,
   // which is exactly the case for every file written before the stamp existed.
   const bool staleGestureDefaults =
-      (doc["gestureDefaultsV"] | 0) < static_cast<int>(CrossPointSettings::GESTURE_DEFAULTS_VERSION);
+      doc["gestureDefaultsV"].as<int>() < static_cast<int>(CrossPointSettings::GESTURE_DEFAULTS_VERSION);
   // Cannot match on a board with no digitiser: the loop below walks the FILTERED
   // settings list, which carries no gesture rows there, so no gesture key ever
   // reaches this. Gated rather than left to be evaluated and always fail, because
@@ -282,7 +284,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     if (!field && !info.stringOffset) return;
 
     if (info.stringOffset) {
-      const char* strPtr = (const char*)&s + info.stringOffset;
+      const char* strPtr = reinterpret_cast<const char*>(&s) + info.stringOffset;
       const std::string fieldDefault = strPtr;  // current buffer = struct-initializer default
       std::string val;
       if (info.obfuscated) {
@@ -303,7 +305,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       } else {
         val = doc[info.key] | fieldDefault;
       }
-      char* destPtr = (char*)&s + info.stringOffset;
+      char* destPtr = reinterpret_cast<char*>(&s) + info.stringOffset;
       if (info.stringMaxLen == 0) {
         LOG_ERR("CPS", "Misconfigured SettingInfo: stringMaxLen is 0 for key '%s'", info.key);
         destPtr[0] = '\0';
@@ -370,7 +372,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   s.fontFamily = clamp(doc["fontFamily"] | (uint8_t)CrossPointSettings::BOOKERLY,
                        CrossPointSettings::BUILTIN_FONT_COUNT, CrossPointSettings::BOOKERLY);
   // Frontlight switch: dynamic in SettingsList, so it needs loading manually too.
-  s.frontlightOn = (doc["frontlightOn"] | 0) ? 1 : 0;
+  s.frontlightOn = doc["frontlightOn"].as<int>() != 0 ? 1 : 0;
   const char* dictName = doc["dictionaryName"] | "";
   strncpy(s.dictionaryName, dictName, sizeof(s.dictionaryName) - 1);
   s.dictionaryName[sizeof(s.dictionaryName) - 1] = '\0';
@@ -383,11 +385,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   const char* txtSfn = doc["txtSdFontFamilyName"] | "";
   strncpy(s.txtSdFontFamilyName, txtSfn, sizeof(s.txtSdFontFamilyName) - 1);
   s.txtSdFontFamilyName[sizeof(s.txtSdFontFamilyName) - 1] = '\0';
-  s.moveFinishedBooksToCompleted = doc["moveFinishedBooksToCompleted"] | (uint8_t)0;
-  s.removeFinishedBooksFromRecents = doc["removeFinishedBooksFromRecents"] | (uint8_t)0;
-  s.syncFinishedBookToKOReader = doc["syncFinishedBookToKOReader"] | (uint8_t)0;
+  s.moveFinishedBooksToCompleted = doc["moveFinishedBooksToCompleted"].as<uint8_t>();
+  s.removeFinishedBooksFromRecents = doc["removeFinishedBooksFromRecents"].as<uint8_t>();
+  s.syncFinishedBookToKOReader = doc["syncFinishedBookToKOReader"].as<uint8_t>();
   // Unknown bits (a file from a build with more layouts) are dropped by keyboard_layouts::enabled().
-  s.keyboardLayouts = doc["keyboardLayouts"] | (uint16_t)0;
+  s.keyboardLayouts = doc["keyboardLayouts"].as<uint16_t>();
 
   const uint8_t quickResumeBeforeNormalize = s.quickResumeSleepScreen;
   CrossPointSettings::normalizeDependentSettings(s);
@@ -397,7 +399,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   // mean the default, not whatever point size a stale enum value happens to name. Idempotent
   // across boots: an unconverted file keeps its old stamp until it is rewritten.
   {
-    const auto fileVersion = static_cast<uint8_t>(doc["fontSizeOrderV"] | 0);
+    const auto fileVersion = static_cast<uint8_t>(doc["fontSizeOrderV"].as<int>());
     const auto loadPointSize = [&](const char* key) -> uint8_t {
       const uint8_t pt = CrossPointSettings::fontPointSizeFromStored(doc[key] | -1, fileVersion);
       return pt != 0 ? pt : CrossPointSettings::DEFAULT_FONT_POINT_SIZE;
@@ -477,9 +479,9 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
   // Repair a scheme typo saved by an older build, so the settings screen shows the
   // same URL getBaseUrl() will connect to.
   store.serverUrl = UrlUtils::repairSchemeSeparator(doc["serverUrl"] | std::string(""));
-  uint8_t method = doc["matchMethod"] | (uint8_t)0;
+  uint8_t method = doc["matchMethod"].as<uint8_t>();
   store.matchMethod = static_cast<DocumentMatchMethod>(method);
-  store.sendMetadata = doc["sendMetadata"] | false;
+  store.sendMetadata = doc["sendMetadata"].as<bool>();
 
   // A file written before this key existed belongs to someone already using the chooser.
   // Default them to ASK_EVERY_TIME rather than the SMART the member initialiser carries, so
@@ -489,12 +491,12 @@ bool JsonSettingsIO::loadKOReader(KOReaderCredentialStore& store, const char* js
     store.setSyncBehavior(KOReaderSyncBehavior::ASK_EVERY_TIME);
     if (needsResave) *needsResave = true;
   } else {
-    store.setSyncBehavior(static_cast<KOReaderSyncBehavior>(behaviorValue | (uint8_t)0));
+    store.setSyncBehavior(static_cast<KOReaderSyncBehavior>(behaviorValue.as<uint8_t>()));
   }
 
-  store.syncOnWake = doc["syncOnWake"] | false;
-  store.syncOnSleep = doc["syncOnSleep"] | false;
-  const uint16_t pushPages = doc["pushIntervalPages"] | (uint16_t)0;
+  store.syncOnWake = doc["syncOnWake"].as<bool>();
+  store.syncOnSleep = doc["syncOnSleep"].as<bool>();
+  const uint16_t pushPages = doc["pushIntervalPages"].as<uint16_t>();
   store.setPushIntervalPages(pushPages);
   if (needsResave && store.pushIntervalPages != pushPages) *needsResave = true;
   store.showSyncIndicator = doc["showSyncIndicator"] | true;
@@ -629,7 +631,7 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
       }
     }
     const std::string bssidHex = obj["bssid"] | std::string("");
-    const int channel = obj["channel"] | 0;
+    const int channel = obj["channel"].as<int>();
     if (bssidHex.size() == 12 && channel > 0 && channel <= 14) {
       bool parseOk = true;
       uint8_t parsed[6] = {0};
@@ -671,7 +673,7 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
         std::memcpy(cred.gateway, gw, 4);
         std::memcpy(cred.mask, mask, 4);
         std::memcpy(cred.dns, dns, 4);
-        cred.cacheTimestamp = obj["ts"] | 0u;
+        cred.cacheTimestamp = obj["ts"].as<unsigned>();
       }
     }
     store.credentials.push_back(cred);
@@ -731,7 +733,7 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
   JsonArray arr = doc["books"].as<JsonArray>();
   // Which meaning the per-book size overrides in this file carry (point sizes since version 2).
   // Absent (0) is every file written before the sizes were put in pixel order.
-  const auto fontSizeOrderV = static_cast<uint8_t>(doc["fontSizeOrderV"] | 0);
+  const auto fontSizeOrderV = static_cast<uint8_t>(doc["fontSizeOrderV"].as<int>());
   auto clampInt8 = [](int value, int minValue, int maxValue, int8_t fallback) -> int8_t {
     if (value < minValue || value > maxValue) {
       return fallback;
@@ -749,7 +751,7 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
     book.coverBmpPath = obj["coverBmpPath"] | std::string("");
     // Absent in files written before it existed: 0, so an entry whose book has
     // a sidecar is refreshed once.
-    book.metadataStamp = obj["metadataStamp"] | 0u;
+    book.metadataStamp = obj["metadataStamp"].as<unsigned>();
     book.embeddedStyleOverride = clampInt8(obj["embeddedStyleOverride"] | -1, -1, 1, -1);
     book.imageRenderingOverride = clampInt8(obj["imageRenderingOverride"] | -1, -1, 2, -1);
     book.fontFamilyOverride =
