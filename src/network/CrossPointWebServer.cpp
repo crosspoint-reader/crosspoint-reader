@@ -17,6 +17,7 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <uri/UriBraces.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -409,7 +410,9 @@ void CrossPointWebServer::begin() {
   server->on("/systeminfo", HTTP_GET, [this] { handleSystemInfoPage(); });
   server->on("/diagnostics", HTTP_GET, [this] { handleDiagnosticsPage(); });
   server->on("/files", HTTP_GET, [this] { handleRoot(); });
-  server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  // The bundle's scripts by name (/js/jszip.min.js, /js/metadata-editor.js, ...), so a new one
+  // needs no route of its own.
+  server->on(UriBraces("/js/{}"), HTTP_GET, [this] { handleBundledScript(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/status/fast", HTTP_GET, [this] { handleStatusFast(); });
@@ -466,7 +469,6 @@ void CrossPointWebServer::begin() {
   server->on("/api/fetch", HTTP_POST, [this] { handleFetchToSd(); });
   server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsData(); });
   server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
-  server->on("/js/metadata-editor.js", HTTP_GET, [this] { handleMetadataEditorJs(); });
   server->on("/api/book/opf", HTTP_GET, [this] { handleBookOpf(); });
   server->on("/api/plugins/begin", HTTP_POST, [this] { handlePluginInstallBegin(); });
   server->on(
@@ -876,10 +878,11 @@ void CrossPointWebServer::handleStatsExport() const {
   response.finish();
 }
 
-void CrossPointWebServer::handleJszip() const {
+void CrossPointWebServer::handleBundledScript() const {
   if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
-  // A script, so no redirect to a page: the Files page copes without it.
-  if (!WebAssets::serve(*server, web_bundle::jszip_minJs)) server->send(404, "text/plain", "Not installed");
+  // A script, so no redirect to a page: each page copes without one (the File Manager says, for
+  // instance, that Details is not available).
+  if (!WebAssets::serveScript(*server, server->pathArg(0).c_str())) server->send(404, "text/plain", "Not installed");
 }
 
 void CrossPointWebServer::handleNotFound() const {
@@ -3388,12 +3391,6 @@ std::string pluginStagingDir(const String& name) { return pluginInstallDir(name)
 }  // namespace
 
 void CrossPointWebServer::handlePluginsPage() const { serveBundlePage(web_bundle::PluginsPageHtml); }
-
-void CrossPointWebServer::handleMetadataEditorJs() const {
-  if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
-  // A script, so no redirect to a page: the File Manager says Details is not available.
-  if (!WebAssets::serve(*server, web_bundle::metadata_editorJs)) server->send(404, "text/plain", "Not installed");
-}
 
 // GET /api/book/opf?path=<epub> -> the OPF package document from inside the book, as it is.
 //

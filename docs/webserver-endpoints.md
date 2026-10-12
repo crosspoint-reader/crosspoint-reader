@@ -72,7 +72,6 @@ the setup page and every other page redirects (`302`) to `/setup`.
 | `/fonts`      | Font Manager                               |
 | `/dictionary` | Dictionaries: lists, installs and removes StarDict dictionaries |
 | `/plugins`    | Plugins: install, switch off and remove web-interface plugins |
-| `/js/metadata-editor.js` | The File Manager's Details dialog, loaded on first use |
 | `/systeminfo` | System Info                                |
 | `/diagnostics`| Diagnostics: device status, boot and sleep history, and a report to download |
 
@@ -84,8 +83,11 @@ compressed files in the browser, then works through
 one request at a time. The route is singular so it is never mistaken for the
 `/dictionaries` folder. See [docs/dictionary.md](dictionary.md#install-from-the-web-interface).
 
-`GET /js/jszip.min.js` serves the gzipped JSZip library (`Content-Encoding: gzip`),
-which the File Manager loads, or `404` while the bundle is not installed. Any
+`GET /js/<name>` serves a script from the bundle by its name, gzip-encoded
+(`Content-Encoding: gzip`), or `404` when the bundle is not installed or has no such
+script: `/js/jszip.min.js`, the JSZip library the File Manager and the Dictionaries and
+Plugins pages load, and `/js/metadata-editor.js`, the File Manager's Details dialog,
+loaded on first use. Pages are not served under `/js/`. Any
 other path that WebDAV does not claim answers `404` with a plain-text body.
 
 ```bash
