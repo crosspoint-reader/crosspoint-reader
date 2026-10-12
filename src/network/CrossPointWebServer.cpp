@@ -37,6 +37,7 @@
 #include "SdCardFontRegistry.h"
 #include "SettingsList.h"
 #include "SystemStatus.h"
+#include "UploadStallTolerance.h"
 #include "WebAssets.h"
 #include "WebDAVHandler.h"
 #include "WebPathGuard.h"
@@ -1355,6 +1356,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
   if (up.status == UPLOAD_FILE_START) {
     // Reset watchdog - this is the critical 1% crash point
     HalSystem::feedWatchdog();
+    tolerateUploadStalls(*server);
 
     state.fileName = up.filename;
     state.size = 0;
@@ -1517,7 +1519,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     state.buffer = {};
     state.error = "Upload aborted";
 
-    // WebServer gives up on a body that stops arriving -- no byte for HTTP_MAX_SEND_WAIT (5 s)
+    // WebServer gives up on a body that stops arriving -- no byte for UPLOAD_STALL_TIMEOUT_MS
     // while the connection stays open -- or when the connection closes: the browser's doing, a
     // lost link, or Back on the device (dropUploadIfCancelled()).
     UploadState::Failure& f = state.failure;
@@ -2606,6 +2608,7 @@ void CrossPointWebServer::handleFontUploadData() {
   switch (up.status) {
     case UPLOAD_FILE_START: {
       HalSystem::feedWatchdog();
+      tolerateUploadStalls(*server);
       String family = server->arg("family");
       fontUpload.valid = false;
       fontUpload.magicChecked = false;
@@ -3404,6 +3407,7 @@ void CrossPointWebServer::handlePluginFs() {
 void CrossPointWebServer::handlePluginFsData() {
   const HTTPRaw& raw = server->raw();
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(*server);
     const String plugin = server->arg("plugin");
     rawUpload.start(isSafePathComponent(plugin) ? pluginWriteTarget(server->arg("path")) : String(),
                     PLUGIN_FS_MAX_BYTES);
@@ -3552,6 +3556,7 @@ void CrossPointWebServer::handleBookReplace() {
 void CrossPointWebServer::handleBookReplaceData() {
   const HTTPRaw& raw = server->raw();
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(*server);
     const String target = bookReplaceTarget(server->arg("path"));
     bookReplacePath = target;
     rawUpload.start(target.isEmpty() ? target : target + ".new", BOOK_REPLACE_MAX_BYTES);
@@ -3585,6 +3590,7 @@ void CrossPointWebServer::handlePluginInstallFile() {
 void CrossPointWebServer::handlePluginInstallFileData() {
   const HTTPRaw& raw = server->raw();
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(*server);
     // Flat files only: /plugin serves single path components, so a nested one could never load.
     const String name = server->arg("name");
     const String fileName = server->arg("file");

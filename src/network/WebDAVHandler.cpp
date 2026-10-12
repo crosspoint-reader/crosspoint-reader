@@ -11,6 +11,7 @@
 #include "BookRelocation.h"
 #include "ChunkedResponse.h"
 #include "HttpFileStreamer.h"
+#include "UploadStallTolerance.h"
 #include "WebPathGuard.h"
 
 namespace {
@@ -51,6 +52,7 @@ bool WebDAVHandler::canRaw(WebServer& server, const String& uri) {
 void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(server);
     _putPath = getRequestPath(server);
     if (isProtectedPath(_putPath)) {
       _putOk = false;

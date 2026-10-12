@@ -121,7 +121,7 @@ curl http://crosspoint.local/api/web/status
 | `online`  | boolean | `false` in hotspot mode, where the device cannot download |
 | `onCard`  | boolean | A file named `asset` is in the SD card's top folder |
 | `rssi`    | number  | Wi-Fi signal in dBm; absent in hotspot mode |
-| `lastUpload` | object | Only after a `/upload` broke off, until the next one starts: `name`, `received` (file bytes), `expected` (request bytes), `ms`, `idleMs` (since data last arrived), `reason` (`stalled`: no data for 5 s; `closed`; `cancelled` on the device), and `rssi` at that moment |
+| `lastUpload` | object | Only after a `/upload` broke off, until the next one starts: `name`, `received` (file bytes), `expected` (request bytes), `ms`, `idleMs` (since data last arrived), `reason` (`stalled`: no data for 10 s; `closed`; `cancelled` on the device), and `rssi` at that moment |
 
 The device drops an upload that breaks off without answering the request, so the browser sees only a
 broken connection; the setup page reads `lastUpload` to say what happened.
