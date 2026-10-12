@@ -1893,6 +1893,19 @@
                   </div>
                 </div>
               </div>
+              <!-- The cover keeps its colors -->
+              <div class="advanced-setting-row">
+                <div class="setting-label">
+                  <div class="setting-title">🎨 Keep Cover in Color</div>
+                  <div class="setting-desc">The cover is only resized to fit the screen, not turned to grayscale</div>
+                </div>
+                <div class="setting-controls">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="preserveCoverColorToggle">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
               <!-- Long chapters are cut into several spine files -->
               <div class="advanced-setting-row">
                 <div class="setting-label">
@@ -2508,6 +2521,7 @@
       }
       // Reset to defaults
       document.getElementById('splitLongSectionsToggle').checked = true;
+      document.getElementById('preserveCoverColorToggle').checked = false;
       document.getElementById('qualitySlider').value = 85;
       document.getElementById('qualityInput').value = 85;
       setHandedness('right');
@@ -5436,9 +5450,75 @@
       });
     }
 
+    // Ported from CrossInk (uxjulia/CrossInk) web/pages/files.js @1b1156027, MIT, by Julia Nguyen.
+    // The zip paths of the book's cover image and of every image on its cover page: the image the
+    // OPF names (meta name="cover", properties="cover-image", or an image item called "cover"),
+    // and the images of the cover page (an item called "cover", the guide's cover reference, or
+    // the first spine item when the OPF names a cover image).
+    async function findEpubCoverImagePaths(zip) {
+      const opfPath = await findOPFPath(zip);
+      const entry = opfPath && zip.files[opfPath];
+      if (!entry) return new Set();
+      const doc = new DOMParser().parseFromString(await safeReadText(entry), 'application/xml');
+      if (doc.getElementsByTagName('parsererror').length) return new Set();
+
+      const coverId = Array.from(doc.getElementsByTagName('meta'))
+        .find((meta) => meta.getAttribute('name') === 'cover')
+        ?.getAttribute('content');
+      const items = Array.from(doc.getElementsByTagName('item'));
+      const coverItem = (coverId && items.find((item) => item.getAttribute('id') === coverId)) ||
+        items.find((item) => (item.getAttribute('properties') || '').split(/\s+/).includes('cover-image')) ||
+        items.find((item) => {
+          const properties = item.getAttribute('properties') || '';
+          const id = item.getAttribute('id') || '';
+          const href = item.getAttribute('href') || '';
+          return !properties.includes('cover-image') &&
+            (item.getAttribute('media-type') || '').startsWith('image/') && /cover/i.test(`${id} ${href}`);
+        });
+      const coverPaths = new Set();
+      const href = coverItem?.getAttribute('href');
+      if (href) coverPaths.add(resolvePath(opfPath, decodeHref(href.split('#')[0])));
+
+      const coverPagePaths = new Set(
+        items
+          .filter((item) => {
+            const itemHref = item.getAttribute('href') || '';
+            const id = item.getAttribute('id') || '';
+            const mediaType = item.getAttribute('media-type') || '';
+            const hasCoverToken = /(?:^|[-_])cover(?:[-_]|$)/i.test(id) ||
+              /(?:^|\/)cover(?:[-_][^/]*)?\.(?:x?html?)$/i.test(itemHref);
+            return /(?:xhtml|html)/i.test(mediaType) && hasCoverToken;
+          })
+          .map((item) => resolvePath(opfPath, decodeHref((item.getAttribute('href') || '').split('#')[0]))));
+      for (const reference of Array.from(doc.getElementsByTagName('reference'))) {
+        if ((reference.getAttribute('type') || '').toLowerCase() === 'cover') {
+          const pageHref = reference.getAttribute('href');
+          if (pageHref) coverPagePaths.add(resolvePath(opfPath, decodeHref(pageHref.split('#')[0])));
+        }
+      }
+      if (coverPaths.size > 0) {
+        const firstSpineId = doc.getElementsByTagName('itemref')[0]?.getAttribute('idref');
+        const firstSpineItem = firstSpineId && items.find((item) => item.getAttribute('id') === firstSpineId);
+        const firstSpineHref = firstSpineItem?.getAttribute('href');
+        if (firstSpineHref) coverPagePaths.add(resolvePath(opfPath, decodeHref(firstSpineHref.split('#')[0])));
+      }
+      for (const pagePath of coverPagePaths) {
+        const page = zip.files[pagePath];
+        if (!page) continue;
+        const pageDoc = new DOMParser().parseFromString(await safeReadText(page), 'application/xhtml+xml');
+        if (pageDoc.getElementsByTagName('parsererror').length) continue;
+        for (const image of Array.from(pageDoc.querySelectorAll('img, image'))) {
+          const imageHref = image.getAttribute('src') || image.getAttribute('href') || image.getAttribute('xlink:href');
+          if (imageHref) coverPaths.add(resolvePath(pagePath, decodeHref(imageHref.split('#')[0])));
+        }
+      }
+      return coverPaths;
+    }
+
     // Process single image - returns array of {data, suffix} objects
+    // preserveColor (the cover, with "Keep Cover in Color"): only resized to fit the screen.
     const IMAGE_LOAD_TIMEOUT_MS = 30000; // 30 second timeout for image loading
-    async function processImage(data, imageState = 0, imagePath = '') {
+    async function processImage(data, imageState = 0, imagePath = '', preserveColor = false) {
       return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(new Blob([data]));
         const img = new Image();
@@ -5453,6 +5533,31 @@
           clearTimeout(timeoutId);
           URL.revokeObjectURL(url);
           const origW = img.width, origH = img.height;
+
+          // Ported from CrossInk: keep the colours, fit the screen, re-encode as baseline JPEG.
+          // CrossInk fits 480×792 whatever the device; this fits the target device's screen,
+          // as every other image here does.
+          if (preserveColor) {
+            const scale = Math.min(1, MAX_WIDTH / origW, MAX_HEIGHT / origH);
+            const width = Math.max(1, Math.round(origW * scale));
+            const height = Math.max(1, Math.round(origH * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = 'high';
+            context.fillStyle = '#FFF';
+            context.fillRect(0, 0, width, height);
+            context.drawImage(img, 0, 0, width, height);
+            const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
+            const output = await blob.arrayBuffer();
+            resolve({
+              parts: [{ data: output, suffix: '', width, height, size: output.byteLength }],
+              meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: width, finalH: height, finalSize: output.byteLength, imageState: 0 },
+            });
+            return;
+          }
 
           // imageState: 0=Normal, 1=H-Split (CW/CCW), 2=V-Split, 3=Rotate & Fit
           // ========================================================================
@@ -5814,6 +5919,9 @@
 
       const out = new JSZip();
       const entries = Object.entries(zip.files);
+      const coverImagePaths = document.getElementById('preserveCoverColorToggle')?.checked
+        ? await findEpubCoverImagePaths(zip)
+        : new Set();
       const splitImages = {};
       const xhtmlFiles = {};
       // Rewritten XHTML is held until the whole book has been seen, so later passes can
@@ -5841,7 +5949,7 @@
 
           let result;
           try {
-            result = await processImage(data, imageState, path);
+            result = await processImage(data, imageState, path, coverImagePaths.has(path));
           } catch (imageError) {
             // Log error but continue with original image
             console.error(`Failed to process image ${path}:`, imageError);
@@ -5881,6 +5989,9 @@
           const imgName = path.split('/').pop();
           const origFormat = path.split('.').pop();
           logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts, meta.imageState || 0);
+          if (coverImagePaths.has(path) && !meta.processingError) {
+            log(`<strong>${escapeHtml(imgName)}</strong> <span class="log-detail">kept in color (cover)</span>`, '', 'INFO');
+          }
 
           if (parts.length === 1 && parts[0].suffix === '') {
             const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
