@@ -372,6 +372,87 @@ const char* triggerName(SleepTrigger trigger) {
   return "?";
 }
 
+const char* outcomeName(SleepOutcome outcome) {
+  switch (outcome) {
+    case SleepOutcome::ReachedDeepSleep:
+      return "slept";
+    case SleepOutcome::ReleaseTimedOut:
+      return "release-timeout";
+    case SleepOutcome::PoweredOffAsAsked:
+      return "powered-off";
+    case SleepOutcome::PoweredOffUnasked:
+      return "powered-off-unasked";
+    case SleepOutcome::DidNotSleep:
+      return "did-not-sleep";
+    case SleepOutcome::Unfinished:
+      return "unfinished";
+  }
+  return "?";
+}
+
+const char* resetReasonName(uint8_t reason) {
+  switch (static_cast<esp_reset_reason_t>(reason)) {
+    case ESP_RST_UNKNOWN:
+      return "unknown";
+    case ESP_RST_POWERON:
+      return "power-on";
+    case ESP_RST_EXT:
+      return "ext-reset";
+    case ESP_RST_SW:
+      return "sw-restart";
+    case ESP_RST_PANIC:
+      return "panic";
+    case ESP_RST_INT_WDT:
+      return "int-wdt";
+    case ESP_RST_TASK_WDT:
+      return "task-wdt";
+    case ESP_RST_WDT:
+      return "other-wdt";
+    case ESP_RST_DEEPSLEEP:
+      return "deep-sleep";
+    case ESP_RST_BROWNOUT:
+      return "brownout";
+    case ESP_RST_SDIO:
+      return "sdio";
+    // The C3 reports a reset through its USB-Serial-JTAG port (flashing, a serial monitor
+    // opening the port) as USB, not as a power-on.
+    case ESP_RST_USB:
+      return "usb";
+    case ESP_RST_JTAG:
+      return "jtag";
+    case ESP_RST_EFUSE:
+      return "efuse";
+    case ESP_RST_PWR_GLITCH:
+      return "power-glitch";
+    case ESP_RST_CPU_LOCKUP:
+      return "cpu-lockup";
+    default:
+      return "other";
+  }
+}
+
+const char* wakeCauseName(uint8_t cause) {
+  switch (static_cast<esp_sleep_wakeup_cause_t>(cause)) {
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      return "none";
+    // The S3 boards wake on the power button through EXT1; the C3 has no EXT wake and uses GPIO.
+    case ESP_SLEEP_WAKEUP_EXT0:
+      return "ext0";
+    case ESP_SLEEP_WAKEUP_EXT1:
+      return "ext1";
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return "timer";
+    case ESP_SLEEP_WAKEUP_GPIO:
+      return "gpio";
+    case ESP_SLEEP_WAKEUP_UART:
+      return "uart";
+    case ESP_SLEEP_WAKEUP_ULP:
+      return "ulp";
+    default:
+      return "other";
+  }
+}
+
 void beginSleep(SleepTrigger trigger, bool keepClockAlive, bool fromReader) {
   uint8_t flags = 0;
   if (keepClockAlive) flags |= kFlagKeepClock;

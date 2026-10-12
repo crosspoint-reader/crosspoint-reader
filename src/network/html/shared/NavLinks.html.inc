@@ -6,9 +6,11 @@
   <a href="/files">File Manager</a>
   <a href="/settings">Settings</a>
   <a href="/fonts">Font Manager</a>
+  <a href="/dictionary">Dictionaries</a>
   <a href="/stats">Reading Stats</a>
   <a href="/plugins">Plugins</a>
   <a href="/systeminfo">System Info</a>
+  <a href="/diagnostics">Diagnostics</a>
 </nav>
 <script>
   // Highlight the page being shown. Runs inline, so before the first paint; the

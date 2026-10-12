@@ -257,6 +257,10 @@ See the [webserver docs](./docs/webserver.md) for more information on how to con
 
 The web interface's pages are kept on the SD card, not in the firmware. The first time you open the device's address, and after a firmware update that changed them, a setup page installs them: on your WiFi network it downloads them by itself; in hotspot mode, choose the `web-….bin` file from the release page, or copy it to the top folder of the SD card. The setup page can upload books on its own as well.
 
+The **Dictionaries** page installs dictionaries for looking up words while you read. Choose the StarDict dictionary you downloaded, as an archive (`.zip`, `.tar.gz`, `.tar.bz2`) or as its files; your browser unpacks the parts the reader cannot use compressed, checks them and puts each dictionary into its own folder under `/dictionaries`. Then choose it on the device under **Settings → Reader → Dictionary**. The page also shows whether each installed dictionary is usable, and removes one. See [Dictionary](./docs/dictionary.md).
+
+The **Diagnostics** page shows what **Boot Diagnostics** (under **Settings → System**) shows, in plain words: how the device last slept and started. **Download report** saves it, with the firmware version and device status, as one file to attach to a bug report, instead of a photo of the screen.
+
 The web server has no password, so it keeps away from what it should not touch: the files holding your saved Wi-Fi, OPDS and KOReader passwords can never be downloaded or changed, and folders whose names start with a dot, such as the reader's own `/.crosspoint`, can be opened only when **Show Hidden Files** is on. **Back** leaves the screen even while the web page is uploading a book or a font; the upload is cancelled.
 
 > [!TIP]
