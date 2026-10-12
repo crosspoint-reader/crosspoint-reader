@@ -531,6 +531,7 @@ bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path
       obj["bssid"] = bssidHex;
       obj["channel"] = cred.channel;
     }
+    if (cred.apCount > 0) obj["aps"] = cred.apCount;
     if (cred.ip[0] != 0) {
       char buf[16];
       snprintf(buf, sizeof(buf), "%d.%d.%d.%d", cred.ip[0], cred.ip[1], cred.ip[2], cred.ip[3]);
@@ -648,6 +649,8 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
         cred.channel = static_cast<uint8_t>(channel);
       }
     }
+    const int aps = obj["aps"].as<int>();  // 0 when absent: files from before the count
+    cred.apCount = static_cast<uint8_t>(aps < 0 ? 0 : (aps > 255 ? 255 : aps));
     const auto parseQuad = [](const std::string& s, uint8_t out[4]) -> bool {
       unsigned int a = 0, b = 0, c = 0, d = 0;
       int consumed = 0;

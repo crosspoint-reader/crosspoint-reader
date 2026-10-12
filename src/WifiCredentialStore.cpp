@@ -123,7 +123,7 @@ bool WifiCredentialStore::clearConnectionCache(const std::string& ssid) {
   if (cred == credentials.end()) {
     return false;
   }
-  bool empty = (cred->channel == 0) && (cred->ip[0] == 0);
+  bool empty = (cred->channel == 0) && (cred->ip[0] == 0) && (cred->apCount == 0);
   for (int i = 0; i < 6 && empty; i++) {
     if (cred->bssid[i] != 0) empty = false;
   }
@@ -137,6 +137,17 @@ bool WifiCredentialStore::clearConnectionCache(const std::string& ssid) {
   std::memset(cred->mask, 0, 4);
   std::memset(cred->dns, 0, 4);
   cred->cacheTimestamp = 0;
+  cred->apCount = 0;
+  return saveToFile();
+}
+
+bool WifiCredentialStore::noteApCount(const std::string& ssid, const uint8_t count) {
+  const auto cred =
+      find_if(credentials.begin(), credentials.end(), [&ssid](const WifiCredential& c) { return c.ssid == ssid; });
+  if (cred == credentials.end() || count <= cred->apCount) {
+    return false;
+  }
+  cred->apCount = count;
   return saveToFile();
 }
 

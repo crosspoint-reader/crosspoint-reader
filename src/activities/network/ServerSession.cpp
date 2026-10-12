@@ -100,10 +100,7 @@ bool ServerSession::serve(const int rounds) {
 
 void ServerSession::end() {
   linkWatch.stop();  // before the disconnect below, a drop of our own making
-  if (server) {
-    server->stop();
-    server.reset();
-  }
+  server.reset();    // its destructor stops it
   MDNS.end();
 
   // Nothing to undo when WiFi never came up (the user backed out of the mode or network choice).

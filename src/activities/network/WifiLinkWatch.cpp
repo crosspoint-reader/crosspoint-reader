@@ -2,7 +2,9 @@
 
 #include <Logging.h>
 
-#include "MacFormat.h"
+#include "WifiCredentialStore.h"
+#include "network/MacFormat.h"
+#include "network/WifiApChoice.h"
 
 namespace {
 // "-87 dBm from f0-9f-c2-31-b8-0c ch 11": the signal and the access point it comes from.
@@ -43,10 +45,18 @@ WifiLinkWatch::Link WifiLinkWatch::poll(std::string& ip) {
 
   const wl_status_t status = WiFi.status();
   if (status == WL_CONNECTED) {
-    const int rssi = WiFi.RSSI();
+    int rssi = WiFi.RSSI();
     if (lostAt != 0) {
+      LOG_DBG(tag, "WiFi back after %lu ms: ip=%s, %s", now - lostAt, WiFi.localIP().toString().c_str(),
+              signalFrom(rssi).c_str());
+      // The driver's reconnect sweeps like a connect does, so on a mesh it too can land on a far AP.
+      // Nothing is recorded here (no display lock for the SD card); the next connect's check is.
+      if (rssi < WifiApChoice::WEAK_RSSI) {
+        const std::string ssid = WiFi.SSID().c_str();
+        const WifiCredential* cred = WIFI_STORE.findCredential(ssid);
+        if (WifiApChoice::improve(ssid, cred ? cred->password : std::string(), tag).moved) rssi = WiFi.RSSI();
+      }
       const String current = WiFi.localIP().toString();
-      LOG_DBG(tag, "WiFi back after %lu ms: ip=%s, %s", now - lostAt, current.c_str(), signalFrom(rssi).c_str());
       loggedRssi = rssi;
       if (ip != current.c_str()) {
         LOG_DBG(tag, "The address changed from %s to %s", ip.c_str(), current.c_str());
