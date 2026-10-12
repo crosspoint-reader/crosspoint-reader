@@ -20,6 +20,7 @@
 #include <cstring>
 #include <ctime>
 
+#include "MacFormat.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/NetworkMemoryTrim.h"
@@ -66,13 +67,6 @@ std::string formatMacLabel(const uint8_t mac[6]) {
   snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
            mac[3], mac[4], mac[5]);
   return std::string(macStr);
-}
-
-std::string formatMacDashed(const uint8_t mac[6]) {
-  char persistedMac[18];
-  snprintf(persistedMac, sizeof(persistedMac), "%02x-%02x-%02x-%02x-%02x-%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
-           mac[5]);
-  return std::string(persistedMac);
 }
 
 String formatMacCompact(const uint8_t mac[6]) {

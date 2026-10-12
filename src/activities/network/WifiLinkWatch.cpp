@@ -2,6 +2,19 @@
 
 #include <Logging.h>
 
+#include "MacFormat.h"
+
+namespace {
+// "-87 dBm from f0-9f-c2-31-b8-0c ch 11": the signal and the access point it comes from.
+std::string signalFrom(const int rssi) {
+  const uint8_t* bssid = WiFi.BSSID();
+  char text[64];
+  snprintf(text, sizeof(text), "%d dBm from %s ch %d", rssi, bssid ? formatMacDashed(bssid).c_str() : "?",
+           static_cast<int>(WiFi.channel()));
+  return text;
+}
+}  // namespace
+
 void WifiLinkWatch::start() {
   if (logger) return;
   // Runs on the WiFi event task. The tag is a string literal, so the copy is safe to keep.
@@ -9,9 +22,10 @@ void WifiLinkWatch::start() {
   logger = WiFi.onEvent(
       [logTag](arduino_event_id_t, arduino_event_info_t info) {
         [[maybe_unused]] const uint8_t reason = info.wifi_sta_disconnected.reason;
-        LOG_DBG(logTag, "WiFi dropped: reason=%u (%s) rssi=%d", reason,
+        LOG_DBG(logTag, "WiFi dropped: reason=%u (%s) rssi=%d bssid=%s", reason,
                 WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(reason)),
-                static_cast<int>(info.wifi_sta_disconnected.rssi));
+                static_cast<int>(info.wifi_sta_disconnected.rssi),
+                formatMacDashed(info.wifi_sta_disconnected.bssid).c_str());
       },
       ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 }
@@ -32,16 +46,21 @@ WifiLinkWatch::Link WifiLinkWatch::poll(std::string& ip) {
     const int rssi = WiFi.RSSI();
     if (lostAt != 0) {
       const String current = WiFi.localIP().toString();
-      LOG_DBG(tag, "WiFi back after %lu ms: ip=%s rssi=%d", now - lostAt, current.c_str(), rssi);
+      LOG_DBG(tag, "WiFi back after %lu ms: ip=%s, %s", now - lostAt, current.c_str(), signalFrom(rssi).c_str());
+      loggedRssi = rssi;
       if (ip != current.c_str()) {
         LOG_DBG(tag, "The address changed from %s to %s", ip.c_str(), current.c_str());
         ip = current.c_str();
       }
       lostAt = 0;
     }
-    // A weak link is worth knowing about, not every 2 s.
-    if (rssi < -75 && (lastWeakLog == 0 || now - lastWeakLog >= 30000)) {
-      LOG_DBG(tag, "Weak WiFi signal: %d dBm", rssi);
+    // The signal as the session starts, and each big change of it; a weak one also every 30 s.
+    if (loggedRssi == 0 || abs(rssi - loggedRssi) >= SIGNAL_STEP_DB) {
+      LOG_DBG(tag, "WiFi signal %s%s", signalFrom(rssi).c_str(), loggedRssi == 0 ? "" : " (changed)");
+      loggedRssi = rssi;
+      if (rssi < -75) lastWeakLog = now;
+    } else if (rssi < -75 && (lastWeakLog == 0 || now - lastWeakLog >= 30000)) {
+      LOG_DBG(tag, "Weak WiFi signal: %s", signalFrom(rssi).c_str());
       lastWeakLog = now;
     }
     link = Link::Up;
