@@ -29,19 +29,16 @@ class ImageCacheService {
   void start();
   void stop();
 
-  // While paused the worker still serves foreground requests but skips
-  // background prefetch jobs (used while the reader is off-screen).
-  void pause();
-  void resume();
-
-  // Wait until the page's still-uncached images have a .pxc. Returns true when
-  // the page no longer needs a decode. The wait is unbounded until this job
-  // finishes: the job borrows the Page, so returning early (e.g. on a timeout)
-  // could outlive the caller's Page and leave the worker on freed memory.
+  // Wait until the page's still-uncached images have a .pxc. Returns the job's
+  // result (true when the page no longer needs a decode). The wait is
+  // unbounded until this job finishes: the job borrows the Page, so returning
+  // early (e.g. on a timeout) could outlive the caller's Page and leave the
+  // worker on freed memory.
   bool ensurePageCached(const Page& page, const DecodeTarget& target, int xOffset, int yOffset);
 
-  // Wait until this image has a .pxc. Returns true when a valid cache is
-  // present. Same borrow-lifetime guarantee as ensurePageCached.
+  // Wait until this image has a .pxc. Returns the job's result (a decode that
+  // wrote no cache reports false). Same borrow-lifetime guarantee as
+  // ensurePageCached.
   bool ensureCached(const ImageBlock& block, const DecodeTarget& target, int x, int y);
 
   // Queue the next page's images for decode without waiting. Any previous
@@ -69,7 +66,7 @@ class ImageCacheService {
   void run();
   bool runJob(Job& job);
   uint32_t postForeground(Job&& job);
-  void waitForCompletion(uint32_t serial);
+  bool waitForCompletion(uint32_t serial);
 
   SemaphoreHandle_t mutex_ = nullptr;
   SemaphoreHandle_t completion_ = nullptr;
@@ -78,6 +75,11 @@ class ImageCacheService {
   Job jobs_[2];  // 0 = foreground, 1 = background
   uint32_t nextSerial_ = 1;
   std::atomic<uint32_t> completedSerial_{0};
+  // Job results keyed by serial. The worker writes a slot before advancing
+  // completedSerial_, so a woken waiter (which acquires via that load) reads
+  // its own job's result; 8 slots cannot be reused within the waiter's 20 ms
+  // poll interval. stop() clears the ring so a dropped job never reports a
+  // stale success.
+  bool results_[8] = {};
   std::atomic<bool> stopRequested_{false};
-  bool paused_ = false;
 };

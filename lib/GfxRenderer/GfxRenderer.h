@@ -285,6 +285,8 @@ class GfxRenderer {
   // scratch plus its physical-row origin and extent; otherwise the full
   // framebuffer ([0, panelHeight)). Writers subtract the origin and clip to the
   // extent, so they honor tiled-grayscale banding without per-pixel method calls.
+  // Decode-relevant renderer state added here must be mirrored in DecodeTarget /
+  // captureDecodeTarget (lib/Epub/Epub/converters) for the prefetch worker.
   uint8_t* getWriteTarget() const { return _stripActive ? _stripBuf : frameBuffer; }
   int getWriteOriginY() const { return _stripActive ? _stripY0 : 0; }
   int getWriteRows() const { return _stripActive ? _stripRows : panelHeight; }

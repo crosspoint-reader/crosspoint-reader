@@ -26,7 +26,6 @@ void ImageCacheService::start() {
   }
   stopRequested_.store(false);
   completedSerial_.store(0);
-  paused_ = false;
   // Priority 1: the same tier as the main loop and render tasks. Time slicing
   // keeps input responsive; the decode yields every 250ms inside the codec. The
   // stack matches the render task's non-vector size: the codec work runs here.
@@ -52,6 +51,7 @@ void ImageCacheService::stop() {
 
   // Any foreground waiter whose job is being dropped must wake now, not after
   // its timeout: the worker is gone and will never advance the serial.
+  for (bool& result : results_) result = false;
   completedSerial_.store(nextSerial_ - 1);
   xSemaphoreGive(completion_);
 
@@ -60,21 +60,6 @@ void ImageCacheService::stop() {
     job = Job{};
   }
   xSemaphoreGive(mutex_);
-}
-
-void ImageCacheService::pause() {
-  if (!mutex_) return;
-  xSemaphoreTake(mutex_, portMAX_DELAY);
-  paused_ = true;
-  xSemaphoreGive(mutex_);
-}
-
-void ImageCacheService::resume() {
-  if (!mutex_) return;
-  xSemaphoreTake(mutex_, portMAX_DELAY);
-  paused_ = false;
-  xSemaphoreGive(mutex_);
-  if (task_) xTaskNotifyGive(task_);
 }
 
 void ImageCacheService::run() {
@@ -92,7 +77,7 @@ void ImageCacheService::run() {
       // against a Page the waiter has already freed.
       jobs_[0] = Job{};
       haveJob = true;
-    } else if (!paused_ && jobs_[1].valid) {
+    } else if (jobs_[1].valid) {
       job = std::move(jobs_[1]);
       jobs_[1] = Job{};
       haveJob = true;
@@ -108,6 +93,9 @@ void ImageCacheService::run() {
     LOG_DBG("ICS", "%s %s decode in %lums", job.foreground ? "Foreground" : "Background", ok ? "image" : "failed image",
             millis() - t0);
 
+    // Write the result before advancing the serial: the waiter's acquire on
+    // completedSerial_ then also covers this store.
+    results_[job.serial % 8] = ok;
     completedSerial_.store(job.serial);
     xSemaphoreGive(completion_);
   }
@@ -142,7 +130,7 @@ uint32_t ImageCacheService::postForeground(Job&& job) {
   return serial;
 }
 
-void ImageCacheService::waitForCompletion(const uint32_t serial) {
+bool ImageCacheService::waitForCompletion(const uint32_t serial) {
   // Unbounded: the job borrows the caller's Page/ImageBlock, so the caller must
   // not return (and free it) until the worker is done with it. stop() advances
   // completedSerial_ and signals completion_ so a waiter wakes if the service
@@ -150,33 +138,32 @@ void ImageCacheService::waitForCompletion(const uint32_t serial) {
   while (static_cast<int32_t>(completedSerial_.load() - serial) < 0) {
     xSemaphoreTake(completion_, pdMS_TO_TICKS(20));
   }
+  return results_[serial % 8];
 }
 
 bool ImageCacheService::ensureCached(const ImageBlock& block, const DecodeTarget& target, const int x, const int y) {
   if (block.hasValidCache()) return true;
-  if (!task_) return block.hasValidCache();
+  if (!task_) return false;
 
   Job job;
   job.block = &block;
   job.target = target;
   job.x = x;
   job.y = y;
-  waitForCompletion(postForeground(std::move(job)));
-  return block.hasValidCache();
+  return waitForCompletion(postForeground(std::move(job)));
 }
 
 bool ImageCacheService::ensurePageCached(const Page& page, const DecodeTarget& target, const int xOffset,
                                          const int yOffset) {
   if (!page.hasImagesNeedingDecode()) return true;
-  if (!task_) return !page.hasImagesNeedingDecode();
+  if (!task_) return false;
 
   Job job;
   job.borrowedPage = &page;
   job.target = target;
   job.x = xOffset;
   job.y = yOffset;
-  waitForCompletion(postForeground(std::move(job)));
-  return !page.hasImagesNeedingDecode();
+  return waitForCompletion(postForeground(std::move(job)));
 }
 
 void ImageCacheService::prefetchPage(std::unique_ptr<Page> page, const DecodeTarget& target, const int xOffset,
