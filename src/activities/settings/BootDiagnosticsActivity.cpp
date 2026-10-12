@@ -363,6 +363,12 @@ void BootDiagnosticsActivity::render(RenderLock&&) {
                  BootDiag::triggerName(static_cast<BootDiag::SleepTrigger>(r.reason)),
                  (r.flags & BootDiag::kFlagKeepClock) ? "latch-kept" : "latch-cut",
                  (r.flags & BootDiag::kFlagReleaseTimeout) ? " rel-timeout" : "");
+      } else if (r.kind == BootDiag::KindAborted) {
+        // Its slots hold a trigger, a gate verdict and a count, not a reset reason and timings.
+        snprintf(buf, sizeof(buf), "%lu abort %u%s %s / gate %s", static_cast<unsigned long>(r.seq), r.msA,
+                 r.msA >= BootDiag::kAbortCountCap ? "+" : "",
+                 BootDiag::triggerName(static_cast<BootDiag::SleepTrigger>(r.reason)),
+                 HalGPIO::wakeVerdictName(static_cast<HalGPIO::WakeVerdict>(r.code)));
       } else {
         snprintf(buf, sizeof(buf), "%lu boot  %s/%s %s %ums sd@%ums", static_cast<unsigned long>(r.seq),
                  resetReasonName(r.reason), wakeCauseName(r.flags),
