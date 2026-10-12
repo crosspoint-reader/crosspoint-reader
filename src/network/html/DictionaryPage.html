@@ -393,7 +393,7 @@
           }
           for (const dir of entries.filter((e) => e.isDirectory)) {
             const list = (await listDir(root + '/' + dir.name)) || [];
-            const verdict = evaluateInstalled(dir.name, list);
+            const verdict = evaluateInstalled(root, dir.name, list);
             let ifo = null;
             if (verdict.ifoName) {
               const ifoEntry = list.find((e) => e.name === verdict.ifoName);
@@ -493,7 +493,10 @@
         const used = new Set();
         for (const p of pending) {
           let name = p.folder;
-          for (let n = 2; used.has(name.toLowerCase()); n++) name = p.folder + ' ' + n;
+          for (let n = 2; used.has(name.toLowerCase()); n++) {
+            const suffix = ' ' + n;
+            name = p.folder.slice(0, MAX_FOLDER_NAME - suffix.length).trim() + suffix;
+          }
           used.add(name.toLowerCase());
           p.folder = name;
         }
@@ -563,6 +566,7 @@
           const label = el('label', '', 'Folder: ' + DICT_ROOT + '/');
           const input = el('input');
           input.type = 'text';
+          input.maxLength = MAX_FOLDER_NAME;
           input.value = p.folder;
           input.addEventListener('change', () => {
             input.value = sanitizeFolderName(input.value) || a.folder;

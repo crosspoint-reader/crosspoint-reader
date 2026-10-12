@@ -74,6 +74,13 @@ function parseIfo(text) {
   return ifo;
 }
 
+// The reader stores the chosen dictionary's folder in a 32-byte setting
+// (CrossPointSettings::dictionaryName): a longer name is cut short there and the
+// folder is not found again. Folder names are ASCII, so characters are bytes.
+const MAX_FOLDER_NAME = 31;
+// Dictionary::open() refuses a "<root>/<folder>/<stem>" longer than this.
+const MAX_BASE_PATH = 151;
+
 // A folder name the card and the reader both take: one path component, ASCII
 // (the device's UI fonts do not cover every script a bookname can be in), and
 // nothing FAT trims or the reader skips (a leading dot, trailing dots or
@@ -82,7 +89,11 @@ function sanitizeFolderName(raw) {
   if (!raw) return '';
   let s = String(raw).normalize('NFKD').replace(/[̀-ͯ]/g, '');
   s = s.replace(/[^A-Za-z0-9 _+()-]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (s.length > 48) s = s.slice(0, 48).trim();
+  if (s.length > MAX_FOLDER_NAME) {
+    // At a word boundary when that keeps most of the name: the device lists it.
+    const cut = s.lastIndexOf(' ', MAX_FOLDER_NAME);
+    s = s.slice(0, cut >= 16 ? cut : MAX_FOLDER_NAME).trim();
+  }
   return s;
 }
 
@@ -475,9 +486,11 @@ async function analyseDictionary(group, fallbackName) {
 
 // --- installed dictionaries ---------------------------------------------------
 
-// The reader's verdict on one folder of /dictionaries, from its listing
-// (DictionaryRegistry::findStem): { level: 'ok'|'warn'|'error', messages, stem, ifoName }.
-function evaluateInstalled(folderName, entries) {
+// The reader's verdict on the folder root/folderName (root is /dictionaries or
+// /.dictionaries), from its listing: DictionaryRegistry::findStem, plus the
+// setting's and Dictionary::open()'s length limits.
+// { level: 'ok'|'warn'|'error', messages, stem, ifoName }.
+function evaluateInstalled(root, folderName, entries) {
   const messages = [];
   const files = entries.filter((e) => !e.isDirectory && !e.name.startsWith('._'));
   const has = (name) => files.some((e) => e.name.toLowerCase() === name.toLowerCase());
@@ -502,6 +515,14 @@ function evaluateInstalled(folderName, entries) {
   }
   const stem = stems[0];
   const ifoName = has(stem + '.ifo') ? files.find((e) => e.name.toLowerCase() === (stem + '.ifo').toLowerCase()).name : null;
+  if (folderName.length > MAX_FOLDER_NAME) {
+    messages.push('The folder name is longer than ' + MAX_FOLDER_NAME + ' characters. The reader keeps only that many when you choose it, and then cannot find the folder: rename it.');
+    return { level: 'error', messages, stem, ifoName };
+  }
+  if ((root + '/' + folderName + '/' + stem).length > MAX_BASE_PATH) {
+    messages.push('The folder and file names together are too long for the reader (' + MAX_BASE_PATH + ' characters with the path): shorten them.');
+    return { level: 'error', messages, stem, ifoName };
+  }
   if (!has(stem + '.dict') && !has(stem + '.dict.dz')) {
     messages.push('No ' + stem + '.dict or ' + stem + '.dict.dz next to the index.');
     return { level: 'error', messages, stem, ifoName };
