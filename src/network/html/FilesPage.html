@@ -4,90 +4,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--#include file="shared/ThemeInit.html.inc" -->
   <title>Files - %%CROSSPOINT%%</title>
   <script src="/js/jszip.min.js"></script>
   <style>
-    html {
-      scrollbar-gutter: stable;
-    }
-
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-color-10: rgba(110, 154, 130, 0.1);
-      --accent-hover-color: #5a8c73;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        color-scheme: dark;
-      }
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-
-    h1 {
-      color: var(--title-color);
-      margin-bottom: 5px;
-    }
-
-    h2 {
-      color: var(--title-color);
-      margin-top: 0;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
+    <!--#include file="shared/Theme.css.inc" -->
+    <!--#include file="shared/NavLinks.css.inc" -->
 
     .page-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-end;
       flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid var(--accent-color);
+      gap: 12px 16px;
+      margin-bottom: 16px;
     }
 
     .page-header-left {
-      display: flex;
-      align-items: baseline;
-      gap: 12px;
-      flex-wrap: wrap;
+      min-width: 0;
     }
 
     .breadcrumb-inline {
-      color: var(--label-color);
-      font-size: 1.1em;
+      color: var(--text-muted);
+      overflow-wrap: anywhere;
     }
 
     .breadcrumb-inline a {
-      color: var(--accent-color);
+      color: var(--accent-text);
       text-decoration: none;
     }
 
@@ -97,70 +40,18 @@
 
     .breadcrumb-inline .sep {
       margin: 0 6px;
-      color: var(--border-color);
+      color: var(--text-muted);
     }
 
     .breadcrumb-inline .current {
-      color: var(--title-color);
+      color: var(--text-strong);
       font-weight: 500;
     }
 
-    <!--#include file="shared/NavLinks.css.inc" -->
-
-    /* Action buttons */
     .action-buttons {
       display: flex;
-      gap: 10px;
-    }
-
-    .action-btn {
-      color: white;
-      padding: 10px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .upload-action-btn {
-      background-color: #27ae60;
-    }
-
-    .upload-action-btn:hover {
-      background-color: #219a52;
-    }
-
-    .folder-action-btn {
-      background-color: #f39c12;
-    }
-
-    .folder-action-btn:hover {
-      background-color: #d68910;
-    }
-
-    .move-action-btn {
-      background-color: #2980b9;
-    }
-
-    .move-action-btn:hover {
-      background-color: #2471a3;
-    }
-
-    .delete-action-btn {
-      background-color: #e74c3c;
-    }
-
-    .delete-action-btn:hover {
-      background-color: #c0392b;
-    }
-
-    .action-btn:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .plugin-error {
@@ -177,7 +68,7 @@
       right: 0;
       bottom: 0;
       background: rgba(52, 152, 219, 0.15);
-      border: 4px dashed #3498db;
+      border: 4px dashed var(--accent);
       z-index: 300;
       justify-content: center;
       align-items: center;
@@ -190,7 +81,7 @@
 
     .drop-overlay-message {
       background: var(--card-bg);
-      color: #3498db;
+      color: var(--accent-text);
       padding: 24px 40px;
       border-radius: 12px;
       font-size: 1.4em;
@@ -217,14 +108,15 @@
     }
 
     .modal {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 25px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
       max-width: 450px;
       width: 90%;
       max-height: 90vh;
       overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      box-shadow: var(--shadow-raised);
     }
 
     .modal.picker-mode {
@@ -297,7 +189,7 @@
 
     .modal h3 {
       margin: 0 0 15px 0;
-      color: var(--title-color);
+      color: var(--text-strong);
     }
 
     .modal-close {
@@ -338,10 +230,12 @@
 
     .file-table th {
       font-weight: 600;
-      color: var(--label-color);
+      font-size: 0.85rem;
+      color: var(--text-muted);
       position: sticky;
       top: 0;
-      background: var(--card-bg);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
       z-index: 10;
     }
 
@@ -367,31 +261,36 @@
     }
 
     .file-table tbody tr:nth-child(even) {
-      background-color: rgba(0, 0, 0, 0.03);
+      background-color: transparent;
     }
 
     .file-table tr:hover {
-      background-color: var(--accent-color-10);
+      background-color: var(--surface-2);
     }
 
     .epub-badge {
       display: inline-block;
-      padding: 2px 8px;
-      background-color: #27ae60;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
+      padding: 1px 8px;
+      background-color: var(--accent-soft);
+      color: var(--accent-text);
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
       margin-left: 8px;
+      vertical-align: 1px;
     }
 
     .folder-badge {
       display: inline-block;
-      padding: 2px 8px;
-      background-color: #f39c12;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
+      padding: 1px 8px;
+      background-color: var(--surface-2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
       margin-left: 8px;
+      vertical-align: 1px;
     }
 
     .file-icon {
@@ -400,14 +299,14 @@
 
     .folder-link,
     .file-link {
-      color: var(--accent-color);
+      color: var(--text-strong);
       text-decoration: none;
       cursor: pointer;
     }
 
     .folder-link:hover,
     .file-link:hover {
-      color: var(--accent-hover-color);
+      color: var(--accent-text);
       text-decoration: underline;
     }
 
@@ -421,7 +320,7 @@
     }
 
     .upload-form input[type="file"]::file-selector-button {
-      background-color: #27ae60;
+      background-color: var(--accent);
       color: white;
       border: none;
       padding: 6px 14px;
@@ -432,35 +331,36 @@
     }
 
     .upload-form input[type="file"].has-files::file-selector-button {
-      background-color: #95a5a6;
+      background-color: var(--text-muted);
     }
 
     .upload-btn {
-      background-color: #27ae60;
-      color: white;
+      background-color: var(--accent);
+      color: var(--on-accent);
+      border: 1px solid var(--accent);
       padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 1em;
+      font: inherit;
+      font-weight: 600;
       width: 100%;
       margin-top: 12px;
     }
 
     .upload-btn:hover {
-      background-color: #219a52;
+      background-color: var(--accent-hover);
     }
 
     .upload-btn.optimize {
-      background-color: #9b59b6;
+      background-color: var(--accent);
     }
 
     .upload-btn.optimize:hover {
-      background-color: #8e44ad;
+      background-color: var(--accent-hover);
     }
 
     .upload-btn:disabled {
-      background-color: #95a5a6;
+      background-color: var(--text-muted);
       cursor: not-allowed;
     }
 
@@ -749,7 +649,7 @@
     }
 
     .quality-preset:hover {
-      background: var(--accent-color-10);
+      background: var(--accent-soft);
       color: var(--accent-color);
     }
 
@@ -841,7 +741,7 @@
     }
 
     .rotation-btn:hover {
-      background: var(--accent-color-10);
+      background: var(--accent-soft);
       color: var(--accent-color);
     }
 
@@ -878,7 +778,7 @@
     }
 
     .overlap-btn:hover {
-      background: var(--accent-color-10);
+      background: var(--accent-soft);
       color: var(--accent-color);
     }
 
@@ -1129,7 +1029,7 @@
       border: 1px solid var(--btn-color);
       border-radius: 4px;
       background: transparent;
-      color: var(--text-color);
+      color: var(--text);
       cursor: pointer;
       transition: all 0.15s;
       font-size: inherit;
@@ -1159,9 +1059,8 @@
 
     .no-files {
       text-align: center;
-      color: #95a5a6;
+      color: var(--text-muted);
       padding: 40px;
-      font-style: italic;
     }
 
     .message {
@@ -1171,15 +1070,15 @@
     }
 
     .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
+      background-color: var(--accent-soft);
+      color: var(--ok-text);
+      border: 1px solid var(--accent-soft);
     }
 
     .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
+      background-color: var(--danger-soft);
+      color: var(--danger);
+      border: 1px solid var(--danger-soft);
     }
 
     .contents-header {
@@ -1216,7 +1115,7 @@
 
     #progress-fill {
       height: 100%;
-      background-color: #27ae60;
+      background-color: var(--accent);
       width: 0%;
       transition: width 0.3s;
     }
@@ -1247,18 +1146,19 @@
     }
 
     .folder-btn {
-      background-color: #f39c12;
-      color: white;
+      background-color: var(--accent);
+      color: var(--on-accent);
+      border: 1px solid var(--accent);
       padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 1em;
+      font: inherit;
+      font-weight: 600;
       width: 100%;
     }
 
     .folder-btn:hover {
-      background-color: #d68910;
+      background-color: var(--accent-hover);
     }
 
     .folder-btn:disabled {
@@ -1281,51 +1181,54 @@
     }
 
     .delete-btn {
-      color: #95a5a6;
+      color: var(--text-muted);
     }
 
     .delete-btn:hover {
-      background-color: #fee;
-      color: #e74c3c;
+      background-color: var(--danger-soft);
+      color: var(--danger);
     }
 
     .rename-btn {
-      color: #2980b9;
+      color: var(--text-muted);
     }
 
     .rename-btn:hover {
-      background-color: #e8f4fd;
+      background-color: var(--surface-2);
     }
 
     .move-btn {
-      color: #16a085;
+      color: var(--text-muted);
     }
 
     .move-btn:hover {
-      background-color: #e6f7f4;
+      background-color: var(--surface-2);
     }
 
     .details-btn:hover {
       background-color: #e8f4fd;
     }
 
-    .actions-col {
+    /* Two classes: .file-table td (text-align: left) outranks one. Right-aligned, a folder's three
+       actions line up under a file's last three. */
+    .file-table .actions-col {
       width: 180px;
-      text-align: center;
+      text-align: right;
     }
 
     .action-icon-group {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-end;
       gap: 6px;
     }
 
     /* Failed uploads banner */
     .failed-uploads-banner {
-      background-color: #fff3cd;
-      border: 1px solid #ffc107;
-      border-radius: 4px;
+      background-color: var(--warn-soft);
+      color: var(--warn-text);
+      border: 1px solid var(--warn-border);
+      border-radius: var(--radius);
       padding: 15px;
       margin-bottom: 15px;
       display: none;
@@ -1390,39 +1293,40 @@
     }
 
     .retry-btn {
-      background-color: #ffc107;
-      color: #533f03;
-      border: none;
+      background-color: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--control-border);
       padding: 6px 12px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
+      font: inherit;
       font-size: 0.9em;
       font-weight: 600;
     }
 
     .retry-btn:hover {
-      background-color: #e0a800;
+      background-color: var(--border);
     }
 
     .retry-all-btn {
-      background-color: #ffc107;
-      color: #533f03;
-      border: none;
+      background-color: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--control-border);
       padding: 8px 16px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 0.95em;
+      font: inherit;
       font-weight: 600;
       margin-top: 10px;
     }
 
     .retry-all-btn:hover {
-      background-color: #e0a800;
+      background-color: var(--border);
     }
 
     /* Delete modal */
     .delete-warning {
-      color: #e74c3c;
+      color: var(--danger);
       font-weight: 600;
       margin: 10px 0;
     }
@@ -1434,64 +1338,68 @@
     }
 
     .delete-btn-confirm {
-      background-color: #e74c3c;
-      color: white;
+      background-color: var(--danger);
+      color: #fff;
+      border: 1px solid var(--danger);
       padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 1em;
+      font: inherit;
+      font-weight: 600;
       width: 100%;
     }
 
     .delete-btn-confirm:hover {
-      background-color: #c0392b;
+      background-color: var(--danger-hover);
     }
 
     .delete-btn-cancel {
-      background-color: #95a5a6;
-      color: white;
+      background-color: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--control-border);
       padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 1em;
+      font: inherit;
+      font-weight: 600;
       width: 100%;
       margin-top: 10px;
     }
 
     .delete-btn-cancel:hover {
-      background-color: var(--label-color);
+      background-color: var(--border);
     }
 
     .rename-btn-confirm {
-      background-color: #3498db;
-      color: white;
+      background-color: var(--accent);
+      color: var(--on-accent);
+      border: 1px solid var(--accent);
       padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 1em;
+      font: inherit;
+      font-weight: 600;
       width: 100%;
     }
 
     .rename-btn-confirm:hover {
-      background-color: #2e86c1;
+      background-color: var(--accent-hover);
     }
 
     .move-btn-confirm {
-      background-color: #16a085;
-      color: white;
+      background-color: var(--accent);
+      color: var(--on-accent);
+      border: 1px solid var(--accent);
       padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 1em;
+      font: inherit;
+      font-weight: 600;
       width: 100%;
     }
 
     .move-btn-confirm:hover {
-      background-color: #138d75;
+      background-color: var(--accent-hover);
     }
 
     .loader-container {
@@ -1524,9 +1432,15 @@
 
     /* Mobile responsive styles */
     @media (max-width: 600px) {
-      body {
-        padding: 10px;
-        font-size: 14px;
+      /* The Type column repeats what the badge and the extension say; the folder icon says FOLDER. */
+      .file-table th:nth-child(3),
+      .file-table td:nth-child(3),
+      .folder-badge {
+        display: none;
+      }
+
+      .file-table td:nth-child(2) {
+        overflow-wrap: anywhere;
       }
 
       .card {
@@ -1604,8 +1518,8 @@
         font-size: 1.1em;
       }
 
-      .actions-col {
-        width: 120px;
+      .file-table .actions-col {
+        width: 112px;
       }
 
       .delete-btn,
@@ -1825,21 +1739,20 @@
 </head>
 
 <body>
-  <!--#include file="shared/NavLinks.html.inc" -->
+  <!--#include file="shared/PageHeader.html.inc" -->
 
+  <main class="page">
   <div class="page-header">
     <div class="page-header-left">
-      <h1>📁 File Manager</h1>
+      <h1>File Manager</h1>
       <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
     </div>
 
     <div class="action-buttons">
-      <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
-      <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
-      <button id="moveActionBtn" class="action-btn move-action-btn" onclick="openMoveSelectedModal()" disabled>➡️
-        Move</button>
-      <button id="deleteActionBtn" class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()" disabled>🗑️
-        Delete</button>
+      <button type="button" class="btn btn-primary" onclick="openUploadModal()">Upload</button>
+      <button type="button" class="btn" onclick="openFolderModal()">New folder</button>
+      <button type="button" id="moveActionBtn" class="btn" onclick="openMoveSelectedModal()" disabled>Move</button>
+      <button type="button" id="deleteActionBtn" class="btn btn-danger" onclick="openDeleteSelectedModal()" disabled>Delete</button>
     </div>
   </div>
 
@@ -1872,12 +1785,7 @@
   </div>
 
   <div id="plugin-container"></div>
-
-  <div class="card">
-    <p style="text-align: center; color: #95a5a6; margin: 0;">
-      %%CROSSPOINT%% • Open Source
-    </p>
-  </div>
+  </main>
 
   <!-- Upload Modal -->
   <div class="modal-overlay" id="uploadModal">

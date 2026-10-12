@@ -1,224 +1,131 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>%%CROSSPOINT%% - Diagnostics</title>
+  <!--#include file="shared/ThemeInit.html.inc" -->
+  <title>Diagnostics - %%CROSSPOINT%%</title>
   <style>
-    html {
-      scrollbar-gutter: stable;
-    }
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-hover-color: #5a8c73;
-      --danger-color: #e74c3c;
-      --notice-bg: #fff8e1;
-      --notice-border: #ffd54f;
-      --notice-color: #5d4e0a;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        --notice-bg: #4a4030;
-        --notice-border: #b89a3e;
-        --notice-color: #f3e5a0;
-        color-scheme: dark;
-      }
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
-    }
-
-    h2 {
-      color: var(--title-color);
-      margin-top: 0;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
+    <!--#include file="shared/Theme.css.inc" -->
     <!--#include file="shared/NavLinks.css.inc" -->
 
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
+    .card h2 { font-size: 1rem; margin-bottom: 6px; }
+    .hint { color: var(--text-muted); font-size: 0.875rem; margin: 0 0 8px; }
+    .alert { color: var(--danger); font-weight: 600; }
+
+    /* The report to download, in the shape of the System Info page's Diagnostics card. */
+    .report { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; }
+    .report-text { flex: 1 1 420px; min-width: 0; }
+    .report-text p { margin: 0; color: var(--text-muted); }
+    .report-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .report-actions .hint { margin: 0; }
+
+    /* Device and the last sleep beside this boot; one column on a narrow screen. */
+    .diag-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 16px;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border-color);
+      align-items: start;
+      margin-bottom: 16px;
     }
+    .diag-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .diag-col .card { margin: 0; }
 
-    .info-row:last-child {
-      border-bottom: none;
+    .value.alert { color: var(--danger); font-weight: 600; }
+
+    .card h3 { margin: 18px 0 2px; font-size: 0.95rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; vertical-align: top; padding: 7px 12px 7px 0; }
+    th:last-child, td:last-child { padding-right: 0; }
+    td { border-top: 1px solid var(--border); }
+    th { color: var(--text-muted); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+    th.num, td.num { text-align: right; white-space: nowrap; }
+
+    /* The sleep and boot history: one row per record, its details below the event and the
+       verdict on the right, or under the details on a narrow screen. */
+    .hist-row {
+      display: grid;
+      grid-template-columns: 3.5em minmax(0, 1fr) auto;
+      gap: 2px 12px;
+      align-items: baseline;
+      padding: 11px 0;
     }
+    .hist-row + .hist-row { border-top: 1px solid var(--border); }
+    .hist-seq { color: var(--text-muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+    .hist-seq::before { content: "#"; }
+    .hist-kind { font-weight: 600; color: var(--text-strong); }
+    .hist-kind.alert { color: var(--danger); }
+    .hist-details { color: var(--text-muted); font-size: 0.875rem; overflow-wrap: anywhere; }
+    .hist-verdict { font-size: 0.875rem; font-weight: 500; color: var(--text-strong); text-align: right; max-width: 280px; }
+    .hist-verdict.alert { color: var(--danger); font-weight: 600; }
 
-    .label {
-      font-weight: 600;
-      color: var(--label-color);
-      flex-shrink: 0;
+    @media (max-width: 860px) {
+      .diag-grid { grid-template-columns: minmax(0, 1fr); }
     }
-
-    .value {
-      color: var(--title-color);
-      text-align: right;
-      overflow-wrap: anywhere;
-    }
-
-    .alert {
-      color: var(--danger-color);
-      font-weight: 600;
-    }
-
-    .hint {
-      color: var(--label-color);
-      font-size: 0.9em;
-    }
-
-    .notice {
-      background: var(--notice-bg);
-      border: 1px solid var(--notice-border);
-      color: var(--notice-color);
-      border-radius: 6px;
-      padding: 10px 14px;
-      margin: 0 0 12px;
-      font-size: 0.95em;
-    }
-
-    .action-row {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .action-row button {
-      padding: 10px 18px;
-      border: none;
-      border-radius: 8px;
-      background-color: var(--accent-color);
-      color: white;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-
-    .action-row button:hover {
-      background-color: var(--accent-hover-color);
-    }
-
-    .action-row button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.9em;
-    }
-
-    th, td {
-      text-align: left;
-      vertical-align: top;
-      padding: 6px 8px 6px 0;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    th {
-      color: var(--label-color);
-      font-weight: 600;
-    }
-
-    td.num {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .kind {
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
+    @media (max-width: 600px) {
+      .hist-row { grid-template-columns: 3em minmax(0, 1fr); }
+      .hist-verdict { grid-column: 2; text-align: left; max-width: none; }
+      .hist-verdict:empty { display: none; }
     }
   </style>
 </head>
 
 <body>
-  <h1>📚 %%CROSSPOINT%%</h1>
+  <!--#include file="shared/PageHeader.html.inc" -->
 
-  <!--#include file="shared/NavLinks.html.inc" -->
-
-  <div class="card">
-    <h2>Bug Report</h2>
-    <p class="notice">
-      Reporting a problem? Download this report and attach it to the issue. It holds the firmware version,
-      the device status and the sleep/boot history shown below. It leaves out the IP and MAC address and
-      holds no passwords. The same history is on the reader under Settings → System → Boot Diagnostics.
-    </p>
-    <div class="action-row">
-      <button id="download" type="button" disabled>Download report</button>
-      <span class="hint" id="loadState">Loading...</span>
+  <main class="page">
+    <div class="page-head">
+      <h1>Diagnostics</h1>
+      <p class="page-intro">How the reader last slept and started, and a report to attach to a bug.</p>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Device</h2>
-    <div id="device"></div>
-  </div>
+    <section class="card report">
+      <div class="report-text">
+        <h2>Bug report</h2>
+        <p>Reporting a problem? Download this report and attach it to the issue. It holds the firmware version,
+          the device status and the sleep/boot history shown below. It leaves out the IP and MAC address and
+          holds no passwords. The same history is on the reader under Settings → System → Boot Diagnostics.</p>
+      </div>
+      <div class="report-actions">
+        <button id="download" class="btn btn-primary" type="button" disabled>Download report</button>
+        <span class="hint" id="loadState">Loading...</span>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>This Boot</h2>
-    <div id="thisBoot"></div>
-    <h3>Boot phases</h3>
-    <p class="hint">Time each step of starting up took. Steps the boot did not go through are left out.</p>
-    <div class="table-wrap"><table id="phases"></table></div>
-  </div>
+    <div class="diag-grid">
+      <div class="diag-col">
+        <section class="card">
+          <h2>Device</h2>
+          <div id="device"></div>
+        </section>
 
-  <div class="card">
-    <h2>Last Sleep</h2>
-    <div id="lastSleep"></div>
-  </div>
+        <section class="card">
+          <h2>Last sleep</h2>
+          <div id="lastSleep"></div>
+        </section>
+      </div>
 
-  <div class="card">
-    <h2>Sleep and Boot History</h2>
-    <p class="hint">
-      Newest first. A healthy cycle is a sleep that reached deep sleep (or powered off as asked) followed by a
-      boot that woke from it; two boots in a row mean the session in between ended without sleeping.
-    </p>
-    <div class="table-wrap"><table id="history"></table></div>
-  </div>
+      <div class="diag-col">
+        <section class="card">
+          <h2>This boot</h2>
+          <div id="thisBoot"></div>
+          <h3>Boot phases</h3>
+          <p class="hint">Time each step of starting up took. Steps the boot did not go through are left out.</p>
+          <table id="phases"></table>
+        </section>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>Sleep and boot history</h2>
+      <p class="hint">
+        Newest first. A healthy cycle is a sleep that reached deep sleep (or powered off as asked) followed by a
+        boot that woke from it; two boots in a row mean the session in between ended without sleeping.
+      </p>
+      <div id="history"></div>
+    </section>
+  </main>
 
   <script>
     // The device reports short untranslated tokens (the ones its own Boot Diagnostics
@@ -461,31 +368,26 @@
     }
 
     function renderHistory() {
-      const table = document.getElementById('history');
-      table.textContent = '';
+      const list = document.getElementById('history');
+      list.textContent = '';
       if (!diagData) {
-        const tr = el('tr');
-        tr.appendChild(el('td', 'hint', diagError || 'Loading...'));
-        table.appendChild(tr);
+        list.appendChild(el('p', 'empty', diagError || 'Loading...'));
         return;
       }
       if (!diagData.history.length) {
-        const tr = el('tr');
-        tr.appendChild(el('td', 'hint', 'No records yet.'));
-        table.appendChild(tr);
+        list.appendChild(el('p', 'empty', 'No records yet.'));
         return;
       }
-      const head = el('tr');
-      ['#', 'Event', 'Details', 'Verdict'].forEach((h) => head.appendChild(el('th', '', h)));
-      table.appendChild(head);
       for (const r of diagData.history) {
         const d = describeRecord(r);
-        const tr = el('tr');
-        tr.appendChild(el('td', 'num', String(r.seq)));
-        tr.appendChild(el('td', 'kind' + (d.bad ? ' alert' : ''), d.kind));
-        tr.appendChild(el('td', '', d.details));
-        tr.appendChild(el('td', d.bad ? 'alert' : '', d.verdict));
-        table.appendChild(tr);
+        const row = el('div', 'hist-row');
+        row.appendChild(el('span', 'hist-seq', String(r.seq)));
+        const main = el('div');
+        main.appendChild(el('div', 'hist-kind' + (d.bad ? ' alert' : ''), d.kind));
+        if (d.details) main.appendChild(el('div', 'hist-details', d.details));
+        row.appendChild(main);
+        row.appendChild(el('span', 'hist-verdict' + (d.bad ? ' alert' : ''), d.verdict));
+        list.appendChild(row);
       }
     }
 
