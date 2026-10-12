@@ -684,12 +684,12 @@
           if (!res.ok || !data.ok) throw new Error(f.fileName + ': ' + (data.error || 'the reader answered ' + res.status));
           total += f.bytes.length;
         }
-        const dropped = new Set();
-        for (const f of files) for (const st of f.styles || []) if (st.kerningDropped) dropped.add(st.style);
+        const reduced = new Set();
+        for (const f of files) for (const st of f.styles || []) if (st.kerningReduced) reduced.add(st.style);
         convertMessage(`Installed "${name}": ${files.length} size${files.length === 1 ? '' : 's'}, ` +
           `${(total / 1048576).toFixed(1)} MB. Choose it on the reader as the reading font.` +
-          (dropped.size ? ` The ${[...dropped].join(' and ')} style has more kerning classes than the reader ` +
-            'can store, so it is set without kerning.' : ''), true);
+          (reduced.size ? ` The ${[...reduced].join(' and ')} style needed more kerning classes than the reader ` +
+            'can store, so the closest were merged: a few rare letter pairs are spaced slightly differently.' : ''), true);
         await loadFonts();
       } catch (err) {
         convertMessage('Could not convert: ' + err.message, false);

@@ -8,6 +8,8 @@ import argparse
 from collections import namedtuple
 from fontTools.ttLib import TTFont
 
+from kern_reduce import reduce_kern_classes
+
 # Force UTF-8 stdout so that `> file.h` on Windows doesn't produce UTF-16 LE
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -626,6 +628,16 @@ for face_idx, cps in face_idx_cps.items():
 
 print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
+# A class number is one byte (uint8_t in EpdFontData): past 255 classes a side, merge the closest
+# (kern_reduce.py). Without this the tables were written anyway, with class numbers that do not fit.
+_pairs = len(kern_map)
+kern_map, _reduced = reduce_kern_classes(kern_map)
+if _reduced:
+    print(f"WARNING: kerning needed {_reduced['left'][0]} left and {_reduced['right'][0]} right classes, "
+          f"more than the 255 a font can store; merged the closest to {_reduced['left'][1]} and "
+          f"{_reduced['right'][1]} ({_reduced['pairs_changed']} of {_pairs} pairs changed)",
+          file=sys.stderr)
+
 # --- Derive class-based kerning from pairs ---
 kern_left_classes = []   # list of (codepoint, classId)
 kern_right_classes = []  # list of (codepoint, classId)
@@ -664,11 +676,6 @@ if kern_map:
 
     kern_left_class_count = left_class_id - 1
     kern_right_class_count = right_class_id - 1
-
-    if kern_left_class_count > 255 or kern_right_class_count > 255:
-        print(f"WARNING: kerning class count exceeds uint8_t range "
-              f"(left={kern_left_class_count}, right={kern_right_class_count})",
-              file=sys.stderr)
 
     # Build the class x class matrix
     kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)

@@ -345,9 +345,12 @@ glyph id; fontTools keeps glyph names unique, so ids and names map one to one.
   are computed in the same order: `size*150.0/72.0`, `/upem`, then `du*scale*16`.
 - Values are clamped to int8, and pairs that end up 0 are dropped before the codepoint
   aliases are expanded. SMP codepoints are dropped afterwards.
-- Classes come from identical rows and columns, numbered in ascending codepoint order. More
-  than 255 classes on either side writes **no kerning at all** for that style. The `styles`
-  result shows it as `kerningDropped`.
+- Classes come from identical rows and columns, numbered in ascending codepoint order. A side
+  that needs more than 255 classes (one byte each) first has its closest classes merged, by
+  `js/kern-reduce.mjs`, the twin of `lib/EpdFont/scripts/kern_reduce.py` that both Python
+  converters use; `test/web/kern_reduce_test.mjs` checks that the two agree. The `styles` result
+  reports it as `kerningReduced` (before and after counts, pairs changed). Before this, the
+  script wrote no kerning at all for such a style.
 
 **Ligatures, as `extract_ligatures_fonttools` does it.**
 - Lookups:
@@ -405,8 +408,9 @@ matches a pair, which is how glyph-pair exceptions override class kerning, and s
 ### Remaining caveats
 
 - **The 255-class cap is close.** Literata Bold already needs 249–250 right classes with
-  today's intervals. A larger interval set, or a user font with richer kerning, would silently
-  lose all kerning. The UI should warn when `kerningDropped` is set.
+  today's intervals. A font past it no longer loses its kerning: the closest classes are merged,
+  weighted so that rare characters absorb the change (ASCII pairs untouched in the measurements),
+  and the Font Manager says so.
 - **Not reproducible in the browser:**
   - variable fonts (refused);
   - WOFF/WOFF2 and TTC (refused);

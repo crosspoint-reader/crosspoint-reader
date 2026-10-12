@@ -30,6 +30,7 @@ EXTERNAL_ASSETS = [
     ("cpfont-writer.mjs", "tools/ftwasm/js/cpfont-writer.mjs", "application/javascript"),
     ("otf-tables.mjs", "tools/ftwasm/js/otf-tables.mjs", "application/javascript"),
     ("pyset-order.mjs", "tools/ftwasm/js/pyset-order.mjs", "application/javascript"),
+    ("kern-reduce.mjs", "tools/ftwasm/js/kern-reduce.mjs", "application/javascript"),
     ("FreeType-FTL.txt", "tools/ftwasm/dist/licenses/FreeType-FTL.txt", "text/plain"),
     ("HarfBuzz-COPYING.txt", "tools/ftwasm/dist/licenses/HarfBuzz-COPYING.txt", "text/plain"),
 ]

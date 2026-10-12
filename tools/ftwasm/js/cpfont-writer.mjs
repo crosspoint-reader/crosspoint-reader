@@ -23,6 +23,7 @@
 
 import { FontError, SfntFont } from './otf-tables.mjs';
 import { PyIntSet } from './pyset-order.mjs';
+import { reduceKernClasses } from './kern-reduce.mjs';
 import { rasterizeStyle, resolveIntervals, CONVERTER_DPI } from './cpfont-raster.mjs';
 
 export { FontError };
@@ -106,10 +107,15 @@ export function scaleKerning(prep, ppem) {
   return out;
 }
 
-/** derive_kern_classes(): identical rows/columns share a class; >255 classes drops kerning. */
-export function deriveKernClasses(kernMap) {
-  const empty = { left: [], right: [], matrix: new Int8Array(0), leftCount: 0, rightCount: 0, dropped: false };
-  if (kernMap.size === 0) return empty;
+/**
+ * derive_kern_classes(): identical rows/columns share a class. A side needing more than 255 classes
+ * (one byte each) first has its closest classes merged (kern-reduce.mjs, as kern_reduce.py does);
+ * `reduced` then reports it, else it is null.
+ */
+export function deriveKernClasses(kernMapIn) {
+  const empty = { left: [], right: [], matrix: new Int8Array(0), leftCount: 0, rightCount: 0, dropped: false, reduced: null };
+  if (kernMapIn.size === 0) return empty;
+  const { map: kernMap, info: reduced } = reduceKernClasses(kernMapIn);
   const lset = new Set(), rset = new Set();
   for (const k of kernMap.keys()) { lset.add(Math.floor(k / 0x110000)); rset.add(k % 0x110000); }
   const L = [...lset].sort((a, b) => a - b), R = [...rset].sort((a, b) => a - b);
@@ -132,8 +138,6 @@ export function deriveKernClasses(kernMap) {
     rightClass.set(R[j], colClass.get(key));
   }
   const leftCount = rowClass.size, rightCount = colClass.size;
-  // The script warns and writes no kerning at all for this style (counts 0 in the TOC).
-  if (leftCount > 255 || rightCount > 255) return { ...empty, dropped: { leftCount, rightCount } };
   const matrix = new Int8Array(leftCount * rightCount);
   for (const [k, v] of kernMap) {
     matrix[(leftClass.get(Math.floor(k / 0x110000)) - 1) * rightCount + rightClass.get(k % 0x110000) - 1] = v;
@@ -141,7 +145,7 @@ export function deriveKernClasses(kernMap) {
   return {
     left: L.map((c) => [c, leftClass.get(c)]),
     right: R.map((c) => [c, rightClass.get(c)]),
-    matrix, leftCount, rightCount, dropped: false,
+    matrix, leftCount, rightCount, dropped: false, reduced,
   };
 }
 
@@ -436,7 +440,7 @@ export function convertFamily(ft, o) {
       styles: [...styles].map(([id, sd]) => ({
         style: STYLE_LABELS[id], glyphs: sd.glyphs.length, intervals: sd.intervals.length,
         bitmapBytes: sd.totalBitmapSize, advanceY: sd.advanceY, ascender: sd.ascender, descender: sd.descender,
-        kernLeftClasses: sd.kern.leftCount, kernRightClasses: sd.kern.rightCount, kerningDropped: sd.kern.dropped,
+        kernLeftClasses: sd.kern.leftCount, kernRightClasses: sd.kern.rightCount, kerningDropped: sd.kern.dropped, kerningReduced: sd.kern.reduced,
         ligatures: sd.ligatures.length, ligaturesTruncated: sd.ligaturesTruncated,
       })),
     });
