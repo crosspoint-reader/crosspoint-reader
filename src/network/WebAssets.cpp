@@ -175,8 +175,19 @@ const char* stateName(const State state) {
   return "missing";
 }
 
-bool serve(WebServer& server, const web_bundle::Index index, const char* cacheControl) {
+bool serve(WebServer& server, const web_bundle::Index index) {
   if (state() != State::Installed) return false;
+
+  // The bundle's name holds the hash of its contents, so it stands for every file in it. The
+  // headers go out only with an answer: a false return leaves the response to the caller.
+  char etag[sizeof(web_bundle::ASSET_NAME) + 2];
+  snprintf(etag, sizeof(etag), "\"%s\"", web_bundle::ASSET_NAME);
+  if (server.header("If-None-Match") == etag) {
+    server.sendHeader("Cache-Control", "no-cache");
+    server.sendHeader("ETag", etag);
+    server.send(304);
+    return true;
+  }
 
   const web_bundle::Entry& entry = web_bundle::ENTRIES[index];
   char path[64];
@@ -196,7 +207,8 @@ bool serve(WebServer& server, const web_bundle::Index index, const char* cacheCo
   }
 
   server.sendHeader("Content-Encoding", "gzip");
-  server.sendHeader("Cache-Control", cacheControl);
+  server.sendHeader("Cache-Control", "no-cache");
+  server.sendHeader("ETag", etag);
   server.setContentLength(entry.size);
   server.send(200, entry.contentType, "");
   NetworkClient client = server.client();
@@ -208,13 +220,13 @@ bool serve(WebServer& server, const web_bundle::Index index, const char* cacheCo
   return true;
 }
 
-bool serveScript(WebServer& server, const char* name, const char* cacheControl) {
+bool serveScript(WebServer& server, const char* name) {
   const size_t len = strlen(name);
   for (size_t i = 0; i < web_bundle::ENTRY_COUNT; i++) {
     const web_bundle::Entry& entry = web_bundle::ENTRIES[i];
     if (strcmp(entry.contentType, "text/html") == 0) continue;  // pages have routes of their own
     if (strncmp(entry.file, name, len) == 0 && strcmp(entry.file + len, ".gz") == 0) {
-      return serve(server, static_cast<web_bundle::Index>(i), cacheControl);
+      return serve(server, static_cast<web_bundle::Index>(i));
     }
   }
   return false;

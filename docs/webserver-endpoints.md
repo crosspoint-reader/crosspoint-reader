@@ -90,6 +90,11 @@ Plugins pages load, and `/js/metadata-editor.js`, the File Manager's Details dia
 loaded on first use. Pages are not served under `/js/`. Any
 other path that WebDAV does not claim answers `404` with a plain-text body.
 
+Pages and scripts from the bundle carry `Cache-Control: no-cache` and the bundle's name as
+their `ETag`. A browser asks again before each use, sending `If-None-Match`, and gets a bodiless
+`304` while the same bundle is installed; after another one is installed, it gets the new file
+straight away.
+
 ```bash
 curl http://crosspoint.local/
 ```

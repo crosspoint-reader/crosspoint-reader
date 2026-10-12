@@ -487,9 +487,11 @@ void CrossPointWebServer::begin() {
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
-  // Collect WebDAV headers and register handler
-  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout"};
-  server->collectHeaders(davHeaders, 6);
+  // Collect the WebDAV headers, and If-None-Match for the bundle's ETags (WebAssets::serve()), then
+  // register the handler. collectHeaders() replaces the list, so it is called once.
+  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
+                                    "Lock-Token", "Timeout",     "If-None-Match"};
+  server->collectHeaders(collectedHeaders, sizeof(collectedHeaders) / sizeof(collectedHeaders[0]));
   // Ownership passes to the WebServer, which deletes the handler when stopped.
   // On OOM the HTTP server still comes up; only WebDAV is unavailable.
   if (auto davHandler = makeUniqueNoThrow<WebDAVHandler>()) {
@@ -728,11 +730,11 @@ void CrossPointWebServer::handleRoot() const {
 }
 
 // "/" is the welcome page once the bundle is installed and the setup page until
-// then, so it is revalidated rather than cached: whichever one a browser kept
-// would otherwise outlive the switch.
+// then. The setup page is never stored and the bundle's pages are revalidated
+// (WebAssets::serve()), so a browser does not keep showing the one it saw last.
 void CrossPointWebServer::handleWelcomePage() const {
   if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
-  if (WebAssets::serve(*server, web_bundle::WelcomePageHtml, "no-cache")) return;
+  if (WebAssets::serve(*server, web_bundle::WelcomePageHtml)) return;
   sendSetupPage(server.get());
 }
 

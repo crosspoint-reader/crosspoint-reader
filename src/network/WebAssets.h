@@ -52,12 +52,19 @@ void forget();
 // sent nothing, when the bundle is not installed or the file cannot be read;
 // the caller then sends the setup page. A file that turns out to be missing
 // marks the bundle Missing, so the setup page reinstalls it.
-bool serve(WebServer& server, web_bundle::Index index, const char* cacheControl = "max-age=3600");
+//
+// Browsers keep the file but ask again before every use (no-cache), with the
+// bundle's name as its ETag: while the bundle stays, the answer is a bodiless
+// 304; once another is installed, the new file. A cache lifetime instead kept a
+// replaced bundle's pages and scripts in use for its length, and could pair a
+// new page with an old script. Needs If-None-Match among the server's
+// collected headers.
+bool serve(WebServer& server, web_bundle::Index index);
 
 // A bundle file that pages load by name under /js/ ("jszip.min.js"), streamed like serve(). Only
 // the bundle's non-page files are found this way. False, having sent nothing, when this build's
 // bundle has no such file or it cannot be served.
-bool serveScript(WebServer& server, const char* name, const char* cacheControl = "max-age=3600");
+bool serveScript(WebServer& server, const char* name);
 
 // The release this build is published under ("" for unpublished builds such as
 // env:default), the repository it is published in, and the bundle's asset name.
