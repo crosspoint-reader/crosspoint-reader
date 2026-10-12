@@ -3,6 +3,7 @@
 //
 //   const { fonts, skipped } = await EpubFonts.extract(zip);   // zip: the book, opened with JSZip
 //   EpubFonts.byFamily(fonts)   // [{ family, styles: { regular, bold, italic, bolditalic } }]
+//   await EpubFonts.read(arrayBuffer)   // one font file (TTF, OTF or WOFF), described the same way
 //
 // Each font: { path, family, subfamily, weight, italic, bold, style, variable, data } where data is an
 // ArrayBuffer holding an sfnt (TrueType or CFF OpenType). skipped lists what could not be used, with
@@ -285,5 +286,15 @@
     return Array.from(families.values());
   }
 
-  window.EpubFonts = { extract, byFamily, sha1 };
+  // One font file chosen by hand: unpacked if WOFF, described like an extracted one. Throws with a
+  // readable reason for anything the converter cannot take.
+  async function read(buffer) {
+    let data = buffer;
+    const signature = tag(new DataView(data), 0);
+    if (signature === 'wOF2') throw new Error('a WOFF2 font, which cannot be unpacked here');
+    if (signature === 'wOFF') data = await unwoff(data);
+    return Object.assign({ data }, describe(data));
+  }
+
+  window.EpubFonts = { extract, byFamily, read, sha1 };
 })();

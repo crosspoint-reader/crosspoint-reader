@@ -23,7 +23,7 @@ The WebSocket upload (port 81) is not passed through; the File Manager falls bac
 For headless screenshots, ?shot=<ms> on a page holds its load event that long (a hidden image the
 server answers late), so the page's own requests finish before e.g. `firefox --screenshot` fires,
 and ?run=<code> runs a snippet shortly after the page is parsed (?run=openUploadModal() to shoot a
-dialog).
+dialog); such a snippet can fetch any file of the checkout from /__repo/<path>.
 """
 
 import argparse
@@ -52,6 +52,11 @@ PAGES = {
     "/dictionary": "DictionaryPage.html",
     "/diagnostics": "DiagnosticsPage.html",
 }
+# Where /js/<name> looks after src/network/html/js: the files build_html.py takes from elsewhere
+# (EXTERNAL_ASSETS there), here served straight from their folders.
+EXTRA_JS_DIRS = [os.path.join(ROOT, d) for d in ("tools/ftwasm/dist", "tools/ftwasm/js", "tools/ftwasm/dist/licenses")]
+CONTENT_TYPES = {".wasm": "application/wasm", ".mjs": "application/javascript", ".js": "application/javascript",
+                 ".txt": "text/plain; charset=utf-8"}
 INCLUDE_RE = re.compile(r'<!--\s*#include\s+file="([^"]+)"\s*-->')
 # A 1x1 transparent GIF, the answer to the ?shot= delay image.
 PIXEL = bytes.fromhex("47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b")
@@ -137,10 +142,18 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(int(query.get("ms", ["1000"])[0]) / 1000)
             return self.send_body(200, PIXEL, "image/gif")
         if self.command == "GET" and path.startswith("/js/"):
-            local = os.path.join(HTML, "js", os.path.basename(path))
-            if os.path.isfile(local):
+            name = os.path.basename(path)
+            for folder in [os.path.join(HTML, "js")] + EXTRA_JS_DIRS:
+                local = os.path.join(folder, name)
+                if os.path.isfile(local):
+                    with open(local, "rb") as f:
+                        return self.send_body(200, f.read(), CONTENT_TYPES.get(os.path.splitext(name)[1], "application/octet-stream"))
+        if self.command == "GET" and path.startswith("/__repo/"):
+            # Any file of the checkout, for a ?run= snippet that needs a real input (a font, a book).
+            local = os.path.normpath(os.path.join(ROOT, urllib.parse.unquote(path[len("/__repo/"):])))
+            if local.startswith(ROOT + os.sep) and os.path.isfile(local):
                 with open(local, "rb") as f:
-                    return self.send_body(200, f.read(), "application/javascript")
+                    return self.send_body(200, f.read(), "application/octet-stream")
         if self.device:
             return self.proxy()
         if self.mock_dir:

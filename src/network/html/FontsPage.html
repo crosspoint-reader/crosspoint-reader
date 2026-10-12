@@ -73,8 +73,31 @@
       #pickedInfo { margin: 8px 0 0; }
       #pickedInfo:empty { display: none; }
 
+      /* The converter: where the fonts come from, which file is which style, and the options. */
+      .card-intro { margin: -4px 0 14px; color: var(--text-muted); }
+      .convert-source { margin-bottom: 14px; }
+      .style-table { margin: 12px 0 0; }
+      .style-row { display: flex; gap: 12px; padding: 6px 0; font-size: 0.9rem; }
+      .style-row + .style-row { border-top: 1px solid var(--border); }
+      .style-row .style-name { flex: 0 0 96px; color: var(--text-muted); }
+      .style-row .style-file { min-width: 0; overflow-wrap: anywhere; color: var(--text-strong); }
+      .style-row .style-file.missing { color: var(--text-muted); }
+      .book-families { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+      .book-families label { display: flex; gap: 8px; align-items: baseline; }
+      .convert-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px 20px;
+        margin: 16px 0;
+      }
+      .convert-options .field-label { display: block; font-weight: 500; color: var(--text-strong); margin-bottom: 6px; }
+      .convert-options input[type="text"], .convert-options select { width: 100%; }
+      .size-boxes { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+      .size-boxes label { display: inline-flex; gap: 4px; align-items: center; }
+      .credit { margin: 14px 0 0; font-size: 0.8rem; color: var(--text-muted); }
+
       /* Result lines: neutral while working, green when done, red on failure. */
-      #status {
+      #status, #convertStatus {
         display: none;
         margin-top: 14px;
         padding: 10px 14px;
@@ -83,9 +106,11 @@
         background: var(--surface-2);
         overflow-wrap: anywhere;
       }
-      #status.status-ok, #remoteStatus.status-ok { display: block; background: var(--accent-soft); color: var(--ok-text);
+      #convertStatus:not(.status-ok):not(.status-err) { display: block; color: var(--text-muted); }
+      #convertStatus:empty { display: none; }
+      #status.status-ok, #remoteStatus.status-ok, #convertStatus.status-ok { display: block; background: var(--accent-soft); color: var(--ok-text);
         border-color: transparent; }
-      #status.status-err, #remoteStatus.status-err { display: block; background: var(--danger-soft); color: var(--danger);
+      #status.status-err, #remoteStatus.status-err, #convertStatus.status-err { display: block; background: var(--danger-soft); color: var(--danger);
         border-color: transparent; }
 
       @media (max-width: 860px) {
@@ -124,13 +149,48 @@
         </div>
       </section>
 
+      <section class="card" id="convertCard">
+        <h2>Convert a font</h2>
+        <p class="card-intro">Makes a font family for the reader from TrueType or OpenType files, here in your
+          browser: the same conversion as the fonts in the catalog.</p>
+        <div class="segmented convert-source" role="radiogroup" aria-label="Convert from">
+          <label><input type="radio" name="convertSource" value="files" checked><span>Font files</span></label>
+          <label><input type="radio" name="convertSource" value="book"><span>The fonts of an EPUB</span></label>
+        </div>
+        <div id="sourceFiles">
+          <input type="file" id="convertFiles" accept=".ttf,.otf,.woff" multiple aria-label="Font files">
+          <p class="family-meta">Choose the family's files, up to four: regular, bold, italic and bold italic. Each
+            file's style is read from the font.</p>
+        </div>
+        <div id="sourceBook" hidden>
+          <input type="file" id="convertBook" accept=".epub" aria-label="An EPUB with embedded fonts">
+          <p class="family-meta">A book on the reader: open it with <strong>Details</strong> in the File Manager and
+            choose <strong>Convert its fonts</strong>.</p>
+          <div id="bookFamilies" class="book-families"></div>
+        </div>
+        <div id="styleTable" class="style-table" hidden></div>
+        <div class="convert-options">
+          <label><span class="field-label">Family name</span>
+            <input type="text" id="convertName" autocomplete="off" spellcheck="false"
+              placeholder="Letters, digits, - and _"></label>
+          <label><span class="field-label">Characters</span>
+            <select id="convertIntervals">
+              <option value="builtin,latin-cyrillic,greek-letters,musical-symbols" selected>Latin, Cyrillic and Greek</option>
+              <option value="builtin,latin-cyrillic,musical-symbols">Latin and Cyrillic</option>
+            </select></label>
+          <div><span class="field-label">Sizes (points)</span>
+            <div class="size-boxes" id="convertSizes"></div></div>
+        </div>
+        <button type="button" id="convertBtn" class="btn btn-primary" disabled>Convert and install</button>
+        <div id="convertStatus" role="status"></div>
+        <p class="credit">A font that came with a book is licensed with that book: convert it for reading on your own
+          reader. The conversion uses FreeType (<a href="/js/FreeType-FTL.txt">licence</a>) and HarfBuzz
+          (<a href="/js/HarfBuzz-COPYING.txt">licence</a>). Portions of this software are copyright © 2024 The
+          FreeType Project (www.freetype.org). All rights reserved.</p>
+      </section>
       <section class="card">
         <h2>Upload a font</h2>
-        <p class="notice">
-          Need a <code>.cpfont</code> file? Convert any TrueType/OpenType font at
-          <a href="https://crosspointreader.com/fonts" target="_blank" rel="noopener">crosspointreader.com/fonts</a>,
-          then upload the resulting files here.
-        </p>
+        <p class="card-intro">Font files already converted to <code>.cpfont</code>, on this computer.</p>
         <form class="upload-form" id="uploadForm">
           <input type="file" id="fontFiles" accept=".cpfont" multiple required />
           <button type="submit" class="btn btn-primary">Upload</button>
@@ -409,6 +469,258 @@
       await loadFonts();
       await loadRemoteManifest();
     });
+
+    // ---- Convert a font ----------------------------------------------------------------------------
+    //
+    // TrueType/OpenType files, or the fonts a book embeds, to .cpfont: in a module Web Worker
+    // (js/font-converter.js) running FreeType built to WebAssembly, which makes the same files as
+    // lib/EpdFont/scripts/fontconvert_sdcard.py makes for the catalog. The result is installed through
+    // /api/fonts/upload, one file at a time, as the Upload card does.
+    const CONVERT_SIZES = [8, 10, 12, 14, 16, 18, 20];
+    const CONVERT_DEFAULT_SIZES = [10, 12, 14, 16, 18];
+    const STYLE_NAMES = { regular: 'Regular', bold: 'Bold', italic: 'Italic', bolditalic: 'Bold italic' };
+    const FAMILY_NAME_MAX = 31;  // FontInstaller::MAX_FAMILY_NAME_LEN
+    let convertStyles = {};      // style -> { data: ArrayBuffer, label: file name }
+    let bookFamilies = [];
+    let converterWorker = null;
+
+    function convertMessage(text, ok) {
+      const el = document.getElementById('convertStatus');
+      el.className = ok === undefined ? '' : (ok ? 'status-ok' : 'status-err');
+      el.textContent = text || '';
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('could not load ' + src + '; reinstall the web interface at /setup'));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function fontReader() {
+      if (!window.EpubFonts) await loadScript('/js/epub-fonts.js');
+      return window.EpubFonts;
+    }
+
+    // The family name as the reader takes it: letters, digits, - and _, at most 31 of them.
+    function familyNameFor(family) {
+      return (family || '').replace(/\s+/g, '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, FAMILY_NAME_MAX);
+    }
+
+    function updateConvertButton() {
+      document.getElementById('convertBtn').disabled = !convertStyles.regular;
+    }
+
+    function renderStyleTable() {
+      const table = document.getElementById('styleTable');
+      table.hidden = Object.keys(convertStyles).length === 0;
+      table.replaceChildren(...Object.keys(STYLE_NAMES).map((style) => {
+        const row = document.createElement('div');
+        row.className = 'style-row';
+        const name = document.createElement('span');
+        name.className = 'style-name';
+        name.textContent = STYLE_NAMES[style];
+        const file = document.createElement('span');
+        file.className = 'style-file' + (convertStyles[style] ? '' : ' missing');
+        file.textContent = convertStyles[style] ? convertStyles[style].label
+          : (style === 'regular' ? 'missing: the family needs a regular style' : 'none');
+        row.append(name, file);
+        return row;
+      }));
+      updateConvertButton();
+    }
+
+    function showSource(source) {
+      document.getElementById('sourceFiles').hidden = source !== 'files';
+      document.getElementById('sourceBook').hidden = source !== 'book';
+      document.querySelector(`input[name="convertSource"][value="${source}"]`).checked = true;
+      convertStyles = {};
+      renderStyleTable();
+      convertMessage('');
+    }
+
+    document.querySelectorAll('input[name="convertSource"]').forEach((radio) => {
+      radio.addEventListener('change', () => showSource(radio.value));
+    });
+
+    document.getElementById('convertFiles').addEventListener('change', async (e) => {
+      convertStyles = {};
+      const problems = [];
+      let family = '';
+      try {
+        const reader = await fontReader();
+        for (const file of Array.from(e.target.files || [])) {
+          try {
+            const font = await reader.read(await file.arrayBuffer());
+            if (font.variable) throw new Error('a variable font; choose the static files of the family');
+            if (convertStyles[font.style]) {
+              throw new Error(`a second ${STYLE_NAMES[font.style].toLowerCase()} style besides ${convertStyles[font.style].label}`);
+            }
+            convertStyles[font.style] = { data: font.data, label: file.name };
+            if (!family || font.style === 'regular') family = font.family;
+          } catch (err) {
+            problems.push(file.name + ' is ' + err.message + '.');
+          }
+        }
+      } catch (err) {
+        problems.push(err.message);
+      }
+      document.getElementById('convertName').value = familyNameFor(family);
+      renderStyleTable();
+      convertMessage(problems.join(' '), problems.length ? false : undefined);
+    });
+
+    async function openBookFonts(bytes) {
+      convertStyles = {};
+      bookFamilies = [];
+      renderStyleTable();
+      const list = document.getElementById('bookFamilies');
+      list.replaceChildren();
+      convertMessage('Reading the book...');
+      try {
+        if (typeof JSZip === 'undefined') await loadScript('/js/jszip.min.js');
+        const reader = await fontReader();
+        const { fonts, skipped } = await reader.extract(await JSZip.loadAsync(bytes));
+        const variable = fonts.filter((f) => f.variable);
+        bookFamilies = reader.byFamily(fonts.filter((f) => !f.variable));
+        list.replaceChildren(...bookFamilies.map((family, i) => {
+          const label = document.createElement('label');
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'bookFamily';
+          radio.addEventListener('change', () => chooseBookFamily(i));
+          const text = document.createElement('span');
+          text.textContent = family.family + ': ' +
+            Object.keys(family.styles).map((st) => STYLE_NAMES[st].toLowerCase()).join(', ');
+          label.append(radio, text);
+          return label;
+        }));
+        const notes = skipped.map((sk) => sk.path.split('/').pop() + ' is ' + sk.reason + '.')
+          .concat(variable.map((f) => f.path.split('/').pop() + ' is a variable font, which the converter cannot take.'));
+        if (!bookFamilies.length) {
+          convertMessage(['This book embeds no font the converter can use.'].concat(notes).join(' '), false);
+          return;
+        }
+        list.querySelector('input').checked = true;
+        chooseBookFamily(0);
+        convertMessage(notes.join(' '));
+      } catch (err) {
+        convertMessage('Could not read the book: ' + err.message, false);
+      }
+    }
+
+    function chooseBookFamily(i) {
+      const family = bookFamilies[i];
+      convertStyles = {};
+      for (const [style, font] of Object.entries(family.styles)) {
+        convertStyles[style] = { data: font.data, label: font.path.split('/').pop() };
+      }
+      document.getElementById('convertName').value = familyNameFor(family.family);
+      renderStyleTable();
+    }
+
+    document.getElementById('convertBook').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) await openBookFonts(await file.arrayBuffer());
+    });
+
+    function runConverter(job) {
+      if (!converterWorker) converterWorker = new Worker('/js/font-converter.js', { type: 'module' });
+      return new Promise((resolve, reject) => {
+        converterWorker.onmessage = (e) => {
+          const m = e.data;
+          if (m.type === 'progress') {
+            convertMessage(`Converting ${m.done} of ${m.total}: ${m.size} pt ${STYLE_NAMES[m.style].toLowerCase()}`);
+          } else if (m.type === 'done') {
+            resolve(m.files);
+          } else if (m.type === 'error') {
+            reject(new Error(m.message));
+          }
+        };
+        converterWorker.onerror = (e) => {
+          converterWorker = null;
+          reject(new Error(e.message || 'the converter could not start; this needs a current browser'));
+        };
+        converterWorker.postMessage(job);
+      });
+    }
+
+    document.getElementById('convertBtn').addEventListener('click', async () => {
+      const name = document.getElementById('convertName').value.trim();
+      const sizes = Array.from(document.querySelectorAll('#convertSizes input:checked')).map((box) => Number(box.value));
+      if (!/^[A-Za-z0-9_-]{1,31}$/.test(name)) {
+        convertMessage('The family name may only hold letters, digits, - and _, at most 31 of them.', false);
+        return;
+      }
+      if (!sizes.length) {
+        convertMessage('Choose at least one size.', false);
+        return;
+      }
+      const button = document.getElementById('convertBtn');
+      button.disabled = true;
+      try {
+        convertMessage('Starting the converter...');
+        const fonts = {};
+        const fileNames = {};
+        for (const [style, entry] of Object.entries(convertStyles)) {
+          fonts[style] = entry.data;
+          fileNames[style] = entry.label;
+        }
+        const files = await runConverter({
+          fonts, fileNames, name, sizes, intervals: document.getElementById('convertIntervals').value
+        });
+        let total = 0;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          convertMessage(`Installing ${i + 1} of ${files.length}: ${f.fileName}`);
+          const form = new FormData();
+          form.append('family', name);
+          form.append('file', new File([f.bytes], f.fileName), f.fileName);
+          const res = await fetch('/api/fonts/upload', { method: 'POST', body: form });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(f.fileName + ': ' + (data.error || 'the reader answered ' + res.status));
+          total += f.bytes.length;
+        }
+        const dropped = new Set();
+        for (const f of files) for (const st of f.styles || []) if (st.kerningDropped) dropped.add(st.style);
+        convertMessage(`Installed "${name}": ${files.length} size${files.length === 1 ? '' : 's'}, ` +
+          `${(total / 1048576).toFixed(1)} MB. Choose it on the reader as the reading font.` +
+          (dropped.size ? ` The ${[...dropped].join(' and ')} style has more kerning classes than the reader ` +
+            'can store, so it is set without kerning.' : ''), true);
+        await loadFonts();
+      } catch (err) {
+        convertMessage('Could not convert: ' + err.message, false);
+      } finally {
+        updateConvertButton();
+      }
+    });
+
+    document.getElementById('convertSizes').replaceChildren(...CONVERT_SIZES.map((size) => {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = String(size);
+      box.checked = CONVERT_DEFAULT_SIZES.includes(size);
+      label.append(box, String(size));
+      return label;
+    }));
+
+    // /fonts?book=<path>: the File Manager's Details dialog sends a book on the card here.
+    const bookOnCard = new URLSearchParams(location.search).get('book');
+    if (bookOnCard) {
+      showSource('book');
+      document.getElementById('convertCard').scrollIntoView();
+      fetch('/download?path=' + encodeURIComponent(bookOnCard))
+        .then((r) => {
+          if (!r.ok) throw new Error('the reader answered ' + r.status);
+          return r.arrayBuffer();
+        })
+        .then(openBookFonts)
+        .catch((err) => convertMessage('Could not open ' + bookOnCard + ': ' + err.message, false));
+    }
 
     document.getElementById('refreshManifest').addEventListener('click', loadRemoteManifest);
     document.getElementById('downloadAllRemote').addEventListener('click', downloadAllRemoteUpdates);
