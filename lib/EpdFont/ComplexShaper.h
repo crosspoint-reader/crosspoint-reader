@@ -98,8 +98,9 @@ class ComplexShaper {
     size_t peak = 0;
     size_t budget = 0;
     uint32_t failures = 0;
-    uint32_t shapedRuns = 0;  // runs the shaper shaped
-    uint32_t reusedRuns = 0;  // runs served from the cache or layout memo
+    uint32_t shapedRuns = 0;   // runs the shaper shaped
+    uint32_t reusedRuns = 0;   // runs served from the cache or layout memo
+    size_t maxHeapSource = 0;  // largest layout font a source may read into the heap
   };
   static MemoryStats memoryStats();
   static void setMemoryBudget(size_t bytes);

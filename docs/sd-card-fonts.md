@@ -205,7 +205,10 @@ On the X3 and X4, the first time an Indic font is used its shaping tables
 (5-80 KB per style, depending on the script) are copied once into a reserved
 area of the device's internal flash and read from there, keeping the reader's
 RAM free. The converter warns when a font's tables exceed the 128 KB that
-area holds per font; such a font may not be shaped on those devices. Opening
+area holds per font; such a font may not be shaped on those devices. That area
+is the "spiffs" flash partition: on a device whose partition is missing or
+smaller than 384 KB, only fonts whose tables are 16 KB or less (Tamil,
+Gurmukhi, Malayalam, Sinhala Sans) are shaped. Opening
 a chapter for the first time takes longer than a Latin one, because every
 word is shaped while the chapter is laid out. Page turns do no shaping: the
 shaped words are stored with the chapter's cached layout.

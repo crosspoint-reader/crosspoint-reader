@@ -69,7 +69,10 @@ namespace {
 
 constexpr uint32_t kMagic = 0x32465043;  // "CPF2": 128 KB slots (a "CPFB" directory had 64 KB slots)
 constexpr uint32_t kSlotSize = MAX_BLOB_BYTES;
-constexpr uint32_t kSlots = 8;
+constexpr uint32_t kSlots = 8;  // at most this many slots; the directory always has this many entries
+// ComplexShaper keeps two faces live (regular and bold) without PSRAM; fewer
+// slots would rewrite flash on every style change.
+constexpr uint32_t kMinSlots = 2;
 constexpr uint32_t kDirSector = 4096;  // directory at offset 0; slot i at (i + 1) * kSlotSize
 constexpr uint32_t kCopyChunk = 4096;
 
@@ -88,7 +91,8 @@ struct Mapping {
 
 Mapping gMappings[kSlots] = {};
 uint8_t gMappingCount = 0;
-int8_t gUsable = -1;  // -1 unchecked, 0 no, 1 yes
+int8_t gUsable = -1;      // -1 unchecked, 0 no, 1 yes
+uint32_t gSlotCount = 0;  // slots the partition holds, up to kSlots
 
 // Keys whose copy failed verification: the source does not hash to its key
 // (a corrupt file, or a bad hash in its header), so copying it again would
@@ -115,8 +119,15 @@ uint32_t slotOffset(const uint32_t slot) { return (slot + 1) * kSlotSize; }
 bool usable() {
   if (gUsable < 0) {
     uint32_t size = 0;
-    gUsable = backend::open(&size) && size >= slotOffset(kSlots) ? 1 : 0;
-    if (!gUsable) LOG_DBG("FBC", "No usable flash partition; layout fonts stay in RAM");
+    const uint32_t regions = backend::open(&size) ? size / kSlotSize : 0;  // the first holds the directory
+    gSlotCount = regions > kSlots ? kSlots : (regions > 0 ? regions - 1 : 0);
+    gUsable = gSlotCount >= kMinSlots ? 1 : 0;
+    if (gUsable) {
+      LOG_DBG("FBC", "Flash partition of %u bytes: %u layout font slots", size, gSlotCount);
+    } else {
+      LOG_ERR("FBC", "No usable flash partition (%u bytes, needs %u); flash cache disabled", size,
+              slotOffset(kMinSlots));
+    }
   }
   return gUsable == 1;
 }
@@ -158,13 +169,13 @@ bool copyIn(const uint32_t slot, const uint32_t length, const Reader read, void*
 }  // namespace
 
 const uint8_t* acquire(const uint32_t key, const uint32_t length, const Reader read, void* ctx) {
-  if (key == 0 || length == 0 || length > kSlotSize || isRejected(key) || !usable()) return nullptr;
+  if (!canHold(key, length)) return nullptr;
 
   DirEntry dir[kSlots];
   if (!backend::read(0, dir, sizeof(dir))) return nullptr;
 
   uint32_t newest = 0;
-  for (uint32_t slot = 0; slot < kSlots; slot++) {
+  for (uint32_t slot = 0; slot < gSlotCount; slot++) {
     if (dir[slot].magic != kMagic) continue;
     if (dir[slot].sequence > newest) newest = dir[slot].sequence;
     if (dir[slot].key == key && dir[slot].length == length && !slotMapped(slot)) {
@@ -174,7 +185,7 @@ const uint8_t* acquire(const uint32_t key, const uint32_t length, const Reader r
 
   // Not cached (or the copy went bad): recycle an empty slot, else the oldest idle one.
   int32_t victim = -1;
-  for (uint32_t slot = 0; slot < kSlots; slot++) {
+  for (uint32_t slot = 0; slot < gSlotCount; slot++) {
     if (slotMapped(slot)) continue;
     if (dir[slot].magic != kMagic) {
       victim = static_cast<int32_t>(slot);
@@ -212,6 +223,10 @@ const uint8_t* acquire(const uint32_t key, const uint32_t length, const Reader r
   return data;
 }
 
+bool canHold(const uint32_t key, const uint32_t length) {
+  return key != 0 && length != 0 && length <= kSlotSize && !isRejected(key) && usable();
+}
+
 void release(void* data) {
   for (uint8_t i = 0; i < gMappingCount; i++) {
     if (gMappings[i].data != data) continue;
@@ -228,6 +243,7 @@ void release(void* data) {
 namespace FlashBlobCache {
 const uint8_t* acquire(uint32_t, uint32_t, Reader, void*) { return nullptr; }
 void release(void*) {}
+bool canHold(uint32_t, uint32_t) { return false; }
 }  // namespace FlashBlobCache
 
 #endif

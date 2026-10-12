@@ -605,15 +605,20 @@ bool SdCardFont::loadShapingBlob(void* ctx, ComplexShaper::Blob* out) {
   BlobFileCtx source{&file, s.shapingBlobOffset};
 
   // No-PSRAM boards map the layout font from internal flash (see
-  // FlashBlobCache.h); elsewhere, or if that fails, it is read into the heap.
+  // FlashBlobCache.h); otherwise it is read into the heap, within the limit
+  // ComplexShaper sets.
   if (const uint8_t* mapped = FlashBlobCache::acquire(s.shapingBlobKey, s.shapingBlobLength, readBlobChunk, &source)) {
     *out = ComplexShaper::Blob{mapped, s.shapingBlobLength, &FlashBlobCache::release};
     return true;
   }
-  // A blob larger than the whole budget can only be mapped: freeing memory
-  // for it would not help.
-  if (s.shapingBlobLength > ComplexShaper::memoryStats().budget) {
-    ComplexShaper::noteSourceUnavailable();
+  // A layout font the heap may not hold shapes only when mapped from flash.
+  if (s.shapingBlobLength > ComplexShaper::memoryStats().maxHeapSource) {
+    if (FlashBlobCache::canHold(s.shapingBlobKey, s.shapingBlobLength)) {
+      ComplexShaper::noteSourceUnavailable();  // the flash copy may succeed later
+    } else {
+      LOG_ERR("SDCF", "%u-byte shaping data fits neither the heap nor a flash cache here; text is not shaped",
+              s.shapingBlobLength);
+    }
     return false;
   }
   auto* blob = static_cast<uint8_t*>(ComplexShaper::allocate(s.shapingBlobLength));

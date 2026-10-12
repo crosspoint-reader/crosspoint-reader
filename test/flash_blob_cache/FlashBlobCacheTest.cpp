@@ -10,8 +10,10 @@
 
 // Fake NOR partition for FlashBlobCache's backend: erase sets bytes to 0xFF,
 // writes can only clear bits, and map() hands out pointers into the array.
+// CMake builds this file once per partition size; EXPECTED_SLOTS is how many
+// slots the cache should make of it (0: too small to use).
 namespace fake {
-constexpr uint32_t kSize = 2 * 1024 * 1024;
+constexpr uint32_t kSize = FAKE_FLASH_SIZE;
 std::vector<uint8_t> flash(kSize, 0xFF);
 int erases = 0;
 int writes = 0;
@@ -115,6 +117,18 @@ class FlashBlobCacheTest : public testing::Test {
 
 }  // namespace
 
+#if EXPECTED_SLOTS == 0
+
+TEST_F(FlashBlobCacheTest, DeclinesAPartitionTooSmallForTwoSlots) {
+  const auto blob = makeBlob(2000, 1);
+  EXPECT_FALSE(FlashBlobCache::canHold(keyOf(blob), static_cast<uint32_t>(blob.size())));
+  EXPECT_EQ(acquire(blob), nullptr);
+  EXPECT_EQ(fake::erases, 0);
+  EXPECT_EQ(fake::writes, 0);
+}
+
+#else
+
 TEST_F(FlashBlobCacheTest, CopiesOnFirstUseAndMapsTheCopyAfterwards) {
   const auto blob = makeBlob(36736, 1);
   const uint8_t* first = acquire(blob);
@@ -176,20 +190,22 @@ TEST_F(FlashBlobCacheTest, DoesNotRewriteFlashForABlobThatFailsItsHash) {
 }
 
 TEST_F(FlashBlobCacheTest, RecyclesTheOldestIdleSlotButNeverAMappedOne) {
-  std::vector<std::vector<uint8_t>> blobs;
-  for (uint8_t i = 0; i < 9; i++) blobs.push_back(makeBlob(1000 + i, static_cast<uint8_t>(10 + i)));
+  std::vector<std::vector<uint8_t> > blobs;
+  for (uint8_t i = 0; i <= EXPECTED_SLOTS; i++) blobs.push_back(makeBlob(1000 + i, static_cast<uint8_t>(10 + i)));
   const uint8_t* pinned = acquire(blobs[0]);  // stays mapped throughout
   ASSERT_NE(pinned, nullptr);
-  for (int i = 1; i < 8; i++) {
+  for (int i = 1; i < EXPECTED_SLOTS; i++) {
+    gReads = 0;
     const uint8_t* p = acquire(blobs[i]);
     ASSERT_NE(p, nullptr);
+    EXPECT_GT(gReads, 0) << "blob " << i << " should have been copied into a free slot";
     release(p);
   }
-  // All eight slots are used; the ninth blob must evict slot 1 (oldest idle), not slot 0.
-  const uint8_t* ninth = acquire(blobs[8]);
-  ASSERT_NE(ninth, nullptr);
+  // Every slot is used; the next blob must evict slot 1 (oldest idle), not slot 0.
+  const uint8_t* extra = acquire(blobs[EXPECTED_SLOTS]);
+  ASSERT_NE(extra, nullptr);
   EXPECT_EQ(std::memcmp(pinned, blobs[0].data(), blobs[0].size()), 0);
-  EXPECT_EQ(std::memcmp(ninth, blobs[8].data(), blobs[8].size()), 0);
+  EXPECT_EQ(std::memcmp(extra, blobs[EXPECTED_SLOTS].data(), blobs[EXPECTED_SLOTS].size()), 0);
 
   gReads = 0;
   const uint8_t* evicted = acquire(blobs[1]);
@@ -198,14 +214,19 @@ TEST_F(FlashBlobCacheTest, RecyclesTheOldestIdleSlotButNeverAMappedOne) {
 }
 
 TEST_F(FlashBlobCacheTest, DeclinesWhatItCannotHold) {
-  EXPECT_NE(acquire(makeBlob(FlashBlobCache::MAX_BLOB_BYTES, 3)), nullptr);      // fills a slot exactly
-  EXPECT_EQ(acquire(makeBlob(FlashBlobCache::MAX_BLOB_BYTES + 1, 4)), nullptr);  // larger than a slot
+  const auto fits = makeBlob(FlashBlobCache::MAX_BLOB_BYTES, 3);
+  const auto tooLarge = makeBlob(FlashBlobCache::MAX_BLOB_BYTES + 1, 4);
+  EXPECT_TRUE(FlashBlobCache::canHold(keyOf(fits), static_cast<uint32_t>(fits.size())));
+  EXPECT_FALSE(FlashBlobCache::canHold(keyOf(tooLarge), static_cast<uint32_t>(tooLarge.size())));
+  EXPECT_NE(acquire(fits), nullptr);      // fills a slot exactly
+  EXPECT_EQ(acquire(tooLarge), nullptr);  // larger than a slot
 
   const auto blob = makeBlob(2000, 5);
   gFailReads = true;
   EXPECT_EQ(acquire(blob), nullptr);  // SD read failed mid-copy
   gFailReads = false;
   // Each copy erases a slot first, so a failed one is not retried.
+  EXPECT_FALSE(FlashBlobCache::canHold(keyOf(blob), static_cast<uint32_t>(blob.size())));
   const int erases = fake::erases;
   gReads = 0;
   EXPECT_EQ(acquire(blob), nullptr);
@@ -214,3 +235,5 @@ TEST_F(FlashBlobCacheTest, DeclinesWhatItCannotHold) {
   // Other blobs still copy.
   EXPECT_NE(acquire(makeBlob(2000, 7)), nullptr);
 }
+
+#endif

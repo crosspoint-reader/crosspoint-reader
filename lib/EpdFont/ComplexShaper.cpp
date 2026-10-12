@@ -47,6 +47,14 @@ constexpr size_t kInternalReserve = 20 * 1024;
 constexpr size_t kMaxLiveFaces = 2;  // regular + bold without rebuilding on every style change
 #endif
 
+#ifdef BOARD_HAS_PSRAM
+constexpr size_t kMaxHeapSource = SIZE_MAX;  // the budget alone bounds it
+#else
+// The small layout fonts (Tamil, Gurmukhi, Malayalam, Sinhala Sans: 7-16 KB)
+// may sit in the heap; larger ones shape only mapped from flash.
+constexpr size_t kMaxHeapSource = 16 * 1024;
+#endif
+
 size_t gBudget = kDefaultBudget;
 uint32_t gShapedRuns = 0;
 uint32_t gReusedRuns = 0;
@@ -617,7 +625,7 @@ bool ComplexShaper::ensureFace() {
                                                : buildTableFace_(tableLoader_, sourceCtx_, &key);
     if (built == nullptr) {
       if (transientFailures() == failuresBefore) {
-        LOG_ERR("SHAPE", "Shaping source is malformed; shaping disabled for this face");
+        LOG_ERR("SHAPE", "Shaping source unusable; shaping disabled for this face");
         unusable_ = true;
       } else {
         retryBackoff_ = kRetryAfterFailure;
@@ -861,7 +869,13 @@ void ComplexShaper::deallocate(void* ptr) {
 
 ComplexShaper::MemoryStats ComplexShaper::memoryStats() {
   std::lock_guard<std::recursive_mutex> lock(shaperMutex());
-  return MemoryStats{gCurrent + gPlanBytes, gPeak + gPlanBytes, gBudget, gFailures, gShapedRuns, gReusedRuns};
+  return MemoryStats{gCurrent + gPlanBytes,
+                     gPeak + gPlanBytes,
+                     gBudget,
+                     gFailures,
+                     gShapedRuns,
+                     gReusedRuns,
+                     gBudget < kMaxHeapSource ? gBudget : kMaxHeapSource};
 }
 
 void ComplexShaper::setMemoryBudget(const size_t bytes) {

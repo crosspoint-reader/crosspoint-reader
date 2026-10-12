@@ -7,15 +7,16 @@
 //
 // No-PSRAM boards only: there an Indic layout font (5-80 KB) would otherwise
 // sit in the same internal DRAM the reader lives in. The "spiffs" data
-// partition, which nothing else uses, is split into MAX_BLOB_BYTES slots
-// behind a one-sector directory. A blob is written once, keyed by its content hash, and
-// re-verified against that hash every time it is mapped; slots are recycled
-// least-recently-used. Writes happen only when a font is used for the first
+// partition, which nothing else uses, is split into as many MAX_BLOB_BYTES
+// slots as it holds (up to 8; the 1 MB partition of a stock Xteink layout
+// holds 7) behind a one-sector directory. A blob is written once, keyed by its content hash, and
+// re-verified against that hash every time it is mapped; the oldest-written
+// idle slot is recycled first. Writes happen only when a font is used for the first
 // time (or after its slot was recycled), so flash wear is negligible.
 //
 // Everything here is best-effort: acquire() returns nullptr whenever the
-// partition is missing, the blob is too large, or flash access fails, and the
-// caller then keeps the blob in RAM.
+// partition is missing or too small, the blob is too large, or flash access
+// fails, and the caller then decides whether the blob may stay in RAM.
 namespace FlashBlobCache {
 
 // Largest blob a slot holds: Noto Devanagari's layout font is ~77 KB.
@@ -31,5 +32,10 @@ const uint8_t* acquire(uint32_t key, uint32_t length, Reader read, void* ctx);
 // Unmaps a pointer returned by acquire(). Signature matches
 // ComplexShaper::Blob::release.
 void release(void* data);
+
+// Whether acquire() could ever map this blob: the partition is usable, the
+// blob fits a slot and its copy has not failed. When true, a failed
+// acquire() may succeed later (a copy buffer, a mapped slot freeing up).
+bool canHold(uint32_t key, uint32_t length);
 
 }  // namespace FlashBlobCache
