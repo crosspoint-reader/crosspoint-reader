@@ -4,8 +4,8 @@
 #include <memory>
 #include <string>
 
+#include "ServerSession.h"
 #include "activities/Activity.h"
-#include "network/CrossPointWebServer.h"
 
 enum class CalibreConnectState { WIFI_SELECTION, SERVER_STARTING, SERVER_RUNNING, ERROR };
 
@@ -16,10 +16,10 @@ enum class CalibreConnectState { WIFI_SELECTION, SERVER_STARTING, SERVER_RUNNING
 class CalibreConnectActivity final : public Activity {
   CalibreConnectState state = CalibreConnectState::WIFI_SELECTION;
 
-  std::unique_ptr<CrossPointWebServer> webServer;
+  // The server, its start, its requests, its link and its end (ServerSession.h).
+  ServerSession session{renderer, mappedInput, "CAL"};
   std::string connectedIP;
   std::string connectedSSID;
-  unsigned long lastHandleClientTime = 0;
   size_t lastProgressReceived = 0;
   size_t lastProgressTotal = 0;
   std::string currentUploadName;
@@ -32,15 +32,15 @@ class CalibreConnectActivity final : public Activity {
   unsigned long lastProcessedDeleteAt = 0;
   int currentRssi = 0;
   unsigned long lastRssiUpdateTime = 0;
-  bool exitRequested = false;
+  // When the transfer progress was last painted; see PROGRESS_REPAINT_MS.
+  unsigned long lastProgressPaintAt = 0;
+  // The state of the link to the network the screen shows.
+  WifiLinkWatch::Link shownLink = WifiLinkWatch::Link::Up;
 
   void renderServerRunning() const;
 
   void onWifiSelectionComplete(bool connected);
-  // Frees what the radio needs; must run before any WiFi bring-up. Idempotent.
-  void freeMemoryBeforeRadio();
   void startWebServer();
-  void stopWebServer();
 
  public:
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -50,6 +50,6 @@ class CalibreConnectActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
-  bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
+  bool skipLoopDelay() override { return session.running(); }
+  bool preventAutoSleep() override { return session.running(); }
 };

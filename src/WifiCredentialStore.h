@@ -6,10 +6,14 @@
 struct WifiCredential {
   std::string ssid;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
-  // Connection hint cached on successful connect. All-zero BSSID or channel==0 means
-  // "no hint, do a full scan". Used to skip channel scanning on reconnect.
+  // The access point the last connect ended on: after WifiApChoice::improve(), the strongest one
+  // it heard. All-zero BSSID or channel==0 means none recorded. Connects never use it as a
+  // shortcut (they always sweep every channel); improve() listens on its channel first.
   uint8_t bssid[6] = {0, 0, 0, 0, 0, 0};
   uint8_t channel = 0;
+  // The most access points one scan has heard for this network: 0 never scanned, 1 a single
+  // router, 2 or more a mesh. Only ever raised (noteApCount()); "Reset info" clears it.
+  uint8_t apCount = 0;
 
   // Last observed IP configuration, retained for connection diagnostics. Reconnects
   // use DHCP because leases, gateways, and DNS servers can change independently of BSSID.
@@ -71,9 +75,10 @@ class WifiCredentialStore {
   bool updateConnectionCache(const std::string& ssid, const uint8_t bssid[6], uint8_t channel, const uint8_t ip[4],
                              const uint8_t gateway[4], const uint8_t mask[4], const uint8_t dns[4],
                              uint32_t cacheTimestamp);
-  // Clear all cached hint + IP for this credential (after a hint-based connect failed
-  // and we want the next attempt to start fresh with full scan + DHCP).
+  // Clear the recorded access point, IP and AP count for this credential ("Reset info").
   bool clearConnectionCache(const std::string& ssid);
+  // Raises the network's AP count to `count` if that is more than it had. Persists only then.
+  bool noteApCount(const std::string& ssid, uint8_t count);
 
   // Get all stored credentials (for UI display)
   const std::vector<WifiCredential>& getCredentials() const { return credentials; }

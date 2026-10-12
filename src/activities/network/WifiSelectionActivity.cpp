@@ -27,6 +27,8 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/MacFormat.h"
+#include "network/WifiApChoice.h"
 #include "util/QrUtils.h"
 
 namespace {
@@ -66,13 +68,6 @@ std::string formatMacLabel(const uint8_t mac[6]) {
   snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
            mac[3], mac[4], mac[5]);
   return std::string(macStr);
-}
-
-std::string formatMacDashed(const uint8_t mac[6]) {
-  char persistedMac[18];
-  snprintf(persistedMac, sizeof(persistedMac), "%02x-%02x-%02x-%02x-%02x-%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
-           mac[5]);
-  return std::string(persistedMac);
 }
 
 String formatMacCompact(const uint8_t mac[6]) {
@@ -268,7 +263,14 @@ void WifiSelectionActivity::startWifiScan() {
 
   // Set WiFi mode to station. Abandoned rather than merely disconnected: a reconnect the core
   // starts by itself would take the radio away from the scan.
+  //
+  // Twice. The core reconnects once after the first disconnect since boot whatever the reason and
+  // whatever setAutoReconnect() says ("Retry once for all failure reasons", first_connect in
+  // STA.cpp). An auto-connect stopped with Confirm went through 2 s later, and the scan below,
+  // started meanwhile, failed: an empty list. The second disconnect cancels that one retry.
   WiFi.mode(WIFI_STA);
+  abandonConnectAttempt();
+  delay(100);
   abandonConnectAttempt();
   delay(100);
 
@@ -408,6 +410,8 @@ void WifiSelectionActivity::processWifiScanResults() {
   // +1 for the hidden-network entry appended below.
   networks.clear();
   networks.reserve(static_cast<size_t>(scanResult) + 1);
+  // Saved networks heard, and on how many APs (the scan lists each BSSID once).
+  std::vector<std::pair<std::string, uint8_t>> savedApsHeard;
 
   for (int i = 0; i < scanResult; i++) {
     char ssid[33];
@@ -417,6 +421,20 @@ void WifiSelectionActivity::processWifiScanResults() {
     // Skip hidden networks (empty SSID)
     if (ssid[0] == '\0') {
       continue;
+    }
+
+    // Every access point of a saved network, as this scan heard it (it listens up to 300 ms a
+    // channel, longer than the connect's sweep), counted so a mesh is known as one.
+    if (WIFI_STORE.hasSavedCredential(ssid)) {
+      LOG_DBG("WIFI", "Scan heard %s from %s ch %d at %d dBm", ssid, formatMacDashed(WiFi.BSSID(i)).c_str(),
+              static_cast<int>(WiFi.channel(i)), static_cast<int>(rssi));
+      auto seen = std::find_if(savedApsHeard.begin(), savedApsHeard.end(),
+                               [&ssid](const std::pair<std::string, uint8_t>& s) { return s.first == ssid; });
+      if (seen == savedApsHeard.end()) {
+        savedApsHeard.emplace_back(ssid, 1);
+      } else if (seen->second < 255) {
+        seen->second++;
+      }
     }
 
     auto it =
@@ -446,6 +464,12 @@ void WifiSelectionActivity::processWifiScanResults() {
   appendHiddenNetworkEntry();
 
   WiFi.scanDelete();
+
+  // Only ever raises a count, so the SD write is rare. SD card operations need the display lock.
+  if (!savedApsHeard.empty()) {
+    RenderLock lock(*this);
+    for (const auto& [ssid, aps] : savedApsHeard) WIFI_STORE.noteApCount(ssid, aps);
+  }
 
   if (autoCycleAfterScan) {
     autoCycleAfterScan = false;
@@ -756,7 +780,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
     IPAddress ip = WiFi.localIP();
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    connectedIP = ipStr;
     autoConnecting = false;
     if (selectedSSID == passwordSuspectSsid) passwordSuspectSsid.clear();
 
@@ -764,16 +787,23 @@ void WifiSelectionActivity::checkConnectionStatus() {
             millis() - connectionStartTime, WiFi.RSSI(), WiFi.channel(), ipStr, WiFi.gatewayIP().toString().c_str(),
             WiFi.subnetMask().toString().c_str(), WiFi.dnsIP().toString().c_str());
 
-    // Records what we actually connected to. NOTHING reads the BSSID/channel back to shortcut a
-    // later connect any more -- issueWifiBegin() always does a full signal-sorted scan, for the
-    // reasons documented there. The whole record is diagnostic now (the "Reset info" prompt below
-    // clears it, and the IP profile has been diagnostic-only for a while), so the storage in
-    // WifiCredentialStore is a candidate for deletion once the full-scan path has some mileage.
-    // Kept for now rather than widening this change into the settings serialisation.
+    // On a mesh the sweep can have joined a far AP: move to a clearly stronger one if there is.
+    // Before the record below, whose AP it reads as the one the last session ended on.
+    const WifiApChoice::Result apChoice = WifiApChoice::improve(selectedSSID, enteredPassword, "WIFI");
+    if (apChoice.moved) {
+      ip = WiFi.localIP();
+      snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    }
+    connectedIP = ipStr;
+
+    // Records the AP the connect ended on, for WifiApChoice::improve() next time (connects never
+    // shortcut through it: issueWifiBegin() always sweeps every channel), and the IP profile for
+    // diagnostics. "Reset info" below clears both, and the AP count.
     // SD card operations need the display lock.
     {
       RenderLock lock(*this);
       WIFI_STORE.setLastConnectedSsid(selectedSSID);
+      if (apChoice.apsHeard > 0) WIFI_STORE.noteApCount(selectedSSID, apChoice.apsHeard);
       const uint8_t* actualBssid = WiFi.BSSID();
       const int actualChannel = WiFi.channel();
       if (actualBssid && actualChannel > 0 && actualChannel <= 255) {
@@ -1344,9 +1374,10 @@ void WifiSelectionActivity::onNetworkOptionsAnswer(const ActivityResult& result)
     RenderLock lock(*this);
     const auto* answer = std::get_if<ConfirmResult>(&result.data);
     if (answer && answer->alternate) {
-      // Reset info: drop the recorded BSSID/channel + IP/gw/mask/DNS but keep the saved password.
-      // Connects already do a full scan + DHCP unconditionally, so this is now about clearing the
-      // diagnostic record rather than changing what the next connect does.
+      // Reset info: drop the recorded AP (BSSID/channel), the AP count and IP/gw/mask/DNS but keep
+      // the saved password. Connects do a full scan + DHCP regardless; what changes is what
+      // WifiApChoice::improve() knows: it relearns whether the network is a mesh, and which AP is
+      // the one to be on.
       WIFI_STORE.clearConnectionCache(selectedSSID);
     } else {
       WIFI_STORE.removeCredential(selectedSSID);

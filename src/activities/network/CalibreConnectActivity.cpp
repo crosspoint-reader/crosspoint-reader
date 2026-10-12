@@ -1,37 +1,26 @@
 #include "CalibreConnectActivity.h"
 
-#include <ESPmDNS.h>
 #include <GfxRenderer.h>
-#include <HalSystem.h>  // feedWatchdog()
 #include <I18n.h>
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
-#include "SdCardFontGlobals.h"
-#include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
-#include "activities/NetworkMemoryTrim.h"
 #include "activities/network/SignalStrengthWidget.h"
 #include "components/TouchExitButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr const char* HOSTNAME = "crosspoint";
-}  // namespace
-
 // Unlike CrossPointWebServerActivity we keep rendering live progress UI, so the primary
-// framebuffer must stay. The ~52 KB secondary buffer, the glyph cache and the SD reader font
-// are unused here though. Safe to drop without restoring: onExit() always silentRestart()s.
-//
-// Idempotent, and called both before the radio comes up and again before the server starts.
-void CalibreConnectActivity::freeMemoryBeforeRadio() {
-  LOG_DBG("CAL", "Free heap before trim: %d bytes", ESP.getFreeHeap());
-  sdFontSystem.unload(renderer);
-  trimMemoryForNetworkSession(renderer, "CAL");
-  LOG_DBG("CAL", "Free heap after trim: %d bytes", ESP.getFreeHeap());
-}
+// framebuffer stays; ServerSession::prepareRadio() drops only what this screen does not use.
 
+namespace {
+// Transfer progress alone repaints at most this often. A repaint is ~0.6 s of panel time, and with
+// the next one requested as soon as the last ended, the panel refreshed through ~75 % of a transfer
+// whose SD writes waited for it (41 KB/s). A new book, a finished one, a deletion and a change of
+// the link still repaint at once.
+constexpr unsigned long PROGRESS_REPAINT_MS = 4000;
+}  // namespace
 void CalibreConnectActivity::onEnter() {
   Activity::onEnter();
 
@@ -39,7 +28,6 @@ void CalibreConnectActivity::onEnter() {
   state = CalibreConnectState::WIFI_SELECTION;
   connectedIP.clear();
   connectedSSID.clear();
-  lastHandleClientTime = 0;
   lastProgressReceived = 0;
   lastProgressTotal = 0;
   currentUploadName.clear();
@@ -52,12 +40,12 @@ void CalibreConnectActivity::onEnter() {
   lastProcessedDeleteAt = 0;
   currentRssi = 0;
   lastRssiUpdateTime = 0;
-  exitRequested = false;
+  shownLink = WifiLinkWatch::Link::Up;
 
   if (WiFi.status() != WL_CONNECTED) {
     // BEFORE the radio, not after the join: bringing up the WiFi stack is itself
     // allocation-heavy, and on a lean heap it is the association that fails.
-    freeMemoryBeforeRadio();
+    session.prepareRadio();
     startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
@@ -76,15 +64,7 @@ void CalibreConnectActivity::onEnter() {
 
 void CalibreConnectActivity::onExit() {
   Activity::onExit();
-
-  stopWebServer();
-  MDNS.end();
-
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  session.end();
 }
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {
@@ -100,79 +80,56 @@ void CalibreConnectActivity::startWebServer() {
   state = CalibreConnectState::SERVER_STARTING;
   requestUpdate();
 
-  if (MDNS.begin(HOSTNAME)) {
-    // mDNS is optional for the Calibre plugin but still helpful for users.
-    LOG_DBG("CAL", "mDNS started: http://%s.local/", HOSTNAME);
-  }
-
-  // The trim itself already happened in freeMemoryBeforeRadio(), before the join. Repeated here
-  // because it is idempotent and the status screens drawn since then have repopulated the glyph
-  // cache, which the web server would rather have as free heap (each request wants an 8 KB
-  // contiguous block).
-  freeMemoryBeforeRadio();
-
-  webServer.reset(new CrossPointWebServer());
-  webServer->begin();
-
-  if (webServer->isRunning()) {
-    state = CalibreConnectState::SERVER_RUNNING;
-    requestUpdate();
-  } else {
-    state = CalibreConnectState::ERROR;
-    requestUpdate();
-  }
-}
-
-void CalibreConnectActivity::stopWebServer() {
-  if (webServer) {
-    webServer->stop();
-    webServer.reset();
-  }
+  // The trim already happened before the join. Repeated because the status screens drawn since
+  // have repopulated the glyph cache, which the web server would rather have as free heap (each
+  // request wants an 8 KB contiguous block).
+  session.prepareRadio();
+  state = session.start(false) ? CalibreConnectState::SERVER_RUNNING : CalibreConnectState::ERROR;
+  requestUpdate();
 }
 
 void CalibreConnectActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || TouchExitButton::tapped(mappedInput)) {
-    exitRequested = true;
+  // Fewer rounds per pass than File Transfer: this screen shows the transfer's progress, which the
+  // code below keeps up to date between passes.
+  if (!session.serve(80)) {
+    finish();
+    return;
   }
 
-  if (webServer && webServer->isRunning()) {
-    const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
-    if (lastHandleClientTime > 0 && timeSinceLastHandleClient > 100) {
-      LOG_DBG("CAL", "WARNING: %lu ms gap since last handleClient", timeSinceLastHandleClient);
-    }
-
-    HalSystem::feedWatchdog();
-    constexpr int MAX_ITERATIONS = 80;
-    for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
-      webServer->handleClient();
-      if ((i & 0x07) == 0x07) {
-        HalSystem::feedWatchdog();
-      }
-      if ((i & 0x0F) == 0x0F) {
-        yield();
-        if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-          exitRequested = true;
-          break;
-        }
-      }
-    }
-    lastHandleClientTime = millis();
-
-    if (millis() - lastRssiUpdateTime > 5000) {
-      lastRssiUpdateTime = millis();
-      currentRssi = WiFi.RSSI();
+  if (session.running()) {
+    // A drop used to go unnoticed here: the screen kept its last signal reading while the plugin
+    // could no longer reach the reader. Now it says the link is reconnecting, then that it failed
+    // (after WifiLinkWatch::GRACE_MS), and returns to normal if the driver gets it back. Back
+    // leaves at any time.
+    const auto link = session.link(connectedIP);
+    if (link != shownLink) {
+      shownLink = link;
+      if (link != WifiLinkWatch::Link::Up) currentRssi = 0;
       requestUpdate();
     }
 
-    const auto status = webServer->getWsUploadStatus();
-    bool changed = false;
+    const auto status = session.webServer()->getWsUploadStatus();
+
+    // The signal every 5 s; during a transfer only as part of its progress repaints.
+    if (shownLink == WifiLinkWatch::Link::Up && millis() - lastRssiUpdateTime > 5000) {
+      lastRssiUpdateTime = millis();
+      currentRssi = WiFi.RSSI();
+      if (!status.inProgress) requestUpdate();
+    }
+
+    bool changed = false;     // repaint now
+    bool progressed = false;  // repaint when PROGRESS_REPAINT_MS allows
     if (status.inProgress) {
-      if (status.received != lastProgressReceived || status.total != lastProgressTotal ||
-          status.filename != currentUploadName) {
+      const bool newUpload = status.filename != currentUploadName || status.total != lastProgressTotal;
+      if (newUpload || status.received != lastProgressReceived) {
         lastProgressReceived = status.received;
         lastProgressTotal = status.total;
         currentUploadName = status.filename;
-        changed = true;
+        if (newUpload) {
+          changed = true;
+        } else {
+          progressed = true;
+        }
       }
     } else if (lastProgressReceived != 0 || lastProgressTotal != 0) {
       lastProgressReceived = 0;
@@ -207,14 +164,11 @@ void CalibreConnectActivity::loop() {
       lastDeleteName.clear();
       changed = true;
     }
+    if (progressed && millis() - lastProgressPaintAt >= PROGRESS_REPAINT_MS) changed = true;
     if (changed) {
+      lastProgressPaintAt = millis();
       requestUpdate();
     }
-  }
-
-  if (exitRequested) {
-    finish();
-    return;
   }
 }
 
@@ -222,6 +176,10 @@ void CalibreConnectActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
+  // The previous frame's refresh is collected before this one draws: on the X3 its waveform reads
+  // the frame buffer (asyncRefreshHoldsFrameBuffer()), and this screen runs on a single one. A
+  // repaint comes seconds after the last, so the waveform is long over and this is quick.
+  if (renderer.isRefreshPending()) renderer.completeDisplay();
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
@@ -247,7 +205,10 @@ void CalibreConnectActivity::render(RenderLock&&) {
 
     const int signalHeight = 22;
     drawWifiSignalStrength(renderer, textX, y, textWidth, signalHeight, currentRssi);
-    renderer.drawText(SMALL_FONT_ID, textX, y + signalHeight + 2, rssiLabel(currentRssi).c_str());
+    const std::string signalText = shownLink == WifiLinkWatch::Link::Reconnecting ? tr(STR_WIFI_RECONNECTING)
+                                   : shownLink == WifiLinkWatch::Link::Gone       ? tr(STR_WIFI_CONN_FAILED)
+                                                                                  : rssiLabel(currentRssi);
+    renderer.drawText(SMALL_FONT_ID, textX, y + signalHeight + 2, signalText.c_str());
     y += signalHeight + lineHeightSmall + metrics.verticalSpacing * 3;
     const int belowExit = TouchExitButton::draw(renderer, mappedInput, textX, y, textWidth);
     if (belowExit != y) y = belowExit + metrics.verticalSpacing * 3;
@@ -297,5 +258,8 @@ void CalibreConnectActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
-  renderer.displayBuffer();
+  // Triggered, not displayed: the panel runs its ~0.45 s waveform on its own, off the SPI bus it
+  // shares with the SD card on the X3 and X4. displayBuffer() held that bus for the whole refresh,
+  // so every SD write of a transfer waited for the screen. The next render collects it (above).
+  renderer.triggerDisplay();
 }
