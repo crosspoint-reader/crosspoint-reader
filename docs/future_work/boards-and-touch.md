@@ -5,7 +5,7 @@ Status: open items as of 2026-10-07. Collected from multiboard-bringup-handover-
 Background for all of these is in [Board Support](../contributing/board-support.md) and
 [Touch Architecture](../contributing/touch-architecture.md). Display items from the same sources
 (the LGFX write-buffer copy before `displayGrayBuffer()`, the pre-render waiting for the deferred
-AA pass, panel questions asked as `isX3()`) are in [Display and refresh](display-and-refresh.md).
+AA pass, the PanelSel/baseline-model split) are in [Display and refresh](display-and-refresh.md).
 
 ## Light sleep with the frontlight
 
@@ -35,35 +35,6 @@ comment; (2) port the app half for the X4 Pro: set `FREEINK_FRONTLIGHT_LS` in `[
 call `park()` on the way into deep sleep and `releaseOnWake()` before `Frontlight.begin()`, then
 compare `rejFrontlight` and the light-sleep residency with the light on and off. The flag is
 untested on the T5S3.
-
-## Board-name checks still to convert
-
-Open: 38 call sites still ask `deviceIsX3()` or `renderer.isX3()` (`deviceIsX4()` has no caller
-left). On any S3 board `deviceIsX3()` is false by construction, so each silently takes the X4
-branch. They fall into four groups:
-
-- Identity, to keep: X3/X4 detection and `selectDevice()` in `HalGPIO::begin()`,
-  `HalDisplay::begin()`'s `setDisplayX3()`, X3 USB polling and wake handling in `HalGPIO`, the
-  GPIO13 battery latch.
-- Layout keyed on the board name: side-hint insets in `UITheme.cpp`, the side-button hints in
-  `BaseTheme` and `LyraTheme`, `KeyboardEntryActivity`'s content rect.
-- Panel questions, spelled `renderer.isX3()` in the firmware and `deviceIsX3()` inside
-  `HalDisplay`: the `syncRedRamFromFrameBuffer()` call sites, the reader's in-place build and
-  transition paths (`chooseSectionBuildMode()` among them), `EpubReaderActivity::usesDeferredAa()`,
-  the FAST check in `HalDisplay::displayBuffer()`, and the refresh log lines in `HalDisplay`. These
-  belong with the PanelSel split in
-  [Display and refresh](display-and-refresh.md#split-panelsel-from-the-baseline-model).
-- `deviceIsX3() && needsHalfRefresh` in `SettingsActivity` and `SettingsSubmenuActivity`.
-
-Tried: `HalCapabilities::panelNeedsHalfRefreshSettle()` (true on UC8253) already gates the settle
-inside `HalDisplay` (`requestResync()`, `displayBuffer()`, `refreshDisplay()`), but was not applied
-to the two settings sites. There it is not behaviour-preserving on the UC8279 X3 variant, where the
-old code settles and the predicate does not. That is probably the correct behaviour (the settle is a
-UC8253 property), but it changes a shipped board.
-
-Next: convert the settings pair with a UC8279 X3 on the bench and check for ghosting. Then the
-layout group: one capability per question (where the side hints sit is a button-topology
-question, `inputStyle()`), one commit per predicate, each leaving the `default` build unchanged.
 
 ## SD clock on the T5S3
 

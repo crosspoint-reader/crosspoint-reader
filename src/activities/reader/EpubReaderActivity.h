@@ -731,7 +731,8 @@ class EpubReaderActivity final : public Activity {
   // Opportunistically restore the secondary display buffer if a prior OOM degraded it.
   void recoverSecondaryBufferIfNeeded();
   // The reader is within BG_BUILD_THROUGH_PAGES of the end of the chapter on screen, on a panel
-  // that can show pages while Background-B holds the secondary buffer (X3).
+  // that can show pages while Background-B holds the secondary buffer: one whose FAST refresh
+  // needs no host-side previous frame (GfxRenderer::fastRefreshNeedsHostFrame() false, the X3).
   bool nearChapterEndForBuildThrough() const;
   // Realloc the secondary buffer, evicting rebuildable caches (FDC page slots, CSS
   // resolve caches) that a released build may have planted inside the freed hole and

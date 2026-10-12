@@ -508,7 +508,7 @@ bool FileBrowserActivity::lendForBackgroundWork() {
   if (!renderer.hasSecondaryBuffer()) return false;
   RenderLock lock(*this);
   renderer.syncWriteBufferFromDisplayed();
-  if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+  renderer.syncRedRamFromFrameBuffer();
   size_t size = 0;
   uint8_t* region = renderer.borrowSecondaryBuffer(&size);
   if (region == nullptr) return false;

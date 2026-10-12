@@ -245,7 +245,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     // -- a carousel move, or Settings' entry frame when Home exits without redrawing -- skips
     // every pixel the new frame shares with that older screen, and Home's ink stays on the glass
     // there. Runs before the borrow, while the secondary still holds the displayed frame.
-    if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+    renderer.syncRedRamFromFrameBuffer();
     size_t lentSize = 0;
     if (uint8_t* lent = renderer.borrowSecondaryBuffer(&lentSize)) {
       coverScratch_ = makeUniqueNoThrow<BuildArena>(lent, lentSize);

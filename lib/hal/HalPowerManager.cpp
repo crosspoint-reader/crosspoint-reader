@@ -390,9 +390,13 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, bool keepClockAlive) const {
   // Xteink C3 boards only", Justin Mitchell / @itsthisjustin). His fix guards
   // lightSleep()/onEinkBusyWaitSlice(), which this fork does not have; here the
   // same predicate guards the one place we touch GPIO13.
-  const bool gpio13IsBatteryLatch = gpio.isXteinkDevice() && !gpio.deviceIsX3();
+  //
+  // Which boards take the latch branch is the profile's call (PowerConfig::latch0GatesBattery,
+  // set on the X4 alone), not a board-name test: the X4 Pro's latch0 keeps a rail up instead and
+  // is held by the loop further down.
+  const bool gpio13IsBatteryLatch = HalCapabilities::hasButtonGatedBatteryLatch();
   if (gpio13IsBatteryLatch) {
-    constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
+    const auto GPIO_SPIWP = static_cast<gpio_num_t>(BoardConfig::ACTIVE.power.latch0);  // GPIO13 on the X4
     // Release any GPIO hold from a previous sleep cycle (keepClockAlive=true leaves GPIO13 held after wake).
     // Without this, gpio_set_level() below silently fails and GPIO13 is stuck in its prior state,
     // causing the device to enter a sleep/wake loop that requires a hardware reset to escape.

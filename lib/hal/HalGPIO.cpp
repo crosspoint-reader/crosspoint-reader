@@ -703,11 +703,11 @@ void HalGPIO::updateUsbState(const unsigned long now) {
   // sleep within a poll or two, or the next slice kills the CDC link again.
   usbHostLinkActive = isUsbHostLinkActive();
 
-  // Throttle the X3's I2C-based USB detection; see USB_POLL_X3_MS. First call
-  // (usbLastPollMs == 0) always polls so boot state is correct. The combined
-  // verdict below is still recomputed every call so a host-link-detected attach
-  // is not held back by the throttle window.
-  if (usbLastPollMs == 0 || !deviceIsX3() || now - usbLastPollMs >= USB_POLL_X3_MS) {
+  // Throttle USB detection that goes over I2C to the fuel gauge (the X3); see
+  // USB_POLL_X3_MS. First call (usbLastPollMs == 0) always polls so boot state is
+  // correct. The combined verdict below is still recomputed every call so a
+  // host-link-detected attach is not held back by the throttle window.
+  if (usbLastPollMs == 0 || !HalCapabilities::usbPresenceFromFuelGauge() || now - usbLastPollMs >= USB_POLL_X3_MS) {
     usbLastPollMs = now;
     usbElectricalConnected = isUsbElectricalConnected();
   }
@@ -1059,7 +1059,7 @@ bool HalGPIO::isUsbConnected() const {
 }
 
 bool HalGPIO::isUsbElectricalConnected() const {
-  if (deviceIsX3()) {
+  if (HalCapabilities::usbPresenceFromFuelGauge()) {
     // X3: GPIO20 is repurposed as I2C SDA, so the X4 pin-level USB detect is
     // unusable here — the I2C pull-ups would always report HIGH. Probe the
     // BQ27220 fuel gauge instead. Charge inference misses a data-only cable and
@@ -1109,7 +1109,7 @@ bool HalGPIO::isUsbElectricalConnected() const {
 bool HalGPIO::canDetectUsbElectrically() const {
   // X3 has no usable detect pin — GPIO20 is its gauge SDA — and infers the cable
   // from fuel-gauge charge current instead, so it CAN answer the question.
-  if (deviceIsX3()) return true;
+  if (HalCapabilities::usbPresenceFromFuelGauge()) return true;
   return BoardConfig::ACTIVE.usbDetect != BoardConfig::PIN_UNASSIGNED;
 }
 
@@ -1126,7 +1126,12 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   // AfterUSBPower so the early handler in setup() puts the device straight
   // back to sleep, matching X4. inputMgr.begin() in gpio.begin() has already
   // configured INPUT_PULLUP on POWER_BUTTON_PIN by the time we're called.
-  if (deviceIsX3() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) {
+  //
+  // Asked as "an Xteink C3 board whose power button gates no battery latch" rather than by
+  // name: the latch is what lets the general rule below read POWERON as a press, and
+  // POWER_BUTTON_PIN is a C3 pin assumption (see isXteinkDevice()).
+  if (isXteinkDevice() && !HalCapabilities::hasButtonGatedBatteryLatch() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED &&
+      resetReason == ESP_RST_POWERON) {
     if (digitalRead(InputManager::POWER_BUTTON_PIN) == LOW) {
       return WakeupReason::PowerButton;
     }

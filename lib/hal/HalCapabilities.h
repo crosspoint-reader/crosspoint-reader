@@ -22,13 +22,15 @@
 // So each predicate below answers ONE question, from the active board profile.
 // Adding a board then means filling in a profile, not editing call sites.
 //
-// These are pure additions: nothing is converted here. Call sites move over in a
-// separate step so that step's diff is reviewable on its own, and so this one can
-// be gated on the C3 coming out byte-identical.
+// The call sites have moved over: board questions to the predicates here, panel
+// questions to the SDK's display (GfxRenderer::fastRefreshNeedsHostFrame(),
+// asyncRefreshHoldsFrameBuffer(), ghostsUnderFastRefresh()), key placement to
+// ButtonGeometry. Each answers as `deviceIsX3()` did on every shipped board.
 //
-// Naming note: `deviceIsX3()` itself is NOT deprecated wholesale. Two of its uses
-// are legitimately about board identity — the dual X3+X4 binary's runtime
-// detection and `BoardConfig::selectDevice()` — and those stay.
+// `deviceIsX3()` itself stays for the one question it IS: which C3 board this is.
+// The dual X3+X4 binary's runtime detection in HalGPIO::begin() sets it, selects
+// the SDK profile from it, and HalDisplay::begin() hands it to the panel driver.
+// Nothing else should ask.
 namespace HalCapabilities {
 
 // --- Sensors -----------------------------------------------------------------
@@ -60,6 +62,29 @@ inline bool hasAdcBattery() { return !hasI2cFuelGauge() && BoardConfig::ACTIVE.b
 
 // Any battery reading is available, by either route.
 inline bool hasBatteryReading() { return hasI2cFuelGauge() || hasAdcBattery(); }
+
+// --- Power and USB -----------------------------------------------------------
+
+// The power button closes a battery MOSFET that a latch pin then holds (the X4's
+// GPIO13; PowerConfig::latch0GatesBattery). So being powered at all means the
+// button was pressed, and driving the latch LOW is the battery power-off. The
+// X4 Pro also carries a latch0, but it keeps a peripheral rail up, so it is not
+// this; the X3 has no latch at all, and its GPIO13 is the SD rail enable.
+inline bool hasButtonGatedBatteryLatch() {
+  return BoardConfig::ACTIVE.power.latch0GatesBattery &&
+         BoardConfig::ACTIVE.power.latch0 != BoardConfig::PIN_UNASSIGNED;
+}
+
+// The USB-detect pin doubles as the fuel gauge's I2C data line (the X3's GPIO20),
+// so it reads HIGH from the bus pull-ups whatever the cable does. USB presence
+// then has to come from the gauge's charge current, which the HAL reads from a
+// BQ27220 -- and that is an I2C transaction, so it is polled on a throttle rather
+// than every loop like a pin.
+inline bool usbPresenceFromFuelGauge() {
+  const BoardConfig::BoardProfile& p = BoardConfig::ACTIVE;
+  return hasI2cFuelGauge() && p.usbDetect != BoardConfig::PIN_UNASSIGNED && p.usbDetect == p.batteryGauge.i2cSda &&
+         p.batteryGauge.gaugeType == BoardConfig::GaugeType::Bq27220;
+}
 
 // --- Display -----------------------------------------------------------------
 
