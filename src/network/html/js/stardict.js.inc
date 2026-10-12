@@ -117,11 +117,23 @@ async function gzipOriginalSize(blob) {
 }
 
 // A dictzip file is gzip with a random-access table in the header's extra
-// field (subfield "RA"). The reader needs that table to read a .dict.dz; a
-// plain gzip renamed to .dz has none and must be unpacked.
-async function isDictzip(blob) {
-  const h = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
-  return h.length >= 16 && h[0] === 0x1f && h[1] === 0x8b && (h[3] & 0x04) !== 0 && h[12] === 0x52 && h[13] === 0x41;
+// field (subfield "RA"). The reader needs that table to read a .dict.dz. Returns
+// 'ok', 'plain' (a gzip renamed to .dz, with no table) or 'unsupported' (a table
+// DictZip::parse() refuses: deflate, version 1 and 1 to 8192 chunks only, which
+// caps the table it keeps in memory at 32 KB). Anything but 'ok' must be unpacked.
+async function dictzipKind(blob) {
+  const h = new Uint8Array(await blob.slice(0, 22).arrayBuffer());
+  if (h.length < 22 || h[0] !== 0x1f || h[1] !== 0x8b || (h[3] & 0x04) === 0 || h[12] !== 0x52 || h[13] !== 0x41) {
+    return 'plain';
+  }
+  const le16 = (i) => h[i] | (h[i + 1] << 8);
+  const subLen = le16(14);
+  const version = le16(16);
+  const chunkLen = le16(18);
+  const chunkCount = le16(20);
+  const readable = h[2] === 8 && version === 1 && chunkLen > 0 && chunkCount > 0 && chunkCount <= 8192 &&
+    subLen === 6 + 2 * chunkCount;
+  return readable ? 'ok' : 'unsupported';
 }
 
 // Streams a blob through the browser's gzip decoder. dictzip is gzip, so this
@@ -448,11 +460,13 @@ async function analyseDictionary(group, fallbackName) {
     if (!f) continue;
     let unpack = f.unpack === 'always';
     if (f.unpack === 'offer') {
-      if (await isDictzip(f.blob)) {
+      const dz = await dictzipKind(f.blob);
+      if (dz === 'ok') {
         unpack = 'offer';
       } else {
         unpack = true;
-        warnings.push(baseName(f.path) + ' is plain gzip rather than dictzip, so it is unpacked to .dict.');
+        warnings.push(baseName(f.path) + (dz === 'plain' ? ' is plain gzip rather than dictzip' :
+          ' has a random-access table the reader cannot use (too large, or an unknown version)') + ', so it is unpacked to .dict.');
       }
     }
     uploads.push({
