@@ -4037,7 +4037,11 @@ async function maybeRenameEbookFile(file) {
 
 function reserveAvailableUploadFilename(fileName, usedFileNames) {
   // Use NFC filenames for cross-platform SD card compatibility.
-  fileName = fileName.normalize('NFC');
+  const normalizedName = fileName.normalize('NFC');
+  if (normalizedName !== fileName) {
+    console.log(`[Upload] Normalized filename to NFC: ${fileName} -> ${normalizedName}`);
+    fileName = normalizedName;
+  }
   const normalize = name => name.normalize('NFC').toLowerCase();
   if (!usedFileNames.has(normalize(fileName))) {
     usedFileNames.add(normalize(fileName));
@@ -4057,6 +4061,7 @@ function reserveAvailableUploadFilename(fileName, usedFileNames) {
   } while (usedFileNames.has(normalize(candidateName)));
 
   usedFileNames.add(normalize(candidateName));
+  console.log(`[Upload] Renamed to avoid collision: ${fileName} -> ${candidateName}`);
   return candidateName;
 }
 
@@ -5826,7 +5831,6 @@ async function uploadFile() {
 
     const availableName = reserveAvailableUploadFilename(file.name, usedFileNames);
     if (availableName !== file.name) {
-      console.log(`[Upload] Prepared filename: ${file.name} -> ${availableName}`);
       file = new File([file], availableName, {
         type: file.type,
         lastModified: file.lastModified
