@@ -690,7 +690,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         const std::string_view token(word.data() + tokenStart, breakOffset - tokenStart);
         pushToken(token, firstToken ? effectiveAttachToPrevious : true, firstToken ? effectiveNoSpaceBefore : true,
                   /*focusBoundary=*/0, tokenVisibleOffset);
-        tokenVisibleOffset += countCodepoints(token);
+        tokenVisibleOffset = sourceOffsetAfter(tokenVisibleOffset, countCodepoints(token));
         firstToken = false;
         tokenStart = breakOffset;
       }
