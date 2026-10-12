@@ -35,31 +35,27 @@ std::string describe(const Ap& ap) {
 bool sameAp(const uint8_t a[6], const uint8_t b[6]) { return std::memcmp(a, b, 6) == 0; }
 
 // The APs of `ssid` a passive scan hears on `channel` (0: every channel), one entry per BSSID.
-int listen(const std::string& ssid, const int channel, Ap* out, const char* tag) {
-  HalSystem::feedWatchdog();
-  // Every network, not only `ssid`, for the census below; the APs of `ssid` are picked out here.
-  const int16_t n = WiFi.scanNetworks(false, true, true, LISTEN_MS_PER_CHANNEL, channel);
-  HalSystem::feedWatchdog();
-  // How many networks the scan heard on each channel. Diagnostic: an AP of `ssid` missing from a
-  // channel where others are heard is off the air for the reader; a channel with nothing at all
-  // points at the reader's reception, or at a scan that does not really listen there.
-  int perChannel[15] = {};
-  for (int i = 0; i < n; i++) {
-    const int ch = WiFi.channel(i);
-    if (ch >= 1 && ch <= 14) perChannel[ch]++;
+bool heardAp(const Ap* aps, const int count, const uint8_t bssid[6]) {
+  for (int i = 0; i < count; i++) {
+    if (sameAp(aps[i].bssid, bssid)) return true;
   }
-  char census[96];
-  int len = snprintf(census, sizeof(census), "%d", n < 0 ? n : 0);
-  if (n >= 0) {
-    len = 0;
-    for (int ch = 1; ch <= 14 && len < static_cast<int>(sizeof(census)) - 8; ch++) {
-      if (perChannel[ch])
-        len += snprintf(census + len, sizeof(census) - len, "%sch%d:%d", len ? " " : "", ch, perChannel[ch]);
-    }
-    if (len == 0) snprintf(census, sizeof(census), "nothing");
-  }
-  LOG_DBG(tag, "Channel census (%s, %d networks): %s", channel ? "one channel" : "all channels", n < 0 ? 0 : n, census);
-  int count = 0;
+  return false;
+}
+
+// One scan for the APs of `ssid` on `channel` (0: every channel), merged into out[0..count): one
+// entry per BSSID, the strongest reading kept. Returns the new count.
+//
+// Active: probe requests for `ssid`, up to LISTEN_MS_PER_CHANNEL a channel, leaving a channel early
+// where nothing answers. Passive: beacons only, LISTEN_MS_PER_CHANNEL on every channel, so it hears
+// an AP that holds back probe answers (band steering). Neither is enough alone: on an X3 and an X4
+// (2026-10-12) a passive scan while connected missed APs on channel 11, once even the AP the reader
+// was connected to.
+int listen(const std::string& ssid, const int channel, const bool active, Ap* out, int count, const char* tag) {
+  HalSystem::feedWatchdog();
+  const unsigned long start = millis();
+  const int16_t n = WiFi.scanNetworks(false, false, !active, LISTEN_MS_PER_CHANNEL, channel, ssid.c_str());
+  HalSystem::feedWatchdog();
+  const int before = count;
   for (int i = 0; i < n; i++) {
     const uint8_t* bssid = WiFi.BSSID(i);
     if (!bssid || WiFi.SSID(i) != ssid.c_str()) continue;
@@ -78,6 +74,14 @@ int listen(const std::string& ssid, const int channel, Ap* out, const char* tag)
     count++;
   }
   WiFi.scanDelete();
+  char where[16];
+  if (channel) {
+    snprintf(where, sizeof(where), "ch %d", channel);
+  } else {
+    snprintf(where, sizeof(where), "all channels");
+  }
+  LOG_DBG(tag, "Scan (%s, %s): %d of %s heard, %d new, in %lu ms", active ? "active" : "passive", where,
+          n < 0 ? 0 : static_cast<int>(n), ssid.c_str(), count - before, millis() - start);
   return count;
 }
 
@@ -148,9 +152,13 @@ bool moveTo(const Ap& to, const char* tag) {
   } else {
     LOG_DBG(tag, "Could not move to %s; connecting as before", describe(to).c_str());
     leave();
-    if (!applyConfig(unpinned) || esp_wifi_connect() != ESP_OK || !waitConnected(nullptr)) {
-      LOG_DBG(tag, "No link yet after the failed move; the driver keeps trying");
-    }
+    if (!applyConfig(unpinned)) LOG_DBG(tag, "Could not unpin the AP: a reconnect will look for it alone");
+    // The core's reconnects back on first. A sweep can miss every AP (NO_AP_FOUND), and only the
+    // core's retry clears the status that leaves behind: without it the network screen took the
+    // failed move for a failed connect and gave up (X3, 2026-10-12).
+    WiFi.setAutoReconnect(true);
+    esp_wifi_connect();  // refused harmlessly when a retry of the core's is already connecting
+    if (!waitConnected(nullptr)) LOG_DBG(tag, "No link yet after the failed move; the core keeps trying");
   }
   WiFi.setAutoReconnect(true);
   return moved;
@@ -177,9 +185,11 @@ Result improve(const std::string& ssid, const char* tag) {
 
   Ap heard[MAX_APS];
   const Ap* best = nullptr;
-  // A known mesh whose last session ended on another AP: listen on that AP's channel first.
+  // A known mesh whose last session ended on another AP: listen on that AP's channel first, actively
+  // and, when that did not hear it, passively.
   if (knownAps >= 2 && cred->channel != 0 && !sameAp(cred->bssid, current.bssid)) {
-    const int n = listen(ssid, cred->channel, heard, tag);
+    int n = listen(ssid, cred->channel, true, heard, 0, tag);
+    if (!heardAp(heard, n, cred->bssid)) n = listen(ssid, cred->channel, false, heard, n, tag);
     for (int i = 0; i < n; i++) {
       if (sameAp(heard[i].bssid, cred->bssid) && heard[i].rssi >= current.rssi + BETTER_BY_DB) best = &heard[i];
     }
@@ -188,17 +198,16 @@ Result improve(const std::string& ssid, const char* tag) {
   }
 
   if (!best) {
-    const int n = listen(ssid, 0, heard, tag);
-    bool joinedHeard = false;
+    // Every channel, actively; passively as well when the active pass is in doubt: it did not hear
+    // even the AP the reader is on, or heard a single AP of a network known to have more.
+    int n = listen(ssid, 0, true, heard, 0, tag);
+    if (!heardAp(heard, n, current.bssid) || (knownAps >= 2 && n < 2)) n = listen(ssid, 0, false, heard, n, tag);
+    const bool joinedHeard = heardAp(heard, n, current.bssid);
     for (int i = 0; i < n; i++) {
       LOG_DBG(tag, "Heard %s from %s", ssid.c_str(), describe(heard[i]).c_str());
-      if (sameAp(heard[i].bssid, current.bssid)) {
-        joinedHeard = true;
-      } else if (!best || heard[i].rssi > best->rssi) {
-        best = &heard[i];
-      }
+      if (!sameAp(heard[i].bssid, current.bssid) && (!best || heard[i].rssi > best->rssi)) best = &heard[i];
     }
-    // Nothing heard, not even the AP the reader is on: the scan failed, and teaches nothing.
+    // Nothing heard, not even the AP the reader is on: the scans failed, and teach nothing.
     if (n > 0) result.apsHeard = static_cast<uint8_t>(n + (joinedHeard ? 0 : 1));
     if (best && best->rssi < current.rssi + BETTER_BY_DB) best = nullptr;
   }
@@ -206,6 +215,16 @@ Result improve(const std::string& ssid, const char* tag) {
   if (!best) {
     LOG_DBG(tag, "Staying on %s: no access point of %s is %d dB stronger", describe(current).c_str(), ssid.c_str(),
             BETTER_BY_DB);
+    return result;
+  }
+  // Heard once is not enough to leave a working link for. On an X3 (2026-10-12) a scan heard the
+  // near AP at -66 dBm, the two sweeps of the move right after missed it, and the reader had no
+  // link for 16 s.
+  Ap again[MAX_APS];
+  int m = listen(ssid, best->channel, true, again, 0, tag);
+  if (!heardAp(again, m, best->bssid)) m = listen(ssid, best->channel, false, again, m, tag);
+  if (!heardAp(again, m, best->bssid)) {
+    LOG_DBG(tag, "Staying on %s: %s was not heard again", describe(current).c_str(), describe(*best).c_str());
     return result;
   }
   LOG_DBG(tag, "Moving from %s to %s", describe(current).c_str(), describe(*best).c_str());
