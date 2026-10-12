@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "components/themes/SideHintLayout.h"
+
 class GfxRenderer;
 class Epub;
 class Txt;
@@ -247,4 +249,19 @@ class BaseTheme {
   // caller (PopupShip::Caller). One place so the two popup looks cannot drift on the part that
   // isn't a look at all.
   static void shipPopup(const GfxRenderer& renderer, PopupShip ship);
+
+  // Side hint sizing shared by every drawSideButtonHints() -- see SideHintLayout.h.
+  // The stretch of the side column the boxes may grow into, in panel coordinates. Call it BEFORE
+  // forcing the draw into the panel frame: where the header lies depends on the live orientation.
+  static SideHintLayout::Span sideHintSpan(const GfxRenderer& renderer);
+  // Along-edge length the longer of the two labels needs, padding included. Null or empty
+  // labels need nothing.
+  static int sideHintNeededLength(const GfxRenderer& renderer, const char* upLabel, const char* downLabel);
+  // `label` fitted to a box `length` px long, the way the bottom hints fit theirs: shrink to the
+  // default-size face first, clip only if even that will not fit.
+  struct SideHintLabel {
+    int fontId;
+    std::string text;
+  };
+  static SideHintLabel fitSideHintLabel(const GfxRenderer& renderer, const char* label, int length);
 };

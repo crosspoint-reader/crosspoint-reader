@@ -481,6 +481,9 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   // Panel coordinates and the inverted mirroring, for the reasons spelled out in
   // BaseTheme::drawSideButtonHints — including why LandscapeCounterClockwise draws inverted too.
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
+  // Taken before the draw is forced into the panel frame -- see BaseTheme::drawSideButtonHints.
+  const SideHintLayout::Span span = sideHintSpan(renderer);
+  const int needed = sideHintNeededLength(renderer, upBtn, downBtn);
   const bool inverted = orig_orientation == GfxRenderer::Orientation::PortraitInverted ||
                         orig_orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   renderer.setDrawOrientation(inverted ? GfxRenderer::Orientation::PortraitInverted
@@ -489,8 +492,10 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = LyraMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int buttonHeight = 78;                                       // Height on screen (width when rotated)
+  constexpr int buttonHeight = 78;  // Tuned height on screen (width when rotated); a longer label grows it
   constexpr int buttonMargin = 0;
+  const bool hasUp = upBtn != nullptr && upBtn[0] != '\0';
+  const bool hasDown = downBtn != nullptr && downBtn[0] != '\0';
 
   const auto roundedRect = [&](const int x, const int y, const int w, const int h, const bool topLeft,
                                const bool topRight, const bool bottomLeft, const bool bottomRight) {
@@ -499,77 +504,76 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
                              cornerRadius, inverted ? bottomRight : topLeft, inverted ? bottomLeft : topRight,
                              inverted ? topRight : bottomLeft, inverted ? topLeft : bottomRight, true);
   };
-  const auto textCW = [&](const int x, const int y, const char* text) {
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, text);
-    const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.drawTextRotated90CW(SMALL_FONT_ID, inverted ? screenWidth - x - textHeight - 5 : x,
-                                 inverted ? screenHeight - 1 - y + textWidth : y, text);
+  // Fits the label to its box (y, length) and centres it there.
+  const auto label = [&](const int x, const int y, const int length, const char* text) {
+    const SideHintLabel fitted = fitSideHintLabel(renderer, text, length);
+    const int textWidth = renderer.getTextWidth(fitted.fontId, fitted.text.c_str());
+    const int textHeight = renderer.getTextHeight(fitted.fontId);
+    const int textY = y + (length + textWidth) / 2;
+    renderer.drawTextRotated90CW(fitted.fontId, inverted ? screenWidth - x - textHeight - 5 : x,
+                                 inverted ? screenHeight - 1 - textY + textWidth : textY, fitted.text.c_str());
   };
 
   if (gpio.deviceIsX3()) {
     // X3 layout: Up on left side, Down on right side, positioned higher
     constexpr int x3ButtonY = 155;
     const int rightX = screenWidth - buttonWidth;
+    const SideHintLayout::Box box = SideHintLayout::centred(x3ButtonY + buttonHeight / 2, buttonHeight, needed, span);
 
     // Publish geometry for touch, in the same un-mirrored logical coordinates roundedRect()
     // mirrors from -- see LyraTheme::drawButtonHints for why the strip is recorded un-inverted
     // even when the draw itself flips for PortraitInverted.
     ButtonHintStrip::SideStrip strip;
     strip.x[0] = buttonMargin;
-    strip.y[0] = x3ButtonY;
+    strip.y[0] = box.y;
     strip.width[0] = buttonWidth;
-    strip.height[0] = buttonHeight;
-    strip.active[0] = upBtn != nullptr && upBtn[0] != '\0';
+    strip.height[0] = box.height;
+    strip.active[0] = hasUp;
     strip.x[1] = rightX;
-    strip.y[1] = x3ButtonY;
+    strip.y[1] = box.y;
     strip.width[1] = buttonWidth;
-    strip.height[1] = buttonHeight;
-    strip.active[1] = downBtn != nullptr && downBtn[0] != '\0';
+    strip.height[1] = box.height;
+    strip.active[1] = hasDown;
     ButtonHintStrip::Side::record(strip);
 
-    if (upBtn != nullptr && upBtn[0] != '\0') {
-      roundedRect(buttonMargin, x3ButtonY, buttonWidth, buttonHeight, false, true, false, true);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, upBtn);
-      textCW(buttonMargin, x3ButtonY + (buttonHeight + textWidth) / 2, upBtn);
+    if (hasUp) {
+      roundedRect(buttonMargin, box.y, buttonWidth, box.height, false, true, false, true);
+      label(buttonMargin, box.y, box.height, upBtn);
     }
 
-    if (downBtn != nullptr && downBtn[0] != '\0') {
-      roundedRect(rightX, x3ButtonY, buttonWidth, buttonHeight, true, false, true, false);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, downBtn);
-      textCW(rightX, x3ButtonY + (buttonHeight + textWidth) / 2, downBtn);
+    if (hasDown) {
+      roundedRect(rightX, box.y, buttonWidth, box.height, true, false, true, false);
+      label(rightX, box.y, box.height, downBtn);
     }
   } else {
     // X4 layout: Both buttons stacked on right side
-    const char* labels[] = {upBtn, downBtn};
     const int x = screenWidth - buttonWidth;
+    const SideHintLayout::Stack stack =
+        SideHintLayout::stacked(topHintButtonY + buttonHeight, /*gap=*/5, buttonHeight, needed, span);
+    const SideHintLayout::Box& up = stack.up;
+    const SideHintLayout::Box& down = stack.down;
 
     ButtonHintStrip::SideStrip strip;
     strip.x[0] = x;
-    strip.y[0] = topHintButtonY;
+    strip.y[0] = up.y;
     strip.width[0] = buttonWidth;
-    strip.height[0] = buttonHeight;
-    strip.active[0] = upBtn != nullptr && upBtn[0] != '\0';
+    strip.height[0] = up.height;
+    strip.active[0] = hasUp;
     strip.x[1] = x;
-    strip.y[1] = topHintButtonY + buttonHeight + 5;
+    strip.y[1] = down.y;
     strip.width[1] = buttonWidth;
-    strip.height[1] = buttonHeight;
-    strip.active[1] = downBtn != nullptr && downBtn[0] != '\0';
+    strip.height[1] = down.height;
+    strip.active[1] = hasDown;
     ButtonHintStrip::Side::record(strip);
 
-    if (upBtn != nullptr && upBtn[0] != '\0') {
-      roundedRect(x, topHintButtonY, buttonWidth, buttonHeight, true, false, true, false);
+    if (hasUp) {
+      roundedRect(x, up.y, buttonWidth, up.height, true, false, true, false);
+      label(x, up.y, up.height, upBtn);
     }
 
-    if (downBtn != nullptr && downBtn[0] != '\0') {
-      roundedRect(x, topHintButtonY + buttonHeight + 5, buttonWidth, buttonHeight, true, false, true, false);
-    }
-
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topHintButtonY + (i * buttonHeight) + 5;
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        textCW(x, y + (buttonHeight + textWidth) / 2, labels[i]);
-      }
+    if (hasDown) {
+      roundedRect(x, down.y, buttonWidth, down.height, true, false, true, false);
+      label(x, down.y, down.height, downBtn);
     }
   }
 
