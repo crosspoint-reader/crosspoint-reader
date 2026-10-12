@@ -20,8 +20,12 @@
 // listens on that AP's channel first: a quarter of a second instead of three.
 namespace WifiApChoice {
 
-// Below this the reader looks for a better AP.
-constexpr int WEAK_RSSI = -70;
+// Below this the reader looks for a better AP. A build flag can raise it so the check runs on every
+// connect, for testing: -DWIFI_AP_WEAK_RSSI=-40.
+#ifndef WIFI_AP_WEAK_RSSI
+#define WIFI_AP_WEAK_RSSI -70
+#endif
+constexpr int WEAK_RSSI = WIFI_AP_WEAK_RSSI;
 // A better AP must be at least this much stronger: no hopping between two that are about equal.
 constexpr int BETTER_BY_DB = 10;
 
