@@ -403,7 +403,9 @@ function groupDictionaries(sources) {
     if (!info || isJunkPath(src.path)) continue;
     const dir = dirName(src.path);
     // FAT names are case-insensitive, so are the reader's lookups of .dict next to .idx.
-    const key = dir.toLowerCase() + '/' + info.stem.toLowerCase();
+    // Per archive: two archives holding the same path are two dictionaries, and
+    // merging them could pair one's index with the other's data.
+    const key = (src.origin || '') + '\n' + dir.toLowerCase() + '/' + info.stem.toLowerCase();
     if (!groups.has(key)) groups.set(key, { dir, stem: info.stem, origin: src.origin, files: {}, skipped: [] });
     const g = groups.get(key);
     const entry = { path: src.path, blob: src.blob, unpack: info.unpack };
