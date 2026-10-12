@@ -5,7 +5,9 @@ description: Read-only firmware-handoff review for regressions introduced or mad
 
 # Correctness review
 
-Review only the pinned logical change. Do not edit files or broaden the task into a general subsystem audit.
+Review only the pinned logical change; avoid a general subsystem audit.
+Inspect code and recorded checks only: no file writes, tests, builds, or new
+diagnostics. Request needed checks from the main agent.
 
 For every changed behavior:
 

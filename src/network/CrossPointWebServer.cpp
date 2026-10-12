@@ -45,12 +45,18 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/RunnerPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/assets/crosspoint_iconSvg.generated.h"
+#include "html/assets/iconsSvg.generated.h"
+#include "html/assets/webCss.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 #include "util/TaskWatchdog.h"
+
+static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
+                              const char* contentType);
 
 namespace {
 // Arduino's WebServer retains parsed request arguments until the next request.
@@ -202,6 +208,15 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+
+  server->on("/assets/web.css", HTTP_GET,
+             [this] { sendStaticContent(server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); });
+  server->on("/assets/icons.svg", HTTP_GET,
+             [this] { sendStaticContent(server.get(), iconsSvg, sizeof(iconsSvg), iconsSvgETag, "image/svg+xml"); });
+  server->on("/assets/crosspoint-icon.svg", HTTP_GET, [this] {
+    sendStaticContent(server.get(), crosspoint_iconSvg, sizeof(crosspoint_iconSvg), crosspoint_iconSvgETag,
+                      "image/svg+xml");
+  });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -1364,12 +1379,16 @@ void CrossPointWebServer::handleGetSettings() const {
         break;
       }
       case SettingType::ENUM: {
-        doc["type"] = "enum";
+        const auto labels = s.enumLabels();
+        const bool toggle = s.enumStringValues.empty() && labels.size() == 2 && labels[0] == StrId::STR_STATE_OFF &&
+                            labels[1] == StrId::STR_STATE_ON;
+        doc["type"] = toggle ? "toggle" : "enum";
         if (s.valuePtr) {
           doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
         } else if (s.valueGetter) {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
+        if (toggle) break;
         JsonArray options = doc["options"].to<JsonArray>();
         if (!s.enumStringValues.empty()) {
           for (const auto& opt : s.enumStringValues) {

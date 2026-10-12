@@ -7,7 +7,9 @@ description: "Read-only firmware-handoff review of ESP32 resources and hardware:
 
 Review the pinned logical change. Consult relevant sections of hardware, HAL,
 coding, or lifecycle rules for the contracts it changes; use project skills only
-when their decision procedure is needed. Do not edit files or run handoff.
+when their decision procedure is needed. Inspect code and recorded checks only:
+no file writes, tests, builds, or new diagnostics. Request needed checks from
+the main agent; do not run handoff.
 
 Review the diff for:
 

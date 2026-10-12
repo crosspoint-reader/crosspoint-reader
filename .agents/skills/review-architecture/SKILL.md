@@ -5,7 +5,9 @@ description: "Read-only architecture audit of the current logical diff at firmwa
 
 # Architecture review
 
-Assume the change can work. Review its shape, not correctness, style, security, or performance. Do not edit files.
+Assume the change can work. Review its shape, not correctness, style, security, or performance.
+Inspect code and recorded checks only: no file writes, tests, builds, or new
+diagnostics. Request needed checks from the main agent.
 
 ## Process
 

@@ -5,7 +5,9 @@ description: Read-only firmware-handoff review of tr(), English source strings, 
 
 # English strings and user documentation review
 
-Review the pinned firmware change without editing files.
+Review the pinned firmware change. Inspect code and recorded checks only:
+no file writes, tests, builds, or new diagnostics. Request needed checks from
+the main agent.
 
 Check:
 
