@@ -25,6 +25,8 @@ enum class SortOrder : uint8_t {
   TitleDesc,
   AuthorAsc,
   AuthorDesc,
+  GroupAsc,
+  GroupDesc,
 };
 
 // One book to locate in the index: the complete-path hash (clixPathHash) is
@@ -59,6 +61,11 @@ class LibraryIndexFile {
   uint16_t bookCount() const { return opened ? head.bookCount : 0; }
   bool ranksDegraded() const { return opened && (head.flags & CLIX_FLAG_RANKS_DEGRADED) != 0; }
   bool dedupDegraded() const { return opened && (head.flags & CLIX_FLAG_DEDUP_DEGRADED) != 0; }
+  bool groupsDegraded() const { return opened && (head.flags & CLIX_FLAG_GROUPS_DEGRADED) != 0; }
+  uint16_t groupCount() const { return opened ? head.groupCount : 0; }
+  uint16_t groupedCount() const { return opened ? head.groupedCount : 0; }
+  GroupKind groupKind() const { return opened ? static_cast<GroupKind>(head.groupKind) : GroupKind::None; }
+  bool hasGroups() const { return opened && head.groupCount > 0 && head.groupedCount > 0; }
 
   // Record ordinal of the row at display position `row` in `order`. Returns
   // 0xFFFF when out of range, which callers treat as "no such row" rather than
@@ -88,13 +95,31 @@ class LibraryIndexFile {
   // Cleaned author spelling before the library-wide spelling vote. Empty is a
   // valid value, so success is independent of `out.empty()`.
   bool readSourceAuthor(const ClixRecord& record, std::string& out);
+  // Read the stored source value of the configured field, before heading truncation,
+  // and the series position stored with it. Returns true with an empty output for
+  // None or a missing value.
+  bool readSourceGroup(const ClixRecord& record, std::string& out, uint16_t* seriesPosition = nullptr);
+  // Read the display author and the source group field in one forward pass.
+  // Missing fields yield empty strings. Returns false on a malformed blob or I/O
+  // failure; the author remains available if it was read before the failure.
+  bool readSearchFields(const ClixRecord& record, std::string& author, std::string& sourceGroup);
 
   // Absolute path of the book, rebuilt from its folder record.
   bool readPath(const ClixRecord& record, std::string& out);
 
+  // Read the group reference; ungrouped books return CLIX_GROUP_NONE.
+  bool readGroupRef(uint16_t ordinal, ClixGroupRef& out);
+  // Read a group heading and book count. Returns false for an out-of-range ID.
+  bool readGroup(uint16_t groupId, std::string& name, uint16_t& bookCount);
+
  private:
+  class BlobWindow;
+
   bool openImpl(const char* path, bool acceptStaleFold);
   bool readAt(uint32_t offset, void* dst, size_t len);
+  bool blobTailStart(const ClixRecord& record, uint32_t& at) const;
+  bool takeShortField(BlobWindow& blob, std::string* out);
+  bool takeSourceGroup(BlobWindow& blob, std::string& out, uint16_t* seriesPosition);
   bool readBlobField(const ClixRecord& record, uint8_t field, std::string& out);
 
   HalFile file;

@@ -20,6 +20,8 @@ class ContentOpfParser final : public Print {
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
     IN_BOOK_IDENTIFIER,
+    IN_BOOK_PUBLISHER,
+    IN_BOOK_SUBJECT,
     IN_META_TEXT,
     IN_MANIFEST,
     IN_SPINE,
@@ -59,6 +61,9 @@ class ContentOpfParser final : public Print {
   std::string calibreSeries;
   std::optional<float> calibreSeriesIndex;
 
+  // Collect the first non-blank value of a dc: element
+  void enterSingleValueElement(ParserState capturing, const std::string& value);
+
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
     uint32_t idHash;      // FNV-1a hash of itemId
@@ -90,6 +95,8 @@ class ContentOpfParser final : public Print {
   std::string asin;
   std::string series;
   std::optional<float> seriesIndex;
+  std::string publisher;
+  std::string subject;
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;

@@ -2,8 +2,8 @@
 
 // Builds the CLX1 index by walking the SD card once.
 //
-// The walk derives filename fallbacks and can read title and author metadata from
-// EPUBs. Fresh metadata is reused from the previous index.
+// The walk derives filename fallbacks and can read title, author and grouping
+// metadata from EPUBs. Fresh metadata is reused from the previous index.
 //
 // Shape of the build, and why:
 //
@@ -52,8 +52,12 @@ struct BuildStats {
   uint16_t enriched = 0;   // took its title or author from the book rather than the filename
   uint16_t parsed = 0;     // EPUB metadata reads performed by this build
   uint16_t metadataReused = 0;
+  uint16_t groups = 0;   // distinct groups for the configured field
+  uint16_t grouped = 0;  // books assigned to a group
   bool indexReplaced = false;
   bool ranksDegraded = false;
+  // Group table allocation failed. The index retains the requested kind and source field.
+  bool groupsDegraded = false;
   bool dedupDegraded = false;
 };
 
@@ -65,7 +69,10 @@ struct BuildStats {
 // book over its filename. It reads an existing cache when available; otherwise
 // it stops the normal EPUB parser at the end of <metadata>, before the manifest,
 // without building the reader's spine, TOC, CSS, or section caches.
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false);
+// The reader's cache doesn't have group fields, so grouped builds
+// always read the package document. A failed group allocation still writes an
+// index but sets `groupsDegraded`.
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata, GroupKind groupKind);
 
 // Live index path, shared by the builder and activity.
 const char* libraryIndexPath();

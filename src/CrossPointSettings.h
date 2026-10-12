@@ -343,6 +343,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Show the title and author read from inside each book rather than its
   // filename. Users can disable this to make index rebuilds skip EPUB parsing.
   uint8_t libraryUseMetadata = 1;
+  // Optional Library grouping field as a library::GroupKind value (0 = none).
+  // Ignored when libraryUseMetadata is off.
+  uint8_t libraryGroupBy = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)

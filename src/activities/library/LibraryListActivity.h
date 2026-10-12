@@ -75,7 +75,9 @@ class LibraryListActivity final : public UiTabListActivity {
   // Shared tail of row activation and the options menu's Open entry.
   void openBookByPath(const std::string& path);
   void promptRebuildIndex();
+  void syncIndexState();
   void resetAfterRebuild();
+  void clearGroupCache();
   // Recent-row long-press menu: open / remove from recents / delete / rebuild.
   void showRecentBookOptions(int entry);
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
@@ -116,6 +118,8 @@ class LibraryListActivity final : public UiTabListActivity {
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
   static void formatInitialHeading(uint32_t initial, std::string& out);
+  bool groupFor(int entry, std::string& name, library::ClixGroupRef& ref, uint16_t& bookCount);
+  void formatGroupHeading(const std::string& name, uint16_t bookCount, std::string& out) const;
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
   void drawHoldHelp() const;
@@ -145,6 +149,13 @@ class LibraryListActivity final : public UiTabListActivity {
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
+
+  bool groupTabAvailable = false;
+  library::GroupKind groupTabKind = library::GroupKind::None;
+  // Cached heading for consecutive rows in the same group.
+  uint16_t cachedGroupId = library::CLIX_GROUP_NONE;
+  uint16_t cachedGroupBooks = 0;
+  std::string cachedGroupName;
 
   // Rows surviving the current query, as positions in the active sort order.
   // Empty query means no filtering and this owns no allocation, so the ordinary

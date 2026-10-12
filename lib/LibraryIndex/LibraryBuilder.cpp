@@ -5,6 +5,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <LanguageTag.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <Utf8.h>
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <optional>
 
 #include "LibraryIndexFile.h"
 #include "LibraryText.h"
@@ -23,12 +25,14 @@ constexpr char INDEX_PATH[] = "/.crosspoint/library.idx";
 constexpr char NEW_PATH[] = "/.crosspoint/library.new";
 constexpr char BACKUP_PATH[] = "/.crosspoint/library.bak";
 constexpr char STAGE_PATH[] = "/.crosspoint/library.stage";
+constexpr char GROUP_STAGE_PATH[] = "/.crosspoint/library.stage.g";
 constexpr char DIRTY_PATH[] = "/.crosspoint/library.dirty";
 constexpr char CACHE_DIR[] = "/.crosspoint";
 // Sticky fallback when the marker could not be persisted (card unavailable at
 // write time): callers must still see the index as stale until a rebuild clears it.
 bool dirtyInMemory = false;
 constexpr size_t LIBRARY_IO_BUFFER_SIZE = 4096;
+constexpr size_t GROUPED_STAGE_IO_BUFFER_SIZE = LIBRARY_IO_BUFFER_SIZE / 2;
 
 // Matches lib/FileIndex's buffer so a name this walk accepts is one the file
 // browser could also show.
@@ -40,6 +44,31 @@ constexpr size_t STAGE_NAME_BYTES = 255;
 constexpr size_t STAGE_AUTHOR_BYTES = 128;
 // A folder path is stored behind one length byte in the folder section.
 constexpr size_t FOLDER_PATH_BYTES = 255;
+
+constexpr size_t STAGED_GROUP_BYTES = 256;
+struct StagedGroup {
+  uint16_t position;  // series position or GROUP_POSITION_NONE
+  uint8_t len;
+  char data[STAGED_GROUP_BYTES - sizeof(uint16_t) - sizeof(uint8_t)];
+};
+static_assert(CLIX_ALIGN % sizeof(StagedGroup) == 0, "staged groups must tile a 512-byte sector");
+constexpr size_t STAGED_GROUP_HEAD_BYTES = offsetof(StagedGroup, data);
+static_assert(STAGED_GROUP_HEAD_BYTES == sizeof(uint16_t) + sizeof(uint8_t), "staged group head is the blob head");
+
+bool stagedLengthFits(const uint8_t len) { return len <= sizeof(StagedGroup::data); }
+
+std::string_view stagedField(const StagedGroup& staged) { return std::string_view(staged.data, staged.len); }
+
+uint32_t stagedBlobBytes(const StagedGroup& staged) { return STAGED_GROUP_HEAD_BYTES + staged.len; }
+
+void packStagedGroup(const std::string_view value, const uint16_t position, StagedGroup& staged) {
+  memset(&staged, 0, sizeof(staged));
+  const int room = static_cast<int>(std::min(value.size(), sizeof(staged.data)));
+  staged.len = static_cast<uint8_t>(utf8SafeTruncateBuffer(value.data(), room));
+  memcpy(staged.data, value.data(), staged.len);
+  staged.position = staged.len > 0 ? position : static_cast<uint16_t>(GROUP_POSITION_NONE);
+}
+
 struct StagedEntry {
   ClixRecord record;
   uint64_t pathHash;
@@ -79,6 +108,22 @@ static_assert(sizeof(SpellingSlot) <= 136, "spelling vote scratch grew unexpecte
 bool sortKeyLess(const SortKey& a, const SortKey& b) {
   const int cmp = memcmp(a.key, b.key, sizeof(a.key));
   if (cmp != 0) return cmp < 0;
+  return a.ordinal < b.ordinal;
+}
+
+// Sort full group names in chunks without keeping every name in RAM
+constexpr size_t GROUP_KEY_NAME_BYTES = 12;
+struct GroupSortKey {
+  char key[GROUP_KEY_NAME_BYTES];
+  uint16_t position;
+  uint16_t ordinal;
+};
+static_assert(sizeof(GroupSortKey) == 16, "GroupSortKey must stay at 16 bytes");
+
+bool groupKeyLess(const GroupSortKey& a, const GroupSortKey& b) {
+  const int cmp = memcmp(a.key, b.key, sizeof(a.key));
+  if (cmp != 0) return cmp < 0;
+  if (a.position != b.position) return a.position < b.position;
   return a.ordinal < b.ordinal;
 }
 
@@ -244,6 +289,12 @@ constexpr uint16_t FIRST_SEEN_UNRESOLVED = 0xFFFF;
 struct WalkState {
   HalFile stage;
   serialization::BufferedFileWriter* stageOut = nullptr;
+  HalFile groupStage;
+  serialization::BufferedFileWriter* groupStageOut = nullptr;
+  StagedGroup* stagedGroup = nullptr;
+  // The current book's value for the configured field
+  std::string sourceGroup;
+  uint16_t sourcePosition = GROUP_POSITION_NONE;
   char* nameBuf = nullptr;
   StagedEntry* stagedEntry = nullptr;
   uint16_t books = 0;
@@ -257,6 +308,7 @@ struct WalkState {
   bool dedupDegraded = false;
   bool failed = false;
   bool readMetadata = false;
+  GroupKind groupKind = GroupKind::None;
   LibraryIndexFile* previous = nullptr;
   BuildStats* stats = nullptr;
   uint16_t enriched = 0;
@@ -287,6 +339,30 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   return -1;
 }
 
+void sourceGroupFor(PackageGroupFields& fields, const GroupKind kind, std::string& value, uint16_t& position) {
+  value.clear();
+  position = GROUP_POSITION_NONE;
+  switch (kind) {
+    case GroupKind::None:
+      break;
+    case GroupKind::Series:
+      value = std::move(fields.series);
+      position = roundSeriesIndex(fields.seriesIndex);
+      break;
+    case GroupKind::Publisher:
+      value = std::move(fields.publisher);
+      break;
+    case GroupKind::Language: {
+      char tag[LANGUAGE_TAG_BUFFER_SIZE];
+      if (normaliseLanguageTag(fields.language, tag, sizeof(tag))) value = tag;
+      break;
+    }
+    case GroupKind::Subject:
+      value = std::move(fields.subject);
+      break;
+  }
+}
+
 // parentBasename and depth are gone with the folder-as-author rule they served:
 // nothing about a book's surroundings names its author any more.
 [[gnu::noinline]] bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize,
@@ -299,6 +375,8 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   // and a name pulled out of one by pattern is a guess wearing a fact's clothes.
   std::string title = stemOf(name);
   std::string author;
+  st.sourceGroup.clear();
+  st.sourcePosition = GROUP_POSITION_NONE;
   bool titleFromBook = false;
   bool authorFromBook = false;
 
@@ -317,7 +395,17 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
     reuseMetadata =
         st.prior[priorIndex].fileSize == fileSize && modificationTime != 0 &&
         priorRecord.modificationTime == modificationTime && st.previous->header().foldVersion == CLIX_FOLD_VERSION &&
-        st.previous->header().metadataEnabled == st.readMetadata && priorRecord.metadataStatus == expectedStatus;
+        st.previous->header().metadataEnabled == st.readMetadata && priorRecord.metadataStatus == expectedStatus &&
+        (st.groupKind == GroupKind::None || st.previous->groupKind() == st.groupKind);
+  }
+
+  // read the group field first so a failure can fall back to parsing this book
+  if (reuseMetadata && st.groupKind != GroupKind::None &&
+      !st.previous->readSourceGroup(priorRecord, st.sourceGroup, &st.sourcePosition)) {
+    LOG_ERR("LIBIDX", "cannot reuse the group field of %s; parsing it again", fullPath.c_str());
+    st.sourceGroup.clear();
+    st.sourcePosition = GROUP_POSITION_NONE;
+    reuseMetadata = false;
   }
 
   if (reuseMetadata) {
@@ -343,11 +431,17 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   // Prefer the reader's existing cache. For an unopened book, loadMetadata()
   // reuses the same EPUB parser but stops before the manifest, so this never
   // builds spine, TOC, CSS, cover, or section caches during the library walk.
+  // Grouped builds skip the cache since it doesn't have group fields.
   if (!reuseMetadata && extractionExpected) {
     st.stats->parsed++;
     Epub epub(fullPath, CACHE_DIR);
     std::string bookTitle;
-    if (epub.loadMetadata(bookTitle, author)) {
+    PackageGroupFields fields;
+
+    const bool grouping = st.groupKind != GroupKind::None;
+    const bool loaded = epub.loadMetadata(bookTitle, author, grouping ? &fields : nullptr);
+    if (loaded && grouping) sourceGroupFor(fields, st.groupKind, st.sourceGroup, st.sourcePosition);
+    if (loaded) {
       entry.record.metadataStatus = CLIX_METADATA_EXTRACTED;
       if (!bookTitle.empty()) {
         title = std::move(bookTitle);
@@ -414,6 +508,11 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   memcpy(entry.author, displayAuthor.data(), entry.authorLen);
 
   st.stageOut->write(&entry, STAGE_STRIDE);
+
+  if (st.groupKind != GroupKind::None) {
+    packStagedGroup(st.sourceGroup, st.sourcePosition, *st.stagedGroup);
+    st.groupStageOut->write(st.stagedGroup, sizeof(StagedGroup));
+  }
   st.books++;
   return true;
 }
@@ -548,9 +647,162 @@ void walk(WalkState& st, const std::string& path, const int depth) {
 
 // Shared by the offset and write passes so the name-blob layout has one source of
 // truth.
-uint32_t blobBytesFor(const StagedEntry& entry, const StagedEntry& canonical) {
+uint32_t blobBytesFor(const StagedEntry& entry, const StagedEntry& canonical, const uint32_t groupBytes) {
   return sizeof(entry.pathHash) + entry.record.nameLen + 1u + canonical.authorLen + 1u + entry.titleLen + 1u +
-         entry.authorLen;
+         entry.authorLen + groupBytes;
+}
+
+bool readStagedGroup(HalFile& groupStage, const uint16_t stagingIndex, StagedGroup& out) {
+  if (!groupStage.seekSet(static_cast<uint64_t>(stagingIndex) * sizeof(StagedGroup)) ||
+      groupStage.read(&out, sizeof(StagedGroup)) != static_cast<int>(sizeof(StagedGroup)) ||
+      !stagedLengthFits(out.len)) {
+    LOG_ERR("LIBIDX", "group stage read failed at record %u", static_cast<unsigned>(stagingIndex));
+    return false;
+  }
+  return true;
+}
+
+enum class GroupBuildResult : uint8_t { Complete, OutOfMemory, IoError };
+
+// Order books with a value in the selected field into groups, A-Z by folded
+// name, then by series position and title within each group.
+//
+// `order` maps title-order ordinals to staging indexes.
+// On success:
+//   groupOrderOf[k]            record ordinal at group-order position k
+//   groupIdOf[ordinal]         group ID, or CLIX_GROUP_NONE
+//   groupPositionOf[ordinal]   series position; optional outside Series
+//
+// Names can be 253 bytes across thousands of books so keys are kept instead of full names.
+// Each key is one 12-byte chunk of the folded name. After
+// sorting the first chunk, each run of books with tied chunks is re-read from
+// the stage and sorted again on the next chunk. Repeat until every run holds a single
+// name. SD reads are done before each sorting so the comparator doesn't need slow SD access.
+//
+// While runs are being refined, groupOrderOf[begin] holds the end of the run
+// that starts at `begin` and other slots are unused. The final pass replaces
+// those run ends with record ordinals.
+GroupBuildResult buildGroupOrder(HalFile& groupStage, const uint16_t* order, const uint16_t n, uint16_t* groupOrderOf,
+                                 uint16_t* groupIdOf, uint16_t* groupPositionOf, uint16_t& groupCount,
+                                 uint16_t& groupedCount) {
+  groupCount = 0;
+  groupedCount = 0;
+  if (n == 0) return GroupBuildResult::Complete;
+
+  // reuse heap scratch for full names (it exceeds the task stack budget)
+  struct GroupScratch {
+    StagedGroup staged;
+    char firstFolded[sizeof(StagedGroup::data)];
+  };
+  auto scratch = makeUniqueNoThrow<GroupScratch>();
+  auto keys = makeUniqueNoThrow<GroupSortKey[]>(n);
+  if (!scratch || !keys) {
+    LOG_ERR("LIBIDX", "group key or scratch alloc failed (%u books)", static_cast<unsigned>(n));
+    return GroupBuildResult::OutOfMemory;
+  }
+  uint32_t serviceUnits = 0;
+  const auto readGroup = [&](const uint16_t ordinal) {
+    serviceBuilder(serviceUnits);
+    return readStagedGroup(groupStage, order[ordinal], scratch->staged);
+  };
+  const auto setChunk = [](GroupSortKey& key, const std::string_view folded, const size_t offset) {
+    memset(key.key, 0, sizeof(key.key));
+    if (offset < folded.size())
+      memcpy(key.key, folded.data() + offset, std::min(folded.size() - offset, sizeof(key.key)));
+  };
+  // re-use the source buffer since folding can't grow the text
+  const auto foldedGroup = [&scratch]() {
+    StagedGroup& staged = scratch->staged;
+    return foldInto(stagedField(staged), std::span<char>(staged.data, sizeof(staged.data)));
+  };
+  // key every book on the first chunk of its folded name
+  size_t maxFoldedBytes = 0;
+  for (uint16_t i = 0; i < n; i++) {
+    if (!readGroup(i)) return GroupBuildResult::IoError;
+    GroupSortKey& key = keys[i];
+    // breaks ties by title
+    key.ordinal = i;
+    key.position = scratch->staged.position;
+    groupIdOf[i] = CLIX_GROUP_NONE;
+    if (groupPositionOf) groupPositionOf[i] = GROUP_POSITION_NONE;
+    const std::string_view folded = foldedGroup();
+    if (folded.empty()) {
+      // 0xff is invalid UTF-8 so this pushes the book to the end
+      memset(key.key, 0xff, sizeof(key.key));
+      key.position = GROUP_POSITION_NONE;
+      continue;
+    }
+    maxFoldedBytes = std::max(maxFoldedBytes, folded.size());
+    setChunk(key, folded, 0);
+    if (groupPositionOf) groupPositionOf[i] = key.position;
+    groupedCount++;
+  }
+  std::sort(keys.get(), keys.get() + n, groupKeyLess);
+  // record where each run of equal chunks ends
+  const auto partitionRuns = [&](const uint16_t begin, const uint16_t end) {
+    for (uint16_t first = begin; first < end;) {
+      uint16_t next = first + 1;
+      while (next < end && memcmp(keys[first].key, keys[next].key, GROUP_KEY_NAME_BYTES) == 0) {
+        next++;
+      }
+      groupOrderOf[first] = next;
+      first = next;
+    }
+  };
+  // ungrouped books form one tail after groupedCount
+  partitionRuns(0, groupedCount);
+
+  for (size_t offset = GROUP_KEY_NAME_BYTES; offset <= maxFoldedBytes; offset += GROUP_KEY_NAME_BYTES) {
+    bool refined = false;
+    for (uint16_t begin = 0; begin < groupedCount;) {
+      const uint16_t end = groupOrderOf[begin];
+      // folded text doesn't have null bytes
+      // if null is at the end, the run already has a single name
+      if (end - begin > 1 && keys[begin].key[GROUP_KEY_NAME_BYTES - 1] != '\0') {
+        size_t firstLength = 0;
+        bool allEqual = true;
+        for (uint16_t k = begin; k < end; k++) {
+          if (!readGroup(keys[k].ordinal)) return GroupBuildResult::IoError;
+          const std::string_view folded = foldedGroup();
+          if (k == begin) {
+            firstLength = folded.size();
+            memcpy(scratch->firstFolded, folded.data(), firstLength);
+          } else if (folded.size() != firstLength || memcmp(scratch->firstFolded, folded.data(), firstLength) != 0) {
+            allEqual = false;
+          }
+          setChunk(keys[k], folded, offset);
+        }
+        // equal names don't need to by chunked just sorted by position + title ordinal
+        // zero to prevent unnecessary repeated reads & sorts
+        if (allEqual) {
+          for (uint16_t k = begin; k < end; k++) {
+            memset(keys[k].key, 0, sizeof(keys[k].key));
+          }
+        }
+        std::sort(keys.get() + begin, keys.get() + end, groupKeyLess);
+        partitionRuns(begin, end);
+        refined = true;
+      }
+      begin = end;
+    }
+    if (!refined) break;
+  }
+
+  // each remaining run is one group
+  // reading `end` before the inner loop keeps it ahead of the overwrites
+  for (uint16_t begin = 0; begin < groupedCount;) {
+    const uint16_t end = groupOrderOf[begin];
+    for (uint16_t k = begin; k < end; k++) {
+      groupIdOf[keys[k].ordinal] = groupCount;
+      groupOrderOf[k] = keys[k].ordinal;
+    }
+    groupCount++;
+    begin = end;
+  }
+  for (uint16_t k = groupedCount; k < n; k++) {
+    groupOrderOf[k] = keys[k].ordinal;
+  }
+  return GroupBuildResult::Complete;
 }
 
 bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order, const uint16_t* resolvedFirstSeen,
@@ -564,6 +816,47 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     return false;
   }
 
+  HalFile stage;
+  if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) return false;
+  const bool grouping = st.groupKind != GroupKind::None;
+  HalFile groupStage;
+  if (grouping && !Storage.openFileForRead("LIBIDX", GROUP_STAGE_PATH, groupStage)) return false;
+
+  std::unique_ptr<uint16_t[]> groupOrderOf;
+  std::unique_ptr<uint16_t[]> groupIdOf;
+  std::unique_ptr<uint16_t[]> groupPositionOf;
+  uint16_t groupCount = 0;
+  uint16_t groupedCount = 0;
+  if (grouping) {
+    GroupBuildResult result = GroupBuildResult::OutOfMemory;
+    if (n == 0) {
+      result = GroupBuildResult::Complete;
+    } else if (coreSortsAvailable) {
+      // keep order and IDs until writing (4 bytes/book) plus Series positions (2 bytes/book)
+      // cache the positions to avoid another staging read for each book
+      const bool positioned = st.groupKind == GroupKind::Series;
+      groupOrderOf = makeUniqueNoThrow<uint16_t[]>(n);
+      groupIdOf = makeUniqueNoThrow<uint16_t[]>(n);
+      if (positioned) groupPositionOf = makeUniqueNoThrow<uint16_t[]>(n);
+      if (groupOrderOf && groupIdOf && (!positioned || groupPositionOf)) {
+        result = buildGroupOrder(groupStage, order, n, groupOrderOf.get(), groupIdOf.get(), groupPositionOf.get(),
+                                 groupCount, groupedCount);
+      }
+    }
+    if (result == GroupBuildResult::IoError) return false;
+    if (result != GroupBuildResult::Complete) {
+      LOG_ERR("LIBIDX", "grouping allocation unavailable; emitting without groups");
+      stats.groupsDegraded = true;
+      groupOrderOf.reset();
+      groupIdOf.reset();
+      groupPositionOf.reset();
+      groupCount = 0;
+      groupedCount = 0;
+    }
+  }
+  stats.groups = groupCount;
+  stats.grouped = groupedCount;
+
   ClixHeader header{};
   memcpy(header.magic, CLIX_MAGIC, sizeof(CLIX_MAGIC));
   header.formatVersion = CLIX_FORMAT_VERSION;
@@ -572,6 +865,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   header.folderCount = st.folderId;
   header.nextFirstSeen = st.nextFirstSeen;
   header.metadataEnabled = st.readMetadata;
+  header.groupCount = groupCount;
+  header.groupedCount = groupedCount;
+  header.groupKind = static_cast<uint8_t>(st.groupKind);
   // Placeholder only. Degradations are known after the sorts have run.
   header.flags = 0;
   // The blob is the LAST section, so its size affects only selfSize — every
@@ -581,9 +877,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // one-spelling-per-person pass has run.
   layoutSections(header, st.folderBytes, 0);
 
-  HalFile stage;
   HalFile out;
-  if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) return false;
   if (!Storage.openFileForWrite("LIBIDX", NEW_PATH, out)) {
     stage.close();
     return false;
@@ -618,6 +912,28 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       ioFailed = true;
       return false;
     }
+    return true;
+  };
+  const auto readGroupAt = [&groupStage, &ioFailed](const uint16_t stagingIndex, StagedGroup& dest) {
+    if (ioFailed) return false;
+    if (!readStagedGroup(groupStage, stagingIndex, dest)) ioFailed = true;
+    return !ioFailed;
+  };
+  // name offsets only need the position and length
+  const auto groupBytesAt = [&groupStage, &ioFailed, grouping](const uint16_t stagingIndex, uint32_t& bytes) {
+    bytes = 0;
+    if (ioFailed) return false;
+    if (!grouping) return true;
+    uint8_t head[STAGED_GROUP_HEAD_BYTES] = {};
+    const bool read = groupStage.seekSet(static_cast<uint64_t>(stagingIndex) * sizeof(StagedGroup)) &&
+                      groupStage.read(head, sizeof(head)) == static_cast<int>(sizeof(head));
+    const uint8_t length = head[sizeof(uint16_t)];  // after the series position
+    if (!read || !stagedLengthFits(length)) {
+      LOG_ERR("LIBIDX", "group stage length read failed at record %u", static_cast<unsigned>(stagingIndex));
+      ioFailed = true;
+      return false;
+    }
+    bytes = STAGED_GROUP_HEAD_BYTES + length;
     return true;
   };
 
@@ -936,7 +1252,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // someone else's. On the heap the allocation is checked; on the stack an
   // overflow is a silent corruption.
   auto staged = makeUniqueNoThrow<StagedEntry[]>(2);
-  if (!staged) {
+  // keep the source field even when the group table could not be allocated
+  auto stagedGroup = grouping ? makeUniqueNoThrow<StagedGroup>() : nullptr;
+  if (!staged || (grouping && !stagedGroup)) {
     LOG_ERR("LIBIDX", "staging buffers alloc failed");
     outBuffer.flush();
     out.close();
@@ -964,7 +1282,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     // Keeping them adjacent means no second offset has to live in the record.
     const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
     if (!fetch(order[from], canonical)) break;
-    nameCursor += blobBytesFor(entry, canonical);
+    uint32_t groupBytes = 0;
+    if (!groupBytesAt(order[i], groupBytes)) break;
+    nameCursor += blobBytesFor(entry, canonical, groupBytes);
     if (resolvedFirstSeen) entry.record.firstSeen = resolvedFirstSeen[order[i]];
     put(&entry.record, sizeof(ClixRecord));
   }
@@ -979,6 +1299,43 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     serviceBuilder(serviceUnits);
     const uint16_t ordinal = arrivalOrder[k];
     put(&ordinal, sizeof(ordinal));
+  }
+  for (uint16_t k = 0; k < n; k++) {
+    serviceBuilder(serviceUnits);
+    const uint16_t ordinal = groupOrderOf ? groupOrderOf[k] : k;
+    put(&ordinal, sizeof(ordinal));
+  }
+  padTo(header.groupStart);
+
+  // assign group IDs in sorted order with one heading and count per group
+  for (uint16_t k = 0; k < groupedCount;) {
+    serviceBuilder(serviceUnits);
+    const uint16_t first = groupOrderOf[k];
+    const uint16_t id = groupIdOf[first];
+    uint16_t count = 0;
+    while (k + count < groupedCount && groupIdOf[groupOrderOf[k + count]] == id) {
+      count++;
+    }
+
+    if (!readGroupAt(order[first], *stagedGroup)) break;
+    const std::string_view heading = stagedField(*stagedGroup);
+    ClixGroupEntry groupEntry{};
+    groupEntry.bookCount = count;
+    groupEntry.nameLen = static_cast<uint8_t>(utf8SafeTruncateBuffer(
+        heading.data(), static_cast<int>(std::min<size_t>(heading.size(), CLIX_GROUP_NAME_BYTES))));
+    memcpy(groupEntry.name, heading.data(), groupEntry.nameLen);
+    put(&groupEntry, sizeof(groupEntry));
+    k += count;
+  }
+  padTo(header.groupRefStart);
+
+  for (uint16_t i = 0; i < n; i++) {
+    serviceBuilder(serviceUnits);
+    ClixGroupRef ref{};
+    ref.groupId = groupIdOf ? groupIdOf[i] : CLIX_GROUP_NONE;
+    ref.position = groupPositionOf && ref.groupId != CLIX_GROUP_NONE ? groupPositionOf[i]
+                                                                     : static_cast<uint16_t>(GROUP_POSITION_NONE);
+    put(&ref, sizeof(ref));
   }
   padTo(header.nameStart);
 
@@ -997,11 +1354,18 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     if (entry.titleLen > 0) put(entry.title, entry.titleLen);
     put(&entry.authorLen, 1);
     if (entry.authorLen > 0) put(entry.author, entry.authorLen);
-    blobWritten += blobBytesFor(entry, canonical);
+    if (grouping) {
+      if (!readGroupAt(order[i], *stagedGroup)) break;
+      put(stagedGroup.get(), stagedBlobBytes(*stagedGroup));
+      blobWritten += blobBytesFor(entry, canonical, stagedBlobBytes(*stagedGroup));
+    } else {
+      blobWritten += blobBytesFor(entry, canonical, 0);
+    }
   }
   header.nameLen = blobWritten;
   header.selfSize = header.nameStart + blobWritten;
   stage.close();
+  if (grouping) groupStage.close();
 
   // Captured HERE, at the end of the data, and not after the header rewrite
   // below: that rewrite seeks back to 0, so asking afterwards reports 64 — the
@@ -1009,8 +1373,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   const uint32_t written = static_cast<uint32_t>(outBuffer.position());
   if (!outBuffer.flush()) ioFailed = true;
 
-  header.flags =
-      (stats.ranksDegraded ? CLIX_FLAG_RANKS_DEGRADED : 0) | (stats.dedupDegraded ? CLIX_FLAG_DEDUP_DEGRADED : 0);
+  header.flags = (stats.ranksDegraded ? CLIX_FLAG_RANKS_DEGRADED : 0) |
+                 (stats.dedupDegraded ? CLIX_FLAG_DEDUP_DEGRADED : 0) |
+                 (stats.groupsDegraded ? CLIX_FLAG_GROUPS_DEGRADED : 0);
 
   if (!out.seekSet(0)) {
     ioFailed = true;
@@ -1061,7 +1426,7 @@ bool markLibraryIndexDirty() {
 
 bool isLibraryIndexDirty() { return dirtyInMemory || Storage.exists(DIRTY_PATH); }
 
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata) {
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata, const GroupKind groupKind) {
   const uint32_t startMs = millis();
   uint32_t serviceUnits = 0;
   stats = BuildStats{};
@@ -1071,6 +1436,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   Storage.remove(STAGE_PATH);
   const std::string folderStagePath = std::string(STAGE_PATH) + ".f";
   Storage.remove(folderStagePath.c_str());
+  Storage.remove(GROUP_STAGE_PATH);
 
   auto nameBuf = makeUniqueNoThrow<char[]>(NAME_BUF_SIZE);
   if (!nameBuf) {
@@ -1140,35 +1506,62 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   st.prior = priorList.get();
   st.priorCount = priorList ? priorCount : 0;
   st.readMetadata = readMetadata;
+  st.groupKind = readMetadata ? groupKind : GroupKind::None;
   st.previous = previous.isOpen() ? &previous : nullptr;
   st.stats = &stats;
+  const bool grouping = st.groupKind != GroupKind::None;
+  const auto removeStageFiles = [&folderStagePath] {
+    Storage.remove(STAGE_PATH);
+    Storage.remove(folderStagePath.c_str());
+    Storage.remove(GROUP_STAGE_PATH);
+  };
+
+  // reuse this buffer during the walk (StagedGroup fills the 256-byte stack budget)
+  auto stagedGroup = grouping ? makeUniqueNoThrow<StagedGroup>() : nullptr;
+  if (grouping && !stagedGroup) {
+    LOG_ERR("LIBIDX", "group staging scratch alloc failed (%u bytes)", static_cast<unsigned>(sizeof(StagedGroup)));
+    return false;
+  }
+  st.stagedGroup = stagedGroup.get();
 
   if (!Storage.openFileForWrite("LIBIDX", STAGE_PATH, st.stage) ||
-      !Storage.openFileForWrite("LIBIDX", folderStagePath, st.folders)) {
+      !Storage.openFileForWrite("LIBIDX", folderStagePath, st.folders) ||
+      (grouping && !Storage.openFileForWrite("LIBIDX", GROUP_STAGE_PATH, st.groupStage))) {
     LOG_ERR("LIBIDX", "cannot open staging files");
     if (st.stage) st.stage.close();
     if (st.folders) st.folders.close();
+    if (st.groupStage) st.groupStage.close();
+    removeStageFiles();
     return false;
   }
 
   LOG_DBG("LIBIDX", "phase prepare/prior: %ums", static_cast<unsigned>(millis() - startMs));
   [[maybe_unused]] const uint32_t walkStartMs = millis();
   bool stageFlushed = false;
+  bool groupStageFlushed = true;
   {
-    serialization::BufferedFileWriter stageOut(st.stage, LIBRARY_IO_BUFFER_SIZE);
+    const size_t stageBufferSize = grouping ? GROUPED_STAGE_IO_BUFFER_SIZE : LIBRARY_IO_BUFFER_SIZE;
+    serialization::BufferedFileWriter stageOut(st.stage, stageBufferSize);
+    std::optional<serialization::BufferedFileWriter> groupStageOut;
+    if (grouping) groupStageOut.emplace(st.groupStage, GROUPED_STAGE_IO_BUFFER_SIZE);
     st.stageOut = &stageOut;
+    st.groupStageOut = groupStageOut ? &*groupStageOut : nullptr;
     walk(st, rootPath, 0);
     st.stageOut = nullptr;
+    st.groupStageOut = nullptr;
     stageFlushed = stageOut.flush();
+    if (groupStageOut) groupStageFlushed = groupStageOut->flush();
   }
   const bool stageClosed = st.stage.close();
   const bool foldersClosed = st.folders.close();
+  const bool groupStageClosed = !grouping || st.groupStage.close();
+  st.stagedGroup = nullptr;
+  stagedGroup.reset();
   LOG_DBG("LIBIDX", "phase walk/metadata/stage: %ums", static_cast<unsigned>(millis() - walkStartMs));
 
-  if (st.failed || !stageFlushed || !stageClosed || !foldersClosed) {
+  if (st.failed || !stageFlushed || !stageClosed || !foldersClosed || !groupStageFlushed || !groupStageClosed) {
     LOG_ERR("LIBIDX", "staging failed; keeping the previous index");
-    Storage.remove(STAGE_PATH);
-    Storage.remove(folderStagePath.c_str());
+    removeStageFiles();
     return false;
   }
 
@@ -1180,11 +1573,14 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   stats.unchanged = st.reused;
   stats.enriched = st.enriched;
 
+  // settings changes and failed group tables need a rebuild even without changed books
   if (previous.isOpen() && st.books == priorCount && st.reused == priorCount && stats.metadataReused == priorCount &&
-      st.unreadableSkipped == 0) {
+      st.unreadableSkipped == 0 && previous.groupKind() == st.groupKind && !previous.groupsDegraded() &&
+      previous.header().metadataEnabled == st.readMetadata) {
+    stats.groups = previous.header().groupCount;
+    stats.grouped = previous.header().groupedCount;
     previous.close();
-    Storage.remove(STAGE_PATH);
-    Storage.remove(folderStagePath.c_str());
+    removeStageFiles();
     stats.walkMs = millis() - startMs;
     LOG_INF("LIBIDX", "unchanged: %u reused, %u parsed, no replacement, %ums",
             static_cast<unsigned>(stats.metadataReused), static_cast<unsigned>(stats.parsed),
@@ -1211,8 +1607,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   auto resolvedFirstSeen = makeUniqueNoThrow<uint16_t[]>(st.books == 0 ? 1 : st.books);
   if (!resolvedFirstSeen) {
     LOG_ERR("LIBIDX", "firstSeen array alloc failed");
-    Storage.remove(STAGE_PATH);
-    Storage.remove(folderStagePath.c_str());
+    removeStageFiles();
     return false;
   }
   if (st.books > 0) {
@@ -1224,8 +1619,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     HalFile read;
     if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, read)) {
       LOG_ERR("LIBIDX", "firstSeen reconciliation: cannot reopen the stage");
-      Storage.remove(STAGE_PATH);
-      Storage.remove(folderStagePath.c_str());
+      removeStageFiles();
       return false;
     }
     for (uint16_t i = 0; i < st.books; i++) {
@@ -1235,8 +1629,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
           read.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) {
         LOG_ERR("LIBIDX", "firstSeen reconciliation: short read at record %u", static_cast<unsigned>(i));
         read.close();
-        Storage.remove(STAGE_PATH);
-        Storage.remove(folderStagePath.c_str());
+        removeStageFiles();
         return false;
       }
       if (r.firstSeen != FIRST_SEEN_UNRESOLVED) {
@@ -1267,8 +1660,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     }
     if (!read.close()) {
       LOG_ERR("LIBIDX", "firstSeen reconciliation: stage close failed");
-      Storage.remove(STAGE_PATH);
-      Storage.remove(folderStagePath.c_str());
+      removeStageFiles();
       return false;
     }
     for (uint16_t q = 0; q < priorCount; q++) {
@@ -1297,8 +1689,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   auto order = makeUniqueNoThrow<uint16_t[]>(st.books == 0 ? 1 : st.books);
   if (!order) {
     LOG_ERR("LIBIDX", "order array alloc failed (%u books)", static_cast<unsigned>(st.books));
-    Storage.remove(STAGE_PATH);
-    Storage.remove(folderStagePath.c_str());
+    removeStageFiles();
     return false;
   }
   for (uint16_t i = 0; i < st.books; i++) {
@@ -1316,8 +1707,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
       HalFile stage;
       if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) {
         LOG_ERR("LIBIDX", "title sort: cannot reopen the record stage");
-        Storage.remove(STAGE_PATH);
-        Storage.remove(folderStagePath.c_str());
+        removeStageFiles();
         return false;
       }
       for (uint16_t i = 0; i < st.books; i++) {
@@ -1328,8 +1718,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
             stage.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) {
           LOG_ERR("LIBIDX", "title sort: record stage read failed at %u", static_cast<unsigned>(offset));
           stage.close();
-          Storage.remove(STAGE_PATH);
-          Storage.remove(folderStagePath.c_str());
+          removeStageFiles();
           return false;
         }
         memset(keys[i].key, 0, sizeof(keys[i].key));
@@ -1338,8 +1727,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
       }
       if (!stage.close()) {
         LOG_ERR("LIBIDX", "title sort: stage close failed");
-        Storage.remove(STAGE_PATH);
-        Storage.remove(folderStagePath.c_str());
+        removeStageFiles();
         return false;
       }
       delay(1);
@@ -1361,8 +1749,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   const bool ok =
       emitIndex(folderStagePath.c_str(), st, order.get(), resolvedFirstSeen.get(), coreSortsAvailable, stats);
   LOG_DBG("LIBIDX", "phase author/orders/emit: %ums", static_cast<unsigned>(millis() - emitStartMs));
-  Storage.remove(STAGE_PATH);
-  Storage.remove(folderStagePath.c_str());
+  removeStageFiles();
 
   stats.walkMs = millis() - startMs;
   stats.indexReplaced = ok;
