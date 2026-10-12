@@ -3,7 +3,6 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
-#include <HalGPIO.h>
 #include <Logging.h>
 
 #include <cstring>
@@ -426,7 +425,8 @@ void SettingsActivity::render(RenderLock&&) {
   // per return against a FAST's 435 ms (X3-measured), even when the previous HALF was three
   // updates ago. Correctness HALFs are armed via setNextDisplayRefreshMode() and bypass this
   // entirely -- see GfxRenderer::ghostClearingHalfWorthwhile().
-  const bool halfRefresh = gpio.deviceIsX3() && needsHalfRefresh && renderer.ghostClearingHalfWorthwhile();
+  const bool halfRefresh =
+      renderer.ghostsUnderFastRefresh() && needsHalfRefresh && renderer.ghostClearingHalfWorthwhile();
   // Cleared whether or not it was spent, i.e. a gated request is DROPPED, not deferred. Deferring
   // would land the 2.2 s stall a few cursor moves into the screen, which reads as a freeze; on
   // entry it reads as the screen change it is. The ghosting cost of dropping is marginal because

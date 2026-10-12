@@ -62,7 +62,7 @@ void FontSelectionActivity::lendPreviewArena() {
   // HomeActivity's lend sequence. Safe with the transition's busy-indicator waveform still running:
   // the copy only reads the displayed frame, and the RED seed and the borrow both drain it first.
   renderer.syncWriteBufferFromDisplayed();
-  if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+  renderer.syncRedRamFromFrameBuffer();
   size_t lentSize = 0;
   uint8_t* lent = renderer.borrowSecondaryBuffer(&lentSize);
   if (!lent) return;

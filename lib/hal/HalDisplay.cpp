@@ -206,7 +206,7 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   // question is about the display path, and asking it by board name answers "no" on every S3
   // board by construction, so an X4 Pro promoted to the same driver would log the misleading
   // line this exists to prevent.
-  if (mode == RefreshMode::FAST_REFRESH && !deviceIsX3() && !einkDisplay.hasSecondaryBuffer() &&
+  if (mode == RefreshMode::FAST_REFRESH && fastRefreshNeedsHostFrame() && !einkDisplay.hasSecondaryBuffer() &&
       !einkDisplay.singleBufferFastDiff()) {
     LOG_DBG("DISP",
             "#%lu displayBuffer mode=%s took %lu ms (no diff baseline: secondary=0 fastDiff=0 -> driver runs HALF)",
@@ -260,7 +260,9 @@ static uint32_t fbufContig() { return heap_caps_get_largest_free_block(MALLOC_CA
 // controller DTM1) and isRedRamSynced() hard-returns false there. Printing "0" on X3 reads as a
 // fact about the panel and is not one -- it was misread as the driver's own sync flag once,
 // which cost a debugging cycle. Say n/a where it means nothing.
-static const char* redSyncedLabel(const bool isX3, const bool synced) { return isX3 ? "n/a" : (synced ? "1" : "0"); }
+static const char* redSyncedLabel(const bool hasRed, const bool synced) {
+  return hasRed ? (synced ? "1" : "0") : "n/a";
+}
 
 bool HalDisplay::releaseSecondaryBuffer() {
   HalSpiBus::Lock spiLock;  // see the note above borrowSecondaryBuffer()
@@ -298,7 +300,8 @@ bool HalDisplay::releaseSecondaryBuffer() {
   einkDisplay.syncWriteBufferFromActive();
   const bool ok = einkDisplay.releaseSecondaryBuffer();
   LOG_INF("FBUF", "releaseSecondary -> %d (hasSecondary=%d redSynced=%s contig=%lu)", ok ? 1 : 0,
-          einkDisplay.hasSecondaryBuffer() ? 1 : 0, redSyncedLabel(deviceIsX3(), einkDisplay.isRedRamSynced()),
+          einkDisplay.hasSecondaryBuffer() ? 1 : 0,
+          redSyncedLabel(fastRefreshNeedsHostFrame(), einkDisplay.isRedRamSynced()),
           static_cast<unsigned long>(fbufContig()));
   return ok;
 }
@@ -307,7 +310,8 @@ bool HalDisplay::reallocSecondaryBuffer() {
   HalSpiBus::Lock spiLock;  // see the note above borrowSecondaryBuffer()
   const bool ok = einkDisplay.reallocSecondaryBuffer();
   LOG_INF("FBUF", "reallocSecondary -> %d (hasSecondary=%d redSynced=%s contig=%lu)", ok ? 1 : 0,
-          einkDisplay.hasSecondaryBuffer() ? 1 : 0, redSyncedLabel(deviceIsX3(), einkDisplay.isRedRamSynced()),
+          einkDisplay.hasSecondaryBuffer() ? 1 : 0,
+          redSyncedLabel(fastRefreshNeedsHostFrame(), einkDisplay.isRedRamSynced()),
           static_cast<unsigned long>(fbufContig()));
   return ok;
 }
@@ -345,7 +349,8 @@ bool HalDisplay::returnSecondaryBuffer() {
 
 void HalDisplay::setSingleBufferFastDiff(bool enabled) {
   LOG_INF("FBUF", "singleBufferFastDiff=%d (hasSecondary=%d redSynced=%s)", enabled ? 1 : 0,
-          einkDisplay.hasSecondaryBuffer() ? 1 : 0, redSyncedLabel(deviceIsX3(), einkDisplay.isRedRamSynced()));
+          einkDisplay.hasSecondaryBuffer() ? 1 : 0,
+          redSyncedLabel(fastRefreshNeedsHostFrame(), einkDisplay.isRedRamSynced()));
   einkDisplay.setSingleBufferFastDiff(enabled);
 }
 
@@ -417,10 +422,13 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) {
 }
 
 void HalDisplay::syncRedRamFromFrameBuffer() {
+  // Only a panel that diffs against a host-supplied previous frame has a RED baseline to seed.
+  // The SDK no-ops it elsewhere too, but returning here skips the bus lock and the log line.
+  if (!fastRefreshNeedsHostFrame()) return;
   HalSpiBus::Lock spiLock;
   einkDisplay.syncRedRamFromFrameBuffer();
   LOG_INF("FBUF", "syncRedRamFromFrameBuffer (hasSecondary=%d redSynced=%s)", einkDisplay.hasSecondaryBuffer() ? 1 : 0,
-          redSyncedLabel(deviceIsX3(), einkDisplay.isRedRamSynced()));
+          redSyncedLabel(fastRefreshNeedsHostFrame(), einkDisplay.isRedRamSynced()));
 }
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
@@ -537,7 +545,11 @@ void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, b
   einkDisplay.displayWindow(x, y, w, h, turnOffScreen);
 }
 
-bool HalDisplay::deviceIsX3() const { return einkDisplay.isX3Mode(); }
+bool HalDisplay::fastRefreshNeedsHostFrame() const { return einkDisplay.fastRefreshNeedsHostFrame(); }
+
+bool HalDisplay::asyncRefreshHoldsFrameBuffer() const { return einkDisplay.asyncRefreshHoldsFrameBuffer(); }
+
+bool HalDisplay::ghostsUnderFastRefresh() const { return einkDisplay.ghostsUnderFastRefresh(); }
 
 void HalDisplay::setFastGrayscaleLut(bool fast) { einkDisplay.setFastGrayscaleLut(fast); }
 

@@ -453,7 +453,10 @@ class GfxRenderer {
   // Keep fast differential alive (X4) after releaseSecondaryBuffer() by diffing
   // against the controller's retained baseline. See HalDisplay::setSingleBufferFastDiff.
   void setSingleBufferFastDiff(bool enabled) const { display.setSingleBufferFastDiff(enabled); }
-  bool isX3() const { return display.deviceIsX3(); }
+  // What the panel does -- see HalDisplay::fastRefreshNeedsHostFrame and friends.
+  bool fastRefreshNeedsHostFrame() const { return display.fastRefreshNeedsHostFrame(); }
+  bool asyncRefreshHoldsFrameBuffer() const { return display.asyncRefreshHoldsFrameBuffer(); }
+  bool ghostsUnderFastRefresh() const { return display.ghostsUnderFastRefresh(); }
 
   // True when triggerDisplayAsync() genuinely overlaps the waveform on this
   // panel. Ask this before spending the async gap on work; see
@@ -948,6 +951,9 @@ class GfxRenderer {
   //
   // The FreeInk drivers stream planes row-reversed (EpdBus::sendPlaneFlipped) and never
   // modify the framebuffer, so these calls leave it untouched.
+  //
+  // Safe to call on any panel: one whose FAST refresh needs no host frame
+  // (fastRefreshNeedsHostFrame() false) has no RED to seed, and the call returns at once.
   void syncRedRamFromFrameBuffer() const;
   void cleanupGrayscaleWithFrameBuffer() const;
   // Restore the driver's baseline and the write buffer from the display's previous-frame

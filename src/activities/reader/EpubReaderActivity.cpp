@@ -3338,7 +3338,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   // popup — NOT the routine forward-reading crossing the cold-open/deliberate-jump gating protects —
   // so it doesn't reintroduce the "every section traversal pays a slow refresh" cost. X3's fast
   // differential reads the controller's DTM1 (drawPopup updated it correctly), so it never ghosts.
-  if (!renderer.isX3() && buildingPopupShown_) {
+  if (renderer.fastRefreshNeedsHostFrame() && buildingPopupShown_) {
     forceHalfRefreshAfterPopup_ = true;
   }
 
@@ -3543,7 +3543,8 @@ EpubReaderActivity::PageLinkInfo EpubReaderActivity::pageLinkInfoForCurrentPage(
 }
 
 bool EpubReaderActivity::nearChapterEndForBuildThrough() const {
-  if (!renderer.isX3() || !section || section->hasActiveBuild() || section->pageCount == 0) return false;
+  if (renderer.fastRefreshNeedsHostFrame() || !section || section->hasActiveBuild() || section->pageCount == 0)
+    return false;
   return static_cast<int>(section->pageCount) - 1 - section->currentPage <= BG_BUILD_THROUGH_PAGES;
 }
 
@@ -3984,7 +3985,7 @@ EpubReaderActivity::SectionBuildMode EpubReaderActivity::chooseSectionBuildMode(
   // and only starves the build — exactly the foreground policy (inPlace is X4-only). Releasing
   // also keeps CSS parses above the runtime resolve floor (the resident build css-degraded
   // on-device, then had to be rebuilt blocking). Mid-build BW draws still work off DTM1.
-  if (renderer.isX3()) return SectionBuildMode::IncrementalReleased;
+  if (!renderer.fastRefreshNeedsHostFrame()) return SectionBuildMode::IncrementalReleased;
 
   // X4 → keep the secondary buffer resident when the in-place floors fit (fast-refresh baseline
   // re-seeds from it, AA stays live during the build); otherwise release for headroom. This now
@@ -4059,7 +4060,7 @@ EpubReaderActivity::BuildOutcome EpubReaderActivity::compileSectionCache(const R
   size_t inflatedSize = 0;
   epub->getSpineItemInflatedSize(currentSpineIndex, &inflatedSize);
   const bool escalated = forceBlockingBuildSpine_ == currentSpineIndex;
-  const bool inPlace = !renderer.isX3() && renderer.hasSecondaryBuffer() && !escalated &&
+  const bool inPlace = renderer.fastRefreshNeedsHostFrame() && renderer.hasSecondaryBuffer() && !escalated &&
                        heapAllowsInPlaceBuild(embeddedStyle, inflatedSize);
   const auto lendSecondaryBuffer = [&]() {
     size_t borrowedSize = 0;
@@ -4507,7 +4508,7 @@ bool EpubReaderActivity::buildSection(const RenderLayout& layout) {
         // HALF override here so drawPopup() doesn't spend a second ~1.7s HALF on the popup itself.
         // On X3 the popup's own refresh IS the baseline step (its displayBuffer updates DTM1, which
         // the following FAST content page diffs against), so leave the override for drawPopup().
-        if (!renderer.isX3() && dramaticTransition) {
+        if (renderer.fastRefreshNeedsHostFrame() && dramaticTransition) {
           renderer.clearRefreshOverride();  // discard the armed HALF -> popup paints FAST
         }
         GUI.drawPopup(renderer, tr(STR_INDEXING));  // immediate feedback before the first page lands
@@ -4538,13 +4539,13 @@ bool EpubReaderActivity::buildSection(const RenderLayout& layout) {
           // never refreshes while borrowing) C drives FAST refreshes for every mid-build page.
           // drawPopup() above just painted frameBuffer with what is now on screen, so this is
           // the correct baseline — the same frame the non-transferred branch below syncs from.
-          if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+          renderer.syncRedRamFromFrameBuffer();
           renderer.setSingleBufferFastDiff(true);
           secondaryBufferDegraded_ = true;
           LOG_INF("ERS", "Background-C: building spine %d incrementally, secondary buffer already BORROWED (free=%lu)",
                   currentSpineIndex, static_cast<unsigned long>(freeBefore));
         } else {
-          if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+          renderer.syncRedRamFromFrameBuffer();
           // Prefer BORROWING the secondary buffer over freeing it: the lent block never enters
           // the heap, so a survivor can't split it into a fragmented hole and the return cannot
           // fail (the realloc-failure / heap-recovery-restart class of bugs is impossible). The
@@ -4581,7 +4582,7 @@ bool EpubReaderActivity::buildSection(const RenderLayout& layout) {
       // call already updated correctly — no host-side baseline gap to paper over, so forcing HALF
       // there is pure unnecessary cost. A routine forward-reading crossing into a still-building
       // Background-B section is NOT dramatic (neither signal is set), so it keeps the fast cadence.
-      if (!renderer.isX3() && dramaticTransition && popupBeforeBuild) {
+      if (renderer.fastRefreshNeedsHostFrame() && dramaticTransition && popupBeforeBuild) {
         forceHalfRefreshAfterPopup_ = true;
       }
       renderer.clearFontAccumulation();
@@ -4604,7 +4605,7 @@ bool EpubReaderActivity::buildSection(const RenderLayout& layout) {
         // branch), which is also where the reader would otherwise sit with no feedback. Arm the
         // same transition handling the up-front path arms, so a popup drawn late is followed by
         // the same clean content refresh as one drawn early.
-        if (!popupBeforeBuild && !renderer.isX3() && dramaticTransition) {
+        if (!popupBeforeBuild && renderer.fastRefreshNeedsHostFrame() && dramaticTransition) {
           renderer.clearRefreshOverride();
           forceHalfRefreshAfterPopup_ = true;
         }
@@ -5844,8 +5845,10 @@ uint16_t EpubReaderActivity::renderPageContentOnly(const Page& page, const int o
 
 bool EpubReaderActivity::usesDeferredAa() const {
   // Inline AA hides its LSB plane render inside a running waveform, so it needs a
-  // panel that can actually overlap. X3 can, but defers anyway (see the header).
-  return !(renderer.supportsAsyncRefresh() && !renderer.isX3());
+  // panel that can actually overlap. The X3 can, but defers anyway: its async refresh
+  // holds the frame buffer, and stays pending, for the whole waveform (see the header
+  // and the pre-render guards).
+  return !(renderer.supportsAsyncRefresh() && !renderer.asyncRefreshHoldsFrameBuffer());
 }
 
 bool EpubReaderActivity::aaPreemptedByNavigation() const {

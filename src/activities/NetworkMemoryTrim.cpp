@@ -21,7 +21,7 @@ void trimMemoryForNetworkSession(const GfxRenderer& renderer, const char* logTag
 
   if (renderer.hasSecondaryBuffer()) {
     // Seed the controller baseline while frameBufferActive is still valid.
-    if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+    renderer.syncRedRamFromFrameBuffer();
     if (renderer.releaseSecondaryBuffer()) {
       LOG_DBG(logTag, "Released secondary framebuffer before network session (~52 KB contiguous)");
       renderer.setSingleBufferFastDiff(true);

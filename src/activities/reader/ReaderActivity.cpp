@@ -939,7 +939,7 @@ void ReaderActivity::onEnter() {
       // The popup's FAST loaded RED RAM with the pre-popup frame, not the popup, and the first
       // FAST after the return below diffs against RED. Seed it with the displayed frame while the
       // secondary still holds it, as the X4's single-buffer fast diff requires (no-op on X3).
-      if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+      renderer.syncRedRamFromFrameBuffer();
       lentForIndexing = renderer.borrowSecondaryBuffer(&lentSize);
       if (lentForIndexing) {
         renderer.setSingleBufferFastDiff(true);
