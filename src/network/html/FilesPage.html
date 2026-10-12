@@ -4133,6 +4133,8 @@
     // EPUB Utilities — ported from EPUB Optimizer Pro
     // ═══════════════════════════════════════════════════════════════════
 
+    const DEFLATE_OPTS = { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false };
+
     /** Defensive CSS injected into every XHTML <head> — prevents e-ink overflow. */
     const DEFENSIVE_STYLE = '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
 
@@ -5147,6 +5149,9 @@
       const entries = Object.entries(zip.files);
       const splitImages = {};
       const xhtmlFiles = {};
+      // Rewritten XHTML is held until the whole book has been seen, so later passes can
+      // still change the set of files before anything is written.
+      let processedXhtmlFiles = {};
       let opfPath = null, opfContent = null;
       let mainIdentifier = null;
 
@@ -5412,7 +5417,7 @@
           t = t.replace('</head>', DEFENSIVE_STYLE + '</head>');
         }
 
-        out.file(xhtmlPath, t, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
+        processedXhtmlFiles[xhtmlPath] = t;
       }
 
       // Extract main identifier from OPF using DOMParser with regex fallback
@@ -5429,7 +5434,11 @@
         const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
         t = fixOPF(t, opfContent, opfDir, splitImages);
         if (t !== opfContent) logFix('OPF', 'manifest updated');
-        out.file(opfPath, t, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
+        out.file(opfPath, t, DEFLATE_OPTS);
+      }
+
+      for (const [xhtmlPath, content] of Object.entries(processedXhtmlFiles)) {
+        out.file(xhtmlPath, content, DEFLATE_OPTS);
       }
 
       // Copy remaining files
@@ -5461,7 +5470,7 @@
           const t = scrubEpubTextResource(path, original);
           if (t !== original) data = new TextEncoder().encode(t);
         }
-        out.file(path, data, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
+        out.file(path, data, DEFLATE_OPTS);
       }
 
       if (progressCallback) progressCallback(100);
