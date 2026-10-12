@@ -31,17 +31,6 @@
     .diag-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
     .diag-col .card { margin: 0; }
 
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      padding: 9px 0;
-    }
-    .info-row + .info-row { border-top: 1px solid var(--border); }
-    .label { color: var(--text-muted); flex-shrink: 0; max-width: 50%; }
-    .value { color: var(--text-strong); font-weight: 500; text-align: right; overflow-wrap: anywhere;
-      font-variant-numeric: tabular-nums; }
     .value.alert { color: var(--danger); font-weight: 600; }
 
     .card h3 { margin: 18px 0 2px; font-size: 0.95rem; }

@@ -30,33 +30,10 @@
       .plugin-info > div:not(.plugin-meta) { margin-bottom: 4px; }
       .plugin-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
       .plugin.off .plugin-info { opacity: 0.6; }
-      /* Version and state next to the name: quieter than the theme's accent badge. */
-      .plugin .badge {
-        background: var(--surface-2);
-        color: var(--text-muted);
-        border: 1px solid var(--border);
-        font-weight: 500;
-      }
-      .plugin .badge.badge-off { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-border); }
 
-      .card > .notice { margin: 0 0 16px; }
       .upload-form { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
       .upload-form input[type="file"] { flex: 1 1 240px; min-width: 0; max-width: 100%; }
       .upload-form + .plugin-meta { margin: 10px 0 0; }
-      /* The browser's file picker button, drawn like .btn. */
-      input[type="file"] { font: inherit; color: var(--text-muted); }
-      input[type="file"]::file-selector-button {
-        font: inherit;
-        font-weight: 600;
-        margin-right: 12px;
-        padding: 8px 14px;
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--control-border);
-        background: var(--surface-2);
-        color: var(--text);
-        cursor: pointer;
-      }
-      input[type="file"]::file-selector-button:hover { background: var(--border); }
 
       /* The result of the last action: shown only while it has a kind. */
       #status { display: none; margin-top: 14px; padding: 10px 14px; border-radius: var(--radius-sm);
@@ -167,8 +144,8 @@
         }
         host.replaceChildren(...installed.map((p) => {
           const title = el('strong', { textContent: p.title || p.name });
-          if (p.version) title.append(el('span', { className: 'badge', textContent: 'v' + p.version }));
-          if (p.disabled) title.append(el('span', { className: 'badge badge-off', textContent: 'switched off' }));
+          if (p.version) title.append(el('span', { className: 'badge badge-muted', textContent: 'v' + p.version }));
+          if (p.disabled) title.append(el('span', { className: 'badge badge-warn', textContent: 'switched off' }));
           const meta = [
             'Adds itself to: ' + (MOUNT_LABELS[p.mount] || p.mount),
             describeReach(p.allowedHosts)
@@ -371,7 +348,7 @@
             onclick: () => installFromCatalog(c, button)
           });
           const title = el('strong', { textContent: c.title || c.name });
-          if (c.version) title.append(el('span', { className: 'badge', textContent: 'v' + c.version }));
+          if (c.version) title.append(el('span', { className: 'badge badge-muted', textContent: 'v' + c.version }));
           const source = describeSource(c);
           return el('div', { className: 'plugin' }, [
             el('div', { className: 'plugin-info' }, [

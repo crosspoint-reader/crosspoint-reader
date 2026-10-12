@@ -10,7 +10,6 @@
       <!--#include file="shared/NavLinks.css.inc" -->
 
       /* The theme's .hidden is a class; this page shows and hides with the attribute. */
-      [hidden] { display: none !important; }
       .card > h2 { margin-bottom: 4px; }
       .hint { color: var(--text-muted); font-size: 0.875rem; margin: 0 0 12px; }
       .meta { color: var(--text-muted); font-size: 0.875rem; overflow-wrap: anywhere; }
@@ -32,8 +31,6 @@
       .msg-error { color: var(--danger); }
       .msg-warn { color: var(--text-muted); }
       h3 .badge { margin-left: 8px; }
-      .badge-warn { background: var(--warn-soft); color: var(--warn-text); }
-      .badge-error { background: var(--danger-soft); color: var(--danger); }
 
       .card .notice { margin: 12px 0 16px; }
       .notice a { color: inherit; font-weight: 600; }
@@ -47,19 +44,7 @@
       }
       .drop-zone.over { border-color: var(--accent); background: var(--accent-soft); }
       .drop-zone p { margin: 8px 0 0; color: var(--text-muted); font-size: 0.875rem; }
-      .drop-zone input[type="file"] { font: inherit; max-width: 100%; color: var(--text-muted); }
-      input[type="file"]::file-selector-button {
-        font: inherit;
-        font-weight: 600;
-        padding: 8px 16px;
-        margin-right: 12px;
-        border: 1px solid var(--control-border);
-        border-radius: var(--radius-sm);
-        background: var(--surface);
-        color: var(--text);
-        cursor: pointer;
-      }
-      input[type="file"]::file-selector-button:hover { background: var(--border); }
+      .drop-zone input[type="file"]::file-selector-button { background: var(--surface); }
 
       /* A fieldset only so that one switch disables every field while installing. */
       fieldset#found { border: 0; margin: 0; padding: 0; min-width: 0; }

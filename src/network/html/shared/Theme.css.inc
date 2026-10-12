@@ -95,7 +95,7 @@ h2 { font-size: 1.15rem; margin: 0 0 12px; }
 h3 { font-size: 1rem; margin: 0 0 8px; }
 a { color: var(--accent-text); }
 :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
-.hidden { display: none !important; }
+.hidden, [hidden] { display: none !important; }
 .muted { color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -195,6 +195,21 @@ select, textarea {
 input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--accent); }
 select { padding-right: 28px; }
 
+/* The browser's file picker button, drawn like .btn. */
+input[type="file"] { font: inherit; color: var(--text-muted); max-width: 100%; }
+input[type="file"]::file-selector-button {
+  font: inherit;
+  font-weight: 600;
+  margin-right: 12px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--control-border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { background: var(--border); }
+
 /* An on/off switch: <label class="switch"><input type="checkbox" role="switch"><span></span></label> */
 .switch { position: relative; display: inline-block; width: 46px; height: 26px; flex: none; }
 .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
@@ -261,6 +276,24 @@ select { padding-right: 28px; }
   color: var(--accent-text);
   vertical-align: middle;
 }
+.badge-muted { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); font-weight: 500; }
+.badge-warn { background: var(--warn-soft); color: var(--warn-text); }
+.badge-error { background: var(--danger-soft); color: var(--danger); }
+.card > .notice { margin: 0 0 16px; }
+
+/* A label and its value on one line, as System Info, Diagnostics and Reading Stats list them. */
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+}
+.info-row + .info-row { border-top: 1px solid var(--border); }
+.info-row .label { color: var(--text-muted); flex-shrink: 0; max-width: 50%; }
+.info-row .value { color: var(--text-strong); font-weight: 500; text-align: right; overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums; }
+
 /* Short-lived feedback at the bottom of the window; role="status" so screen readers hear it. */
 .toast {
   position: fixed;

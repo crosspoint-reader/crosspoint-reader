@@ -61,7 +61,6 @@
       #remoteStatus { color: var(--text-muted); overflow-wrap: anywhere; }
       #remoteStatus.status-ok, #remoteStatus.status-err { margin: 0 -4px; padding: 8px 10px; border-radius: var(--radius-sm); }
 
-      .card > .notice { margin: 0 0 16px; }
       .notice a { color: inherit; font-weight: 600; }
       .upload-form {
         display: flex;
@@ -70,20 +69,6 @@
         flex-wrap: wrap;
       }
       .upload-form input[type="file"] { flex: 1 1 240px; min-width: 0; max-width: 100%; }
-      /* The browser's file picker button, drawn like .btn. */
-      input[type="file"] { font: inherit; color: var(--text-muted); }
-      input[type="file"]::file-selector-button {
-        font: inherit;
-        font-weight: 600;
-        margin-right: 12px;
-        padding: 8px 14px;
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--control-border);
-        background: var(--surface-2);
-        color: var(--text);
-        cursor: pointer;
-      }
-      input[type="file"]::file-selector-button:hover { background: var(--border); }
       #pickedInfo { margin: 8px 0 0; }
       #pickedInfo:empty { display: none; }
 
