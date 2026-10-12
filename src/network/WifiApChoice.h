@@ -32,10 +32,11 @@ struct Result {
   bool moved = false;
 };
 
-// After a connect to `ssid` (`password` empty for an open network). Returns at once when the AP
-// is strong enough or the network is known to have a single one; otherwise blocks while it
-// listens (up to ~3.5 s) and moves (up to ~8 s, ~1 s usually). Logs what it heard and did under
-// `tag`. Leaves the connection unpinned, so the driver's own reconnects pick the strongest AP.
-Result improve(const std::string& ssid, const std::string& password, const char* tag);
+// After a connect to `ssid`. Returns at once when the AP is strong enough or the network is known
+// to have a single one; otherwise blocks while it listens (up to ~3.5 s) and moves (~1 s usually,
+// up to ~16 s when the move fails and it reconnects). Logs what it heard and did under `tag`.
+// Leaves the connection unpinned, so the driver's own reconnects pick the strongest AP. A failed
+// move can leave no link yet: the caller checks WiFi.status() afterwards.
+Result improve(const std::string& ssid, const char* tag);
 
 }  // namespace WifiApChoice

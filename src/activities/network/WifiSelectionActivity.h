@@ -77,6 +77,9 @@ class WifiSelectionActivity final : public Activity {
 
   // Whether we are attempting to auto-connect
   bool autoConnecting = false;
+  // Whether this attempt has run WifiApChoice::improve(): once per attempt, so a reader that ends
+  // up on the far AP again after a failed move connects rather than going round.
+  bool apChoiceTried = false;
 
   // Saved-credential candidates for auto-cycling (SSIDs visible in scan, sorted by RSSI desc)
   std::vector<std::string> autoCycleCandidates;
