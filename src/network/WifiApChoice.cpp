@@ -152,9 +152,13 @@ bool moveTo(const Ap& to, const char* tag) {
   } else {
     LOG_DBG(tag, "Could not move to %s; connecting as before", describe(to).c_str());
     leave();
-    if (!applyConfig(unpinned) || esp_wifi_connect() != ESP_OK || !waitConnected(nullptr)) {
-      LOG_DBG(tag, "No link yet after the failed move; the driver keeps trying");
-    }
+    if (!applyConfig(unpinned)) LOG_DBG(tag, "Could not unpin the AP: a reconnect will look for it alone");
+    // The core's reconnects back on first. A sweep can miss every AP (NO_AP_FOUND), and only the
+    // core's retry clears the status that leaves behind: without it the network screen took the
+    // failed move for a failed connect and gave up (X3, 2026-10-12).
+    WiFi.setAutoReconnect(true);
+    esp_wifi_connect();  // refused harmlessly when a retry of the core's is already connecting
+    if (!waitConnected(nullptr)) LOG_DBG(tag, "No link yet after the failed move; the core keeps trying");
   }
   WiFi.setAutoReconnect(true);
   return moved;
@@ -211,6 +215,16 @@ Result improve(const std::string& ssid, const char* tag) {
   if (!best) {
     LOG_DBG(tag, "Staying on %s: no access point of %s is %d dB stronger", describe(current).c_str(), ssid.c_str(),
             BETTER_BY_DB);
+    return result;
+  }
+  // Heard once is not enough to leave a working link for. On an X3 (2026-10-12) a scan heard the
+  // near AP at -66 dBm, the two sweeps of the move right after missed it, and the reader had no
+  // link for 16 s.
+  Ap again[MAX_APS];
+  int m = listen(ssid, best->channel, true, again, 0, tag);
+  if (!heardAp(again, m, best->bssid)) m = listen(ssid, best->channel, false, again, m, tag);
+  if (!heardAp(again, m, best->bssid)) {
+    LOG_DBG(tag, "Staying on %s: %s was not heard again", describe(current).c_str(), describe(*best).c_str());
     return result;
   }
   LOG_DBG(tag, "Moving from %s to %s", describe(current).c_str(), describe(*best).c_str());
