@@ -681,6 +681,45 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
   return true;
 }
 
+bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
+  metadata = {};
+
+  ZipFile zip(filepath);
+  if (!zip.open()) {
+    LOG_DBG("EBP", "Could not open ePub for sync metadata: %s", filepath.c_str());
+    return false;
+  }
+
+  std::string contentOpfFilePath;
+  if (!findContentOpfFile(&contentOpfFilePath, &zip)) {
+    zip.close();
+    return false;
+  }
+
+  size_t contentOpfSize;
+  if (!zip.getInflatedFileSize(contentOpfFilePath.c_str(), &contentOpfSize)) {
+    zip.close();
+    return false;
+  }
+
+  const std::string basePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
+  ContentOpfParser parser(cachePath, basePath, contentOpfSize, nullptr, true);
+  if (!parser.setup()) {
+    zip.close();
+    return false;
+  }
+
+  const bool read = zip.readFileToStream(contentOpfFilePath.c_str(), parser, 1024, true);
+  zip.close();
+  if (!read) return false;
+
+  metadata.isbn = std::move(parser.isbn);
+  metadata.asin = std::move(parser.asin);
+  metadata.series = std::move(parser.series);
+  metadata.seriesIndex = parser.seriesIndex;
+  return true;
+}
+
 bool Epub::clearCache() const {
   if (!Storage.exists(cachePath.c_str())) {
     LOG_DBG("EPB", "Cache does not exist, no action needed");

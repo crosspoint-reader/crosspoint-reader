@@ -76,6 +76,7 @@ class Section {
   // Read a page already laid out by the in-progress build (page < build LUT size), from
   // the partially-written tmp .bin without disturbing the build's write cursor.
   std::unique_ptr<Page> loadPageDuringBuild(int page);
+  bool openAnchorMap(HalFile& anchorFile, uint16_t& count) const;
 
  public:
   uint16_t pageCount = 0;
@@ -123,6 +124,8 @@ class Section {
   // Resolve an anchor from the in-progress build first, then the on-disk anchor map
   // (covers finalized sections and partials from a previous session).
   std::optional<uint16_t> findAnchor(const std::string& anchor) const;
+  // Select a TOC boundary without reopening the anchor map for every story.
+  int getTocIndexForPage(int page) const;
 
   // True if this spine's unzipped HTML is already cached, so a build won't pay the (multi-second on a
   // giant spine) zip inflation. Lets the reader skip the indexing popup on a fast reopen/rebuild.

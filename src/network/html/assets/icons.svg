@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M3 20h18V7H11L9 4H3z"/></symbol>
+  <symbol id="file" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5zM14 3v6h5"/></symbol>
+  <symbol id="book" viewBox="0 0 24 24"><path d="M5 3h14v18H5a2 2 0 0 1 0-4h14M5 3v14M10 3v7l2-1 2 1V3"/></symbol>
+  <symbol id="image" viewBox="0 0 24 24"><path d="M3 3h18v18H3zM3 17l6-6 5 5 3-3 4 4"/><circle cx="16" cy="7" r="1"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></symbol>
+  <symbol id="edit" viewBox="0 0 24 24"><path d="m16 3 5 5L8 21H3v-5zM13 6l5 5"/></symbol>
+  <symbol id="move" viewBox="0 0 24 24"><path d="M3 20h18V7H11L9 4H3zM7 14h10m-3-3 3 3-3 3"/></symbol>
+  <symbol id="upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M3 15v6h18v-6"/></symbol>
+  <symbol id="warning" viewBox="0 0 24 24"><path d="m12 3 10 18H2zM12 9v5m0 3v.1"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3"/></symbol>
+</svg>

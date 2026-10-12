@@ -98,6 +98,8 @@ jobs:
             asset: firmware-papermono.bin
           - env: metalio_eink4
             asset: firmware-metalio_eink4.bin
+          - env: eego_a4
+            asset: firmware-eego_a4.bin
     steps:
       - uses: actions/checkout@v6
         with:

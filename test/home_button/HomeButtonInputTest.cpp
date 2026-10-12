@@ -43,4 +43,10 @@ TEST(HomeButtonInput, RecognizesConfiguredGestures) {
   EXPECT_EQ(tick(7751), A::Home);
   // Disabling double tap removes the single-tap delay.
   EXPECT_EQ(input.update(8000, true, false, false, false, A::Bookmark, A::Ignore, A::ReaderMenu), A::Bookmark);
+  // Every Home gesture can launch clipping selection without changing persisted action IDs.
+  static_assert(static_cast<uint8_t>(A::ToggleFrontlight) == 10);
+  EXPECT_EQ(input.update(9000, true, false, false, false, A::CreateClipping, A::Ignore, A::Home), A::CreateClipping);
+  EXPECT_EQ(input.update(10000, true, false, false, false, A::Home, A::CreateClipping, A::Ignore), A::Ignore);
+  EXPECT_EQ(input.update(10100, true, false, false, false, A::Home, A::CreateClipping, A::Ignore), A::CreateClipping);
+  EXPECT_EQ(input.update(11000, false, true, false, false, A::Home, A::Ignore, A::CreateClipping), A::CreateClipping);
 }

@@ -7,8 +7,8 @@
 
 /**
  * Optional document metadata sent alongside progress sync requests.
- * Mirrors the metadata object added in KOReader PR #15306.
- * The official sync server ignores this field; custom servers may use it.
+ * Mirrors the metadata object added in KOReader PR #15306 and adds bounded
+ * bibliographic fields for compatible custom servers.
  */
 struct KOReaderMetadata {
   std::string filename;  // e.g. "my_book.epub"
@@ -20,13 +20,18 @@ struct KOReaderMetadata {
   // verbatim (JSON types kept) inside the metadata object; the firmware
   // assigns no meaning to the keys.
   std::string extraJson;
+  std::string isbn;    // ISBN from package metadata when available
+  std::string asin;    // Amazon ASIN from package metadata when available
+  std::string series;  // Series/collection title when available
+  std::optional<float> seriesIndex;
 };
 
 /**
  * Rich CrossPoint position sent alongside progress uploads. Maps 1:1 onto the
  * crosspoint-sync extended `position` object (see crosspoint-sync docs/API.md).
- * It is only transmitted to sync.crosspointreader.com. These fields remain
- * layout-dependent compatibility hints; the standard XPath is the content anchor.
+ * It is transmitted only when the selected server type supports rich progress.
+ * These fields remain layout-dependent compatibility hints; the standard XPath
+ * is the content anchor.
  */
 struct KOReaderRichPosition {
   uint32_t pctQ = 0;                       // Percentage quantized 0..1,000,000 (metadata/fallback)
@@ -48,7 +53,7 @@ struct KOReaderProgress {
   std::string deviceId;                          // Device ID
   int64_t timestamp;                             // Unix timestamp of last update
   std::optional<KOReaderMetadata> metadata;      // Optional document metadata
-  std::optional<KOReaderRichPosition> position;  // Optional rich position (crosspoint-sync servers only)
+  std::optional<KOReaderRichPosition> position;  // Optional rich position
 };
 
 /**
