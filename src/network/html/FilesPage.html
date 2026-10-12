@@ -4364,6 +4364,118 @@
       return result;
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // Chapter structure: empty stubs and long chapters
+    // Ported from CrossInk (uxjulia/CrossInk) web/pages/files.js @1b1156027, MIT, by Julia Nguyen.
+    // ═══════════════════════════════════════════════════════════════════
+
+    function localName(node) {
+      return (node && (node.localName || node.nodeName || '')).toLowerCase();
+    }
+
+    function dirname(path) {
+      const index = path.lastIndexOf('/');
+      return index === -1 ? '' : path.substring(0, index);
+    }
+
+    function basename(path) {
+      const index = path.lastIndexOf('/');
+      return index === -1 ? path : path.substring(index + 1);
+    }
+
+    // Zip path of toPath as seen from the file fromFile ('../Text/ch2.xhtml').
+    function relativeZipPath(fromFile, toPath) {
+      const fromParts = dirname(fromFile).split('/').filter(Boolean);
+      const toParts = toPath.split('/').filter(Boolean);
+      while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
+        fromParts.shift();
+        toParts.shift();
+      }
+      return [...fromParts.map(() => '..'), ...toParts].join('/') || basename(toPath);
+    }
+
+    // relativeZipPath as an href: escapes the characters a file name may hold but an href may
+    // not carry raw (%, #, ?, space). Everything else stays as it is in the name. (Not in
+    // CrossInk, which writes the bare path.)
+    function relativeZipHref(fromFile, toPath) {
+      return relativeZipPath(fromFile, toPath).replace(/[%#? ]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+    }
+
+    // A chapter's identity as a reader sees it: its body id and title. Two consecutive spine
+    // files that share both are one chapter split in two (Kindle conversions do this).
+    function readerSectionIdentity(content) {
+      const doc = new DOMParser().parseFromString(content, 'application/xhtml+xml');
+      if (doc.querySelector('parsererror') || !doc.body) return null;
+      const id = doc.body.getAttribute('id') || '';
+      const title = doc.querySelector('title')?.textContent?.trim() || '';
+      return id && title ? `${id}\u0000${title}` : null;
+    }
+
+    // Whether a chapter shows anything: text or an image outside script/style/svg/metadata and
+    // outside elements Amazon marked as removed. Unparseable files count as having content.
+    function hasReaderContent(content) {
+      const doc = new DOMParser().parseFromString(content, 'application/xhtml+xml');
+      if (doc.querySelector('parsererror') || !doc.body) return true;
+      const body = doc.body.cloneNode(true);
+      body.querySelectorAll('script,style,svg,metadata,[data-AmznRemoved-M8]').forEach((node) => node.remove());
+      return !!(body.textContent || '').trim() || !!body.querySelector('img');
+    }
+
+    // Drops from the spine every chapter that shows nothing and is followed by the rest of the
+    // same chapter (same body id and title), which the reader would show as a blank page.
+    // The stub stays in the manifest; redirects maps its path to the next chapter's so links can
+    // follow. Returns { opfContent, redirects }.
+    function collapseReaderEmptySpineItems(xhtmlFiles, opfContent, opfPath) {
+      const redirects = new Map();
+      if (!opfContent) return { opfContent, redirects };
+      const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
+      if (doc.querySelector('parsererror')) return { opfContent, redirects };
+      const manifestById = new Map(
+        Array.from(doc.getElementsByTagNameNS('*', 'item')).map((item) => [item.getAttribute('id'), item]));
+      const spine = doc.getElementsByTagNameNS('*', 'spine')[0];
+      if (!spine) return { opfContent, redirects };
+      const refs = Array.from(spine.getElementsByTagNameNS('*', 'itemref'));
+      for (let index = 0; index + 1 < refs.length; index++) {
+        const item = manifestById.get(refs[index].getAttribute('idref'));
+        const nextItem = manifestById.get(refs[index + 1].getAttribute('idref'));
+        const href = item?.getAttribute('href');
+        const nextHref = nextItem?.getAttribute('href');
+        if (!href || !nextHref) continue;
+        const path = resolvePath(opfPath, decodeHref(href.split('#')[0]));
+        const nextPath = resolvePath(opfPath, decodeHref(nextHref.split('#')[0]));
+        const content = xhtmlFiles[path];
+        const nextContent = xhtmlFiles[nextPath];
+        if (!content || !nextContent || hasReaderContent(content) || !hasReaderContent(nextContent)) continue;
+        const identity = readerSectionIdentity(content);
+        if (!identity || identity !== readerSectionIdentity(nextContent)) continue;
+        redirects.set(path, nextPath);
+        spine.removeChild(refs[index]);
+      }
+      // Unlike CrossInk, an untouched OPF is returned as it was rather than re-serialized.
+      return { opfContent: redirects.size ? safeSerialize(doc, opfContent) : opfContent, redirects };
+    }
+
+    // Points every link (href, src, xlink:href) at a collapsed stub to the chapter that replaced
+    // it, keeping the fragment. Returns the content unchanged when nothing pointed there.
+    function rewriteCollapsedSpineReferences(content, sourcePath, redirects) {
+      if (redirects.size === 0) return content;
+      const doc = new DOMParser().parseFromString(content, 'application/xml');
+      if (doc.querySelector('parsererror')) return content;
+      let changed = false;
+      for (const element of Array.from(doc.getElementsByTagName('*'))) {
+        for (const attribute of ['href', 'src', 'xlink:href']) {
+          const value = element.getAttribute(attribute);
+          if (!value || value.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(value)) continue;
+          const [href, fragment = ''] = value.split(/#(.*)/s, 2);
+          const target = redirects.get(resolvePath(sourcePath, decodeHref(href)));
+          if (!target) continue;
+          element.setAttribute(attribute, `${relativeZipHref(sourcePath, target)}${fragment ? `#${fragment}` : ''}`);
+          changed = true;
+        }
+      }
+      return changed ? safeSerialize(doc, content) : content;
+    }
+
     /**
      * Extract main identifier from OPF for NCX sync. DOMParser with regex fallback.
      */
@@ -5420,6 +5532,29 @@
         processedXhtmlFiles[xhtmlPath] = t;
       }
 
+      // Empty chapter stubs: drop them from the spine and send their links to the chapter that
+      // follows (ported from CrossInk, see collapseReaderEmptySpineItems).
+      const collapseResult = collapseReaderEmptySpineItems(processedXhtmlFiles, opfContent, opfPath);
+      opfContent = collapseResult.opfContent;
+      for (const [xhtmlPath, content] of Object.entries(processedXhtmlFiles)) {
+        processedXhtmlFiles[xhtmlPath] = rewriteCollapsedSpineReferences(content, xhtmlPath, collapseResult.redirects);
+      }
+      if (collapseResult.redirects.size > 0) {
+        logFix('EPUB sections', `Collapsed ${collapseResult.redirects.size} empty chapter stubs`);
+      }
+
+      // The NCX and other XML/SVG files can point into chapters too: scrub them and redirect
+      // their links here, before the OPF pass; the copy loop below writes them.
+      const extraTextFiles = {};
+      for (const [path, fileObj] of entries) {
+        if (fileObj.dir || path === 'mimetype') continue;
+        const low = path.toLowerCase();
+        if (low.endsWith('.ncx') || low.match(/\.(xml|svg)$/)) {
+          extraTextFiles[path] = rewriteCollapsedSpineReferences(
+            scrubEpubTextResource(path, await safeReadText(fileObj)), path, collapseResult.redirects);
+        }
+      }
+
       // Extract main identifier from OPF using DOMParser with regex fallback
       if (opfContent) {
         mainIdentifier = extractIdentifier(opfContent);
@@ -5456,7 +5591,7 @@
           }
           data = new TextEncoder().encode(t);
         } else if (low.endsWith('.ncx')) {
-          let t = scrubEpubTextResource(path, await safeReadText(fileObj));
+          let t = extraTextFiles[path];
           for (const [o, n] of Object.entries(renamed)) {
             t = t.split(o.split('/').pop()).join(n.split('/').pop());
           }
@@ -5465,10 +5600,9 @@
           if (t !== oldT) logFix('NCX identifier', 'Synced with OPF');
           data = new TextEncoder().encode(t);
         } else if (low.match(/\.(xml|svg)$/)) {
-          // Re-encoded only when something was removed; otherwise the bytes pass through.
-          const original = await safeReadText(fileObj);
-          const t = scrubEpubTextResource(path, original);
-          if (t !== original) data = new TextEncoder().encode(t);
+          // Re-encoded only when something changed; otherwise the bytes pass through.
+          const t = extraTextFiles[path];
+          if (t !== await safeReadText(fileObj)) data = new TextEncoder().encode(t);
         }
         out.file(path, data, DEFLATE_OPTS);
       }
