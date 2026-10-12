@@ -125,6 +125,8 @@
         text-align: center;
       }
       .drop-zone.over { border-color: var(--accent-color); }
+      /* A fieldset only so that one switch disables every field while installing. */
+      fieldset#found { border: 0; margin: 0; padding: 0; min-width: 0; }
       .drop-zone p { margin: 8px 0 0; color: var(--label-color); font-size: 0.9em; }
       .pending {
         border: 1px solid var(--border-color);
@@ -189,7 +191,7 @@
         <input type="file" id="dictFiles" multiple />
         <p>or drop the files here</p>
       </div>
-      <div id="found"></div>
+      <fieldset id="found"></fieldset>
       <div class="toolbar" id="installBar" hidden>
         <button id="installBtn" class="btn btn-primary" type="button">Install</button>
         <span class="meta" id="installTotal"></span>
@@ -319,6 +321,9 @@
       busy = on;
       document.getElementById('dictFiles').disabled = on;
       document.getElementById('installBtn').disabled = on;
+      // The folder names and checkboxes too: install() checks the names once, up front. A
+      // disabled fieldset leaves each field's own disabled state alone for afterwards.
+      document.getElementById('found').disabled = on;
       document.querySelectorAll('#installed button').forEach((b) => (b.disabled = on));
     }
 
@@ -643,8 +648,8 @@
             showProgress('Removing the old ' + clash.name + '...', 0);
             await deleteTree(DICT_ROOT + '/' + clash.name);
           }
-          current = folder;
           await mkdir(DICT_ROOT, folder);
+          current = folder;  // only once this install made it: a failure removes it again
           existing.push({ name: folder, isDirectory: true });
           const uploads = p.analysis.uploads;
           for (let i = 0; i < uploads.length; i++) {
@@ -675,7 +680,19 @@
             ' on the reader under Settings → Reader → Dictionary; the first lookup takes a few seconds while it indexes the dictionary.'
           : 'Nothing was installed.', done.length > 0);
       } catch (e) {
-        setStatus('Install failed: ' + e.message + (current ? ' ' + DICT_ROOT + '/' + current + ' is incomplete; remove it below and try again.' : ''), false);
+        let message = 'Install failed: ' + e.message;
+        if (current) {
+          // The data file goes last so that an interrupted install is not taken for a
+          // dictionary, but a failed SD write keeps the part of the file it wrote. Remove the
+          // whole folder rather than leave a cut-off .dict the reader would open.
+          try {
+            await deleteTree(DICT_ROOT + '/' + current);
+            message += ' The unfinished ' + DICT_ROOT + '/' + current + ' was removed.';
+          } catch (cleanupError) {
+            message += ' ' + DICT_ROOT + '/' + current + ' is incomplete; remove it below and try again.';
+          }
+        }
+        setStatus(message, false);
       }
       hideProgress();
       setBusy(false);
