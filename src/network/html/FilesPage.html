@@ -5013,6 +5013,7 @@
       log(`Quality: ${JPEG_QUALITY}% | Overlap: ${OVERLAP_PERCENT}% | Rotation: ${HANDEDNESS === 'right' ? 'CW' : 'CCW'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'}`, '', 'INFO');
 
       const zip = await JSZip.loadAsync(file);
+      await assertEpubHasNoContentEncryption(zip);
       const renamed = {};
       zip.forEach(p => {
         const l = p.toLowerCase();
@@ -5349,6 +5350,39 @@
       }
 
       return newBlob;
+    }
+
+    // Ported from CrossInk (uxjulia/CrossInk) web/pages/files.js @1b1156027, MIT, by Julia Nguyen.
+    // Refuses a book whose content is encrypted (DRM): its XHTML and images are ciphertext, so
+    // optimizing it would only produce a broken copy. Font obfuscation (IDPF and Adobe) is not
+    // DRM: it scrambles only the first bytes of an embedded font, which the optimizer copies
+    // untouched, so such a book is accepted. The caller logs the message and uploads the original.
+    async function assertEpubHasNoContentEncryption(zip) {
+      const encryptionEntry = Object.entries(zip.files).find(
+        ([path, fileObj]) => !fileObj.dir && path.toLowerCase() === 'meta-inf/encryption.xml');
+      if (!encryptionEntry) return;
+
+      const [, encryptionFile] = encryptionEntry;
+      const encryptionXml = await safeReadText(encryptionFile);
+      const encryptionDoc = new DOMParser().parseFromString(encryptionXml, 'application/xml');
+      if (encryptionDoc.querySelector('parsererror')) {
+        throw new Error('This EPUB has invalid encryption metadata and cannot be optimized safely.');
+      }
+
+      const fontObfuscationAlgorithms = new Set([
+        'http://www.idpf.org/2008/embedding',
+        'http://ns.adobe.com/pdf/enc#RC',
+      ]);
+      for (const encryptedData of encryptionDoc.getElementsByTagNameNS('*', 'EncryptedData')) {
+        const method = encryptedData.getElementsByTagNameNS('*', 'EncryptionMethod')[0];
+        const algorithm = method?.getAttribute('Algorithm');
+
+        // Publishers often store obfuscated fonts as .dat files, so the algorithm
+        // is the reliable signal; their filename is not.
+        if (!fontObfuscationAlgorithms.has(algorithm)) {
+          throw new Error('This EPUB is DRM-protected. Please remove DRM before optimizing it.');
+        }
+      }
     }
 
     // Get WebSocket URL based on current page location
