@@ -8,8 +8,9 @@ goes to one of:
 
   --device http://192.168.0.42   a reader in File Transfer: requests are passed through, so the
                                  pages work on real data and really change it
-  --mock DIR                     JSON files: GET /api/settings answers DIR/api/settings.json;
-                                 other methods answer {"ok": true} and change nothing
+  --mock DIR                     JSON files: GET /api/settings answers DIR/api/settings.json, and
+                                 GET /api/files?path=/Books DIR/api/files@path=%2FBooks.json when
+                                 that exists; other methods answer {"ok": true} and change nothing
 
 With --device, --record DIR also saves every JSON answer to a GET under DIR, in the layout
 --mock reads, so a session with the reader can be replayed without it.
@@ -20,7 +21,9 @@ With --device, --record DIR also saves every JSON answer to a GET under DIR, in 
 The WebSocket upload (port 81) is not passed through; the File Manager falls back to /upload.
 
 For headless screenshots, ?shot=<ms> on a page holds its load event that long (a hidden image the
-server answers late), so the page's own requests finish before e.g. `firefox --screenshot` fires.
+server answers late), so the page's own requests finish before e.g. `firefox --screenshot` fires,
+and ?run=<code> runs a snippet shortly after the page is parsed (?run=openUploadModal() to shoot a
+dialog).
 """
 
 import argparse
@@ -87,6 +90,13 @@ def render_page(file_name: str) -> bytes:
     return html.replace("%%CROSSPOINT%%", NAME).replace("%%VERSION%%", VERSION).encode("utf-8")
 
 
+def before_last_body_end(page: bytes, insert: bytes) -> bytes:
+    """Inserts before the page's closing body tag: the last one, since a page's scripts may hold the
+    same text in a string (the File Manager's EPUB templates do)."""
+    head, sep, tail = page.rpartition(b"</body>")
+    return head + insert + sep + tail if sep else page + insert
+
+
 class Handler(BaseHTTPRequestHandler):
     device = None  # urllib.parse.SplitResult of --device
     mock_dir = None
@@ -113,9 +123,15 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(url.query)
         if self.command == "GET" and path in PAGES:
             page = render_page(PAGES[path])
+            if "run" in query:
+                # ?run=openUploadModal() runs that shortly after the page is parsed, e.g. to shoot a
+                # dialog; with ?shot=, before the held load event that takes the screenshot.
+                code = json.dumps(query["run"][0])
+                script = f"<script>addEventListener('DOMContentLoaded', () => setTimeout(() => eval({code}), 500));</script>"
+                page = before_last_body_end(page, script.encode())
             if "shot" in query:
                 img = f'<img src="/__delay?ms={int(query["shot"][0])}" alt="" style="display:none">'.encode()
-                page = page.replace(b"</body>", img + b"</body>")
+                page = before_last_body_end(page, img)
             return self.send_body(200, page, "text/html; charset=utf-8")
         if self.command == "GET" and path == "/__delay":
             time.sleep(int(query.get("ms", ["1000"])[0]) / 1000)
@@ -162,8 +178,14 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_body()
             sys.stderr.write(f"  mock {self.command} {path}: {body[:200]!r}\n")
             return self.send_body(200, b'{"ok":true}', "application/json")
-        local = os.path.join(self.mock_dir, path.lstrip("/") + ".json")
-        if os.path.isfile(local):
+        # A file for this exact query first (api/files@path=%2FBooks.json), then one for any query.
+        query = urllib.parse.urlsplit(self.path).query
+        candidates = [path.lstrip("/") + ".json"]
+        if query:
+            candidates.insert(0, path.lstrip("/") + "@" + urllib.parse.quote(urllib.parse.unquote(query), safe="=&") + ".json")
+        local = next((os.path.join(self.mock_dir, c) for c in candidates
+                      if os.path.isfile(os.path.join(self.mock_dir, c))), "")
+        if local:
             with open(local, "rb") as f:
                 return self.send_body(200, f.read(), "application/json")
         self.send_body(404, b'{"error":"no mock for this path"}', "application/json")
