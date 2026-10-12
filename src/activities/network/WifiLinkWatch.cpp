@@ -2,7 +2,6 @@
 
 #include <Logging.h>
 
-#include "WifiCredentialStore.h"
 #include "network/MacFormat.h"
 #include "network/WifiApChoice.h"
 
@@ -51,10 +50,8 @@ WifiLinkWatch::Link WifiLinkWatch::poll(std::string& ip) {
               signalFrom(rssi).c_str());
       // The driver's reconnect sweeps like a connect does, so on a mesh it too can land on a far AP.
       // Nothing is recorded here (no display lock for the SD card); the next connect's check is.
-      if (rssi < WifiApChoice::WEAK_RSSI) {
-        const std::string ssid = WiFi.SSID().c_str();
-        const WifiCredential* cred = WIFI_STORE.findCredential(ssid);
-        if (WifiApChoice::improve(ssid, cred ? cred->password : std::string(), tag).moved) rssi = WiFi.RSSI();
+      if (rssi < WifiApChoice::WEAK_RSSI && WifiApChoice::improve(WiFi.SSID().c_str(), tag).moved) {
+        rssi = WiFi.RSSI();
       }
       const String current = WiFi.localIP().toString();
       loggedRssi = rssi;

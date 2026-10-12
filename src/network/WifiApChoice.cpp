@@ -61,6 +61,8 @@ int listen(const std::string& ssid, const int channel, Ap* out) {
   return count;
 }
 
+// Waits for an address on `bssid`, or on any AP when it is null. Fails on another AP: the core
+// reconnected somewhere by itself.
 bool waitConnected(const uint8_t* bssid) {
   const unsigned long start = millis();
   while (millis() - start < MOVE_TIMEOUT_MS) {
@@ -74,42 +76,69 @@ bool waitConnected(const uint8_t* bssid) {
   return false;
 }
 
-// Back to what issueWifiBegin() connects with: no AP pinned, every channel, strongest first. Set
-// while connected, it applies to the next connect, the driver's own reconnects included.
-void unpin(const char* tag) {
-  wifi_config_t conf;
-  if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return;
-  conf.sta.bssid_set = 0;
-  std::memset(conf.sta.bssid, 0, sizeof(conf.sta.bssid));
-  conf.sta.channel = 0;
-  conf.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-  conf.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-  const esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &conf);
-  if (err != ESP_OK) {
-    LOG_DBG(tag, "Could not unpin the AP (%s): a reconnect will look for it alone", esp_err_to_name(err));
-  }
+// Leaves the AP and waits until the status says so, so waitConnected() cannot mistake the link
+// just left for the one asked for.
+void leave() {
+  esp_wifi_disconnect();
+  const unsigned long start = millis();
+  while (WiFi.status() == WL_CONNECTED && millis() - start < 1000) delay(20);
 }
 
-bool moveTo(const std::string& ssid, const std::string& password, const Ap& to, const char* tag) {
-  const char* pwd = password.empty() ? nullptr : password.c_str();
-  // A fast scan of the AP's channel goes straight to the BSSID just heard there.
-  WiFi.setScanMethod(WIFI_FAST_SCAN);
-  WiFi.begin(ssid.c_str(), pwd, to.channel, to.bssid);
-  const bool moved = waitConnected(to.bssid);
-  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-  if (moved) {
-    unpin(tag);
-    return true;
+// Hands the driver a station config, waiting out a connect it is busy with. The core reconnects
+// once after the first disconnect since boot, whatever the reason and whatever setAutoReconnect()
+// says ("Retry once for all failure reasons", first_connect in STA.cpp), and while that runs the
+// driver refuses a config ("sta is connecting, cannot set config", ESP_ERR_WIFI_STATE). That is how
+// the first move on a device failed: it left the far AP, the core's retry took the radio, the
+// pinned config was refused, and the reader ended with no link at all.
+bool applyConfig(wifi_config_t conf) {
+  for (int attempt = 0; attempt < 10; attempt++) {
+    const esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &conf);
+    if (err != ESP_ERR_WIFI_STATE) return err == ESP_OK;
+    leave();
+    delay(100);
   }
-  LOG_DBG(tag, "Could not move to %s; connecting as before", describe(to).c_str());
-  WiFi.begin(ssid.c_str(), pwd);
-  waitConnected(nullptr);
   return false;
+}
+
+// Moves to `to`, an AP of the network the reader is connected to: the driver's own config holds
+// its name and password. Pinned to the BSSID just heard, with a fast scan of its channel; the pin
+// is dropped again afterwards, so later reconnects - the driver's own ones included - pick the
+// strongest AP. When the move fails the reader reconnects as a connect does. The core's own
+// reconnects are off meanwhile.
+bool moveTo(const Ap& to, const char* tag) {
+  wifi_config_t pinned;
+  if (esp_wifi_get_config(WIFI_IF_STA, &pinned) != ESP_OK) return false;
+  wifi_config_t unpinned = pinned;
+  unpinned.sta.bssid_set = 0;
+  std::memset(unpinned.sta.bssid, 0, sizeof(unpinned.sta.bssid));
+  unpinned.sta.channel = 0;
+  unpinned.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+  unpinned.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+  pinned.sta.bssid_set = 1;
+  std::memcpy(pinned.sta.bssid, to.bssid, 6);
+  pinned.sta.channel = static_cast<uint8_t>(to.channel);
+  pinned.sta.scan_method = WIFI_FAST_SCAN;
+
+  WiFi.setAutoReconnect(false);
+  leave();
+  bool moved = applyConfig(pinned) && esp_wifi_connect() == ESP_OK && waitConnected(to.bssid);
+  if (moved) {
+    // Set while connected, it applies to the next connect.
+    if (!applyConfig(unpinned)) LOG_DBG(tag, "Could not unpin the AP: a reconnect will look for it alone");
+  } else {
+    LOG_DBG(tag, "Could not move to %s; connecting as before", describe(to).c_str());
+    leave();
+    if (!applyConfig(unpinned) || esp_wifi_connect() != ESP_OK || !waitConnected(nullptr)) {
+      LOG_DBG(tag, "No link yet after the failed move; the driver keeps trying");
+    }
+  }
+  WiFi.setAutoReconnect(true);
+  return moved;
 }
 
 }  // namespace
 
-Result improve(const std::string& ssid, const std::string& password, const char* tag) {
+Result improve(const std::string& ssid, const char* tag) {
   Result result;
   const uint8_t* joined = WiFi.BSSID();
   if (WiFi.status() != WL_CONNECTED || !joined) return result;
@@ -160,7 +189,7 @@ Result improve(const std::string& ssid, const std::string& password, const char*
     return result;
   }
   LOG_DBG(tag, "Moving from %s to %s", describe(current).c_str(), describe(*best).c_str());
-  result.moved = moveTo(ssid, password, *best, tag);
+  result.moved = moveTo(*best, tag);
   if (result.moved) LOG_DBG(tag, "Moved: %d dBm, ip=%s", WiFi.RSSI(), WiFi.localIP().toString().c_str());
   return result;
 }

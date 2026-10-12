@@ -340,6 +340,7 @@ void WifiSelectionActivity::tryNextAutoCycleCandidate() {
   wifiEventConnectionStartMs.store(connectionStartTime, std::memory_order_relaxed);
   connectedIP.clear();
   connectionError.clear();
+  apChoiceTried = false;
   requestUpdate();
 
   prepareForConnect();
@@ -590,6 +591,7 @@ void WifiSelectionActivity::attemptConnection() {
   wifiEventConnectionStartMs.store(connectionStartTime, std::memory_order_relaxed);
   connectedIP.clear();
   connectionError.clear();
+  apChoiceTried = false;
   requestUpdate();
 
   prepareForConnect();
@@ -780,8 +782,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
     IPAddress ip = WiFi.localIP();
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    autoConnecting = false;
-    if (selectedSSID == passwordSuspectSsid) passwordSuspectSsid.clear();
 
     LOG_DBG("WIFI", "Connected to %s in %lu ms (rssi=%d ch=%d ip=%s gw=%s mask=%s dns=%s)", selectedSSID.c_str(),
             millis() - connectionStartTime, WiFi.RSSI(), WiFi.channel(), ipStr, WiFi.gatewayIP().toString().c_str(),
@@ -789,12 +789,26 @@ void WifiSelectionActivity::checkConnectionStatus() {
 
     // On a mesh the sweep can have joined a far AP: move to a clearly stronger one if there is.
     // Before the record below, whose AP it reads as the one the last session ended on.
-    const WifiApChoice::Result apChoice = WifiApChoice::improve(selectedSSID, enteredPassword, "WIFI");
+    WifiApChoice::Result apChoice;
+    if (!apChoiceTried) {
+      apChoiceTried = true;
+      apChoice = WifiApChoice::improve(selectedSSID, "WIFI");
+    }
+    // A failed move can leave no link yet. Carry on as a connect in progress, under the attempt's
+    // own timeout, rather than hand over a dead link: that made a web server start with no network
+    // and the session end before it began.
+    if (WiFi.status() != WL_CONNECTED) {
+      LOG_DBG("WIFI", "No link after looking for a better AP; still connecting");
+      connectionStartTime = millis();  // the reconnect gets a timeout of its own
+      return;
+    }
     if (apChoice.moved) {
       ip = WiFi.localIP();
       snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     }
     connectedIP = ipStr;
+    autoConnecting = false;
+    if (selectedSSID == passwordSuspectSsid) passwordSuspectSsid.clear();
 
     // Records the AP the connect ended on, for WifiApChoice::improve() next time (connects never
     // shortcut through it: issueWifiBegin() always sweeps every channel), and the IP profile for
