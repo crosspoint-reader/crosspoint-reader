@@ -98,6 +98,7 @@
     <p id="msg">Checking the web interface…</p>
     <p id="done" class="hidden"><a class="btn" href="/">Open the web interface</a></p>
     <p id="retry" class="hidden"><button class="btn" onclick="install('release')">Try the download again</button></p>
+    <p id="signal" class="muted hidden"></p>
     <div id="manual" class="hidden">
       <h2>Install from a file</h2>
       <p class="muted">Download <b id="asset"></b> from <span id="release">the release page</span> and choose
@@ -118,10 +119,27 @@
     function say(text) { $('msg').textContent = text; }
     function show(id, on) { $(id).classList.toggle('hidden', !on); }
 
+    const kb = (n) => Math.round(n / 1024) + ' KB';
+    const secs = (ms) => (ms / 1000).toFixed(1) + ' s';
+
+    // Below about -75 dBm a reader's Wi-Fi loses enough packets for an upload to stall.
+    function weakSignal(rssi) {
+      return typeof rssi === 'number' && rssi < -75;
+    }
+
+    function showSignal() {
+      if (weakSignal(st.rssi)) {
+        $('signal').textContent = 'The reader\'s Wi-Fi signal is weak (' + st.rssi + ' dBm), so an upload may break ' +
+          'off: bring it closer to the router, or copy the file to the SD card instead.';
+      }
+      show('signal', weakSignal(st.rssi));
+    }
+
     function fail(text) {
       say(text);
       show('manual', true);
       show('retry', !!(st.online && st.release));
+      showSignal();
     }
 
     async function install(source) {
@@ -139,11 +157,41 @@
       }
     }
 
-    async function upload(file, name) {
-      const fd = new FormData();
-      fd.append('file', file, name);
-      const r = await fetch('/upload?path=/', { method: 'POST', body: fd });
-      return r.ok ? '' : await r.text();
+    // '' when the file arrived, else why not. XMLHttpRequest rather than fetch for its progress
+    // events; onProgress(text) gets e.g. "120 KB of 448 KB".
+    function upload(file, name, onProgress) {
+      return new Promise((resolve) => {
+        const fd = new FormData();
+        fd.append('file', file, name);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload?path=/');
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(kb(Math.min(e.loaded, file.size)) + ' of ' + kb(file.size));
+        };
+        xhr.onload = () => resolve(xhr.status === 200 ? '' : (xhr.responseText || 'the reader answered ' + xhr.status));
+        xhr.onerror = () => brokenOff(file, name).then(resolve);
+        xhr.send(fd);
+      });
+    }
+
+    // The reader drops an upload that stalls or loses its connection without answering it, so
+    // the browser sees only the connection go. The reader keeps its own account of it.
+    async function brokenOff(file, name) {
+      let text = 'the connection to the reader broke off.';
+      try {
+        st = await (await fetch('/api/web/status')).json();
+      } catch (e) {
+        return text + ' The reader does not answer any more.';
+      }
+      const u = st.lastUpload;
+      if (u && u.name === name) {
+        text = 'the reader received ' + kb(u.received) + ' of ' + kb(file.size) + ' in ' + secs(u.ms) + ', then ' + {
+          stalled: 'nothing more for ' + secs(u.idleMs) + ', and gave up.',
+          cancelled: 'the upload was cancelled on the reader.',
+          closed: 'the connection was closed.'
+        }[u.reason];
+      }
+      return text;
     }
 
     async function uploadBundle() {
@@ -151,7 +199,7 @@
       if (!file) return;
       say('Uploading…');
       // Saved under the release asset's name, which is where the installer looks.
-      const error = await upload(file, st.asset);
+      const error = await upload(file, st.asset, (progress) => say('Uploading: ' + progress + '…'));
       if (error) return fail('Uploading failed: ' + error);
       install('card');
     }
@@ -159,9 +207,13 @@
     async function uploadBooks() {
       const files = $('books').files;
       for (const file of files) {
-        $('upload').textContent = 'Uploading ' + file.name + '…';
-        const error = await upload(file, file.name);
-        if (error) return ($('upload').textContent = file.name + ': ' + error);
+        const status = (text) => ($('upload').textContent = 'Uploading ' + file.name + ': ' + text + '…');
+        status('starting');
+        const error = await upload(file, file.name, status);
+        if (error) {
+          $('upload').textContent = file.name + ': ' + error;
+          return showSignal();
+        }
       }
       $('upload').textContent = files.length + ' file(s) uploaded.';
     }

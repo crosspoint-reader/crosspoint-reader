@@ -749,6 +749,18 @@ void CrossPointWebServer::handleWebStatus() const {
   doc["asset"] = WebAssets::assetName();
   doc["online"] = !apMode;
   doc["onCard"] = WebAssets::bundleOnCard();
+  if (!apMode) doc["rssi"] = WiFi.RSSI();
+  // An upload that broke off: the setup page's browser saw only the connection go.
+  if (const UploadState::Failure& f = upload.failure; f.set) {
+    JsonObject last = doc["lastUpload"].to<JsonObject>();
+    last["name"] = f.name;
+    last["received"] = f.received;
+    last["expected"] = f.expected;
+    last["ms"] = f.ms;
+    last["idleMs"] = f.idleMs;
+    last["reason"] = f.reason;
+    if (!apMode) last["rssi"] = f.rssi;
+  }
   sendJson(server.get(), 200, doc);
 }
 
@@ -1327,6 +1339,7 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
 
 void CrossPointWebServer::handleUpload(UploadState& state) const {
   static size_t lastLoggedSize = 0;
+  static unsigned long lastLoggedAt = 0;
 
   // Reset watchdog at start of every upload callback - HTTP parsing can be slow
   HalSystem::feedWatchdog();
@@ -1347,8 +1360,13 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     state.size = 0;
     state.success = false;
     state.error = "";
+    state.expected = server->clientContentLength();
+    state.cancelled = false;
+    state.failure = {};
     uploadStartTime = millis();
+    state.lastDataAt = uploadStartTime;
     lastLoggedSize = 0;
+    lastLoggedAt = uploadStartTime;
     state.bufferPos = 0;
     totalWriteTime = 0;
     writeCount = 0;
@@ -1372,8 +1390,13 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       state.path = "/";
     }
 
-    LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
-    LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
+    LOG_DBG("WEB", "[UPLOAD] START: %s (request %u bytes) to path: %s", state.fileName.c_str(),
+            static_cast<unsigned>(state.expected), state.path.c_str());
+    if (apMode) {
+      LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes, hotspot mode", ESP.getFreeHeap());
+    } else {
+      LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes, Wi-Fi %d dBm", ESP.getFreeHeap(), WiFi.RSSI());
+    }
 
     // Create file path
     String filePath = state.path;
@@ -1409,7 +1432,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
   } else if (up.status == UPLOAD_FILE_WRITE) {
-    if (dropUploadIfCancelled()) return;
+    if (dropUploadIfCancelled()) {
+      state.cancelled = true;
+      return;
+    }
+    state.lastDataAt = millis();
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
@@ -1437,13 +1464,14 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
       state.size += up.currentSize;
 
-      // Log progress every 100KB
-      if (state.size - lastLoggedSize >= 102400) {
-        const unsigned long elapsed = millis() - uploadStartTime;
+      // Progress every 100 KB, and every 5 s on a link too slow for that
+      if (state.size - lastLoggedSize >= 102400 || state.lastDataAt - lastLoggedAt >= 5000) {
+        const unsigned long elapsed = state.lastDataAt - uploadStartTime;
         const float kbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
         LOG_DBG("WEB", "[UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes", state.size, state.size / 1024.0, kbps,
                 writeCount);
         lastLoggedSize = state.size;
+        lastLoggedAt = state.lastDataAt;
       }
     }
   } else if (up.status == UPLOAD_FILE_END) {
@@ -1488,7 +1516,25 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     }
     state.buffer = {};
     state.error = "Upload aborted";
-    LOG_DBG("WEB", "Upload aborted");
+
+    // WebServer gives up on a body that stops arriving -- no byte for HTTP_MAX_SEND_WAIT (5 s)
+    // while the connection stays open -- or when the connection closes: the browser's doing, a
+    // lost link, or Back on the device (dropUploadIfCancelled()).
+    UploadState::Failure& f = state.failure;
+    const unsigned long now = millis();
+    f.set = true;
+    f.name = state.fileName;
+    f.received = state.size;
+    f.expected = state.expected;
+    f.ms = now - uploadStartTime;
+    f.idleMs = now - state.lastDataAt;
+    f.reason = state.cancelled ? "cancelled" : server->client().connected() ? "stalled" : "closed";
+    f.rssi = apMode ? 0 : WiFi.RSSI();
+    const float kbps = (f.ms > 0) ? (f.received / 1024.0) / (f.ms / 1000.0) : 0;
+    LOG_DBG("WEB", "[UPLOAD] Aborted (%s): %s, %u of %u bytes in %lu ms (%.1f KB/s), no data for the last %lu ms",
+            f.reason, f.name.c_str(), static_cast<unsigned>(f.received), static_cast<unsigned>(f.expected), f.ms, kbps,
+            f.idleMs);
+    if (!apMode) LOG_DBG("WEB", "[UPLOAD] Wi-Fi %d dBm", f.rssi);
   }
 }
 
