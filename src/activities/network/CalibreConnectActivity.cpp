@@ -1,37 +1,18 @@
 #include "CalibreConnectActivity.h"
 
-#include <ESPmDNS.h>
 #include <GfxRenderer.h>
-#include <HalSystem.h>  // feedWatchdog()
 #include <I18n.h>
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
-#include "SdCardFontGlobals.h"
-#include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
-#include "activities/NetworkMemoryTrim.h"
 #include "activities/network/SignalStrengthWidget.h"
 #include "components/TouchExitButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr const char* HOSTNAME = "crosspoint";
-}  // namespace
-
 // Unlike CrossPointWebServerActivity we keep rendering live progress UI, so the primary
-// framebuffer must stay. The ~52 KB secondary buffer, the glyph cache and the SD reader font
-// are unused here though. Safe to drop without restoring: onExit() always silentRestart()s.
-//
-// Idempotent, and called both before the radio comes up and again before the server starts.
-void CalibreConnectActivity::freeMemoryBeforeRadio() {
-  LOG_DBG("CAL", "Free heap before trim: %d bytes", ESP.getFreeHeap());
-  sdFontSystem.unload(renderer);
-  trimMemoryForNetworkSession(renderer, "CAL");
-  LOG_DBG("CAL", "Free heap after trim: %d bytes", ESP.getFreeHeap());
-}
-
+// framebuffer stays; ServerSession::prepareRadio() drops only what this screen does not use.
 void CalibreConnectActivity::onEnter() {
   Activity::onEnter();
 
@@ -39,7 +20,6 @@ void CalibreConnectActivity::onEnter() {
   state = CalibreConnectState::WIFI_SELECTION;
   connectedIP.clear();
   connectedSSID.clear();
-  lastHandleClientTime = 0;
   lastProgressReceived = 0;
   lastProgressTotal = 0;
   currentUploadName.clear();
@@ -52,12 +32,12 @@ void CalibreConnectActivity::onEnter() {
   lastProcessedDeleteAt = 0;
   currentRssi = 0;
   lastRssiUpdateTime = 0;
-  exitRequested = false;
+  shownLink = WifiLinkWatch::Link::Up;
 
   if (WiFi.status() != WL_CONNECTED) {
     // BEFORE the radio, not after the join: bringing up the WiFi stack is itself
     // allocation-heavy, and on a lean heap it is the association that fails.
-    freeMemoryBeforeRadio();
+    session.prepareRadio();
     startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
@@ -76,16 +56,7 @@ void CalibreConnectActivity::onEnter() {
 
 void CalibreConnectActivity::onExit() {
   Activity::onExit();
-
-  wifiWatch.stop();  // before the disconnect below, a drop of our own making
-  stopWebServer();
-  MDNS.end();
-
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  session.end();
 }
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {
@@ -101,70 +72,28 @@ void CalibreConnectActivity::startWebServer() {
   state = CalibreConnectState::SERVER_STARTING;
   requestUpdate();
 
-  if (MDNS.begin(HOSTNAME)) {
-    // mDNS is optional for the Calibre plugin but still helpful for users.
-    LOG_DBG("CAL", "mDNS started: http://%s.local/", HOSTNAME);
-  }
-
-  // The trim itself already happened in freeMemoryBeforeRadio(), before the join. Repeated here
-  // because it is idempotent and the status screens drawn since then have repopulated the glyph
-  // cache, which the web server would rather have as free heap (each request wants an 8 KB
-  // contiguous block).
-  freeMemoryBeforeRadio();
-
-  webServer.reset(new CrossPointWebServer());
-  webServer->begin();
-
-  if (webServer->isRunning()) {
-    state = CalibreConnectState::SERVER_RUNNING;
-    wifiWatch.start();
-    requestUpdate();
-  } else {
-    state = CalibreConnectState::ERROR;
-    requestUpdate();
-  }
-}
-
-void CalibreConnectActivity::stopWebServer() {
-  if (webServer) {
-    webServer->stop();
-    webServer.reset();
-  }
+  // The trim already happened before the join. Repeated because the status screens drawn since
+  // have repopulated the glyph cache, which the web server would rather have as free heap (each
+  // request wants an 8 KB contiguous block).
+  session.prepareRadio();
+  state = session.start(false) ? CalibreConnectState::SERVER_RUNNING : CalibreConnectState::ERROR;
+  requestUpdate();
 }
 
 void CalibreConnectActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || TouchExitButton::tapped(mappedInput)) {
-    exitRequested = true;
+  // Fewer rounds per pass than File Transfer: this screen shows the transfer's progress, which the
+  // code below keeps up to date between passes.
+  if (!session.serve(80)) {
+    finish();
+    return;
   }
 
-  if (webServer && webServer->isRunning()) {
-    const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
-    if (lastHandleClientTime > 0 && timeSinceLastHandleClient > 100) {
-      LOG_DBG("CAL", "WARNING: %lu ms gap since last handleClient", timeSinceLastHandleClient);
-    }
-
-    HalSystem::feedWatchdog();
-    constexpr int MAX_ITERATIONS = 80;
-    for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
-      webServer->handleClient();
-      if ((i & 0x07) == 0x07) {
-        HalSystem::feedWatchdog();
-      }
-      if ((i & 0x0F) == 0x0F) {
-        yield();
-        if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-          exitRequested = true;
-          break;
-        }
-      }
-    }
-    lastHandleClientTime = millis();
-
+  if (session.running()) {
     // A drop used to go unnoticed here: the screen kept its last signal reading while the plugin
     // could no longer reach the reader. Now it says the link is reconnecting, then that it failed
     // (after WifiLinkWatch::GRACE_MS), and returns to normal if the driver gets it back. Back
     // leaves at any time.
-    const auto link = wifiWatch.poll(connectedIP);
+    const auto link = session.link(connectedIP);
     if (link != shownLink) {
       shownLink = link;
       if (link != WifiLinkWatch::Link::Up) currentRssi = 0;
@@ -177,7 +106,7 @@ void CalibreConnectActivity::loop() {
       requestUpdate();
     }
 
-    const auto status = webServer->getWsUploadStatus();
+    const auto status = session.webServer()->getWsUploadStatus();
     bool changed = false;
     if (status.inProgress) {
       if (status.received != lastProgressReceived || status.total != lastProgressTotal ||
@@ -223,11 +152,6 @@ void CalibreConnectActivity::loop() {
     if (changed) {
       requestUpdate();
     }
-  }
-
-  if (exitRequested) {
-    finish();
-    return;
   }
 }
 

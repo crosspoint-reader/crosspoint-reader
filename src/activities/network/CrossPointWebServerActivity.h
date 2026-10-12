@@ -5,9 +5,8 @@
 #include <string>
 
 #include "NetworkModeSelectionActivity.h"
-#include "WifiLinkWatch.h"
+#include "ServerSession.h"
 #include "activities/Activity.h"
-#include "network/CrossPointWebServer.h"
 
 // Web server activity states
 enum class WebServerActivityState {
@@ -37,11 +36,9 @@ class CrossPointWebServerActivity final : public Activity {
   NetworkMode initialSelection;
   bool isApMode = false;
 
-  // Track whether the web server was started during this activity.
-  bool webServerStarted = false;
-
-  // Web server - owned by this activity
-  std::unique_ptr<CrossPointWebServer> webServer;
+  // The server, its start, its requests, its link and its end (ServerSession.h). STA mode: a link
+  // that is Gone (a drop that did not heal within its grace period) ends the session, as Back does.
+  ServerSession session{renderer, mappedInput, "WEBACT"};
 
   // Server status
   std::string connectedIP;
@@ -49,23 +46,10 @@ class CrossPointWebServerActivity final : public Activity {
   int currentRssi = 0;
   unsigned long lastRssiUpdateTime = 0;
 
-  // Performance monitoring
-  unsigned long lastHandleClientTime = 0;
-
-  // STA mode: the link to the network. Gone (a drop that did not heal within its grace period)
-  // ends the session, as Back does.
-  WifiLinkWatch wifiWatch{"WEBACT"};
-
-  // Set by the upload cancel check when Back is seen while an HTTP upload holds handleClient().
-  // A flag rather than leaving it to the Back checks in loop(): the press the check saw may sit in
-  // this tick's snapshot, which loop()'s own update() overwrites before it looks.
-  bool leaveRequested = false;
-
   // Set after the first render completes and frame buffers are released.
   // Subsequent render() calls return immediately — no display operations
   // are possible after releaseFrameBuffers().
   bool buffersReleased = false;
-  bool memoryFreedForRadio = false;
 
   void renderServerRunning() const;
 
@@ -74,9 +58,6 @@ class CrossPointWebServerActivity final : public Activity {
   // Unload SD fonts, paint the QR/URL screen, and release both frame buffers.
   // AP mode calls this before the WiFi stack starts so it gets the ~100KB of
   // headroom; STA mode calls it from startWebServer once the IP is known.
-  // Frees what the radio needs (SD font, secondary buffer, glyph cache) — must run before any
-  // WiFi bring-up on either path. Idempotent.
-  void freeMemoryBeforeRadio();
   void showServerScreenAndReleaseBuffers();
   void startAccessPoint();
   void startWebServer();
@@ -90,9 +71,9 @@ class CrossPointWebServerActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
-  bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
+  bool skipLoopDelay() override { return session.running(); }
+  bool preventAutoSleep() override { return session.running(); }
   // Suppress the minute-tick e-ink refresh while the web server is running.
   // That 640ms display cycle holds the render mutex and blocks handleClient.
-  bool shouldSkipPeriodicUpdate() const override { return webServer && webServer->isRunning(); }
+  bool shouldSkipPeriodicUpdate() const override { return session.running(); }
 };
