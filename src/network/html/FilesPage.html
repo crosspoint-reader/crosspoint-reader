@@ -4725,6 +4725,39 @@
       }
     }
 
+    // The nodes a chapter is cut between, in document order, each with the wrappers it sits in.
+    // CrossInk cuts only between the container's own children, so a chapter shaped
+    // <h2/> + <div>all of the text</div> (Calibre's and many publishers' template) could not be
+    // cut at all. Here a child too big for one part is opened when it is a plain wrapper around
+    // block content, and its children are cut instead; every part then repeats a shallow copy of
+    // the wrapper around its share. (Not in CrossInk.) Returns [{ node, wrappers }].
+    function collectSectionSplitUnits(container, serializer, wrappers = []) {
+      const units = [];
+      for (const node of Array.from(container.childNodes)) {
+        if (isOpenableSectionSplitWrapper(node, serializer)) {
+          units.push(...collectSectionSplitUnits(node, serializer, [...wrappers, node]));
+        } else {
+          units.push({ node, wrappers });
+        }
+      }
+      return units;
+    }
+
+    // A div, section, article, aside, blockquote or main past the preferred part size that holds
+    // block elements (two or more, or one that is itself such a wrapper). Lists are not opened
+    // (a continued <ol> would restart its numbering), nor anything holding only inline content.
+    function isOpenableSectionSplitWrapper(node, serializer) {
+      if (node?.nodeType !== Node.ELEMENT_NODE) return false;
+      if (!['div', 'section', 'article', 'aside', 'blockquote', 'main'].includes(localName(node))) return false;
+      const elementChildren = Array.from(node.children);
+      const blockChildren = elementChildren.filter((child) => isSafeSectionSplitElement(child));
+      const holdsBlocks = blockChildren.length >= 2 ||
+        (elementChildren.length === 1 && isOpenableSectionSplitWrapper(elementChildren[0], serializer));
+      if (!holdsBlocks) return false;
+      return utf8ByteLength(serializer.serializeToString(node)) > SECTION_SPLIT_BYTE_THRESHOLD ||
+        countSectionWords(node.textContent || '') > SECTION_SPLIT_WORD_THRESHOLD;
+    }
+
     // ch.xhtml -> ch.xhtml, ch__ci_section_002.xhtml, ch__ci_section_003.xhtml, ...
     function makeSectionSplitPath(path, partIndex) {
       if (partIndex === 0) return path;
@@ -4748,7 +4781,8 @@
       return candidate;
     }
 
-    // Cuts every spine chapter past the preferred sizes into parts, at its container's children.
+    // Cuts every spine chapter past the preferred sizes into parts, between its container's
+    // children (and those of oversized wrappers inside it, see collectSectionSplitUnits).
     // Returns { files, splitSections, anchorTargets, partOrigins }:
     //   files          the XHTML map with each cut chapter replaced by its parts (the first part
     //                  keeps the chapter's path)
@@ -4791,7 +4825,9 @@
           out[path] = content;
           continue;
         }
-        const splitChildren = Array.from(splitContainer.container.childNodes);
+        const units = collectSectionSplitUnits(splitContainer.container, serializer);
+        const splitChildren = units.map((unit) => unit.node);
+        const wrappersOf = new Map(units.map((unit) => [unit.node, unit.wrappers]));
         // What every part repeats: the head and the wrappers around the container.
         const fixedBytes = Math.max(0,
           totalBytes - splitChildren.reduce((sum, child) => sum + utf8ByteLength(serializer.serializeToString(child)), 0));
@@ -4878,7 +4914,24 @@
           let partContainer = partDoc.body;
           for (const childIndex of splitContainer.childPath) partContainer = partContainer.childNodes[childIndex];
           while (partContainer.firstChild) partContainer.removeChild(partContainer.firstChild);
-          for (const node of chunk) partContainer.appendChild(partDoc.importNode(node, true));
+          // Each node goes inside shallow copies of the wrappers it was opened from, one copy per
+          // wrapper per part, so the part keeps the structure (and the wrappers' styles).
+          const originalOf = new Map();
+          for (const node of chunk) {
+            let parent = partContainer;
+            for (const wrapper of wrappersOf.get(node) || []) {
+              const last = parent.lastChild;
+              if (last && originalOf.get(last) === wrapper) {
+                parent = last;
+              } else {
+                const copy = partDoc.importNode(wrapper, false);
+                originalOf.set(copy, wrapper);
+                parent.appendChild(copy);
+                parent = copy;
+              }
+            }
+            parent.appendChild(partDoc.importNode(node, true));
+          }
           for (const element of Array.from(partDoc.getElementsByTagName('*'))) {
             const anchor = element.getAttribute('id') || (localName(element) === 'a' ? element.getAttribute('name') : null);
             if (anchor && !sectionAnchors.has(anchor)) sectionAnchors.set(anchor, partPath);
