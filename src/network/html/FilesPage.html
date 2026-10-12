@@ -4036,7 +4036,9 @@ async function maybeRenameEbookFile(file) {
 }
 
 function reserveAvailableUploadFilename(fileName, usedFileNames) {
-  const normalize = name => name.toLowerCase();
+  // macOS FAT lookup expects composed Unicode filenames on disk.
+  fileName = fileName.normalize('NFC');
+  const normalize = name => name.normalize('NFC').toLowerCase();
   if (!usedFileNames.has(normalize(fileName))) {
     usedFileNames.add(normalize(fileName));
     return fileName;
@@ -4064,7 +4066,7 @@ async function fetchExistingUploadNames() {
     throw new Error(response.status + ' ' + response.statusText);
   }
   const entries = await response.json();
-  return new Set(entries.map(entry => entry.name.toLowerCase()));
+  return new Set(entries.map(entry => entry.name.normalize('NFC').toLowerCase()));
 }
 
 /**
@@ -5824,7 +5826,7 @@ async function uploadFile() {
 
     const availableName = reserveAvailableUploadFilename(file.name, usedFileNames);
     if (availableName !== file.name) {
-      console.log(`[Upload] Renamed to avoid collision: ${file.name} -> ${availableName}`);
+      console.log(`[Upload] Prepared filename: ${file.name} -> ${availableName}`);
       file = new File([file], availableName, {
         type: file.type,
         lastModified: file.lastModified
