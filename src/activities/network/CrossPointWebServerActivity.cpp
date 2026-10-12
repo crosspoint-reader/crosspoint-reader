@@ -85,6 +85,7 @@ void CrossPointWebServerActivity::onExit() {
   Activity::onExit();
 
   state = WebServerActivityState::SHUTTING_DOWN;
+  wifiWatch.stop();  // before the disconnect below, a drop of our own making
   stopDnsServer();
   MDNS.end();
 
@@ -344,6 +345,7 @@ void CrossPointWebServerActivity::startWebServer() {
   if (webServer->isRunning()) {
     webServerStarted = true;
     LOG_DBG("WEBACT", "Web server started successfully");
+    if (!isApMode) wifiWatch.start();
   } else {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
     webServer.reset();
@@ -365,24 +367,18 @@ void CrossPointWebServerActivity::loop() {
       dnsServer->processNextRequest();
     }
 
-    // STA mode: Monitor WiFi connection health
+    // STA mode: Monitor WiFi connection health. A drop used to end the session on the spot, and
+    // badly: the state went to SHUTTING_DOWN, which loop() ignores -- Back included -- and render()
+    // cannot paint with the buffers released, so the device sat on a dead File Transfer screen
+    // until it was switched off. Now the server and Back keep working while the driver reconnects,
+    // and a link still gone after the grace period ends the session as Back does: restart to Home.
+    // The screen cannot be repainted to show the loss, nor a new address if the link comes back on
+    // one; the log has both.
     if (!isApMode && webServer && webServer->isRunning()) {
-      static unsigned long lastWifiCheck = 0;
-      if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
-        lastWifiCheck = millis();
-        const wl_status_t wifiStatus = WiFi.status();
-        if (wifiStatus != WL_CONNECTED) {
-          LOG_DBG("WEBACT", "WiFi disconnected! Status: %d", wifiStatus);
-          // Show error and exit gracefully
-          state = WebServerActivityState::SHUTTING_DOWN;
-          requestUpdate();
-          return;
-        }
-        // Log weak signal warnings
-        const int rssi = WiFi.RSSI();
-        if (rssi < -75) {
-          LOG_DBG("WEBACT", "Warning: Weak WiFi signal: %d dBm", rssi);
-        }
+      if (wifiWatch.poll(connectedIP) == WifiLinkWatch::Link::Gone) {
+        LOG_DBG("WEBACT", "Leaving File Transfer: the WiFi did not come back");
+        onGoHome();
+        return;
       }
 
       // RSSI indicator update intentionally removed: the 640ms e-ink refresh

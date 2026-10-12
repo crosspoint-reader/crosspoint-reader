@@ -5,6 +5,7 @@
 #include <string>
 
 #include "NetworkModeSelectionActivity.h"
+#include "WifiLinkWatch.h"
 #include "activities/Activity.h"
 #include "network/CrossPointWebServer.h"
 
@@ -50,6 +51,10 @@ class CrossPointWebServerActivity final : public Activity {
 
   // Performance monitoring
   unsigned long lastHandleClientTime = 0;
+
+  // STA mode: the link to the network. Gone (a drop that did not heal within its grace period)
+  // ends the session, as Back does.
+  WifiLinkWatch wifiWatch{"WEBACT"};
 
   // Set by the upload cancel check when Back is seen while an HTTP upload holds handleClient().
   // A flag rather than leaving it to the Back checks in loop(): the press the check saw may sit in
