@@ -34,6 +34,8 @@ from collections import namedtuple
 
 from fontTools.ttLib import TTFont
 
+from kern_reduce import reduce_kern_classes
+
 try:
     from PIL import Image
 except ImportError:
@@ -467,6 +469,16 @@ def derive_kern_classes(kern_map):
     if not kern_map:
         return [], [], [], 0, 0
 
+    # A class number is one byte: past 255 classes a side, merge the closest (kern_reduce.py)
+    # rather than lose the style's kerning.
+    pairs = len(kern_map)
+    kern_map, reduced = reduce_kern_classes(kern_map)
+    if reduced:
+        print(f"WARNING: kerning needed {reduced['left'][0]} left and {reduced['right'][0]} right classes, "
+              f"more than the 255 a font can store; merged the closest to {reduced['left'][1]} and "
+              f"{reduced['right'][1]} ({reduced['pairs_changed']} of {pairs} pairs changed)",
+              file=sys.stderr)
+
     all_left_cps = {lcp for lcp, _ in kern_map}
     all_right_cps = {rcp for _, rcp in kern_map}
 
@@ -497,13 +509,6 @@ def derive_kern_classes(kern_map):
 
     kern_left_class_count = left_class_id - 1
     kern_right_class_count = right_class_id - 1
-
-    if kern_left_class_count > 255 or kern_right_class_count > 255:
-        print(f"WARNING: kerning class count exceeds uint8_t range "
-              f"(left={kern_left_class_count}, right={kern_right_class_count}), "
-              f"dropping kerning for this style",
-              file=sys.stderr)
-        return ([], [], [], 0, 0)
 
     # Build the class x class matrix
     kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)

@@ -1,0 +1,9 @@
+variant:        ft2.13.3-hblean
+freetype:       2.13.3 sha256=0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289
+harfbuzz:       8.3.0 sha256=109501eaeb8bde3eadb25fab4164e993fbace29c3d775bcaa1c1e58e2f15f847 (lean)
+emscripten:     emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.10 (d6c521a7f05449857c76bd99e396895583cf2083)
+wasm bytes:     607732
+wasm gzip -9:   279565
+glue bytes:     4747
+glue gzip -9:   2320
+wasm sha256:    923b85dc94c125b3849f52b82800c556fb9376cfd025d058304d8c22a3592902

@@ -53,6 +53,26 @@ class CrossPointWebServer {
     std::vector<uint8_t> buffer;
     size_t bufferPos = 0;
 
+    // For the log and the failure report: the request body's length (the file plus its form
+    // framing), when data last arrived, and whether Back on the device ended it.
+    size_t expected = 0;
+    unsigned long lastDataAt = 0;
+    bool cancelled = false;
+
+    // The last upload that broke off, until the next one starts. WebServer drops such a request
+    // without answering it, so the browser sees only a broken connection; /api/web/status hands it
+    // this instead, for the setup page to explain.
+    struct Failure {
+      bool set = false;
+      String name;
+      size_t received = 0;
+      size_t expected = 0;
+      unsigned long ms = 0;      // from the start to the end
+      unsigned long idleMs = 0;  // since data last arrived
+      const char* reason = "";   // "stalled", "closed" or "cancelled"
+      int rssi = 0;              // 0 in hotspot mode
+    } failure;
+
     UploadState() = default;
   } upload;
 

@@ -22,8 +22,8 @@ class ChunkedResponse {
  public:
   explicit ChunkedResponse(WebServer* server) : server(server) {
     // ~1 TCP segment. Heap rather than stack: handleClient() runs on the shared
-    // Arduino loop task, below the whole activity call chain and alongside a 1KB
-    // serialization buffer in the settings handler, so 1.4KB is not free there.
+    // Arduino loop task, below the whole activity call chain, so 1.4KB is not
+    // free there.
     // The allocation is fallible and a failure degrades to the old per-entry
     // sends rather than failing the request.
     buffer = makeUniqueNoThrow<char[]>(CAPACITY);
@@ -110,6 +110,14 @@ class ChunkedJsonArray {
     out.append(json, len);
   }
 
+  // The next entry, to be written through Print -- serializeJson(doc, array.nextEntry()) --
+  // with no buffer of its own and so no size limit.
+  Print& nextEntry() {
+    if (seenFirst) out.append(",", 1);
+    seenFirst = true;
+    return print;
+  }
+
   void finish() {
     out.append("]", 1);
     out.finish();
@@ -117,5 +125,6 @@ class ChunkedJsonArray {
 
  private:
   ChunkedResponse out;
+  ChunkedPrint print{out};
   bool seenFirst = false;
 };

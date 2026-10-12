@@ -18,6 +18,22 @@ PLACEHOLDERS = {}
 # installs into /.crosspoint/web (src/network/WebAssets.h). The setup page stays,
 # because it is what installs the bundle.
 FLASH_ASSETS = {"WebSetupPage.html"}
+
+# Files made outside src/network/html that pages load from /js/<name>: the Font Manager's converter,
+# FreeType built to WebAssembly with its JS around it (tools/ftwasm; rebuild with its build.sh), and
+# the licences that must ship with it. Bundled as they are, gzipped, never minified. Paths are
+# relative to the project; the name is the one under /js/.
+EXTERNAL_ASSETS = [
+    ("ftwasm.wasm", "tools/ftwasm/dist/ftwasm.wasm", "application/wasm"),
+    ("ftwasm.mjs", "tools/ftwasm/dist/ftwasm.mjs", "application/javascript"),
+    ("cpfont-raster.mjs", "tools/ftwasm/js/cpfont-raster.mjs", "application/javascript"),
+    ("cpfont-writer.mjs", "tools/ftwasm/js/cpfont-writer.mjs", "application/javascript"),
+    ("otf-tables.mjs", "tools/ftwasm/js/otf-tables.mjs", "application/javascript"),
+    ("pyset-order.mjs", "tools/ftwasm/js/pyset-order.mjs", "application/javascript"),
+    ("kern-reduce.mjs", "tools/ftwasm/js/kern-reduce.mjs", "application/javascript"),
+    ("FreeType-FTL.txt", "tools/ftwasm/dist/licenses/FreeType-FTL.txt", "text/plain"),
+    ("HarfBuzz-COPYING.txt", "tools/ftwasm/dist/licenses/HarfBuzz-COPYING.txt", "text/plain"),
+]
 BUNDLE_HEADER = os.path.join(SRC_DIR, "network", "html", "WebBundle.generated.h")
 
 # <!--#include file="shared/Foo.js.inc" --> directives, resolved relative to the
@@ -551,6 +567,27 @@ for root, _, files in os.walk(SRC_DIR):
             print(
                 f"  Compressed: {len(compressed)} bytes ({100 * len(compressed) / len(content):.1f}%)"
             )
+
+# The external assets, gzipped once and kept in .pio/web-cache until their source changes.
+cache_dir = os.path.join(project_dir, ".pio", "web-cache")
+os.makedirs(cache_dir, exist_ok=True)
+for name, rel_source, ctype in EXTERNAL_ASSETS:
+    source = os.path.join(project_dir, rel_source)
+    if not os.path.isfile(source):
+        raise SystemExit(f"ERROR [build_html.py]: missing {rel_source}, which the web bundle needs")
+    stem, ext = os.path.splitext(name)
+    ident = sanitize_identifier(f"{stem}{ext[1:].capitalize()}")
+    cached = os.path.join(cache_dir, f"{name}.gz")
+    if os.path.exists(cached) and os.path.getmtime(cached) >= os.path.getmtime(source):
+        with open(cached, "rb") as g:
+            compressed = g.read()
+    else:
+        with open(source, "rb") as f:
+            compressed = zopfli.gzip.compress(f.read())
+        with open(cached, "wb") as g:
+            g.write(compressed)
+        print(f"Generated: {cached} ({len(compressed)} bytes)")
+    bundle_entries.append((f"{name}.gz", ident, ctype, compressed))
 
 bundle_dir = (
     scons_env.subst("$BUILD_DIR") if scons_env is not None else os.path.join(project_dir, ".pio", "web")

@@ -1,0 +1,143 @@
+fontconvert_sdcard.py: kern with OpenType's first-match rule (NOT applied yet)
+
+Today the converter adds up every GPOS 'kern' PairPos subtable and the legacy
+'kern' table. OpenType applies only the first subtable of a lookup that
+matches a pair (that is how glyph-pair exceptions override class kerning),
+and shapers ignore 'kern' when GPOS has kerning. This patch does the same.
+Measured at 14 pt it changes 3,973 pairs in Literata Regular and 101 in
+SourceSerif4 (e.g. "Vã" -61/16 px -> -23/16 px).
+
+Apply together with the browser side, which already has the same rule behind
+an option: convertFamily(ft, { ..., kerning: 'first-match' }).
+Verified byte-identical against this patched script with
+  node test/file_parity.mjs --kerning first-match --script <patched script>
+
+  git apply tools/ftwasm/patches/fontconvert_sdcard-kerning-first-match.patch
+
+--- a/lib/EpdFont/scripts/fontconvert_sdcard.py	2026-10-12 14:23:13.746361247 +0200
++++ b/lib/EpdFont/scripts/fontconvert_sdcard.py	2026-10-12 14:23:33.598460103 +0200
+@@ -323,10 +323,16 @@
+ }
+ 
+ 
+-def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
+-    """Extract kerning from a PairPos subtable (Format 1 or 2)."""
++def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern, matched):
++    """Extract kerning from a PairPos subtable (Format 1 or 2).
++
++    `matched` holds the (left, right) pairs an earlier subtable of the same
++    lookup already matched. OpenType applies only the first matching subtable
++    of a lookup, which is how glyph-pair exceptions (Format 1, listed first)
++    override class kerning (Format 2), so a matched pair is skipped here.
++    """
+     if subtable.Format == 1:
+-        # Individual pairs
++        # Individual pairs: a pair matches when it is listed, whatever its value.
+         for i, coverage_glyph in enumerate(subtable.Coverage.glyphs):
+             if coverage_glyph not in glyph_to_cp:
+                 continue
+@@ -334,20 +340,22 @@
+             for pvr in pair_set.PairValueRecord:
+                 if pvr.SecondGlyph not in glyph_to_cp:
+                     continue
++                key = (coverage_glyph, pvr.SecondGlyph)
++                if key in matched:
++                    continue
++                matched.add(key)
+                 xa = 0
+                 if hasattr(pvr, 'Value1') and pvr.Value1:
+                     xa = getattr(pvr.Value1, 'XAdvance', 0) or 0
+                 if xa != 0:
+-                    key = (coverage_glyph, pvr.SecondGlyph)
+                     raw_kern[key] = raw_kern.get(key, 0) + xa
+     elif subtable.Format == 2:
+-        # Class-based pairs — iterate by class, not by glyph, to avoid
+-        # O(glyphs²) explosion for CJK fonts with many requested glyphs.
++        # Class-based pairs: a covered left glyph matches every right glyph
++        # whose class is in range, zero values included.
+         class_def1 = subtable.ClassDef1.classDefs if subtable.ClassDef1 else {}
+         class_def2 = subtable.ClassDef2.classDefs if subtable.ClassDef2 else {}
+         coverage_set = set(subtable.Coverage.glyphs)
+ 
+-        # Build reverse mappings: class_id -> list of glyph names
+         left_by_class = {}   # only glyphs in coverage AND glyph_to_cp
+         for glyph in glyph_to_cp:
+             if glyph not in coverage_set:
+@@ -360,22 +368,23 @@
+             c2 = class_def2.get(glyph, 0)
+             right_by_class.setdefault(c2, []).append(glyph)
+ 
+-        # Iterate class pairs (typically << glyph pairs)
+         for c1, class1_rec in enumerate(subtable.Class1Record):
+             if c1 not in left_by_class:
+                 continue
+             for c2, c2_rec in enumerate(class1_rec.Class2Record):
++                if c2 not in right_by_class:
++                    continue
+                 xa = 0
+                 if hasattr(c2_rec, 'Value1') and c2_rec.Value1:
+                     xa = getattr(c2_rec.Value1, 'XAdvance', 0) or 0
+-                if xa == 0:
+-                    continue
+-                if c2 not in right_by_class:
+-                    continue
+                 for lg in left_by_class[c1]:
+                     for rg in right_by_class[c2]:
+                         key = (lg, rg)
+-                        raw_kern[key] = raw_kern.get(key, 0) + xa
++                        if key in matched:
++                            continue
++                        matched.add(key)
++                        if xa != 0:
++                            raw_kern[key] = raw_kern.get(key, 0) + xa
+ 
+ 
+ def extract_kerning_fonttools(font_path, codepoints, ppem):
+@@ -402,24 +411,29 @@
+     # Collect raw kerning values in font design units
+     raw_kern = {}  # (left_glyph_name, right_glyph_name) -> design_units
+ 
+-    # 1. Legacy kern table
+-    if 'kern' in font:
++    # GPOS 'kern' lookups (all scripts and languages)
++    kern_lookup_indices = set()
++    if 'GPOS' in font and font['GPOS'].table.FeatureList:
++        for fr in font['GPOS'].table.FeatureList.FeatureRecord:
++            if fr.FeatureTag == 'kern':
++                kern_lookup_indices.update(fr.Feature.LookupListIndex)
++
++    # 1. Legacy kern table -- only when GPOS has no kerning, as shapers do;
++    #    fonts that carry both would otherwise be kerned twice.
++    if 'kern' in font and not kern_lookup_indices:
+         for subtable in font['kern'].kernTables:
+             if hasattr(subtable, 'kernTable'):
+                 for (lg, rg), val in subtable.kernTable.items():
+                     if lg in glyph_to_cp and rg in glyph_to_cp:
+                         raw_kern[(lg, rg)] = raw_kern.get((lg, rg), 0) + val
+ 
+-    # 2. GPOS 'kern' feature
+-    if 'GPOS' in font:
++    # 2. GPOS 'kern' feature: values add up across lookups, but within one
++    #    lookup only the first subtable that matches a pair applies.
++    if kern_lookup_indices:
+         gpos = font['GPOS'].table
+-        kern_lookup_indices = set()
+-        if gpos.FeatureList:
+-            for fr in gpos.FeatureList.FeatureRecord:
+-                if fr.FeatureTag == 'kern':
+-                    kern_lookup_indices.update(fr.Feature.LookupListIndex)
+         for li in kern_lookup_indices:
+             lookup = gpos.LookupList.Lookup[li]
++            matched = set()
+             for st in lookup.SubTable:
+                 actual = st
+                 # Unwrap Extension (lookup type 9) wrappers. After unwrapping,
+@@ -431,7 +445,7 @@
+                 effective_type = getattr(st, 'ExtensionLookupType', lookup.LookupType)
+                 if hasattr(actual, 'Format'):
+                     if effective_type == 2:
+-                        _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern)
++                        _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern, matched)
+                     else:
+                         print(f"  Debug: skipping unsupported GPOS kern lookupType="
+                               f"{effective_type} (outer={lookup.LookupType}, Format={actual.Format})",

@@ -37,6 +37,7 @@
 #include "SdCardFontRegistry.h"
 #include "SettingsList.h"
 #include "SystemStatus.h"
+#include "UploadStallTolerance.h"
 #include "WebAssets.h"
 #include "WebDAVHandler.h"
 #include "WebPathGuard.h"
@@ -486,9 +487,12 @@ void CrossPointWebServer::begin() {
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
-  // Collect WebDAV headers and register handler
-  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout"};
-  server->collectHeaders(davHeaders, 6);
+  // Collect the WebDAV headers, If-None-Match for the bundle's ETags (WebAssets::serve()) and
+  // Referer for the upload log, then register the handler. collectHeaders() replaces the list, so
+  // it is called once.
+  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",     "If",
+                                    "Lock-Token", "Timeout",     "If-None-Match", "Referer"};
+  server->collectHeaders(collectedHeaders, sizeof(collectedHeaders) / sizeof(collectedHeaders[0]));
   // Ownership passes to the WebServer, which deletes the handler when stopped.
   // On OOM the HTTP server still comes up; only WebDAV is unavailable.
   if (auto davHandler = makeUniqueNoThrow<WebDAVHandler>()) {
@@ -727,11 +731,11 @@ void CrossPointWebServer::handleRoot() const {
 }
 
 // "/" is the welcome page once the bundle is installed and the setup page until
-// then, so it is revalidated rather than cached: whichever one a browser kept
-// would otherwise outlive the switch.
+// then. The setup page is never stored and the bundle's pages are revalidated
+// (WebAssets::serve()), so a browser does not keep showing the one it saw last.
 void CrossPointWebServer::handleWelcomePage() const {
   if (rejectIfLowMemory(server.get(), MIN_HEAP_FOR_HTML)) return;
-  if (WebAssets::serve(*server, web_bundle::WelcomePageHtml, "no-cache")) return;
+  if (WebAssets::serve(*server, web_bundle::WelcomePageHtml)) return;
   sendSetupPage(server.get());
 }
 
@@ -749,6 +753,18 @@ void CrossPointWebServer::handleWebStatus() const {
   doc["asset"] = WebAssets::assetName();
   doc["online"] = !apMode;
   doc["onCard"] = WebAssets::bundleOnCard();
+  if (!apMode) doc["rssi"] = WiFi.RSSI();
+  // An upload that broke off: the setup page's browser saw only the connection go.
+  if (const UploadState::Failure& f = upload.failure; f.set) {
+    JsonObject last = doc["lastUpload"].to<JsonObject>();
+    last["name"] = f.name;
+    last["received"] = f.received;
+    last["expected"] = f.expected;
+    last["ms"] = f.ms;
+    last["idleMs"] = f.idleMs;
+    last["reason"] = f.reason;
+    if (!apMode) last["rssi"] = f.rssi;
+  }
   sendJson(server.get(), 200, doc);
 }
 
@@ -1327,6 +1343,7 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
 
 void CrossPointWebServer::handleUpload(UploadState& state) const {
   static size_t lastLoggedSize = 0;
+  static unsigned long lastLoggedAt = 0;
 
   // Reset watchdog at start of every upload callback - HTTP parsing can be slow
   HalSystem::feedWatchdog();
@@ -1342,13 +1359,19 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
   if (up.status == UPLOAD_FILE_START) {
     // Reset watchdog - this is the critical 1% crash point
     HalSystem::feedWatchdog();
+    tolerateUploadStalls(*server);
 
     state.fileName = up.filename;
     state.size = 0;
     state.success = false;
     state.error = "";
+    state.expected = server->clientContentLength();
+    state.cancelled = false;
+    state.failure = {};
     uploadStartTime = millis();
+    state.lastDataAt = uploadStartTime;
     lastLoggedSize = 0;
+    lastLoggedAt = uploadStartTime;
     state.bufferPos = 0;
     totalWriteTime = 0;
     writeCount = 0;
@@ -1372,8 +1395,19 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       state.path = "/";
     }
 
-    LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
-    LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
+    // The page it came from, without the scheme and host: "/setup", "/files?path=/".
+    String from = server->header("Referer");
+    const int scheme = from.indexOf("//");
+    const int pathStart = scheme >= 0 ? from.indexOf('/', scheme + 2) : -1;
+    if (pathStart >= 0) from = from.substring(pathStart);
+    if (from.isEmpty()) from = "?";
+    LOG_DBG("WEB", "[UPLOAD] START: %s (request %u bytes) to path: %s, from %s", state.fileName.c_str(),
+            static_cast<unsigned>(state.expected), state.path.c_str(), from.c_str());
+    if (apMode) {
+      LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes, hotspot mode", ESP.getFreeHeap());
+    } else {
+      LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes, Wi-Fi %d dBm", ESP.getFreeHeap(), WiFi.RSSI());
+    }
 
     // Create file path
     String filePath = state.path;
@@ -1409,7 +1443,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
   } else if (up.status == UPLOAD_FILE_WRITE) {
-    if (dropUploadIfCancelled()) return;
+    if (dropUploadIfCancelled()) {
+      state.cancelled = true;
+      return;
+    }
+    state.lastDataAt = millis();
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
@@ -1437,13 +1475,14 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
       state.size += up.currentSize;
 
-      // Log progress every 100KB
-      if (state.size - lastLoggedSize >= 102400) {
-        const unsigned long elapsed = millis() - uploadStartTime;
+      // Progress every 100 KB, and every 5 s on a link too slow for that
+      if (state.size - lastLoggedSize >= 102400 || state.lastDataAt - lastLoggedAt >= 5000) {
+        const unsigned long elapsed = state.lastDataAt - uploadStartTime;
         const float kbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
         LOG_DBG("WEB", "[UPLOAD] %d bytes (%.1f KB), %.1f KB/s, %d writes", state.size, state.size / 1024.0, kbps,
                 writeCount);
         lastLoggedSize = state.size;
+        lastLoggedAt = state.lastDataAt;
       }
     }
   } else if (up.status == UPLOAD_FILE_END) {
@@ -1488,7 +1527,25 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     }
     state.buffer = {};
     state.error = "Upload aborted";
-    LOG_DBG("WEB", "Upload aborted");
+
+    // WebServer gives up on a body that stops arriving -- no byte for UPLOAD_STALL_TIMEOUT_MS
+    // while the connection stays open -- or when the connection closes: the browser's doing, a
+    // lost link, or Back on the device (dropUploadIfCancelled()).
+    UploadState::Failure& f = state.failure;
+    const unsigned long now = millis();
+    f.set = true;
+    f.name = state.fileName;
+    f.received = state.size;
+    f.expected = state.expected;
+    f.ms = now - uploadStartTime;
+    f.idleMs = now - state.lastDataAt;
+    f.reason = state.cancelled ? "cancelled" : server->client().connected() ? "stalled" : "closed";
+    f.rssi = apMode ? 0 : WiFi.RSSI();
+    const float kbps = (f.ms > 0) ? (f.received / 1024.0) / (f.ms / 1000.0) : 0;
+    LOG_DBG("WEB", "[UPLOAD] Aborted (%s): %s, %u of %u bytes in %lu ms (%.1f KB/s), no data for the last %lu ms",
+            f.reason, f.name.c_str(), static_cast<unsigned>(f.received), static_cast<unsigned>(f.expected), f.ms, kbps,
+            f.idleMs);
+    if (!apMode) LOG_DBG("WEB", "[UPLOAD] Wi-Fi %d dBm", f.rssi);
   }
 }
 
@@ -1885,18 +1942,12 @@ void CrossPointWebServer::handleGetSettings() const {
   server->send(200, "application/json", "");
   ChunkedJsonArray out(server.get());
 
-  char output[1024];
-  constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
 
-  auto sendEntry = [&]() {
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      LOG_DBG("WEB", "Settings entry JSON truncated (key=%s)", doc["key"].as<const char*>());
-      return;
-    }
-    out.addEntry(output, written);
-  };
+  // Straight into the response, without a buffer of its own: an entry can be any size. The
+  // timezone row's 86 city names make about 2 KB, more than the 1 KB buffer this used to be
+  // formatted into, so the row was dropped and the web page had no Timezone setting.
+  auto sendEntry = [&]() { serializeJson(doc, out.nextEntry()); };
 
   // Rows are visited one at a time (forEachSetting()), never held as a list: the whole list is
   // one 11.5 KB block, and this runs while Wi-Fi holds most of the heap.
@@ -2566,6 +2617,7 @@ void CrossPointWebServer::handleFontUploadData() {
   switch (up.status) {
     case UPLOAD_FILE_START: {
       HalSystem::feedWatchdog();
+      tolerateUploadStalls(*server);
       String family = server->arg("family");
       fontUpload.valid = false;
       fontUpload.magicChecked = false;
@@ -3364,6 +3416,7 @@ void CrossPointWebServer::handlePluginFs() {
 void CrossPointWebServer::handlePluginFsData() {
   const HTTPRaw& raw = server->raw();
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(*server);
     const String plugin = server->arg("plugin");
     rawUpload.start(isSafePathComponent(plugin) ? pluginWriteTarget(server->arg("path")) : String(),
                     PLUGIN_FS_MAX_BYTES);
@@ -3512,6 +3565,7 @@ void CrossPointWebServer::handleBookReplace() {
 void CrossPointWebServer::handleBookReplaceData() {
   const HTTPRaw& raw = server->raw();
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(*server);
     const String target = bookReplaceTarget(server->arg("path"));
     bookReplacePath = target;
     rawUpload.start(target.isEmpty() ? target : target + ".new", BOOK_REPLACE_MAX_BYTES);
@@ -3545,6 +3599,7 @@ void CrossPointWebServer::handlePluginInstallFile() {
 void CrossPointWebServer::handlePluginInstallFileData() {
   const HTTPRaw& raw = server->raw();
   if (raw.status == RAW_START) {
+    tolerateUploadStalls(*server);
     // Flat files only: /plugin serves single path components, so a nested one could never load.
     const String name = server->arg("name");
     const String fileName = server->arg("file");

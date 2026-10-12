@@ -90,6 +90,11 @@ Plugins pages load, and `/js/metadata-editor.js`, the File Manager's Details dia
 loaded on first use. Pages are not served under `/js/`. Any
 other path that WebDAV does not claim answers `404` with a plain-text body.
 
+Pages and scripts from the bundle carry `Cache-Control: no-cache` and the bundle's name as
+their `ETag`. A browser asks again before each use, sending `If-None-Match`, and gets a bodiless
+`304` while the same bundle is installed; after another one is installed, it gets the new file
+straight away.
+
 ```bash
 curl http://crosspoint.local/
 ```
@@ -120,6 +125,11 @@ curl http://crosspoint.local/api/web/status
 | `asset`   | string  | File name of this firmware's bundle |
 | `online`  | boolean | `false` in hotspot mode, where the device cannot download |
 | `onCard`  | boolean | A file named `asset` is in the SD card's top folder |
+| `rssi`    | number  | Wi-Fi signal in dBm; absent in hotspot mode |
+| `lastUpload` | object | Only after a `/upload` broke off, until the next one starts: `name`, `received` (file bytes), `expected` (request bytes), `ms`, `idleMs` (since data last arrived), `reason` (`stalled`: no data for 10 s; `closed`; `cancelled` on the device), and `rssi` at that moment |
+
+The device drops an upload that breaks off without answering the request, so the browser sees only a
+broken connection; the setup page reads `lastUpload` to say what happened.
 
 ### POST `/api/web/install` - Install the Bundle
 

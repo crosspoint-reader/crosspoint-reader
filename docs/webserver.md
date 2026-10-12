@@ -270,9 +270,32 @@ numbers as the Reading Stats screens on the device. From it you can **export** t
 
 ### Font Manager
 
-The Fonts page lists the font families installed on the SD card and the families available online.
+The Font Manager lists the font families installed on the SD card and the families available online.
 You can install or update one or all of them (the device downloads them itself, so it needs internet
-access), upload a `.cpfont` file from your computer, or delete a family.
+access), upload a `.cpfont` file from your computer, or delete a family. As on the Settings page, a
+menu beside the page (a row of buttons on a phone) switches between **Installed fonts**, **Download
+fonts**, **Convert a font** and **Upload a font**; the number beside Download fonts counts the installed
+families with an update.
+
+**Convert a font** makes a family of your own from TrueType or OpenType files (`.ttf`, `.otf`, or
+`.woff`), in your browser, so it works without internet, in hotspot mode too:
+
+1. Choose the family's files, up to four: regular, bold, italic and bold italic. Each file's style is
+   read from the font, and a regular one is needed. Variable fonts (one file for every weight) cannot
+   be converted; use the family's static files.
+2. Check the family name (letters, digits, `-` and `_`, at most 31), the characters to include, and
+   the sizes.
+3. Click **Convert and install**. The files are made in the browser and installed on the card; choose
+   the font on the reader as your reading font.
+
+The conversion is the one the catalog's fonts are made with (FreeType with its auto-hinter, in
+WebAssembly), so a converted family looks the same as one from the catalog.
+
+It can also take the fonts a book embeds: choose **The fonts of an EPUB** and a book from your
+computer, or open a book on the reader with **Details** in the File Manager and choose **Convert its
+fonts**. Fonts the publisher obfuscated are decoded; fonts protected with DRM, WOFF2 and font
+collections are listed as unusable. A font that came with a book is licensed with that book: convert
+it for reading on your own reader.
 
 ### Dictionaries
 

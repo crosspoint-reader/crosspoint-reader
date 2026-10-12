@@ -74,6 +74,11 @@
       '<p id="md-note" class="file-info"></p>' +
       '<div id="md-form"><p>Loading metadata...</p></div>' +
       '<hr><div id="md-cover"></div>' +
+      // The Font Manager's converter can make a font family of the fonts an EPUB embeds.
+      (hasExt(book.name, '.epub')
+        ? '<hr><p class="file-info">Fonts embedded in this book can become a reading font: ' +
+          '<a href="/fonts?book=' + encodeURIComponent(join(book.dir, book.name)) + '">Convert its fonts</a></p>'
+        : '') +
       '</div>';
     overlay.querySelector('#md-close').onclick = close;
     return overlay;

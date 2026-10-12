@@ -8,15 +8,9 @@
   <style>
     <!--#include file="shared/Theme.css.inc" -->
     <!--#include file="shared/NavLinks.css.inc" -->
+    <!--#include file="shared/SideNav.css.inc" -->
 
-    /* Category menu beside the settings; a strip of chips above them on a narrow screen. */
-    .settings-layout {
-      display: grid;
-      grid-template-columns: 236px minmax(0, 1fr);
-      gap: 32px;
-      align-items: start;
-    }
-    .settings-nav { position: sticky; top: 76px; }
+    /* The category menu (shared/SideNav.css.inc) under a search box. */
     .search { position: relative; margin-bottom: 14px; }
     .search svg {
       position: absolute;
@@ -29,22 +23,6 @@
       pointer-events: none;
     }
     .search input { width: 100%; padding-left: 34px; }
-    .cat-group { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-      color: var(--text-muted); margin: 16px 10px 4px; }
-    .cat-group:first-child { margin-top: 0; }
-    .cat-list { display: flex; flex-direction: column; gap: 1px; }
-    .cat-link {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 7px 10px;
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      text-decoration: none;
-    }
-    .cat-link:hover { background: var(--surface-2); }
-    .cat-link.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
     .cat-link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); visibility: hidden; flex: none; }
     .cat-link.has-changes .dot { visibility: visible; }
 
@@ -117,22 +95,7 @@
     .save-bar.show ~ .toast { bottom: 84px; }
 
     @media (max-width: 860px) {
-      .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-      .settings-nav {
-        top: 0;
-        z-index: 10;
-        background: var(--bg);
-        margin: 0 -16px;
-        padding: 8px 16px 10px;
-        border-bottom: 1px solid var(--border);
-      }
       .search { margin-bottom: 8px; }
-      .cat-group { display: none; }
-      #categoryNav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-      #categoryNav::-webkit-scrollbar { display: none; }
-      .cat-list { flex: none; flex-direction: row; gap: 6px; }
-      .cat-link { white-space: nowrap; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px;
-        background: var(--surface); }
       .setting { flex-direction: column; align-items: stretch; gap: 10px; }
       .setting.is-switch { flex-direction: row; align-items: center; }
       .setting-control { max-width: none; align-items: stretch; }
@@ -154,8 +117,8 @@
       <p class="page-intro">Changes reach the reader when you save them.</p>
     </div>
 
-    <div class="settings-layout">
-      <aside class="settings-nav">
+    <div class="side-layout">
+      <aside class="side-nav">
         <div class="search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="7"></circle><line x1="16.5" y1="16.5" x2="21" y2="21"></line>
@@ -211,6 +174,7 @@
 
 <script>
 <!--#include file="shared/SettingsHelp.js.inc" -->
+<!--#include file="shared/SideNav.js.inc" -->
 
   // Settings without a category of their own (the firmware gives them STR_NONE_OPT so they stay off
   // the device's settings screen) that apply to every OPDS server: shown in the OPDS panel, and saved
@@ -430,6 +394,7 @@
       if (a.dataset.panel === id) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }
+    revealActiveLink();
   }
 
   window.addEventListener('hashchange', () => {
