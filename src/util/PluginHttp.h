@@ -55,6 +55,10 @@ std::string urlEncodeQuery(const std::string& s);
 
 // --- token / config files ---
 
+// A manifest file path: relative paths live in the plugin's own folder
+// ("token.json" -> "<pluginDir>/token.json"); absolute and empty pass through.
+std::string inPluginDir(const std::string& pluginDir, const char* path);
+
 // Reads the token at `path` (dotted) from the JSON file at `file`.
 // An empty `file` means a token-less plugin: returns true with `out` empty.
 bool loadTokenFromFile(const std::string& file, const std::string& path, std::string& out);

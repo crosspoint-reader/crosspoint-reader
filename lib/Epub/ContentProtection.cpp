@@ -2,14 +2,14 @@
 //
 // The ContentProtection SDK lib is storage-agnostic (it works against a
 // ByteSource). This file is the firmware-side glue that backs that seam with
-// the device's SD storage: a HalStorage-backed ByteSource, the credential
-// lookup, and the openProtectedBook() entry point the reader calls. It lives in
-// the firmware — not the SDK lib — so the portable lib carries no HAL dependency.
+// the device's SD storage: a HalStorage-backed ByteSource and the
+// openProtectedBook() entry point the reader calls. The book's content key
+// comes from its device-wrapped "<book>.key" (BookKey.h), written when the
+// book was fulfilled; the reader carries no rights or account scheme.
 
 #include <Arduino.h>
 #include <ByteSource.h>
 #include <ContentProtection.h>
-#include <Credential.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -21,16 +21,13 @@
 #include <ZipFile.h>
 #include <esp_heap_caps.h>
 
+#include "BookKey.h"
 #include "Epub/parsers/EncryptionManifestProbe.h"
 
 namespace freeink {
 namespace content {
 
 namespace {
-
-// The access credential is provisioned off-device and dropped here.
-// Generic path — the reader carries no scheme name.
-constexpr const char* CREDENTIAL_PATH = "/.crosspoint/content.key";
 
 // One shared crypto backend for the whole read path.
 WolfsslCrypto& crypto() {
@@ -129,59 +126,26 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
     return nullptr;
   }
 
-  // A book carrying encryption.xml may only obfuscate its embedded fonts
-  // (not content-protected). The SDK demands the credential only after parsing
-  // the manifest and finding genuinely encrypted entries.
-  SdByteSource credSource(CREDENTIAL_PATH);
-  Credential credential;
-  const bool haveCredential = credSource.open() && parseCredential(credSource, &credential);
-
   auto book = makeUniqueNoThrow<ProtectedBook>();
   if (!book) {
     err = "out of memory";
     return nullptr;
   }
-  // Prefer an out-of-band rights document delivered as a sidecar next to the
-  // EPUB ("<book>.epub.rights"), so the EPUB on disk stays byte-identical to
-  // what the server sent. Falls back to a rights.xml injected into the zip.
-  std::string rightsOverride;
-  {
-    // A real rights document is a few KB; 64KB is a generous ceiling. The
-    // largest-block check keeps the resize below from aborting on OOM (string
-    // growth is a bare allocation under -fno-exceptions).
-    constexpr uint64_t MAX_RIGHTS_SIZE = 64 * 1024;
-    SdByteSource rightsSource(epubPath + ".rights");
-    if (rightsSource.open()) {
-      const uint64_t rsize = rightsSource.size();
-      if (rsize > 0 && rsize <= MAX_RIGHTS_SIZE &&
-          heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > static_cast<size_t>(rsize) + 8 * 1024) {
-        rightsOverride.resize(static_cast<size_t>(rsize));
-        const int32_t rn = rightsSource.readAt(0, rightsOverride.data(), static_cast<uint32_t>(rsize));
-        if (rn <= 0)
-          rightsOverride.clear();
-        else
-          rightsOverride.resize(static_cast<size_t>(rn));
-      }
-    }
-  }
-  if (!book->openFromScan(source, crypto(), credential, std::move(scan), rightsOverride)) {
-    if (haveCredential) {
-      // Guarded concat: this path runs precisely when the heap is tight, and
-      // the temporary would abort under -fno-exceptions.
-      err = "cannot open protected content";
-      const std::string& detail = book->lastError();
-      if (!detail.empty() && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > detail.size() + err.size() + 1024) {
-        err += ": ";
-        err += detail;
-      }
-    } else {
-      err = "no content access key on this device";
-    }
+  if (!book->openFromScan(source, std::move(scan))) {
+    err = "cannot open protected content";
     return nullptr;
   }
   // An encryption manifest containing only font obfuscation does not require
   // this read path; let the reader open it normally.
   if (!book->isProtected()) return nullptr;
+
+  uint8_t key[bookkey::KEY_LEN];
+  int64_t expiresAt = 0;
+  if (!bookkey::read(epubPath, key, &expiresAt)) {
+    err = "no content key for this book";
+    return nullptr;
+  }
+  book->setContentKey(key);
 
   // Loan enforcement. The clock is a persisted monotonic floor (TrustedTime):
   // it can lag real time while the device sat powered off, but can never be
@@ -189,13 +153,13 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
   // powered-off gap, it does not suspend it. A book carrying a due date with
   // no trustworthy clock at all fails closed rather than open.
   // Exact err strings below are matched by the reader for the user message.
-  if (book->expiresAt() != 0) {
+  if (expiresAt != 0) {
     const int64_t now = trustedtime::trustedNow();
     if (now == 0) {
       err = "loan date unverified";
       return nullptr;
     }
-    if (book->isExpired(now)) {
+    if (now > expiresAt) {
       err = "access expired";
       return nullptr;
     }

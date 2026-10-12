@@ -239,19 +239,8 @@ void ReaderActivity::loop() {
   const bool skip =
       !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && heldMs >= ReaderUtils::SKIP_HOLD_MS;
 
-  if (prevTriggered) {
-    if (skip) {
-      skipPagesRecorded(-10);
-    } else {
-      turnPageRecorded(false);
-    }
-  } else {
-    if (skip) {
-      skipPagesRecorded(10);
-    } else {
-      turnPageRecorded(true);
-    }
-  }
+  const bool changed = skip ? skipPagesRecorded(prevTriggered ? -10 : 10) : turnPageRecorded(!prevTriggered);
+  if (changed && (touch.prev || touch.next)) haptic_feedback::touchAction(skip);
   requestUpdate();
 }
 

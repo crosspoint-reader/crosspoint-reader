@@ -142,13 +142,15 @@ Two browse formats:
 {
   "title": "Service Name",                  // menu label; defaults to folder name
 
+  // Relative paths are in the plugin's own folder; absolute paths work too.
+  // The credential stores (wifi/opds/koreader .json) are refused.
   "token": {                                // omit for token-less catalogs
-    "file": "/.crosspoint/<name>.json",     // written by auth (either side)
+    "file": "token.json",                   // written by auth (either side)
     "path": "token"                         // dotted JSON path inside the file
   },
 
   "config": {                               // optional: flat JSON of {cfg.KEY} values,
-    "file": "/.crosspoint/<name>-cfg.json"  // e.g. a user-entered server URL + credentials
+    "file": "config.json"                   // e.g. a user-entered server URL + credentials
   },
 
   "browse": {                               // required
@@ -167,7 +169,9 @@ Two browse formats:
       "url": "download_url",                // when the item carries a direct file URL
       "version": "version"                  // catalog-of-plugins only: badges each row
                                             // Installed / Update by comparing this to the
-                                            // installed plugin's manifest.json (found by id)
+                                            // installed plugin's manifest.json (found by id).
+                                            // Both are MAJOR.MINOR.PATCH ("1.2.0"); only a
+                                            // newer catalog version shows Update.
     },
     "page_size": 8,                         // 1..16; response should honor {limit}
 
@@ -195,6 +199,8 @@ Two browse formats:
     "username": "{cfg.user}",              // optional HTTP Basic creds for the file GET
     "password": "{cfg.pass}",             // omit for token/header auth
     "dest_dir": "/ServiceName",             // created if missing; falls back to SD root
+                                            // a "dest_dir" in the config file overrides it,
+                                            // so the plugin's web card can offer the setting
     "filename": "{title}.epub",             // rendered filename is sanitized to 100 bytes;
                                             // a conventional extension is preserved
     "sidecar": {                            // optional per-book metadata file
@@ -303,6 +309,8 @@ lets plugins attach service fields (e.g. a service book id) to a book; those
 fields ride along with KOSync progress uploads and are available to event
 handlers as `{meta.*}` variables. See `plugin-events.md` for the whole
 surface: the event whitelist, handler schema, delivery semantics, and limits.
+The device's plugin list shows, under each plugin, the events it receives, so
+the person using the reader can see what activity a plugin is sent.
 
 ## Ideas to build
 
@@ -373,6 +381,7 @@ browser-side.
 | Outbound HTTP(S), any method (CORS-free) | `api.relay(method, url, headers, body)` |
 | Download a URL straight to SD | `api.fetchToSd(url, dest, headers)` |
 | Write a small file to SD | `api.writeFile(path, base64)` |
+| The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
 | Create / delete / move SD files | same-origin `/mkdir`, `/delete`, `/move` |
 | On-device catalog/browse/download | `device.json` (this document) |
@@ -381,13 +390,19 @@ browser-side.
 ## Protected content and loan expiry
 
 Books whose entries are content-protected open through the read path in
-`lib/Epub/ContentProtection.cpp`: the access credential lives at
-`/.crosspoint/content.key`, and an out-of-band rights document may sit next to
-the book as `<book>.epub.rights` (falling back to a rights file inside the
-zip). Entries decrypt on demand, streamed in small chunks; nothing decrypted
-is ever written to SD.
+`lib/Epub/ContentProtection.cpp`. The core (SDK `ContentProtection`) only
+understands the standard OCF `encryption.xml` and decrypts entries on demand,
+streamed in small chunks; nothing decrypted is ever written to SD.
 
-When the rights carry a due date, the reader enforces it against
+The reader gets each book's content key from `<book>.key`, written through
+`POST /api/book-key` by the plugin that fulfilled the book: the plugin (or its
+service) turns whatever the provider delivers into the key, and the device
+stores it wrapped to itself. The reader carries no rights or account scheme.
+A book with no `.key`, or one wrapped by another reader, does not open. A full
+flash erase replaces the device secret, so a plugin should keep what it needs
+to derive keys again.
+
+When the key carries a due date, the reader enforces it against
 `lib/TrustedTime`: a monotonic clock floor persisted in NVS (on-flash, not on
 the removable card), restored into the system clock at boot, advanced at
 every sleep entry and snapped to real time by SNTP on every Wi-Fi join. The

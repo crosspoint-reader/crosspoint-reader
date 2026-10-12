@@ -24,6 +24,7 @@
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "network/HttpDownloader.h"
+#include "network/ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/PluginEvents.h"
 #include "util/PluginHttp.h"
@@ -161,9 +162,10 @@ bool PluginCatalogActivity::loadManifest() {
   JsonDocument doc;
   if (deserializeJson(doc, raw) != DeserializationError::Ok) return false;
 
-  manifest.tokenFile = doc["token"]["file"] | "";
+  const std::string pluginDir = manifestPath.substr(0, manifestPath.rfind('/'));
+  manifest.tokenFile = pluginhttp::inPluginDir(pluginDir, doc["token"]["file"] | "");
   manifest.tokenPath = doc["token"]["path"] | "token";
-  manifest.configFile = doc["config"]["file"] | "";
+  manifest.configFile = pluginhttp::inPluginDir(pluginDir, doc["config"]["file"] | "");
 
   JsonVariantConst browse = doc["browse"];
   manifest.browseFormat = browse["format"] | "json";
@@ -201,7 +203,11 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.dlUrlPath = dl["url_path"] | "";
   manifest.dlUser = dl["username"] | "";
   manifest.dlPass = dl["password"] | "";
-  manifest.destDir = dl["dest_dir"] | "";
+  manifest.destDir = pluginhttp::inPluginDir(pluginDir, dl["dest_dir"] | "");
+  if (!manifest.destDir.empty() && !protectedpaths::isPluginPath(manifest.destDir)) {
+    LOG_ERR("PCAT", "dest_dir outside plugin space: %s", manifest.destDir.c_str());
+    return false;
+  }
   manifest.filenameTpl = dl["filename"] | "{title}.epub";
   // Multi-file bundle install (generic): base URL + a files array per item.
   manifest.bundleBasePath = dl["bundle"]["base"] | "";
@@ -269,6 +275,18 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
   return tpl;
 }
 
+std::string PluginCatalogActivity::downloadDir() const {
+  for (const auto& kv : config) {
+    if (kv.first != "dest_dir" || kv.second.empty()) continue;
+    std::string dir = kv.second.front() == '/' ? kv.second : "/" + kv.second;
+    while (dir.size() > 1 && dir.back() == '/') dir.pop_back();
+    if (dir == "/") return "";  // SD root
+    if (protectedpaths::isPluginPath(dir)) return dir;
+    LOG_ERR("PCAT", "config dest_dir rejected: %s", kv.second.c_str());
+  }
+  return manifest.destDir;
+}
+
 PluginCatalogActivity::PluginCatalogActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              const bool showOpds, const bool rootMode)
     : CatalogActivity("PluginCatalog", renderer, mappedInput), showOpds(showOpds), rootMode(rootMode) {}
@@ -291,6 +309,26 @@ void PluginCatalogActivity::enterPluginPicker() {
   // table in step so a plugin installed since boot starts receiving events
   // (and a removed one stops) without a restart.
   pluginevents::refreshSubscriptions();
+  // Disclose which device events each plugin receives (and so what reading
+  // activity it can send off the device). The list leads the subtitle so the
+  // two-line wrap never cuts it.
+  static constexpr StrId EVENT_LABELS[] = {StrId::STR_EVENT_BOOK_OPEN, StrId::STR_EVENT_BOOK_CLOSE,
+                                           StrId::STR_EVENT_READING_SESSION, StrId::STR_EVENT_DOWNLOAD,
+                                           StrId::STR_EVENT_SLEEP};
+  static_assert(sizeof(EVENT_LABELS) / sizeof(EVENT_LABELS[0]) == static_cast<size_t>(pluginevents::Event::COUNT));
+  for (auto& plugin : installedPlugins) {
+    const uint8_t mask = pluginevents::subscriptionMask(plugin.name.c_str());
+    if (mask == 0) continue;
+    std::string events;
+    for (size_t i = 0; i < std::size(EVENT_LABELS); i++) {
+      if (!(mask & (1u << i))) continue;
+      if (!events.empty()) events += ", ";
+      events += I18N.get(EVENT_LABELS[i]);
+    }
+    char line[192];
+    snprintf(line, sizeof(line), tr(STR_PLUGIN_RECEIVES_EVENTS), events.c_str());
+    plugin.description = plugin.description.empty() ? line : std::string(line) + ". " + plugin.description;
+  }
 
   manifestPath.clear();
   manifest = Manifest{};
@@ -558,8 +596,8 @@ bool PluginCatalogActivity::parseBrowseResponse() {
 }
 
 // Badge each item by comparing its catalog version to the installed copy's
-// manifest (located by folder id across the plugin roots). Any string
-// mismatch is an update, mirroring the browser store and the font downloader.
+// manifest (located by folder id across the plugin roots). Only a newer
+// catalog version is an update, so an older catalog never offers a downgrade.
 // Runs once per page.
 void PluginCatalogActivity::computeInstallStatus() {
   if (!manifest.tracksInstalls()) return;
@@ -582,9 +620,8 @@ void PluginCatalogActivity::computeInstallStatus() {
     if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
       installed = doc["version"] | "";
     }
-    // A mismatch (including an installed copy with no version recorded) means
-    // the catalog carries a different build; offer the update.
-    item.status = (!item.version.empty() && installed != item.version) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
+    item.status =
+        PluginLocations::isNewerVersion(item.version, installed) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
   }
 }
 
@@ -689,7 +726,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   if (subdir.empty() || subdir.find("..") != std::string::npos || subdir.front() == '/') {
     return HttpDownloader::FILE_ERROR;
   }
-  std::string dir = manifest.destDir;
+  std::string dir = downloadDir();
   if (!dir.empty() && dir.back() == '/') dir.pop_back();
   dir += '/';
   dir += subdir;
@@ -715,13 +752,13 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   for (size_t i = 0; i < total; i++) {
     std::string rel = item.files[i];
     while (!rel.empty() && rel.front() == '/') rel.erase(rel.begin());
-    if (rel.empty() || rel.find("..") != std::string::npos) {
-      // A manifest listing traversal entries is hostile or broken either
-      // way; abort rather than install a bundle with silent holes.
+    const std::string dest = dir + "/" + rel;
+    if (rel.empty() || !protectedpaths::isPluginPath(dest)) {
+      // A manifest listing traversal or credential-store entries is hostile
+      // or broken either way; abort rather than install a bundle with holes.
       LOG_ERR("PCAT", "unsafe bundle entry rejected: %s", item.files[i].c_str());
       return HttpDownloader::FILE_ERROR;
     }
-    const std::string dest = dir + "/" + rel;
     // Create any intermediate folders for nested files ("assets/icon.bin").
     const size_t slash = dest.find_last_of('/');
     if (slash != std::string::npos) {
@@ -775,7 +812,8 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     return HttpDownloader::FILE_ERROR;
   }
 
-  const char* folder = manifest.destDir.c_str();
+  const std::string folderDir = downloadDir();
+  const char* folder = folderDir.c_str();
   bool haveFolder = folder[0] != '\0';
   if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     LOG_ERR("PCAT", "mkdir failed for %s, using SD root", folder);
@@ -791,10 +829,14 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     return HttpDownloader::FILE_ERROR;
   }
   std::string dest;
-  dest.reserve((haveFolder ? manifest.destDir.size() : 0) + 1 + filename.size());
+  dest.reserve((haveFolder ? folderDir.size() : 0) + 1 + filename.size());
   if (haveFolder) dest += folder;
   dest += '/';
   dest += filename;
+  if (!protectedpaths::isPluginPath(dest)) {
+    LOG_ERR("PCAT", "unsafe download dest rejected: %s", dest.c_str());
+    return HttpDownloader::FILE_ERROR;
+  }
 
   // url_path already authenticated the JSON hop; the resolved file URL must not
   // inherit those headers (S3 pre-signed GETs reject a second Authorization).
@@ -827,8 +869,8 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     // {title} alone cannot express that, since the filename is sanitized.
     substituteAll(path, "{dest}", dest);
     // Sidecar paths legitimately contain '/', but the substituted fields must
-    // not climb out of the tree.
-    if (path.empty() || path.find("..") != std::string::npos) {
+    // not climb out of the tree or land on a credential store.
+    if (!protectedpaths::isPluginPath(path)) {
       LOG_ERR("PCAT", "unsafe sidecar path rejected: %s", path.c_str());
     } else {
       std::string body = substituted(manifest.sidecarBody, &item);

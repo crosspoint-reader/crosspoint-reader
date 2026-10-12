@@ -3,14 +3,15 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "HapticFeedback.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 #include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
 
@@ -19,9 +20,7 @@ namespace {
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
-
-// Body text left/right inset, matching the reader's default feel.
-constexpr int SIDE_PADDING = 20;
+constexpr float PLAIN_TEXT_LINE_SPACING = 1.5f;
 
 // Styled-path ceiling: the laid-out Pages keep the whole definition resident
 // (TextBlock arenas ≈ text + ~7 bytes/word plus per-line objects), roughly
@@ -37,9 +36,20 @@ void DictionaryDefinitionActivity::onEnter() {
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
-  if (!(htmlDefinition && definition.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages())) {
-    definition = htmlToPlainText(definition);
+  const char* plainTextReason = nullptr;
+  if (!htmlDefinition) {
+    plainTextReason = "dictionary format is not HTML";
+  } else if (definition.size() > MAX_STYLED_HTML_BYTES) {
+    plainTextReason = "HTML exceeds 16 KiB limit";
+  } else if (!layoutHtmlPages()) {
+    plainTextReason = "HTML layout failed; see DHTML/EHP error";
+  }
+  if (plainTextReason) {
+    LOG_INF("DICT", "Plain-text definition: %s (bytes=%u)", plainTextReason, static_cast<unsigned>(definition.size()));
+    if (htmlDefinition) definition = htmlToPlainText(definition);
     wrapText();
+  } else {
+    LOG_INF("DICT", "Styled definition: %u pages", static_cast<unsigned>(pages.size()));
   }
   requestUpdate();
 }
@@ -58,10 +68,18 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
                            orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
-  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
-  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING,
-          renderer.getScreenHeight() - topArea - bottomArea};
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int contentLeft =
+      std::max(left, orientation == GfxRenderer::Orientation::LandscapeClockwise ? hintGutterWidth : 0);
+  const int contentRight =
+      std::max(right, orientation == GfxRenderer::Orientation::LandscapeCounterClockwise ? hintGutterWidth : 0);
+  const int x = contentLeft + metrics.contentSidePadding;
+  const int y = std::max(top, isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
+                metrics.verticalSpacing;
+  const int bottomArea = std::max(bottom, metrics.buttonHintsHeight) + metrics.verticalSpacing;
+  return {x, y, renderer.getScreenWidth() - contentLeft - contentRight - 2 * metrics.contentSidePadding,
+          renderer.getScreenHeight() - y - bottomArea};
 }
 
 // Styled path: lay the HTML definition out through the EPUB chapter parser
@@ -69,7 +87,10 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
 // own the text); any failure leaves state untouched for the plain-text path.
 bool DictionaryDefinitionActivity::layoutHtmlPages() {
   const BodyArea body = bodyArea();
-  if (body.width <= 0 || body.height <= 0) return false;
+  if (body.width <= 0 || body.height <= 0) {
+    LOG_ERR("DHTML", "Invalid definition viewport: %dx%d", body.width, body.height);
+    return false;
+  }
   if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
                                 static_cast<uint16_t>(body.height), pages)) {
     return false;
@@ -106,7 +127,7 @@ void DictionaryDefinitionActivity::wrapText() {
   const BodyArea body = bodyArea();
   const int maxWidth = body.width;
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
-  const int lineHeight = renderer.getLineHeight(fontId);
+  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
   linesPerPage = std::max(1, body.height / lineHeight);
 
   const char* text = definition.c_str();
@@ -210,10 +231,12 @@ void DictionaryDefinitionActivity::loop() {
   if (mappedInput.wasScreenTapped(tx, ty)) {
     if (tx < renderer.getScreenWidth() / 3) {
       if (currentPage > 0) {
+        haptic_feedback::touchAction();
         currentPage--;
         requestUpdate();
       }
     } else if (currentPage + 1 < totalPages) {
+      haptic_feedback::touchAction();
       currentPage++;
       requestUpdate();
     }
@@ -244,7 +267,7 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     pages[currentPage]->render(renderer, fontId, x, startY);
     return;
   }
-  const int lineHeight = renderer.getLineHeight(fontId);
+  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
   char buf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
   const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
@@ -270,26 +293,23 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
   const int contentY = isInverted ? metrics.buttonHintsHeight : 0;
 
-  // Header: matched headword left, page counter right.
-  const int headerY = contentY + metrics.topPadding + 10;
-  renderer.drawText(UI_12_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true, EpdFontFamily::BOLD);
+  char counter[16] = {};
   if (totalPages > 1) {
-    char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
-    const int counterWidth = renderer.getTextWidth(UI_10_FONT_ID, counter);
-    renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - SIDE_PADDING - counterWidth, headerY, counter);
   }
+  GUI.drawHeader(renderer, Rect{contentX, contentY + metrics.topPadding, contentWidth, metrics.headerHeight},
+                 headword.c_str(), counter[0] ? counter : nullptr);
 
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
   const int fontId = SETTINGS.getReaderFontId();
-  const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight;
+  const BodyArea body = bodyArea();
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);  // scan pass: records codepoints only
+  drawBody(fontId, body.x, body.y);  // scan pass: records codepoints only
   scope.endScanAndPrewarm();
-  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
+  drawBody(fontId, body.x, body.y);
 
   const auto labels =
       mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
