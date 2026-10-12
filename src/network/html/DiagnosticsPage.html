@@ -309,6 +309,7 @@
     let statusData = null;
     let diagData = null;
     let diagError = null;
+    let statusError = null;
 
     function el(tag, className, text) {
       const e = document.createElement(tag);
@@ -376,8 +377,12 @@
       }
       const b = diagData.thisBoot;
       addRow(c, 'Reset reason', word(RESET_REASONS, b.resetReason));
-      addRow(c, 'Previous session', b.previousSessionSlept ? 'ended at the sleep path' : 'ended without sleeping (reset or crash)',
-        !b.previousSessionSlept);
+      if (b.previousSessionSlept === null) {
+        addRow(c, 'Previous session', 'unknown (fewer than two records in the history)');
+      } else {
+        addRow(c, 'Previous session', b.previousSessionSlept ? 'ended at the sleep path' : 'ended without sleeping (reset or crash)',
+          !b.previousSessionSlept);
+      }
       addRow(c, 'Wake cause', word(WAKE_CAUSES, b.wakeCause));
       const g = b.wakeGate;
       addRow(c, 'Wake gate', word(GATE_VERDICTS, g.verdict) + ' (held ' + g.heldMs + ' ms, needs ' + g.requiredMs +
@@ -485,21 +490,23 @@
     }
 
     // What goes into the saved file. The IP and MAC address are dropped: the report is
-    // meant for a public issue tracker, and neither helps to diagnose anything.
+    // meant for a public issue tracker, and neither helps to diagnose anything. So are the
+    // card figures: plain /api/status leaves them unfilled (sdReady false, sizes 0), which
+    // would read as a missing card.
     function buildReport() {
       let status = null;
       if (statusData) {
         status = Object.assign({}, statusData);
-        delete status.ip;
-        delete status.macAddress;
+        for (const key of ['ip', 'macAddress', 'sdReady', 'sdTotal', 'sdUsed', 'sdFree']) delete status[key];
       }
+      const errors = [statusError, diagError].filter(Boolean);
       return {
         report: 'device diagnostics',
         generated: new Date().toISOString(),
         firmware: statusData ? statusData.version : null,
         status: status,
         bootDiagnostics: diagData,
-        errors: diagError ? [diagError] : undefined,
+        errors: errors.length ? errors : undefined,
       };
     }
 
@@ -537,6 +544,7 @@
         statusData = await getJson('/api/status');
       } catch (e) {
         statusData = null;
+        statusError = 'Could not load the device status: ' + e.message;
       }
       try {
         diagData = await getJson('/api/diagnostics/boot');

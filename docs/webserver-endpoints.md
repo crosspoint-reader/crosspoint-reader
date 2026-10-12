@@ -262,6 +262,7 @@ curl http://crosspoint.local/api/diagnostics/boot
 | Field | Meaning |
 | ----- | ------- |
 | `hardware.panelProbe` | The display-bus probe's raw bytes, or `null` when no probe ran |
+| `thisBoot.previousSessionSlept` | `false` when this boot directly followed another boot, so the session between them never reached the sleep path (a reset or a crash); `null` while the history holds fewer than two records |
 | `thisBoot.phases` | The `millis()` stamp of each boot phase this boot reached (`BootDiag::BootPhase`); the page shows the differences |
 | `thisBoot.abortedBoots` | Wakes refused since the last completed boot (`thisRun`, from the card), ever (`lifetime`, NVS), and counted but not yet written to the card (`undrained`) |
 | `history` | Newest first. `kind` is `sleep`, `boot` or `aborted` (a run of wakes that went straight back to sleep, `count` times; `capped` once the count stopped at its limit) |

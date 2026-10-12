@@ -23,8 +23,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "BootDiagnostics.h"
 #include "BookRelocation.h"
+#include "BootDiagnostics.h"
 #include "ChunkedResponse.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -1001,7 +1001,14 @@ void fillBootHardware(JsonDocument& doc) {
 void fillThisBoot(JsonDocument& doc, const BootDiag::Record* records, const uint8_t count) {
   doc["resetReason"] = BootDiag::resetReasonName(static_cast<uint8_t>(esp_reset_reason()));
   doc["wakeCause"] = BootDiag::wakeCauseName(static_cast<uint8_t>(esp_sleep_get_wakeup_cause()));
-  doc["previousSessionSlept"] = !BootDiag::previousSessionEndedWithoutSleep();
+  // BootDiag::previousSessionEndedWithoutSleep() on the records already loaded: two boots in a
+  // row mean the session between them never reached the sleep path. With fewer than two records
+  // (no card, a fresh ring) nothing is known, and null says so instead of "slept".
+  if (count >= 2) {
+    doc["previousSessionSlept"] = !(records[0].kind == BootDiag::KindBoot && records[1].kind == BootDiag::KindBoot);
+  } else {
+    doc["previousSessionSlept"] = nullptr;
+  }
 
   const auto& check = BootDiag::wakeCheck();
   const JsonObject gate = doc["wakeGate"].to<JsonObject>();
