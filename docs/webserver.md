@@ -163,9 +163,9 @@ Click **File Manager** to access file management features.
 #### Browsing Files
 
 - The file manager displays all files and folders on your SD card
-- **Folders** are highlighted in yellow and indicated with a 📁 icon
-- **EPUB Files** are highlighted in green and indicated with a 📗 icon
-- **All Other Files** are not highlighted and indicated with a 📄 icon
+- **Folders** have a 📁 icon and a FOLDER label
+- **Books** have a label with their format (EPUB, XTC, TXT, MD) and, for EPUBs, a 📗 icon
+- **All Other Files** have a 📄 icon
 - Click on a folder name to navigate into it
 - Use the breadcrumb navigation at the top to go back to parent folders
 - Files and folders whose names start with `.` are hidden unless **Show Hidden Files** is on
@@ -179,7 +179,7 @@ Click **File Manager** to access file management features.
 
 #### Uploading Files
 
-1. Click the **📤 Upload** button in the top-right corner
+1. Click the **Upload** button in the top-right corner
 2. Click **Choose File** and select a file from your device
 3. Click **Upload**
 4. A progress bar will show the upload status
@@ -187,9 +187,37 @@ Click **File Manager** to access file management features.
 
 <img src="./images/wifi/webserver_upload.png" width="600">
 
+#### Optimizing EPUBs
+
+An EPUB can be optimized for the reader on its way to the card: tick **Optimize EPUB** in the
+upload dialog. The work is done in your browser, and **Advanced Mode** shows its options. It:
+
+- converts the pictures to grayscale JPEGs sized for the screen of the chosen reader (Auto: the
+  reader you are connected to), turning very tall ones and splitting them into parts;
+  **Keep Cover in Color** leaves the cover in colour, only resized;
+- **splits long chapters** (over 8,000 words or 32 KB) into several files, at headings or scene
+  breaks where it can, and points every link and table-of-contents entry at the right part. Long
+  chapters are what make the reader slow to open a chapter and short of memory while laying it
+  out. On by default;
+- removes empty chapter stubs (a heading file with nothing after it), comments in the book's
+  files, and invisible characters that would otherwise take space on the page;
+- refuses books protected with DRM, which it cannot change. Fonts that the publisher only
+  obfuscated are fine.
+
+**Remember These Options** keeps your choices in this browser for the next upload. Optimizing
+changes the file, so a sync service that matches books by their contents, such as KOReader's,
+no longer recognises it as the copy on another device.
+
+Books already on the card can be optimized too: select them and click **Optimize** in the
+toolbar. Each book is downloaded, optimized with the upload dialog's options and put back in
+its place. The original stays beside it as `name.epub.bak` (if there already is one, that older
+copy is kept). When no chapter had to be split or removed, the book keeps its reading position
+and bookmarks; otherwise it starts over, as a newly uploaded book does. Reading stats always
+stay.
+
 #### Creating Folders
 
-1. Click the **📁 New Folder** button in the top-right corner
+1. Click the **New folder** button in the top-right corner
 2. Enter a folder name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
 3. Click **Create Folder**
 

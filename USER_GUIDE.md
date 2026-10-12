@@ -939,7 +939,7 @@ Accessible by pressing **Confirm** while inside a book and selecting **Table of 
 
 Please note that this firmware is currently in active development. The following features have known limitations:
 
-* **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for the sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
+* **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for the sleep screen and home screen thumbnail. Uploading the book with **Optimize EPUB** in the web interface's File Manager, or optimizing it there afterwards, resizes them and speeds this up (see [Optimizing EPUBs](./docs/webserver.md#optimizing-epubs)).
 * **Right-to-left scripts (Hebrew, Arabic):** Not currently supported. For BiDi / RTL support, use the original [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) firmware.
 * **CJK (Chinese, Japanese, Korean):** Not supported. See https://github.com/aBER0724/crosspoint-reader-cjk for a CJK-capable fork.
 

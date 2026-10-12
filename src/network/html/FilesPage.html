@@ -1327,6 +1327,42 @@
     }
 
     /* Delete modal */
+    .optimize-list {
+      max-height: 260px;
+      overflow: auto;
+      margin: 4px 0 12px;
+    }
+
+    .optimize-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 0;
+      border-top: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    .optimize-name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: var(--text-strong);
+    }
+
+    .optimize-state {
+      flex: none;
+      max-width: 55%;
+      text-align: right;
+      color: var(--text-muted);
+    }
+
+    .optimize-state.done {
+      color: var(--ok-text);
+    }
+
+    .optimize-state.failed {
+      color: var(--danger);
+    }
+
     .delete-warning {
       color: var(--danger);
       font-weight: 600;
@@ -1753,6 +1789,8 @@
     <div class="action-buttons">
       <button type="button" class="btn btn-primary" onclick="openUploadModal()">Upload</button>
       <button type="button" class="btn" onclick="openFolderModal()">New folder</button>
+      <button type="button" id="optimizeActionBtn" class="btn" onclick="openOptimizeSelectedModal()" disabled
+        title="Optimize the selected EPUBs for the reader, in place">Optimize</button>
       <button type="button" id="moveActionBtn" class="btn" onclick="openMoveSelectedModal()" disabled>Move</button>
       <button type="button" id="deleteActionBtn" class="btn btn-danger" onclick="openDeleteSelectedModal()" disabled>Delete</button>
     </div>
@@ -2040,6 +2078,24 @@
     </div>
   </div>
 
+  <!-- Optimize books already on the card -->
+  <div class="modal-overlay" id="optimizeModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeOptimizeModal()">&times;</button>
+      <h3>Optimize on the card</h3>
+      <div class="folder-form">
+        <p class="file-info">Each book is downloaded, optimized in this browser with the options under
+          Upload, Advanced Mode, and put back in its place.</p>
+        <p class="file-info">The original stays beside it as <strong>name.epub.bak</strong> (an older one is
+          kept). If long chapters get split, the book's reading position and bookmarks start over; otherwise
+          they stay.</p>
+        <div id="optimizeList" class="optimize-list"></div>
+        <button class="move-btn-confirm" id="optimizeStartBtn" onclick="optimizeSelected()">Optimize</button>
+        <button class="delete-btn-cancel" id="optimizeCancelBtn" onclick="closeOptimizeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Upload clash: the target folder already has a file of that name -->
   <div class="modal-overlay" id="clashModal">
     <div class="modal">
@@ -2211,6 +2267,7 @@
             if (overlay.id === 'uploadModal') return closeUploadModal();
             if (overlay.id === 'folderModal') return closeFolderModal();
             if (overlay.id === 'deleteModal') return closeDeleteModal();
+            if (overlay.id === 'optimizeModal') return closeOptimizeModal();
             if (overlay.id === 'renameModal') return closeRenameModal();
             if (overlay.id === 'moveModal') return closeMoveModal();
             // The upload is waiting on this answer; a click beside the dialog is not one.
@@ -2479,7 +2536,7 @@
       const progressFill = document.getElementById('progress-fill');
       const progressText = document.getElementById('progress-text');
       progressFill.style.width = '0%';
-      progressFill.style.backgroundColor = '#e74c3c';
+      progressFill.style.backgroundColor = 'var(--danger)';
       progressText.style.color = '#e74c3c';
       progressText.textContent = 'Upload cancelled by User!';
       // Re-enable the action button (uploadBtn is always visible at this point;
@@ -3512,6 +3569,105 @@
       const folderCount = items.filter(it => it.isFolder).length;
       document.getElementById('deleteActionBtn').disabled = items.length === 0;
       document.getElementById('moveActionBtn').disabled = fileCount === 0 || folderCount > 0;
+      document.getElementById('optimizeActionBtn').disabled = optimizeCandidates(items).length === 0;
+    }
+
+    // ---- Optimize books already on the card ------------------------------------------------------
+    //
+    // Each selected EPUB is downloaded, run through convertEpubFile() with the upload dialog's
+    // options, and sent to /api/book/replace, which swaps it in and keeps the original as .bak.
+    // keep=1 when the chapter list stayed as it was: the reading position and bookmarks still fit.
+    // One book at a time - the reader serves one connection at a time.
+    let optimizeItems = [];
+    let optimizeRunning = false;
+    let optimizeChanged = false;
+
+    function optimizeCandidates(items) {
+      return items.filter(it => !it.isFolder && /\.epub$/i.test(it.name));
+    }
+
+    function openOptimizeSelectedModal() {
+      optimizeItems = optimizeCandidates(getSelectedItems());
+      if (optimizeItems.length === 0) return;
+      const list = document.getElementById('optimizeList');
+      list.replaceChildren(...optimizeItems.map((it, i) => {
+        const row = document.createElement('div');
+        row.className = 'optimize-row';
+        const name = document.createElement('span');
+        name.className = 'optimize-name';
+        name.textContent = it.name;
+        const state = document.createElement('span');
+        state.className = 'optimize-state';
+        state.id = 'optimizeState' + i;
+        state.textContent = 'Waiting';
+        row.append(name, state);
+        return row;
+      }));
+      const start = document.getElementById('optimizeStartBtn');
+      start.disabled = false;
+      start.textContent = optimizeItems.length === 1 ? 'Optimize' : `Optimize ${optimizeItems.length} books`;
+      document.getElementById('optimizeCancelBtn').textContent = 'Cancel';
+      optimizeChanged = false;
+      document.getElementById('optimizeModal').classList.add('open');
+    }
+
+    function closeOptimizeModal() {
+      if (optimizeRunning) {
+        operationCancelled = true;  // the current book stops at its next step
+        return;
+      }
+      document.getElementById('optimizeModal').classList.remove('open');
+      if (optimizeChanged) window.location.reload();
+    }
+
+    async function optimizeSelected() {
+      if (optimizeRunning) return;
+      optimizeRunning = true;
+      operationCancelled = false;
+      document.getElementById('optimizeStartBtn').disabled = true;
+      document.getElementById('optimizeCancelBtn').textContent = 'Stop';
+      for (let i = 0; i < optimizeItems.length; i++) {
+        const it = optimizeItems[i];
+        const state = document.getElementById('optimizeState' + i);
+        if (operationCancelled) {
+          state.textContent = 'Not started';
+          continue;
+        }
+        try {
+          state.textContent = 'Downloading…';
+          const got = await fetch('/download?path=' + encodeURIComponent(it.path));
+          if (!got.ok) throw new Error('could not download it (' + got.status + ')');
+          const original = new File([await got.blob()], it.name, { type: 'application/epub+zip' });
+          const report = {};
+          const optimized = await convertEpubFile(original, (percent) => {
+            state.textContent = `Optimizing ${Math.round(percent)}%`;
+          }, report);
+          if (operationCancelled) throw new Error('Cancelled by user');
+          state.textContent = 'Saving…';
+          const put = await fetch('/api/book/replace?path=' + encodeURIComponent(it.path) +
+            '&keep=' + (report.spineChanged ? '0' : '1'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/epub+zip' },
+            body: optimized
+          });
+          if (!put.ok) {
+            let message = 'the reader answered ' + put.status;
+            try { message = (await put.json()).error || message; } catch (e) { /* not JSON */ }
+            throw new Error(message);
+          }
+          optimizeChanged = true;
+          state.textContent = `${formatBytes(original.size)} → ${formatBytes(optimized.size)}` +
+            (report.spineChanged ? ', reading position reset' : '');
+          state.classList.add('done');
+        } catch (e) {
+          state.textContent = e.message === 'Cancelled by user' ? 'Stopped' : 'Failed: ' + e.message;
+          state.classList.add('failed');
+        }
+      }
+      optimizeRunning = false;
+      operationCancelled = false;
+      document.getElementById('optimizeStartBtn').textContent = 'Done';
+      document.getElementById('optimizeCancelBtn').textContent = 'Close';
     }
 
     // Open delete modal for currently selected checkboxes
@@ -3866,8 +4022,16 @@
           crosspointVersion = data.version || 'Unknown';
           if (data.deviceType === 'X3' || data.deviceType === 'X4') {
             DETECTED_DEVICE = data.deviceType;
-            applyDeviceTarget();
+          } else if (data.deviceType && data.displayWidth > 0 && data.displayHeight > 0) {
+            // Another reader (the X4 Pro, the T5 S3, ...): Auto sizes for its own screen, upright.
+            DEVICE_PROFILES[data.deviceType] = {
+              width: Math.min(data.displayWidth, data.displayHeight),
+              height: Math.max(data.displayWidth, data.displayHeight),
+              label: data.deviceType
+            };
+            DETECTED_DEVICE = data.deviceType;
           }
+          if (DETECTED_DEVICE) applyDeviceTarget();
         }
       } catch (e) {
         console.error('Failed to fetch version:', e);
@@ -5985,8 +6149,11 @@
       });
     }
 
-    // Convert EPUB file - returns converted blob
-    async function convertEpubFile(file, progressCallback) {
+    // Convert EPUB file - returns converted blob. `report`, when given, is filled in with what changed
+    // beyond the images: chapters split (splitChapters, splitParts) and empty stubs collapsed
+    // (collapsedStubs); spineChanged is true when either changed the chapter list, which is what
+    // decides whether an optimized book keeps its reading position (optimizeSelected()).
+    async function convertEpubFile(file, progressCallback, report) {
       const startTime = Date.now();
       const originalSize = file.size;
 
@@ -6308,9 +6475,15 @@
           content, xhtmlPath, sectionSplitResult.anchorTargets, sectionSplitResult.partOrigins);
       }
       const splitChapterCount = Object.keys(sectionSplitResult.splitSections).length;
+      const splitPartCount = Object.values(sectionSplitResult.splitSections).reduce((sum, parts) => sum + parts.length, 0);
       if (splitChapterCount > 0) {
-        const splitPartCount = Object.values(sectionSplitResult.splitSections).reduce((sum, parts) => sum + parts.length, 0);
         logFix('EPUB sections', `${splitPartCount} parts from ${splitChapterCount} long sections`);
+      }
+      if (report) {
+        report.splitChapters = splitChapterCount;
+        report.splitParts = splitPartCount;
+        report.collapsedStubs = collapseResult.redirects.size;
+        report.spineChanged = splitChapterCount > 0 || collapseResult.redirects.size > 0;
       }
 
       // The NCX and other XML/SVG files can point into chapters too: scrub them and redirect
@@ -6717,7 +6890,7 @@
         if (currentIndex >= files.length) {
           // All files processed - show summary
           if (failedFiles.length === 0) {
-            progressFill.style.backgroundColor = '#4caf50';
+            progressFill.style.backgroundColor = 'var(--accent)';
             progressText.textContent = 'All uploads complete!';
 
             // Finalize batch log if in batch mode
@@ -6732,7 +6905,7 @@
               }, 1000);
             }
           } else {
-            progressFill.style.backgroundColor = '#e74c3c';
+            progressFill.style.backgroundColor = 'var(--danger)';
             const failedList = failedFiles.map(f => f.name).join(', ');
             progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
 
@@ -6767,7 +6940,7 @@
         // Reset progress bar instantly without transition when starting a new file
         progressFill.classList.add('no-transition');
         progressFill.style.width = '0%';
-        progressFill.style.backgroundColor = '#27ae60';
+        progressFill.style.backgroundColor = 'var(--accent)';
         // Re-enable transition after a brief delay
         setTimeout(() => progressFill.classList.remove('no-transition'), 50);
 
@@ -6863,7 +7036,7 @@
         try {
           // Convert EPUB if needed
           if (needsConversion) {
-            progressFill.style.backgroundColor = '#9b59b6'; // Purple for conversion
+            progressFill.style.backgroundColor = 'var(--accent-text)'; // a lighter tone while converting
             progressText.textContent = `Converting ${file.name} (${currentIndex + 1}/${files.length})...`;
 
             // Clear log for single file mode, or just add separator for batch mode
@@ -6884,7 +7057,7 @@
 
               // Create new File from converted blob
               file = new File([convertedBlob], file.name, { type: 'application/epub+zip' });
-              progressFill.style.backgroundColor = '#27ae60'; // Back to green for upload
+              progressFill.style.backgroundColor = 'var(--accent)'; // the usual tone for the upload
               conversionSucceeded = true;
               convOriginalSize = origFileSize;
               convNewSize = convertedBlob.size;
@@ -6905,7 +7078,7 @@
 
               // If conversion fails, try uploading original file
               progressText.textContent = `Conversion failed, uploading original ${file.name}...`;
-              progressFill.style.backgroundColor = '#e67e22'; // Orange for fallback
+              progressFill.style.backgroundColor = 'var(--warn-border)'; // warning tone for the fallback
               // Reset progress bar to 0% for original file upload
               progressFill.style.width = '0%';
             }
@@ -6972,7 +7145,7 @@
         // file inside it.
         progressText.textContent = 'Creating folders...';
         createDroppedFolders(stagedFolders).then(uploadNextFile).catch((err) => {
-          progressFill.style.backgroundColor = '#e74c3c';
+          progressFill.style.backgroundColor = 'var(--danger)';
           progressText.textContent = err && err.message ? err.message : String(err);
           isUploadInProgress = false;
           uploadBtn.disabled = false;
