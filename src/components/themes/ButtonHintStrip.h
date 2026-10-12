@@ -30,8 +30,9 @@ namespace ButtonHintStrip {
 struct Strip {
   int y = 0;
   int height = 0;
-  int width = 0;
   int x[4] = {0, 0, 0, 0};
+  // Per box: a box grows when its label needs the room (HintLayout).
+  int width[4] = {0, 0, 0, 0};
   // False for an empty label. BaseTheme skips such a box entirely and LyraTheme shrinks it
   // to a decorative stub, so in neither case is there something there for a finger to mean.
   bool active[4] = {false, false, false, false};
@@ -105,11 +106,11 @@ inline bool hasStrip() {
 // Pure geometry, split out so the arithmetic can be tested without the shared state.
 // Returns 0..3 for the box containing the point, or -1 for a miss.
 inline int hitTestIn(const Strip& s, const int px, const int py) {
-  if (s.height <= 0 || s.width <= 0) return -1;
+  if (s.height <= 0) return -1;
   if (py < s.y || py >= s.y + s.height) return -1;
   for (int i = 0; i < 4; ++i) {
     if (!s.active[i]) continue;
-    if (px >= s.x[i] && px < s.x[i] + s.width) return i;
+    if (px >= s.x[i] && px < s.x[i] + s.width[i]) return i;
   }
   return -1;
 }

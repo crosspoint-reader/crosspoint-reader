@@ -201,6 +201,49 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+int BaseTheme::hintLabelWidth(const GfxRenderer& renderer, const int fontId, const char* label) {
+  return label != nullptr && label[0] != '\0' ? renderer.getTextWidth(fontId, label) : 0;
+}
+
+BaseTheme::FittedHintLabel BaseTheme::fitHintLabel(const GfxRenderer& renderer, const int fontId, const char* label,
+                                                   const int maxWidth) {
+  const int fitted = renderer.getTextWidth(fontId, label) > maxWidth ? FIT_SMALL_FONT_ID : fontId;
+  return {fitted, renderer.truncatedText(fitted, label, maxWidth)};
+}
+
+void BaseTheme::layOutButtonHints(const GfxRenderer& renderer, const int fontId, const int base, const int (&tuned)[4],
+                                  const char* const (&labels)[4], int (&x)[4], int (&width)[4]) {
+  const int maxWidth = HintLayout::bottomMaxWidth(renderer.getScreenWidth(), base, tuned);
+  for (int i = 0; i < 4; i++) {
+    const int needed = hintLabelWidth(renderer, fontId, labels[i]) + HintLayout::BOTTOM_LABEL_PADDING;
+    width[i] = HintLayout::grow(base, needed, maxWidth);
+  }
+  HintLayout::placeBottom(renderer.getScreenWidth(), base, tuned, width, x);
+}
+
+HintLayout::Span BaseTheme::sideHintSpan(const GfxRenderer& renderer) {
+  // The header sits at the logical top, which crosses the side column only in the two portrait
+  // frames; the landscape ones run it along another panel edge.
+  const GfxRenderer::Orientation orientation = renderer.getOrientation();
+  const bool landscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
+                         orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const HintLayout::HeaderEdge header =
+      orientation == GfxRenderer::Orientation::Portrait           ? HintLayout::HeaderEdge::PanelTop
+      : orientation == GfxRenderer::Orientation::PortraitInverted ? HintLayout::HeaderEdge::PanelBottom
+                                                                  : HintLayout::HeaderEdge::None;
+  // Read live: the bottom strip and the header both grow with the UI font size.
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const int panelHeight = landscape ? renderer.getScreenWidth() : renderer.getScreenHeight();
+  return HintLayout::sideFreeSpan(panelHeight, metrics.buttonHintsHeight, metrics.topPadding + metrics.headerHeight,
+                                  header);
+}
+
+int BaseTheme::sideHintNeededLength(const GfxRenderer& renderer, const int fontId, const char* upLabel,
+                                    const char* downLabel) {
+  return std::max(hintLabelWidth(renderer, fontId, upLabel), hintLabelWidth(renderer, fontId, downLabel)) +
+         HintLayout::SIDE_LABEL_PADDING;
+}
+
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
@@ -227,6 +270,10 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   ButtonHintLayout::positions(renderer.getScreenWidth(), buttonWidth, x4ButtonPositions, x3ButtonPositions,
                               buttonPositions);
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  // A box grows when its label needs it, and the strip makes room around it.
+  int boxX[4];
+  int boxWidth[4];
+  layOutButtonHints(renderer, UI_10_FONT_ID, buttonWidth, buttonPositions, labels, boxX, boxWidth);
   // Inverted flips both axes, so the strip's panel-bottom band becomes the top one and each slot
   // mirrors across the width. Labels keep their hardware index — the mirroring is what carries
   // each box back to its own button.
@@ -237,9 +284,9 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   ButtonHintStrip::Strip strip;
   strip.y = pageHeight - buttonY;
   strip.height = buttonHeight;
-  strip.width = buttonWidth;
   for (int i = 0; i < 4; i++) {
-    strip.x[i] = buttonPositions[i];
+    strip.x[i] = boxX[i];
+    strip.width[i] = boxWidth[i];
     strip.active[i] = labels[i] != nullptr && labels[i][0] != '\0';
   }
   ButtonHintStrip::record(strip);
@@ -247,17 +294,15 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   for (int i = 0; i < 4; i++) {
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = inverted ? pageWidth - buttonPositions[i] - buttonWidth : buttonPositions[i];
-      renderer.fillRect(x, stripY, buttonWidth, buttonHeight, false);
-      // See LyraTheme::drawButtonHints: fixed box, scaling font, centred text. Shrink first,
-      // clip only if even the smaller face will not fit.
-      const int labelFont =
-          renderer.getTextWidth(UI_10_FONT_ID, labels[i]) > buttonWidth - 4 ? FIT_SMALL_FONT_ID : UI_10_FONT_ID;
-      const std::string label = renderer.truncatedText(labelFont, labels[i], buttonWidth - 4);
-      const int textWidth = renderer.getTextWidth(labelFont, label.c_str());
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(labelFont, textX, stripY + textYOffset, label.c_str());
-      renderer.drawRect(x, stripY, buttonWidth, buttonHeight);
+      const int width = boxWidth[i];
+      const int x = inverted ? pageWidth - boxX[i] - width : boxX[i];
+      renderer.fillRect(x, stripY, width, buttonHeight, false);
+      const FittedHintLabel label =
+          fitHintLabel(renderer, UI_10_FONT_ID, labels[i], width - HintLayout::BOTTOM_LABEL_PADDING);
+      const int textWidth = renderer.getTextWidth(label.fontId, label.text.c_str());
+      const int textX = x + (width - 1 - textWidth) / 2;
+      renderer.drawText(label.fontId, textX, stripY + textYOffset, label.text.c_str());
+      renderer.drawRect(x, stripY, width, buttonHeight);
     }
   }
 
@@ -275,6 +320,10 @@ void BaseTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   // mirroring below keeps every box on the same panel spot and turns only the text round, which
   // is all LandscapeCounterClockwise needs too (issue #336).
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
+  // How far the boxes may grow along the column, and how far their labels want them to. The span
+  // reads the live orientation, so it is taken before the draw is forced into the panel frame.
+  const HintLayout::Span span = sideHintSpan(renderer);
+  const int needed = sideHintNeededLength(renderer, SMALL_FONT_ID, upBtn, downBtn);
   const bool inverted = orig_orientation == GfxRenderer::Orientation::PortraitInverted ||
                         orig_orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   renderer.setDrawOrientation(inverted ? GfxRenderer::Orientation::PortraitInverted
@@ -283,8 +332,10 @@ void BaseTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)
+  constexpr int buttonHeight = 80;  // Tuned height on screen (width when rotated); a longer label grows it
   constexpr int buttonMargin = 4;
+  const bool hasUp = upBtn != nullptr && upBtn[0] != '\0';
+  const bool hasDown = downBtn != nullptr && downBtn[0] != '\0';
 
   // Panel -> drawing space. Upright, that is the identity; inverted, both axes mirror, and these
   // three wrappers are the only place that has to know. Text is anchored at the left edge of its
@@ -298,11 +349,15 @@ void BaseTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   const auto rect = [&](const int x, const int y, const int w, const int h) {
     renderer.drawRect(inverted ? screenWidth - x - w : x, inverted ? screenHeight - y - h : y, w, h);
   };
-  const auto textCW = [&](const int x, const int y, const char* text) {
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, text);
-    const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-    renderer.drawTextRotated90CW(SMALL_FONT_ID, inverted ? screenWidth - x - textHeight : x,
-                                 inverted ? screenHeight - 1 - y + textWidth : y, text);
+  // Fits the label to its box (y, length) and centres it there.
+  const auto label = [&](const int x, const int y, const int length, const char* text) {
+    const FittedHintLabel fitted = fitHintLabel(renderer, SMALL_FONT_ID, text, length - HintLayout::SIDE_LABEL_PADDING);
+    const int textWidth = renderer.getTextWidth(fitted.fontId, fitted.text.c_str());
+    const int textHeight = renderer.getTextHeight(fitted.fontId);
+    const int textX = x + (buttonWidth - textHeight) / 2;
+    const int textY = y + (length + textWidth) / 2;
+    renderer.drawTextRotated90CW(fitted.fontId, inverted ? screenWidth - textX - textHeight : textX,
+                                 inverted ? screenHeight - 1 - textY + textWidth : textY, fitted.text.c_str());
   };
 
   if (gpio.deviceIsX3()) {
@@ -310,78 +365,73 @@ void BaseTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
     constexpr int x3ButtonY = 155;
     const int leftX = buttonMargin;
     const int rightX = screenWidth - buttonMargin - buttonWidth;
+    const HintLayout::Box box = HintLayout::sideCentred(x3ButtonY + buttonHeight / 2, buttonHeight, needed, span);
 
     // Publish geometry for touch, in the same un-mirrored logical coordinates rect() mirrors
     // from -- see BaseTheme::drawButtonHints for why the strip is recorded un-inverted even
     // when the draw itself flips for PortraitInverted.
     ButtonHintStrip::SideStrip strip;
     strip.x[0] = leftX;
-    strip.y[0] = x3ButtonY;
+    strip.y[0] = box.y;
     strip.width[0] = buttonWidth;
-    strip.height[0] = buttonHeight;
-    strip.active[0] = upBtn != nullptr && upBtn[0] != '\0';
+    strip.height[0] = box.height;
+    strip.active[0] = hasUp;
     strip.x[1] = rightX;
-    strip.y[1] = x3ButtonY;
+    strip.y[1] = box.y;
     strip.width[1] = buttonWidth;
-    strip.height[1] = buttonHeight;
-    strip.active[1] = downBtn != nullptr && downBtn[0] != '\0';
+    strip.height[1] = box.height;
+    strip.active[1] = hasDown;
     ButtonHintStrip::Side::record(strip);
 
-    if (upBtn != nullptr && upBtn[0] != '\0') {
-      rect(leftX, x3ButtonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, upBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      textCW(leftX + (buttonWidth - textHeight) / 2, x3ButtonY + (buttonHeight + textWidth) / 2, upBtn);
+    if (hasUp) {
+      rect(leftX, box.y, buttonWidth, box.height);
+      label(leftX, box.y, box.height, upBtn);
     }
 
-    if (downBtn != nullptr && downBtn[0] != '\0') {
-      rect(rightX, x3ButtonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, downBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      textCW(rightX + (buttonWidth - textHeight) / 2, x3ButtonY + (buttonHeight + textWidth) / 2, downBtn);
+    if (hasDown) {
+      rect(rightX, box.y, buttonWidth, box.height);
+      label(rightX, box.y, box.height, downBtn);
     }
   } else {
-    // X4 layout: Both buttons stacked on right side
+    // X4 layout: Both buttons stacked on right side, sharing the line between them
     constexpr int topButtonY = 345;
-    const char* labels[] = {upBtn, downBtn};
     const int x = screenWidth - buttonMargin - buttonWidth;
+    const HintLayout::Stack stack =
+        HintLayout::sideStacked(topButtonY + buttonHeight, /*gap=*/0, buttonHeight, needed, span);
+    const HintLayout::Box& up = stack.up;
+    const HintLayout::Box& down = stack.down;
+    const int junction = down.y;
+    const int bottom = down.y + down.height - 1;
 
     ButtonHintStrip::SideStrip strip;
     strip.x[0] = x;
-    strip.y[0] = topButtonY;
+    strip.y[0] = up.y;
     strip.width[0] = buttonWidth;
-    strip.height[0] = buttonHeight;
-    strip.active[0] = upBtn != nullptr && upBtn[0] != '\0';
+    strip.height[0] = up.height;
+    strip.active[0] = hasUp;
     strip.x[1] = x;
-    strip.y[1] = topButtonY + buttonHeight;
+    strip.y[1] = down.y;
     strip.width[1] = buttonWidth;
-    strip.height[1] = buttonHeight;
-    strip.active[1] = downBtn != nullptr && downBtn[0] != '\0';
+    strip.height[1] = down.height;
+    strip.active[1] = hasDown;
     ButtonHintStrip::Side::record(strip);
 
-    if (upBtn != nullptr && upBtn[0] != '\0') {
-      line(x, topButtonY, x + buttonWidth - 1, topButtonY);
-      line(x, topButtonY, x, topButtonY + buttonHeight - 1);
-      line(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);
+    if (hasUp) {
+      line(x, up.y, x + buttonWidth - 1, up.y);
+      line(x, up.y, x, junction - 1);
+      line(x + buttonWidth - 1, up.y, x + buttonWidth - 1, junction - 1);
+      label(x, up.y, up.height, upBtn);
     }
 
-    if ((upBtn != nullptr && upBtn[0] != '\0') || (downBtn != nullptr && downBtn[0] != '\0')) {
-      line(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);
+    if (hasUp || hasDown) {
+      line(x, junction, x + buttonWidth - 1, junction);
     }
 
-    if (downBtn != nullptr && downBtn[0] != '\0') {
-      line(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);
-      line(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);
-      line(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);
-    }
-
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topButtonY + i * buttonHeight;
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-        textCW(x + (buttonWidth - textHeight) / 2, y + (buttonHeight + textWidth) / 2, labels[i]);
-      }
+    if (hasDown) {
+      line(x, junction, x, bottom);
+      line(x + buttonWidth - 1, junction, x + buttonWidth - 1, bottom);
+      line(x, bottom, x + buttonWidth - 1, bottom);
+      label(x, down.y, down.height, downBtn);
     }
   }
 
