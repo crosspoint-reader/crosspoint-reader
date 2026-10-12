@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Parity test: fontconvert_sdcard.py (FreeType via freetype-py) vs cpfont-raster.mjs (FreeType wasm).
 //
-//   node test/parity.mjs [--dist dist/ft2.13.3-hblean] [--sets core,literata,wide]
+//   node test/parity.mjs [--dist <dir with ftwasm.mjs>] [--sets core,literata,wide,otf]
 //                        [--python venv/bin/python] [--ref out/ref-wheel] [--regen]
 //                        [--show 40] [--ascii 3] [--json out/summary.json]
 //
@@ -12,13 +12,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FreeTypeWasm, rasterizeStyle, resolveIntervals } from '../js/cpfont-raster.mjs';
-import { jobsFor, REPO } from './jobs.mjs';
+import { findDist, jobsFor, REPO } from './jobs.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
 function parseArgs(argv) {
-  const a = { dist: 'dist/ft2.13.3-hblean', sets: 'core', python: 'venv/bin/python', ref: 'out/ref-wheel',
+  const a = { dist: '', sets: 'core', python: 'venv/bin/python', ref: 'out/ref-wheel',
               regen: false, show: 40, ascii: 0, json: '' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i].replace(/^--/, '');
@@ -27,7 +27,8 @@ function parseArgs(argv) {
   }
   a.show = Number(a.show);
   a.ascii = Number(a.ascii);
-  for (const k of ['dist', 'python', 'ref']) if (!path.isAbsolute(a[k])) a[k] = path.join(ROOT, a[k]);
+  for (const k of ['python', 'ref']) if (!path.isAbsolute(a[k])) a[k] = path.join(ROOT, a[k]);
+  a.dist = findDist(ROOT, a.dist);
   return a;
 }
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Loads the module the way a page/worker would (wasm bytes handed in, no filesystem),
 // forces wasm memory growth mid-run, and checks the output does not change.
-//   node test/smoke.mjs [dist/ft2.13.3-hblean]
+//   node test/smoke.mjs [<dir with ftwasm.mjs>]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FreeTypeWasm, rasterizeStyle, resolveIntervals } from '../js/cpfont-raster.mjs';
-import { JOB_SETS } from './jobs.mjs';
+import { findDist, JOB_SETS } from './jobs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const dist = path.resolve(ROOT, process.argv[2] ?? 'dist/ft2.13.3-hblean');
+const dist = findDist(ROOT, process.argv[2]);
 const { default: createFtWasm } = await import(pathToFileURL(path.join(dist, 'ftwasm.mjs')).href);
 const ft = await FreeTypeWasm.create(createFtWasm, { wasmBinary: fs.readFileSync(path.join(dist, 'ftwasm.wasm')) });
 const job = JOB_SETS.core[0];

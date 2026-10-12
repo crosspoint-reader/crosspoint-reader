@@ -1,7 +1,14 @@
 // Job sets for the parity test: fonts from the repo, intervals as in sd-fonts.yaml.
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export const REPO = process.env.REPO ?? path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..');
+// In the repo (tools/ftwasm/test) the checkout is three levels up; elsewhere set REPO.
+const inRepo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+export const REPO = process.env.REPO ?? inRepo;
+if (!fs.existsSync(path.join(REPO, 'lib/EpdFont/scripts'))) {
+  throw new Error(`no firmware checkout at ${REPO}: run from the repository, or set REPO`);
+}
 const D = path.join(REPO, 'lib/EpdFont/scripts/downloaded_fonts');
 // CFF-flavoured OpenType (no such font in the repo): Adobe's own OTF release of Source Serif 4.
 const OTF = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../dl/fonts-otf');
@@ -67,4 +74,16 @@ export function jobsFor(names) {
     for (const j of JOB_SETS[n]) if (!seen.has(j.id)) { seen.add(j.id); out.push(j); }
   }
   return out;
+}
+
+/**
+ * The FreeType build to test: an explicit --dist, else dist/ (the layout committed
+ * in the repo: dist/ftwasm.mjs), else dist/ft2.13.3-hblean/ (build.sh's default OUT).
+ */
+export function findDist(root, explicit) {
+  const candidates = explicit ? [path.resolve(root, explicit)]
+                              : [path.join(root, 'dist'), path.join(root, 'dist/ft2.13.3-hblean')];
+  const d = candidates.find((c) => fs.existsSync(path.join(c, 'ftwasm.mjs')));
+  if (!d) throw new Error(`no ftwasm.mjs in ${candidates.join(' or ')}; run build.sh`);
+  return d;
 }

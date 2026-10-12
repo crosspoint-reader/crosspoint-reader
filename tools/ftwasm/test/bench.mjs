@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 // Timing: one whole family (4 styles x sizes 10,12,14,16,18) through cpfont-raster.mjs in Node.
-//   node test/bench.mjs [--dist dist/ft2.13.3-hblean] [--family Literata] [--runs 3]
+//   node test/bench.mjs [--dist <dir with ftwasm.mjs>] [--family Literata] [--runs 3]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FreeTypeWasm, rasterizeStyle, resolveIntervals } from '../js/cpfont-raster.mjs';
-import { JOB_SETS } from './jobs.mjs';
+import { findDist, JOB_SETS } from './jobs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const args = { dist: 'dist/ft2.13.3-hblean', family: 'Literata', runs: '3' };
+const args = { dist: '', family: 'Literata', runs: '3' };
 for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].replace(/^--/, '')] = process.argv[i + 1];
 
 const t0 = performance.now();
-const { default: createFtWasm } = await import(pathToFileURL(path.resolve(ROOT, args.dist, 'ftwasm.mjs')).href);
+const { default: createFtWasm } = await import(pathToFileURL(path.join(findDist(ROOT, args.dist), 'ftwasm.mjs')).href);
 const ft = await FreeTypeWasm.create(createFtWasm);
 const initMs = performance.now() - t0;
 

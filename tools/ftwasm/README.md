@@ -1,9 +1,13 @@
 # ftwasm: FreeType in the browser for the .cpfont converter
 
-This is the engine for turning TTF/OTF fonts into `.cpfont` in the browser. It
-produces the same per-glyph data as `lib/EpdFont/scripts/fontconvert_sdcard.py`.
-It covers glyphs, bitmaps and metrics. Kerning, ligatures and the file writer are
-not ported yet (see the last section).
+This turns TTF/OTF fonts into `.cpfont` files in the browser. The files are byte-identical
+to what `lib/EpdFont/scripts/fontconvert_sdcard.py` writes for the same fonts, sizes and
+interval presets.
+
+It has two layers:
+- FreeType compiled to WebAssembly plus `js/cpfont-raster.mjs`: glyph bitmaps and metrics.
+- `js/cpfont-writer.mjs`: kerning, ligatures, synthetic bold and the v4 file layout.
+  `convertFamily()` is the single entry point.
 
 ## Results
 
@@ -15,6 +19,9 @@ not ported yet (see the last section).
 | Parity vs the repo's Python converter | **70,148 / 70,148 glyphs byte-identical (100 %)**: 62 style-sizes over 7 families, every glyph checked for bitmap, width, height, advance, left and top. advanceY, ascender, descender and the validated intervals are identical for all 62 |
 | Whole family in Node (Literata, 4 styles × 10/12/14/16/18 pt, 18,060 glyphs, 1.75 MB bitmaps) | **~145 ms** warm, 160 ms first run; module load + init 4 ms |
 | Same family in Python (`rasterize_font_style`, includes fontTools kerning) | ~234 s (measured while other jobs were running, so only a rough figure) |
+| **Complete .cpfont files vs the Python CLI** | **18 / 18 files byte-identical** (8 cases, 8.8 MiB), plus 11 / 11 with the opt-in kerning fix against the patched script; see [Writer](#writer-complete-cpfont-files) |
+| Complete family in Node (Literata, 4 styles × 5 sizes → 5 files, 2.93 MB) | **~0.8 s** warm, 0.9 s first run. The Python CLI takes 247 s |
+| JS modules (raster + writer + OpenType reader) | 52 KB raw / 16.5 KB gzip -9, no dependencies |
 
 The build is reproducible bit for bit. Two builds into different directories gave the same
 `ftwasm.wasm` sha256: `923b85dc94c125b3849f52b82800c556fb9376cfd025d058304d8c22a3592902`.
@@ -103,6 +110,10 @@ csrc/ftwasm.c            the C surface (ftw_* functions below)
 csrc/ftmodule.h          module list: autofit, truetype, cff, psaux, psnames, sfnt, smooth
 csrc/hb-ftwasm-config.h  lean HarfBuzz switches (with the reasoning)
 js/cpfont-raster.mjs     JS rasteriser (port of rasterize_font_style's glyph half)
+js/cpfont-writer.mjs     convertFamily(): kerning, ligatures, synthetic bold, v4 file layout
+js/otf-tables.mjs        the fontTools subset the script uses: head, cmap, kern, GPOS/GSUB
+js/pyset-order.mjs       CPython set iteration order (ligature lookups are visited in it)
+patches/                 fontconvert_sdcard-kerning-first-match.patch (opt-in fix, not applied)
 dist/<variant>/          ftwasm.mjs + ftwasm.wasm + BUILDINFO.txt (versions, sha256s, sizes)
 test/parity.mjs          parity test (Python dump vs JS, byte for byte)
 test/py_dump.py          runs the repo's own rasterize_font_style() and dumps JSON
@@ -113,9 +124,13 @@ test/build_native_ft.sh  native FreeType+HarfBuzz via freetype-py's recipe -> ve
 test/bench.mjs           whole-family timing
 test/smoke.mjs           page-style load (wasmBinary), memory growth mid-run
 test/kern_semantics.py   measures the kerning-summing quirk described below
+test/file_parity.mjs     whole-file parity: Python CLI vs convertFamily(), byte for byte
+test/make_kern_fonts.py  builds test fonts with a legacy 'kern' table (none in the repo has one)
+test/bench_writer.mjs    whole-family timing of the complete conversion
 venv/                    freetype-py 2.5.1 wheel (FreeType 2.13.2 + HarfBuzz 8.3.0) + fonttools 4.63.0
 venv-ft2.13.3/           same, with a native FreeType 2.13.3 + HarfBuzz 8.3.0 libfreetype.so
-out/                     Python reference dumps (ref-wheel/, ref-native-ft2.13.3/), parity logs/JSON
+out/                     Python reference dumps (ref-wheel/, ref-native-ft2.13.3/), CLI output
+                         (cli/, cli-first-match/), generated kern fonts (fonts-kern/), logs
 dl/                      downloads: tarballs + .sig, GnuPG keyring, freetype-py sdist, OTF test fonts
 emsdk/                   the pinned emscripten SDK (created by build.sh)
 ```
@@ -124,6 +139,7 @@ emsdk/                   the pinned emscripten SDK (created by build.sh)
 
 ```sh
 ./build.sh                                   # FreeType 2.13.3 + lean HarfBuzz 8.3.0 -> dist/ft2.13.3-hblean
+                                             # (the repo commits this build flattened into dist/)
 FT_VERSION=2.13.2 HARFBUZZ=none ./build.sh   # other variants: HARFBUZZ=none|lean|full, OPT_FLAGS="-Os"
 ```
 
@@ -214,36 +230,158 @@ for this line in the documentation; for 2.13.3, `<year>` is 2024:
 The HarfBuzz notice must also ship with the page, because HarfBuzz is now linked in.
 HarfBuzz uses the "Old MIT" licence, which requires the copyright notice and its two
 disclaimer paragraphs "in all copies of this software". Ship
-`build/src/harfbuzz-8.3.0/COPYING` verbatim, for example as `licenses/harfbuzz.txt` next to
-the wasm, with a link from the credits. FreeType's `src/autofit/ft-hb.c` carries the same
+`build/src/harfbuzz-8.3.0/COPYING` verbatim next to the wasm, with a link from the credits.
+In the repo it is committed as `dist/licenses/HarfBuzz-COPYING.txt`, next to
+`FreeType-FTL.txt`. FreeType's `src/autofit/ft-hb.c` carries the same
 notice (Red Hat / Google). A credits block could read:
 
 > Font rasterisation: FreeType 2.13.3 (FreeType License) with HarfBuzz 8.3.0 (Old MIT licence; see licenses/harfbuzz.txt).
 > Portions of this software are copyright © 2024 The FreeType Project (www.freetype.org). All rights reserved.
 
-## What remains to port (writer), and pitfalls
 
-None of this needs FreeType. It needs a small OpenType table reader in JS: `head`, `cmap`,
-`kern`, `GPOS` and `GSUB`.
+## Writer: complete .cpfont files
 
-### Kerning: `extract_kerning_fonttools` + `derive_kern_classes`
+```js
+import createFtWasm from './dist/ftwasm.mjs';
+import { FreeTypeWasm } from './js/cpfont-raster.mjs';
+import { convertFamily } from './js/cpfont-writer.mjs';
 
-**Sources.** Two sources are read:
-- The legacy `kern` table: every format-0 subtable fontTools exposes. Coverage bits (horizontal,
-  cross-stream, minimum, override) are ignored.
-- GPOS: every lookup of every `kern` feature, under all scripts and language systems. Only
-  lookup type 2 is used, with type-9 extension wrappers unwrapped. The effective type comes from
-  `ExtensionLookupType`. Contextual kerning (type 8) is dropped silently.
-- Only `Value1.XAdvance` is used. Value2, XPlacement and Device/VariationIndex records are
-  ignored.
+const ft = await FreeTypeWasm.create(createFtWasm);      // once per worker
+const files = convertFamily(ft, {
+  fonts: { regular, bold, italic, bolditalic },          // Uint8Array each; any subset of the four
+  sizes: [10, 12, 14, 16, 18],                            // or "10,12,14,16,18"
+  intervals: 'builtin,latin-cyrillic,greek-letters,musical-symbols',  // as in sd-fonts.yaml
+  name: 'Literata',                                       // file names: Literata_<size>.cpfont
+  // fileNames: { regular: 'Literata-Regular.ttf', ... }  // optional: error messages, default name
+  // syntheticBold: false,                                // --synthetic-bold
+  // kerning: 'sum',                                      // 'first-match' = the fix, off by default
+  // onProgress: ({ size, style, done, total }) => {},
+});
+// files: [{ fileName, size, bytes: Uint8Array, styles: [{ style, glyphs, kernLeftClasses,
+//          kernRightClasses, kerningDropped, ligatures, ligaturesTruncated, ... }] }]
+```
 
-**Summing.** Values are summed over everything: across lookups, across subtables in a lookup,
-and across `kern` + GPOS. That is not OpenType's rule. Within one lookup, the first subtable that
-matches a pair wins, which is how exceptions override class kerning: a format-1 pair subtable
-comes before format-2 class subtables.
-- `test/kern_semantics.py` compares the converter's sum with a first-match evaluation at 14 pt.
+This is what `build-sd-fonts.py` runs for each family in `sd-fonts.yaml`:
 
-| font | pairs that differ |
+```
+fontconvert_sdcard.py --regular R --bold B --italic I --bolditalic BI \
+  --intervals <set> --sizes <list> --name <name> --output-dir <dir>/
+```
+
+A family with a single style uses a positional font plus `--style` instead; the output layout
+is the same. There is one `<name>_<size>.cpfont` per size, holding all the given styles.
+
+- **Errors.** Errors are thrown with clear messages:
+  - **Variable fonts** (an `fvar` table) are refused with a `FontError`. The Python script would
+    silently use the default instance; `build-sd-fonts.py` instead makes static instances with
+    fontTools first, which the browser cannot reproduce.
+  - TTC/OTC collections, WOFF/WOFF2 and unsupported cmap formats are refused too.
+  - Values that Python's `struct.pack` would reject raise a `RangeError` naming the field (for
+    example a glyph wider than 255 px), as does `advanceY > 255`.
+- **No compression.** `.cpfont` stores the 2-bit bitmaps uncompressed. `fontconvert_sdcard.py`
+  imports `zlib` only for its `--debug-images` PNGs. zopfli and the grouped/deflated glyph
+  storage belong to `fontconvert.py`, which builds the built-in `.h` fonts. Byte-identical
+  output therefore needs no deflate implementation.
+- **Worker-safe.** The writer modules use no Node or DOM APIs: only `DataView`, `Map`/`Set`
+  and `TextEncoder`.
+
+### Parity (`test/file_parity.mjs`)
+
+The Python CLI runs exactly as `build-sd-fonts.py` invokes it, with freetype-py 2.5.1. Its
+output is compared with `convertFamily()` byte for byte. On a mismatch, the test names the
+first differing byte's section, for example "style 2 kern matrix [37]".
+
+| case | what it covers | sizes | files identical | JS | Python |
+|---|---|---|---:|---:|---:|
+| Literata (4 styles) | the sd-fonts.yaml family; GPOS extension lookups | 10–18 | 5/5 | 0.84 s | 247 s |
+| Bookerly-SD (4 styles, `builtin`) | GPOS **and GSUB** extension lookups (ligatures via type 7), as `generate-sd-fonts.sh` | 12–18 | 4/4 | 0.62 s | 263 s |
+| OpenDyslexic (4 styles) | **CFF** outlines (in the repo) | 12, 16 | 2/2 | 0.14 s | 243 s |
+| SourceSerif4 OTF (2 styles) | CFF, Adobe release | 14 | 1/1 | 0.15 s | 14 s |
+| Inter (2 styles) | 2048 upem: 129 kerning values in Inter Bold 12 pt are exact .5 ties where `Math.round` would differ | 12, 14 | 2/2 | 0.44 s | 43 s |
+| KernTest (3 styles, generated) | legacy `kern`: one subtable + GPOS (both summed), two format-0 subtables + a format-2 stub, Apple version 1 | 12, 14 | 2/2 | 0.32 s | 59 s |
+| SynthBold | `--synthetic-bold`, with bold = regular file (dilation verified as applied) | 14 | 1/1 | 0.18 s | 27 s |
+| Charis | single-style mode (positional font + `--style`) | 14 | 1/1 | 0.07 s | 11 s |
+| **total** | | | **18/18** (8.8 MiB) | | |
+
+A Bitter variable font is refused with: `Bitter[wght].ttf: variable fonts are not supported (it
+has an 'fvar' table). Use the static .ttf/.otf files of the family, or make a static instance
+first (fontTools varLib.instancer, as build-sd-fonts.py does).`
+
+Timing (`test/bench_writer.mjs`): Literata, 4 styles × 5 sizes → 5 files (2.93 MB), takes
+**0.80–0.88 s** warm and about 0.9 s on the first run in Node 22. Of that, rasterising is about
+0.15 s. Most of the rest is kerning: expanding about 92k design-unit pairs per style, then
+deriving classes.
+
+```sh
+node test/file_parity.mjs                                  # all cases; Python output cached in out/cli/
+node test/file_parity.mjs --cases Literata,Bookerly --regen
+node test/bench_writer.mjs
+```
+
+### How the writer reproduces the script, including its quirks
+
+**fontTools semantics.** `js/otf-tables.mjs` reads tables the way fontTools does, keyed by
+glyph id; fontTools keeps glyph names unique, so ids and names map one to one.
+- `getBestCmap()`:
+  - preference order (3,10) (0,6) (0,4) (3,1) (0,3) (0,2) (0,1) (0,0), first matching subtable
+    in file order;
+  - gid-0 entries are dropped, a repeated code keeps its first position but takes the last gid;
+  - in format 4 the last segment is always skipped.
+- `kern` table:
+  - only format-0 subtables are read, coverage bits are ignored, and Apple version-1 headers
+    are understood;
+  - with exactly one subtable, the length comes from nPairs;
+  - a pair repeated inside a subtable keeps its last value.
+- Coverage format 2 ranges are stable-sorted by StartCoverageIndex. ClassDef never stores
+  class 0. ValueRecord sizes count all 16 format bits.
+
+**Kerning, as `extract_kerning_fonttools` does it today.**
+- What is read and summed:
+  - every format-0 `kern` pair, plus every `kern`-feature lookup from all scripts and
+    languages;
+  - only PairPos (type 2, also inside type-9 extensions), `Value1.XAdvance` only;
+  - values are **summed across all subtables and lookups and both tables**.
+- Rounding: Python `round()` is half to even; JS uses its own `roundHalfEven()`. The doubles
+  are computed in the same order: `size*150.0/72.0`, `/upem`, then `du*scale*16`.
+- Values are clamped to int8, and pairs that end up 0 are dropped before the codepoint
+  aliases are expanded. SMP codepoints are dropped afterwards.
+- Classes come from identical rows and columns, numbered in ascending codepoint order. More
+  than 255 classes on either side writes **no kerning at all** for that style. The `styles`
+  result shows it as `kerningDropped`.
+
+**Ligatures, as `extract_ligatures_fonttools` does it.**
+- Lookups:
+  - `liga` and `rlig` only, LigatureSubst only (type 4, also inside type 7);
+  - lookups are visited in **CPython `set` iteration order**, which `js/pyset-order.mjs`
+    reproduces. That order is not ascending: 2,964 of 3,000 random lookup-index sets came out
+    non-ascending. All 3,000 matched real Python 3.14, which matters when two lookups map the
+    same sequence differently.
+- The glyph-to-codepoint map:
+  - it is built from the whole best cmap, and the last codepoint wins for aliased glyphs;
+  - `STANDARD_LIGATURE_MAP` is the fallback.
+- Filtering and output:
+  - only ligatures whose inputs and output are all requested codepoints ≤ U+FFFF are kept;
+  - 3+ character ligatures are chained through their prefix ligature;
+  - the list is stable-sorted by the packed key, then truncated to 255.
+
+**Synthetic bold.** When style 1 or 3 is pixel-identical to its base for A, a, g and 0, every
+glyph gets a 3×3 max-dilation. The base is italic for style 3 when italic is present,
+otherwise regular.
+
+**File layout.**
+- A 32-byte header `<8sHHB19s` and 32-byte TOC entries `<B3xIIBhhHHBBBI4x`.
+- Per style, back to back with no padding: intervals `<III`, glyphs `<BBHhhH2xI`, kern left
+  `<HB`, kern right `<HB`, the int8 matrix, ligatures `<II`, then the bitmaps.
+- Every field is range-checked like `struct.pack`.
+
+### The kerning fix (opt-in, not used yet)
+
+The script sums every subtable. OpenType applies only the first subtable of a lookup that
+matches a pair, which is how glyph-pair exceptions override class kerning, and shapers ignore
+`kern` when GPOS has kerning. Summing over-kerns: for example SourceSerif4 "Vã" ships at
+−3.8 px instead of −1.4 px. Pairs that differ at 14 pt:
+
+| font | pairs |
 |---|---:|
 | Literata Regular | 3,973 |
 | Bitter Regular | 3,750 |
@@ -254,129 +392,39 @@ comes before format-2 class subtables.
 | Spectral | 26 |
 | Charis, GentiumBookPlus | 0 |
 
-- Example: SourceSerif4 `Vã` ships −61/16 px (−3.8 px) where the font means −23/16 (−1.4 px).
-- This looks like a real over-kerning bug in the current converter. For byte parity the browser
-  must copy it. The better fix is to change Python and JS together, to first match per lookup
-  and to ignore `kern` when GPOS has a `kern` feature. HarfBuzz uses `kern` only when GPOS has
-  no kerning. None of the fonts tested has a `kern` table.
+- JS: `convertFamily(ft, { ..., kerning: 'first-match' })`. The default is `'sum'`, today's
+  behaviour.
+- Python: `patches/fontconvert_sdcard-kerning-first-match.patch` applies cleanly with
+  `git apply`. It makes the same change in `extract_kerning_fonttools`.
+- Verified: `node test/file_parity.mjs --kerning first-match --script <patched copy>` gives
+  **11/11 files byte-identical** (Literata 10–18, Inter, KernTest, SourceSerif4 OTF, Charis).
+  The fix really changes the output: 201,195 bytes of Inter 12, 38 of SourceSerif4 OTF 14, and
+  KernTest Regular's legacy table is ignored because the font has GPOS.
+- Switch both sides in the same change, or browser and CLI files will differ.
 
-**Rounding.** `fp4_from_design_units` uses Python `round()`, which rounds half to even.
-`Math.round` rounds half up, so JS needs its own half-even rounding.
-- Exact halves really occur. At 12 pt the ppem is exactly 25.0, and a font with 2048 units per
-  em gets an exact binary scale: du = 64 gives 12.5. Python stores 12, `Math.round` gives 13.
-- Compute `ppem = size * 150.0 / 72.0`, `scale = ppem / upem`, then `du * scale * 16` in
-  exactly that order, so the doubles come out bit-identical.
-- After rounding, clamp to [−128, 127] and drop pairs that end up 0. That happens per size, so
-  the class tables differ by size.
+### Remaining caveats
 
-**Codepoints.**
-- The codepoint set is every emitted glyph. That includes default-ignorables the font maps (they
-  get kerning pairs too) and every alias: all codepoints sharing a glyph get every combination.
-  SMP codepoints are dropped after the expansion.
-- The cmap is fontTools' `getBestCmap()`, which prefers (3,10), (0,6), (0,4), (3,1), (0,3),
-  (0,2), (0,1), (0,0). That is not necessarily the charmap FreeType picked; they agree for normal
-  Unicode fonts.
-
-**Classes and matrix.**
-- Classes come from identical rows over the sorted right codepoints, and likewise for columns.
-  Class ids are given in ascending-codepoint order of first appearance.
-- If there are more than 255 left or right classes, the style's kerning is dropped entirely.
-- Each class entry is `<HB`: 3 bytes, no padding. The matrix is int8, row-major.
-
-**Practical notes.**
-- Format-2 expansion is classes × glyphs. Bitter gives about 282k raw pairs, so use integer keys
-  like `l << 16 | r`, not strings.
-- How fontTools reads the `kern` table, which a JS reader must copy:
-  - When a table has exactly one format-0 subtable, the length field is ignored and the length
-    is computed from nPairs. This is because of fonts that overflow the length past 10,920 pairs,
-    and others like OpenSans/Calibri.
-  - A pair that repeats inside one subtable keeps its last value (a dict assignment). Values from
-    different subtables are summed.
-  - Apple version-1 headers are read, but only format-0 subtables are used. Format 2 is skipped.
-
-### Ligatures: `extract_ligatures_fonttools`
-
-**Lookups.**
-- Only GSUB features `liga` and `rlig`, never `dlig` or `clig`, from all scripts.
-- Lookup type 4, with type-7 extensions unwrapped.
-- Lookups are iterated over a Python `set`. When two lookups map the same sequence differently,
-  the later one wins, and in CPython that is roughly ascending lookup index.
-
-**Glyph-to-codepoint map.**
-- It is built from the **whole** best cmap, not just the requested codepoints, and the last
-  codepoint wins for aliased glyphs (ascending iteration).
-- That codepoint must then be in the requested set, or the ligature is dropped.
-- When the ligature glyph has no cmap entry, `STANDARD_LIGATURE_MAP` is the fallback (ff, fi, fl,
-  ffi, ffl, ſt, st).
-
-**Filtering and chaining.**
-- The output and every input must be in the requested set and be ≤ U+FFFF.
-- A 3+ character ligature is kept only as a chain through an existing prefix ligature: ffi needs
-  ff. It is stored as `(prefixLigCp << 16) | last`.
-
-**Order and size.**
-- Pairs are stable-sorted by the packed key, with all two-character pairs inserted first. They
-  are truncated to 255 **after** sorting.
-- Each entry is `<II`.
-
-### Synthetic bold
-
-`--synthetic-bold` is opt-in; `build-sd-fonts.py` never passes it. If style 1 or 3 is
-pixel-identical to its base for 'A', 'a', 'g' and '0', every glyph gets a 3×3 max-dilation of the
-2-bit pixels. Only the UI needs this, and only if it offers "fake bold".
-
-### File writer: `generate_cpfont_multistyle` / `pack_style_sections`
-
-**Header and TOC.**
-- 32-byte header `<8sHHB19s`: `CPFONT\0\0`, version 4, flags = 1, styleCount.
-- A 32-byte TOC entry per style, in ascending style id: `<B3xIIBhhHHBBBI4x`. The style data
-  offset is absolute.
-
-**Per-style sections**, back to back with **no alignment padding**:
-1. intervals: `<III` start, end, running glyph index
-2. glyphs: `<BBHhhH2xI`
-3. kern left
-4. kern right
-5. kern matrix
-6. ligatures
-7. bitmaps
-
-**Range checks.** Python's `struct.pack` raises on out-of-range values; `DataView` silently wraps
-them. Add explicit checks for:
-- glyph width and height ≤ 255
-- data_length ≤ 65535
-- advanceX ≤ 0xFFFF (12.4)
-- left and top as int16
-- advanceY ≤ 255. Python checks this one explicitly and exits.
-
-The file name is `<name>_<size>.cpfont`. The name is the regular file name with a
-`-Regular`/`-Bold`/… suffix removed, unless `--name` is given.
-
-### Inputs the browser cannot reproduce byte for byte, and other caveats
-
-- **Variable fonts.** `build-sd-fonts.py` makes static instances with `fontTools.instancer`
-  (Bitter, Inter, Alegreya, Vollkorn, Arimo, Gelasio).
-  - FreeType's own `FT_Set_Var_Design_Coordinates` gives slightly different outlines, because
-    fontTools rounds coordinates to integers. It also does not bake GPOS variations into the
-    kerning.
-  - Suggestion: reject fonts with an `fvar` table and ask for static files, or accept that they
-    will not match.
-- **Not supported by this build:**
-  - WOFF/WOFF2: zlib and brotli are left out.
-  - Fonts with embedded bitmap strikes at the target ppem (EBDT/CBDT/sbix). FreeType returns the
-    strike, and Python would misread it too.
-  - Apple fonts that have `morx` but no GSUB: lean HarfBuzz drops AAT, so these could hint
-    differently.
-  - TrueType collections (TTC): the face index is plumbed through but untested.
+- **The 255-class cap is close.** Literata Bold already needs 249–250 right classes with
+  today's intervals. A larger interval set, or a user font with richer kerning, would silently
+  lose all kerning. The UI should warn when `kerningDropped` is set.
+- **Not reproducible in the browser:**
+  - variable fonts (refused);
+  - WOFF/WOFF2 and TTC (refused);
+  - fonts with embedded bitmap strikes at the target ppem;
+  - Apple `morx`-only fonts (lean HarfBuzz drops AAT);
+  - cmap subtables in formats 2, 8 or 10 as the best cmap (refused; they don't occur in normal
+    Unicode fonts).
+- **Malformed fonts.** Where fontTools would raise (corrupt cmap 12 lengths, LigatureSubst
+  count mismatches, out-of-range lookup indices), the JS throws a `FontError` too. Other
+  malformations may fail differently; neither side writes a file in that case.
 - **Shaping language.** The auto-hinter shapes blue-zone characters in HarfBuzz's default
   language, which comes from `setlocale(LC_CTYPE)`. Python ran under `en_US.UTF-8` here, and
-  the wasm side has emscripten's C locale; that made no difference on any test font. In theory, a font with
-  `locl` rules on blue characters could hint differently when the Python converter runs under
-  another locale.
-- **Pin freetype-py exactly.** `requirements.txt` says `freetype-py>=2.5.1`. A future freetype-py
-  bundling FreeType 2.14.x would silently break parity, because the auto-hinter changed; the old
-  prototype measured 92 % with 2.14.3. Suggest `freetype-py==2.5.1`.
+  the wasm side has emscripten's C locale; that made no difference on any test font. In
+  theory, a font with `locl` rules on blue characters could hint differently when the Python
+  converter runs under another locale.
+- **freetype-py is pinned** to 2.5.1 (`requirements.txt`). A release bundling FreeType 2.14
+  would break parity, because the auto-hinter changed.
 - **Serving.** Serve `ftwasm.wasm` as `application/wasm`, or fetch the bytes yourself and pass
-  `{wasmBinary}`, for example from the hashed SD web bundle. Load `ftwasm.mjs` in a module worker
-  (`new Worker(url, {type: 'module'})`). The device web server probably does not gzip, so plan
-  for 608 KB over WiFi.
+  `{wasmBinary}`. Load the modules in a module worker (`new Worker(url, {type: 'module'})`).
+  The device web server probably does not gzip, so plan for 608 KB of wasm plus 52 KB of JS
+  over WiFi.
