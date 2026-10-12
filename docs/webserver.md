@@ -272,7 +272,10 @@ numbers as the Reading Stats screens on the device. From it you can **export** t
 
 The Font Manager lists the font families installed on the SD card and the families available online.
 You can install or update one or all of them (the device downloads them itself, so it needs internet
-access), upload a `.cpfont` file from your computer, or delete a family.
+access), upload a `.cpfont` file from your computer, or delete a family. As on the Settings page, a
+menu beside the page (a row of buttons on a phone) switches between **Installed fonts**, **Download
+fonts**, **Convert a font** and **Upload a font**; the number beside Download fonts counts the installed
+families with an update.
 
 **Convert a font** makes a family of your own from TrueType or OpenType files (`.ttf`, `.otf`, or
 `.woff`), in your browser, so it works without internet, in hotspot mode too:

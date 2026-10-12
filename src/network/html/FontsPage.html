@@ -8,6 +8,7 @@
     <style>
       <!--#include file="shared/Theme.css.inc" -->
       <!--#include file="shared/NavLinks.css.inc" -->
+      <!--#include file="shared/SideNav.css.inc" -->
 
       /* A font family per row: name and details on the left, its button on the right; on a narrow
          screen the button wraps under the text. */
@@ -35,7 +36,7 @@
       }
 
       /* The catalog beside the status of the last download, which stays in view while the list
-         scrolls; above the list on a narrow screen. */
+         scrolls; above the list where the panel beside the menu is too narrow for both. */
       .download-layout {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 280px;
@@ -97,7 +98,7 @@
       .credit { margin: 14px 0 0; font-size: 0.8rem; color: var(--text-muted); }
 
       /* Result lines: neutral while working, green when done, red on failure. */
-      #status, #convertStatus {
+      #status, #installedStatus, #convertStatus {
         display: none;
         margin-top: 14px;
         padding: 10px 14px;
@@ -108,12 +109,12 @@
       }
       #convertStatus:not(.status-ok):not(.status-err) { display: block; color: var(--text-muted); }
       #convertStatus:not(.status-ok):not(.status-err):empty { display: none; }
-      #status.status-ok, #remoteStatus.status-ok, #convertStatus.status-ok { display: block; background: var(--accent-soft); color: var(--ok-text);
+      #status.status-ok, #installedStatus.status-ok, #remoteStatus.status-ok, #convertStatus.status-ok { display: block; background: var(--accent-soft); color: var(--ok-text);
         border-color: transparent; }
-      #status.status-err, #remoteStatus.status-err, #convertStatus.status-err { display: block; background: var(--danger-soft); color: var(--danger);
+      #status.status-err, #installedStatus.status-err, #remoteStatus.status-err, #convertStatus.status-err { display: block; background: var(--danger-soft); color: var(--danger);
         border-color: transparent; }
 
-      @media (max-width: 860px) {
+      @media (max-width: 1060px) {
         .download-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
         .status-panel { position: static; order: -1; }
       }
@@ -125,82 +126,108 @@
     <main class="page">
       <div class="page-head">
         <h1>Font Manager</h1>
-        <p class="page-intro">Reading fonts on the SD card: download them from the catalog, upload your own, or delete
-          those you no longer use.</p>
+        <p class="page-intro">Reading fonts on the SD card: download them from the catalog, convert or upload your own,
+          or delete those you no longer use.</p>
       </div>
 
-      <section class="card">
-        <h2>Installed fonts</h2>
-        <div id="families"><p class="empty">Loading...</p></div>
-      </section>
+      <!-- One panel at a time, chosen in the menu; #installed, #download, #convert or #upload. -->
+      <div class="side-layout">
+        <aside class="side-nav">
+          <nav aria-label="Font Manager">
+            <div class="cat-group">On the reader</div>
+            <div class="cat-list">
+              <a class="cat-link" href="#installed" data-panel="installed"><span>Installed fonts</span>
+                <span class="cat-count" id="installedCount"></span></a>
+            </div>
+            <div class="cat-group">Add fonts</div>
+            <div class="cat-list">
+              <a class="cat-link" href="#download" data-panel="download"><span>Download fonts</span>
+                <span class="cat-count" id="updateCount"></span></a>
+              <a class="cat-link" href="#convert" data-panel="convert"><span>Convert a font</span></a>
+              <a class="cat-link" href="#upload" data-panel="upload"><span>Upload a font</span></a>
+            </div>
+          </nav>
+        </aside>
 
-      <section class="card">
-        <h2>Download fonts</h2>
-        <div class="toolbar">
-          <button id="refreshManifest" class="btn" type="button">Refresh catalog</button>
-          <button id="downloadAllRemote" class="btn btn-primary" type="button">Download all updates</button>
-        </div>
-        <div class="download-layout">
-          <div id="remoteFamilies"><p class="empty">Catalog not loaded</p></div>
-          <div class="status-panel" role="status">
-            <h3>Download status</h3>
-            <div id="remoteStatus" class="status-message"><p>Waiting for action...</p></div>
-          </div>
-        </div>
-      </section>
+        <div>
+          <section class="card" id="panel-installed">
+            <h2>Installed fonts</h2>
+            <div id="families"><p class="empty">Loading...</p></div>
+            <div id="installedStatus" role="status"></div>
+          </section>
 
-      <section class="card" id="convertCard">
-        <h2>Convert a font</h2>
-        <p class="card-intro">Makes a font family for the reader from TrueType or OpenType files, here in your
-          browser: the same conversion as the fonts in the catalog.</p>
-        <div class="segmented convert-source" role="radiogroup" aria-label="Convert from">
-          <label><input type="radio" name="convertSource" value="files" checked><span>Font files</span></label>
-          <label><input type="radio" name="convertSource" value="book"><span>The fonts of an EPUB</span></label>
+          <section class="card" id="panel-download" hidden>
+            <h2>Download fonts</h2>
+            <div class="toolbar">
+              <button id="refreshManifest" class="btn" type="button">Refresh catalog</button>
+              <button id="downloadAllRemote" class="btn btn-primary" type="button">Download all updates</button>
+            </div>
+            <div class="download-layout">
+              <div id="remoteFamilies"><p class="empty">Catalog not loaded</p></div>
+              <div class="status-panel" role="status">
+                <h3>Download status</h3>
+                <div id="remoteStatus" class="status-message"><p>Waiting for action...</p></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" id="panel-convert" hidden>
+            <h2>Convert a font</h2>
+            <p class="card-intro">Makes a font family for the reader from TrueType or OpenType files, here in your
+              browser: the same conversion as the fonts in the catalog.</p>
+            <div class="segmented convert-source" role="radiogroup" aria-label="Convert from">
+              <label><input type="radio" name="convertSource" value="files" checked><span>Font files</span></label>
+              <label><input type="radio" name="convertSource" value="book"><span>The fonts of an EPUB</span></label>
+            </div>
+            <div id="sourceFiles">
+              <input type="file" id="convertFiles" accept=".ttf,.otf,.woff" multiple aria-label="Font files">
+              <p class="family-meta">Choose the family's files, up to four: regular, bold, italic and bold italic. Each
+                file's style is read from the font.</p>
+            </div>
+            <div id="sourceBook" hidden>
+              <input type="file" id="convertBook" accept=".epub" aria-label="An EPUB with embedded fonts">
+              <p class="family-meta">A book on the reader: open it with <strong>Details</strong> in the File Manager and
+                choose <strong>Convert its fonts</strong>.</p>
+              <div id="bookFamilies" class="book-families"></div>
+            </div>
+            <div id="styleTable" class="style-table" hidden></div>
+            <div class="convert-options">
+              <label><span class="field-label">Family name</span>
+                <input type="text" id="convertName" autocomplete="off" spellcheck="false"
+                  placeholder="Letters, digits, - and _"></label>
+              <label><span class="field-label">Characters</span>
+                <select id="convertIntervals">
+                  <option value="builtin,latin-cyrillic,greek-letters,musical-symbols" selected>Latin, Cyrillic and Greek</option>
+                  <option value="builtin,latin-cyrillic,musical-symbols">Latin and Cyrillic</option>
+                </select></label>
+              <div><span class="field-label">Sizes (points)</span>
+                <div class="size-boxes" id="convertSizes"></div></div>
+            </div>
+            <button type="button" id="convertBtn" class="btn btn-primary" disabled>Convert and install</button>
+            <div id="convertStatus" role="status"></div>
+            <p class="credit">A font that came with a book is licensed with that book: convert it for reading on your own
+              reader. The conversion uses FreeType (<a href="/js/FreeType-FTL.txt">licence</a>) and HarfBuzz
+              (<a href="/js/HarfBuzz-COPYING.txt">licence</a>). Portions of this software are copyright © 2024 The
+              FreeType Project (www.freetype.org). All rights reserved.</p>
+          </section>
+
+          <section class="card" id="panel-upload" hidden>
+            <h2>Upload a font</h2>
+            <p class="card-intro">Font files already converted to <code>.cpfont</code>, on this computer.</p>
+            <form class="upload-form" id="uploadForm">
+              <input type="file" id="fontFiles" accept=".cpfont" multiple required />
+              <button type="submit" class="btn btn-primary">Upload</button>
+            </form>
+            <p id="pickedInfo" class="family-meta"></p>
+            <div id="status" role="status"></div>
+          </section>
         </div>
-        <div id="sourceFiles">
-          <input type="file" id="convertFiles" accept=".ttf,.otf,.woff" multiple aria-label="Font files">
-          <p class="family-meta">Choose the family's files, up to four: regular, bold, italic and bold italic. Each
-            file's style is read from the font.</p>
-        </div>
-        <div id="sourceBook" hidden>
-          <input type="file" id="convertBook" accept=".epub" aria-label="An EPUB with embedded fonts">
-          <p class="family-meta">A book on the reader: open it with <strong>Details</strong> in the File Manager and
-            choose <strong>Convert its fonts</strong>.</p>
-          <div id="bookFamilies" class="book-families"></div>
-        </div>
-        <div id="styleTable" class="style-table" hidden></div>
-        <div class="convert-options">
-          <label><span class="field-label">Family name</span>
-            <input type="text" id="convertName" autocomplete="off" spellcheck="false"
-              placeholder="Letters, digits, - and _"></label>
-          <label><span class="field-label">Characters</span>
-            <select id="convertIntervals">
-              <option value="builtin,latin-cyrillic,greek-letters,musical-symbols" selected>Latin, Cyrillic and Greek</option>
-              <option value="builtin,latin-cyrillic,musical-symbols">Latin and Cyrillic</option>
-            </select></label>
-          <div><span class="field-label">Sizes (points)</span>
-            <div class="size-boxes" id="convertSizes"></div></div>
-        </div>
-        <button type="button" id="convertBtn" class="btn btn-primary" disabled>Convert and install</button>
-        <div id="convertStatus" role="status"></div>
-        <p class="credit">A font that came with a book is licensed with that book: convert it for reading on your own
-          reader. The conversion uses FreeType (<a href="/js/FreeType-FTL.txt">licence</a>) and HarfBuzz
-          (<a href="/js/HarfBuzz-COPYING.txt">licence</a>). Portions of this software are copyright © 2024 The
-          FreeType Project (www.freetype.org). All rights reserved.</p>
-      </section>
-      <section class="card">
-        <h2>Upload a font</h2>
-        <p class="card-intro">Font files already converted to <code>.cpfont</code>, on this computer.</p>
-        <form class="upload-form" id="uploadForm">
-          <input type="file" id="fontFiles" accept=".cpfont" multiple required />
-          <button type="submit" class="btn btn-primary">Upload</button>
-        </form>
-        <p id="pickedInfo" class="family-meta"></p>
-        <div id="status" role="status"></div>
-      </section>
+      </div>
     </main>
 
   <script>
+<!--#include file="shared/SideNav.js.inc" -->
+
     function formatSize(bytes) {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
       if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
@@ -220,6 +247,7 @@
         const data = await res.json();
         const el = document.getElementById('families');
         el.innerHTML = '';
+        document.getElementById('installedCount').textContent = data.families ? String(data.families.length) : '';
         if (!data.families || data.families.length === 0) {
           const p = document.createElement('p');
           p.className = 'empty';
@@ -261,6 +289,7 @@
           btn.addEventListener('click', () => deleteFamily(btn.dataset.family));
         });
       } catch (e) {
+        document.getElementById('installedCount').textContent = '';
         document.getElementById('families').innerHTML =
           '<p class="empty">Failed to load font list</p>';
       }
@@ -268,7 +297,7 @@
 
     async function deleteFamily(name) {
       if (!confirm('Delete font family "' + name + '"?')) return;
-      setStatus('status', 'Deleting ' + name + '...');
+      setStatus('installedStatus', 'Deleting ' + name + '...');
       try {
         const res = await fetch('/api/fonts/delete', {
           method: 'POST',
@@ -276,20 +305,29 @@
           body: JSON.stringify({family: name})
         });
         if (res.ok) {
-          setStatus('status', 'Deleted "' + name + '".', true);
+          setStatus('installedStatus', 'Deleted "' + name + '".', true);
         } else {
-          setStatus('status', 'Failed to delete "' + name + '".', false);
+          setStatus('installedStatus', 'Failed to delete "' + name + '".', false);
         }
       } catch (err) {
-        setStatus('status', 'Delete error: ' + err.message, false);
+        setStatus('installedStatus', 'Delete error: ' + err.message, false);
       }
       await loadFonts();
       await loadRemoteManifest();
     }
 
+    // The number of catalog updates, beside Download fonts in the menu.
+    function showUpdateCount(n) {
+      const count = document.getElementById('updateCount');
+      count.textContent = n ? String(n) : '';
+      count.classList.toggle('attention', n > 0);
+      count.title = n ? n + (n === 1 ? ' update' : ' updates') + ' available' : '';
+    }
+
     async function loadRemoteManifest() {
       const el = document.getElementById('remoteFamilies');
       el.innerHTML = '<p class="empty">Loading catalog...</p>';
+      showUpdateCount(0);
       try {
         const res = await fetch('/api/fonts/manifest');
         const data = await res.json();
@@ -302,6 +340,7 @@
           el.innerHTML = '<p class="empty">No remote fonts found</p>';
           return;
         }
+        showUpdateCount(data.families.filter((f) => f.installed && f.hasUpdate).length);
 
         data.families.forEach(f => {
           const row = document.createElement('div');
@@ -708,11 +747,29 @@
       return label;
     }));
 
+    const PANELS = ['installed', 'download', 'convert', 'upload'];
+
+    function showPanel(id) {
+      if (!PANELS.includes(id)) id = PANELS[0];
+      for (const p of PANELS) document.getElementById('panel-' + p).hidden = p !== id;
+      for (const a of document.querySelectorAll('.cat-link')) {
+        a.classList.toggle('active', a.dataset.panel === id);
+        if (a.dataset.panel === id) a.setAttribute('aria-current', 'page');
+        else a.removeAttribute('aria-current');
+      }
+      revealActiveLink();
+    }
+
+    window.addEventListener('hashchange', () => {
+      showPanel(location.hash.slice(1));
+      window.scrollTo({ top: 0 });
+    });
+
     // /fonts?book=<path>: the File Manager's Details dialog sends a book on the card here.
     const bookOnCard = new URLSearchParams(location.search).get('book');
+    showPanel(location.hash.slice(1) || (bookOnCard ? 'convert' : ''));
     if (bookOnCard) {
       showSource('book');
-      document.getElementById('convertCard').scrollIntoView();
       fetch('/download?path=' + encodeURIComponent(bookOnCard))
         .then((r) => {
           if (!r.ok) throw new Error('the reader answered ' + r.status);
