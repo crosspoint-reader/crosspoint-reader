@@ -1,4 +1,4 @@
 fonttools>=4.62.1
-freetype-py>=2.5.1
+freetype-py==2.5.1
 pyyaml
 zopfli>=0.2.3  # DEFLATE backend for builtin fonts (convert-builtin-fonts.sh --zopfli)
