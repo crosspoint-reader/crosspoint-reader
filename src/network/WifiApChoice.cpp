@@ -35,10 +35,30 @@ std::string describe(const Ap& ap) {
 bool sameAp(const uint8_t a[6], const uint8_t b[6]) { return std::memcmp(a, b, 6) == 0; }
 
 // The APs of `ssid` a passive scan hears on `channel` (0: every channel), one entry per BSSID.
-int listen(const std::string& ssid, const int channel, Ap* out) {
+int listen(const std::string& ssid, const int channel, Ap* out, const char* tag) {
   HalSystem::feedWatchdog();
-  const int16_t n = WiFi.scanNetworks(false, false, true, LISTEN_MS_PER_CHANNEL, channel, ssid.c_str());
+  // Every network, not only `ssid`, for the census below; the APs of `ssid` are picked out here.
+  const int16_t n = WiFi.scanNetworks(false, true, true, LISTEN_MS_PER_CHANNEL, channel);
   HalSystem::feedWatchdog();
+  // How many networks the scan heard on each channel. Diagnostic: an AP of `ssid` missing from a
+  // channel where others are heard is off the air for the reader; a channel with nothing at all
+  // points at the reader's reception, or at a scan that does not really listen there.
+  int perChannel[15] = {};
+  for (int i = 0; i < n; i++) {
+    const int ch = WiFi.channel(i);
+    if (ch >= 1 && ch <= 14) perChannel[ch]++;
+  }
+  char census[96];
+  int len = snprintf(census, sizeof(census), "%d", n < 0 ? n : 0);
+  if (n >= 0) {
+    len = 0;
+    for (int ch = 1; ch <= 14 && len < static_cast<int>(sizeof(census)) - 8; ch++) {
+      if (perChannel[ch])
+        len += snprintf(census + len, sizeof(census) - len, "%sch%d:%d", len ? " " : "", ch, perChannel[ch]);
+    }
+    if (len == 0) snprintf(census, sizeof(census), "nothing");
+  }
+  LOG_DBG(tag, "Channel census (%s, %d networks): %s", channel ? "one channel" : "all channels", n < 0 ? 0 : n, census);
   int count = 0;
   for (int i = 0; i < n; i++) {
     const uint8_t* bssid = WiFi.BSSID(i);
@@ -159,7 +179,7 @@ Result improve(const std::string& ssid, const char* tag) {
   const Ap* best = nullptr;
   // A known mesh whose last session ended on another AP: listen on that AP's channel first.
   if (knownAps >= 2 && cred->channel != 0 && !sameAp(cred->bssid, current.bssid)) {
-    const int n = listen(ssid, cred->channel, heard);
+    const int n = listen(ssid, cred->channel, heard, tag);
     for (int i = 0; i < n; i++) {
       if (sameAp(heard[i].bssid, cred->bssid) && heard[i].rssi >= current.rssi + BETTER_BY_DB) best = &heard[i];
     }
@@ -168,7 +188,7 @@ Result improve(const std::string& ssid, const char* tag) {
   }
 
   if (!best) {
-    const int n = listen(ssid, 0, heard);
+    const int n = listen(ssid, 0, heard, tag);
     bool joinedHeard = false;
     for (int i = 0; i < n; i++) {
       LOG_DBG(tag, "Heard %s from %s", ssid.c_str(), describe(heard[i]).c_str());
