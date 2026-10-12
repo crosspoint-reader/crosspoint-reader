@@ -2,7 +2,6 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <I18n.h>
 #include <Logging.h>
 
@@ -14,6 +13,7 @@
 #include "MappedInputManager.h"
 #include "UiFontScale.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/ButtonGeometry.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
@@ -127,11 +127,14 @@ Rect UITheme::getContentRect(const GfxRenderer& renderer, bool hasBottomHints, b
   const int bh = hasBottomHints ? metrics.buttonHintsHeight : 0;
   const int sw = hasSideHints ? metrics.sideButtonHintsWidth : 0;
 
+  // Boards with Up and Down on opposite edges need a side column on both of them.
+  const bool sideKeysSplit = ButtonGeometry::sideKeysOnOppositeEdges();
+
   int top = 0, right = 0, bottom = 0, left = 0;
   switch (renderer.getOrientation()) {
     case GfxRenderer::Portrait:
       bottom = bh;
-      if (gpio.deviceIsX3() && hasSideHints) {
+      if (sideKeysSplit && hasSideHints) {
         left = sw;
         right = sw;
       } else {
@@ -140,7 +143,7 @@ Rect UITheme::getContentRect(const GfxRenderer& renderer, bool hasBottomHints, b
       break;
     case GfxRenderer::PortraitInverted:
       top = bh;
-      if (gpio.deviceIsX3() && hasSideHints) {
+      if (sideKeysSplit && hasSideHints) {
         left = sw;
         right = sw;
       } else {
@@ -149,7 +152,7 @@ Rect UITheme::getContentRect(const GfxRenderer& renderer, bool hasBottomHints, b
       break;
     case GfxRenderer::LandscapeClockwise:
       left = bh;
-      if (gpio.deviceIsX3() && hasSideHints) {
+      if (sideKeysSplit && hasSideHints) {
         top = sw;
         bottom = sw;
       } else {
@@ -158,7 +161,7 @@ Rect UITheme::getContentRect(const GfxRenderer& renderer, bool hasBottomHints, b
       break;
     case GfxRenderer::LandscapeCounterClockwise:
       right = bh;
-      if (gpio.deviceIsX3() && hasSideHints) {
+      if (sideKeysSplit && hasSideHints) {
         top = sw;
         bottom = sw;
       } else {

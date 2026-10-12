@@ -57,16 +57,27 @@ inline Layout forActiveBoard() {
       break;
 
     case BoardConfig::Board::XteinkX4Pro:
-      // Up/Down sit on the sides as on the X3; no Left/Right keys at all. The
-      // capacitive home key is centred on the lower screen edge.
-      l.up = {Edge::Left, 0.5f};
-      l.down = {Edge::Right, 0.5f};
+      // Up/Down sit on the sides as on the X3, and as high up (confirmed on
+      // the device 2026-10-12; this was 0.5, which put them at mid-height); no
+      // Left/Right keys at all. The capacitive home key is centred on the
+      // lower screen edge.
+      l.up = {Edge::Left, 0.75f};
+      l.down = {Edge::Right, 0.75f};
       l.confirm = {Edge::Bottom, 0.5f};
       l.legacyStrip = true;
       break;
 
     case BoardConfig::Board::XteinkX3:
     case BoardConfig::Board::XteinkX3Uc8279:
+      // Up on the left edge, Down on the right, level with each other. The
+      // height is read off the hand-tuned hint boxes (155-233 px of 792),
+      // which the hints keep (legacyStrip); recorded so sideKeysOnOppositeEdges()
+      // can answer from the layout rather than from the board's name.
+      l.up = {Edge::Left, 0.75f};
+      l.down = {Edge::Right, 0.75f};
+      l.legacyStrip = true;
+      break;
+
     case BoardConfig::Board::XteinkX4:
       l.legacyStrip = true;
       break;
@@ -77,6 +88,18 @@ inline Layout forActiveBoard() {
       break;
   }
   return l;
+}
+
+// Up and Down sit on opposite side edges -- Up on the left, Down on the right --
+// as on the X3 and the X4 Pro, rather than one above the other on the right as on
+// the X4. The side hints then draw one box on each edge, and getContentRect()
+// reserves a column on both.
+//
+// Asked of the layout, not of the board's name: deviceIsX3() answered it for the
+// X3 alone, so the X4 Pro got the X4's stacked boxes on the wrong edge.
+inline bool sideKeysOnOppositeEdges() {
+  const Layout l = forActiveBoard();
+  return l.up.edge == Edge::Left && l.down.edge == Edge::Right;
 }
 
 }  // namespace ButtonGeometry
