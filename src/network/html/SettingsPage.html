@@ -1,838 +1,723 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Settings - %%CROSSPOINT%%</title>
   <style>
-    html {
-      scrollbar-gutter: stable;
-    }
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-hover-color: #5a8c73;
-      --toggle-bg: #ccc;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        --toggle-bg: #666;
-        color-scheme: dark;
-      }
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
-    }
-    h2 {
-      color: var(--title-color);
-      margin-top: 0;
-    }
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
+    <!--#include file="shared/Theme.css.inc" -->
     <!--#include file="shared/NavLinks.css.inc" -->
 
-    .section-header {
-      font-size: 0.75em;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--accent-color);
-      padding: 14px 0 4px;
-      border-bottom: 1px solid var(--accent-color);
-      margin-bottom: 4px;
+    /* Category menu beside the settings; a strip of chips above them on a narrow screen. */
+    .settings-layout {
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+      gap: 32px;
+      align-items: start;
     }
-    .section .section-header:first-of-type {
-      padding-top: 0;
+    .settings-nav { position: sticky; top: 76px; }
+    .search { position: relative; margin-bottom: 14px; }
+    .search svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      pointer-events: none;
     }
-    .setting-row {
+    .search input { width: 100%; padding-left: 34px; }
+    .cat-group { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-muted); margin: 16px 10px 4px; }
+    .cat-group:first-child { margin-top: 0; }
+    .cat-list { display: flex; flex-direction: column; gap: 1px; }
+    .cat-link {
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border-color);
-    }
-    .setting-row:last-child {
-      border-bottom: none;
-    }
-    .setting-name {
-      font-weight: 500;
-      color: var(--label-color);
-      flex: 1;
-      min-width: 0;
-      padding-right: 12px;
-    }
-    .setting-control {
-      flex-shrink: 0;
-    }
-    .setting-control select,
-    .setting-control input[type="number"],
-    .setting-control input[type="text"],
-    .setting-control input[type="password"] {
-      padding: 6px 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 0.95em;
-      background: var(--card-bg);
-    }
-    .setting-control select {
-      min-width: 160px;
-    }
-    .setting-control input[type="text"],
-    .setting-control input[type="password"] {
-      width: 220px;
-    }
-    .setting-control input[type="number"] {
-      width: 80px;
-    }
-    .clear-cred {
-      display: block;
-      margin-top: 4px;
-      font-size: 0.8em;
-      color: var(--label-color);
-      text-align: right;
-      white-space: nowrap;
-    }
-    .clear-cred input {
-      vertical-align: middle;
-    }
-    /* Toggle switch */
-    .toggle-switch {
-      display: inline-block;
-      position: relative;
-      width: 48px;
-      height: 26px;
-    }
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .toggle-slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background-color: var(--toggle-bg);
-      border-radius: 26px;
-      transition: 0.3s;
-    }
-    .toggle-slider:before {
-      position: absolute;
-      content: "";
-      height: 20px;
-      width: 20px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      border-radius: 50%;
-      transition: 0.3s;
-    }
-    .toggle-switch input:checked + .toggle-slider {
-      background-color: var(--accent-color);
-    }
-    .toggle-switch input:checked + .toggle-slider:before {
-      transform: translateX(22px);
-    }
-    .save-container {
-      text-align: center;
-      margin: 20px 0;
-    }
-    .save-btn {
-      background-color: #27ae60;
-      color: white;
-      padding: 12px 40px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1.1em;
-      font-weight: 600;
-    }
-    .save-btn:hover {
-      background-color: #219a52;
-    }
-    .save-btn:disabled {
-      background-color: #95a5a6;
-      cursor: not-allowed;
-    }
-    .message {
-      padding: 12px;
-      border-radius: 4px;
-      margin: 15px 0;
-      text-align: center;
-      display: none;
-    }
-    .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
-    }
-    .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
-    }
-    .plugin-error {
-      color: #c0392b;
-      margin: 0;
-    }
-    .loader-container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 20px 0;
-    }
-    .loader {
-      width: 48px;
-      height: 48px;
-      border: 5px solid #AAA;
-      border-bottom-color: transparent;
-      border-radius: 50%;
-      display: inline-block;
-      box-sizing: border-box;
-      animation: rotation 1s linear infinite;
-    }
-    @keyframes rotation {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    .opds-server {
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 12px;
-      margin: 10px 0;
-    }
-    .opds-server .setting-row:last-child {
-      border-bottom: none;
-    }
-    .opds-actions {
-      display: flex;
       gap: 8px;
-      margin-top: 8px;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      text-decoration: none;
     }
-    .btn-small {
-      padding: 6px 14px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
+    .cat-link:hover { background: var(--surface-2); }
+    .cat-link.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+    .cat-link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); visibility: hidden; flex: none; }
+    .cat-link.has-changes .dot { visibility: visible; }
+
+    .panel-head { margin-bottom: 14px; }
+    .panel-head h2 { font-size: 1.3rem; margin: 0 0 2px; }
+    .panel-head p { margin: 0; color: var(--text-muted); }
+    .settings-section { padding: 4px 20px 6px; }
+    .settings-section > h3 { margin: 16px 0 0; font-size: 1rem; }
+    .section-help { margin: 2px 0 0; color: var(--text-muted); font-size: 0.875rem; }
+    .group-title { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--text-muted); margin: 18px 0 0; }
+
+    .setting {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 14px 0;
     }
-    .btn-add {
-      background-color: var(--accent-color);
-      color: white;
+    .rows > .setting:not(.hidden) ~ .setting:not(.hidden) { border-top: 1px solid var(--border); }
+    .setting-text { flex: 1; min-width: 0; }
+    .setting-name { font-weight: 500; color: var(--text-strong); }
+    .setting.changed .setting-name::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-right: 8px;
+      vertical-align: 1px;
     }
-    .btn-add:hover {
-      background-color: var(--accent-hover-color);
+    .setting-help { margin: 2px 0 0; font-size: 0.875rem; color: var(--text-muted); }
+    .setting-control { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 60%; }
+    .setting-control select { min-width: 190px; max-width: 300px; }
+    .setting-control input[type="text"], .setting-control input[type="password"] { width: 280px; }
+    .setting-control input[type="number"] { width: 100px; }
+    .clear-cred { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-muted); }
+
+    .item-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 16px 14px; margin: 0 0 12px; }
+    .item-head { display: flex; align-items: center; gap: 10px; padding-top: 12px; font-weight: 600; color: var(--text-strong); }
+    .item-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+    .add-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .search-empty { text-align: center; color: var(--text-muted); padding: 48px 0; }
+
+    /* Shown while settings differ from the reader's. */
+    .save-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 30;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      box-shadow: var(--shadow-raised);
+      transform: translateY(110%);
+      transition: transform 0.2s;
     }
-    .btn-delete {
-      background-color: #e74c3c;
-      color: white;
+    .save-bar.show { transform: none; }
+    .save-bar-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-    .btn-delete:hover {
-      background-color: #c0392b;
-    }
-    .btn-save-server {
-      background-color: #27ae60;
-      color: white;
-    }
-    .btn-save-server:hover {
-      background-color: #219a52;
-    }
-    @media (max-width: 600px) {
-      body {
-        padding: 10px;
-        font-size: 14px;
+    .save-bar-actions { display: flex; gap: 8px; }
+    .save-bar.show ~ .toast { bottom: 84px; }
+
+    @media (max-width: 860px) {
+      .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+      .settings-nav {
+        top: 0;
+        z-index: 10;
+        background: var(--bg);
+        margin: 0 -16px;
+        padding: 8px 16px 10px;
+        border-bottom: 1px solid var(--border);
       }
-      .card {
-        padding: 12px;
-        margin: 10px 0;
-      }
-      h1 {
-        font-size: 1.3em;
-      }
-      .setting-row {
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-      .setting-control select,
-      .setting-control input[type="text"],
-      .setting-control input[type="password"] {
-        min-width: 0;
-        width: unset;
-      }
+      .search { margin-bottom: 8px; }
+      .cat-group { display: none; }
+      #categoryNav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+      #categoryNav::-webkit-scrollbar { display: none; }
+      .cat-list { flex: none; flex-direction: row; gap: 6px; }
+      .cat-link { white-space: nowrap; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px;
+        background: var(--surface); }
+      .setting { flex-direction: column; align-items: stretch; gap: 10px; }
+      .setting.is-switch { flex-direction: row; align-items: center; }
+      .setting-control { max-width: none; align-items: stretch; }
+      .setting.is-switch .setting-control { align-items: flex-end; }
+      .setting-control select, .setting-control input[type="text"], .setting-control input[type="password"] {
+        width: 100%; max-width: none; }
+      .segmented { display: flex; flex-wrap: nowrap; width: 100%; }
+      .segmented label { flex: 1 1 0; min-width: 0; text-align: center; }
+      .segmented span { padding: 7px 6px; overflow: hidden; text-overflow: ellipsis; }
     }
   </style>
 </head>
 <body>
-  <h1>⚙️ Settings</h1>
+  <!--#include file="shared/PageHeader.html.inc" -->
 
-  <!--#include file="shared/NavLinks.html.inc" -->
+  <main class="page page-wide">
+    <div class="page-head">
+      <h1>Settings</h1>
+      <p class="page-intro">Changes reach the reader when you save them.</p>
+    </div>
 
-  <div id="message" class="message"></div>
+    <div class="settings-layout">
+      <aside class="settings-nav">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle><line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+          </svg>
+          <input type="search" id="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off">
+        </div>
+        <nav id="categoryNav" aria-label="Settings categories"></nav>
+      </aside>
 
-  <div id="settings-container">
-    <div class="loader-container">
-      <span class="loader"></span>
+      <div>
+        <div id="settingsPanels"><div class="loader" aria-label="Loading"></div></div>
+
+        <section class="panel hidden" id="panel-wifi" data-title="Wi-Fi networks">
+          <div class="panel-head">
+            <h2>Wi-Fi networks</h2>
+            <p>Networks the reader joins on its own. Passwords are never shown, only replaced or cleared.</p>
+          </div>
+          <div class="card" id="wifiList"></div>
+        </section>
+
+        <section class="panel hidden" id="panel-opds" data-title="OPDS servers">
+          <div class="panel-head">
+            <h2>OPDS servers</h2>
+            <p>Online catalogs the reader can browse and download books from.</p>
+          </div>
+          <div id="opdsDownloads"></div>
+          <div class="card" id="opdsList"></div>
+        </section>
+
+        <section class="panel hidden" id="panel-plugins" data-title="Plugins">
+          <div class="panel-head">
+            <h2>Plugins</h2>
+            <p>Settings that installed plugins add to this page. Install, switch off or remove plugins on the
+              <a href="/plugins">Plugins</a> page.</p>
+          </div>
+          <div id="plugin-container"></div>
+          <p class="empty card hidden" id="pluginsEmpty">No installed plugin adds settings here.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div class="save-bar" id="saveBar" role="region" aria-label="Unsaved changes">
+    <div class="save-bar-inner">
+      <span id="saveSummary"></span>
+      <div class="save-bar-actions">
+        <button type="button" class="btn" id="discardBtn">Discard</button>
+        <button type="button" class="btn btn-primary" id="saveBtn">Save changes</button>
+      </div>
     </div>
   </div>
-
-  <div class="save-container" id="save-container" style="display:none;">
-    <button class="save-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
-  </div>
-  
-  <div id="wifi-container"></div>
-  <div id="opds-container"></div>
-  <div id="plugin-container"></div>
-
-  <div class="card">
-    <p style="text-align: center; color: #95a5a6; margin: 0;">
-      %%CROSSPOINT%% • Open Source
-    </p>
-  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-  let allSettings = [];
-  let originalValues = {};
+<!--#include file="shared/SettingsHelp.js.inc" -->
 
-  // Global (not per-server) OPDS download settings. The firmware deliberately leaves
-  // these category-less so they stay off the device settings screen, which would park
-  // them under a card headed "None" here. They apply to every OPDS server, so they are
-  // pulled out of the settings grid and rendered once at the top of the OPDS card.
+  // Settings without a category of their own (the firmware gives them STR_NONE_OPT so they stay off
+  // the device's settings screen) that apply to every OPDS server: shown in the OPDS panel, and saved
+  // with the other settings.
   const OPDS_GLOBAL_KEYS = ['opdsDownloadFolder', 'opdsFilenameFormat'];
+  const MAX_OPDS_SERVERS = 8;
+  const EXTRA_PANELS = ['wifi', 'opds', 'plugins'];
 
-  function escapeHtml(unsafe) {
-    return unsafe
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  let settings = [];      // as GET /api/settings sent them; value is what the reader holds
+  let categories = [];    // [{id, name, rows}], in the order the reader lists them
+  let current = '';       // id of the panel shown
+
+  const $ = (id) => document.getElementById(id);
+
+  // Builds an element: el('div', {className: 'x', onclick: f}, [children or strings]).
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (v === undefined || v === null || v === false) continue;
+      if (k === 'dataset') Object.assign(node.dataset, v);
+      else if (k.startsWith('aria-') || k === 'role' || k === 'for') node.setAttribute(k, v);
+      else node[k] = v;
+    }
+    for (const c of [].concat(children || [])) {
+      if (c !== null && c !== undefined && c !== false) node.append(c);
+    }
+    return node;
   }
 
-  function showMessage(text, isError) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = 'message ' + (isError ? 'error' : 'success');
-    msg.style.display = 'block';
-    setTimeout(function() { msg.style.display = 'none'; }, 4000);
+  let toastTimer = 0;
+  function toast(text, isError) {
+    const t = $('toast');
+    t.textContent = text;
+    t.className = 'toast show' + (isError ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3000);
   }
 
-  function renderControl(setting) {
-    const id = 'setting-' + setting.key;
-
-    if (setting.type === 'toggle') {
-      const checked = setting.value ? 'checked' : '';
-      return '<label class="toggle-switch">' +
-        '<input type="checkbox" id="' + id + '" ' + checked + ' onchange="markChanged()">' +
-        '<span class="toggle-slider"></span></label>';
-    }
-
-    if (setting.type === 'enum') {
-      let html = '<select id="' + id + '" onchange="markChanged()">';
-      setting.options.forEach(function(opt, idx) {
-        const selected = idx === setting.value ? ' selected' : '';
-        html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(opt) + '</option>';
-      });
-      html += '</select>';
-      return html;
-    }
-
-    if (setting.type === 'value') {
-      return '<input type="number" id="' + id + '" value="' + setting.value + '"' +
-        ' min="' + setting.min + '" max="' + setting.max + '" step="' + setting.step + '"' +
-        ' onchange="markChanged()">';
-    }
-
-    if (setting.type === 'string') {
-      // Obfuscated values are never sent to the browser, so the field always starts
-      // empty. Blank therefore means "leave unchanged" — clearing needs its own control.
-      if (setting.obfuscated) {
-        return renderPasswordField(id, setting.isSet, 'markChanged()');
-      }
-      const val = setting.value || '';
-      return '<input type="text" id="' + id + '" value="' + escapeHtml(val) + '"' +
-        ' oninput="markChanged()">';
-    }
-
+  function lookup(map, name) {
+    if (!map || !name) return '';
+    const lower = name.toLowerCase();
+    for (const k in map) if (k.toLowerCase() === lower) return map[k];
     return '';
   }
 
-  function getValue(setting) {
-    const el = document.getElementById('setting-' + setting.key);
-    if (!el) return undefined;
+  function slug(name, index) {
+    const s = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return s || 'category-' + (index + 1);
+  }
 
-    if (setting.type === 'toggle') {
-      return el.checked ? 1 : 0;
+  // ---- Controls ------------------------------------------------------------------------------
+
+  // Stored passwords are never sent to the browser, so the field always starts empty, and an empty
+  // field alone is ambiguous: nothing stored, or stored but hidden. The placeholder says which, and
+  // clearing is a box of its own rather than a reading of blankness.
+  function passwordField(id, isSet, label) {
+    const input = el('input', {
+      type: 'password', id, value: '', autocomplete: 'new-password',
+      placeholder: isSet ? 'Unchanged - type to replace' : 'Not set', 'aria-label': label
+    });
+    if (!isSet) return [input];
+    return [input, el('label', { className: 'clear-cred' }, [
+      el('input', { type: 'checkbox', id: id + '-clear' }), 'Clear the stored password'])];
+  }
+
+  // undefined: keep what is stored; '': clear it; anything else: the new password.
+  function readPassword(id) {
+    const input = $(id);
+    if (!input) return undefined;
+    const clear = $(id + '-clear');
+    if (clear && clear.checked) return '';
+    return input.value === '' ? undefined : input.value;
+  }
+
+  // A short choice reads better as buttons than as a dropdown.
+  function useSegmented(s) {
+    return s.options.length >= 2 && s.options.length <= 3 && s.options.every((o) => o.length <= 14);
+  }
+
+  function controlFor(s) {
+    const id = 'set-' + s.key;
+    if (s.type === 'toggle') {
+      return el('label', { className: 'switch' }, [
+        el('input', { type: 'checkbox', role: 'switch', id, checked: !!s.value }), el('span')]);
     }
-    if (setting.type === 'enum') {
-      return parseInt(el.value, 10);
+    if (s.type === 'enum' && useSegmented(s)) {
+      return el('div', { className: 'segmented', role: 'radiogroup', id, 'aria-labelledby': id + '-name' },
+        s.options.map((opt, i) => el('label', {}, [
+          el('input', { type: 'radio', name: id, value: String(i), checked: i === s.value }), el('span', { textContent: opt })])));
     }
-    if (setting.type === 'value') {
-      return parseInt(el.value, 10);
+    if (s.type === 'enum') {
+      return el('select', { id }, s.options.map((opt, i) =>
+        el('option', { value: String(i), selected: i === s.value, textContent: opt })));
     }
-    if (setting.type === 'string') {
-      if (setting.obfuscated) {
-        return readPasswordField('setting-' + setting.key);
-      }
-      return el.value;
+    if (s.type === 'value') {
+      return el('input', { type: 'number', id, value: String(s.value), min: s.min, max: s.max, step: s.step });
     }
+    if (s.type === 'string' && s.obfuscated) return passwordField(id, s.isSet, s.name);
+    if (s.type === 'string') return el('input', { type: 'text', id, value: s.value || '' });
+    return null;
+  }
+
+  function valueOf(s) {
+    const id = 'set-' + s.key;
+    const node = $(id);
+    if (!node) return undefined;
+    if (s.type === 'toggle') return node.checked ? 1 : 0;
+    if (s.type === 'enum' && node.tagName === 'DIV') {
+      const picked = node.querySelector('input:checked');
+      return picked ? parseInt(picked.value, 10) : s.value;
+    }
+    if (s.type === 'enum' || s.type === 'value') return parseInt(node.value, 10);
+    if (s.type === 'string' && s.obfuscated) return readPassword(id);
+    if (s.type === 'string') return node.value;
     return undefined;
   }
 
-  function markChanged() {
-    document.getElementById('saveBtn').disabled = false;
+  function isChanged(s) {
+    const v = valueOf(s);
+    if (v === undefined) return false;
+    // A password has no original to compare with: anything typed, or the clear box, is a change.
+    return s.obfuscated ? true : v !== s.value;
   }
 
-  // Shared renderer for every credential field on this page (settings, Wi-Fi, OPDS).
-  // Stored passwords are never sent to the browser, so the input always starts empty
-  // and an empty field is ambiguous on its own: it could mean "nothing stored" or
-  // "stored but hidden". The placeholder states which, and the clear box makes erasing
-  // an explicit action rather than an interpretation of blankness.
-  // onInput is optional — the settings grid needs it to enable its Save button, while
-  // the Wi-Fi and OPDS cards have their own per-entry Save.
-  function renderPasswordField(id, isSet, onInput) {
-    const handler = onInput ? ' oninput="' + onInput + '"' : '';
-    const clearHandler = onInput ? ' onchange="' + onInput + '"' : '';
-    return '<input type="password" id="' + id + '" value="" autocomplete="new-password"' +
-      ' placeholder="' + (isSet ? 'unchanged — leave blank to keep' : 'not set') + '"' + handler + '>' +
-      (isSet
-        ? '<label class="clear-cred"><input type="checkbox" id="' + id + '-clear"' + clearHandler +
-          '> clear password</label>'
-        : '');
+  function settingRow(s, category, section, group) {
+    const id = 'set-' + s.key;
+    const help = SETTINGS_HELP.settings[s.key] || '';
+    const control = controlFor(s);
+    const isGroup = s.type === 'enum' && useSegmented(s);
+    const nameEl = isGroup
+      ? el('span', { className: 'setting-name', id: id + '-name', textContent: s.name })
+      : el('label', { className: 'setting-name', id: id + '-name', for: id, textContent: s.name });
+    const row = el('div', {
+      className: 'setting' + (s.type === 'toggle' ? ' is-switch' : ''),
+      dataset: { key: s.key, search: [s.name, help, section, group, category].join(' ').toLowerCase() }
+    }, [
+      el('div', { className: 'setting-text' }, [nameEl, help ? el('p', { className: 'setting-help', id: id + '-help', textContent: help }) : null]),
+      el('div', { className: 'setting-control' }, control)
+    ]);
+    if (help) {
+      const target = isGroup ? control : (Array.isArray(control) ? control[0] : control.querySelector('input') || control);
+      target.setAttribute('aria-describedby', id + '-help');
+    }
+    return row;
   }
 
-  // Reads a credential field into the three states the server distinguishes:
-  //   undefined -> omit from the request, keep whatever is stored
-  //   ''        -> explicit clear
-  //   non-empty -> set this new password
-  function readPasswordField(id) {
-    const el = document.getElementById(id);
-    if (!el) return undefined;
-    const clear = document.getElementById(id + '-clear');
-    if (clear && clear.checked) return '';
-    return el.value === '' ? undefined : el.value;
+  // ---- Panels --------------------------------------------------------------------------------
+
+  // Rows in the reader's order: a subcategory starts a section (only its first row carries it), and
+  // a run of rows sharing a submenu forms a group inside the section.
+  function sectionCards(cat) {
+    const cards = [];
+    let card = null, rows = null, groupName = '', sectionName = '';
+    const newCard = (title) => {
+      sectionName = title || '';
+      const sectionHelp = lookup(SETTINGS_HELP.sections, title);
+      card = el('div', { className: 'card settings-section' }, [
+        title ? el('h3', { textContent: title }) : null,
+        sectionHelp ? el('p', { className: 'section-help', textContent: sectionHelp }) : null]);
+      cards.push(card);
+      rows = null;
+      groupName = '';
+    };
+    for (const s of cat.rows) {
+      if (!card || s.subcategory) newCard(s.subcategory);
+      const submenu = s.submenu || '';
+      if (!rows || submenu !== groupName) {
+        groupName = submenu;
+        if (submenu && submenu !== sectionName) card.append(el('div', { className: 'group-title', textContent: submenu }));
+        rows = el('div', { className: 'rows' });
+        card.append(rows);
+      }
+      rows.append(settingRow(s, cat.name, sectionName, submenu));
+    }
+    return cards;
   }
+
+  function renderSettings() {
+    const host = $('settingsPanels');
+    host.replaceChildren(...categories.map((cat) => {
+      const intro = lookup(SETTINGS_HELP.categories, cat.name);
+      return el('section', { className: 'panel hidden', id: 'panel-' + cat.id, dataset: { title: cat.name } }, [
+        el('div', { className: 'panel-head' }, [el('h2', { textContent: cat.name }), intro ? el('p', { textContent: intro }) : null]),
+        ...sectionCards(cat)]);
+    }));
+
+    const globals = OPDS_GLOBAL_KEYS.map((k) => settings.find((s) => s.key === k)).filter(Boolean);
+    $('opdsDownloads').replaceChildren(...(globals.length ? sectionCards({ name: 'OPDS servers', rows: globals.map((s, i) =>
+      Object.assign({}, s, { subcategory: i === 0 ? 'Downloads' : '', submenu: '' })) }) : []));
+    if (current) show(current);
+    refreshDirty();
+  }
+
+  function renderNav() {
+    const link = (id, name) => el('a', { className: 'cat-link', href: '#' + id, dataset: { panel: id } },
+      [el('span', { textContent: name }), el('span', { className: 'dot', 'aria-hidden': 'true' })]);
+    // The reader's categories exactly as /api/settings lists them, so a new one appears by itself;
+    // then the three panels with endpoints of their own.
+    $('categoryNav').replaceChildren(
+      el('div', { className: 'cat-group', textContent: 'On the reader' }),
+      el('div', { className: 'cat-list' }, categories.map((c) => link(c.id, c.name))),
+      el('div', { className: 'cat-group', textContent: 'Connections' }),
+      el('div', { className: 'cat-list' }, [
+        link('wifi', 'Wi-Fi networks'),
+        link('opds', 'OPDS servers'),
+        link('plugins', 'Plugins')]));
+  }
+
+  function panelIds() { return categories.map((c) => c.id).concat(EXTRA_PANELS); }
+
+  function show(id) {
+    if (!panelIds().includes(id)) id = panelIds()[0];
+    current = id;
+    for (const p of document.querySelectorAll('.panel')) p.classList.toggle('hidden', p.id !== 'panel-' + id);
+    for (const a of document.querySelectorAll('.cat-link')) {
+      a.classList.toggle('active', a.dataset.panel === id);
+      if (a.dataset.panel === id) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    }
+  }
+
+  window.addEventListener('hashchange', () => {
+    if ($('search').value) clearSearch();
+    show(location.hash.slice(1));
+    window.scrollTo({ top: 0 });
+  });
+
+  // ---- Search --------------------------------------------------------------------------------
+
+  // Every panel stays in the page; a search shows the matching rows of all of them at once.
+  function runSearch() {
+    const words = $('search').value.toLowerCase().split(/\s+/).filter(Boolean);
+    for (const n of document.querySelectorAll('.search-empty')) n.remove();
+    if (!words.length) {
+      for (const n of document.querySelectorAll('.setting, .rows, .settings-section, .group-title'))
+        n.classList.remove('hidden');
+      show(current);
+      return;
+    }
+    let any = false;
+    for (const p of document.querySelectorAll('.panel')) {
+      const extra = EXTRA_PANELS.includes(p.id.slice(6));
+      let panelHit = extra && words.every((w) => p.dataset.title.toLowerCase().includes(w));
+      for (const row of p.querySelectorAll('.setting[data-key]')) {
+        const hit = words.every((w) => row.dataset.search.includes(w));
+        row.classList.toggle('hidden', !hit);
+        if (hit) panelHit = true;
+      }
+      if (!extra || !panelHit) {
+        for (const rows of p.querySelectorAll('.rows')) {
+          const visible = rows.querySelector('.setting:not(.hidden)');
+          rows.classList.toggle('hidden', !visible);
+          const title = rows.previousElementSibling;
+          if (title && title.classList.contains('group-title')) title.classList.toggle('hidden', !visible);
+        }
+        for (const card of p.querySelectorAll('.settings-section'))
+          card.classList.toggle('hidden', !card.querySelector('.setting:not(.hidden)'));
+      }
+      p.classList.toggle('hidden', !panelHit);
+      any = any || panelHit;
+    }
+    for (const a of document.querySelectorAll('.cat-link')) a.classList.remove('active');
+    if (!any) {
+      $('settingsPanels').append(el('p', { className: 'search-empty', textContent: 'No setting matches "' + $('search').value + '".' }));
+    }
+  }
+
+  function clearSearch() {
+    $('search').value = '';
+    runSearch();
+  }
+
+  $('search').addEventListener('input', runSearch);
+  $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') clearSearch(); });
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+    if (e.key === '/' && !typing) { e.preventDefault(); $('search').focus(); }
+  });
+
+  // ---- Unsaved changes -----------------------------------------------------------------------
+
+  function changes() {
+    const out = {};
+    for (const s of settings) {
+      if (isChanged(s)) out[s.key] = valueOf(s);
+    }
+    return out;
+  }
+
+  function refreshDirty() {
+    const changed = changes();
+    const count = Object.keys(changed).length;
+    for (const row of document.querySelectorAll('.setting[data-key]'))
+      row.classList.toggle('changed', row.dataset.key in changed);
+    for (const a of document.querySelectorAll('.cat-link')) {
+      const panel = $('panel-' + a.dataset.panel);
+      a.classList.toggle('has-changes', !!(panel && panel.querySelector('.setting.changed')));
+    }
+    $('saveSummary').textContent = count === 1 ? '1 unsaved change' : count + ' unsaved changes';
+    $('saveBar').classList.toggle('show', count > 0);
+  }
+
+  for (const host of [$('settingsPanels'), $('opdsDownloads')]) {
+    host.addEventListener('input', refreshDirty);
+    host.addEventListener('change', refreshDirty);
+  }
+
+  window.addEventListener('beforeunload', (e) => {
+    if (Object.keys(changes()).length) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  $('discardBtn').addEventListener('click', () => {
+    renderSettings();
+    runSearch();
+    toast('Changes discarded.');
+  });
+
+  $('saveBtn').addEventListener('click', async () => {
+    const changed = changes();
+    if (!Object.keys(changed).length) return;
+    const btn = $('saveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changed)
+      });
+      if (!r.ok) throw new Error((await r.text()) || 'the reader refused the change');
+      for (const s of settings) {
+        if (!(s.key in changed)) continue;
+        if (s.obfuscated) s.isSet = changed[s.key] !== '';
+        else s.value = changed[s.key];
+      }
+      // A size list belongs to the selected font family, so a new family needs fresh lists.
+      if ('fontFamily' in changed || 'txtFontFamily' in changed) await loadSettings();
+      else renderSettings();
+      runSearch();
+      toast('Settings saved.');
+    } catch (e) {
+      toast('Could not save: ' + e.message, true);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Save changes';
+  });
 
   async function loadSettings() {
     try {
-      const response = await fetch('/api/settings');
-      if (!response.ok) {
-        throw new Error('Failed to load settings: ' + response.status);
-      }
-      allSettings = await response.json();
-
-      // Store original values
-      originalValues = {};
-      allSettings.forEach(function(s) {
-        originalValues[s.key] = s.value;
-      });
-
-      // Group by category. Category-less entries (the firmware gives them STR_NONE_OPT
-      // so they stay off the device settings screen) would otherwise collect under a
-      // heading literally named "None". The OPDS download settings are global rather
-      // than per-server, so they are rendered inside the OPDS card instead; anything
-      // else without a real category is skipped rather than shown under a junk heading.
-      const groups = {};
-      allSettings.forEach(function(s) {
-        if (OPDS_GLOBAL_KEYS.indexOf(s.key) !== -1) return;
-        if (!groups[s.category]) groups[s.category] = [];
-        groups[s.category].push(s);
-      });
-
-      const container = document.getElementById('settings-container');
-      let html = '';
-
-      for (const category in groups) {
-        html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
-        let lastSection = null;
-        groups[category].forEach(function(s) {
-          // Each item carries either a subcategory or a submenu label as its section heading.
-          // Both are treated identically: a new label triggers a section header row.
-          const section = s.subcategory || s.submenu || null;
-          if (section && section !== lastSection) {
-            html += '<div class="section-header">' + escapeHtml(section) + '</div>';
-            lastSection = section;
-          }
-          html += '<div class="setting-row">' +
-            '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
-            '<span class="setting-control">' + renderControl(s) + '</span>' +
-            '</div>';
-        });
-        html += '</div>';
-      }
-
-      container.innerHTML = html;
-      document.getElementById('save-container').style.display = '';
-      document.getElementById('saveBtn').disabled = true;
-
-      // The OPDS card hosts the global download settings but may have rendered before
-      // this fetch returned; redraw it now that allSettings is populated.
-      renderOpdsSection();
+      const r = await fetch('/api/settings');
+      if (!r.ok) throw new Error('the reader answered ' + r.status);
+      settings = await r.json();
     } catch (e) {
-      console.error(e);
-      document.getElementById('settings-container').innerHTML =
-        '<div class="card"><p style="text-align:center;color:#e74c3c;">Failed to load settings: ' +
-        escapeHtml(e.message || String(e)) + '</p></div>';
-    }
-  }
-
-  async function saveSettings() {
-    const btn = document.getElementById('saveBtn');
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
-
-    // Collect only changed values
-    const changes = {};
-    allSettings.forEach(function(s) {
-      const current = getValue(s);
-      if (current === undefined) return;
-      // Obfuscated fields have no meaningful original to diff against (the server sends
-      // ""), so any value getValue() returns is a deliberate set-or-clear and is sent.
-      if (s.obfuscated || current !== originalValues[s.key]) {
-        changes[s.key] = current;
-      }
-    });
-
-    if (Object.keys(changes).length === 0) {
-      showMessage('No changes to save.', false);
-      btn.textContent = 'Save Settings';
+      $('settingsPanels').replaceChildren(el('div', { className: 'card' },
+        el('p', { className: 'empty', textContent: 'The settings could not be loaded: ' + e.message })));
       return;
     }
-
-    try {
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changes)
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Save failed');
-      }
-
-      // Update original values to new values
-      for (const key in changes) {
-        originalValues[key] = changes[key];
-      }
-
-      // Credential fields keep nothing client-side: blank the input, drop the clear
-      // tick, and re-derive the placeholder from what was just saved.
-      allSettings.forEach(function(s) {
-        if (!s.obfuscated || !(s.key in changes)) return;
-        s.isSet = changes[s.key] !== '';
-        originalValues[s.key] = '';
-        const el = document.getElementById('setting-' + s.key);
-        if (el) {
-          el.value = '';
-          el.placeholder = s.isSet ? 'unchanged' : 'not set';
-        }
-        const clear = document.getElementById('setting-' + s.key + '-clear');
-        if (clear) clear.checked = false;
-      });
-
-      // A size dropdown lists the selected family's sizes, so a family change leaves the ones on
-      // this page stale. Fetch them again before anything else is edited.
-      if ('fontFamily' in changes || 'txtFontFamily' in changes) {
-        await loadSettings();
-      }
-
-      showMessage('Settings saved successfully!', false);
-    } catch (e) {
-      console.error(e);
-      showMessage('Error: ' + e.message, true);
+    const byName = new Map();
+    for (const s of settings) {
+      if (OPDS_GLOBAL_KEYS.includes(s.key) || !s.category || s.category === 'None') continue;
+      if (!byName.has(s.category)) byName.set(s.category, { name: s.category, rows: [] });
+      byName.get(s.category).rows.push(s);
     }
-
-    btn.textContent = 'Save Settings';
+    const used = new Set(EXTRA_PANELS);
+    categories = [...byName.values()].map((c, i) => {
+      let id = slug(c.name, i);
+      while (used.has(id)) id += '-' + (i + 1);
+      used.add(id);
+      return Object.assign(c, { id });
+    });
+    renderNav();
+    renderSettings();
+    show(location.hash.slice(1) || current);
+    // /settings?q=font opens with that search, so a page or a guide can point at a setting.
+    const q = new URLSearchParams(location.search).get('q');
+    if (q && !$('search').value) { $('search').value = q; runSearch(); }
   }
 
- // --- Wi-Fi Network Management ---
-  // Renders an editable list of saved Wi-Fi networks using /api/wifi endpoints.
-  // Password fields are never pre-filled; when left blank during edit, existing
-  // passwords remain unchanged server-side.
+  // ---- Wi-Fi networks ------------------------------------------------------------------------
+
   let wifiNetworks = [];
 
-  function renderWifiNetwork(net, idx) {
-    const isNew = idx === -1;
-    const id = isNew ? 'new' : idx;
-    const lastConnected = net.isLastConnected
-      ? '<div style="margin-top:8px;color:var(--label-color);font-size:0.9em;">Last connected network</div>'
-      : '';
-
-    return '<div class="opds-server" id="wifi-' + id + '">' +
-      '<div class="setting-row">' +
-        '<span class="setting-name">SSID</span>' +
-        '<span class="setting-control"><input type="text" id="wifi-ssid-' + id + '" value="' + escapeHtml(net.ssid || '') + '"></span>' +
-      '</div>' +
-      '<div class="setting-row">' +
-        '<span class="setting-name">Password</span>' +
-        '<span class="setting-control">' + renderPasswordField('wifi-pass-' + id, net.hasPassword) + '</span>' +
-      '</div>' +
-      lastConnected +
-      '<div class="opds-actions">' +
-        '<button class="btn-small btn-save-server" onclick="saveWifiNetwork(' + idx + ')">Save</button>' +
-        (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteWifiNetwork(' + idx + ')">Delete</button>') +
-      '</div>' +
-    '</div>';
+  function field(label, control) {
+    return el('div', { className: 'setting' }, [
+      el('div', { className: 'setting-text' }, el('label', { className: 'setting-name', for: [].concat(control)[0].id, textContent: label })),
+      el('div', { className: 'setting-control' }, control)]);
   }
 
-  function renderWifiSection() {
-    const container = document.getElementById('wifi-container');
-    let html = '<div class="card"><h2>Wi-Fi Networks</h2>';
-
-    if (wifiNetworks.length === 0) {
-      html += '<p style="color:var(--label-color);text-align:center;">No Wi-Fi networks saved</p>';
-    } else {
-      wifiNetworks.forEach(function(net, idx) {
-        html += renderWifiNetwork(net, idx);
-      });
-    }
-
-    html += '<div style="margin-top:12px;text-align:center;">' +
-      '<button class="btn-small btn-add" onclick="addWifiNetwork()">+ Add Network</button>' +
-    '</div></div>';
-    container.innerHTML = html;
+  async function post(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.text()) || 'the reader answered ' + r.status);
   }
 
-  async function loadWifiNetworks() {
-    try {
-      const resp = await fetch('/api/wifi');
-      if (!resp.ok) throw new Error('Failed to load');
-      wifiNetworks = await resp.json();
-      renderWifiSection();
-    } catch (e) {
-      console.error('Wi-Fi load error:', e);
-    }
-  }
-
-  function addWifiNetwork() {
-    const container = document.getElementById('wifi-container');
-    const card = container.querySelector('.card');
-    const addBtn = card.querySelector('.btn-add').parentElement;
-    // Prevent multiple unsaved new-network forms at once (idx -1 -> id "new")
-    if (document.getElementById('wifi-new')) return;
-    addBtn.insertAdjacentHTML('beforebegin', renderWifiNetwork({ssid:'',hasPassword:false,isLastConnected:false}, -1));
-  }
-
-  async function saveWifiNetwork(idx) {
-    const id = idx === -1 ? 'new' : idx;
-    const ssid = document.getElementById('wifi-ssid-' + id).value.trim();
-    if (!ssid) {
-      showMessage('SSID is required.', true);
-      return;
-    }
-
-    const data = { ssid: ssid };
-    // undefined omits the field, preserving the stored password; '' clears it.
-    const pass = readPasswordField('wifi-pass-' + id);
-    if (pass !== undefined) data.password = pass;
-    if (idx >= 0) data.index = idx;
-
-    try {
-      const resp = await fetch('/api/wifi', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      showMessage('Wi-Fi network saved!', false);
-      await loadWifiNetworks();
-    } catch (e) {
-      showMessage('Error: ' + e.message, true);
-    }
-  }
-
-  async function deleteWifiNetwork(idx) {
-    if (!confirm('Delete this Wi-Fi network?')) return;
-    try {
-      const resp = await fetch('/api/wifi/delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({index: idx})
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      showMessage('Wi-Fi network deleted', false);
-      await loadWifiNetworks();
-    } catch (e) {
-      showMessage('Error: ' + e.message, true);
-    }
-  }
-
-  // --- OPDS Server Management ---
-  // Dynamically renders an editable list of OPDS servers, communicating with the
-  // /api/opds REST endpoints. Password fields are never pre-filled for security;
-  // the "(unchanged)" placeholder indicates an existing password is preserved on save.
-  let opdsServers = [];
-  const MAX_OPDS_SERVERS = 8;
-
-  function renderOpdsServer(srv, idx) {
-    const isNew = idx === -1;
-    const id = isNew ? 'new' : idx;
-    return '<div class="opds-server" id="opds-' + id + '">' +
-      '<div class="setting-row">' +
-        '<span class="setting-name">Server Name</span>' +
-        '<span class="setting-control"><input type="text" id="opds-name-' + id + '" value="' + escapeHtml(srv.name || '') + '"></span>' +
-      '</div>' +
-      '<div class="setting-row">' +
-        '<span class="setting-name">URL</span>' +
-        '<span class="setting-control"><input type="text" id="opds-url-' + id + '" value="' + escapeHtml(srv.url || '') + '"></span>' +
-      '</div>' +
-      '<div class="setting-row">' +
-        '<span class="setting-name">Username</span>' +
-        '<span class="setting-control"><input type="text" id="opds-user-' + id + '" value="' + escapeHtml(srv.username || '') + '"></span>' +
-      '</div>' +
-      '<div class="setting-row">' +
-        '<span class="setting-name">Password</span>' +
-        '<span class="setting-control">' + renderPasswordField('opds-pass-' + id, srv.hasPassword) + '</span>' +
-      '</div>' +
-      '<div class="opds-actions">' +
-        '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')">Save</button>' +
-        (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteOpdsServer(' + idx + ')">Delete</button>') +
-      '</div>' +
-    '</div>';
-  }
-
-  // The global download settings live in allSettings, which is fetched independently of
-  // the server list — whichever request lands second triggers the re-render, so this
-  // returns nothing until the settings are actually available.
-  function renderOpdsGlobalSettings() {
-    const globals = OPDS_GLOBAL_KEYS
-      .map(function(k) { return allSettings.find(function(s) { return s.key === k; }); })
-      .filter(Boolean);
-    if (globals.length === 0) return '';
-
-    let html = '<div class="section-header">Downloads</div>';
-    globals.forEach(function(s) {
-      html += '<div class="setting-row">' +
-        '<span class="setting-name">' + escapeHtml(s.name) + '</span>' +
-        '<span class="setting-control">' + renderControl(s) + '</span>' +
-        '</div>';
-    });
-    return html;
-  }
-
-  function renderOpdsSection() {
-    const container = document.getElementById('opds-container');
-    if (!container) return;
-    let html = '<div class="card"><h2>OPDS Servers</h2>';
-    html += renderOpdsGlobalSettings();
-    const canAddOpdsServer = opdsServers.length < MAX_OPDS_SERVERS;
-
-    if (opdsServers.length === 0) {
-      html += '<p style="color:var(--label-color);text-align:center;">No OPDS servers configured</p>';
-    } else {
-      opdsServers.forEach(function(srv, idx) {
-        html += renderOpdsServer(srv, idx);
-      });
-    }
-
-    html += '<div style="margin-top:12px;text-align:center;">' +
-      (canAddOpdsServer
-        ? '<button class="btn-small btn-add" onclick="addOpdsServer()">+ Add Server</button>'
-        : '<span style="color:var(--label-color);">Maximum of 8 servers reached</span>') +
-    '</div></div>';
-    container.innerHTML = html;
-  }
-
-  async function loadOpdsServers() {
-    try {
-      const resp = await fetch('/api/opds');
-      if (!resp.ok) throw new Error('Failed to load');
-      opdsServers = await resp.json();
-      renderOpdsSection();
-    } catch (e) {
-      console.error('OPDS load error:', e);
-    }
-  }
-
-  function addOpdsServer() {
-    if (opdsServers.length >= MAX_OPDS_SERVERS) return;
-    const container = document.getElementById('opds-container');
-    const card = container.querySelector('.card');
-    const addBtn = card.querySelector('.btn-add').parentElement;
-    // Prevent multiple unsaved new-server forms at once (idx -1 → id "new")
-    if (document.getElementById('opds-new')) return;
-    addBtn.insertAdjacentHTML('beforebegin', renderOpdsServer({name:'',url:'',username:'',hasPassword:false}, -1));
-  }
-
-  async function saveOpdsServer(idx) {
-    const id = idx === -1 ? 'new' : idx;
-    const data = {
-      name: document.getElementById('opds-name-' + id).value,
-      url: document.getElementById('opds-url-' + id).value,
-      username: document.getElementById('opds-user-' + id).value,
+  function wifiCard(net, idx) {
+    const id = idx < 0 ? 'new' : String(idx);
+    const save = async () => {
+      const ssid = $('wifi-ssid-' + id).value.trim();
+      if (!ssid) { toast('Enter the network name.', true); return; }
+      const data = { ssid };
+      const pass = readPassword('wifi-pass-' + id);
+      if (pass !== undefined) data.password = pass;
+      if (idx >= 0) data.index = idx;
+      try { await post('/api/wifi', data); toast('Network saved.'); await loadWifi(); } catch (e) { toast('Could not save: ' + e.message, true); }
     };
-    // undefined omits the field, preserving the stored password; '' clears it.
-    const pass = readPasswordField('opds-pass-' + id);
-    if (pass !== undefined) data.password = pass;
-    if (idx >= 0) data.index = idx;
-
-    try {
-      const resp = await fetch('/api/opds', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      showMessage('OPDS server saved!', false);
-      await loadOpdsServers();
-    } catch (e) {
-      showMessage('Error: ' + e.message, true);
-    }
+    const remove = async () => {
+      if (!confirm('Forget the network "' + net.ssid + '"?')) return;
+      try { await post('/api/wifi/delete', { index: idx }); toast('Network forgotten.'); await loadWifi(); } catch (e) { toast('Could not remove: ' + e.message, true); }
+    };
+    return el('div', { className: 'item-card', id: 'wifi-' + id }, [
+      el('div', { className: 'item-head' }, [idx < 0 ? 'New network' : net.ssid,
+        net.isLastConnected ? el('span', { className: 'badge', textContent: 'Last connected' }) : null]),
+      el('div', { className: 'rows' }, [
+        field('Network name (SSID)', el('input', { type: 'text', id: 'wifi-ssid-' + id, value: net.ssid || '' })),
+        field('Password', passwordField('wifi-pass-' + id, net.hasPassword, 'Password'))]),
+      el('div', { className: 'item-actions' }, [
+        idx < 0 ? el('button', { type: 'button', className: 'btn', textContent: 'Cancel', onclick: renderWifi })
+          : el('button', { type: 'button', className: 'btn btn-danger', textContent: 'Forget', onclick: remove }),
+        el('button', { type: 'button', className: 'btn btn-primary', textContent: 'Save', onclick: save })])]);
   }
 
-  async function deleteOpdsServer(idx) {
-    if (!confirm('Delete this OPDS server?')) return;
-    try {
-      const resp = await fetch('/api/opds/delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({index: idx})
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      showMessage('OPDS server deleted', false);
-      await loadOpdsServers();
-    } catch (e) {
-      showMessage('Error: ' + e.message, true);
-    }
+  function renderWifi() {
+    const add = el('button', { type: 'button', className: 'btn', textContent: '+ Add a network', onclick: () => {
+      if ($('wifi-new')) return;
+      add.before(wifiCard({ ssid: '', hasPassword: false }, -1));
+      $('wifi-ssid-new').focus();
+    } });
+    $('wifiList').replaceChildren(
+      ...(wifiNetworks.length ? wifiNetworks.map(wifiCard) : [el('p', { className: 'empty', textContent: 'No networks saved yet.' })]),
+      add);
   }
-  
+
+  async function loadWifi() {
+    try {
+      const r = await fetch('/api/wifi');
+      if (!r.ok) throw new Error(r.status);
+      wifiNetworks = await r.json();
+    } catch (e) {
+      wifiNetworks = [];
+    }
+    renderWifi();
+  }
+
+  // ---- OPDS servers --------------------------------------------------------------------------
+
+  let opdsServers = [];
+
+  function opdsCard(srv, idx) {
+    const id = idx < 0 ? 'new' : String(idx);
+    const save = async () => {
+      const data = { name: $('opds-name-' + id).value, url: $('opds-url-' + id).value, username: $('opds-user-' + id).value };
+      const pass = readPassword('opds-pass-' + id);
+      if (pass !== undefined) data.password = pass;
+      if (idx >= 0) data.index = idx;
+      try { await post('/api/opds', data); toast('Server saved.'); await loadOpds(); } catch (e) { toast('Could not save: ' + e.message, true); }
+    };
+    const remove = async () => {
+      if (!confirm('Remove the server "' + (srv.name || srv.url) + '"?')) return;
+      try { await post('/api/opds/delete', { index: idx }); toast('Server removed.'); await loadOpds(); } catch (e) { toast('Could not remove: ' + e.message, true); }
+    };
+    return el('div', { className: 'item-card', id: 'opds-' + id }, [
+      el('div', { className: 'item-head' }, idx < 0 ? 'New server' : (srv.name || srv.url)),
+      el('div', { className: 'rows' }, [
+        field('Name', el('input', { type: 'text', id: 'opds-name-' + id, value: srv.name || '' })),
+        field('Catalog URL', el('input', { type: 'text', id: 'opds-url-' + id, value: srv.url || '', placeholder: 'https://example.com/opds' })),
+        field('Username', el('input', { type: 'text', id: 'opds-user-' + id, value: srv.username || '', autocomplete: 'off' })),
+        field('Password', passwordField('opds-pass-' + id, srv.hasPassword, 'Password'))]),
+      el('div', { className: 'item-actions' }, [
+        idx < 0 ? el('button', { type: 'button', className: 'btn', textContent: 'Cancel', onclick: renderOpds })
+          : el('button', { type: 'button', className: 'btn btn-danger', textContent: 'Remove', onclick: remove }),
+        el('button', { type: 'button', className: 'btn btn-primary', textContent: 'Save', onclick: save })])]);
+  }
+
+  function renderOpds() {
+    const full = opdsServers.length >= MAX_OPDS_SERVERS;
+    const add = el('div', { className: 'add-row' }, [
+      el('button', { type: 'button', className: 'btn', textContent: '+ Add a server', disabled: full, onclick: () => {
+        if ($('opds-new')) return;
+        add.before(opdsCard({}, -1));
+        $('opds-name-new').focus();
+      } }),
+      full ? el('span', { className: 'muted', textContent: 'The reader keeps at most ' + MAX_OPDS_SERVERS + ' servers.' }) : null]);
+    $('opdsList').replaceChildren(
+      ...(opdsServers.length ? opdsServers.map(opdsCard) : [el('p', { className: 'empty', textContent: 'No servers yet.' })]),
+      add);
+  }
+
+  async function loadOpds() {
+    try {
+      const r = await fetch('/api/opds');
+      if (!r.ok) throw new Error(r.status);
+      opdsServers = await r.json();
+    } catch (e) {
+      opdsServers = [];
+    }
+    renderOpds();
+  }
+
 <!--#include file="shared/PluginHost.js.inc" -->
 
-  // Sequential, not concurrent: the device's web server handles one client
-  // connection at a time, and three simultaneous fetches on page load can
-  // stall long enough inside a single response to trip the firmware watchdog.
-  // Plugins load last, so a slow or broken one cannot delay the real settings.
+  // One request at a time: the reader serves one connection at a time, and several at once on page
+  // load can stall a response long enough to trip its watchdog. Plugins load last, so a slow or
+  // broken one cannot hold up the settings.
   (async () => {
     await loadSettings();
-    await loadWifiNetworks();
-    await loadOpdsServers();
+    await loadWifi();
+    await loadOpds();
     await loadPlugins('settings');
+    $('pluginsEmpty').classList.toggle('hidden', $('plugin-container').children.length > 0);
   })();
 </script>
 </body>
