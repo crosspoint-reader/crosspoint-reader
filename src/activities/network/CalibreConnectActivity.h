@@ -32,6 +32,8 @@ class CalibreConnectActivity final : public Activity {
   unsigned long lastProcessedDeleteAt = 0;
   int currentRssi = 0;
   unsigned long lastRssiUpdateTime = 0;
+  // When the transfer progress was last painted; see PROGRESS_REPAINT_MS.
+  unsigned long lastProgressPaintAt = 0;
   // The state of the link to the network the screen shows.
   WifiLinkWatch::Link shownLink = WifiLinkWatch::Link::Up;
 

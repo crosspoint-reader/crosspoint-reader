@@ -13,6 +13,14 @@
 
 // Unlike CrossPointWebServerActivity we keep rendering live progress UI, so the primary
 // framebuffer stays; ServerSession::prepareRadio() drops only what this screen does not use.
+
+namespace {
+// Transfer progress alone repaints at most this often. A repaint is ~0.6 s of panel time, and with
+// the next one requested as soon as the last ended, the panel refreshed through ~75 % of a transfer
+// whose SD writes waited for it (41 KB/s). A new book, a finished one, a deletion and a change of
+// the link still repaint at once.
+constexpr unsigned long PROGRESS_REPAINT_MS = 4000;
+}  // namespace
 void CalibreConnectActivity::onEnter() {
   Activity::onEnter();
 
@@ -100,21 +108,28 @@ void CalibreConnectActivity::loop() {
       requestUpdate();
     }
 
+    const auto status = session.webServer()->getWsUploadStatus();
+
+    // The signal every 5 s; during a transfer only as part of its progress repaints.
     if (shownLink == WifiLinkWatch::Link::Up && millis() - lastRssiUpdateTime > 5000) {
       lastRssiUpdateTime = millis();
       currentRssi = WiFi.RSSI();
-      requestUpdate();
+      if (!status.inProgress) requestUpdate();
     }
 
-    const auto status = session.webServer()->getWsUploadStatus();
-    bool changed = false;
+    bool changed = false;     // repaint now
+    bool progressed = false;  // repaint when PROGRESS_REPAINT_MS allows
     if (status.inProgress) {
-      if (status.received != lastProgressReceived || status.total != lastProgressTotal ||
-          status.filename != currentUploadName) {
+      const bool newUpload = status.filename != currentUploadName || status.total != lastProgressTotal;
+      if (newUpload || status.received != lastProgressReceived) {
         lastProgressReceived = status.received;
         lastProgressTotal = status.total;
         currentUploadName = status.filename;
-        changed = true;
+        if (newUpload) {
+          changed = true;
+        } else {
+          progressed = true;
+        }
       }
     } else if (lastProgressReceived != 0 || lastProgressTotal != 0) {
       lastProgressReceived = 0;
@@ -149,7 +164,9 @@ void CalibreConnectActivity::loop() {
       lastDeleteName.clear();
       changed = true;
     }
+    if (progressed && millis() - lastProgressPaintAt >= PROGRESS_REPAINT_MS) changed = true;
     if (changed) {
+      lastProgressPaintAt = millis();
       requestUpdate();
     }
   }
@@ -159,6 +176,10 @@ void CalibreConnectActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect contentRect = UITheme::getContentRect(renderer, true, false);
 
+  // The previous frame's refresh is collected before this one draws: on the X3 its waveform reads
+  // the frame buffer (asyncRefreshHoldsFrameBuffer()), and this screen runs on a single one. A
+  // repaint comes seconds after the last, so the waveform is long over and this is quick.
+  if (renderer.isRefreshPending()) renderer.completeDisplay();
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.headerHeight},
@@ -237,5 +258,8 @@ void CalibreConnectActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
-  renderer.displayBuffer();
+  // Triggered, not displayed: the panel runs its ~0.45 s waveform on its own, off the SPI bus it
+  // shares with the SD card on the X3 and X4. displayBuffer() held that bus for the whole refresh,
+  // so every SD write of a transfer waited for the screen. The next render collects it (above).
+  renderer.triggerDisplay();
 }
