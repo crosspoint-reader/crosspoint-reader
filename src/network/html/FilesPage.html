@@ -1901,7 +1901,7 @@
                 </div>
                 <div class="setting-controls">
                   <label class="toggle-switch">
-                    <input type="checkbox" id="preserveCoverColorToggle">
+                    <input type="checkbox" id="preserveCoverColorToggle" onchange="updateUploadSettingsPersistence()">
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
@@ -1914,7 +1914,7 @@
                 </div>
                 <div class="setting-controls">
                   <label class="toggle-switch">
-                    <input type="checkbox" id="splitLongSectionsToggle" checked>
+                    <input type="checkbox" id="splitLongSectionsToggle" checked onchange="updateUploadSettingsPersistence()">
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
@@ -1927,7 +1927,20 @@
                 </div>
                 <div class="setting-controls">
                   <label class="toggle-switch">
-                    <input type="checkbox" id="export-log-checkbox">
+                    <input type="checkbox" id="export-log-checkbox" onchange="updateUploadSettingsPersistence()">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <!-- Remember the upload options in this browser -->
+              <div class="advanced-setting-row">
+                <div class="setting-label">
+                  <div class="setting-title">💾 Remember These Options</div>
+                  <div class="setting-desc">Kept in this browser for the next upload, including Optimize EPUB</div>
+                </div>
+                <div class="setting-controls">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="rememberUploadSettings" onchange="updateUploadSettingsPersistence()">
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
@@ -2424,22 +2437,15 @@
     function openUploadModal() {
       // Clear any staged folder drop; prepareFolderDrop re-arms it after this.
       pendingFolderUpload = null;
-      // Reset converter variables to defaults
-      ENABLE_GRAYSCALE = true;
-      JPEG_QUALITY = 85;
-      HANDEDNESS = 'right';
-      OVERLAP_PERCENT = 5;
       imageStates = {};
+      // The defaults, or the options remembered from an earlier visit.
+      restoreUploadSettingsFromStorage();
 
       // Hide convert options when opening modal (no files selected initially)
       const convertOptions = document.getElementById('convertOptions');
       if (convertOptions) {
         convertOptions.style.display = 'none';
       }
-
-      // Reset rotation and overlap UI
-      setHandedness('right');
-      setOverlap(5);
 
       // Hide log section from previous session
       const logSection = document.getElementById('log-section');
@@ -2497,7 +2503,6 @@
       document.getElementById('progress-container').style.display = 'none';
       document.getElementById('progress-fill').style.width = '0%';
       document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
-      document.getElementById('convertBeforeUpload').checked = false;
       document.getElementById('convertInfo').style.display = 'none';
       document.getElementById('convertWarning').style.display = 'none';
       // Clear image picker cache and reset layout
@@ -2519,15 +2524,8 @@
         advancedOptionsToggle.style.opacity = '0.5';
         advancedOptionsToggle.style.pointerEvents = 'none';
       }
-      // Reset to defaults
-      document.getElementById('splitLongSectionsToggle').checked = true;
-      document.getElementById('preserveCoverColorToggle').checked = false;
-      document.getElementById('qualitySlider').value = 85;
-      document.getElementById('qualityInput').value = 85;
-      setHandedness('right');
-      setOverlap(5);
-      // Update converter variables
-      updateQualitySettings();
+      // Back to the defaults; what is remembered stays stored for the next open.
+      applyUploadSettings();
     }
 
     function updateBatchModeUI(isBatch) {
@@ -2564,6 +2562,7 @@
         advancedOptionsToggle.style.opacity = checked ? '1' : '0.5';
         advancedOptionsToggle.style.pointerEvents = checked ? 'auto' : 'none';
       }
+      updateUploadSettingsPersistence();
     }
 
     function toggleAdvancedOptions() {
@@ -2626,6 +2625,7 @@
       // Update converter variables (used by processImage and applyGrayscale)
       JPEG_QUALITY = parseInt(quality, 10);
       ENABLE_GRAYSCALE = true; // Always grayscale for e-ink
+      updateUploadSettingsPersistence();
     }
 
     function setHandedness(value) {
@@ -2638,6 +2638,7 @@
       if (document.getElementById('imagePickerSection').style.display !== 'none') {
         renderImageGrid();
       }
+      updateUploadSettingsPersistence();
     }
 
     function setOverlap(value) {
@@ -2646,6 +2647,7 @@
       document.querySelectorAll('.overlap-btn').forEach(btn => {
         btn.classList.toggle('active', parseInt(btn.dataset.value) === value);
       });
+      updateUploadSettingsPersistence();
     }
 
     // ============================================================================
@@ -3253,8 +3255,14 @@
       }
 
       if (qualitySlider && qualityInput) {
-        // Initialize converter variables with UI default values
-        updateQualitySettings();
+        // Initialize converter variables with UI default values, without overwriting the
+        // remembered settings (the Remember switch is still off until the dialog opens).
+        suppressUploadSettingsSave = true;
+        try {
+          updateQualitySettings();
+        } finally {
+          suppressUploadSettingsSave = false;
+        }
 
         // Deselect all presets when slider is manually changed
         const deselectPresets = function () {
@@ -3615,15 +3623,15 @@
       const hasEpub = Array.from(files).some(f => f.name.toLowerCase().endsWith('.epub'));
       if (files.length > 0 && hasEpub) {
         convertOptions.style.display = 'block';
+        toggleConvertOptions();
       } else {
         convertOptions.style.display = 'none';
-        // Clear stale checkbox state so the "Optimize & Upload" button doesn't linger
-        // when the user re-picks a non-EPUB after having ticked Optimize for an EPUB.
-        const cb = document.getElementById('convertBeforeUpload');
-        if (cb && cb.checked) {
-          cb.checked = false;
-          toggleConvertOptions();
-        }
+        // Optimize only applies to EPUBs: the button and notes say plain "Upload" for anything
+        // else, while the ticked box itself is kept (it may be a remembered choice).
+        uploadBtn.textContent = 'Upload';
+        uploadBtn.classList.remove('optimize');
+        document.getElementById('convertInfo').style.display = 'none';
+        document.getElementById('convertWarning').style.display = 'none';
         if (files.length === 0) clearImagePicker();
       }
 
@@ -3701,6 +3709,84 @@
     let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
     let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
     let OVERLAP_PERCENT = 5; // Minimum overlap percentage for splits (5%, 10%, 15%)
+
+    // Ported from CrossInk (uxjulia/CrossInk) web/pages/files.js @1b1156027, MIT, by Julia Nguyen.
+    // The upload options, remembered in this browser when "Remember These Options" is on, and
+    // restored each time the upload dialog opens. Every storage access may throw (private
+    // windows, blocked site data), so each is guarded and the page falls back to the defaults.
+    const UPLOAD_SETTINGS_STORAGE_KEY = 'filesUploadSettings.v1';
+    const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
+      convertBeforeUpload: false,
+      splitLongSections: true,
+      preserveCoverColor: false,
+      quality: DEFAULT_JPEG_QUALITY,
+      deviceTarget: 'auto',
+      handedness: 'right',
+      overlap: 5,
+      exportLog: false,
+    });
+    let suppressUploadSettingsSave = false;
+
+    function getCurrentUploadSettings() {
+      return {
+        convertBeforeUpload: !!document.getElementById('convertBeforeUpload')?.checked,
+        splitLongSections: !!document.getElementById('splitLongSectionsToggle')?.checked,
+        preserveCoverColor: !!document.getElementById('preserveCoverColorToggle')?.checked,
+        quality: parseInt(document.getElementById('qualitySlider')?.value || JPEG_QUALITY, 10),
+        deviceTarget: DEVICE_TARGET,
+        handedness: HANDEDNESS,
+        overlap: OVERLAP_PERCENT,
+        exportLog: !!document.getElementById('export-log-checkbox')?.checked,
+      };
+    }
+
+    // Puts settings (missing ones from the defaults) into the dialog and the converter, without
+    // saving them back.
+    function applyUploadSettings(settings = {}) {
+      const merged = { ...DEFAULT_UPLOAD_SETTINGS, ...settings };
+      suppressUploadSettingsSave = true;
+      try {
+        document.getElementById('convertBeforeUpload').checked = !!merged.convertBeforeUpload;
+        document.getElementById('splitLongSectionsToggle').checked = !!merged.splitLongSections;
+        document.getElementById('preserveCoverColorToggle').checked = !!merged.preserveCoverColor;
+        document.getElementById('export-log-checkbox').checked = !!merged.exportLog;
+        document.getElementById('rememberUploadSettings').checked = !!settings.rememberSettings;
+
+        setQualityPreset(Math.max(1, Math.min(95, parseInt(merged.quality, 10) || DEFAULT_JPEG_QUALITY)));
+        setDeviceTarget(['auto', 'X3', 'X4'].includes(merged.deviceTarget) ? merged.deviceTarget : 'auto');
+        setHandedness(merged.handedness === 'left' ? 'left' : 'right');
+        setOverlap([5, 10, 15].includes(Number(merged.overlap)) ? Number(merged.overlap) : 5);
+        toggleConvertOptions();
+      } finally {
+        suppressUploadSettingsSave = false;
+      }
+    }
+
+    function restoreUploadSettingsFromStorage() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(UPLOAD_SETTINGS_STORAGE_KEY) || 'null');
+        applyUploadSettings(saved?.rememberSettings ? saved : undefined);
+      } catch (error) {
+        console.warn('Could not read remembered upload settings:', error);
+        applyUploadSettings();
+      }
+    }
+
+    // Called by every option's change: stores all options while "Remember" is on, and forgets
+    // them the moment it is switched off.
+    function updateUploadSettingsPersistence() {
+      if (suppressUploadSettingsSave) return;
+      try {
+        if (!document.getElementById('rememberUploadSettings')?.checked) {
+          localStorage.removeItem(UPLOAD_SETTINGS_STORAGE_KEY);
+          return;
+        }
+        const settings = { ...getCurrentUploadSettings(), rememberSettings: true };
+        localStorage.setItem(UPLOAD_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      } catch (error) {
+        console.warn('Could not save upload settings:', error);
+      }
+    }
 
     // ============================================================================
     // Image Picker State Management
@@ -3823,6 +3909,7 @@
     function setDeviceTarget(value) {
       DEVICE_TARGET = value;
       applyDeviceTarget();
+      updateUploadSettingsPersistence();
     }
 
     // Batch logging system for multiple files
