@@ -117,7 +117,7 @@ class CrossPointWebServer {
   void handleSystemInfoPage() const;
   void handleDiagnosticsPage() const;
   void handleBootDiagnostics() const;
-  void handleJszip() const;
+  void handleBundledScript() const;  // GET /js/<name>: a script from the SD-card bundle
   void handleNotFound() const;
   void handleStatus() const;
   void handleStatusFast() const;
@@ -208,9 +208,12 @@ class CrossPointWebServer {
   // /.crosspoint/plugins, which the web file endpoints leave alone unless Show Hidden Files is on;
   // one copied by hand into /plugins or /.plugins is listed and managed the same way.
   void handlePluginsPage() const;
-  // The File Manager's Details dialog: its script, and an EPUB's own OPF to read metadata from.
-  void handleMetadataEditorJs() const;
+  // The File Manager's Details dialog reads an EPUB's own OPF from here.
   void handleBookOpf() const;
+  // POST /api/book/replace?path&keep (raw body): swaps in an optimized copy of a book, keeping the
+  // original as <book>.bak.
+  void handleBookReplace();
+  void handleBookReplaceData();
   void handlePluginInstallBegin() const;  // POST /api/plugins/begin?name -> fresh staging folder
   void handlePluginInstallFile();         // POST /api/plugins/file?name&file (raw body) -> one file
   void handlePluginInstallFileData();
@@ -241,4 +244,5 @@ class CrossPointWebServer {
     // The response once the body is in: false (and an error sent) when it failed or never streamed.
     bool answerFailure(WebServer& server);
   } rawUpload;
+  String bookReplacePath;  // the book /api/book/replace is replacing, set at the start of its body
 };

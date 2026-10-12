@@ -208,6 +208,18 @@ bool serve(WebServer& server, const web_bundle::Index index, const char* cacheCo
   return true;
 }
 
+bool serveScript(WebServer& server, const char* name, const char* cacheControl) {
+  const size_t len = strlen(name);
+  for (size_t i = 0; i < web_bundle::ENTRY_COUNT; i++) {
+    const web_bundle::Entry& entry = web_bundle::ENTRIES[i];
+    if (strcmp(entry.contentType, "text/html") == 0) continue;  // pages have routes of their own
+    if (strncmp(entry.file, name, len) == 0 && strcmp(entry.file + len, ".gz") == 0) {
+      return serve(server, static_cast<web_bundle::Index>(i), cacheControl);
+    }
+  }
+  return false;
+}
+
 const char* releaseTag() { return WEB_BUNDLE_RELEASE_TAG; }
 
 const char* repository() { return CROSSPOINT_GIT_REPOSITORY; }

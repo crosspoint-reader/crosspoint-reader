@@ -54,6 +54,11 @@ void forget();
 // marks the bundle Missing, so the setup page reinstalls it.
 bool serve(WebServer& server, web_bundle::Index index, const char* cacheControl = "max-age=3600");
 
+// A bundle file that pages load by name under /js/ ("jszip.min.js"), streamed like serve(). Only
+// the bundle's non-page files are found this way. False, having sent nothing, when this build's
+// bundle has no such file or it cannot be served.
+bool serveScript(WebServer& server, const char* name, const char* cacheControl = "max-age=3600");
+
 // The release this build is published under ("" for unpublished builds such as
 // env:default), the repository it is published in, and the bundle's asset name.
 const char* releaseTag();

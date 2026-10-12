@@ -72,7 +72,6 @@ the setup page and every other page redirects (`302`) to `/setup`.
 | `/fonts`      | Font Manager                               |
 | `/dictionary` | Dictionaries: lists, installs and removes StarDict dictionaries |
 | `/plugins`    | Plugins: install, switch off and remove web-interface plugins |
-| `/js/metadata-editor.js` | The File Manager's Details dialog, loaded on first use |
 | `/systeminfo` | System Info                                |
 | `/diagnostics`| Diagnostics: device status, boot and sleep history, and a report to download |
 
@@ -84,8 +83,11 @@ compressed files in the browser, then works through
 one request at a time. The route is singular so it is never mistaken for the
 `/dictionaries` folder. See [docs/dictionary.md](dictionary.md#install-from-the-web-interface).
 
-`GET /js/jszip.min.js` serves the gzipped JSZip library (`Content-Encoding: gzip`),
-which the File Manager loads, or `404` while the bundle is not installed. Any
+`GET /js/<name>` serves a script from the bundle by its name, gzip-encoded
+(`Content-Encoding: gzip`), or `404` when the bundle is not installed or has no such
+script: `/js/jszip.min.js`, the JSZip library the File Manager and the Dictionaries and
+Plugins pages load, and `/js/metadata-editor.js`, the File Manager's Details dialog,
+loaded on first use. Pages are not served under `/js/`. Any
 other path that WebDAV does not claim answers `404` with a plain-text body.
 
 ```bash
@@ -834,6 +836,34 @@ client sees as malformed XML.
 ```bash
 curl "http://crosspoint.local/api/book/opf?path=/Books/mybook.epub"
 ```
+
+### POST `/api/book/replace` - Swap In an Optimized Copy of a Book
+
+What the File Manager's in-place **Optimize** uses: it downloads a book, optimizes it in the
+browser and sends the result here as the raw request body (any content type except
+`multipart/form-data`).
+
+```bash
+curl -X POST -H 'Content-Type: application/epub+zip' --data-binary @optimized.epub \
+  "http://crosspoint.local/api/book/replace?path=%2FBooks%2Fbook.epub&keep=1"
+# -> {"ok":true,"path":"/Books/book.epub","backup":"/Books/book.epub.bak","keptOlderBackup":false,"keptReadingState":true}
+```
+
+| Parameter | Description |
+| --------- | ----------- |
+| `path`    | An existing EPUB the file endpoints may write (the same check as `/upload`'s target) |
+| `keep`    | `1` when the new copy has the same chapter list: the reading position and bookmarks stay, and only the laid-out chapters, indexes and thumbnails are dropped. Without it the book starts afresh, as after any re-upload, and its entries leave the bookmark index. |
+
+The body is written to `<path>.new` and swapped in only once complete. The original is kept as
+`<path>.bak`; if a `.bak` already exists, it holds the older original and stays, and the current
+file is replaced. Reading stats follow the file name, so they always stay.
+
+| Status | Cause |
+| ------ | ----- |
+| 400    | No such EPUB, a refused path, or the upload was cut off |
+| 413    | Body over 512 MB |
+| 415    | A `multipart/form-data` body |
+| 500    | Could not write the new file, set the original aside, or swap the new one in |
 
 ### Installing and managing plugins
 
