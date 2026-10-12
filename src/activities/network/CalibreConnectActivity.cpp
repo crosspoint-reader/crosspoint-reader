@@ -77,7 +77,6 @@ void CalibreConnectActivity::onEnter() {
 void CalibreConnectActivity::onExit() {
   Activity::onExit();
 
-  wifiWatch.stop();  // before the disconnect below, a drop of our own making
   stopWebServer();
   MDNS.end();
 
@@ -117,7 +116,6 @@ void CalibreConnectActivity::startWebServer() {
 
   if (webServer->isRunning()) {
     state = CalibreConnectState::SERVER_RUNNING;
-    wifiWatch.start();
     requestUpdate();
   } else {
     state = CalibreConnectState::ERROR;
@@ -160,18 +158,7 @@ void CalibreConnectActivity::loop() {
     }
     lastHandleClientTime = millis();
 
-    // A drop used to go unnoticed here: the screen kept its last signal reading while the plugin
-    // could no longer reach the reader. Now it says the link is reconnecting, then that it failed
-    // (after WifiLinkWatch::GRACE_MS), and returns to normal if the driver gets it back. Back
-    // leaves at any time.
-    const auto link = wifiWatch.poll(connectedIP);
-    if (link != shownLink) {
-      shownLink = link;
-      if (link != WifiLinkWatch::Link::Up) currentRssi = 0;
-      requestUpdate();
-    }
-
-    if (shownLink == WifiLinkWatch::Link::Up && millis() - lastRssiUpdateTime > 5000) {
+    if (millis() - lastRssiUpdateTime > 5000) {
       lastRssiUpdateTime = millis();
       currentRssi = WiFi.RSSI();
       requestUpdate();
@@ -260,10 +247,7 @@ void CalibreConnectActivity::render(RenderLock&&) {
 
     const int signalHeight = 22;
     drawWifiSignalStrength(renderer, textX, y, textWidth, signalHeight, currentRssi);
-    const std::string signalText = shownLink == WifiLinkWatch::Link::Reconnecting ? tr(STR_WIFI_RECONNECTING)
-                                   : shownLink == WifiLinkWatch::Link::Gone       ? tr(STR_WIFI_CONN_FAILED)
-                                                                                  : rssiLabel(currentRssi);
-    renderer.drawText(SMALL_FONT_ID, textX, y + signalHeight + 2, signalText.c_str());
+    renderer.drawText(SMALL_FONT_ID, textX, y + signalHeight + 2, rssiLabel(currentRssi).c_str());
     y += signalHeight + lineHeightSmall + metrics.verticalSpacing * 3;
     const int belowExit = TouchExitButton::draw(renderer, mappedInput, textX, y, textWidth);
     if (belowExit != y) y = belowExit + metrics.verticalSpacing * 3;

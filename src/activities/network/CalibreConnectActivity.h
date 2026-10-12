@@ -4,7 +4,6 @@
 #include <memory>
 #include <string>
 
-#include "WifiLinkWatch.h"
 #include "activities/Activity.h"
 #include "network/CrossPointWebServer.h"
 
@@ -34,9 +33,6 @@ class CalibreConnectActivity final : public Activity {
   int currentRssi = 0;
   unsigned long lastRssiUpdateTime = 0;
   bool exitRequested = false;
-  // The link to the network, and the state of it the screen shows.
-  WifiLinkWatch wifiWatch{"CAL"};
-  WifiLinkWatch::Link shownLink = WifiLinkWatch::Link::Up;
 
   void renderServerRunning() const;
 
