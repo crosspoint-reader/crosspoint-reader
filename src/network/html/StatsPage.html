@@ -1,122 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reading Stats - %%CROSSPOINT%%</title>
   <style>
-    html {
-      scrollbar-gutter: stable;
-    }
-
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #fff;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-hover-color: #5a8c73;
-      --bar-color: rgb(110, 154, 130);
-      --bar-empty: #d8e0dc;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        --bar-empty: #2f3a35;
-        color-scheme: dark;
-      }
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
-    }
-
-    h2 {
-      color: var(--title-color);
-      margin: 0 0 16px 0;
-      font-size: 1.1rem;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
+    <!--#include file="shared/Theme.css.inc" -->
     <!--#include file="shared/NavLinks.css.inc" -->
 
-    /* 4-cell stat grid — mirrors the on-device card */
+    /* All time and the 30-day chart side by side; one column on a narrow screen. */
+    .stats-top {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .stats-top .card { margin: 0; min-width: 0; }
+
+    /* 4-cell stat grid: mirrors the on-device card */
     .grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
     }
-
-    .grid > div {
-      text-align: center;
-      padding: 8px 4px;
-      border-right: 1px solid var(--border-color);
-    }
-
-    .grid > div:last-child {
-      border-right: none;
-    }
-
+    .grid > div { text-align: center; padding: 12px 4px; min-width: 0; }
+    .grid > div + div { border-left: 1px solid var(--border); }
     .grid .value {
       font-size: 1.6rem;
       font-weight: 700;
-      color: var(--title-color);
+      line-height: 1.2;
+      color: var(--text-strong);
+      font-variant-numeric: tabular-nums;
     }
+    .grid .label { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
 
-    .grid .label {
-      font-size: 0.8rem;
-      color: var(--label-color);
-      margin-top: 4px;
-    }
-
+    .info-list { margin-top: 10px; }
     .info-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border-color);
+      align-items: baseline;
+      gap: 12px;
+      padding: 9px 0;
     }
+    .info-row + .info-row { border-top: 1px solid var(--border); }
+    .info-row .label { color: var(--text-muted); }
+    .info-row .value { color: var(--text-strong); font-weight: 500; font-variant-numeric: tabular-nums; }
 
-    .info-row:last-child {
-      border-bottom: none;
-    }
-
-    .info-row .label {
-      font-weight: 600;
-      color: var(--label-color);
-    }
-
-    .info-row .value {
-      color: var(--title-color);
-      font-variant-numeric: tabular-nums;
-    }
+    /* The 30-day chart grows to the height of the card beside it. */
+    .chart-card { display: flex; flex-direction: column; }
+    .chart-host { flex: 1; display: flex; flex-direction: column; }
+    .chart-host .sparkline { flex: 1; }
 
     /* Sparkline */
     .sparkline {
@@ -124,152 +60,94 @@
       align-items: flex-end;
       gap: 2px;
       height: 80px;
-      margin-top: 10px;
-      padding-bottom: 4px;
-      border-bottom: 1px solid var(--border-color);
+      min-height: 80px;
+      margin-top: 4px;
+      border-bottom: 1px solid var(--border);
     }
-
     .sparkline .bar {
       flex: 1;
-      background: var(--bar-color);
+      background: var(--accent);
       min-height: 2px;
-      border-radius: 1px 1px 0 0;
+      border-radius: 2px 2px 0 0;
     }
-
-    .sparkline .bar.empty {
-      background: var(--bar-empty);
-      min-height: 1px;
-    }
-
+    /* Not "empty": the theme has an .empty class for empty states. */
+    .sparkline .bar.no-reading { background: var(--border); min-height: 1px; }
     .sparkline-labels {
       display: flex;
       justify-content: space-between;
       font-size: 0.75rem;
-      color: var(--label-color);
+      color: var(--text-muted);
       margin-top: 4px;
     }
 
     /* Books table */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95rem;
-    }
-
-    th, td {
-      text-align: left;
-      padding: 8px;
-      border-bottom: 1px solid var(--border-color);
-    }
-
+    .books-card { padding-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    th:first-child, td:first-child { padding-left: 0; }
+    th:last-child, td:last-child { padding-right: 0; }
     th {
+      font-size: 0.78rem;
       font-weight: 600;
-      color: var(--label-color);
-      font-size: 0.85rem;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      white-space: nowrap;
       cursor: pointer;
       user-select: none;
     }
-
-    th:hover {
-      color: var(--title-color);
-    }
-
-    th.sorted-asc::after { content: " ▲"; font-size: 0.7em; }
-    th.sorted-desc::after { content: " ▼"; font-size: 0.7em; }
-
-    td.num {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
+    th:hover, th.sorted-asc, th.sorted-desc { color: var(--text-strong); }
+    th.sorted-asc::after { content: " \25B2"; font-size: 0.7em; }
+    th.sorted-desc::after { content: " \25BC"; font-size: 0.7em; }
+    tbody tr:last-child td { border-bottom: none; }
+    td { overflow-wrap: anywhere; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .finished-mark { color: var(--accent-text); font-weight: 700; margin-right: 6px; }
 
     tr.book-row { cursor: pointer; }
-    tr.book-row:hover td { background: rgba(110, 154, 130, 0.08); }
-
-    .book-detail {
-      background: rgba(0, 0, 0, 0.02);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .book-detail { background: rgba(255, 255, 255, 0.03); }
-      tr.book-row:hover td { background: rgba(110, 154, 130, 0.15); }
-    }
-
-    .book-detail td { padding: 16px; }
-
+    tr.book-row:hover td { background: var(--surface-2); }
+    .book-detail > td { background: var(--surface-2); padding: 16px; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
     .book-detail-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 8px 16px;
+      grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+      gap: 0 24px;
     }
-
-    .book-detail-grid div {
+    .book-detail-grid > div {
       display: flex;
       justify-content: space-between;
-      padding: 4px 0;
-      border-bottom: 1px solid var(--border-color);
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
     }
+    .book-detail-grid .label { color: var(--text-muted); }
+    .book-detail-grid span:last-child { color: var(--text-strong); font-weight: 500; text-align: right; }
+    .remove-book { margin-top: 14px; }
 
-    .book-detail-grid .label {
-      color: var(--label-color);
-      font-weight: 600;
-    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-    .remove-book {
-      margin-top: 12px;
-      padding: 8px 14px;
-      border: none;
-      border-radius: 6px;
-      background: #e74c3c;
-      color: white;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-
-    .remove-book:hover { background: #c0392b; }
-    .remove-book:disabled { opacity: 0.6; cursor: default; }
-
-    .empty-state {
-      text-align: center;
-      color: var(--label-color);
-      padding: 30px;
-    }
-
-    .actions {
-      margin-top: 20px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .actions a, .actions button {
-      padding: 10px 16px;
-      border-radius: 6px;
-      background: var(--accent-color);
-      color: white;
-      text-decoration: none;
-      border: none;
-      cursor: pointer;
-      font-size: 0.95rem;
-    }
-
-    .actions a:hover, .actions button:hover {
-      background: var(--accent-hover-color);
+    /* Narrow screens: the last two columns go; a book's row opens to show them. */
+    @media (max-width: 560px) {
+      .col-extra { display: none; }
+      .grid .value { font-size: 1.35rem; }
     }
   </style>
 </head>
 
 <body>
-  <h1>Reading Stats</h1>
+  <!--#include file="shared/PageHeader.html.inc" -->
 
-  <!--#include file="shared/NavLinks.html.inc" -->
-
-  <div id="content">
-    <div class="card">
-      <div class="empty-state">Loading…</div>
+  <main class="page">
+    <div class="page-head">
+      <h1>Reading Stats</h1>
+      <p class="page-intro">Time spent reading on this device, in total and per book. Open a book's row for its details.</p>
     </div>
-  </div>
+
+    <div id="content">
+      <section class="card">
+        <p class="empty">Loading…</p>
+      </section>
+    </div>
+  </main>
 
   <script>
     // Format a number of seconds as "1h 23m" / "23m 45s" / "12s" — matches
@@ -320,7 +198,7 @@
       }
       for (const sec of series) {
         const bar = document.createElement("div");
-        bar.className = sec > 0 ? "bar" : "bar empty";
+        bar.className = sec > 0 ? "bar" : "bar no-reading";
         bar.style.height = sec > 0 ? `${Math.max(4, (sec / max) * 100)}%` : "2px";
         bar.title = sec > 0 ? formatDuration(sec) : "no reading";
         bars.appendChild(bar);
@@ -368,15 +246,20 @@
       content.innerHTML = "";
 
       if (!data || data.totalSeconds === 0) {
-        const empty = document.createElement("div");
+        const empty = document.createElement("section");
         empty.className = "card";
-        empty.innerHTML = '<div class="empty-state">No reading recorded yet. Open a book and read for a while — your stats will appear here.</div>';
+        empty.innerHTML = '<p class="empty">No reading recorded yet. Open a book and read for a while — your stats will appear here.</p>';
         content.appendChild(empty);
         return;
       }
 
+      // All time and the 30-day chart share a row on a wide screen.
+      const overview = document.createElement("div");
+      overview.className = "stats-top";
+      content.appendChild(overview);
+
       // ---- All-time card ----
-      const allTime = document.createElement("div");
+      const allTime = document.createElement("section");
       allTime.className = "card";
       const curStreak = data.currentStreak != null ? String(data.currentStreak) : "—";
       const maxStreak = data.longestStreak != null ? String(data.longestStreak) : "—";
@@ -391,32 +274,32 @@
           <div><div class="value">${curStreak}</div><div class="label">Streak</div></div>
           <div><div class="value">${maxStreak}</div><div class="label">Longest</div></div>
         </div>
-        <div style="margin-top: 14px;">
+        <div class="info-list">
           <div class="info-row"><span class="label">Total time</span><span class="value">${formatDuration(data.totalSeconds)}</span></div>
           <div class="info-row"><span class="label">Pages turned</span><span class="value">${data.totalPagesTurned}</span></div>
           <div class="info-row"><span class="label">Pages/min</span><span class="value">${formatPagesPerMin(data.totalPagesTurned, data.totalSeconds)}</span></div>
           ${finishedRow}
         </div>
       `;
-      content.appendChild(allTime);
+      overview.appendChild(allTime);
 
       // ---- Sparkline card ----
       if (data.todayDayIndex && data.globalDays && data.globalDays.length > 0) {
-        const sparkCard = document.createElement("div");
-        sparkCard.className = "card";
-        sparkCard.innerHTML = "<h2>Last 30 days</h2><div id=\"global-spark\"></div>";
-        content.appendChild(sparkCard);
+        const sparkCard = document.createElement("section");
+        sparkCard.className = "card chart-card";
+        sparkCard.innerHTML = "<h2>Last 30 days</h2><div id=\"global-spark\" class=\"chart-host\"></div>";
+        overview.appendChild(sparkCard);
         const daysMap = {};
         for (const [day, sec] of data.globalDays) daysMap[day] = sec;
         renderSparkline(sparkCard.querySelector("#global-spark"), daysMap, data.todayDayIndex);
       }
 
       // ---- Books card ----
-      const booksCard = document.createElement("div");
-      booksCard.className = "card";
+      const booksCard = document.createElement("section");
+      booksCard.className = "card books-card";
       booksCard.innerHTML = "<h2>Books</h2>";
       if (!data.books || data.books.length === 0) {
-        booksCard.innerHTML += '<div class="empty-state">No books tracked yet.</div>';
+        booksCard.innerHTML += '<p class="empty">No books tracked yet.</p>';
         content.appendChild(booksCard);
       } else {
         const table = document.createElement("table");
@@ -426,8 +309,8 @@
               <th data-col="title">Title</th>
               <th data-col="totalSeconds" class="num">Time</th>
               <th data-col="progress" class="num">Progress</th>
-              <th data-col="etaSeconds" class="num">To finish</th>
-              <th data-col="lastReadEpoch" class="num">Last read</th>
+              <th data-col="etaSeconds" class="num col-extra">To finish</th>
+              <th data-col="lastReadEpoch" class="num col-extra">Last read</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -439,15 +322,15 @@
           tr.className = "book-row";
           tr.dataset.docId = b.docId;
           const finishedMark = b.finishedCount > 0
-            ? `<span title="Finished${b.finishedCount > 1 ? ' ' + b.finishedCount + '×' : ''}" style="margin-right:6px">✓</span>`
+            ? `<span title="Finished${b.finishedCount > 1 ? ' ' + b.finishedCount + '×' : ''}" class="finished-mark">✓</span>`
             : "";
           const etaCell = b.progress >= 100 ? "done" : formatEta(b.etaSeconds);
           tr.innerHTML = `
             <td>${finishedMark}${escapeHtml(b.title || b.docId)}</td>
             <td class="num">${formatDuration(b.totalSeconds)}</td>
             <td class="num">${b.progress}%</td>
-            <td class="num">${etaCell}</td>
-            <td class="num">${formatDateOrRelative(b.lastReadEpoch)}</td>
+            <td class="num col-extra">${etaCell}</td>
+            <td class="num col-extra">${formatDateOrRelative(b.lastReadEpoch)}</td>
           `;
           tr.addEventListener("click", () => toggleBookDetail(b, tr, data.todayDayIndex));
           tbody.appendChild(tr);
@@ -479,7 +362,7 @@
       // ---- Actions ----
       const actions = document.createElement("div");
       actions.className = "actions";
-      actions.innerHTML = '<a href="/api/stats/export" download="reading-stats.json">Download backup</a>';
+      actions.innerHTML = '<a class="btn" href="/api/stats/export" download="reading-stats.json">Download backup</a>';
       content.appendChild(actions);
     }
 
@@ -516,7 +399,8 @@
         cell.appendChild(sparkHost);
       }
       const removeButton = document.createElement("button");
-      removeButton.className = "remove-book";
+      removeButton.type = "button";
+      removeButton.className = "btn btn-danger btn-small remove-book";
       removeButton.textContent = "Remove from stats";
       removeButton.addEventListener("click", () => removeBook(book, removeButton));
       cell.appendChild(removeButton);
@@ -578,7 +462,7 @@ Its reading time is taken out of the totals. The book itself stays on the device
         render(data);
       } catch (e) {
         const content = document.getElementById("content");
-        content.innerHTML = `<div class="card"><div class="empty-state">Failed to load stats: ${escapeHtml(e.message)}</div></div>`;
+        content.innerHTML = `<section class="card"><p class="empty">Failed to load stats: ${escapeHtml(e.message)}</p></section>`;
       }
     }
 
