@@ -819,7 +819,15 @@ void WifiSelectionActivity::checkConnectionStatus() {
       WIFI_STORE.setLastConnectedSsid(selectedSSID);
       if (apChoice.apsHeard > 0) WIFI_STORE.noteApCount(selectedSSID, apChoice.apsHeard);
       const uint8_t* actualBssid = WiFi.BSSID();
-      const int actualChannel = WiFi.channel();
+      int actualChannel = WiFi.channel();
+      // A weak AP is not worth remembering: WifiApChoice::improve() listens on the remembered AP's
+      // channel first, and a far AP the reader stayed on (because the near one went unheard) would
+      // displace the near one it should look for. Keep the AP recorded before.
+      const WifiCredential* known = WIFI_STORE.findCredential(selectedSSID);
+      if (WiFi.RSSI() < WifiApChoice::WEAK_RSSI && known && known->channel != 0) {
+        actualBssid = known->bssid;
+        actualChannel = known->channel;
+      }
       if (actualBssid && actualChannel > 0 && actualChannel <= 255) {
         const IPAddress gw = WiFi.gatewayIP();
         const IPAddress mask = WiFi.subnetMask();
