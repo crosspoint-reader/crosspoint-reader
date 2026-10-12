@@ -219,11 +219,15 @@ This is useful for organizing your library by genre, author, series or file type
 
 ### Settings
 
-The Settings page lists the same settings as the Settings screens on the device, grouped by
-category. Change a value and save. The font size lists show the sizes the selected font family
-offers, so after you change a family and save, the page reloads them. Two cards at the end manage
-the **Wi-Fi Networks** and **OPDS Servers** the device remembers. Saved passwords are never shown
-back; leave the password field empty when editing to keep the stored one. See
+The Settings page has the same settings as the Settings screens on the device. A menu down the side
+(along the top on a phone) shows one category at a time, and the search box finds a setting in any
+category; `/settings?q=font` opens with that search. Most settings have a line explaining them, in
+English. Changes are not sent at once: a bar at the bottom counts them, with **Discard** and
+**Save**, and marks the changed settings and their categories. The font size lists show the sizes
+the selected font family offers, so after you change a family and save, the page reloads them.
+**Wi-Fi networks** and **OPDS servers** in the menu manage the networks and catalogs the device
+remembers, each entry saved on its own. Saved passwords are never shown back; leave the password
+field empty when editing to keep the stored one. See
 [Web Settings](../USER_GUIDE.md#376-web-settings-wifi--opds) in the User Guide.
 
 ### Reading Stats

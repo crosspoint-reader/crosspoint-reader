@@ -491,12 +491,12 @@ way.
 
 #### 3.7.6 Web Settings (WiFi + OPDS)
 
-While in **File Transfer** mode, the web settings page includes management cards for both **WiFi Networks** and **OPDS Servers**.
+While in **File Transfer** mode, the web settings page has **Wi-Fi networks** and **OPDS servers** in its menu, to manage both.
 
 1. On device: open **File Transfer** and connect to WiFi.
 1. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local`.
-1. In **WiFi Networks**, add, edit, or delete saved network entries (SSID + optional password).
-1. In **OPDS Servers**, add, edit, or delete OPDS catalogs.
+1. In **Wi-Fi networks**, add, edit, or delete saved network entries (SSID + optional password).
+1. In **OPDS servers**, add, edit, or delete OPDS catalogs.
 
 Behavior notes:
 
