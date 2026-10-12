@@ -47,8 +47,10 @@ function dirName(path) {
 }
 
 // Junk an archive made on a Mac carries along: AppleDouble resource forks.
+// No regex literal here: build_html.py's fallback minifier (no terser) reads
+// "return /..\//" as a division and the "//" as a comment, and cuts the line.
 function isJunkPath(path) {
-  return /(^|\/)__MACOSX\//.test(path) || baseName(path).startsWith('._');
+  return path.startsWith('__MACOSX/') || path.includes('/__MACOSX/') || baseName(path).startsWith('._');
 }
 
 // { kind, stem, unpack } for a dictionary file name, or null for anything else.
