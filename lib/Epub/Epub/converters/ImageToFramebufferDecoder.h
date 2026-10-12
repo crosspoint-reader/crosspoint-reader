@@ -39,6 +39,12 @@ class ImageToFramebufferDecoder {
   virtual bool decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                    const RenderConfig& config) = 0;
 
+  // Reports successful cache writes separately from framebuffer rendering.
+  // Decoders that stream a pixel cache override this; the default forwards to
+  // the three-argument decode and conservatively reports no cache write.
+  virtual bool decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target, const RenderConfig& config,
+                                   bool& cacheWritten);
+
   // Convenience wrapper for framebuffer-rendering callers: captures the live
   // renderer (writeFramebuffer = !config.cacheOnly) and forwards to the virtual.
   bool decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer, const RenderConfig& config);

@@ -13,9 +13,10 @@ class JpegToFramebufferConverter final : public ImageToFramebufferDecoder {
   using ImageToFramebufferDecoder::decodeToFramebuffer;
   bool decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                            const RenderConfig& config) override;
-  // Reports successful cache writes separately from framebuffer rendering.
   bool decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target, const RenderConfig& config,
-                           bool& cacheWritten);
+                           bool& cacheWritten) override;
+  // Cache-reporting decode for sleep-image conversion, which holds a live
+  // renderer; captures it and forwards to the DecodeTarget decode.
   bool decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer, const RenderConfig& config,
                            bool& cacheWritten);
 
