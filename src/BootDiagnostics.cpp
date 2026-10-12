@@ -414,6 +414,18 @@ const char* resetReasonName(uint8_t reason) {
       return "brownout";
     case ESP_RST_SDIO:
       return "sdio";
+    // The C3 reports a reset through its USB-Serial-JTAG port (flashing, a serial monitor
+    // opening the port) as USB, not as a power-on.
+    case ESP_RST_USB:
+      return "usb";
+    case ESP_RST_JTAG:
+      return "jtag";
+    case ESP_RST_EFUSE:
+      return "efuse";
+    case ESP_RST_PWR_GLITCH:
+      return "power-glitch";
+    case ESP_RST_CPU_LOCKUP:
+      return "cpu-lockup";
     default:
       return "other";
   }
@@ -423,6 +435,11 @@ const char* wakeCauseName(uint8_t cause) {
   switch (static_cast<esp_sleep_wakeup_cause_t>(cause)) {
     case ESP_SLEEP_WAKEUP_UNDEFINED:
       return "none";
+    // The S3 boards wake on the power button through EXT1; the C3 has no EXT wake and uses GPIO.
+    case ESP_SLEEP_WAKEUP_EXT0:
+      return "ext0";
+    case ESP_SLEEP_WAKEUP_EXT1:
+      return "ext1";
     case ESP_SLEEP_WAKEUP_TIMER:
       return "timer";
     case ESP_SLEEP_WAKEUP_GPIO:
