@@ -21,6 +21,12 @@ DecodeTarget captureDecodeTarget(const GfxRenderer& renderer, const bool writeFr
   return target;
 }
 
+bool ImageToFramebufferDecoder::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
+                                                    const RenderConfig& config, bool& cacheWritten) {
+  cacheWritten = false;
+  return decodeToFramebuffer(imagePath, target, config);
+}
+
 bool ImageToFramebufferDecoder::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
                                                     const RenderConfig& config) {
   return decodeToFramebuffer(imagePath, captureDecodeTarget(renderer, !config.cacheOnly), config);

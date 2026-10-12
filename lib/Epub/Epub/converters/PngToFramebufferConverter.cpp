@@ -341,6 +341,13 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
 
 bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                     const RenderConfig& config) {
+  bool cacheWritten;
+  return decodeToFramebuffer(imagePath, target, config, cacheWritten);
+}
+
+bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
+                                                    const RenderConfig& config, bool& cacheWritten) {
+  cacheWritten = false;
   LOG_DBG("PNG", "Decoding PNG: %s", imagePath.c_str());
 
   size_t freeHeap = ESP.getFreeHeap();
@@ -480,7 +487,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   // Finalize the streamed cache (caching may have been cleared on a flush error).
   if (ctx.caching) {
-    ctx.cache.finalize();
+    cacheWritten = ctx.cache.finalize();
   }
 
   return true;

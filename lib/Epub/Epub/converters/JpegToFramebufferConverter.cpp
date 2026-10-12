@@ -398,10 +398,15 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
 bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                      const RenderConfig& config) {
   bool cacheWritten;
-  return decodeToFramebuffer(imagePath, renderer, config, cacheWritten);
+  return decodeToFramebuffer(imagePath, target, config, cacheWritten);
 }
 
 bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
+                                                     const RenderConfig& config, bool& cacheWritten) {
+  return decodeToFramebuffer(imagePath, captureDecodeTarget(renderer, !config.cacheOnly), config, cacheWritten);
+}
+
+bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                      const RenderConfig& config, bool& cacheWritten) {
   cacheWritten = false;
   LOG_DBG("JPG", "Decoding JPEG: %s", imagePath.c_str());

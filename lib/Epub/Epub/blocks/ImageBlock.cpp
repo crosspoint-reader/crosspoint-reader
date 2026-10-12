@@ -326,7 +326,8 @@ bool ImageBlock::positionOnScreen(const int screenWidth, const int screenHeight,
   return true;
 }
 
-bool ImageBlock::decodeImage(const DecodeTarget& target, const int x, const int y, const std::string& cachePath) const {
+bool ImageBlock::decodeImage(const DecodeTarget& target, const int x, const int y, const std::string& cachePath,
+                             bool& cacheWritten) const {
   // The build only header-probed the image for dimensions; pull the actual
   // file out of the book now, on first visit to the page.
   if (!srcPath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
@@ -368,7 +369,7 @@ bool ImageBlock::decodeImage(const DecodeTarget& target, const int x, const int 
   config.cachePath = cachePath;      // Enable caching during decode
   config.cacheOnly = !target.writeFramebuffer;
 
-  if (!decoder->decodeToFramebuffer(imagePath, target, config)) {
+  if (!decoder->decodeToFramebuffer(imagePath, target, config, cacheWritten)) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
     return false;
   }
@@ -431,13 +432,14 @@ bool ImageBlock::prefetch(const DecodeTarget& target, const int x, const int y) 
   if (!positionOnScreen(target.screenWidth, target.screenHeight, x, y)) return false;
 
   LOG_DBG("IMG", "Prefetching image to cache: %s (%dx%d)", imagePath.c_str(), width, height);
-  if (!decodeImage(target, x, y, getCachePath(imagePath))) {
+  // A decode can succeed without writing the cache (its stream start failed);
+  // report failure so the caller does not retry an unwritable image forever.
+  bool cacheWritten = false;
+  if (!decodeImage(target, x, y, getCachePath(imagePath), cacheWritten) || !cacheWritten) {
     LOG_ERR("IMG", "Failed to prefetch image: %s", imagePath.c_str());
     return false;
   }
-  // A decode can succeed without writing the cache (its stream start failed);
-  // report failure so the caller does not retry an unwritable image forever.
-  return hasValidCache();
+  return true;
 }
 
 bool ImageBlock::serialize(HalFile& file) {

@@ -58,7 +58,8 @@ class ImageBlock final : public Block {
   bool positionOnScreen(int screenWidth, int screenHeight, int x, int y) const;
   // Lazy-extract from the book, validate, and decode straight to the .pxc (the
   // target disables framebuffer output); owned by ImageCacheService.
-  bool decodeImage(const DecodeTarget& target, int x, int y, const std::string& cachePath) const;
+  // cacheWritten reports whether the .pxc stream completed.
+  bool decodeImage(const DecodeTarget& target, int x, int y, const std::string& cachePath, bool& cacheWritten) const;
 
   static void* extractCtx;
   static ExtractFn extractFn;
