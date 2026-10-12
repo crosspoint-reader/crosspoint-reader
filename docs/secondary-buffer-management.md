@@ -302,19 +302,22 @@ waking resets the chip. Quick Resume saves `getFrameBuffer()` to the SD card aft
 `SerialTransferActivity`):
 
 ```cpp
-if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();  // while the secondary holds the panel
+renderer.syncRedRamFromFrameBuffer();  // while the secondary holds the panel
 if (renderer.releaseSecondaryBuffer()) renderer.setSingleBufferFastDiff(true);
 // ... heap-hungry work; B/W refreshes stay FAST ...
 renderer.reallocSecondaryBuffer();           // skip when the session reboots
 renderer.setSingleBufferFastDiff(false);
 ```
 
+`syncRedRamFromFrameBuffer()` is safe on every panel: where a FAST refresh needs no host frame
+(`fastRefreshNeedsHostFrame()` false, the X3) there is no RED to seed and it returns at once.
+
 **Pattern 1b — borrow as an arena** (`HomeActivity`, `FileBrowserActivity`, `FontSelectionActivity`,
 `ReaderActivity`):
 
 ```cpp
 renderer.syncWriteBufferFromDisplayed();     // only if you will draw over the current screen
-if (!renderer.isX3()) renderer.syncRedRamFromFrameBuffer();
+renderer.syncRedRamFromFrameBuffer();
 size_t size = 0;
 if (uint8_t* block = renderer.borrowSecondaryBuffer(&size)) {
   renderer.setSingleBufferFastDiff(true);

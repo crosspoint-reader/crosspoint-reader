@@ -217,7 +217,7 @@ this document.**
 
 ```cpp
 bool EpubReaderActivity::usesDeferredAa() const {
-  return !(renderer.supportsAsyncRefresh() && !renderer.isX3());
+  return !(renderer.supportsAsyncRefresh() && !renderer.asyncRefreshHoldsFrameBuffer());
 }
 ```
 

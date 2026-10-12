@@ -155,7 +155,8 @@ The reader picks its anti-aliasing strategy from what the display path can do, n
 
 - single push, when `renderer.supportsGrayFrame()` (today only the T5S3's LovyanGFX path): the
   gray planes are captured during the page render and the page goes out in one graded waveform;
-- inline, when `renderer.supportsAsyncRefresh()` and the board is not an X3: the LSB plane is
+- inline, when `renderer.supportsAsyncRefresh()` and the async refresh frees the frame buffer
+  (`!asyncRefreshHoldsFrameBuffer()`): the LSB plane is
   rendered while the B/W waveform runs (X4);
 - deferred: everything else, including the X3 and any panel that cannot overlap a refresh.
 

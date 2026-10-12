@@ -187,8 +187,10 @@ board that is not an X3 reads as `X4`: X4 and X4 Pro units on UC8179 or UC8279, 
 - `isRedRamSynced()` reports a RED plane that UC8179, UC8279 X4 and LGFX do not have.
 - `syncRedRamFromFrameBuffer()` runs there; harmless only because `seedPreviousFrame()` is a no-op
   outside SSD1677.
-- In the firmware, `GfxRenderer::isX3()` answers several unrelated questions by board name (build
-  mode, deferred AA, whether to seed RED before a lend).
+- The firmware no longer asks by board name: it asks the facade's own rules,
+  `fastRefreshNeedsHostFrame()` (build mode, RED seeds, post-popup HALFs) and
+  `asyncRefreshHoldsFrameBuffer()` (deferred AA). Both are still keyed on `PanelSel`, so fixing them
+  here fixes every firmware decision at once.
 
 The SDK's `displayCommitted()` and `abortPostRefresh()` / `postRefreshAborted()` are still unused: the
 reader hand-rolls `aaPreemptedByNavigation()`, and the refresh cadence assumes every submit commits.
@@ -197,10 +199,10 @@ Also open: whether the PSRAM boards (X4 Pro, T5S3) need to borrow or release the
 **Why it matters.** A downgraded FAST costs a HALF waveform: on an X4, ~1755 ms instead of ~476 ms
 (2026-08-19, during a Background-B borrow).
 
-**Next.** SDK: a `PanelDriver` capability for "keeps a host-managed previous frame" (true where the
-driver consumes `prev`), and key the three facade sites on it. Firmware: convert `isX3()` sites one at
-a time, each with a device check. `EpubReaderActivity::usesDeferredAa()` is the model: one predicate
-used by both the strategy and its scheduling.
+**Next.** SDK: a `PanelDriver` capability for "consumes a host-managed previous frame" (true where the
+driver uses `prev`), and answer `fastRefreshNeedsHostFrame()` and `asyncRefreshHoldsFrameBuffer()` from
+it instead of `PanelSel`. That changes behaviour on the UC8179/UC8279 X4-family units and the T5S3
+(no needless FAST-to-HALF downgrades, released builds), so it wants a device check on each.
 
 ## LGFX write-buffer copy before displayGrayBuffer()
 
