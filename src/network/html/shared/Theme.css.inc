@@ -125,8 +125,10 @@ a { color: var(--accent-text); }
   text-decoration: none;
   white-space: nowrap;
 }
-.page { max-width: 960px; margin: 0 auto; padding: 24px 16px 96px; }
-.page-wide { max-width: 1120px; }
+/* One width for the header and every page, so their left edges line up. Text-heavy content can sit
+   in .page-narrow, which keeps that left edge but limits the line length. */
+.page { max-width: 1120px; margin: 0 auto; padding: 24px 16px 96px; }
+.page-narrow { max-width: 820px; }
 .page-head { margin-bottom: 20px; }
 .page-intro { margin: 0; color: var(--text-muted); }
 

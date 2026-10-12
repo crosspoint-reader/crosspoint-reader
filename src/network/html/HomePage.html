@@ -1,261 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>System Info - %%CROSSPOINT%%</title>
   <style>
-    html {
-      scrollbar-gutter: stable;
-    }
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-hover-color: #5a8c73;
-    }
+    <!--#include file="shared/Theme.css.inc" -->
+    <!--#include file="shared/NavLinks.css.inc" -->
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        color-scheme: dark;
-      }
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
     }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
-    }
-
-    h2 {
-      color: var(--title-color);
-      margin-top: 0;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .section {
-      margin-top: 18px;
-    }
-
-    .section:first-of-type {
-      margin-top: 0;
-    }
-
-    .section-title {
-      font-size: 0.85em;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--label-color);
-      margin: 0 0 4px 0;
-      padding-bottom: 4px;
-      border-bottom: 1px solid var(--accent-color);
-    }
-
+    .info-grid .card { margin: 0; }
+    .card h2 { font-size: 1rem; margin-bottom: 6px; }
     .info-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .info-row:last-child {
-      border-bottom: none;
-    }
-
-    .label {
-      font-weight: 600;
-      color: var(--label-color);
-    }
-
-    .value {
-      color: var(--title-color);
-    }
-
-    .status {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      background-color: #27ae60;
-      color: white;
-      font-size: 0.9em;
-    }
-
-    <!--#include file="shared/NavLinks.css.inc" -->
-
-    .action-row {
-      text-align: center;
-      margin-top: 16px;
-    }
-
-    .action-row button {
-      padding: 10px 18px;
-      border: none;
-      border-radius: 8px;
-      background-color: var(--accent-color);
-      color: white;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-
-    .action-row button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-
-    .debug-footer {
-      margin-top: 24px;
-      padding-top: 8px;
-      border-top: 1px dashed var(--border-color);
-      display: flex;
-      justify-content: space-between;
+      align-items: baseline;
       gap: 12px;
-      font-size: 0.75em;
-      color: var(--label-color);
-      opacity: 0.7;
+      padding: 9px 0;
     }
+    .info-row + .info-row { border-top: 1px solid var(--border); }
+    .label { color: var(--text-muted); }
+    .value { color: var(--text-strong); font-weight: 500; text-align: right; overflow-wrap: anywhere;
+      font-variant-numeric: tabular-nums; }
+    .action-row { margin-top: 10px; }
+    .report { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .report p { margin: 0; }
+    .debug-footer { display: flex; gap: 16px; font-size: 0.78rem; color: var(--text-muted); }
   </style>
 </head>
 
 <body>
-  <h1>📚 %%CROSSPOINT%%</h1>
+  <!--#include file="shared/PageHeader.html.inc" -->
 
-  <!--#include file="shared/NavLinks.html.inc" -->
-
-  <div class="card">
-    <h2>Device Status</h2>
-
-    <div class="section">
-      <div class="section-title">Version</div>
-      <div class="info-row">
-        <span class="label">Firmware</span>
-        <span class="value" id="version">Loading...</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Device</span>
-        <span class="value" id="device">Loading...</span>
-      </div>
+  <main class="page">
+    <div class="page-head">
+      <h1>System Info</h1>
+      <p class="page-intro">What the reader reports about itself.</p>
     </div>
 
-    <div class="section">
-      <div class="section-title">Chip</div>
-      <div class="info-row">
-        <span class="label">Chip</span>
-        <span class="value" id="chip-version">Loading...</span>
-      </div>
-      <div class="info-row">
-        <span class="label">CPU</span>
-        <span class="value" id="cpu-mhz">Loading...</span>
-      </div>
+    <div class="info-grid">
+      <section class="card">
+        <h2>Version</h2>
+        <div class="info-row"><span class="label">Firmware</span><span class="value" id="version">Loading...</span></div>
+        <div class="info-row"><span class="label">Device</span><span class="value" id="device">Loading...</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Network</h2>
+        <div class="info-row"><span class="label">Wi-Fi</span><span class="value" id="wifi-status">Loading...</span></div>
+        <div class="info-row"><span class="label">IP address</span><span class="value" id="ip-address">Loading...</span></div>
+        <div class="info-row"><span class="label">MAC address</span><span class="value" id="mac-address">Loading...</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Runtime</h2>
+        <div class="info-row"><span class="label">Uptime</span><span class="value" id="uptime">Loading...</span></div>
+        <div class="info-row"><span class="label">Battery</span><span class="value" id="battery">Loading...</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Storage</h2>
+        <div class="info-row"><span class="label">SD card</span><span class="value" id="sd-space">Not loaded</span></div>
+        <div class="action-row"><button type="button" class="btn btn-small" id="load-sd-button">Load SD info</button></div>
+      </section>
+
+      <section class="card">
+        <h2>Chip</h2>
+        <div class="info-row"><span class="label">Chip</span><span class="value" id="chip-version">Loading...</span></div>
+        <div class="info-row"><span class="label">CPU</span><span class="value" id="cpu-mhz">Loading...</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Memory and flash</h2>
+        <div class="info-row"><span class="label">Heap free / min / max</span><span class="value" id="heap-combined">Loading...</span></div>
+        <div class="info-row"><span class="label">App partition</span><span class="value" id="app-partition-size">Loading...</span></div>
+        <div class="info-row"><span class="label">Total flash</span><span class="value" id="flash-total">Loading...</span></div>
+      </section>
     </div>
 
-    <div class="section">
-      <div class="section-title">Network</div>
-      <div class="info-row">
-        <span class="label">WiFi Status</span>
-        <span class="status" id="wifi-status">Loading...</span>
-      </div>
-      <div class="info-row">
-        <span class="label">IP Address</span>
-        <span class="value" id="ip-address">Loading...</span>
-      </div>
-      <div class="info-row">
-        <span class="label">MAC Address</span>
-        <span class="value" id="mac-address">Loading...</span>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Memory</div>
-      <div class="info-row">
-        <span class="label">Free / Min / Max</span>
-        <span class="value" id="heap-combined">Loading...</span>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Flash</div>
-      <div class="info-row">
-        <span class="label">App partition</span>
-        <span class="value" id="app-partition-size">Loading...</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Total flash</span>
-        <span class="value" id="flash-total">Loading...</span>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Runtime</div>
-      <div class="info-row">
-        <span class="label">Uptime</span>
-        <span class="value" id="uptime">Loading...</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Battery</span>
-        <span class="value" id="battery">Loading...</span>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Storage</div>
-      <div class="info-row">
-        <span class="label">SD Card</span>
-        <span class="value" id="sd-space">Not loaded</span>
-      </div>
-      <div class="action-row">
-        <button id="load-sd-button">Load SD info</button>
-      </div>
+    <div class="card report">
+      <p>Reporting a problem? Diagnostics shows how the reader last slept and started, and saves a report to attach
+        to the issue.</p>
+      <a class="btn" href="/diagnostics">Open Diagnostics</a>
     </div>
 
     <div class="debug-footer">
       <span>Fast fetch: <span id="fast-status-duration">…</span></span>
       <span>Full fetch: <span id="full-status-duration">—</span></span>
     </div>
-  </div>
+  </main>
 
-  <div class="card">
-    <h2>Diagnostics</h2>
-    <p style="margin: 0">
-      Reporting a problem? <a href="/diagnostics">Diagnostics</a> shows how the reader last slept and started,
-      and saves a report to attach to the issue.
-    </p>
-  </div>
-
-  <div class="card">
-    <p style="text-align: center; color: #95a5a6; margin: 0">
-      %%CROSSPOINT%% • Open Source
-    </p>
-  </div>
   <script>
     function pickUnit(maxBytes) {
       const units = ['B', 'KB', 'MB', 'GB'];
