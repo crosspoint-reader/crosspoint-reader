@@ -1893,6 +1893,19 @@
                   </div>
                 </div>
               </div>
+              <!-- Long chapters are cut into several spine files -->
+              <div class="advanced-setting-row">
+                <div class="setting-label">
+                  <div class="setting-title">✂️ Split Long Chapters</div>
+                  <div class="setting-desc">Chapters over 8,000 words or 32 KB become several files, cut at headings or breaks where possible</div>
+                </div>
+                <div class="setting-controls">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="splitLongSectionsToggle" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
               <!-- Conversion Log Export -->
               <div class="advanced-setting-row">
                 <div class="setting-label">
@@ -2494,6 +2507,7 @@
         advancedOptionsToggle.style.pointerEvents = 'none';
       }
       // Reset to defaults
+      document.getElementById('splitLongSectionsToggle').checked = true;
       document.getElementById('qualitySlider').value = 85;
       document.getElementById('qualityInput').value = 85;
       setHandedness('right');
@@ -4476,6 +4490,494 @@
       return changed ? safeSerialize(doc, content) : content;
     }
 
+    // Long chapters are what strain the reader: one spine file is laid out at a time, so a
+    // chapter far past these sizes is cut into several spine files. A part prefers to stay under
+    // both preferred sizes; it may run up to the lookahead past them to reach an author's break
+    // (a heading, <hr>, page break), and never past the hard limit where a break is possible.
+    const SECTION_SPLIT_WORD_THRESHOLD = 8000;
+    const SECTION_SPLIT_BYTE_THRESHOLD = 32768;
+    const SECTION_SPLIT_HARD_BYTE_LIMIT = 49152;
+    const SECTION_SPLIT_NATURAL_BOUNDARY_LOOKAHEAD_BYTES = 8192;
+    const OPF_NS = 'http://www.idpf.org/2007/opf';
+    const UTF8_ENCODER = new TextEncoder();
+
+    function utf8ByteLength(text) {
+      return UTF8_ENCODER.encode(text).length;
+    }
+
+    function getElementsByLocalName(root, name) {
+      const seen = new Set();
+      const elements = [];
+      for (const element of [...root.getElementsByTagNameNS('*', name), ...root.getElementsByTagName(name)]) {
+        if (seen.has(element)) continue;
+        seen.add(element);
+        elements.push(element);
+      }
+      return elements;
+    }
+
+    // Zip paths of the spine in reading order; DOMParser first, regex fallback.
+    function parseOpfSpineHrefs(opfContent, opfPath) {
+      const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
+      const opfBasePath = opfDir ? `${opfDir}/content.opf` : 'content.opf';
+
+      try {
+        const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
+        if (!doc.querySelector('parsererror')) {
+          const manifest = {};
+          for (const item of getElementsByLocalName(doc, 'item')) {
+            const id = item.getAttribute('id');
+            const href = item.getAttribute('href');
+            if (id && href) manifest[id] = resolvePath(opfBasePath, decodeHref(href.split('#')[0]));
+          }
+
+          const spineHrefs = [];
+          for (const itemref of getElementsByLocalName(doc, 'itemref')) {
+            const idref = itemref.getAttribute('idref');
+            if (idref && manifest[idref]) spineHrefs.push(manifest[idref]);
+          }
+          if (spineHrefs.length > 0) return spineHrefs;
+        }
+      } catch (e) { /* fall through to regex parser */ }
+
+      const manifest = {};
+      const itemRegex = /<(?:\w+:)?item\b[^>]*>/gi;
+      let match;
+      while ((match = itemRegex.exec(opfContent)) !== null) {
+        const tag = match[0];
+        const idMatch = tag.match(/\bid=["']([^"']+)["']/i);
+        const hrefMatch = tag.match(/\bhref=["']([^"']+)["']/i);
+        if (idMatch && hrefMatch) manifest[idMatch[1]] = resolvePath(opfBasePath, decodeHref(hrefMatch[1].split('#')[0]));
+      }
+
+      const spineHrefs = [];
+      const itemrefRegex = /<(?:\w+:)?itemref\b[^>]*idref=["']([^"']+)["'][^>]*>/gi;
+      while ((match = itemrefRegex.exec(opfContent)) !== null) {
+        if (manifest[match[1]]) spineHrefs.push(manifest[match[1]]);
+      }
+      return spineHrefs;
+    }
+
+    // Zip paths of the EPUB 3 navigation documents (manifest items with properties="nav").
+    // Not in CrossInk: the reader takes the table of contents from that one file, so it is
+    // never split, or every entry after its first part would vanish from the TOC.
+    function parseOpfNavPaths(opfContent, opfPath) {
+      const paths = new Set();
+      const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
+      if (doc.querySelector('parsererror')) {
+        for (const tag of opfContent.match(/<(?:\w+:)?item\b[^>]*>/gi) || []) {
+          const props = tag.match(/\bproperties=["']([^"']+)["']/i);
+          const href = tag.match(/\bhref=["']([^"']+)["']/i);
+          if (props && href && props[1].split(/\s+/).includes('nav')) paths.add(resolvePath(opfPath, decodeHref(href[1].split('#')[0])));
+        }
+        return paths;
+      }
+      for (const item of getElementsByLocalName(doc, 'item')) {
+        const href = item.getAttribute('href');
+        if (href && (item.getAttribute('properties') || '').split(/\s+/).includes('nav')) {
+          paths.add(resolvePath(opfPath, decodeHref(href.split('#')[0])));
+        }
+      }
+      return paths;
+    }
+
+    // What a reader shows of a chapter: body text without script, style, SVG and metadata.
+    // (CrossInk's extractLocationText, which its page-location feature shares.)
+    function extractSectionText(xhtmlContent) {
+      for (const type of ['application/xhtml+xml', 'text/html']) {
+        try {
+          const doc = new DOMParser().parseFromString(xhtmlContent, type);
+          if (doc.querySelector('parsererror')) continue;
+          doc.querySelectorAll('script,style,svg,metadata').forEach((el) => el.remove());
+          return (doc.body || doc.documentElement).textContent || '';
+        } catch (e) { /* next parser */ }
+      }
+      return xhtmlContent.replace(/<[^>]+>/g, ' ');
+    }
+
+    // Words as runs of letters and digits, joined by apostrophes or hyphens.
+    // (CrossInk's countLocationWords.)
+    function countSectionWords(text) {
+      const normalized = text.replace(/\s+/g, ' ').trim();
+      if (!normalized) return 0;
+      try {
+        return (normalized.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
+      } catch (e) {
+        return (normalized.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g) || []).length;
+      }
+    }
+
+    // A part may start at block-level elements only (and at bare text between them).
+    function isSafeSectionSplitElement(node) {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE) return true;
+      return ['p', 'div', 'section', 'article', 'aside', 'blockquote', 'ul', 'ol', 'li',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr'].includes(localName(node));
+    }
+
+    function isHeadingElement(node) {
+      return node && node.nodeType === Node.ELEMENT_NODE && /^h[1-6]$/i.test(localName(node));
+    }
+
+    function isIgnorableSectionSplitNode(node) {
+      return node?.nodeType === Node.TEXT_NODE && !(node.textContent || '').trim();
+    }
+
+    // An author's page break inside or on the node: <hr>, epub:type/role pagebreak, or a
+    // page-break-before/after (or break-before/after) style that forces a page.
+    function hasNaturalSectionPageBoundary(node) {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+      const elements = [node, ...node.querySelectorAll('*')];
+      return elements.some((element) => {
+        const name = localName(element);
+        if (name === 'hr') return true;
+        const epubType = element.getAttributeNS?.('http://www.idpf.org/2007/ops', 'type') || element.getAttribute('epub:type') || '';
+        const role = element.getAttribute('role') || '';
+        const style = element.getAttribute('style') || '';
+        return /(^|\s)pagebreak(\s|$)/i.test(epubType) ||
+          /(^|\s)doc-pagebreak(\s|$)/i.test(role) ||
+          /(?:^|;)\s*(?:-epub-)?(?:page-break|break)-(?:before|after)\s*:\s*(?:always|page|left|right|recto|verso)\b/i.test(style);
+      });
+    }
+
+    function isNaturalSectionSplitBoundary(previous, next) {
+      return hasNaturalSectionPageBoundary(previous) || hasNaturalSectionPageBoundary(next) || isHeadingElement(next);
+    }
+
+    // Looking forward from where a part got too long: the first author's break within the
+    // lookahead, or candidateIndex when there is none.
+    function findNaturalSectionSplitIndex(splitChildren, candidateIndex, current, currentBytes, serializer) {
+      const byteLimit = Math.min(
+        SECTION_SPLIT_HARD_BYTE_LIMIT,
+        Math.max(currentBytes, SECTION_SPLIT_BYTE_THRESHOLD) + SECTION_SPLIT_NATURAL_BOUNDARY_LOOKAHEAD_BYTES);
+      let projectedBytes = currentBytes;
+      for (let index = candidateIndex; index < splitChildren.length; index++) {
+        if (index > candidateIndex) {
+          projectedBytes += utf8ByteLength(serializer.serializeToString(splitChildren[index - 1]));
+        }
+        if (projectedBytes > byteLimit) break;
+        const priorNodes = current.concat(splitChildren.slice(candidateIndex, index));
+        const previous = [...priorNodes].reverse().find((node) => !isIgnorableSectionSplitNode(node));
+        const next = splitChildren[index];
+        const canBreakBefore = !!previous && isSafeSectionSplitElement(next) &&
+          !shouldKeepSectionSplitCluster(next) && !isHeadingElement(previous);
+        if (canBreakBefore && isNaturalSectionSplitBoundary(previous, next)) return index;
+      }
+      return candidateIndex;
+    }
+
+    // Looking back over the part being filled: an author's break within the lookahead from its
+    // end, as an offset into current, or -1.
+    function findNaturalSectionSplitOffsetInCurrent(current, serializer) {
+      let trailingBytes = 0;
+      for (let offset = current.length - 1; offset > 0; offset--) {
+        trailingBytes += utf8ByteLength(serializer.serializeToString(current[offset]));
+        if (trailingBytes > SECTION_SPLIT_NATURAL_BOUNDARY_LOOKAHEAD_BYTES) break;
+        const previous = [...current.slice(0, offset)].reverse().find((node) => !isIgnorableSectionSplitNode(node));
+        const next = current[offset];
+        const canBreakBefore = !!previous && isSafeSectionSplitElement(next) &&
+          !shouldKeepSectionSplitCluster(next) && !isHeadingElement(previous);
+        if (canBreakBefore && isNaturalSectionSplitBoundary(previous, next)) return offset;
+      }
+      return -1;
+    }
+
+    // Whether a run of nodes shows anything (text or an image), the way hasReaderContent asks
+    // it of a whole chapter. A part that would show nothing joins its neighbour.
+    function chunkHasReaderContent(nodes) {
+      const visit = (node, hidden) => {
+        if (node.nodeType === Node.TEXT_NODE) return !hidden && !!(node.textContent || '').trim();
+        if (node.nodeType !== Node.ELEMENT_NODE) return false;
+        const name = localName(node);
+        const nextHidden = hidden || node.hasAttribute('data-AmznRemoved-M8') || ['script', 'style', 'svg', 'metadata'].includes(name);
+        if (nextHidden) return false;
+        if (name === 'img') return true;
+        return Array.from(node.childNodes).some((child) => visit(child, nextHidden));
+      };
+      return nodes.some((node) => visit(node, false));
+    }
+
+    // Tables, figures and SVG are never cut, and a part never starts at one.
+    function shouldKeepSectionSplitCluster(node) {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+      const name = localName(node);
+      return ['table', 'figure', 'svg'].includes(name) || !!node.querySelector?.('table,figure,svg');
+    }
+
+    function isAtomicSectionSplitContainer(node) {
+      return node?.nodeType === Node.ELEMENT_NODE && ['table', 'figure', 'svg'].includes(localName(node));
+    }
+
+    // The element whose children are cut into parts: body, or the first descendant with two or
+    // more element children when body holds a single wrapper (<div class="chapter">). childPath
+    // finds it again in a clone. null when there is nothing to cut.
+    function findSectionSplitContainer(body) {
+      let container = body;
+      const childPath = [];
+      while (true) {
+        const children = Array.from(container.childNodes);
+        const elementChildren = children
+          .map((child, index) => ({ child, index }))
+          .filter(({ child }) => child.nodeType === Node.ELEMENT_NODE);
+        if (elementChildren.length >= 2) return { container, childPath };
+        if (elementChildren.length !== 1 || isAtomicSectionSplitContainer(elementChildren[0].child)) return null;
+        childPath.push(elementChildren[0].index);
+        container = elementChildren[0].child;
+      }
+    }
+
+    // ch.xhtml -> ch.xhtml, ch__ci_section_002.xhtml, ch__ci_section_003.xhtml, ...
+    function makeSectionSplitPath(path, partIndex) {
+      if (partIndex === 0) return path;
+      const dot = path.lastIndexOf('.');
+      const suffix = `__ci_section_${String(partIndex + 1).padStart(3, '0')}`;
+      return dot > 0 ? `${path.substring(0, dot)}${suffix}${path.substring(dot)}` : `${path}${suffix}.xhtml`;
+    }
+
+    // makeSectionSplitPath, avoiding names already taken: a book optimized before already holds
+    // ch__ci_section_002.xhtml, and splitting its ch.xhtml again must not overwrite that.
+    // (Not in CrossInk.)
+    function makeUniqueSectionSplitPath(path, partIndex, takenPaths) {
+      const base = makeSectionSplitPath(path, partIndex);
+      if (partIndex === 0) return base;
+      const dot = base.lastIndexOf('.');
+      let candidate = base;
+      for (let attempt = 2; takenPaths.has(candidate); attempt++) {
+        candidate = `${base.substring(0, dot)}_${attempt}${base.substring(dot)}`;
+      }
+      takenPaths.add(candidate);
+      return candidate;
+    }
+
+    // Cuts every spine chapter past the preferred sizes into parts, at its container's children.
+    // Returns { files, splitSections, anchorTargets, partOrigins }:
+    //   files          the XHTML map with each cut chapter replaced by its parts (the first part
+    //                  keeps the chapter's path)
+    //   splitSections  chapter path -> [part paths], in reading order
+    //   anchorTargets  chapter path -> Map(id or a@name -> part path holding it)
+    //   partOrigins    part path -> chapter path, for every part
+    function splitLongXhtmlSections(xhtmlFiles, opfContent, opfPath, enabled) {
+      const none = { files: xhtmlFiles, splitSections: {}, anchorTargets: new Map(), partOrigins: new Map() };
+      if (!enabled || !opfContent) return none;
+
+      const parser = new DOMParser();
+      const serializer = new XMLSerializer();
+      const out = {};
+      const splitSections = {};
+      const anchorTargets = new Map();
+      const partOrigins = new Map();
+      const spinePaths = new Set(parseOpfSpineHrefs(opfContent, opfPath));
+      const navPaths = parseOpfNavPaths(opfContent, opfPath);
+      const takenPaths = new Set(Object.keys(xhtmlFiles));
+
+      for (const [path, content] of Object.entries(xhtmlFiles)) {
+        if (!spinePaths.has(path) || navPaths.has(path)) {
+          out[path] = content;
+          continue;
+        }
+        const totalBytes = utf8ByteLength(content);
+        if (totalBytes <= SECTION_SPLIT_BYTE_THRESHOLD &&
+            countSectionWords(extractSectionText(content)) <= SECTION_SPLIT_WORD_THRESHOLD) {
+          out[path] = content;
+          continue;
+        }
+
+        const doc = parser.parseFromString(content, 'application/xhtml+xml');
+        if (doc.querySelector('parsererror') || !doc.body) {
+          out[path] = content;
+          continue;
+        }
+        const splitContainer = findSectionSplitContainer(doc.body);
+        if (!splitContainer) {
+          out[path] = content;
+          continue;
+        }
+        const splitChildren = Array.from(splitContainer.container.childNodes);
+        // What every part repeats: the head and the wrappers around the container.
+        const fixedBytes = Math.max(0,
+          totalBytes - splitChildren.reduce((sum, child) => sum + utf8ByteLength(serializer.serializeToString(child)), 0));
+
+        const chunks = [];
+        let current = [];
+        let currentWords = 0;
+        let currentBytes = fixedBytes;
+        const flush = () => {
+          if (current.length === 0) return;
+          chunks.push(current);
+          current = [];
+          currentWords = 0;
+          currentBytes = fixedBytes;
+        };
+
+        for (let childIndex = 0; childIndex < splitChildren.length; childIndex++) {
+          const child = splitChildren[childIndex];
+          const childWords = countSectionWords(child.textContent || '');
+          const childBytes = utf8ByteLength(serializer.serializeToString(child));
+          const lastContentNode = [...current].reverse().find((node) => !isIgnorableSectionSplitNode(node));
+          const wouldExceed = !!lastContentNode &&
+            (currentWords + childWords > SECTION_SPLIT_WORD_THRESHOLD || currentBytes + childBytes > SECTION_SPLIT_BYTE_THRESHOLD);
+          const canBreakBefore = !!lastContentNode && isSafeSectionSplitElement(child) &&
+            !shouldKeepSectionSplitCluster(child) && !isHeadingElement(lastContentNode);
+          const naturalSplitOffset = wouldExceed && currentBytes <= SECTION_SPLIT_HARD_BYTE_LIMIT
+            ? findNaturalSectionSplitOffsetInCurrent(current, serializer)
+            : -1;
+          if (naturalSplitOffset > 0) {
+            const completed = current.splice(0, naturalSplitOffset);
+            chunks.push(completed);
+            currentWords = current.reduce((sum, node) => sum + countSectionWords(node.textContent || ''), 0);
+            currentBytes = fixedBytes + current.reduce((sum, node) => sum + utf8ByteLength(serializer.serializeToString(node)), 0);
+          } else if (wouldExceed && canBreakBefore) {
+            const naturalSplitIndex = findNaturalSectionSplitIndex(splitChildren, childIndex, current, currentBytes, serializer);
+            if (naturalSplitIndex > childIndex) {
+              for (let index = childIndex; index < naturalSplitIndex; index++) {
+                const node = splitChildren[index];
+                current.push(node);
+                currentWords += countSectionWords(node.textContent || '');
+                currentBytes += utf8ByteLength(serializer.serializeToString(node));
+              }
+              flush();
+              childIndex = naturalSplitIndex - 1;
+              continue;
+            }
+            flush();
+          }
+
+          current.push(child);
+          currentWords += childWords;
+          currentBytes += childBytes;
+
+          const canBreakAfter = !isIgnorableSectionSplitNode(child) && isSafeSectionSplitElement(child) &&
+            !shouldKeepSectionSplitCluster(child) && !isHeadingElement(child);
+          if (currentBytes >= SECTION_SPLIT_HARD_BYTE_LIMIT && canBreakAfter) flush();
+        }
+        flush();
+
+        // A part that would show nothing (only anchors, empty wrappers) joins the next one.
+        const mergedChunks = [];
+        let pending = [];
+        for (const chunk of chunks) {
+          if (chunkHasReaderContent(chunk)) {
+            mergedChunks.push([...pending, ...chunk]);
+            pending = [];
+          } else {
+            pending.push(...chunk);
+          }
+        }
+        if (pending.length && mergedChunks.length) mergedChunks[mergedChunks.length - 1].push(...pending);
+
+        if (mergedChunks.length < 2) {
+          out[path] = content;
+          continue;
+        }
+
+        splitSections[path] = [];
+        const sectionAnchors = new Map();
+        anchorTargets.set(path, sectionAnchors);
+        mergedChunks.forEach((chunk, partIndex) => {
+          const partPath = makeUniqueSectionSplitPath(path, partIndex, takenPaths);
+          const partDoc = doc.cloneNode(true);
+          let partContainer = partDoc.body;
+          for (const childIndex of splitContainer.childPath) partContainer = partContainer.childNodes[childIndex];
+          while (partContainer.firstChild) partContainer.removeChild(partContainer.firstChild);
+          for (const node of chunk) partContainer.appendChild(partDoc.importNode(node, true));
+          for (const element of Array.from(partDoc.getElementsByTagName('*'))) {
+            const anchor = element.getAttribute('id') || (localName(element) === 'a' ? element.getAttribute('name') : null);
+            if (anchor && !sectionAnchors.has(anchor)) sectionAnchors.set(anchor, partPath);
+          }
+          out[partPath] = safeSerialize(partDoc, content);
+          splitSections[path].push(partPath);
+          partOrigins.set(partPath, path);
+        });
+      }
+
+      return { files: out, splitSections, anchorTargets, partOrigins };
+    }
+
+    // Lists each part after its chapter: a manifest item per part, and in the spine an itemref
+    // per part right after the chapter's, in order. A chapter marked linear="no" passes that on
+    // to its parts (not in CrossInk).
+    function addSplitSectionsToOpf(opfContent, opfPath, splitSections) {
+      if (Object.keys(splitSections).length === 0) return opfContent;
+
+      const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
+      if (doc.querySelector('parsererror')) return opfContent;
+      const manifest = doc.getElementsByTagNameNS('*', 'manifest')[0];
+      const spine = doc.getElementsByTagNameNS('*', 'spine')[0];
+      if (!manifest || !spine) return opfContent;
+
+      const byPath = new Map();
+      const items = Array.from(doc.getElementsByTagNameNS('*', 'item'));
+      for (const item of items) {
+        const id = item.getAttribute('id');
+        const href = item.getAttribute('href');
+        if (id && href) byPath.set(resolvePath(opfPath, decodeHref(href.split('#')[0])), { id, item });
+      }
+      const usedIds = new Set(items.map((item) => item.getAttribute('id') || ''));
+
+      for (const [originalPath, parts] of Object.entries(splitSections)) {
+        const original = byPath.get(originalPath);
+        if (!original || parts.length < 2) continue;
+
+        const addedIds = [];
+        for (let index = 1; index < parts.length; index++) {
+          let id = `${original.id}-ci-${index + 1}`;
+          while (usedIds.has(id)) id += 'x';
+          usedIds.add(id);
+
+          const item = doc.createElementNS(manifest.namespaceURI || OPF_NS, 'item');
+          item.setAttribute('id', id);
+          item.setAttribute('href', relativeZipHref(opfPath, parts[index]));
+          item.setAttribute('media-type', 'application/xhtml+xml');
+          manifest.appendChild(item);
+          addedIds.push(id);
+        }
+
+        const itemref = Array.from(doc.getElementsByTagNameNS('*', 'itemref')).find(
+          (ref) => ref.getAttribute('idref') === original.id);
+        if (!itemref) continue;
+        const linear = itemref.getAttribute('linear');
+        let insertAfter = itemref;
+        for (const id of addedIds) {
+          const ref = doc.createElementNS(spine.namespaceURI || OPF_NS, 'itemref');
+          ref.setAttribute('idref', id);
+          if (linear) ref.setAttribute('linear', linear);
+          if (insertAfter.nextSibling) spine.insertBefore(ref, insertAfter.nextSibling);
+          else spine.appendChild(ref);
+          insertAfter = ref;
+        }
+      }
+
+      return safeSerialize(doc, opfContent);
+    }
+
+    // Points every link with a fragment that now lives in another part (href, xlink:href, and
+    // src for NCX <content>) at that part. Differences from CrossInk, which only looked at href
+    // and xlink:href and read a bare "#id" as the part the link sits in:
+    //   - NCX entries (<content src="ch.xhtml#id">) are rewritten too;
+    //   - a bare "#id" in a part is looked up in the chapter the part was cut from, so a note
+    //     reference in part 2 still reaches its note at the end of part 5;
+    //   - a link that already reaches the right document is left as the author wrote it.
+    function rewriteSplitSectionReferences(content, sourcePath, anchorTargets, partOrigins = new Map()) {
+      if (anchorTargets.size === 0) return content;
+      const doc = new DOMParser().parseFromString(content, 'application/xml');
+      if (doc.querySelector('parsererror')) return content;
+      let changed = false;
+      for (const element of Array.from(doc.getElementsByTagName('*'))) {
+        for (const attribute of ['href', 'src', 'xlink:href']) {
+          const value = element.getAttribute(attribute);
+          if (!value || /^[a-z][a-z0-9+.-]*:/i.test(value)) continue;
+          const [href, fragment = ''] = value.split(/#(.*)/s, 2);
+          if (!fragment) continue;
+          const reaches = href ? resolvePath(sourcePath, decodeHref(href)) : sourcePath;
+          const chapterPath = href ? reaches : (partOrigins.get(sourcePath) || sourcePath);
+          const partPath = anchorTargets.get(chapterPath)?.get(decodeHref(fragment));
+          if (!partPath || partPath === reaches) continue;
+          element.setAttribute(attribute, `${relativeZipHref(sourcePath, partPath)}#${fragment}`);
+          changed = true;
+        }
+      }
+      return changed ? safeSerialize(doc, content) : content;
+    }
+
     /**
      * Extract main identifier from OPF for NCX sync. DOMParser with regex fallback.
      */
@@ -5543,6 +6045,21 @@
         logFix('EPUB sections', `Collapsed ${collapseResult.redirects.size} empty chapter stubs`);
       }
 
+      // Long chapters: cut into parts at natural breaks, then point every link with a fragment
+      // at the part that now holds its target (ported from CrossInk, see splitLongXhtmlSections).
+      const splitLongSections = !!document.getElementById('splitLongSectionsToggle')?.checked;
+      const sectionSplitResult = splitLongXhtmlSections(processedXhtmlFiles, opfContent, opfPath, splitLongSections);
+      processedXhtmlFiles = sectionSplitResult.files;
+      for (const [xhtmlPath, content] of Object.entries(processedXhtmlFiles)) {
+        processedXhtmlFiles[xhtmlPath] = rewriteSplitSectionReferences(
+          content, xhtmlPath, sectionSplitResult.anchorTargets, sectionSplitResult.partOrigins);
+      }
+      const splitChapterCount = Object.keys(sectionSplitResult.splitSections).length;
+      if (splitChapterCount > 0) {
+        const splitPartCount = Object.values(sectionSplitResult.splitSections).reduce((sum, parts) => sum + parts.length, 0);
+        logFix('EPUB sections', `${splitPartCount} parts from ${splitChapterCount} long sections`);
+      }
+
       // The NCX and other XML/SVG files can point into chapters too: scrub them and redirect
       // their links here, before the OPF pass; the copy loop below writes them.
       const extraTextFiles = {};
@@ -5550,8 +6067,9 @@
         if (fileObj.dir || path === 'mimetype') continue;
         const low = path.toLowerCase();
         if (low.endsWith('.ncx') || low.match(/\.(xml|svg)$/)) {
-          extraTextFiles[path] = rewriteCollapsedSpineReferences(
+          const content = rewriteCollapsedSpineReferences(
             scrubEpubTextResource(path, await safeReadText(fileObj)), path, collapseResult.redirects);
+          extraTextFiles[path] = rewriteSplitSectionReferences(content, path, sectionSplitResult.anchorTargets);
         }
       }
 
@@ -5568,6 +6086,8 @@
         }
         const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
         t = fixOPF(t, opfContent, opfDir, splitImages);
+        t = addSplitSectionsToOpf(t, opfPath, sectionSplitResult.splitSections);
+        t = rewriteSplitSectionReferences(t, opfPath, sectionSplitResult.anchorTargets);
         if (t !== opfContent) logFix('OPF', 'manifest updated');
         out.file(opfPath, t, DEFLATE_OPTS);
       }
