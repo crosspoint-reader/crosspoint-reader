@@ -1,216 +1,158 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>%%CROSSPOINT%% - Fonts</title>
+    <title>Font Manager - %%CROSSPOINT%%</title>
     <style>
-      :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-        --danger-color: #e74c3c;
-        --danger-hover: #c0392b;
-        --notice-bg: #fff8e1;
-        --notice-border: #ffd54f;
-        --notice-color: #5d4e0a;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          --notice-bg: #4a4030;
-          --notice-border: #b89a3e;
-          --notice-color: #f3e5a0;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 { color: var(--title-color); margin-top: 0; }
-      h3 { margin: 0 0 8px 0; }
-      .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
+      <!--#include file="shared/Theme.css.inc" -->
       <!--#include file="shared/NavLinks.css.inc" -->
 
+      /* A font family per row: name and details on the left, its button on the right; on a narrow
+         screen the button wraps under the text. */
       .family {
-        border-bottom: 1px solid var(--border-color);
-        padding: 12px 0;
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .family:last-child { border-bottom: none; }
-      .family-info { flex: 1; }
-      .family-meta { color: var(--label-color); font-size: 0.9em; }
-      .btn {
-        padding: 6px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9em;
-      }
-      .btn-danger {
-        background: var(--danger-color);
-        color: white;
-      }
-      .btn-danger:hover { background: var(--danger-hover); }
-      .btn-primary {
-        background: var(--accent-color);
-        color: white;
-      }
-      .btn-primary:hover { background: var(--accent-hover-color); }
-      .btn[disabled] {
-        opacity: 0.5;
-        cursor: default;
-      }
-      .upload-form {
-        display: flex;
-        gap: 10px;
-        align-items: center;
         flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px 16px;
+        padding: 12px 0;
       }
-      .upload-form input[type="text"] {
-        padding: 6px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        background: var(--bg);
-        color: var(--font-color);
-      }
-      .upload-form input[type="file"] { flex: 1; min-width: 200px; }
-      #status {
-        margin-top: 10px;
-        padding: 8px;
-        border-radius: 4px;
-        display: none;
-      }
-      .status-ok { background: #d4edda; color: #155724; display: block !important; }
-      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
-      .empty { color: var(--label-color); text-align: center; padding: 20px; }
-      .notice {
-        background: var(--notice-bg);
-        border: 1px solid var(--notice-border);
-        color: var(--notice-color);
-        border-radius: 6px;
-        padding: 10px 14px;
-        margin: 0 0 12px;
-        font-size: 0.95em;
-      }
-      .notice a { color: inherit; font-weight: 600; }
+      .family + .family { border-top: 1px solid var(--border); }
+      .family:first-child { padding-top: 0; }
+      .family:last-child { padding-bottom: 0; }
+      .family-info { flex: 1 1 260px; min-width: 0; }
+      .family-info h3 { margin: 0 0 2px; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+      .family-meta { color: var(--text-muted); font-size: 0.875rem; overflow-wrap: anywhere; }
+
       .toolbar {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
         align-items: center;
-        margin-bottom: 12px;
+        margin-bottom: 16px;
       }
+
+      /* The catalog beside the status of the last download, which stays in view while the list
+         scrolls; above the list on a narrow screen. */
       .download-layout {
         display: grid;
-        grid-template-columns: minmax(240px, 1fr) 280px;
-        gap: 16px;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 24px;
         align-items: start;
       }
       .status-panel {
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        position: sticky;
+        top: 72px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 14px 16px;
       }
       .status-panel h3 {
-        margin: 0 0 10px 0;
-        font-size: 1rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin: 0 0 8px;
       }
-      .status-panel p {
-        margin: 0;
+      .status-panel p { margin: 0; }
+      #remoteStatus { color: var(--text-muted); overflow-wrap: anywhere; }
+      #remoteStatus.status-ok, #remoteStatus.status-err { margin: 0 -4px; padding: 8px 10px; border-radius: var(--radius-sm); }
+
+      .card > .notice { margin: 0 0 16px; }
+      .notice a { color: inherit; font-weight: 600; }
+      .upload-form {
+        display: flex;
+        gap: 8px 12px;
+        align-items: center;
+        flex-wrap: wrap;
       }
-      #remoteStatus {
-        margin-top: 8px;
-        min-height: 80px;
-        display: block;
-        border-radius: 6px;
-        padding: 12px;
-        background: var(--notice-bg);
-        border: 1px solid var(--notice-border);
-        color: var(--notice-color);
+      .upload-form input[type="file"] { flex: 1 1 240px; min-width: 0; max-width: 100%; }
+      /* The browser's file picker button, drawn like .btn. */
+      input[type="file"] { font: inherit; color: var(--text-muted); }
+      input[type="file"]::file-selector-button {
+        font: inherit;
+        font-weight: 600;
+        margin-right: 12px;
+        padding: 8px 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--control-border);
+        background: var(--surface-2);
+        color: var(--text);
+        cursor: pointer;
       }
-      .status-ok {
-        background: #d4edda;
-        color: #155724;
-        border-color: #c3e6cb;
+      input[type="file"]::file-selector-button:hover { background: var(--border); }
+      #pickedInfo { margin: 8px 0 0; }
+      #pickedInfo:empty { display: none; }
+
+      /* Result lines: neutral while working, green when done, red on failure. */
+      #status {
+        display: none;
+        margin-top: 14px;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        overflow-wrap: anywhere;
       }
-      .status-err {
-        background: #f8d7da;
-        color: #721c24;
-        border-color: #f5c6cb;
+      #status.status-ok, #remoteStatus.status-ok { display: block; background: var(--accent-soft); color: var(--ok-text);
+        border-color: transparent; }
+      #status.status-err, #remoteStatus.status-err { display: block; background: var(--danger-soft); color: var(--danger);
+        border-color: transparent; }
+
+      @media (max-width: 860px) {
+        .download-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+        .status-panel { position: static; order: -1; }
       }
     </style>
   </head>
   <body>
-    <h1>📚 %%CROSSPOINT%%</h1>
+    <!--#include file="shared/PageHeader.html.inc" -->
 
-    <!--#include file="shared/NavLinks.html.inc" -->
-
-    <div class="card">
-      <h2>Installed Fonts</h2>
-      <div id="families"><p class="empty">Loading...</p></div>
-    </div>
-
-    <div class="card">
-      <h2>Download Fonts</h2>
-      <div class="toolbar">
-        <button id="refreshManifest" class="btn btn-primary" type="button">Refresh Catalog</button>
-        <button id="downloadAllRemote" class="btn btn-primary" type="button">Download All Updates</button>
+    <main class="page">
+      <div class="page-head">
+        <h1>Font Manager</h1>
+        <p class="page-intro">Reading fonts on the SD card: download them from the catalog, upload your own, or delete
+          those you no longer use.</p>
       </div>
-      <div class="download-layout">
-        <div id="remoteFamilies"><p class="empty">Catalog not loaded</p></div>
-        <div class="status-panel">
-          <h3>Download Status</h3>
-          <div id="remoteStatus" class="status-message"><p>Waiting for action...</p></div>
+
+      <section class="card">
+        <h2>Installed fonts</h2>
+        <div id="families"><p class="empty">Loading...</p></div>
+      </section>
+
+      <section class="card">
+        <h2>Download fonts</h2>
+        <div class="toolbar">
+          <button id="refreshManifest" class="btn" type="button">Refresh catalog</button>
+          <button id="downloadAllRemote" class="btn btn-primary" type="button">Download all updates</button>
         </div>
-      </div>
-    </div>
+        <div class="download-layout">
+          <div id="remoteFamilies"><p class="empty">Catalog not loaded</p></div>
+          <div class="status-panel" role="status">
+            <h3>Download status</h3>
+            <div id="remoteStatus" class="status-message"><p>Waiting for action...</p></div>
+          </div>
+        </div>
+      </section>
 
-    <div class="card">
-      <h2>Upload Font</h2>
-      <p class="notice">
-        Need a <code>.cpfont</code> file? Convert any TrueType/OpenType font at
-        <a href="https://crosspointreader.com/fonts" target="_blank" rel="noopener">crosspointreader.com/fonts</a>,
-        then upload the resulting files here.
-      </p>
-      <form class="upload-form" id="uploadForm">
-        <input type="file" id="fontFiles" accept=".cpfont" multiple required />
-        <button type="submit" class="btn btn-primary">Upload</button>
-      </form>
-      <p id="pickedInfo" class="family-meta" style="margin: 8px 0 0;"></p>
-      <div id="status"></div>
-    </div>
+      <section class="card">
+        <h2>Upload a font</h2>
+        <p class="notice">
+          Need a <code>.cpfont</code> file? Convert any TrueType/OpenType font at
+          <a href="https://crosspointreader.com/fonts" target="_blank" rel="noopener">crosspointreader.com/fonts</a>,
+          then upload the resulting files here.
+        </p>
+        <form class="upload-form" id="uploadForm">
+          <input type="file" id="fontFiles" accept=".cpfont" multiple required />
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </form>
+        <p id="pickedInfo" class="family-meta"></p>
+        <div id="status" role="status"></div>
+      </section>
+    </main>
 
   <script>
     function formatSize(bytes) {
@@ -260,7 +202,7 @@
           info.appendChild(meta);
 
           const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-danger';
+          delBtn.className = 'btn btn-danger btn-small';
           delBtn.dataset.family = f.name;
           delBtn.textContent = 'Delete';
 
@@ -335,7 +277,8 @@
           info.appendChild(meta);
 
           const btn = document.createElement('button');
-          btn.className = 'btn btn-primary';
+          // Only an update stands out; a list of green buttons would hide it.
+          btn.className = 'btn btn-small' + (f.installed && f.hasUpdate ? ' btn-primary' : '');
           btn.dataset.family = f.name;
           btn.textContent = f.installed ? (f.hasUpdate ? 'Update' : 'Reinstall') : 'Download';
 
