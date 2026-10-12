@@ -29,6 +29,7 @@
 #include "ChunkedResponse.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
+#include "GlobalBookmarkIndex.h"
 #include "HttpFileStreamer.h"
 #include "OpdsServerStore.h"
 #include "ReadingStats.h"
@@ -470,6 +471,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsData(); });
   server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
   server->on("/api/book/opf", HTTP_GET, [this] { handleBookOpf(); });
+  server->on("/api/book/replace", HTTP_POST, [this] { handleBookReplace(); }, [this] { handleBookReplaceData(); });
   server->on("/api/plugins/begin", HTTP_POST, [this] { handlePluginInstallBegin(); });
   server->on(
       "/api/plugins/file", HTTP_POST, [this] { handlePluginInstallFile(); }, [this] { handlePluginInstallFileData(); });
@@ -3419,6 +3421,103 @@ void CrossPointWebServer::handleBookOpf() const {
   // falls back to downloading the book.
   if (!epub.readItemContentsToStream(opfPath, body, 1024)) LOG_ERR("WEB", "Reading the OPF of %s failed", path.c_str());
   out.finish();
+}
+
+// POST /api/book/replace?path=<book.epub>[&keep=1]  (raw body = the new book)
+//
+// The File Manager's in-place optimize: it downloads a book, optimizes it in the browser and sends
+// it back here. The new file is written beside the book and swapped in only once complete. The
+// original stays as <book>.bak - unless a .bak is already there, which then holds the older
+// original and is kept. keep=1 means the optimizer left the chapter list as it was: the reading
+// position and the bookmarks stay, and only what the new content makes wrong (laid-out chapters,
+// indexes, thumbnails) goes. Without it the book starts afresh, as after any re-upload.
+
+namespace {
+
+// A book of any size the card holds; the browser cannot send what it could not optimize anyway.
+constexpr size_t BOOK_REPLACE_MAX_BYTES = 512u * 1024u * 1024u;
+
+// The target /api/book/replace accepts: an existing EPUB the web interface may write.
+String bookReplaceTarget(const String& rawPath) {
+  const String path = pluginWriteTarget(rawPath);
+  if (path.isEmpty() || !FsHelpers::hasEpubExtension(path) || !Storage.exists(path.c_str())) return "";
+  return path;
+}
+
+// Everything in the book's cache folder except the reading position and the bookmarks.
+void dropLayoutCache(const String& bookPath) {
+  const std::string cacheDir = Epub(bookPath.c_str(), "/.crosspoint").getCachePath();
+  FsFile dir = Storage.open(cacheDir.c_str());
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return;
+  }
+  char name[64];
+  for (FsFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+    HalSystem::feedWatchdog();
+    entry.getName(name, sizeof(name));
+    const bool isDir = entry.isDirectory();
+    entry.close();
+    if (strcmp(name, "progress.bin") == 0 || strcmp(name, "bookmarks.bin") == 0) continue;
+    const std::string child = cacheDir + "/" + name;
+    if (isDir ? !Storage.removeDir(child.c_str()) : !Storage.remove(child.c_str())) {
+      LOG_ERR("WEB", "Could not remove %s", child.c_str());
+    }
+  }
+  dir.close();
+}
+
+}  // namespace
+
+void CrossPointWebServer::handleBookReplace() {
+  const String path = bookReplacePath;  // validated in handleBookReplaceData(); rawUpload.path is <path>.new
+  bookReplacePath = "";
+  if (rawUpload.answerFailure(*server)) return;
+  const String fresh = path + ".new";
+  const String backup = path + ".bak";
+  // The upload wrote <path>.new.part and renamed it to <path>.new; now <path> itself moves.
+  const bool keepOlderBackup = Storage.exists(backup.c_str());
+  const bool movedAside = keepOlderBackup ? Storage.remove(path.c_str()) : Storage.rename(path.c_str(), backup.c_str());
+  if (!movedAside) {
+    Storage.remove(fresh.c_str());
+    server->send(500, "application/json", "{\"error\":\"could not set the original aside\"}");
+    return;
+  }
+  if (!Storage.rename(fresh.c_str(), path.c_str())) {
+    LOG_ERR("WEB", "Could not swap in %s", fresh.c_str());
+    if (!keepOlderBackup) Storage.rename(backup.c_str(), path.c_str());
+    server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
+    return;
+  }
+
+  const bool keep = server->arg("keep") == "1";
+  if (keep) {
+    dropLayoutCache(path);
+  } else {
+    clearBookCacheIfNeeded(path);
+    GLOBAL_BOOKMARKS.removeBySourcePath(path.c_str());
+  }
+  LOG_DBG("WEB", "Replaced %s (%u B, %s)", path.c_str(), static_cast<unsigned>(rawUpload.written),
+          keep ? "reading state kept" : "reading state reset");
+
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["path"] = path.c_str();
+  doc["backup"] = backup.c_str();
+  doc["keptOlderBackup"] = keepOlderBackup;
+  doc["keptReadingState"] = keep;
+  sendJson(server.get(), 200, doc);
+}
+
+void CrossPointWebServer::handleBookReplaceData() {
+  const HTTPRaw& raw = server->raw();
+  if (raw.status == RAW_START) {
+    const String target = bookReplaceTarget(server->arg("path"));
+    bookReplacePath = target;
+    rawUpload.start(target.isEmpty() ? target : target + ".new", BOOK_REPLACE_MAX_BYTES);
+    return;
+  }
+  rawUpload.feed(raw);
 }
 
 void CrossPointWebServer::handlePluginInstallBegin() const {

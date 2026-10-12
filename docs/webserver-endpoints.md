@@ -837,6 +837,34 @@ client sees as malformed XML.
 curl "http://crosspoint.local/api/book/opf?path=/Books/mybook.epub"
 ```
 
+### POST `/api/book/replace` - Swap In an Optimized Copy of a Book
+
+What the File Manager's in-place **Optimize** uses: it downloads a book, optimizes it in the
+browser and sends the result here as the raw request body (any content type except
+`multipart/form-data`).
+
+```bash
+curl -X POST -H 'Content-Type: application/epub+zip' --data-binary @optimized.epub \
+  "http://crosspoint.local/api/book/replace?path=%2FBooks%2Fbook.epub&keep=1"
+# -> {"ok":true,"path":"/Books/book.epub","backup":"/Books/book.epub.bak","keptOlderBackup":false,"keptReadingState":true}
+```
+
+| Parameter | Description |
+| --------- | ----------- |
+| `path`    | An existing EPUB the file endpoints may write (the same check as `/upload`'s target) |
+| `keep`    | `1` when the new copy has the same chapter list: the reading position and bookmarks stay, and only the laid-out chapters, indexes and thumbnails are dropped. Without it the book starts afresh, as after any re-upload, and its entries leave the bookmark index. |
+
+The body is written to `<path>.new` and swapped in only once complete. The original is kept as
+`<path>.bak`; if a `.bak` already exists, it holds the older original and stays, and the current
+file is replaced. Reading stats follow the file name, so they always stay.
+
+| Status | Cause |
+| ------ | ----- |
+| 400    | No such EPUB, a refused path, or the upload was cut off |
+| 413    | Body over 512 MB |
+| 415    | A `multipart/form-data` body |
+| 500    | Could not write the new file, set the original aside, or swap the new one in |
+
 ### Installing and managing plugins
 
 What the Plugins page (`GET /plugins`) uses. Installs go to
