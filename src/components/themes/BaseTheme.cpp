@@ -360,8 +360,8 @@ void BaseTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
                                  inverted ? screenHeight - 1 - textY + textWidth : textY, fitted.text.c_str());
   };
 
-  if (gpio.deviceIsX3()) {
-    // X3 layout: Up on left side, Down on right side, positioned higher
+  if (ButtonGeometry::sideKeysOnOppositeEdges()) {
+    // X3 / X4 Pro layout: Up on left side, Down on right side, positioned higher
     constexpr int x3ButtonY = 155;
     const int leftX = buttonMargin;
     const int rightX = screenWidth - buttonMargin - buttonWidth;
