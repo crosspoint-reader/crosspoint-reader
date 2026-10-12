@@ -1023,6 +1023,21 @@ await test('in place: a book whose chapters stay as they are keeps its reading s
   check(/→/.test(states[0]) && !/reset/.test(states[0]), `the row shows the sizes (${states[0]})`);
 });
 
+await test('in place: once the run is over, Done closes the dialog', async () => {
+  await optimizeInPlace([{ path: '/Books/small.epub', bytes: await smallBook() }]);
+  const done = w.document.getElementById('optimizeStartBtn');
+  const close = w.document.getElementById('optimizeCancelBtn');
+  const modal = w.document.getElementById('optimizeModal');
+  check(done.textContent === 'Done' && !done.disabled, `the start button turns into an enabled Done (${done.textContent}, disabled=${done.disabled})`);
+  check(close.hidden, 'and stands alone: the Cancel button is hidden');
+  await w.optimizeSelected();  // its onclick
+  check(!modal.classList.contains('open'), 'Done closes the dialog');
+  run('openOptimizeSelectedModal()');
+  check(done.textContent === 'Optimize' && !done.disabled && !close.hidden && close.textContent === 'Cancel',
+    'opening it again starts afresh');
+  run('closeOptimizeModal()');
+});
+
 await test('in place: a split book starts afresh', async () => {
   const { sent, states } = await optimizeInPlace([{ path: '/Books/long.epub', bytes: await longBook() }]);
   check(sent.length === 1 && sent[0].keep === '0', `keep=0 when long chapters were split (got ${sent[0] && sent[0].keep})`);

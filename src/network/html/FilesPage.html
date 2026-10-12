@@ -1436,8 +1436,13 @@
       width: 100%;
     }
 
-    .move-btn-confirm:hover {
+    .move-btn-confirm:hover:not(:disabled) {
       background-color: var(--accent-hover);
+    }
+
+    .move-btn-confirm:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
 
     .loader-container {
@@ -3580,6 +3585,7 @@
     // One book at a time - the reader serves one connection at a time.
     let optimizeItems = [];
     let optimizeRunning = false;
+    let optimizeFinished = false;  // the run is over: the start button reads Done and closes
     let optimizeChanged = false;
 
     function optimizeCandidates(items) {
@@ -3606,7 +3612,10 @@
       const start = document.getElementById('optimizeStartBtn');
       start.disabled = false;
       start.textContent = optimizeItems.length === 1 ? 'Optimize' : `Optimize ${optimizeItems.length} books`;
-      document.getElementById('optimizeCancelBtn').textContent = 'Cancel';
+      const cancel = document.getElementById('optimizeCancelBtn');
+      cancel.textContent = 'Cancel';
+      cancel.hidden = false;
+      optimizeFinished = false;
       optimizeChanged = false;
       document.getElementById('optimizeModal').classList.add('open');
     }
@@ -3621,6 +3630,7 @@
     }
 
     async function optimizeSelected() {
+      if (optimizeFinished) return closeOptimizeModal();
       if (optimizeRunning) return;
       optimizeRunning = true;
       operationCancelled = false;
@@ -3665,9 +3675,12 @@
         }
       }
       optimizeRunning = false;
+      optimizeFinished = true;
       operationCancelled = false;
-      document.getElementById('optimizeStartBtn').textContent = 'Done';
-      document.getElementById('optimizeCancelBtn').textContent = 'Close';
+      const done = document.getElementById('optimizeStartBtn');
+      done.textContent = 'Done';
+      done.disabled = false;
+      document.getElementById('optimizeCancelBtn').hidden = true;
     }
 
     // Open delete modal for currently selected checkboxes
