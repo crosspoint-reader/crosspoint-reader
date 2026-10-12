@@ -141,6 +141,7 @@ stops you adding books. It stays available at `http://<device-ip>/setup`.
 The page you land on at `http://<device-ip>/` has one link per page, and every other page shows the
 same links along its top:
 
+
 - **File Manager**: browse and manage the SD card (below)
 - **Settings**: device settings and saved networks (below)
 - **Font Manager**: install and remove SD-card fonts (below)
@@ -151,6 +152,9 @@ same links along its top:
 - **Diagnostics**: how the device last slept and started, and a report for bug reports (below)
 
 <img src="./images/wifi/webserver_homepage.png" width="600">
+
+The button at the right of that bar switches the pages between automatic colours, which follow the
+light or dark setting of your phone or computer, light and dark. The choice is kept by the browser.
 
 ### File Manager
 

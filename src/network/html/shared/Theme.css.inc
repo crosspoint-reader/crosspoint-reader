@@ -49,8 +49,11 @@
   --err-bg: var(--danger-soft);
   --err-color: var(--danger);
 }
+/* Dark: when the system asks for it, unless the header's switch chose Light, or whenever the
+   switch chose Dark (shared/ThemeInit.html.inc sets data-theme before the page is drawn). The
+   two blocks hold the same values; CSS has no way to share them. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #171a19;
     --surface: #222725;
     --surface-2: #2a302d;
@@ -77,6 +80,33 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #171a19;
+  --surface: #222725;
+  --surface-2: #2a302d;
+  --text: #e3e8e5;
+  --text-strong: #f3f6f4;
+  --text-muted: #9fa9a4;
+  --border: #353c38;
+  --accent: #4d7d64;
+  --accent-hover: #5b8f74;
+  --accent-soft: #263a30;
+  --accent-text: #8fc4a7;
+  --danger: #d0604c;
+  --danger-hover: #e0705c;
+  --danger-soft: #3a2420;
+  --warn-soft: #362f17;
+  --warn-border: #6b5a22;
+  --warn-text: #ecd690;
+  --ok-text: #8fd4aa;
+  --control-bg: #1c201e;
+  --control-border: #46504b;
+  --switch-off: #4a534f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 4px 18px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 /* ---- Base ------------------------------------------------------------------------------------ */
 *, *::before, *::after { box-sizing: border-box; }
@@ -127,6 +157,22 @@ a { color: var(--accent-text); }
 }
 /* One width for the header and every page, so their left edges line up. Text-heavy content can sit
    in .page-narrow, which keeps that left edge but limits the line length. */
+.theme-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+.theme-toggle svg { width: 18px; height: 18px; }
 .page { max-width: 1120px; margin: 0 auto; padding: 24px 16px 96px; }
 .page-narrow > * { max-width: 820px; }
 .page-head { margin-bottom: 20px; }

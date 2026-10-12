@@ -24,6 +24,7 @@
 @media (max-width: 760px) {
   .app-header { position: static; }
   .app-header-inner { flex-wrap: wrap; gap: 0; padding-top: 10px; }
-  .brand { width: 100%; }
-  .nav-links { flex-basis: 100%; margin: 0 -16px; padding: 6px 16px 8px; }
+  /* The name and the colour mode switch on the first line, the links below. */
+  .brand { flex: 1; }
+  .nav-links { order: 3; flex-basis: 100%; margin: 0 -16px; padding: 6px 16px 8px; }
 }
