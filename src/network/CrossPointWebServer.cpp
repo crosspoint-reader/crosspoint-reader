@@ -1885,18 +1885,12 @@ void CrossPointWebServer::handleGetSettings() const {
   server->send(200, "application/json", "");
   ChunkedJsonArray out(server.get());
 
-  char output[1024];
-  constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
 
-  auto sendEntry = [&]() {
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      LOG_DBG("WEB", "Settings entry JSON truncated (key=%s)", doc["key"].as<const char*>());
-      return;
-    }
-    out.addEntry(output, written);
-  };
+  // Straight into the response, without a buffer of its own: an entry can be any size. The
+  // timezone row's 86 city names make about 2 KB, more than the 1 KB buffer this used to be
+  // formatted into, so the row was dropped and the web page had no Timezone setting.
+  auto sendEntry = [&]() { serializeJson(doc, out.nextEntry()); };
 
   // Rows are visited one at a time (forEachSetting()), never held as a list: the whole list is
   // one 11.5 KB block, and this runs while Wi-Fi holds most of the heap.
