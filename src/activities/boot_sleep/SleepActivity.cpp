@@ -502,17 +502,42 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
     }
 
     lcgIndexesLeft = lcgIndexesTotal = fileCount;
-    lcgState = lcgSeed = static_cast<uint32_t>(random(lcgM));
-    lcgC = (lcgSeed * 2u + 1u) % lcgM;
-    for (uint32_t step = 0; step < lcgM; ++step) {
-      lcgState = (5u * lcgState + lcgC) % lcgM;
-      if (lcgState < fileCount &&
-          std::find(previousIndexes, previousIndexes + previousCount, lcgState) == previousIndexes + previousCount) {
-        // Starting here rotates the new cycle without removing any images from its permutation.
-        randomFileIndex = lcgState;
-        break;
+    const auto isPreviousIndex = [&](uint32_t index) {
+      return std::find(previousIndexes, previousIndexes + previousCount, index) != previousIndexes + previousCount;
+    };
+
+    // Find a new seed that
+    // 1. doesn't immediately repeat an image
+    // 2. has the fewest overlaps with previousIndexes in the remaining first "window" generations
+    uint8_t bestOverlapCount = window + 1;
+    static constexpr uint8_t MAX_SEED_ATTEMPTS = 16;
+    for (uint8_t attempt = 0; attempt < MAX_SEED_ATTEMPTS; ++attempt) {
+      const uint32_t candidateSeed = static_cast<uint32_t>(random(lcgM));
+      const uint32_t candidateC = (candidateSeed * 2u + 1u) % lcgM;
+      uint32_t candidateState = candidateSeed;
+      for (uint32_t step = 0; step < lcgM; ++step) {
+        candidateState = (5u * candidateState + candidateC) % lcgM;
+        if (candidateState < fileCount && !isPreviousIndex(candidateState)) break;
       }
+
+      const uint32_t firstState = candidateState;
+      uint8_t overlapCount = 0;
+      uint8_t generatedCount = 1;
+      for (uint32_t step = 0; step < lcgM && generatedCount < window && previousCount > 0; ++step) {
+        candidateState = (5u * candidateState + candidateC) % lcgM;
+        if (candidateState >= fileCount) continue;
+        ++generatedCount;
+        if (isPreviousIndex(candidateState)) ++overlapCount;
+      }
+
+      if (overlapCount < bestOverlapCount) {
+        bestOverlapCount = overlapCount;
+        lcgSeed = candidateSeed;
+        lcgState = firstState;
+      }
+      if (overlapCount == 0) break;
     }
+    randomFileIndex = static_cast<uint16_t>(lcgState);
   } else {
     for (uint32_t attempt = 0; attempt < lcgM; ++attempt) {
       lcgState = (5u * lcgState + lcgC) % lcgM;
