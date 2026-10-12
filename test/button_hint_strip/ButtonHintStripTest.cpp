@@ -13,7 +13,7 @@ Strip x4Strip() {
   Strip s;
   s.y = 800 - 42;
   s.height = 42;
-  s.width = 106;
+  for (int& w : s.width) w = 106;
   s.x[0] = 25;
   s.x[1] = 130;
   s.x[2] = 245;
@@ -26,7 +26,7 @@ TEST(ButtonHintStrip, HitsEachBoxAtItsCentre) {
   const Strip s = x4Strip();
   const int y = s.y + s.height / 2;
   for (int i = 0; i < 4; ++i) {
-    EXPECT_EQ(i, ButtonHintStrip::hitTestIn(s, s.x[i] + s.width / 2, y)) << "box " << i;
+    EXPECT_EQ(i, ButtonHintStrip::hitTestIn(s, s.x[i] + s.width[i] / 2, y)) << "box " << i;
   }
 }
 
@@ -36,7 +36,7 @@ TEST(ButtonHintStrip, HitsEachBoxAtItsCentre) {
 TEST(ButtonHintStrip, LeftmostBoxIsRawButtonZero) {
   const Strip s = x4Strip();
   EXPECT_EQ(0, ButtonHintStrip::hitTestIn(s, s.x[0], s.y));
-  EXPECT_EQ(3, ButtonHintStrip::hitTestIn(s, s.x[3] + s.width - 1, s.y + s.height - 1));
+  EXPECT_EQ(3, ButtonHintStrip::hitTestIn(s, s.x[3] + s.width[3] - 1, s.y + s.height - 1));
 }
 
 TEST(ButtonHintStrip, BoundariesAreHalfOpen) {
@@ -46,7 +46,7 @@ TEST(ButtonHintStrip, BoundariesAreHalfOpen) {
   // pair with real space either side of it (see TunedBoxesOverlapByOnePixel).
   EXPECT_EQ(2, ButtonHintStrip::hitTestIn(s, s.x[2], y));
   EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[2] - 1, y));
-  EXPECT_EQ(3, ButtonHintStrip::hitTestIn(s, s.x[2] + s.width, y));  // = x[3], box 3 starts here
+  EXPECT_EQ(3, ButtonHintStrip::hitTestIn(s, s.x[2] + s.width[2], y));  // = x[3], box 3 starts here
   // Same on the vertical axis: the row above the band and the row past it both miss.
   EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[2], s.y - 1));
   EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[2], s.y + s.height));
@@ -60,7 +60,7 @@ TEST(ButtonHintStrip, BoundariesAreHalfOpen) {
 TEST(ButtonHintStrip, TunedBoxesOverlapByOnePixel) {
   const Strip s = x4Strip();
   const int y = s.y + s.height / 2;
-  ASSERT_EQ(s.x[0] + s.width, s.x[1] + 1) << "x4 box 0/1 overlap assumption no longer holds";
+  ASSERT_EQ(s.x[0] + s.width[0], s.x[1] + 1) << "x4 box 0/1 overlap assumption no longer holds";
   EXPECT_EQ(0, ButtonHintStrip::hitTestIn(s, s.x[1], y));
   EXPECT_EQ(1, ButtonHintStrip::hitTestIn(s, s.x[1] + 1, y));
 }
@@ -68,9 +68,21 @@ TEST(ButtonHintStrip, TunedBoxesOverlapByOnePixel) {
 TEST(ButtonHintStrip, MissesOutsideTheBoxes) {
   const Strip s = x4Strip();
   const int y = s.y + s.height / 2;
-  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, 0, y));                     // left of box 0
-  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[1] + s.width + 2, y));  // real gap, 1 -> 2
-  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[3] + s.width + 1, y));  // right of box 3
+  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, 0, y));                        // left of box 0
+  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[1] + s.width[1] + 2, y));  // real gap, 1 -> 2
+  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[3] + s.width[3] + 1, y));  // right of box 3
+}
+
+// A box that grew for a long label (HintLayout) is tappable across its own width, and
+// its narrower neighbours only across theirs.
+TEST(ButtonHintStrip, EachBoxHasItsOwnWidth) {
+  Strip s = x4Strip();
+  s.x[2] = 240;
+  s.width[2] = 116;
+  s.x[3] = 360;
+  const int y = s.y + s.height / 2;
+  EXPECT_EQ(2, ButtonHintStrip::hitTestIn(s, s.x[2] + 112, y));
+  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[1] + s.width[1] + 2, y));
 }
 
 // An empty label paints no full-size box (BaseTheme) or a decorative stub (LyraTheme).
@@ -79,10 +91,10 @@ TEST(ButtonHintStrip, InactiveBoxIsNotTappable) {
   Strip s = x4Strip();
   s.active[2] = false;
   const int y = s.y + s.height / 2;
-  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[2] + s.width / 2, y));
+  EXPECT_EQ(-1, ButtonHintStrip::hitTestIn(s, s.x[2] + s.width[2] / 2, y));
   // Its neighbours still work — an inactive box must not blank the whole strip.
-  EXPECT_EQ(1, ButtonHintStrip::hitTestIn(s, s.x[1] + s.width / 2, y));
-  EXPECT_EQ(3, ButtonHintStrip::hitTestIn(s, s.x[3] + s.width / 2, y));
+  EXPECT_EQ(1, ButtonHintStrip::hitTestIn(s, s.x[1] + s.width[1] / 2, y));
+  EXPECT_EQ(3, ButtonHintStrip::hitTestIn(s, s.x[3] + s.width[3] / 2, y));
 }
 
 // invalidate() leaves a default Strip. Every tap must miss it, which is what stops a screen
@@ -125,7 +137,7 @@ TEST(ButtonHintStrip, TapResolvesOntoTheStripOnlyInThePortraitFrame) {
   Strip s;
   s.y = 960 - 30;
   s.height = 30;
-  s.width = 80;
+  for (int& w : s.width) w = 80;
   s.x[0] = 44;
   s.x[1] = 168;
   s.x[2] = 292;

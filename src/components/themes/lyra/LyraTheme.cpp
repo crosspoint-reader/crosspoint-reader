@@ -414,6 +414,10 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   ButtonHintLayout::positions(renderer.getScreenWidth(), buttonWidth, x4ButtonPositions, x3ButtonPositions,
                               buttonPositions);
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  // A box grows when its label needs it, and the strip makes room around it.
+  int boxX[4];
+  int boxWidth[4];
+  layOutButtonHints(renderer, SMALL_FONT_ID, buttonWidth, buttonPositions, labels, boxX, boxWidth);
 
   // Inverted flips both axes: the strip's panel-bottom band becomes the top one and each slot
   // mirrors across the width, which is what carries every box back to its own button.
@@ -439,38 +443,35 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   ButtonHintStrip::Strip strip;
   strip.y = pageHeight - buttonY;
   strip.height = buttonHeight;
-  strip.width = buttonWidth;
   for (int i = 0; i < 4; i++) {
-    strip.x[i] = buttonPositions[i];
+    strip.x[i] = boxX[i];
+    strip.width[i] = boxWidth[i];
     strip.active[i] = labels[i] != nullptr && labels[i][0] != '\0';
   }
   ButtonHintStrip::record(strip);
 
   for (int i = 0; i < 4; i++) {
-    const int x = inverted ? pageWidth - buttonPositions[i] - buttonWidth : buttonPositions[i];
+    const int width = boxWidth[i];
+    const int x = inverted ? pageWidth - boxX[i] - width : boxX[i];
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       // Draw the filled background and border for a FULL-sized button
-      renderer.fillRoundedRect(x, fullY, buttonWidth, buttonHeight, cornerRadius, Color::White);
-      // Fit the label to the box. The box is a fixed width while the label's font grows with the
-      // UI font size, so at a large size a long label runs out of BOTH ends of its own box --
-      // the text is centred, so the overflow is symmetrical -- and sprawls across its neighbours.
-      //
-      // Shrink before clipping: a whole word a size smaller is still the word, where "Down..."
-      // is a guess at which of Down and Download the button means. Clipping is the last resort
-      // for a label too long even at the smaller face.
-      const int labelFont =
-          renderer.getTextWidth(SMALL_FONT_ID, labels[i]) > buttonWidth - 4 ? FIT_SMALL_FONT_ID : SMALL_FONT_ID;
-      const std::string label = renderer.truncatedText(labelFont, labels[i], buttonWidth - 4);
-      const int textWidth = renderer.getTextWidth(labelFont, label.c_str());
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(labelFont, textX, fullY + textYOffset, label.c_str());
-      renderer.drawRoundedRect(x, fullY, buttonWidth, buttonHeight, 1, cornerRadius, roundTop, roundTop, roundBottom,
+      renderer.fillRoundedRect(x, fullY, width, buttonHeight, cornerRadius, Color::White);
+      // Fit the label to the box. The box grows with its label only up to a fair quarter of the
+      // strip, while the label's font grows with the UI font size, so a long label can still run
+      // out of BOTH ends of its own box -- the text is centred, so the overflow is symmetrical --
+      // and sprawl across its neighbours. fitHintLabel() shrinks it, then clips it.
+      const FittedHintLabel label =
+          fitHintLabel(renderer, SMALL_FONT_ID, labels[i], width - HintLayout::BOTTOM_LABEL_PADDING);
+      const int textWidth = renderer.getTextWidth(label.fontId, label.text.c_str());
+      const int textX = x + (width - 1 - textWidth) / 2;
+      renderer.drawText(label.fontId, textX, fullY + textYOffset, label.text.c_str());
+      renderer.drawRoundedRect(x, fullY, width, buttonHeight, 1, cornerRadius, roundTop, roundTop, roundBottom,
                                roundBottom, true);
     } else {
       // Draw the filled background and border for a SMALL-sized button
-      renderer.fillRoundedRect(x, smallY, buttonWidth, smallButtonHeight, cornerRadius, Color::White);
-      renderer.drawRoundedRect(x, smallY, buttonWidth, smallButtonHeight, 1, cornerRadius, roundTop, roundTop,
-                               roundBottom, roundBottom, true);
+      renderer.fillRoundedRect(x, smallY, width, smallButtonHeight, cornerRadius, Color::White);
+      renderer.drawRoundedRect(x, smallY, width, smallButtonHeight, 1, cornerRadius, roundTop, roundTop, roundBottom,
+                               roundBottom, true);
     }
   }
 
@@ -482,8 +483,8 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   // BaseTheme::drawSideButtonHints — including why LandscapeCounterClockwise draws inverted too.
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   // Taken before the draw is forced into the panel frame -- see BaseTheme::drawSideButtonHints.
-  const SideHintLayout::Span span = sideHintSpan(renderer);
-  const int needed = sideHintNeededLength(renderer, upBtn, downBtn);
+  const HintLayout::Span span = sideHintSpan(renderer);
+  const int needed = sideHintNeededLength(renderer, SMALL_FONT_ID, upBtn, downBtn);
   const bool inverted = orig_orientation == GfxRenderer::Orientation::PortraitInverted ||
                         orig_orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   renderer.setDrawOrientation(inverted ? GfxRenderer::Orientation::PortraitInverted
@@ -506,7 +507,7 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   };
   // Fits the label to its box (y, length) and centres it there.
   const auto label = [&](const int x, const int y, const int length, const char* text) {
-    const SideHintLabel fitted = fitSideHintLabel(renderer, text, length);
+    const FittedHintLabel fitted = fitHintLabel(renderer, SMALL_FONT_ID, text, length - HintLayout::SIDE_LABEL_PADDING);
     const int textWidth = renderer.getTextWidth(fitted.fontId, fitted.text.c_str());
     const int textHeight = renderer.getTextHeight(fitted.fontId);
     const int textY = y + (length + textWidth) / 2;
@@ -518,7 +519,7 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
     // X3 layout: Up on left side, Down on right side, positioned higher
     constexpr int x3ButtonY = 155;
     const int rightX = screenWidth - buttonWidth;
-    const SideHintLayout::Box box = SideHintLayout::centred(x3ButtonY + buttonHeight / 2, buttonHeight, needed, span);
+    const HintLayout::Box box = HintLayout::sideCentred(x3ButtonY + buttonHeight / 2, buttonHeight, needed, span);
 
     // Publish geometry for touch, in the same un-mirrored logical coordinates roundedRect()
     // mirrors from -- see LyraTheme::drawButtonHints for why the strip is recorded un-inverted
@@ -548,10 +549,10 @@ void LyraTheme::drawSideButtonHints(GfxRenderer& renderer, const char* upBtn, co
   } else {
     // X4 layout: Both buttons stacked on right side
     const int x = screenWidth - buttonWidth;
-    const SideHintLayout::Stack stack =
-        SideHintLayout::stacked(topHintButtonY + buttonHeight, /*gap=*/5, buttonHeight, needed, span);
-    const SideHintLayout::Box& up = stack.up;
-    const SideHintLayout::Box& down = stack.down;
+    const HintLayout::Stack stack =
+        HintLayout::sideStacked(topHintButtonY + buttonHeight, /*gap=*/5, buttonHeight, needed, span);
+    const HintLayout::Box& up = stack.up;
+    const HintLayout::Box& down = stack.down;
 
     ButtonHintStrip::SideStrip strip;
     strip.x[0] = x;

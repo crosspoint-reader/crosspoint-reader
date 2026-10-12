@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "components/themes/SideHintLayout.h"
+#include "components/themes/HintLayout.h"
 
 class GfxRenderer;
 class Epub;
@@ -250,18 +250,30 @@ class BaseTheme {
   // isn't a look at all.
   static void shipPopup(const GfxRenderer& renderer, PopupShip ship);
 
-  // Side hint sizing shared by every drawSideButtonHints() -- see SideHintLayout.h.
-  // The stretch of the side column the boxes may grow into, in panel coordinates. Call it BEFORE
-  // forcing the draw into the panel frame: where the header lies depends on the live orientation.
-  static SideHintLayout::Span sideHintSpan(const GfxRenderer& renderer);
-  // Along-edge length the longer of the two labels needs, padding included. Null or empty
-  // labels need nothing.
-  static int sideHintNeededLength(const GfxRenderer& renderer, const char* upLabel, const char* downLabel);
-  // `label` fitted to a box `length` px long, the way the bottom hints fit theirs: shrink to the
-  // default-size face first, clip only if even that will not fit.
-  struct SideHintLabel {
+  // ---- Hint box sizing, shared by every drawButtonHints() / drawSideButtonHints() ----
+  // See HintLayout.h for the rule: a box grows to fit its label, then the label shrinks, then
+  // it is clipped.
+
+  // Width of `label` in `fontId`; 0 for a null or empty label, which needs no room.
+  static int hintLabelWidth(const GfxRenderer& renderer, int fontId, const char* label);
+  // `label` fitted to `maxWidth`: in `fontId` if it fits, else the default-size face, clipped
+  // only if even that will not fit. A whole word a size smaller is still the word, where
+  // "Down..." is a guess at which of Down and Download the button means.
+  struct FittedHintLabel {
     int fontId;
     std::string text;
   };
-  static SideHintLabel fitSideHintLabel(const GfxRenderer& renderer, const char* label, int length);
+  static FittedHintLabel fitHintLabel(const GfxRenderer& renderer, int fontId, const char* label, int maxWidth);
+
+  // Where each bottom box goes and how wide it is: as wide as its label needs in `fontId`, up to
+  // a fair quarter of the panel, laid out around the `tuned` positions. Empty labels keep `base`.
+  static void layOutButtonHints(const GfxRenderer& renderer, int fontId, int base, const int (&tuned)[4],
+                                const char* const (&labels)[4], int (&x)[4], int (&width)[4]);
+
+  // The stretch of the side column the side boxes may grow into, in panel coordinates. Call it
+  // BEFORE forcing the draw into the panel frame: where the header lies depends on the live
+  // orientation.
+  static HintLayout::Span sideHintSpan(const GfxRenderer& renderer);
+  // Length the longer of the two side labels needs in `fontId`, padding included.
+  static int sideHintNeededLength(const GfxRenderer& renderer, int fontId, const char* upLabel, const char* downLabel);
 };
