@@ -487,10 +487,11 @@ void CrossPointWebServer::begin() {
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
-  // Collect the WebDAV headers, and If-None-Match for the bundle's ETags (WebAssets::serve()), then
-  // register the handler. collectHeaders() replaces the list, so it is called once.
-  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
-                                    "Lock-Token", "Timeout",     "If-None-Match"};
+  // Collect the WebDAV headers, If-None-Match for the bundle's ETags (WebAssets::serve()) and
+  // Referer for the upload log, then register the handler. collectHeaders() replaces the list, so
+  // it is called once.
+  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",     "If",
+                                    "Lock-Token", "Timeout",     "If-None-Match", "Referer"};
   server->collectHeaders(collectedHeaders, sizeof(collectedHeaders) / sizeof(collectedHeaders[0]));
   // Ownership passes to the WebServer, which deletes the handler when stopped.
   // On OOM the HTTP server still comes up; only WebDAV is unavailable.
@@ -1394,8 +1395,14 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       state.path = "/";
     }
 
-    LOG_DBG("WEB", "[UPLOAD] START: %s (request %u bytes) to path: %s", state.fileName.c_str(),
-            static_cast<unsigned>(state.expected), state.path.c_str());
+    // The page it came from, without the scheme and host: "/setup", "/files?path=/".
+    String from = server->header("Referer");
+    const int scheme = from.indexOf("//");
+    const int pathStart = scheme >= 0 ? from.indexOf('/', scheme + 2) : -1;
+    if (pathStart >= 0) from = from.substring(pathStart);
+    if (from.isEmpty()) from = "?";
+    LOG_DBG("WEB", "[UPLOAD] START: %s (request %u bytes) to path: %s, from %s", state.fileName.c_str(),
+            static_cast<unsigned>(state.expected), state.path.c_str(), from.c_str());
     if (apMode) {
       LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes, hotspot mode", ESP.getFreeHeap());
     } else {
