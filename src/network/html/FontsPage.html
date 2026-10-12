@@ -107,7 +107,7 @@
         overflow-wrap: anywhere;
       }
       #convertStatus:not(.status-ok):not(.status-err) { display: block; color: var(--text-muted); }
-      #convertStatus:empty { display: none; }
+      #convertStatus:not(.status-ok):not(.status-err):empty { display: none; }
       #status.status-ok, #remoteStatus.status-ok, #convertStatus.status-ok { display: block; background: var(--accent-soft); color: var(--ok-text);
         border-color: transparent; }
       #status.status-err, #remoteStatus.status-err, #convertStatus.status-err { display: block; background: var(--danger-soft); color: var(--danger);
