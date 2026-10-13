@@ -27,17 +27,20 @@ void putLE32(std::vector<uint8_t>& out, const uint32_t v) {
 }
 
 // A 1-bit BMP with a two-entry palette (B, G, R, 0 each), random pixels, rows padded to 4 bytes.
+// `dibSize` 108 or 124 writes a V4/V5 header, as GIMP and ImageMagick do: the 40 bytes of the
+// original header, then masks and a colour-space tag that must not be read as the palette.
 std::string writeOneBitBmp(const std::string& name, const int width, const int height, const bool topDown,
-                           const uint8_t palette0, const uint8_t palette1, const uint32_t seed) {
+                           const uint8_t palette0, const uint8_t palette1, const uint32_t seed,
+                           const uint32_t dibSize = 40) {
   const int rowBytes = ((width + 31) / 32) * 4;
-  const uint32_t pixelOffset = 14 + 40 + 8;
+  const uint32_t pixelOffset = 14 + dibSize + 8;
   std::vector<uint8_t> out;
   out.push_back('B');
   out.push_back('M');
   putLE32(out, pixelOffset + static_cast<uint32_t>(rowBytes * height));
   putLE32(out, 0);
   putLE32(out, pixelOffset);
-  putLE32(out, 40);
+  putLE32(out, dibSize);
   putLE32(out, static_cast<uint32_t>(width));
   putLE32(out, static_cast<uint32_t>(topDown ? -height : height));
   putLE16(out, 1);
@@ -48,6 +51,11 @@ std::string writeOneBitBmp(const std::string& name, const int width, const int h
   putLE32(out, 2835);
   putLE32(out, 2);
   putLE32(out, 2);
+  if (dibSize > 40) {
+    for (const uint32_t mask : {0x00FF0000u, 0x0000FF00u, 0x000000FFu, 0xFF000000u}) putLE32(out, mask);
+    putLE32(out, 0x73524742);  // 'sRGB'
+    while (out.size() < 14 + dibSize) out.push_back(0x7F);
+  }
   for (const uint8_t gray : {palette0, palette1}) {
     out.push_back(gray);
     out.push_back(gray);
@@ -140,4 +148,46 @@ TEST(BitmapRows, ReadingPastTheLastRowFails) {
   ASSERT_EQ(bmp.parseHeaders(), BmpReaderError::Ok);
   std::vector<uint8_t> raw(static_cast<size_t>(5) * bmp.getRowBytes());
   EXPECT_EQ(bmp.readRawRows(raw.data(), 5), BmpReaderError::ShortReadRow);
+}
+
+// The palette is read after the whole DIB header. With a V4 or V5 header it used to be read from
+// byte 54, inside the masks, so the black and white of a GIMP export came out as two greys.
+TEST(BitmapRows, ExtendedHeadersReadThePaletteAfterTheHeader) {
+  for (const uint32_t dibSize : {108u, 124u}) {
+    const auto plainPath = writeOneBitBmp("bmp_hdr_40.bmp", 21, 3, false, 0, 255, 11);
+    const auto extPath =
+        writeOneBitBmp("bmp_hdr_" + std::to_string(dibSize) + ".bmp", 21, 3, false, 0, 255, 11, dibSize);
+    FsFile a;
+    FsFile b;
+    ASSERT_TRUE(Storage.openFileForRead("T", plainPath, a));
+    ASSERT_TRUE(Storage.openFileForRead("T", extPath, b));
+    Bitmap plain(a);
+    Bitmap extended(b);
+    ASSERT_EQ(plain.parseHeaders(), BmpReaderError::Ok);
+    ASSERT_EQ(extended.parseHeaders(), BmpReaderError::Ok) << dibSize;
+    uint16_t want[256];
+    uint16_t got[256];
+    plain.oneBitExpansion(want);
+    extended.oneBitExpansion(got);
+    for (int i = 0; i < 256; ++i) ASSERT_EQ(got[i], want[i]) << dibSize << " byte " << i;
+    expectSameRows(extPath, 2);
+  }
+}
+
+// A file cut off inside its palette is refused rather than drawn with whatever was read.
+TEST(BitmapRows, PaletteCutShortIsRefused) {
+  const auto path = writeOneBitBmp("bmp_hdr_cut_src.bmp", 16, 2, false, 0, 255, 12);
+  std::vector<uint8_t> bytes(14 + 40 + 6);
+  FILE* in = std::fopen(path.c_str(), "rb");
+  ASSERT_EQ(std::fread(bytes.data(), 1, bytes.size(), in), bytes.size());
+  std::fclose(in);
+  const std::string cut = (std::filesystem::temp_directory_path() / "bmp_hdr_cut.bmp").string();
+  FILE* out = std::fopen(cut.c_str(), "wb");
+  std::fwrite(bytes.data(), 1, bytes.size(), out);
+  std::fclose(out);
+
+  FsFile f;
+  ASSERT_TRUE(Storage.openFileForRead("T", cut, f));
+  Bitmap bmp(f);
+  EXPECT_EQ(bmp.parseHeaders(), BmpReaderError::FileInvalid);
 }
