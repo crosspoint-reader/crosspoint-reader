@@ -392,7 +392,12 @@ int SecureHttpClient::get(const std::string& url, const BodySink& sink, const Pr
 
 int SecureHttpClient::request(const char* method, const std::string& url, const std::string& body) {
   _body.clear();
+  _bodyTruncated = false;
   auto sink = [this](const uint8_t* d, size_t n) {
+    if (_maxBufferedBody > 0 && _body.size() + n > _maxBufferedBody) {
+      n = _maxBufferedBody - _body.size();
+      _bodyTruncated = true;
+    }
     _body.append(reinterpret_cast<const char*>(d), n);
     return true;
   };

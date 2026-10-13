@@ -76,6 +76,11 @@ class SecureHttpClient {
   // Leave out the per-request trace line for requests that got a response (failures still log it),
   // for a transfer made of many small requests that logs one summary instead.
   void setQuietRequests(bool quiet) { _quietRequests = quiet; }
+  // request() keeps at most this many body bytes (0: no limit) and reads the rest off the
+  // connection without storing it, so the status and the start of the body still arrive.
+  // bodyTruncated() says whether anything was dropped. For callers that expect a small reply but
+  // may be pointed at a server that sends a large page instead.
+  void setMaxBufferedBody(size_t bytes) { _maxBufferedBody = bytes; }
 
   // --- requests ---
   // Open the connection for url (or keep the matching kept-alive one) without sending anything, so
@@ -94,6 +99,7 @@ class SecureHttpClient {
   int PUT(const std::string& url, const std::string& body) { return request("PUT", url, body); }
 
   const std::string& getBody() const { return _body; }
+  bool bodyTruncated() const { return _bodyTruncated; }
   // The current (inside a body sink) or last response: status, Content-Length (-1 when absent),
   // Content-Range, and the URL it came from after redirects. All set before the first body byte.
   int lastStatus() const { return _status; }
@@ -216,12 +222,14 @@ class SecureHttpClient {
   std::vector<std::string> _headers;
   std::string _rangeHeader;  // "bytes=a-b" while a Range is set, else empty
   bool _quietRequests = false;
+  size_t _maxBufferedBody = 0;
   int _maxRedirects = 5;
   bool _allowRedirectDowngrade = false;
   RedirectFilter _redirectFilter;
 
   // per-request result
   std::string _body;
+  bool _bodyTruncated = false;
   int _status = 0;
   long _contentLength = -1;
   bool _hasContentRange = false;
