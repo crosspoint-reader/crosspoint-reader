@@ -140,9 +140,20 @@ BmpReaderError Bitmap::parseHeaders() {
 
   for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
   if (colorsUsed > 0) {
+    // The palette follows the whole DIB header, not the 40 bytes read above: GIMP and ImageMagick
+    // write V4/V5 headers (108/124 bytes), whose masks and colour-space fields were read as colours,
+    // which turned a 1-bit image's black and white into two greys. A palette that claims more
+    // entries than fit before the pixels is cut to the ones that do.
+    // Ported from CrossInk commits 7d49b69fa ("read colors correctly in extended BMP files") and
+    // 99712ef66 ("reject incomplete BMP color palettes"), Julia Nguyen; clamping instead of
+    // rejecting the overlapping palette is ours.
+    const uint64_t paletteStart = 14ULL + biSize;
+    const uint64_t room = bfOffBits > paletteStart ? (bfOffBits - paletteStart) / 4 : 0;
+    if (colorsUsed > room) colorsUsed = static_cast<uint32_t>(room);
+    if (!file.seek(static_cast<size_t>(paletteStart))) return BmpReaderError::SeekPixelDataFailed;
     for (uint32_t i = 0; i < colorsUsed; i++) {
       uint8_t rgb[4];
-      file.read(rgb, 4);  // Read B, G, R, Reserved in one go
+      if (file.read(rgb, 4) != 4) return BmpReaderError::FileInvalid;  // B, G, R, reserved
       paletteLum[i] = (77u * rgb[2] + 150u * rgb[1] + 29u * rgb[0]) >> 8;
     }
   }
