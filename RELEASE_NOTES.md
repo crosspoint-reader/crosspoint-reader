@@ -130,7 +130,7 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 
 ### Languages
 
-- **Every language is complete.** Catalan, Czech, Danish, Finnish, Hungarian, Kazakh, Lithuanian and Romanian each gain about 500 strings that were shown in English, and Turkish and Vietnamese about 150. In Catalan, Czech, Finnish, Kazakh and Turkish the EPUB font size setting was labelled as the menu font size; in Swedish "None" read "No open book". These new translations have not been reviewed by native speakers yet: corrections are welcome.
+- **Every language is complete.** Catalan, Czech, Danish, Finnish, Hungarian, Kazakh, Lithuanian and Romanian each gain about 500 strings that were shown in English, and Turkish and Vietnamese about 150. Where crosspoint-reader's translators had already translated a string, their wording is used, and each language follows their terms (in Catalan, for example, the informal address and "font"). About 740 strings we had translated before take their newer wording too, which also fixes missing spaces before a network name or after a label, typos, and keyboard tips that named the buttons in English. In Catalan, Czech, Finnish, Kazakh and Turkish the EPUB font size setting was labelled as the menu font size; in Swedish "None" read "No open book". The strings only this firmware has (the Library, Diagnostics, plugins and others) were machine-translated and have not been reviewed by native speakers yet: corrections are welcome.
 - **The Library is translated.** Its tabs, views, book counts and menu entries, the **Compare progress** entry, the TXT/MD font settings and the slider hint now appear in every language the reader offers, instead of in English. In Belarusian, Dutch, French, German, Italian, Polish, Portuguese, Russian, Slovenian, Spanish, Swedish and Ukrainian the menus are fully translated again.
 
 ### Fixes
@@ -169,7 +169,28 @@ Where the code here is someone else's, it is credited in the source file it live
 - **Justin Mitchell** (@itsthisjustin): closing the password files to the web interface (crosspoint-reader #3824), and the smaller secure-connection records and resumable downloads in the `freeink-sdk` that the chunked downloads build on.
 - **suhsoohong** (@suhsoohong): keeping Back after a link across a reopen (crosspoint-reader #3764).
 - **Phạm Bình An** (@brianhuster): finding why a long paragraph lost its top spacing (crosspoint-reader #3875).
-- The translators whose work came over from crosspoint-reader #3396, assembled by Uri Tauber: **Leopoldo Pla** (Catalan and Spanish), **Phạm Bình An** (Vietnamese) and **BlueDragon** (German).
+- **The crosspoint-reader translators whose wording this release uses**, collected there by **Uri Tauber** (@Uri-Tauber, crosspoint-reader #2740, #2946, #3396):
+  - Belarusian: **Dexif** (@dexif)
+  - Catalan and Spanish: **Leopoldo Pla** (@lpla); Spanish also **mvidelatraduc**
+  - Czech: **Jan Kaláb** (@Pitel) and **Bastian** (@dasrecht)
+  - French: **Spigaw**
+  - German: **BlueDragon** (@BlueDragon333), **Bastian** (@dasrecht) and **Wilhelm Schuster** (@wlhlm)
+  - Hungarian: **Poc031205**
+  - Italian: **Matteo Scopel** (@matteoscopel) and **luca** (@alan0ford)
+  - Kazakh: **fsocietyipa**
+  - Lithuanian: **nieko-nera**
+  - Polish: **th0m4sek**
+  - Portuguese (Brazil): **Rodrigo Matsuura** (@Rodrigo-Matsuura) and **Rodrigo Lanes** (@rodrigolanes)
+  - Portuguese (Portugal): **CookieCaptainD** and **Tiago** (@tiagofilipenunes)
+  - Russian: **winst0niuss** and **muhas**
+  - Slovenian: **Andrej Kralj** (@thehijacker)
+  - Swedish: **Stefan Blixten Karlsson** (@steka)
+  - Turkish: **metoli86** and **Barış Albayrak** (@barbarhan)
+  - Ukrainian: **KymAndriy**, **Mirus** (@mirus-ua) and **winst0niuss**
+  - Vietnamese: **Hoang Manh Linh** (@jetaudio) and **Phạm Bình An** (@brianhuster)
+  - A few strings come from crosspoint-reader feature PRs, translated by their authors (Nick Perez, Justinian, Oscar Nogueira Neto, Arthur Tazhitdinov, Julia Nguyen, WuTofu, HgGamer).
+
+  All of them are listed in [docs/translators.md](docs/translators.md).
 - The crosspoint-reader developers, whose list screens File Transfer's mode choice, the OPDS server list and editor, Customise Status Bar and the font manager's list are adapted from.
 - The reports behind the fixes and features above: **PiperKev** for the KOReader sync landing (#268) and the chapter headings (#388); **syfq91** for the OPDS buttons (#374) and the Home card overflow (#375); **trungtypo-png** for the custom sleep image, with the fix they proposed (#377); and **WaRoarr** for the request to offer an SD-card font's own sizes (#395).
 
