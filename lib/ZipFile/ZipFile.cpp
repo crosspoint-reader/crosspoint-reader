@@ -184,7 +184,12 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
 
     // Skip names that are too long or cannot match by length
     if (nameLen == targetLen && nameLen < sizeof(itemName)) {
-      if (file.read(itemName, nameLen) != static_cast<int>(nameLen)) break;
+      const int nameRead = file.read(itemName, nameLen);
+      if (nameRead != static_cast<int>(nameLen)) {
+        LOG_ERR("ZIP", "Failed to read entry name for %s: expected %u bytes, got %d", filename,
+                static_cast<unsigned int>(nameLen), nameRead);
+        break;
+      }
       if (memcmp(itemName, filename, nameLen) == 0) {
         // Found it! Update cursor to next entry
         fileStat->method = readLe16(header + 10);
