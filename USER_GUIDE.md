@@ -253,7 +253,7 @@ The Book Info screen shows full metadata for a book: cover image, title, author,
 
 The File Transfer screen allows you to upload new e-books to the device. When you enter the screen, you'll be prompted with a WiFi selection dialog and then your X4 will start hosting a web server.
 
-See the [webserver docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
+The [Web Interface Guide](./docs/webserver.md) walks through every page of the web interface, with screenshots: connecting, the first-visit setup, uploading and organising books, the EPUB optimizer, book details, settings, fonts, dictionaries, reading stats, plugins and diagnostics.
 
 The web interface's pages are kept on the SD card, not in the firmware. The first time you open the device's address, and after a firmware update that changed them, a setup page installs them: on your WiFi network it downloads them by itself; in hotspot mode, choose the `web-….bin` file from the release page, or copy it to the top folder of the SD card. The setup page can upload books on its own as well.
 
@@ -264,7 +264,7 @@ The **Diagnostics** page shows what **Boot Diagnostics** (under **Settings → S
 The web server has no password, so it keeps away from what it should not touch: the files holding your saved Wi-Fi, OPDS and KOReader passwords can never be downloaded or changed, and folders whose names start with a dot, such as the reader's own `/.crosspoint`, can be opened only when **Show Hidden Files** is on. **Back** leaves the screen even while the web page is uploading a book or a font; the upload is cancelled.
 
 > [!TIP]
-> Advanced users can also manage files programmatically or via the command line using `curl`. See the [webserver docs](./docs/webserver.md) for details.
+> Advanced users can also manage files programmatically or via the command line using `curl`. See [Webserver Endpoints](./docs/webserver-endpoints.md) for details.
 
 ### 3.6.1 Calibre Wireless Transfers
 
