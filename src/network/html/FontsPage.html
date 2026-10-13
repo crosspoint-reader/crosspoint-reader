@@ -3,73 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CrossPoint Reader - Fonts</title>
+    <title>Fonts - CrossPoint Reader</title>
     <style>
-      :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-        --danger-color: #e74c3c;
-        --danger-hover: #c0392b;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 { color: var(--title-color); margin-top: 0; }
       h3 { margin: 0 0 8px 0; }
-      .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
-      }
       .family {
         border-bottom: 1px solid var(--border-color);
         padding: 12px 0;
@@ -89,12 +25,12 @@
       }
       .btn-danger {
         background: var(--danger-color);
-        color: white;
+        color: var(--button-text);
       }
       .btn-danger:hover { background: var(--danger-hover); }
       .btn-primary {
         background: var(--accent-color);
-        color: white;
+        color: var(--button-text);
       }
       .btn-primary:hover { background: var(--accent-hover-color); }
       .upload-form {
@@ -117,20 +53,17 @@
         border-radius: 4px;
         display: none;
       }
-      .status-ok { background: #d4edda; color: #155724; display: block !important; }
-      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
+      .status-ok { background: var(--accent-color-10); color: var(--accent-color); display: block !important; }
+      .status-err { background: var(--danger-bg); color: var(--danger-color); display: block !important; }
       .empty { color: var(--label-color); text-align: center; padding: 20px; }
     </style>
+  <link rel="stylesheet" href="/assets/web.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/crosspoint-icon.svg" />
   </head>
-  <body>
-    <h1>📚 CrossPoint Reader</h1>
+  <body class="web-ui">
+    <!--#include file="shared/Header.html.inc" -->
+<main class="page-content">
 
-    <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
-      <a href="/fonts" class="active">Fonts</a>
-    </div>
 
     <div class="card">
       <h2>Installed Fonts</h2>
@@ -147,6 +80,8 @@
       <div id="status"></div>
     </div>
 
+    </main>
+<!--#include file="shared/Footer.html.inc" -->
   <script>
     function formatSize(bytes) {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';

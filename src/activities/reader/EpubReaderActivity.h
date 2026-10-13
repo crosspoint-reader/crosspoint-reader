@@ -12,6 +12,7 @@
 
 #include "BookmarkEntry.h"
 #include "ChapterPosition.h"
+#include "ClipSelectionActivity.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
@@ -45,6 +46,9 @@ class EpubReaderActivity final : public ReaderActivity {
   bool showBookmarkMessage = false;
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
+  bool showClippingMessage = false;
+  StrId clippingMessage = StrId::STR_CLIPPING_SAVED;
+  unsigned long clippingMessageTime = 0UL;
   bool currentPageBookmarked = false;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
@@ -143,6 +147,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  int currentTocIndex() const;
   // Live section position, or the values cached before a child screen
   // released the section.
   ChapterPosition chapterPosition() const;
@@ -173,6 +178,11 @@ class EpubReaderActivity final : public ReaderActivity {
   void activateMoreRow(int row);
   void openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
+  void startClipSelection(int initialX = -1, int initialY = -1,
+                          ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
+  int clippingAtPoint(const Page& page, int x, int y) const;
+  void openClippings();
+  void applyProgressChange(const ProgressChangeResult& progress);
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
@@ -185,6 +195,7 @@ class EpubReaderActivity final : public ReaderActivity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
+  void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;

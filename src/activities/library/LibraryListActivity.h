@@ -42,6 +42,10 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onRowLongPress(int index) override;
+#if FREEINK_CAP_TOUCH
+  bool canSwipeDelete(int index) const override { return !groupsCollapsed && index >= 0 && index < listCount(); }
+  void swipeDelete(int index) override;
+#endif
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;

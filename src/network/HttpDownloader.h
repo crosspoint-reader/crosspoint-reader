@@ -37,6 +37,21 @@ class HttpDownloader {
   using Header = std::pair<std::string, std::string>;
 
   /**
+   * HTTP status of the last request, or 0 when it never got a response (DNS,
+   * connect, TLS, timeout). fetchUrl() returns only success or failure; this
+   * lets a caller tell a dead server from a catalog that wants a password.
+   * Not thread-safe by design: one fetch runs at a time.
+   */
+  static int lastStatus();
+
+  /**
+   * True when the last answer came from a different origin (scheme, host or
+   * port) than the URL asked for, after a redirect. Credentials are withheld
+   * from such a hop, so a 401 there is not a wrong password.
+   */
+  static bool lastAnswerRedirected();
+
+  /**
    * Fetch text content from a URL with optional credentials. `headers` are
    * added to the request, as for downloadToFile().
    */

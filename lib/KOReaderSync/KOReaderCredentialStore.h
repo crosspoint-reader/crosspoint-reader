@@ -24,6 +24,13 @@ enum class KOReaderSyncBehavior : uint8_t {
   SMART = 1,           // Auto-resolve simple cases using furthest progress.
 };
 
+// Protocol family/capability profile selected for the configured sync server.
+enum class KOReaderServerType : uint8_t {
+  CROSSPOINT = 0,  // CrossPoint protocol extensions, including rich position.
+  KOSYNC = 1,      // Strict standard KOSync payloads.
+  OTHER = 2,       // Compatible custom servers that accept CrossPoint-style extensions.
+};
+
 /**
  * Singleton class for storing KOReader sync credentials on the SD card.
  * Passwords are XOR-obfuscated with the device's unique hardware MAC address
@@ -37,8 +44,10 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   std::string password;
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
-  bool sendMetadata = false;                                        // Send document metadata with progress sync
+  bool sendMetadata = true;                                         // Send document metadata with progress sync
+  bool syncClippings = false;                                       // Opt-in crosspoint-sync extension
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
+  KOReaderServerType serverType = KOReaderServerType::CROSSPOINT;
 
   // Fixed-size to avoid vector growth on the settings edit path; an empty
   // name marks an unused slot.
@@ -78,8 +87,11 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Get base URL for API calls (with http:// normalization if no protocol, falls back to default)
   std::string getBaseUrl() const;
 
-  // Whether API calls target the CrossPoint sync server that supports protocol extensions.
-  bool usesCrossPointSyncServer() const;
+  // Server protocol/capability profile.
+  void setServerType(KOReaderServerType type);
+  KOReaderServerType getServerType() const { return serverType; }
+  bool supportsRichProgress() const { return serverType != KOReaderServerType::KOSYNC; }
+  bool supportsExtendedMetadata() const { return serverType == KOReaderServerType::OTHER; }
 
   // Document matching method
   void setMatchMethod(DocumentMatchMethod method);
@@ -88,6 +100,9 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Send metadata setting
   void setSendMetadata(bool enabled);
   bool getSendMetadata() const { return sendMetadata; }
+
+  void setSyncClippings(bool enabled) { syncClippings = enabled; }
+  bool getSyncClippings() const { return syncClippings; }
 
   // Sync behavior
   void setSyncBehavior(KOReaderSyncBehavior behavior);
