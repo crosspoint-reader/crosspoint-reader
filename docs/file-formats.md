@@ -97,6 +97,11 @@ The header gains a `publisherFonts` byte after `wordSpacingPercent` (0 off, 1 ac
 `@font-face` font embedded in the book are laid out in that font; their font ids
 come from the family and point size, so cached pages reload them by id.
 
+Accents Only keeps the reader font for the main body family. When no embedded
+font is declared on `html` or `body`, a bounded scan of ordinary paragraph text
+infers that family before layout, so paragraph-defined body fonts use the reader
+font from the first page.
+
 CSS cache version 20 uses defined-property bit 31 for `font-family` and appends the
 family's 32-bit hash to each style. `css_fonts.cache` lists the book's `@font-face`
 rules: a version byte (the CSS cache version), a face count, then per face the
