@@ -218,7 +218,9 @@ void OpdsParser::endElement(void* userData, const char* name) {
     } else if (strcmp(name, "author") == 0 || strstr(name, ":author") != nullptr) {
       self->inAuthor = false;
     } else if (self->inAuthorName && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
-      self->currentEntry.author = self->currentText;
+      // The first <author> is the book's author; catalogs list a translator or illustrator after it.
+      // From CrossInk commit 234675e5c ("keep first OPDS author", Julia Nguyen).
+      if (self->currentEntry.author.empty()) self->currentEntry.author = self->currentText;
       self->inAuthorName = false;
     } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
       if (self->inId) self->currentEntry.id = self->currentText;

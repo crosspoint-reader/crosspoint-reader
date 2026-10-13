@@ -258,3 +258,28 @@ TEST(OpdsParser, SlashVariantHrefAcquisitionLinksAreDeduplicated) {
   ASSERT_EQ(links[0].formatKey, "epub");
   ASSERT_EQ(links[0].href, "/books/example.epub");
 }
+
+// A translator or illustrator listed after the author must not replace them: the name is shown in
+// the list and goes into the download's file name.
+TEST(OpdsParser, FirstAuthorIsKept) {
+  const char* xml = R"(<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Example Book</title>
+    <author><name>Leo Tolstoy</name></author>
+    <author><name>Louise Maude</name></author>
+    <id>book-11</id>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/books/example.epub"/>
+  </entry>
+</feed>)";
+
+  std::vector<OpdsEntry> entries;
+  OpdsParser parser;
+  parser.onEntryParsed = [&](OpdsEntry e) { entries.push_back(std::move(e)); };
+  parser.write(reinterpret_cast<const uint8_t*>(xml), strlen(xml));
+  parser.flush();
+
+  ASSERT_TRUE(!parser.error());
+  ASSERT_EQ(entries.size(), static_cast<size_t>(1));
+  EXPECT_EQ(entries.front().author, "Leo Tolstoy");
+}
