@@ -15,6 +15,9 @@
 #   styles:      Map of style name -> font source
 #                  path: relative to lib/EpdFont (for committed fonts)
 #                  url:  download URL (for fonts not in the repo)
+#   prebuilt:    Instead of intervals/styles, a ZIP of <name>/<name>_<size>.cpfont
+#                  url: pinned upstream bundle (v4, 2-bit, four styles)
+#                  sha256: expected archive checksum
 #
 # Variable fonts:
 #   Some fonts (Bitter, Inter, Alegreya) are distributed as variable fonts.
@@ -47,6 +50,14 @@ scriptGroups:
 
 families:
   # ── Serif ──────────────────────────────────────────────────────────────
+
+  - name: Libron
+    description: "Serif optimized for digital reading and e-readers (Latin)"
+    scripts: [latin]
+    sizes: [12, 14, 16, 18]
+    prebuilt:
+      url: "https://github.com/nicoverbruggen/libron/releases/download/v0.31/Libron_CrossPoint.zip"
+      sha256: "3bfdef4333ebe2e7d9b7521f22041fed133d9abfe246009890ca7d89c3de4df8"
 
   - name: Literata
     description: "Screen-optimized serif (Latin, Greek, Cyrillic)"

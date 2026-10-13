@@ -26,8 +26,10 @@ Usage:
 """
 
 import argparse
+import hashlib
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -35,10 +37,13 @@ import threading
 import time
 import socket
 import urllib.request
+import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import yaml
+
+from cpfont_version import CPFONT_VERSION
 
 SCRIPT_DIR = Path(__file__).parent
 FONTCONVERT = SCRIPT_DIR / "fontconvert_sdcard.py"
@@ -192,6 +197,28 @@ def build_family(
     name = family["name"]
     output_dir = output_base / name
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if "prebuilt" in family:
+        spec = family["prebuilt"]
+        try:
+            archive = download_font(
+                spec["url"], DOWNLOAD_DIR / name / spec["url"].rsplit("/", 1)[-1]
+            )
+            if hashlib.sha256(archive.read_bytes()).hexdigest() != spec["sha256"]:
+                raise ValueError(f"{name}: prebuilt archive SHA-256 mismatch")
+            with zipfile.ZipFile(archive) as bundle, tempfile.TemporaryDirectory() as staging:
+                for size in family["sizes"]:
+                    filename = f"{name}_{size}.cpfont"
+                    data = bundle.read(f"{name}/{filename}")
+                    magic, version, flags, styles = struct.unpack_from("<8sHHB19x", data)
+                    if magic != b"CPFONT\0\0" or version != CPFONT_VERSION or flags != 1 or styles != 4:
+                        raise ValueError(f"{filename}: expected CPFONT v{CPFONT_VERSION}, 2-bit, four styles")
+                    (Path(staging) / filename).write_bytes(data)
+                for source in Path(staging).iterdir():
+                    shutil.copyfile(source, output_dir / source.name)
+            return name, True, ""
+        except (OSError, RuntimeError, KeyError, ValueError, struct.error, zipfile.BadZipFile) as e:
+            return name, False, str(e)
 
     styles = family.get("styles", {})
     intervals = family["intervals"]
