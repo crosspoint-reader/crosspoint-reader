@@ -228,6 +228,8 @@ typedef struct {
   uint32_t ligatureCp;  ///< Codepoint of the replacement ligature glyph
 } __attribute__((packed)) EpdLigaturePair;
 
+class GlyphProvider;
+
 /// Data stored for FONT AS A WHOLE
 typedef struct {
   const uint8_t* bitmap;  ///< Glyph bitmaps, concatenated
@@ -310,6 +312,10 @@ typedef struct {
   /// Context pointer for glyphMissHandler (typically SdCardFont*).  Also used by
   /// GfxRenderer::getGlyphBitmap() to retrieve overflow bitmaps via SdCardFont.
   void* glyphMissCtx;
+
+  /// Glyphs the tables above do not have, and kerning for a font with no kern tables. Null for
+  /// built-in fonts. See GlyphProvider.h.
+  GlyphProvider* provider;
 } EpdFontData;
 
 /// Reads glyph `index` out of whichever representation `data` carries.

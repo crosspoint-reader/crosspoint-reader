@@ -1,0 +1,138 @@
+// EpdFont's side of GlyphProvider: who is asked for a glyph the tables lack, and for kerning.
+#include <gtest/gtest.h>
+
+#include <map>
+#include <utility>
+#include <vector>
+
+#include "EpdFont.h"
+#include "GlyphProvider.h"
+
+namespace {
+
+class FakeProvider final : public GlyphProvider {
+ public:
+  std::map<uint32_t, EpdGlyph> glyphs;
+  std::vector<uint32_t> asked;
+  std::vector<std::pair<uint32_t, uint32_t>> kernAsked;
+  int8_t kernValue = 0;
+
+  const EpdGlyph* missGlyph(const uint32_t codepoint) override {
+    asked.push_back(codepoint);
+    const auto it = glyphs.find(codepoint);
+    return it == glyphs.end() ? nullptr : &it->second;
+  }
+  int8_t kerning(const uint32_t leftCp, const uint32_t rightCp) override {
+    kernAsked.emplace_back(leftCp, rightCp);
+    return kernValue;
+  }
+};
+
+EpdGlyph makeGlyph(const uint8_t width, const uint8_t height, const uint16_t advanceX) {
+  EpdGlyph g{};
+  g.width = width;
+  g.height = height;
+  g.advanceX = advanceX;
+  g.left = 1;
+  g.top = 12;
+  g.dataLength = glyphDataBytes(width, height, true);
+  g.dataOffset = 40;
+  return g;
+}
+
+// No interval table, no glyph array, no kern tables: every lookup has to go to the provider.
+EpdFontData providerOnly(GlyphProvider* provider) {
+  EpdFontData d{};
+  d.advanceY = 20;
+  d.ascender = 16;
+  d.descender = -4;
+  d.is2Bit = true;
+  d.provider = provider;
+  return d;
+}
+
+constexpr uint32_t kReplacement = 0xFFFD;
+
+}  // namespace
+
+TEST(GlyphProvider, EveryLookupGoesToTheProviderWhenTheFontHasNoIntervals) {
+  FakeProvider provider;
+  provider.glyphs['A'] = makeGlyph(9, 12, 10 << 4);
+  const EpdFontData data = providerOnly(&provider);
+  const EpdFont font(&data);
+
+  const EpdGlyphRef glyph = font.getGlyph('A');
+
+  ASSERT_TRUE(glyph);
+  EXPECT_EQ(&provider.glyphs['A'], glyph.sdRecord);
+  EXPECT_EQ(10 << 4, glyph.advanceX);
+  EXPECT_EQ(9, glyph.width);
+  EXPECT_EQ(12, glyph.height);
+  EXPECT_EQ(1, glyph.left);
+  EXPECT_EQ(12, glyph.top);
+  EXPECT_EQ(40u, epdGlyphBitmapOffset(&data, glyph));
+  EXPECT_EQ(std::vector<uint32_t>{'A'}, provider.asked);
+}
+
+TEST(GlyphProvider, AMissingGlyphFallsBackToTheReplacementThroughTheProvider) {
+  FakeProvider provider;
+  provider.glyphs[kReplacement] = makeGlyph(8, 8, 9 << 4);
+  const EpdFontData data = providerOnly(&provider);
+  const EpdFont font(&data);
+
+  const EpdGlyphRef glyph = font.getGlyph('Z');
+
+  ASSERT_TRUE(glyph);
+  EXPECT_EQ(&provider.glyphs[kReplacement], glyph.sdRecord);
+  ASSERT_FALSE(provider.asked.empty());
+  EXPECT_EQ('Z', provider.asked.front());
+  EXPECT_EQ(kReplacement, provider.asked.back());
+}
+
+TEST(GlyphProvider, NoGlyphAnywhereGivesAnInvalidRef) {
+  FakeProvider provider;
+  const EpdFontData data = providerOnly(&provider);
+  const EpdFont font(&data);
+
+  EXPECT_FALSE(font.getGlyph('Z'));
+}
+
+TEST(GlyphProvider, KerningAsksTheProviderWhenTheFontHasNoKernTables) {
+  FakeProvider provider;
+  provider.kernValue = -3;
+  const EpdFontData data = providerOnly(&provider);
+  const EpdFont font(&data);
+
+  EXPECT_EQ(-3, font.getKerning('A', 'V'));
+  ASSERT_EQ(1u, provider.kernAsked.size());
+  EXPECT_EQ(std::make_pair(uint32_t{'A'}, uint32_t{'V'}), provider.kernAsked.front());
+}
+
+TEST(GlyphProvider, KerningUsesTablesWhenTheFontHasThem) {
+  static const EpdKernClassEntry kLeft[] = {{'A', 1}};
+  static const EpdKernClassEntry kRight[] = {{'V', 1}};
+  static const int8_t kMatrix[] = {-5};
+  FakeProvider provider;
+  provider.kernValue = 7;
+  EpdFontData data = providerOnly(&provider);
+  data.kernLeftClasses = kLeft;
+  data.kernRightClasses = kRight;
+  data.kernMatrix = kMatrix;
+  data.kernLeftEntryCount = 1;
+  data.kernRightEntryCount = 1;
+  data.kernLeftClassCount = 1;
+  data.kernRightClassCount = 1;
+  const EpdFont font(&data);
+
+  EXPECT_EQ(-5, font.getKerning('A', 'V'));
+  EXPECT_EQ(0, font.getKerning('V', 'A'));  // not in the tables: 0, NOT the provider's 7
+  EXPECT_TRUE(provider.kernAsked.empty());
+}
+
+TEST(GlyphProvider, AFontWithoutAProviderBehavesAsBefore) {
+  const EpdFontData data{};
+  const EpdFont font(&data);
+
+  EXPECT_FALSE(font.getGlyph('A'));
+  EXPECT_EQ(0, font.getKerning('A', 'V'));
+}
