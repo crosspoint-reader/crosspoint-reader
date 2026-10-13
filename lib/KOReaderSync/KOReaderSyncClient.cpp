@@ -34,6 +34,8 @@ namespace {
 // ESP_ERR_HTTP base range. Only produced/consumed within this file.
 constexpr esp_err_t KO_ERR_CONNECT = static_cast<esp_err_t>(0x7001);  // connect/transport failure (retryable)
 constexpr esp_err_t KO_ERR_EAGAIN = static_cast<esp_err_t>(0x7002);   // timeout/truncated (retryable)
+// The most of a sync reply kept in memory; see performKoRequest().
+constexpr size_t KO_MAX_RESPONSE_BYTES = 16 * 1024;
 
 // Mirrors the app's "skip HTTPS validation" setting; see setSkipTlsValidation().
 bool g_skipTlsValidation = false;
@@ -325,6 +327,13 @@ esp_err_t performKoRequest(const char* method, const std::string& url, const cha
   // stay fully enforced either way; only the validity window is waived.
   http->setAllowCertificateDateErrors(!HalClock::isPlausibleForTls());
   http->setTimeout(5000);
+  // Sync replies are a few hundred bytes of JSON. A wrong server URL can answer with a whole web
+  // page (a Booklore root serves its app's index.html with 200), and buffering all of it grew one
+  // string until an allocation failed, which restarts the C3. Keep only the start: enough for
+  // shouldRejectBody() to recognise HTML.
+  // Ported from CrossInk commit 56a29f618 ("reject oversized KOReader authentication responses
+  // (#783)", Julia Nguyen), which aborts the request instead; here the status still comes through.
+  http->setMaxBufferedBody(KO_MAX_RESPONSE_BYTES);
   http->setUserAgent("WitchReader-ESP32-" CROSSPOINT_VERSION);
   http->clearHeaders();
   applyAuthHeaders(*http);
@@ -363,6 +372,10 @@ esp_err_t performKoRequest(const char* method, const std::string& url, const cha
   if (rc >= 100) {  // got an HTTP status line
     KOReaderSyncClient::lastHttpCode = rc;
     outBody = http->getBody();
+    if (http->bodyTruncated()) {
+      LOG_ERR("KOSync", "Response to %s %s is over %u bytes; kept only the start", method, url.c_str(),
+              static_cast<unsigned>(KO_MAX_RESPONSE_BYTES));
+    }
     logResponseBody(method, url, rc, outBody, elapsedMs, didHandshake);
     return ESP_OK;
   }
