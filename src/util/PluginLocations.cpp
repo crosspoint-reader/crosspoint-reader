@@ -43,4 +43,19 @@ std::string findPluginDir(const char* name) {
   return {};
 }
 
+std::string bundleInstallDir(const std::string& destRoot, const std::string& subdir) {
+  std::string root = destRoot;
+  while (!root.empty() && root.back() == '/') root.pop_back();
+  if (!subdir.empty() && subdir.front() != '.' && subdir.find('/') == std::string::npos &&
+      subdir.find('\\') == std::string::npos && subdir.find("..") == std::string::npos) {
+    for (const char* pluginRoot : ROOTS) {
+      if (root != pluginRoot) continue;
+      const std::string installed = findPluginDir(subdir.c_str());
+      if (!installed.empty()) return installed;
+      break;
+    }
+  }
+  return root + "/" + subdir;
+}
+
 }  // namespace PluginLocations
