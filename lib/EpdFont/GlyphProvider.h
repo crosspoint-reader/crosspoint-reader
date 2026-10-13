@@ -15,7 +15,8 @@ class GlyphProvider {
   virtual ~GlyphProvider() = default;
 
   /// The glyph for `codepoint`, or nullptr when the font has none. The record must stay valid at
-  /// least until the next missGlyph() call on this provider.
+  /// least until the next missGlyph() call on ANY provider of the same font: SdCardFont's styles
+  /// share one miss ring. Callers consume the record (and its bitmap) before the next lookup.
   virtual const EpdGlyph* missGlyph(uint32_t codepoint) = 0;
 
   /// True when `glyph` is a record whose bitmap this provider keeps itself. `bitmap` then receives

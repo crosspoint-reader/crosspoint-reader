@@ -303,7 +303,9 @@ class GfxRenderer {
   bool isFontCacheScanning() const;
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   /// Lets a font source supply families for IDs nobody registered yet, on first use. The
-  /// resolver is asked once per unknown ID; what it returns is registered like insertFont().
+  /// resolver is asked on every lookup of an ID that is not in fontMap, so declining must be
+  /// cheap. A family it returns is emplaced into fontMap directly (no insertFont(): no cache
+  /// invalidation, no log). It must not look fonts up through this renderer, or it recurses.
   void setFontResolver(std::optional<EpdFontFamily> (*resolve)(void* ctx, int fontId), void* ctx) {
     fontResolver_ = FontResolverHook<EpdFontFamily>{resolve, ctx};
   }

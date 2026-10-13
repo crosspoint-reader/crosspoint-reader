@@ -98,7 +98,6 @@ class SdCardFont {
   // Returns the bitmap for an on-demand-loaded (overflow) glyph.
   const uint8_t* getOverflowBitmap(const EpdGlyph* glyph) const;
 
-
   struct Stats {
     uint32_t prewarmTotalMs = 0;
     uint32_t sdReadTimeMs = 0;

@@ -1984,4 +1984,3 @@ const uint8_t* SdCardFont::getOverflowBitmap(const EpdGlyph* glyph) const {
   }
   return nullptr;
 }
-
