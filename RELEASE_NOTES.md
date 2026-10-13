@@ -2,9 +2,9 @@
 
 User-facing changes only. Full commit history is in git log.
 
-## Unreleased
+## 2.40 — 2026-10-13
 
-Everything since 2.37. Your books have one Library screen, with tabs for Recent, New and Authors and a view of their covers, and an SD-card font offers the sizes it was made in. KOReader sync lands on the exact page, the lists move with one set of buttons, and fonts and firmware updates download from GitHub again.
+Everything since 2.37. Your books have one Library screen, with tabs for Recent, New and Authors and a view of their covers, and an SD-card font offers the sizes it was made in. KOReader sync lands on the exact page, the lists move with one set of buttons, and fonts and firmware updates download from GitHub again. The web interface has a new design and many new pages, and lives on the SD card: the first time you open it after updating, it installs itself (see the [Web Interface Guide](docs/webserver.md)). Every language is now translated in full.
 
 ### Library
 
@@ -28,6 +28,7 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **The font picker makes its previews without running the X3 short of memory.** It now works in the screen's second frame buffer instead of the shared memory: the lowest free memory while it makes previews went from about 10 KB to 26 KB, and making them no longer stops halfway for lack of memory.
 - Fix: the font picker made its previews again on every visit for a font drawn enlarged, such as 22 pt from an 18 pt file.
 - **Fix: an SD-card font with 255 kerning classes froze the reader**, and one whose kerning tables name a class the font does not have could crash it. Such entries are now treated as unkerned.
+- **The largest sizes of an SD-card font load from the flash font cache too.** Mapping a font size took the cache's whole start up to that size, so on the X3 and X4 the top one or two sizes of most catalog families did not fit and were read from the card instead, with their tables taking memory.
 
 ### Reading
 
@@ -52,6 +53,9 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 ### OPDS
 
 - **OPDS catalogs can be paged, and their buttons do what the hints say** (#374). Hold **Left** / **Right**, or swipe, to page through a catalog; **Up** / **Down** move one row, and two quick taps jump a page. A short **Left** is **Search** and a short **Right** is **Info** for a book. Where those do not apply, the hint shows only « or », instead of "Up" / "Down" labels on buttons that did nothing. Holding **Back** returns to the Home screen, and holding **Up** / **Down** jumps to the first / last entry. A long catalog in landscape no longer runs off the bottom of the screen. The side Up/Down hints also appear when choosing a download format, so the T5 S3 can move up there.
+- **The OPDS Browser moved from Home into File Transfer**, beside Calibre Wireless, since it too downloads books onto the card. It is listed while at least one OPDS server is set up, and **Back** from it returns to File Transfer. A finished book's "Find more by this author" still opens it directly.
+- **Fix: downloading a book again no longer deletes the copy you have if the download fails.** A download now goes to a temporary file and replaces the old one only once it is complete, so a cancelled or broken download leaves the book on the card as it was. This applies to font downloads too.
+- **Fix: a book with several authors in a catalog shows its first author**, not the translator or illustrator listed after it. The name also goes into the downloaded file's name.
 
 ### Buttons
 
@@ -59,6 +63,8 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **Wi-Fi's saved-network options are a question like the others.** The **Cancel / Reset info / Forget** choice, offered from **Options** on a saved network or after one fails to connect, was drawn as text with a bracketed selection, and on a touch screen tapping an answer did nothing. It now shows three on-screen buttons, one above the other, and explains both actions at once. **Back** answers Cancel, and the two front buttons answer **Reset info** and **Forget**, as their hints say; you no longer move a selection and press Confirm.
 - **Removing a folder that isn't empty says what it takes with it:** "Delete this folder and everything in it?" instead of "Delete?". **Switch to USB Drive** asks with a **Restart** button, and no longer tells you to press a Confirm key that doesn't answer it. Every question now carries its own question mark in each language, so French and Spanish punctuate it their own way ("Supprimer ?", "¿Borrar?").
 - **Lists that wait for a double press no longer lag behind Left and Right.** Outside a book, the file browser, the pickers and the chapter lists waited 0.3 s after every Left/Right press to see whether a double press would follow, because the double press is bound to a reading action by default. Two quick presses then moved nothing at all in the file browser. The wait now happens only in the reader, where the double press means something.
+- **Button hints fit their labels.** The hints along the bottom and beside the side keys were fixed-width boxes, so longer labels, in Russian or Ukrainian for example ("Вправо / Вкладка"), were cut off or ran over the next box. Each box now grows as far as its label needs and the screen allows.
+- **Fix (X4 Pro): the side Up/Down hints sit on the edges the keys are on**, Up on the left and Down on the right, as on the X3, instead of both on the right.
 
 ### Lists
 
@@ -93,6 +99,7 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 
 ### Wi-Fi and the web interface
 
+- **A new look for the web interface.** Every page now shares one design, with the same menu along the top and a button that switches between automatic, light and dark colours. The Settings page has a menu of categories and a search box, and changes are saved together with **Save changes**. Reading Stats, Diagnostics, the Font Manager, Dictionaries and Plugins fit a phone's screen without scrolling sideways. The new [Web Interface Guide](docs/webserver.md) shows every page.
 - **Correct a book's details from the File Manager.** The new **Details** button beside every book edits its title, author, how the author is sorted, language, series and description, and sets its cover from a file, a pasted image or a search of Open Library, Goodreads or Google Books. It works for EPUB, XTC, TXT and Markdown books, and writes files beside the book without changing the book itself. It was the Metadata Editor plugin; a copy installed as a plugin keeps working until you remove it.
 - **A text book shows the title its details give it.** On Home and in Recent, a TXT or Markdown book with a metadata file beside it is listed under that file's title and author instead of its file name, and edits to an XTC, TXT or Markdown book's details show there too, not only an EPUB's.
 - **A new cover shows everywhere at once.** Saving a cover from the web interface makes the reader draw its thumbnails again, which on a reader without a set clock, and in some Home themes, kept the old cover until the book's cache was cleared.
@@ -116,9 +123,14 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **A saved Wi-Fi password that stopped working is asked for again.** When the network turns the saved password down (it was changed on the router, say), the reader used to report only a timeout. Now the keyboard opens headed **Saved password may be wrong**, and a password that works can be saved over the old one. On the automatic connect, the reader first tries your other saved networks in range.
 - **Fix: after a failed connect, the reader kept trying in the background.** It went on retrying the network with the error already on screen.
 - **Saved Wi-Fi passwords work after the card moves to another reader.** Passwords are stored scrambled with the reader's own key, so on another reader, or from a copied `wifi.json`, they came out wrong and the network turned them down. They are now read with the key of the reader that saved them, and stored again under the new reader's key. A card that an older firmware has already opened on the other reader cannot be recovered this way: type those passwords once more.
+- **On a mesh network the reader moves to a nearer access point.** When it joins a network with several access points, it sometimes joined a distant one and stayed there, with slow and failing uploads. After a connection with a weak signal it now listens for the network's other access points and moves to one at least 10 dB stronger, and only once it has heard that one twice. If the move fails, it reconnects as before.
+- **Fix: a lost Wi-Fi link no longer freezes File Transfer.** The screen stopped responding until the reader was switched off. The link now gets 30 seconds to come back, with **Back** working throughout; if it doesn't, the reader leaves File Transfer. Calibre Wireless shows "WiFi lost, reconnecting..." meanwhile.
+- **Calibre Wireless transfers faster.** Redrawing the progress after every change kept the SD card waiting for the screen most of the time; the progress is now redrawn every 4 seconds. **Back** also leaves Calibre Wireless during a slow transfer now.
+- **Fix: a failed upload left a book cut short on the card.** When the card filled up partway through an upload, the part that had arrived stayed on the card and showed up in the Library. It is now deleted.
 
 ### Languages
 
+- **Every language is complete.** Catalan, Czech, Danish, Finnish, Hungarian, Kazakh, Lithuanian and Romanian each gain about 500 strings that were shown in English, and Turkish and Vietnamese about 150. In Catalan, Czech, Finnish, Kazakh and Turkish the EPUB font size setting was labelled as the menu font size; in Swedish "None" read "No open book". These new translations have not been reviewed by native speakers yet: corrections are welcome.
 - **The Library is translated.** Its tabs, views, book counts and menu entries, the **Compare progress** entry, the TXT/MD font settings and the slider hint now appear in every language the reader offers, instead of in English. In Belarusian, Dutch, French, German, Italian, Polish, Portuguese, Russian, Slovenian, Spanish, Swedish and Ukrainian the menus are fully translated again.
 
 ### Fixes
@@ -136,6 +148,9 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 - **The font manager and the firmware update free more memory before they download**: the settings lists behind them, a loaded SD-card font, the bookmark list and cached scaled glyphs. Both restart the reader when you leave, as before, which loads everything again.
 - **Fix: opening Settings could restart the device** when memory was fragmented, as seen on an X3. Every settings row was built into one 11.5 KB block at once, by the settings screen, every settings save and load, and the web interface's settings page; the rows are now built one at a time. A save made when memory was short could also write a cut-off settings file, which brought back every default on the next start. Such a save now keeps the old file.
 - **Fix: a screen could take several seconds to draw.** When the processor slowed down to save power at the moment a screen began to draw, the whole screen was drawn at the slow speed: a frame of 0.2 s took over 3 s.
+- **Fix: custom sleep images saved by GIMP or ImageMagick show in black and white.** These programs write a longer BMP header, and its extra fields were read as the image's colours, so black and white came out as two greys and grey images lost their darkest shades.
+- **Fix: a wrong KOReader sync address could restart the reader.** A server address that answers with a large web page instead of the sync service filled the memory with it. Only the start of a reply is kept now, enough to tell that it is not a sync server.
+- **Fix: Boot Diagnostics no longer shows crashes that never happened.** A wake that was refused (a power button released too early, say) was drawn in the history as a boot, with its reason read as "panic" or "int-wdt".
 - **Fix (X3): the battery gauge is given the battery's real capacity.** A fuel gauge that lost power came back assuming a 3,000 mAh battery, four and a half times the X3's 650 mAh, and learned its readings against that, so the battery percentage could be off. When the reader finds the gauge in that state, it now loads 650 mAh into it, in the first seconds after start-up.
 
 ### More memory to work with
@@ -148,6 +163,7 @@ Everything since 2.37. Your books have one Library screen, with tabs for Recent,
 Where the code here is someone else's, it is credited in the source file it lives in. Where the idea is theirs and the code is ours, the source says that too.
 
 - **Sung-jin Brian Hong** (@serialx): the SD-card font kerning fixes (crosspoint-reader #3838); a separate cache for the card's allocation table, and the cache fix after a failed read (#3685); log lines no longer lost at the low-power clock (#3737); and finding the memory churn in list navigation (#3698, #3848) and the reader's unlocked chapter reads (#3652).
+- **Julia Nguyen** (@uxjulia, CrossInk): the EPUB optimizer's chapter splitting and clean-up, and the fixes behind the BMP palettes, failed uploads, OPDS downloads and authors, and the KOReader reply limit (CrossInk e092f81da, 7d49b69fa, 99712ef66, 1d954ae34, 234675e5c, 56a29f618).
 - **Tuan Q. Nguyen** (@martinqnguyen): loading the X3's battery capacity into its fuel gauge (crosspoint-reader #3730, Free-Ink/freeink-sdk #132), and leaving File Transfer with Back during a slow upload (#3732, with **Uri Tauber**).
 - **Uri Tauber** (@Uri-Tauber): the keyboard tips that stay still (crosspoint-reader #3863), the idea of storing font sizes in points (#2720), and giving the build's version only to the files that use it (#3860).
 - **Justin Mitchell** (@itsthisjustin): closing the password files to the web interface (crosspoint-reader #3824), and the smaller secure-connection records and resumable downloads in the `freeink-sdk` that the chunked downloads build on.
@@ -160,13 +176,14 @@ Where the code here is someone else's, it is credited in the source file it live
 ### Upgrade notes
 
 - **The web interface installs its pages on your first visit after updating.** On your Wi-Fi network this happens by itself. For hotspot mode, have the `web-….bin` file from the release page ready (see Wi-Fi and the web interface).
+- **KOReader sync and optimized books.** Optimizing a book in the web interface splits its long chapters, so its chapters are numbered differently from the original file. If you sync with KOReader, read the same optimized file on every device, or turn off **Split Long Chapters** in the upload dialog's options. See the [Web Interface Guide](docs/webserver.md#optimizing-epubs).
 - **Every chapter is laid out once more the first time you open it**, because headings, long paragraphs, poems and pictures are laid out differently and each page now records where its text starts for KOReader sync. Each book's stylesheet is also compiled again once. Your place in every book is kept.
 - **Each book is read once more for its details** the first time Details, Covers or Authors shows it, because the details now include the author's sort name. A book shows its filename for a moment while that happens.
 - **The cover grid's thumbnails are made once more**, now whole instead of cropped, the first time a cover grid or the finished-book screen shows them. On the T5 S3 they are made at the new three-by-three size, and again whenever you change the UI font size.
 - **The first visit to New or Authors builds the library index.** A book that has never been opened takes about a third of a second to read, so on a large card of unopened books this takes a while. It is kept from then on.
-- **Home's Browse files and Recent books switches become one Library switch**, on if either of them was on.
+- **Home's Browse files and Recent books switches become one Library switch**, on if either of them was on, and Home's OPDS Browser entry moves into File Transfer.
 - **Font sizes are now stored in points.** Your sizes are converted on the first start and kept. If you go back to an older firmware, it resets a size of 9 pt or more to the default, and reads a smaller one as a different size.
-- **Catalan, Spanish and Vietnamese gain a few labels** that were already translated in crosspoint-reader, and German's message for a chapter with no content now reads "Leeres Kapitel" instead of "Kapitelende" ("end of chapter").
+- **Catalan, Spanish and Vietnamese gained a few labels** from crosspoint-reader before the full translation, and German's message for a chapter with no content now reads "Leeres Kapitel" instead of "Kapitelende" ("end of chapter").
 
 ## 2.37 — 2026-09-29
 
