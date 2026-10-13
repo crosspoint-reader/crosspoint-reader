@@ -198,7 +198,7 @@ class SdCardFont {
     uint32_t reportedMisses[MAX_REPORTED_MISSES] = {};
     uint8_t reportedMissCount = 0;
 
-    // Debug counters for on-demand glyph misses (glyphMissHandler). Used to
+    // Debug counters for on-demand glyph misses (StyleProvider::missGlyph). Used to
     // throttle log volume while still preserving visibility into overflow churn.
     uint32_t onDemandMissCount = 0;
     uint16_t onDemandMissLogged = 0;
@@ -244,7 +244,7 @@ class SdCardFont {
   };
   StyleProvider styleProviders_[MAX_STYLES];
 
-  // Shared on-demand overflow buffer (ring buffer of glyphs loaded via glyphMissHandler)
+  // Shared on-demand overflow buffer (ring of glyphs loaded by StyleProvider::missGlyph)
   static constexpr uint32_t OVERFLOW_CAPACITY = 8;
   struct OverflowEntry {
     EpdGlyph glyph;

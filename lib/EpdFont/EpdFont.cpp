@@ -217,7 +217,7 @@ uint32_t EpdFont::applyLigatures(uint32_t cp, const char*& text) const {
 // never recurse back into another fallback.
 EpdGlyphRef EpdFont::findGlyph(const uint32_t cp) const {
   const int count = data->intervalCount;
-  if (count == 0 && !data->glyphMissHandler && !data->provider) return {};
+  if (count == 0 && !data->provider) return {};
 
   if (count > 0) {
     const EpdUnicodeInterval* intervals = data->intervals;
@@ -239,23 +239,19 @@ EpdGlyphRef EpdFont::findGlyph(const uint32_t cp) const {
 
   // Codepoint not in the interval table: ask the font's provider (SD on-demand ring, or a font
   // with no tables at all).
-  const EpdGlyph* loaded = nullptr;
   if (data->provider) {
-    loaded = data->provider->missGlyph(cp);
-  } else if (data->glyphMissHandler) {
-    loaded = data->glyphMissHandler(data->glyphMissCtx, cp);
-  }
-  if (loaded) {
-    // A provider's record, not an array one: there is no index to report, and the pointer is what
-    // GlyphProvider::ownsBitmap() recognises it by.
-    return EpdGlyphRef{loaded,
-                       loaded->advanceX,
-                       0,  // no array index: this glyph is not in the array
-                       loaded->width,
-                       loaded->height,
-                       static_cast<int8_t>(loaded->left),
-                       static_cast<int8_t>(loaded->top),
-                       true};
+    if (const EpdGlyph* loaded = data->provider->missGlyph(cp)) {
+      // A provider's record, not an array one: there is no index to report, and the pointer is
+      // what GlyphProvider::ownsBitmap() recognises it by.
+      return EpdGlyphRef{loaded,
+                         loaded->advanceX,
+                         0,  // no array index: this glyph is not in the array
+                         loaded->width,
+                         loaded->height,
+                         static_cast<int8_t>(loaded->left),
+                         static_cast<int8_t>(loaded->top),
+                         true};
+    }
   }
   return {};
 }
