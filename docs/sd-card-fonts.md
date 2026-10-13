@@ -151,7 +151,9 @@ What this means in practice:
 The current list of pre-built fonts is maintained in the
 [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
 
-Libron uses the author's [CrossPoint bundle](https://github.com/nicoverbruggen/libron/releases/tag/v0.31),
+Libron is an optional SD-card font in **Settings > Reader > Manage Fonts > Latin**.
+Select it to download; it is not preinstalled or included in the firmware.
+It uses the author's [CrossPoint bundle](https://github.com/nicoverbruggen/libron/releases/tag/v0.31),
 with regular, bold, italic, and bold italic styles at 12, 14, 16, and 18 pt.
 To install it manually, extract `Libron_CrossPoint.zip` and copy the `Libron`
 folder to `/fonts/` or `/.fonts/` on your SD card. Libron is licensed under the
