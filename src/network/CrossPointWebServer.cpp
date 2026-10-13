@@ -1341,6 +1341,18 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
   return true;
 }
 
+// Closes the upload's file and deletes it. A write that failed part-way leaves a file cut short,
+// and the Library and Home would list that truncated book.
+// Ported from CrossInk commit e092f81da ("fix: protect files and reduce unnecessary reader work",
+// Julia Nguyen): there a failed write removes the partial file; the helper is ours.
+static void discardUploadFile(CrossPointWebServer::UploadState& state) {
+  state.file.close();
+  String filePath = state.path;
+  if (!filePath.endsWith("/")) filePath += "/";
+  filePath += state.fileName;
+  Storage.remove(filePath.c_str());
+}
+
 void CrossPointWebServer::handleUpload(UploadState& state) const {
   static size_t lastLoggedSize = 0;
   static unsigned long lastLoggedAt = 0;
@@ -1467,7 +1479,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (state.bufferPos >= UploadState::UPLOAD_BUFFER_SIZE) {
           if (!flushUploadBuffer(state)) {
             state.error = "Failed to write to SD card - disk may be full";
-            state.file.close();
+            discardUploadFile(state);
             return;
           }
         }
@@ -1495,7 +1507,12 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       if (!flushUploadBuffer(state)) {
         state.error = "Failed to write final data to SD card";
       }
-      state.file.close();
+      // close() writes the last cached sector and the directory entry: a failure there also
+      // leaves a file cut short.
+      if (!state.file.close() && state.error.isEmpty()) {
+        state.error = "Failed to write final data to SD card";
+      }
+      if (!state.error.isEmpty()) discardUploadFile(state);
 
       if (state.error.isEmpty()) {
         state.success = true;
@@ -1517,14 +1534,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     state.buffer = {};
   } else if (up.status == UPLOAD_FILE_ABORTED) {
     state.bufferPos = 0;  // Discard buffered data
-    if (state.file) {
-      state.file.close();
-      // Try to delete the incomplete file
-      String filePath = state.path;
-      if (!filePath.endsWith("/")) filePath += "/";
-      filePath += state.fileName;
-      Storage.remove(filePath.c_str());
-    }
+    if (state.file) discardUploadFile(state);
     state.buffer = {};
     state.error = "Upload aborted";
 
