@@ -19,28 +19,33 @@ bool InflateReader::init(const bool streaming) {
   if (streaming) {
     ringBuffer = static_cast<uint8_t*>(malloc(INFLATE_DICT_SIZE));
     if (!ringBuffer) return false;
-    ownsRing = true;
     memset(ringBuffer, 0, INFLATE_DICT_SIZE);
+    streamingMode = true;
   }
 
   uzlib_uncompress_init(&decomp, ringBuffer, ringBuffer ? INFLATE_DICT_SIZE : 0);
   return true;
 }
 
-bool InflateReader::initWithRing(uint8_t* ring) {
+bool InflateReader::initWithSegments(uint8_t* const (&segments)[RING_SEGMENTS]) {
+  static_assert((RING_SEGMENT_BYTES & (RING_SEGMENT_BYTES - 1)) == 0, "uzlib indexes segments by shift/mask");
+  static_assert(RING_SEGMENTS * RING_SEGMENT_BYTES == RING_BYTES, "segments must cover the full deflate window");
+  static_assert(RING_SEGMENTS <= UZLIB_DICT_MAX_SEGS, "uzlib segment table too small");
+
   deinit();  // free any owned ring buffer and reset state
-  if (!ring) return false;
-  ringBuffer = ring;
-  ownsRing = false;  // caller's buffer: never freed here
-  memset(ringBuffer, 0, INFLATE_DICT_SIZE);
-  uzlib_uncompress_init(&decomp, ringBuffer, INFLATE_DICT_SIZE);
+  for (uint8_t* segment : segments) {
+    if (!segment) return false;
+  }
+  for (uint8_t* segment : segments) memset(segment, 0, RING_SEGMENT_BYTES);
+  uzlib_uncompress_init_segmented(&decomp, segments, RING_SEGMENTS, __builtin_ctz(RING_SEGMENT_BYTES));
+  streamingMode = true;
   return true;
 }
 
 void InflateReader::deinit() {
-  if (ringBuffer && ownsRing) free(ringBuffer);
+  free(ringBuffer);
   ringBuffer = nullptr;
-  ownsRing = false;
+  streamingMode = false;
   memset(&decomp, 0, sizeof(decomp));
 }
 
@@ -57,7 +62,7 @@ void InflateReader::skipZlibHeader() {
 }
 
 bool InflateReader::read(uint8_t* dest, size_t len) {
-  if (!ringBuffer) {
+  if (!streamingMode) {
     // One-shot mode: back-references use absolute offset from dest_start.
     // Valid only when read() is called once with the full output buffer.
     decomp.dest_start = dest;
@@ -71,7 +76,7 @@ bool InflateReader::read(uint8_t* dest, size_t len) {
 }
 
 InflateStatus InflateReader::readAtMost(uint8_t* dest, size_t maxLen, size_t* produced) {
-  if (!ringBuffer) {
+  if (!streamingMode) {
     // One-shot mode: back-references use absolute offset from dest_start.
     // Valid only when readAtMost() is called once with the full output buffer.
     decomp.dest_start = dest;

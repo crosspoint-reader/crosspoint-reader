@@ -21,8 +21,8 @@ struct Info {
 // Why an extraction failed, so callers can report the accurate cause.
 enum class ExtractError : uint8_t {
   None,        // success
-  LowMemory,   // an allocation failed — the ~32KB inflate window or a chunk
-               // buffer couldn't be obtained from the fragmented heap
+  LowMemory,   // an allocation failed — an 8KB inflate-window segment, the
+               // chunk source or the chunk table couldn't be obtained from the heap
   ReadError,   // file open / read / write / bad-offset failure (IO or a bogus
                // .idx offset), not a compression problem
   Decompress,  // the compressed stream itself was bad (inflate failed, or the
