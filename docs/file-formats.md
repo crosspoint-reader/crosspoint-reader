@@ -92,12 +92,12 @@ if (parsedSize != fileSize) {
 
 ### Version 74
 
-The header gains a `publisherFonts` byte after `wordSpacingPercent` (0 off, 1 accents,
-2 all). On PSRAM boards, words and blocks whose CSS `font-family` names an
+The header gains a `publisherFonts` byte after `wordSpacingPercent` (0 off, 1 ignore
+body font, 2 all). On PSRAM boards, words and blocks whose CSS `font-family` names an
 `@font-face` font embedded in the book are laid out in that font; their font ids
 come from the family and point size, so cached pages reload them by id.
 
-Accents Only keeps the reader font for the main body family. When no embedded
+Ignore Body Font keeps the reader font for the main body family. When no embedded
 font is declared on `html` or `body`, a bounded scan of ordinary paragraph text
 infers that family before layout, so paragraph-defined body fonts use the reader
 font from the first page.
