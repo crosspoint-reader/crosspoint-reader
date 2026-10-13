@@ -110,8 +110,10 @@ class ChapterHtmlSlimParser {
   bool effectivePreserveWhitespace = false;
   // Embedded font-family for the next word after PublisherFonts filtering; 0 = reader font.
   uint32_t effectiveFontFamily = 0;
-  // font-family set on <html>/<body>, which Accents mode leaves in the reader font.
+  // Root-declared or predominant prose family, kept in the reader font in Accents mode.
   uint32_t bodyFontFamily = 0;
+  bool bodyFontDetected = false;
+  bool detectBodyFont();
   bool pendingPageBreak = false;  // set when a page-break-after element closes
 
   // Initial letter captured from a ::first-letter block or a leading float/initial-letter span,
