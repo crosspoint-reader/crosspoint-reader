@@ -3,6 +3,7 @@
 #include <BoardConfig.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
+#include <GlyphProvider.h>
 #include <HalGPIO.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -34,20 +35,13 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     // before asking for another.
     return fd->getBitmap(fontData, glyph, glyph.index);
   }
-  // For SD card fonts, check if the glyph was loaded on demand into the overflow
-  // buffer.  getOverflowBitmap() returns:
-  //   - bitmap pointer for overflow glyphs with bitmap data
-  //   - nullptr for overflow glyphs without bitmap data (e.g. space: width=0, height=0)
-  //   - nullptr for non-overflow glyphs (normal prewarmed path)
-  // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
-  // sdRecord is the record this ref resolved from, and is null for built-in fonts. The overflow
-  // checks key on its pointer identity to tell a ring-loaded glyph from an array one, which is
-  // why resolution has to carry it rather than just the values.
-  if (fontData->glyphMissCtx && glyph.sdRecord) {
-    auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
-    if (sdFont->isOverflowGlyph(glyph.sdRecord)) {
-      return sdFont->getOverflowBitmap(glyph.sdRecord);  // may be nullptr for zero-width glyphs
-    }
+  // A glyph the font's provider loaded itself (SdCardFont's miss ring) keeps its bitmap there.
+  // ownsBitmap() answers by the record's pointer identity, which is why resolution carries
+  // sdRecord; it is null for built-in fonts. An owned glyph with no pixels (a space) yields
+  // nullptr and must not fall through to the flat bitmap below.
+  if (fontData->provider && glyph.sdRecord) {
+    const uint8_t* owned = nullptr;
+    if (fontData->provider->ownsBitmap(glyph.sdRecord, owned)) return owned;
   }
   return &fontData->bitmap[epdGlyphBitmapOffset(fontData, glyph)];
 }
