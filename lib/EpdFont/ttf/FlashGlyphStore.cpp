@@ -450,3 +450,101 @@ void FlashGlyphStore::setWipePending() {
     LOG_ERR("GST", "could not record wipe pending in flash");
   }
 }
+
+// --- Sizes ---
+
+int FlashGlyphStore::sizeIndex(const uint32_t ppem26_6, const uint8_t flags) {
+  if (!open_ || ppem26_6 == kErased) return -1;
+  SizeEntry entries[kSizeEntries];  // 128 B
+  if (!flash_.read(kSizeTableOffset, entries, sizeof entries)) return -1;
+  for (int i = 0; i < kSizeEntries; ++i) {
+    const SizeEntry& e = entries[i];
+    if (e.ppem26_6 == ppem26_6 && e.pad[0] == 0 && e.pad[1] == 0 && e.pad[2] == 0) return i;
+  }
+  if (wipePending_) return -1;
+  for (int i = 0; i < kSizeEntries; ++i) {
+    const SizeEntry& e = entries[i];
+    // Free only if every byte is erased: an entry cut short is never programmed again.
+    if (e.ppem26_6 != kErased || e.flags != 0xFF || e.pad[0] != 0xFF || e.pad[1] != 0xFF || e.pad[2] != 0xFF) {
+      continue;
+    }
+    const SizeEntry claim{ppem26_6, flags, {0, 0, 0}};  // the zero pad lands last and marks it in use
+    if (!flash_.program(kSizeTableOffset + static_cast<uint32_t>(i) * sizeof(SizeEntry), &claim, sizeof claim)) {
+      LOG_ERR("GST", "size table write failed; wipe pending");
+      setWipePending();
+      return -1;
+    }
+    return i;
+  }
+  LOG_INF("GST", "full: all %u sizes in use; wipe pending", static_cast<unsigned>(kSizeEntries));
+  setWipePending();
+  return -1;
+}
+
+// --- Kerning pairs ---
+
+bool FlashGlyphStore::findPair(const uint16_t left, const uint16_t right, const uint8_t style,
+                               int16_t* fontUnits) const {
+  const uint32_t key = pairKey(left, right);
+  if (!open_ || key == kErased) return false;
+  const uint32_t slots = geometry_.pairSlots;
+  uint32_t i = homeSlot(key, slots);
+  for (uint32_t probe = 0; probe < kMaxProbe; ++probe, i = (i + 1 == slots) ? 0 : i + 1) {
+    const Slot slot = loadSlot(pairs_, i);
+    if (slotErased(slot)) return false;
+    // The value's top bits are written as zero: a value cut short reads as some other style.
+    if (slot.key != key || (slot.value >> 16) != style) continue;
+    if (fontUnits) *fontUnits = static_cast<int16_t>(slot.value & 0xFFFF);
+    return true;
+  }
+  return false;
+}
+
+bool FlashGlyphStore::storePair(const uint16_t left, const uint16_t right, const uint8_t style,
+                                const int16_t fontUnits) {
+  const uint32_t key = pairKey(left, right);
+  if (!open_ || wipePending_ || key == kErased || style > 3) return false;
+  // A full pair index only stops storing pairs; they come from the GPOS reader instead (never a wipe).
+  if ((uint64_t{usedPairs_} + 1) * 100 > uint64_t{geometry_.pairSlots} * kIndexLoadPercent) return false;
+  const uint32_t value = (static_cast<uint32_t>(style) << 16) | static_cast<uint16_t>(fontUnits);
+  switch (insert(geometry_.pairOffset, pairs_, geometry_.pairSlots, key, value)) {
+    case Insert::Done:
+      ++usedPairs_;
+      return true;
+    case Insert::ChainFull:
+      return false;
+    case Insert::WriteFailed:
+      break;
+  }
+  LOG_ERR("GST", "pair write failed; wipe pending");
+  setWipePending();
+  return false;
+}
+
+// --- Wipe ---
+
+bool FlashGlyphStore::wipe() {
+  if (!open_) return false;
+  const Geometry g = geometry_;
+  // Everything a lookup can reach goes first. The header, which holds the size table and the wipe word, is
+  // rewritten last: a cut before that leaves wipe pending, and the next wipe() finishes the job.
+  if (!eraseWritten(g.indexOffset, tableBytes(g.indexSlots)) || !eraseWritten(g.pairOffset, tableBytes(g.pairSlots)) ||
+      !eraseWritten(g.logOffset, g.logSize)) {
+    LOG_ERR("GST", "wipe: erase failed");
+    return false;
+  }
+  logUsed_ = usedSlots_ = usedPairs_ = 0;
+  auto header = makeUniqueNoThrow<Header>();
+  if (!header) {
+    LOG_ERR("GST", "wipe: no memory for the header (%u B)", static_cast<unsigned>(sizeof(Header)));
+    return false;
+  }
+  if (!flash_.read(0, header.get(), sizeof(Header)) || !flash_.erase(0, kSectorBytes) ||
+      !flash_.program(0, header.get(), sizeof(Header))) {
+    LOG_ERR("GST", "wipe: header rewrite failed; the family will be installed again");
+    close();
+    return false;
+  }
+  wipePending_ = false;
+  return true;
+}
