@@ -290,12 +290,15 @@ ScratchPlan planScratch(const Face& face, const uint32_t maxPpem26_6, const uint
   ScratchPlan plan;
   plan.points = face.maxPoints < kMaxScratchPoints ? face.maxPoints : kMaxScratchPoints;
   plan.contours = face.maxContours < kMaxScratchContours ? face.maxContours : kMaxScratchContours;
-  const int32_t scale = unitsToPixels(face, maxPpem26_6 < kMaxPpem26_6 ? maxPpem26_6 : kMaxPpem26_6);
-  // head's box at that size, one pixel wider each way for the rounding of compound transforms.
+  plan.maxPpem26_6 = maxPpem26_6 < kMaxPpem26_6 ? maxPpem26_6 : kMaxPpem26_6;
+  const int32_t scale = unitsToPixels(face, plan.maxPpem26_6);
+  // head's box at that size, one pixel wider each way for the rounding of compound transforms. FreeType does
+  // not trust head's box, so neither side is ever smaller than the em square.
+  const int32_t em = ((mulFix(face.unitsPerEm, scale) + 63) >> 6) + 2;
   int32_t width = ((mulFix(face.xMax, scale) + 63) >> 6) - (mulFix(face.xMin, scale) >> 6) + 2;
   int32_t height = ((mulFix(face.yMax, scale) + 63) >> 6) - (mulFix(face.yMin, scale) >> 6) + 2;
-  width = width < 0 ? 0 : width > 255 ? 255 : width;
-  height = height < 0 ? 0 : height > 255 ? 255 : height;
+  width = width < em ? em : width > 255 ? 255 : width;
+  height = height < em ? em : height > 255 ? 255 : height;
   const uint32_t bytes = glyphDataBytes(width, height, true);
   plan.outputBytes = bytes < kMaxOutputBytes ? bytes : kMaxOutputBytes;
   plan.poolBytes = poolBytes;
@@ -308,15 +311,18 @@ ScratchPlan mergePlans(const ScratchPlan& a, const ScratchPlan& b) {
   plan.contours = a.contours > b.contours ? a.contours : b.contours;
   plan.outputBytes = a.outputBytes > b.outputBytes ? a.outputBytes : b.outputBytes;
   plan.poolBytes = a.poolBytes > b.poolBytes ? a.poolBytes : b.poolBytes;
+  plan.maxPpem26_6 = a.maxPpem26_6 > b.maxPpem26_6 ? a.maxPpem26_6 : b.maxPpem26_6;
   return plan;
 }
 
 bool Rasterizer::allocate(const ScratchPlan& plan) {
   release();
   if (plan.points > kMaxScratchPoints || plan.contours > kMaxScratchContours || plan.outputBytes > kMaxOutputBytes ||
-      plan.poolBytes < 2048 || plan.poolBytes > kPoolBytesSd) {
-    LOG_ERR("TTF", "scratch plan out of range: %u points, %u contours, %lu output, %lu pool", plan.points,
-            plan.contours, static_cast<unsigned long>(plan.outputBytes), static_cast<unsigned long>(plan.poolBytes));
+      plan.poolBytes < 2048 || plan.poolBytes > kPoolBytesSd || plan.maxPpem26_6 == 0 ||
+      plan.maxPpem26_6 > kMaxPpem26_6) {
+    LOG_ERR("TTF", "scratch plan out of range: %u points, %u contours, %lu output, %lu pool, %lu ppem", plan.points,
+            plan.contours, static_cast<unsigned long>(plan.outputBytes), static_cast<unsigned long>(plan.poolBytes),
+            static_cast<unsigned long>(plan.maxPpem26_6));
     return false;
   }
   // The pool comes first: the block's start is aligned for ftgrays' cells and for the points that follow.
@@ -393,9 +399,13 @@ Status Rasterizer::load(FontBytes& bytes, const Face& face, const uint16_t glyph
     top = static_cast<int32_t>((yMax + 63) >> 6);
     width = static_cast<int32_t>((xMax + 63) >> 6) - left;
     height = top - bottom;
-    if (width > 255 || height > 255 || glyphDataBytes(width, height, true) > plan_.outputBytes || left < INT16_MIN ||
-        left > INT16_MAX || top < INT16_MIN || top > INT16_MAX) {
+    if (width > 255 || height > 255 || left < INT16_MIN || left > INT16_MAX || top < INT16_MIN || top > INT16_MAX) {
       return loaded_ = Status::Unsupported;
+    }
+    if (glyphDataBytes(width, height, true) > plan_.outputBytes) {
+      // Past the output region: the glyph's own limit at a size the plan was made for; above those sizes the
+      // caller must plan again, and nothing is wrong with the glyph.
+      return loaded_ = ppem26_6 > plan_.maxPpem26_6 ? Status::Transient : Status::Unsupported;
     }
     loader.translate(0, -left * 64, -bottom * 64);  // the box now starts at (0, 0), as ftgrays' clip box does
   }

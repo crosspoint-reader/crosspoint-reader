@@ -17,8 +17,8 @@ enum class Status : uint8_t {
                 ///< over the output region, or coordinates out of range
   Malformed,    ///< permanent: broken glyph data (a read past the glyph or the file, contour ends out of
                 ///< order, a flag run past the last point, a glyph index past numGlyphs)
-  Transient,    ///< nothing is known to be wrong with the glyph (an SD read failed, Stage 2c; or no scratch
-                ///< block): not marked in the store, tried again at the next lookup
+  Transient,    ///< nothing is known to be wrong with the glyph (an SD read failed, Stage 2c; no scratch block;
+                ///< or a size larger than the block was planned for): not marked in the store, tried again
 };
 
 constexpr bool isPermanent(const Status status) { return status == Status::Unsupported || status == Status::Malformed; }
@@ -37,10 +37,14 @@ struct ScratchPlan {
   uint16_t contours = 0;
   uint32_t outputBytes = 0;
   uint32_t poolBytes = 0;
+  /// The largest size the output region was sized for. A glyph too big for the region at a larger size is
+  /// the plan's fault, not the glyph's, so it reports Transient rather than Unsupported.
+  uint32_t maxPpem26_6 = kMaxPpem26_6;
 };
 
-/// The plan for one face: points and contours from maxp, the output from head's box at `maxPpem26_6` (the
-/// largest size the family renders), each capped. A glyph past a cap reports Unsupported.
+/// The plan for one face: points and contours from maxp; the output from head's box at `maxPpem26_6` (the
+/// largest size the family renders), but never less than the em square, since head's box can lie; each
+/// capped. A glyph past a cap at a planned size reports Unsupported.
 ScratchPlan planScratch(const Face& face, uint32_t maxPpem26_6, uint32_t poolBytes);
 /// The larger of each part, so one block serves every style of a family.
 ScratchPlan mergePlans(const ScratchPlan& a, const ScratchPlan& b);

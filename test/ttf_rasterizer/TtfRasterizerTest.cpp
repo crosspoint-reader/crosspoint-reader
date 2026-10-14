@@ -40,7 +40,8 @@ class TtfRasterizerTest : public ::testing::Test {
     bytes = FontBytes(data.data(), static_cast<uint32_t>(data.size()));
     if (parseFace(bytes, &face) != FaceStatus::Ok) return Status::Malformed;
     if (!rasterizer.allocated() || rasterizer.plan().points != plan.points ||
-        rasterizer.plan().outputBytes != plan.outputBytes || rasterizer.plan().contours != plan.contours) {
+        rasterizer.plan().outputBytes != plan.outputBytes || rasterizer.plan().contours != plan.contours ||
+        rasterizer.plan().maxPpem26_6 != plan.maxPpem26_6) {
       if (!rasterizer.allocate(plan)) return Status::Transient;
     }
     metrics = EpdGlyph{};
@@ -344,7 +345,28 @@ TEST(TtfScratch, ThePlanFollowsTheFontAndItsCaps) {
   EXPECT_EQ(40, plan.contours);
   EXPECT_EQ(81u, plan.outputBytes);  // 16 px and a pixel each way: 18 x 18 at 2 bits
   EXPECT_EQ(kPoolBytesFlash, plan.poolBytes);
+  EXPECT_EQ(1000u, plan.maxPpem26_6);
   EXPECT_EQ(kMaxOutputBytes, planScratch(face, kMaxPpem26_6, kPoolBytesFlash).outputBytes);
+}
+
+TEST(TtfScratch, TheOutputRegionNeverTrustsAnEmptyHeadBox) {
+  // FreeType does not trust head's box; a font that leaves it 0 must still fit em-sized glyphs.
+  Face face;
+  face.unitsPerEm = 1000;
+  face.maxPoints = 64;
+  face.maxContours = 8;
+  EXPECT_EQ(81u, planScratch(face, 1000, kPoolBytesFlash).outputBytes);  // the em square: 16 px + 2
+}
+
+TEST_F(TtfRasterizerTest, AGlyphTooBigForThePlannedSizesIsTransient) {
+  // The region was sized for kUnitPpem: twice that size is the caller's mistake, not the glyph's, so it
+  // must not be marked missing for good (Unsupported is permanent, spec 6.1).
+  ScratchPlan plan = roomyPlan();
+  plan.outputBytes = 7;
+  plan.maxPpem26_6 = kUnitPpem;
+  const uint16_t square = add(outline({rect(0, 0, 320, 320)}));  // 5 x 5 px at kUnitPpem: 7 bytes
+  EXPECT_EQ(Status::Ok, draw(square, kUnitPpem, plan));
+  EXPECT_EQ(Status::Transient, draw(square, 2 * kUnitPpem, plan));  // 10 x 10: 25 bytes
 }
 
 TEST(TtfScratch, OneBlockServesEveryStyle) {
