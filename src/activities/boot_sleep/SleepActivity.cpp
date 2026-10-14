@@ -563,7 +563,9 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
     // Find a new seed that
     // 1. doesn't immediately repeat an image
     // 2. has the fewest overlaps with previousIndexes in the remaining first "window" generations
+    // 3. ideally isn't the same seed as the previous one
     uint8_t bestOverlapCount = window + 1;
+    const uint32_t prevLcgSeed = lcgSeed;
     static constexpr uint8_t MAX_SEED_ATTEMPTS = 16;
     for (uint8_t attempt = 0; attempt < MAX_SEED_ATTEMPTS; ++attempt) {
       const uint32_t candidateSeed = static_cast<uint32_t>(random(lcgM));
@@ -576,12 +578,18 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
 
       const uint32_t firstState = candidateState;
       uint8_t overlapCount = 0;
-      uint8_t generatedCount = 1;
-      for (uint32_t step = 0; step < lcgM && generatedCount < window && previousCount > 0; ++step) {
-        candidateState = (5u * candidateState + candidateC) % lcgM;
-        if (candidateState >= fileCount) continue;
-        ++generatedCount;
-        if (isPreviousIndex(candidateState)) ++overlapCount;
+
+      if (previousCount > 0 && candidateSeed == prevLcgSeed) {
+        // assume some overlaps for the previous seed to penalize it for selection.
+        overlapCount = window > 1 ? window / 2 : 1;
+      } else {
+        uint8_t generatedCount = 1;
+        for (uint32_t step = 0; step < lcgM && generatedCount < window && previousCount > 0; ++step) {
+          candidateState = (5u * candidateState + candidateC) % lcgM;
+          if (candidateState >= fileCount) continue;
+          ++generatedCount;
+          if (isPreviousIndex(candidateState)) ++overlapCount;
+        }
       }
 
       if (overlapCount < bestOverlapCount) {
