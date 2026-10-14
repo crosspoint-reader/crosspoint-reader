@@ -89,6 +89,38 @@ inline void writeRawRecord(SimNorFlash& flash, const glyphstore::Layout& layout,
                             glyphstore::kRecordHeaderBytes + written));
 }
 
+/// Stages `key` as a width x height glyph whose bitmap is pattern(key, i).
+inline bool stage(GlyphBatch& batch, const uint32_t key, const uint8_t width, const uint8_t height) {
+  const EpdGlyph glyph = metrics(width, height);
+  uint8_t* bitmap = batch.add(key, glyph);
+  if (!bitmap) return false;
+  for (uint32_t i = 0; i < glyph.dataLength; ++i) bitmap[i] = pattern(key, i);
+  return true;
+}
+
+/// True when `key` is stored with exactly the metrics and bitmap stage() gave it.
+inline bool storedIntact(const FlashGlyphStore& store, const uint32_t key, const uint8_t width,
+                         const uint8_t height) {
+  const EpdGlyph* glyph = nullptr;
+  if (store.find(key, &glyph) != FlashGlyphStore::Lookup::Found || glyph == nullptr) return false;
+  const EpdGlyph want = metrics(width, height);
+  if (glyph->width != want.width || glyph->height != want.height || glyph->advanceX != want.advanceX ||
+      glyph->left != want.left || glyph->top != want.top || glyph->dataLength != want.dataLength) {
+    return false;
+  }
+  const uint8_t* bitmap = store.logBase() + glyph->dataOffset;
+  for (uint32_t i = 0; i < glyph->dataLength; ++i) {
+    if (bitmap[i] != pattern(key, i)) return false;
+  }
+  return true;
+}
+
+/// Absent, or stored intact: a lookup may miss a glyph whose write was cut, but never serve wrong bytes.
+inline bool absentOrIntact(const FlashGlyphStore& store, const uint32_t key, const uint8_t width,
+                           const uint8_t height) {
+  return store.find(key, nullptr) == FlashGlyphStore::Lookup::Absent || storedIntact(store, key, width, height);
+}
+
 /// Every store test runs on its own simulated chip, and no test may ever program a byte twice.
 class StoreTest : public ::testing::Test {
  protected:

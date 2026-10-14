@@ -299,3 +299,154 @@ bool FlashGlyphStore::isBlank(const uint32_t sector) {
   }
   return true;
 }
+
+// --- Glyphs ---
+
+uint8_t* GlyphBatch::add(const uint32_t key, const EpdGlyph& metrics) {
+  // A record whose length does not match its size would read as torn to the log scan.
+  if (metrics.dataLength > kMaxBitmapBytes ||
+      metrics.dataLength != glyphDataBytes(metrics.width, metrics.height, true)) {
+    return nullptr;
+  }
+  const uint32_t bytes = recordBytes(metrics.dataLength);
+  if (bytes > capacity_ - used_) return nullptr;
+  uint8_t* record = buffer_ + used_;
+  std::memset(record, 0xFF, bytes);  // the padding stays erased
+  std::memcpy(record, &key, sizeof key);
+  EpdGlyph glyph = metrics;
+  glyph.dataOffset = 0;  // known at commit, when the record's place in the log is
+  std::memcpy(record + 4, &glyph, sizeof glyph);
+  used_ += bytes;
+  ++count_;
+  return record + kRecordHeaderBytes;
+}
+
+// A record a slot may point at: inside the written log, with the slot's key, and well formed.
+const EpdGlyph* FlashGlyphStore::validRecord(const uint32_t key, const uint32_t logOffset) const {
+  if (logOffset >= logUsed_ || logUsed_ - logOffset < kRecordHeaderBytes) return nullptr;
+  if (loadU32(log_ + logOffset) != key || !plausibleRecord(logOffset)) return nullptr;
+  const auto* glyph = reinterpret_cast<const EpdGlyph*>(log_ + logOffset + 4);
+  if (recordBytes(glyph->dataLength) > logUsed_ - logOffset) return nullptr;
+  return glyph;
+}
+
+FlashGlyphStore::Lookup FlashGlyphStore::find(const uint32_t key, const EpdGlyph** glyph) const {
+  if (!open_ || !isGlyphKey(key)) return Lookup::Absent;
+  const uint32_t slots = geometry_.indexSlots;
+  uint32_t i = homeSlot(key, slots);
+  for (uint32_t probe = 0; probe < kMaxProbe; ++probe, i = (i + 1 == slots) ? 0 : i + 1) {
+    const Slot slot = loadSlot(index_, i);
+    if (slotErased(slot)) return Lookup::Absent;
+    if (slot.key != key) continue;
+    if (slot.value == kMissing) return Lookup::Missing;
+    if (const EpdGlyph* found = validRecord(key, slot.value)) {
+      if (glyph) *glyph = found;
+      return Lookup::Found;
+    }
+    // A slot cut short, or one whose record never completed: keep probing.
+  }
+  return Lookup::Absent;
+}
+
+FlashGlyphStore::Insert FlashGlyphStore::insert(const uint32_t tableOffset, const uint8_t* table,
+                                                const uint32_t slots, const uint32_t key, const uint32_t value) {
+  uint32_t i = homeSlot(key, slots);
+  for (uint32_t probe = 0; probe < kMaxProbe && probe < slots; ++probe, i = (i + 1 == slots) ? 0 : i + 1) {
+    // A slot in use, or one cut short (some bits programmed), is never programmed again.
+    if (!slotErased(loadSlot(table, i))) continue;
+    const Slot slot{key, value};
+    return flash_.program(tableOffset + i * kSlotBytes, &slot, sizeof slot) ? Insert::Done : Insert::WriteFailed;
+  }
+  return Insert::ChainFull;
+}
+
+FlashGlyphStore::Commit FlashGlyphStore::commit(GlyphBatch& batch) {
+  if (batch.count_ == 0) return Commit::Stored;
+  if (!open_) {
+    batch.clear();
+    return Commit::WriteFailed;
+  }
+  if (wipePending_) {
+    batch.clear();
+    return Commit::Full;
+  }
+  // 4.6: full when the batch would take the log past 95 % or the index past 70 %.
+  if ((uint64_t{logUsed_} + batch.used_) * 100 > uint64_t{geometry_.logSize} * kLogFullPercent ||
+      (uint64_t{usedSlots_} + batch.count_) * 100 > uint64_t{geometry_.indexSlots} * kIndexLoadPercent) {
+    LOG_INF("GST", "full: log %u of %u B, %u of %u slots; wipe pending", static_cast<unsigned>(logUsed_),
+            static_cast<unsigned>(geometry_.logSize), static_cast<unsigned>(usedSlots_),
+            static_cast<unsigned>(geometry_.indexSlots));
+    setWipePending();
+    batch.clear();
+    return Commit::Full;
+  }
+  // Each bitmap's offset is relative to the log base, known now.
+  const uint32_t base = logUsed_;
+  for (uint32_t at = 0; at < batch.used_;) {
+    EpdGlyph glyph = loadGlyph(batch.buffer_ + at + 4);
+    glyph.dataOffset = base + at + kRecordHeaderBytes;
+    std::memcpy(batch.buffer_ + at + 4, &glyph, sizeof glyph);
+    at += recordBytes(glyph.dataLength);
+  }
+  // Every record in one program call...
+  if (!flash_.program(geometry_.logOffset + base, batch.buffer_, batch.used_)) {
+    LOG_ERR("GST", "log write of %u B at %u failed; wipe pending", static_cast<unsigned>(batch.used_),
+            static_cast<unsigned>(base));
+    setWipePending();
+    batch.clear();
+    return Commit::WriteFailed;
+  }
+  logUsed_ = base + batch.used_;
+  // ...then the slots, so a probe never finds a slot whose record is incomplete.
+  Commit result = Commit::Stored;
+  for (uint32_t at = 0; at < batch.used_;) {
+    const Insert inserted =
+        insert(geometry_.indexOffset, index_, geometry_.indexSlots, loadU32(batch.buffer_ + at), base + at);
+    if (inserted != Insert::Done) {
+      if (inserted == Insert::ChainFull) {
+        LOG_INF("GST", "full: a probe chain passed %u slots; wipe pending", static_cast<unsigned>(kMaxProbe));
+      } else {
+        LOG_ERR("GST", "slot write failed; wipe pending");
+      }
+      result = inserted == Insert::ChainFull ? Commit::Full : Commit::WriteFailed;
+      setWipePending();
+      break;
+    }
+    ++usedSlots_;
+    at += recordBytes(loadGlyph(batch.buffer_ + at + 4).dataLength);
+  }
+  batch.clear();
+  return result;
+}
+
+FlashGlyphStore::Commit FlashGlyphStore::markMissing(const uint32_t key) {
+  if (!open_ || !isGlyphKey(key)) return Commit::WriteFailed;
+  if (wipePending_) return Commit::Full;
+  if ((uint64_t{usedSlots_} + 1) * 100 > uint64_t{geometry_.indexSlots} * kIndexLoadPercent) {
+    setWipePending();
+    return Commit::Full;
+  }
+  switch (insert(geometry_.indexOffset, index_, geometry_.indexSlots, key, kMissing)) {
+    case Insert::Done:
+      ++usedSlots_;
+      return Commit::Stored;
+    case Insert::ChainFull:
+      setWipePending();
+      return Commit::Full;
+    case Insert::WriteFailed:
+      break;
+  }
+  LOG_ERR("GST", "slot write failed; wipe pending");
+  setWipePending();
+  return Commit::WriteFailed;
+}
+
+// The wipe word goes from erased to zero once; if even that write fails, wipe stays pending for the session.
+void FlashGlyphStore::setWipePending() {
+  if (wipePending_) return;
+  wipePending_ = true;
+  const uint32_t zero = 0;
+  if (!flash_.program(kWipeWordOffset, &zero, sizeof zero)) {
+    LOG_ERR("GST", "could not record wipe pending in flash");
+  }
+}
