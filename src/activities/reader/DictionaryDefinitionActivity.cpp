@@ -202,8 +202,8 @@ void DictionaryDefinitionActivity::wrapText() {
       uint32_t lastFit = 0;
       for (uint32_t f = 1; f <= len; f++) {
         if (f == len || (text[lineStart + f] & 0xC0) != 0x80) {  // codepoint boundary
-          if (measureSpan(fontId, text + lineStart, f,
-                          lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR) > maxWidth)
+          if (measureSpan(fontId, text + lineStart, f, lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR) >
+              maxWidth)
             break;
           lastFit = f;
         }

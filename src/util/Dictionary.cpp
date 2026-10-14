@@ -721,8 +721,7 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       const auto& synonymLocation = synonymLocations[i];
       const size_t definitionSize = std::min<uint32_t>(synonymLocation.size, MAX_DEFINITION_BYTES);
       const size_t separatorSize = combinedSize == 0 ? 0 : (htmlDefinitions ? 8 : 2);
-      const size_t labelSize =
-          htmlDefinitions ? synonymHeadwords[i].size() + 12 : synonymHeadwords[i].size() + 1;
+      const size_t labelSize = htmlDefinitions ? synonymHeadwords[i].size() + 12 : synonymHeadwords[i].size() + 1;
       if (combinedSize > MAX_DEFINITION_BYTES - separatorSize ||
           labelSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize ||
           definitionSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize - labelSize) {
