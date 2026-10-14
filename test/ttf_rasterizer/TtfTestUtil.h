@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <fstream>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -11,9 +10,14 @@
 namespace ttf_test {
 
 /// A bundled font source, relative to lib/EpdFont/builtinFonts/source.
+/// Exactly the file's bytes, with no spare capacity, so AddressSanitizer sees a read one byte past the end.
 inline std::vector<uint8_t> readFont(const std::string& relative) {
-  std::ifstream in(std::string(TTF_FONT_DIR) + "/" + relative, std::ios::binary);
-  return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  std::ifstream in(std::string(TTF_FONT_DIR) + "/" + relative, std::ios::binary | std::ios::ate);
+  if (!in) return {};
+  std::vector<uint8_t> data(static_cast<size_t>(in.tellg()));
+  in.seekg(0);
+  in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+  return data;
 }
 
 /// Every TrueType source the reader bundles (the OpenDyslexic sources are CFF).

@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -121,6 +122,96 @@ TEST(TtfCorruptFont, RandomBytesInTheDirectoryAreSafe) {
     font[random.below(directoryEnd)] = static_cast<uint8_t>(random.next());
     exercise(font, sharedRasterizer());
   }
+}
+
+namespace {
+
+uint32_t be32(const std::vector<uint8_t>& font, const size_t at) {
+  return static_cast<uint32_t>(font[at] << 24 | font[at + 1] << 16 | font[at + 2] << 8 | font[at + 3]);
+}
+
+// Where a glyph's record lies in glyf, from the intact face's loca.
+void glyphRecord(FontBytes& bytes, const Face& face, const uint16_t glyph, uint32_t* start, uint32_t* end) {
+  if (face.longLoca) {
+    *start = bytes.u32(face.loca + 4u * glyph);
+    *end = bytes.u32(face.loca + 4u * glyph + 4);
+  } else {
+    *start = 2u * bytes.u16(face.loca + 2u * glyph);
+    *end = 2u * bytes.u16(face.loca + 2u * glyph + 2);
+  }
+}
+
+}  // namespace
+
+TEST(TtfCorruptFont, DamagedGlyphsFailTheGlyphNotTheDevice) {
+  // Aimed at what a render reads: the glyph's own record, its loca and hmtx entries, maxp's limits (which size
+  // the scratch block) and head. The block is planned from the damaged face, at three pool sizes, and the
+  // glyph and its neighbours are drawn at three sizes. The tail asserts the damage reached the loader.
+  const std::vector<std::string> sources = {"Bookerly/Bookerly-Regular.ttf", "NotoSans/NotoSans-Italic.ttf",
+                                            "Inter/Inter-Bold.ttf"};
+  const uint32_t pools[] = {2048, kPoolBytesFlash, kPoolBytesSd};
+  const uint32_t sizes[] = {ppemFromPoints(8), ppemFromPoints(14), ppemFromPoints(40)};
+  Random random{20261015};
+  uint32_t rounds = 0, refused = 0, damagedFailed = 0, renders = 0;
+  for (const std::string& source : sources) {
+    const std::vector<uint8_t> original = readFont(source);
+    FontBytes intactBytes(original.data(), static_cast<uint32_t>(original.size()));
+    Face intact;
+    ASSERT_EQ(FaceStatus::Ok, parseFace(intactBytes, &intact));
+    const size_t maxp = be32(original, findRecord(original, "maxp") + 8);
+    const size_t head = be32(original, findRecord(original, "head") + 8);
+    for (int round = 0; round < 1000; ++round, ++rounds) {
+      std::vector<uint8_t> font = original;  // a copy, exactly the file's size
+      const uint16_t glyph = static_cast<uint16_t>(1 + random.below(intact.numGlyphs - 1u));
+      uint32_t start = 0, end = 0;
+      glyphRecord(intactBytes, intact, glyph, &start, &end);
+      const uint32_t kind = random.below(100);
+      if (kind < 50 && end > start) {  // the record itself
+        for (uint32_t i = 1 + random.below(8); i > 0; --i) {
+          font[intact.glyf + start + random.below(end - start)] = static_cast<uint8_t>(random.next());
+        }
+      } else if (kind < 65 || end <= start) {  // its loca entry, or the next one (its end)
+        const uint32_t entry = intact.loca + (glyph + random.below(2)) * (intact.longLoca ? 4u : 2u);
+        font[entry + random.below(intact.longLoca ? 4 : 2)] = static_cast<uint8_t>(random.next());
+      } else if (kind < 75) {  // its hmtx entry
+        const uint32_t entry = intact.hmtx + 4u * (glyph < intact.numHMetrics ? glyph : intact.numHMetrics - 1u);
+        font[entry + random.below(4)] = static_cast<uint8_t>(random.next());
+      } else if (kind < 90) {  // maxp's points and contours, which size the scratch block
+        set16(font, maxp + 6 + 2 * random.below(4), random.below(65));
+      } else {  // head: units per em, the box, the loca format
+        const uint32_t fields[] = {18, 36, 38, 40, 42, 50};
+        font[head + fields[random.below(6)] + random.below(2)] = static_cast<uint8_t>(random.next());
+      }
+      FontBytes bytes(font.data(), static_cast<uint32_t>(font.size()));
+      Face face;
+      if (parseFace(bytes, &face) != FaceStatus::Ok) {
+        ++refused;
+        continue;
+      }
+      Rasterizer rasterizer;
+      if (!rasterizer.allocate(planScratch(face, sizes[2], pools[round % 3]))) {
+        ++refused;
+        continue;
+      }
+      bool failed = false;
+      for (const uint32_t ppem : sizes) {
+        for (int neighbour = -1; neighbour <= 1; ++neighbour) {
+          const int g = glyph + neighbour;
+          if (g < 0 || g >= face.numGlyphs) continue;
+          EpdGlyph metrics{};
+          const Status status = rasterizer.render(bytes, face, static_cast<uint16_t>(g), ppem, &metrics);
+          ASSERT_TRUE(status == Status::Ok || isPermanent(status)) << statusName(status);
+          ++renders;
+          failed |= neighbour == 0 && status != Status::Ok;
+        }
+      }
+      damagedFailed += failed;
+    }
+  }
+  std::printf("damaged fonts: %u rounds, %u refused at parse or plan, %u where the damaged glyph failed, %u renders\n",
+              rounds, refused, damagedFailed, renders);
+  EXPECT_GT(damagedFailed * 5, rounds);  // over 20% of rounds broke the glyph itself: the damage reached the loader
+  EXPECT_GT(renders, rounds * 6);        // and most rounds rendered rather than being refused
 }
 
 TEST(TtfCorruptFont, HugeCoordinatesAreRefusedNotOverflowed) {
