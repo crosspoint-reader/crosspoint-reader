@@ -6,7 +6,9 @@ add_executable(TtfRasterizerTest
   FontBytesTest.cpp
   TtfFixedTest.cpp
   TtfFaceTest.cpp
+  TtfRasterizerTest.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/TtfRasterizer.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c
   ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
 )
