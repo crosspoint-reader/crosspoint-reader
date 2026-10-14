@@ -61,10 +61,7 @@ bool TxtToHtml::stream(std::string_view filename, void* readerCtx, int (*readFn)
   writeByte('\n');
   writeStr("<!DOCTYPE html>\n<html>\n<head><title>");
   std::string title = FsHelpers::getFileNameWithoutExtension(filename);
-  std::string escapedTitle;
-  escapedTitle.reserve(escapedHtmlSize(title));
-  TxtToHtml::appendEscapedHtml(escapedTitle, title);
-  writeStr(escapedTitle);
+  TxtToHtml::streamEscapedHtml(writeStr, title);
   writeStr("</title></head>\n<body>\n");
 
   bool isStart = true;
