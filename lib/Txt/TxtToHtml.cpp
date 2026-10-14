@@ -84,7 +84,7 @@ bool TxtToHtml::stream(std::string_view filename, void* readerCtx, int (*readFn)
 
       if (b == '\n') {
         pendingSpaces = 0;
-        TxtToHtml::streamEscapedHtml(writeStr, "\n");
+        writeStr("<br />");
         atLineStart = true;
         continue;
       }

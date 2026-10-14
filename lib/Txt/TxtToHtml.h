@@ -21,10 +21,6 @@ class TxtToHtml {
         case '>':
           append("&gt;");
           break;
-        case '\n':
-        case '\0':
-          append("<br />");
-          break;
         default:
           append(std::string_view(&c, 1));
           break;
