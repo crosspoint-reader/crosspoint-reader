@@ -77,6 +77,9 @@ class ComplexShaper {
   // True when `utf8` may contain a run shape() would rewrite: a byte scan
   // for the Indic blocks.
   static bool containsComplexScript(const char* utf8) { return indic::containsIndic(utf8); }
+  // containsComplexScript() for the UTF-8 sequence at `p`, for callers that
+  // scan text for other things too.
+  static bool startsComplexScript(const unsigned char* p) { return indic::startsIndic(p); }
 
   // The language shaped text is written in (BCP 47, e.g. the book's
   // dc:language; empty = unknown). Fonts can draw a script differently per
@@ -108,8 +111,10 @@ class ComplexShaper {
   // Drops the shared shaped-run cache (rebuilt on demand).
   static void releaseCache();
 
-  // release() on every live shaper plus releaseCache(): the memory-pressure
-  // sink. Returns the bytes freed.
+  // release() on every live shaper plus releaseCache() and the shared glyph
+  // buffer: the memory-pressure sink and SdCardFont::releaseResidentCaches().
+  // Destroying the last shaper frees the cache and buffer too. Returns the
+  // bytes freed.
   static size_t releaseAll();
 
   // Layout memo: between beginMemo() and endMemo() every shaped run is also

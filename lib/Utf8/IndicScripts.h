@@ -75,12 +75,15 @@ constexpr const ScriptInfo* scriptOf(const uint32_t cp) {
 
 constexpr size_t indexOf(const ScriptInfo& script) { return static_cast<size_t>(&script - SCRIPTS); }
 
-// True when `utf8` contains any codepoint of the Indic blocks. A byte scan:
+// True when the UTF-8 at `p` starts a codepoint of the Indic blocks:
 // U+0900-U+0DFF encode as E0 A4 xx .. E0 B7 xx.
+inline bool startsIndic(const unsigned char* p) { return p[0] == 0xE0 && p[1] >= 0xA4 && p[1] <= 0xB7; }
+
+// True when `utf8` contains any codepoint of the Indic blocks. A byte scan.
 inline bool containsIndic(const char* utf8) {
   if (utf8 == nullptr) return false;
   for (const auto* p = reinterpret_cast<const unsigned char*>(utf8); *p; ++p) {
-    if (p[0] == 0xE0 && p[1] >= 0xA4 && p[1] <= 0xB7) return true;
+    if (startsIndic(p)) return true;
   }
   return false;
 }

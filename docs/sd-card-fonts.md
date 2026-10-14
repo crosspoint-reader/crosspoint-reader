@@ -211,7 +211,9 @@ smaller than 384 KB, only fonts whose tables are 16 KB or less (Tamil,
 Gurmukhi, Malayalam, Sinhala Sans) are shaped. Opening
 a chapter for the first time takes longer than a Latin one, because every
 word is shaped while the chapter is laid out. Page turns do no shaping: the
-shaped words are stored with the chapter's cached layout.
+shaped words are stored with the chapter's cached layout. If the device runs
+short of memory while a chapter is laid out, some of its words may stay
+unshaped; **Delete Book Cache** lays the chapter out again.
 
 ## Available Pre-Built Fonts
 

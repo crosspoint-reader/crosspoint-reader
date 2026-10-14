@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <iterator>
 
+#include "Fnv1a.h"
 #include "ShapingTokens.h"
 
 namespace {
@@ -477,31 +478,60 @@ int32_t TtfEpdFont::advanceThunk(void* ctx, const uint32_t glyph) {
   return f->ready && f->ft.metricsGlyph26_6(glyph, f->owner->size26_6_, metrics) ? metrics.advance26_6 : -1;
 }
 
+bool TtfEpdFont::readSource(const Source& src, const uint32_t offset, uint8_t* buffer, const uint32_t count,
+                            const bool noteFailure) {
+  if (!src.streamed) {
+    if (offset > src.len || count > src.len - offset) return false;
+    memcpy(buffer, src.data + offset, count);
+    return true;
+  }
+  if (offset > src.fileSize || count > src.fileSize - offset) return false;
+  if (src.read(src.ctx, offset, buffer, count) == count) return true;
+  if (noteFailure) ComplexShaper::noteSourceUnavailable();
+  return false;
+}
+
+bool TtfEpdFont::readSfntHeader(const Source& src, const bool noteFailure, uint32_t* base, uint8_t (&header)[12]) {
+  *base = 0;
+  if (!readSource(src, 0, header, sizeof(header), noteFailure)) return false;
+  if (ot::Table(header, sizeof(header)).u32(0) != ot::tag("ttcf")) return true;
+  uint8_t first[4];
+  if (!readSource(src, 12, first, sizeof(first), noteFailure)) return false;
+  *base = ot::Table(first, sizeof(first)).u32(0);
+  return readSource(src, *base, header, sizeof(header), noteFailure);
+}
+
+uint32_t TtfEpdFont::contentKey() const {
+  uint32_t hash = fnv1a::OFFSET_BASIS;
+  for (const Source& src : sources_) {
+    const auto size = static_cast<uint32_t>(src.present ? (src.streamed ? src.fileSize : src.len) : 0);
+    hash = fnv1a::hash(&size, sizeof(size), hash);
+    uint32_t base;
+    uint8_t header[12];
+    if (!src.present || !readSfntHeader(src, false, &base, header)) continue;
+    hash = fnv1a::hash(header, sizeof(header), hash);
+    // Real fonts have a few dozen tables; the cap bounds a corrupt count.
+    const uint32_t numTables = std::min<uint32_t>(ot::Table(header, sizeof(header)).u16(4), 256);
+    uint8_t records[16 * 16];
+    for (uint32_t done = 0; done < numTables;) {
+      const uint32_t count = std::min<uint32_t>(numTables - done, sizeof(records) / 16);
+      if (!readSource(src, base + sizeof(header) + 16 * done, records, 16 * count, false)) break;
+      hash = fnv1a::hash(records, 16 * count, hash);
+      done += count;
+    }
+  }
+  return hash | 1u;
+}
+
 uint8_t* TtfEpdFont::loadTable(void* ctx, const uint32_t tag, uint32_t* length) {
   const Source* src = static_cast<const Source*>(ctx);
   const auto readAt = [src](const uint32_t offset, uint8_t* buf, const uint32_t count) {
-    if (!src->streamed) {
-      if (offset > src->len || count > src->len - offset) return false;
-      memcpy(buf, src->data + offset, count);
-      return true;
-    }
-    if (offset > src->fileSize || count > src->fileSize - offset) return false;
-    if (src->read(src->ctx, offset, buf, count) == count) return true;
-    ComplexShaper::noteSourceUnavailable();
-    return false;
+    return readSource(*src, offset, buf, count, true);
   };
 
-  // sfnt directory; a collection (.ttc) is read through its first font, the
-  // face FreeType renders.
+  uint32_t base;
   uint8_t header[12];
-  if (!readAt(0, header, sizeof(header))) return nullptr;
-  uint32_t base = 0;
-  if (ot::Table(header, sizeof(header)).u32(0) == ot::tag("ttcf")) {
-    uint8_t first[4];
-    if (!readAt(12, first, sizeof(first))) return nullptr;
-    base = ot::Table(first, sizeof(first)).u32(0);
-    if (!readAt(base, header, sizeof(header))) return nullptr;
-  }
+  if (!readSfntHeader(*src, true, &base, header)) return nullptr;
   const uint16_t numTables = ot::Table(header, sizeof(header)).u16(4);
   for (uint16_t i = 0; i < numTables; ++i) {
     uint8_t record[16];

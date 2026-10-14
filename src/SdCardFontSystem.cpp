@@ -295,15 +295,6 @@ void SdCardFontSystem::unloadTtf(GfxRenderer& renderer) {
   ttfPointSize_ = 0;
 }
 
-uint32_t SdCardFontSystem::ttfFilesKey() const {
-  uint32_t hash = fnv1a::OFFSET_BASIS;
-  for (const TtfSource& source : ttfSources_) {
-    const auto size = static_cast<uint32_t>(source.present ? source.size : 0);
-    hash = fnv1a::hash(&size, sizeof(size), hash);
-  }
-  return hash | 1u;
-}
-
 bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& path) {
   if (style >= 4) return false;
   // Small fonts are read fully into RAM (fastest, fewest SD reads; PSRAM when
@@ -480,7 +471,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     renderer.removeFont(ttfFontId_);
     if (ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs)) {
       ttf_->build(" ");
-      ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttfFilesKey());
+      ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttf_->contentKey());
       renderer.insertFont(ttfFontId_, ttf_->family());
       renderer.registerTtfFont(ttfFontId_, ttf_.get());
       ttfPointSize_ = size;
@@ -537,7 +528,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // Seed the regular face's glyph cache; other styles + glyphs fault on demand.
   ttf_->build(" ");
 
-  ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttfFilesKey());
+  ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttf_->contentKey());
   renderer.insertFont(ttfFontId_, ttf_->family());
   renderer.registerTtfFont(ttfFontId_, ttf_.get());
   ttfFamily_ = family.name;

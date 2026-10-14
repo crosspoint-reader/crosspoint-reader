@@ -202,9 +202,11 @@ void SdCardFont::releaseResidentCaches() {
     if (!styles_[i].present) continue;
     freeStyleMiniData(styles_[i]);  // also frees mini kern and restores the stub EpdFontData
     freeStyleLigatures(styles_[i]);
-    if (styles_[i].shaper) styles_[i].shaper->release();
     applyGlyphMissCallback(i);  // keep the on-demand miss path alive on the stub
   }
+  // Shaping state is shared by every font (faces, run cache, glyph buffer),
+  // so it goes even when this font does not shape.
+  ComplexShaper::releaseAll();
 }
 
 void SdCardFont::freeAll() {

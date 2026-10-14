@@ -557,6 +557,11 @@ ComplexShaper::~ComplexShaper() {
   if (prev_ != nullptr) prev_->next_ = next_;
   if (next_ != nullptr) next_->prev_ = prev_;
   if (gShapers == this) gShapers = next_;
+  // The last shaper leaves no one to use the shared run cache and buffer.
+  if (gShapers == nullptr) {
+    releaseCache();
+    releaseBuffer();
+  }
 }
 
 void ComplexShaper::setBlobSource(const BlobLoader loader, void* ctx, const uint32_t contentKey) {

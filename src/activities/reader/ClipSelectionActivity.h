@@ -30,6 +30,8 @@ class ClipSelectionActivity final : public Activity {
 
  private:
   struct WordBox {
+    static constexpr uint16_t NO_DISPLAY = UINT16_MAX;
+
     int16_t x = 0;
     int16_t y = 0;
     int16_t width = 0;
@@ -38,21 +40,21 @@ class ClipSelectionActivity final : public Activity {
     uint8_t pageOffset = 0;
     int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
+    uint16_t display = NO_DISPLAY;  // index into displayForms
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
-    const char* text = nullptr;     // logical text, for clipping and lookup
-    const char* display = nullptr;  // TextBlock::displayForm(): what layout measured, or nullptr
+    const char* text = nullptr;  // logical text, for clipping and lookup
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;
-
-    GfxRenderer::LaidOutText laidOut() const { return {text, display}; }
   };
 
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 
   bool extractWords();
+  uint16_t storeDisplayForm(const char* display);
+  GfxRenderer::LaidOutText laidOut(const WordBox& word) const;
   int closestInRow(uint16_t row, int centerX) const;
   int wordAt(int x, int y) const;
   int dragWordAt(int x, int y) const;
@@ -95,6 +97,11 @@ class ClipSelectionActivity final : public Activity {
   int lineHeight = 0;
   std::unique_ptr<WordBox[]> words;
   size_t wordCount = 0;
+  // TextBlock::displayForm() of the words that have one (what layout
+  // measured), indexed by WordBox::display. Allocated only when a word has
+  // one, so pages without complex scripts pay nothing per word.
+  std::unique_ptr<const char*[]> displayForms;
+  uint16_t displayFormCount = 0;
   int selected = 0;
   int rangeStart = -1;
   uint8_t currentPageOffset = 0;

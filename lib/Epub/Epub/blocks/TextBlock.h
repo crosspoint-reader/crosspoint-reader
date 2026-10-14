@@ -125,7 +125,8 @@ class TextBlock final : public Block {
   // NUL-terminated by construction; safe to pass to C APIs directly.
   const char* wordText(const uint16_t i) const { return textArr + textOffArr[i]; }
   // The form layout measured word i in (GfxRenderer::resolveForDisplay), or
-  // nullptr when it measured wordText(i) itself.
+  // nullptr when it measured wordText(i) and needs no stored form, or layout
+  // dropped a form that measured differently.
   const char* displayForm(const uint16_t i) const {
     return displayPresent && displayOffArr[i] != NO_DISPLAY ? displayArr + displayOffArr[i] : nullptr;
   }

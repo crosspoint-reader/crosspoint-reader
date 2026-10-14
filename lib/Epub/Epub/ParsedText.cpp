@@ -1790,12 +1790,23 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // Complex-script words keep the form they were measured in (shaped, via
   // this layout's shaping memo) in the page cache, so page turns draw exactly
-  // that without shaping. Empty when the line has none.
+  // that without shaping. Empty when the line has none. A form that does not
+  // fill the word's measured width (this pass shaped differently, e.g. the
+  // memo was full and memory ran short; or ruby widened the slot) is dropped,
+  // and the word resolves when drawn.
   std::vector<std::string> lineDisplay;
   for (size_t i = 0; i < lineWordCount; i++) {
     if (!ComplexShaper::containsComplexScript(lineWords[i].c_str())) continue;
     if (lineDisplay.empty()) lineDisplay.resize(lineWordCount);
-    renderer.resolveForDisplay(fontId, lineWords[i].c_str(), lineWordStyles[i], lineDisplay[i]);
+    std::string& form = lineDisplay[i];
+    if (!renderer.resolveForDisplay(fontId, lineWords[i].c_str(), lineWordStyles[i], form)) continue;
+    const int measured = willReorder ? reorderedWidthsScratch[i] : wordWidths[lastBreakAt + i];
+    const int formWidth = renderer.getTextAdvanceX(fontId, GfxRenderer::LaidOutText{lineWords[i].c_str(), form.c_str()},
+                                                   lineWordStyles[i], blockStyle.characterSpacing);
+    if (formWidth != measured) {
+      LOG_DBG("PTX", "Display form measures %d px, layout %d px: resolved when drawn", formWidth, measured);
+      form.clear();
+    }
   }
 
   // Fast path: no word on this line carries focus emphasis, so pass empty boundary/suffixX

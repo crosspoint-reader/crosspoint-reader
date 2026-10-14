@@ -363,10 +363,12 @@ class GfxRenderer {
 
   // The form getTextAdvanceX measures a complex-script `text` in: shaped
   // glyph tokens (ShapingTokens.h), or reordered vowel signs when the font
-  // cannot shape. Returns false, leaving `out` untouched, when that form is
-  // `text` itself or when a shaping font could not shape `text` just now (the
-  // page then shapes it when drawn). Tied to this font and style; layout
-  // stores it in the page cache as a LaidOutText display form.
+  // cannot shape. A font that shapes but could not shape `text` just now
+  // (e.g. memory ran short) gets the unshaped form, so the page draws the width
+  // layout measured. Returns false, leaving `out` untouched, when `text`
+  // draws as it is: a font that cannot shape needs no reordering, or the font
+  // does not draw the script. Tied to this font and style; layout stores it
+  // in the page cache as a LaidOutText display form.
   bool resolveForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
 
   // While one of these is alive, repeated runs shape once (see
@@ -382,10 +384,11 @@ class GfxRenderer {
  private:
   // drawText and getTextAdvanceX once `text` is the visual stream (bidi
   // resolved, complex scripts shaped) and `resolvedFontId` the font it draws in.
-  void drawVisualText(int fontId, int resolvedFontId, int x, int y, const char* text, bool black,
+  // `shapedText`: `text` may hold shaping tokens; other text skips token handling.
+  void drawVisualText(int fontId, int resolvedFontId, int x, int y, const char* text, bool shapedText, bool black,
                       EpdFontFamily::Style style, int8_t tracking) const;
-  int measureVisualText(int resolvedFontId, const char* text, EpdFontFamily::Style style, int8_t tracking,
-                        TextMeasureMode mode) const;
+  int measureVisualText(int resolvedFontId, const char* text, bool shapedText, EpdFontFamily::Style style,
+                        int8_t tracking, TextMeasureMode mode) const;
 
  public:
   int getFontAscenderSize(int fontId) const;

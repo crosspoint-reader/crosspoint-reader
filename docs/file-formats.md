@@ -102,10 +102,11 @@ match. TextBlock's former `hasFocus` byte became a flags byte: bit 1 adds a
 a `display[]` blob that hold each complex-script word in the form layout
 measured it in (ShapingTokens.h glyph, advance and offset tokens, or reordered
 vowel signs from a font without shaping data), so page renders draw exactly
-that without running the shaper. Words without a display entry, among them
-words a shaping font could not shape while memory was short, are resolved from
-`text[]` when drawn. Older completed and partial section caches rebuild
-automatically; book metadata and reading progress are kept.
+that without running the shaper. A word a shaping font could not shape while
+memory was short keeps the unshaped form it was measured in. Words without a
+display entry are resolved from `text[]` when drawn. Older completed and
+partial section caches rebuild automatically; book metadata and reading
+progress are kept.
 
 ### Version 55
 
