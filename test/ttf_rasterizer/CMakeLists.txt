@@ -1,12 +1,22 @@
 # The TTF engine (lib/EpdFont/ttf): FontBytes, face parsing, the integer TrueType loader and the vendored
 # ftgrays, checked against FreeType itself over every bundled TTF.
 
+# FreeType for the comparison only, never the firmware: the SDK's copy, compiled through its own build
+# wrappers as FreeInkFont's host tests compile it. Third-party code, so its warnings are not ours.
+set(FREEINK_FONT ${REPO_ROOT}/freeink-sdk/libs/font/FreeInkFont)
+file(GLOB FREETYPE_HOST_SOURCES ${FREEINK_FONT}/src/freetype/ft_*.c)
+add_library(freetype_host STATIC ${FREETYPE_HOST_SOURCES})
+target_include_directories(freetype_host PUBLIC ${FREEINK_FONT}/third_party/freetype/include)
+target_compile_options(freetype_host PRIVATE -w)
+
 add_executable(TtfRasterizerTest
   TtfGraysTest.cpp
   FontBytesTest.cpp
   TtfFixedTest.cpp
   TtfFaceTest.cpp
   TtfRasterizerTest.cpp
+  TtfVsFreeTypeTest.cpp
+  FreeTypeReference.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfRasterizer.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c
@@ -28,6 +38,7 @@ target_compile_definitions(TtfRasterizerTest PRIVATE
 
 target_link_libraries(TtfRasterizerTest PRIVATE
   crosspoint_test_common
+  freetype_host
   GTest::gtest_main
 )
 
