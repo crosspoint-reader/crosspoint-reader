@@ -15,12 +15,33 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
+#include "util/OpdsFeedError.h"
 #include "util/OpdsFilename.h"
 #include "util/PluginHttp.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace fui = freeink::ui;
+
+namespace {
+// Tells a dead server from a catalog that wants a password; both are a bare
+// "failed" to the fetch itself. Read right after a failed fetch.
+StrId feedFailureMessage() {
+  switch (classifyFeedFailure(HttpDownloader::lastStatus(), HttpDownloader::lastAnswerRedirected())) {
+    case OpdsFeedError::Unreachable:
+      return StrId::STR_FEED_UNREACHABLE;
+    case OpdsFeedError::Unauthorized:
+      return StrId::STR_FEED_UNAUTHORIZED;
+    case OpdsFeedError::Redirected:
+      return StrId::STR_FEED_REDIRECTED;
+    case OpdsFeedError::ServerError:
+      return StrId::STR_FEED_SERVER_ERROR;
+    case OpdsFeedError::Other:
+      break;
+  }
+  return StrId::STR_FETCH_FEED_FAILED;
+}
+}  // namespace
 
 OpdsBookBrowserActivity::OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  OpdsServer server)
@@ -106,8 +127,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   OpdsParser parser;
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
-      fail(StrId::STR_FETCH_FEED_FAILED);
+    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password, server.activeCustomHeaders())) {
+      fail(feedFailureMessage());
       return;
     }
   }
@@ -229,7 +250,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   releaseEntries();
 
   // downloadFile() (CatalogActivity) releases font caches and checks the TLS heap floor.
-  const auto result = downloadFile(downloadUrl, filename, server.username, server.password);
+  const auto result =
+      downloadFile(downloadUrl, filename, server.username, server.password, server.activeCustomHeaders());
   if (result == HttpDownloader::OK) {
     clearBookCache(filename);
     library::markLibraryIndexDirty();

@@ -51,7 +51,7 @@ Response:
 | `rssi` | number | Wi-Fi RSSI in dBm; `0` in AP mode |
 | `freeHeap` | number | Free heap in bytes |
 | `uptime` | number | Seconds since boot |
-| `hardwareMac` | string | Factory MAC, stable across Wi-Fi modes; omitted if unavailable |
+| `deviceId` | string | With `?plugin=<name>`: 64 hex chars, stable per device and plugin (SHA-256 of an on-device NVS secret and the name); omitted if NVS is unavailable |
 | `device` | string | `"X3"` or `"X4"` hardware detection |
 
 ## File Management
@@ -82,6 +82,10 @@ Response:
 Hidden dotfiles are omitted unless the device setting `showHiddenFiles` is
 enabled. `System Volume Information` and `XTCache` are always hidden/protected.
 
+The saved-credential stores (`/.crosspoint/wifi.json`, `opds.json`,
+`koreader.json`) can never be downloaded, uploaded, renamed, moved, deleted or
+written by a plugin over the network, however the path is spelled.
+
 ### `GET /download`
 
 Downloads a file from the SD card.
@@ -96,8 +100,8 @@ Query parameters:
 |-----------|----------|-------------|
 | `path` | Yes | File path to download |
 
-Protected dotfiles, `System Volume Information`, and `XTCache` cannot be
-downloaded. EPUB files are served as `application/epub+zip`; other files use
+Protected dotfiles, `System Volume Information`, `XTCache`, and the credential
+stores cannot be downloaded. EPUB files are served as `application/epub+zip`; other files use
 `application/octet-stream`.
 
 ### `POST /upload`
@@ -521,8 +525,9 @@ encrypted but the peer is not verified (the transport ships no CA bundle).
 ### `GET /api/plugins`
 
 Installed plugins that ship a `plugin.js`:
-`[{"name":"<folder>","title":"<title>","mount":"settings"}, ...]`. `title` and
-`mount` come from the plugin's `manifest.json` when present.
+`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings"}, ...]`.
+`dir` is where the plugin is installed (plugins keep their own files there);
+`title` and `mount` come from the plugin's `manifest.json` when present.
 
 ### `GET /plugin?name=<plugin>&file=<file>`
 
@@ -556,12 +561,26 @@ the result fields, or `200 {"error":"..."}`.
 | --- | --- | --- |
 | `random` | `len` (default 16, max 4096) | `data` |
 | `sha1` | `data` | `data` (20 bytes) |
+| `sha256` | `data` | `data` (32 bytes) |
 | `aesenc` | `key`, `iv` (16 bytes each), `data` | `data`: AES-128-CBC with PKCS#7 padding |
 | `aesdec` | `key`, `iv`, `data` (block-aligned) | `data`: AES-128-CBC, padding left in place |
 | `keygen` | none | `public` (SPKI DER), `private` (PKCS#8 DER): RSA key pair |
 | `pubencrypt` | `cert` (X.509 DER), `data` | `data`: RSAES-PKCS1-v1_5 to the certificate's key |
 | `sign` | `private` (PKCS#8 DER), `hash` (20 bytes) | `data` (128 bytes): raw RSA signature |
+| `rsadec` | `private` (PKCS#8 DER), `data` (one modulus block) | `data`: raw RSA private-key result, padding left in place |
 | `pkcs12` | `data` (the bundle), `password` | `key`, `cert` (DER) |
+
+### `POST /api/book-key`
+
+Stores a protected book's content key for the reader. Body:
+`{"path":"/abs/book.epub","key":"<base64, 16 bytes>","expires":<epoch seconds, optional>}`.
+The device wraps the key with AES-256-GCM under a key derived from its NVS
+secret and writes `<path>.key`; the header (including `expires`) is
+authenticated, so the file only opens on this reader and its loan date cannot
+be edited. The reader enforces `expires` when the book opens.
+
+- **Success:** `200 {"ok":true}`.
+- **Errors:** `400 {"error":"bad path/key"}`; `500 {"error":"cannot store key"}`.
 
 ### `POST /api/fetch`
 
@@ -593,7 +612,8 @@ browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...
 Writes one small file to SD. The content is sent as a multipart file part
 (`api.writeFile()` builds it), so binary data, including NUL bytes, arrives
 intact. It streams to `<path>.tmp` and replaces `path` only after a complete,
-non-empty body.
+non-empty body. `path` must be absolute, without `..`, and not a credential
+store. A plugin keeps its own files in its install folder (`api.dir`).
 
 - **Success:** `200 {"ok":true,"bytes":N}`.
 - **Errors:** `400` (`bad path`, `empty body`, `missing file part`,

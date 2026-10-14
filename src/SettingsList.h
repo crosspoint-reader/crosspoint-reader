@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <HalClock.h>
+#include <HalFrontlight.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
@@ -151,6 +152,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
   SettingInfo s;
   s.nameId = StrId::STR_DICTIONARY;
+  s.key = "dictionaryName";  // web settings API; persisted by name, not by the generic loop
   s.type = SettingType::ENUM;
   s.enumStringValues.reserve(folderNames.size() + 1);
   s.enumStringValues.push_back(I18N.get(StrId::STR_NONE_OPT));
@@ -181,10 +183,66 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 }
 
 inline std::vector<StrId> buildLongPressMenuValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
-                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
-  const size_t count = BoardConfig::hasHomeKey() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  std::vector<StrId> values = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
+                               StrId::STR_DICTIONARY};
+  values.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
+  if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
+  values.push_back(StrId::STR_SAVE_CLIPPING);
+  values.push_back(StrId::STR_FOOTNOTES);
+  return values;
+}
+
+inline uint8_t longPressMenuDisplayValue() {
+  const uint8_t raw = SETTINGS.longPressMenuFunction;
+  if (raw <= CrossPointSettings::LP_MENU_DICTIONARY) return raw;
+  if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
+    return BoardConfig::hasHomeKey() ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_DISABLED;
+  }
+  if (raw < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT) return BoardConfig::hasHomeKey() ? raw : raw - 1;
+  return CrossPointSettings::LP_MENU_DISABLED;
+}
+
+inline void setLongPressMenuFromDisplayValue(const uint8_t displayValue) {
+  if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) {
+    SETTINGS.longPressMenuFunction = displayValue;
+  } else {
+    SETTINGS.longPressMenuFunction = BoardConfig::hasHomeKey() ? displayValue : displayValue + 1;
+  }
+}
+
+inline SettingInfo buildLongPressMenuSetting() {
+  return SettingInfo::DynamicEnum(StrId::STR_LONG_PRESS_MENU, buildLongPressMenuValues(), longPressMenuDisplayValue,
+                                  setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
+}
+
+inline std::vector<StrId> buildShortPowerButtonValues() {
+  std::vector<StrId> values = {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                               StrId::STR_FOOTNOTES};
+  values.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  if (BoardConfig::hasTouch()) values.push_back(StrId::STR_CONFIRM);
+  values.push_back(StrId::STR_SAVE_CLIPPING);
+  return values;
+}
+
+inline uint8_t shortPowerButtonDisplayValue() {
+  const uint8_t raw = SETTINGS.shortPwrBtn;
+  if (raw <= CrossPointSettings::FOOTNOTES) return raw;
+  if (raw == CrossPointSettings::CREATE_CLIPPING) return BoardConfig::hasTouch() ? 6 : 5;
+  if (raw == CrossPointSettings::PWR_CONFIRM && BoardConfig::hasTouch()) return 5;
+  return CrossPointSettings::IGNORE;
+}
+
+inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
+  if (!BoardConfig::hasTouch() && displayValue == 5) {
+    SETTINGS.shortPwrBtn = CrossPointSettings::CREATE_CLIPPING;
+    return;
+  }
+  SETTINGS.shortPwrBtn = displayValue;
+}
+
+inline SettingInfo buildShortPowerButtonSetting() {
+  return SettingInfo::DynamicEnum(StrId::STR_SHORT_PWR_BTN, buildShortPowerButtonValues(), shortPowerButtonDisplayValue,
+                                  setShortPowerButtonFromDisplayValue, "shortPwrBtn", StrId::STR_CAT_CONTROLS);
 }
 
 inline std::vector<StrId> homeThemeValues() {
@@ -204,8 +262,14 @@ inline std::vector<StrId> homeThemeValues() {
 // the font-family entry is replaced in that copy with a registry-aware version.
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
+// forPersistence: fromJson()/toJson() pass true so the runtime frontlight probe
+// cannot drop a persisted key. Frontlight.present() is false until
+// Frontlight.begin() runs the I2C probe, which happens AFTER SETTINGS.loadFromFile();
+// filtering the persistence list on it would fail to restore (and later overwrite)
+// STR_RESTORE_LIGHT_ON_WAKE on frontlit EEGO A4 units. The UI list still filters it.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                bool forPersistence = false) {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -318,7 +382,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_READER_MENU_STYLE, &CrossPointSettings::readerMenuStyle,
                           {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                           StrId::STR_CAT_READER),
-        // --- Controls ---
+    // --- Controls ---
+#if FREEINK_CAP_HAPTIC
+        SettingInfo::Enum(StrId::STR_VIBRATION, &CrossPointSettings::vibration,
+                          {StrId::STR_VIBRATION_TOUCH, StrId::STR_VIBRATION_TOUCH_PAGE, StrId::STR_STATE_OFF},
+                          "vibration", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_HAPTIC_INTENSITY, &CrossPointSettings::hapticIntensity,
+                          {StrId::STR_HAPTIC_LOW, StrId::STR_HAPTIC_MEDIUM, StrId::STR_HAPTIC_HIGH}, "hapticIntensity",
+                          StrId::STR_CAT_CONTROLS),
+#endif
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT,
                            StrId::STR_PREV_PREV},
@@ -344,22 +416,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                          buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
+        buildLongPressMenuSetting(),
         // Erased below unless the board is an X4 Pro.
         SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
-#if FREEINK_CAP_TOUCH
-        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
-                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#endif
+        buildShortPowerButtonSetting(),
         // Erased below unless the QMI8658 IMU is present (X3).
         SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                           {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
@@ -429,6 +490,44 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koServerUrl", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_1_NAME, [] { return KOREADER_STORE.getCustomHeaders()[0].name; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(0, v, KOREADER_STORE.getCustomHeaders()[0].value);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader1Name", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_1_VALUE, [] { return KOREADER_STORE.getCustomHeaders()[0].value; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(0, KOREADER_STORE.getCustomHeaders()[0].name, v);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader1Value", StrId::STR_KOREADER_SYNC)
+            .withObfuscated(),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_2_NAME, [] { return KOREADER_STORE.getCustomHeaders()[1].name; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(1, v, KOREADER_STORE.getCustomHeaders()[1].value);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader2Name", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_2_VALUE, [] { return KOREADER_STORE.getCustomHeaders()[1].value; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(1, KOREADER_STORE.getCustomHeaders()[1].name, v);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader2Value", StrId::STR_KOREADER_SYNC)
+            .withObfuscated(),
+        SettingInfo::DynamicEnum(
+            StrId::STR_SERVER_TYPE, {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC_SERVER, StrId::STR_OTHER},
+            [] { return static_cast<uint8_t>(KOREADER_STORE.getServerType()); },
+            [](uint8_t v) {
+              KOREADER_STORE.setServerType(static_cast<KOReaderServerType>(v));
+              KOREADER_STORE.saveToFile();
+            },
+            "koServerType", StrId::STR_KOREADER_SYNC),
         SettingInfo::DynamicEnum(
             StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
@@ -453,6 +552,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koSyncBehavior", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicEnum(
+            StrId::STR_SYNC_CLIPPINGS, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+            [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncClippings()); },
+            [](uint8_t v) {
+              if (KOREADER_STORE.getSyncClippings() == (v != 0)) return;
+              KOREADER_STORE.setSyncClippings(v != 0);
+              KOREADER_STORE.saveToFile();
+            },
+            "koSyncClippings", StrId::STR_KOREADER_SYNC),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),
@@ -503,7 +611,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     };
     // Double-click power frontlight shortcut only exists on the X4 Pro.
     if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
-    // Tilt page turn needs the QMI8658 IMU (X3).
+    // Tilt page turn needs an IMU with a gyroscope.
     if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
     return v;
   }();
@@ -543,6 +651,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     s.nameId == StrId::STR_SUNLIGHT_FADING_FIX ||
                                     s.nameId == StrId::STR_BACK_SHORT_TO_FILE_BROWSER;
                            }),
+            v.end());
+  }
+  // Frontlit and lightless variants of a board share one binary (EEGO A4);
+  // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
+  // has not run at load time, so persistence must keep the key (forPersistence).
+  if (!forPersistence && !Frontlight.present()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());
   }
   if (registry && registry->getFamilyCount() > 0) {
