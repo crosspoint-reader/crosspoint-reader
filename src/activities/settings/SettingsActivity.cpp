@@ -90,10 +90,9 @@ void SettingsActivity::rebuildSettings() {
 
   auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
-  size_t count = 0;
-  for (const auto& setting : all) {
-    if (sectionFor(setting) == section && showOnDevice(setting)) ++count;
-  }
+  const size_t count = std::count_if(all.begin(), all.end(), [this](const SettingInfo& setting) {
+    return sectionFor(setting) == section && showOnDevice(setting);
+  });
   settings.clear();
   settings.reserve(count + EXTRA_ROWS_PER_SECTION);
 
