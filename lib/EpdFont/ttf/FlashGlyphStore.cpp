@@ -17,17 +17,12 @@ namespace {
 
 // Loads from mapped flash. Each is 4-byte aligned: mappings start on a page, and every offset the store
 // reads at is a multiple of 4. Saying so lets the compiler emit plain loads; without it RISC-V calls
-// memcpy for every field, which costs more than the lookup itself.
+// memcpy for every field, which costs more than the lookup itself. A record's EpdGlyph is read in place
+// (recordGlyph()) for the same reason: copying 16 bytes out is a memcpy call too.
 uint32_t flashU32(const uint8_t* bytes) {
   uint32_t value;
   std::memcpy(&value, __builtin_assume_aligned(bytes, 4), sizeof value);
   return value;
-}
-
-EpdGlyph flashGlyph(const uint8_t* bytes) {
-  EpdGlyph glyph;
-  std::memcpy(&glyph, __builtin_assume_aligned(bytes, 4), sizeof glyph);
-  return glyph;
 }
 
 Slot flashSlot(const uint8_t* table, const uint32_t i) {
@@ -269,7 +264,7 @@ bool FlashGlyphStore::styleInfo(const uint8_t style, StyleInfo& out) const {
 bool FlashGlyphStore::plausibleRecord(const uint32_t offset) const {
   if (offset % 4 != 0 || offset > geometry_.logSize || geometry_.logSize - offset < kRecordHeaderBytes) return false;
   if (!isGlyphKey(flashU32(log_ + offset))) return false;
-  const EpdGlyph glyph = flashGlyph(log_ + offset + 4);
+  const EpdGlyph& glyph = recordGlyph(offset);
   return glyph.dataLength <= kMaxBitmapBytes && glyph.dataLength == glyphDataBytes(glyph.width, glyph.height, true) &&
          glyph.dataOffset == offset + kRecordHeaderBytes && recordBytes(glyph.dataLength) <= geometry_.logSize - offset;
 }
@@ -278,7 +273,7 @@ uint32_t FlashGlyphStore::scanLog() const {
   const uint32_t size = geometry_.logSize;
   uint32_t offset = 0;
   for (;;) {
-    while (plausibleRecord(offset)) offset += recordBytes(flashGlyph(log_ + offset + 4).dataLength);
+    while (plausibleRecord(offset)) offset += recordBytes(recordGlyph(offset).dataLength);
     // The walk stopped at an erased key, a torn record or the end. A cut write spans at most one record, and
     // can have left programmed bytes after the stop, even behind a key that still reads erased.
     const uint32_t window = size - offset < kMaxRecordBytes ? size : offset + kMaxRecordBytes;
@@ -373,9 +368,9 @@ const EpdGlyph* FlashGlyphStore::validRecord(const uint32_t key, const uint32_t 
   if (dataOffset < kRecordHeaderBytes || dataOffset > logUsed_ || dataOffset % 4 != 0) return nullptr;
   const uint32_t offset = dataOffset - kRecordHeaderBytes;
   if (flashU32(log_ + offset) != key || !plausibleRecord(offset)) return nullptr;
-  const auto* glyph = reinterpret_cast<const EpdGlyph*>(log_ + offset + 4);
-  if (recordBytes(glyph->dataLength) > logUsed_ - offset) return nullptr;
-  return glyph;
+  const EpdGlyph& glyph = recordGlyph(offset);
+  if (recordBytes(glyph.dataLength) > logUsed_ - offset) return nullptr;
+  return &glyph;
 }
 
 FlashGlyphStore::Lookup FlashGlyphStore::find(const uint32_t key, const EpdGlyph** glyph) const {

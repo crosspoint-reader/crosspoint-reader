@@ -153,6 +153,10 @@ class FlashGlyphStore {
  private:
   enum class Insert : uint8_t { Done, ChainFull, WriteFailed };
 
+  // The EpdGlyph of the record at `offset` in the log, read in place (4-byte aligned in mapped flash).
+  const EpdGlyph& recordGlyph(const uint32_t offset) const {
+    return *reinterpret_cast<const EpdGlyph*>(__builtin_assume_aligned(log_ + offset + 4, 4));
+  }
   bool plausibleRecord(uint32_t offset) const;
   const EpdGlyph* validRecord(uint32_t key, uint32_t dataOffset) const;
   uint32_t scanLog() const;
