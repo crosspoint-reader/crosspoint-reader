@@ -3,6 +3,8 @@
 
 add_executable(TtfRasterizerTest
   TtfGraysTest.cpp
+  FontBytesTest.cpp
+  TtfFixedTest.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c
   ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
 )
