@@ -12,6 +12,7 @@
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
+#include "TxtToHtml.h"
 
 namespace {
 
@@ -721,7 +722,8 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       const auto& synonymLocation = synonymLocations[i];
       const size_t definitionSize = std::min<uint32_t>(synonymLocation.size, MAX_DEFINITION_BYTES);
       const size_t separatorSize = combinedSize == 0 ? 0 : (htmlDefinitions ? 8 : 2);
-      const size_t labelSize = htmlDefinitions ? synonymHeadwords[i].size() + 12 : synonymHeadwords[i].size() + 1;
+      const size_t labelSize =
+          htmlDefinitions ? TxtToHtml::escapedHtmlSize(synonymHeadwords[i]) + 12 : synonymHeadwords[i].size() + 1;
       if (combinedSize > MAX_DEFINITION_BYTES - separatorSize ||
           labelSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize ||
           definitionSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize - labelSize) {
@@ -745,10 +747,13 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         definitionOut += htmlDefinitions ? "<br><br>" : "\n\n";
       }
       if (htmlDefinitions) {
-        definitionOut += "<b>" + synonymHeadwords[i] + "</b><br>";
+        definitionOut += "<b>";
+        TxtToHtml::appendEscapedHtml(definitionOut, synonymHeadwords[i]);
+        definitionOut += "</b><br>";
       } else {
         definitionOut.push_back(DICTIONARY_PLAIN_HEADWORD_MARKER);
-        definitionOut += synonymHeadwords[i] + "\n";
+        definitionOut += synonymHeadwords[i];
+        definitionOut.push_back('\n');
       }
       if (!readDefinition(synonymLocations[i], definitionOut, outResult, true)) return false;
     }
