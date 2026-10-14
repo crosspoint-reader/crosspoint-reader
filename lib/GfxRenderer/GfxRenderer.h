@@ -10,10 +10,12 @@ class SdCardFont;
 #include <cstring>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "Bitmap.h"
+#include "FontLookup.h"
 
 // Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
 // 0 = transparent, 1-16 = gray levels (white to black)
@@ -70,7 +72,14 @@ class GfxRenderer {
   size_t bwSnapshotSizeBytes = 0;
   size_t bwBufferChunkSize = BW_BUFFER_CHUNK_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
-  std::map<int, EpdFontFamily> fontMap;
+  // Mutable because a lookup from a const draw or measure call may register a font the resolver
+  // supplies on demand (findFontFamily). Same compromise as sdCardFonts_ below.
+  mutable std::map<int, EpdFontFamily> fontMap;
+  FontResolverHook<EpdFontFamily> fontResolver_;
+  // The one place a font ID becomes a family: fontMap, then the resolver for an unknown ID.
+  const EpdFontFamily* findFontFamily(const int fontId) const {
+    return findOrResolveFont(fontMap, fontId, fontResolver_);
+  }
   // Font IDs that render another family's faces at a fixed scale -- see insertScaledFont(). Only
   // synthesised sizes appear here, so the map is empty on a build that ships every size for real
   // and the lookup is a miss that costs one comparison.
@@ -293,6 +302,13 @@ class GfxRenderer {
   bool releaseFontCaches();
   bool isFontCacheScanning() const;
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
+  /// Lets a font source supply families for IDs nobody registered yet, on first use. The
+  /// resolver is asked on every lookup of an ID that is not in fontMap, so declining must be
+  /// cheap. A family it returns is emplaced into fontMap directly (no insertFont(): no cache
+  /// invalidation, no log). It must not look fonts up through this renderer, or it recurses.
+  void setFontResolver(std::optional<EpdFontFamily> (*resolve)(void* ctx, int fontId), void* ctx) {
+    fontResolver_ = FontResolverHook<EpdFontFamily>{resolve, ctx};
+  }
   // Each of these can retire an EpdFontData a cached scaled mask is keyed on, so
   // they all drop the cache (see ScaledGlyphEntry).
   void registerSdCardFont(int fontId, SdCardFont* font) {

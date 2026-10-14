@@ -668,12 +668,9 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
 // --- Glyph miss callback ---
 
 void SdCardFont::applyGlyphMissCallback(uint8_t styleIdx) {
-  overflowCtx_[styleIdx].self = this;
-  overflowCtx_[styleIdx].styleIdx = styleIdx;
-
-  auto& s = styles_[styleIdx];
-  s.stubData.glyphMissHandler = &SdCardFont::onGlyphMiss;
-  s.stubData.glyphMissCtx = &overflowCtx_[styleIdx];
+  styleProviders_[styleIdx].self = this;
+  styleProviders_[styleIdx].styleIdx = styleIdx;
+  styles_[styleIdx].stubData.provider = &styleProviders_[styleIdx];
 }
 
 // --- Compute per-style file offsets from a base data offset ---
@@ -1300,8 +1297,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       s.miniData.is2Bit = s.header.is2Bit;
       s.miniData.ligaturePairs = s.ligaturePairs;
       s.miniData.ligaturePairCount = s.header.ligaturePairCount;
-      s.miniData.glyphMissHandler = &SdCardFont::onGlyphMiss;
-      s.miniData.glyphMissCtx = &overflowCtx_[styleIdx];
+      s.miniData.provider = &styleProviders_[styleIdx];
       s.epdFont.data = &s.miniData;
       s.miniMode = PerStyle::MiniMode::METADATA;
     }
@@ -1796,8 +1792,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     s.miniData.ligaturePairs = s.ligaturePairs;
     s.miniData.ligaturePairCount = s.header.ligaturePairCount;
   }
-  s.miniData.glyphMissHandler = &SdCardFont::onGlyphMiss;
-  s.miniData.glyphMissCtx = &overflowCtx_[styleIdx];
+  s.miniData.provider = &styleProviders_[styleIdx];
 
   s.epdFont.data = &s.miniData;
   s.miniMode = metadataOnly ? PerStyle::MiniMode::METADATA : PerStyle::MiniMode::FULL;
@@ -1862,7 +1857,7 @@ bool SdCardFont::hasStyle(uint8_t style) const { return style < MAX_STYLES && st
 // --- On-demand glyph loading (overflow buffer) ---
 
 const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
-  auto* oc = static_cast<OverflowContext*>(ctx);
+  auto* oc = static_cast<StyleProvider*>(ctx);
   auto* self = oc->self;
   uint8_t styleIdx = oc->styleIdx;
 
@@ -1989,5 +1984,3 @@ const uint8_t* SdCardFont::getOverflowBitmap(const EpdGlyph* glyph) const {
   }
   return nullptr;
 }
-
-SdCardFont* SdCardFont::fromMissCtx(void* ctx) { return static_cast<OverflowContext*>(ctx)->self; }
