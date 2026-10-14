@@ -122,8 +122,8 @@ bool ClipSelectionActivity::extractWords() {
         if (!clippingText::hasVisibleText(text)) continue;
 
         const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-        const GfxRenderer::LaidOutText laidOut = block->laidOutWord(i);
-        int width = renderer.getTextAdvanceX(fontId, laidOut, style, characterSpacing);
+        const GfxRenderer::LaidOutText measured = block->laidOutWord(i);
+        int width = renderer.getTextAdvanceX(fontId, measured, style, characterSpacing);
         if (width <= 0) continue;
         if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
           width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i)));
@@ -143,7 +143,7 @@ bool ClipSelectionActivity::extractWords() {
         word.startOffset = block->wordSourceRange(i).start;
         word.endOffset = block->wordSourceRange(i).end;
         word.text = text;
-        word.display = storeDisplayForm(laidOut.display);
+        word.display = storeDisplayForm(measured.display);
         word.style = style;
         word.characterSpacing = characterSpacing;
         word.paragraphStart = false;
