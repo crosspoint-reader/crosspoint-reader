@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "FreeTypeReference.h"
+#include "TtfBuilder.h"
 #include "TtfRasterizer.h"
 #include "TtfTestUtil.h"
 #include "ttf_raster_golden.h"
@@ -206,4 +207,64 @@ TEST(TtfGolden, TheDeviceBenchExpectsThisOutput) {
     hash = ttf_golden::hashGlyph(hash, g, metrics, rasterizer.output());
   }
   EXPECT_EQ(ttf_golden::kBookerlyRegular14pt, hash) << std::hex << hash;
+}
+
+TEST(TtfVsFreeTypeSynthetic, CompoundsMatchFreeTypeBitForBit) {
+  // The loader paths no bundled font reaches (Review Focus 2): rotated, scaled and mirrored components,
+  // USE_MY_METRICS taking a component's left side bearing, and that two levels deep; quadratic curves throughout.
+  Font font;
+  font.glyphs.resize(8);
+  font.glyphs[0].contours = {rect(50, 0, 450, 700)};
+  font.glyphs[1].contours = {// a bowl and its counter
+                             {{250, 0},
+                              {450, 0, false},
+                              {450, 250},
+                              {450, 500, false},
+                              {250, 500},
+                              {50, 500, false},
+                              {50, 250},
+                              {50, 0, false}},
+                             {{250, 100},
+                              {150, 100, false},
+                              {150, 250},
+                              {150, 400, false},
+                              {250, 400},
+                              {350, 400, false},
+                              {350, 250},
+                              {350, 100, false}}};
+  font.glyphs[2].contours = {rect(80, 0, 160, 700)};  // a stem whose lsb is not its xMin
+  font.glyphs[2].lsbIsXMin = false;
+  font.glyphs[2].lsb = 20;
+  font.glyphs[2].advance = 300;
+  font.glyphs[3].components = {{1, 300, 0, {0x3800, 0x0C00, -0x0C00, 0x3800}}, {2, -40, 80, {0x4000, 0x5000}}};
+  font.glyphs[4].components = {{2, 10, 0, {}, 0x0200}, {1, 200, 100}};  // USE_MY_METRICS on the stem
+  font.glyphs[5].components = {{3, 0, 0}, {4, 600, -50, {}, 0x0200}};   // ...and through a compound
+  font.glyphs[6].components = {{1, 500, 0, {-0x4000, 0x4000}}};         // mirrored
+  font.glyphs[7].components = {{2, 0, 0, {0x2666}}};                    // scaled to 0.6
+  font.cmap = {{'A', 1}};
+  const Bytes data = buildFont(font);
+  FontBytes bytes(data.data(), static_cast<uint32_t>(data.size()));
+  Face face;
+  ASSERT_EQ(FaceStatus::Ok, parseFace(bytes, &face));
+  Rasterizer rasterizer;
+  ASSERT_TRUE(rasterizer.allocate({64, 16, kMaxOutputBytes, kPoolBytesFlash}));
+  for (const uint32_t points : {8u, kPoints, 40u}) {
+    const FreeTypeReference reference(data, points);
+    ASSERT_TRUE(reference.ok());
+    for (uint16_t g = 1; g < 8; ++g) {
+      const ReferenceGlyph expected = reference.glyph(g);
+      ASSERT_TRUE(expected.loaded) << g;
+      EpdGlyph metrics{};
+      ASSERT_EQ(Status::Ok, rasterizer.render(bytes, face, g, ppemFromPoints(points), &metrics)) << g;
+      EXPECT_EQ(static_cast<uint16_t>((expected.linearAdvance + 2048) >> 12), metrics.advanceX) << g << " @" << points;
+      ASSERT_EQ(expected.width, metrics.width) << g << " @" << points;
+      ASSERT_EQ(expected.height, metrics.height) << g << " @" << points;
+      EXPECT_EQ(expected.left, metrics.left) << g << " @" << points;
+      EXPECT_EQ(expected.top, metrics.top) << g << " @" << points;
+      EXPECT_EQ(0, std::memcmp(rasterizer.output(), expected.bitmap.data(), expected.bitmap.size()))
+          << g << " @" << points << ", ours then FreeType's:\n"
+          << picture(metrics, rasterizer.output()) << "---\n"
+          << picture(metrics, expected.bitmap.data());
+    }
+  }
 }
