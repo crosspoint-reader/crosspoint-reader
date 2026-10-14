@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "EspNorFlash.h"
+
 namespace FlashFontPartition {
 
 // Partition magic
@@ -96,6 +98,10 @@ bool beginWrite(const char* familyName) {
 
   if (s_mmapPtr) {
     LOG_ERR("FFP", "beginWrite: partition is mmap'd — call unmap() first");
+    return false;
+  }
+  if (EspNorFlash::liveMappings() > 0) {
+    LOG_ERR("FFP", "beginWrite: the TTF glyph store is open on this partition — close it first");
     return false;
   }
 
@@ -259,6 +265,10 @@ bool mmap(const char* familyName, uint8_t pointSize, const uint8_t** outPtr, siz
     LOG_ERR("FFP", "mmap: write session still active");
     return false;
   }
+  if (EspNorFlash::liveMappings() > 0) {
+    LOG_ERR("FFP", "mmap: the TTF glyph store is open on this partition — close it first");
+    return false;
+  }
 
   const esp_partition_t* part = findPartition();
   if (!part) return false;
@@ -346,5 +356,7 @@ bool hasFamilyComplete(const char* familyName, const uint8_t* sizes, uint8_t siz
 }
 
 bool isMapped() { return s_mmapPtr != nullptr; }
+
+bool isWriting() { return s_ws.active; }
 
 }  // namespace FlashFontPartition
