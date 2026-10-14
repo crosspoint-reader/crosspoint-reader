@@ -1,7 +1,6 @@
 #pragma once
 #include <I18n.h>
 
-#include <array>
 #include <functional>
 #include <span>
 #include <string>
@@ -179,12 +178,6 @@ struct SettingInfo {
     return s;
   }
 };
-
-using SettingsBySection = std::array<std::vector<SettingInfo>, SETTINGS_SECTION_COUNT>;
-
-// Fills every section with its on-device rows: the shared settings list,
-// filtered for this board, plus device-only action rows.
-void buildSettingsSections(SettingsBySection& out);
 
 // The rows of one SettingsSection; activating a row toggles/cycles it, opens
 // its option popup, or launches its sub-screen.

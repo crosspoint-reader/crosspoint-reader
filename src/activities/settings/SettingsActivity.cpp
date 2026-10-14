@@ -42,10 +42,6 @@
 namespace fui = freeink::ui;
 
 namespace {
-std::vector<SettingInfo>& sectionOf(SettingsBySection& out, const SettingsSection section) {
-  return out[static_cast<size_t>(section)];
-}
-
 // Shared-list filtering for this board; false drops the row from the device UI
 // (it stays in the shared list for the web settings API).
 SettingsSection sectionFor(const SettingInfo& setting);
@@ -82,7 +78,7 @@ SettingsSection sectionFor(const SettingInfo& setting) {
 constexpr size_t EXTRA_ROWS_PER_SECTION = 4;
 }  // namespace
 
-void buildSettingsSections(SettingsBySection& out) {
+void SettingsActivity::rebuildSettings() {
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
@@ -94,56 +90,52 @@ void buildSettingsSections(SettingsBySection& out) {
 
   auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
-  std::array<size_t, SETTINGS_SECTION_COUNT> counts{};
+  size_t count = 0;
   for (const auto& setting : all) {
-    if (showOnDevice(setting)) ++counts[static_cast<size_t>(sectionFor(setting))];
+    if (sectionFor(setting) == section && showOnDevice(setting)) ++count;
   }
-  for (size_t i = 0; i < SETTINGS_SECTION_COUNT; ++i) {
-    out[i].clear();
-    out[i].reserve(counts[i] + EXTRA_ROWS_PER_SECTION);
-  }
+  settings.clear();
+  settings.reserve(count + EXTRA_ROWS_PER_SECTION);
 
-  auto& general = sectionOf(out, SettingsSection::General);
-  auto& reader = sectionOf(out, SettingsSection::Reader);
-  auto& controls = sectionOf(out, SettingsSection::Controls);
-  auto& fileBrowser = sectionOf(out, SettingsSection::FileBrowser);
-  auto& network = sectionOf(out, SettingsSection::Network);
-  auto& system = sectionOf(out, SettingsSection::System);
+  const auto addAction = [this](SettingsSection target, StrId name, SettingAction action) {
+    if (target == section) settings.push_back(SettingInfo::Action(name, action));
+  };
 
   // Language leads so a user stuck in an unfamiliar language finds it first.
-  general.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  general.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
-  reader.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
-  reader.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  addAction(SettingsSection::General, StrId::STR_LANGUAGE, SettingAction::Language);
+  addAction(SettingsSection::General, StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts);
+  addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
+  addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
   if (BoardConfig::hasHomeKey()) {
-    controls.push_back(SettingInfo::Action(StrId::STR_HOME_BUTTON, SettingAction::HomeButton));
+    addAction(SettingsSection::Controls, StrId::STR_HOME_BUTTON, SettingAction::HomeButton);
   }
   if (!BoardConfig::hasTouch()) {
-    controls.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+    addAction(SettingsSection::Controls, StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons);
   }
 
   for (auto& setting : all) {
-    if (!showOnDevice(setting)) continue;
-    sectionOf(out, sectionFor(setting)).push_back(std::move(setting));
+    if (sectionFor(setting) != section || !showOnDevice(setting)) continue;
+    settings.push_back(std::move(setting));
   }
 
   // Clock configuration only exists where the RTC probe found hardware.
   if (halClock.isAvailable()) {
-    general.push_back(SettingInfo::Action(StrId::STR_CLOCK, SettingAction::ClockSettings));
+    addAction(SettingsSection::General, StrId::STR_CLOCK, SettingAction::ClockSettings);
   }
-  reader.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
-  fileBrowser.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  addAction(SettingsSection::Reader, StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar);
+  addAction(SettingsSection::FileBrowser, StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache);
 
-  network.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  network.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  network.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  addAction(SettingsSection::Network, StrId::STR_WIFI_NETWORKS, SettingAction::Network);
+  addAction(SettingsSection::Network, StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync);
+  addAction(SettingsSection::Network, StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser);
 
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
-  system.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
-  system.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
-  system.push_back(SettingInfo::Action(StrId::STR_PLUGINS, SettingAction::Plugins));
-  system.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
+  addAction(SettingsSection::System, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
+  addAction(SettingsSection::System, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
+  addAction(SettingsSection::System, StrId::STR_PLUGINS, SettingAction::Plugins);
+  addAction(SettingsSection::System, StrId::STR_ABOUT, SettingAction::About);
+  rebuildRowItems();
 }
 
 SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -159,13 +151,6 @@ void SettingsActivity::onEnter() {
   syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
 
   rebuildSettings();
-}
-
-void SettingsActivity::rebuildSettings() {
-  SettingsBySection all;
-  buildSettingsSections(all);
-  settings = std::move(all[static_cast<size_t>(section)]);
-  rebuildRowItems();
 }
 
 // Rebuilds rowValues_/rowItems_ (label + actionValue) for settings.
