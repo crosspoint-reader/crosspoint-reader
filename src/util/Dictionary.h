@@ -76,11 +76,11 @@ class Dictionary {
   bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
 
   // Clean the word, look it up, and on a miss retry dictionary-authored
-  // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). On a hit fills
-  // the definition text (capped at MAX_DEFINITION_BYTES) and the headword as
-  // stored in the index. Returns true on a hit. *outResult (if provided)
-  // reports the precise outcome so the UI can distinguish a genuine miss from a
-  // decompression / low-memory / read failure.
+  // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). When several
+  // .syn records resolve to distinct headwords, their definitions are combined
+  // in dictionary order and capped at MAX_DEFINITION_BYTES. Returns true on a
+  // hit. *outResult (if provided) reports the precise outcome so the UI can
+  // distinguish a genuine miss from a decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
               LookupResult* outResult = nullptr);
 
@@ -157,9 +157,11 @@ class Dictionary {
   // the .qidx samples. Used to follow a .syn synonym back to its headword.
   DictLocation locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut);
 
-  // Bisect the .syn/.sidx synonym index for target; on a hit follow its ordinal
-  // through locateByOrdinal(). Returns not-found when no .syn exists.
-  DictLocation locateSynonym(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  // Scan every .syn/.sidx record for target, following each ordinal through
+  // locateByOrdinal(). Distinct resolved headwords are returned in dictionary
+  // order; a failed synonym read is reported separately from a genuine miss.
+  bool locateSynonyms(LookupSession& session, const char* target, std::vector<DictLocation>& locations,
+                      std::vector<std::string>& headwords, bool* readError);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
@@ -175,7 +177,8 @@ class Dictionary {
 
   // Read the definition at location. On failure returns false and, if outResult
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
-  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
+  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr,
+                      bool append = false);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
