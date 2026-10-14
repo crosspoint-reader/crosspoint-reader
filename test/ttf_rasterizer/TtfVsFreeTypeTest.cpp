@@ -1,6 +1,7 @@
-// The integer loader against FreeType itself, unhinted (spec 9.3), over every glyph of every bundled TTF.
-// FreeType renders glyphs whose outlines carry an OVERLAP flag 4x4 oversampled, which the engine does not
-// (spec 11.6): those are held to the spec's pixel budget. Every other glyph must come out byte for byte.
+// The integer loader against FreeType itself, unhinted (spec 9.3), over every glyph of every bundled TTF: every
+// glyph must come out byte for byte. FreeType renders outlines flagged OVERLAP 4x4 oversampled, which the
+// engine does not (spec 11.6), so the reference clears that flag; the oversampled difference is measured on
+// its own against the spec's 3% budget.
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -67,7 +68,6 @@ void TtfVsFreeType::compareEveryGlyph(const uint32_t points) {
 
   uint32_t glyphs = 0, tooLarge = 0, loadFailures = 0, advanceDiffs = 0, boxDiffs = 0, exactDiffs = 0;
   uint32_t overlapGlyphs = 0;
-  uint64_t overlapPixels = 0, overlapPixelDiffs = 0;
   for (uint32_t g = 0; g < face.numGlyphs; ++g) {
     const ReferenceGlyph expected = reference.glyph(g);
     if (!expected.loaded) continue;
@@ -93,33 +93,51 @@ void TtfVsFreeType::compareEveryGlyph(const uint32_t points) {
       ++boxDiffs;
       continue;
     }
+    overlapGlyphs += expected.overlap;
     const uint8_t* ours = rasterizer.output();
-    if (!expected.overlap) {
-      if (std::memcmp(ours, expected.bitmap.data(), expected.bitmap.size()) != 0 && ++exactDiffs <= 3) {
-        ADD_FAILURE() << "glyph " << g << ", ours then FreeType's:\n"
-                      << picture(metrics, ours) << "---\n"
-                      << picture(metrics, expected.bitmap.data());
-      }
-      continue;
-    }
-    ++overlapGlyphs;
-    for (int p = 0; p < expected.width * expected.height; ++p) {
-      ++overlapPixels;
-      overlapPixelDiffs += pixelAt(ours, p) != pixelAt(expected.bitmap.data(), p);
+    if (std::memcmp(ours, expected.bitmap.data(), expected.bitmap.size()) != 0 && ++exactDiffs <= 3) {
+      ADD_FAILURE() << "glyph " << g << ", ours then FreeType's:\n"
+                    << picture(metrics, ours) << "---\n"
+                    << picture(metrics, expected.bitmap.data());
     }
   }
   std::printf(
-      "%s @%u pt: %u glyphs (%u too large), %u load failures, %u advance diffs, %u box diffs, %u inexact; %u overlap "
-      "glyphs, "
-      "%.2f%% of their pixels differ\n",
-      GetParam().c_str(), points, glyphs, tooLarge, loadFailures, advanceDiffs, boxDiffs, exactDiffs, overlapGlyphs,
-      overlapPixels ? 100.0 * static_cast<double>(overlapPixelDiffs) / static_cast<double>(overlapPixels) : 0.0);
+      "%s @%u pt: %u glyphs (%u too large, %u flagged overlap), %u load failures, %u advance diffs, %u box "
+      "diffs, %u inexact\n",
+      GetParam().c_str(), points, glyphs, tooLarge, overlapGlyphs, loadFailures, advanceDiffs, boxDiffs, exactDiffs);
   EXPECT_GT(glyphs, 1000u);
   EXPECT_EQ(0u, loadFailures);
   EXPECT_EQ(0u, advanceDiffs);
   EXPECT_EQ(0u, boxDiffs);  // spec 9.3 allows 5; scaling exactly as FreeType does leaves none
   EXPECT_EQ(0u, exactDiffs);
-  EXPECT_LE(overlapPixelDiffs * 100, overlapPixels * 3);  // spec 9.3: at most 3% of pixels
+}
+
+TEST_P(TtfVsFreeType, OversampledOverlapsStayWithinThreePercent) {
+  // Spec 9.3's pixel budget, against FreeType as it really renders outlines flagged OVERLAP: 4x4 oversampled.
+  const FreeTypeReference reference(data, kPoints);
+  ASSERT_TRUE(reference.ok());
+  const uint32_t ppem = ppemFromPoints(kPoints);
+  Rasterizer rasterizer;
+  ASSERT_TRUE(rasterizer.allocate(planScratch(face, ppem, kPoolBytesFlash)));
+  uint32_t overlapGlyphs = 0;
+  uint64_t pixels = 0, differ = 0;
+  for (uint32_t g = 0; g < face.numGlyphs; ++g) {
+    const ReferenceGlyph expected = reference.glyph(g, true);
+    if (!expected.loaded || !expected.overlap) continue;
+    EpdGlyph metrics{};
+    ASSERT_EQ(Status::Ok, rasterizer.render(bytes, face, static_cast<uint16_t>(g), ppem, &metrics)) << g;
+    ASSERT_EQ(expected.width, metrics.width) << g;
+    ASSERT_EQ(expected.height, metrics.height) << g;
+    ++overlapGlyphs;
+    for (int p = 0; p < expected.width * expected.height; ++p) {
+      ++pixels;
+      differ += pixelAt(rasterizer.output(), p) != pixelAt(expected.bitmap.data(), p);
+    }
+  }
+  std::printf("%s @%u pt: %u overlap glyphs, %.2f%% of their pixels differ from FreeType's oversampled ones\n",
+              GetParam().c_str(), kPoints, overlapGlyphs,
+              pixels ? 100.0 * static_cast<double>(differ) / static_cast<double>(pixels) : 0.0);
+  EXPECT_LE(differ * 100, pixels * 3);
 }
 
 TEST_P(TtfVsFreeType, TheCmapMatchesFreeType) {

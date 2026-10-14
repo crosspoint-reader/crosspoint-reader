@@ -38,11 +38,12 @@ int32_t FreeTypeReference::ascender() const { return static_cast<int32_t>(impl_-
 int32_t FreeTypeReference::descender() const { return static_cast<int32_t>(impl_->face->size->metrics.descender); }
 int32_t FreeTypeReference::height() const { return static_cast<int32_t>(impl_->face->size->metrics.height); }
 
-ReferenceGlyph FreeTypeReference::glyph(const uint32_t index) const {
+ReferenceGlyph FreeTypeReference::glyph(const uint32_t index, const bool oversampleOverlaps) const {
   ReferenceGlyph out;
   FT_GlyphSlot slot = impl_->face->glyph;
   if (FT_Load_Glyph(impl_->face, index, FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0) return out;
   out.overlap = (slot->outline.flags & FT_OUTLINE_OVERLAP) != 0;
+  if (!oversampleOverlaps) slot->outline.flags &= ~FT_OUTLINE_OVERLAP;
   out.linearAdvance = static_cast<int32_t>(slot->linearHoriAdvance);
   if (FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL) != 0) return out;
   out.loaded = true;
