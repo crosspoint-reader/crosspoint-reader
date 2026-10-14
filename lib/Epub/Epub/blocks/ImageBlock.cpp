@@ -29,8 +29,6 @@ void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
   extractFn = fn;
 }
 
-bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str()); }
-
 namespace {
 
 std::string getCachePath(const std::string& imagePath) {
@@ -418,20 +416,25 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 }
 
 bool ImageBlock::serialize(HalFile& file) {
-  serialization::writeString(file, imagePath);
-  serialization::writeString(file, srcPath);
-  serialization::writePod(file, width);
-  serialization::writePod(file, height);
+  if (!(serialization::tryWriteString(file, imagePath) && serialization::tryWriteString(file, srcPath) &&
+        serialization::tryWritePod(file, width) && serialization::tryWritePod(file, height))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
   return true;
 }
 
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   std::string path;
   std::string src;
-  serialization::readString(file, path);
-  serialization::readString(file, src);
+  if (!(serialization::tryReadString(file, path, 4096) && serialization::tryReadString(file, src, 4096))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
   int16_t w, h;
-  serialization::readPod(file, w);
-  serialization::readPod(file, h);
+  if (!(serialization::tryReadPod(file, w) && serialization::tryReadPod(file, h))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
   return std::unique_ptr<ImageBlock>(new (std::nothrow) ImageBlock(path, src, w, h));
 }

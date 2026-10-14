@@ -1,5 +1,6 @@
 #include <ClippingStore.h>
 #include <HalStorage.h>
+#include <activities/reader/ProgressFile.h>
 #include <gtest/gtest.h>
 
 namespace {
@@ -13,6 +14,34 @@ std::string storePath() {
   return "";
 }
 }  // namespace
+
+TEST(ClippingStore, FailedClosePreservesOriginal) {
+  fake::reset();
+  ClippingStore store;
+  ASSERT_TRUE(store.loadForBook("/book.epub", "Book", "Author", "epub"));
+  ASSERT_EQ(add(store), Result::Added);
+  const auto path = storePath();
+  const auto original = fake::files.at(path)->bytes;
+  fake::failClosePath = path + ".tmp";
+  EXPECT_EQ(add(store, "two"), Result::SaveFailed);
+  EXPECT_EQ(store.clippingCount(), 1u);
+  EXPECT_EQ(fake::files.at(path)->bytes, original);
+  EXPECT_FALSE(Storage.exists((path + ".tmp").c_str()));
+}
+
+TEST(ProgressFile, FailedClosePreservesOriginal) {
+  fake::reset();
+  const std::string cache = "/.crosspoint/epub_1";
+  Storage.mkdir(cache.c_str());
+  const uint8_t original[] = {1, 2, 3, 4};
+  const uint8_t replacement[] = {5, 6, 7, 8};
+  ASSERT_TRUE(ProgressFile::writeAtomic(cache, original, sizeof(original)));
+  const auto path = cache + "/progress.bin";
+  const auto before = fake::files.at(path)->bytes;
+  fake::failClosePath = path + ".tmp";
+  EXPECT_FALSE(ProgressFile::writeAtomic(cache, replacement, sizeof(replacement)));
+  EXPECT_EQ(fake::files.at(path)->bytes, before);
+}
 
 TEST(ClippingStore, FailedLoadCannotPublishOrOverwriteValidPrefix) {
   fake::reset();

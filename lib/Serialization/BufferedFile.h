@@ -109,6 +109,10 @@ class BufferedFileReader {
 
   // Logical read position.
   size_t position() const { return bufStart + off; }
+  size_t available() const {
+    const size_t total = file.size();
+    return position() <= total ? total - position() : 0;
+  }
 
   bool seek(const size_t target) {
     // Within the buffered window: just move the cursor.
@@ -141,6 +145,18 @@ void writePod(BufferedFileWriter& out, const T& value) {
 template <typename T>
 void readPod(BufferedFileReader& in, T& value) {
   in.read(&value, sizeof(T));
+}
+
+template <typename T>
+bool tryReadPod(BufferedFileReader& in, T& value) {
+  return in.read(&value, sizeof(T)) == sizeof(T);
+}
+
+inline bool tryReadString(BufferedFileReader& in, std::string& s, size_t maxLength) {
+  uint32_t len = 0;
+  if (!tryReadPod(in, len) || len > maxLength || len > s.max_size() || len > in.available()) return false;
+  s.resize(len);
+  return len == 0 || in.read(s.data(), len) == len;
 }
 
 inline void writeString(BufferedFileWriter& out, const std::string& s) {

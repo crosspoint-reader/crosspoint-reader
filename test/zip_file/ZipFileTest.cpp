@@ -135,6 +135,18 @@ class VectorSink : public Print {
   std::vector<uint8_t> bytes;
 };
 
+TEST(ZipReadError, StoredEntryNeverForwardsFailedRead) {
+  const std::string path = "/books/error.epub";
+  ZipBuilder builder;
+  builder.addStored("mimetype", "application/epub+zip");
+  Storage.setFile(path, builder.build());
+  HalFile::failReadOffset = 30 + std::string("mimetype").size();
+  ZipFile zip(path);
+  VectorSink sink;
+  EXPECT_FALSE(zip.readFileToStream("mimetype", sink, 7));
+  EXPECT_TRUE(sink.text().empty());
+}
+
 class ZipFileTest : public ::testing::Test {
  protected:
   // ZipFile keeps a reference to its path, so the fixture owns the string.

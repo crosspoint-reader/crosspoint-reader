@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
@@ -588,4 +589,23 @@ TEST(KoreanLayout, HangulGluedAcrossInlineStyleIsUnbreakable) {
   // 가나 한국 fits in 36 px, but 어 is glued to 한국, so the whole word moves down.
   const std::vector<std::vector<std::string>> expected{{"가나"}, {"한국", "어"}};
   EXPECT_EQ(lines, expected);
+}
+
+TEST(PageStorage, EveryShortWriteFailsSerialization) {
+  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-page-write-test.bin").string();
+  Page page;
+  page.elements.push_back(std::make_unique<PageHorizontalRule>(120, 1, 2, 3));
+  HalFile file;
+  ASSERT_TRUE(file.open(path.c_str(), "wb"));
+  ASSERT_TRUE(page.serialize(file));
+  const size_t size = file.position();
+  file.close();
+  for (size_t budget = 0; budget < size; ++budget) {
+    ASSERT_TRUE(file.open(path.c_str(), "wb"));
+    HalFile::writeBudget = budget;
+    EXPECT_FALSE(page.serialize(file)) << budget;
+    file.close();
+  }
+  HalFile::writeBudget = std::numeric_limits<size_t>::max();
+  std::filesystem::remove(path);
 }

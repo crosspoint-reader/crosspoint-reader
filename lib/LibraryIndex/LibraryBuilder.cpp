@@ -403,7 +403,8 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   if (!reuseMetadata) {
     const size_t foldBytes = std::min(folded.size(), CLIX_FOLD_BYTES);
     entry.record.foldLen = static_cast<uint8_t>(utf8SafeTruncateBuffer(folded.data(), static_cast<int>(foldBytes)));
-    entry.record.authorKeyLen = static_cast<uint8_t>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES));
+    entry.record.authorKeyLen = static_cast<uint8_t>(
+        utf8SafeTruncateBuffer(key.data(), static_cast<int>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES))));
     memcpy(entry.record.fold, folded.data(), entry.record.foldLen);
     memcpy(entry.record.authorKey, key.data(), entry.record.authorKeyLen);
   }
@@ -733,6 +734,14 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     stats.ranksDegraded = true;
   }
   if (!ioFailed && canonicalFrom && spellingScratch && authorSort && n > 1) {
+    const auto readAuthor = [&](uint16_t ord, char* text, uint8_t& len) {
+      const uint64_t base = static_cast<uint64_t>(order[ord]) * STAGE_STRIDE;
+      if (readStageAt(base + offsetof(StagedEntry, authorLen), &len, sizeof(len)) && len <= STAGE_AUTHOR_BYTES &&
+          readStageAt(base + offsetof(StagedEntry, author), text, len))
+        return true;
+      ioFailed = true;
+      return false;
+    };
     uint16_t runStart = 0;
     while (runStart < n) {
       serviceBuilder(serviceUnits);
@@ -746,30 +755,18 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       // all 0xFF) must not be collapsed onto one arbitrary empty string.
       const bool unknownRun = static_cast<unsigned char>(authorSort[runStart].key[0]) == 0xFF;
       if (!unknownRun && runEnd - runStart > 1) {
-        // Each author read ONCE, then counted in RAM. The first version re-read
-        // the whole run for every member of it — k² reads of 768 bytes for a
-        // number that k reads can produce — and an author with twenty books cost
-        // four hundred SD reads to decide one string.
-        //
-        // Bounded by DISTINCT spellings rather than by run length, which is the
-        // point: one person has two or three spellings on a real card, however
-        // many books they wrote, so this holds a handful of short strings instead
-        // of one per book.
+        // Count spellings once, then reread each name to choose within its full identity.
         uint8_t spellingCount = 0;
 
         for (uint16_t a = runStart; a < runEnd; a++) {
           serviceBuilder(serviceUnits);
           const uint16_t ord = authorSort[a].ordinal;
           uint8_t len = 0;
-          if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, authorLen), &len,
-                           sizeof(len)))
-            break;
+          char buf[STAGE_AUTHOR_BYTES];
+          if (!readAuthor(ord, buf, len)) break;
           if (len == 0) continue;
 
-          char buf[STAGE_AUTHOR_BYTES];
-          const size_t want = std::min<size_t>(len, sizeof(buf));
-          if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, author), buf, want))
-            break;
+          const size_t want = len;
           bool merged = false;
           for (uint8_t i = 0; i < spellingCount; i++) {
             SpellingSlot& sp = spellingScratch[i];
@@ -779,9 +776,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
               break;
             }
           }
-          // A hard cap so a card full of near-identical spellings cannot grow this
-          // without bound. Sixteen is far past anything real; beyond it the vote
-          // simply decides among the first sixteen.
+          // shortcut: vote among the first 16 spellings; use separate identity runs if real cards exceed this.
           if (!merged && spellingCount < MAX_AUTHOR_SPELLINGS) {
             SpellingSlot& sp = spellingScratch[spellingCount++];
             memcpy(sp.text, buf, want);
@@ -791,25 +786,31 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
           }
         }
 
-        uint16_t bestOrdinal = authorSort[runStart].ordinal;
-        int bestScore = -1;
-        size_t bestLen = 0;
-        const char* bestText = nullptr;
-        for (uint8_t i = 0; i < spellingCount; i++) {
-          const SpellingSlot& sp = spellingScratch[i];
-          const bool better = sp.count > bestScore || (sp.count == bestScore && sp.len < bestLen) ||
-                              (sp.count == bestScore && sp.len == bestLen &&
-                               (bestText == nullptr || memcmp(sp.text, bestText, sp.len) < 0));
-          if (better) {
-            bestScore = sp.count;
-            bestLen = sp.len;
-            bestText = sp.text;
-            bestOrdinal = sp.ordinal;
-          }
-        }
-        for (uint16_t a = runStart; a < runEnd; a++) {
+        for (uint16_t a = runStart; a < runEnd && !ioFailed; a++) {
           serviceBuilder(serviceUnits);
-          canonicalFrom[authorSort[a].ordinal] = bestOrdinal;
+          const uint16_t ord = authorSort[a].ordinal;
+          uint8_t len = 0;
+          char buf[STAGE_AUTHOR_BYTES];
+          if (!readAuthor(ord, buf, len)) break;
+          const std::string identity = authorKey(std::string_view(buf, len));
+          uint16_t bestOrdinal = ord;
+          int bestScore = -1;
+          size_t bestLen = 0;
+          const char* bestText = nullptr;
+          for (uint8_t i = 0; i < spellingCount; i++) {
+            const SpellingSlot& sp = spellingScratch[i];
+            if (authorKey(std::string_view(sp.text, sp.len)) != identity) continue;
+            const bool better = sp.count > bestScore || (sp.count == bestScore && sp.len < bestLen) ||
+                                (sp.count == bestScore && sp.len == bestLen &&
+                                 (bestText == nullptr || memcmp(sp.text, bestText, sp.len) < 0));
+            if (better) {
+              bestScore = sp.count;
+              bestLen = sp.len;
+              bestText = sp.text;
+              bestOrdinal = sp.ordinal;
+            }
+          }
+          canonicalFrom[ord] = bestOrdinal;
         }
       }
       runStart = runEnd;
@@ -1336,14 +1337,60 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
         memcpy(keys[i].key, r.fold, std::min<size_t>(r.foldLen, sizeof(keys[i].key)));
         keys[i].ordinal = i;
       }
-      if (!stage.close()) {
-        LOG_ERR("LIBIDX", "title sort: stage close failed");
+      delay(1);
+      std::sort(keys.get(), keys.get() + st.books, sortKeyLess);
+      const auto failTitleSort = [&] {
+        LOG_ERR("LIBIDX", "title sort: full title read failed");
+        stage.close();
         Storage.remove(STAGE_PATH);
         Storage.remove(folderStagePath.c_str());
         return false;
+      };
+      const auto readTitle = [&](uint16_t ordinal, std::string& title) {
+        const uint64_t base = static_cast<uint64_t>(ordinal) * STAGE_STRIDE;
+        uint8_t len = 0;
+        if (!stage.seekSet(base + offsetof(StagedEntry, titleLen)) || stage.read(&len, sizeof(len)) != sizeof(len))
+          return false;
+        uint64_t position = base + offsetof(StagedEntry, title);
+        const bool fallback = len == 0;
+        if (fallback) {
+          if (!stage.seekSet(base + offsetof(StagedEntry, record) + offsetof(ClixRecord, nameLen)) ||
+              stage.read(&len, sizeof(len)) != sizeof(len))
+            return false;
+          position = base + offsetof(StagedEntry, name);
+        }
+        char text[STAGE_NAME_BYTES];
+        if (len > sizeof(text) || !stage.seekSet(position) || stage.read(text, len) != len) return false;
+        title = fold(fallback ? stemOf(std::string(text, len)) : std::string(text, len));
+        return true;
+      };
+      std::string firstTitle, secondTitle;
+      // Refine equal prefixes with checked disk reads; order[] is already available as merge scratch.
+      for (size_t begin = 0; begin < st.books;) {
+        size_t end = begin + 1;
+        while (end < st.books && memcmp(keys[begin].key, keys[end].key, sizeof(keys[begin].key)) == 0) ++end;
+        for (size_t width = 1; width < end - begin; width *= 2) {
+          for (size_t left = begin; left < end; left += width * 2) {
+            const size_t middle = std::min(left + width, end);
+            const size_t right = std::min(left + width * 2, end);
+            size_t a = left, b = middle;
+            for (size_t out = left; out < right; ++out) {
+              serviceBuilder(serviceUnits);
+              bool takeFirst = b == right;
+              if (a < middle && b < right) {
+                if (!readTitle(keys[a].ordinal, firstTitle) || !readTitle(keys[b].ordinal, secondTitle))
+                  return failTitleSort();
+                takeFirst =
+                    firstTitle < secondTitle || (firstTitle == secondTitle && keys[a].ordinal < keys[b].ordinal);
+              }
+              order[out] = takeFirst ? keys[a++].ordinal : keys[b++].ordinal;
+            }
+          }
+          for (size_t i = begin; i < end; ++i) keys[i].ordinal = order[i];
+        }
+        begin = end;
       }
-      delay(1);
-      std::sort(keys.get(), keys.get() + st.books, sortKeyLess);
+      if (!stage.close()) return failTitleSort();
       delay(1);
       for (uint16_t i = 0; i < st.books; i++) {
         serviceBuilder(serviceUnits);

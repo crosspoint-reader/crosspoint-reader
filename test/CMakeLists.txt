@@ -88,3 +88,21 @@ add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
+foreach(check selection_buttons list_viewport clipping_highlight_planes clipping_selection_text)
+  add_test(NAME ${check} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_${check}.py)
+endforeach()
+
+add_subdirectory(book_metadata_cache)
+
+add_subdirectory(url_utils)
+
+add_subdirectory(png_converter)
+add_subdirectory(font_registry)
+
+add_test(NAME ReaderStorage COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reader_storage.py)
+
+add_test(NAME TransferStorage COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_transfer_storage.py)
+
+add_test(NAME SectionStorage COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_section_storage.py)
+
+add_test(NAME OpdsServersJson COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_opds_servers.py)

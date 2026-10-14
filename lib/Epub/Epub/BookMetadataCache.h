@@ -52,6 +52,7 @@ class BookMetadataCache {
   uint16_t tocCount;
   bool loaded;
   bool buildMode;
+  bool buildFailed = false;
 
   HalFile bookFile;
   // Temp file handles during build
@@ -66,7 +67,7 @@ class BookMetadataCache {
   // Cumulative spine sizes, cached in RAM at load() so progress/percent lookups are
   // O(1) instead of 2 seeks + a heap-allocating SpineEntry read per access (4 bytes
   // per spine item; <1KB for typical books).
-  std::vector<uint32_t> cumulativeSizes;
+  std::unique_ptr<uint32_t[]> cumulativeSizes;
 
   // Index for fast href→spineIndex lookup (used only for large EPUBs)
   struct SpineHrefIndexEntry {
@@ -91,8 +92,8 @@ class BookMetadataCache {
 
   uint32_t writeSpineEntry(HalFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(HalFile& file, const TocEntry& entry) const;
-  SpineEntry readSpineEntry(HalFile& file) const;
-  TocEntry readTocEntry(HalFile& file) const;
+  bool readSpineEntry(HalFile& file, SpineEntry& entry) const;
+  bool readTocEntry(HalFile& file, TocEntry& entry) const;
 
  public:
   BookMetadata coreMetadata;

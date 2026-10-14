@@ -60,6 +60,12 @@ static void sendStaticContent(WebServer* server, const char* data, size_t len, c
                               const char* contentType);
 
 namespace {
+bool validFontHeader(const uint8_t* header, bool vector) {
+  static constexpr uint8_t TTF_MAGIC[] = {0, 1, 0, 0};
+  return vector ? memcmp(header, TTF_MAGIC, 4) == 0 || memcmp(header, "OTTO", 4) == 0 || memcmp(header, "true", 4) == 0
+                : memcmp(header, "CPFONT\0\0", 8) == 0;
+}
+
 // Arduino's WebServer retains parsed request arguments until the next request.
 // For JSON POSTs, that includes the complete "plain" body. Expose a narrowly
 // scoped release operation so large request bodies do not remain resident
@@ -1542,8 +1548,27 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
+  class JsonWriter final : public Print {
+    WebServer& server;
+    char buffer[128];
+    size_t used = 0;
+
+   public:
+    using Print::write;
+    explicit JsonWriter(WebServer& server) : server(server) {}
+    size_t write(uint8_t byte) override {
+      buffer[used++] = static_cast<char>(byte);
+      if (used == sizeof(buffer)) flush();
+      return 1;
+    }
+    void flush() {
+      if (used == 0) return;
+      server.sendContent(buffer, used);
+      used = 0;
+      yield();
+      resetTaskWatchdogIfSubscribed();
+    }
+  } output(*server);
   JsonDocument doc;
 
   for (size_t i = 0; i < servers.size(); i++) {
@@ -1562,11 +1587,9 @@ void CrossPointWebServer::handleGetOpdsServers() const {
       h["hasValue"] = !header.value.empty();
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) continue;
-
     if (i > 0) server->sendContent(",");
-    server->sendContent(output);
+    serializeJson(doc, output);
+    output.flush();
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
@@ -2923,14 +2946,15 @@ void CrossPointWebServer::handleFontUploadData() {
 
       char path[128];
       FontInstaller::buildFontPath(family.c_str(), filename.c_str(), path, sizeof(path));
-      fontUpload.filePath = path;
 
-      if (!Storage.openFileForWrite("WEB", path, fontUpload.file)) {
+      const std::string tempPath = std::string(path) + ".part";
+      if (!Storage.openFileForWrite("WEB", tempPath, fontUpload.file)) {
         LOG_ERR("WEB", "Failed to open font file for write: %s", path);
         fontUpload.buffer.reset();
         break;
       }
 
+      fontUpload.filePath = tempPath;
       fontUpload.valid = true;
       LOG_DBG("WEB", "Font upload started: %s -> %s", filename.c_str(), path);
       break;
@@ -2940,17 +2964,10 @@ void CrossPointWebServer::handleFontUploadData() {
       if (dropUploadIfCancelled() || !fontUpload.valid) break;
       resetTaskWatchdogIfSubscribed();
 
-      // Validate magic bytes on first chunk only
-      if (!fontUpload.magicChecked && upload.currentSize >= 8) {
-        bool magicOk;
-        if (fontUpload.isVector) {
-          // sfnt versions: 0x00010000 (TrueType), "OTTO" (CFF), "true" (Apple)
-          static constexpr uint8_t kTtfMagic[4] = {0x00, 0x01, 0x00, 0x00};
-          magicOk = memcmp(upload.buf, kTtfMagic, 4) == 0 || memcmp(upload.buf, "OTTO", 4) == 0 ||
-                    memcmp(upload.buf, "true", 4) == 0;
-        } else {
-          magicOk = memcmp(upload.buf, "CPFONT\0\0", 8) == 0;
-        }
+      // A split header is checked from the completed temporary file before replacement.
+      if (!fontUpload.magicChecked && fontUpload.bytesWritten == 0 && fontUpload.bufferPos == 0 &&
+          upload.currentSize >= 8) {
+        const bool magicOk = validFontHeader(upload.buf, fontUpload.isVector);
         if (!magicOk) {
           LOG_ERR("WEB", "Invalid font magic bytes");
           fontUpload.valid = false;
@@ -2995,10 +3012,36 @@ void CrossPointWebServer::handleFontUploadData() {
         fontUpload.bufferPos = 0;
       }
       if (fontUpload.file.isOpen()) {
-        fontUpload.file.close();
+        if (!fontUpload.file.close()) fontUpload.valid = false;
       }
       fontUpload.bufferPos = 0;
       fontUpload.buffer.reset();
+
+      if (fontUpload.valid) {
+        HalFile check;
+        uint8_t header[8];
+        fontUpload.valid = Storage.openFileForRead("WEB", fontUpload.filePath, check) &&
+                           check.read(header, sizeof(header)) == sizeof(header) &&
+                           validFontHeader(header, fontUpload.isVector);
+      }
+      if (fontUpload.valid) {
+        const std::string destination = fontUpload.filePath.substr(0, fontUpload.filePath.size() - 5);
+        const std::string backup = destination + ".bak";
+        const bool hadDestination = Storage.exists(destination.c_str());
+        if (hadDestination && ((Storage.exists(backup.c_str()) && !Storage.remove(backup.c_str())) ||
+                               !Storage.rename(destination.c_str(), backup.c_str()))) {
+          fontUpload.valid = false;
+        } else if (!Storage.rename(fontUpload.filePath.c_str(), destination.c_str())) {
+          if (hadDestination && !Storage.rename(backup.c_str(), destination.c_str())) {
+            LOG_ERR("WEB", "Failed restoring font backup: %s", backup.c_str());
+            sdFontSystem.markRegistryDirty();
+          }
+          fontUpload.valid = false;
+        } else {
+          fontUpload.filePath = destination;
+          if (hadDestination) Storage.remove(backup.c_str());
+        }
+      }
 
       if (!fontUpload.valid && !fontUpload.filePath.empty()) {
         Storage.remove(fontUpload.filePath.c_str());

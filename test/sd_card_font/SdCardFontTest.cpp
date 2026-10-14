@@ -208,6 +208,30 @@ TEST(SdCardFontTest, CompletePagesReplaceEarlierGlyphs) {
   }
 }
 
+TEST(SdCardFontTest, RejectsShortGlyphBitmapsInBothLoadingPaths) {
+  makeFont(2);
+  EpdGlyph glyph{};
+  std::memcpy(&glyph, sdFontTestFile.data() + 88, sizeof(glyph));
+  glyph.dataLength = 1;
+  std::memcpy(sdFontTestFile.data() + 88, &glyph, sizeof(glyph));
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  EXPECT_GT(font.prewarm(page(FIRST, 1).c_str(), 1, false, false, false), 0);
+  const EpdGlyph* replacement = font.getEpdFont()->getGlyph(0xFFFD);
+  EXPECT_EQ(font.getEpdFont()->getGlyph(FIRST), replacement);
+}
+
+TEST(SdCardFontTest, RejectsBitmapOffsetsOutsideTheFile) {
+  makeFont(2);
+  EpdGlyph glyph{};
+  std::memcpy(&glyph, sdFontTestFile.data() + 88, sizeof(glyph));
+  glyph.dataOffset = UINT32_MAX;
+  std::memcpy(sdFontTestFile.data() + 88, &glyph, sizeof(glyph));
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  EXPECT_GT(font.prewarm(page(FIRST, 1).c_str(), 1, false, false, false), 0);
+}
+
 TEST(SdCardFontTest, IncrementalUiStringsStillAccumulate) {
   makeFont();
   SdCardFont font;

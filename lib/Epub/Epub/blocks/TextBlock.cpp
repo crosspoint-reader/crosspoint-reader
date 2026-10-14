@@ -321,10 +321,12 @@ bool TextBlock::serialize(HalFile& file) const {
   // Word data: scalars, then the arena verbatim -- its in-memory layout is
   // exactly the on-disk layout (see TextBlock.h), so one write covers all
   // per-word arrays and the text blob.
-  serialization::writePod(file, numWords);
-  serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
-  serialization::writePod(file, textBytes);
-  serialization::writePod(file, paragraphStartWord);
+  if (!(serialization::tryWritePod(file, numWords) &&
+        serialization::tryWritePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0)) &&
+        serialization::tryWritePod(file, textBytes) && serialization::tryWritePod(file, paragraphStartWord))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
   if (numWords > 0) {
     const size_t size = arenaSize(numWords, focusPresent, textBytes);
     if (file.write(arena.get(), size) != size) {
@@ -335,25 +337,31 @@ bool TextBlock::serialize(HalFile& file) const {
 
   // Ruby text data
   for (size_t i = 0; i < numWords; i++) {
-    serialization::writeString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string());
+    if (!serialization::tryWriteString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string())) {
+      LOG_ERR("CACHE", "Failed cache writeString");
+      return false;
+    }
   }
 
   // Style (alignment + margins/padding/indent)
-  serialization::writePod(file, blockStyle.alignment);
-  serialization::writePod(file, blockStyle.textAlignDefined);
-  serialization::writePod(file, blockStyle.marginTop);
-  serialization::writePod(file, blockStyle.marginBottom);
-  serialization::writePod(file, blockStyle.marginLeft);
-  serialization::writePod(file, blockStyle.marginRight);
-  serialization::writePod(file, blockStyle.paddingTop);
-  serialization::writePod(file, blockStyle.paddingBottom);
-  serialization::writePod(file, blockStyle.paddingLeft);
-  serialization::writePod(file, blockStyle.paddingRight);
-  serialization::writePod(file, blockStyle.textIndent);
-  serialization::writePod(file, blockStyle.textIndentDefined);
-  serialization::writePod(file, blockStyle.isRtl);
-  serialization::writePod(file, blockStyle.directionDefined);
-  serialization::writePod(file, blockStyle.characterSpacing);
+  if (!(serialization::tryWritePod(file, blockStyle.alignment) &&
+        serialization::tryWritePod(file, blockStyle.textAlignDefined) &&
+        serialization::tryWritePod(file, blockStyle.marginTop) &&
+        serialization::tryWritePod(file, blockStyle.marginBottom) &&
+        serialization::tryWritePod(file, blockStyle.marginLeft) &&
+        serialization::tryWritePod(file, blockStyle.marginRight) &&
+        serialization::tryWritePod(file, blockStyle.paddingTop) &&
+        serialization::tryWritePod(file, blockStyle.paddingBottom) &&
+        serialization::tryWritePod(file, blockStyle.paddingLeft) &&
+        serialization::tryWritePod(file, blockStyle.paddingRight) &&
+        serialization::tryWritePod(file, blockStyle.textIndent) &&
+        serialization::tryWritePod(file, blockStyle.textIndentDefined) &&
+        serialization::tryWritePod(file, blockStyle.isRtl) &&
+        serialization::tryWritePod(file, blockStyle.directionDefined) &&
+        serialization::tryWritePod(file, blockStyle.characterSpacing))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
 
   return true;
 }
@@ -363,10 +371,11 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint8_t hasFocus;
   uint16_t textBytes;
   uint16_t paragraphStartWord;
-  serialization::readPod(file, wc);
-  serialization::readPod(file, hasFocus);
-  serialization::readPod(file, textBytes);
-  serialization::readPod(file, paragraphStartWord);
+  if (!(serialization::tryReadPod(file, wc) && serialization::tryReadPod(file, hasFocus) &&
+        serialization::tryReadPod(file, textBytes) && serialization::tryReadPod(file, paragraphStartWord))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
@@ -431,7 +440,10 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   // overwrites every byte, so a moved-from value carries nothing into the next iteration.
   std::string scratch;
   for (uint16_t i = 0; i < wc; i++) {
-    serialization::readString(file, scratch);
+    if (!serialization::tryReadString(file, scratch, 4096)) {
+      LOG_ERR("CACHE", "Failed cache readString");
+      return nullptr;
+    }
     if (scratch.empty()) continue;
     if (block->rubyTexts.empty()) {
       block->rubyTexts.resize(wc);
@@ -441,21 +453,24 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
 
   // Style (alignment + margins/padding/indent)
   BlockStyle& blockStyle = block->blockStyle;
-  serialization::readPod(file, blockStyle.alignment);
-  serialization::readPod(file, blockStyle.textAlignDefined);
-  serialization::readPod(file, blockStyle.marginTop);
-  serialization::readPod(file, blockStyle.marginBottom);
-  serialization::readPod(file, blockStyle.marginLeft);
-  serialization::readPod(file, blockStyle.marginRight);
-  serialization::readPod(file, blockStyle.paddingTop);
-  serialization::readPod(file, blockStyle.paddingBottom);
-  serialization::readPod(file, blockStyle.paddingLeft);
-  serialization::readPod(file, blockStyle.paddingRight);
-  serialization::readPod(file, blockStyle.textIndent);
-  serialization::readPod(file, blockStyle.textIndentDefined);
-  serialization::readPod(file, blockStyle.isRtl);
-  serialization::readPod(file, blockStyle.directionDefined);
-  serialization::readPod(file, blockStyle.characterSpacing);
+  if (!(serialization::tryReadPod(file, blockStyle.alignment) &&
+        serialization::tryReadPod(file, blockStyle.textAlignDefined) &&
+        serialization::tryReadPod(file, blockStyle.marginTop) &&
+        serialization::tryReadPod(file, blockStyle.marginBottom) &&
+        serialization::tryReadPod(file, blockStyle.marginLeft) &&
+        serialization::tryReadPod(file, blockStyle.marginRight) &&
+        serialization::tryReadPod(file, blockStyle.paddingTop) &&
+        serialization::tryReadPod(file, blockStyle.paddingBottom) &&
+        serialization::tryReadPod(file, blockStyle.paddingLeft) &&
+        serialization::tryReadPod(file, blockStyle.paddingRight) &&
+        serialization::tryReadPod(file, blockStyle.textIndent) &&
+        serialization::tryReadPod(file, blockStyle.textIndentDefined) &&
+        serialization::tryReadPod(file, blockStyle.isRtl) &&
+        serialization::tryReadPod(file, blockStyle.directionDefined) &&
+        serialization::tryReadPod(file, blockStyle.characterSpacing))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   return block;
 }
