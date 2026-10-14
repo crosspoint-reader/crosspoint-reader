@@ -142,6 +142,7 @@
         if (typeof CrossPoint._pending === 'function') {
           CrossPoint._pending(container, {
             name: p.name,
+            dir: p.dir,
             relay: (m, u, h, b) => CrossPoint.relay(p.name, m, u, h, b),
             crypto: (op, f) => CrossPoint.crypto(op, f),
             writeFile: (path, d) => CrossPoint.writeFile(p.name, path, d),

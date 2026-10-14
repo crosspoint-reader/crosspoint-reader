@@ -27,25 +27,24 @@ bool FontInstaller::isValidFamilyName(const char* name) {
   return true;
 }
 
-bool FontInstaller::isValidCpfontFilename(const char* name) {
+// Shared filename validation: rejects path separators / traversal, requires
+// the given extension (case-insensitive), and restricts the basename to
+// alphanumeric + hyphen + underscore. No additional dots — keeps stray
+// "Foo.cpfont.tmp"-style names out. Anything that could escape the family
+// directory or refer to a different one is a hard reject.
+static bool isValidFontFilenameWithExt(const char* name, const char* ext) {
   if (name == nullptr || name[0] == '\0') return false;
 
-  // Reject path separators / traversal up front. Anything that could escape
-  // the family directory or refer to a different one is a hard reject.
   if (strstr(name, "..") != nullptr) return false;
   if (strchr(name, '/') != nullptr) return false;
   if (strchr(name, '\\') != nullptr) return false;
 
-  // Must end with ".cpfont" exactly.
-  static constexpr char kExt[] = ".cpfont";
-  static constexpr size_t kExtLen = sizeof(kExt) - 1;
-  size_t nameLen = strlen(name);
-  if (nameLen <= kExtLen) return false;
-  if (strcmp(name + nameLen - kExtLen, kExt) != 0) return false;
+  const size_t extLen = strlen(ext);
+  const size_t nameLen = strlen(name);
+  if (nameLen <= extLen) return false;
+  if (strcasecmp(name + nameLen - extLen, ext) != 0) return false;
 
-  // Basename (before .cpfont) must be alphanumeric + hyphen + underscore only.
-  // No additional dots — keeps stray "Foo.cpfont.tmp"-style names out.
-  size_t baseLen = nameLen - kExtLen;
+  const size_t baseLen = nameLen - extLen;
   for (size_t i = 0; i < baseLen; ++i) {
     char c = name[i];
     if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') {
@@ -53,6 +52,12 @@ bool FontInstaller::isValidCpfontFilename(const char* name) {
     }
   }
   return true;
+}
+
+bool FontInstaller::isValidCpfontFilename(const char* name) { return isValidFontFilenameWithExt(name, ".cpfont"); }
+
+bool FontInstaller::isValidVectorFontFilename(const char* name) {
+  return isValidFontFilenameWithExt(name, ".ttf") || isValidFontFilenameWithExt(name, ".otf");
 }
 
 bool FontInstaller::ensureFamilyDir(const char* familyName) {
