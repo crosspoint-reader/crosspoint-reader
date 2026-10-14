@@ -16,6 +16,7 @@ add_executable(TtfRasterizerTest
   TtfFaceTest.cpp
   TtfRasterizerTest.cpp
   TtfVsFreeTypeTest.cpp
+  TtfCorruptFontTest.cpp
   FreeTypeReference.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfRasterizer.cpp
