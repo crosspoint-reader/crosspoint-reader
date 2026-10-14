@@ -1814,14 +1814,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     if (!firstLineConsumed && logical == 0) paragraphStartWord = static_cast<uint16_t>(i);
     const uint32_t start = visibleOffsetAt(logical);
     const bool discretionaryHyphen = (wordStyles[logical] & TextBlock::DISCRETIONARY_HYPHEN_FLAG) != 0;
-    uint32_t end = sourceOffsetAfter(start, countCodepoints(wordAt(logical)) - discretionaryHyphen);
     if (discretionaryHyphen) {
       lineWordStyles[i] = static_cast<EpdFontFamily::Style>(lineWordStyles[i] | TextBlock::DISCRETIONARY_HYPHEN_FLAG);
     }
-    if (logical + 1 < words.size() && visibleOffsetAt(logical + 1) > start) {
-      end = std::min(end, visibleOffsetAt(logical + 1));
-    }
-    sourceRanges.push_back({start, end});
+    sourceRanges.push_back({start, getWordVisibleEndOffsetAt(logical)});
   }
 
   if (!lineHasFocusSplit) {
