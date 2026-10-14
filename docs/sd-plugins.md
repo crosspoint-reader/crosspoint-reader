@@ -190,6 +190,7 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.bundle_install` | A catalog entry can install a multi-file plugin bundle from a base URL plus a file list into the plugin directory. | Any catalog can distribute a plugin or other supported bundle made of multiple files without a dedicated installer in firmware. Plugin Hub currently uses this to install complete plugins. |
 | `catalog.version_tracking` | Catalog item versions are compared with installed plugin manifests to show Installed or Update status. | Any catalog can expose install/update state using the generic installed-plugin version contract. Plugin Hub currently uses it to identify available updates. |
 | `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, exact firmware ID, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
+| `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
 
 Capability names describe firmware behavior available to the entire plugin system.
 They must not encode Plugin Hub policy or ownership, and another plugin may use the
@@ -232,6 +233,8 @@ Two browse formats:
 
 For JSON catalogs, `browse.compatibility` maps optional catalog-entry fields to firmware checks. If a catalog entry omits compatibility metadata, it is accepted and displayed normally. When an entry declares restrictions, `firmware_family` and `firmware` are comma-separated allow-lists, `plugin_api_min` requires the device API to be at least that value, and every comma-separated `requires` capability must be advertised by the firmware. Any mismatch silently omits that entry.
 
+JSON catalogs may also map `description`, `detail_author`, and `repository` for a generic item-details view, plus `details_url` and `details_format` for optional richer content. Catalog row subtitles may use up to three lines; the full Details view is still opened explicitly. Version-tracked catalogs automatically use Details before install/update and, for backward compatibility, recognize conventional item keys named `description`, `author`, `repository`, `details.url`, and `details.format` when explicit mappings are absent. Other JSON catalogs get the same Details-before-Fetch flow when a details field is mapped. The firmware re-streams the cached page only for the selected item, so long metadata is not retained for every row in memory. If `details_url` is present, firmware fetches that selected item only (bounded to 24 KiB); `details_format: "html"` uses the existing semantic HTML reader while an empty format or `text` is plain text. An unavailable URL or unsupported format falls back to the normal description/author/version/repository Details page and never blocks Install, Update, or Fetch.
+
 ```jsonc
 {
   "title": "Service Name",                  // menu label; defaults to folder name
@@ -258,14 +261,19 @@ For JSON catalogs, `browse.compatibility` maps optional catalog-entry fields to 
     "items": "",                            // dotted path to the item array; "" = response root
     "fields": {                             // json: dotted paths (numeric = array index)
       "title": "title",                     // required (items without one are dropped)
-      "author": "authors.0.name",
+      "author": "authors.0.name",            // compact row subtitle
+      "detail_author": "authors.0.name",     // optional Details author; defaults to author
       "id": "id",
       "url": "download_url",                // when the item carries a direct file URL
-      "version": "version"                  // catalog-of-plugins only: badges each row
+      "version": "version",                 // catalog-of-plugins only: badges each row
                                             // Installed / Update by comparing this to the
                                             // installed plugin's manifest.json (found by id).
                                             // Both are MAJOR.MINOR.PATCH ("1.2.0"); only a
                                             // newer catalog version shows Update.
+      "description": "description",         // optional: full paged text on Details
+      "repository": "repository",             // optional: shown on Details
+      "details_url": "details.url",            // optional: fetched only when Details opens
+      "details_format": "details.format"       // optional: "html" or plain-text default
     },
     "compatibility": {                    // optional JSON-only catalog filtering
       "firmware_family": "compatibility.firmware_family",

@@ -13,8 +13,9 @@
 #endif
 
 #ifndef CROSSPOINT_PLUGIN_CAPABILITIES
-#define CROSSPOINT_PLUGIN_CAPABILITIES \
-  "catalog.lists,catalog.notices,catalog.bundle_install,catalog.version_tracking,catalog.compatibility"
+#define CROSSPOINT_PLUGIN_CAPABILITIES                                                                                \
+  "catalog.lists,catalog.notices,catalog.bundle_install,catalog.version_tracking,catalog.compatibility,catalog.item_" \
+  "details"
 #endif
 
 namespace firmwareidentity {

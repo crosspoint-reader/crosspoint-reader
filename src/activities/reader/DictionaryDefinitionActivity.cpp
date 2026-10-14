@@ -12,6 +12,7 @@
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 #include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
 
@@ -33,6 +34,11 @@ constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  if (!confirmLabel.empty()) {
+    ActivityResult cancelled;
+    cancelled.isCancelled = true;
+    setResult(std::move(cancelled));
+  }
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
@@ -82,6 +88,17 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
           renderer.getScreenHeight() - y - bottomArea};
 }
 
+DictionaryDefinitionActivity::ActionArea DictionaryDefinitionActivity::actionArea() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  (void)top;
+  const int reservedHeight = std::max(bottom, metrics.buttonHintsHeight) + metrics.verticalSpacing;
+  const int height = std::max(1, metrics.buttonHintsHeight - metrics.verticalSpacing);
+  return {left + metrics.contentSidePadding, renderer.getScreenHeight() - reservedHeight + metrics.verticalSpacing / 2,
+          renderer.getScreenWidth() - left - right - 2 * metrics.contentSidePadding, height};
+}
+
 // Styled path: lay the HTML definition out through the EPUB chapter parser
 // into reader-identical Pages. Frees `definition` on success (the page arenas
 // own the text); any failure leaves state untouched for the plain-text path.
@@ -91,8 +108,10 @@ bool DictionaryDefinitionActivity::layoutHtmlPages() {
     LOG_ERR("DHTML", "Invalid definition viewport: %dx%d", body.width, body.height);
     return false;
   }
+  const uint8_t paragraphAlignment =
+      paragraphAlignmentOverride == 0xff ? SETTINGS.paragraphAlignment : paragraphAlignmentOverride;
   if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
-                                static_cast<uint16_t>(body.height), pages)) {
+                                static_cast<uint16_t>(body.height), paragraphAlignment, pages)) {
     return false;
   }
   definition.clear();
@@ -224,11 +243,26 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  if (!confirmLabel.empty() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    setResult(ActivityResult{});
+    finish();
+    return;
+  }
+
   // Same tap zones as the reader page turns: left third = previous page,
   // the rest = next. Back is the usual left-edge swipe.
   int tx = 0;
   int ty = 0;
   if (mappedInput.wasScreenTapped(tx, ty)) {
+    if (!confirmLabel.empty() && mappedInput.hasTouch()) {
+      const ActionArea action = actionArea();
+      if (tx >= action.x && tx < action.x + action.width && ty >= action.y && ty < action.y + action.height) {
+        haptic_feedback::touchAction();
+        setResult(ActivityResult{});
+        finish();
+        return;
+      }
+    }
     if (tx < renderer.getScreenWidth() / 3) {
       if (currentPage > 0) {
         haptic_feedback::touchAction();
@@ -311,8 +345,17 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(fontId, body.x, body.y);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
+  if (!confirmLabel.empty() && mappedInput.hasTouch()) {
+    const ActionArea action = actionArea();
+    renderer.drawRect(action.x, action.y, action.width, action.height);
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, confirmLabel.c_str());
+    const int textHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    renderer.drawText(UI_10_FONT_ID, action.x + std::max(0, (action.width - textWidth) / 2),
+                      action.y + std::max(0, (action.height - textHeight) / 2), confirmLabel.c_str());
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel.c_str(), (currentPage > 0 ? "<" : ""),
+                                            (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

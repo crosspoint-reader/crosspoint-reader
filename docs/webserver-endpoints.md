@@ -37,7 +37,7 @@ Response:
   "firmwareFamily": "crosspoint",
   "firmwareId": "crosspoint",
   "pluginApi": 1,
-  "pluginCapabilities": "catalog.lists,catalog.notices,catalog.bundle_install,catalog.version_tracking,catalog.compatibility",
+  "pluginCapabilities": "catalog.lists,catalog.notices,catalog.bundle_install,catalog.version_tracking,catalog.compatibility,catalog.item_details",
   "ip": "192.168.1.100",
   "mode": "STA",
   "rssi": -45,
