@@ -5,6 +5,8 @@ add_executable(TtfRasterizerTest
   TtfGraysTest.cpp
   FontBytesTest.cpp
   TtfFixedTest.cpp
+  TtfFaceTest.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c
   ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
 )
@@ -16,6 +18,10 @@ target_include_directories(TtfRasterizerTest PRIVATE
   ${REPO_ROOT}/lib/Logging
   ${REPO_ROOT}/lib/Memory
   ${REPO_ROOT}/test/shims
+)
+
+target_compile_definitions(TtfRasterizerTest PRIVATE
+  TTF_FONT_DIR="${REPO_ROOT}/lib/EpdFont/builtinFonts/source"
 )
 
 target_link_libraries(TtfRasterizerTest PRIVATE
