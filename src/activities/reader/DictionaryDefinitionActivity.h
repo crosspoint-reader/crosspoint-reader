@@ -9,6 +9,7 @@
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
 
 // Paged viewer for one dictionary definition. HTML definitions are laid out
 // through the EPUB chapter parser into styled Pages; anything else (plain
@@ -34,6 +35,7 @@ class DictionaryDefinitionActivity final : public Activity {
   struct Line {
     uint32_t start;
     uint16_t len;
+    bool bold;
   };
 
   // Usable body-text area between the header and the button hints.
@@ -47,7 +49,8 @@ class DictionaryDefinitionActivity final : public Activity {
   BodyArea bodyArea() const;
   bool layoutHtmlPages();
   void wrapText();
-  int measureSpan(int fontId, const char* text, size_t len) const;
+  int measureSpan(int fontId, const char* text, size_t len,
+                  EpdFontFamily::Style family = EpdFontFamily::REGULAR) const;
   void drawBody(int fontId, int x, int startY) const;
 
   const std::string headword;

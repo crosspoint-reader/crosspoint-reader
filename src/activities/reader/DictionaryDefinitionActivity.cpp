@@ -102,12 +102,13 @@ bool DictionaryDefinitionActivity::layoutHtmlPages() {
   return true;
 }
 
-int DictionaryDefinitionActivity::measureSpan(const int fontId, const char* text, size_t len) const {
+int DictionaryDefinitionActivity::measureSpan(const int fontId, const char* text, size_t len,
+                                              const EpdFontFamily::Style family) const {
   char buf[MAX_LINE_BYTES + 1];
   len = std::min(len, MAX_LINE_BYTES);
   memcpy(buf, text, len);
   buf[len] = '\0';
-  return renderer.getTextAdvanceX(fontId, buf, EpdFontFamily::REGULAR);
+  return renderer.getTextAdvanceX(fontId, buf, family);
 }
 
 // Greedy word-wrap of `definition` into byte spans. '\n' breaks lines (blank
@@ -122,7 +123,7 @@ void DictionaryDefinitionActivity::wrapText() {
   // SD-card fonts: merge every definition codepoint into the persistent
   // advance table up front. Otherwise each unseen codepoint measured below
   // falls back to an on-demand glyph load from SD (8-slot overflow ring).
-  renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x01 /* REGULAR */);
+  renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x03 /* REGULAR + BOLD */);
 
   const BodyArea body = bodyArea();
   const int maxWidth = body.width;
@@ -135,16 +136,24 @@ void DictionaryDefinitionActivity::wrapText() {
   uint32_t lineStart = 0;
   uint32_t lineEnd = 0;  // one past the last token byte on the current line
   int lineWidth = 0;
+  bool lineBold = false;
 
   const auto flushLine = [&](uint32_t nextStart) {
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart)});
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
+    lineBold = false;
   };
 
   uint32_t i = 0;
   while (i < n) {
+    if (lineEnd == lineStart && i == lineStart && text[i] == DICTIONARY_PLAIN_HEADWORD_MARKER) {
+      lineStart = ++i;
+      lineEnd = lineStart;
+      lineBold = true;
+      continue;
+    }
     const char c = text[i];
     if (c == '\n' || c == '\0') {
       flushLine(i + 1);
@@ -168,7 +177,8 @@ void DictionaryDefinitionActivity::wrapText() {
     // continuation byte, so this is a no-op there.
     while (i - tokenStart > 1 && (text[i] & 0xC0) == 0x80) i--;
     const uint32_t tokenLen = i - tokenStart;
-    const int tokenWidth = measureSpan(fontId, text + tokenStart, tokenLen);
+    const int tokenWidth =
+        measureSpan(fontId, text + tokenStart, tokenLen, lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
     if (lineEnd == lineStart) {
       lineStart = tokenStart;
@@ -192,7 +202,9 @@ void DictionaryDefinitionActivity::wrapText() {
       uint32_t lastFit = 0;
       for (uint32_t f = 1; f <= len; f++) {
         if (f == len || (text[lineStart + f] & 0xC0) != 0x80) {  // codepoint boundary
-          if (measureSpan(fontId, text + lineStart, f) > maxWidth) break;
+          if (measureSpan(fontId, text + lineStart, f,
+                          lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR) > maxWidth)
+            break;
           lastFit = f;
         }
       }
@@ -206,7 +218,8 @@ void DictionaryDefinitionActivity::wrapText() {
       lineEnd = rest;
       flushLine(rest);
       lineEnd = rest + (len - lastFit);
-      lineWidth = measureSpan(fontId, text + lineStart, lineEnd - lineStart);
+      lineWidth = measureSpan(fontId, text + lineStart, lineEnd - lineStart,
+                              lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
     }
   }
   if (lineEnd > lineStart) flushLine(n);
@@ -276,7 +289,8 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
-    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf);
+    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf, true,
+                      lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
   }
 }
 

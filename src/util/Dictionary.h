@@ -16,6 +16,8 @@ struct DictLocation {
   bool readError = false;
 };
 
+inline constexpr char DICTIONARY_PLAIN_HEADWORD_MARKER = '\x01';
+
 // Slim StarDict reader: exact-match lookup with a synonym and mini stemming
 // fallback.
 //

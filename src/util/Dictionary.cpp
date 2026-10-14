@@ -748,6 +748,7 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       if (htmlDefinitions) {
         definitionOut += "<b>" + synonymHeadwords[i] + "</b><br>";
       } else {
+        definitionOut.push_back(DICTIONARY_PLAIN_HEADWORD_MARKER);
         definitionOut += synonymHeadwords[i] + "\n";
       }
       if (!readDefinition(synonymLocations[i], definitionOut, outResult, true)) return false;
