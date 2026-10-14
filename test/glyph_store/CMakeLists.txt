@@ -1,10 +1,13 @@
 add_executable(GlyphStoreTest
   SimNorFlashTest.cpp
+  GlyphStoreFormatTest.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/GlyphStoreFormat.cpp
 )
 
 target_include_directories(GlyphStoreTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${REPO_ROOT}/lib/hal
+  ${REPO_ROOT}/lib/EpdFont/ttf
 )
 
 target_link_libraries(GlyphStoreTest PRIVATE
