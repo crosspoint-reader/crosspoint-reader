@@ -66,8 +66,7 @@ class FlashGlyphStore {
   /// Erases the header first, so a power cut from here on reads as "not installed". Then erases every
   /// sector of the new layout that holds data. `sdInfo` (SD mode, may be null) supplies each style's file
   /// hash, size and table map; offsets and sizes come from `layout`.
-  bool beginInstall(const glyphstore::Layout& layout, const uint8_t identity[16],
-                    const glyphstore::StyleInfo* sdInfo);
+  bool beginInstall(const glyphstore::Layout& layout, const uint8_t identity[16], const glyphstore::StyleInfo* sdInfo);
   /// Copies style data into a style block, each byte once. Only between beginInstall() and finishInstall().
   bool writeStyleData(uint8_t style, uint32_t offset, const void* data, uint32_t len);
   /// Writes the header. Only now does the store open.

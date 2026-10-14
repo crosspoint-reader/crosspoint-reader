@@ -23,7 +23,8 @@ struct GlyphSpec {
 };
 
 const GlyphSpec kBatchA[] = {{makeKey('A', 0, 0), 9, 12}, {makeKey('B', 0, 0), 10, 12}, {makeKey(' ', 0, 0), 0, 0}};
-const GlyphSpec kBatchB[] = {{makeKey('C', 0, 0), 11, 13}, {makeKey('d', 1, 0), 8, 12}, {makeKey(0x4E2D, 0, 1), 24, 26}};
+const GlyphSpec kBatchB[] = {
+    {makeKey('C', 0, 0), 11, 13}, {makeKey('d', 1, 0), 8, 12}, {makeKey(0x4E2D, 0, 1), 24, 26}};
 const GlyphSpec kAfter[] = {{makeKey('E', 0, 0), 9, 13}, {makeKey('F', 0, 0), 9, 12}};
 constexpr uint32_t kMissingKey = makeKey(0x2603, 0, 0);
 constexpr uint32_t kPpem = 29 << 6;

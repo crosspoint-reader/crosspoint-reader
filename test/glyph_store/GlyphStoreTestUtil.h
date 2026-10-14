@@ -66,7 +66,9 @@ inline EpdGlyph metrics(const uint8_t width, const uint8_t height) {
 }
 
 /// Bitmap byte i of the glyph stored under `key`: a pattern any test can recompute.
-inline uint8_t pattern(const uint32_t key, const uint32_t i) { return static_cast<uint8_t>((key * 31u + i * 7u) ^ 0x5Au); }
+inline uint8_t pattern(const uint32_t key, const uint32_t i) {
+  return static_cast<uint8_t>((key * 31u + i * 7u) ^ 0x5Au);
+}
 
 /// Bytes a record with a width x height bitmap takes in the log.
 inline uint32_t recordSize(const uint8_t width, const uint8_t height) {
@@ -85,8 +87,8 @@ inline void writeRawRecord(SimNorFlash& flash, const glyphstore::Layout& layout,
   std::memcpy(record.data() + 4, &glyph, sizeof glyph);
   for (uint32_t i = 0; i < glyph.dataLength; ++i) record[glyphstore::kRecordHeaderBytes + i] = pattern(key, i);
   const uint32_t written = bitmapBytes < glyph.dataLength ? bitmapBytes : glyph.dataLength;
-  ASSERT_TRUE(flash.program(layout.geometry.logOffset + offset, record.data(),
-                            glyphstore::kRecordHeaderBytes + written));
+  ASSERT_TRUE(
+      flash.program(layout.geometry.logOffset + offset, record.data(), glyphstore::kRecordHeaderBytes + written));
 }
 
 /// Stages `key` as a width x height glyph whose bitmap is pattern(key, i).
@@ -99,8 +101,7 @@ inline bool stage(GlyphBatch& batch, const uint32_t key, const uint8_t width, co
 }
 
 /// True when `key` is stored with exactly the metrics and bitmap stage() gave it.
-inline bool storedIntact(const FlashGlyphStore& store, const uint32_t key, const uint8_t width,
-                         const uint8_t height) {
+inline bool storedIntact(const FlashGlyphStore& store, const uint32_t key, const uint8_t width, const uint8_t height) {
   const EpdGlyph* glyph = nullptr;
   if (store.find(key, &glyph) != FlashGlyphStore::Lookup::Found || glyph == nullptr) return false;
   const EpdGlyph want = metrics(width, height);

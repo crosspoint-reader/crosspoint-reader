@@ -119,8 +119,7 @@ bool FlashGlyphStore::beginInstall(const Layout& layout, const uint8_t identity[
   return true;
 }
 
-bool FlashGlyphStore::writeStyleData(const uint8_t style, const uint32_t offset, const void* data,
-                                     const uint32_t len) {
+bool FlashGlyphStore::writeStyleData(const uint8_t style, const uint32_t offset, const void* data, const uint32_t len) {
   if (!installing_ || style >= installing_->geometry.styleCount) return false;
   const StyleInfo& info = installing_->styles[style];
   if (offset > info.size || len > info.size - offset) return false;
@@ -147,9 +146,8 @@ FlashGlyphStore::OpenResult FlashGlyphStore::open(const uint8_t identity[16]) {
     LOG_ERR("GST", "open: no memory for the header (%u B)", static_cast<unsigned>(sizeof(Header)));
     return OpenResult::NoMemory;
   }
-  if (!flash_.read(0, header.get(), sizeof(Header)) || header->magic != kMagic ||
-      header->version != kFormatVersion || header->headerBytes != sizeof(Header) ||
-      header->check != fnv1a(header.get(), offsetof(Header, check))) {
+  if (!flash_.read(0, header.get(), sizeof(Header)) || header->magic != kMagic || header->version != kFormatVersion ||
+      header->headerBytes != sizeof(Header) || header->check != fnv1a(header.get(), offsetof(Header, check))) {
     return OpenResult::NotInstalled;
   }
   const Geometry& g = header->geometry;
@@ -165,7 +163,8 @@ FlashGlyphStore::OpenResult FlashGlyphStore::open(const uint8_t identity[16]) {
   region_ = flash_.map(g.indexOffset, g.logOffset + g.logSize - g.indexOffset);
   if (!region_) {
     LOG_ERR("GST", "open: cannot map the index and log (%u B, %u map pages free)",
-            static_cast<unsigned>(g.logOffset + g.logSize - g.indexOffset), static_cast<unsigned>(flash_.freeMapPages()));
+            static_cast<unsigned>(g.logOffset + g.logSize - g.indexOffset),
+            static_cast<unsigned>(flash_.freeMapPages()));
     return OpenResult::MapFailed;
   }
   geometry_ = g;
@@ -348,8 +347,8 @@ FlashGlyphStore::Lookup FlashGlyphStore::find(const uint32_t key, const EpdGlyph
   return Lookup::Absent;
 }
 
-FlashGlyphStore::Insert FlashGlyphStore::insert(const uint32_t tableOffset, const uint8_t* table,
-                                                const uint32_t slots, const uint32_t key, const uint32_t value) {
+FlashGlyphStore::Insert FlashGlyphStore::insert(const uint32_t tableOffset, const uint8_t* table, const uint32_t slots,
+                                                const uint32_t key, const uint32_t value) {
   uint32_t i = homeSlot(key, slots);
   for (uint32_t probe = 0; probe < kMaxProbe && probe < slots; ++probe, i = (i + 1 == slots) ? 0 : i + 1) {
     // A slot in use, or one cut short (some bits programmed), is never programmed again.

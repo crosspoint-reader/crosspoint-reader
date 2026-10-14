@@ -46,7 +46,8 @@ bool EspNorFlash::program(const uint32_t offset, const void* src, const uint32_t
 bool EspNorFlash::erase(const uint32_t offset, const uint32_t len) {
   if (!writable("erase", offset, len)) return false;
   if (offset % kSectorBytes != 0 || len % kSectorBytes != 0) {
-    LOG_ERR("ENF", "erase of %u B at %u is not sector-aligned", static_cast<unsigned>(len), static_cast<unsigned>(offset));
+    LOG_ERR("ENF", "erase of %u B at %u is not sector-aligned", static_cast<unsigned>(len),
+            static_cast<unsigned>(offset));
     return false;
   }
   const esp_err_t err = esp_partition_erase_range(part_, offset, len);
