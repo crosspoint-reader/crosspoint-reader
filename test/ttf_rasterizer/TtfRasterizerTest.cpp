@@ -246,6 +246,15 @@ TEST_F(TtfRasterizerTest, AdvancesTooWideForAnEpdGlyphAreUnsupported) {
   EXPECT_EQ(Status::Unsupported, draw(wide, kMaxPpem26_6));
 }
 
+TEST_F(TtfRasterizerTest, GlyphsPlacedPastAnInt16AreUnsupported) {
+  // On a 16-unit em at 14 pt one unit is 117 px: a glyph at the int16 limits lands about 59,700 px away.
+  font.unitsPerEm = 16;
+  const uint16_t below = add(outline({rect(0, -32768, 1, -32767)}));
+  const uint16_t right = add(outline({rect(32766, 0, 32767, 1)}));
+  EXPECT_EQ(Status::Unsupported, draw(below, ppemFromPoints(14)));  // top would wrap to +5,794
+  EXPECT_EQ(Status::Unsupported, draw(right, ppemFromPoints(14)));  // left would wrap to -5,796
+}
+
 TEST_F(TtfRasterizerTest, BitmapsTooLargeAreUnsupported) {
   const uint16_t big = add(outline({rect(0, 0, 2000, 2000)}));
   EXPECT_EQ(Status::Unsupported, draw(big, kMaxPpem26_6));  // 510 px a side

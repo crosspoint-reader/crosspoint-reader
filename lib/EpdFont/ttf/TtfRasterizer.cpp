@@ -394,7 +394,7 @@ Status Rasterizer::load(FontBytes& bytes, const Face& face, const uint16_t glyph
     width = static_cast<int32_t>((xMax + 63) >> 6) - left;
     height = top - bottom;
     if (width > 255 || height > 255 || glyphDataBytes(width, height, true) > plan_.outputBytes || left < INT16_MIN ||
-        top > INT16_MAX) {
+        left > INT16_MAX || top < INT16_MIN || top > INT16_MAX) {
       return loaded_ = Status::Unsupported;
     }
     loader.translate(0, -left * 64, -bottom * 64);  // the box now starts at (0, 0), as ftgrays' clip box does
