@@ -157,9 +157,10 @@ EpubReaderActivity::~EpubReaderActivity() {
   settleOverlayRefresh();
   discardOverlayPage();  // free the overlay's page snapshot if one is held
 
-  if (footnoteDepth > 0 && epub) {
-    const SavedPosition& origin = savedPositions[0];
-    saveProgress(origin.spineIndex, origin.pageNumber, 0);
+  if (epub) {
+    if (const auto* origin = footnoteHistory.origin()) {
+      saveProgress(origin->spineIndex, origin->pageNumber, 0);
+    }
   }
 
   section.reset();
@@ -618,9 +619,8 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (footnoteDepth > 0 && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_BACK_OR_HOME_MS) {
-    restoreSavedPosition();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() < ReaderUtils::GO_BACK_OR_HOME_MS && restoreSavedPosition()) {
     return;
   }
 
@@ -632,9 +632,7 @@ void EpubReaderActivity::loop() {
       (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
        mappedInput.wasReleased(MappedInputManager::Button::Power) &&
        !mappedInput.wasReleased(MappedInputManager::Button::Down))) {
-    if (footnoteDepth > 0) {
-      restoreSavedPosition();
-    } else {
+    if (!restoreSavedPosition()) {
       openFootnoteSelect(false);
     }
     return;
@@ -1435,6 +1433,7 @@ void EpubReaderActivity::renderBook() {
     }
     pageLoadRetryCount = 0;
 
+    footnoteHistory.resolveLinkTarget({currentSpineIndex, section->currentPage});
     currentPageVisibleOffset = p->visibleTextOffset;
     currentPageFootnotes = std::move(p->footnotes);
     currentPageLinks = std::move(p->links);
@@ -2559,12 +2558,6 @@ void EpubReaderActivity::activateMoreRow(int row) {
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
   if (!epub) return;
 
-  if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
-    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
-    footnoteDepth++;
-    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
-  }
-
   std::string anchor;
   const auto hashPos = hrefStr.find('#');
   if (hashPos != std::string::npos && hashPos + 1 < hrefStr.size()) {
@@ -2576,12 +2569,16 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   if (targetSpineIndex < 0) {
     LOG_DBG("ERS", "Could not resolve href: %s", hrefStr.c_str());
-    if (savePosition && footnoteDepth > 0) footnoteDepth--;
     return;
   }
 
   {
     RenderLock lock;
+    if (savePosition && section) {
+      footnoteHistory.push({currentSpineIndex, section->currentPage});
+      LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteHistory.depth(), currentSpineIndex,
+              section->currentPage);
+    }
     clearDeferredReposition();
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
@@ -2592,20 +2589,20 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   LOG_DBG("ERS", "Navigated to spine %d for href: %s", targetSpineIndex, hrefStr.c_str());
 }
 
-void EpubReaderActivity::restoreSavedPosition() {
-  if (footnoteDepth <= 0) return;
-  footnoteDepth--;
-  const auto& pos = savedPositions[footnoteDepth];
-  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
-
+bool EpubReaderActivity::restoreSavedPosition() {
   {
     RenderLock lock;
+    const auto pos = footnoteHistory.pop();
+    if (!pos) return false;
+    LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteHistory.depth(), pos->spineIndex,
+            pos->pageNumber);
     clearDeferredReposition();
-    currentSpineIndex = pos.spineIndex;
-    nextPageNumber = pos.pageNumber;
+    currentSpineIndex = pos->spineIndex;
+    nextPageNumber = pos->pageNumber;
     section.reset();
   }
   requestUpdate();
+  return true;
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {
