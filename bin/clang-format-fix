@@ -44,7 +44,7 @@ set +o pipefail
 if [[ "${1:-}" == "-g" ]]; then
   git diff --name-only HEAD -- \
       | grep -E '\.(c|cpp|h|hpp)$' \
-      | grep -v -E '^(freeink-sdk/|\.pio/|\.venv/|lib/EpdFont/builtinFonts/|lib/Epub/Epub/hyphenation/generated/|lib/uzlib/|lib/TJpgDec/)' \
+      | grep -v -E '^(freeink-sdk/|\.pio/|\.venv/|lib/EpdFont/builtinFonts/|lib/Epub/Epub/hyphenation/generated/|lib/uzlib/|lib/TJpgDec/|lib/EpdFont/ttf/third_party/)' \
       | grep -v -E '\.generated\.h$' \
       | while IFS= read -r file; do
           [[ -f "$file" ]] && printf '%s\n' "$file"
@@ -53,7 +53,7 @@ if [[ "${1:-}" == "-g" ]]; then
 else
   git ls-files --exclude-standard \
       | grep -E '\.(c|cpp|h|hpp)$' \
-      | grep -v -E '^(freeink-sdk/|\.pio/|\.venv/|lib/EpdFont/builtinFonts/|lib/Epub/Epub/hyphenation/generated/|lib/uzlib/|lib/TJpgDec/)' \
+      | grep -v -E '^(freeink-sdk/|\.pio/|\.venv/|lib/EpdFont/builtinFonts/|lib/Epub/Epub/hyphenation/generated/|lib/uzlib/|lib/TJpgDec/|lib/EpdFont/ttf/third_party/)' \
       | grep -v -E '\.generated\.h$' \
       | xargs -r "${CLANG_FORMAT_BIN}" -style=file -i
 fi
