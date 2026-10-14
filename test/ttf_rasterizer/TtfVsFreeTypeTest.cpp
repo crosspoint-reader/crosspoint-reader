@@ -12,6 +12,7 @@
 #include "FreeTypeReference.h"
 #include "TtfRasterizer.h"
 #include "TtfTestUtil.h"
+#include "ttf_raster_golden.h"
 
 using namespace ttf;
 using namespace ttf_test;
@@ -170,4 +171,21 @@ TEST(TtfPoolSize, ThePoolNeverChangesTheOutput) {
     ASSERT_EQ(0, std::memcmp(small.output(), flash.output(), a.dataLength)) << g;
     ASSERT_EQ(0, std::memcmp(small.output(), sd.output(), a.dataLength)) << g;
   }
+}
+
+TEST(TtfGolden, TheDeviceBenchExpectsThisOutput) {
+  // bench/ttf_raster_main.cpp computes the same hash on the device, over the same glyphs.
+  const std::vector<uint8_t> data = readFont("Bookerly/Bookerly-Regular.ttf");
+  FontBytes bytes(data.data(), static_cast<uint32_t>(data.size()));
+  Face face;
+  ASSERT_EQ(FaceStatus::Ok, parseFace(bytes, &face));
+  Rasterizer rasterizer;
+  ASSERT_TRUE(rasterizer.allocate(planScratch(face, ppemFromPoints(40), kPoolBytesFlash)));
+  uint32_t hash = ttf_golden::kSeed;
+  for (uint16_t g = 0; g < face.numGlyphs; ++g) {
+    EpdGlyph metrics{};
+    if (rasterizer.render(bytes, face, g, ppemFromPoints(kPoints), &metrics) != Status::Ok) continue;
+    hash = ttf_golden::hashGlyph(hash, g, metrics, rasterizer.output());
+  }
+  EXPECT_EQ(ttf_golden::kBookerlyRegular14pt, hash) << std::hex << hash;
 }

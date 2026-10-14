@@ -31,6 +31,7 @@ target_include_directories(TtfRasterizerTest PRIVATE
   ${REPO_ROOT}/lib/Logging
   ${REPO_ROOT}/lib/Memory
   ${REPO_ROOT}/test/shims
+  ${REPO_ROOT}/bench
 )
 
 target_compile_definitions(TtfRasterizerTest PRIVATE
