@@ -130,4 +130,7 @@ bool hasFamilyComplete(const char* familyName, const uint8_t* sizes, uint8_t siz
 // Returns true if the partition is currently mmap'd.
 bool isMapped();
 
+// Returns true while a write session (beginWrite .. finaliseWrite) is open.
+bool isWriting();
+
 }  // namespace FlashFontPartition

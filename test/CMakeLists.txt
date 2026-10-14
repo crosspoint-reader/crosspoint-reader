@@ -190,6 +190,7 @@ add_subdirectory(adaptive_tone)
 add_subdirectory(gray8_writer)
 add_subdirectory(glyph_fallback)
 add_subdirectory(glyph_provider)
+add_subdirectory(glyph_store)
 # After zip_entry_reader: reuses its inflate_reader_host target and HalStorage shim.
 add_subdirectory(dictionary)
 add_subdirectory(reading_stats)
