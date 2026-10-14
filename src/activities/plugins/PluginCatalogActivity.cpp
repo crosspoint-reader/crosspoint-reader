@@ -512,7 +512,12 @@ void PluginCatalogActivity::enterPluginPicker() {
   errorMessage.clear();
   session.reset();  // no TLS while only picking
   state = State::PLUGIN_PICKER;
-  if (pickerReturnRow > 0 && pickerReturnRow < rowCount()) moveSelectionTo(pickerReturnRow);
+  for (size_t i = 0; i < installedPlugins.size(); ++i) {
+    if (installedPlugins[i].name != pickerReturnName) continue;
+    const int prefixRows = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+    moveSelectionTo(prefixRows + static_cast<int>(i));
+    break;
+  }
   requestUpdate();
 }
 
@@ -1284,7 +1289,7 @@ void PluginCatalogActivity::activateIndex(const int index) {
     }
     if (action != PluginLocations::PickerAction::Catalog) return;
     app.clearTapFlash();  // the row leaves this screen
-    pickerReturnRow = index;
+    pickerReturnName = plugin.name;
     manifestPath = plugin.manifestPath;
     catalogTitle = plugin.title;
     enterCatalog();
