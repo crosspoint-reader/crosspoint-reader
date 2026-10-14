@@ -63,17 +63,14 @@ If you are unsure whether your idea falls into one of these categories, open a D
 CrossPoint is also used as a foundation for downstream forks with different
 product goals. Supporting that ecosystem does not expand CrossPoint's own
 product scope, but narrowly scoped, product-neutral improvements to existing
-low-level infrastructure may still be accepted when they are broadly reusable.
+low-level infrastructure may still be accepted when they are broadly reusable
+and do not impose substantial new dependencies, resource cost, or maintenance
+burden on CrossPoint itself.
 
-Such changes should extend existing abstractions without introducing
-downstream-specific UI, policy, workflows, or feature semantics, and should not
-impose substantial new dependencies, resource cost, or maintenance burden on
-CrossPoint itself.
-
-This does not make the downstream feature itself in scope. If a reusable
-primitive cannot be cleanly separated from the larger feature or subsystem that
-needs it, that work belongs in the downstream fork unless CrossPoint
-independently chooses to adopt it.
+Downstream-specific UI, policy, workflows, and feature semantics remain out of
+scope. If a reusable primitive cannot be cleanly separated from the downstream
+feature that needs it, that work belongs in the downstream fork unless
+CrossPoint independently chooses to adopt it.
 
 ## 5. Calls to Action
 
