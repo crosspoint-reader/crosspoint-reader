@@ -62,7 +62,8 @@ int32_t unitsToPixels(const Face& face, uint32_t ppem26_6);
 void horizontalMetrics(FontBytes& bytes, const Face& face, uint16_t glyph, uint16_t* advance, int16_t* lsb);
 
 /// The glyph's advance in 12.4 pixels, as the converter derives advanceX from FreeType's linearHoriAdvance.
-uint16_t advance12_4(FontBytes& bytes, const Face& face, uint16_t glyph, uint32_t ppem26_6);
+/// Unclipped: a value over 0xFFFF does not fit EpdGlyph::advanceX, and the caller refuses the glyph.
+uint32_t advance12_4(FontBytes& bytes, const Face& face, uint16_t glyph, uint32_t ppem26_6);
 
 /// Line metrics in whole pixels, as fontconvert_sdcard.py writes them: advanceY from the rounded height,
 /// the ascender rounded up, the descender rounded down.

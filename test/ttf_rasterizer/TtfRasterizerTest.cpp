@@ -240,6 +240,12 @@ TEST_F(TtfRasterizerTest, OutlinesPastTheScratchCapsAreUnsupported) {
   EXPECT_EQ(Status::Ok, draw(two, kUnitPpem, small));
 }
 
+TEST_F(TtfRasterizerTest, AdvancesTooWideForAnEpdGlyphAreUnsupported) {
+  // 65,535 units at 255 px per em is 16,711 px: past the 4,095.9 px a 12.4 advanceX can hold.
+  const uint16_t wide = add(outline({rect(0, 0, 64, 64)}, 65535));
+  EXPECT_EQ(Status::Unsupported, draw(wide, kMaxPpem26_6));
+}
+
 TEST_F(TtfRasterizerTest, BitmapsTooLargeAreUnsupported) {
   const uint16_t big = add(outline({rect(0, 0, 2000, 2000)}));
   EXPECT_EQ(Status::Unsupported, draw(big, kMaxPpem26_6));  // 510 px a side

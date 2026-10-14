@@ -261,3 +261,23 @@ TEST(TtfFace, Os2MetricsAreUsedWhereFreeTypeUsesThem) {
   EXPECT_EQ(-400, face.descender);
   EXPECT_EQ(1500, face.height);
 }
+
+TEST(TtfFace, HugeAdvancesNeitherOverflowNorWrap) {
+  // A lying hmtx on a tiny em: the 16.16 linear advance passes 2^31, and the 12.4 result passes 16 bits.
+  Font font = threeGlyphs();
+  font.unitsPerEm = 16;
+  font.glyphs[1].advance = 63550;
+  Bytes data = buildFont(font);
+  FontBytes bytes(data.data(), static_cast<uint32_t>(data.size()));
+  Face face;
+  ASSERT_EQ(FaceStatus::Ok, parseFace(bytes, &face));
+  EXPECT_EQ(524288u, advance12_4(bytes, face, 1, 528));  // 2147481600 in 16.16: the + 2048 used to overflow
+
+  font = threeGlyphs();
+  font.unitsPerEm = 2048;
+  font.glyphs[1].advance = 65535;
+  data = buildFont(font);
+  bytes = FontBytes(data.data(), static_cast<uint32_t>(data.size()));
+  ASSERT_EQ(FaceStatus::Ok, parseFace(bytes, &face));
+  EXPECT_EQ(130558u, advance12_4(bytes, face, 1, 255 << 6));  // 8,160 px: wrapped to 4,064 px in 16 bits
+}

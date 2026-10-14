@@ -368,8 +368,9 @@ Status Rasterizer::load(FontBytes& bytes, const Face& face, const uint16_t glyph
   if (status == Status::Ok && bytes.outOfRange()) status = Status::Malformed;
   if (status == Status::Ok && !loader.translate(0, -pp1x, 0)) status = Status::Unsupported;
   if (status != Status::Ok) return loaded_ = status;
-  const uint16_t advance = advance12_4(bytes, face, glyph, ppem26_6);
+  const uint32_t advance = advance12_4(bytes, face, glyph, ppem26_6);
   if (bytes.ioError()) return loaded_ = Status::Transient;
+  if (advance > 0xFFFF) return loaded_ = Status::Unsupported;  // past the 4,095.9 px EpdGlyph::advanceX holds
 
   int32_t left = 0;
   int32_t top = 0;
@@ -400,7 +401,7 @@ Status Rasterizer::load(FontBytes& bytes, const Face& face, const uint16_t glyph
   }
   metrics->width = static_cast<uint8_t>(width);
   metrics->height = static_cast<uint8_t>(height);
-  metrics->advanceX = advance;
+  metrics->advanceX = static_cast<uint16_t>(advance);
   metrics->left = static_cast<int16_t>(left);
   metrics->top = static_cast<int16_t>(top);
   metrics->dataLength = glyphDataBytes(width, height, true);

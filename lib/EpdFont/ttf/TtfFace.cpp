@@ -229,13 +229,14 @@ void horizontalMetrics(FontBytes& bytes, const Face& face, const uint16_t glyph,
   if (pos + 2 <= face.hmtxLength) *lsb = bytes.i16(face.hmtx + pos);
 }
 
-uint16_t advance12_4(FontBytes& bytes, const Face& face, const uint16_t glyph, const uint32_t ppem26_6) {
+uint32_t advance12_4(FontBytes& bytes, const Face& face, const uint16_t glyph, const uint32_t ppem26_6) {
   uint16_t advance = 0;
   int16_t lsb = 0;
   horizontalMetrics(bytes, face, glyph, &advance, &lsb);
   // FreeType: linearHoriAdvance = FT_MulDiv(advance, x_scale, 64) in 16.16; the converter rounds that to 12.4.
-  const int32_t linear = mulDiv(advance, unitsToPixels(face, ppem26_6), 64);
-  return static_cast<uint16_t>((linear + (1 << 11)) >> 12);
+  // In 64 bits: a lying hmtx on a small em passes 2^31 (at most 2^36: 65,535 units x a 2^26 scale / 64).
+  const int64_t linear = mulDivWide(advance, unitsToPixels(face, ppem26_6), 64);
+  return static_cast<uint32_t>((linear + (1 << 11)) >> 12);
 }
 
 LineMetrics lineMetrics(const Face& face, const uint32_t ppem26_6) {
