@@ -4,11 +4,6 @@
 
 namespace {
 
-FootnoteHistory::Position sleepPosition(const FootnoteHistory& history, const FootnoteHistory::Position current) {
-  const auto* origin = history.origin();
-  return origin ? *origin : current;
-}
-
 void expectPosition(const FootnoteHistory::Position position, const int spine, const int page) {
   EXPECT_EQ(position.spineIndex, spine);
   EXPECT_EQ(position.pageNumber, page);
@@ -16,7 +11,7 @@ void expectPosition(const FootnoteHistory::Position position, const int spine, c
 
 }  // namespace
 
-TEST(FootnoteHistoryTest, ReturnLinkThenReadingSavesLatestPageOnSleep) {
+TEST(FootnoteHistoryTest, ReturnLinkClearsStaleHistory) {
   FootnoteHistory history;
   history.push({1, 12});
   history.resolveLinkTarget({38, 0});
@@ -24,20 +19,24 @@ TEST(FootnoteHistoryTest, ReturnLinkThenReadingSavesLatestPageOnSleep) {
   history.resolveLinkTarget({1, 12});
 
   EXPECT_TRUE(history.empty());
-  expectPosition(sleepPosition(history, {3, 25}), 3, 25);
   EXPECT_FALSE(history.pop().has_value());
 }
 
-TEST(FootnoteHistoryTest, SleepWhileReadingNoteSavesMainTextOrigin) {
+TEST(FootnoteHistoryTest, RestoredHistoryKeepsReturnPositionOnOrdinaryRender) {
   FootnoteHistory history;
   history.push({1, 12});
   history.resolveLinkTarget({38, 0});
 
-  EXPECT_EQ(history.depth(), 1);
-  expectPosition(sleepPosition(history, {38, 2}), 1, 12);
+  FootnoteHistory restored;
+  ASSERT_TRUE(restored.restore(history.data(), history.depth()));
+  restored.resolveLinkTarget({1, 12});
+  ASSERT_EQ(restored.depth(), 1);
+  const auto previous = restored.pop();
+  ASSERT_TRUE(previous.has_value());
+  expectPosition(*previous, 1, 12);
 }
 
-TEST(FootnoteHistoryTest, BackButtonThenReadingSavesLatestPageOnSleep) {
+TEST(FootnoteHistoryTest, BackButtonClearsHistory) {
   FootnoteHistory history;
   history.push({1, 12});
   history.resolveLinkTarget({38, 0});
@@ -46,7 +45,6 @@ TEST(FootnoteHistoryTest, BackButtonThenReadingSavesLatestPageOnSleep) {
   ASSERT_TRUE(previous.has_value());
   expectPosition(*previous, 1, 12);
   EXPECT_TRUE(history.empty());
-  expectPosition(sleepPosition(history, {3, 25}), 3, 25);
 }
 
 TEST(FootnoteHistoryTest, NestedReturnLinkKeepsOuterReturnPosition) {
@@ -59,7 +57,6 @@ TEST(FootnoteHistoryTest, NestedReturnLinkKeepsOuterReturnPosition) {
   history.resolveLinkTarget({38, 0});
 
   EXPECT_EQ(history.depth(), 1);
-  expectPosition(sleepPosition(history, {38, 0}), 1, 12);
   const auto previous = history.pop();
   ASSERT_TRUE(previous.has_value());
   expectPosition(*previous, 1, 12);
@@ -75,7 +72,6 @@ TEST(FootnoteHistoryTest, ReturnToMainTextClearsAllNestedNotes) {
   history.resolveLinkTarget({1, 12});
 
   EXPECT_TRUE(history.empty());
-  expectPosition(sleepPosition(history, {2, 25}), 2, 25);
 }
 
 TEST(FootnoteHistoryTest, ReturnAtDepthLimitStillClearsHistory) {
@@ -99,7 +95,7 @@ TEST(FootnoteHistoryTest, PageTurnsDoNotCompleteLinkReturns) {
   history.resolveLinkTarget({1, 12});
 
   EXPECT_EQ(history.depth(), 1);
-  expectPosition(sleepPosition(history, {1, 15}), 1, 12);
+  expectPosition(history.data()[0], 1, 12);
 }
 
 TEST(FootnoteHistoryTest, SamePageInAnotherSpineIsNotAReturn) {
@@ -108,7 +104,7 @@ TEST(FootnoteHistoryTest, SamePageInAnotherSpineIsNotAReturn) {
   history.resolveLinkTarget({38, 12});
 
   EXPECT_EQ(history.depth(), 1);
-  expectPosition(sleepPosition(history, {38, 12}), 1, 12);
+  expectPosition(history.data()[0], 1, 12);
 }
 
 TEST(FootnoteHistoryTest, BacklinkToAnotherPageInMainSpineCompletesReturn) {
@@ -119,7 +115,6 @@ TEST(FootnoteHistoryTest, BacklinkToAnotherPageInMainSpineCompletesReturn) {
   history.resolveLinkTarget({22, 9});
 
   EXPECT_TRUE(history.empty());
-  expectPosition(sleepPosition(history, {24, 25}), 24, 25);
 }
 
 TEST(FootnoteHistoryTest, SameSpineNotesKeepHistoryUntilReturningToOriginPage) {
@@ -130,10 +125,43 @@ TEST(FootnoteHistoryTest, SameSpineNotesKeepHistoryUntilReturningToOriginPage) {
   history.resolveLinkTarget({1, 30});
 
   EXPECT_EQ(history.depth(), 2);
-  expectPosition(sleepPosition(history, {1, 30}), 1, 12);
+  expectPosition(history.data()[0], 1, 12);
 
   history.push({1, 30});
   history.resolveLinkTarget({1, 12});
   EXPECT_TRUE(history.empty());
-  expectPosition(sleepPosition(history, {1, 45}), 1, 45);
+}
+
+TEST(FootnoteHistoryTest, FourthJumpKeepsThreeNewestReturnPositions) {
+  FootnoteHistory history;
+  for (int spine = 1; spine <= 4; ++spine) {
+    history.push({spine, spine * 10});
+    history.resolveLinkTarget({spine + 1, 0});
+  }
+  ASSERT_EQ(history.depth(), 3);
+  for (int spine = 4; spine >= 2; --spine) {
+    const auto previous = history.pop();
+    ASSERT_TRUE(previous.has_value());
+    expectPosition(*previous, spine, spine * 10);
+  }
+  EXPECT_FALSE(history.pop().has_value());
+}
+
+TEST(FootnoteHistoryTest, RestoredHistoryCanCompleteANewBacklink) {
+  const FootnoteHistory::Position positions[] = {{1, 12}, {38, 0}};
+  FootnoteHistory history;
+  ASSERT_TRUE(history.restore(positions, 2));
+  history.push({38, 5});
+  history.resolveLinkTarget({1, 13});
+  EXPECT_TRUE(history.empty());
+}
+
+TEST(FootnoteHistoryTest, InvalidRestoredDepthLeavesHistoryIntact) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  const FootnoteHistory::Position positions[] = {{38, 0}};
+  EXPECT_FALSE(history.restore(positions, 4));
+  EXPECT_FALSE(history.restore(nullptr, 1));
+  ASSERT_EQ(history.depth(), 1);
+  expectPosition(history.data()[0], 1, 12);
 }

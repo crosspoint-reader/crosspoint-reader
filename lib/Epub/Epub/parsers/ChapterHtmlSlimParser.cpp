@@ -362,12 +362,10 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     linkId = currentFootnoteLinkId;
   }
   if (requestedAnchorBufferByteOffset) {
-    // Only the requested word needs its target translated into layout coordinates.
-    size_t byteOffset = *requestedAnchorBufferByteOffset;
-    utf8ComposeNfcInPlace(partWordBuffer, &byteOffset);
+    // Layout ranges retain source codepoints, including accents absorbed by NFC.
     uint32_t offset = partWordVisibleOffset;
     const auto* ptr = reinterpret_cast<const unsigned char*>(partWordBuffer);
-    const auto* const target = ptr + byteOffset;
+    const auto* const target = ptr + *requestedAnchorBufferByteOffset;
     while (ptr < target) {
       utf8NextCodepoint(&ptr);
       ++offset;
@@ -1056,6 +1054,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               bool gotDimensions = headerProbe.getDimensions(dims);
 
               if (!gotDimensions) {
+                // Retry with framebuffer scratch when the heap cannot fit the inflate window.
+                GfxRenderer::FrameBufferLoan probeLoan(self->renderer);
+                ImageDimsProbe retryProbe;
+                self->epub->readItemContentsToStream(resolvedPath, retryProbe, 1024, /*allowEarlyStop=*/true);
+                gotDimensions = retryProbe.getDimensions(dims);
+              }
+
+              if (!gotDimensions) {
                 // No header within the stream (rare) — fall back to extracting the
                 // whole image and probing the file. That can take seconds, so
                 // surface the indexing popup first (single-shot per parser).
@@ -1066,7 +1072,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 HalFile cachedImageFile;
                 bool extractSuccess = false;
                 if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
-                  extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+                  {
+                    // Same 32 KB inflate window as the probe; the popup is already up.
+                    GfxRenderer::FrameBufferLoan extractLoan(self->renderer);
+                    extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
+                  }
                   cachedImageFile.flush();
                   cachedImageFile.close();
                 }
@@ -1830,17 +1840,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
   if (blockWordCount > softFlushThreshold && !self->inRuby) {
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    size_t wordIndex = 0;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [self, &wordIndex](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
-          self->addFlowLineToPage(std::move(textBlock), offset, wordIndex);
-        },
-        false, self->characterSpacing, self->wordSpacingPercent);
+    self->makePages(/*includeLastLine=*/false);
   }
 }
 
@@ -2332,7 +2332,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   currentPageNextY += lineHeight;
 }
 
-void ChapterHtmlSlimParser::makePages() {
+void ChapterHtmlSlimParser::makePages(const bool includeLastLine) {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
@@ -2353,14 +2353,7 @@ void ChapterHtmlSlimParser::makePages() {
 
   const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
 
-  // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
-  }
 
   // Calculate effective width accounting for horizontal margins/padding
   const int horizontalInset = blockStyle.totalHorizontalInset();
@@ -2371,9 +2364,19 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this, &wordIndex](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
+        // Apply top spacing before the paragraph (stored in pixels) only on the first line of this block
+        if (wordsExtractedInBlock == 0) {
+          const auto& blockStyle = currentTextBlock->getBlockStyle();
+          if (blockStyle.marginTop > 0) {
+            currentPageNextY += blockStyle.marginTop;
+          }
+          if (blockStyle.paddingTop > 0) {
+            currentPageNextY += blockStyle.paddingTop;
+          }
+        }
         addFlowLineToPage(std::move(textBlock), offset, wordIndex);
       },
-      true, characterSpacing, wordSpacingPercent);
+      includeLastLine, characterSpacing, wordSpacingPercent);
 
   // Latch again after layout: extractLine can drop a whole line (TextBlock
   // arena OOM) during the call above, after the pre-layout latch ran, and the
@@ -2382,26 +2385,29 @@ void ChapterHtmlSlimParser::makePages() {
     layoutOom = true;
   }
 
-  // Fallback: transfer any remaining pending footnotes to current page.
-  // Normally addLineToPage handles this via word-index tracking, but this catches
-  // edge cases where a footnote's word index equals the exact block size.
-  if (!pendingFootnotes.empty() && currentPage) {
-    for (const auto& [idx, fn] : pendingFootnotes) {
-      currentPage->addFootnote(fn.number, fn.href);
+  // Trailing spacing and footnotes only apply when the block is finalized
+  if (includeLastLine) {
+    // Fallback: transfer any remaining pending footnotes to current page.
+    // Normally addLineToPage handles this via word-index tracking, but this catches
+    // edge cases where a footnote's word index equals the exact block size.
+    if (!pendingFootnotes.empty() && currentPage) {
+      for (const auto& [idx, fn] : pendingFootnotes) {
+        currentPage->addFootnote(fn.number, fn.href);
+      }
+      pendingFootnotes.clear();
     }
-    pendingFootnotes.clear();
-  }
 
-  // Apply bottom spacing after the paragraph (stored in pixels)
-  if (blockStyle.marginBottom > 0) {
-    currentPageNextY += blockStyle.marginBottom;
-  }
-  if (blockStyle.paddingBottom > 0) {
-    currentPageNextY += blockStyle.paddingBottom;
-  }
+    // Apply bottom spacing after the paragraph (stored in pixels)
+    if (blockStyle.marginBottom > 0) {
+      currentPageNextY += blockStyle.marginBottom;
+    }
+    if (blockStyle.paddingBottom > 0) {
+      currentPageNextY += blockStyle.paddingBottom;
+    }
 
-  // Extra paragraph spacing if enabled (default behavior)
-  if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
+    // Extra paragraph spacing if enabled (default behavior)
+    if (extraParagraphSpacing) {
+      currentPageNextY += lineHeight / 2;
+    }
   }
 }

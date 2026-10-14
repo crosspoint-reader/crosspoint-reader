@@ -35,6 +35,15 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
 }
 
+// Caller-configured headers (e.g. a Cloudflare Access service token) applied
+// on top of the KOSync auth scheme, including on createUser() which has no
+// KOSync credentials yet.
+void applyCustomHeaders(freeink::SecureHttpClient& http) {
+  for (const auto& header : KOREADER_STORE.getCustomHeaders()) {
+    if (!header.name.empty()) http.addHeader(header.name, header.value);
+  }
+}
+
 // True when free heap is too low to risk a TLS handshake.
 bool insufficientHeap() {
   const auto heap = HalMemory::getDefaultHeap();
@@ -65,6 +74,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   applyAuthHeaders(http);
   const int httpCode = http.GET();
   http.end();
@@ -104,6 +114,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   http.addHeader("Accept", "application/vnd.koreader.v1+json");
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.sendRequest("POST", body);
@@ -126,7 +137,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     return NO_CREDENTIALS;
   }
 
-  const std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
+  const std::string url =
+      KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash + "?position_kinds=locator,percentage";
   LOG_DBG("KOSync", "Getting progress: %s (heap: %u)", url.c_str(), (unsigned)ESP.getFreeHeap());
   if (insufficientHeap()) return LOW_MEMORY;
 
@@ -136,6 +148,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   applyAuthHeaders(http);
   const int httpCode = http.GET();
   lastHttpCode = httpCode;
@@ -174,7 +187,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     outProgress.timestamp = doc["timestamp"].as<int64_t>();
 
     outProgress.position.reset();
-    if (KOREADER_STORE.usesCrossPointSyncServer()) {
+    if (KOREADER_STORE.supportsRichProgress()) {
       const JsonObjectConst pos = doc["position"].as<JsonObjectConst>();
       if (!pos.isNull()) {
         KOReaderRichPosition rich;
@@ -221,13 +234,32 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
     meta["filename"] = progress.metadata->filename;
     meta["title"] = progress.metadata->title;
     meta["authors"] = progress.metadata->authors;
+    if (KOREADER_STORE.supportsExtendedMetadata()) {
+      if (!progress.metadata->isbn.empty()) meta["isbn"] = progress.metadata->isbn;
+      if (!progress.metadata->asin.empty()) meta["asin"] = progress.metadata->asin;
+      if (!progress.metadata->series.empty()) meta["series"] = progress.metadata->series;
+      if (progress.metadata->seriesIndex.has_value()) meta["series_index"] = *progress.metadata->seriesIndex;
+    }
+
+    JsonDocument extra;
+    if (!progress.metadata->extraJson.empty() &&
+        deserializeJson(extra, progress.metadata->extraJson) == DeserializationError::Ok) {
+      for (JsonPairConst kv : extra.as<JsonObjectConst>()) {
+        // Flat strings, numbers, and booleans keep their JSON type; null and
+        // nested values are skipped, and the reserved keys above always win.
+        const JsonVariantConst value = kv.value();
+        if (!(value.is<const char*>() || value.is<bool>() || value.is<long long>() || value.is<double>())) continue;
+        if (!meta[kv.key().c_str()].isNull()) continue;
+        meta[kv.key().c_str()] = value;
+      }
+    }
   }
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
   doc["device"] = DEVICE_NAME;
   doc["device_id"] = DEVICE_ID;
-  if (progress.position.has_value() && KOREADER_STORE.usesCrossPointSyncServer()) {
-    // CrossPoint-specific extension: do not send it to third-party KOSync servers.
+  if (progress.position.has_value() && KOREADER_STORE.supportsRichProgress()) {
+    // Enhanced position is opt-in by server type; strict KOSync never receives it.
     const auto& p = *progress.position;
     auto pos = doc["position"].to<JsonObject>();
     pos["pctQ"] = p.pctQ;
@@ -250,6 +282,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   applyAuthHeaders(http);
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.sendRequest("PUT", body);

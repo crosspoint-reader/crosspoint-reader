@@ -10,6 +10,10 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include <cstdlib>
+#include <cstring>
+#include <vector>
+
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
@@ -433,8 +437,27 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
 }
 
 // load in the meta data for the epub file
+// Opens the optional encrypted-entry accessor. A null result without an error
+// means normal ZIP reads should be used. A hard error refuses the open with a
+// user-presentable reason.
+bool Epub::openProtection() {
+  std::string err;
+  decryptor = freeink::content::openProtectedBook(filepath, err);
+  if (!err.empty()) {
+    LOG_ERR("EBP", "protected content unavailable: %s", err.c_str());
+    protectionError = err;
+    return false;
+  }
+  if (decryptor) {
+    LOG_DBG("EBP", "protected content; on-read access path open");
+  }
+  return true;
+}
+
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
+
+  if (!openProtection()) return false;
 
   // Initialize spine/TOC cache
   bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
@@ -658,6 +681,45 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
   return true;
 }
 
+bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
+  metadata = {};
+
+  ZipFile zip(filepath);
+  if (!zip.open()) {
+    LOG_DBG("EBP", "Could not open ePub for sync metadata: %s", filepath.c_str());
+    return false;
+  }
+
+  std::string contentOpfFilePath;
+  if (!findContentOpfFile(&contentOpfFilePath, &zip)) {
+    zip.close();
+    return false;
+  }
+
+  size_t contentOpfSize;
+  if (!zip.getInflatedFileSize(contentOpfFilePath.c_str(), &contentOpfSize)) {
+    zip.close();
+    return false;
+  }
+
+  const std::string basePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
+  ContentOpfParser parser(cachePath, basePath, contentOpfSize, nullptr, true);
+  if (!parser.setup()) {
+    zip.close();
+    return false;
+  }
+
+  const bool read = zip.readFileToStream(contentOpfFilePath.c_str(), parser, 1024, true);
+  zip.close();
+  if (!read) return false;
+
+  metadata.isbn = std::move(parser.isbn);
+  metadata.asin = std::move(parser.asin);
+  metadata.series = std::move(parser.series);
+  metadata.seriesIndex = parser.seriesIndex;
+  return true;
+}
+
 bool Epub::clearCache() const {
   if (!Storage.exists(cachePath.c_str())) {
     LOG_DBG("EPB", "Cache does not exist, no action needed");
@@ -735,15 +797,9 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     LOG_DBG("EBP", "Generating BMP from JPG cover image (%s mode%s)", cropped ? "cropped" : "fit",
             originalThresholds ? ", original thresholds" : "");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+    if (!extractItemToFile(coverImageHref, coverJpgTempPath)) return false;
 
     HalFile coverJpg;
-    if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
-      return false;
-    }
-    readItemContentsToStream(coverImageHref, coverJpg, 1024);
-    // Explicitly close() file before reopening for reading
-    coverJpg.close();
-
     if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
@@ -770,15 +826,9 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode%s)", cropped ? "cropped" : "fit",
             originalThresholds ? ", original thresholds" : "");
     const auto coverPngTempPath = getCachePath() + "/.cover.png";
+    if (!extractItemToFile(coverImageHref, coverPngTempPath)) return false;
 
     HalFile coverPng;
-    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
-      return false;
-    }
-    readItemContentsToStream(coverImageHref, coverPng, 1024);
-    // Explicitly close() file before reopening for reading
-    coverPng.close();
-
     if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
       return false;
     }
@@ -843,6 +893,8 @@ bool Epub::generateThumbBmpFromSource(int height) {
   }
   if (!parseContentOpf(*metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/false, zip.get())) return false;
   zip.reset();
+  // The cover of a protected book is encrypted like everything else.
+  if (!decryptor && !openProtection()) return false;
   setupCacheDir();
   return generateThumbBmpForCover(height, metadata->coverItemHref);
 }
@@ -860,15 +912,9 @@ bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHre
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating thumb BMP from JPG cover image");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+    if (!extractItemToFile(coverImageHref, coverJpgTempPath)) return false;
 
     HalFile coverJpg;
-    if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
-      return false;
-    }
-    readItemContentsToStream(coverImageHref, coverJpg, 1024);
-    // Explicitly close() file before reopening for reading
-    coverJpg.close();
-
     if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
@@ -897,15 +943,9 @@ bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHre
   } else if (FsHelpers::hasPngExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating thumb BMP from PNG cover image");
     const auto coverPngTempPath = getCachePath() + "/.cover.png";
+    if (!extractItemToFile(coverImageHref, coverPngTempPath)) return false;
 
     HalFile coverPng;
-    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
-      return false;
-    }
-    readItemContentsToStream(coverImageHref, coverPng, 1024);
-    // Explicitly close() file before reopening for reading
-    coverPng.close();
-
     if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
       return false;
     }
@@ -947,6 +987,38 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
   const std::string path = FsHelpers::normalisePath(itemHref);
 
+  // Decode encrypted entries on demand in memory.
+  if (decryptor && decryptor->isEncrypted(path)) {
+    const size_t plainSize = decryptor->decryptedSize(path);
+    if (plainSize > SIZE_MAX - (trailingNullByte ? 1 : 0)) return nullptr;
+    const size_t total = plainSize + (trailingNullByte ? 1 : 0);
+    uint8_t* content = static_cast<uint8_t*>(malloc(total > 0 ? total : 1));
+    if (!content) {
+      LOG_ERR("EBP", "insufficient memory for %s (%u bytes)", path.c_str(), static_cast<unsigned>(total));
+      return nullptr;
+    }
+    struct BufferSink {
+      uint8_t* data;
+      size_t capacity;
+      size_t written;
+    } state{content, plainSize, 0};
+    auto append = [](void* context, const uint8_t* data, size_t size) {
+      auto* target = static_cast<BufferSink*>(context);
+      if (size > target->capacity - target->written) return false;
+      memcpy(target->data + target->written, data, size);
+      target->written += size;
+      return true;
+    };
+    if (!decryptor->decryptToSink(path, append, &state) || state.written != plainSize) {
+      free(content);
+      LOG_ERR("EBP", "content read failed for %s", path.c_str());
+      return nullptr;
+    }
+    if (trailingNullByte) content[plainSize] = 0;
+    if (size) *size = plainSize;
+    return content;
+  }
+
   const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
     LOG_DBG("EBP", "Failed to read item %s", path.c_str());
@@ -968,6 +1040,18 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
+
+  if (decryptor && decryptor->isEncrypted(path)) {
+    auto append = [](void* context, const uint8_t* data, size_t size) {
+      return static_cast<Print*>(context)->write(data, size) == size;
+    };
+    if (!decryptor->decryptToSink(path, append, &out)) {
+      LOG_ERR("EBP", "content read failed for %s", path.c_str());
+      return false;
+    }
+    return true;
+  }
+
   return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, allowEarlyStop);
 }
 
