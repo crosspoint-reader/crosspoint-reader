@@ -14,28 +14,32 @@
 #include <ttf/GlyphStoreFormat.h>
 
 using namespace glyphstore;
+using Lookup = FlashGlyphStore::Lookup;
+using Commit = FlashGlyphStore::Commit;
 
 namespace {
 
-constexpr uint8_t kIdentity[16] = {'g', 'l', 'y', 'p', 'h', '-', 'b', 'e', 'n', 'c', 'h'};
+constexpr uint8_t kIdentity[kIdentityBytes] = {'g', 'l', 'y', 'p', 'h', '-', 'b', 'e', 'n', 'c', 'h'};
+constexpr uint32_t kReaderMapPages = 32;  // what the reader image leaves free (measured on the X3)
 constexpr uint32_t kStyleBytes = 300000;
 constexpr uint32_t kBatched = 3000;
 constexpr uint32_t kSingles = 200;
+constexpr uint32_t kGlyphs = kBatched + kSingles;
+constexpr uint32_t kPageKeys = 60;    // distinct glyphs on a page of prose
+constexpr uint32_t kPageRounds = 20;  // about 1,200 lookups, as on one page
 constexpr uint32_t kPairs = 500;
 alignas(4) uint8_t gBatch[4096];
 alignas(4) uint8_t gChunk[4096];
+uint32_t gKeys[kGlyphs];
 
 uint32_t langSlotHash() {
   const esp_partition_t* part =
       esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
   if (!part) return 0;
-  uint32_t hash = 2166136261u;
+  uint32_t hash = fnv1a(nullptr, 0);
   for (uint32_t at = part->size - 65536; at < part->size; at += sizeof gChunk) {
     if (esp_partition_read(part, at, gChunk, sizeof gChunk) != ESP_OK) return 0;
-    for (const uint8_t b : gChunk) {
-      hash ^= b;
-      hash *= 16777619u;
-    }
+    hash = fnv1a(gChunk, sizeof gChunk, hash);
   }
   return hash;
 }
@@ -53,33 +57,27 @@ EpdGlyph shapeOf(const uint32_t i) {
 
 uint8_t patternOf(const uint32_t key, const uint32_t j) { return static_cast<uint8_t>((key * 31u + j * 7u) ^ 0x5Au); }
 
-uint32_t keyOf(const uint32_t i, const int body, const int heading) {
-  return makeKey(0x21 + i, static_cast<uint8_t>(i % 2), static_cast<uint8_t>(i % 3 == 0 ? heading : body));
-}
-
-bool stage(GlyphBatch& batch, const uint32_t i, const int body, const int heading) {
-  const uint32_t key = keyOf(i, body, heading);
+bool stage(GlyphBatch& batch, const uint32_t i) {
   const EpdGlyph glyph = shapeOf(i);
-  uint8_t* bitmap = batch.add(key, glyph);
+  uint8_t* bitmap = batch.add(gKeys[i], glyph);
   if (!bitmap) return false;
-  for (uint32_t j = 0; j < glyph.dataLength; ++j) bitmap[j] = patternOf(key, j);
+  for (uint32_t j = 0; j < glyph.dataLength; ++j) bitmap[j] = patternOf(gKeys[i], j);
   return true;
 }
 
-uint32_t countBad(const FlashGlyphStore& store, const uint32_t count, const int body, const int heading) {
+uint32_t countBad(const FlashGlyphStore& store) {
   uint32_t bad = 0;
-  for (uint32_t i = 0; i < count; ++i) {
-    const uint32_t key = keyOf(i, body, heading);
+  for (uint32_t i = 0; i < kGlyphs; ++i) {
     const EpdGlyph want = shapeOf(i);
     const EpdGlyph* glyph = nullptr;
-    if (store.find(key, &glyph) != FlashGlyphStore::Lookup::Found || glyph->width != want.width ||
-        glyph->height != want.height || glyph->dataLength != want.dataLength) {
+    if (store.find(gKeys[i], &glyph) != Lookup::Found || glyph->width != want.width || glyph->height != want.height ||
+        glyph->dataLength != want.dataLength) {
       ++bad;
       continue;
     }
     const uint8_t* bitmap = store.logBase() + glyph->dataOffset;
     for (uint32_t j = 0; j < glyph->dataLength; ++j) {
-      if (bitmap[j] != patternOf(key, j)) {
+      if (bitmap[j] != patternOf(gKeys[i], j)) {
         ++bad;
         break;
       }
@@ -105,15 +103,16 @@ void setup() {
 
   EspNorFlash flash;
   if (!flash.begin()) return finish("no spiffs partition");
-  Serial.printf("font area %u B, free map pages %u, free heap %u B\n", static_cast<unsigned>(flash.size()),
-                static_cast<unsigned>(flash.freeMapPages()), static_cast<unsigned>(esp_get_free_heap_size()));
+  Serial.printf("font area %u B, free map pages %u (planning with %u, the reader's budget), free heap %u B\n",
+                static_cast<unsigned>(flash.size()), static_cast<unsigned>(flash.freeMapPages()),
+                static_cast<unsigned>(kReaderMapPages), static_cast<unsigned>(esp_get_free_heap_size()));
 
   PlanInput in{};
   in.mode = kModeFlash;
   in.styleCount = 2;
   in.styleBytes[0] = in.styleBytes[1] = kStyleBytes;
   in.usableBytes = flash.size();
-  in.freeMapPages = flash.freeMapPages();
+  in.freeMapPages = flash.freeMapPages() < kReaderMapPages ? flash.freeMapPages() : kReaderMapPages;
   Layout layout{};
   if (!planLayout(in, layout)) return finish("planLayout refused the budget");
   const Geometry& g = layout.geometry;
@@ -139,63 +138,69 @@ void setup() {
   if (!ok || store.open(kIdentity) != FlashGlyphStore::OpenResult::Ready) return finish("install or open failed");
   Serial.printf("BENCH open_empty        %u ms\n", msSince(t));
 
-  const int body = store.sizeIndex(29 << 6, 0);
-  const int heading = store.sizeIndex(54 << 6, 1);
+  uint8_t body = 0;
+  uint8_t heading = 0;
+  if (!store.sizeIndex(29 << 6, &body) || !store.sizeIndex(54 << 6, &heading)) return finish("sizeIndex failed");
+  for (uint32_t i = 0; i < kGlyphs; ++i) {
+    gKeys[i] = makeKey(0x21 + i, static_cast<uint8_t>(i % 2), i % 3 == 0 ? heading : body);
+  }
 
   // Batched, as prefetch will commit a text run's glyphs.
   GlyphBatch batch(gBatch, sizeof gBatch);
   unsigned batches = 0;
   t = esp_timer_get_time();
   for (uint32_t i = 0; i < kBatched; ++i) {
-    if (stage(batch, i, body, heading)) continue;
-    if (store.commit(batch) != FlashGlyphStore::Commit::Stored) return finish("batched commit failed");
+    if (stage(batch, i)) continue;
+    if (store.commit(batch) != Commit::Stored) return finish("batched commit failed");
     ++batches;
-    if (!stage(batch, i, body, heading)) return finish("a glyph did not fit an empty batch");
+    if (!stage(batch, i)) return finish("a glyph did not fit an empty batch");
   }
-  if (store.commit(batch) != FlashGlyphStore::Commit::Stored) return finish("last batched commit failed");
+  if (store.commit(batch) != Commit::Stored) return finish("last batched commit failed");
   ++batches;
   const int64_t batchedUs = esp_timer_get_time() - t;
 
   // One at a time, as the per-glyph miss path will.
   t = esp_timer_get_time();
-  for (uint32_t i = kBatched; i < kBatched + kSingles; ++i) {
+  for (uint32_t i = kBatched; i < kGlyphs; ++i) {
     GlyphBatch one(gBatch, sizeof gBatch);
-    stage(one, i, body, heading);
-    if (store.commit(one) != FlashGlyphStore::Commit::Stored) return finish("single commit failed");
+    if (!stage(one, i) || store.commit(one) != Commit::Stored) return finish("single commit failed");
   }
   const int64_t singleUs = esp_timer_get_time() - t;
   Serial.printf("BENCH commit_batched    per_glyph=%lldus  glyphs=%u  batches=%u\n", batchedUs / kBatched,
                 static_cast<unsigned>(kBatched), batches);
   Serial.printf("BENCH commit_single     per_glyph=%lldus  glyphs=%u\n", singleUs / kSingles,
                 static_cast<unsigned>(kSingles));
-  Serial.printf("verify after writes:    %u bad of %u\n",
-                static_cast<unsigned>(countBad(store, kBatched + kSingles, body, heading)),
-                static_cast<unsigned>(kBatched + kSingles));
+  Serial.printf("verify after writes:    %u bad of %u\n", static_cast<unsigned>(countBad(store)),
+                static_cast<unsigned>(kGlyphs));
 
-  // Hits, read in place through the mapping.
-  t = esp_timer_get_time();
+  // Lookups through the mapping: a page's few glyphs again and again (warm), then 3,000 glyphs round robin,
+  // which misses the 16 KB flash cache on nearly every lookup (cold).
   unsigned found = 0;
-  for (uint32_t r = 0; r < 10000; ++r) {
-    if (store.find(keyOf(r % kBatched, body, heading), nullptr) == FlashGlyphStore::Lookup::Found) ++found;
+  t = esp_timer_get_time();
+  for (uint32_t r = 0; r < kPageRounds; ++r) {
+    for (uint32_t i = 0; i < kPageKeys; ++i) found += store.find(gKeys[i * 7], nullptr) == Lookup::Found;
   }
-  Serial.printf("BENCH find_hit          per_lookup=%lldns  found=%u/10000\n", (esp_timer_get_time() - t) / 10, found);
+  const int64_t warmUs = esp_timer_get_time() - t;
+  Serial.printf("BENCH find_warm         per_lookup=%lldns  found=%u/%u\n", warmUs * 1000 / (kPageRounds * kPageKeys),
+                found, static_cast<unsigned>(kPageRounds * kPageKeys));
+  found = 0;
+  t = esp_timer_get_time();
+  for (uint32_t r = 0; r < 10000; ++r) found += store.find(gKeys[r % kBatched], nullptr) == Lookup::Found;
+  Serial.printf("BENCH find_cold         per_lookup=%lldns  found=%u/10000\n", (esp_timer_get_time() - t) / 10, found);
 
   // Kerning pairs.
   t = esp_timer_get_time();
   unsigned pairsStored = 0;
   for (uint32_t p = 0; p < kPairs; ++p) {
-    if (store.storePair(0x41 + p % 26, 0x61 + p / 26, p % 2, static_cast<int16_t>(-static_cast<int>(p % 90)))) {
-      ++pairsStored;
-    }
+    pairsStored +=
+        store.storePair(0x41 + p % 26, 0x61 + p / 26, p % 2, static_cast<int16_t>(-static_cast<int>(p % 90)));
   }
   const int64_t pairWriteUs = esp_timer_get_time() - t;
   t = esp_timer_get_time();
   unsigned pairsRight = 0;
   for (uint32_t p = 0; p < kPairs; ++p) {
     int16_t kern = 1;
-    if (store.findPair(0x41 + p % 26, 0x61 + p / 26, p % 2, &kern) && kern == -static_cast<int>(p % 90)) {
-      ++pairsRight;
-    }
+    if (store.findPair(0x41 + p % 26, 0x61 + p / 26, p % 2, &kern) && kern == -static_cast<int>(p % 90)) ++pairsRight;
   }
   Serial.printf("BENCH pair_store        per_pair=%lldus  stored=%u/%u\n", pairWriteUs / kPairs, pairsStored,
                 static_cast<unsigned>(kPairs));
@@ -210,19 +215,19 @@ void setup() {
   Serial.printf("BENCH open_scan         %u ms  log=%u B  slots=%u  resume point %s\n", msSince(t),
                 static_cast<unsigned>(store.logUsed()), static_cast<unsigned>(store.usedSlots()),
                 reopened && store.logUsed() == logUsed ? "matches" : "MISMATCH");
-  Serial.printf("verify after reopen:    %u bad\n",
-                static_cast<unsigned>(countBad(store, kBatched + kSingles, body, heading)));
+  Serial.printf("verify after reopen:    %u bad\n", static_cast<unsigned>(countBad(store)));
 
-  // The wipe erases only the sectors that hold data.
+  // The wipe erases only the sectors that hold data, and never the header.
   t = esp_timer_get_time();
   const bool wiped = store.wipe();
   Serial.printf("BENCH wipe              %u ms  %s\n", msSince(t), wiped ? "ok" : "FAILED");
-  Serial.printf(
-      "after wipe:             first glyph %s, sizes restart at %d\n",
-      store.find(keyOf(0, body, heading), nullptr) == FlashGlyphStore::Lookup::Absent ? "absent" : "STILL THERE",
-      store.sizeIndex(29 << 6, 0));
+  uint8_t afterWipe = 0xFF;
+  const bool sizeClaimed = store.sizeIndex(29 << 6, &afterWipe);
+  Serial.printf("after wipe:             first glyph %s, sizes restart at %d\n",
+                store.find(gKeys[0], nullptr) == Lookup::NotStored ? "absent" : "STILL THERE",
+                sizeClaimed ? afterWipe : -1);
 
-  // Leave the partition without a store header, as the reader found it.
+  // Leave no store header behind: the reader then sees no TTF store on the partition.
   store.close();
   flash.erase(0, NorFlash::kSectorBytes);
   Serial.printf("language slot untouched: %s\n", langSlotHash() == langBefore ? "yes" : "NO");
