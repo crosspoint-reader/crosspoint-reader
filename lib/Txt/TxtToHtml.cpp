@@ -14,7 +14,7 @@ const char* TxtToHtml::cacheVersionTag(std::string_view filename) {
 size_t TxtToHtml::escapedHtmlSize(const std::string_view text) {
   size_t size = 0;
   for (const char c : text) {
-    size += c == '&' ? 5 : (c == '<' || c == '>') ? 4 : (c == '\n' || c == '\0') ? 6 : 1;
+    size += c == '&' ? 5 : (c == '<' || c == '>') ? 4 : 1;
   }
   return size;
 }
