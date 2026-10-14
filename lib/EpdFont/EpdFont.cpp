@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "GlyphFallback.h"
+#include "GlyphProvider.h"
 #include "SmallCaps.h"
 
 // Scale a 12.4 fixed-point advance by the small-caps factor, rounding to nearest.
@@ -126,11 +127,10 @@ static uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t 
 }
 
 int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
-  if (!data->kernMatrix && !data->kernRowOffsets) {
-    return 0;
-  }
-  if (!data->kernLeftClasses && !data->kernLeftCodepoints) {
-    return 0;
+  const bool hasKernTables =
+      (data->kernMatrix || data->kernRowOffsets) && (data->kernLeftClasses || data->kernLeftCodepoints);
+  if (!hasKernTables) {
+    return data->provider ? data->provider->kerning(leftCp, rightCp) : 0;
   }
   // Built-in fonts carry the split arrays, SD-card fonts the packed ones; never both.
   const bool split = data->kernLeftCodepoints != nullptr;
@@ -217,7 +217,7 @@ uint32_t EpdFont::applyLigatures(uint32_t cp, const char*& text) const {
 // never recurse back into another fallback.
 EpdGlyphRef EpdFont::findGlyph(const uint32_t cp) const {
   const int count = data->intervalCount;
-  if (count == 0 && !data->glyphMissHandler) return {};
+  if (count == 0 && !data->provider) return {};
 
   if (count > 0) {
     const EpdUnicodeInterval* intervals = data->intervals;
@@ -237,11 +237,12 @@ EpdGlyphRef EpdFont::findGlyph(const uint32_t cp) const {
     }
   }
 
-  // Codepoint not in interval table — try on-demand loading (SD card fonts).
-  if (data->glyphMissHandler) {
-    if (const EpdGlyph* loaded = data->glyphMissHandler(data->glyphMissCtx, cp)) {
-      // A ring entry, not an array one: there is no index to report, and the pointer is what
-      // SdCardFont::isOverflowGlyph() recognises it by.
+  // Codepoint not in the interval table: ask the font's provider (SD on-demand ring, or a font
+  // with no tables at all).
+  if (data->provider) {
+    if (const EpdGlyph* loaded = data->provider->missGlyph(cp)) {
+      // A provider's record, not an array one: there is no index to report, and the pointer is
+      // what GlyphProvider::ownsBitmap() recognises it by.
       return EpdGlyphRef{loaded,
                          loaded->advanceX,
                          0,  // no array index: this glyph is not in the array

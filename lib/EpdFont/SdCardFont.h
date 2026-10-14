@@ -7,6 +7,7 @@
 
 #include "EpdFont.h"
 #include "EpdFontData.h"
+#include "GlyphProvider.h"
 
 class HalFile;
 class BuildArena;
@@ -96,10 +97,6 @@ class SdCardFont {
 
   // Returns the bitmap for an on-demand-loaded (overflow) glyph.
   const uint8_t* getOverflowBitmap(const EpdGlyph* glyph) const;
-
-  // Extract SdCardFont* from an opaque glyphMissCtx pointer.
-  // Used by GfxRenderer::getGlyphBitmap() to recover the SdCardFont from EpdFontData::glyphMissCtx.
-  static SdCardFont* fromMissCtx(void* ctx);
 
   struct Stats {
     uint32_t prewarmTotalMs = 0;
@@ -200,7 +197,7 @@ class SdCardFont {
     uint32_t reportedMisses[MAX_REPORTED_MISSES] = {};
     uint8_t reportedMissCount = 0;
 
-    // Debug counters for on-demand glyph misses (glyphMissHandler). Used to
+    // Debug counters for on-demand glyph misses (StyleProvider::missGlyph). Used to
     // throttle log volume while still preserving visibility into overflow churn.
     uint32_t onDemandMissCount = 0;
     uint16_t onDemandMissLogged = 0;
@@ -230,14 +227,23 @@ class SdCardFont {
 
   char filePath_[128] = {};
 
-  // Overflow context: glyphMissHandler needs to know which style it's serving
-  struct OverflowContext {
-    SdCardFont* self;
-    uint8_t styleIdx;
-  };
-  OverflowContext overflowCtx_[MAX_STYLES] = {};
+  // Each style's EpdFontData points at its own StyleProvider: a miss goes to the shared ring, and
+  // the renderer asks it whether a glyph's bitmap is one the ring holds.
+  class StyleProvider final : public GlyphProvider {
+   public:
+    SdCardFont* self = nullptr;
+    uint8_t styleIdx = 0;
 
-  // Shared on-demand overflow buffer (ring buffer of glyphs loaded via glyphMissHandler)
+    const EpdGlyph* missGlyph(const uint32_t codepoint) override { return SdCardFont::onGlyphMiss(this, codepoint); }
+    bool ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const override {
+      if (!self->isOverflowGlyph(glyph)) return false;
+      bitmap = self->getOverflowBitmap(glyph);
+      return true;
+    }
+  };
+  StyleProvider styleProviders_[MAX_STYLES];
+
+  // Shared on-demand overflow buffer (ring of glyphs loaded by StyleProvider::missGlyph)
   static constexpr uint32_t OVERFLOW_CAPACITY = 8;
   struct OverflowEntry {
     EpdGlyph glyph;
@@ -311,6 +317,6 @@ class SdCardFont {
   void clearOverflow();
   static void computeStyleFileOffsets(PerStyle& s, uint32_t baseOffset);
 
-  // Static callback for EpdFontData::glyphMissHandler (per-style via OverflowContext)
+  // The miss path behind StyleProvider::missGlyph; ctx is that StyleProvider.
   static const EpdGlyph* onGlyphMiss(void* ctx, uint32_t codepoint);
 };

@@ -271,16 +271,54 @@ TEST(SdFontArena, GlyphMissesServeFromTheHeapWithTheArenaFull) {
   const size_t full = arena.used();
 
   const EpdFontData& data = *font.getEpdFont(0)->data;
-  ASSERT_NE(nullptr, data.glyphMissHandler);
+  ASSERT_NE(nullptr, data.provider);
   for (uint32_t g = 1; g < LETTERS; g++) {
-    const EpdGlyph* glyph = data.glyphMissHandler(data.glyphMissCtx, FIRST_CP + g);
+    const EpdGlyph* glyph = data.provider->missGlyph(FIRST_CP + g);
     ASSERT_NE(nullptr, glyph) << "miss for glyph " << g << " was refused";
-    ASSERT_TRUE(font.isOverflowGlyph(glyph));
-    const uint8_t* bitmap = font.getOverflowBitmap(glyph);
+    const uint8_t* bitmap = nullptr;
+    ASSERT_TRUE(data.provider->ownsBitmap(glyph, bitmap));
     ASSERT_NE(nullptr, bitmap);
     for (uint32_t k = 0; k < kBitmap; k++) ASSERT_EQ(static_cast<uint8_t>(g * 31 + k), bitmap[k]) << "glyph " << g;
   }
   EXPECT_EQ(full, arena.used());
+}
+
+// The renderer asks the provider whose bitmap a glyph is. An array glyph is not the ring's: its
+// bitmap is at EpdFontData::bitmap + dataOffset like any other.
+TEST(SdFontArena, ProviderOwnsOnlyRingBitmaps) {
+  const std::string path = writeTemp(buildFont(64, /*kerning=*/false));
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("A", 0x01));
+  const EpdFont& epd = *font.getEpdFont(0);
+  ASSERT_NE(nullptr, epd.data->provider);
+
+  const EpdGlyphRef arrayGlyph = epd.getGlyph('A');
+  ASSERT_TRUE(arrayGlyph);
+  const uint8_t* bitmap = reinterpret_cast<const uint8_t*>(1);
+  EXPECT_FALSE(epd.data->provider->ownsBitmap(arrayGlyph.sdRecord, bitmap));
+
+  const EpdGlyphRef ringGlyph = epd.getGlyph('C');  // not prewarmed: comes from the miss ring
+  ASSERT_TRUE(ringGlyph);
+  bitmap = nullptr;
+  EXPECT_TRUE(epd.data->provider->ownsBitmap(ringGlyph.sdRecord, bitmap));
+  EXPECT_NE(nullptr, bitmap);
+}
+
+// A glyph with no pixels (a space) is still the ring's: the renderer must get "owned, no bitmap"
+// rather than fall through and read EpdFontData::bitmap at an offset that belongs to nothing.
+TEST(SdFontArena, ZeroSizeRingGlyphIsOwnedWithNoBitmap) {
+  const std::string path = writeTemp(buildFont(0, /*kerning=*/false));
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  const EpdFontData& data = *font.getEpdFont(0)->data;  // the stub: nothing prewarmed
+  ASSERT_NE(nullptr, data.provider);
+
+  const EpdGlyph* glyph = data.provider->missGlyph('B');
+  ASSERT_NE(nullptr, glyph);
+  const uint8_t* bitmap = reinterpret_cast<const uint8_t*>(1);
+  EXPECT_TRUE(data.provider->ownsBitmap(glyph, bitmap));
+  EXPECT_EQ(nullptr, bitmap);
 }
 
 }  // namespace

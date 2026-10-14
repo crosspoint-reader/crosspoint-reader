@@ -136,7 +136,7 @@ constexpr uint16_t glyphDataBytes(const int width, const int height, const bool 
 /// One glyph's metrics, resolved from whichever representation its font uses.
 ///
 /// Returned BY VALUE. A pointer cannot serve both forms, and the old `const EpdGlyph*` carried a
-/// lifetime rule besides — it was valid only until the next glyphMissHandler call that evicted
+/// lifetime rule besides — it was valid only until the next GlyphProvider::missGlyph() call that evicted
 /// the overflow ring, which every caller had to honour and nothing enforced. Resolving to values
 /// removes that hazard rather than extending it to a second representation.
 /// Laid out and initialised for the LOOKUP path, which is much hotter than the draw path: a
@@ -153,8 +153,8 @@ constexpr uint16_t glyphDataBytes(const int width, const int height, const bool 
 ///     for on every resolve by a measurement path that never reads either. The handful of sites
 ///     that actually want them call glyphDataBytes() and epdGlyphBitmapOffset() themselves.
 struct EpdGlyphRef {
-  /// The underlying record, for SD-card fonts only. SdCardFont::isOverflowGlyph() and
-  /// getOverflowBitmap() key on pointer identity to tell a ring-loaded glyph from an array one,
+  /// The underlying record, for SD-card fonts only. GlyphProvider::ownsBitmap() keys on pointer
+  /// identity to tell a provider-loaded glyph from an array one,
   /// so that identity has to survive resolution. Always null for built-in fonts.
   const EpdGlyph* sdRecord;
   uint16_t advanceX;  ///< 12.4 fixed-point
@@ -228,6 +228,8 @@ typedef struct {
   uint32_t ligatureCp;  ///< Codepoint of the replacement ligature glyph
 } __attribute__((packed)) EpdLigaturePair;
 
+class GlyphProvider;
+
 /// Data stored for FONT AS A WHOLE
 typedef struct {
   const uint8_t* bitmap;  ///< Glyph bitmaps, concatenated
@@ -299,17 +301,9 @@ typedef struct {
   const EpdLigaturePair* ligaturePairs;  ///< Sorted ligature pair table (nullptr if none)
   uint32_t ligaturePairCount;            ///< Number of entries in ligaturePairs
 
-  /// On-demand glyph loading for fonts that don't keep all glyphs in RAM (e.g. SD card fonts).
-  /// Called by getGlyph() when a codepoint is not found in the interval table.
-  /// Returns a valid EpdGlyph* with correct metadata, or nullptr to fall back to the
-  /// replacement glyph.  The returned pointer is valid until the next glyphMissHandler
-  /// call that causes a ring-buffer eviction — callers must consume it (measure or draw)
-  /// before requesting another missed glyph.
-  const EpdGlyph* (*glyphMissHandler)(void* ctx, uint32_t codepoint);
-
-  /// Context pointer for glyphMissHandler (typically SdCardFont*).  Also used by
-  /// GfxRenderer::getGlyphBitmap() to retrieve overflow bitmaps via SdCardFont.
-  void* glyphMissCtx;
+  /// Glyphs the tables above do not have, and kerning for a font with no kern tables. Null for
+  /// built-in fonts. See GlyphProvider.h.
+  GlyphProvider* provider;
 } EpdFontData;
 
 /// Reads glyph `index` out of whichever representation `data` carries.
