@@ -9,8 +9,9 @@
 
 /// NOR flash for host tests.
 ///
-/// - program() can only clear bits. A write that needs a 0 -> 1 change is counted in violations(); the
-///   bit stays 0, as on the chip. Store tests assert violations() == 0: no byte is programmed twice.
+/// - program() can only clear bits. A write that needs a 0 -> 1 change is counted in violations(); the bit
+///   stays 0, as on the chip. Programming a byte that is no longer erased with anything but 0xFF is counted
+///   in reprograms(): the store never does it. Store tests assert both are 0.
 /// - erase() works in whole 4 KB sectors and counts erases per sector (the wear tests).
 /// - Power cuts: after cutAfterSteps(n), n more steps succeed (one step = one programmed byte or one
 ///   erased sector). The operation in flight then stops part-way, and every later program or erase fails
@@ -26,7 +27,7 @@ class SimNorFlash final : public NorFlash {
 
   uint32_t size() const override { return static_cast<uint32_t>(mem_.size()); }
 
-  bool read(const uint32_t offset, void* dst, const uint32_t len) override {
+  bool read(const uint32_t offset, void* dst, const uint32_t len) const override {
     if (!inRange(offset, len)) return false;
     std::memcpy(dst, mem_.data() + offset, len);
     return true;
@@ -34,9 +35,12 @@ class SimNorFlash final : public NorFlash {
 
   bool program(const uint32_t offset, const void* src, const uint32_t len) override {
     if (dead_ || !inRange(offset, len)) return false;
-    if (failNextProgram_) {
-      failNextProgram_ = false;
-      return false;
+    if (failProgram_) {
+      if (failSkip_ == 0) {
+        failProgram_ = false;
+        return false;
+      }
+      --failSkip_;
     }
     ++programCalls_;
     const auto* bytes = static_cast<const uint8_t*>(src);
@@ -47,6 +51,7 @@ class SimNorFlash final : public NorFlash {
         return false;
       }
       if ((cell & bytes[i]) != bytes[i]) ++violations_;
+      if (cell != 0xFF && bytes[i] != 0xFF) ++reprograms_;
       cell &= bytes[i];
     }
     return true;
@@ -97,13 +102,18 @@ class SimNorFlash final : public NorFlash {
     maps_.clear();
     mappedPages_ = 0;
   }
-  void failNextProgram() { failNextProgram_ = true; }
+  /// Fails one program() call (writing nothing): the next one, or the one after `skip` successful calls.
+  void failNextProgram(const uint32_t skip = 0) {
+    failProgram_ = true;
+    failSkip_ = skip;
+  }
   void setFreePages(const uint32_t pages) { freePages_ = pages; }
 
   // --- what happened ---
   bool dead() const { return dead_; }
   uint64_t steps() const { return steps_; }
   uint32_t violations() const { return violations_; }
+  uint32_t reprograms() const { return reprograms_; }
   uint32_t programCalls() const { return programCalls_; }
   uint32_t eraseCalls() const { return eraseCalls_; }
   uint32_t sectorErases(const uint32_t sector) const { return sectorErases_.at(sector); }
@@ -145,8 +155,10 @@ class SimNorFlash final : public NorFlash {
   uint64_t steps_ = 0;
   bool dead_ = false;
   bool partialCut_ = false;
-  bool failNextProgram_ = false;
+  bool failProgram_ = false;
+  uint32_t failSkip_ = 0;
   uint32_t violations_ = 0;
+  uint32_t reprograms_ = 0;
   uint32_t programCalls_ = 0;
   uint32_t eraseCalls_ = 0;
 };

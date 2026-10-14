@@ -1,4 +1,4 @@
-// The size table, kerning pairs and the wipe (spec 4.2, 4.3, 4.6, 4.7, 7.5).
+// The size table, kerning pairs and the wipe.
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -7,28 +7,30 @@
 
 using namespace glyphstore;
 using namespace gst_test;
-using Commit = FlashGlyphStore::Commit;
-using Lookup = FlashGlyphStore::Lookup;
-using OpenResult = FlashGlyphStore::OpenResult;
 
 namespace {
 
+// A store with an empty size table.
 class GlyphStoreSizes : public StoreTest {
+ protected:
+  void SetUp() override {
+    ASSERT_TRUE(install(store, smallLayout()));
+    ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
+  }
+
+  int claim(const uint32_t ppem26_6) {
+    uint8_t index = 0;
+    return store.sizeIndex(ppem26_6, &index) ? index : -1;
+  }
+};
+
+class GlyphStorePairs : public StoreTest {
  protected:
   void SetUp() override { ASSERT_TRUE(installAndOpen(store, smallLayout())); }
 };
 
-class GlyphStorePairs : public GlyphStoreSizes {};
-
-class GlyphStoreWipe : public GlyphStoreSizes {
+class GlyphStoreWipe : public GlyphStorePairs {
  protected:
-  // Claims all 16 sizes and one more: the store is then full, with wipe pending.
-  void fillSizeTable() {
-    for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), store.sizeIndex((20 + i) << 6, 0));
-    ASSERT_EQ(-1, store.sizeIndex(99 << 6, 0));
-    ASSERT_TRUE(store.wipePending());
-  }
-
   alignas(4) uint8_t buffer[4096] = {};
   GlyphBatch batch{buffer, sizeof buffer};
 };
@@ -36,28 +38,37 @@ class GlyphStoreWipe : public GlyphStoreSizes {
 }  // namespace
 
 TEST_F(GlyphStoreSizes, TheFirstSizeGetsIndexZeroAndKeepsIt) {
-  EXPECT_EQ(0, store.sizeIndex(29 << 6, 0));
-  EXPECT_EQ(1, store.sizeIndex(54 << 6, 1));
-  EXPECT_EQ(0, store.sizeIndex(29 << 6, 0));
+  EXPECT_EQ(0, claim(29 << 6));
+  EXPECT_EQ(1, claim(54 << 6));
+  EXPECT_EQ(0, claim(29 << 6));
   store.close();
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
-  EXPECT_EQ(1, store.sizeIndex(54 << 6, 1));
-  EXPECT_EQ(2, store.sizeIndex(33 << 6, 0));
+  EXPECT_EQ(1, claim(54 << 6));
+  EXPECT_EQ(2, claim(33 << 6));
 }
 
-TEST_F(GlyphStoreSizes, TheSeventeenthSizeFillsTheStore) {
-  for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), store.sizeIndex((20 + i) << 6, 0));
-  EXPECT_EQ(-1, store.sizeIndex(99 << 6, 0));
+TEST_F(GlyphStoreSizes, WhenEverySizeIsTakenTheStoreIsFull) {
+  for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  EXPECT_EQ(-1, claim(99 << 6));
   EXPECT_TRUE(store.wipePending());
-  EXPECT_EQ(3, store.sizeIndex(23 << 6, 0));  // known sizes are still answered
+  EXPECT_EQ(3, claim(23 << 6));  // known sizes are still answered
 }
 
 TEST_F(GlyphStoreSizes, ASizeEntryCutShortIsNeverReused) {
-  flash.cutAfterSteps(5);  // the ppem and the flags byte land; the pad does not
-  EXPECT_EQ(-1, store.sizeIndex(29 << 6, 0));
+  flash.cutAfterSteps(5);  // the ppem and one byte of `claimed` land
+  EXPECT_EQ(-1, claim(29 << 6));
   flash.powerCycle();
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
-  EXPECT_EQ(1, store.sizeIndex(29 << 6, 0));  // entry 0 is spent, not programmed again
+  EXPECT_EQ(1, claim(29 << 6));  // entry 0 is spent, not programmed again
+}
+
+TEST_F(GlyphStoreSizes, AnEntryWhoseClaimLandedWithoutItsPpemIsNeverReused) {
+  // On a real chip the bits of an 8-byte write can land in any order.
+  const uint32_t claimed = 0;
+  ASSERT_TRUE(flash.program(kSizeTableOffset + 4, &claimed, sizeof claimed));
+  store.close();
+  ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
+  EXPECT_EQ(1, claim(29 << 6));
 }
 
 TEST_F(GlyphStorePairs, PairsAreStoredPerStyle) {
@@ -101,32 +112,36 @@ TEST_F(GlyphStorePairs, ImpossiblePairsAreRefused) {
   EXPECT_EQ(0u, store.usedPairSlots());
 }
 
-TEST(GlyphStorePairsFull, AFullPairIndexStopsStoringButNeverWipes) {
-  SimNorFlash flash(kFlashBytes);
-  FlashGlyphStore store(flash);
-  ASSERT_TRUE(installAndOpen(store, smallLayout(1024, 100)));
+TEST_F(GlyphStorePairs, PairsAreNotStoredWhileWipeIsPending) {
+  fillSizeTable(store);
+  EXPECT_FALSE(store.storePair('A', 'V', 0, -74));
+  EXPECT_EQ(0u, store.usedPairSlots());
+}
+
+TEST_F(GlyphStorePairs, AFullPairIndexStopsStoringButNeverWipes) {
+  store.close();
+  ASSERT_TRUE(installAndOpen(store, smallLayout(1024, 200)));
   uint32_t stored = 0;
-  for (uint16_t right = 0x100; right < 0x200 && store.storePair(0x41, right, 0, -1); ++right) ++stored;
-  EXPECT_EQ(70u, stored);
+  for (uint16_t right = 0x100; right < 0x300 && store.storePair(0x41, right, 0, -1); ++right) ++stored;
+  EXPECT_EQ(140u, stored);
   EXPECT_FALSE(store.wipePending());
   alignas(4) uint8_t buffer[256];
   GlyphBatch batch(buffer, sizeof buffer);
   ASSERT_TRUE(stage(batch, makeKey('A', 0, 0), 9, 12));
   EXPECT_EQ(Commit::Stored, store.commit(batch));  // glyphs are not affected
-  EXPECT_EQ(0u, flash.violations());
 }
 
 TEST_F(GlyphStoreWipe, WipeEmptiesTheStoreAndKeepsTheFamily) {
   ASSERT_TRUE(stage(batch, makeKey('A', 0, 0), 9, 12));
   ASSERT_EQ(Commit::Stored, store.commit(batch));
-  ASSERT_EQ(Commit::Stored, store.markMissing(makeKey(0x2603, 0, 0)));
+  ASSERT_EQ(Commit::Stored, store.markNoGlyph(makeKey(0x2603, 0, 0)));
   ASSERT_TRUE(store.storePair('A', 'V', 0, -74));
-  fillSizeTable();
+  fillSizeTable(store);
   ASSERT_TRUE(store.wipe());
   for (int pass = 0; pass < 2; ++pass) {  // as wiped, then again after a reopen
     EXPECT_FALSE(store.wipePending()) << pass;
-    EXPECT_EQ(Lookup::Absent, store.find(makeKey('A', 0, 0), nullptr)) << pass;
-    EXPECT_EQ(Lookup::Absent, store.find(makeKey(0x2603, 0, 0), nullptr)) << pass;
+    EXPECT_EQ(Lookup::NotStored, store.find(makeKey('A', 0, 0), nullptr)) << pass;
+    EXPECT_EQ(Lookup::NotStored, store.find(makeKey(0x2603, 0, 0), nullptr)) << pass;
     EXPECT_FALSE(store.findPair('A', 'V', 0, nullptr)) << pass;
     EXPECT_EQ(0u, store.logUsed()) << pass;
     EXPECT_EQ(0u, store.usedSlots()) << pass;
@@ -137,29 +152,54 @@ TEST_F(GlyphStoreWipe, WipeEmptiesTheStoreAndKeepsTheFamily) {
     store.close();
     ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   }
-  EXPECT_EQ(0, store.sizeIndex(54 << 6, 0));  // the size table starts over
+  ASSERT_TRUE(claimTestSizes(store));  // the size table starts over
   ASSERT_TRUE(stage(batch, makeKey('B', 0, 0), 9, 12));
   EXPECT_EQ(Commit::Stored, store.commit(batch));
+}
+
+TEST_F(GlyphStoreWipe, AWipeVoidsTheSizeIndicesClaimedBeforeIt) {
+  const uint32_t generation = store.generation();
+  fillSizeTable(store);
+  ASSERT_TRUE(store.wipe());
+  EXPECT_NE(generation, store.generation());
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, 2), 9, 12));
+  EXPECT_EQ(Commit::Refused, store.commit(batch));  // size index 2 is not claimed any more
+  uint8_t index = 0xFF;
+  ASSERT_TRUE(store.sizeIndex(54 << 6, &index));  // another size takes entry 0 now
+  EXPECT_EQ(0, index);
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, 2), 9, 12));
+  EXPECT_EQ(Commit::Refused, store.commit(batch));
+}
+
+TEST_F(GlyphStoreWipe, AWipeOfAStoreNotFullWorksToo) {
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, 0), 9, 12));
+  ASSERT_EQ(Commit::Stored, store.commit(batch));
+  ASSERT_FALSE(store.wipePending());
+  ASSERT_TRUE(store.wipe());
+  EXPECT_FALSE(store.wipePending());
+  EXPECT_EQ(Lookup::NotStored, store.find(makeKey('A', 0, 0), nullptr));
 }
 
 TEST_F(GlyphStoreWipe, WipeErasesOnlySectorsThatHoldData) {
   for (uint32_t cp = 'a'; cp < 'a' + 3; ++cp) ASSERT_TRUE(stage(batch, makeKey(cp, 0, 0), 9, 12));
   ASSERT_EQ(Commit::Stored, store.commit(batch));
-  fillSizeTable();
+  fillSizeTable(store);
   const Geometry g = store.geometry();
   const uint32_t before = flash.totalSectorErases();
   ASSERT_TRUE(store.wipe());
-  // The header, the log's first sector and at most three index sectors; no pair sector (no pair stored).
-  EXPECT_LE(flash.totalSectorErases() - before, 5u);
+  // The state sector, the log's first sector and at most two index sectors; no pair sector (no pair stored),
+  // and never the header.
+  EXPECT_LE(flash.totalSectorErases() - before, 4u);
   EXPECT_EQ(1u, flash.sectorErases(g.logOffset / kSectorBytes));
   EXPECT_EQ(0u, flash.sectorErases(g.logOffset / kSectorBytes + 1));
   EXPECT_EQ(0u, flash.sectorErases(g.pairOffset / kSectorBytes));
+  EXPECT_EQ(0u, flash.sectorErases(0));
 }
 
-TEST_F(GlyphStoreWipe, WipingAnEmptyStoreErasesOnlyTheHeader) {
-  fillSizeTable();
+TEST_F(GlyphStoreWipe, WipingAnEmptyStoreErasesOnlyTheStateSector) {
+  fillSizeTable(store);
   const uint32_t before = flash.totalSectorErases();
   ASSERT_TRUE(store.wipe());
   EXPECT_EQ(1u, flash.totalSectorErases() - before);
-  EXPECT_EQ(1u, flash.sectorErases(0));
+  EXPECT_EQ(1u, flash.sectorErases(kStateSectorOffset / kSectorBytes));
 }

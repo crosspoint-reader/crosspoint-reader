@@ -1,4 +1,4 @@
-// The glyph store's on-flash format and its install-time layout planner (spec 4.1-4.4).
+// The glyph store's on-flash format and its install-time layout planner.
 #include <gtest/gtest.h>
 
 #include <cstddef>
@@ -25,17 +25,23 @@ PlanInput input(const uint8_t mode, const uint8_t styles, const uint32_t styleBy
 }  // namespace
 
 TEST(GlyphStoreFormat, KeysNeverLookErased) {
-  const uint32_t largest = makeKey(0x10FFFF, 3, 15);
+  const uint32_t largest = makeKey(0x10FFFF, 3, kSizeEntries - 1);
   EXPECT_TRUE(isGlyphKey(largest));
   EXPECT_NE(kErased, largest);
-  EXPECT_NE(kMissing, largest);
   EXPECT_FALSE(isGlyphKey(kErased));
   EXPECT_EQ(0x10FFFFu, largest & 0x1FFFFFu);
   EXPECT_EQ(3u, (largest >> 21) & 0x3u);
-  EXPECT_EQ(15u, (largest >> 23) & 0xFu);
+  EXPECT_EQ(kSizeEntries - 1, keySizeIndex(largest));
+  EXPECT_EQ(0u, largest >> 28);
 }
 
-TEST(GlyphStoreFormat, HomeSlotMatchesTheSpecFormulaForPowersOfTwo) {
+TEST(GlyphStoreFormat, NoGlyphIsAValueOnlyACompleteWriteProduces) {
+  // A cut leaves extra 1 bits; only a write that lands every bit reads as 0.
+  EXPECT_EQ(0u, kNoGlyph);
+  EXPECT_GE(kRecordHeaderBytes, 1u);  // a record slot holds a dataOffset, which is never 0
+}
+
+TEST(GlyphStoreFormat, HomeSlotMatchesFibonacciHashingForPowersOfTwo) {
   for (const uint32_t bits : {10u, 13u, 15u}) {
     const uint32_t slots = 1u << bits;
     for (uint32_t cp = 0x20; cp < 0x2000; cp += 7) {
@@ -51,6 +57,7 @@ TEST(GlyphStoreFormat, HomeSlotStaysInRangeForAnySlotCount) {
 }
 
 TEST(GlyphStoreFormat, HeaderLayoutIsStable) {
+  // Bump kFormatVersion when any of these change.
   EXPECT_EQ(648u, sizeof(Header));
   EXPECT_EQ(644u, offsetof(Header, check));
   EXPECT_EQ(8u, sizeof(Slot));

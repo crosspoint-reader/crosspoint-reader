@@ -3,18 +3,19 @@
 #include <cstddef>
 #include <cstdint>
 
-/// On-flash format of the TTF glyph store in the `spiffs` partition (magic "CPTT"). Spec:
-/// docs/superpowers/specs/2026-10-13-ttf-fonts-design.md, section 4.
+/// On-flash format of the TTF glyph store in the `spiffs` partition (magic "CPTT").
 ///
-///   0            header sector (4 KB): Header, then the size table (0x400) and the wipe word (0x480)
+///   0            header sector: Header, written once per install
+///   4 KB         state sector: the size table, then the wipe word; a wipe erases it last
 ///   64 KB        style blocks, each starting on a 64 KB page so one maps alone (flash mode: the whole
 ///                TTF; SD mode: the tables copied out of it)
-///   indexOffset  glyph index: Slot {key, log offset}, open addressing
+///   indexOffset  glyph index: Slot {key, the record's dataOffset, or kNoGlyph}, open addressing
 ///   pairOffset   kerning pair index: Slot {left << 16 | right, style << 16 | font units}
 ///   logOffset    append-only glyph records: [u32 key][EpdGlyph][2-bit bitmap], each 4-byte aligned
 ///
-/// Outside the header sector every byte is programmed at most once between erases. Erased flash reads
-/// 0xFF, so "erased" doubles as "empty".
+/// Every byte is programmed at most once between erases. Erased flash reads 0xFF, so "erased" doubles as
+/// "empty". A power cut can only leave bytes with more 1 bits than were written (NorFlash.h); every marker
+/// that must not appear by accident is therefore one that only a complete write produces.
 namespace glyphstore {
 
 constexpr uint32_t kMagic = 0x54545043;  // "CPTT"
@@ -23,20 +24,21 @@ constexpr uint8_t kModeFlash = 0;  ///< every style's whole TTF is in the partit
 constexpr uint8_t kModeSd = 1;     ///< the tables are in the partition; outlines are read from the SD card
 constexpr uint8_t kMaxStyles = 4;
 constexpr uint8_t kMaxTables = 8;
-constexpr uint8_t kSizeEntries = 16;
+constexpr uint8_t kSizeEntries = 32;  ///< the 9 ladder rungs plus body sizes
+constexpr uint32_t kIdentityBytes = 16;
 
 constexpr uint32_t kSectorBytes = 4096;
-constexpr uint32_t kPageBytes = 65536;               ///< one MMU page: mappings are paid in whole pages
-constexpr uint32_t kHeaderRegionBytes = kPageBytes;  ///< sector 0 is the header; the regions start a page later
-constexpr uint32_t kSizeTableOffset = 0x400;
-constexpr uint32_t kWipeWordOffset = 0x480;
+constexpr uint32_t kPageBytes = 65536;  ///< one MMU page: mappings are paid in whole pages
+constexpr uint32_t kStateSectorOffset = kSectorBytes;
+constexpr uint32_t kFirstRegionOffset = 2 * kSectorBytes;  ///< nothing else may start before this
+constexpr uint32_t kHeaderRegionBytes = kPageBytes;        ///< planLayout starts the style blocks a page in
 
 constexpr uint32_t kErased = 0xFFFFFFFF;
-constexpr uint32_t kMissing = 0xFFFFFFFE;  ///< slot value: the font has no glyph for this key; no record
+constexpr uint32_t kNoGlyph = 0;  ///< slot value: the font has no glyph for this key; a cut can't produce 0
 constexpr uint32_t kSlotBytes = 8;
 constexpr uint32_t kSlotsPerPage = kPageBytes / kSlotBytes;  // 8,192
-constexpr uint32_t kMaxProbe = 32;
-constexpr uint32_t kIndexLoadPercent = 70;  ///< more slots in use than this counts as full (4.6)
+constexpr uint32_t kMaxProbe = 128;         ///< a longer chain counts as full; tables have at least this many slots
+constexpr uint32_t kIndexLoadPercent = 70;  ///< more slots in use than this counts as full
 constexpr uint32_t kLogFullPercent = 95;
 
 constexpr uint32_t kRecordHeaderBytes = 20;  ///< u32 key + 16-byte EpdGlyph
@@ -47,24 +49,25 @@ constexpr uint32_t kMinLogPages = 4;
 constexpr uint32_t kPairPages = 1;
 constexpr uint32_t kSparePages = 2;
 /// Expected bytes per stored record, used only to size the index against the log: a Latin glyph at
-/// 14 pt is about 100 B, a CJK glyph about 250 B (Appendix A).
+/// 14 pt is about 100 B, a CJK glyph about 250 B (measured on the X3).
 constexpr uint32_t kExpectedRecordFlash = 100;
 constexpr uint32_t kExpectedRecordSd = 250;
 
-/// Glyph key: code point (21 bits), style (2), size-table index (4). Bits 27-31 stay zero, so a key is
+/// Glyph key: code point (21 bits), style (2), size-table index (5). Bits 28-31 stay zero, so a key is
 /// never the erased value.
 constexpr uint32_t makeKey(const uint32_t codepoint, const uint8_t style, const uint8_t sizeIndex) {
   return (codepoint & 0x1FFFFFu) | (static_cast<uint32_t>(style & 0x3u) << 21) |
-         (static_cast<uint32_t>(sizeIndex & 0xFu) << 23);
+         (static_cast<uint32_t>(sizeIndex & 0x1Fu) << 23);
 }
-constexpr bool isGlyphKey(const uint32_t key) { return (key >> 27) == 0; }
+constexpr bool isGlyphKey(const uint32_t key) { return (key >> 28) == 0; }
+constexpr uint8_t keySizeIndex(const uint32_t key) { return static_cast<uint8_t>((key >> 23) & 0x1Fu); }
 constexpr uint32_t pairKey(const uint16_t left, const uint16_t right) {
   return (static_cast<uint32_t>(left) << 16) | right;
 }
 
 /// Home slot of `key` in a table of `slots`: Fibonacci hashing, then a multiply-shift into the range. For
-/// a power-of-two table this is the spec's `(key * 2654435761) >> (32 - log2(slots))`; it also serves any
-/// slot count, so the index can be sized in whole pages.
+/// a power-of-two table this is `(key * 2654435761) >> (32 - log2(slots))`; it also serves any slot count,
+/// so the index can be sized in whole pages.
 constexpr uint32_t homeSlot(const uint32_t key, const uint32_t slots) {
   return static_cast<uint32_t>((static_cast<uint64_t>(key * 2654435761u) * slots) >> 32);
 }
@@ -108,31 +111,32 @@ struct Geometry {
   uint32_t logSize;
 };
 
+/// Bump kFormatVersion whenever this layout changes.
 struct Header {
   uint32_t magic;
   uint16_t version;
-  uint16_t headerBytes;  ///< sizeof(Header) when written
-  uint8_t identity[16];  ///< the family identity (4.2), compared at open
+  uint16_t headerBytes;              ///< sizeof(Header) when written
+  uint8_t identity[kIdentityBytes];  ///< the family identity, compared at open
   Geometry geometry;
   StyleInfo styles[kMaxStyles];
   uint32_t check;  ///< FNV-1a over every byte before it: a torn header write fails it
 };
-static_assert(sizeof(Header) <= kSizeTableOffset, "the header overlaps the size table");
+static_assert(sizeof(Header) <= kSectorBytes, "the header fits its sector");
 
-/// A size-table entry. It is in use once `pad` reads zero: the pad is written last, so an entry cut short
-/// reads as neither free nor in use, and is never claimed again.
+/// A size-table entry. In use once `claimed` reads zero. The ppem is written first and `claimed` last, so
+/// an entry cut short reads as neither free nor in use, and is never claimed again.
 struct SizeEntry {
   uint32_t ppem26_6;
-  uint8_t flags;
-  uint8_t pad[3];
+  uint32_t claimed;
 };
 static_assert(sizeof(SizeEntry) == 8, "a size entry is 8 bytes");
-static_assert(kSizeTableOffset + kSizeEntries * sizeof(SizeEntry) <= kWipeWordOffset,
-              "the size table overlaps the wipe word");
 
-inline uint32_t fnv1a(const void* data, const size_t len) {
+constexpr uint32_t kSizeTableOffset = kStateSectorOffset;
+constexpr uint32_t kWipeWordOffset = kSizeTableOffset + kSizeEntries * sizeof(SizeEntry);
+static_assert(kSizeEntries <= 32, "claimed sizes are tracked in a 32-bit mask");
+
+inline uint32_t fnv1a(const void* data, const size_t len, uint32_t hash = 2166136261u) {
   const auto* bytes = static_cast<const uint8_t*>(data);
-  uint32_t hash = 2166136261u;
   for (size_t i = 0; i < len; ++i) {
     hash ^= bytes[i];
     hash *= 16777619u;
@@ -140,8 +144,8 @@ inline uint32_t fnv1a(const void* data, const size_t len) {
   return hash;
 }
 
-/// What the caller knows before an install (7.1): the mode, and per style the bytes to copy (flash
-/// mode: the TTF file; SD mode: the copied tables, summed).
+/// What the caller knows before an install: the mode, and per style the bytes to copy (flash mode: the
+/// TTF file; SD mode: the copied tables, summed).
 struct PlanInput {
   uint8_t mode;
   uint8_t styleCount;
@@ -156,7 +160,7 @@ struct Layout {
   uint32_t styleSize[kMaxStyles];
 };
 
-/// Region sizes from the mapping budget (4.1):
+/// Region sizes from the mapping budget:
 ///   log pages = free pages - mapped style pages - index pages - pair pages - 2 spare,
 /// also bounded by the partition. The index gets enough pages that 70 % of its slots holds the
 /// records the log holds (kExpectedRecord*), so it does not fill first. Flash mode maps one style at a

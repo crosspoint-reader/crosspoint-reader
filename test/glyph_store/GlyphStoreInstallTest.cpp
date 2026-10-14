@@ -1,13 +1,13 @@
-// Installing a family into the glyph store and opening it (spec 4.1, 4.2, 7.1).
+// Installing a family into the glyph store and opening it.
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <vector>
 
 #include "GlyphStoreTestUtil.h"
 
 using namespace glyphstore;
 using namespace gst_test;
-using OpenResult = FlashGlyphStore::OpenResult;
 
 namespace {
 
@@ -27,7 +27,8 @@ Layout twoStyleLayout(const uint8_t mode) {
 TEST_F(GlyphStoreInstall, ABlankChipIsNotInstalled) { EXPECT_EQ(OpenResult::NotInstalled, store.open(kIdentityA)); }
 
 TEST_F(GlyphStoreInstall, AnInstalledStoreOpensEmpty) {
-  ASSERT_TRUE(installAndOpen(store, smallLayout()));
+  ASSERT_TRUE(install(store, smallLayout()));
+  ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   EXPECT_TRUE(store.isOpen());
   EXPECT_EQ(kModeFlash, store.mode());
   EXPECT_EQ(1, store.styleCount());
@@ -64,6 +65,12 @@ TEST_F(GlyphStoreInstall, UntilFinishTheStoreIsNotInstalled) {
   }
   ASSERT_TRUE(store.finishInstall());
   EXPECT_EQ(OpenResult::Ready, store.open(kIdentityA));
+}
+
+TEST_F(GlyphStoreInstall, AnInstallAbandonedByOpenCannotBeFinishedLater) {
+  ASSERT_TRUE(store.beginInstall(smallLayout(), kIdentityA, nullptr));
+  EXPECT_EQ(OpenResult::NotInstalled, store.open(kIdentityA));
+  EXPECT_FALSE(store.finishInstall());  // the half-done install was dropped, not left to write a stale header
 }
 
 TEST(GlyphStoreInstallCut, ACutAnywhereInTheHeaderWriteReadsAsNotInstalled) {
@@ -108,8 +115,22 @@ TEST_F(GlyphStoreInstall, ALayoutOutsideTheChipIsRefused) {
   Layout overlapping = smallLayout();
   overlapping.styleSize[0] = 70000;  // into the index
   EXPECT_FALSE(store.beginInstall(overlapping, kIdentityA, nullptr));
+  Layout tinyIndex = smallLayout(kMaxProbe - 1);  // a probe could wrap onto itself
+  EXPECT_FALSE(store.beginInstall(tinyIndex, kIdentityA, nullptr));
   EXPECT_EQ(0u, flash.eraseCalls());
   EXPECT_EQ(0u, flash.programCalls());
+}
+
+TEST_F(GlyphStoreInstall, SdModeNeedsTablesThatFitTheirStyle) {
+  const Layout layout = twoStyleLayout(kModeSd);
+  EXPECT_FALSE(store.beginInstall(layout, kIdentityA, nullptr));  // no table maps
+  StyleInfo info[kMaxStyles] = {};
+  info[1].tableCount = 1;
+  info[1].tables[0] = {0x636D6170, 0, 4000, 200};  // 'cmap', past the 4 KB block
+  EXPECT_FALSE(store.beginInstall(layout, kIdentityA, info));
+  info[1].tableCount = kMaxTables + 1;
+  info[1].tables[0].blockOffset = 0;
+  EXPECT_FALSE(store.beginInstall(layout, kIdentityA, info));
 }
 
 TEST_F(GlyphStoreInstall, SdModeMapsAllStylesTogether) {
@@ -146,4 +167,15 @@ TEST_F(GlyphStoreInstall, FlashModeMapsOneStyleAtATime) {
   EXPECT_EQ(2u, flash.mappings());  // the glyph regions and the one style
   store.close();
   EXPECT_EQ(0u, flash.mappings());
+}
+
+TEST_F(GlyphStoreInstall, AHeaderThatPassesItsCheckButDescribesOverlappingStylesIsNotInstalled) {
+  ASSERT_TRUE(install(store, twoStyleLayout(kModeFlash)));
+  Header header{};
+  ASSERT_TRUE(flash.read(0, &header, sizeof header));
+  header.styles[0].size = 8192;  // now runs into style 1
+  header.check = fnv1a(&header, offsetof(Header, check));
+  ASSERT_TRUE(flash.erase(0, kSectorBytes));
+  ASSERT_TRUE(flash.program(0, &header, sizeof header));
+  EXPECT_EQ(OpenResult::NotInstalled, store.open(kIdentityA));
 }

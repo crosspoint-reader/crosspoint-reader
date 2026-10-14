@@ -9,8 +9,7 @@ uint32_t indexPagesFor(const uint32_t logPages, const uint32_t expectedRecord) {
   const uint64_t logBytes = static_cast<uint64_t>(logPages) * kPageBytes;
   const uint64_t denominator = static_cast<uint64_t>(expectedRecord) * kIndexLoadPercent;
   const uint64_t slots = (logBytes * 100 + denominator - 1) / denominator;
-  const uint64_t pages = (slots + kSlotsPerPage - 1) / kSlotsPerPage;
-  return pages == 0 ? 1 : static_cast<uint32_t>(pages);
+  return static_cast<uint32_t>((slots + kSlotsPerPage - 1) / kSlotsPerPage);
 }
 
 }  // namespace
@@ -33,28 +32,26 @@ bool planLayout(const PlanInput& in, Layout& out) {
     if (pages > largestStyle) largestStyle = pages;
   }
 
-  const int64_t usablePages = in.usableBytes / kPageBytes;
-  const int64_t fixedPages = 1 + static_cast<int64_t>(stylePages);  // the header page and the style blocks
-  const int64_t mappedStyles = in.mode == kModeFlash ? largestStyle : stylePages;
+  const uint32_t usablePages = in.usableBytes / kPageBytes;
+  const uint32_t fixedPages = kHeaderRegionBytes / kPageBytes + stylePages;
+  const uint32_t mappedStyles = in.mode == kModeFlash ? largestStyle : stylePages;
   const uint32_t expected = in.mode == kModeFlash ? kExpectedRecordFlash : kExpectedRecordSd;
 
-  // The largest log either limit allows with a one-page index; then shrink it until the index it needs
-  // fits as well.
-  const int64_t byBudget = static_cast<int64_t>(in.freeMapPages) - mappedStyles - kPairPages - kSparePages - 1;
-  const int64_t byPartition = usablePages - fixedPages - kPairPages - 1;
-  for (int64_t log = byBudget < byPartition ? byBudget : byPartition; log >= kMinLogPages; --log) {
-    const int64_t index = indexPagesFor(static_cast<uint32_t>(log), expected);
+  // From the largest log the partition could hold down: the first that fits both the mapping budget and
+  // the partition, together with the index it needs.
+  for (uint32_t log = usablePages; log >= kMinLogPages; --log) {
+    const uint32_t index = indexPagesFor(log, expected);
     if (mappedStyles + index + kPairPages + log + kSparePages > in.freeMapPages) continue;
     if (fixedPages + index + kPairPages + log > usablePages) continue;
     Geometry& g = out.geometry;
     g.mode = in.mode;
     g.styleCount = in.styleCount;
     g.indexOffset = offset;
-    g.indexSlots = static_cast<uint32_t>(index) * kSlotsPerPage;
-    g.pairOffset = g.indexOffset + static_cast<uint32_t>(index) * kPageBytes;
+    g.indexSlots = index * kSlotsPerPage;
+    g.pairOffset = g.indexOffset + index * kPageBytes;
     g.pairSlots = kPairPages * kSlotsPerPage;
     g.logOffset = g.pairOffset + kPairPages * kPageBytes;
-    g.logSize = static_cast<uint32_t>(log) * kPageBytes;
+    g.logSize = log * kPageBytes;
     return true;
   }
   out = Layout{};
