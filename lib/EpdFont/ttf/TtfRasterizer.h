@@ -74,8 +74,10 @@ class Rasterizer {
   /// The output region, plan().outputBytes long: render() leaves its bitmap here.
   uint8_t* output() { return block_ ? block_.get() + outputOffset_ : nullptr; }
 
-  /// Loads `glyph` of `face` at `ppem26_6` into the scratch block and fills `metrics` as the .cpfont
-  /// converter would: width, height, left, top, advanceX (12.4) and dataLength; dataOffset is 0.
+  /// Loads `glyph` of `face` at `ppem26_6` into the scratch block and fills `metrics`: width, height, left
+  /// and top of FreeType's unhinted bitmap, advanceX (12.4) as the .cpfont converter derives it, and
+  /// dataLength; dataOffset is 0. The converter auto-hints its bitmaps, so only advances and line metrics
+  /// match a .cpfont of the same font; the boxes and pixels match FreeType unhinted.
   Status load(FontBytes& bytes, const Face& face, uint16_t glyph, uint32_t ppem26_6, EpdGlyph* metrics);
   /// Draws the glyph of the last load() into `dst`, writing all of its dataLength bytes (MSB-first, rows
   /// continuous, as .cpfont bitmaps). After a failed load() it writes nothing and returns that status.
