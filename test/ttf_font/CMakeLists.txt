@@ -2,7 +2,18 @@
 
 add_executable(TtfFontTest
   TtfFamilyTest.cpp
+  TtfFontTest.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFamily.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/TtfFont.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/FlashGlyphStore.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/GlyphStoreFormat.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/TtfRasterizer.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c
+  ${REPO_ROOT}/lib/EpdFont/EpdFont.cpp
+  ${REPO_ROOT}/lib/EpdFont/EpdFontFamily.cpp
+  ${REPO_ROOT}/lib/EpdFont/GlyphFallback.cpp
+  ${REPO_ROOT}/lib/Utf8/Utf8.cpp
   ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
 )
 
