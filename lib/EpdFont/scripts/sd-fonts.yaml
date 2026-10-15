@@ -48,6 +48,17 @@ scriptGroups:
 families:
   # ── Serif ──────────────────────────────────────────────────────────────
 
+  - name: Libron
+    description: "Serif optimized for digital reading and e-readers (Latin)"
+    scripts: [latin]
+    intervals: latin-ext
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-BoldItalic.ttf"}
+
   - name: Literata
     description: "Screen-optimized serif (Latin, Greek, Cyrillic)"
     scripts: [latin, cyrillic, greek]

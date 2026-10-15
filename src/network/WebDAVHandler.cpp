@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "ClippingStore.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -451,8 +452,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     }
   } else {
     file.close();
-    clearBookCache(path.c_str());
-    if (Storage.remove(path.c_str())) {
+    if (removeBookFile(path.c_str())) {
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to delete file");
@@ -550,8 +550,9 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
+  if (dstExists && !removeBookFile(dstPath.c_str())) {
+    s.send(500, "text/plain", "Failed to remove destination");
+    return;
   }
 
   HalFile file = Storage.open(srcPath.c_str());
@@ -561,8 +562,8 @@ void WebDAVHandler::handleMove(WebServer& s) {
   }
 
   clearBookCache(srcPath.c_str());
-  bool success = file.rename(dstPath.c_str());
   file.close();
+  const bool success = ClippingStore::moveBook(srcPath.c_str(), dstPath.c_str());
 
   if (success) {
     s.send(dstExists ? 204 : 201);

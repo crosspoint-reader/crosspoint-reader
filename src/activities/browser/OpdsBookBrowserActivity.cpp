@@ -31,6 +31,7 @@
 #include "network/HttpDownloader.h"
 #include "network/LcpDevice.h"
 #include "util/BookCacheUtils.h"
+#include "util/OpdsFeedError.h"
 #include "util/OpdsFilename.h"
 #include "util/UrlUtils.h"
 
@@ -56,6 +57,23 @@ std::string uiAcceptLanguage() {
   return lang + ",en;q=0.8";
 }
 
+// Tells a dead server from a catalog that wants a password; both are a bare
+// "failed" to the fetch itself. Read right after a failed fetch.
+StrId feedFailureMessage() {
+  switch (classifyFeedFailure(HttpDownloader::lastStatus(), HttpDownloader::lastAnswerRedirected())) {
+    case OpdsFeedError::Unreachable:
+      return StrId::STR_FEED_UNREACHABLE;
+    case OpdsFeedError::Unauthorized:
+      return StrId::STR_FEED_UNAUTHORIZED;
+    case OpdsFeedError::Redirected:
+      return StrId::STR_FEED_REDIRECTED;
+    case OpdsFeedError::ServerError:
+      return StrId::STR_FEED_SERVER_ERROR;
+    case OpdsFeedError::Other:
+      break;
+  }
+  return StrId::STR_FETCH_FEED_FAILED;
+}
 }  // namespace
 
 OpdsBookBrowserActivity::OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -71,6 +89,7 @@ void OpdsBookBrowserActivity::onEnter() {
   // reset the per-session auth latches. Accept-Language localizes the catalog
   // (both request header and language-map title resolution).
   opdsClient.setServer(server.url, server.username, server.password);
+  opdsTransport.customHeaders = server.activeCustomHeaders();
   {
     const OpdsTokens t = OPDS_TOKENS.get(tokenKey());
     opdsClient.setTokens(t.accessToken, t.refreshToken, t.refreshUrl);
@@ -341,7 +360,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
         fail(StrId::STR_PARSE_FEED_FAILED);
         break;
       default:
-        fail(StrId::STR_FETCH_FEED_FAILED);
+        fail(feedFailureMessage());
         break;
     }
     return;
@@ -561,7 +580,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // the current feed when the transfer finishes.
   releaseEntries();
 
-  std::vector<HttpDownloader::Header> headers;
+  std::vector<HttpDownloader::Header> headers = server.activeCustomHeaders();
   const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
   if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
   // downloadFile() (CatalogActivity) releases font caches, checks the TLS heap
@@ -594,6 +613,7 @@ void OpdsBookBrowserActivity::downloadLcpBook(const OpdsEntry& book) {
     options.username = auth.username;
     options.password = auth.password;
     options.bearer = auth.bearer;
+    options.headers = server.activeCustomHeaders();
     options.statusOut = &status;
     constexpr size_t MAX_LICENSE_BYTES = 256 * 1024;
     const bool ok = HttpDownloader::fetchUrl(
@@ -899,7 +919,7 @@ void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl) {
     LOG_INF("OPDS", "Skipping cover: low heap");
     return;
   }
-  std::vector<HttpDownloader::Header> headers;
+  std::vector<HttpDownloader::Header> headers = server.activeCustomHeaders();
   const freeink::opds::HttpAuth auth = opdsClient.downloadAuth();
   if (!auth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + auth.bearer});
   const auto result = HttpDownloader::downloadToFile(url, tmp, nullptr, nullptr, auth.username, auth.password, headers);

@@ -33,6 +33,11 @@ void applyCommonClientSetup(freeink::SecureHttpClient& http) {
   http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
 }
 
+// Written after every request, and read by the UI right after a failure.
+int g_lastStatus = 0;
+// Whether the last answer came from another origin than the request started at.
+bool g_lastRedirected = false;
+
 // All HTTP(S) fetches go through wolfSSL (the firmware's only TLS stack: it
 // speaks TLS 1.3 and reads large bodies reliably). Plain-http URLs still use a
 // WiFiClient here, so this is safe for non-TLS targets too. A body cut short
@@ -45,9 +50,11 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
   WifiPowerSaveGuard psGuard;
   freeink::FetchOptions options;
   options.redirectToHttp = downgradeRedirectsToHttp;
+  bool answeredBySameOrigin = true;
   const freeink::FetchResult result = freeink::fetchResumable(
       url, options,
       [&](freeink::SecureHttpClient& http, const bool sameOrigin) {
+        answeredBySameOrigin = sameOrigin;
         applyCommonClientSetup(http);
         // Credentials and caller headers stay with the starting origin; a
         // redirect elsewhere (or to plain http) gets neither.
@@ -60,6 +67,9 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
       },
       sink, [cancelFlag] { return cancelFlag && *cancelFlag; });
   if (bytesOut) *bytesOut = result.bytes;
+  // FetchResult::status is -1 when no response arrived (bad URL, DNS, connect, TLS).
+  g_lastStatus = result.status < 0 ? 0 : result.status;
+  g_lastRedirected = !answeredBySameOrigin;
 
   if (result.aborted) return HttpDownloader::ABORTED;
   if (result.stopped) return HttpDownloader::FILE_ERROR;
@@ -80,19 +90,23 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
 
 }  // namespace
 
+int HttpDownloader::lastStatus() { return g_lastStatus; }
+
+bool HttpDownloader::lastAnswerRedirected() { return g_lastRedirected; }
+
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const std::vector<Header>& headers) {
   return fetchUrl(
       url, [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; }, username,
-      password);
+      password, headers);
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const std::vector<Header>& headers) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   freeink::FetchSink sink;
   sink.write = onData;
-  return runGetSecure(url, username, password, {}, sink) == OK;
+  return runGetSecure(url, username, password, headers, sink) == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const FetchOptions& options) {
@@ -121,6 +135,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
       } else if (!options.username.empty() && !options.password.empty()) {
         http.setBasicAuth(options.username, options.password);
       }
+      for (const auto& h : options.headers) http.addHeader(h.first, h.second);
     }
     if (!options.accept.empty()) http.addHeader("Accept", options.accept);
     if (!options.acceptLanguage.empty()) http.addHeader("Accept-Language", options.acceptLanguage);
@@ -143,7 +158,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
     }
     break;
   }
-  if (options.statusOut) *options.statusOut = status > 0 ? status : 0;
+  g_lastStatus = status > 0 ? status : 0;
+  g_lastRedirected = freeink::fetchOrigin(current) != startOrigin;
+  if (options.statusOut) *options.statusOut = g_lastStatus;
   return status >= 200 && status < 300 && !sinkStopped;
 }
 

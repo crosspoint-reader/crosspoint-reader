@@ -87,12 +87,21 @@ const ThemeMetrics& UITheme::getMetrics() const {
   return adjustedMetrics;
 }
 
-// Screen area excluding the button hints
+// Full drawable content area: screen minus the board's viewable insets (bezel /
+// rounded-corner clearance), oriented to the current rotation. The single place
+// the inset math lives; every screen derives its content bounds from here (or
+// from getScreenSafeArea, which builds on it).
+Rect UITheme::getContentArea(const GfxRenderer& renderer) {
+  int viTop = 0, viRight = 0, viBottom = 0, viLeft = 0;
+  renderer.getOrientedViewableTRBL(&viTop, &viRight, &viBottom, &viLeft);
+  return Rect{viLeft, viTop, renderer.getScreenWidth() - viLeft - viRight,
+              renderer.getScreenHeight() - viTop - viBottom};
+}
+
+// Content area excluding the button hints.
 Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
   auto orientation = renderer.getOrientation();
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
-  Rect safeArea = Rect{0, 0, screenWidth, screenHeight};
+  Rect safeArea = getContentArea(renderer);
   const ThemeMetrics metrics = getMetrics();
   switch (orientation) {
     case GfxRenderer::Orientation::Portrait:
@@ -139,7 +148,7 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename)) {
     return Text;
   }
-  if (FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename)) {
+  if (FsHelpers::hasImageExtension(filename)) {
     return Image;
   }
   return File;
