@@ -54,6 +54,11 @@ int probeStyle(const FileSource& file);
 /// falls back to regular.
 bool assignStyles(const FileProbe* files, size_t count, int (&out)[4]);
 
+/// True when flash mode can install a family with these style file sizes: every style copied into a font area of
+/// `usableBytes`, with the largest style, the index and a minimal log mapped within `freeMapPages`
+/// (glyphstore::planLayout). Larger families need SD mode (Stage 2c-4).
+bool fitsFlashMode(const uint32_t* styleBytes, uint8_t count, uint32_t usableBytes, uint32_t freeMapPages);
+
 /// Bump whenever the engine's output changes for the same font (the rasterizer, the 150 dpi sizing, the 2-bit
 /// thresholds): the identity changes with it, so every installed store is rebuilt.
 constexpr uint8_t kRenderVersion = 1;

@@ -48,6 +48,11 @@ class SdCardFontRegistry {
   // Scan SD card, populate families_. Returns true if any families found.
   bool discover();
 
+  // Asked at discovery whether a TTF family with these style file sizes can be installed; one that cannot is not
+  // listed, since picking it would only fall back to a built-in font. Unset (host tests): every family is listed.
+  using TtfFits = bool (*)(const uint32_t* styleBytes, uint8_t count);
+  void setTtfFits(const TtfFits fits) { ttfFits_ = fits; }
+
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
   int getFamilyIndex(const std::string& name) const;
@@ -58,7 +63,8 @@ class SdCardFontRegistry {
 
   static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
   void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
-  static void addTtfFiles(const char* dirPath, const std::vector<std::string>& names,
-                          const std::vector<uint32_t>& bytes, SdCardFontFamilyInfo& family);
+  void addTtfFiles(const char* dirPath, const std::vector<std::string>& names, const std::vector<uint32_t>& bytes,
+                   SdCardFontFamilyInfo& family) const;
+  TtfFits ttfFits_ = nullptr;
   void scanRoot(const char* rootPath);
 };

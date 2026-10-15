@@ -263,3 +263,15 @@ TEST(TtfFamily, TheBundledFilesCarryTheirWeights) {
   EXPECT_EQ(400, ttf::probeFile(regular.source()).weight);
   EXPECT_EQ(700, ttf::probeFile(bold.source()).weight);
 }
+
+TEST(TtfFamily, AFamilyFitsFlashModeOnlyWithinThePartitionAndTheMappingBudget) {
+  constexpr uint32_t kX3FontArea = 3538944 - 65536;
+  const uint32_t bookerly[4] = {450048, 452000, 460000, 455000};
+  EXPECT_TRUE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 32));
+  const uint32_t cjk[1] = {10u * 1024 * 1024};  // one CJK style is larger than the partition
+  EXPECT_FALSE(ttf::fitsFlashMode(cjk, 1, kX3FontArea, 32));
+  const uint32_t wide[4] = {1000000, 1000000, 1000000, 1000000};  // 4 MB of styles
+  EXPECT_FALSE(ttf::fitsFlashMode(wide, 4, kX3FontArea, 32));
+  EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 12));  // too few mapping pages for a style and a log
+  EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 0, kX3FontArea, 32));
+}

@@ -1,8 +1,10 @@
 #include "SdCardFontSystem.h"
 
+#include <EspNorFlash.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <ttf/TtfFamily.h>
 #include <ttf/TtfFont.h>
 
 #include <climits>
@@ -27,6 +29,14 @@ void ttfYield() {
   if (now - last < 200) return;
   last = now;
   vTaskDelay(1);
+}
+
+// Lists a TTF family only when flash mode can install it; larger families wait for SD mode (Stage 2c-4).
+bool ttfFamilyFits(const uint32_t* styleBytes, const uint8_t count) {
+  // While the store is open its mappings hide the budget an install would get: the load decides then.
+  if (EspNorFlash::liveMappings() != 0) return true;
+  EspNorFlash flash;
+  return flash.begin() && ttf::fitsFlashMode(styleBytes, count, flash.size(), flash.freeMapPages());
 }
 
 }  // namespace
@@ -192,6 +202,7 @@ ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   (void)renderer;
   TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield});
+  registry_.setTtfFits(&ttfFamilyFits);
   registry_.discover();
 
   // Startup is discovery-only. SD font payloads are loaded lazily on reader
