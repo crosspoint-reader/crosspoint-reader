@@ -781,7 +781,7 @@ bool OpdsBookBrowserActivity::parseUnlockResponse(const std::string& response, L
     c.pending[n] = '\0';
   };
   callbacks.onString = [](void* ud, const char* value, size_t len) {
-    auto& c = *static_cast<Ctx*>(ud);
+    const auto& c = *static_cast<const Ctx*>(ud);
     const size_t n = len < 128 ? len : 128;
     if (strcmp(c.pending, "epk") == 0) c.out->epk.assign(value, n);
     if (strcmp(c.pending, "iv") == 0) c.out->iv.assign(value, n);
