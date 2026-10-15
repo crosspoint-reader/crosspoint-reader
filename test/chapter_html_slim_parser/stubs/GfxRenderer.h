@@ -1,13 +1,12 @@
 #pragma once
 
 #include <EpdFontFamily.h>
+#include <GfxRenderer/FontVariantProvider.h>
 #include <Utf8.h>
 
 #include <deque>
 #include <map>
 #include <string>
-
-#include "src/ReaderFontSizes.h"
 
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
@@ -56,14 +55,13 @@ class GfxRenderer {
   int getScreenHeight() const { return 800; }
   int getLineHeight(int, float = 1.0f) const { return 16; }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
-  // Fixture provider uses built-in sizes, or synthetic IDs when variantsEnabled.
-  bool variantsEnabled = false;
-  int resolveFontVariant(int fontId, float scale) const {
-    if (variantsEnabled) return fontId * 1000 + static_cast<int>(scale * 100 + 0.5f);
-    const int builtin = builtinReaderFontVariant(fontId, scale);
-    return fontMap.count(builtin) ? builtin : 0;
+  void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
+  int resolveFontVariant(int fontId, float scale) const { return fontVariantProvider_.resolveFont(fontId, scale); }
+  bool ensureFontLoaded(int fontId) const {
+    if (fontMap.count(fontId) != 0 || fontId == 0) return true;
+    return fontVariantProvider_.load && fontVariantProvider_.load(fontVariantProvider_.ctx, fontId) &&
+           fontMap.count(fontId) != 0;
   }
-  bool ensureFontLoaded(int fontId) const { return variantsEnabled || fontMap.count(fontId) != 0 || fontId == 0; }
   std::map<int, EpdFontFamily> fontMap;
   int getFontAscenderSize(int) const { return 12; }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 4; }
@@ -85,4 +83,7 @@ class GfxRenderer {
   int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 4; }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const char* const*, const size_t*, size_t, bool, bool, uint8_t) const {}
+
+ private:
+  FontVariantProvider fontVariantProvider_;
 };

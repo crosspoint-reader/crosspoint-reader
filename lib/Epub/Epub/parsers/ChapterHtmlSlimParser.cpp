@@ -2890,7 +2890,6 @@ void ChapterHtmlSlimParser::applyBlockFontScale(BlockStyle& blockStyle, const Cs
 }
 
 int ChapterHtmlSlimParser::fontIdForScale(const float scale) const {
-  if (std::fabs(scale - 1.0f) < 0.05f) return fontId;
   const int variant = renderer.resolveFontVariant(fontId, scale);
   return variant != 0 ? variant : fontId;
 }

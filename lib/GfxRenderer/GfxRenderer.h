@@ -22,6 +22,7 @@ class TtfEpdFont;
 #include <vector>
 
 #include "Bitmap.h"
+#include "FontVariantProvider.h"
 
 namespace glyphBitmap {
 struct Frame;
@@ -30,16 +31,6 @@ struct Frame;
 // Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
 // 0 = transparent, 1-16 = gray levels (white to black)
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
-
-// Sized variants of the reader font (built-in, installed .cpfont, or vector), supplied by
-// the font system. resolve returns a font id registered with the renderer for `fontId`
-// scaled by `scale`, or 0 when there is none; load re-registers a previously resolved id
-// after it was evicted or the device rebooted, returning false when it cannot.
-struct FontVariantProvider {
-  void* ctx = nullptr;
-  int (*resolve)(void* ctx, int fontId, float scale) = nullptr;
-  bool (*load)(void* ctx, int fontId) = nullptr;
-};
 
 class GfxRenderer {
  public:
@@ -210,7 +201,7 @@ class GfxRenderer {
 
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
   int resolveFontVariant(const int fontId, const float scale) const {
-    return fontVariantProvider_.resolve ? fontVariantProvider_.resolve(fontVariantProvider_.ctx, fontId, scale) : 0;
+    return fontVariantProvider_.resolveFont(fontId, scale);
   }
   // True when fontId is registered, loading it through the variant provider if needed.
   bool ensureFontLoaded(const int fontId) const {

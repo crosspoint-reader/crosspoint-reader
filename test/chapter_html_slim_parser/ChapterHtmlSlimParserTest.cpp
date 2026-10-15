@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "src/ReaderFontSizes.h"
 #include "src/activities/settings/TextSettingsPreview.h"
 #include "src/clippings/ClippingText.h"
 #include "src/util/ParagraphIndentMigration.h"
@@ -24,6 +25,26 @@
 #include "../../src/fontIds.h"
 
 namespace {
+
+void installBuiltinVariants(GfxRenderer& renderer) {
+  renderer.setFontVariantProvider({&renderer, [](void* ctx, const int fontId, const float scale) {
+                                     const int variant = builtinReaderFontVariant(fontId, scale);
+                                     return static_cast<GfxRenderer*>(ctx)->getFontMap().count(variant) ? variant : 0;
+                                   }});
+}
+
+void installSyntheticVariants(GfxRenderer& renderer) {
+  renderer.setFontVariantProvider({&renderer,
+                                   [](void* ctx, const int fontId, const float scale) {
+                                     const int variant = fontId * 1000 + static_cast<int>(scale * 100 + 0.5f);
+                                     static_cast<GfxRenderer*>(ctx)->fontMap.emplace(variant, EpdFontFamily(nullptr));
+                                     return variant;
+                                   },
+                                   [](void* ctx, const int fontId) {
+                                     static_cast<GfxRenderer*>(ctx)->fontMap.emplace(fontId, EpdFontFamily(nullptr));
+                                     return true;
+                                   }});
+}
 
 class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
  protected:
@@ -138,6 +159,7 @@ TEST(ReaderFontSizes, BuiltinVariantsStayInFamilyAndRespectSizeBounds) {
 }
 
 TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleUsesProviderAndFallsBackToBodyFont) {
+  installBuiltinVariants(renderer);
   for (const int id : {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID}) {
     renderer.fontMap.emplace(id, EpdFontFamily(nullptr));
   }
@@ -152,6 +174,40 @@ TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleUsesProviderAndFallsBackToBodyFo
   EXPECT_EQ(parser.fontIdForScale(2.0f), NOTOSANS_14_FONT_ID);
   parser.fontId = 12345;  // SD or vector font: never rescaled
   EXPECT_EQ(parser.fontIdForScale(2.0f), 12345);
+}
+
+TEST(FontVariantProvider, NearUnitScalesKeepBaseFontWithoutResolving) {
+  int calls = 0;
+  FontVariantProvider provider{&calls, [](void* ctx, int, float) {
+                                 ++*static_cast<int*>(ctx);
+                                 return 42;
+                               }};
+  for (const int font : {NOTOSERIF_14_FONT_ID, NOTOSANS_16_FONT_ID, 7}) {
+    for (const float scale : {0.96f, 0.99f, 1.0f, 1.04f}) EXPECT_EQ(provider.resolveFont(font, scale), font);
+  }
+  EXPECT_EQ(calls, 0);
+  EXPECT_EQ(provider.resolveFont(7, 0.94f), 42);
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, BuiltinFontSelectionDelegatesToInstalledProvider) {
+  parser.fontId = NOTOSERIF_14_FONT_ID;
+  int calls = 0;
+  renderer.setFontVariantProvider({&calls, [](void* ctx, const int fontId, const float scale) {
+                                     ++*static_cast<int*>(ctx);
+                                     EXPECT_EQ(fontId, NOTOSERIF_14_FONT_ID);
+                                     EXPECT_FLOAT_EQ(scale, 0.8f);
+                                     return 42;
+                                   }});
+  EXPECT_EQ(parser.fontIdForScale(0.8f), 42);
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, MissingVariantProviderFallsBackToBodyFont) {
+  parser.fontId = NOTOSERIF_14_FONT_ID;
+  EXPECT_EQ(renderer.resolveFontVariant(parser.fontId, 2.0f), 0);
+  EXPECT_EQ(parser.fontIdForScale(2.0f), parser.fontId);
+  EXPECT_EQ(parser.fontIdForScale(0.96f), parser.fontId);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleInheritsAndUsesHeadingDefaults) {
@@ -696,6 +752,7 @@ class ChapterInlineSizeTest : public ChapterBlockDecorationTest {
  protected:
   void SetUp() override {
     ChapterBlockDecorationTest::SetUp();
+    installBuiltinVariants(renderer);
     for (const int id : {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID}) {
       renderer.fontMap.emplace(id, EpdFontFamily(nullptr));
     }
@@ -805,7 +862,7 @@ TEST_F(ChapterInlineSizeTest, MixedSizesWithinALineSurviveTheCache) {
 TEST_F(ChapterBlockDecorationTest, SdAndVectorFontsSizeThroughTheVariantProvider) {
   constexpr int SD_FONT = 7;  // not a built-in ladder font
   parser.fontId = SD_FONT;
-  renderer.variantsEnabled = true;
+  installSyntheticVariants(renderer);
   open("h1", nullptr);
   text("Title");
   close("h1");
@@ -826,7 +883,7 @@ TEST_F(ChapterBlockDecorationTest, SdAndVectorFontsSizeThroughTheVariantProvider
 
 TEST_F(ChapterBlockDecorationTest, UnloadableVariantFallsBackToSectionFont) {
   EXPECT_EQ(TextBlock::renderFontId(renderer, 12345, 7), 7);
-  renderer.variantsEnabled = true;
+  installSyntheticVariants(renderer);
   EXPECT_EQ(TextBlock::renderFontId(renderer, 12345, 7), 12345);
 }
 
