@@ -68,6 +68,27 @@ bool SerialTransferProtocol::readLenPrefixed(std::string& out) {
   return true;
 }
 
+namespace {
+
+// A path with a NUL or another control byte is refused, not acted on. The C3's USB serial link has delivered a 0 in
+// place of a name's byte (both times the first byte of the command's second 64-byte packet), and a NUL ends the C
+// string the file system is given: a rename to "BookerlyTTF.off" created a folder named "Booker", and a remove would
+// delete whatever the truncated path names.
+bool hasControlByte(const std::string& path) {
+  for (const char c : path) {
+    if (static_cast<uint8_t>(c) < 0x20) return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+bool SerialTransferProtocol::refuseBadPath(const std::string& path) {
+  if (!hasControlByte(path)) return false;
+  host_.writeLine("ERR:badpath");
+  return true;
+}
+
 // --- dispatch ---------------------------------------------------------------
 bool SerialTransferProtocol::poll() {
   // Need a full 4-byte magic before we commit to either protocol.
@@ -108,7 +129,7 @@ bool SerialTransferProtocol::handleCommand() {
     }
     case 'R': {  // remove file
       std::string path;
-      if (!readLenPrefixed(path)) return true;
+      if (!readLenPrefixed(path) || refuseBadPath(path)) return true;
       host_.writeLine(host_.removeFile(path) ? "OK" : "ERR:remove");
       return true;
     }
@@ -144,6 +165,9 @@ bool SerialTransferProtocol::handleUpload() {
 bool SerialTransferProtocol::receiveFile(const std::string& dest) {
   uint32_t dataLen = 0;
   if (!readU32LE(dataLen)) return true;
+
+  // Checked after the length, like a create failure: the host sends the length with the name and then waits.
+  if (refuseBadPath(dest)) return true;
 
   if (!host_.fileBegin(dest)) {
     host_.writeLine("ERR:create");
@@ -207,7 +231,7 @@ bool SerialTransferProtocol::handleWrite() {
 
 bool SerialTransferProtocol::handleListDir() {
   std::string path;
-  if (!readLenPrefixed(path)) return true;
+  if (!readLenPrefixed(path) || refuseBadPath(path)) return true;
 
   if (!host_.listDirBegin(path)) {
     host_.writeLine("ERR:opendir");
@@ -240,20 +264,22 @@ bool SerialTransferProtocol::handleRename() {
   std::string src, dst;
   if (!readLenPrefixed(src)) return true;
   if (!readLenPrefixed(dst)) return true;
+  // Both read before either is checked: a destination left on the wire would be scanned for a magic.
+  if (refuseBadPath(src) || refuseBadPath(dst)) return true;
   host_.writeLine(host_.renameFile(src, dst) ? "OK" : "ERR:rename_failed");
   return true;
 }
 
 bool SerialTransferProtocol::handleMkDir() {
   std::string path;
-  if (!readLenPrefixed(path)) return true;
+  if (!readLenPrefixed(path) || refuseBadPath(path)) return true;
   host_.writeLine(host_.makeDir(path) ? "OK" : "ERR:mkdir_failed");
   return true;
 }
 
 bool SerialTransferProtocol::handleDownload() {
   std::string path;
-  if (!readLenPrefixed(path)) return true;
+  if (!readLenPrefixed(path) || refuseBadPath(path)) return true;
 
   uint32_t size = 0;
   if (!host_.fileReadBegin(path, size)) {

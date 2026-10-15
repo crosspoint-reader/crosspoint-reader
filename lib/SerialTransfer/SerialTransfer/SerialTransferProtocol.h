@@ -25,6 +25,8 @@
 //   'T' download, 'A' list dir (DIR:/d|/f|name|size|mtime/END), 'W' write file
 //   to an arbitrary path (same framing as EPUB upload), 'N' rename/move
 //   (<u16>src + <u16>dst), 'K' mkdir. Replies are "OK"/"ERR:..." unless noted.
+//   A path or upload name holding a NUL or another control byte (< 0x20) is refused with "ERR:badpath" (an upload's
+//   after its <u32 dataLen>, before "READY").
 
 #include <cstddef>
 #include <cstdint>
@@ -151,6 +153,9 @@ class SerialTransferProtocol {
   // false on timeout or over-cap length (caller bails; the host's read times out
   // and the device's magic resync recovers).
   bool readLenPrefixed(std::string& out);
+  // True, after replying "ERR:badpath", when `path` holds a NUL or another control byte: such a path is refused,
+  // not acted on. Callers read the command's every field first, so nothing is left on the wire.
+  bool refuseBadPath(const std::string& path);
 
   SerialTransferHost& host_;
 };
