@@ -873,3 +873,28 @@ TEST_F(TtfFontTest, TheFiLigatureDrawsTheGlyphGsubNames) {
   ASSERT_TRUE(ttf->nativeFonts(40, fonts));
   EXPECT_EQ(regular->data->ligaturePairs, fonts[kRegular]->data->ligaturePairs);
 }
+
+TEST_F(TtfFontTest, ALigatureKernsAsTheGlyphGsubNames) {
+  // "fi" then "x": EpdFont asks for the pair (U+FB01, x), which the font kerns through the ligature's glyph (4),
+  // not through the cmap (no U+FB01 there) nor the i.
+  Font font;
+  font.glyphs.resize(5);
+  for (auto& glyph : font.glyphs) glyph.contours = {rect(0, 0, 400, 600)};
+  font.cmap = {{'f', 1}, {'i', 2}, {'x', 3}};
+  LayoutLookup liga;
+  liga.type = 4;
+  liga.ligatures = {{{1, 2}, 4}};
+  LayoutLookup kern;
+  PairSubtable pairs;
+  pairs.pairs = {{4, {{3, -100}}}};
+  kern.pairSubtables = {pairs};
+  font.extraTables = {{"GSUB", layoutTable({{"latn", {0}}}, {{"liga", {0}}}, {liga}, /*gsub=*/true)},
+                      {"GPOS", layoutTable({{"latn", {0}}}, {{"kern", {0}}}, {kern})}};
+  useBuiltFont(font);
+  const auto ttf = open();
+  ASSERT_NE(nullptr, ttf);
+  // -100 units at 29.17 px per em, in 4.4, as in layout so in drawing.
+  EXPECT_EQ(-47, ttf->kerning(kRegular, 0xFB01, 'x'));
+  EXPECT_EQ(-47, ttf->font(kRegular)->getKerning(0xFB01, 'x'));
+  EXPECT_EQ(0, ttf->kerning(kRegular, 'i', 'x'));
+}
