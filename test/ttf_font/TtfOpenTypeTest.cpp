@@ -255,7 +255,7 @@ TEST(TtfLigatures, BookerlyHasTheFiAndFlLigatures) {
 // --- Hostile and truncated tables ---
 
 TEST(TtfKerning, AStyleKeepsAtMostTheSubtableCap) {
-  // 1,100 PairPos subtables in one lookup. The first kern 1-2; the last one alone kerns 5-6.
+  // 76 PairPos subtables more than the cap, in one lookup. The first kern 1-2; the last one alone kerns 5-6.
   const uint16_t total = ttf::Kerning::kMaxSubtables + 76;
   LayoutLookup lookup;
   for (uint16_t s = 0; s < total; ++s) {
@@ -270,6 +270,10 @@ TEST(TtfKerning, AStyleKeepsAtMostTheSubtableCap) {
   Font font = boxes(6);
   font.extraTables = {{"GPOS", layoutTable({{"latn", {0}}}, {{"kern", {0}}}, {lookup})}};
   Parsed p(font);
+  // The font has them all, more than the cap.
+  const unsigned found =
+      freeink::font::gpos::ResolveKernSubtables(p.file.data() + p.face.gpos, p.face.gposLength, nullptr, 0);
+  ASSERT_EQ(total, found);
   ttf::Kerning kerning;
   ASSERT_TRUE(kerning.resolve(p.bytes, p.face));
   EXPECT_EQ(ttf::Kerning::kMaxSubtables, kerning.subtableCount());

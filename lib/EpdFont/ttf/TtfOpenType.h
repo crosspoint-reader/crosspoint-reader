@@ -18,8 +18,10 @@ namespace ttf {
 /// 'kern' table. A pair's kerning is what OpenType layout gives (see Gpos.h).
 class Kerning {
  public:
-  /// More would be a malformed or hostile table: the first ones are kept.
-  static constexpr uint16_t kMaxSubtables = 1024;
+  /// More would be a malformed or hostile table: the first ones are kept. More than three times the most found in a
+  /// real font (76, Calibri Light), and it bounds what a hostile table costs per pair: the resolved walk has no
+  /// budget of its own, so every subtable is read for every pair that misses the store.
+  static constexpr uint16_t kMaxSubtables = 256;
 
   /// Resolves the subtables (one heap block, 4 bytes each). False, with nothing held, for a font without kerning or
   /// when memory is short; kerning is then 0.
