@@ -20,14 +20,17 @@ class GlyphBatch {
   /// Stages a record for `key` with `metrics` (its dataOffset is set at commit) and returns where the caller
   /// writes the bitmap: all metrics.dataLength bytes of it, since they start as 0xFF, which draws as solid ink.
   /// Returns nullptr when `key` is not a glyph key, the bitmap's length does not match its width and height
-  /// or is over glyphstore::kMaxBitmapBytes, or the buffer has no room left (commit, then add again). A
-  /// staged record cannot be taken back. Keys in one batch must be distinct and not yet stored.
+  /// or is over glyphstore::kMaxBitmapBytes, or the buffer has no room left (commit, then add again). Keys in
+  /// one batch must be distinct and not yet stored.
   uint8_t* add(uint32_t key, const EpdGlyph& metrics);
+  /// Takes back the record of the last add() (its bitmap could not be drawn). Only once per add().
+  void dropLast();
 
   uint16_t count() const { return count_; }
   void clear() {
     used_ = 0;
     count_ = 0;
+    lastUsed_ = 0;
   }
 
  private:
@@ -36,6 +39,7 @@ class GlyphBatch {
   uint8_t* buffer_;
   uint32_t capacity_;
   uint32_t used_ = 0;
+  uint32_t lastUsed_ = 0;  // used_ before the last add()
   uint16_t count_ = 0;
 };
 
