@@ -94,12 +94,14 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-### Version 56
+### Version 58
 
-Version 56 retains the clipping source ranges and paragraph markers from
-version 55 and adds a fixed-size table-grid-row page element containing its
-bounds and equal-width column count. Older completed and partial section
-caches rebuild automatically; book metadata and reading progress are kept.
+Version 58 retains the clipping source ranges and paragraph markers from
+version 55, includes version 56's explicit-hyphen/dash line breaks, and adds a
+fixed-size table-grid-row page element containing its bounds and equal-width
+column count. Version 57 was used by external-hyphenation builds with a
+different cache header. Older completed and partial section caches rebuild
+automatically; book metadata and reading progress are kept.
 
 ### Version 55
 
@@ -247,7 +249,7 @@ superscript, and subscript. The format also includes:
 
 The following pattern describes the pre-clipping table-grid prototype that
 used version 53. It lacks the word source ranges and paragraph markers in the
-current format and must not be used to parse version 56 caches.
+current format and must not be used to parse version 58 caches.
 
 ```c++
 import std.mem;

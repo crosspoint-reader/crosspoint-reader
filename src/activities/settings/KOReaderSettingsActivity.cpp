@@ -1,6 +1,7 @@
 #include "KOReaderSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HttpHeader.h>
 #include <I18n.h>
 
 #include <memory>
@@ -16,10 +17,23 @@
 namespace fui = freeink::ui;
 
 namespace {
+constexpr int IDX_USERNAME = 0;
+constexpr int IDX_PASSWORD = 1;
+constexpr int IDX_SERVER_URL = 2;
+constexpr int IDX_SERVER_TYPE = 3;
+constexpr int IDX_CUSTOM_HEADER_1 = 4;
+constexpr int IDX_CUSTOM_HEADER_2 = 5;
+constexpr int IDX_MATCH_METHOD = 6;
+constexpr int IDX_SEND_METADATA = 7;
+constexpr int IDX_SYNC_BEHAVIOR = 8;
+constexpr int IDX_SYNC_CLIPPINGS = 9;
+constexpr int IDX_SIGN_UP = 10;
+constexpr int IDX_AUTHENTICATE = 11;
+
 constexpr StrId menuNames[KOReaderSettingsActivity::MENU_ITEMS] = {
-    StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL, StrId::STR_SERVER_TYPE,
-    StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,   StrId::STR_SYNC_CLIPPINGS,
-    StrId::STR_SIGN_UP,           StrId::STR_AUTHENTICATE};
+    StrId::STR_USERNAME,        StrId::STR_PASSWORD,        StrId::STR_SYNC_SERVER_URL,   StrId::STR_SERVER_TYPE,
+    StrId::STR_CUSTOM_HEADER_1, StrId::STR_CUSTOM_HEADER_2, StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA,
+    StrId::STR_SYNC_BEHAVIOR,   StrId::STR_SYNC_CLIPPINGS,  StrId::STR_SIGN_UP,           StrId::STR_AUTHENTICATE};
 
 constexpr int SERVER_TYPE_ITEMS = 3;
 constexpr StrId serverTypeNames[SERVER_TYPE_ITEMS] = {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC_SERVER,
@@ -49,7 +63,7 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
   // Activation opens a keyboard/sub-activity or repaints a new value; a
   // lingering flash would gray an unrelated row.
   app.clearTapFlash();
-  if (index == 0) {
+  if (index == IDX_USERNAME) {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_USERNAME),
                                                                    KOREADER_STORE.getUsername(), 64, InputType::Text),
                            [this](const ActivityResult& result) {
@@ -59,17 +73,18 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
                                KOREADER_STORE.saveToFile();
                              }
                            });
-  } else if (index == 1) {
-    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_PASSWORD),
-                                                                   KOREADER_STORE.getPassword(), 64, InputType::Text),
-                           [this](const ActivityResult& result) {
-                             if (!result.isCancelled) {
-                               const auto& kb = std::get<KeyboardResult>(result.data);
-                               KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), kb.text);
-                               KOREADER_STORE.saveToFile();
-                             }
-                           });
-  } else if (index == 2) {
+  } else if (index == IDX_PASSWORD) {
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_PASSWORD),
+                                                KOREADER_STORE.getPassword(), 64, InputType::Password),
+        [this](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            const auto& kb = std::get<KeyboardResult>(result.data);
+            KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), kb.text);
+            KOREADER_STORE.saveToFile();
+          }
+        });
+  } else if (index == IDX_SERVER_URL) {
     const std::string currentUrl = KOREADER_STORE.getServerUrl();
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SYNC_SERVER_URL),
@@ -83,7 +98,7 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
                                KOREADER_STORE.saveToFile();
                              }
                            });
-  } else if (index == 3) {
+  } else if (index == IDX_SERVER_TYPE) {
     const auto current = KOREADER_STORE.getServerType();
     optionPopup.show(StrId::STR_SERVER_TYPE, serverTypeNames, SERVER_TYPE_ITEMS, static_cast<int>(current),
                      [this](const int selected) {
@@ -92,34 +107,50 @@ void KOReaderSettingsActivity::activateIndex(const int index) {
                        KOREADER_STORE.saveToFile();
                      });
     requestUpdate();
-  } else if (index == 4) {
+  } else if (index == IDX_CUSTOM_HEADER_1 || index == IDX_CUSTOM_HEADER_2) {
+    // Single "Name: Value" line, parsed on save.
+    const size_t slot = static_cast<size_t>(index == IDX_CUSTOM_HEADER_1 ? 0 : 1);
+    const StrId label = index == IDX_CUSTOM_HEADER_1 ? StrId::STR_CUSTOM_HEADER_1 : StrId::STR_CUSTOM_HEADER_2;
+    const std::string prefill = formatHttpHeaderLine(KOREADER_STORE.getCustomHeaders()[slot]);
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(label), prefill, 160, InputType::Text),
+        [this, slot](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            const auto& kb = std::get<KeyboardResult>(result.data);
+            HttpHeader header;
+            parseHttpHeaderLine(kb.text, header);
+            KOREADER_STORE.setCustomHeader(slot, header.name, header.value);
+            KOREADER_STORE.saveToFile();
+          }
+        });
+  } else if (index == IDX_MATCH_METHOD) {
     const auto current = KOREADER_STORE.getMatchMethod();
     const auto newMethod =
         (current == DocumentMatchMethod::FILENAME) ? DocumentMatchMethod::BINARY : DocumentMatchMethod::FILENAME;
     KOREADER_STORE.setMatchMethod(newMethod);
     KOREADER_STORE.saveToFile();
     requestUpdate();
-  } else if (index == 5) {
+  } else if (index == IDX_SEND_METADATA) {
     KOREADER_STORE.setSendMetadata(!KOREADER_STORE.getSendMetadata());
     KOREADER_STORE.saveToFile();
     requestUpdate();
-  } else if (index == 6) {
+  } else if (index == IDX_SYNC_BEHAVIOR) {
     const auto current = KOREADER_STORE.getSyncBehavior();
     const auto newBehavior = (current == KOReaderSyncBehavior::ASK_EVERY_TIME) ? KOReaderSyncBehavior::SMART
                                                                                : KOReaderSyncBehavior::ASK_EVERY_TIME;
     KOREADER_STORE.setSyncBehavior(newBehavior);
     KOREADER_STORE.saveToFile();
     requestUpdate();
-  } else if (index == 7) {
+  } else if (index == IDX_SYNC_CLIPPINGS) {
     KOREADER_STORE.setSyncClippings(!KOREADER_STORE.getSyncClippings());
     KOREADER_STORE.saveToFile();
     requestUpdate();
-  } else if (index == 8) {
+  } else if (index == IDX_SIGN_UP) {
     if (!KOREADER_STORE.hasCredentials()) return;
     startActivityForResult(
         std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::SIGN_UP),
         [](const ActivityResult&) {});
-  } else if (index == 9) {
+  } else if (index == IDX_AUTHENTICATE) {
     if (!KOREADER_STORE.hasCredentials()) return;
     startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
   }
@@ -137,12 +168,12 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
   // rowValues_ strings (no array growth) rather than building a new
   // items/values vector on every render.
   for (int i = 0; i < MENU_ITEMS; i++) {
-    if (i == 0) {
+    if (i == IDX_USERNAME) {
       const auto username = KOREADER_STORE.getUsername();
       rowValues_[i] = username.empty() ? tr(STR_NOT_SET) : username;
-    } else if (i == 1) {
+    } else if (i == IDX_PASSWORD) {
       rowValues_[i] = KOREADER_STORE.getPassword().empty() ? tr(STR_NOT_SET) : "******";
-    } else if (i == 2) {
+    } else if (i == IDX_SERVER_URL) {
       rowValues_[i] = KOREADER_STORE.getServerUrl();
       if (rowValues_[i].empty()) {
         std::string defaultUrl = KOREADER_STORE.getBaseUrl();
@@ -150,17 +181,21 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
         if (schemeEnd != std::string::npos) defaultUrl.erase(0, schemeEnd + 3);
         rowValues_[i] = std::string(tr(STR_DEFAULT_VALUE)) + ": " + defaultUrl;
       }
-    } else if (i == 3) {
+    } else if (i == IDX_SERVER_TYPE) {
       const auto type = KOREADER_STORE.getServerType();
       rowValues_[i] = type == KOReaderServerType::CROSSPOINT ? tr(STR_CROSSPOINT)
                       : type == KOReaderServerType::KOSYNC   ? tr(STR_KOSYNC_SERVER)
                                                              : tr(STR_OTHER);
-    } else if (i == 4) {
+    } else if (i == IDX_CUSTOM_HEADER_1 || i == IDX_CUSTOM_HEADER_2) {
+      const size_t slot = static_cast<size_t>(i == IDX_CUSTOM_HEADER_1 ? 0 : 1);
+      rowValues_[i] = formatHttpHeaderLine(KOREADER_STORE.getCustomHeaders()[slot], true);
+      if (rowValues_[i].empty()) rowValues_[i] = tr(STR_NOT_SET);
+    } else if (i == IDX_MATCH_METHOD) {
       rowValues_[i] =
           KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? tr(STR_FILENAME) : tr(STR_BINARY);
-    } else if (i == 5 || i == 7) {
+    } else if (i == IDX_SEND_METADATA || i == IDX_SYNC_CLIPPINGS) {
       rowValues_[i].clear();
-    } else if (i == 6) {
+    } else if (i == IDX_SYNC_BEHAVIOR) {
       rowValues_[i] =
           KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? tr(STR_SMART_SYNC) : tr(STR_ASK_EVERY_TIME);
     } else {
@@ -168,8 +203,8 @@ void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
   }
-  GUI.setCheckboxRow(rowItems_[5], KOREADER_STORE.getSendMetadata());
-  GUI.setCheckboxRow(rowItems_[7], KOREADER_STORE.getSyncClippings());
+  GUI.setCheckboxRow(rowItems_[IDX_SEND_METADATA], KOREADER_STORE.getSendMetadata());
+  GUI.setCheckboxRow(rowItems_[IDX_SYNC_CLIPPINGS], KOREADER_STORE.getSyncClippings());
 
   fui::ListProps props;
   props.items = rowItems_;

@@ -329,6 +329,13 @@ void FileBrowserActivity::onRowLongPress(const int index) {
   }
 }
 
+#if FREEINK_CAP_TOUCH
+void FileBrowserActivity::swipeDelete(const int index) {
+  nav.selected = index;
+  deleteSelected();
+}
+#endif
+
 void FileBrowserActivity::activateSelected() {
   if (files.empty()) return;
   // A touch activation can carry a row index captured before a delete/reload
@@ -656,6 +663,9 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // follow/clamping to nav.top) before the list resolves rows through the
   // provider.
   prewarmRowGlyphs(nav.top);
+#if FREEINK_CAP_TOUCH
+  if (mode == Mode::Books) configureSwipeDelete(screen, props);
+#endif
   screen.list(props);
 }
 
