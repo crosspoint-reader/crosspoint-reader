@@ -241,7 +241,7 @@ std::optional<SdCardFontManager::NativeSizes> SdCardFontManager::ttfNativeSizes(
   sizes.base = ttfNativeBase_;
   sizes.bodyPpem = ttf_->bodyPpem();
   sizes.minPx = TtfFont::kMinNativePx;
-  sizes.maxPx = TtfFont::kMaxNativePx;
+  sizes.maxPx = ttf_->maxNativePx();
   return sizes;
 }
 

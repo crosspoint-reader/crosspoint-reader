@@ -22,6 +22,18 @@ const EpdGlyph kIgnorable{};
 constexpr uint32_t kCopyBytes = 4096;  // install: one SD read and one flash write per chunk
 constexpr uint8_t kMaxFailuresLogged = 16;
 
+// The largest native size whose glyphs all fit EpdGlyphRef's int8 top and left, by the face's bounding box: the
+// pixel size is rounded, and a glyph's edges round outwards, so a pixel is kept in hand.
+uint8_t nativeCeilingPx(const ttf::Face& face) {
+  uint32_t px = TtfFont::kMaxNativePx;
+  if (face.unitsPerEm == 0) return static_cast<uint8_t>(px);
+  if (face.yMax > 0) px = std::min<uint32_t>(px, INT8_MAX * static_cast<uint32_t>(face.unitsPerEm) / face.yMax - 1);
+  if (face.xMin < 0) {
+    px = std::min<uint32_t>(px, -INT8_MIN * static_cast<uint32_t>(face.unitsPerEm) / -face.xMin - 1);
+  }
+  return static_cast<uint8_t>(px);
+}
+
 // EpdGlyphRef carries left and top as int8 (spec 8.1): a glyph reaching further from the pen cannot be placed.
 ttf::Status placeable(const ttf::Status loaded, const EpdGlyph& metrics) {
   if (loaded != ttf::Status::Ok) return loaded;
@@ -93,6 +105,7 @@ bool TtfFont::load(const ttf::FileSource (&files)[4], const uint8_t identity[kId
 TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf::ScratchPlan* plan) {
   // Present styles take the store's style blocks in order, at install as here.
   uint8_t block = 0;
+  maxNativePx_ = kMaxNativePx;
   for (uint8_t s = 0; s < 4; ++s) {
     Style& style = styles_[s];
     style.present = false;
@@ -109,6 +122,7 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf
       continue;
     }
     style.present = true;
+    maxNativePx_ = std::min(maxNativePx_, nativeCeilingPx(style.face));
     // Planned for the largest size drawn: a native size (5 x 26 pt's pixels per em, about) above the body sizes.
     const uint32_t largest = std::max(ttf::ppemFromPoints(kMaxPointSize), static_cast<uint32_t>(kMaxNativePx) << 6);
     *plan = ttf::mergePlans(*plan, ttf::planScratch(style.face, largest, ttf::kPoolBytesFlash));
@@ -203,7 +217,7 @@ const EpdFont* TtfFont::font(const uint8_t style) const {
 }
 
 TtfFont::Size* TtfFont::nativeSize(const uint8_t px) {
-  if (px < kMinNativePx || px > kMaxNativePx || !styles_[0].present) return nullptr;
+  if (px < kMinNativePx || px > maxNativePx_ || !styles_[0].present) return nullptr;
   const uint32_t ppem = static_cast<uint32_t>(px) << 6;
   std::unique_ptr<Size>* free = nullptr;
   for (auto& size : native_) {

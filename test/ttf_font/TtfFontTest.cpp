@@ -623,15 +623,36 @@ TEST_F(TtfFontTest, TheLargestNativeSizeDrawsEveryGlyphOfTheFamily) {
   // Planned for: the output region holds each glyph, and its top fits EpdGlyphRef.
   const auto font = open();
   ASSERT_NE(nullptr, font);
+  EXPECT_EQ(119, font->maxNativePx());  // Bookerly: 120 px less the pixel kept in hand for rounding
   const EpdFont* fonts[4] = {};
-  ASSERT_TRUE(font->nativeFonts(TtfFont::kMaxNativePx, fonts));
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts));
   for (const uint32_t cp : {uint32_t{'W'}, uint32_t{'@'}, uint32_t{'Q'}, uint32_t{0xC5}}) {
     for (const uint8_t style : {kRegular, kBold, kItalic}) {
       const EpdGlyph* glyph = nativeGlyph(fonts[style], cp);
       ASSERT_NE(nullptr, glyph) << std::hex << cp << " style " << int{style};
-      expectDrawnAs(referenceAt(files[style].bytes, cp, px(TtfFont::kMaxNativePx)), *font, style, glyph);
+      expectDrawnAs(referenceAt(files[style].bytes, cp, px(font->maxNativePx())), *font, style, glyph);
     }
   }
+}
+
+TEST_F(TtfFontTest, TheLargestNativeSizeKeepsTheFamilysTallestGlyphInsideEpdGlyphRef) {
+  // A glyph reaching 1.2 em above the baseline (stacked accents, as in Vietnamese capitals) passes int8's 127 px
+  // top above 105 px: the family's native sizes stop there, and larger text is the largest of them scaled.
+  Font built;
+  built.glyphs.resize(2);
+  built.glyphs[0].contours = {rect(0, 0, 400, 600)};
+  built.glyphs[1].contours = {rect(50, 0, 450, 1200)};
+  built.cmap = {{'A', 1}};
+  useBuiltFont(built);
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  EXPECT_EQ(104, font->maxNativePx());  // 127 * 1000 / 1200, less a pixel for rounding
+  const EpdFont* fonts[4] = {};
+  EXPECT_FALSE(font->nativeFonts(105, fonts));
+  ASSERT_TRUE(font->nativeFonts(104, fonts));
+  const EpdGlyph* tall = nativeGlyph(fonts[kRegular], 'A');
+  ASSERT_NE(nullptr, tall);  // drawn, not marked missing
+  EXPECT_LE(tall->top, INT8_MAX);
 }
 
 TEST_F(TtfFontTest, WhenEveryNativeSizeIsHeldTheNearestServesUntilTheyAreDropped) {
@@ -646,14 +667,14 @@ TEST_F(TtfFontTest, WhenEveryNativeSizeIsHeldTheNearestServesUntilTheyAreDropped
   uint32_t served = 0;
   ASSERT_TRUE(font->nativeFonts(largestPx, largestHeld, &served));
   EXPECT_EQ(px(largestPx), served);  // its own size
-  ASSERT_TRUE(font->nativeFonts(TtfFont::kMaxNativePx, fonts, &served));
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts, &served));
   EXPECT_EQ(largestHeld[kRegular], fonts[kRegular]);
   EXPECT_EQ(px(largestPx), served);  // the nearest size serves, and says so: the caller scales it
   EXPECT_EQ(TtfFont::kMaxNativeSizes, font->nativeSizeCount());
   font->dropNativeSizes();
   EXPECT_EQ(0u, font->nativeSizeCount());
-  ASSERT_TRUE(font->nativeFonts(TtfFont::kMaxNativePx, fonts));
-  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(TtfFont::kMaxNativePx)), *font, kRegular,
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts));
+  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(font->maxNativePx())), *font, kRegular,
                 nativeGlyph(fonts[kRegular], 'M'));
 }
 

@@ -64,6 +64,9 @@ class TtfFont {
   const EpdFont* font(uint8_t style) const;
   /// The body face's pixels per em (26.6), which native sizes are measured against; 0 before setBodySize().
   uint32_t bodyPpem() const { return body_.ppem; }
+  /// The family's largest native size: kMaxNativePx, or less when its tallest glyph (head.yMax) or the furthest
+  /// left it reaches (head.xMin) would not fit EpdGlyphRef's int8 there. Larger text is this size scaled.
+  uint8_t maxNativePx() const { return maxNativePx_; }
 
   /// The four fonts of the native size `px` (whole pixels per em), made on first use; nullptr for a style the
   /// family lacks. When all kMaxNativeSizes are held, or memory is short, the nearest size held serves instead:
@@ -165,6 +168,7 @@ class TtfFont {
   Size body_;
   uint8_t pointSize_ = 0;
   std::unique_ptr<Size> native_[kMaxNativeSizes];
+  uint8_t maxNativePx_ = kMaxNativePx;
   bool ringMode_ = false;
 
   // The ring: glyphs drawn without being stored. Their records live until the slot is reused, 8 lookups later.
