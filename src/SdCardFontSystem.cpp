@@ -188,7 +188,7 @@ ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
   // out, where building one for a long family name would allocate.
   for (const auto& family : registry_.getFamilies()) {
     if (family.name != familyName) continue;
-    if (family.ttf) return ReaderSizeList::native();  // drawn natively at every size
+    if (family.ttf()) return ReaderSizeList::native();  // drawn natively at every size
     uint8_t sizes[ReaderSizeList::kCapacity];
     size_t n = 0;
     for (const auto& file : family.files) {
@@ -233,7 +233,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       SETTINGS.sdFontFamilyName[0] = '\0';
       return;
     }
-    if (family->ttf && manager_.ttfLoaded()) {
+    if (family->ttf() && manager_.ttfLoaded()) {
       manager_.setTtfBodySize(renderer, targetPt);  // drawn natively: a new size, never a reload
       return;
     }
@@ -285,7 +285,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
       manager_.unloadAll(renderer);
       return;
     }
-    if (family->ttf && manager_.ttfLoaded()) {
+    if (family->ttf() && manager_.ttfLoaded()) {
       // Book open: no glyph record of the family is in use, so a full store can be emptied here.
       manager_.wipeTtfIfPending(onColdLoad);
       manager_.setTtfBodySize(renderer, targetPt);

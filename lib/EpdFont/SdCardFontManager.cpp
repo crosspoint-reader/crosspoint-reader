@@ -212,7 +212,7 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
   if (!renderer_) renderer_ = &renderer;
   if (!loadedFamilyName_.empty()) unloadAll(renderer);
 
-  if (family.ttf) {
+  if (family.ttf()) {
     // A preview must never install over the partition; TTF previews come later (spec 7.6).
     if (policy == FlashCachePolicy::ReadOnly) return false;
     return loadTtfFamily(family, renderer, targetPtSize, onColdLoad);

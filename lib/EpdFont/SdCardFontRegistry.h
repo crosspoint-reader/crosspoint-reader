@@ -21,7 +21,9 @@ struct SdCardFontFamilyInfo {
   std::vector<SdCardFontFileInfo> files;
   // A TrueType family: one .ttf file per style, regular among them, every size drawn from them on the
   // device (TtfFont). A directory with any .cpfont file is a .cpfont family, whatever else it holds.
-  bool ttf = false;
+  // Derived, not stored: a TTF file is listed with pointSize 0, which no .cpfont name can give, and a field
+  // here would cost the registry's 128 reserved records heap for good.
+  bool ttf() const { return !files.empty() && files.front().pointSize == 0; }
 
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   bool hasSize(uint8_t size) const;

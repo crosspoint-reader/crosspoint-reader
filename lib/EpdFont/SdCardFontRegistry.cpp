@@ -26,7 +26,7 @@ bool SdCardFontFamilyInfo::hasSize(uint8_t size) const {
 
 std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
   std::vector<uint8_t> sizes;
-  if (ttf) return sizes;  // drawn at any size, from one file per style
+  if (ttf()) return sizes;  // drawn at any size, from one file per style
   for (const auto& f : files) {
     bool found = false;
     for (uint8_t s : sizes) {
@@ -42,7 +42,7 @@ std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
 }
 
 const SdCardFontFileInfo* SdCardFontFamilyInfo::pickClosestSize(uint8_t targetPtSize) const {
-  if (ttf) return nullptr;
+  if (ttf()) return nullptr;
   const SdCardFontFileInfo* selected = nullptr;
   int bestDiff = INT32_MAX;
   for (const auto& f : files) {
@@ -131,7 +131,6 @@ void SdCardFontRegistry::addTtfFiles(const char* dirPath, const std::vector<std:
     info.fileBytes = bytes[file];
     family.files.push_back(std::move(info));
   }
-  family.ttf = true;
 }
 
 void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
@@ -233,7 +232,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath) {
 
       if (!family.files.empty()) {
         families_.push_back(std::move(family));
-        LOG_DBG("SDREG", "Found %s family: %s (%d files) in %s", families_.back().ttf ? "TTF" : ".cpfont",
+        LOG_DBG("SDREG", "Found %s family: %s (%d files) in %s", families_.back().ttf() ? "TTF" : ".cpfont",
                 families_.back().name.c_str(), static_cast<int>(families_.back().files.size()), rootPath);
       }
     } else {
