@@ -267,6 +267,10 @@ Two browse formats:
 - **After download**: the book's layout cache is invalidated and the optional
   sidecar is written. Use the `{dest}.meta.json` convention so the fields ride
   KOSync progress uploads and event handlers (see `plugin-events.md`).
+  Downloading a book file (`.epub`, `.txt`, `.md`, `.xtc`) also marks the
+  Library index stale, so the book appears the next time the Library opens.
+  Hidden files and folders (names that start with `.`) don't mark it, because
+  the Library never lists them.
 
 ### Heap budget (ESP32-C3, ~380KB total)
 
