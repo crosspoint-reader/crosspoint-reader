@@ -11,6 +11,7 @@
 
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
+#include "HtmlToPlainText.h"
 #include "StringUtils.h"
 
 namespace {
@@ -561,6 +562,15 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
   if (dict.read(&out[0], size) != static_cast<int>(size)) {
     out.clear();
     return fail(LookupResult::ReadError);
+  }
+  if (!htmlDefinitions) {
+    // Non-HTML StarDict types (such as XDXF) can still contain markup.
+    if (ESP.getMaxAllocHeap() < out.size() + DEFINITION_HEAP_HEADROOM_BYTES) {
+      LOG_ERR("DICT", "Low heap for %lu byte definition conversion", static_cast<unsigned long>(out.size()));
+      return fail(LookupResult::LowMemory);
+    }
+    std::replace(out.begin(), out.end(), '\0', '\n');
+    out = htmlToPlainText(out);
   }
   return true;
 }
