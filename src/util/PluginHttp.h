@@ -63,9 +63,9 @@ std::string inPluginDir(const std::string& pluginDir, const char* path);
 // An empty `file` means a token-less plugin: returns true with `out` empty.
 bool loadTokenFromFile(const std::string& file, const std::string& path, std::string& out);
 
-// Writes `value` at `path` into `file`, building the nesting the read path
-// expects (numeric segments unsupported). Removes the file on a short write so
-// a truncated token is never persisted.
+// Writes `value` at `path` into `file` (numeric segments unsupported).
+// Reserves .new/.bak siblings; a failed replacement keeps the old file
+// or a backup recovered by the next load/save. An existing primary wins.
 bool saveTokenToFile(const std::string& file, const std::string& path, const std::string& value);
 
 // Loads a flat JSON config file into {cfg.KEY} pairs. Missing file = empty.

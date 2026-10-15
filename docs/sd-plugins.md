@@ -268,6 +268,22 @@ Two browse formats:
   sidecar is written. Use the `{dest}.meta.json` convention so the fields ride
   KOSync progress uploads and event handlers (see `plugin-events.md`).
 
+### Token-file recovery
+
+Firmware token writes reserve `<token file>.new` and `<token file>.bak` in the
+same directory. A complete staged file, checked after a successful close, replaces the primary;
+if the primary is missing after an interrupted replacement, the next firmware
+token load/save restores the backup. An existing primary remains authoritative,
+even when empty or malformed, so recovery does not undo an explicit clear.
+Uncommitted `.new` data is never used as a token.
+
+These helpers do not provide sector-level power-loss guarantees or coordinate
+external file edits. To remove the stored token, remove the token file and its
+`.new`/`.bak` siblings. Password credentials in `config.file` can obtain a new
+token; remove those credentials too when ending local access, or remove the
+plugin directory. Revoke access at the service when copied cards must lose
+access too.
+
 ### Heap budget (ESP32-C3, ~380KB total)
 
 - Manifest ≤ 8KB, token file ≤ 2KB, small API responses (auth, download-url
