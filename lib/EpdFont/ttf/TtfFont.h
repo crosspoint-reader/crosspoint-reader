@@ -27,6 +27,8 @@ class TtfFont {
   /// The largest reader size: the scratch block is planned for it, and setBodySize() refuses anything larger.
   static constexpr uint8_t kMaxPointSize = 26;
   static constexpr uint8_t kRingSlots = 8;
+  /// Missing glyphs one prefetch() call renders at most; the rest render as they are looked up.
+  static constexpr uint8_t kPrefetchGlyphs = 64;
 
   /// Supplied by the app; both may stay null (host tests).
   struct Hooks {
@@ -65,6 +67,7 @@ class TtfFont {
   // The provider side; the per-style adapters forward here.
   const EpdGlyph* glyph(uint8_t style, uint32_t codepoint);
   bool ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const;
+  void prefetch(uint8_t style, const char* utf8Text);
 
  private:
   class StyleProvider final : public GlyphProvider {
@@ -75,6 +78,7 @@ class TtfFont {
     bool ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const override {
       return owner->ownsBitmap(glyph, bitmap);
     }
+    void prefetch(const char* utf8Text) override { owner->prefetch(style, utf8Text); }
   };
 
   struct Style {
@@ -85,6 +89,11 @@ class TtfFont {
     EpdFontData data{};
     EpdFont font{&data};
     StyleProvider provider;
+  };
+
+  struct Pending {
+    uint32_t codepoint;
+    uint16_t glyph;
   };
 
   bool install(const ttf::FileSource (&files)[4], const uint8_t* identity, const std::function<void()>& onBusy);
@@ -115,6 +124,7 @@ class TtfFont {
   uint16_t ringCapacity_[kRingSlots] = {};
   uint8_t ringNext_ = 0;
 
+  Pending pending_[kPrefetchGlyphs] = {};
   uint32_t renders_ = 0;
   uint32_t hits_ = 0;
   uint8_t failuresLogged_ = 0;

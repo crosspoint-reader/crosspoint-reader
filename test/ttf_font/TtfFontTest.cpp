@@ -432,3 +432,109 @@ TEST_F(TtfFontTest, TheAppHooksAreCalled) {
   ASSERT_NE(nullptr, font->glyph(kRegular, 'A'));
   EXPECT_EQ(1, lockChecks);
 }
+
+// --- prefetch() -------------------------------------------------------------------------------------------------
+
+namespace {
+
+std::string utf8(const std::vector<uint32_t>& codepoints) {
+  std::string out;
+  for (const uint32_t cp : codepoints) {
+    if (cp < 0x80) {
+      out += static_cast<char>(cp);
+    } else {
+      out += static_cast<char>(0xC0 | (cp >> 6));
+      out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
+TEST_F(TtfFontTest, PrefetchStoresATextsMissingGlyphsInBatches) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const uint32_t writes = flash.programCalls();
+  font->prefetch(kRegular, "Hello world");
+  EXPECT_EQ(8u, font->renders());  // H e l o space w r d
+  // One log write per batch and one slot per glyph; one glyph at a time would be two writes each.
+  EXPECT_GE(flash.programCalls() - writes, 9u);
+  EXPECT_LE(flash.programCalls() - writes, 10u);
+  for (const char c : std::string("Hello world")) {
+    expectDrawnAs(reference(files[kRegular].bytes, static_cast<uint8_t>(c), 14), *font, kRegular,
+                  font->glyph(kRegular, static_cast<uint8_t>(c)));
+  }
+  EXPECT_EQ(8u, font->renders());  // all found in the store
+}
+
+TEST_F(TtfFontTest, PrefetchSkipsWhatIsAlreadyStored) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  font->prefetch(kRegular, "Hello world");
+  const uint32_t writes = flash.programCalls();
+  font->prefetch(kRegular, "Hello world, world");
+  EXPECT_EQ(9u, font->renders());               // only the comma is new
+  EXPECT_EQ(writes + 2, flash.programCalls());  // one batch, one slot
+}
+
+TEST_F(TtfFontTest, PrefetchRendersAtMostItsLimitAndLookupsRenderTheRest) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  std::vector<uint32_t> codepoints;
+  for (uint32_t cp = 'A'; cp <= 'Z'; ++cp) codepoints.push_back(cp);
+  for (uint32_t cp = 'a'; cp <= 'z'; ++cp) codepoints.push_back(cp);
+  for (uint32_t cp = '0'; cp <= '9'; ++cp) codepoints.push_back(cp);
+  for (uint32_t cp = 0xC0; cp <= 0xD6; ++cp) codepoints.push_back(cp);
+  font->prefetch(kRegular, utf8(codepoints).c_str());
+  EXPECT_EQ(TtfFont::kPrefetchGlyphs, font->renders());
+  for (const uint32_t cp : codepoints) {
+    expectDrawnAs(reference(files[kRegular].bytes, cp, 14), *font, kRegular, font->glyph(kRegular, cp));
+  }
+  EXPECT_EQ(codepoints.size(), font->renders());
+}
+
+TEST_F(TtfFontTest, PrefetchMarksCodepointsTheFontLacks) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  font->prefetch(kRegular, "\xE4\xB8\xAD");  // U+4E2D
+  const uint32_t writes = flash.programCalls();
+  EXPECT_EQ(nullptr, font->glyph(kRegular, 0x4E2D));
+  EXPECT_EQ(writes, flash.programCalls());
+}
+
+TEST_F(TtfFontTest, PrefetchInRingModeWritesNothing) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  flash.failNextProgram();
+  ASSERT_NE(nullptr, font->glyph(kRegular, 'A'));
+  ASSERT_TRUE(font->ringMode());
+  const uint32_t writes = flash.programCalls();
+  const uint32_t renders = font->renders();
+  font->prefetch(kRegular, "DEF");
+  EXPECT_EQ(writes, flash.programCalls());
+  EXPECT_EQ(renders, font->renders());  // nothing to batch for: they are drawn as they are looked up
+}
+
+TEST_F(TtfFontTest, PrefetchYieldsBetweenGlyphs) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  TtfFont::setHooks({[] {
+                       ++lockChecks;
+                       return true;
+                     },
+                     [] { ++yields; }});
+  font->prefetch(kRegular, "abc");
+  EXPECT_EQ(3, yields);
+  EXPECT_EQ(1, lockChecks);
+}
+
+TEST_F(TtfFontTest, EpdFontFamilyPrefetchReachesTheStylesFont) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFontFamily family(font->font(0), font->font(1), font->font(2), font->font(3));
+  family.prefetch("Wolf", 1u << EpdFontFamily::BOLD);
+  EXPECT_EQ(4u, font->renders());
+  expectDrawnAs(reference(files[kBold].bytes, 'W', 14), *font, kBold, font->glyph(kBold, 'W'));
+  EXPECT_EQ(4u, font->renders());  // prefetched
+}

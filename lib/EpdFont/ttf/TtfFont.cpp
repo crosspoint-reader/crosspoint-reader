@@ -325,6 +325,72 @@ void TtfFont::noteCommit(const Commit result) {
   }
 }
 
+void TtfFont::prefetch(const uint8_t style, const char* utf8Text) {
+  if (!utf8Text || style >= 4 || !styles_[style].present || ringMode_) return;
+  uint32_t key = 0;
+  if (!storeKey(style, 0, &key)) return;
+  checkLock();
+  FontBytes bytes;
+  if (!fontBytes(style, &bytes)) return;
+  const ttf::Face& face = styles_[style].face;
+
+  // The text's codepoints that are not stored yet, each once.
+  uint8_t count = 0;
+  uint32_t asciiSeen[4] = {};
+  const auto* text = reinterpret_cast<const unsigned char*>(utf8Text);
+  while (count < kPrefetchGlyphs) {
+    const uint32_t cp = utf8NextCodepoint(&text);
+    if (cp == 0) break;
+    if (cp < 0x80) {
+      if (asciiSeen[cp >> 5] & (1u << (cp & 31))) continue;
+      asciiSeen[cp >> 5] |= 1u << (cp & 31);
+    }
+    if (utf8IsDefaultIgnorable(cp)) continue;
+    key = glyphstore::makeKey(cp, style, sizeIndex_);
+    if (store_.find(key, nullptr) != Lookup::NotStored) continue;
+    if (std::any_of(pending_, pending_ + count, [cp](const Pending& p) { return p.codepoint == cp; })) continue;
+    const uint16_t index = ttf::glyphIndex(bytes, face, cp);
+    if (index == 0) {
+      if (!bytes.ioError()) noteCommit(store_.markNoGlyph(key));
+      if (ringMode_) return;
+      continue;
+    }
+    pending_[count++] = {cp, index};
+  }
+  if (count == 0) return;
+
+  // In glyph order, which is file order: in SD mode the outline reads then move forward through the file.
+  std::sort(pending_, pending_ + count, [](const Pending& a, const Pending& b) { return a.glyph < b.glyph; });
+  GlyphBatch batch(rasterizer_.output(), batchCapacity());
+  for (uint8_t i = 0; i < count && !ringMode_; ++i) {
+    const Pending& p = pending_[i];
+    key = glyphstore::makeKey(p.codepoint, style, sizeIndex_);
+    EpdGlyph metrics{};
+    const ttf::Status loaded = placeable(rasterizer_.load(bytes, face, p.glyph, ppem_, &metrics), metrics);
+    if (loaded != ttf::Status::Ok) {
+      failed(style, p.codepoint, loaded, true, key);
+      continue;
+    }
+    if (glyphstore::recordBytes(metrics.dataLength) > batchCapacity()) continue;  // drawn from the ring when used
+    uint8_t* bitmap = batch.add(key, metrics);
+    if (!bitmap) {
+      noteCommit(store_.commit(batch));
+      if (ringMode_) break;
+      bitmap = batch.add(key, metrics);
+      if (!bitmap) continue;
+    }
+    const ttf::Status drawn = rasterizer_.rasterize(bitmap);
+    if (drawn != ttf::Status::Ok) {
+      batch.dropLast();
+      failed(style, p.codepoint, drawn, true, key);
+      continue;
+    }
+    ++renders_;
+    if (hooks.yield) hooks.yield();
+  }
+  if (!ringMode_) noteCommit(store_.commit(batch));
+}
+
 bool TtfFont::wipeIfPending(const std::function<void()>& onBusy) {
   if (!store_.isOpen() || !store_.wipePending()) return false;
   if (onBusy) onBusy();
