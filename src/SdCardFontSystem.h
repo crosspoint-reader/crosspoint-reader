@@ -58,6 +58,10 @@ class SdCardFontSystem {
   /// kern/ligature tables, glyph cache — typically 24-60KB). The registry is
   /// preserved so the font can be reloaded on next ensureLoaded() call.
   void unload(GfxRenderer& renderer) { manager_.unloadAll(renderer); }
+  // A TTF body font's native sizes, for the reader's size ladder (FontSizeLadder::setNative).
+  std::optional<SdCardFontManager::NativeSizes> ttfNativeSizes(const int bodyFontId) const {
+    return manager_.ttfNativeSizes(bodyFontId);
+  }
 
   /// Access the registry (e.g. for settings UI to enumerate available fonts).
   SdCardFontRegistry& registry() { return registry_; }

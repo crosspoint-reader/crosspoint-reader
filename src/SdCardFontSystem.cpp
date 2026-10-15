@@ -286,7 +286,9 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
       return;
     }
     if (family->ttf() && manager_.ttfLoaded()) {
-      // Book open: no glyph record of the family is in use, so a full store can be emptied here.
+      // Book open: no glyph record or face of the family is in use, so a full store can be emptied here, and the
+      // last book's sizes go.
+      manager_.dropTtfNativeSizes(renderer);
       manager_.wipeTtfIfPending(onColdLoad);
       manager_.setTtfBodySize(renderer, targetPt);
       return;

@@ -173,6 +173,8 @@ bool SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRen
   ttf_ = std::move(font);
   ttfIdentityHash_ = identityHash;
   registerTtfFace(renderer, fontId);
+  ttfNativeBase_ = pickNativeBase(renderer, identityHash, family.name.c_str());
+  if (ttfNativeBase_ != 0) renderer.setFontResolver(&SdCardFontManager::resolveTtfSize, this);
   loadedFamilyName_ = family.name;
   loadedPointSize_ = targetPtSize;
   LOG_INF("SDMGR", "TTF family %s at %u pt (id=%d)", family.name.c_str(), targetPtSize, fontId);
@@ -185,11 +187,74 @@ void SdCardFontManager::registerTtfFace(GfxRenderer& renderer, const int fontId)
   ttfFontId_ = fontId;
 }
 
+int32_t SdCardFontManager::pickNativeBase(const GfxRenderer& renderer, const uint32_t identityHash,
+                                          const char* familyName) const {
+  // The window's high bits come from the family, so a section laid out with its sizes finds them again in the next
+  // session; a window that holds a registered font ID moves on (another salt), so a size never shadows a font.
+  for (uint8_t salt = 0; salt < 8; ++salt) {
+    const int32_t base =
+        ttf::nativeBaseFrom(static_cast<uint32_t>(computeFontId(identityHash, familyName, 0)) + salt * 0x100u);
+    if (base == 0) continue;
+    bool taken = false;
+    for (const auto& entry : renderer.getFontMap()) {
+      if (ttf::isNativeId(base, entry.first)) {
+        taken = true;
+        break;
+      }
+    }
+    if (!taken) return base;
+  }
+  LOG_ERR("SDMGR", "%s: no free font ID window; sizes other than the body are scaled", familyName);
+  return 0;
+}
+
+bool SdCardFontManager::fontIdTaken(const GfxRenderer& renderer, const int fontId) const {
+  return renderer.getFontMap().count(fontId) != 0 || ttf::isNativeId(ttfNativeBase_, fontId);
+}
+
+std::optional<EpdFontFamily> SdCardFontManager::resolveTtfSize(void* ctx, const int fontId) {
+  // Asked for every font ID the renderer does not know: declining is one comparison.
+  auto* self = static_cast<SdCardFontManager*>(ctx);
+  if (!self->ttf_ || !ttf::isNativeId(self->ttfNativeBase_, fontId)) return std::nullopt;
+  const EpdFont* fonts[4] = {};
+  if (!self->ttf_->nativeFonts(ttf::nativeIdPixels(fontId), fonts)) {
+    // The text must still be laid out and drawn, the same way all session: with the body face.
+    LOG_ERR("SDMGR", "%u px cannot be drawn natively; the body face serves", ttf::nativeIdPixels(fontId));
+    for (uint8_t s = 0; s < 4; ++s) fonts[s] = self->ttf_->font(s);
+  }
+  return EpdFontFamily(fonts[0], fonts[1], fonts[2], fonts[3]);
+}
+
+std::optional<SdCardFontManager::NativeSizes> SdCardFontManager::ttfNativeSizes(const int bodyFontId) const {
+  if (!ttf_ || ttfNativeBase_ == 0 || bodyFontId != ttfFontId_) return std::nullopt;
+  NativeSizes sizes;
+  sizes.base = ttfNativeBase_;
+  sizes.bodyPpem = ttf_->bodyPpem();
+  sizes.minPx = TtfFont::kMinNativePx;
+  sizes.maxPx = TtfFont::kMaxNativePx;
+  return sizes;
+}
+
+void SdCardFontManager::dropTtfNativeSizes(GfxRenderer& renderer) {
+  if (!ttf_) return;
+  // One at a time: removeFont() ends the walk over the map.
+  for (bool found = true; found;) {
+    found = false;
+    for (const auto& entry : renderer.getFontMap()) {
+      if (!ttf::isNativeId(ttfNativeBase_, entry.first)) continue;
+      renderer.removeFont(entry.first);
+      found = true;
+      break;
+    }
+  }
+  ttf_->dropNativeSizes();
+}
+
 bool SdCardFontManager::setTtfBodySize(GfxRenderer& renderer, const uint8_t pointSize) {
   if (!ttf_) return false;
   if (pointSize == loadedPointSize_) return true;
   const int fontId = computeFontId(ttfIdentityHash_, loadedFamilyName_.c_str(), pointSize);
-  if (renderer.getFontMap().count(fontId) != 0) {
+  if (fontIdTaken(renderer, fontId)) {
     LOG_ERR("SDMGR", "Font ID %d for %s@%u collides with a registered font", fontId, loadedFamilyName_.c_str(),
             pointSize);
     return false;
@@ -353,6 +418,9 @@ void SdCardFontManager::dropSizeAlias(GfxRenderer& renderer) {
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   if (!renderer_) renderer_ = &renderer;
   if (ttf_) {
+    dropTtfNativeSizes(renderer);
+    renderer.setFontResolver(nullptr, nullptr);
+    ttfNativeBase_ = 0;
     renderer.removeFont(ttfFontId_);
     LOG_INF("SDMGR", "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store", loadedFamilyName_.c_str(),
             static_cast<unsigned long>(ttf_->renders()), static_cast<unsigned long>(ttf_->storeHits()));
