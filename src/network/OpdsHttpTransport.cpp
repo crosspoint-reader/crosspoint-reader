@@ -1,5 +1,6 @@
 #include "OpdsHttpTransport.h"
 
+#include "network/HttpDownloader.h"
 #include "util/UrlUtils.h"
 
 namespace fo = freeink::opds;
@@ -12,9 +13,9 @@ fo::HttpResult OpdsHttpTransport::get(const std::string& url, const fo::HttpAuth
   options.username = auth.username;
   options.password = auth.password;
   options.bearer = auth.bearer;
+  options.headers = auth.headers;
   if (accept) options.accept = accept;
   if (acceptLanguage) options.acceptLanguage = acceptLanguage;
-  options.headers = customHeaders;
   options.captureErrorBody = captureErrorBody;
   options.statusOut = &status;
   const bool ok = HttpDownloader::fetchUrl(url, onChunk, options);

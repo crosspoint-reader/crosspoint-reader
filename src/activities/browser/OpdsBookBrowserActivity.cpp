@@ -88,8 +88,7 @@ void OpdsBookBrowserActivity::onEnter() {
   // Configure the OPDS client for this server, restore any persisted token, and
   // reset the per-session auth latches. Accept-Language localizes the catalog
   // (both request header and language-map title resolution).
-  opdsClient.setServer(server.url, server.username, server.password);
-  opdsTransport.customHeaders = server.activeCustomHeaders();
+  opdsClient.setServer(server.url, server.username, server.password, server.activeCustomHeaders());
   {
     const OpdsTokens t = OPDS_TOKENS.get(tokenKey());
     opdsClient.setTokens(t.accessToken, t.refreshToken, t.refreshUrl);
@@ -580,8 +579,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // the current feed when the transfer finishes.
   releaseEntries();
 
-  std::vector<HttpDownloader::Header> headers = server.activeCustomHeaders();
   const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
+  std::vector<HttpDownloader::Header> headers = dlAuth.headers;
   if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
   // downloadFile() (CatalogActivity) releases font caches, checks the TLS heap
   // floor, and pumps cancel input during the transfer.
@@ -613,7 +612,7 @@ void OpdsBookBrowserActivity::downloadLcpBook(const OpdsEntry& book) {
     options.username = auth.username;
     options.password = auth.password;
     options.bearer = auth.bearer;
-    options.headers = server.activeCustomHeaders();
+    options.headers = auth.headers;
     options.statusOut = &status;
     constexpr size_t MAX_LICENSE_BYTES = 256 * 1024;
     const bool ok = HttpDownloader::fetchUrl(
@@ -919,8 +918,8 @@ void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl) {
     LOG_INF("OPDS", "Skipping cover: low heap");
     return;
   }
-  std::vector<HttpDownloader::Header> headers = server.activeCustomHeaders();
   const freeink::opds::HttpAuth auth = opdsClient.downloadAuth();
+  std::vector<HttpDownloader::Header> headers = auth.headers;
   if (!auth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + auth.bearer});
   const auto result = HttpDownloader::downloadToFile(url, tmp, nullptr, nullptr, auth.username, auth.password, headers);
   if (result != HttpDownloader::OK) {
