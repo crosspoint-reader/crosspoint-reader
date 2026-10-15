@@ -125,8 +125,8 @@ class FlashGlyphStore {
   // --- Sizes ---
 
   /// The size-table index for a pixels-per-em (26.6), claiming a free entry (a flash write) on first use.
-  /// False when all entries are taken, on a write error, or for a new size while wipe is pending. A full table
-  /// makes the wipe pending but stops nothing else: the claimed sizes go on storing their glyphs until the wipe.
+  /// False when all entries are taken, on a write error, or for a new size while wipe is pending. Taking the last
+  /// entry makes the wipe pending but stops nothing else: the claimed sizes go on storing their glyphs until the wipe.
   /// A wipe empties the table: indices claimed before it are void, and commits under them are refused until
   /// they are claimed again.
   bool sizeIndex(uint32_t ppem26_6, uint8_t* index);

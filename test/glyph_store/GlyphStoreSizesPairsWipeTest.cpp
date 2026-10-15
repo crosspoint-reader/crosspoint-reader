@@ -54,6 +54,16 @@ TEST_F(GlyphStoreSizes, WhenEverySizeIsTakenTheStoreIsFull) {
   EXPECT_EQ(3, claim(23 << 6));  // known sizes are still answered
 }
 
+TEST_F(GlyphStoreSizes, ClaimingTheLastFreeSizeMakesTheWipePending) {
+  // Otherwise a table filled exactly at the end of one book refuses the next book's body size until a book after it.
+  for (uint32_t i = 0; i + 1 < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  EXPECT_FALSE(store.wipePending());
+  EXPECT_EQ(static_cast<int>(kSizeEntries - 1), claim(99 << 6));
+  EXPECT_TRUE(store.wipePending());
+  EXPECT_FALSE(store.writesStopped());
+  EXPECT_EQ(3, claim(23 << 6));  // claimed sizes are still answered
+}
+
 TEST_F(GlyphStoreSizes, AFullSizeTableStopsOnlyNewSizes) {
   for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
   EXPECT_EQ(-1, claim(99 << 6));

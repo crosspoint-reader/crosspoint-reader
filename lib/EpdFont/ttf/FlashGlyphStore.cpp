@@ -496,6 +496,7 @@ bool FlashGlyphStore::readSizeEntry(const uint8_t i, SizeEntry& entry) const {
 bool FlashGlyphStore::sizeIndex(const uint32_t ppem26_6, uint8_t* index) {
   if (!open_ || ppem26_6 == kErased || index == nullptr) return false;
   int free = -1;
+  uint8_t freeCount = 0;
   for (uint8_t i = 0; i < kSizeEntries; ++i) {
     SizeEntry entry{};
     if (!readSizeEntry(i, entry)) return false;
@@ -504,7 +505,10 @@ bool FlashGlyphStore::sizeIndex(const uint32_t ppem26_6, uint8_t* index) {
       return true;
     }
     // Free only if wholly erased: an entry cut short is never programmed again.
-    if (free < 0 && entry.ppem26_6 == kErased && entry.claimed == kErased) free = i;
+    if (entry.ppem26_6 == kErased && entry.claimed == kErased) {
+      if (free < 0) free = i;
+      ++freeCount;
+    }
   }
   if (wipePending_) return false;
   if (free < 0) {
@@ -523,6 +527,12 @@ bool FlashGlyphStore::sizeIndex(const uint32_t ppem26_6, uint8_t* index) {
   }
   claimedSizes_ |= 1u << free;
   *index = static_cast<uint8_t>(free);
+  if (freeCount == 1) {
+    // That was the last entry: the next book open empties the table, before a new body size needs one.
+    LOG_INF("GST", "the last of %u sizes taken; wipe pending", static_cast<unsigned>(kSizeEntries));
+    wipePending_ = true;
+    recordWipePending();
+  }
   return true;
 }
 
