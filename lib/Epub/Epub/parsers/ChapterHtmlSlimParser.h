@@ -204,6 +204,7 @@ class ChapterHtmlSlimParser final : public Print {
   // One non-body font per section: body regular/bold/italic plus one auxiliary regular is
   // exactly the FontDecompressor's four page slots. The first block to resolve off-body
   // claims the slot; blocks that would need a different font keep the scale fallback.
+  // A native ladder (a TTF family) has no such budget: its faces are read from the glyph store.
   int32_t auxFontId_ = 0;
   // EPUBs often set their running prose to a nominal CSS size such as 10pt,
   // 87%, or 0.875em. The reader's selected font size is our body size. Root
