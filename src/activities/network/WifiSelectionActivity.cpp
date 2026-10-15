@@ -860,10 +860,9 @@ void WifiSelectionActivity::render(RenderLock&&) {
   // safe-area `screen` would inset it twice.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
                  tr(STR_WIFI_NETWORKS), countStr);
-  GUI.drawSubHeader(
-      renderer,
-      Rect{screen.x, metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
-      cachedMacAddress.c_str());
+  GUI.drawSubHeader(renderer,
+                    Rect{screen.x, metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
+                    cachedMacAddress.c_str());
 
   switch (state) {
     case WifiSelectionState::AUTO_CONNECTING:
