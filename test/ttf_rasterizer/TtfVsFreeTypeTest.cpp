@@ -96,7 +96,10 @@ void TtfVsFreeType::compareEveryGlyph(const uint32_t points) {
     }
     overlapGlyphs += expected.overlap;
     const uint8_t* ours = rasterizer.output();
-    if (std::memcmp(ours, expected.bitmap.data(), expected.bitmap.size()) != 0 && ++exactDiffs <= 3) {
+    // An empty bitmap's data() may be null, and memcmp with a null pointer is undefined even for 0 bytes
+    // (glibc declares it nonnull: UBSan on CI's Linux GCC).
+    if (!expected.bitmap.empty() && std::memcmp(ours, expected.bitmap.data(), expected.bitmap.size()) != 0 &&
+        ++exactDiffs <= 3) {
       ADD_FAILURE() << "glyph " << g << ", ours then FreeType's:\n"
                     << picture(metrics, ours) << "---\n"
                     << picture(metrics, expected.bitmap.data());
