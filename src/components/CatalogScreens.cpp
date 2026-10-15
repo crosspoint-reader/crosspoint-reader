@@ -25,10 +25,10 @@ void catalogScreenHeader(UiAppHost::UiScreen& screen, const GfxRenderer& rendere
   // heights are unified across themes, so the buttons derive from the band.
   GUI.applyHeaderStatus(renderer, header);
   const auto frameRect = screen.frame().screen();
-  const fui::Rect band = BaseTheme::headerBand(
-      renderer, fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding), frameRect.width,
-                          static_cast<int16_t>(metrics.headerHeight)},
-      header);
+  const fui::Rect band = BaseTheme::headerBand(renderer,
+                                               fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding),
+                                                         frameRect.width, static_cast<int16_t>(metrics.headerHeight)},
+                                               header);
   // Back button on touch boards, as on every GUI.drawHeader screen: the rect
   // goes to HeaderBackTapTarget, which MappedInputManager folds into
   // Button::Back, so each page's own Back handling applies (leaving a list,

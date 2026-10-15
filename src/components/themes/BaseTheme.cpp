@@ -392,8 +392,7 @@ freeink::ui::Rect BaseTheme::headerBand(const GfxRenderer& renderer, const freei
   props.bleed = freeink::ui::Insets{0, r, 0, l};
   // Only the status line sits up in the rounded corners; it alone gets their clearance.
   const int corner = BoardConfig::ACTIVE.cornerRadius;
-  props.status.edgeInset =
-      static_cast<int16_t>(props.status.edgeInset + std::max(0, corner - std::min(left, right)));
+  props.status.edgeInset = static_cast<int16_t>(props.status.edgeInset + std::max(0, corner - std::min(left, right)));
   return freeink::ui::Rect{static_cast<int16_t>(rect.x + l), static_cast<int16_t>(rect.y + offset),
                            static_cast<int16_t>(rect.width - l - r), static_cast<int16_t>(rect.height - offset)};
 }
@@ -426,11 +425,10 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // header component; this only fills the values from settings and metrics.
   applyHeaderStatus(renderer, props);
   // Callers pass a full-width header rect; headerBand fits it to the board's bezel.
-  const fui::Rect band = headerBand(
-      renderer,
-      fui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
-                static_cast<int16_t>(rect.height)},
-      props);
+  const fui::Rect band = headerBand(renderer,
+                                    fui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y),
+                                              static_cast<int16_t>(rect.width), static_cast<int16_t>(rect.height)},
+                                    props);
   if (rect.height < UITheme::getInstance().getMetrics().headerHeight) {
     // Short bands (home) are not split into strip + content row: the title
     // centers on the band, clear of the band's bottom edge.

@@ -969,10 +969,10 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   }
   const auto frameRect = screen.frame().screen();
   // Header and tabs share a screen-relative boundary, independent of bezel insets.
-  const fui::Rect band = BaseTheme::headerBand(
-      renderer, fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding), frameRect.width,
-                          static_cast<int16_t>(metrics.headerHeight)},
-      header);
+  const fui::Rect band = BaseTheme::headerBand(renderer,
+                                               fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding),
+                                                         frameRect.width, static_cast<int16_t>(metrics.headerHeight)},
+                                               header);
   fui::header(screen.frame(), band, header);
 }
 
@@ -1049,8 +1049,8 @@ void LibraryListActivity::drawHoldHelp() const {
   const Rect area = UITheme::getContentArea(renderer);
   const int left = std::max(area.x, int{BoardConfig::ACTIVE.cornerRadius});
   const int y = area.y + area.height - metrics.buttonHintsHeight - lineHeight;
-  GUI.drawHelpText(renderer, Rect{left + SIDE_PADDING, y, renderer.getScreenWidth() / 2 - left - SIDE_PADDING, lineHeight},
-                   help);
+  GUI.drawHelpText(renderer,
+                   Rect{left + SIDE_PADDING, y, renderer.getScreenWidth() / 2 - left - SIDE_PADDING, lineHeight}, help);
 }
 
 // OptionPopup is a self-contained modal: it owns the whole frame (hints
