@@ -3,6 +3,8 @@
 add_executable(TtfFontTest
   TtfFamilyTest.cpp
   TtfFontTest.cpp
+  TtfRegistryTest.cpp
+  ${REPO_ROOT}/lib/EpdFont/SdCardFontRegistry.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFamily.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFont.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/FlashGlyphStore.cpp
