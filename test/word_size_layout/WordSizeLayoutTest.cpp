@@ -479,6 +479,15 @@ TEST(FontSizeLadderTest, ANativeLadderScalesTheLargestFaceBeyondIt) {
   EXPECT_NEAR(8.75f / 10.0f, tiny.residual, 0.001f);
 }
 
+TEST(FontSizeLadderTest, ANativeLadderClampsAbsurdSizesBeforeConvertingThem) {
+  // A book's CSS can ask for any size (font-size: 1e12%); converting a float beyond int's range is undefined, and
+  // differs between the host and the device. The largest face serves, scaled.
+  const auto ladder = nativeLadder();
+  EXPECT_EQ(kNativeBase | 120, ladder.resolve(1e12f).fontId);
+  EXPECT_EQ(kNativeBase | 120, ladder.resolve(3e38f).fontId);
+  EXPECT_EQ(kNativeBase | 10, ladder.resolve(1e-30f).fontId);
+}
+
 TEST(FontSizeLadderTest, AnIncompleteNativeLadderIsIgnored) {
   FontSizeLadder ladder;
   ladder.setNative(0, kBody14pt, 10, 120);

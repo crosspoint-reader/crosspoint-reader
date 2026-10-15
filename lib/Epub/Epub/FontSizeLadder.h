@@ -113,8 +113,10 @@ struct FontSizeLadder {
       return r;
     }
     const float target = static_cast<float>(nativeBodyPpem) / 64.0f * r.residual;
-    int px = static_cast<int>(target + 0.5f);
-    px = px < nativeMinPx ? nativeMinPx : px > nativeMaxPx ? nativeMaxPx : px;
+    // Clamped as a float: a book's CSS can ask for any size, and converting one beyond int's range is undefined.
+    const float lo = nativeMinPx;
+    const float hi = nativeMaxPx;
+    const int px = static_cast<int>((target > hi ? hi : target > lo ? target : lo) + 0.5f);
     r.fontId = nativeBase | px;
     r.residual = target / static_cast<float>(px);
     return r;
