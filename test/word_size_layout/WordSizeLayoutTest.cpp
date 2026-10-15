@@ -429,6 +429,65 @@ TEST(FontSizeLadderTest, ResidualDeadZoneSnapsToNativeGlyphs) {
   EXPECT_FLOAT_EQ(empty.resolve(95.0f).residual, 0.95f);
 }
 
+// A TTF family: every size its own face, at whole pixels per em.
+namespace {
+constexpr int32_t kNativeBase = 0x12345600;
+constexpr uint32_t kBody14pt = (14 * 64 * 150 + 36) / 72;  // 29.17 px per em, 26.6
+
+FontSizeLadder nativeLadder() {
+  FontSizeLadder ladder;
+  ladder.setNative(kNativeBase, kBody14pt, 10, 120);
+  return ladder;
+}
+}  // namespace
+
+TEST(FontSizeLadderTest, ANativeLadderGivesEachSizeItsOwnWholePixelFace) {
+  const auto ladder = nativeLadder();
+  // h1 160%: 46.7 px, drawn at 47 px; the 0.7% left over is inside the dead zone.
+  const auto h1 = ladder.resolve(160.0f);
+  EXPECT_EQ(kNativeBase | 47, h1.fontId);
+  EXPECT_FLOAT_EQ(1.0f, h1.residual);
+  const auto h2 = ladder.resolve(140.0f);
+  EXPECT_EQ(kNativeBase | 41, h2.fontId);
+  EXPECT_FLOAT_EQ(1.0f, h2.residual);
+  // A footnote at 80%: 23.3 px at 23 px.
+  const auto small = ladder.resolve(80.0f);
+  EXPECT_EQ(kNativeBase | 23, small.fontId);
+  EXPECT_FLOAT_EQ(1.0f, small.residual);
+}
+
+TEST(FontSizeLadderTest, ANativeLadderKeepsTheBodyFaceNearTheBodySize) {
+  const auto ladder = nativeLadder();
+  for (const float pct : {97.5f, 100.0f, 102.5f}) {
+    const auto r = ladder.resolve(pct);
+    EXPECT_EQ(0, r.fontId) << pct;
+    EXPECT_FLOAT_EQ(1.0f, r.residual) << pct;
+  }
+  // 96%: 28.0 px is a face of its own, not the body's 29.17.
+  EXPECT_EQ(kNativeBase | 28, ladder.resolve(96.0f).fontId);
+}
+
+TEST(FontSizeLadderTest, ANativeLadderScalesTheLargestFaceBeyondIt) {
+  const auto ladder = nativeLadder();
+  // A 5x drop cap: 145.8 px, the 120 px face scaled by the rest.
+  const auto cap = ladder.resolve(500.0f);
+  EXPECT_EQ(kNativeBase | 120, cap.fontId);
+  EXPECT_NEAR(145.83f / 120.0f, cap.residual, 0.001f);
+  // Tiny text: the smallest face, scaled down.
+  const auto tiny = ladder.resolve(30.0f);
+  EXPECT_EQ(kNativeBase | 10, tiny.fontId);
+  EXPECT_NEAR(8.75f / 10.0f, tiny.residual, 0.001f);
+}
+
+TEST(FontSizeLadderTest, AnIncompleteNativeLadderIsIgnored) {
+  FontSizeLadder ladder;
+  ladder.setNative(0, kBody14pt, 10, 120);
+  ladder.setNative(kNativeBase, 0, 10, 120);
+  ladder.setNative(kNativeBase, kBody14pt, 20, 10);
+  EXPECT_FALSE(ladder.native());
+  EXPECT_FLOAT_EQ(1.6f, ladder.resolve(160.0f).residual);  // the scale fallback
+}
+
 // ---------------------------------------------------------------------------
 // ParsedText::foldUniformWordSizes — whole-paragraph spans join the block channel
 // ---------------------------------------------------------------------------
