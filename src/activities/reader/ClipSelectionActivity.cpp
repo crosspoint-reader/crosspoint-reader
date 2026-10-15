@@ -26,7 +26,6 @@ using Input = WordSelectionInput;
 
 namespace {
 
-constexpr size_t FONT_PREWARM_TEXT_MAX = 2048;
 constexpr int TOUCH_DRAG_MOVEMENT_PX = 4;
 constexpr unsigned long TOUCH_PAGE_ADVANCE_HOLD_MS = 1000;
 constexpr int TOUCH_PAGE_END_DWELL_SLOP_PX = 8;
@@ -95,10 +94,6 @@ bool ClipSelectionActivity::extractWords() {
   }
   rowCount = 0;
   const bool needsFontPrewarm = renderer.isSdCardFont(fontId);
-  auto pageText = needsFontPrewarm ? makeUniqueNoThrow<char[]>(FONT_PREWARM_TEXT_MAX) : nullptr;
-  size_t pageTextLength = 0;
-  if (needsFontPrewarm && !pageText) LOG_DBG("CLIP", "Skipping SD font prewarm: OOM");
-  uint8_t styleMask = 0;
   bool paragraphStartPending = false;
 
   for (size_t pageOffset = 0; pageOffset < pages.size(); ++pageOffset) {
@@ -108,6 +103,18 @@ bool ClipSelectionActivity::extractWords() {
       const auto& line = static_cast<const PageLine&>(*element);
       const auto& block = line.getBlock();
       if (!block || !block->valid()) continue;
+
+      if (needsFontPrewarm && block->wordCount() != 0) {
+        uint8_t styleMask = 0;
+        for (uint16_t i = 0; i < block->wordCount(); ++i) {
+          styleMask |= static_cast<uint8_t>(1U << (static_cast<uint8_t>(block->wordStyle(i)) & 0x03));
+        }
+        // Borrow the line's packed words to prepare advances before measuring, without copying or truncating text.
+        const char* text = block->wordText(0);
+        const uint16_t lastWord = block->wordCount() - 1;
+        const size_t textLength = block->wordText(lastWord) + block->wordTextLen(lastWord) + 1 - text;
+        renderer.ensureSdCardFontReady(fontId, &text, &textLength, 1, false, false, styleMask);
+      }
 
       const size_t lineStart = wordCount;
       const bool isRtl = block->getBlockStyle().isRtl;
@@ -146,13 +153,6 @@ bool ClipSelectionActivity::extractWords() {
         word.paragraphStart = false;
         word.isRtl = isRtl;
         word.discretionaryHyphen = block->wordHasDiscretionaryHyphen(i);
-        if (pageText) {
-          for (const char* p = text; *p != '\0' && pageTextLength + 1 < FONT_PREWARM_TEXT_MAX; ++p) {
-            pageText[pageTextLength++] = *p;
-          }
-          if (pageTextLength + 1 < FONT_PREWARM_TEXT_MAX) pageText[pageTextLength++] = ' ';
-        }
-        styleMask |= static_cast<uint8_t>(1U << (static_cast<uint8_t>(style) & 0x03));
         if (isRtl) ++rtlWordCount;
       }
       if (isRtl) {
@@ -180,12 +180,6 @@ bool ClipSelectionActivity::extractWords() {
       }
     }
     if (wordCount == MAX_SELECTABLE_WORDS) break;
-  }
-
-  if (styleMask == 0) styleMask = 0x01;
-  if (pageText) {
-    pageText[pageTextLength] = '\0';
-    renderer.ensureSdCardFontReady(fontId, pageText.get(), styleMask);
   }
 
   return true;
