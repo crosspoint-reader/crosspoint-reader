@@ -169,27 +169,97 @@ TEST(TtfFamily, TtfFileNamesAreRecognisedInAnyCase) {
   EXPECT_FALSE(ttf::isTtfFileName("Literatattf"));
 }
 
-TEST(TtfFamily, TheFirstFileOfEachStyleServesIt) {
+TEST(TtfFamily, AmongEqualWeightsTheFirstFileServes) {
   // Sorted by name: Bold, BoldCondensed (also bold), Italic, Regular.
-  const int styles[] = {1, 1, 2, 0};
+  const ttf::FileProbe files[] = {{1, 700}, {1, 700}, {2, 400}, {0, 400}};
   int chosen[4];
-  ASSERT_TRUE(ttf::assignStyles(styles, 4, chosen));
+  ASSERT_TRUE(ttf::assignStyles(files, 4, chosen));
   EXPECT_EQ(3, chosen[0]);
   EXPECT_EQ(0, chosen[1]);  // not the condensed one that sorts after it
   EXPECT_EQ(2, chosen[2]);
   EXPECT_EQ(-1, chosen[3]);  // no bold italic: it falls back
 }
 
-TEST(TtfFamily, FilesTheEngineCannotDrawAreIgnored) {
-  const int styles[] = {-1, 0, -1};
+TEST(TtfFamily, TheWeightClosestToRegularOrBoldServesEachStyle) {
+  // A folder of static weights, sorted by name. Only Bold and BoldItalic set macStyle's bold bit, as Google
+  // Fonts' static files do, so every other weight reads as regular or italic.
+  const ttf::FileProbe files[] = {
+      {3, 900},  // BlackItalic, which marks itself bold
+      {1, 700},  // Bold
+      {3, 700},  // BoldItalic
+      {0, 800},  // ExtraBold
+      {2, 300},  // LightItalic
+      {0, 300},  // Light
+      {2, 400},  // Italic
+      {0, 400},  // Regular
+  };
   int chosen[4];
-  ASSERT_TRUE(ttf::assignStyles(styles, 3, chosen));
+  ASSERT_TRUE(ttf::assignStyles(files, 8, chosen));
+  EXPECT_EQ(7, chosen[0]);  // Regular, not the ExtraBold that sorts first
+  EXPECT_EQ(1, chosen[1]);
+  EXPECT_EQ(6, chosen[2]);  // Italic, not LightItalic
+  EXPECT_EQ(2, chosen[3]);  // BoldItalic at 700, not 900
+}
+
+TEST(TtfFamily, WithoutAnExactWeightTheNearestServes) {
+  const ttf::FileProbe files[] = {{0, 800}, {0, 300}};  // ExtraBold, Light
+  int chosen[4];
+  ASSERT_TRUE(ttf::assignStyles(files, 2, chosen));
+  EXPECT_EQ(1, chosen[0]);  // 300 is nearer 400 than 800 is
+}
+
+TEST(TtfFamily, AStaticFileWinsOverAVariableOne) {
+  const ttf::FileProbe files[] = {{0, 400, true}, {0, 500}};  // the variable font sorts first
+  int chosen[4];
+  ASSERT_TRUE(ttf::assignStyles(files, 2, chosen));
+  EXPECT_EQ(1, chosen[0]);
+  const ttf::FileProbe onlyVariable[] = {{0, 400, true}};
+  ASSERT_TRUE(ttf::assignStyles(onlyVariable, 1, chosen));
+  EXPECT_EQ(0, chosen[0]);  // drawn as its default instance (spec 5.6)
+}
+
+TEST(TtfFamily, FilesTheEngineCannotDrawAreIgnored) {
+  const ttf::FileProbe files[] = {{-1}, {0}, {-1}};
+  int chosen[4];
+  ASSERT_TRUE(ttf::assignStyles(files, 3, chosen));
   EXPECT_EQ(1, chosen[0]);
 }
 
 TEST(TtfFamily, ADirectoryWithoutARegularStyleIsNoFamily) {
-  const int styles[] = {1, 2, 3, -1};
+  const ttf::FileProbe files[] = {{1}, {2}, {3}, {-1}};
   int chosen[4];
-  EXPECT_FALSE(ttf::assignStyles(styles, 4, chosen));
+  EXPECT_FALSE(ttf::assignStyles(files, 4, chosen));
   EXPECT_FALSE(ttf::assignStyles(nullptr, 0, chosen));
+}
+
+TEST(TtfFamily, TheProbeReadsTheWeightClassAndSpotsVariableFonts) {
+  Font font;
+  font.glyphs.resize(1);
+  font.glyphs[0].contours = {rect(0, 0, 64, 64)};
+  font.os2 = true;
+  font.weightClass = 800;
+  MemoryFile extraBold{buildFont(font)};
+  ttf::FileProbe probe = ttf::probeFile(extraBold.source());
+  EXPECT_EQ(0, probe.style);
+  EXPECT_EQ(800, probe.weight);
+  EXPECT_FALSE(probe.variable);
+
+  font.extraTables = {{"fvar", Bytes(16, 0)}};
+  MemoryFile variable{buildFont(font)};
+  EXPECT_TRUE(ttf::probeFile(variable.source()).variable);
+
+  font.os2 = false;  // no OS/2 table: the weight follows the style
+  font.extraTables.clear();
+  font.macStyle = 1;
+  MemoryFile bold{buildFont(font)};
+  probe = ttf::probeFile(bold.source());
+  EXPECT_EQ(1, probe.style);
+  EXPECT_EQ(700, probe.weight);
+}
+
+TEST(TtfFamily, TheBundledFilesCarryTheirWeights) {
+  MemoryFile regular{readFont("NotoSans/NotoSans-Regular.ttf")};
+  MemoryFile bold{readFont("NotoSans/NotoSans-Bold.ttf")};
+  EXPECT_EQ(400, ttf::probeFile(regular.source()).weight);
+  EXPECT_EQ(700, ttf::probeFile(bold.source()).weight);
 }

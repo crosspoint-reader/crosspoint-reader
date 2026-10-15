@@ -89,25 +89,26 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
   return true;
 }
 
-// A directory of .ttf files: each file's style comes from its head table, and the first file of each style (by
-// name) serves it. Only a directory with a regular style becomes a family.
+// A directory of .ttf files: each file's style and weight come from its head and OS/2 tables, and the file of
+// each style nearest the regular or bold weight serves it (ttf::assignStyles). Only a directory with a regular
+// style becomes a family.
 void SdCardFontRegistry::addTtfFiles(const char* dirPath, const std::vector<std::string>& names,
                                      const std::vector<uint32_t>& bytes, SdCardFontFamilyInfo& family) {
   std::vector<size_t> order(names.size());
   std::iota(order.begin(), order.end(), size_t{0});
   std::sort(order.begin(), order.end(), [&](const size_t a, const size_t b) { return names[a] < names[b]; });
-  std::vector<int> styles(order.size(), -1);
+  std::vector<ttf::FileProbe> probes(order.size());
   for (size_t i = 0; i < order.size(); ++i) {
     const std::string path = std::string(dirPath) + "/" + names[order[i]];
     HalFile file;
     if (!Storage.openFileForRead("SDREG", path.c_str(), file)) continue;
-    styles[i] = ttf::probeStyle(ttf::fileSource(file, bytes[order[i]]));
-    if (styles[i] < 0) {
+    probes[i] = ttf::probeFile(ttf::fileSource(file, bytes[order[i]]));
+    if (probes[i].style < 0) {
       LOG_DBG("SDREG", "Not a TrueType font the reader draws: %s", path.c_str());
     }
   }
   int chosen[4];
-  if (!ttf::assignStyles(styles.data(), styles.size(), chosen)) {
+  if (!ttf::assignStyles(probes.data(), probes.size(), chosen)) {
     LOG_DBG("SDREG", "No regular TrueType style in %s", dirPath);
     return;
   }

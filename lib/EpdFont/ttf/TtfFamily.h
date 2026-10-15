@@ -32,16 +32,27 @@ FileSource fileSource(File& file, const uint32_t size) {
 /// True for a name ending in ".ttf", in any case. In-progress copies ("x.ttf.tmp") do not count.
 bool isTtfFileName(const char* name);
 
-/// The style a TrueType file declares in head.macStyle: bit 0 bold, bit 1 italic, as EpdFontFamily::Style.
-/// -1 when it is not a font the engine draws: not TrueType (CFF, a collection), a table it needs missing or
-/// outside the file, or a read error.
+/// What discovery learns from a TrueType file, in a few small reads.
+struct FileProbe {
+  /// head.macStyle: bit 0 bold, bit 1 italic, as EpdFontFamily::Style. -1 when it is not a font the engine
+  /// draws: not TrueType (CFF, a collection), a table it needs missing or outside the file, or a read error.
+  int style = -1;
+  /// OS/2 usWeightClass (400 regular, 700 bold). Without an OS/2 table, 700 for a bold style and 400 otherwise.
+  uint16_t weight = 400;
+  /// It has an fvar table: a variable font, drawn as its default instance only (spec 5.6).
+  bool variable = false;
+};
+FileProbe probeFile(const FileSource& file);
+/// probeFile(file).style.
 int probeStyle(const FileSource& file);
 
-/// Which file serves each style of a directory's TrueType files. `styles[i]` is probeStyle() of file i, the
-/// files sorted by name; the first file of each style wins, so a family does not change with the card's listing
-/// order. `out[style]` is that file's index, or -1. False when no file is regular: not a family the reader can
-/// use, since every missing style falls back to regular.
-bool assignStyles(const int* styles, size_t count, int (&out)[4]);
+/// Which file serves each style of a directory's TrueType files, the files sorted by name. Each style takes, of
+/// the files declaring it, a static one before a variable one, then the weight nearest 400 (regular, italic) or
+/// 700 (bold, bold italic), then the first by name: a folder of static weights (Light, Regular, ExtraBold, ...,
+/// most of them declaring the regular style) then serves Regular, not whichever sorts first. `out[style]` is that
+/// file's index, or -1. False when no file is regular: not a family the reader can use, since every missing style
+/// falls back to regular.
+bool assignStyles(const FileProbe* files, size_t count, int (&out)[4]);
 
 /// Bump whenever the engine's output changes for the same font (the rasterizer, the 150 dpi sizing, the 2-bit
 /// thresholds): the identity changes with it, so every installed store is rebuilt.
