@@ -293,7 +293,8 @@ class GfxRenderer {
     const auto it = fontBaseScales.find(fontId);
     return it == fontBaseScales.end() ? 1.0f : it->second;
   }
-  void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
+  // The manager prewarms through this renderer's font lookup, so it reaches the faces the resolver makes.
+  void setFontCacheManager(FontCacheManager* m);
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
   // Drop every rebuildable font cache (glyph metadata, bitmaps, kern) while leaving
   // the fonts loaded and usable — everything faults back in on demand. Lets callers

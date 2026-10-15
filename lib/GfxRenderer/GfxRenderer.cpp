@@ -69,6 +69,14 @@ void GfxRenderer::clearFontAccumulation() const {
   }
 }
 
+void GfxRenderer::setFontCacheManager(FontCacheManager* m) {
+  fontCacheManager_ = m;
+  if (!m) return;
+  m->setFontLookup(
+      [](const void* ctx, const int fontId) { return static_cast<const GfxRenderer*>(ctx)->findFontFamily(fontId); },
+      this);
+}
+
 bool GfxRenderer::releaseFontCaches() {
   if (!fontCacheManager_) return false;
   fontCacheManager_->clearCache();

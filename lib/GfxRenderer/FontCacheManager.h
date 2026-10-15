@@ -16,6 +16,14 @@ class FontCacheManager {
                    const std::map<int, SdCardFont*>& sdCardFontAliases);
 
   void setFontDecompressor(FontDecompressor* d);
+  // How prewarmCache() turns a font ID into a family: the renderer's own lookup, which also makes the faces its
+  // resolver supplies on demand (a TTF family's native sizes, perhaps not yet looked up when a page laid out in
+  // an earlier session is prewarmed). Without one, the font map alone.
+  using FontLookup = const EpdFontFamily* (*)(const void* ctx, int fontId);
+  void setFontLookup(FontLookup lookup, const void* ctx) {
+    lookup_ = lookup;
+    lookupCtx_ = ctx;
+  }
 
   void clearCache();
   // Prewarm one font's glyphs for the given text. Appends into existing page slots
@@ -75,6 +83,9 @@ class FontCacheManager {
 
  private:
   const std::map<int, EpdFontFamily>& fontMap_;
+  FontLookup lookup_ = nullptr;
+  const void* lookupCtx_ = nullptr;
+  const EpdFontFamily* findFamily(int fontId) const;
   const std::map<int, SdCardFont*>& sdCardFonts_;
   // Scaled alias IDs -> the same fonts (GfxRenderer::sdCardFontAliases_). Consulted only by the
   // per-ID prewarm; the per-font loops walk sdCardFonts_ alone so a font is cleared once.
