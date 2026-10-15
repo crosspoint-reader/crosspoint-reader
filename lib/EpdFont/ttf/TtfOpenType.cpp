@@ -64,7 +64,8 @@ bool resolveLigatures(FontBytes& bytes, const Face& face, Ligatures* out) {
     if (sequences[k][lengths[k] - 1] == 0) continue;
     const uint32_t glyph =
         freeink::font::gsub::LigatureGlyphId(bytes.data() + face.gsub, face.gsubLength, sequences[k], lengths[k]);
-    out->glyphs[k] = glyph <= 0xFFFF ? static_cast<uint16_t>(glyph) : 0;
+    // A glyph the font does not have would draw as missing, every time: without it the letters draw instead.
+    out->glyphs[k] = glyph != 0 && glyph < face.numGlyphs ? static_cast<uint16_t>(glyph) : 0;
   }
   // In the order EpdFont searches them (left << 16 | right); ffi and ffl chain through ff.
   const auto add = [out](const uint32_t left, const uint32_t right, const uint8_t k) {

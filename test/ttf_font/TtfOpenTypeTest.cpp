@@ -189,6 +189,48 @@ TEST(TtfLigatures, WithoutAnFfLigatureFfiDoesNotChain) {
   EXPECT_EQ(0xFB01u, ligatures.pairs[0].ligatureCp);
 }
 
+TEST(TtfLigatures, ALigatureGlyphTheFontLacksIsLeftOut) {
+  // GSUB names glyph 99 in a font of 11 glyphs: the rasterizer could not draw it, so every such ligature would draw
+  // as missing. Left out, the text draws its letters instead.
+  // Resolves ff and fi as given, and checks that `leftOut` (U+FB00-FB04) draws the cmap's glyph: none.
+  const auto resolve = [](const uint16_t ff, const uint16_t fi, const uint32_t leftOut, ttf::Ligatures* ligatures) {
+    Font font = boxes(10);
+    font.cmap['f'] = 1;
+    font.cmap['i'] = 2;
+    font.cmap['l'] = 3;
+    LayoutLookup liga;
+    liga.type = 4;
+    liga.ligatures = {{{1, 1, 2}, 7}, {{1, 1, 3}, 8}, {{1, 1}, ff}, {{1, 2}, fi}, {{1, 3}, 6}};  // ffi ffl ff fi fl
+    font.extraTables = {{"GSUB", layoutTable({{"latn", {0}}}, {{"liga", {0}}}, {liga}, /*gsub=*/true)}};
+    Parsed p(font);
+    ASSERT_EQ(11, p.face.numGlyphs);
+    ttf::resolveLigatures(p.bytes, p.face, ligatures);
+    EXPECT_EQ(0, ligatures->glyphFor(p.bytes, p.face, leftOut));
+  };
+  const auto hasPair = [](const ttf::Ligatures& ligatures, const uint32_t ligatureCp) {
+    for (uint8_t k = 0; k < ligatures.count; ++k) {
+      if (ligatures.pairs[k].ligatureCp == ligatureCp) return true;
+    }
+    return false;
+  };
+
+  ttf::Ligatures noFi;
+  resolve(/*ff=*/4, /*fi=*/99, 0xFB01, &noFi);
+  EXPECT_EQ(0, noFi.glyphs[1]);
+  EXPECT_FALSE(hasPair(noFi, 0xFB01));
+  EXPECT_EQ(4, noFi.count);  // ff, fl, and ffi and ffl through ff
+  EXPECT_EQ(7, noFi.glyphs[3]);
+  EXPECT_TRUE(hasPair(noFi, 0xFB03));
+
+  ttf::Ligatures noFf;
+  resolve(/*ff=*/99, /*fi=*/5, 0xFB00, &noFf);
+  EXPECT_EQ(0, noFf.glyphs[0]);
+  EXPECT_EQ(2, noFf.count);  // fi and fl: ffi and ffl cannot chain through a missing ff
+  EXPECT_FALSE(hasPair(noFf, 0xFB00));
+  EXPECT_FALSE(hasPair(noFf, 0xFB03));
+  EXPECT_FALSE(hasPair(noFf, 0xFB04));
+}
+
 TEST(TtfLigatures, AFontWithoutGsubHasNone) {
   Parsed p(boxes(4));
   ttf::Ligatures ligatures;
