@@ -90,6 +90,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 56
+
+The serialized layout is unchanged. Non-visible elements, pagebreak markers, and
+suppressed images are skipped before table layout and anchor selection. In
+particular, suppressed table images no longer contribute alt text. Older
+completed and partial section caches rebuild automatically so page numbers and
+fragment destinations use the same layout. Book metadata and progress are kept.
+
 ### Version 55
 
 Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
@@ -447,6 +455,15 @@ if (parsedSize != fileSize) {
     std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
 }
 ```
+
+The anchor map may include one negative lookup entry for a fragment searched by a
+completed build but not found among rendered destinations. Its key is the byte
+`0x01` followed by the requested ID, and its page field is `0`. Since XML IDs
+cannot contain U+0001, it cannot collide with a destination; older readers see an
+unrelated key. Navigation treats this record as a checked miss, not a page target,
+so the same missing fragment does not repeatedly rebuild the complete cache.
+Partial builds never record absence. The marker uses the existing string/page
+encoding and does not change the section format version.
 
 ## CLX1 — library index (`.crosspoint/library.idx`)
 

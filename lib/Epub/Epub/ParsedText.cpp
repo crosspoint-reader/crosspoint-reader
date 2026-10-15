@@ -378,6 +378,19 @@ uint32_t ParsedText::visibleOffsetAt(const size_t wordIndex) const {
   return visibleOffsetBaseAt(wordIndex) + wordVisibleOffsetDeltas[wordIndex];
 }
 
+uint32_t ParsedText::getWordVisibleEndOffsetAt(const size_t wordIndex) const {
+  if (wordIndex >= words.size()) return 0;
+  const uint32_t start = visibleOffsetAt(wordIndex);
+  const bool discretionaryHyphen = (wordStyles[wordIndex] & TextBlock::DISCRETIONARY_HYPHEN_FLAG) != 0;
+  uint32_t end = sourceOffsetAfter(start, countCodepoints(wordAt(wordIndex)) - discretionaryHyphen);
+  // A split remainder's source offset excludes the prefix's display-only hyphen.
+  if (wordIndex + 1 < words.size()) {
+    const uint32_t next = visibleOffsetAt(wordIndex + 1);
+    if (next > start) end = std::min(end, next);
+  }
+  return end;
+}
+
 uint32_t ParsedText::sourceOffsetAfter(const uint32_t start, const uint32_t renderedLength) const {
   uint32_t end = start + renderedLength;
   const auto* chunk =
@@ -1801,14 +1814,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     if (!firstLineConsumed && logical == 0) paragraphStartWord = static_cast<uint16_t>(i);
     const uint32_t start = visibleOffsetAt(logical);
     const bool discretionaryHyphen = (wordStyles[logical] & TextBlock::DISCRETIONARY_HYPHEN_FLAG) != 0;
-    uint32_t end = sourceOffsetAfter(start, countCodepoints(wordAt(logical)) - discretionaryHyphen);
     if (discretionaryHyphen) {
       lineWordStyles[i] = static_cast<EpdFontFamily::Style>(lineWordStyles[i] | TextBlock::DISCRETIONARY_HYPHEN_FLAG);
     }
-    if (logical + 1 < words.size() && visibleOffsetAt(logical + 1) > start) {
-      end = std::min(end, visibleOffsetAt(logical + 1));
-    }
-    sourceRanges.push_back({start, end});
+    sourceRanges.push_back({start, getWordVisibleEndOffsetAt(logical)});
   }
 
   if (!lineHasFocusSplit) {

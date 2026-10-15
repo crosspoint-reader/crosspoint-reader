@@ -64,7 +64,8 @@ namespace {
 // v53: Persist per-word source ranges alongside the redaction layout changes.
 // v54: Source ranges retain codepoints absorbed by NFC composition.
 // v55: Persist the first logical word of each paragraph for clipping separators.
-constexpr uint8_t SECTION_FILE_VERSION = 55;
+// v56: Apply non-visible element and image suppression before table layout.
+constexpr uint8_t SECTION_FILE_VERSION = 56;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -275,9 +276,10 @@ bool Section::clearCache() const {
   return true;
 }
 
-bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn,
+                                const std::string& requestedAnchor) {
   // One-shot build: start, then lay out the whole section in a single pass.
-  if (!startBuild(spec, popupFn)) {
+  if (!startBuild(spec, popupFn, requestedAnchor)) {
     return false;
   }
   if (!buildSomeMore(0)) {  // 0 = build to completion
@@ -286,7 +288,8 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
   return buildComplete_;
 }
 
-bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn,
+                         const std::string& requestedAnchor) {
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
@@ -456,7 +459,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
             {this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
       },
       spec.embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors),
-      popupFn, ctxPtr->cssParser);
+      popupFn, ctxPtr->cssParser, requestedAnchor);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     if (ctx->cssParser) ctx->cssParser->clear();
@@ -515,7 +518,7 @@ bool Section::hasHtmlCache() const {
 std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string& anchor) const {
   if (!build_ || !build_->parser) return std::nullopt;
   for (const auto& [key, page] : build_->parser->getAnchors()) {
-    if (key == anchor) return page;
+    if (key == anchor && page < builtPageCount_) return page;
   }
   return std::nullopt;
 }
@@ -670,16 +673,10 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   // Write anchor-to-page map for fragment navigation (e.g. footnote targets). For a
   // partial, skip anchors that landed on the incomplete trailing page the suspend drops.
   const uint32_t anchorMapOffset = file.position();
-  const auto& anchors = build_->parser->getAnchors();
-  uint16_t anchorCount = 0;
-  for (const auto& [anchor, page] : anchors) {
-    if (!asPartial || page < builtPageCount_) anchorCount++;
-  }
-  serialization::writePod(file, anchorCount);
-  for (const auto& [anchor, page] : anchors) {
-    if (asPartial && page >= builtPageCount_) continue;
-    serialization::writeString(file, anchor);
-    serialization::writePod(file, page);
+  if (!sectionAnchors::write(file, build_->parser->getAnchors(), build_->parser->getRequestedAnchor(), builtPageCount_,
+                             asPartial)) {
+    LOG_ERR("SCT", "Failed to write anchor map");
+    return failCommit();
   }
 
   const uint32_t paragraphLutOffset = file.position();
@@ -953,14 +950,15 @@ std::optional<uint16_t> Section::getCachedPageCount() const {
   return count;
 }
 
+std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const { return lookupAnchor(anchor).page; }
+
 bool Section::openAnchorMap(HalFile& f, uint16_t& count) const {
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return false;
   }
-
   const uint32_t fileSize = f.size();
   f.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
-  uint32_t anchorMapOffset;
+  uint32_t anchorMapOffset = 0;
   serialization::readPod(f, anchorMapOffset);
   if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
     return false;
@@ -971,21 +969,16 @@ bool Section::openAnchorMap(HalFile& f, uint16_t& count) const {
   return true;
 }
 
-std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
+sectionAnchors::Lookup Section::lookupAnchor(const std::string& anchor) const {
   HalFile f;
-  uint16_t count;
-  if (!openAnchorMap(f, count)) return std::nullopt;
-  for (uint16_t i = 0; i < count; i++) {
-    std::string key;
-    uint16_t page;
-    serialization::readString(f, key);
-    serialization::readPod(f, page);
-    if (key == anchor) {
-      return page;
-    }
-  }
-
-  return std::nullopt;
+  if (!Storage.openFileForRead("SCT", filePath, f)) return {};
+  const uint32_t fileSize = f.size();
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  uint32_t anchorMapOffset = 0;
+  serialization::readPod(f, anchorMapOffset);
+  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) return {};
+  f.seek(anchorMapOffset);
+  return sectionAnchors::read(f, anchor);
 }
 
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {

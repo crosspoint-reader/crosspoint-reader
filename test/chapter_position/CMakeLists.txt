@@ -1,5 +1,6 @@
 add_executable(ChapterPositionTest
   ChapterPositionTest.cpp
+  FootnoteHistoryTest.cpp
 )
 
 target_link_libraries(ChapterPositionTest PRIVATE
