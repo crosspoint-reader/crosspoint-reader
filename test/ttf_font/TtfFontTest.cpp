@@ -806,6 +806,26 @@ TEST_F(TtfFontTest, OnlyPairsWhoseLeftGlyphKernsAreStored) {
   EXPECT_EQ(2u, font->kernLookups());
 }
 
+TEST_F(TtfFontTest, ALeftGlyphThatKernsWithNothingIsLookedUpOnce) {
+  // Such pairs are not stored, yet every word gap asks for one (the space kerns with nothing in Bookerly).
+  useBuiltFont(kernedBoxes());
+  const auto font = open();
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'A'));
+  EXPECT_EQ(1u, font->kernLookups());
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'A'));  // the same pair again
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'B'));  // another pair with C on the left
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(48, fonts));
+  EXPECT_EQ(0, fonts[kRegular]->getKerning('C', 'D'));  // and at another size
+  EXPECT_EQ(1u, font->kernLookups());
+  // A left glyph that kerns still kerns, whatever its pairs before gave: a right glyph the font lacks ('Z') says
+  // nothing of the left one, nor does a pair it kerns by 0.
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'Z'));
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'D'));
+  EXPECT_EQ(-47, font->kerning(kRegular, 'A', 'B'));
+  EXPECT_EQ(4u, font->kernLookups());
+}
+
 TEST_F(TtfFontTest, KerningGoesOnWithoutWritesInRingMode) {
   useBuiltFont(kernedBoxes());
   const auto font = open();

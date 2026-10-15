@@ -114,6 +114,7 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf
     style.face = {};
     style.kerning = ttf::Kerning{};
     style.ligatures = ttf::Ligatures{};
+    std::fill_n(style.uncoveredLeft, sizeof style.uncoveredLeft, 0);
     if (files[s].size == 0) continue;
     style.block = block++;
     glyphstore::StyleInfo info{};
@@ -408,24 +409,29 @@ uint32_t TtfFont::ringBytes() const {
 
 int8_t TtfFont::kerning(const Size& size, const uint8_t style, const uint32_t left, const uint32_t right) {
   if (style >= 4 || !styles_[style].present || !styles_[style].kerning.any() || size.ppem == 0) return 0;
-  const Style& s = styles_[style];
+  Style& s = styles_[style];
   // The store keys a pair by its codepoints (BMP only) and keeps font units, so every size shares it.
   const bool storable = left <= 0xFFFF && right <= 0xFFFF;
   int16_t units = 0;
   if (!storable || !store_.isOpen() ||
       !store_.findPair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), style, &units)) {
+    if (s.knownUncovered(left)) return 0;  // without touching the font: no remap of another style
     checkLock();
     FontBytes bytes;
     if (!fontBytes(style, &bytes)) return 0;
     const uint16_t l = s.ligatures.glyphFor(bytes, s.face, left);
     const uint16_t r = s.ligatures.glyphFor(bytes, s.face, right);
+    const bool looked = l != 0 && r != 0;
     bool covered = false;
-    const int32_t value = l != 0 && r != 0 ? s.kerning.pair(bytes, s.face, l, r, &covered) : 0;
+    const int32_t value = looked ? s.kerning.pair(bytes, s.face, l, r, &covered) : 0;
     ++kernLookups_;
     if (bytes.ioError()) return 0;  // SD mode: not an answer, ask again
     units = static_cast<int16_t>(value < INT16_MIN ? INT16_MIN : value > INT16_MAX ? INT16_MAX : value);
     // A left glyph that kerns with nothing costs no slot (spec 8.1): the CJK repertoire would fill the index.
-    if (!covered) return 0;
+    if (!covered) {
+      if (looked) s.markUncovered(left);  // whatever the right glyph: coverage depends on the left one only
+      return 0;
+    }
     if (storable && !ringMode_) {
       store_.storePair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), style, units);
     }

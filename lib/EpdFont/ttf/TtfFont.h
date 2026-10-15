@@ -149,6 +149,17 @@ class TtfFont {
     ttf::Face face;
     ttf::Kerning kerning;
     ttf::Ligatures ligatures;  // every size's EpdFontData points at its pairs
+    // Left codepoints found to kern with nothing. Their pairs are never stored (spec 8.1), yet the space before
+    // every word asks for one: one bit each below kUncoveredEnd (Latin), so they read the font once per load.
+    static constexpr uint32_t kUncoveredEnd = 0x250;
+    uint8_t uncoveredLeft[kUncoveredEnd / 8] = {};
+
+    bool knownUncovered(const uint32_t left) const {
+      return left < kUncoveredEnd && (uncoveredLeft[left >> 3] >> (left & 7) & 1) != 0;
+    }
+    void markUncovered(const uint32_t left) {
+      if (left < kUncoveredEnd) uncoveredLeft[left >> 3] |= static_cast<uint8_t>(1u << (left & 7));
+    }
   };
 
   struct Pending {
