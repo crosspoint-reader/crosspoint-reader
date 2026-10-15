@@ -891,20 +891,18 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // A rotation can remap the held button, so ignore page buttons until released.
-  if (waitForPageButtonsUp) {
-    if (mappedInput.isPressed(MappedInputManager::Button::PageBack) ||
-        mappedInput.isPressed(MappedInputManager::Button::PageForward) ||
-        mappedInput.isPressed(MappedInputManager::Button::Left) ||
-        mappedInput.isPressed(MappedInputManager::Button::Right)) {
-      return;
-    }
+  // A rotation can remap the held button, so ignore page buttons (not touch) until released.
+  const bool ignorePageButtons = waitForPageButtonsUp;
+  if (waitForPageButtonsUp && !mappedInput.isPressed(MappedInputManager::Button::PageBack) &&
+      !mappedInput.isPressed(MappedInputManager::Button::PageForward) &&
+      !mappedInput.isPressed(MappedInputManager::Button::Left) &&
+      !mappedInput.isPressed(MappedInputManager::Button::Right)) {
     waitForPageButtonsUp = false;
     mappedInput.clearPageButtonSuppressedReleases();
-    return;
   }
 
-  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  auto [prevTriggered, nextTriggered, fromTilt] =
+      ignorePageButtons ? ReaderUtils::PageTurnResult{} : ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
