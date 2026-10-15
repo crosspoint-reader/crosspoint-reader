@@ -2,9 +2,11 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <ttf/TtfFamily.h>
 
 #include <algorithm>
 #include <cstring>
+#include <numeric>
 
 // --- SdCardFontFamilyInfo helpers ---
 
@@ -24,6 +26,7 @@ bool SdCardFontFamilyInfo::hasSize(uint8_t size) const {
 
 std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
   std::vector<uint8_t> sizes;
+  if (ttf()) return sizes;  // drawn at any size, from one file per style
   for (const auto& f : files) {
     bool found = false;
     for (uint8_t s : sizes) {
@@ -39,6 +42,7 @@ std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
 }
 
 const SdCardFontFileInfo* SdCardFontFamilyInfo::pickClosestSize(uint8_t targetPtSize) const {
+  if (ttf()) return nullptr;
   const SdCardFontFileInfo* selected = nullptr;
   int bestDiff = INT32_MAX;
   for (const auto& f : files) {
@@ -85,10 +89,56 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
   return true;
 }
 
+// A directory of .ttf files: each file's style and weight come from its head and OS/2 tables, and the file of
+// each style nearest the regular or bold weight serves it (ttf::assignStyles). Only a directory with a regular
+// style becomes a family.
+void SdCardFontRegistry::addTtfFiles(const char* dirPath, const std::vector<std::string>& names,
+                                     const std::vector<uint32_t>& bytes, SdCardFontFamilyInfo& family) const {
+  std::vector<size_t> order(names.size());
+  std::iota(order.begin(), order.end(), size_t{0});
+  std::sort(order.begin(), order.end(), [&](const size_t a, const size_t b) { return names[a] < names[b]; });
+  std::vector<ttf::FileProbe> probes(order.size());
+  for (size_t i = 0; i < order.size(); ++i) {
+    const std::string path = std::string(dirPath) + "/" + names[order[i]];
+    HalFile file;
+    if (!Storage.openFileForRead("SDREG", path.c_str(), file)) continue;
+    probes[i] = ttf::probeFile(ttf::fileSource(file, bytes[order[i]]));
+    if (probes[i].style < 0) {
+      LOG_DBG("SDREG", "Not a TrueType font the reader draws: %s", path.c_str());
+    }
+  }
+  int chosen[4];
+  if (!ttf::assignStyles(probes.data(), probes.size(), chosen)) {
+    LOG_DBG("SDREG", "No regular TrueType style in %s", dirPath);
+    return;
+  }
+  uint32_t styleBytes[4];
+  uint8_t styleCount = 0;
+  for (const int file : chosen) {
+    if (file >= 0) styleBytes[styleCount++] = bytes[order[static_cast<size_t>(file)]];
+  }
+  if (ttfFits_ && !ttfFits_(styleBytes, styleCount)) {
+    LOG_INF("SDREG", "TTF family in %s is too large for the font partition; not listed", dirPath);
+    return;
+  }
+  for (uint8_t style = 0; style < 4; ++style) {
+    if (chosen[style] < 0) continue;
+    const size_t file = order[static_cast<size_t>(chosen[style])];
+    SdCardFontFileInfo info;
+    info.path = std::string(dirPath) + "/" + names[file];
+    info.pointSize = 0;
+    info.style = style;
+    info.fileBytes = bytes[file];
+    family.files.push_back(std::move(info));
+  }
+}
+
 void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
   FsFile dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return;
 
+  std::vector<std::string> ttfNames;
+  std::vector<uint32_t> ttfBytes;
   char nameBuffer[128];
   while (true) {
     FsFile entry = dir.openNextFile();
@@ -106,7 +156,13 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
 
     uint8_t size, style;
-    if (!parseFilename(nameBuffer, size, style)) continue;
+    if (!parseFilename(nameBuffer, size, style)) {
+      if (ttf::isTtfFileName(nameBuffer)) {
+        ttfNames.emplace_back(nameBuffer);
+        ttfBytes.push_back(entryBytes);
+      }
+      continue;
+    }
 
     SdCardFontFileInfo info;
     info.path = std::string(dirPath) + "/" + nameBuffer;
@@ -116,6 +172,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     family.files.push_back(std::move(info));
   }
   dir.close();
+  if (family.files.empty() && !ttfNames.empty()) addTtfFiles(dirPath, ttfNames, ttfBytes, family);
 }
 
 void SdCardFontRegistry::scanRoot(const char* rootPath) {
@@ -175,8 +232,8 @@ void SdCardFontRegistry::scanRoot(const char* rootPath) {
 
       if (!family.files.empty()) {
         families_.push_back(std::move(family));
-        LOG_DBG("SDREG", "Found family: %s (%d files) in %s", families_.back().name.c_str(),
-                static_cast<int>(families_.back().files.size()), rootPath);
+        LOG_DBG("SDREG", "Found %s family: %s (%d files) in %s", families_.back().ttf() ? "TTF" : ".cpfont",
+                families_.back().name.c_str(), static_cast<int>(families_.back().files.size()), rootPath);
       }
     } else {
       entry.close();

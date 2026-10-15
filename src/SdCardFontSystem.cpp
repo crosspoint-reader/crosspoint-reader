@@ -1,8 +1,11 @@
 #include "SdCardFontSystem.h"
 
+#include <EspNorFlash.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <ttf/TtfFamily.h>
+#include <ttf/TtfFont.h>
 
 #include <climits>
 #include <cstdlib>
@@ -10,6 +13,33 @@
 
 #include "CrossPointSettings.h"
 #include "SdCardFontGlobals.h"
+#include "activities/RenderLock.h"
+
+static_assert(CrossPointSettings::FONT_SIZE_RUNGS[CrossPointSettings::FONT_SIZE_RUNG_COUNT - 1].points <=
+                  TtfFont::kMaxPointSize,
+              "TtfFont plans its scratch block for the largest reader size");
+
+namespace {
+
+// Between glyphs and install chunks: a hostile glyph can take most of a second, and an install
+// several seconds, all under RenderLock. A tick's sleep every 200 ms lets the idle task run.
+void ttfYield() {
+  static uint32_t last = 0;
+  const uint32_t now = millis();
+  if (now - last < 200) return;
+  last = now;
+  vTaskDelay(1);
+}
+
+// Lists a TTF family only when flash mode can install it; larger families wait for SD mode (Stage 2c-4).
+bool ttfFamilyFits(const uint32_t* styleBytes, const uint8_t count) {
+  // While the store is open its mappings hide the budget an install would get: the load decides then.
+  if (EspNorFlash::liveMappings() != 0) return true;
+  EspNorFlash flash;
+  return flash.begin() && ttf::fitsFlashMode(styleBytes, count, flash.size(), flash.freeMapPages());
+}
+
+}  // namespace
 
 // Free-function resolver used by CrossPointSettings::getReaderFontId().
 // Resolved by the linker — no callback indirection stored in settings.
@@ -158,6 +188,7 @@ ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
   // out, where building one for a long family name would allocate.
   for (const auto& family : registry_.getFamilies()) {
     if (family.name != familyName) continue;
+    if (family.ttf()) return ReaderSizeList::native();  // drawn natively at every size
     uint8_t sizes[ReaderSizeList::kCapacity];
     size_t n = 0;
     for (const auto& file : family.files) {
@@ -170,6 +201,8 @@ ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   (void)renderer;
+  TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield});
+  registry_.setTtfFits(&ttfFamilyFits);
   registry_.discover();
 
   // Startup is discovery-only. SD font payloads are loaded lazily on reader
@@ -198,6 +231,10 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       manager_.unloadAll(renderer);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      return;
+    }
+    if (family->ttf() && manager_.ttfLoaded()) {
+      manager_.setTtfBodySize(renderer, targetPt);  // drawn natively: a new size, never a reload
       return;
     }
     const auto* best = family->pickClosestSize(targetPt);
@@ -246,6 +283,12 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
     const auto* family = registry_.findFamily(wantedFamily);
     if (!family) {
       manager_.unloadAll(renderer);
+      return;
+    }
+    if (family->ttf() && manager_.ttfLoaded()) {
+      // Book open: no glyph record of the family is in use, so a full store can be emptied here.
+      manager_.wipeTtfIfPending(onColdLoad);
+      manager_.setTtfBodySize(renderer, targetPt);
       return;
     }
     const auto* best = family->pickClosestSize(targetPt);

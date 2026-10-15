@@ -48,8 +48,6 @@ bool slotErased(const Slot& slot) { return slot.key == kErased && slot.value == 
 
 uint32_t nextSlot(const uint32_t i, const uint32_t slots) { return i + 1 == slots ? 0 : i + 1; }
 
-uint32_t recordBytes(const uint16_t dataLength) { return align4(kRecordHeaderBytes + dataLength); }
-
 uint32_t tableBytes(const uint32_t slots) { return alignUp(slots * kSlotBytes, kSectorBytes); }
 
 // The most entries a table of `capacity` takes before it counts as full.
@@ -357,9 +355,16 @@ uint8_t* GlyphBatch::add(const uint32_t key, const EpdGlyph& metrics) {
   EpdGlyph glyph = metrics;
   glyph.dataOffset = 0;  // known at commit, when the record's place in the log is
   std::memcpy(record + 4, &glyph, sizeof glyph);
+  lastUsed_ = used_;
   used_ += bytes;
   ++count_;
   return record + kRecordHeaderBytes;
+}
+
+void GlyphBatch::dropLast() {
+  if (count_ == 0 || used_ == lastUsed_) return;
+  used_ = lastUsed_;
+  --count_;
 }
 
 // The record a glyph slot points at, if it is complete and really this key's: the slot value is the record's

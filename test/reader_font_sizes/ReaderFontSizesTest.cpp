@@ -180,3 +180,23 @@ TEST(FontPointSizeLabel, ReadsAsThePointSize) {
 }
 
 }  // namespace
+
+TEST(ReaderSizeListNative, OffersEightPointBelowTheLadder) {
+  const ReaderSizeList sizes = ReaderSizeList::native();
+  ASSERT_EQ(CrossPointSettings::FONT_SIZE_RUNG_COUNT + 1, sizes.count);
+  EXPECT_EQ(8, sizes.points[0]);
+  for (int i = 0; i < CrossPointSettings::FONT_SIZE_RUNG_COUNT; ++i) {
+    EXPECT_EQ(CrossPointSettings::FONT_SIZE_RUNGS[i].points, sizes.points[i + 1]);
+  }
+}
+
+TEST(ReaderSizeListNative, TheSmallSizesSnapAndStepToEight) {
+  const ReaderSizeList sizes = ReaderSizeList::native();
+  EXPECT_EQ(8, sizes.snap(9));  // a tie goes to the smaller size
+  EXPECT_EQ(8, sizes.snap(1));
+  EXPECT_EQ(8, sizes.step(10, -1));
+  EXPECT_EQ(26, sizes.next(24));
+  EXPECT_EQ(8, sizes.next(26));  // the size button wraps to the new smallest
+}
+
+TEST(ReaderSizeListNative, BuiltInFamiliesStillStartAtTheLadder) { EXPECT_EQ(10, ReaderSizeList::builtin().snap(8)); }

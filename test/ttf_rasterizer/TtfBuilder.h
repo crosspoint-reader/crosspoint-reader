@@ -65,6 +65,7 @@ struct Glyph {
 struct Font {
   uint32_t sfntVersion = 0x00010000;
   uint16_t unitsPerEm = 1000;
+  uint16_t macStyle = 0;  ///< head.macStyle: bit 0 bold, bit 1 italic
   int16_t ascender = 800;
   int16_t descender = -200;
   int16_t lineGap = 0;
@@ -75,6 +76,7 @@ struct Font {
   bool cmapRangeOffsets = false;  ///< format 4 through glyphIdArray instead of deltas
   uint16_t numHMetrics = 0;       ///< 0: one hmtx entry per glyph
   bool os2 = false;
+  uint16_t weightClass = 400;  ///< OS/2 usWeightClass
   uint16_t os2Selection = 0;
   int16_t typoAscender = 0;
   int16_t typoDescender = 0;
@@ -365,6 +367,7 @@ inline Bytes buildFont(const Font& font) {
   set16(head, 38, static_cast<uint16_t>(yMin));
   set16(head, 40, static_cast<uint16_t>(xMax));
   set16(head, 42, static_cast<uint16_t>(yMax));
+  set16(head, 44, font.macStyle);
   set16(head, 50, font.longLoca ? 1 : 0);
 
   Bytes hhea(36, 0);
@@ -401,6 +404,7 @@ inline Bytes buildFont(const Font& font) {
   };
   if (font.os2) {
     Bytes os2(78, 0);
+    set16(os2, 4, font.weightClass);
     set16(os2, 62, font.os2Selection);
     set16(os2, 68, static_cast<uint16_t>(font.typoAscender));
     set16(os2, 70, static_cast<uint16_t>(font.typoDescender));

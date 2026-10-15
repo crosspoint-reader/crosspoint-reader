@@ -7,9 +7,9 @@
 /// Supplies what a font's own tables do not hold.
 ///
 /// EpdFont asks it for a glyph after the interval table misses, and for pair kerning when the font
-/// carries no kern tables. GfxRenderer asks it whether a glyph's bitmap is one it keeps itself.
-/// SdCardFont implements it for its glyph-miss ring; a font with no tables at all can answer every
-/// lookup through it.
+/// carries no kern tables. GfxRenderer asks it whether a glyph's bitmap is one it keeps itself, and
+/// lets it prepare a run of text before measuring or drawing it. SdCardFont implements it for its
+/// glyph-miss ring; a font with no tables at all (TtfFont) answers every lookup through it.
 class GlyphProvider {
  public:
   virtual ~GlyphProvider() = default;
@@ -34,4 +34,8 @@ class GlyphProvider {
     (void)rightCp;
     return 0;
   }
+
+  /// `utf8Text` is about to be measured or drawn in this provider's style: a provider that renders glyphs
+  /// can prepare the ones it lacks in one batch. Lookups must still work for anything it skipped.
+  virtual void prefetch(const char* utf8Text) { (void)utf8Text; }
 };

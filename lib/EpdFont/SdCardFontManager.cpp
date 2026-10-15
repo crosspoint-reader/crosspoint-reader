@@ -1,14 +1,22 @@
 #include "SdCardFontManager.h"
 
 #include <EpdFontFamily.h>
+#include <EspNorFlash.h>
 #include <FlashFontPartition.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <SdCardFont.h>
 #include <SdCardFontRegistry.h>
+#include <ttf/TtfFamily.h>
+#include <ttf/TtfFont.h>
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
+
+SdCardFontManager::SdCardFontManager() = default;
 
 SdCardFontManager::~SdCardFontManager() {
   if (renderer_) {
@@ -18,6 +26,8 @@ SdCardFontManager::~SdCardFontManager() {
       delete lf.font;
     }
     loaded_.clear();
+    ttf_.reset();
+    ttfFlash_.reset();
   }
 }
 
@@ -111,11 +121,102 @@ static bool writeFamily(const SdCardFontFamilyInfo& family, uint8_t requestedPoi
   return true;
 }
 
+bool SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
+                                      const uint8_t targetPtSize, const std::function<void()>& onColdLoad) {
+  // The partition has one owner (spec 4.1): a .cpfont mapping goes before the glyph store opens.
+  if (FlashFontPartition::isMapped()) FlashFontPartition::unmap();
+
+  // The files stay open while the family loads: an install copies them into the store.
+  HalFile files[4];
+  ttf::FileSource sources[4];
+  ttf::FileStamp stamps[4];
+  for (const auto& file : family.files) {
+    if (file.style >= 4) continue;
+    HalFile& handle = files[file.style];
+    if (!Storage.openFileForRead("SDMGR", file.path.c_str(), handle)) {
+      LOG_ERR("SDMGR", "Cannot open %s", file.path.c_str());
+      continue;
+    }
+    const auto size = static_cast<uint32_t>(handle.fileSize());
+    sources[file.style] = ttf::fileSource(handle, size);
+    uint16_t date = 0;
+    uint16_t time = 0;
+    handle.getModifyDateTime(&date, &time);
+    const char* slash = std::strrchr(file.path.c_str(), '/');
+    stamps[file.style] = {slash ? slash + 1 : file.path.c_str(), size, date, time};
+  }
+  uint8_t identity[glyphstore::kIdentityBytes];
+  ttf::familyIdentity(stamps, identity);
+
+  // Held while the family is loaded: the font area (a few words), and the font with its scratch block.
+  auto flash = makeUniqueNoThrow<EspNorFlash>();
+  if (!flash || !flash->begin()) {
+    LOG_ERR("SDMGR", "No font partition for TTF family %s", family.name.c_str());
+    return false;
+  }
+  auto font = makeUniqueNoThrow<TtfFont>(*flash);
+  if (!font) {
+    LOG_ERR("SDMGR", "OOM allocating TtfFont for %s", family.name.c_str());
+    return false;
+  }
+  if (!font->load(sources, identity, onColdLoad) || !font->setBodySize(targetPtSize)) {
+    LOG_ERR("SDMGR", "TTF family %s cannot be drawn at %u pt", family.name.c_str(), targetPtSize);
+    return false;
+  }
+  const uint32_t identityHash = ttf::identityHash(identity);
+  const int fontId = computeFontId(identityHash, family.name.c_str(), targetPtSize);
+  if (renderer.getFontMap().count(fontId) != 0) {
+    LOG_ERR("SDMGR", "Font ID %d collides with existing font, skipping %s", fontId, family.name.c_str());
+    return false;
+  }
+  ttfFlash_ = std::move(flash);
+  ttf_ = std::move(font);
+  ttfIdentityHash_ = identityHash;
+  registerTtfFace(renderer, fontId);
+  loadedFamilyName_ = family.name;
+  loadedPointSize_ = targetPtSize;
+  LOG_INF("SDMGR", "TTF family %s at %u pt (id=%d)", family.name.c_str(), targetPtSize, fontId);
+  return true;
+}
+
+void SdCardFontManager::registerTtfFace(GfxRenderer& renderer, const int fontId) {
+  // Not an SD font to the renderer: TtfFont keeps no per-page state for its maintenance loops.
+  renderer.insertFont(fontId, EpdFontFamily(ttf_->font(0), ttf_->font(1), ttf_->font(2), ttf_->font(3)));
+  ttfFontId_ = fontId;
+}
+
+bool SdCardFontManager::setTtfBodySize(GfxRenderer& renderer, const uint8_t pointSize) {
+  if (!ttf_) return false;
+  if (pointSize == loadedPointSize_) return true;
+  const int fontId = computeFontId(ttfIdentityHash_, loadedFamilyName_.c_str(), pointSize);
+  if (renderer.getFontMap().count(fontId) != 0) {
+    LOG_ERR("SDMGR", "Font ID %d for %s@%u collides with a registered font", fontId, loadedFamilyName_.c_str(),
+            pointSize);
+    return false;
+  }
+  if (!ttf_->setBodySize(pointSize)) return false;
+  renderer.removeFont(ttfFontId_);
+  registerTtfFace(renderer, fontId);
+  loadedPointSize_ = pointSize;
+  LOG_INF("SDMGR", "TTF family %s now at %u pt (id=%d)", loadedFamilyName_.c_str(), pointSize, fontId);
+  return true;
+}
+
+void SdCardFontManager::wipeTtfIfPending(const std::function<void()>& onBusy) {
+  if (ttf_) ttf_->wipeIfPending(onBusy);
+}
+
 bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize,
                                    const std::function<void()>& onColdLoad, const FlashCachePolicy policy,
                                    BuildArena* const arena) {
   if (!renderer_) renderer_ = &renderer;
   if (!loadedFamilyName_.empty()) unloadAll(renderer);
+
+  if (family.ttf()) {
+    // A preview must never install over the partition; TTF previews come later (spec 7.6).
+    if (policy == FlashCachePolicy::ReadOnly) return false;
+    return loadTtfFamily(family, renderer, targetPtSize, onColdLoad);
+  }
 
   const SdCardFontFileInfo* selected = family.pickClosestSize(targetPtSize);
   if (!selected) {
@@ -251,6 +352,14 @@ void SdCardFontManager::dropSizeAlias(GfxRenderer& renderer) {
 
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   if (!renderer_) renderer_ = &renderer;
+  if (ttf_) {
+    renderer.removeFont(ttfFontId_);
+    LOG_INF("SDMGR", "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store", loadedFamilyName_.c_str(),
+            static_cast<unsigned long>(ttf_->renders()), static_cast<unsigned long>(ttf_->storeHits()));
+    ttf_.reset();  // closes the store before its flash goes
+    ttfFlash_.reset();
+    ttfFontId_ = 0;
+  }
   dropSizeAlias(renderer);
   renderer.clearSdCardFonts();
   for (auto& lf : loaded_) {
@@ -264,6 +373,7 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
 }
 
 int SdCardFontManager::getFontId(const std::string& familyName, const uint8_t pointSize) const {
+  if (ttf_) return familyName == loadedFamilyName_ && pointSize == loadedPointSize_ ? ttfFontId_ : 0;
   if (familyName != loadedFamilyName_ || loaded_.empty()) return 0;
   if (pointSize == loadedPointSize_) return loaded_.front().fontId;
   if (aliasFontId_ != 0 && pointSize == aliasPointSize_) return aliasFontId_;

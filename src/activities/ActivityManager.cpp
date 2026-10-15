@@ -1233,3 +1233,7 @@ void RenderLock::unlock() {
  * answers exactly the same question legally.
  */
 bool RenderLock::peek() { return xSemaphoreGetMutexHolder(activityManager.renderingMutex) != nullptr; };
+
+bool RenderLock::heldByCurrentTask() {
+  return xSemaphoreGetMutexHolder(activityManager.renderingMutex) == xTaskGetCurrentTaskHandle();
+}

@@ -63,5 +63,6 @@ endif()
 target_compile_options(TtfRasterizerTest PRIVATE ${TTF_SANITIZERS})
 target_link_options(TtfRasterizerTest PRIVATE ${TTF_SANITIZERS})
 message(STATUS "TtfRasterizerTest sanitizers: ${TTF_SANITIZERS}")
+set(TTF_SANITIZERS ${TTF_SANITIZERS} PARENT_SCOPE)  # ttf_font uses them too
 
 gtest_discover_tests(TtfRasterizerTest DISCOVERY_TIMEOUT 60)

@@ -73,6 +73,8 @@ constexpr uint32_t homeSlot(const uint32_t key, const uint32_t slots) {
 }
 
 constexpr uint32_t align4(const uint32_t n) { return (n + 3u) & ~3u; }
+/// Bytes a record with a `dataLength`-byte bitmap takes in the log, and in a GlyphBatch.
+constexpr uint32_t recordBytes(const uint32_t dataLength) { return align4(kRecordHeaderBytes + dataLength); }
 constexpr uint32_t alignUp(const uint32_t n, const uint32_t to) { return (n + to - 1) / to * to; }
 constexpr uint32_t pagesFor(const uint32_t bytes) { return (bytes + kPageBytes - 1) / kPageBytes; }
 

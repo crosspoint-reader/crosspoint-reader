@@ -64,6 +64,13 @@ TEST(GlyphStoreFormat, HeaderLayoutIsStable) {
   EXPECT_EQ(8u, sizeof(SizeEntry));
 }
 
+TEST(GlyphStoreFormat, ARecordIsItsHeaderAndBitmapRoundedToFourBytes) {
+  EXPECT_EQ(20u, recordBytes(0));  // a space: the header alone
+  EXPECT_EQ(24u, recordBytes(1));
+  EXPECT_EQ(24u, recordBytes(4));
+  EXPECT_EQ(28u, recordBytes(5));
+}
+
 TEST(GlyphStorePlan, LatinFlashModeFillsThePartition) {
   // Bookerly-sized: four styles of 450 KB, 8 pages each.
   Layout layout{};

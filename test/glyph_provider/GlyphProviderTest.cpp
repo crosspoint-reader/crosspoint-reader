@@ -2,10 +2,12 @@
 #include <gtest/gtest.h>
 
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "EpdFont.h"
+#include "EpdFontFamily.h"
 #include "GlyphProvider.h"
 
 namespace {
@@ -26,6 +28,8 @@ class FakeProvider final : public GlyphProvider {
     kernAsked.emplace_back(leftCp, rightCp);
     return kernValue;
   }
+  std::vector<std::string> prefetched;
+  void prefetch(const char* utf8Text) override { prefetched.emplace_back(utf8Text); }
 };
 
 EpdGlyph makeGlyph(const uint8_t width, const uint8_t height, const uint16_t advanceX) {
@@ -135,4 +139,47 @@ TEST(GlyphProvider, AFontWithoutAProviderBehavesAsBefore) {
 
   EXPECT_FALSE(font.getGlyph('A'));
   EXPECT_EQ(0, font.getKerning('A', 'V'));
+}
+
+TEST(GlyphProvider, PrefetchAsksEachStylesFontOnceAfterFallback) {
+  FakeProvider regularProvider;
+  FakeProvider boldProvider;
+  const EpdFontData regularData = providerOnly(&regularProvider);
+  const EpdFontData boldData = providerOnly(&boldProvider);
+  const EpdFont regular(&regularData);
+  const EpdFont bold(&boldData);
+  const EpdFontFamily family(&regular, &bold);  // italic falls back to regular, bold italic to bold
+
+  family.prefetch("Wolf", 0x0F);
+
+  EXPECT_EQ(std::vector<std::string>{"Wolf"}, regularProvider.prefetched);
+  EXPECT_EQ(std::vector<std::string>{"Wolf"}, boldProvider.prefetched);
+}
+
+TEST(GlyphProvider, PrefetchAsksOnlyTheStylesInTheMask) {
+  FakeProvider regularProvider;
+  FakeProvider boldProvider;
+  const EpdFontData regularData = providerOnly(&regularProvider);
+  const EpdFontData boldData = providerOnly(&boldProvider);
+  const EpdFont regular(&regularData);
+  const EpdFont bold(&boldData);
+  const EpdFontFamily family(&regular, &bold);
+
+  family.prefetch("Wolf", 1u << EpdFontFamily::BOLD);
+
+  EXPECT_TRUE(regularProvider.prefetched.empty());
+  EXPECT_EQ(std::vector<std::string>{"Wolf"}, boldProvider.prefetched);
+}
+
+TEST(GlyphProvider, PrefetchSkipsFontsWithoutAProvider) {
+  FakeProvider boldProvider;
+  const EpdFontData builtIn{};  // a built-in font has no provider
+  const EpdFontData boldData = providerOnly(&boldProvider);
+  const EpdFont regular(&builtIn);
+  const EpdFont bold(&boldData);
+  const EpdFontFamily family(&regular, &bold);
+
+  family.prefetch("Wolf", 0x0F);
+
+  EXPECT_EQ(std::vector<std::string>{"Wolf"}, boldProvider.prefetched);
 }

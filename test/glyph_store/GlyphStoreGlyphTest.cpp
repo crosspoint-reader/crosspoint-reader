@@ -192,6 +192,22 @@ TEST_F(GlyphStoreGlyphs, ABatchThatDoesNotFitTheBufferIsRefused) {
   EXPECT_EQ(1, tiny.count());
 }
 
+TEST_F(GlyphStoreGlyphs, DropLastTakesBackOnlyTheLastRecord) {
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, 0), 9, 12));
+  ASSERT_NE(nullptr, batch.add(makeKey('B', 0, 0), metrics(10, 12)));  // its bitmap is never drawn
+  batch.dropLast();
+  batch.dropLast();  // once per add(): A stays
+  EXPECT_EQ(1, batch.count());
+  ASSERT_TRUE(stage(batch, makeKey('C', 0, 0), 8, 12));
+  ASSERT_EQ(Commit::Stored, store.commit(batch));
+  EXPECT_TRUE(storedIntact(store, makeKey('A', 0, 0), 9, 12));
+  EXPECT_EQ(Lookup::NotStored, store.find(makeKey('B', 0, 0), nullptr));
+  EXPECT_TRUE(storedIntact(store, makeKey('C', 0, 0), 8, 12));
+  const EpdGlyph* c = nullptr;
+  ASSERT_EQ(Lookup::Found, store.find(makeKey('C', 0, 0), &c));
+  EXPECT_EQ(recordSize(9, 12) + kRecordHeaderBytes, c->dataOffset);  // staged where B was
+}
+
 TEST_F(GlyphStoreGlyphs, KeysOfAnUnclaimedSizeAreRefused) {
   ASSERT_TRUE(stage(batch, makeKey('A', 0, 0), 9, 12));
   ASSERT_TRUE(stage(batch, makeKey('B', 0, kTestSizes), 9, 12));  // size index kTestSizes was never claimed
