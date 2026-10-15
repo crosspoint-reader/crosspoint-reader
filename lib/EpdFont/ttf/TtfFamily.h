@@ -9,6 +9,16 @@
 /// file is, and the identity that tells an installed glyph store whether it holds this family.
 namespace ttf {
 
+/// A loaded family's native sizes have font IDs `base | px`: a window of 256 IDs, its base a multiple of 256 with
+/// the top bit clear, so no negative ID is ever in it. FontSizeLadder makes the same IDs (its setNative()).
+constexpr uint32_t kNativeIdMask = 0xFFFFFF00u;
+inline bool isNativeId(const int32_t base, const int fontId) {
+  return base != 0 && (static_cast<uint32_t>(fontId) & kNativeIdMask) == static_cast<uint32_t>(base);
+}
+inline uint8_t nativeIdPixels(const int fontId) { return static_cast<uint8_t>(fontId & 0xFF); }
+/// A window base from `hash`: its bits 8-30. 0 (no window) when they are all clear.
+inline int32_t nativeBaseFrom(const uint32_t hash) { return static_cast<int32_t>(hash & 0x7FFFFF00u); }
+
 /// A font file read in pieces (on the SD card), not mapped.
 struct FileSource {
   uint32_t size = 0;

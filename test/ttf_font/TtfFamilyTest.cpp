@@ -275,3 +275,17 @@ TEST(TtfFamily, AFamilyFitsFlashModeOnlyWithinThePartitionAndTheMappingBudget) {
   EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 12));  // too few mapping pages for a style and a log
   EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 0, kX3FontArea, 32));
 }
+
+// --- Native size font IDs ---
+
+TEST(TtfNativeIds, AWindowHoldsItsSizesAndNothingElse) {
+  const int32_t base = ttf::nativeBaseFrom(0xDEADBEEFu);
+  EXPECT_EQ(0x5EADBE00, base);  // bits 8-30: positive, a multiple of 256
+  EXPECT_TRUE(ttf::isNativeId(base, base | 47));
+  EXPECT_EQ(47, ttf::nativeIdPixels(base | 47));
+  EXPECT_FALSE(ttf::isNativeId(base, (base + 0x100) | 47));
+  EXPECT_FALSE(ttf::isNativeId(base, static_cast<int>(0xDEADBE2Fu)));  // the same bits with the sign set
+  EXPECT_FALSE(ttf::isNativeId(0, 47));                                // no window
+}
+
+TEST(TtfNativeIds, AHashWithoutWindowBitsGivesNoWindow) { EXPECT_EQ(0, ttf::nativeBaseFrom(0x800000FFu)); }

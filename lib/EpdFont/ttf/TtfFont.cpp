@@ -22,6 +22,18 @@ const EpdGlyph kIgnorable{};
 constexpr uint32_t kCopyBytes = 4096;  // install: one SD read and one flash write per chunk
 constexpr uint8_t kMaxFailuresLogged = 16;
 
+// The largest native size whose glyphs all fit EpdGlyphRef's int8 top and left, by the face's bounding box: the
+// pixel size is rounded, and a glyph's edges round outwards, so a pixel is kept in hand.
+uint8_t nativeCeilingPx(const ttf::Face& face) {
+  uint32_t px = TtfFont::kMaxNativePx;
+  if (face.unitsPerEm == 0) return static_cast<uint8_t>(px);
+  if (face.yMax > 0) px = std::min<uint32_t>(px, INT8_MAX * static_cast<uint32_t>(face.unitsPerEm) / face.yMax - 1);
+  if (face.xMin < 0) {
+    px = std::min<uint32_t>(px, -INT8_MIN * static_cast<uint32_t>(face.unitsPerEm) / -face.xMin - 1);
+  }
+  return static_cast<uint8_t>(px);
+}
+
 // EpdGlyphRef carries left and top as int8 (spec 8.1): a glyph reaching further from the pen cannot be placed.
 ttf::Status placeable(const ttf::Status loaded, const EpdGlyph& metrics) {
   if (loaded != ttf::Status::Ok) return loaded;
@@ -34,12 +46,7 @@ ttf::Status placeable(const ttf::Status loaded, const EpdGlyph& metrics) {
 
 void TtfFont::setHooks(const Hooks& newHooks) { hooks = newHooks; }
 
-TtfFont::TtfFont(NorFlash& flash) : flash_(flash), store_(flash) {
-  for (uint8_t s = 0; s < 4; ++s) {
-    styles_[s].provider.owner = this;
-    styles_[s].provider.style = s;
-  }
-}
+TtfFont::TtfFont(NorFlash& flash) : flash_(flash), store_(flash) {}
 
 void TtfFont::checkLock() const {
   static bool logged = false;
@@ -89,21 +96,20 @@ bool TtfFont::load(const ttf::FileSource (&files)[4], const uint8_t identity[kId
   plan.outputBytes = std::min(plan.outputBytes + glyphstore::kRecordHeaderBytes + 3, ttf::kMaxOutputBytes);
   if (!rasterizer_.allocate(plan)) return false;
   if (store_.wipePending()) wipeIfPending(onBusy);
-  LOG_INF("TTF", "family loaded: %u B scratch, log %lu of %lu B used",
-          static_cast<unsigned>(rasterizer_.scratchBytes()), static_cast<unsigned long>(store_.logUsed()),
-          static_cast<unsigned long>(store_.geometry().logSize));
+  LOG_INF("TTF", "family loaded: %u B scratch, %u B per native size, log %lu of %lu B used",
+          static_cast<unsigned>(rasterizer_.scratchBytes()), static_cast<unsigned>(sizeof(Size)),
+          static_cast<unsigned long>(store_.logUsed()), static_cast<unsigned long>(store_.geometry().logSize));
   return true;
 }
 
 TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf::ScratchPlan* plan) {
   // Present styles take the store's style blocks in order, at install as here.
   uint8_t block = 0;
+  maxNativePx_ = kMaxNativePx;
   for (uint8_t s = 0; s < 4; ++s) {
     Style& style = styles_[s];
-    // Field by field: assigning a fresh Style would point its EpdFont at the temporary's data.
     style.present = false;
     style.face = {};
-    style.data = EpdFontData{};
     if (files[s].size == 0) continue;
     style.block = block++;
     glyphstore::StyleInfo info{};
@@ -116,8 +122,10 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf
       continue;
     }
     style.present = true;
-    *plan =
-        ttf::mergePlans(*plan, ttf::planScratch(style.face, ttf::ppemFromPoints(kMaxPointSize), ttf::kPoolBytesFlash));
+    maxNativePx_ = std::min(maxNativePx_, nativeCeilingPx(style.face));
+    // Planned for the largest size drawn: a native size (5 x 26 pt's pixels per em, about) above the body sizes.
+    const uint32_t largest = std::max(ttf::ppemFromPoints(kMaxPointSize), static_cast<uint32_t>(kMaxNativePx) << 6);
+    *plan = ttf::mergePlans(*plan, ttf::planScratch(style.face, largest, ttf::kPoolBytesFlash));
   }
   if (!styles_[0].present) return StylesResult::Failed;
   return StylesResult::Ok;
@@ -166,25 +174,26 @@ bool TtfFont::install(const ttf::FileSource (&files)[4], const uint8_t* identity
   return true;
 }
 
-bool TtfFont::setBodySize(const uint8_t pointSize) {
-  if (pointSize == 0 || pointSize > kMaxPointSize || !styles_[0].present) return false;
-  const uint32_t ppem = ttf::ppemFromPoints(pointSize);
+bool TtfFont::configure(Size& size, const uint32_t ppem) {
   ttf::LineMetrics metrics[4];
   for (uint8_t s = 0; s < 4; ++s) {
     if (!styles_[s].present) continue;
     metrics[s] = ttf::lineMetrics(styles_[s].face, ppem);
     if (metrics[s].advanceY <= 0 || metrics[s].advanceY > 255) {
-      LOG_ERR("TTF", "style %u at %u pt: line height %ld does not fit", s, pointSize,
+      LOG_ERR("TTF", "style %u at %lu/64 px: line height %ld does not fit", s, static_cast<unsigned long>(ppem),
               static_cast<long>(metrics[s].advanceY));
       return false;
     }
   }
-  ppem_ = ppem;
-  pointSize_ = pointSize;
+  size.ppem = ppem;
+  size.claimTried = false;
   for (uint8_t s = 0; s < 4; ++s) {
-    Style& style = styles_[s];
-    if (!style.present) continue;
+    Size::StyleFont& style = size.styles[s];
+    style.provider.owner = this;
+    style.provider.size = &size;
+    style.provider.style = s;
     style.data = EpdFontData{};
+    if (!styles_[s].present) continue;
     style.data.advanceY = static_cast<uint8_t>(metrics[s].advanceY);
     style.data.ascender = metrics[s].ascender;
     style.data.descender = metrics[s].descender;
@@ -192,27 +201,91 @@ bool TtfFont::setBodySize(const uint8_t pointSize) {
     style.data.bitmap = store_.logBase();
     style.data.provider = &style.provider;
   }
-  sizeValid_ = false;
-  claimSize();
+  return true;
+}
+
+bool TtfFont::setBodySize(const uint8_t pointSize) {
+  if (pointSize == 0 || pointSize > kMaxPointSize || !styles_[0].present) return false;
+  if (!configure(body_, ttf::ppemFromPoints(pointSize))) return false;
+  pointSize_ = pointSize;
+  claimSize(body_);
   return true;
 }
 
 const EpdFont* TtfFont::font(const uint8_t style) const {
-  return style < 4 && styles_[style].present && ppem_ != 0 ? &styles_[style].font : nullptr;
+  return style < 4 && styles_[style].present && body_.ppem != 0 ? &body_.styles[style].font : nullptr;
 }
 
-void TtfFont::claimSize() {
-  // A wipe voids every size index; claim it again once the store's generation moved.
-  if (sizeValid_ && sizeGeneration_ == store_.generation()) return;
-  sizeGeneration_ = store_.generation();
-  sizeValid_ = store_.sizeIndex(ppem_, &sizeIndex_);
+TtfFont::Size* TtfFont::nativeSize(const uint8_t px) {
+  if (px < kMinNativePx || px > maxNativePx_ || !styles_[0].present) return nullptr;
+  const uint32_t ppem = static_cast<uint32_t>(px) << 6;
+  std::unique_ptr<Size>* free = nullptr;
+  for (auto& size : native_) {
+    if (size && size->ppem == ppem) return size.get();
+    if (!size && !free) free = &size;
+  }
+  if (!free) {
+    LOG_ERR("TTF", "%u px: all %u native sizes in use; the nearest serves", px, kMaxNativeSizes);
+    return nearestNative(ppem);
+  }
+  checkLock();
+  auto size = makeUniqueNoThrow<Size>();
+  if (!size) {
+    LOG_ERR("TTF", "%u px: no memory for a native size; the nearest serves", px);
+    return nearestNative(ppem);
+  }
+  if (!configure(*size, ppem)) return nullptr;
+  *free = std::move(size);
+  return free->get();
 }
 
-bool TtfFont::storeKey(const uint8_t style, const uint32_t codepoint, uint32_t* key) {
-  if (!store_.isOpen() || ppem_ == 0) return false;
-  claimSize();
-  if (!sizeValid_) return false;
-  *key = glyphstore::makeKey(codepoint, style, sizeIndex_);
+TtfFont::Size* TtfFont::nearestNative(const uint32_t ppem) {
+  Size* nearest = nullptr;
+  uint32_t distance = UINT32_MAX;
+  for (auto& size : native_) {
+    if (!size) continue;
+    const uint32_t d = size->ppem > ppem ? size->ppem - ppem : ppem - size->ppem;
+    if (d < distance) {
+      distance = d;
+      nearest = size.get();
+    }
+  }
+  return nearest;
+}
+
+bool TtfFont::nativeFonts(const uint8_t px, const EpdFont* (&fonts)[4], uint32_t* servedPpem) {
+  Size* size = nativeSize(px);
+  if (!size) return false;
+  for (uint8_t s = 0; s < 4; ++s) fonts[s] = styles_[s].present ? &size->styles[s].font : nullptr;
+  if (servedPpem) *servedPpem = size->ppem;
+  return true;
+}
+
+void TtfFont::dropNativeSizes() {
+  for (auto& size : native_) size.reset();
+  // No record is in use either (the same safe point): the ring's blocks, which a native size grew, go too.
+  for (uint8_t i = 0; i < kRingSlots; ++i) freeRingSlot(i);
+}
+
+uint8_t TtfFont::nativeSizeCount() const {
+  uint8_t count = 0;
+  for (const auto& size : native_) count += size ? 1 : 0;
+  return count;
+}
+
+bool TtfFont::claimSize(Size& size) {
+  // A wipe voids every size index: claimed again once the store's generation moved. A claim the full table
+  // refused is not asked again before then; that size's glyphs come from the ring.
+  if (size.claimTried && size.generation == store_.generation()) return size.indexValid;
+  size.claimTried = true;
+  size.generation = store_.generation();
+  size.indexValid = store_.sizeIndex(size.ppem, &size.index);
+  return size.indexValid;
+}
+
+bool TtfFont::storeKey(Size& size, const uint8_t style, const uint32_t codepoint, uint32_t* key) {
+  if (!store_.isOpen() || size.ppem == 0 || !claimSize(size)) return false;
+  *key = glyphstore::makeKey(codepoint, style, size.index);
   return true;
 }
 
@@ -229,11 +302,11 @@ bool TtfFont::fontBytes(const uint8_t style, FontBytes* bytes) {
 
 uint32_t TtfFont::batchCapacity() const { return rasterizer_.plan().outputBytes; }
 
-const EpdGlyph* TtfFont::glyph(const uint8_t style, const uint32_t codepoint) {
-  if (style >= 4 || !styles_[style].present || ppem_ == 0) return nullptr;
+const EpdGlyph* TtfFont::glyph(Size& size, const uint8_t style, const uint32_t codepoint) {
+  if (style >= 4 || !styles_[style].present || size.ppem == 0) return nullptr;
   if (utf8IsDefaultIgnorable(codepoint)) return &kIgnorable;
   uint32_t key = 0;
-  const bool haveKey = storeKey(style, codepoint, &key);
+  const bool haveKey = storeKey(size, style, codepoint, &key);
   if (haveKey) {
     const EpdGlyph* stored = nullptr;
     switch (store_.find(key, &stored)) {
@@ -246,10 +319,11 @@ const EpdGlyph* TtfFont::glyph(const uint8_t style, const uint32_t codepoint) {
         break;
     }
   }
-  return render(style, codepoint, haveKey, key);
+  return render(size, style, codepoint, haveKey, key);
 }
 
-const EpdGlyph* TtfFont::render(const uint8_t style, const uint32_t codepoint, const bool haveKey, const uint32_t key) {
+const EpdGlyph* TtfFont::render(const Size& size, const uint8_t style, const uint32_t codepoint, const bool haveKey,
+                                const uint32_t key) {
   checkLock();
   FontBytes bytes;
   if (!fontBytes(style, &bytes)) return nullptr;
@@ -261,7 +335,7 @@ const EpdGlyph* TtfFont::render(const uint8_t style, const uint32_t codepoint, c
     return nullptr;
   }
   EpdGlyph metrics{};
-  const ttf::Status loaded = placeable(rasterizer_.load(bytes, face, index, ppem_, &metrics), metrics);
+  const ttf::Status loaded = placeable(rasterizer_.load(bytes, face, index, size.ppem, &metrics), metrics);
   if (loaded != ttf::Status::Ok) {
     failed(style, codepoint, loaded, haveKey, key);
     return nullptr;
@@ -292,7 +366,12 @@ const EpdGlyph* TtfFont::drawToRing(const EpdGlyph& metrics) {
   ringNext_ = static_cast<uint8_t>((ringNext_ + 1) % kRingSlots);
   if (metrics.dataLength > ringCapacity_[slot]) {
     // One heap block per slot, kept and reused while it is large enough: the ring exists only after the store
-    // filled up, for oversized glyphs, or without a store.
+    // filled up, for oversized glyphs, for a size the store had no room for, or without a store. A record is
+    // promised only until the next miss, so the oldest slots give way when the ring would pass its budget.
+    freeRingSlot(slot);
+    for (uint8_t age = 1; age < kRingSlots && ringBytes() + metrics.dataLength > kRingBudgetBytes; ++age) {
+      freeRingSlot(static_cast<uint8_t>((slot + age) % kRingSlots));  // the slot after this one is the oldest
+    }
     ringBitmaps_[slot] = makeUniqueNoThrow<uint8_t[]>(metrics.dataLength);
     ringCapacity_[slot] = ringBitmaps_[slot] ? metrics.dataLength : 0;
     if (!ringBitmaps_[slot]) {
@@ -304,6 +383,17 @@ const EpdGlyph* TtfFont::drawToRing(const EpdGlyph& metrics) {
   ringGlyphs_[slot] = metrics;
   ringGlyphs_[slot].dataOffset = 0;
   return &ringGlyphs_[slot];
+}
+
+void TtfFont::freeRingSlot(const uint8_t slot) {
+  ringBitmaps_[slot].reset();
+  ringCapacity_[slot] = 0;
+}
+
+uint32_t TtfFont::ringBytes() const {
+  uint32_t bytes = 0;
+  for (const uint16_t capacity : ringCapacity_) bytes += capacity;
+  return bytes;
 }
 
 bool TtfFont::ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const {
@@ -348,10 +438,10 @@ void TtfFont::noteCommit(const Commit result) {
   }
 }
 
-void TtfFont::prefetch(const uint8_t style, const char* utf8Text) {
+void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
   if (!utf8Text || style >= 4 || !styles_[style].present || ringMode_) return;
   uint32_t key = 0;
-  if (!storeKey(style, 0, &key)) return;
+  if (!storeKey(size, style, 0, &key)) return;
   checkLock();
   FontBytes bytes;
   if (!fontBytes(style, &bytes)) return;
@@ -369,7 +459,7 @@ void TtfFont::prefetch(const uint8_t style, const char* utf8Text) {
       asciiSeen[cp >> 5] |= 1u << (cp & 31);
     }
     if (utf8IsDefaultIgnorable(cp)) continue;
-    key = glyphstore::makeKey(cp, style, sizeIndex_);
+    key = glyphstore::makeKey(cp, style, size.index);
     if (store_.find(key, nullptr) != Lookup::NotStored) continue;
     if (std::any_of(pending_, pending_ + count, [cp](const Pending& p) { return p.codepoint == cp; })) continue;
     const uint16_t index = ttf::glyphIndex(bytes, face, cp);
@@ -387,9 +477,9 @@ void TtfFont::prefetch(const uint8_t style, const char* utf8Text) {
   GlyphBatch batch(rasterizer_.output(), batchCapacity());
   for (uint8_t i = 0; i < count && !ringMode_; ++i) {
     const Pending& p = pending_[i];
-    key = glyphstore::makeKey(p.codepoint, style, sizeIndex_);
+    key = glyphstore::makeKey(p.codepoint, style, size.index);
     EpdGlyph metrics{};
-    const ttf::Status loaded = placeable(rasterizer_.load(bytes, face, p.glyph, ppem_, &metrics), metrics);
+    const ttf::Status loaded = placeable(rasterizer_.load(bytes, face, p.glyph, size.ppem, &metrics), metrics);
     if (loaded != ttf::Status::Ok) {
       failed(style, p.codepoint, loaded, true, key);
       continue;
@@ -420,13 +510,17 @@ bool TtfFont::wipeIfPending(const std::function<void()>& onBusy) {
   if (!store_.wipe()) return false;  // stays pending: the next book open tries again
   LOG_INF("TTF", "glyph store wiped");
   ringMode_ = false;
-  for (uint8_t i = 0; i < kRingSlots; ++i) {
-    ringBitmaps_[i].reset();
-    ringCapacity_[i] = 0;
+  for (uint8_t i = 0; i < kRingSlots; ++i) freeRingSlot(i);
+  // The log may map elsewhere now; every size claims its index again at its next lookup.
+  const auto rebase = [this](Size& size) {
+    if (size.ppem == 0) return;
+    for (uint8_t s = 0; s < 4; ++s) {
+      if (styles_[s].present) size.styles[s].data.bitmap = store_.logBase();
+    }
+  };
+  rebase(body_);
+  for (auto& size : native_) {
+    if (size) rebase(*size);
   }
-  for (Style& style : styles_) {
-    if (style.present && ppem_ != 0) style.data.bitmap = store_.logBase();
-  }
-  if (ppem_ != 0) claimSize();
   return true;
 }

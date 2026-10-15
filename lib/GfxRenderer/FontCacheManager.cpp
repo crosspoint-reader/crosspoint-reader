@@ -29,6 +29,12 @@ void FontCacheManager::clearCache() {
   }
 }
 
+const EpdFontFamily* FontCacheManager::findFamily(const int fontId) const {
+  if (lookup_) return lookup_(lookupCtx_, fontId);
+  const auto it = fontMap_.find(fontId);
+  return it != fontMap_.end() ? &it->second : nullptr;
+}
+
 void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask) {
   // Deliberately does NOT clear existing page slots: a page that mixes fonts (body +
   // heading) is prewarmed with one call per font, and clearing here would wipe the
@@ -62,16 +68,16 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
 
   // A face whose glyphs come from a provider (TTF): each requested style renders its missing glyphs in
   // one batch. Nothing for built-in fonts.
-  const auto family = fontMap_.find(fontId);
-  if (family != fontMap_.end()) family->second.prefetch(utf8Text, styleMask);
+  const EpdFontFamily* family = findFamily(fontId);
+  if (family) family->prefetch(utf8Text, styleMask);
 
   // Standard compressed font prewarm path: loop over all requested styles
-  if (!fontDecompressor_ || family == fontMap_.end()) return;
+  if (!fontDecompressor_ || !family) return;
 
   for (uint8_t i = 0; i < 4; i++) {
     if (!(styleMask & (1 << i))) continue;
     auto style = static_cast<EpdFontFamily::Style>(i);
-    const EpdFontData* data = fontMap_.at(fontId).getData(style);
+    const EpdFontData* data = family->getData(style);
     if (!data || !data->groups) continue;
     int missed = fontDecompressor_->prewarmCache(data, utf8Text);
     if (missed < 0) {

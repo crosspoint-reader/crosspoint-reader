@@ -125,22 +125,26 @@ class FlashGlyphStore {
   // --- Sizes ---
 
   /// The size-table index for a pixels-per-em (26.6), claiming a free entry (a flash write) on first use.
-  /// False when all entries are taken (wipe is then pending), on a write error, or for a new size while wipe
-  /// is pending. A wipe empties the table: indices claimed before it are void, and commits under them are
-  /// refused until they are claimed again.
+  /// False when all entries are taken, on a write error, or for a new size while wipe is pending. Taking the last
+  /// entry makes the wipe pending but stops nothing else: the claimed sizes go on storing their glyphs until the wipe.
+  /// A wipe empties the table: indices claimed before it are void, and commits under them are refused until
+  /// they are claimed again.
   bool sizeIndex(uint32_t ppem26_6, uint8_t* index);
 
   // --- Kerning pairs ---
 
   bool findPair(uint16_t left, uint16_t right, uint8_t style, int16_t* fontUnits) const;
   /// Stores a pair's kerning in font units. False when it was not stored: the pair index is full (pairs then
-  /// come from the GPOS reader every time; never a reason to wipe), wipe is pending, or a write failed (which
-  /// sets wipe pending).
+  /// come from the GPOS reader every time; never a reason to wipe), writes are stopped, or a write failed (which
+  /// stops them).
   bool storePair(uint16_t left, uint16_t right, uint8_t style, int16_t fontUnits);
 
   // --- A full store, and the wipe ---
 
   bool wipePending() const { return wipePending_; }
+  /// Nothing is written until the next wipe: the log or the index filled, a write failed, or the store opened
+  /// with a wipe pending. A full size table alone does not stop writes.
+  bool writesStopped() const { return writesStopped_; }
   /// Records wipe pending in flash, then erases the index, the pair index and the log (only sectors that hold
   /// data) and last the state sector (size table and wipe word). A cut anywhere leaves wipe pending, and the
   /// next wipe() finishes the job. Call it only where no pointer into the log and no size index is in use:
@@ -171,7 +175,7 @@ class FlashGlyphStore {
   bool readSizeEntry(uint8_t i, glyphstore::SizeEntry& entry) const;
   bool eraseWritten(uint32_t offset, uint32_t len);
   bool isBlank(uint32_t sector) const;
-  void setWipePending();
+  void stopWrites();
   bool recordWipePending();
 
   NorFlash& flash_;
@@ -191,5 +195,6 @@ class FlashGlyphStore {
   uint32_t generation_ = 0;
   bool open_ = false;
   bool wipePending_ = false;
+  bool writesStopped_ = false;
   std::unique_ptr<glyphstore::Header> installing_;  // written by finishInstall()
 };

@@ -51,6 +51,25 @@ struct FontSizeLadder {
   Rung rungs[kMaxRungs] = {};
   int8_t count = 0;
 
+  // A family drawn natively at any size (a TTF family) has no rungs: every size is a face of its own at a whole
+  // number of pixels per em, font ID nativeBase | px (SdCardFontManager hands out that window of 256 IDs and makes
+  // a face on the first lookup of one). Whole pixels keep the leftover scale inside the dead zone from about 17 px
+  // up, so nothing is resampled; above nativeMaxPx the largest face is drawn scaled. Also derived from the body
+  // fontId alone (the family's identity is in both), so not hashed either.
+  int32_t nativeBase = 0;       // 0: no native sizes
+  uint32_t nativeBodyPpem = 0;  // the body face's pixels per em, 26.6
+  uint8_t nativeMinPx = 0;
+  uint8_t nativeMaxPx = 0;
+
+  void setNative(const int32_t base, const uint32_t bodyPpem26_6, const uint8_t minPx, const uint8_t maxPx) {
+    if (base == 0 || bodyPpem26_6 == 0 || minPx == 0 || maxPx < minPx) return;
+    nativeBase = base;
+    nativeBodyPpem = bodyPpem26_6;
+    nativeMinPx = minPx;
+    nativeMaxPx = maxPx;
+  }
+  bool native() const { return nativeBase != 0; }
+
   void addRung(const int32_t fontId, const uint16_t sizePct) {
     if (count >= kMaxRungs || fontId == 0 || sizePct == 0) return;
     rungs[count].fontId = fontId;
@@ -78,7 +97,7 @@ struct FontSizeLadder {
   // ladder, or a nearest rung of 100%, keeps the body font with the full scale
   // as residual — exactly the legacy scale-only behavior.
   Resolved resolve(const float desiredPct) const {
-    Resolved r = resolveExact(desiredPct);
+    Resolved r = native() ? resolveNative(desiredPct) : resolveExact(desiredPct);
     if (r.residual > 1.0f - kResidualDeadZone && r.residual < 1.0f + kResidualDeadZone) {
       r.residual = 1.0f;
     }
@@ -86,6 +105,23 @@ struct FontSizeLadder {
   }
 
  private:
+  Resolved resolveNative(const float desiredPct) const {
+    Resolved r;
+    r.residual = desiredPct / 100.0f;
+    // Within the dead zone of the body size, the body face itself.
+    if (desiredPct <= 0.0f || (r.residual > 1.0f - kResidualDeadZone && r.residual < 1.0f + kResidualDeadZone)) {
+      return r;
+    }
+    const float target = static_cast<float>(nativeBodyPpem) / 64.0f * r.residual;
+    // Clamped as a float: a book's CSS can ask for any size, and converting one beyond int's range is undefined.
+    const float lo = nativeMinPx;
+    const float hi = nativeMaxPx;
+    const int px = static_cast<int>((target > hi ? hi : target > lo ? target : lo) + 0.5f);
+    r.fontId = nativeBase | px;
+    r.residual = target / static_cast<float>(px);
+    return r;
+  }
+
   Resolved resolveExact(const float desiredPct) const {
     Resolved r;
     r.residual = desiredPct / 100.0f;

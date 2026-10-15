@@ -3,10 +3,14 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+class EpdFontFamily;
 class GfxRenderer;
+template <typename Family>
+struct ResolvedFont;
 class BuildArena;
 class SdCardFont;
 class NorFlash;
@@ -70,6 +74,21 @@ class SdCardFontManager {
   void wipeTtfIfPending(const std::function<void()>& onBusy);
   bool ttfLoaded() const { return ttf_ != nullptr; }
 
+  // The loaded TTF family's native sizes (headings, CSS sizes, drop caps at their own pixel size). The renderer
+  // asks for a size's font ID the first time something is laid out or drawn with it (the resolver installed at
+  // load), and the face is made then. Their IDs come from a window FontSizeLadder::setNative() computes too.
+  struct NativeSizes {
+    int32_t base = 0;       // font ID base | px
+    uint32_t bodyPpem = 0;  // the body face's pixels per em, 26.6
+    uint8_t minPx = 0;
+    uint8_t maxPx = 0;
+  };
+  // For a body font ID of the loaded TTF family; nothing for any other font, or when no window was free.
+  std::optional<NativeSizes> ttfNativeSizes(int bodyFontId) const;
+  // Forgets every native size: their font IDs leave the renderer and their faces are freed. Only where nothing laid
+  // out with them is in use: book open, a body size change, unload.
+  void dropTtfNativeSizes(GfxRenderer& renderer);
+
   // Font ID that renders the loaded family AT pointSize: the face itself when that is the loaded
   // size, the alias when one was made for it, else 0 -- never a nearby size. The setting says
   // "24pt" and the page has to be 24pt; a quiet 18pt is indistinguishable from the feature not
@@ -94,6 +113,9 @@ class SdCardFontManager {
   bool loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize,
                      const std::function<void()>& onColdLoad);
   void registerTtfFace(GfxRenderer& renderer, int fontId);
+  int32_t pickNativeBase(const GfxRenderer& renderer, uint32_t identityHash, const char* familyName) const;
+  bool fontIdTaken(const GfxRenderer& renderer, int fontId) const;
+  static std::optional<ResolvedFont<EpdFontFamily>> resolveTtfSize(void* ctx, int fontId);
 
   GfxRenderer* renderer_ = nullptr;
   std::string loadedFamilyName_;
@@ -109,4 +131,5 @@ class SdCardFontManager {
   std::unique_ptr<TtfFont> ttf_;
   uint32_t ttfIdentityHash_ = 0;
   int ttfFontId_ = 0;
+  int32_t ttfNativeBase_ = 0;  // the native sizes' ID window; 0: none
 };

@@ -78,12 +78,13 @@ class GfxRenderer {
   FontResolverHook<EpdFontFamily> fontResolver_;
   // The one place a font ID becomes a family: fontMap, then the resolver for an unknown ID.
   const EpdFontFamily* findFontFamily(const int fontId) const {
-    return findOrResolveFont(fontMap, fontId, fontResolver_);
+    return findOrResolveFont(fontMap, fontBaseScales, fontId, fontResolver_);
   }
-  // Font IDs that render another family's faces at a fixed scale -- see insertScaledFont(). Only
-  // synthesised sizes appear here, so the map is empty on a build that ships every size for real
-  // and the lookup is a miss that costs one comparison.
-  std::map<int, float> fontBaseScales;
+  // Font IDs that render another family's faces at a fixed scale -- see insertScaledFont(), and a
+  // resolver's stand-in for a size it could not make. Only synthesised sizes appear here, so the
+  // map is empty on a build that ships every size for real and the lookup is a miss that costs one
+  // comparison. Mutable for the resolver, as fontMap.
+  mutable std::map<int, float> fontBaseScales;
   // Mutable because ensureFontReady() is const (called from layout code that
   // holds a const GfxRenderer&) but triggers SD card reads and heap allocation
   // inside the SdCardFont objects. Same pragmatic compromise as fontCacheManager_.
@@ -289,11 +290,9 @@ class GfxRenderer {
   ///
   /// Callers that need a size in pixels should use the ordinary accessors, which already apply
   /// this; it is exposed for the few places that must know a size is synthesised at all.
-  float fontBaseScale(int fontId) const {
-    const auto it = fontBaseScales.find(fontId);
-    return it == fontBaseScales.end() ? 1.0f : it->second;
-  }
-  void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
+  float fontBaseScale(int fontId) const { return resolvedBaseScale(fontMap, fontBaseScales, fontId, fontResolver_); }
+  // The manager prewarms through this renderer's font lookup, so it reaches the faces the resolver makes.
+  void setFontCacheManager(FontCacheManager* m);
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
   // Drop every rebuildable font cache (glyph metadata, bitmaps, kern) while leaving
   // the fonts loaded and usable — everything faults back in on demand. Lets callers
@@ -305,8 +304,9 @@ class GfxRenderer {
   /// Lets a font source supply families for IDs nobody registered yet, on first use. The
   /// resolver is asked on every lookup of an ID that is not in fontMap, so declining must be
   /// cheap. A family it returns is emplaced into fontMap directly (no insertFont(): no cache
-  /// invalidation, no log). It must not look fonts up through this renderer, or it recurses.
-  void setFontResolver(std::optional<EpdFontFamily> (*resolve)(void* ctx, int fontId), void* ctx) {
+  /// invalidation, no log), with its scale, if not 1, in the base scales. It must not look fonts
+  /// up through this renderer, or it recurses.
+  void setFontResolver(std::optional<ResolvedFont<EpdFontFamily>> (*resolve)(void* ctx, int fontId), void* ctx) {
     fontResolver_ = FontResolverHook<EpdFontFamily>{resolve, ctx};
   }
   // Each of these can retire an EpdFontData a cached scaled mask is keyed on, so

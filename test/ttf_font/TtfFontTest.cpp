@@ -30,18 +30,25 @@ struct Reference {
   std::vector<uint8_t> bitmap;
 };
 
-Reference reference(const std::vector<uint8_t>& file, const uint32_t cp, const uint8_t points) {
+/// The same at a pixels-per-em (26.6).
+Reference referenceAt(const std::vector<uint8_t>& file, const uint32_t cp, const uint32_t ppem) {
   FontBytes bytes(file.data(), static_cast<uint32_t>(file.size()));
   ttf::Face face;
   EXPECT_EQ(ttf::FaceStatus::Ok, ttf::parseFace(bytes, &face));
   ttf::Rasterizer rasterizer;
-  EXPECT_TRUE(rasterizer.allocate(ttf::planScratch(face, ttf::ppemFromPoints(26), ttf::kPoolBytesFlash)));
+  EXPECT_TRUE(rasterizer.allocate(
+      ttf::planScratch(face, static_cast<uint32_t>(TtfFont::kMaxNativePx) << 6, ttf::kPoolBytesFlash)));
   Reference ref;
-  EXPECT_EQ(ttf::Status::Ok, rasterizer.render(bytes, face, ttf::glyphIndex(bytes, face, cp),
-                                               ttf::ppemFromPoints(points), &ref.metrics));
+  EXPECT_EQ(ttf::Status::Ok, rasterizer.render(bytes, face, ttf::glyphIndex(bytes, face, cp), ppem, &ref.metrics));
   ref.bitmap.assign(rasterizer.output(), rasterizer.output() + ref.metrics.dataLength);
   return ref;
 }
+
+Reference reference(const std::vector<uint8_t>& file, const uint32_t cp, const uint8_t points) {
+  return referenceAt(file, cp, ttf::ppemFromPoints(points));
+}
+
+constexpr uint32_t px(const uint32_t pixels) { return pixels << 6; }
 
 /// A glyph's bitmap, wherever TtfFont keeps it: the ring, or the store's log.
 std::vector<uint8_t> bitmapOf(const TtfFont& font, const uint8_t style, const EpdGlyph* glyph) {
@@ -550,4 +557,194 @@ TEST_F(TtfFontTest, EpdFontFamilyPrefetchReachesTheStylesFont) {
   EXPECT_EQ(4u, font->renders());
   expectDrawnAs(reference(files[kBold].bytes, 'W', 14), *font, kBold, font->glyph(kBold, 'W'));
   EXPECT_EQ(4u, font->renders());  // prefetched
+}
+
+// --- Native sizes: headings, CSS sizes and drop caps at their own pixel size ---
+
+namespace {
+
+/// A native size's glyph, as the renderer asks for it: through the style's provider.
+const EpdGlyph* nativeGlyph(const EpdFont* font, const uint32_t cp) {
+  return font ? font->data->provider->missGlyph(cp) : nullptr;
+}
+
+}  // namespace
+
+TEST_F(TtfFontTest, ANativeSizeIsDrawnAtItsOwnPixelSize) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(40, fonts));
+  for (const uint8_t style : {kRegular, kBold, kItalic}) {
+    ASSERT_NE(nullptr, fonts[style]);
+    expectDrawnAs(referenceAt(files[style].bytes, 'M', px(40)), *font, style, nativeGlyph(fonts[style], 'M'));
+  }
+  // Its line metrics are the face's at 40 px.
+  FontBytes bytes(files[kRegular].bytes.data(), static_cast<uint32_t>(files[kRegular].bytes.size()));
+  ttf::Face face;
+  ASSERT_EQ(ttf::FaceStatus::Ok, ttf::parseFace(bytes, &face));
+  const ttf::LineMetrics expected = ttf::lineMetrics(face, px(40));
+  EXPECT_EQ(expected.advanceY, fonts[kRegular]->data->advanceY);
+  EXPECT_EQ(expected.ascender, fonts[kRegular]->data->ascender);
+  EXPECT_EQ(expected.descender, fonts[kRegular]->data->descender);
+}
+
+TEST_F(TtfFontTest, ANativeSizeIsMadeOnceAndStoredApartFromTheBody) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* first[4] = {};
+  const EpdFont* again[4] = {};
+  const EpdFont* other[4] = {};
+  ASSERT_TRUE(font->nativeFonts(40, first));
+  ASSERT_TRUE(font->nativeFonts(40, again));
+  ASSERT_TRUE(font->nativeFonts(41, other));
+  EXPECT_EQ(first[kRegular], again[kRegular]);
+  EXPECT_NE(first[kRegular], other[kRegular]);
+  EXPECT_EQ(2u, font->nativeSizeCount());
+  const EpdGlyph* body = font->glyph(kRegular, 'M');
+  const EpdGlyph* at40 = nativeGlyph(first[kRegular], 'M');
+  ASSERT_NE(nullptr, at40);
+  EXPECT_NE(body->width, at40->width);
+  EXPECT_EQ(at40, nativeGlyph(again[kRegular], 'M'));  // read from the store the second time
+  EXPECT_EQ(2u, font->renders());
+}
+
+TEST_F(TtfFontTest, NativeSizesOutsideTheRangeAreRefused) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  EXPECT_FALSE(font->nativeFonts(TtfFont::kMinNativePx - 1, fonts));
+  EXPECT_FALSE(font->nativeFonts(TtfFont::kMaxNativePx + 1, fonts));
+  EXPECT_EQ(nullptr, fonts[kRegular]);
+  EXPECT_EQ(0u, font->nativeSizeCount());
+}
+
+TEST_F(TtfFontTest, TheLargestNativeSizeDrawsEveryGlyphOfTheFamily) {
+  // Planned for: the output region holds each glyph, and its top fits EpdGlyphRef.
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  EXPECT_EQ(119, font->maxNativePx());  // Bookerly: 120 px less the pixel kept in hand for rounding
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts));
+  for (const uint32_t cp : {uint32_t{'W'}, uint32_t{'@'}, uint32_t{'Q'}, uint32_t{0xC5}}) {
+    for (const uint8_t style : {kRegular, kBold, kItalic}) {
+      const EpdGlyph* glyph = nativeGlyph(fonts[style], cp);
+      ASSERT_NE(nullptr, glyph) << std::hex << cp << " style " << int{style};
+      expectDrawnAs(referenceAt(files[style].bytes, cp, px(font->maxNativePx())), *font, style, glyph);
+    }
+  }
+}
+
+TEST_F(TtfFontTest, TheLargestNativeSizeKeepsTheFamilysTallestGlyphInsideEpdGlyphRef) {
+  // A glyph reaching 1.2 em above the baseline (stacked accents, as in Vietnamese capitals) passes int8's 127 px
+  // top above 105 px: the family's native sizes stop there, and larger text is the largest of them scaled.
+  Font built;
+  built.glyphs.resize(2);
+  built.glyphs[0].contours = {rect(0, 0, 400, 600)};
+  built.glyphs[1].contours = {rect(50, 0, 450, 1200)};
+  built.cmap = {{'A', 1}};
+  useBuiltFont(built);
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  EXPECT_EQ(104, font->maxNativePx());  // 127 * 1000 / 1200, less a pixel for rounding
+  const EpdFont* fonts[4] = {};
+  EXPECT_FALSE(font->nativeFonts(105, fonts));
+  ASSERT_TRUE(font->nativeFonts(104, fonts));
+  const EpdGlyph* tall = nativeGlyph(fonts[kRegular], 'A');
+  ASSERT_NE(nullptr, tall);  // drawn, not marked missing
+  EXPECT_LE(tall->top, INT8_MAX);
+}
+
+TEST_F(TtfFontTest, TheRingStaysWithinItsBudgetAndGoesWithTheNativeSizes) {
+  // A native size's glyphs are large (2-4 KB at the largest size); drawn through the ring, eight of them would hold
+  // tens of KB until the next wipe. A record is promised only until the next miss, so the oldest go first.
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts));
+  flash.failNextProgram();  // the size's claim fails: its glyphs are drawn into the ring
+  for (const char c : std::string("WMQ@BDGHKNOR")) {
+    const EpdGlyph* glyph = nativeGlyph(fonts[kRegular], static_cast<uint8_t>(c));
+    const uint8_t* bitmap = nullptr;
+    ASSERT_TRUE(font->ownsBitmap(glyph, bitmap)) << c;
+    expectDrawnAs(referenceAt(files[kRegular].bytes, static_cast<uint8_t>(c), px(font->maxNativePx())), *font, kRegular,
+                  glyph);  // the newest record is always whole
+    EXPECT_LE(font->ringBytes(), TtfFont::kRingBudgetBytes) << c;
+  }
+  font->dropNativeSizes();  // only where no record is in use: book open
+  EXPECT_EQ(0u, font->ringBytes());
+}
+
+TEST_F(TtfFontTest, WhenEveryNativeSizeIsHeldTheNearestServesUntilTheyAreDropped) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  for (uint8_t i = 0; i < TtfFont::kMaxNativeSizes; ++i) {
+    ASSERT_TRUE(font->nativeFonts(static_cast<uint8_t>(TtfFont::kMinNativePx + i), fonts)) << int{i};
+  }
+  const EpdFont* largestHeld[4] = {};
+  const uint8_t largestPx = TtfFont::kMinNativePx + TtfFont::kMaxNativeSizes - 1;
+  uint32_t served = 0;
+  ASSERT_TRUE(font->nativeFonts(largestPx, largestHeld, &served));
+  EXPECT_EQ(px(largestPx), served);  // its own size
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts, &served));
+  EXPECT_EQ(largestHeld[kRegular], fonts[kRegular]);
+  EXPECT_EQ(px(largestPx), served);  // the nearest size serves, and says so: the caller scales it
+  EXPECT_EQ(TtfFont::kMaxNativeSizes, font->nativeSizeCount());
+  font->dropNativeSizes();
+  EXPECT_EQ(0u, font->nativeSizeCount());
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts));
+  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(font->maxNativePx())), *font, kRegular,
+                nativeGlyph(fonts[kRegular], 'M'));
+}
+
+TEST_F(TtfFontTest, ADroppedSizeMadeAgainFindsItsStoredGlyphs) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(40, fonts));
+  ASSERT_NE(nullptr, nativeGlyph(fonts[kRegular], 'M'));
+  font->dropNativeSizes();
+  ASSERT_TRUE(font->nativeFonts(40, fonts));
+  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(40)), *font, kRegular, nativeGlyph(fonts[kRegular], 'M'));
+  EXPECT_EQ(1u, font->renders());
+}
+
+TEST_F(TtfFontTest, ASizeTheFullTableRefusesIsDrawnFromTheRingWhileTheOthersStore) {
+  const auto font = open();  // the body takes the first size entry
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  // Every native size takes an entry at its first glyph: 16, dropped, then 15 more fill the 32 entries.
+  for (uint8_t pixels = 20; pixels < 20 + 31; ++pixels) {
+    if (font->nativeSizeCount() == TtfFont::kMaxNativeSizes) font->dropNativeSizes();
+    ASSERT_TRUE(font->nativeFonts(pixels, fonts));
+    ASSERT_NE(nullptr, nativeGlyph(fonts[kRegular], 'a')) << int{pixels};
+  }
+  font->dropNativeSizes();
+  ASSERT_TRUE(font->nativeFonts(60, fonts));
+  const EpdGlyph* refused = nativeGlyph(fonts[kRegular], 'M');
+  const uint8_t* bitmap = nullptr;
+  EXPECT_TRUE(font->ownsBitmap(refused, bitmap));  // drawn without being stored
+  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(60)), *font, kRegular, refused);
+  EXPECT_FALSE(font->ringMode());
+  EXPECT_FALSE(font->ownsBitmap(font->glyph(kRegular, 'Q'), bitmap));  // the body still stores its glyphs
+  // The wipe at the next book open frees the table.
+  EXPECT_TRUE(font->wipeIfPending());
+  EXPECT_FALSE(font->ownsBitmap(nativeGlyph(fonts[kRegular], 'M'), bitmap));
+  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(60)), *font, kRegular, nativeGlyph(fonts[kRegular], 'M'));
+}
+
+TEST_F(TtfFontTest, PrefetchStoresANativeSizesGlyphs) {
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(48, fonts));
+  fonts[kRegular]->data->provider->prefetch("Chapter One");
+  const uint32_t renders = font->renders();
+  EXPECT_EQ(10u, renders);  // C h a p t e r O n and the space (no ink, but a glyph): each once
+  for (const char c : std::string("Chapter One")) {
+    expectDrawnAs(referenceAt(files[kRegular].bytes, static_cast<uint8_t>(c), px(48)), *font, kRegular,
+                  nativeGlyph(fonts[kRegular], static_cast<uint8_t>(c)));
+  }
+  EXPECT_EQ(renders, font->renders());
 }

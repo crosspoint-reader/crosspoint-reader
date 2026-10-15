@@ -31,7 +31,8 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 81;  // v81: a paragraph over 96 words gets its top margin and padding
+constexpr uint8_t SECTION_FILE_VERSION = 82;  // v82: a TTF family draws every size with a face of its own
+                                              // v81: a paragraph over 96 words gets its top margin and padding
                                               // v79: a <span> styled display:block is a block,
                                               // and every block in a heading keeps its centring
                                               // and size (#388); v78 pages run them together

@@ -54,6 +54,36 @@ TEST_F(GlyphStoreSizes, WhenEverySizeIsTakenTheStoreIsFull) {
   EXPECT_EQ(3, claim(23 << 6));  // known sizes are still answered
 }
 
+TEST_F(GlyphStoreSizes, ClaimingTheLastFreeSizeMakesTheWipePending) {
+  // Otherwise a table filled exactly at the end of one book refuses the next book's body size until a book after it.
+  for (uint32_t i = 0; i + 1 < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  EXPECT_FALSE(store.wipePending());
+  EXPECT_EQ(static_cast<int>(kSizeEntries - 1), claim(99 << 6));
+  EXPECT_TRUE(store.wipePending());
+  EXPECT_FALSE(store.writesStopped());
+  EXPECT_EQ(3, claim(23 << 6));  // claimed sizes are still answered
+}
+
+TEST_F(GlyphStoreSizes, AFullSizeTableStopsOnlyNewSizes) {
+  for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  EXPECT_EQ(-1, claim(99 << 6));
+  ASSERT_TRUE(store.wipePending());
+  EXPECT_FALSE(store.writesStopped());
+  // The claimed sizes still store their glyphs, missing glyphs and pairs until the wipe.
+  alignas(4) uint8_t buffer[256];
+  GlyphBatch batch(buffer, sizeof buffer);
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, 5), 9, 12));
+  EXPECT_EQ(Commit::Stored, store.commit(batch));
+  EXPECT_EQ(Lookup::Found, store.find(makeKey('A', 0, 5), nullptr));
+  EXPECT_EQ(Commit::Stored, store.markNoGlyph(makeKey(0x2603, 0, 5)));
+  EXPECT_TRUE(store.storePair('A', 'V', 0, -74));
+  // The next session wipes first.
+  store.close();
+  ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
+  EXPECT_TRUE(store.wipePending());
+  EXPECT_TRUE(store.writesStopped());
+}
+
 TEST_F(GlyphStoreSizes, ASizeEntryCutShortIsNeverReused) {
   flash.cutAfterSteps(5);  // the ppem and one byte of `claimed` land
   EXPECT_EQ(-1, claim(29 << 6));
@@ -112,8 +142,11 @@ TEST_F(GlyphStorePairs, ImpossiblePairsAreRefused) {
   EXPECT_EQ(0u, store.usedPairSlots());
 }
 
-TEST_F(GlyphStorePairs, PairsAreNotStoredWhileWipeIsPending) {
+TEST_F(GlyphStorePairs, PairsAreNotStoredWhileWritesAreStopped) {
   fillSizeTable(store);
+  store.close();  // a store that opens with wipe pending writes nothing until the wipe
+  ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
+  ASSERT_TRUE(store.writesStopped());
   EXPECT_FALSE(store.storePair('A', 'V', 0, -74));
   EXPECT_EQ(0u, store.usedPairSlots());
 }

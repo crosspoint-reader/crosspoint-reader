@@ -1267,7 +1267,12 @@ void ChapterHtmlSlimParser::finalizePendingDropCap() {
   // rather than falling back to scaling the small body font — same decompressor budget.
   int32_t capFontId = 0;  // 0 = body font
   float capScale = pendingDropCap_.multiplier;
-  {
+  if (fontSizeLadder_.native()) {
+    // Every size has a face of its own: the cap is drawn at its own size, scaled only above the largest face.
+    const FontSizeLadder::Resolved r = fontSizeLadder_.resolve(pendingDropCap_.multiplier * 100.0f);
+    capFontId = r.fontId;
+    capScale = r.residual;
+  } else {
     int best = -1;
     for (int i = 0; i < fontSizeLadder_.count; ++i) {
       const auto& rung = fontSizeLadder_.rungs[i];
@@ -3865,8 +3870,10 @@ void ChapterHtmlSlimParser::resolveBlockFont(BlockStyle& bs) {
     bs.fontSizeMultiplier = r.residual;
     return;
   }
-  if (auxFontId_ == 0) auxFontId_ = r.fontId;
-  if (r.fontId != auxFontId_) return;  // aux budget already claimed by another size — scale fallback
+  if (!fontSizeLadder_.native()) {
+    if (auxFontId_ == 0) auxFontId_ = r.fontId;
+    if (r.fontId != auxFontId_) return;  // aux budget already claimed by another size — scale fallback
+  }
   bs.headingFontId = r.fontId;
   bs.fontSizeMultiplier = r.residual;
 }
