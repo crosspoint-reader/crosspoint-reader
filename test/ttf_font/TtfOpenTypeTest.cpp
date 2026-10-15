@@ -1,10 +1,9 @@
 // Kerning and ligatures for the TTF engine (TtfOpenType): the glue over the SDK's FreeInkFont layout readers, which
 // test the OpenType rules themselves (libs/font/FreeInkFont/test/host). Here: that a style finds and resolves its
 // tables, which table it kerns from, and the ligatures EpdFont applies, on built fonts and on Bookerly.
-#include <gtest/gtest.h>
-
 #include <Gpos.h>
 #include <Gsub.h>
+#include <gtest/gtest.h>
 
 #include <cstdint>
 #include <vector>
@@ -208,5 +207,89 @@ TEST(TtfLigatures, BookerlyHasTheFiAndFlLigatures) {
     ASSERT_TRUE(ttf::resolveLigatures(bytes, face, &ligatures)) << name;
     EXPECT_NE(0, ligatures.glyphs[1]) << name << " fi";
     EXPECT_NE(0, ligatures.glyphs[2]) << name << " fl";
+  }
+}
+
+// --- Hostile and truncated tables ---
+
+TEST(TtfKerning, AStyleKeepsAtMostTheSubtableCap) {
+  // 1,100 PairPos subtables in one lookup. The first kern 1-2; the last one alone kerns 5-6.
+  const uint16_t total = ttf::Kerning::kMaxSubtables + 76;
+  LayoutLookup lookup;
+  for (uint16_t s = 0; s < total; ++s) {
+    PairSubtable pairs;
+    if (s + 1 == total) {
+      pairs.pairs = {{5, {{6, 77}}}};
+    } else {
+      pairs.pairs = {{1, {{2, -50}}}};
+    }
+    lookup.pairSubtables.push_back(pairs);
+  }
+  Font font = boxes(6);
+  font.extraTables = {{"GPOS", layoutTable({{"latn", {0}}}, {{"kern", {0}}}, {lookup})}};
+  Parsed p(font);
+  ttf::Kerning kerning;
+  ASSERT_TRUE(kerning.resolve(p.bytes, p.face));
+  EXPECT_EQ(ttf::Kerning::kMaxSubtables, kerning.subtableCount());
+  EXPECT_EQ(-50, kerning.pair(p.bytes, p.face, 1, 2));
+  // The subtable past the cap is dropped, so its pair kerns 0: the first ones are kept.
+  EXPECT_EQ(0, kerning.pair(p.bytes, p.face, 5, 6));
+}
+
+TEST(TtfKerning, ATruncatedGposKernsSafely) {
+  Font font = boxes(4);
+  font.extraTables = {{"GPOS", kernedGpos()}};
+  Parsed p(font);
+  const uint32_t full = p.face.gposLength;
+  ASSERT_GT(full, 0u);
+  for (uint32_t length = 0; length <= full; ++length) {
+    ttf::Face cut = p.face;
+    cut.gposLength = length;
+    ttf::Kerning kerning;
+    const bool resolved = kerning.resolve(p.bytes, cut);
+    const int32_t a = kerning.pair(p.bytes, cut, 1, 2);
+    const int32_t b = kerning.pair(p.bytes, cut, 1, 3);
+    const int32_t c = kerning.pair(p.bytes, cut, 3, 1);
+    if (length == full) {
+      EXPECT_TRUE(resolved);
+      EXPECT_EQ(-50, a);
+      EXPECT_EQ(30, b);
+      EXPECT_EQ(0, c);
+    }
+  }
+}
+
+TEST(TtfLigatures, ABrokenGsubLigatesSafely) {
+  Font font = boxes(10);
+  font.cmap['f'] = 1;
+  font.cmap['i'] = 2;
+  font.cmap['l'] = 3;
+  LayoutLookup liga;
+  liga.type = 4;
+  liga.ligatures = {{{1, 1, 2}, 7}, {{1, 1, 3}, 8}, {{1, 1}, 4}, {{1, 2}, 5}, {{1, 3}, 6}};
+  font.extraTables = {{"GSUB", layoutTable({{"latn", {0}}}, {{"liga", {0}}}, {liga}, /*gsub=*/true)}};
+  Parsed p(font);
+  ASSERT_NE(0u, p.face.gsub);
+  const auto check = [&](const ttf::Face& face, const char* what, const uint32_t at) {
+    ttf::Ligatures ligatures;
+    ttf::resolveLigatures(p.bytes, face, &ligatures);
+    ASSERT_LE(ligatures.count, 5) << what << " " << at;
+    for (uint8_t k = 0; k < ligatures.count; ++k) {
+      ASSERT_NE(0, ligatures.glyphs[ligatures.pairs[k].ligatureCp - ttf::Ligatures::kFirst]) << what << " " << at;
+      if (k != 0) {
+        ASSERT_LT(ligatures.pairs[k - 1].pair, ligatures.pairs[k].pair) << what << " " << at;
+      }
+    }
+  };
+  const uint32_t full = p.face.gsubLength;
+  for (uint32_t length = 0; length <= full; ++length) {
+    ttf::Face cut = p.face;
+    cut.gsubLength = length;
+    check(cut, "truncated", length);
+  }
+  for (uint32_t i = 0; i < full; ++i) {
+    p.file[p.face.gsub + i] ^= 0xFF;
+    check(p.face, "corrupted", i);
+    p.file[p.face.gsub + i] ^= 0xFF;
   }
 }
