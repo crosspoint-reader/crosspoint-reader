@@ -94,6 +94,7 @@ bool ClipSelectionActivity::extractWords() {
     return false;
   }
   rowCount = 0;
+  displayFormCount = 0;
   const bool needsFontPrewarm = renderer.isSdCardFont(fontId);
   auto pageText = needsFontPrewarm ? makeUniqueNoThrow<char[]>(FONT_PREWARM_TEXT_MAX) : nullptr;
   size_t pageTextLength = 0;
@@ -121,7 +122,8 @@ bool ClipSelectionActivity::extractWords() {
         if (!clippingText::hasVisibleText(text)) continue;
 
         const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-        int width = renderer.getTextAdvanceX(fontId, text, style, characterSpacing);
+        const GfxRenderer::LaidOutText measured = block->laidOutWord(i);
+        int width = renderer.getTextAdvanceX(fontId, measured, style, characterSpacing);
         if (width <= 0) continue;
         if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
           width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i)));
@@ -141,6 +143,7 @@ bool ClipSelectionActivity::extractWords() {
         word.startOffset = block->wordSourceRange(i).start;
         word.endOffset = block->wordSourceRange(i).end;
         word.text = text;
+        word.display = storeDisplayForm(measured.display);
         word.style = style;
         word.characterSpacing = characterSpacing;
         word.paragraphStart = false;
@@ -189,6 +192,25 @@ bool ClipSelectionActivity::extractWords() {
   }
 
   return true;
+}
+
+uint16_t ClipSelectionActivity::storeDisplayForm(const char* display) {
+  // Without room the word is resolved from its text when drawn.
+  if (display == nullptr || displayFormCount == MAX_SELECTABLE_WORDS) return WordBox::NO_DISPLAY;
+  if (!displayForms) {
+    displayForms = makeUniqueNoThrow<const char*[]>(MAX_SELECTABLE_WORDS);
+    if (!displayForms) {
+      LOG_DBG("CLIP", "Display forms: OOM, words resolve when drawn");
+      displayFormCount = MAX_SELECTABLE_WORDS;  // no retry for every later word
+      return WordBox::NO_DISPLAY;
+    }
+  }
+  displayForms[displayFormCount] = display;
+  return displayFormCount++;
+}
+
+GfxRenderer::LaidOutText ClipSelectionActivity::laidOut(const WordBox& word) const {
+  return {word.text, word.display == WordBox::NO_DISPLAY ? nullptr : displayForms[word.display]};
 }
 
 int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) const {
@@ -651,8 +673,10 @@ int ClipSelectionActivity::textXOffset() const {
 
 void ClipSelectionActivity::prewarmWord(const int index) const {
   if (index >= 0 && index < static_cast<int>(wordCount) && words[index].text) {
+    const GfxRenderer::LaidOutText word = laidOut(words[index]);
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, words[index].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
+        fontId, word.display ? word.display : word.text,
+        static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
   }
 }
 
@@ -692,7 +716,7 @@ void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, co
     clearGapBetween(word, words[index + 1], offsetX, offset);
   }
 
-  renderer.drawText(fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
+  renderer.drawText(fontId, word.x + offsetX, word.y + offset, laidOut(word), true, word.style,
                     BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
 }
 
@@ -712,7 +736,7 @@ void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSe
   }
 
   renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-  renderer.drawText(fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
+  renderer.drawText(fontId, word.x + offsetX, word.y + offset, laidOut(word), true, word.style,
                     BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
 }
 
@@ -809,7 +833,7 @@ void ClipSelectionActivity::drawSelection() const {
     if (word.pageOffset != currentPageOffset) continue;
     if (previous) ditherGapBetween(*previous, word, offsetX, offset);
     renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-    renderer.drawText(fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
+    renderer.drawText(fontId, word.x + offsetX, word.y + offset, laidOut(word), true, word.style,
                       BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
     previous = &word;
   }

@@ -48,6 +48,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "ComplexShaper.h"
 #include "EpdFont.h"
 #include "EpdFontData.h"
 #include "EpdFontFamily.h"
@@ -68,6 +69,12 @@ class TtfEpdFont {
   bool load(uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 32 * 1024, uint16_t maxGlyphs = 768);
 
   EpdFontFamily family() const;
+
+  // Identifies the configured sources' content: each file's size and sfnt
+  // table directory, whose table checksums, offsets and lengths font tools
+  // rewrite when a table changes (renumbered glyphs included). Page caches
+  // store shaped glyph IDs, so a replaced file must not reuse their pages.
+  uint32_t contentKey() const;
 
   // Per-scope reset (mirrors SdCardFont::clearCache): drop every face's cached
   // page glyphs but KEEP the allocations (byte arena + vector capacity), so a
@@ -139,6 +146,17 @@ class TtfEpdFont {
   static const uint8_t* bitmapThunk(void* ctx, const EpdGlyph* glyph);
   static bool coverageThunk(void* ctx, uint32_t codepoint);
   static int8_t kernThunk(void* ctx, uint32_t leftCp, uint32_t rightCp);
+  static bool shapeThunk(void* ctx, const char* utf8, std::string* out);
+  // ComplexShaper::AdvanceSource over a Face (ctx = Face*).
+  static int32_t advanceThunk(void* ctx, uint32_t glyph);
+  // ComplexShaper::TableLoader over a Source (ctx = const Source*).
+  static uint8_t* loadTable(void* ctx, uint32_t tag, uint32_t* length);
+  // Reads `count` bytes at `offset`; a failed streamed read in range notes
+  // the shaping source unavailable when `noteFailure`.
+  static bool readSource(const Source& src, uint32_t offset, uint8_t* buffer, uint32_t count, bool noteFailure);
+  // The offset of the sfnt table directory (a collection is read through its
+  // first font, the face FreeType renders) and the header found there.
+  static bool readSfntHeader(const Source& src, bool noteFailure, uint32_t* base, uint8_t (&header)[12]);
 
   void resolveFaces();             // map the 4 faces onto the configured sources
   void initFace(Face& f);          // lazy: create the FT face on first use
@@ -148,7 +166,12 @@ class TtfEpdFont {
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
 
-  Source sources_[4];      // indexed by Style role
+  Source sources_[4];  // indexed by Style role
+  // One shaper per face, indexed like faces_. Faces synthesized from the same
+  // file share its glyph IDs, and their shapers share its layout tables.
+  ComplexShaper shapers_[4];
+  // Per source: 0 = unchecked, 1 = covers a complex script, 2 = does not.
+  uint8_t shapingCoverage_[4] = {};
   Face faces_[4];          // 0=regular 1=bold 2=italic 3=bold-italic
   uint32_t size26_6_ = 0;  // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
   bool loaded_ = false;

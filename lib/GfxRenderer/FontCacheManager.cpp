@@ -3,6 +3,7 @@
 #include <FontDecompressor.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <ShapingTokens.h>
 #include <TtfEpdFont.h>
 #include <Utf8.h>
 
@@ -159,6 +160,7 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
   while (*cursor) {
     const uint32_t codepoint = utf8NextCodepoint(&cursor);
     if (codepoint == 0) break;
+    if (shaping::isPositionToken(codepoint)) continue;  // modifies the next glyph; has no glyph of its own
 
     const uint32_t packed = (static_cast<uint32_t>(fontSlot) << SCAN_FONT_SHIFT) |
                             (static_cast<uint32_t>(resolvedStyle) << SCAN_STYLE_SHIFT) | codepoint;
