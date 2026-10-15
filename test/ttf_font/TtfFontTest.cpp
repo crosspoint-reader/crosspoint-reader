@@ -642,9 +642,13 @@ TEST_F(TtfFontTest, WhenEveryNativeSizeIsHeldTheNearestServesUntilTheyAreDropped
     ASSERT_TRUE(font->nativeFonts(static_cast<uint8_t>(TtfFont::kMinNativePx + i), fonts)) << int{i};
   }
   const EpdFont* largestHeld[4] = {};
-  ASSERT_TRUE(font->nativeFonts(TtfFont::kMinNativePx + TtfFont::kMaxNativeSizes - 1, largestHeld));
-  ASSERT_TRUE(font->nativeFonts(TtfFont::kMaxNativePx, fonts));
+  const uint8_t largestPx = TtfFont::kMinNativePx + TtfFont::kMaxNativeSizes - 1;
+  uint32_t served = 0;
+  ASSERT_TRUE(font->nativeFonts(largestPx, largestHeld, &served));
+  EXPECT_EQ(px(largestPx), served);  // its own size
+  ASSERT_TRUE(font->nativeFonts(TtfFont::kMaxNativePx, fonts, &served));
   EXPECT_EQ(largestHeld[kRegular], fonts[kRegular]);
+  EXPECT_EQ(px(largestPx), served);  // the nearest size serves, and says so: the caller scales it
   EXPECT_EQ(TtfFont::kMaxNativeSizes, font->nativeSizeCount());
   font->dropNativeSizes();
   EXPECT_EQ(0u, font->nativeSizeCount());

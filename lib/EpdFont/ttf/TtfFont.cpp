@@ -239,10 +239,11 @@ TtfFont::Size* TtfFont::nearestNative(const uint32_t ppem) {
   return nearest;
 }
 
-bool TtfFont::nativeFonts(const uint8_t px, const EpdFont* (&fonts)[4]) {
+bool TtfFont::nativeFonts(const uint8_t px, const EpdFont* (&fonts)[4], uint32_t* servedPpem) {
   Size* size = nativeSize(px);
   if (!size) return false;
   for (uint8_t s = 0; s < 4; ++s) fonts[s] = styles_[s].present ? &size->styles[s].font : nullptr;
+  if (servedPpem) *servedPpem = size->ppem;
   return true;
 }
 

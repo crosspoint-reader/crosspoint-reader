@@ -212,17 +212,27 @@ bool SdCardFontManager::fontIdTaken(const GfxRenderer& renderer, const int fontI
   return renderer.getFontMap().count(fontId) != 0 || ttf::isNativeId(ttfNativeBase_, fontId);
 }
 
-std::optional<EpdFontFamily> SdCardFontManager::resolveTtfSize(void* ctx, const int fontId) {
+std::optional<ResolvedFont<EpdFontFamily>> SdCardFontManager::resolveTtfSize(void* ctx, const int fontId) {
   // Asked for every font ID the renderer does not know: declining is one comparison.
   auto* self = static_cast<SdCardFontManager*>(ctx);
   if (!self->ttf_ || !ttf::isNativeId(self->ttfNativeBase_, fontId)) return std::nullopt;
+  const uint8_t px = ttf::nativeIdPixels(fontId);
   const EpdFont* fonts[4] = {};
-  if (!self->ttf_->nativeFonts(ttf::nativeIdPixels(fontId), fonts)) {
-    // The text must still be laid out and drawn, the same way all session: with the body face.
-    LOG_ERR("SDMGR", "%u px cannot be drawn natively; the body face serves", ttf::nativeIdPixels(fontId));
+  uint32_t served = 0;
+  if (!self->ttf_->nativeFonts(px, fonts, &served)) {
+    LOG_ERR("SDMGR", "%u px cannot be drawn natively; the body face serves", px);
     for (uint8_t s = 0; s < 4; ++s) fonts[s] = self->ttf_->font(s);
+    served = self->ttf_->bodyPpem();
   }
-  return EpdFontFamily(fonts[0], fonts[1], fonts[2], fonts[3]);
+  // A stand-in (the nearest size held, or the body) is scaled to `px`: a page laid out with this ID in another
+  // session, where the size itself served, keeps its measurements.
+  ResolvedFont<EpdFontFamily> resolved{EpdFontFamily(fonts[0], fonts[1], fonts[2], fonts[3])};
+  const uint32_t wanted = static_cast<uint32_t>(px) << 6;
+  if (served != 0 && served != wanted) {
+    resolved.baseScale = static_cast<float>(wanted) / static_cast<float>(served);
+    LOG_INF("SDMGR", "%u px drawn from the %lu/64 px size, scaled", px, static_cast<unsigned long>(served));
+  }
+  return resolved;
 }
 
 std::optional<SdCardFontManager::NativeSizes> SdCardFontManager::ttfNativeSizes(const int bodyFontId) const {
@@ -259,6 +269,8 @@ bool SdCardFontManager::setTtfBodySize(GfxRenderer& renderer, const uint8_t poin
             pointSize);
     return false;
   }
+  // A native size the body stood in for was scaled from the old body size: all of them go, and come back on demand.
+  dropTtfNativeSizes(renderer);
   if (!ttf_->setBodySize(pointSize)) return false;
   renderer.removeFont(ttfFontId_);
   registerTtfFace(renderer, fontId);

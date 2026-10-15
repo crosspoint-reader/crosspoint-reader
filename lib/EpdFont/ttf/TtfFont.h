@@ -66,10 +66,11 @@ class TtfFont {
   uint32_t bodyPpem() const { return body_.ppem; }
 
   /// The four fonts of the native size `px` (whole pixels per em), made on first use; nullptr for a style the
-  /// family lacks. When all kMaxNativeSizes are held, or memory is short, the nearest size held serves instead, a
-  /// few percent off. False, with `fonts` untouched, when `px` is outside kMinNativePx..kMaxNativePx, a line
-  /// height does not fit EpdFontData, or no size can serve. They live until dropNativeSizes() or the font's end.
-  bool nativeFonts(uint8_t px, const EpdFont* (&fonts)[4]);
+  /// family lacks. When all kMaxNativeSizes are held, or memory is short, the nearest size held serves instead:
+  /// `servedPpem` (26.6) says which, so the caller can scale it to `px`. False, with `fonts` untouched, when `px`
+  /// is outside kMinNativePx..kMaxNativePx, a line height does not fit EpdFontData, or no size can serve. They live
+  /// until dropNativeSizes() or the font's end.
+  bool nativeFonts(uint8_t px, const EpdFont* (&fonts)[4], uint32_t* servedPpem = nullptr);
   /// Frees every native size. Only once nothing refers to their fonts any more (their font IDs removed).
   void dropNativeSizes();
   uint8_t nativeSizeCount() const;

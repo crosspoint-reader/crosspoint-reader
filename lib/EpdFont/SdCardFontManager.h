@@ -9,6 +9,8 @@
 
 class EpdFontFamily;
 class GfxRenderer;
+template <typename Family>
+struct ResolvedFont;
 class BuildArena;
 class SdCardFont;
 class NorFlash;
@@ -83,8 +85,8 @@ class SdCardFontManager {
   };
   // For a body font ID of the loaded TTF family; nothing for any other font, or when no window was free.
   std::optional<NativeSizes> ttfNativeSizes(int bodyFontId) const;
-  // Forgets every native size: their font IDs leave the renderer and their faces are freed. Only at book open,
-  // where nothing laid out with them is in use.
+  // Forgets every native size: their font IDs leave the renderer and their faces are freed. Only where nothing laid
+  // out with them is in use: book open, a body size change, unload.
   void dropTtfNativeSizes(GfxRenderer& renderer);
 
   // Font ID that renders the loaded family AT pointSize: the face itself when that is the loaded
@@ -113,7 +115,7 @@ class SdCardFontManager {
   void registerTtfFace(GfxRenderer& renderer, int fontId);
   int32_t pickNativeBase(const GfxRenderer& renderer, uint32_t identityHash, const char* familyName) const;
   bool fontIdTaken(const GfxRenderer& renderer, int fontId) const;
-  static std::optional<EpdFontFamily> resolveTtfSize(void* ctx, int fontId);
+  static std::optional<ResolvedFont<EpdFontFamily>> resolveTtfSize(void* ctx, int fontId);
 
   GfxRenderer* renderer_ = nullptr;
   std::string loadedFamilyName_;
