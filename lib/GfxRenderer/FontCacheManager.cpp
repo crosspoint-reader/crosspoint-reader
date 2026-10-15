@@ -60,8 +60,13 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
     return;
   }
 
+  // A face whose glyphs come from a provider (TTF): each requested style renders its missing glyphs in
+  // one batch. Nothing for built-in fonts.
+  const auto family = fontMap_.find(fontId);
+  if (family != fontMap_.end()) family->second.prefetch(utf8Text, styleMask);
+
   // Standard compressed font prewarm path: loop over all requested styles
-  if (!fontDecompressor_ || fontMap_.count(fontId) == 0) return;
+  if (!fontDecompressor_ || family == fontMap_.end()) return;
 
   for (uint8_t i = 0; i < 4; i++) {
     if (!(styleMask & (1 << i))) continue;

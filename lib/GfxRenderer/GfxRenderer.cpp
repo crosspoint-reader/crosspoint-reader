@@ -48,7 +48,12 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
 
 void GfxRenderer::ensureFontReady(int fontId, const char* utf8Text) const {
   SdCardFont* font = sdCardFontFor(fontId);  // native ID or scaled alias
-  if (!font) return;                         // no-op for built-in fonts
+  if (!font) {
+    // A face whose glyphs come from a provider (TTF) renders the run's missing glyphs in one batch.
+    // Layout passes no style, so the regular face it measures most with; built-in fonts do nothing.
+    if (const EpdFontFamily* family = findFontFamily(fontId)) family->prefetch(utf8Text, 1u << EpdFontFamily::REGULAR);
+    return;
+  }
   // Metadata-only: loads glyph metrics (advanceX) without bitmap data.
   // Saves ~50-100 KB heap vs full prewarm — layout only needs advance widths.
   int missed = font->prewarm(utf8Text, 0x0F, /*metadataOnly=*/true,

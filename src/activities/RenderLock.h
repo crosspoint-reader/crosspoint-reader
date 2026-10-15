@@ -40,4 +40,6 @@ class RenderLock {
   bool ownsLock() const { return isLocked; }
   void unlock();
   static bool peek();
+  // True when the calling task holds renderingMutex: the debug check for code that relies on it.
+  static bool heldByCurrentTask();
 };

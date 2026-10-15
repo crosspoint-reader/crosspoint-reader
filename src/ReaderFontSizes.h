@@ -33,6 +33,18 @@ struct ReaderSizeList {
     return list;
   }
 
+  /// The smallest size a natively drawn family offers. Points convert to pixels at the converter's 150 dpi on
+  /// every board, so 8 pt is about 17 px per em on all of them; the denser the panel, the smaller it looks.
+  static constexpr uint8_t kNativeSmallestPoints = 8;
+
+  /// What a TrueType family offers: its glyphs are drawn from the outlines at any size, so the ladder plus the
+  /// sizes below it, in the ladder's 2 pt steps, down to kNativeSmallestPoints.
+  static ReaderSizeList native() {
+    ReaderSizeList list = builtin();
+    for (uint8_t pt = kNativeSmallestPoints; pt < list.points[0]; pt += 2) list.insert(pt);
+    return list;
+  }
+
   /// What an SD family offers: every size it ships a file for, then the ladder sizes above its
   /// largest file. Those are drawn from that file scaled up (SdCardFontManager::ensureSizeAlias),
   /// so large print stays available whatever the family was built at. A ladder size below the
