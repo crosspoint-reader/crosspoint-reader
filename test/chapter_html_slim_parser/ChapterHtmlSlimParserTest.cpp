@@ -2,6 +2,7 @@
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -119,7 +120,24 @@ TEST_F(ChapterHtmlSlimParserTest, UnequalTableCellsAndRubySurvivePageBreaks) {
   for (const auto& lines : parser.tableCellLines) EXPECT_TRUE(lines.empty());
 }
 
-TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleSnapsToBuiltinSizes) {
+TEST(ReaderFontSizes, BuiltinVariantsStayInFamilyAndRespectSizeBounds) {
+  for (const auto& family : {
+           std::array{NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID},
+           std::array{NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
+       }) {
+    EXPECT_EQ(builtinReaderFontVariant(family[1], 1.0f), family[1]);
+    EXPECT_EQ(builtinReaderFontVariant(family[1], 2.0f), family[3]);
+    EXPECT_EQ(builtinReaderFontVariant(family[1], 1.17f), family[2]);
+    EXPECT_EQ(builtinReaderFontVariant(family[1], 0.83f), family[0]);
+    EXPECT_EQ(builtinReaderFontVariant(family[3], 0.9f), family[2]);
+    EXPECT_EQ(builtinReaderFontVariant(family[0], 0.5f), family[0]);
+    EXPECT_EQ(builtinReaderFontVariant(family[3], 3.0f), family[3]);
+    EXPECT_EQ(builtinReaderFontVariant(family[0], 1.25f), family[1]);  // ties keep the smaller size
+  }
+  EXPECT_EQ(builtinReaderFontVariant(12345, 2.0f), 0);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleUsesProviderAndFallsBackToBodyFont) {
   for (const int id : {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID}) {
     renderer.fontMap.emplace(id, EpdFontFamily(nullptr));
   }
@@ -128,6 +146,8 @@ TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleSnapsToBuiltinSizes) {
   EXPECT_EQ(parser.fontIdForScale(2.0f), NOTOSERIF_18_FONT_ID);
   EXPECT_EQ(parser.fontIdForScale(1.17f), NOTOSERIF_16_FONT_ID);
   EXPECT_EQ(parser.fontIdForScale(0.83f), NOTOSERIF_12_FONT_ID);
+  EXPECT_EQ(parser.fontIdForScale(0.96f), NOTOSERIF_14_FONT_ID);
+  EXPECT_EQ(parser.fontIdForScale(1.04f), NOTOSERIF_14_FONT_ID);
   parser.fontId = NOTOSANS_14_FONT_ID;  // family not registered with the renderer
   EXPECT_EQ(parser.fontIdForScale(2.0f), NOTOSANS_14_FONT_ID);
   parser.fontId = 12345;  // SD or vector font: never rescaled

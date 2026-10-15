@@ -16,7 +16,6 @@
 #include <iterator>
 #include <new>
 
-#include "../../../../src/fontIds.h"
 #include "Epub.h"
 #include "Epub/Page.h"
 #include "Epub/VisibleTextUtils.h"
@@ -2890,35 +2889,8 @@ void ChapterHtmlSlimParser::applyBlockFontScale(BlockStyle& blockStyle, const Cs
   blockStyle.fontScaleDefined = true;
 }
 
-namespace {
-// Built-in reader families live in flash at these sizes, so switching a block to
-// another size costs no RAM. SD and vector fonts get their sizes from the renderer's
-// variant provider.
-constexpr uint8_t BUILTIN_LADDER_POINTS[] = {12, 14, 16, 18};
-constexpr int BUILTIN_LADDERS[][std::size(BUILTIN_LADDER_POINTS)] = {
-    {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID},
-    {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
-};
-}  // namespace
-
 int ChapterHtmlSlimParser::fontIdForScale(const float scale) const {
   if (std::fabs(scale - 1.0f) < 0.05f) return fontId;
-  for (const auto& ladder : BUILTIN_LADDERS) {
-    const int* base = std::find(std::begin(ladder), std::end(ladder), fontId);
-    if (base == std::end(ladder)) continue;
-    const float target = BUILTIN_LADDER_POINTS[base - ladder] * scale;
-    size_t pick = scale < 1.0f ? 0 : static_cast<size_t>(base - ladder);
-    for (size_t i = 0; i < std::size(BUILTIN_LADDER_POINTS); ++i) {
-      const float points = BUILTIN_LADDER_POINTS[i];
-      // Shrinking takes the largest size at or below the target, so small print
-      // never rounds back up to body size; growing takes the nearest size.
-      if (scale < 1.0f ? points <= target
-                       : std::fabs(points - target) < std::fabs(BUILTIN_LADDER_POINTS[pick] - target)) {
-        pick = i;
-      }
-    }
-    return renderer.getFontMap().count(ladder[pick]) ? ladder[pick] : fontId;
-  }
   const int variant = renderer.resolveFontVariant(fontId, scale);
   return variant != 0 ? variant : fontId;
 }

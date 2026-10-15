@@ -7,6 +7,8 @@
 #include <map>
 #include <string>
 
+#include "src/ReaderFontSizes.h"
+
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 }
@@ -54,10 +56,12 @@ class GfxRenderer {
   int getScreenHeight() const { return 800; }
   int getLineHeight(int, float = 1.0f) const { return 16; }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
-  // Fixture variant provider: maps (fontId, scale) to fontId * 1000 + scale * 100 when set.
+  // Fixture provider uses built-in sizes, or synthetic IDs when variantsEnabled.
   bool variantsEnabled = false;
   int resolveFontVariant(int fontId, float scale) const {
-    return variantsEnabled ? fontId * 1000 + static_cast<int>(scale * 100 + 0.5f) : 0;
+    if (variantsEnabled) return fontId * 1000 + static_cast<int>(scale * 100 + 0.5f);
+    const int builtin = builtinReaderFontVariant(fontId, scale);
+    return fontMap.count(builtin) ? builtin : 0;
   }
   bool ensureFontLoaded(int fontId) const { return variantsEnabled || fontMap.count(fontId) != 0 || fontId == 0; }
   std::map<int, EpdFontFamily> fontMap;

@@ -31,8 +31,8 @@ struct Frame;
 // 0 = transparent, 1-16 = gray levels (white to black)
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
 
-// Sized variants of the reader font (installed .cpfont sizes, vector faces), supplied by
-// the SD font system. resolve returns a font id registered with the renderer for `fontId`
+// Sized variants of the reader font (built-in, installed .cpfont, or vector), supplied by
+// the font system. resolve returns a font id registered with the renderer for `fontId`
 // scaled by `scale`, or 0 when there is none; load re-registers a previously resolved id
 // after it was evicted or the device rebooted, returning false when it cannot.
 struct FontVariantProvider {
