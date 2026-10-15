@@ -129,6 +129,19 @@ TEST_F(TtfFontTest, AStoreThatNoLongerMapsIsInstalledAgain) {
   expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *font, kRegular, font->glyph(kRegular, 'A'));
 }
 
+TEST_F(TtfFontTest, AStyleThatNoLongerMapsIsInstalledAgain) {
+  ASSERT_NE(nullptr, open());
+  // Fewer mapping pages than the install planned for, but enough for the index and log regions: open() succeeds
+  // and only a style's own mapping fails.
+  flash.setFreePages(26);
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  EXPECT_EQ(2, busy);
+  EXPECT_NE(nullptr, font->font(kBold));
+  expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *font, kRegular, font->glyph(kRegular, 'A'));
+  expectDrawnAs(reference(files[kBold].bytes, 'A', 14), *font, kBold, font->glyph(kBold, 'A'));
+}
+
 TEST_F(TtfFontTest, AFamilyWithoutARegularStyleIsRefused) {
   files[0].bytes.clear();
   EXPECT_EQ(nullptr, open());

@@ -55,9 +55,11 @@ bool TtfFont::load(const ttf::FileSource (&files)[4], const uint8_t identity[kId
     LOG_ERR("TTF", "family has no regular style");
     return false;
   }
+  bool installed = false;
   OpenResult opened = store_.open(identity);
   if (opened == OpenResult::NotInstalled || opened == OpenResult::OtherFamily || opened == OpenResult::MapFailed) {
     if (!install(files, identity, onBusy)) return false;
+    installed = true;
     opened = store_.open(identity);
   }
   if (opened != OpenResult::Ready) {
@@ -65,8 +67,36 @@ bool TtfFont::load(const ttf::FileSource (&files)[4], const uint8_t identity[kId
     return false;
   }
 
-  // Present styles take the store's style blocks in order, at install as here.
   ttf::ScratchPlan plan;
+  StylesResult styles = openStyles(files, &plan);
+  if (styles == StylesResult::MapFailed && !installed) {
+    // The regions opened but a style no longer maps: the mapping budget shrank since the install (a firmware
+    // update). Install again with a plan for today's budget (spec 6.2); a fresh install that still cannot map a
+    // style is refused below rather than installed again at every load.
+    LOG_INF("TTF", "a style no longer fits the mapping budget; installing the family again");
+    if (!install(files, identity, onBusy)) return false;
+    opened = store_.open(identity);
+    if (opened != OpenResult::Ready) {
+      LOG_ERR("TTF", "glyph store did not open after a reinstall (%u)", static_cast<unsigned>(opened));
+      return false;
+    }
+    plan = ttf::ScratchPlan{};
+    styles = openStyles(files, &plan);
+  }
+  if (styles != StylesResult::Ok) return false;
+
+  // The output region doubles as the batch buffer, so it also holds the record header of its largest bitmap.
+  plan.outputBytes = std::min(plan.outputBytes + glyphstore::kRecordHeaderBytes + 3, ttf::kMaxOutputBytes);
+  if (!rasterizer_.allocate(plan)) return false;
+  if (store_.wipePending()) wipeIfPending(onBusy);
+  LOG_INF("TTF", "family loaded: %u B scratch, log %lu of %lu B used",
+          static_cast<unsigned>(rasterizer_.scratchBytes()), static_cast<unsigned long>(store_.logUsed()),
+          static_cast<unsigned long>(store_.geometry().logSize));
+  return true;
+}
+
+TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf::ScratchPlan* plan) {
+  // Present styles take the store's style blocks in order, at install as here.
   uint8_t block = 0;
   for (uint8_t s = 0; s < 4; ++s) {
     Style& style = styles_[s];
@@ -77,27 +107,20 @@ bool TtfFont::load(const ttf::FileSource (&files)[4], const uint8_t identity[kId
     if (files[s].size == 0) continue;
     style.block = block++;
     glyphstore::StyleInfo info{};
-    if (!store_.styleInfo(style.block, info)) return false;
+    if (!store_.styleInfo(style.block, info)) return StylesResult::Failed;
     style.bytes = info.size;
     FontBytes bytes;
-    if (!fontBytes(s, &bytes) || ttf::parseFace(bytes, &style.face) != ttf::FaceStatus::Ok) {
+    if (!fontBytes(s, &bytes)) return StylesResult::MapFailed;
+    if (ttf::parseFace(bytes, &style.face) != ttf::FaceStatus::Ok) {
       LOG_ERR("TTF", "style %u is not a font the engine draws", s);
       continue;
     }
     style.present = true;
-    plan =
-        ttf::mergePlans(plan, ttf::planScratch(style.face, ttf::ppemFromPoints(kMaxPointSize), ttf::kPoolBytesFlash));
+    *plan =
+        ttf::mergePlans(*plan, ttf::planScratch(style.face, ttf::ppemFromPoints(kMaxPointSize), ttf::kPoolBytesFlash));
   }
-  if (!styles_[0].present) return false;
-
-  // The output region doubles as the batch buffer, so it also holds the record header of its largest bitmap.
-  plan.outputBytes = std::min(plan.outputBytes + glyphstore::kRecordHeaderBytes + 3, ttf::kMaxOutputBytes);
-  if (!rasterizer_.allocate(plan)) return false;
-  if (store_.wipePending()) wipeIfPending(onBusy);
-  LOG_INF("TTF", "family loaded: %u B scratch, log %lu of %lu B used",
-          static_cast<unsigned>(rasterizer_.scratchBytes()), static_cast<unsigned long>(store_.logUsed()),
-          static_cast<unsigned long>(store_.geometry().logSize));
-  return true;
+  if (!styles_[0].present) return StylesResult::Failed;
+  return StylesResult::Ok;
 }
 
 bool TtfFont::install(const ttf::FileSource (&files)[4], const uint8_t* identity, const std::function<void()>& onBusy) {

@@ -96,6 +96,11 @@ class TtfFont {
     uint16_t glyph;
   };
 
+  // What opening the installed styles found: MapFailed means a style's block cannot be mapped (the budget shrank
+  // since the install); Failed, no usable regular style or an unreadable header.
+  enum class StylesResult : uint8_t { Ok, MapFailed, Failed };
+
+  StylesResult openStyles(const ttf::FileSource (&files)[4], ttf::ScratchPlan* plan);
   bool install(const ttf::FileSource (&files)[4], const uint8_t* identity, const std::function<void()>& onBusy);
   bool fontBytes(uint8_t style, FontBytes* bytes);
   bool storeKey(uint8_t style, uint32_t codepoint, uint32_t* key);
