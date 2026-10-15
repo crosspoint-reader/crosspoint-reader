@@ -18,14 +18,22 @@
 /// into the `spiffs` partition when the family is installed, and read there in place. A glyph is rendered the
 /// first time it is looked up and stored, so later lookups, in this session and the next, read it from flash.
 ///
-/// It serves one face, the body size: four EpdFontData without tables, so every lookup goes to a per-style
-/// GlyphProvider adapter. Kerning, ligatures and the size-ladder rungs come in later stages.
+/// It serves the body size and, on demand, native sizes (headings, CSS sizes, drop caps at their own pixel size):
+/// each size is four EpdFontData without tables, so every lookup goes to a per-style GlyphProvider adapter, and has
+/// its own entry in the store's size table. Kerning and ligatures come in later stages.
 ///
 /// Not thread-safe: every call runs under RenderLock (spec 3.4).
 class TtfFont {
  public:
   /// The largest reader size: the scratch block is planned for it, and setBodySize() refuses anything larger.
   static constexpr uint8_t kMaxPointSize = 26;
+  /// Native sizes, in whole pixels per em. The scratch block is planned for the largest: its output region then
+  /// holds any glyph up to 4 KB, and a glyph's top stays inside EpdGlyphRef's int8. Larger text is drawn from the
+  /// largest size scaled.
+  static constexpr uint8_t kMinNativePx = 10;
+  static constexpr uint8_t kMaxNativePx = 120;
+  /// Native sizes held at once, until dropNativeSizes().
+  static constexpr uint8_t kMaxNativeSizes = 16;
   static constexpr uint8_t kRingSlots = 8;
   /// Missing glyphs one prefetch() call renders at most; the rest render as they are looked up.
   static constexpr uint8_t kPrefetchGlyphs = 64;
@@ -54,6 +62,17 @@ class TtfFont {
   uint8_t bodySize() const { return pointSize_; }
   /// The body face's font for `style`; nullptr for a style the family lacks (EpdFontFamily then falls back).
   const EpdFont* font(uint8_t style) const;
+  /// The body face's pixels per em (26.6), which native sizes are measured against; 0 before setBodySize().
+  uint32_t bodyPpem() const { return body_.ppem; }
+
+  /// The four fonts of the native size `px` (whole pixels per em), made on first use; nullptr for a style the
+  /// family lacks. When all kMaxNativeSizes are held, or memory is short, the nearest size held serves instead, a
+  /// few percent off. False, with `fonts` untouched, when `px` is outside kMinNativePx..kMaxNativePx, a line
+  /// height does not fit EpdFontData, or no size can serve. They live until dropNativeSizes() or the font's end.
+  bool nativeFonts(uint8_t px, const EpdFont* (&fonts)[4]);
+  /// Frees every native size. Only once nothing refers to their fonts any more (their font IDs removed).
+  void dropNativeSizes();
+  uint8_t nativeSizeCount() const;
 
   /// Runs a pending wipe (the store filled up, or a write failed), calling `onBusy` first. Only where no glyph
   /// record of this font is in use: at book open. True when a wipe ran.
@@ -64,31 +83,52 @@ class TtfFont {
   uint32_t renders() const { return renders_; }
   uint32_t storeHits() const { return hits_; }
 
-  // The provider side; the per-style adapters forward here.
-  const EpdGlyph* glyph(uint8_t style, uint32_t codepoint);
+  // The body size's glyphs, as its per-style adapters see them.
+  const EpdGlyph* glyph(uint8_t style, uint32_t codepoint) { return glyph(body_, style, codepoint); }
   bool ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const;
-  void prefetch(uint8_t style, const char* utf8Text);
+  void prefetch(uint8_t style, const char* utf8Text) { prefetch(body_, style, utf8Text); }
 
  private:
+  struct Size;
+
   class StyleProvider final : public GlyphProvider {
    public:
     TtfFont* owner = nullptr;
+    Size* size = nullptr;
     uint8_t style = 0;
-    const EpdGlyph* missGlyph(const uint32_t codepoint) override { return owner->glyph(style, codepoint); }
+    const EpdGlyph* missGlyph(const uint32_t codepoint) override { return owner->glyph(*size, style, codepoint); }
     bool ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const override {
       return owner->ownsBitmap(glyph, bitmap);
     }
-    void prefetch(const char* utf8Text) override { owner->prefetch(style, utf8Text); }
+    void prefetch(const char* utf8Text) override { owner->prefetch(*size, style, utf8Text); }
   };
 
+  /// One pixel size: its index in the store's size table and the four styles' fonts. Never copied or moved: each
+  /// font points at its own data, and each provider at its size.
+  struct Size {
+    struct StyleFont {
+      EpdFontData data{};
+      EpdFont font{&data};
+      StyleProvider provider;
+    };
+    Size() = default;
+    Size(const Size&) = delete;
+    Size& operator=(const Size&) = delete;
+
+    uint32_t ppem = 0;  // 26.6; 0 until configured
+    uint8_t index = 0;
+    bool indexValid = false;
+    bool claimTried = false;  // in store generation `generation`
+    uint32_t generation = 0;
+    StyleFont styles[4];
+  };
+
+  // A style's file, shared by every size.
   struct Style {
     bool present = false;
     uint8_t block = 0;  // the store's style block
     uint32_t bytes = 0;
     ttf::Face face;
-    EpdFontData data{};
-    EpdFont font{&data};
-    StyleProvider provider;
   };
 
   struct Pending {
@@ -103,9 +143,14 @@ class TtfFont {
   StylesResult openStyles(const ttf::FileSource (&files)[4], ttf::ScratchPlan* plan);
   bool install(const ttf::FileSource (&files)[4], const uint8_t* identity, const std::function<void()>& onBusy);
   bool fontBytes(uint8_t style, FontBytes* bytes);
-  bool storeKey(uint8_t style, uint32_t codepoint, uint32_t* key);
-  void claimSize();
-  const EpdGlyph* render(uint8_t style, uint32_t codepoint, bool haveKey, uint32_t key);
+  bool configure(Size& size, uint32_t ppem);
+  Size* nativeSize(uint8_t px);
+  Size* nearestNative(uint32_t ppem);
+  bool claimSize(Size& size);
+  bool storeKey(Size& size, uint8_t style, uint32_t codepoint, uint32_t* key);
+  const EpdGlyph* glyph(Size& size, uint8_t style, uint32_t codepoint);
+  void prefetch(Size& size, uint8_t style, const char* utf8Text);
+  const EpdGlyph* render(const Size& size, uint8_t style, uint32_t codepoint, bool haveKey, uint32_t key);
   const EpdGlyph* drawToRing(const EpdGlyph& metrics);
   void failed(uint8_t style, uint32_t codepoint, ttf::Status status, bool haveKey, uint32_t key);
   void noteCommit(FlashGlyphStore::Commit result);
@@ -116,11 +161,9 @@ class TtfFont {
   FlashGlyphStore store_;
   ttf::Rasterizer rasterizer_;
   Style styles_[4];
-  uint32_t ppem_ = 0;
+  Size body_;
   uint8_t pointSize_ = 0;
-  uint8_t sizeIndex_ = 0;
-  bool sizeValid_ = false;
-  uint32_t sizeGeneration_ = 0;
+  std::unique_ptr<Size> native_[kMaxNativeSizes];
   bool ringMode_ = false;
 
   // The ring: glyphs drawn without being stored. Their records live until the slot is reused, 8 lookups later.
