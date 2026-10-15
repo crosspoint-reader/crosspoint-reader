@@ -3036,6 +3036,11 @@ static FontSizeLadder buildReaderFontSizeLadder(const int bodyFontId) {
                 "will silently resample from a smaller face");
 
   FontSizeLadder ladder;
+  // A TTF family draws every size with a face of its own.
+  if (const auto native = sdFontSystem.ttfNativeSizes(bodyFontId)) {
+    ladder.setNative(native->base, native->bodyPpem, native->minPx, native->maxPx);
+    return ladder;
+  }
   for (const uint8_t family : kFamilies) {
     for (int i = 0; i < rungCount; ++i) {
       if (CrossPointSettings::getBuiltinReaderFontId(family, rungs[i].size) != bodyFontId) continue;
