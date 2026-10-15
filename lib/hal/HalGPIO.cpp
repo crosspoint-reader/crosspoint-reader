@@ -154,6 +154,12 @@ bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }
 
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
 
+bool HalGPIO::hasToggleSwitch() const { return inputMgr.hasToggleSwitch(); }
+
+bool HalGPIO::isToggleSwitchOn() const { return inputMgr.isToggleSwitchOn(); }
+
+bool HalGPIO::wasToggleSwitchChanged() const { return inputMgr.wasToggleSwitchChanged(); }
+
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
 bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
@@ -226,8 +232,13 @@ bool HalGPIO::isUsbConnected() const {
   // divider): infer external power from charging state instead. BatteryMonitor
   // picks the board's best source — charger IC status, gauge Current() sign, or
   // a /STAT pin — and reports false on boards with no battery telemetry at all.
-  // Caveat: charge termination at 100% reads as "not connected".
+  // A charger IC that reports its input rail (BQ25896, SGM41562, M5 PMIC)
+  // answers directly; otherwise infer from charging state, where charge
+  // termination at 100% reads as "not connected".
   static const BatteryMonitor battery;
+  bool known = false;
+  const bool present = battery.isExternalPowerPresent(&known);
+  if (known) return present;
   return battery.isCharging();
 }
 

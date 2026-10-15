@@ -24,6 +24,8 @@ jobs:
             asset: firmware-metalio_eink4.bin
           - pio_env: eego_a4-gh_release_rc
             asset: firmware-eego_a4.bin
+          - pio_env: picco-gh_release_rc
+            asset: firmware-picco.bin
     steps:
       - uses: actions/checkout@v6
         with:

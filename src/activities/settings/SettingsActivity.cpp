@@ -76,7 +76,11 @@ void SettingsActivity::rebuildSettingsLists() {
       if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
-      if (BoardConfig::hasHomeKey() && setting.valuePtr == &CrossPointSettings::longPressMenuFunction) continue;
+      // Touch boards act on the text directly; the X4 Pro home key and the
+      // short power click on other touch boards carry the remaining shortcuts.
+      if (BoardConfig::hasTouch() && setting.valuePtr == &CrossPointSettings::longPressMenuFunction) {
+        continue;
+      }
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;

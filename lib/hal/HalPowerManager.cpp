@@ -11,7 +11,7 @@
 
 #include "HalGPIO.h"
 
-#if FREEINK_DEVICE_EEGO_A4
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO
 #include <HalFrontlight.h>
 #endif
 
@@ -30,6 +30,9 @@ void HalPowerManager::begin() {
   if (BoardConfig::ACTIVE.batteryAdc >= 0) {
     pinMode(BoardConfig::ACTIVE.batteryAdc, INPUT);
   }
+  // Board charger setup (Picco SGM41562: stock charge voltage and limits); a
+  // no-op on boards without a configurable charger.
+  if (BatteryMonitor::configureCharger()) LOG_INF("PWR", "Charger configured");
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
@@ -74,9 +77,10 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   xSemaphoreGive(modeMutex);
 }
 
-void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
-#if FREEINK_DEVICE_EEGO_A4
-  // LM3630A and GSL share I2C; turn the light off before touch releases the bus.
+void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton) const {
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO
+  // The frontlight driver and touch share I2C; turn the light off before touch
+  // releases the bus. On Picco this also puts the TMA525C to sleep.
   Frontlight.setOn(false);
   gpio.prepareForDeepSleep();
 #endif
@@ -146,6 +150,10 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   freeink::metalio::powerOff();
 #endif
 
+  if (wakeOnHeldButton) {
+    freeink::PowerManager::armPowerButtonWakeup();
+    freeink::PowerManager::deepSleep();
+  }
   // Waits for the power button to be physically released (so holding it doesn't
   // immediately wake the device again), then arms the wake source and sleeps.
   freeink::PowerManager::deepSleepUntilPowerButton();
