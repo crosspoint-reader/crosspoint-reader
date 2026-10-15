@@ -263,6 +263,8 @@ bool TtfFont::nativeFonts(const uint8_t px, const EpdFont* (&fonts)[4], uint32_t
 
 void TtfFont::dropNativeSizes() {
   for (auto& size : native_) size.reset();
+  // No record is in use either (the same safe point): the ring's blocks, which a native size grew, go too.
+  for (uint8_t i = 0; i < kRingSlots; ++i) freeRingSlot(i);
 }
 
 uint8_t TtfFont::nativeSizeCount() const {
@@ -364,7 +366,12 @@ const EpdGlyph* TtfFont::drawToRing(const EpdGlyph& metrics) {
   ringNext_ = static_cast<uint8_t>((ringNext_ + 1) % kRingSlots);
   if (metrics.dataLength > ringCapacity_[slot]) {
     // One heap block per slot, kept and reused while it is large enough: the ring exists only after the store
-    // filled up, for oversized glyphs, or without a store.
+    // filled up, for oversized glyphs, for a size the store had no room for, or without a store. A record is
+    // promised only until the next miss, so the oldest slots give way when the ring would pass its budget.
+    freeRingSlot(slot);
+    for (uint8_t age = 1; age < kRingSlots && ringBytes() + metrics.dataLength > kRingBudgetBytes; ++age) {
+      freeRingSlot(static_cast<uint8_t>((slot + age) % kRingSlots));  // the slot after this one is the oldest
+    }
     ringBitmaps_[slot] = makeUniqueNoThrow<uint8_t[]>(metrics.dataLength);
     ringCapacity_[slot] = ringBitmaps_[slot] ? metrics.dataLength : 0;
     if (!ringBitmaps_[slot]) {
@@ -376,6 +383,17 @@ const EpdGlyph* TtfFont::drawToRing(const EpdGlyph& metrics) {
   ringGlyphs_[slot] = metrics;
   ringGlyphs_[slot].dataOffset = 0;
   return &ringGlyphs_[slot];
+}
+
+void TtfFont::freeRingSlot(const uint8_t slot) {
+  ringBitmaps_[slot].reset();
+  ringCapacity_[slot] = 0;
+}
+
+uint32_t TtfFont::ringBytes() const {
+  uint32_t bytes = 0;
+  for (const uint16_t capacity : ringCapacity_) bytes += capacity;
+  return bytes;
 }
 
 bool TtfFont::ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const {
@@ -492,10 +510,7 @@ bool TtfFont::wipeIfPending(const std::function<void()>& onBusy) {
   if (!store_.wipe()) return false;  // stays pending: the next book open tries again
   LOG_INF("TTF", "glyph store wiped");
   ringMode_ = false;
-  for (uint8_t i = 0; i < kRingSlots; ++i) {
-    ringBitmaps_[i].reset();
-    ringCapacity_[i] = 0;
-  }
+  for (uint8_t i = 0; i < kRingSlots; ++i) freeRingSlot(i);
   // The log may map elsewhere now; every size claims its index again at its next lookup.
   const auto rebase = [this](Size& size) {
     if (size.ppem == 0) return;

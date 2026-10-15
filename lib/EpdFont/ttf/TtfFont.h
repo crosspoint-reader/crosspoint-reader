@@ -35,6 +35,8 @@ class TtfFont {
   /// Native sizes held at once, until dropNativeSizes().
   static constexpr uint8_t kMaxNativeSizes = 16;
   static constexpr uint8_t kRingSlots = 8;
+  /// The ring's bitmaps together, at most: a native size's glyphs are large, and the ring is held until a wipe.
+  static constexpr uint32_t kRingBudgetBytes = 8192;
   /// Missing glyphs one prefetch() call renders at most; the rest render as they are looked up.
   static constexpr uint8_t kPrefetchGlyphs = 64;
 
@@ -83,6 +85,8 @@ class TtfFont {
   bool wipeIfPending(const std::function<void()>& onBusy = {});
   /// New glyphs are drawn without being stored until the next wipe.
   bool ringMode() const { return ringMode_; }
+  /// The heap the ring's bitmaps hold.
+  uint32_t ringBytes() const;
 
   uint32_t renders() const { return renders_; }
   uint32_t storeHits() const { return hits_; }
@@ -156,6 +160,7 @@ class TtfFont {
   void prefetch(Size& size, uint8_t style, const char* utf8Text);
   const EpdGlyph* render(const Size& size, uint8_t style, uint32_t codepoint, bool haveKey, uint32_t key);
   const EpdGlyph* drawToRing(const EpdGlyph& metrics);
+  void freeRingSlot(uint8_t slot);
   void failed(uint8_t style, uint32_t codepoint, ttf::Status status, bool haveKey, uint32_t key);
   void noteCommit(FlashGlyphStore::Commit result);
   uint32_t batchCapacity() const;

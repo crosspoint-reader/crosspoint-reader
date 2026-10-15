@@ -655,6 +655,26 @@ TEST_F(TtfFontTest, TheLargestNativeSizeKeepsTheFamilysTallestGlyphInsideEpdGlyp
   EXPECT_LE(tall->top, INT8_MAX);
 }
 
+TEST_F(TtfFontTest, TheRingStaysWithinItsBudgetAndGoesWithTheNativeSizes) {
+  // A native size's glyphs are large (2-4 KB at the largest size); drawn through the ring, eight of them would hold
+  // tens of KB until the next wipe. A record is promised only until the next miss, so the oldest go first.
+  const auto font = open();
+  ASSERT_NE(nullptr, font);
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(font->maxNativePx(), fonts));
+  flash.failNextProgram();  // the size's claim fails: its glyphs are drawn into the ring
+  for (const char c : std::string("WMQ@BDGHKNOR")) {
+    const EpdGlyph* glyph = nativeGlyph(fonts[kRegular], static_cast<uint8_t>(c));
+    const uint8_t* bitmap = nullptr;
+    ASSERT_TRUE(font->ownsBitmap(glyph, bitmap)) << c;
+    expectDrawnAs(referenceAt(files[kRegular].bytes, static_cast<uint8_t>(c), px(font->maxNativePx())), *font, kRegular,
+                  glyph);  // the newest record is always whole
+    EXPECT_LE(font->ringBytes(), TtfFont::kRingBudgetBytes) << c;
+  }
+  font->dropNativeSizes();  // only where no record is in use: book open
+  EXPECT_EQ(0u, font->ringBytes());
+}
+
 TEST_F(TtfFontTest, WhenEveryNativeSizeIsHeldTheNearestServesUntilTheyAreDropped) {
   const auto font = open();
   ASSERT_NE(nullptr, font);
