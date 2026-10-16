@@ -1654,6 +1654,11 @@ void loop() {
       String cmd = line.substring(4);
       cmd.trim();
       if (cmd == "SCREENSHOT") {
+        // The write buffer is not necessarily the page on the panel: after a page turn the reader
+        // pre-renders the next page into it. As the POWER+DOWN screenshot does, put the visible page
+        // back first, and hold the render lock until it is sent so nothing draws over it meanwhile.
+        RenderLock lock;
+        activityManager.prepareFramebufferForCapture();
         uint8_t* buf = display.getFrameBuffer();
         if (buf) {
           const uint16_t width = display.getDisplayWidth();
