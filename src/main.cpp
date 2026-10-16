@@ -19,9 +19,9 @@
 #include <TrustedTime.h>
 #include <VectorFontSupport.h>
 #include <WiFi.h>
-#include <esp_wifi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
+#include <esp_wifi.h>
 
 #include <cstring>
 
