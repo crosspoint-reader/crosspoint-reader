@@ -259,6 +259,24 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
 
     uint8_t size, style;
+    const size_t nameLength = strlen(nameBuffer);
+    if (nameLength > 4 && strcmp(nameBuffer + nameLength - 4, ".bak") == 0) {
+      const std::string backup = std::string(dirPath) + "/" + nameBuffer;
+      nameBuffer[nameLength - 4] = '\0';
+      bool recognized = parseFilename(nameBuffer, size, style);
+#if CROSSPOINT_VECTOR_FONTS
+      size_t baseLength = 0;
+      recognized = recognized || parseVectorFontName(nameBuffer, baseLength);
+#endif
+      if (!recognized) continue;
+      const std::string destination = std::string(dirPath) + "/" + nameBuffer;
+      if (Storage.exists(destination.c_str())) continue;
+      // Discovery owns recovery when an interrupted upload leaves only the installed font's backup.
+      if (!Storage.rename(backup.c_str(), destination.c_str())) {
+        LOG_ERR("SDREG", "Failed restoring font backup: %s", backup.c_str());
+        continue;
+      }
+    }
     if (parseFilename(nameBuffer, size, style)) {
       // .cpfont: reject duplicate (pointSize, style) — style is always 0 in v4,
       // so two files at the same size would silently shadow each other.

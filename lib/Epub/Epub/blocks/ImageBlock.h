@@ -15,7 +15,6 @@ class ImageBlock final : public Block {
   int16_t getWidth() const { return width; }
   int16_t getHeight() const { return height; }
 
-  bool imageExists() const;
   bool hasValidCache() const;
   bool needsDecode() const;
   void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;

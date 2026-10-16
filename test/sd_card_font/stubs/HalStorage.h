@@ -18,6 +18,7 @@ inline uint32_t millis() { return 0; }
 
 class HalFile {
  public:
+  size_t size() const { return sdFontTestFile.size(); }
   bool seekSet(size_t position) {
     position_ = position;
     return opened_ && position <= sdFontTestFile.size();

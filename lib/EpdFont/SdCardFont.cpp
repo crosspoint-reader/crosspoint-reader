@@ -53,6 +53,15 @@ inline uint16_t readU16(const uint8_t* p) { return p[0] | (p[1] << 8); }
 inline int16_t readI16(const uint8_t* p) { return static_cast<int16_t>(p[0] | (p[1] << 8)); }
 inline uint32_t readU32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24); }
 
+bool validGlyphBitmap(const EpdGlyph& glyph, bool twoBit, uint32_t bitmapOffset, size_t fileSize) {
+  const uint32_t pixels = static_cast<uint32_t>(glyph.width) * glyph.height;
+  const uint32_t required = (pixels * (twoBit ? 2U : 1U) + 7U) / 8U;
+  if (glyph.dataLength < required) return false;
+  if (glyph.dataLength == 0) return true;
+  return bitmapOffset <= fileSize && glyph.dataOffset <= fileSize - bitmapOffset &&
+         glyph.dataLength <= fileSize - bitmapOffset - glyph.dataOffset;
+}
+
 // Walks a null-terminated UTF-8 string and appends each unique codepoint to
 // codepoints[0..cpCount-1] via O(n²) dedup.  Returns true if the buffer
 // reached maxCount (cap hit), false if all codepoints fit.
@@ -1254,6 +1263,11 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       freeStyleMiniData(s);
       return static_cast<int>(cpCount);
     }
+    if (!validGlyphBitmap(s.miniGlyphs[mapIdx], s.header.is2Bit, s.bitmapFileOffset, file.size())) {
+      LOG_ERR("SDCF", "Invalid glyph bitmap (style %u, glyph %d)", styleIdx, gIdx);
+      freeStyleMiniData(s);
+      return static_cast<int>(cpCount);
+    }
     lastReadIndex = gIdx;
   }
 
@@ -1794,6 +1808,10 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   }
   if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
     LOG_ERR("SDCF", "Overflow: failed to read glyph metadata for U+%04X style %u", codepoint, styleIdx);
+    return nullptr;
+  }
+  if (!validGlyphBitmap(tempGlyph, s.header.is2Bit, s.bitmapFileOffset, file.size())) {
+    LOG_ERR("SDCF", "Invalid glyph bitmap for U+%04X style %u", codepoint, styleIdx);
     return nullptr;
   }
 

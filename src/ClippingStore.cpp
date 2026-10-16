@@ -627,7 +627,12 @@ bool ClippingStore::writeToFile(const std::string* replacementText, const size_t
   }
 
   f.flush();
-  f.close();
+  if (!f.close()) {
+    LOG_ERR("CLIP", "Failed to close clipping file: %s", tmpPath.c_str());
+    if (source) source.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
   if (source) source.close();
 
   if (hasDestination && !Storage.rename(storeFilePath.c_str(), backupPath.c_str())) {

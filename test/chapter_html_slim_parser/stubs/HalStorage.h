@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <string>
 
 class HalFile {
@@ -18,7 +20,13 @@ class HalFile {
   }
   int available() const { return file_ ? static_cast<int>(size() - position()) : 0; }
   size_t read(void* buffer, size_t count) { return file_ ? std::fread(buffer, 1, count, file_) : 0; }
-  size_t write(const void* buffer, size_t count) { return file_ ? std::fwrite(buffer, 1, count, file_) : 0; }
+  static inline size_t writeBudget = std::numeric_limits<size_t>::max();
+  size_t write(const void* buffer, size_t count) {
+    count = std::min(count, writeBudget);
+    const size_t written = file_ ? std::fwrite(buffer, 1, count, file_) : 0;
+    writeBudget -= written;
+    return written;
+  }
   size_t write(uint8_t byte) { return write(&byte, 1); }
   bool flush() { return file_ && std::fflush(file_) == 0; }
   bool seekCur(size_t offset) { return file_ && std::fseek(file_, static_cast<long>(offset), SEEK_CUR) == 0; }

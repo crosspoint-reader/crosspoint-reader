@@ -36,12 +36,12 @@ std::string extractHost(const std::string& url) {
   const size_t protocolEnd = url.find("://");
   if (protocolEnd == std::string::npos) {
     // No protocol, find first slash
-    const size_t firstSlash = url.find('/');
+    const size_t firstSlash = url.find_first_of("/?#");
     return firstSlash == std::string::npos ? url : url.substr(0, firstSlash);
   }
   // Find the first slash after the protocol
   const size_t hostStart = protocolEnd + 3;
-  const size_t pathStart = url.find('/', hostStart);
+  const size_t pathStart = url.find_first_of("/?#", hostStart);
   return pathStart == std::string::npos ? url : url.substr(0, pathStart);
 }
 
@@ -67,28 +67,53 @@ std::string encodeUnsafeUrlChars(const std::string& url) {
 }
 
 std::string buildUrl(const std::string& serverUrl, const std::string& path) {
-  // If path is already an absolute URL (has protocol), use it directly
-  if (path.find("://") != std::string::npos) {
-    return encodeUnsafeUrlChars(path);
+  if (path.find("://") != std::string::npos) return encodeUnsafeUrlChars(path);
+  std::string base = ensureProtocol(serverUrl);
+  const size_t fragment = base.find('#');
+  if (fragment != std::string::npos) base.resize(fragment);
+  if (path.empty()) return encodeUnsafeUrlChars(base);
+  if (path[0] == '#') return encodeUnsafeUrlChars(base + path);
+  const size_t query = base.find('?');
+  if (query != std::string::npos) base.resize(query);
+  if (path[0] == '?') return encodeUnsafeUrlChars(base + path);
+  if (path.starts_with("//")) return encodeUnsafeUrlChars(base.substr(0, base.find(':') + 1) + path);
+  const std::string origin = extractHost(base);
+  std::string resolved;
+  if (path[0] == '/')
+    resolved = path;
+  else {
+    const size_t slash = base.rfind('/');
+    const std::string parent = slash < origin.size() ? "/" : base.substr(origin.size(), slash - origin.size() + 1);
+    resolved = parent + path;
   }
-  const std::string urlWithProtocol = ensureProtocol(serverUrl);
-  if (path.empty()) {
-    return encodeUnsafeUrlChars(urlWithProtocol);
+  const size_t suffix = resolved.find_first_of("?#");
+  const std::string tail = suffix == std::string::npos ? "" : resolved.substr(suffix);
+  if (suffix != std::string::npos) resolved.resize(suffix);
+  std::string normalized;
+  while (!resolved.empty()) {
+    if (resolved.starts_with("../"))
+      resolved.erase(0, 3);
+    else if (resolved.starts_with("./"))
+      resolved.erase(0, 2);
+    else if (resolved.starts_with("/./"))
+      resolved.erase(0, 2);
+    else if (resolved == "/.")
+      resolved = "/";
+    else if (resolved.starts_with("/../") || resolved == "/..") {
+      resolved.replace(0, 3, "");
+      if (resolved.empty()) resolved = "/";
+      const size_t slash = normalized.rfind('/');
+      normalized.resize(slash == std::string::npos ? 0 : slash);
+    } else if (resolved == "." || resolved == "..")
+      resolved.clear();
+    else {
+      const size_t slash = resolved.find('/', resolved[0] == '/' ? 1 : 0);
+      const size_t count = slash == std::string::npos ? resolved.size() : slash;
+      normalized.append(resolved, 0, count);
+      resolved.erase(0, count);
+    }
   }
-  if (path[0] == '/') {
-    // Absolute path - use just the host
-    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + path);
-  }
-  // Relative path - strip query string from base before appending
-  std::string base = urlWithProtocol;
-  const size_t queryPos = base.find('?');
-  if (queryPos != std::string::npos) {
-    base.resize(queryPos);
-  }
-  if (base.back() == '/') {
-    return encodeUnsafeUrlChars(base + path);
-  }
-  return encodeUnsafeUrlChars(base + "/" + path);
+  return encodeUnsafeUrlChars(origin + normalized + tail);
 }
 
 }  // namespace UrlUtils

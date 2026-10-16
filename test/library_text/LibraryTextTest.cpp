@@ -155,22 +155,19 @@ TEST(LibraryAuthorKey, DistinctPeopleDoNotCollide) {
   EXPECT_NE(authorKey("Victor Hugo"), authorKey("Jules Verne"));
 }
 
-TEST(LibraryAuthorKey, FitsTheRecordFieldWithoutCollapsingToAForename) {
+TEST(LibraryAuthorKey, RetainsCompleteIdentity) {
   const std::string key = authorKey("Bartholomew Fitzgerald Wellington");
   ASSERT_FALSE(key.empty());
-  EXPECT_LE(key.size(), library::AUTHOR_KEY_MAX_BYTES);
+  EXPECT_EQ(key, "bartholomew fitzgerald wellington");
   EXPECT_NE(key.back(), ' ');
 
-  // Sorting puts a short forename first, so cutting on a token boundary would
-  // reduce this to "mary" and merge every Alex in the library. The byte cut must
-  // keep enough of the surname to discriminate.
+  // The complete identity keeps people with a shared forename distinct.
   const std::string mary = authorKey("Wollstonecraft, Mary");
   EXPECT_GT(mary.size(), 5u);
   EXPECT_NE(mary, "mary");
   EXPECT_NE(mary, authorKey("Mary Trevelyan"));
 
-  // A truncated key stays a prefix of the untruncated one, so grouping is stable
-  // however long the name is.
+  EXPECT_NE(authorKey("Christopher Isherwood"), authorKey("Christopher Paolini"));
   EXPECT_EQ(authorKey("Wollstonecraft, Maryse").rfind("mary", 0), 0u);
 
   EXPECT_FALSE(authorKey("Nebuchadnezzarson").empty());

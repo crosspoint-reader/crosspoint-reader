@@ -24,6 +24,7 @@ inline int failWrite = -1;
 inline int shortWrite = -1;
 inline int failTruncate = -1;
 inline int failRename = -1;
+inline std::map<std::string, unsigned> renameFailures;
 inline int failAlloc = -1;
 inline bool failDirectorySeek = false;
 inline std::string failClosePath;
@@ -55,6 +56,7 @@ inline void reset() {
   shortWrite = -1;
   failTruncate = -1;
   failRename = -1;
+  renameFailures.clear();
   failAlloc = -1;
   failDirectorySeek = false;
   failClosePath.clear();
@@ -240,6 +242,12 @@ class HalStorage {
   }
   bool remove(const char* path) { return fake::files.erase(path) != 0; }
   bool rename(const char* from, const char* to) {
+    auto failure = fake::renameFailures.find(from);
+    if (failure != fake::renameFailures.end() && failure->second > 0) {
+      --failure->second;
+      fake::failureTriggered = true;
+      return false;
+    }
     if (fake::fail(fake::failRename) || !exists(from) || exists(to)) return false;
     std::vector<std::pair<std::string, std::shared_ptr<fake::Node>>> moved;
     moved.reserve(fake::files.size());

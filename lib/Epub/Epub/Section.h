@@ -20,7 +20,7 @@ class Section {
   std::string filePath;
   HalFile file;
 
-  void writeSectionFileHeader(const ReaderRenderSpec& spec);
+  bool writeSectionFileHeader(const ReaderRenderSpec& spec);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
   // Page-offset table entry, kept in RAM while an incremental build is running so
@@ -43,6 +43,7 @@ class Section {
     std::string htmlPath;
     std::string tmpHtmlPath;
     bool reusedHtml = false;
+    bool writeFailed = false;
     CssParser* cssParser = nullptr;
     // HTML byte progress, for estimating the section's total page count while it's still building.
     uint32_t bytesConsumed = 0;

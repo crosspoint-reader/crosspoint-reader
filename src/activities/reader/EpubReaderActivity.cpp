@@ -174,7 +174,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     for (size_t j = 0; j < i; j++) {
       Storage.rename((dstPath + SIDECARS[j]).c_str(), (srcPath + SIDECARS[j]).c_str());
     }
-    if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
+    if (!ClippingStore::moveBook(dstPath, srcPath)) {
       LOG_ERR("ERS", "Failed to restore epub after sidecar move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
     }
     return;
@@ -255,11 +255,13 @@ bool EpubReaderActivity::loadBook() {
 
   epub->setupCacheDir();
 
+  bool loadedProgress = false;
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
     int dataSize = f.read(data, sizeof(data));
     if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
+      loadedProgress = true;
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
       if (nextPageNumber == UINT16_MAX) {
@@ -278,7 +280,7 @@ bool EpubReaderActivity::loadBook() {
     }
   }
 
-  if (currentSpineIndex == 0) {
+  if (!loadedProgress) {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
@@ -2434,6 +2436,7 @@ void EpubReaderActivity::settleOverlayRefresh() {
 }
 
 void EpubReaderActivity::openOverlay(Overlay target) {
+  RenderLock lock;
   mappedInput.resetHomeButtonInput();
   const Overlay previous = overlay;
   overlay = target;
@@ -2446,7 +2449,6 @@ void EpubReaderActivity::openOverlay(Overlay target) {
       focusedTool = 0;
       break;
     case Overlay::Contents: {
-      RenderLock lock;
       panelIndex = currentTocIndex();
       // Fresh viewport opening on the current chapter, cursor shown or not.
       toolbarUi->nav().reset(panelIndex);
@@ -2482,7 +2484,7 @@ void EpubReaderActivity::openOverlay(Overlay target) {
     // Serialize against the render task: renderBook may be mid-page (status
     // bar included) in the shared framebuffer, and painting the chrome from
     // the loop task at the same time interleaves the two frames.
-    RenderLock lock;
+
     settleOverlayRefresh();
     if (previous == Overlay::None) {
       // Snapshot the clean page so stepping back from a panel to the toolbar
@@ -2506,13 +2508,13 @@ void EpubReaderActivity::openOverlay(Overlay target) {
 
 // Grayscale panels re-render to restore AA; other boards restore the B/W snapshot.
 void EpubReaderActivity::closeOverlayToPage() {
+  RenderLock lock;
   mappedInput.resetHomeButtonInput();
   overlay = Overlay::None;
   overlayPopup.dismiss();  // an option picker cannot outlive its panel
   toolbarUi.reset();       // ~1 KB of interaction table + props, only needed while open
   if (BoardConfig::isEegoA4()) pagesUntilFullRefresh = 1;
   if (!xteinkClassPanel() && overlayPageStored) {
-    RenderLock lock;  // the render task shares the framebuffer
     settleOverlayRefresh();
     // No baseline resync: the glass shows the chrome, and erasing it needs
     // the differential to keep diffing against the last pushed frame.
@@ -2646,7 +2648,10 @@ void EpubReaderActivity::handleOverlayInput() {
 
   // Touch first: FreeInkUI routes the frame against the tap targets the last
   // render registered and hands back the action it mapped to.
-  const auto routed = toolbarUi->route(mappedInput);
+  const auto routed = [this] {
+    RenderLock lock;
+    return toolbarUi->route(mappedInput);
+  }();
 
   // --- Toolbar ---
   if (overlay == Overlay::Toolbar) {
@@ -2890,11 +2895,11 @@ void EpubReaderActivity::paintOverlayPopup() {
 
 void EpubReaderActivity::applyReaderTextSettings() {
   SETTINGS.saveToFile();
+  RenderLock lock;
   // (Re)load or unload the selected SD-card font for the current family/size.
   // The reader otherwise only loads SD fonts on book open, so without this an
   // in-reader font change wouldn't take effect until re-opening the book.
   sdFontSystem.ensureLoaded(renderer);
-  RenderLock lock;
   if (section) {
     rememberCurrentContentOffset();
     cachedSpineIndex = currentSpineIndex;

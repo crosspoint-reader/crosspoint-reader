@@ -24,8 +24,10 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
 }
 
 bool PageLine::serialize(HalFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
+  if (!(serialization::tryWritePod(file, xPos) && serialization::tryWritePod(file, yPos))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
 
   // serialize TextBlock pointed to by PageLine
   return block->serialize(file);
@@ -34,8 +36,10 @@ bool PageLine::serialize(HalFile& file) {
 std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  if (!(serialization::tryReadPod(file, xPos) && serialization::tryReadPod(file, yPos))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   auto tb = TextBlock::deserialize(file);
   if (!tb) {
@@ -61,8 +65,10 @@ void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, cons
 }
 
 bool PageImage::serialize(HalFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
+  if (!(serialization::tryWritePod(file, xPos) && serialization::tryWritePod(file, yPos))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
 
   // serialize ImageBlock
   return imageBlock->serialize(file);
@@ -71,8 +77,10 @@ bool PageImage::serialize(HalFile& file) {
 std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  if (!(serialization::tryReadPod(file, xPos) && serialization::tryReadPod(file, yPos))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   auto ib = ImageBlock::deserialize(file);
   if (!ib) {
@@ -97,10 +105,11 @@ void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const i
 }
 
 bool PageHorizontalRule::serialize(HalFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, width);
-  serialization::writePod(file, thickness);
+  if (!(serialization::tryWritePod(file, xPos) && serialization::tryWritePod(file, yPos) &&
+        serialization::tryWritePod(file, width) && serialization::tryWritePod(file, thickness))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
   return true;
 }
 
@@ -109,10 +118,11 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
   int16_t yPos = 0;
   uint16_t width = 0;
   uint8_t thickness = 0;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
-  serialization::readPod(file, width);
-  serialization::readPod(file, thickness);
+  if (!(serialization::tryReadPod(file, xPos) && serialization::tryReadPod(file, yPos) &&
+        serialization::tryReadPod(file, width) && serialization::tryReadPod(file, thickness))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   if (width == 0 || thickness == 0) {
     LOG_ERR("PGE", "Deserialization failed: invalid horizontal rule metadata (width=%u thickness=%u)", width,
@@ -150,11 +160,17 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
 
 bool Page::serialize(HalFile& file) const {
   const uint16_t count = elements.size();
-  serialization::writePod(file, count);
+  if (!serialization::tryWritePod(file, count)) {
+    LOG_ERR("CACHE", "Failed cache writePod");
+    return false;
+  }
 
   for (const auto& el : elements) {
     // Use getTag() method to determine type
-    serialization::writePod(file, static_cast<uint8_t>(el->getTag()));
+    if (!serialization::tryWritePod(file, static_cast<uint8_t>(el->getTag()))) {
+      LOG_ERR("CACHE", "Failed cache writePod");
+      return false;
+    }
 
     if (!el->serialize(file)) {
       return false;
@@ -163,7 +179,10 @@ bool Page::serialize(HalFile& file) const {
 
   // Serialize footnotes (clamp to MAX_FOOTNOTES_PER_PAGE to match addFootnote/deserialize limits)
   const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), MAX_FOOTNOTES_PER_PAGE);
-  serialization::writePod(file, fnCount);
+  if (!serialization::tryWritePod(file, fnCount)) {
+    LOG_ERR("CACHE", "Failed cache writePod");
+    return false;
+  }
   for (uint16_t i = 0; i < fnCount; i++) {
     const auto& fn = footnotes[i];
     if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
@@ -174,17 +193,21 @@ bool Page::serialize(HalFile& file) const {
   }
 
   const uint16_t linkCount = std::min<uint16_t>(links.size(), MAX_LINKS_PER_PAGE);
-  serialization::writePod(file, linkCount);
+  if (!serialization::tryWritePod(file, linkCount)) {
+    LOG_ERR("CACHE", "Failed cache writePod");
+    return false;
+  }
   for (uint16_t i = 0; i < linkCount; i++) {
     const auto& link = links[i];
     if (file.write(link.href, sizeof(link.href)) != sizeof(link.href)) {
       LOG_ERR("PGE", "Failed to write link %u", i);
       return false;
     }
-    serialization::writePod(file, link.x);
-    serialization::writePod(file, link.y);
-    serialization::writePod(file, link.width);
-    serialization::writePod(file, link.height);
+    if (!(serialization::tryWritePod(file, link.x) && serialization::tryWritePod(file, link.y) &&
+          serialization::tryWritePod(file, link.width) && serialization::tryWritePod(file, link.height))) {
+      LOG_ERR("CACHE", "Incomplete cache data");
+      return false;
+    }
   }
 
   return true;
@@ -198,7 +221,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   uint16_t count;
-  serialization::readPod(file, count);
+  if (!serialization::tryReadPod(file, count)) {
+    LOG_ERR("CACHE", "Failed cache readPod");
+    return nullptr;
+  }
 
   // Reserve up front so a page load costs one allocation for the element vector
   // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
@@ -212,7 +238,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
-    serialization::readPod(file, tag);
+    if (!serialization::tryReadPod(file, tag)) {
+      LOG_ERR("CACHE", "Failed cache readPod");
+      return nullptr;
+    }
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
@@ -240,7 +269,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   // Deserialize footnotes
   uint16_t fnCount;
-  serialization::readPod(file, fnCount);
+  if (!serialization::tryReadPod(file, fnCount)) {
+    LOG_ERR("CACHE", "Failed cache readPod");
+    return nullptr;
+  }
   if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
     LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
     return nullptr;
@@ -258,7 +290,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   uint16_t linkCount;
-  serialization::readPod(file, linkCount);
+  if (!serialization::tryReadPod(file, linkCount)) {
+    LOG_ERR("CACHE", "Failed cache readPod");
+    return nullptr;
+  }
   if (linkCount > MAX_LINKS_PER_PAGE) {
     LOG_ERR("PGE", "Invalid link count %u", linkCount);
     return nullptr;
@@ -271,10 +306,11 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
       return nullptr;
     }
     link.href[sizeof(link.href) - 1] = '\0';
-    serialization::readPod(file, link.x);
-    serialization::readPod(file, link.y);
-    serialization::readPod(file, link.width);
-    serialization::readPod(file, link.height);
+    if (!(serialization::tryReadPod(file, link.x) && serialization::tryReadPod(file, link.y) &&
+          serialization::tryReadPod(file, link.width) && serialization::tryReadPod(file, link.height))) {
+      LOG_ERR("CACHE", "Incomplete cache data");
+      return nullptr;
+    }
     if (link.href[0] == '\0' || link.width <= 0 || link.height <= 0) {
       LOG_ERR("PGE", "Invalid link geometry %u", i);
       return nullptr;
