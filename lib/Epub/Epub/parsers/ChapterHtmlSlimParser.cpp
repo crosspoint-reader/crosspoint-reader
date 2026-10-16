@@ -3080,7 +3080,7 @@ void ChapterHtmlSlimParser::makePages(const bool includeLastLine, const bool par
     currentPageNextY = 0;
     currentPageVisibleOffsetSet = false;
   }
-  applyPendingPageBreak();
+  if (!currentTextBlock->isEmpty()) applyPendingPageBreak();
 
   const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
 

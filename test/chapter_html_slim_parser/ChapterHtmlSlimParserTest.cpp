@@ -1183,6 +1183,22 @@ TEST_F(ChapterWidowOrphanTest, CarriedReferenceKeepsItsFootnote) {
   }
 }
 
+TEST_F(ChapterPageBreakTest, TerminalBreakAfterDoesNotCreateEmptyPage) {
+  paragraph("only", "page-break-after: always");
+  ASSERT_TRUE(parser.finishParse());
+  EXPECT_EQ(pages, 1u);
+}
+
+TEST_F(ChapterPageBreakTest, EmptyBlockDoesNotConsumePendingBreak) {
+  paragraph("before", "page-break-after: always");
+  paragraph("", "page-break-before: always");
+  EXPECT_EQ(pages, 0u);
+  paragraph("after");
+  EXPECT_EQ(pages, 1u);
+  ASSERT_TRUE(parser.finishParse());
+  EXPECT_EQ(pages, 2u);
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {
