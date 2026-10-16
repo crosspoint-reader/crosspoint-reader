@@ -234,6 +234,9 @@ std::vector<PluginRef> discoverPlugins() {
     plugins.push_back(std::move(ref));
   }
   std::sort(plugins.begin(), plugins.end(), [](const PluginRef& lhs, const PluginRef& rhs) {
+    const bool lhsHub = lhs.name == "pluginhub";
+    const bool rhsHub = rhs.name == "pluginhub";
+    if (lhsHub != rhsHub) return lhsHub;
     const int titleOrder = strcasecmp(lhs.title.c_str(), rhs.title.c_str());
     return titleOrder != 0 ? titleOrder < 0 : strcasecmp(lhs.name.c_str(), rhs.name.c_str()) < 0;
   });
