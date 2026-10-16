@@ -69,7 +69,7 @@ discover, and update plugins** entry. Selecting it offers:
   sideloaded plugins continue to work normally.
 - **Cancel** — leave the entry visible and make no changes.
 
-The **Hide** preference persists across reboots. Setting **Settings → System →
+The **Hide** preference persists across reboots. Setting **Settings → Connectivity →
 Plugins** to **Enabled** clears it, which brings the installer entry back.
 
 For users who prefer manual installation, Plugin Hub can be downloaded directly
