@@ -5,9 +5,13 @@
 HalFrontlight HalFrontlight::instance;
 
 void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const bool on) {
+  // begin() runs the hardware probe (EEGO A4: an I2C ACK from the LM3630A at
+  // 0x36) that decides present(), so it must come FIRST. Guarding on present()
+  // before begin() would skip the probe forever and hide the light on units
+  // that actually have one. begin() is inert on boards without a frontlight.
+  manager.begin();
   if (!manager.present()) return;
 
-  manager.begin();
   lastBrightness = brightness > 100 ? 100 : brightness;
   manager.setColorTemperature(warmth > 100 ? 100 : warmth);
   lit = on;

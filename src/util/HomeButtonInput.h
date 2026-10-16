@@ -15,6 +15,7 @@ enum class HomeButtonAction : uint8_t {
   Dictionary,
   ReaderMenu,
   ToggleFrontlight,
+  CreateClipping,
   Count
 };
 

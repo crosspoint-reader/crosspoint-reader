@@ -12,6 +12,7 @@ struct RecentBook;
 namespace freeink {
 namespace ui {
 struct HeaderProps;
+struct Rect;
 struct BitmapRef;
 struct ListItem;
 }  // namespace ui
@@ -267,6 +268,14 @@ class BaseTheme {
   // drawHeader). The label strings point at internal static buffers refreshed
   // per call (headers draw on the single render task).
   static void applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::HeaderProps& props);
+  // The header band every screen draws in: the caller's full-width rect inset
+  // by the board's side insets, its top edge lowered by the board's
+  // headerOffsetY (bottom edge fixed, so content below keeps its boundary).
+  // Sets props.bleed so the band's fill and rule still span `rect`, and widens
+  // the status line's edge inset to clear rounded corners. Call after
+  // applyHeaderStatus.
+  static freeink::ui::Rect headerBand(const GfxRenderer& renderer, freeink::ui::Rect rect,
+                                      freeink::ui::HeaderProps& props);
   // Edge inset drawHeader uses for the clock/battery status line (detached
   // layouts hug the corner with a legacy 12px inset instead of the padding).
   static int headerStatusInset();
@@ -278,6 +287,8 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  static void drawSelectionHandle(const GfxRenderer& renderer, Rect rect, bool left);
+  static void drawSelectionActions(const GfxRenderer& renderer, Rect rect);
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   static void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,

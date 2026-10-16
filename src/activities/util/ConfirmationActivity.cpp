@@ -35,7 +35,10 @@ void ConfirmationActivity::render(RenderLock&& lock) {
 }
 
 void ConfirmationActivity::loop() {
-  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (confirmPopup.handleInput(mappedInput, [this] {
+        if (confirmPopup.isActive()) requestUpdate();
+      }))
+    return;
 
   // Popup dismissed without a selection (Back button or tap outside): cancel.
   ActivityResult res;
