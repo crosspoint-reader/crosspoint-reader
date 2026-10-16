@@ -68,7 +68,6 @@ bool showOnDevice(const SettingInfo& setting) {
 // End = not a row here: other categories (KOReader Sync, Status Bar, ...)
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
-  if (setting.section != SettingsSection::End) return setting.section;
   if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
   if (setting.category == StrId::STR_CAT_CONTROLS) return SettingsSection::Controls;
@@ -77,7 +76,7 @@ SettingsSection sectionFor(const SettingInfo& setting) {
 }
 
 // Device-only action rows added per section, beyond the shared list.
-constexpr size_t EXTRA_ROWS_PER_SECTION = 4;
+constexpr size_t EXTRA_ROWS_PER_SECTION = 5;
 }  // namespace
 
 void SettingsActivity::rebuildSettings() {
@@ -124,7 +123,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CLOCK, SettingAction::ClockSettings);
   }
   addAction(SettingsSection::Reader, StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar);
-  addAction(SettingsSection::FileBrowser, StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache);
+  addAction(SettingsSection::General, StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache);
 
   addAction(SettingsSection::Network, StrId::STR_WIFI_NETWORKS, SettingAction::Network);
   if (bleturner::status().compiledIn) {
@@ -132,12 +131,12 @@ void SettingsActivity::rebuildSettings() {
   }
   addAction(SettingsSection::Network, StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync);
   addAction(SettingsSection::Network, StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser);
+  addAction(SettingsSection::Network, StrId::STR_PLUGINS, SettingAction::Plugins);
 
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
   addAction(SettingsSection::System, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
   addAction(SettingsSection::System, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
-  addAction(SettingsSection::System, StrId::STR_PLUGINS, SettingAction::Plugins);
   addAction(SettingsSection::System, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }

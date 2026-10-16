@@ -17,8 +17,7 @@ namespace {
 constexpr int16_t ICON_SIZE = 32;
 // Row icons, indexed by SettingsSection.
 constexpr const freeink::Icon* SECTION_ICONS[SETTINGS_SECTION_COUNT] = {
-    &icon_settings_32, &icon_sun_moon_32, &icon_book_open_32, &icon_pointer_32,
-    &icon_folder_32,   &icon_library_32,  &icon_wifi_32,      &icon_cpu_32,
+    &icon_settings_32, &icon_smartphone_32, &icon_book_open_32, &icon_pointer_32, &icon_wifi_32, &icon_cpu_32,
 };
 }  // namespace
 
