@@ -368,6 +368,11 @@ void ChapterHtmlSlimParser::openBoxScope(BlockStyle& ownStyle, const CssStyle& c
   const bool shaded = cssStyle.defined.shaded && cssStyle.shaded;
   if (tableDepth > 0 || boxScopes.size() >= MAX_BOX_SCOPES || (!cssStyle.hasVisibleBorder() && !shaded)) return;
 
+  if (partWordBufferIndex > 0) flushPartWordBuffer();
+  if (currentTextBlock && !currentTextBlock->isEmpty() && !listItemBulletOnly) {
+    startNewTextBlock(blockStyleStack.back().withoutTop().withoutBottom());
+  }
+
   BoxScope box;
   box.depth = depth;
   box.shaded = shaded;

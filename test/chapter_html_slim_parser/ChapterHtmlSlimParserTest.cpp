@@ -1323,6 +1323,24 @@ TEST_F(ChapterInlineSizeTest, GridCellsResolveBlockAndWordFonts) {
   EXPECT_EQ(small.wordFontId(0, NOTOSERIF_14_FONT_ID), NOTOSERIF_12_FONT_ID);
 }
 
+TEST_F(ChapterBlockDecorationTest, BorderScopeExcludesPrecedingParentText) {
+  for (const char* tag : {"div", "h2"}) {
+    SCOPED_TRACE(tag);
+    open("div", nullptr);
+    text("Outside");
+    open(tag, "border: 1px solid");
+    text("Inside");
+    close(tag);
+    close("div");
+    const auto boxes = elementsWithTag(TAG_PageBorderBox);
+    const auto lines = elementsWithTag(TAG_PageLine);
+    ASSERT_GE(lines.size(), 2u);
+    ASSERT_FALSE(boxes.empty());
+    EXPECT_GT(boxes.back()->yPos, lines[lines.size() - 2]->yPos);
+    EXPECT_LT(boxes.back()->yPos, lines.back()->yPos);
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {
