@@ -11,12 +11,19 @@
 
 // Content for the shared details page (fui::publicationPage layout).
 struct DetailsSpec {
-  std::string header;       // header band title
-  std::string title;        // bold hero title
-  std::string author;       // hero line under the title
-  std::string source;       // hero line under the author (e.g. repository)
-  std::string metadata;     // short facts (version, status, ...)
-  std::string description;  // plain text, or HTML when descriptionHtml
+  std::string header;    // header band title
+  std::string title;     // bold hero title
+  std::string author;    // hero line under the title
+  std::string source;    // hero line under the author (e.g. repository)
+  std::string metadata;  // short facts (version, status, ...)
+  // Portrait cover slot: draws the image at coverPath, or the home screen's
+  // placeholder when empty. The caller owns (and deletes) the file.
+  bool showCover = false;
+  std::string coverPath;
+  // Availability block under the hero; each line is optional.
+  std::string status, copies, holds;
+  std::string descriptionHeading;  // optional heading above the description
+  std::string description;         // plain text, or HTML when descriptionHtml
   bool descriptionHtml = false;
   std::string actionLabel;  // primary button; confirming finishes with a non-cancelled result
 };
@@ -36,6 +43,8 @@ class DetailsActivity final : public Activity, private UiAppHost {
   static void detailsScreen(UiScreen& screen, void* user);
   static void onPrimaryEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onMoreEvent(const freeink::ui::ActionEvent& event, void* user);
+  static bool paintCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect,
+                         const freeink::ui::PublicationHeaderProps& props, void* user);
   static bool paintDescription(freeink::ui::DrawTarget& target, freeink::ui::Rect rect,
                                const freeink::ui::PublicationPageProps& props, void* user);
   void buildScreen(UiScreen& screen);
@@ -47,6 +56,7 @@ class DetailsActivity final : public Activity, private UiAppHost {
 
   DetailsSpec spec;
   // Description area the layout reserved, recorded by paintDescription.
+  freeink::ui::Rect coverRect{};  // recorded by paintCover; decoded in render()
   freeink::ui::Rect descriptionRect{};
   freeink::ui::Rect laidOutRect{};
   // First styled page of an HTML description; empty until laid out.

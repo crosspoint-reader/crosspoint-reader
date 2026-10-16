@@ -1,5 +1,6 @@
 #include "DetailsActivity.h"
 
+#include <Epub/converters/ImageDecoderFactory.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -117,6 +118,20 @@ void DetailsActivity::onMoreEvent(const fui::ActionEvent&, void* user) {
   self->openMore();
 }
 
+// Records the cover rect only; render() decodes into it after the app paints,
+// keeping the image decoder's stack off the component call chain.
+bool DetailsActivity::paintCover(fui::DrawTarget&, const fui::Rect rect, const fui::PublicationHeaderProps&,
+                                 void* user) {
+  auto* self = static_cast<DetailsActivity*>(user);
+  if (self->spec.coverPath.empty()) {
+    GUI.drawCoverPlaceholder(self->renderer, Rect{rect.x, rect.y, rect.width, rect.height});
+    self->coverRect = fui::Rect{};
+  } else {
+    self->coverRect = rect;
+  }
+  return true;
+}
+
 // Claims the area for HTML and records it; render() draws the page after the
 // app paints, keeping the page renderer off the component call chain.
 bool DetailsActivity::paintDescription(fui::DrawTarget&, const fui::Rect rect, const fui::PublicationPageProps&,
@@ -143,17 +158,28 @@ void DetailsActivity::buildScreen(UiScreen& screen) {
   props.book.series = asPtr(spec.source);  // the series slot is just a hero line
   props.book.titleText = theme.bodyText;
   props.book.detailText = theme.bodyText;
-  props.book.coverSize = fui::Size{0, 0};  // no artwork: text-only hero
-  props.book.titleLines = 2;
-  props.book.authorLines = 1;
   props.book.seriesLines = 1;
-  // Title (2 lines) and author each end with titleGap; the source line with textGap.
-  const bool hasSource = !spec.source.empty();
-  props.heroHeight =
-      static_cast<int16_t>((hasSource ? 4 : 3) * line + 2 * props.book.titleGap + (hasSource ? props.book.textGap : 0));
+  if (spec.showCover) {
+    // Component default hero height, sized for the cover.
+    props.book.coverPainter = &DetailsActivity::paintCover;
+    props.book.coverPainterUserData = this;
+  } else {
+    props.book.coverSize = fui::Size{0, 0};  // text-only hero
+    props.book.titleLines = 2;
+    props.book.authorLines = 1;
+    // Title (2 lines) and author each end with titleGap; the source line with textGap.
+    const bool hasSource = !spec.source.empty();
+    props.heroHeight = static_cast<int16_t>((hasSource ? 4 : 3) * line + 2 * props.book.titleGap +
+                                            (hasSource ? props.book.textGap : 0));
+  }
+  props.availability.status = asPtr(spec.status);
+  props.availability.copies = asPtr(spec.copies);
+  props.availability.holds = asPtr(spec.holds);
+  props.availability.headingText = theme.bodyText;
+  props.availability.detailText = theme.bodyText;
   props.metadata = asPtr(spec.metadata);
   props.metadataLines = 3;
-  props.descriptionHeading = nullptr;
+  props.descriptionHeading = asPtr(spec.descriptionHeading);
   props.description = asPtr(spec.description);
   props.descriptionPainter = &DetailsActivity::paintDescription;
   props.descriptionPainterUserData = this;
@@ -188,6 +214,13 @@ void DetailsActivity::render(RenderLock&&) {
   // The first paint only discovers the description area; loop() lays the
   // page out and repaints, so skip showing a frame with an empty body.
   if (needsLayout()) return;
+
+  if (coverRect.width > 0 && coverRect.height > 0) {
+    if (ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(spec.coverPath)) {
+      RenderConfig cfg{coverRect.x, coverRect.y, coverRect.width, coverRect.height};
+      decoder->decodeToFramebuffer(spec.coverPath, renderer, cfg);
+    }
+  }
 
   if (!pages.empty()) {
     const int fontId = SETTINGS.getReaderFontId();
