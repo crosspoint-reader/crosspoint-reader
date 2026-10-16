@@ -15,7 +15,6 @@ class CatalogActivity : public UiListActivity {
     SEARCH_INPUT,
     LOADING,
     BROWSING,
-    DETAIL,  // publication detail page (OPDS)
     DOWNLOADING,
     ERROR,
     PLUGIN_PICKER,

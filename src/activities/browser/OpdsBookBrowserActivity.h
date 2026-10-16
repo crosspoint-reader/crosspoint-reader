@@ -12,6 +12,8 @@
 #include "activities/CatalogActivity.h"
 #include "network/OpdsHttpTransport.h"
 
+struct DetailsSpec;
+
 /**
  * Activity for browsing and downloading books from an OPDS server.
  * Supports navigation through catalog hierarchy and downloading EPUBs.
@@ -26,7 +28,6 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
  private:
   // Subclass actions after the base's ACTION_SEARCH/ACTION_CANCEL.
   static constexpr freeink::ui::ActionId ACTION_PAGE = ACTION_USER + 2;
-  static constexpr freeink::ui::ActionId ACTION_DETAIL = ACTION_USER + 3;
 
   std::vector<OpdsEntry> entries;
   // Row buffer, built whenever entries changes (fetchFeed()/releaseEntries())
@@ -61,22 +62,10 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   int pageCurrent = 0;
   int pageTotal = 0;
   void setSearchQuery(const std::string& query);
-  // Publication detail page (DETAIL state): the parsed self-document, the book
-  // to acquire, and the availability/metadata lines the publication-page
-  // component renders (owned here so its borrowed const char* stay valid).
-  OpdsPublication currentPublication;
+  // The book the open details page acquires, and its cover art on an SD temp
+  // (removed when the page closes).
   OpdsEntry detailBook;
-  std::string detailStatus;    // availability status ("Available", "On hold"...)
-  std::string detailCopies;    // "N of M copies available"
-  std::string detailHolds;     // holds total or the reader's queue position
-  std::string detailMetadata;  // publisher / price, when present
-  // Book cover for the detail page: downloaded to an SD temp in
-  // openPublicationDetail, its rect captured by detailCoverPainter during
-  // layout, then decoded into the framebuffer in drawFooter() (the last hook
-  // before displayBuffer, kept off the deep component call chain).
   std::string detailCoverPath;
-  bool detailCoverReady = false;
-  freeink::ui::Rect detailCoverRect{};
   // Raw search URL template ({searchTerms} or RFC 6570 {?query} style),
   // either inlined in the feed or fetched from an OpenSearch description.
   std::string searchTemplate;
@@ -107,7 +96,7 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void downloadFinished(bool cancelled) override;
   void performSearch(const std::string& query) override;
   void onBackButton() override;
-  // DETAIL-state buttons and the pagination side buttons; everything else
+  // Pagination side buttons; everything else
   // falls through to the shared catalog input handling.
   bool handleCustomInput() override;
 
@@ -117,7 +106,6 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void followPageLink(const std::string& href);
   void buildBrowsingScreen(UiScreen& screen);
   static void onPageEvent(const freeink::ui::ActionEvent& event, void* user);
-  static void onDetailEvent(const freeink::ui::ActionEvent& event, void* user);
 
   // LCP acquisition: fetch the license, fulfill through the LCP service,
   // then prompt for the passphrase and store the device-wrapped book key.
@@ -147,18 +135,14 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
   void openPublicationDetail(const OpdsEntry& entry);
-  void buildDetailScreen(UiScreen& screen);
-  void rebuildDetailInfo();
-  // Download the publication's cover art to an SD temp for the detail page.
-  void loadDetailCover(const std::string& docUrl);
-  // Cover painter passed to the publication component: records the cover rect
-  // (the actual decode runs in drawFooter(), not in this deep call).
-  static bool detailCoverPainter(freeink::ui::DrawTarget& target, freeink::ui::Rect rect,
-                                 const freeink::ui::PublicationHeaderProps& props, void* user);
-  // Label for the detail-page acquire button (and its button hint): Buy for a
-  // purchase, Place Hold for a borrowable title with no copies available,
-  // otherwise Borrow (library loan) or Download (direct file).
-  const char* acquireLabel() const;
+  static void fillDetailInfo(const OpdsPublication& publication, DetailsSpec& spec);
+  // Download the publication's cover art to an SD temp for the details page.
+  void loadDetailCover(const std::string& docUrl, const std::string& coverHref);
+  // Label for the details-page acquire button: Buy for a purchase, Place Hold
+  // for a borrowable title with no copies available, otherwise Borrow (library
+  // loan) or Download (direct file).
+  const char* acquireLabel(const OpdsAvailability& av) const;
+  const char* browserTitle() const;
   bool ensureSearchTemplate();
   // Client status hook: reflect the login phase in the status line.
   static void onClientStatus(void* ctx, freeink::opds::ClientPhase phase);

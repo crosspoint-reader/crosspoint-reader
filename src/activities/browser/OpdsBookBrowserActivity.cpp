@@ -1,7 +1,6 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <Arduino.h>
-#include <Epub/converters/ImageDecoderFactory.h>
 #include <FontCacheManager.h>
 #include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
@@ -25,6 +24,7 @@
 #include "LcpPassphraseStore.h"
 #include "MappedInputManager.h"
 #include "OpdsTokenStore.h"
+#include "activities/util/DetailsActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "components/icons/opdsIcons.h"
@@ -83,7 +83,6 @@ OpdsBookBrowserActivity::OpdsBookBrowserActivity(GfxRenderer& renderer, MappedIn
 void OpdsBookBrowserActivity::onEnter() {
   CatalogActivity::onEnter();
   app.on(ACTION_PAGE, &OpdsBookBrowserActivity::onPageEvent, this);
-  app.on(ACTION_DETAIL, &OpdsBookBrowserActivity::onDetailEvent, this);
 
   // Configure the OPDS client for this server, restore any persisted token, and
   // reset the per-session auth latches. Accept-Language localizes the catalog
@@ -109,7 +108,6 @@ void OpdsBookBrowserActivity::onExit() {
     if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
     detailCoverPath.clear();
   }
-  detailCoverReady = false;
   CatalogActivity::onExit();
 }
 
@@ -120,15 +118,6 @@ void OpdsBookBrowserActivity::activateIndex(const int index) {
 }
 
 bool OpdsBookBrowserActivity::handleCustomInput() {
-  if (state == State::DETAIL) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      downloadBook(detailBook);
-      return true;
-    }
-    // Back falls through to handleButtons() -> onBackButton(); the acquire
-    // button routes through the shared touch pass (ACTION_DETAIL).
-    return false;
-  }
   if (state == State::BROWSING &&
       (!pageNextHref.empty() || !pagePrevHref.empty() || !pageFirstHref.empty() || !pageLastHref.empty())) {
     // On a paginated feed the side buttons belong to feed pages exclusively.
@@ -189,19 +178,18 @@ void OpdsBookBrowserActivity::setSearchQuery(const std::string& query) {
   headerSearchTitle = query.empty() ? std::string() : "“" + query + "”";
 }
 
+// An active search replaces the server name with the quoted query, like the
+// library view, so the reader can see what produced the current list. With
+// no search, a navigated feed's own title beats the server name.
+const char* OpdsBookBrowserActivity::browserTitle() const {
+  return !headerSearchTitle.empty() ? headerSearchTitle.c_str()
+         : !feedTitle.empty()       ? feedTitle.c_str()
+         : server.name.empty()      ? tr(STR_OPDS_BROWSER)
+                                    : server.name.c_str();
+}
+
 void OpdsBookBrowserActivity::buildScreen(UiScreen& screen) {
-  // An active search replaces the server name with the quoted query, like the
-  // library view, so the reader can see what produced the current list. With
-  // no search, a navigated feed's own title beats the server name.
-  const char* title = !headerSearchTitle.empty() ? headerSearchTitle.c_str()
-                      : !feedTitle.empty()       ? feedTitle.c_str()
-                      : server.name.empty()      ? tr(STR_OPDS_BROWSER)
-                                                 : server.name.c_str();
-  screenHeader(screen, title);
-  if (state == State::DETAIL) {
-    buildDetailScreen(screen);
-    return;
-  }
+  screenHeader(screen, browserTitle());
   if (buildStatusScreen(screen, /*boldError=*/false, /*showDownloadTotal=*/true)) return;
   buildBrowsingScreen(screen);
 }
@@ -297,9 +285,6 @@ void OpdsBookBrowserActivity::drawFooter() {
       labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
       break;
     }
-    case State::DETAIL:
-      labels = mappedInput.mapLabels(tr(STR_BACK), acquireLabel(), "", "");
-      break;
     case State::DOWNLOADING:
       labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
       break;
@@ -311,16 +296,6 @@ void OpdsBookBrowserActivity::drawFooter() {
       break;
   }
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  // Decode the book cover into the rect the layout reserved. Done here — the
-  // last render hook before displayBuffer() — so the JPEG decoder's stack
-  // cost doesn't stack on the deep FreeInkUI compose path.
-  if (state == State::DETAIL && detailCoverReady && detailCoverRect.width > 0 && detailCoverRect.height > 0) {
-    if (ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(detailCoverPath)) {
-      RenderConfig cfg{detailCoverRect.x, detailCoverRect.y, detailCoverRect.width, detailCoverRect.height};
-      decoder->decodeToFramebuffer(detailCoverPath, renderer, cfg);
-    }
-  }
 }
 
 void OpdsBookBrowserActivity::startBrowse() {
@@ -492,14 +467,7 @@ void OpdsBookBrowserActivity::navigateBack() {
   startBrowse();
 }
 
-void OpdsBookBrowserActivity::onBackButton() {
-  if (state == State::DETAIL) {
-    // Entries were released for heap; rebuild the catalog we came from.
-    startBrowse();
-    return;
-  }
-  navigateBack();
-}
+void OpdsBookBrowserActivity::onBackButton() { navigateBack(); }
 
 // SD destination from the configured download folder + filename format.
 std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) const {
@@ -826,20 +794,13 @@ bool OpdsBookBrowserActivity::parseUnlockResponse(const std::string& response, L
   return true;
 }
 
-void OpdsBookBrowserActivity::onDetailEvent(const fui::ActionEvent&, void* user) {
-  auto* self = static_cast<OpdsBookBrowserActivity*>(user);
-  if (self->state != State::DETAIL) return;
-  self->app.clearTapFlash();
-  self->downloadBook(self->detailBook);
-}
-
 // Open the publication detail page: fetch the publication's self-document for
 // full metadata + availability, then show it with an acquire button. The
 // catalog list and SD font caches are released first (rebuilt on Back) to keep
 // the most heap free for the TLS fetch, exactly like a download.
 void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
   detailBook = entry;
-  currentPublication = OpdsPublication{};
+  OpdsPublication publication;
 
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   const bool haveSelf = !entry.selfHref.empty();
@@ -851,59 +812,83 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
   if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
 
   if (haveSelf) {
-    opdsClient.fetchPublication(docUrl, currentPublication);
+    opdsClient.fetchPublication(docUrl, publication);
   }
 
-  if (!currentPublication.valid) {
+  if (!publication.valid) {
     // No self link, or the fetch/parse failed: show what the list row had.
-    currentPublication = OpdsPublication{};
-    currentPublication.title = entry.title;
-    currentPublication.author = entry.author;
-    currentPublication.acquisitionHref = entry.href;
-    currentPublication.indirect = entry.indirect;
-    currentPublication.purchase = entry.purchase;
-    if (entry.purchase) currentPublication.price = entry.detail;
-    currentPublication.valid = !entry.title.empty();
+    OpdsPublication publication;
+    publication.title = entry.title;
+    publication.author = entry.author;
+    publication.acquisitionHref = entry.href;
+    publication.indirect = entry.indirect;
+    publication.purchase = entry.purchase;
+    if (entry.purchase) publication.price = entry.detail;
+    publication.valid = !entry.title.empty();
   }
   // Feed-inline fallbacks: without a publication self document (OPDS 1.x, or
   // OPDS 2.0 servers like Mayberry that inline everything) the feed entry is
   // the only source for the description and cover. Also fills gaps when a
   // document exists but omits one of them.
-  if (currentPublication.description.empty()) currentPublication.description = entry.description;
-  if (currentPublication.coverHref.empty()) currentPublication.coverHref = entry.coverHref;
+  if (publication.description.empty()) publication.description = entry.description;
+  if (publication.coverHref.empty()) publication.coverHref = entry.coverHref;
 
   // Resolve the acquisition to an absolute URL against the document it came
   // from; downloadBook() resolves against the feed, so an absolute URL is used
   // verbatim.
-  if (!currentPublication.acquisitionHref.empty()) {
-    detailBook.href = UrlUtils::buildUrl(docUrl, currentPublication.acquisitionHref);
-    detailBook.indirect = currentPublication.indirect;
-    detailBook.purchase = currentPublication.purchase;
+  if (!publication.acquisitionHref.empty()) {
+    detailBook.href = UrlUtils::buildUrl(docUrl, publication.acquisitionHref);
+    detailBook.indirect = publication.indirect;
+    detailBook.purchase = publication.purchase;
   }
 
   // Fetch the cover art (best-effort) while entries and font caches are still
   // released, so the TLS transfer has maximum heap. Resolved against the
   // document the cover href came from.
-  loadDetailCover(haveSelf ? docUrl : feedUrl);
+  loadDetailCover(haveSelf ? docUrl : feedUrl, publication.coverHref);
 
-  rebuildDetailInfo();
-  state = State::DETAIL;
-  requestUpdate();
+  DetailsSpec spec;
+  spec.header = browserTitle();
+  spec.title = std::move(publication.title);
+  spec.author = std::move(publication.author);
+  spec.showCover = true;
+  spec.coverPath = detailCoverPath;
+  fillDetailInfo(publication, spec);
+  spec.descriptionHeading = tr(STR_OPDS_ABOUT_BOOK);
+  spec.description = std::move(publication.description);
+  spec.descriptionHtml = true;  // publication documents may carry markup; plain text parses as-is
+  spec.actionLabel = acquireLabel(publication.availability);
+
+  auto details = makeUniqueNoThrow<DetailsActivity>(renderer, mappedInput, std::move(spec));
+  if (!details) {
+    LOG_ERR("OPDS", "OOM: publication details");
+    startBrowse();
+    return;
+  }
+  startActivityForResult(std::move(details), [this](const ActivityResult& result) {
+    if (!detailCoverPath.empty()) {
+      if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
+      detailCoverPath.clear();
+    }
+    if (result.isCancelled) {
+      startBrowse();  // entries were released for heap; rebuild the catalog we came from
+    } else {
+      downloadBook(detailBook);
+    }
+  });
 }
 
 // Downloads the publication's cover art to an SD temp file for the detail page.
 // A cover is optional chrome: any failure just leaves the placeholder, never
 // blocks the page.
-void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl) {
-  detailCoverReady = false;
-  detailCoverRect = fui::Rect{};
+void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl, const std::string& coverHref) {
   if (!detailCoverPath.empty()) {
     if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
     detailCoverPath.clear();
   }
-  if (currentPublication.coverHref.empty()) return;
+  if (coverHref.empty()) return;
 
-  const std::string url = UrlUtils::buildUrl(docUrl, currentPublication.coverHref);
+  const std::string url = UrlUtils::buildUrl(docUrl, coverHref);
   // The decoder factory picks JPEG vs PNG by file extension; name the temp to
   // match. Default to JPEG (the common case, and content-negotiated URLs with
   // no extension).
@@ -928,114 +913,48 @@ void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl) {
     return;
   }
   detailCoverPath = std::move(tmp);
-  detailCoverReady = true;
 }
 
-bool OpdsBookBrowserActivity::detailCoverPainter(fui::DrawTarget&, fui::Rect rect, const fui::PublicationHeaderProps&,
-                                                 void* user) {
-  auto* self = static_cast<OpdsBookBrowserActivity*>(user);
-  if (!self->detailCoverReady) {
-    // No cover art: the same placeholder the home screen draws (cheap, so it
-    // can run right here, unlike the JPEG decode).
-    GUI.drawCoverPlaceholder(self->renderer, Rect{rect.x, rect.y, rect.width, rect.height});
-    self->detailCoverRect = fui::Rect{};
-    return true;
-  }
-  // Record the rect only; the decode runs in drawFooter() to keep the JPEG
-  // decoder off this deep component call chain.
-  self->detailCoverRect = rect;
-  return true;
-}
-
-// Formats the availability and metadata lines the publication-page component
-// draws. Owned by the activity so the component's borrowed const char* stay
-// valid across repaints; rebuilt once per opened publication.
-void OpdsBookBrowserActivity::rebuildDetailInfo() {
-  detailStatus.clear();
-  detailCopies.clear();
-  detailHolds.clear();
-  detailMetadata.clear();
-
-  const OpdsAvailability& av = currentPublication.availability;
+// Formats the availability and metadata lines of the details page.
+void OpdsBookBrowserActivity::fillDetailInfo(const OpdsPublication& publication, DetailsSpec& spec) {
+  const OpdsAvailability& av = publication.availability;
   if (av.present()) {
     const char* stateStr = av.state == "available"     ? tr(STR_OPDS_AVAILABLE)
                            : av.state == "ready"       ? tr(STR_OPDS_READY)
                            : av.state == "reserved"    ? tr(STR_OPDS_RESERVED)
                            : av.state == "unavailable" ? tr(STR_OPDS_UNAVAILABLE)
                                                        : nullptr;
-    if (stateStr) detailStatus = stateStr;
+    if (stateStr) spec.status = stateStr;
     if (av.copiesTotal >= 0) {
       char b[64];
       snprintf(b, sizeof(b), tr(STR_OPDS_COPIES), av.copiesAvailable < 0 ? 0 : av.copiesAvailable, av.copiesTotal);
-      detailCopies = b;
+      spec.copies = b;
     }
     // The reader's own queue position is more useful than the raw holds count.
     if (av.holdsPosition >= 0) {
       char b[48];
       snprintf(b, sizeof(b), tr(STR_OPDS_HOLD_POSITION), av.holdsPosition);
-      detailHolds = b;
+      spec.holds = b;
     } else if (av.holdsTotal >= 0) {
       char b[48];
       snprintf(b, sizeof(b), tr(STR_OPDS_HOLDS), av.holdsTotal);
-      detailHolds = b;
+      spec.holds = b;
     }
   }
 
-  if (!currentPublication.purchase && !currentPublication.price.empty()) {
-    detailMetadata = currentPublication.price;
-  } else if (!currentPublication.publisher.empty()) {
-    detailMetadata = currentPublication.publisher;
+  if (!publication.purchase && !publication.price.empty()) {
+    spec.metadata = publication.price;
+  } else if (!publication.publisher.empty()) {
+    spec.metadata = publication.publisher;
   }
 }
 
-const char* OpdsBookBrowserActivity::acquireLabel() const {
+const char* OpdsBookBrowserActivity::acquireLabel(const OpdsAvailability& av) const {
   if (detailBook.purchase) return tr(STR_OPDS_BUY);
   if (!detailBook.indirect) return tr(STR_DOWNLOAD);
   // Borrowable (library loan): offer to place a hold when no copy is free.
-  const OpdsAvailability& av = currentPublication.availability;
   const bool noCopies = av.state == "unavailable" || (av.copiesAvailable == 0 && av.copiesTotal > 0);
   return noCopies ? tr(STR_OPDS_PLACE_HOLD) : tr(STR_OPDS_BORROW);
-}
-
-void OpdsBookBrowserActivity::buildDetailScreen(UiScreen& screen) {
-  // Content band comes from screenHeader() (header above, button hints
-  // below), same as every other state.
-  const auto& theme = screen.theme();
-  const auto asPtr = [](const std::string& s) { return s.empty() ? nullptr : s.c_str(); };
-
-  fui::PublicationPageProps props;
-  props.book.title = asPtr(currentPublication.title);
-  props.book.author = asPtr(currentPublication.author);
-  // Downloaded cover: the painter reserves its rect and drawFooter() decodes
-  // into it. No cover: the painter draws the home screen's placeholder.
-  props.book.coverPainter = &OpdsBookBrowserActivity::detailCoverPainter;
-  props.book.coverPainterUserData = this;
-  props.book.titleText = theme.bodyText;
-  props.book.detailText = theme.bodyText;
-  props.availability.status = asPtr(detailStatus);
-  props.availability.copies = asPtr(detailCopies);
-  props.availability.holds = asPtr(detailHolds);
-  props.availability.headingText = theme.bodyText;
-  props.availability.detailText = theme.bodyText;
-  props.descriptionHeading = tr(STR_OPDS_ABOUT_BOOK);
-  props.description = asPtr(currentPublication.description);
-  props.metadata = asPtr(detailMetadata);
-  props.headingText = theme.bodyText;
-  props.bodyText = theme.bodyText;
-  props.primary.label = acquireLabel();
-  props.primary.action = ACTION_DETAIL;
-  // Same styling and theme rounding as every themed button in the app
-  // (controlRadius: RoundedRaff pill, Classic square), plus an outline so
-  // the resting state reads as a button against the page.
-  props.primary.styles = theme.button;
-  props.primary.styles.normal.border = fui::Paint::solid(fui::Color::Black);
-  props.primary.styles.normal.borderWidth = 1;
-  props.primary.text = theme.bodyText;
-  props.primary.radius = theme.controlRadius;
-  props.primary.minTouchSize = theme.minTouchSize;
-  props.actionHeight = theme.rowHeight;
-
-  fui::publicationPage(screen.frame(), screen.body(), props);
 }
 
 // Login can take several seconds (TLS handshakes across the catalog and its
