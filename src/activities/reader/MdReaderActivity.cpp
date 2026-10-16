@@ -23,7 +23,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;
 constexpr size_t MAX_LINE_LENGTH = 64 * 1024;
 constexpr uint32_t CACHE_MAGIC = 0x4D4B4449;  // "MKDI"
-constexpr uint8_t CACHE_VERSION = 4;          // Bumped: GFM pipe table support
+constexpr uint8_t CACHE_VERSION = 5;          // Bumped: grid-rendered pipe tables
 
 static std::string flattenHeadingText(const MdParser::ParsedLine& parsed) {
   std::string result;
@@ -33,6 +33,26 @@ static std::string flattenHeadingText(const MdParser::ParsedLine& parsed) {
   return result;
 }
 }  // namespace
+
+uint32_t MdReaderActivity::TableContext::pack() const {
+  uint32_t v = cols & 0xF;
+  for (uint8_t c = 0; c < MAX_TABLE_COLS; c++) {
+    v |= static_cast<uint32_t>(aligns[c] & 0x3) << (4 + 2 * c);
+  }
+  return v;
+}
+
+MdReaderActivity::TableContext MdReaderActivity::TableContext::unpack(const uint32_t v) {
+  TableContext ctx;
+  ctx.cols = static_cast<uint8_t>(v & 0xF);
+  if (ctx.cols > MAX_TABLE_COLS && ctx.cols != COLS_FLATTENED) {
+    ctx.cols = 0;  // corrupt cache entry: treat as "no open table"
+  }
+  for (uint8_t c = 0; c < MAX_TABLE_COLS; c++) {
+    ctx.aligns[c] = static_cast<uint8_t>((v >> (4 + 2 * c)) & 0x3);
+  }
+  return ctx;
+}
 
 void MdReaderActivity::assignHeadingPageNumbers() {
   if (pageOffsets.empty()) {
@@ -188,6 +208,7 @@ void MdReaderActivity::scanHeadings() {
 
 void MdReaderActivity::onReaderExit() {
   pageCodeBlockState.clear();
+  pageTableState.clear();
   currentPageLines.clear();
 }
 
@@ -240,67 +261,36 @@ int MdReaderActivity::measureSpans(const std::vector<MdParser::Span>& spans) con
   });
 }
 
-bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
-                                          std::vector<RenderedLine>& outLines, int maxLines, bool isCodeBlock) {
+bool MdReaderActivity::wrapSpans(const std::vector<MdParser::Span>& spans, const int availableWidth, const int maxLines,
+                                 std::vector<std::vector<MdParser::Span>>& outLines,
+                                 std::vector<int>& outWidths) const {
   const size_t startSize = outLines.size();
 
-  if (parsed.spans.empty()) {
-    RenderedLine rl;
-    rl.indent = indent;
-    rl.isHR = (parsed.blockType == MdParser::BlockType::HorizontalRule);
-    outLines.push_back(std::move(rl));
-    return true;
-  }
-
-  const int availableWidth = viewportWidth - indent;
-  if (availableWidth <= 0) return true;
-
-  // Build a flat list of all spans, prepending the list prefix if present.
-  std::vector<MdParser::Span> allSpans;
-  if (!parsed.listPrefix.empty()) {
-    allSpans.push_back({parsed.listPrefix, EpdFontFamily::REGULAR});
-  }
-  allSpans.insert(allSpans.end(), parsed.spans.begin(), parsed.spans.end());
-
-  const int listPrefixIndent =
-      !parsed.listPrefix.empty()
-          ? renderer.getTextAdvanceX(cachedFontId, parsed.listPrefix.c_str(), EpdFontFamily::REGULAR)
-          : 0;
-
-  // Check if everything fits on one line
-  int totalWidth = measureSpans(allSpans);
-  if (totalWidth <= availableWidth) {
-    RenderedLine rl;
-    rl.spans = std::move(allSpans);
-    rl.indent = indent;
-    rl.isCodeBlock = isCodeBlock;
-    outLines.push_back(std::move(rl));
-    return true;
-  }
-
-  // Word-wrap across spans
-  const int continuationIndent = indent + listPrefixIndent;
-  RenderedLine currentLine;
-  currentLine.indent = indent;
-  currentLine.isCodeBlock = isCodeBlock;
+  std::vector<MdParser::Span> currentLine;
   int currentWidth = 0;
   bool fullyConsumed = true;
 
-  for (size_t si = 0; si < allSpans.size(); si++) {
-    const auto& span = allSpans[si];
+  auto emitLine = [&]() {
+    outLines.push_back(std::move(currentLine));
+    outWidths.push_back(currentWidth);
+    currentLine = std::vector<MdParser::Span>();
+    currentWidth = 0;
+  };
+
+  for (const auto& span : spans) {
     if (span.text.empty()) continue;
 
-    int spanWidth = renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
+    const int spanWidth = renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
 
     if (currentWidth + spanWidth <= availableWidth) {
-      currentLine.spans.push_back(span);
+      currentLine.push_back(span);
       currentWidth += spanWidth;
       continue;
     }
 
     // Need to break within this span
     std::string remaining = span.text;
-    auto style = span.style;
+    const auto style = span.style;
 
     while (!remaining.empty()) {
       // Check line limit (using lines added, not total size)
@@ -309,10 +299,10 @@ bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
         goto done;
       }
 
-      int remWidth = renderer.getTextAdvanceX(cachedFontId, remaining.c_str(), style);
+      const int remWidth = renderer.getTextAdvanceX(cachedFontId, remaining.c_str(), style);
 
       if (currentWidth + remWidth <= availableWidth) {
-        currentLine.spans.push_back({remaining, style});
+        currentLine.push_back({remaining, style});
         currentWidth += remWidth;
         remaining.clear();
         break;
@@ -334,27 +324,20 @@ bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
       }
 
       if (breakPos == 0) {
-        if (currentLine.spans.empty()) {
+        if (currentLine.empty()) {
           breakPos = 1;
           while (breakPos < remaining.size() && (remaining[breakPos] & 0xC0) == 0x80) {
             breakPos++;
           }
         } else {
-          outLines.push_back(std::move(currentLine));
-          currentLine = RenderedLine();
-          currentLine.indent = continuationIndent;
-          currentLine.isCodeBlock = isCodeBlock;
-          currentWidth = 0;
+          emitLine();
           continue;
         }
       }
 
-      currentLine.spans.push_back({remaining.substr(0, breakPos), style});
-      outLines.push_back(std::move(currentLine));
-      currentLine = RenderedLine();
-      currentLine.indent = continuationIndent;
-      currentLine.isCodeBlock = isCodeBlock;
-      currentWidth = 0;
+      currentLine.push_back({remaining.substr(0, breakPos), style});
+      currentWidth += renderer.getTextAdvanceX(cachedFontId, currentLine.back().text.c_str(), style);
+      emitLine();
 
       size_t skip = breakPos;
       if (skip < remaining.size() && remaining[skip] == ' ') {
@@ -365,16 +348,179 @@ bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, in
   }
 
 done:
-  if (!currentLine.spans.empty()) {
-    outLines.push_back(std::move(currentLine));
+  if (!currentLine.empty()) {
+    emitLine();
   }
   return fullyConsumed;
 }
 
-bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, std::vector<RenderedLine>& outLines,
-                                        size_t& nextOffset, bool& endInCodeBlock) {
+bool MdReaderActivity::wordWrapParsedLine(const MdParser::ParsedLine& parsed, int indent,
+                                          std::vector<RenderedLine>& outLines, int maxLines, bool isCodeBlock) {
+  if (parsed.spans.empty()) {
+    RenderedLine rl;
+    rl.indent = indent;
+    rl.isHR = (parsed.blockType == MdParser::BlockType::HorizontalRule);
+    outLines.push_back(std::move(rl));
+    return true;
+  }
+
+  const int availableWidth = viewportWidth - indent;
+  if (availableWidth <= 0) return true;
+
+  // Build a flat list of all spans, prepending the list prefix if present.
+  std::vector<MdParser::Span> allSpans;
+  allSpans.reserve(parsed.spans.size() + 1);
+  if (!parsed.listPrefix.empty()) {
+    allSpans.push_back({parsed.listPrefix, EpdFontFamily::REGULAR});
+  }
+  allSpans.insert(allSpans.end(), parsed.spans.begin(), parsed.spans.end());
+
+  const int listPrefixIndent =
+      !parsed.listPrefix.empty()
+          ? renderer.getTextAdvanceX(cachedFontId, parsed.listPrefix.c_str(), EpdFontFamily::REGULAR)
+          : 0;
+
+  // Transient span-line holders; the spans are moved into the RenderedLines.
+  std::vector<std::vector<MdParser::Span>> lines;
+  std::vector<int> widths;
+  const bool fullyConsumed = wrapSpans(allSpans, availableWidth, maxLines, lines, widths);
+
+  if (lines.empty()) {
+    // Spans with no text (an empty line inside a code block): still one blank line.
+    RenderedLine rl;
+    rl.indent = indent;
+    rl.isCodeBlock = isCodeBlock;
+    outLines.push_back(std::move(rl));
+    return fullyConsumed;
+  }
+
+  outLines.reserve(outLines.size() + lines.size());
+  for (size_t i = 0; i < lines.size(); i++) {
+    RenderedLine rl;
+    rl.spans = std::move(lines[i]);
+    rl.indent = (i == 0) ? indent : indent + listPrefixIndent;
+    rl.isCodeBlock = isCodeBlock;
+    outLines.push_back(std::move(rl));
+  }
+  return fullyConsumed;
+}
+
+bool MdReaderActivity::layoutTableRow(const MdParser::ParsedLine& parsed, const TableContext& ctx, const bool isHeader,
+                                      const bool drawTopRule, const int maxLines, std::vector<RenderedLine>& outLines) {
+  if (maxLines <= 0) return false;
+  const uint8_t cols = ctx.cols;
+  const int colWidth = viewportWidth / cols;
+  const int innerWidth = colWidth - 2 * TABLE_CELL_PAD_X;
+
+  // Per-cell wrapped lines, transient for this one row (never the whole table).
+  // Bounded: at most cols × maxLines span lines, and wrapSpans stops at the cap,
+  // so a pathological cell never builds lines just to throw them away.
+  struct CellLayout {
+    std::vector<std::vector<MdParser::Span>> lines;
+    std::vector<int> widths;
+  };
+  CellLayout cells[MAX_TABLE_COLS];  // 8 × 2 empty vectors: stack headers only
+
+  int rowLines = 1;  // an all-empty row still occupies one visual line
+  const size_t cellCount = std::min(parsed.tableCells.size(), static_cast<size_t>(cols));
+  for (size_t c = 0; c < cellCount; c++) {
+    // Copy, not move: on failure the caller still owns the row for the
+    // flattened fallback. Cell strings are short; this is a page-build path.
+    std::vector<MdParser::Span> cellSpans = parsed.tableCells[c];
+    if (isHeader) {
+      for (auto& s : cellSpans) {
+        s.style = static_cast<EpdFontFamily::Style>(static_cast<uint8_t>(s.style) |
+                                                    static_cast<uint8_t>(EpdFontFamily::BOLD));
+      }
+    }
+    if (!wrapSpans(cellSpans, innerWidth, maxLines, cells[c].lines, cells[c].widths)) {
+      return false;  // this cell alone is taller than the space the row may use
+    }
+    rowLines = std::max(rowLines, static_cast<int>(cells[c].lines.size()));
+  }
+  if (rowLines > maxLines) return false;
+
+  outLines.reserve(outLines.size() + rowLines);
+  for (int li = 0; li < rowLines; li++) {
+    RenderedLine rl;
+    rl.tableCols = cols;
+    if (li == 0 && drawTopRule) rl.tableFlags |= TBL_TOP;
+    if (li == rowLines - 1) {
+      rl.tableFlags |= TBL_ROW_END;
+      if (isHeader) rl.tableFlags |= TBL_HEADER;
+    }
+
+    size_t spanCount = 0;
+    for (size_t c = 0; c < cellCount; c++) {
+      if (li < static_cast<int>(cells[c].lines.size())) spanCount += cells[c].lines[li].size();
+    }
+    rl.spans.reserve(spanCount);
+    rl.spanX.reserve(spanCount);
+
+    for (size_t c = 0; c < cellCount; c++) {
+      if (li >= static_cast<int>(cells[c].lines.size())) continue;
+      auto& cellLine = cells[c].lines[li];
+      const int lineWidth = cells[c].widths[li];
+      int x = static_cast<int>(c) * colWidth + TABLE_CELL_PAD_X;
+      const auto align = static_cast<MdParser::TableAlign>(ctx.aligns[c]);
+      if (align == MdParser::TableAlign::Center) {
+        x += std::max(0, (innerWidth - lineWidth) / 2);
+      } else if (align == MdParser::TableAlign::Right) {
+        x += std::max(0, innerWidth - lineWidth);
+      }
+      for (auto& s : cellLine) {
+        const int w = renderer.getTextAdvanceX(cachedFontId, s.text.c_str(), s.style);
+        rl.spans.push_back(std::move(s));
+        rl.spanX.push_back(static_cast<int16_t>(x));
+        x += w;
+      }
+    }
+    outLines.push_back(std::move(rl));
+  }
+  return true;
+}
+
+bool MdReaderActivity::appendFlattenedTableRow(const MdParser::ParsedLine& parsed, const bool isHeader,
+                                               const int maxLines, std::vector<RenderedLine>& outLines) {
+  // Flatten cells into a single flowed line: "Cell1  │  Cell2  │  Cell3".
+  MdParser::ParsedLine flatLine;
+  flatLine.blockType = MdParser::BlockType::Paragraph;
+  size_t spanCount = parsed.tableCells.size();  // one divider between each pair of cells
+  for (const auto& cell : parsed.tableCells) spanCount += cell.size();
+  flatLine.spans.reserve(spanCount);
+
+  bool first = true;
+  for (const auto& cell : parsed.tableCells) {
+    if (!first) {
+      flatLine.spans.push_back({"  \xe2\x94\x82  ", EpdFontFamily::REGULAR});  // " │ "
+    }
+    first = false;
+    for (auto span : cell) {
+      if (isHeader) {
+        span.style = static_cast<EpdFontFamily::Style>(static_cast<uint8_t>(span.style) |
+                                                       static_cast<uint8_t>(EpdFontFamily::BOLD));
+      }
+      flatLine.spans.push_back(std::move(span));
+    }
+  }
+
+  const bool fullyConsumed = wordWrapParsedLine(flatLine, 0, outLines, maxLines);
+
+  // After a header row, add a thin separator line (reuses the isHR rendering).
+  if (fullyConsumed && isHeader && static_cast<int>(outLines.size()) < linesPerPage) {
+    RenderedLine sep;
+    sep.isHR = true;
+    outLines.push_back(sep);
+  }
+  return fullyConsumed;
+}
+
+bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, TableContext startTable,
+                                        std::vector<RenderedLine>& outLines, size_t& nextOffset, bool& endInCodeBlock,
+                                        TableContext& endTable) {
   outLines.clear();
   endInCodeBlock = startInCodeBlock;
+  endTable = startTable;
   const size_t fileSize = txt->getFileSize();
 
   if (offset >= fileSize) {
@@ -389,6 +535,11 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
   pageBuffer[bufferSize] = '\0';
 
   bool inCodeBlock = startInCodeBlock;
+  // Table left open by the previous page (or opened on this one). A page that
+  // starts mid-table draws its first grid line with a fresh top rule, closing
+  // the box the page break opened.
+  TableContext tableCtx = startTable;
+  bool tableTopPending = startTable.active();
   size_t pos = 0;
 
   while (pos < bufferSize && static_cast<int>(outLines.size()) < linesPerPage) {
@@ -449,73 +600,96 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
       parsed = MdParser::parseLine(rawLine, inCodeBlock);
     }
 
-    // GFM table handling: separator rows are invisible; the first data row in a table
-    // block is promoted to TableHeader (bold cells + separator line drawn after it).
+    // GFM pipe tables. Separator rows are invisible; their alignment is
+    // captured when the table's first row peeks ahead at them.
     if (parsed.blockType == MdParser::BlockType::TableSeparator) {
       pos = lineEnd + 1;
       continue;
     }
+    if (parsed.blockType == MdParser::BlockType::TableRow && parsed.tableCells.empty()) {
+      // A pipe line with no content: keep the old behaviour, a blank flowed line.
+      parsed.blockType = MdParser::BlockType::Paragraph;
+    }
     if (parsed.blockType == MdParser::BlockType::TableRow) {
-      // Promote first row of a table to header if immediately followed by a separator.
-      // We detect this by peeking ahead at the next line in the buffer.
+      const bool startingTable = !tableCtx.active();
       bool isHeader = false;
-      {
+      if (startingTable) {
+        // Promote the table's first row to header if immediately followed by a
+        // separator row, which also carries the per-column alignment. Peeks at
+        // the next line in the buffer, like the flattened renderer always did.
         size_t nextLineStart = lineEnd + 1;
         size_t nextLineEnd = nextLineStart;
         while (nextLineEnd < bufferSize && pageBuffer[nextLineEnd] != '\n') nextLineEnd++;
         std::string nextRaw(reinterpret_cast<char*>(pageBuffer.data() + nextLineStart), nextLineEnd - nextLineStart);
         if (!nextRaw.empty() && nextRaw.back() == '\r') nextRaw.pop_back();
-        isHeader = MdParser::isTableSeparator(nextRaw);
-      }
-      if (isHeader) parsed.blockType = MdParser::BlockType::TableHeader;
 
-      // Flatten cells into a single line: "Cell1  │  Cell2  │  Cell3"
-      // Bold all spans when this is a header row.
-      MdParser::ParsedLine flatLine;
-      flatLine.blockType = MdParser::BlockType::Paragraph;
-      bool first = true;
-      for (auto& cell : parsed.tableCells) {
-        if (!first) {
-          flatLine.spans.push_back({"  \xe2\x94\x82  ", EpdFontFamily::REGULAR});  // " │ "
+        tableCtx = TableContext();
+        const size_t cellCount = parsed.tableCells.size();
+        const int gridCols = static_cast<int>(std::min<size_t>(cellCount, MAX_TABLE_COLS));
+        const bool tooNarrow = viewportWidth / gridCols - 2 * TABLE_CELL_PAD_X < MIN_COL_INNER_WIDTH;
+        if (cellCount > MAX_TABLE_COLS || tooNarrow) {
+          // The grid cannot represent this table; flatten it until it ends.
+          tableCtx.cols = TableContext::COLS_FLATTENED;
+        } else {
+          tableCtx.cols = static_cast<uint8_t>(gridCols);
         }
-        first = false;
-        for (auto& span : cell) {
-          if (isHeader) {
-            span.style = static_cast<EpdFontFamily::Style>(static_cast<uint8_t>(span.style) |
-                                                           static_cast<uint8_t>(EpdFontFamily::BOLD));
+        if (MdParser::isTableSeparator(nextRaw)) {
+          isHeader = true;
+          const auto aligns = MdParser::parseTableAlignments(nextRaw);
+          for (size_t c = 0; c < aligns.size() && c < MAX_TABLE_COLS; c++) {
+            tableCtx.aligns[c] = static_cast<uint8_t>(aligns[c]);
           }
-          flatLine.spans.push_back(span);
         }
+        tableTopPending = true;
       }
 
       {
-        std::string flatText;
-        for (const auto& span : flatLine.spans) flatText += span.text;
-        if (!flatText.empty()) renderer.ensureFontReady(cachedFontId, flatText.c_str());
+        // SD fonts load glyphs on demand: warm the row's text (and the
+        // flattened divider, cheap to include) before any measuring.
+        std::string rowText = "\xe2\x94\x82";
+        for (const auto& cell : parsed.tableCells) {
+          for (const auto& span : cell) rowText += span.text;
+        }
+        renderer.ensureFontReady(cachedFontId, rowText.c_str());
       }
 
-      size_t linesBefore = outLines.size();
-      int remainingLines = linesPerPage - static_cast<int>(outLines.size());
-      bool fullyConsumed = wordWrapParsedLine(flatLine, 0, outLines, remainingLines);
+      const size_t linesBefore = outLines.size();
+      const int remainingLines = linesPerPage - static_cast<int>(outLines.size());
+      bool fullyConsumed;
+      if (tableCtx.flattened()) {
+        fullyConsumed = appendFlattenedTableRow(parsed, isHeader, remainingLines, outLines);
+      } else {
+        fullyConsumed = layoutTableRow(parsed, tableCtx, isHeader, tableTopPending, remainingLines, outLines);
+        if (fullyConsumed) {
+          tableTopPending = false;
+        } else if (linesBefore == 0) {
+          // The row alone is taller than a page; a grid row cannot be split,
+          // so this one row degrades to the flattened form (which truncates).
+          // The rows after it resume the grid as a fresh fragment.
+          fullyConsumed = appendFlattenedTableRow(parsed, isHeader, remainingLines, outLines);
+          tableTopPending = true;
+        }
+      }
+
       if (!fullyConsumed) {
         if (linesBefore > 0) {
+          // Page was partially filled — roll the whole row to the next page.
           outLines.resize(linesBefore);
+          if (startingTable) {
+            tableCtx = TableContext();  // the first row rolls over; the next page re-detects its header
+          }
         } else {
+          // Even the flattened form of a page-sized row truncates: advance past it.
           pos = lineComplete ? lineEnd + 1 : lineEnd;
         }
         break;
       }
 
-      // After a header row, add a thin separator line (reuse isHR rendering)
-      if (isHeader && static_cast<int>(outLines.size()) < linesPerPage) {
-        RenderedLine sep;
-        sep.isHR = true;
-        outLines.push_back(sep);
-      }
-
       pos = lineEnd + 1;
       continue;
     }
+    // Any other block type (a blank line included) closes an open table.
+    tableCtx = TableContext();
 
     // Determine indent (base + nesting level)
     int indent = 0;
@@ -576,12 +750,14 @@ bool MdReaderActivity::loadPageAtOffset(size_t offset, bool startInCodeBlock, st
   }
 
   endInCodeBlock = inCodeBlock;
+  endTable = tableCtx;
   return !outLines.empty();
 }
 
 void MdReaderActivity::buildPageIndex() {
   pageOffsets.clear();
   pageCodeBlockState.clear();
+  pageTableState.clear();
 
   const size_t fileSize = txt->getFileSize();
   if (fileSize == 0) {
@@ -592,9 +768,11 @@ void MdReaderActivity::buildPageIndex() {
 
   pageOffsets.push_back(0);
   pageCodeBlockState.push_back(0);
+  pageTableState.push_back(0);
 
   size_t offset = 0;
   bool inCodeBlock = false;
+  TableContext tableCtx;
 
   LOG_DBG("MDR", "Building page index for %zu bytes...", fileSize);
 
@@ -604,8 +782,9 @@ void MdReaderActivity::buildPageIndex() {
     std::vector<RenderedLine> tempLines;
     size_t nextOffset = offset;
     bool nextCodeBlock = inCodeBlock;
+    TableContext nextTable;
 
-    if (!loadPageAtOffset(offset, inCodeBlock, tempLines, nextOffset, nextCodeBlock)) {
+    if (!loadPageAtOffset(offset, inCodeBlock, tableCtx, tempLines, nextOffset, nextCodeBlock, nextTable)) {
       break;
     }
 
@@ -615,10 +794,12 @@ void MdReaderActivity::buildPageIndex() {
 
     offset = nextOffset;
     inCodeBlock = nextCodeBlock;
+    tableCtx = nextTable;
 
     if (offset < fileSize) {
       pageOffsets.push_back(offset);
       pageCodeBlockState.push_back(inCodeBlock ? 1 : 0);
+      pageTableState.push_back(tableCtx.pack());
     }
 
     if (pageOffsets.size() % 20 == 0) {
@@ -653,15 +834,36 @@ void MdReaderActivity::render(RenderLock&&) {
   size_t offset = pageOffsets[currentPage];
   bool startCodeBlock =
       (currentPage < static_cast<int>(pageCodeBlockState.size())) ? pageCodeBlockState[currentPage] : false;
+  TableContext startTable = (currentPage < static_cast<int>(pageTableState.size()))
+                                ? TableContext::unpack(pageTableState[currentPage])
+                                : TableContext();
   size_t nextOffset;
   bool endCodeBlock;
+  TableContext endTable;
   currentPageLines.clear();
-  loadPageAtOffset(offset, startCodeBlock, currentPageLines, nextOffset, endCodeBlock);
+  loadPageAtOffset(offset, startCodeBlock, startTable, currentPageLines, nextOffset, endCodeBlock, endTable);
 
   renderer.clearScreen();
   renderPage();
 
   saveProgress();
+}
+
+int MdReaderActivity::drawSpanAt(const int x, const int y, const MdParser::Span& span) const {
+  if (span.text.empty()) return 0;
+  const int spanWidth = renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
+  renderer.drawText(cachedFontId, x, y, span.text.c_str(), true, span.style);
+  if ((span.style & EpdFontFamily::UNDERLINE) != 0) {
+    const int underlineY = y + renderer.getFontAscenderSize(cachedFontId) + 3;
+    renderer.drawLine(x, underlineY, x + spanWidth, underlineY, 2, true);
+  }
+  if ((span.style & EpdFontFamily::STRIKETHROUGH) != 0) {
+    // Arbitrary vertical offset of 4px from the font midline to avoid colliding with typical diacritics;
+    // adjust as needed
+    const int strikeY = y + renderer.getFontAscenderSize(cachedFontId) / 2 + 4;
+    renderer.drawLine(x, strikeY, x + spanWidth, strikeY, 2, true);
+  }
+  return spanWidth;
 }
 
 void MdReaderActivity::renderPage() {
@@ -677,6 +879,31 @@ void MdReaderActivity::renderPage() {
         const int contentWidth = viewportWidth - line.indent;
         const int hrX = cachedOrientedMarginLeft + line.indent + contentWidth / 4;
         renderer.drawLine(hrX, hrY, hrX + contentWidth / 2, hrY);
+        y += lineHeight;
+      } else if (line.tableCols > 0) {
+        // Table grid line: column rules span the line box; the spans carry
+        // their own x (alignment was baked in at layout time).
+        const int cols = line.tableCols;
+        const int colWidth = viewportWidth / cols;
+        const int x0 = cachedOrientedMarginLeft;
+        const int tableRight = x0 + colWidth * cols;
+        for (int c = 0; c <= cols; c++) {
+          const int cx = x0 + c * colWidth;
+          renderer.drawLine(cx, y, cx, y + lineHeight - 1);
+        }
+        if (line.tableFlags & TBL_TOP) {
+          renderer.drawLine(x0, y, tableRight, y);
+        }
+        if (line.tableFlags & TBL_ROW_END) {
+          const int ry = y + lineHeight - 1;
+          renderer.drawLine(x0, ry, tableRight, ry);
+          if (line.tableFlags & TBL_HEADER) {
+            renderer.drawLine(x0, ry - 1, tableRight, ry - 1);
+          }
+        }
+        for (size_t i = 0; i < line.spans.size(); i++) {
+          drawSpanAt(x0 + line.spanX[i], y, line.spans[i]);
+        }
         y += lineHeight;
       } else {
         if (line.isCodeBlock) {
@@ -705,21 +932,7 @@ void MdReaderActivity::renderPage() {
 
           // Render each span
           for (const auto& span : line.spans) {
-            if (!span.text.empty()) {
-              const int spanWidth = renderer.getTextAdvanceX(cachedFontId, span.text.c_str(), span.style);
-              renderer.drawText(cachedFontId, x, y, span.text.c_str(), true, span.style);
-              if ((span.style & EpdFontFamily::UNDERLINE) != 0) {
-                const int underlineY = y + renderer.getFontAscenderSize(cachedFontId) + 3;
-                renderer.drawLine(x, underlineY, x + spanWidth, underlineY, 2, true);
-              }
-              if ((span.style & EpdFontFamily::STRIKETHROUGH) != 0) {
-                // Arbitrary vertical offset of 4px from the font midline to avoid colliding with typical diacritics;
-                // adjust as needed
-                const int strikeY = y + renderer.getFontAscenderSize(cachedFontId) / 2 + 4;
-                renderer.drawLine(x, strikeY, x + spanWidth, strikeY, 2, true);
-              }
-              x += spanWidth;
-            }
+            x += drawSpanAt(x, y, span);
           }
         }
         y += lineHeight;
@@ -837,14 +1050,19 @@ bool MdReaderActivity::loadPageIndexCache() {
   pageOffsets.reserve(numPages);
   pageCodeBlockState.clear();
   pageCodeBlockState.reserve(numPages);
+  pageTableState.clear();
+  pageTableState.reserve(numPages);
 
   for (uint32_t i = 0; i < numPages; i++) {
     uint32_t pageOffset;
     serialization::readPod(f, pageOffset);
     uint8_t codeState;
     serialization::readPod(f, codeState);
+    uint32_t tableState;
+    serialization::readPod(f, tableState);
     pageOffsets.push_back(pageOffset);
     pageCodeBlockState.push_back(codeState);
+    pageTableState.push_back(tableState);
   }
 
   totalPages = pageOffsets.size();
@@ -873,6 +1091,7 @@ void MdReaderActivity::savePageIndexCache() const {
   for (size_t i = 0; i < pageOffsets.size(); i++) {
     serialization::writePod(f, static_cast<uint32_t>(pageOffsets[i]));
     serialization::writePod(f, pageCodeBlockState[i]);
+    serialization::writePod(f, i < pageTableState.size() ? pageTableState[i] : 0u);
   }
 
   LOG_DBG("MDR", "Saved page index cache: %d pages", totalPages);
