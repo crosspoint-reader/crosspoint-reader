@@ -21,6 +21,7 @@
 #include <cstring>
 #include <new>
 #include <string_view>
+#include <type_traits>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -62,6 +63,16 @@ constexpr size_t MAX_BROWSE_RESPONSE = 1024 * 1024;
 constexpr size_t MAX_BROWSE_LIST_INDEX_RESPONSE = 16 * 1024;
 constexpr size_t MAX_ITEM_DETAILS_RESPONSE = 24 * 1024;
 constexpr int MAX_PAGE_SIZE = 16;
+
+// JsonListParser has six generic field slots. The compatibility and details
+// passes store other fields in the slots they do not need.
+constexpr auto COMPAT_FAMILY = JsonListParser::F_AUTHOR;
+constexpr auto COMPAT_API_MIN = JsonListParser::F_ID;
+constexpr auto COMPAT_REQUIRES = JsonListParser::F_URL;
+constexpr auto DETAIL_DESCRIPTION = JsonListParser::F_URL;
+constexpr auto DETAIL_REPOSITORY = JsonListParser::F_BASE;
+constexpr auto DETAIL_PAGE_URL = JsonListParser::F_URL;
+constexpr auto DETAIL_PAGE_FORMAT = JsonListParser::F_BASE;
 
 std::string htmlEscape(const std::string& value) {
   std::string escaped;
@@ -110,16 +121,21 @@ std::string_view trimCsvToken(std::string_view token) {
   return token;
 }
 
-bool csvContainsToken(std::string_view csv, const std::string_view wanted) {
+// Calls fn(token) for each trimmed comma-separated token; stops early when fn returns false.
+template <typename Fn>
+bool allCsvTokens(std::string_view csv, Fn fn) {
   size_t start = 0;
-  while (start <= csv.size()) {
+  while (true) {
     size_t end = csv.find(',', start);
     if (end == std::string_view::npos) end = csv.size();
-    if (trimCsvToken(csv.substr(start, end - start)) == wanted) return true;
-    if (end == csv.size()) break;
+    if (!fn(trimCsvToken(csv.substr(start, end - start)))) return false;
+    if (end == csv.size()) return true;
     start = end + 1;
   }
-  return false;
+}
+
+bool csvContainsToken(std::string_view csv, const std::string_view wanted) {
+  return !allCsvTokens(csv, [wanted](const std::string_view token) { return token != wanted; });
 }
 
 bool matchesCsvRestriction(const std::string& restriction, const std::string_view current) {
@@ -135,24 +151,14 @@ bool matchesPluginApiMinimum(const std::string& minimum) {
 
 bool matchesCapabilities(const std::string& required) {
   if (required.empty()) return true;
-  const std::string_view available = firmwareidentity::PLUGIN_CAPABILITIES;
-  const std::string_view requested = required;
-  size_t start = 0;
-  while (start <= requested.size()) {
-    size_t end = requested.find(',', start);
-    if (end == std::string_view::npos) end = requested.size();
-    const std::string_view capability = trimCsvToken(requested.substr(start, end - start));
-    if (capability.empty() || !csvContainsToken(available, capability)) return false;
-    if (end == requested.size()) break;
-    start = end + 1;
-  }
-  return true;
+  return allCsvTokens(required, [](const std::string_view capability) {
+    return !capability.empty() && csvContainsToken(firmwareidentity::PLUGIN_CAPABILITIES, capability);
+  });
 }
 
-bool catalogEntryCompatible(const std::string& family, const std::string& firmware, const std::string& apiMin,
+bool catalogEntryCompatible(const std::string& family, const std::string& apiMin,
                             const std::string& requiredCapabilities) {
-  return matchesCsvRestriction(family, firmwareidentity::FAMILY) &&
-         matchesCsvRestriction(firmware, firmwareidentity::ID) && matchesPluginApiMinimum(apiMin) &&
+  return matchesCsvRestriction(family, firmwareidentity::FAMILY) && matchesPluginApiMinimum(apiMin) &&
          matchesCapabilities(requiredCapabilities);
 }
 
@@ -244,15 +250,6 @@ std::vector<PluginRef> discoverPlugins() {
   return plugins;
 }
 
-bool anyPluginInstalled() {
-  // manifest.json alone means web-card metadata only; plugin.js or device.json
-  // is what makes an installed plugin worth the home screen's library slot.
-  for (const auto& e : PluginLocations::scanPlugins()) {
-    if (e.hasPluginJs || e.hasDevice) return true;
-  }
-  return false;
-}
-
 bool PluginCatalogActivity::loadManifest() {
   std::string raw;
   if (!Storage.readFileToString("PCAT", manifestPath, MAX_MANIFEST_SIZE, raw)) return false;
@@ -292,7 +289,6 @@ bool PluginCatalogActivity::loadManifest() {
   }
   JsonVariantConst compatibility = browse["compatibility"];
   manifest.compatFamilyPath = compatibility["firmware_family"] | "";
-  manifest.compatFirmwarePath = compatibility["firmware"] | "";
   manifest.compatApiMinPath = compatibility["plugin_api_min"] | "";
   manifest.compatRequiresPath = compatibility["requires"] | "";
   manifest.pageSize = browse["page_size"] | 8;
@@ -428,7 +424,6 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
   substituteAll(tpl, "{token}", token);
   for (const auto& kv : config) substituteAll(tpl, ("{cfg." + kv.first + "}").c_str(), kv.second);
   substituteAll(tpl, "{firmware_family}", firmwareidentity::FAMILY);
-  substituteAll(tpl, "{firmware_id}", firmwareidentity::ID);
   substituteAll(tpl, "{firmware_version}", CROSSPOINT_VERSION);
   substituteAll(tpl, "{plugin_capabilities}", firmwareidentity::PLUGIN_CAPABILITIES);
   char num[16];
@@ -771,13 +766,15 @@ bool PluginCatalogActivity::parseBrowseResponse() {
         rawHasMore = true;
         return;
       }
-      if (catalogEntryCompatible(row.field[JsonListParser::F_AUTHOR], row.field[JsonListParser::F_ID],
-                                 row.field[JsonListParser::F_URL], row.field[JsonListParser::F_VERSION]))
+      if (catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]))
         compatibleRows.push_back(thisRow);
     };
-    const std::string* const compatibilityFields[] = {&manifest.titlePath,          &manifest.compatFamilyPath,
-                                                      &manifest.compatFirmwarePath, &manifest.compatApiMinPath,
-                                                      &manifest.compatRequiresPath, &unused};
+    const std::string* compatibilityFields[JsonListParser::F_COUNT] = {};
+    for (auto& field : compatibilityFields) field = &unused;
+    compatibilityFields[JsonListParser::F_TITLE] = &manifest.titlePath;
+    compatibilityFields[COMPAT_FAMILY] = &manifest.compatFamilyPath;
+    compatibilityFields[COMPAT_API_MIN] = &manifest.compatApiMinPath;
+    compatibilityFields[COMPAT_REQUIRES] = &manifest.compatRequiresPath;
     auto compatibilityParser = makeUniqueNoThrow<JsonListParser>(
         manifest.itemsPath, compatibilityFields, unused,
         [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(selectCompatible)*>(context))(row); },
@@ -1359,45 +1356,54 @@ void PluginCatalogActivity::activateItem(const int itemIndex) {
 bool PluginCatalogActivity::loadItemDetails(const int itemIndex, ItemDetails& details) {
   if (itemIndex < 0 || itemIndex >= static_cast<int>(items.size())) return false;
   const Item& target = items[itemIndex];
+  // Rows are matched by id, or by title+version when the catalog has no ids.
+  const auto isTarget = [&target](const JsonListParser::Row& row) {
+    if (!target.id.empty()) return row.field[JsonListParser::F_ID] == target.id;
+    return row.field[JsonListParser::F_TITLE] == target.title &&
+           (target.version.empty() || row.field[JsonListParser::F_VERSION] == target.version);
+  };
+  const std::string unused;
+  // Every pass keys rows on title/id/version and reads three more fields.
+  const auto streamFor = [&](auto& capture, const std::string* author, const std::string* extraUrl,
+                             const std::string* extraBase) {
+    const std::string* fields[JsonListParser::F_COUNT] = {};
+    fields[JsonListParser::F_TITLE] = &manifest.titlePath;
+    fields[JsonListParser::F_AUTHOR] = author;
+    fields[JsonListParser::F_ID] = &manifest.idPath;
+    fields[JsonListParser::F_URL] = extraUrl;
+    fields[JsonListParser::F_VERSION] = &manifest.versionPath;
+    fields[JsonListParser::F_BASE] = extraBase;
+    auto parser = makeUniqueNoThrow<JsonListParser>(
+        manifest.itemsPath, fields, unused,
+        [](void* context, JsonListParser::Row& row) {
+          (*static_cast<std::remove_reference_t<decltype(capture)>*>(context))(row);
+        },
+        &capture);
+    return streamBrowseFile(parser.get());
+  };
+
   bool found = false;
-  auto capture = [&](JsonListParser::Row& row) {
-    if (found) return;
-    const bool idMatch = !target.id.empty() && row.field[JsonListParser::F_AUTHOR] == target.id;
-    const bool fallbackMatch = target.id.empty() && row.field[JsonListParser::F_TITLE] == target.title &&
-                               (target.version.empty() || row.field[JsonListParser::F_VERSION] == target.version);
-    if (!idMatch && !fallbackMatch) return;
-    details.description = std::move(row.field[JsonListParser::F_ID]);
-    details.author = std::move(row.field[JsonListParser::F_URL]);
-    details.repository = std::move(row.field[JsonListParser::F_BASE]);
+  auto captureMetadata = [&](JsonListParser::Row& row) {
+    if (found || !isTarget(row)) return;
+    details.author = std::move(row.field[JsonListParser::F_AUTHOR]);
+    details.description = std::move(row.field[DETAIL_DESCRIPTION]);
+    details.repository = std::move(row.field[DETAIL_REPOSITORY]);
     found = true;
   };
-  const std::string* const fields[] = {&manifest.titlePath,        &manifest.idPath,      &manifest.descriptionPath,
-                                       &manifest.detailAuthorPath, &manifest.versionPath, &manifest.repositoryPath};
-  const std::string unused;
-  auto parser = makeUniqueNoThrow<JsonListParser>(
-      manifest.itemsPath, fields, unused,
-      [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(capture)*>(context))(row); }, &capture);
-  const bool metadataFound = streamBrowseFile(parser.get()) && found;
-
+  const bool metadataFound =
+      streamFor(captureMetadata, &manifest.detailAuthorPath, &manifest.descriptionPath, &manifest.repositoryPath) &&
+      found;
   if (manifest.detailsUrlPath.empty()) return metadataFound;
-  bool richFound = false;
-  auto captureRich = [&](JsonListParser::Row& row) {
-    if (richFound) return;
-    const bool idMatch = !target.id.empty() && row.field[JsonListParser::F_AUTHOR] == target.id;
-    const bool fallbackMatch = target.id.empty() && row.field[JsonListParser::F_TITLE] == target.title &&
-                               (target.version.empty() || row.field[JsonListParser::F_VERSION] == target.version);
-    if (!idMatch && !fallbackMatch) return;
-    details.detailsUrl = std::move(row.field[JsonListParser::F_ID]);
-    details.detailsFormat = std::move(row.field[JsonListParser::F_URL]);
-    richFound = true;
+
+  bool pageFound = false;
+  auto capturePage = [&](JsonListParser::Row& row) {
+    if (pageFound || !isTarget(row)) return;
+    details.detailsUrl = std::move(row.field[DETAIL_PAGE_URL]);
+    details.detailsFormat = std::move(row.field[DETAIL_PAGE_FORMAT]);
+    pageFound = true;
   };
-  const std::string* const richFields[] = {&manifest.titlePath,         &manifest.idPath,      &manifest.detailsUrlPath,
-                                           &manifest.detailsFormatPath, &manifest.versionPath, &unused};
-  auto richParser = makeUniqueNoThrow<JsonListParser>(
-      manifest.itemsPath, richFields, unused,
-      [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(captureRich)*>(context))(row); },
-      &captureRich);
-  return (streamBrowseFile(richParser.get()) && richFound) || metadataFound;
+  return (streamFor(capturePage, &unused, &manifest.detailsUrlPath, &manifest.detailsFormatPath) && pageFound) ||
+         metadataFound;
 }
 
 void PluginCatalogActivity::showItemDetails(const int itemIndex) {

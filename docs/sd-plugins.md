@@ -15,7 +15,7 @@ and the firmware carries no vendor names, URLs, or file-format knowledge.
 ```
 
 **Discovery and the on-device list.** The plugin subsystem is controlled by
-**Settings → System → Advanced → Plugin System**. When enabled, **Plugins** is
+**Settings → System → Plugins**. When enabled, **Plugins** is
 shown on the Home screen even when no plugins are installed. Every plugin folder
 (anything holding a `manifest.json`, `plugin.js`, or `device.json`) appears under
 **Home → Plugins**, showing its `title` and one-line `description`. Selecting a
@@ -47,18 +47,18 @@ state; it does not change the normal plugin validity contract once removed.
 
 ### Enabling plugins and Plugin Hub
 
-The **Plugin System** switch is the global gate for SD-card plugin discovery and
+The **Plugins** setting is the global gate for SD-card plugin discovery and
 execution. New installations default to **Disabled**. Firmware upgrades detect
-existing plugin folders and keep the Plugin System enabled so an upgrade does
-not silently disable an existing setup. Turning the Plugin System off does not
+existing plugin folders and keep plugins enabled so an upgrade does
+not silently disable an existing setup. Turning plugins off does not
 delete or rename any plugin files; turning it back on makes them discoverable
 again.
 
 Plugin Hub is optional and is not required for sideloaded plugins. The native
 Hub is considered available when the first matching `pluginhub` directory has a
 `device.json` and is not quarantined by `.installing`; `manifest.json`,
-`plugin.js`, and `README.md` are not required for native availability. When the
-Plugin System is enabled, no native Hub is available, and the installer has not
+`plugin.js`, and `README.md` are not required for native availability. When
+plugins are enabled, no native Hub is available, and the installer has not
 been hidden, **Home → Plugins** contains a synthetic **Plugin Hub — Download,
 discover, and update plugins** entry. Selecting it offers:
 
@@ -69,11 +69,8 @@ discover, and update plugins** entry. Selecting it offers:
   sideloaded plugins continue to work normally.
 - **Cancel** — leave the entry visible and make no changes.
 
-The **Hide** preference persists across reboots and Plugin System disable/enable
-cycles. While the Plugin System is enabled and the Hub installer is hidden,
-**Settings → System → Advanced** shows **Restore Plugin Hub installer**. Selecting
-it clears only the hidden preference; installed and sideloaded plugins are not
-restarted or changed.
+The **Hide** preference persists across reboots. Setting **Settings → System →
+Plugins** to **Enabled** clears it, which brings the installer entry back.
 
 For users who prefer manual installation, Plugin Hub can be downloaded directly
 from <https://github.com/jadehawk/PluginHub.crosspoint-plugin/releases>. Copy or
@@ -177,7 +174,6 @@ of the plugin-system contract, not hardware detection.
 | Value | Stock CrossPoint value | Purpose |
 |---|---|---|
 | `firmware_family` | `crosspoint` | Broad compatibility family. Forks that intentionally keep the same plugin contract can advertise the same family. |
-| `firmware_id` | `crosspoint` | Exact firmware implementation ID. Use this when a plugin depends specifically on stock CrossPoint behavior rather than the wider family. |
 | `plugin_api` | `1` | Numeric plugin contract level for requirements that need a minimum firmware API generation. |
 | `plugin_capabilities` | comma-separated names below | Fine-grained feature advertisement. A catalog entry may require one or more capabilities without hard-coding a firmware version. |
 
@@ -189,7 +185,7 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.notices` | A browse list can display an optional confirmation notice with custom title, message, Confirm, and Cancel labels before opening. | Any plugin can require a generic user notice before entering a catalog or section. Plugin Hub currently uses this for the Community-plugin warning. |
 | `catalog.bundle_install` | A catalog entry can install a multi-file plugin bundle from a base URL plus a file list into the plugin directory. | Any catalog can distribute a plugin or other supported bundle made of multiple files without a dedicated installer in firmware. Plugin Hub currently uses this to install complete plugins. |
 | `catalog.version_tracking` | Catalog item versions are compared with installed plugin manifests to show Installed or Update status. | Any catalog can expose install/update state using the generic installed-plugin version contract. Plugin Hub currently uses it to identify available updates. |
-| `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, exact firmware ID, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
+| `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
 | `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
 
 Capability names describe firmware behavior available to the entire plugin system.
@@ -211,7 +207,6 @@ download filename/username/password; and sidecar path/body.
 | `{token}` | contents of the token file at `token.path` | template fields |
 | `{cfg.KEY}` | value of `KEY` in the flat JSON config file at `config.file` | template fields |
 | `{firmware_family}` | stable firmware family (`crosspoint` on stock CrossPoint) | template fields |
-| `{firmware_id}` | exact firmware implementation ID (`crosspoint` on stock CrossPoint) | template fields |
 | `{firmware_version}` | current `CROSSPOINT_VERSION` value | template fields |
 | `{plugin_api}` | numeric plugin API level | template fields |
 | `{plugin_capabilities}` | comma-separated advertised capability names | template fields |
@@ -231,7 +226,7 @@ Two browse formats:
   config. XML field selectors are `"elem"` (child element text), `"elem@attr"`
   (child element attribute), or `"@attr"` (attribute on the item element).
 
-For JSON catalogs, `browse.compatibility` maps optional catalog-entry fields to firmware checks. If a catalog entry omits compatibility metadata, it is accepted and displayed normally. When an entry declares restrictions, `firmware_family` and `firmware` are comma-separated allow-lists, `plugin_api_min` requires the device API to be at least that value, and every comma-separated `requires` capability must be advertised by the firmware. Any mismatch silently omits that entry.
+For JSON catalogs, `browse.compatibility` maps optional catalog-entry fields to firmware checks. If a catalog entry omits compatibility metadata, it is accepted and displayed normally. When an entry declares restrictions, `firmware_family` is a comma-separated allow-list, `plugin_api_min` requires the device API to be at least that value, and every comma-separated `requires` capability must be advertised by the firmware. Any mismatch silently omits that entry.
 
 JSON catalogs may also map `description`, `detail_author`, and `repository` for a generic item-details view, plus `details_url` and `details_format` for optional richer content. Catalog row subtitles may use up to three lines; the full Details view is still opened explicitly. Version-tracked catalogs automatically use Details before install/update and, for backward compatibility, recognize conventional item keys named `description`, `author`, `repository`, `details.url`, and `details.format` when explicit mappings are absent. Other JSON catalogs get the same Details-before-Fetch flow when a details field is mapped. The firmware re-streams the cached page only for the selected item, so long metadata is not retained for every row in memory. If `details_url` is present, firmware fetches that selected item only (bounded to 24 KiB); `details_format: "html"` uses the existing semantic HTML reader while an empty format or `text` is plain text. An unavailable URL or unsupported format falls back to the normal description/author/version/repository Details page and never blocks Install, Update, or Fetch.
 
@@ -277,7 +272,6 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
     },
     "compatibility": {                    // optional JSON-only catalog filtering
       "firmware_family": "compatibility.firmware_family",
-      "firmware": "compatibility.firmware",
       "plugin_api_min": "compatibility.plugin_api_min",
       "requires": "compatibility.requires"
     },
@@ -412,7 +406,7 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
 ### Testing a new manifest
 
 1. Copy the plugin folder to `/.crosspoint/plugins/<name>/` on the SD card.
-2. Enable **Settings → System → Advanced → Plugin System**, then open **Home → Plugins → your title**. With no token and no `auth`
+2. Enable **Settings → System → Plugins**, then open **Home → Plugins → your title**. With no token and no `auth`
    block you should see the not-signed-in screen; with `auth`, the code/QR
    screen.
 3. Watch serial (`[PCAT]` tag) for request/parse failures — the log includes

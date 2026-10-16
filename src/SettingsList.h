@@ -430,9 +430,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
                             "backShortToFileBrowser", StrId::STR_CAT_CONTROLS),
 
-        // Global plugin switch is persisted here but managed from System -> Advanced.
-        SettingInfo::Toggle(StrId::STR_PLUGIN_SYSTEM, &CrossPointSettings::pluginsEnabled, "pluginsEnabled")
-            .withWebHidden(),
+        // Persisted here; set from the System -> Plugins popup.
+        SettingInfo::Toggle(StrId::STR_PLUGINS, &CrossPointSettings::pluginsEnabled, "pluginsEnabled").withWebHidden(),
         SettingInfo::Toggle(StrId::STR_PLUGIN_HUB, &CrossPointSettings::pluginHubPromptHidden, "pluginHubPromptHidden")
             .withWebHidden(),
 

@@ -531,7 +531,6 @@ void CrossPointWebServer::handleStatus() const {
   JsonDocument doc;
   doc["version"] = CROSSPOINT_VERSION;
   doc["firmwareFamily"] = firmwareidentity::FAMILY;
-  doc["firmwareId"] = firmwareidentity::ID;
   doc["pluginApi"] = firmwareidentity::PLUGIN_API_VERSION;
   doc["pluginCapabilities"] = firmwareidentity::PLUGIN_CAPABILITIES;
   doc["ip"] = ipAddr;

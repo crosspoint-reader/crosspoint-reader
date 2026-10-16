@@ -30,9 +30,6 @@ struct PluginRef {
 // Rescan plugin roots on demand; metadata is owned by the picker.
 std::vector<PluginRef> discoverPlugins();
 
-// True if a plugin.js or device.json is installed; reads no manifests.
-bool anyPluginInstalled();
-
 // Manifest-driven picker, catalog, download, and sign-in screens.
 // See docs/sd-plugins.md for the device.json schema.
 class PluginCatalogActivity final : public CatalogActivity {
@@ -66,14 +63,13 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::string versionPath;
     // Optional catalog-entry compatibility fields. Empty paths mean no
     // restriction; entries that omit the mapped values remain visible.
-    std::string compatFamilyPath, compatFirmwarePath, compatApiMinPath, compatRequiresPath;
+    std::string compatFamilyPath, compatApiMinPath, compatRequiresPath;
     bool tracksInstalls() const { return !versionPath.empty(); }
     bool hasItemDetails() const {
       return tracksInstalls() || !descriptionPath.empty() || !repositoryPath.empty() || !detailsUrlPath.empty();
     }
     bool filtersCompatibility() const {
-      return !compatFamilyPath.empty() || !compatFirmwarePath.empty() || !compatApiMinPath.empty() ||
-             !compatRequiresPath.empty();
+      return !compatFamilyPath.empty() || !compatApiMinPath.empty() || !compatRequiresPath.empty();
     }
     int pageSize = 8;
     // Named JSON views override the browse URL/body; Back returns to their picker.
