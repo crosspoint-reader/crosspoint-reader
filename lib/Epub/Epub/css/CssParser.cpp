@@ -171,23 +171,36 @@ bool compoundMatches(const CompoundSelector& compound, const CssAncestor& ancest
   return true;
 }
 
-// Matches a stored ancestor part ("div.poem > ", "body div ") right to left
-// against open ancestors (outermost first). Descendant steps bind to the nearest
-// matching ancestor.
-bool ancestorsMatch(std::string_view context, const CssAncestor* ancestors, size_t candidates) {
-  while (true) {
-    const bool child = popTrailingCombinator(context);
-    if (context.empty()) return true;
+// Match a contiguous chain of child combinators at one ancestor position.
+// Leave context and candidates at the next descendant step on success.
+bool matchChildChain(std::string_view& context, const CssAncestor* ancestors, size_t& candidates) {
+  do {
     CompoundSelector compound;
-    if (!parseCompound(popTrailingCompound(context), compound)) return false;
-    if (child) {
-      if (candidates == 0 || !compoundMatches(compound, ancestors[candidates - 1])) return false;
-    } else {
-      while (candidates > 0 && !compoundMatches(compound, ancestors[candidates - 1])) --candidates;
-      if (candidates == 0) return false;
+    if (!parseCompound(popTrailingCompound(context), compound) || candidates == 0 ||
+        !compoundMatches(compound, ancestors[candidates - 1])) {
+      return false;
     }
     --candidates;
+  } while (popTrailingCombinator(context) && !context.empty());
+  return true;
+}
+
+// Match right to left, retrying a whole child chain at each descendant candidate.
+bool ancestorsMatch(std::string_view context, const CssAncestor* ancestors, size_t candidates) {
+  bool child = popTrailingCombinator(context);
+  while (!context.empty()) {
+    std::string_view remaining = context;
+    size_t remainingCandidates = candidates;
+    if (matchChildChain(remaining, ancestors, remainingCandidates)) {
+      context = remaining;
+      candidates = remainingCandidates;
+      child = false;
+    } else {
+      if (child || candidates == 0) return false;
+      --candidates;
+    }
   }
+  return true;
 }
 
 // Specificity packed as ids << 16 | classes << 8 | elements.

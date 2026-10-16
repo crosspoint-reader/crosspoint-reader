@@ -605,3 +605,14 @@ TEST_F(CssParserTest, BorderComponentsCascadeIndependentlyAndSurviveCache) {
   EXPECT_TRUE(inlineStyle.hasVisibleBorder());
   EXPECT_EQ(inlineStyle.borderTop.width, 2);
 }
+
+TEST_F(CssParserTest, DescendantRetriesWholeChildChain) {
+  CssParser parser(cachePath());
+  ASSERT_EQ(loadCss(parser, "body > div p { font-weight: bold; } body > div > p { font-style: italic; }"),
+            CssParser::ParseResult::Complete);
+  const CssAncestor ancestors[] = {CssParser::makeAncestor("body", "", ""), CssParser::makeAncestor("div", "", ""),
+                                   CssParser::makeAncestor("div", "", "")};
+  const auto style = parser.resolveStyle("p", "", "", ancestors, 3);
+  EXPECT_EQ(style.fontWeight, CssFontWeight::Bold);
+  EXPECT_FALSE(style.hasFontStyle());
+}
