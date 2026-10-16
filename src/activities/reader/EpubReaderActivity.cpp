@@ -4854,11 +4854,11 @@ void EpubReaderActivity::renderNormalPass(RenderLock& lock, const RenderLayout& 
         lastRenderStats.fontGetBitmapTimeUs);
 
     if (pendingScreenshot) {
-      // No restoreCurrentPageToBufferIfPreRendered() needed here: we are inside renderContents()
-      // right after a fresh full render of the current page, before any pre-render is re-armed,
-      // so the frame buffer already holds exactly what is on screen.
+      // The page has just been redrawn without the menu. Ask for the screenshot rather than take it
+      // here: the refresh is still running and a pre-render may start during it, so the capture
+      // waits until the panel holds this page and nothing uses the buffers (ScreenshotUtil::service).
       pendingScreenshot = false;
-      ScreenshotUtil::takeScreenshot(renderer);
+      ScreenshotUtil::request(ScreenshotUtil::Target::Card);
     }
 
     // Pre-render was already scheduled in renderContents() before the lock was

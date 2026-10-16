@@ -1533,6 +1533,29 @@ void setup() {
   logStartupMemory("setup_complete");
 }
 
+// ScreenshotUtil's host sender: the frame over serial, framed for scripts/debugging_monitor.py.
+static void sendScreenshotToHost(const uint8_t* frame, const uint32_t size, const int width, const int height,
+                                 const bool busy) {
+  if (busy) {
+    logSerial.printf("SCREENSHOT_ERROR:busy\n");
+    return;
+  }
+  if (!frame) {
+    // Framebuffers are released during the web server session — nothing to send.
+    logSerial.printf("SCREENSHOT_ERROR:framebuffer released\n");
+    return;
+  }
+  logSerial.printf("SCREENSHOT_START:%d:%d:%lu\n", width, height, static_cast<unsigned long>(size));
+  // ~52 KB in one go is exactly the sustained write that trips the short-write
+  // behaviour, so the END marker must not be sent if the payload was cut short:
+  // a truncated frame with a valid trailer looks complete to the host.
+  if (writeAllToSerial(frame, size)) {
+    logSerial.printf("SCREENSHOT_END\n");
+  } else {
+    logSerial.printf("SCREENSHOT_ERROR:transfer stalled\n");
+  }
+}
+
 void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
@@ -1654,29 +1677,7 @@ void loop() {
       String cmd = line.substring(4);
       cmd.trim();
       if (cmd == "SCREENSHOT") {
-        // The write buffer is not necessarily the page on the panel: after a page turn the reader
-        // pre-renders the next page into it. As the POWER+DOWN screenshot does, put the visible page
-        // back first, and hold the render lock until it is sent so nothing draws over it meanwhile.
-        RenderLock lock;
-        activityManager.prepareFramebufferForCapture();
-        uint8_t* buf = display.getFrameBuffer();
-        if (buf) {
-          const uint16_t width = display.getDisplayWidth();
-          const uint16_t height = display.getDisplayHeight();
-          const uint32_t bufferSize = display.getBufferSize();
-          logSerial.printf("SCREENSHOT_START:%d:%d:%d\n", width, height, bufferSize);
-          // ~52 KB in one go is exactly the sustained write that trips the short-write
-          // behaviour, so the END marker must not be sent if the payload was cut short:
-          // a truncated frame with a valid trailer looks complete to the host.
-          if (writeAllToSerial(buf, bufferSize)) {
-            logSerial.printf("SCREENSHOT_END\n");
-          } else {
-            logSerial.printf("SCREENSHOT_ERROR:transfer stalled\n");
-          }
-        } else {
-          // Framebuffers are released during the web server session — nothing to send.
-          logSerial.printf("SCREENSHOT_ERROR:framebuffer released\n");
-        }
+        ScreenshotUtil::request(ScreenshotUtil::Target::Host);
       } else if (cmd == "BOOTLOG") {
         // On-demand replay of this session's boot summary, for when the monitor was
         // attached too late to catch it and the automatic repeats are used up.
@@ -1684,6 +1685,9 @@ void loop() {
       }
     }
   }
+
+  // Before the POWER+DOWN block below, which returns while the combo is held.
+  ScreenshotUtil::service(renderer, &sendScreenshotToHost);
 
   // Check for any user activity (button press or release, screen touch) or
   // active background work.
@@ -1724,13 +1728,7 @@ void loop() {
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
-      {
-        RenderLock lock;
-        // The reader may have left a pre-rendered next page in the frame buffer; ask the
-        // current activity to redraw the visible page first so the screenshot matches the screen.
-        activityManager.prepareFramebufferForCapture();
-        ScreenshotUtil::takeScreenshot(renderer);
-      }
+      ScreenshotUtil::request(ScreenshotUtil::Target::Card);
       // Discard the POWER+DOWN presses so they don't fire Short/Long events
       // (e.g. page turn, sleep) once the user releases the combo.
       buttonEventManager.drain();

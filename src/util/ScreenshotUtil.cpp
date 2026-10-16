@@ -9,6 +9,50 @@
 #include <string>
 
 #include "Bitmap.h"  // Required for BmpHeader struct definition
+#include "activities/Activity.h"
+#include "activities/ActivityManager.h"
+#include "activities/RenderLock.h"
+
+namespace {
+ScreenshotUtil::Target pendingTarget = ScreenshotUtil::Target::None;
+unsigned long pendingDeadline = 0;
+constexpr unsigned long kWaitMs = 5000;
+}  // namespace
+
+void ScreenshotUtil::request(const Target target) {
+  pendingTarget = target;
+  pendingDeadline = millis() + kWaitMs;
+}
+
+void ScreenshotUtil::service(GfxRenderer& renderer, void (*sendToHost)(const uint8_t* frame, uint32_t size, int width,
+                                                                       int height, bool busy)) {
+  if (pendingTarget == Target::None) return;
+  const Target target = pendingTarget;
+  if (static_cast<long>(millis() - pendingDeadline) >= 0) {
+    pendingTarget = Target::None;
+    LOG_ERR("SCR", "Screenshot skipped: the display stayed busy for %lu ms", kWaitMs);
+    if (target == Target::Host) sendToHost(nullptr, 0, 0, 0, /*busy=*/true);
+    return;
+  }
+  if (RenderLock::peek()) return;  // a render pass, or the reader's AA pass, has the buffers
+  RenderLock lock;
+  // A refresh still uses them. Not isComposingFrame(): render passes hold the lock while they draw, and the
+  // reader's pre-render clears the write buffer without ever displaying it, so that marker stays set
+  // until it goes stale (2 s), holding every capture back for nothing.
+  if (renderer.isRefreshPending()) return;
+  pendingTarget = Target::None;
+  // The write buffer is not the frame on the panel: the reader pre-renders its next page into it, and
+  // after a two-buffer refresh it holds an older frame. The activity first drops what it keeps there
+  // (the reader forgets its pre-render), then the panel's frame is copied in.
+  activityManager.prepareFramebufferForCapture();
+  if (renderer.hasSecondaryBuffer()) renderer.syncWriteBufferFromDisplayed();
+  if (target == Target::Host) {
+    sendToHost(renderer.getFrameBuffer(), renderer.getBufferSize(), renderer.getDisplayWidth(),
+               renderer.getDisplayHeight(), /*busy=*/false);
+  } else {
+    takeScreenshot(renderer);
+  }
+}
 
 void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   const uint8_t* fb = renderer.getFrameBuffer();
