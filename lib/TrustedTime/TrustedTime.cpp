@@ -15,8 +15,8 @@ namespace {
 
 // Below this the clock was obviously never set (2025-01-01 UTC).
 constexpr int64_t MIN_VALID_EPOCH = 1735689600LL;
-// Above this a value is a fault, not a date (2100-01-01 UTC). Both RTC chips
-// stop at 2099, so anything past this is a dead battery or a corrupt read --
+// Above this a value is a fault, not a date (2100-01-01 UTC). Every supported
+// RTC chip stops at 2099, so anything past this is a dead battery or a corrupt read --
 // and the floor never lowers again, so adopting one would lock every real clock
 // out from then on.
 constexpr int64_t MAX_VALID_EPOCH = 4102444800LL;

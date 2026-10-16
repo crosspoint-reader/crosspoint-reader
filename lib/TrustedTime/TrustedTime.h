@@ -7,7 +7,7 @@
 // The ESP32-C3 keeps time through deep sleep but loses it on power-off, so a
 // cold boot starts near epoch 0 and a date-based check would never fire
 // offline. Two things lift the clock off that: a battery-backed RTC, seeded
-// into the system clock at boot through adopt() — the DS3231 keeps running
+// into the system clock at boot through adopt() — the RTC keeps running
 // across power-off, so it is the only real clock while Wi-Fi is down — and
 // SNTP whenever Wi-Fi is up. Between those, this module persists the last
 // known-good time in NVS (on-flash, not on the removable SD card) and restores
