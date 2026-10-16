@@ -34,9 +34,12 @@ for the main agent. Never substitute the main agent for a reviewer:
 
 Use fresh reviewer contexts where supported. Give each a compact packet: human
 requirement and constraints, repository path, comparison base, pinned diff and
-revision, and its review axis. Supply necessary human discussion without the
-main agent's analysis or verdict. Reviewers read relevant rule sections; they do
-not edit, run implementation handoff, commit, publish, or flash hardware.
+revision, review axis, and main-agent check results/log paths. Supply necessary
+human discussion without the main agent's analysis or verdict. Include this
+scope in every reviewer task:
+"Inspect code, diffs, history, and recorded checks only. No file writes, tests,
+builds, or new diagnostics; request needed checks from the main agent."
+Reviewers read relevant rule sections and do not run handoff or publish.
 
 Keep the candidate unchanged while reviews run. Collect all four results before
 editing. A reviewer with no applicable changes may return a short explanation.
@@ -82,12 +85,15 @@ or missing verification is explicitly reported and handoff remains incomplete.
 
 Explain old and new behavior, state/resource ownership, affected files, the
 important tradeoff, checks, and remaining risks in plain English. Point to the
-diff. Ask the human to review it and explicitly confirm understanding of the
-behavior and architecture and acceptance of maintenance responsibility, without
-prescribing a confirmation phrase. Tie the request to a concrete design decision
-or tradeoff. Recognize explicit acceptance already given for this logical change;
-record it once and reopen it only if the design materially changes. Continuation
-or commit approval alone does not establish understanding and ownership.
+diff. Ask the human to accept the specific behavior and design tradeoff just
+explained, including responsibility for maintaining it. Name the relevant choice:
+for example, bounded temporary storage and a fallback when allocation fails.
+For a straightforward fix, ask whether the new behavior and its state ownership
+match their intent; do not invent a tradeoff. A generic understanding/ownership
+question does not complete handoff. Prescribe no confirmation phrase. Recognize
+explicit acceptance already given for this logical change; record it once and
+reopen only after a material design change. Continuation or commit approval alone
+does not establish understanding and ownership.
 
 Give applicable hardware steps with expected results and likely failure signs,
 including orientations, resources, and caches when affected. Hardware testing is
@@ -96,6 +102,7 @@ hardware verification yourself. Publication follows the root guide's human
 ownership policy and the [Git rule](../../rules/git-workflow.md).
 
 **Done when:** checks and independent reviews cover the final change, no verified
-finding remains, the human has explicitly accepted understanding and ownership,
-and the hardware test plan is provided. If the human rejects the architecture,
-ask what must change and revise before calling it ready.
+finding remains, and explicit human acceptance covers the described behavior,
+architecture, and maintenance responsibility. The hardware test plan is provided.
+If the human rejects the architecture, ask what must change and revise before
+calling it ready.

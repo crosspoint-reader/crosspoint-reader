@@ -24,17 +24,23 @@ Use the table to find guidance for the decisions being changed. Read relevant se
 
 | Decision being changed | Relevant guidance |
 | --- | --- |
-| Host setup, PlatformIO usage, or local configuration | [environment.md](.agents/rules/environment.md) |
+| Routine builds or host setup | [existing environment](.agents/rules/environment.md#build-in-an-existing-environment) |
+| Personal build flags or ports | [local overrides](.agents/rules/environment.md#platformiolocalini-personal-overrides) |
 | Allocation size/failure, buffer or cache lifetime, hot-path containers, or hardware limits | [hardware-resources.md](.agents/rules/hardware-resources.md); use `heap-discipline` for allocation decisions |
 | Hardware/storage access, rendering contracts, input ownership, or SDK boundaries | [HAL contracts](.agents/rules/architecture-hal.md#hardware-abstraction-layer-hal) and relevant sections of `hal-and-abstractions` |
 | Build flags, dependencies, or board profiles | [build environment and flags](.agents/rules/architecture-hal.md#build-environment) |
-| C or C++ implementation | [coding-standards.md](.agents/rules/coding-standards.md); use `control-flow-clarity` for state modeling or discrete-value dispatch |
-| Activity lifecycle, input behavior, layout/orientation, or font ownership | [ui-activities.md](.agents/rules/ui-activities.md) |
+| C or C++ implementation | [coding conventions](.agents/rules/coding-standards.md#naming-conventions); consult the relevant pitfall/allocation section and use `control-flow-clarity` for state modeling |
+| Lists, controls, touch routing, or layout | [shared UI](.agents/rules/ui-activities.md#shared-ui-and-input) and [orientation](.agents/rules/ui-activities.md#orientation-aware-logic) |
+| Input edges or activity/popup transitions | [input ownership](.agents/rules/ui-activities.md#input-frames-and-ownership) and its transition/verification sections |
+| Activity resources or worker tasks | [activity lifecycle](.agents/rules/ui-activities.md#activity-lifecycle-and-memory-management) and [workers](.agents/rules/ui-activities.md#freertos-task-guidelines) |
+| Runtime font discovery, rendering, or cache lifetime | [font ownership](.agents/rules/ui-activities.md#runtime-fonts-and-cache-ownership) |
 | Plugin, service, web endpoint, or protected-book contracts | [service contracts](.agents/rules/architecture-hal.md#service-and-plugin-contracts) and the linked contract that applies |
-| Builds, formatting, CI, serial logs, crashes, or verification | [testing-debugging.md](.agents/rules/testing-debugging.md) |
+| Builds, formatting, or verification | [testing workflow](.agents/rules/testing-debugging.md#testing-and-verification-workflow) and [compact build output](.agents/rules/testing-debugging.md#compact-build-output) |
+| Crashes, CI, or serial measurements | [crash diagnosis](.agents/rules/testing-debugging.md#debugging-crashes) or the matching CI/serial section |
 | Branch creation, merges, commits, or publication | [git-workflow.md](.agents/rules/git-workflow.md) |
-| User-facing strings, translation keys, or generated HTML/i18n | [generated-source workflow](.agents/rules/generated-files-cache.md#modifying-generated-content-workflow) |
-| Cache formats, layout persistence, or invalidation | [cache contracts](.agents/rules/generated-files-cache.md#cache-management-and-invalidation) |
+| User-facing strings or language metadata | [translation workflow](.agents/rules/generated-files-cache.md#translation-workflow) |
+| Generated HTML/i18n or font assets | [generated sources](.agents/rules/generated-files-cache.md#files-generated-by-build-scripts) or [font generation](.agents/rules/generated-files-cache.md#font-generation) |
+| Cache formats, layout persistence, or invalidation | [versioning](.agents/rules/generated-files-cache.md#cache-file-format-versioning) and [invalidation](.agents/rules/generated-files-cache.md#cache-invalidation-rules) |
 | New features, activities, settings, libraries, or dependencies | `SCOPE.md` and the `scope-discipline` skill |
 | Restructuring, extraction, or separating unrelated cleanup | the `refactor-for-review` skill |
 
@@ -44,9 +50,10 @@ Repository-local skills live under `.agents/skills/`. Their descriptions identif
 
 A PR is a long-term maintenance commitment. Working code is not enough: prefer the simplest design that meets the real requirement, fits `SCOPE.md`, and can be understood and maintained by its human owner.
 
-Fully autonomous end-to-end agents are forbidden. Review subagents under the main
-agent's supervision may inspect code, diffs, history, and build metadata only; they may
-not edit, commit, push, open/close PRs, post reviews, release, deploy, or flash.
+Fully autonomous end-to-end agents are forbidden. Review subagents inspect code,
+diffs, history, and recorded checks only. The main agent owns verification:
+reviewers may not write files (including temporary diagnostics), run tests/builds,
+commit, publish, deploy, or flash.
 
 The human must write PR descriptions; agents may give concise factual notes and test
 results, never ready-to-paste PR prose. Creating/amending local commits requires

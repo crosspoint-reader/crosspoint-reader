@@ -34,6 +34,8 @@ class HttpDownloader {
   static constexpr uint32_t MIN_TLS_FREE_HEAP = 40000;
   static constexpr uint32_t MIN_TLS_MAX_ALLOC = 20000;
 
+  using Header = std::pair<std::string, std::string>;
+
   /**
    * HTTP status of the last request, or 0 when it never got a response (DNS,
    * connect, TLS, timeout). fetchUrl() returns only success or failure; this
@@ -50,18 +52,17 @@ class HttpDownloader {
   static bool lastAnswerRedirected();
 
   /**
-   * Fetch text content from a URL with optional credentials.
+   * Fetch text content from a URL with optional credentials. `headers` are
+   * added to the request, as for downloadToFile().
    */
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const std::vector<Header>& headers = {});
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "");
-
-  using Header = std::pair<std::string, std::string>;
+                       const std::string& password = "", const std::vector<Header>& headers = {});
 
   /**
    * Download a file to the SD card with optional credentials. `headers` are

@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 57
+
+Version 57 combines the rendering layout below with line breaks after explicit
+hyphens and dashes. It invalidates version 56 caches from both branches, which
+used different layouts under the same version. Completed and partial sections
+are rebuilt.
+
 ### Version 56
 
 Version 56 adds the rendering layout below on top of version 55.
@@ -283,7 +290,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 56
+#define EXPECTED_VERSION 57
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256

@@ -1,6 +1,7 @@
 #include "CssParser.h"
 
 #include <Arduino.h>
+#include <AsciiText.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -67,15 +68,6 @@ constexpr size_t MAX_STORED_KEY_LENGTH = MAX_SELECTOR_LENGTH + 1;
 constexpr size_t MAX_ELEMENT_CLASSES = 8;
 constexpr size_t MAX_COMPOUND_SUBSET_CLASSES = 4;
 constexpr size_t MAX_STYLE_MATCHES = 16;
-
-// Check if character is CSS whitespace
-constexpr bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
-
-constexpr std::string_view trimCssWhitespace(std::string_view s) {
-  while (!s.empty() && isCssWhitespace(s.front())) s.remove_prefix(1);
-  while (!s.empty() && isCssWhitespace(s.back())) s.remove_suffix(1);
-  return s;
-}
 
 constexpr char asciiToLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
 
@@ -152,7 +144,7 @@ bool parseCompound(const std::string_view text, CompoundSelector& out) {
 // Splits the trailing compound off `text`, leaving what precedes it (including the combinator).
 std::string_view popTrailingCompound(std::string_view& text) {
   size_t start = text.size();
-  while (start > 0 && !isCssWhitespace(text[start - 1]) && text[start - 1] != '>') --start;
+  while (start > 0 && !isAsciiWhitespace(text[start - 1]) && text[start - 1] != '>') --start;
   const std::string_view compound = text.substr(start);
   text = text.substr(0, start);
   return compound;
@@ -161,7 +153,7 @@ std::string_view popTrailingCompound(std::string_view& text) {
 // Strips a trailing combinator; returns true when it was a child combinator ('>').
 bool popTrailingCombinator(std::string_view& text) {
   bool child = false;
-  while (!text.empty() && (isCssWhitespace(text.back()) || text.back() == '>')) {
+  while (!text.empty() && (isAsciiWhitespace(text.back()) || text.back() == '>')) {
     child = child || text.back() == '>';
     text.remove_suffix(1);
   }
@@ -223,7 +215,7 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
   size_t start = 0;
   for (size_t i = 0; i <= s.size(); ++i) {
     if (i == s.size() || isDelimiter(s[i])) {
-      const std::string_view trimmed = trimCssWhitespace(s.substr(start, i - start));
+      const std::string_view trimmed = trimAsciiWhitespace(s.substr(start, i - start));
       if (!trimmed.empty()) {
         fn(trimmed);
       }
@@ -251,7 +243,7 @@ bool tryParseNumber(std::string_view s, T& out) {
 // fallback rule using the returned count.
 size_t collectEdgeValueTokens(std::string_view s, std::string_view (&out)[4]) {
   size_t count = 0;
-  forEachDelimitedToken(s, isCssWhitespace, [&](std::string_view tok) {
+  forEachDelimitedToken(s, isAsciiWhitespace, [&](std::string_view tok) {
     if (count < 4) out[count++] = tok;
   });
   return count;
@@ -316,7 +308,7 @@ bool interpretBorderStyle(const std::string_view token, CssBorderStyle& out) {
 CssBorderSide interpretBorderShorthand(const std::string_view value) {
   CssBorderSide side;
   bool hasWidth = false;
-  forEachDelimitedToken(value, isCssWhitespace, [&](const std::string_view token) {
+  forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
     uint8_t width = 0;
     CssBorderStyle style = CssBorderStyle::None;
     if (interpretBorderWidth(token, width)) {
@@ -356,7 +348,7 @@ int colorLuminance(const std::string_view value) {
   }
 
   int result = -1;
-  forEachDelimitedToken(value, isCssWhitespace, [&](const std::string_view token) {
+  forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
     if (result >= 0) return;
     if (token.size() > 1 && token[0] == '#') {
       const std::string_view hex = token.substr(1);
@@ -399,7 +391,7 @@ bool interpretShade(const std::string_view value) {
 std::string_view stripTrailingImportant(std::string_view value) {
   constexpr std::string_view IMPORTANT = "!important";
 
-  while (!value.empty() && isCssWhitespace(value.back())) {
+  while (!value.empty() && isAsciiWhitespace(value.back())) {
     value.remove_suffix(1);
   }
 
@@ -413,7 +405,7 @@ std::string_view stripTrailingImportant(std::string_view value) {
   }
 
   value.remove_suffix(IMPORTANT.size());
-  while (!value.empty() && isCssWhitespace(value.back())) {
+  while (!value.empty() && isAsciiWhitespace(value.back())) {
     value.remove_suffix(1);
   }
   return value;
@@ -781,7 +773,7 @@ CssParser::RuleInsertResult CssParser::insertOrMerge(const KeyPieces& key, const
 // Property value interpreters
 
 CssTextAlign CssParser::interpretAlignment(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   if (iequalsAscii(val, "left") || iequalsAscii(val, "start")) return CssTextAlign::Left;
   if (iequalsAscii(val, "right") || iequalsAscii(val, "end")) return CssTextAlign::Right;
@@ -792,14 +784,14 @@ CssTextAlign CssParser::interpretAlignment(std::string_view val) {
 }
 
 CssFontStyle CssParser::interpretFontStyle(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   if (iequalsAscii(val, "italic") || iequalsAscii(val, "oblique")) return CssFontStyle::Italic;
   return CssFontStyle::Normal;
 }
 
 CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   // Named values
   if (iequalsAscii(val, "bold") || iequalsAscii(val, "bolder")) return CssFontWeight::Bold;
@@ -820,7 +812,7 @@ CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
   // so malformed values like "notunderline" do not accidentally enable a line.
   CssTextDecoration result = CssTextDecoration::None;
   bool explicitNone = false;
-  forEachDelimitedToken(val, isCssWhitespace, [&](const std::string_view token) {
+  forEachDelimitedToken(val, isAsciiWhitespace, [&](const std::string_view token) {
     if (iequalsAscii(token, "none")) {
       explicitNone = true;
     } else if (iequalsAscii(token, "underline")) {
@@ -839,7 +831,7 @@ CssLength CssParser::interpretLength(std::string_view val) {
 }
 
 bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
   if (val.empty()) {
     out = CssLength{};
     return false;
@@ -877,7 +869,7 @@ bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
 }
 
 bool CssParser::tryInterpretFontSize(std::string_view val, CssLength& out) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   struct Keyword {
     std::string_view name;
@@ -933,8 +925,8 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
   const size_t colonPos = decl.find(':');
   if (colonPos == std::string_view::npos || colonPos == 0) return;
 
-  const std::string_view name = trimCssWhitespace(decl.substr(0, colonPos));
-  std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));
+  const std::string_view name = trimAsciiWhitespace(decl.substr(0, colonPos));
+  std::string_view value = trimAsciiWhitespace(decl.substr(colonPos + 1));
 
   if (name.empty() || value.empty()) return;
 
@@ -1046,7 +1038,7 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
     }
   } else if (iequalsAscii(name, "font-variant") || iequalsAscii(name, "font-variant-caps")) {
     bool smallCaps = false;
-    forEachDelimitedToken(value, isCssWhitespace, [&](const std::string_view token) {
+    forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
       smallCaps = smallCaps || iequalsAscii(token, "small-caps") || iequalsAscii(token, "all-small-caps");
     });
     style.smallCaps = smallCaps;
@@ -1067,7 +1059,7 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
     style.defined.floatLeft = 1;
   } else if (iequalsAscii(name, "initial-letter")) {
     uint32_t lines = 0;
-    forEachDelimitedToken(value, isCssWhitespace, [&](const std::string_view token) {
+    forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
       float number = 0;
       if (lines == 0 && tryParseNumber(token, number) && number >= 1) lines = static_cast<uint32_t>(number + 0.5f);
     });
@@ -1127,9 +1119,9 @@ void CssParser::parseBorderDeclaration(const std::string_view name, const std::s
       *sides[i] = interpretBorderShorthand(value);
       markDefined(i);
     } else if (iequalsAscii(suffix, "-width")) {
-      if (interpretBorderWidth(trimCssWhitespace(value), sides[i]->width)) markDefined(i);
+      if (interpretBorderWidth(trimAsciiWhitespace(value), sides[i]->width)) markDefined(i);
     } else if (iequalsAscii(suffix, "-style")) {
-      if (interpretBorderStyle(trimCssWhitespace(value), sides[i]->style)) markDefined(i);
+      if (interpretBorderStyle(trimAsciiWhitespace(value), sides[i]->style)) markDefined(i);
     }
     return;
   }
@@ -1275,7 +1267,7 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
     }
 
     if (bodyDepth == 0) {
-      if (selector.empty() && isCssWhitespace(c)) {
+      if (selector.empty() && isAsciiWhitespace(c)) {
         return;
       }
       if (c == '@' && selector.empty()) {
@@ -1399,7 +1391,7 @@ CssAncestor CssParser::makeAncestor(const std::string_view tagName, const std::s
   CssAncestor ancestor;
   ancestor.tagHash = hashIgnoringAsciiCase(tagName);
   ancestor.idHash = idAttr.empty() ? 0 : hashIgnoringAsciiCase(idAttr);
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](const std::string_view cls) {
+  forEachDelimitedToken(classAttr, isAsciiWhitespace, [&](const std::string_view cls) {
     if (ancestor.classCount < CssAncestor::MAX_CLASSES) {
       ancestor.classHashes[ancestor.classCount++] = hashIgnoringAsciiCase(cls);
     }
@@ -1425,7 +1417,7 @@ CssStyle CssParser::resolveStyle(const std::string_view tagName, const std::stri
 
   std::string_view classes[MAX_ELEMENT_CLASSES];
   size_t classCount = 0;
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](const std::string_view cls) {
+  forEachDelimitedToken(classAttr, isAsciiWhitespace, [&](const std::string_view cls) {
     if (classCount < MAX_ELEMENT_CLASSES) classes[classCount++] = cls;
   });
   sortIgnoringAsciiCase(classes, classCount);

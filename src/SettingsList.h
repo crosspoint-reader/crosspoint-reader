@@ -188,6 +188,7 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   values.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
   if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
   values.push_back(StrId::STR_SAVE_CLIPPING);
+  values.push_back(StrId::STR_FOOTNOTES);
   return values;
 }
 
@@ -195,20 +196,17 @@ inline uint8_t longPressMenuDisplayValue() {
   const uint8_t raw = SETTINGS.longPressMenuFunction;
   if (raw <= CrossPointSettings::LP_MENU_DICTIONARY) return raw;
   if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
-    return BoardConfig::hasHomeKey() ? 4 : CrossPointSettings::LP_MENU_DISABLED;
+    return BoardConfig::hasHomeKey() ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_DISABLED;
   }
-  if (raw == CrossPointSettings::LP_MENU_CREATE_CLIPPING) return BoardConfig::hasHomeKey() ? 5 : 4;
+  if (raw < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT) return BoardConfig::hasHomeKey() ? raw : raw - 1;
   return CrossPointSettings::LP_MENU_DISABLED;
 }
 
 inline void setLongPressMenuFromDisplayValue(const uint8_t displayValue) {
   if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) {
     SETTINGS.longPressMenuFunction = displayValue;
-  } else if (BoardConfig::hasHomeKey()) {
-    SETTINGS.longPressMenuFunction =
-        displayValue == 4 ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_CREATE_CLIPPING;
   } else {
-    SETTINGS.longPressMenuFunction = CrossPointSettings::LP_MENU_CREATE_CLIPPING;
+    SETTINGS.longPressMenuFunction = BoardConfig::hasHomeKey() ? displayValue : displayValue + 1;
   }
 }
 
@@ -488,6 +486,36 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koServerUrl", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_1_NAME, [] { return KOREADER_STORE.getCustomHeaders()[0].name; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(0, v, KOREADER_STORE.getCustomHeaders()[0].value);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader1Name", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_1_VALUE, [] { return KOREADER_STORE.getCustomHeaders()[0].value; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(0, KOREADER_STORE.getCustomHeaders()[0].name, v);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader1Value", StrId::STR_KOREADER_SYNC)
+            .withObfuscated(),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_2_NAME, [] { return KOREADER_STORE.getCustomHeaders()[1].name; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(1, v, KOREADER_STORE.getCustomHeaders()[1].value);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader2Name", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicString(
+            StrId::STR_KOREADER_CUSTOM_HEADER_2_VALUE, [] { return KOREADER_STORE.getCustomHeaders()[1].value; },
+            [](const std::string& v) {
+              KOREADER_STORE.setCustomHeader(1, KOREADER_STORE.getCustomHeaders()[1].name, v);
+              KOREADER_STORE.saveToFile();
+            },
+            "koHeader2Value", StrId::STR_KOREADER_SYNC)
+            .withObfuscated(),
         SettingInfo::DynamicEnum(
             StrId::STR_SERVER_TYPE, {StrId::STR_CROSSPOINT, StrId::STR_KOSYNC_SERVER, StrId::STR_OTHER},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getServerType()); },
@@ -579,7 +607,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     };
     // Double-click power frontlight shortcut only exists on the X4 Pro.
     if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
-    // Tilt page turn needs the QMI8658 IMU (X3).
+    // Tilt page turn needs an IMU with a gyroscope.
     if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
     return v;
   }();
