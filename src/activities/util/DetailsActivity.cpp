@@ -41,8 +41,7 @@ void DetailsActivity::onEnter() {
 
 bool DetailsActivity::needsLayout() const {
   return spec.descriptionHtml && descriptionRect.width > 0 && descriptionRect.height > 0 &&
-         (pages.empty() || laidOutRect.width != descriptionRect.width ||
-          laidOutRect.height != descriptionRect.height);
+         (pages.empty() || laidOutRect.width != descriptionRect.width || laidOutRect.height != descriptionRect.height);
 }
 
 // Runs on the loop task: the EPUB parser is too deep for the render task's stack.
@@ -98,7 +97,7 @@ void DetailsActivity::openMore() {
   if (spec.description.empty()) return;
   // The viewer consumes its copy; this page keeps the original for repaints.
   auto viewer = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, spec.title, spec.description,
-                                                                 spec.descriptionHtml);
+                                                                spec.descriptionHtml);
   if (!viewer) {
     LOG_ERR("DETAILS", "OOM: description viewer");
     return;
@@ -150,8 +149,8 @@ void DetailsActivity::buildScreen(UiScreen& screen) {
   props.book.seriesLines = 1;
   // Title (2 lines) and author each end with titleGap; the source line with textGap.
   const bool hasSource = !spec.source.empty();
-  props.heroHeight = static_cast<int16_t>((hasSource ? 4 : 3) * line + 2 * props.book.titleGap +
-                                          (hasSource ? props.book.textGap : 0));
+  props.heroHeight =
+      static_cast<int16_t>((hasSource ? 4 : 3) * line + 2 * props.book.titleGap + (hasSource ? props.book.textGap : 0));
   props.metadata = asPtr(spec.metadata);
   props.metadataLines = 3;
   props.descriptionHeading = nullptr;
