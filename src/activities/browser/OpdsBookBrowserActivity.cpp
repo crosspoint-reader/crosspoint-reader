@@ -817,21 +817,23 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
 
   if (!publication.valid) {
     // No self link, or the fetch/parse failed: show what the list row had.
-    OpdsPublication publication;
-    publication.title = entry.title;
-    publication.author = entry.author;
-    publication.acquisitionHref = entry.href;
-    publication.indirect = entry.indirect;
-    publication.purchase = entry.purchase;
-    if (entry.purchase) publication.price = entry.detail;
-    publication.valid = !entry.title.empty();
+    publication = {};
+    publication.title = detailBook.title;
+    publication.author = detailBook.author;
+    if (!detailBook.href.empty()) publication.acquisitionHref = UrlUtils::buildUrl(feedUrl, detailBook.href);
+    publication.indirect = detailBook.indirect;
+    publication.purchase = detailBook.purchase;
+    if (detailBook.purchase) publication.price = detailBook.detail;
+    publication.valid = !detailBook.title.empty();
   }
   // Feed-inline fallbacks: without a publication self document (OPDS 1.x, or
   // OPDS 2.0 servers like Mayberry that inline everything) the feed entry is
   // the only source for the description and cover. Also fills gaps when a
   // document exists but omits one of them.
-  if (publication.description.empty()) publication.description = entry.description;
-  if (publication.coverHref.empty()) publication.coverHref = entry.coverHref;
+  if (publication.description.empty()) publication.description = detailBook.description;
+  if (publication.coverHref.empty() && !detailBook.coverHref.empty()) {
+    publication.coverHref = UrlUtils::buildUrl(feedUrl, detailBook.coverHref);
+  }
 
   // Resolve the acquisition to an absolute URL against the document it came
   // from; downloadBook() resolves against the feed, so an absolute URL is used
