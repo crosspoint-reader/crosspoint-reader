@@ -105,6 +105,11 @@ class Activity {
   // here so the capture matches the display. Default is a no-op.
   virtual void prepareFramebufferForCapture() {}
 
+  // Appends what a test script needs to know about this activity's state to `out`, as
+  // space-separated key=value pairs, for the serial CMD:STATE. Called under the render lock.
+  // Default: nothing beyond the activity's name, which the caller already writes.
+  virtual void appendDebugState(std::string& /*out*/) const {}
+
   // Called while this activity is buried on the stack, before a download that needs the heap in
   // one piece (releaseMemoryForDownload()). Drop what the activity built only to draw itself, such
   // as row lists and labels; the object must stay valid to destroy. Return true if anything was
