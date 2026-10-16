@@ -1239,6 +1239,25 @@ TEST_F(ChapterInlineSizeTest, DescendantFontSizeResolvesAfterAncestorSize) {
   }
 }
 
+TEST_F(ChapterInlineSizeTest, SpecializedInlineTagsKeepTheirFontSize) {
+  for (const char* tag : {"b", "strong", "i", "em", "u", "s", "sup", "sub", "a"}) {
+    SCOPED_TRACE(tag);
+    open("p", nullptr);
+    text("Normal ");
+    const XML_Char* attributes[] = {"style", "font-size: 0.8em", "href", "#note", nullptr};
+    ChapterHtmlSlimParser::startElement(&parser, tag, attributes);
+    text("small");
+    close(tag);
+    text(" after");
+    close("p");
+    const auto lines = elementsWithTag(TAG_PageLine);
+    const auto& block = *static_cast<const PageLine*>(lines.back())->getBlock();
+    ASSERT_EQ(block.wordCount(), 3u);
+    EXPECT_EQ(block.wordFontId(1, NOTOSERIF_14_FONT_ID), NOTOSERIF_12_FONT_ID);
+    EXPECT_EQ(block.wordFontId(2, NOTOSERIF_14_FONT_ID), NOTOSERIF_14_FONT_ID);
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {

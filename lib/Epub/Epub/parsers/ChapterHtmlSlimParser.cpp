@@ -173,6 +173,11 @@ void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, c
 }
 
 void ChapterHtmlSlimParser::applyInlinePresentationToEntry(StyleStackEntry& entry, const CssStyle& css) {
+  if (css.hasFontSize()) {
+    entry.hasFontScale = true;
+    entry.fontScaleRem = css.fontSize.unit == CssUnit::Rem;
+    entry.fontScale = css.fontSize.value;
+  }
   if (css.defined.whiteSpace) {
     entry.hasWhiteSpace = true;
     entry.preserveWhitespace = css.preserveWhitespace;
@@ -1947,6 +1952,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.depth = self->depth;
       entry.hasTextDecoration = true;
       entry.textDecoration = CssTextDecoration::Underline;
+      applyInlinePresentationToEntry(entry, cssStyle);
       applyDirectionToEntry(entry, cssStyle);
       applyVerticalAlignToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
@@ -2122,6 +2128,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasSub = true;
       entry.sub = true;
     }
+    applyInlinePresentationToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
