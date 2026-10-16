@@ -280,6 +280,24 @@ bool isTableSeparator(const std::string& line) {
   return line.find('-') != std::string::npos;
 }
 
+std::vector<TableAlign> parseTableAlignments(const std::string& line) {
+  const std::vector<std::string> cells = splitTableCells(trimLeft(line));
+  std::vector<TableAlign> aligns;
+  aligns.reserve(cells.size());
+  for (const auto& cell : cells) {
+    const bool colonLeft = !cell.empty() && cell.front() == ':';
+    const bool colonRight = !cell.empty() && cell.back() == ':';
+    if (colonLeft && colonRight) {
+      aligns.push_back(TableAlign::Center);
+    } else if (colonRight) {
+      aligns.push_back(TableAlign::Right);
+    } else {
+      aligns.push_back(TableAlign::Left);
+    }
+  }
+  return aligns;
+}
+
 bool isCodeFence(const std::string& line) {
   auto trimmed = trimLeft(line);
   if (trimmed.size() < 3) return false;

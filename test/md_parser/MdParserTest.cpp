@@ -86,3 +86,42 @@ TEST(MdParser, NestedOrderedListIndentLevel) {
   ASSERT_EQ(parsed.indentLevel, 2);
   ASSERT_EQ(flattenText(parsed.spans), "nested ordered");
 }
+
+TEST(MdParser, TableRowSplitsCellsWithInlineStyles) {
+  auto parsed = MdParser::parseLine("| plain | **bold** | `code` |", false);
+  ASSERT_EQ(parsed.blockType, MdParser::BlockType::TableRow);
+  ASSERT_EQ(parsed.tableCells.size(), static_cast<size_t>(3));
+  ASSERT_EQ(flattenText(parsed.tableCells[0]), "plain");
+  ASSERT_EQ(flattenText(parsed.tableCells[1]), "bold");
+  ASSERT_EQ(parsed.tableCells[1][0].style, EpdFontFamily::BOLD);
+  ASSERT_EQ(flattenText(parsed.tableCells[2]), "code");
+}
+
+TEST(MdParser, TableSeparatorDetection) {
+  ASSERT_TRUE(MdParser::isTableSeparator("| --- | --- |"));
+  ASSERT_TRUE(MdParser::isTableSeparator("| :--- | :---: | ---: |"));
+  ASSERT_FALSE(MdParser::isTableSeparator("| a | b |"));
+  ASSERT_FALSE(MdParser::isTableSeparator("plain text"));
+}
+
+TEST(MdParser, TableAlignmentsFromSeparator) {
+  auto aligns = MdParser::parseTableAlignments("| :--- | :---: | ---: | --- |");
+  ASSERT_EQ(aligns.size(), static_cast<size_t>(4));
+  ASSERT_EQ(aligns[0], MdParser::TableAlign::Left);
+  ASSERT_EQ(aligns[1], MdParser::TableAlign::Center);
+  ASSERT_EQ(aligns[2], MdParser::TableAlign::Right);
+  ASSERT_EQ(aligns[3], MdParser::TableAlign::Left);
+}
+
+TEST(MdParser, TableAlignmentsWithoutLeadingPipeOrSpaces) {
+  auto aligns = MdParser::parseTableAlignments("  :---: | ---:");
+  ASSERT_EQ(aligns.size(), static_cast<size_t>(2));
+  ASSERT_EQ(aligns[0], MdParser::TableAlign::Center);
+  ASSERT_EQ(aligns[1], MdParser::TableAlign::Right);
+}
+
+TEST(MdParser, TableRowEscapedPipeStaysInCell) {
+  auto parsed = MdParser::parseLine("| a \\| b | c |", false);
+  ASSERT_EQ(parsed.blockType, MdParser::BlockType::TableRow);
+  ASSERT_EQ(parsed.tableCells.size(), static_cast<size_t>(2));
+}
