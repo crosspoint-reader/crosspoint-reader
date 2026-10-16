@@ -266,7 +266,7 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
                                             // Both are MAJOR.MINOR.PATCH ("1.2.0"); only a
                                             // newer catalog version shows Update.
       "description": "description",         // optional: full paged text on Details
-      "repository": "repository",             // optional: shown on Details
+      "repository": "repository",           // optional: line under the author on Details
       "details_url": "details.url",            // optional: fetched only when Details opens
       "details_format": "details.format"       // optional: "html" or plain-text default
     },
@@ -364,7 +364,8 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   page" row precedes the items past page 1 and a "Next page" row follows
   them while more pages exist — tappable and button-reachable like any row.
 - **Lists** (json): with `browse.lists`, opening the catalog shows a picker
-  of the named entries first; each entry browses with its own url/body
+  of the named entries first (a single list skips the picker and opens
+  directly, after its notice; Back then leaves the catalog); each entry browses with its own url/body
   overrides (server-side categories, shelves, sort orders). A list with
   `notice.message` shows a confirmation before browsing; Back/cancel returns
   to the picker, while confirm continues into the selected list. `notice.title`

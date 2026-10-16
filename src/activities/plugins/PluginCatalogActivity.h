@@ -173,6 +173,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   void resetBrowse();
   // JSON catalog with named lists and none picked yet.
   bool wantsListPicker() const;
+  void openList(int index);
   bool loadManifest();
   bool loadBrowseListIndex();
   bool loadToken();

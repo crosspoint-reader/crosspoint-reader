@@ -28,6 +28,7 @@
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/DetailsActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "network/HttpDownloader.h"
@@ -73,34 +74,6 @@ constexpr auto DETAIL_DESCRIPTION = JsonListParser::F_URL;
 constexpr auto DETAIL_REPOSITORY = JsonListParser::F_BASE;
 constexpr auto DETAIL_PAGE_URL = JsonListParser::F_URL;
 constexpr auto DETAIL_PAGE_FORMAT = JsonListParser::F_BASE;
-
-std::string htmlEscape(const std::string& value) {
-  std::string escaped;
-  escaped.reserve(value.size());
-  for (const char ch : value) {
-    switch (ch) {
-      case '&':
-        escaped += "&amp;";
-        break;
-      case '<':
-        escaped += "&lt;";
-        break;
-      case '>':
-        escaped += "&gt;";
-        break;
-      case '"':
-        escaped += "&quot;";
-        break;
-      case 0x27:
-        escaped += "&#39;";
-        break;
-      default:
-        escaped += ch;
-        break;
-    }
-  }
-  return escaped;
-}
 
 std::string md5Hex(const std::string& text) {
   MD5Builder md5;
@@ -272,8 +245,8 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.versionPath = browse["fields"]["version"] | "";
   manifest.descriptionPath = browse["fields"]["description"] | "";
   manifest.detailAuthorPath = browse["fields"]["detail_author"] | "";
-  if (manifest.detailAuthorPath.empty()) manifest.detailAuthorPath = manifest.authorPath;
   manifest.repositoryPath = browse["fields"]["repository"] | "";
+  if (manifest.detailAuthorPath.empty()) manifest.detailAuthorPath = manifest.authorPath;
   manifest.detailsUrlPath = browse["fields"]["details_url"] | "";
   manifest.detailsFormatPath = browse["fields"]["details_format"] | "";
   // Version-tracked catalogs predate item details. Conventional field names
@@ -552,6 +525,35 @@ void PluginCatalogActivity::resetBrowse() {
   nav.reset();
 }
 
+// Shows the list's notice first when it has one. Declining stays on the
+// picker, or leaves the catalog when this list is the only one.
+void PluginCatalogActivity::openList(const int index) {
+  const auto& list = manifest.browseLists[index];
+  if (!list.hasNotice()) {
+    currentList = index;
+    startBrowse();
+    return;
+  }
+  const std::string heading = substituted(list.noticeTitle.empty() ? list.title : list.noticeTitle, nullptr);
+  const std::string message = substituted(list.noticeMessage, nullptr);
+  const std::string cancel = substituted(list.noticeCancel, nullptr);
+  const std::string confirm = substituted(list.noticeConfirm, nullptr);
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, message, cancel, confirm);
+  if (!confirmation) {
+    LOG_ERR("PCAT", "OOM: browse-list notice");
+    if (manifest.browseLists.size() == 1) exitCatalog();
+    return;
+  }
+  startActivityForResult(std::move(confirmation), [this, index](const ActivityResult& result) {
+    if (result.isCancelled) {
+      if (manifest.browseLists.size() == 1) exitCatalog();
+      return;
+    }
+    currentList = index;
+    startBrowse();
+  });
+}
+
 bool PluginCatalogActivity::wantsListPicker() const {
   return !manifest.browseLists.empty() && !manifest.isXmlList() && currentList < 0;
 }
@@ -587,6 +589,10 @@ void PluginCatalogActivity::startBrowse() {
   }
   // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
   if (wantsListPicker()) {
+    if (manifest.browseLists.size() == 1) {
+      openList(0);  // a one-entry picker is just an extra click
+      return;
+    }
     items.clear();
     page = 1;
     hasMore = false;
@@ -1216,6 +1222,7 @@ void PluginCatalogActivity::onBackButton() {
     // Leave the results and return to the pre-search view (picker or page 1).
     searchActive = false;
     searchQuery.clear();
+    if (manifest.browseLists.size() == 1) currentList = 0;  // its notice was already accepted
     startBrowse();
     return;
   }
@@ -1224,7 +1231,7 @@ void PluginCatalogActivity::onBackButton() {
     browseHistory.pop_back();
     beginLoading();
     fetchPage(page);
-  } else if (state == State::BROWSING && currentList >= 0) {
+  } else if (state == State::BROWSING && currentList >= 0 && manifest.browseLists.size() > 1) {
     // Browsing a picked list: Back returns to the list picker, not out.
     currentList = -1;
     startBrowse();
@@ -1300,27 +1307,7 @@ void PluginCatalogActivity::activateIndex(const int index) {
   if (state == State::LIST_PICKER) {
     if (index < 0 || index >= static_cast<int>(manifest.browseLists.size())) return;
     app.clearTapFlash();
-    const auto& list = manifest.browseLists[index];
-    if (list.hasNotice()) {
-      const std::string heading = substituted(list.noticeTitle.empty() ? list.title : list.noticeTitle, nullptr);
-      const std::string message = substituted(list.noticeMessage, nullptr);
-      const std::string cancel = substituted(list.noticeCancel, nullptr);
-      const std::string confirm = substituted(list.noticeConfirm, nullptr);
-      auto confirmation =
-          makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, message, cancel, confirm);
-      if (!confirmation) {
-        LOG_ERR("PCAT", "OOM: browse-list notice");
-        return;
-      }
-      startActivityForResult(std::move(confirmation), [this, index](const ActivityResult& result) {
-        if (result.isCancelled) return;
-        currentList = index;
-        startBrowse();
-      });
-      return;
-    }
-    currentList = index;
-    startBrowse();
+    openList(index);
     return;
   }
   // The pager rows bracket the items: "Previous page" ahead of them past
@@ -1413,67 +1400,39 @@ void PluginCatalogActivity::showItemDetails(const int itemIndex) {
   ItemDetails details;
   loadItemDetails(itemIndex, details);
 
-  std::string body;
-  bool htmlDefinition = false;
+  DetailsSpec spec;
+  spec.header = catalogTitle;
+  spec.title = item.title;
+  if (!details.author.empty()) spec.author = std::string(tr(STR_AUTHOR)) + ": " + details.author;
+  if (!details.repository.empty()) spec.source = std::string(tr(STR_REPOSITORY)) + ": " + details.repository;
   if (!details.detailsUrl.empty()) {
     String response;
     const std::string url = substituted(details.detailsUrl, &item);
     const int status = pluginhttp::request(session.get(), url, "GET", "", {}, response, MAX_ITEM_DETAILS_RESPONSE);
-    if (status >= 200 && status < 300 && response.length() > 0) {
-      if (details.detailsFormat == "html") {
-        body.assign(response.c_str(), response.length());
-        htmlDefinition = true;
-      } else if (details.detailsFormat.empty() || details.detailsFormat == "text") {
-        body.assign(response.c_str(), response.length());
-      } else {
-        LOG_INF("PCAT", "unsupported item details format: %s", details.detailsFormat.c_str());
-      }
-    } else {
+    const bool html = details.detailsFormat == "html";
+    if (status < 200 || status >= 300 || response.length() == 0) {
       LOG_INF("PCAT", "item details fetch failed: HTTP %d", status);
+    } else if (html || details.detailsFormat.empty() || details.detailsFormat == "text") {
+      spec.description.assign(response.c_str(), response.length());
+      spec.descriptionHtml = html;
+    } else {
+      LOG_INF("PCAT", "unsupported item details format: %s", details.detailsFormat.c_str());
     }
   }
+  if (spec.description.empty()) spec.description = std::move(details.description);
 
-  if (body.empty()) body = details.description;
-  if (htmlDefinition) {
-    const auto appendHtmlField = [&](const StrId label, const std::string& value) {
-      if (value.empty()) return;
-      body += "<p><strong>";
-      body += htmlEscape(I18N.get(label));
-      body += ":</strong> ";
-      body += htmlEscape(value);
-      body += "</p>";
-    };
-    appendHtmlField(StrId::STR_AUTHOR, details.author);
-    appendHtmlField(StrId::STR_VERSION, item.version);
-    appendHtmlField(StrId::STR_REPOSITORY, details.repository);
-    if (item.status == tr(STR_INSTALLED) || item.status == tr(STR_UPDATE_AVAILABLE)) {
-      body += "<p><strong>";
-      body += htmlEscape(item.status);
-      body += "</strong></p>";
-    }
-  } else {
-    const auto appendField = [&](const StrId label, const std::string& value) {
-      if (value.empty()) return;
-      if (!body.empty()) body += "\n\n";
-      body += I18N.get(label);
-      body += ": ";
-      body += value;
-    };
-    appendField(StrId::STR_AUTHOR, details.author);
-    appendField(StrId::STR_VERSION, item.version);
-    appendField(StrId::STR_REPOSITORY, details.repository);
-    if (item.status == tr(STR_INSTALLED) || item.status == tr(STR_UPDATE_AVAILABLE)) {
-      if (!body.empty()) body += "\n\n";
-      body += item.status;
-    }
-  }
-  if (body.empty()) body = item.title;
+  const auto addFact = [&spec](const std::string& fact) {
+    if (fact.empty()) return;
+    if (!spec.metadata.empty()) spec.metadata += " \xC2\xB7 ";
+    spec.metadata += fact;
+  };
+  if (!item.version.empty()) addFact(std::string(tr(STR_VERSION)) + " " + item.version);
+  addFact(item.status);
 
   const bool updateAvailable = item.status == tr(STR_UPDATE_AVAILABLE);
-  const char* actionLabel =
-      updateAvailable ? tr(STR_UPDATE) : (manifest.tracksInstalls() ? tr(STR_INSTALL) : tr(STR_FETCH));
-  auto detailsActivity = makeUniqueNoThrow<DictionaryDefinitionActivity>(
-      renderer, mappedInput, item.title, std::move(body), htmlDefinition, actionLabel, CrossPointSettings::LEFT_ALIGN);
+  spec.actionLabel = updateAvailable ? tr(STR_UPDATE) : (manifest.tracksInstalls() ? tr(STR_INSTALL) : tr(STR_FETCH));
+
+  auto detailsActivity = makeUniqueNoThrow<DetailsActivity>(renderer, mappedInput, std::move(spec));
   if (!detailsActivity) {
     LOG_ERR("PCAT", "OOM: item details");
     return;
