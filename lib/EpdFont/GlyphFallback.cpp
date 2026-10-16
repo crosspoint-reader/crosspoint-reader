@@ -105,6 +105,20 @@ constexpr Fallback FALLBACKS[] = {
     {0x222B, 'f'},  // integral -- historically a long s, conventionally an f
     {0x223C, '~'},  // tilde operator -- an ASCII tilde is the same shape
     {0x2248, '~'},  // almost equal to
+    // Box Drawing. No built-in font carries U+2500-U+257F; the MD reader's
+    // table rows use the light vertical as a cell divider (#471), and code
+    // blocks lean on the light set for tree listings. ASCII keeps the shape.
+    {0x2500, '-'},  // ─ light horizontal
+    {0x2502, '|'},  // │ light vertical
+    {0x250C, '+'},  // ┌ light down and right
+    {0x2510, '+'},  // ┐ light down and left
+    {0x2514, '+'},  // └ light up and right
+    {0x2518, '+'},  // ┘ light up and left
+    {0x251C, '+'},  // ├ light vertical and right
+    {0x2524, '+'},  // ┤ light vertical and left
+    {0x252C, '+'},  // ┬ light down and horizontal
+    {0x2534, '+'},  // ┴ light up and horizontal
+    {0x253C, '+'},  // ┼ light vertical and horizontal
     // Bullet shapes a dictionary uses to separate senses. U+2022 is in the
     // General Punctuation range every font here carries.
     {0x25AA, 0x2022},  // black small square
