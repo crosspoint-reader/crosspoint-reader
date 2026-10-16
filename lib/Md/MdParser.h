@@ -43,6 +43,14 @@ bool isTableRow(const std::string& line);
 // Returns true if the line is a GFM table separator row (| :---: | --- |).
 bool isTableSeparator(const std::string& line);
 
+// Per-column alignment, from the separator row's colons: ':---' left,
+// ':---:' center, '---:' right, '---' left (the GFM default).
+enum class TableAlign : uint8_t { Left = 0, Center = 1, Right = 2 };
+
+// Parse one alignment per column from a separator row. The caller must have
+// checked isTableSeparator(); any other line yields unspecified alignments.
+std::vector<TableAlign> parseTableAlignments(const std::string& line);
+
 // Parse a single raw line of markdown into block type and styled spans.
 // |inCodeBlock| indicates whether the line is inside a fenced code block.
 ParsedLine parseLine(const std::string& rawLine, bool inCodeBlock);
