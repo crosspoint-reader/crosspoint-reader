@@ -1258,6 +1258,71 @@ TEST_F(ChapterInlineSizeTest, SpecializedInlineTagsKeepTheirFontSize) {
   }
 }
 
+TEST_F(ChapterInlineSizeTest, EnlargedGridCellsReserveTheirHeightAcrossPages) {
+  renderer.fontLineHeights[NOTOSERIF_16_FONT_ID] = 32;
+  renderer.fontAscenders[NOTOSERIF_16_FONT_ID] = 24;
+  parser.viewportHeight = 80;
+  open("table", nullptr);
+  for (const bool inlineSize : {false, true}) {
+    open("tr", nullptr);
+    open("td", inlineSize ? nullptr : "font-size: 1.2rem");
+    if (inlineSize) open("span", "font-size: 1.2rem");
+    text(words(18));
+    if (inlineSize) close("span");
+    close("td");
+    open("td", nullptr);
+    text("Normal");
+    close("td");
+    EXPECT_FALSE(parser.tableRowStacked);
+    close("tr");
+  }
+  close("table");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_GE(pages.size(), 2u);
+  size_t enlargedLines = 0;
+  for (const auto& page : pages) {
+    std::map<int, int> bottomByColumn;
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*element);
+      const auto& block = *line.getBlock();
+      const int lineFont = block.blockFontId(parser.fontId);
+      const int height = renderer.getLineHeight(lineFont, parser.lineCompression) +
+                         block.extraAscent(renderer, parser.fontId) +
+                         block.getRubyShift(renderer.getFontAscenderSize(lineFont));
+      EXPECT_GE(line.yPos, bottomByColumn[line.xPos]);
+      EXPECT_LE(line.yPos + height, parser.viewportHeight);
+      bottomByColumn[line.xPos] = line.yPos + height;
+      if (line.xPos < parser.viewportWidth / 2) {
+        ++enlargedLines;
+        EXPECT_EQ(block.wordFontId(0, parser.fontId), NOTOSERIF_16_FONT_ID);
+      }
+    }
+  }
+  EXPECT_GE(enlargedLines, 6u);
+}
+
+TEST_F(ChapterInlineSizeTest, GridCellsResolveBlockAndWordFonts) {
+  open("table", nullptr);
+  open("tr", nullptr);
+  open("td", "font-size: 1.2rem");
+  text("Large");
+  close("td");
+  open("td", nullptr);
+  open("span", "font-size: 0.8em");
+  text("Small");
+  close("span");
+  close("td");
+  close("tr");
+  close("table");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& large = *static_cast<const PageLine*>(lines[0])->getBlock();
+  const auto& small = *static_cast<const PageLine*>(lines[1])->getBlock();
+  EXPECT_EQ(large.wordFontId(0, NOTOSERIF_14_FONT_ID), NOTOSERIF_16_FONT_ID);
+  EXPECT_EQ(small.wordFontId(0, NOTOSERIF_14_FONT_ID), NOTOSERIF_12_FONT_ID);
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {

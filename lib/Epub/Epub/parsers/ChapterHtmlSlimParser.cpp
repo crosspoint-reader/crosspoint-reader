@@ -509,7 +509,8 @@ void ChapterHtmlSlimParser::cancelDropCapToWord() {
 }
 
 void ChapterHtmlSlimParser::layoutCurrentBlock(const bool includeLastLine) {
-  const int layoutFontId = prepareBlockFont();
+  const int layoutFontId = prepareBlockFont(
+      *currentTextBlock, inlineSize.valid ? inlineSize.scale : currentTextBlock->getBlockStyle().fontScale);
   const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
@@ -1149,8 +1150,9 @@ void ChapterHtmlSlimParser::finishTableRow() {
     const size_t estimatedLines = tableRowCells[column]->size() * 2;
     lines.reserve(estimatedLines);
     tableLineVisibleOffsets.reserve(estimatedLines);
+    const int cellFontId = prepareBlockFont(*tableRowCells[column], tableRowCells[column]->getBlockStyle().fontScale);
     tableRowCells[column]->layoutAndExtractLines(
-        renderer, fontId,
+        renderer, cellFontId,
         static_cast<uint16_t>(columnWidths[column] - tableRowCells[column]->getBlockStyle().paddingLeft -
                               tableRowCells[column]->getBlockStyle().paddingRight),
         [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
@@ -1207,9 +1209,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
     int16_t rowLineHeight = lineHeight;
     for (size_t column = 0; column < columnCount; ++column) {
       if (lineIndex < tableCellLines[column].size()) {
-        rowLineHeight = std::max<int16_t>(
-            rowLineHeight, static_cast<int16_t>(lineHeight + tableCellLines[column][lineIndex]->getRubyShift(
-                                                                 renderer.getFontAscenderSize(fontId))));
+        const TextBlock& line = *tableCellLines[column][lineIndex];
+        const int lineFontId = line.blockFontId(fontId);
+        const int height = renderer.getLineHeight(lineFontId, lineCompression) + line.extraAscent(renderer, fontId) +
+                           line.getRubyShift(renderer.getFontAscenderSize(lineFontId));
+        rowLineHeight = std::max<int16_t>(rowLineHeight, static_cast<int16_t>(height));
       }
     }
 
@@ -1494,6 +1498,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
 
     auto tableCellBlockStyle = BlockStyle();
+    self->applyBlockFontScale(tableCellBlockStyle, cssStyle, name);
     const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
     // Bound author padding so even a stacked cell leaves room for content.
     const auto padding = [&](const CssLength& length, const int limit) {
@@ -2916,11 +2921,11 @@ int ChapterHtmlSlimParser::fontIdForScale(const float scale) const {
   return variant != 0 ? variant : fontId;
 }
 
-int ChapterHtmlSlimParser::prepareBlockFont() {
-  BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  const int layoutFontId = fontIdForScale(inlineSize.valid ? inlineSize.scale : blockStyle.fontScale);
-  for (uint8_t slot = 1; slot < currentTextBlock->sizeSlotsInUse(); ++slot) {
-    currentTextBlock->setSizeSlotFontId(slot, fontIdForScale(currentTextBlock->sizeSlotScale(slot)));
+int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale) {
+  BlockStyle& blockStyle = text.getBlockStyle();
+  const int layoutFontId = fontIdForScale(scale);
+  for (uint8_t slot = 1; slot < text.sizeSlotsInUse(); ++slot) {
+    text.setSizeSlotFontId(slot, fontIdForScale(text.sizeSlotScale(slot)));
   }
   blockStyle.fontId = layoutFontId == fontId ? 0 : layoutFontId;
   return layoutFontId;

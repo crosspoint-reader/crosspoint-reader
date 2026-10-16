@@ -53,7 +53,12 @@ class GfxRenderer {
   }
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
-  int getLineHeight(int, float = 1.0f) const { return 16; }
+  std::map<int, int> fontLineHeights;
+  std::map<int, int> fontAscenders;
+  int getLineHeight(int fontId, float compression = 1.0f) const {
+    const auto found = fontLineHeights.find(fontId);
+    return found == fontLineHeights.end() ? 16 : static_cast<int>(found->second * compression);
+  }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
   int resolveFontVariant(int fontId, float scale) const { return fontVariantProvider_.resolveFont(fontId, scale); }
@@ -63,7 +68,10 @@ class GfxRenderer {
            fontMap.count(fontId) != 0;
   }
   std::map<int, EpdFontFamily> fontMap;
-  int getFontAscenderSize(int) const { return 12; }
+  int getFontAscenderSize(int fontId) const {
+    const auto found = fontAscenders.find(fontId);
+    return found == fontAscenders.end() ? 12 : found->second;
+  }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 4; }
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t tracking = 0,
                       BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
