@@ -13,6 +13,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -470,7 +471,22 @@ void BmpViewerActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (canSetSleepCover()) doSetSleepCover();
+    if (!canSetSleepCover()) return;
+
+    auto confirmation =
+        makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SET_SLEEP_COVER) + std::string("?"),
+                                                filePath.substr(filePath.find_last_of('/') + 1));
+    if (!confirmation) {
+      LOG_ERR("BMP", "OOM: sleep cover confirmation (%zu bytes)", sizeof(ConfirmationActivity));
+      return;
+    }
+    startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
+      if (result.isCancelled) {
+        onEnter();
+        return;
+      }
+      doSetSleepCover();
+    });
     return;
   }
 

@@ -68,7 +68,7 @@ bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 // headers are tiny and both keys always appear early when present.
 struct IfoFacts {
   bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
-  bool htmlDefinitions = false;  // sametypesequence=h (definitions are HTML)
+  bool htmlDefinitions = false;  // sametypesequence=h or x (HTML or XDXF)
 };
 
 IfoFacts readIfoFacts(const std::string& ifoPath) {
@@ -85,9 +85,8 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   line = strstr(buf, "sametypesequence");
   eq = line ? strchr(line, '=') : nullptr;
   if (eq) {
-    // Only the single-field sequence "h" is treated as HTML; multi-type
-    // entries keep the plain-text viewing path.
-    facts.htmlDefinitions = eq[1] == 'h' && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
+    // HTML and XDXF share the styled renderer; multi-type entries stay plain text.
+    facts.htmlDefinitions = (eq[1] == 'h' || eq[1] == 'x') && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
   }
   return facts;
 }
@@ -561,6 +560,11 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
   if (dict.read(&out[0], size) != static_cast<int>(size)) {
     out.clear();
     return fail(LookupResult::ReadError);
+  }
+  // Keep room for the viewer's plain-text fallback while retaining the input.
+  if (htmlDefinitions && ESP.getMaxAllocHeap() < out.size() + DEFINITION_HEAP_HEADROOM_BYTES) {
+    LOG_ERR("DICT", "Low heap for %lu byte definition fallback", static_cast<unsigned long>(out.size()));
+    return fail(LookupResult::LowMemory);
   }
   return true;
 }

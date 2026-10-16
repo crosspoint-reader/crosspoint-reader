@@ -21,6 +21,7 @@ enum class SettingAction {
   KOReaderSync,
   OPDSBrowser,
   Network,
+  Bluetooth,
   ClearCache,
   CheckForUpdates,
   SdFirmwareUpdate,
@@ -55,6 +56,8 @@ struct SettingInfo {
   bool inTextSettings = false;           // Surfaced in the Text Settings screen; hidden from the flat Reader list
   SettingsSection section = SettingsSection::End;  // Device Settings group; End = derived from category
 
+  bool webHidden = false;  // Persisted normally, but omitted from the generic Web Settings API
+
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
   size_t stringMaxLen = 0;
@@ -77,6 +80,11 @@ struct SettingInfo {
 
   SettingInfo& inSection(const SettingsSection s) {
     section = s;
+    return *this;
+  }
+
+  SettingInfo& withWebHidden() {
+    webHidden = true;
     return *this;
   }
 

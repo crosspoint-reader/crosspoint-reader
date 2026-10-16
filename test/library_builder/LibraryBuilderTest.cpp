@@ -48,6 +48,27 @@ class LibraryBuilderTest : public ::testing::Test {
 
 }  // namespace
 
+TEST(LibraryBookFileTest, AcceptsBookFilesTheWalkLists) {
+  EXPECT_TRUE(isLibraryBookFile("book.epub"));
+  EXPECT_TRUE(isLibraryBookFile("/Books/book.epub"));
+  EXPECT_TRUE(isLibraryBookFile("/notes.txt"));
+  EXPECT_TRUE(isLibraryBookFile("/a/b/c/readme.md"));
+  EXPECT_TRUE(isLibraryBookFile("/Comics/issue.xtc"));
+  EXPECT_TRUE(isLibraryBookFile("/Books/./book.epub"));
+}
+
+TEST(LibraryBookFileTest, RejectsOtherFilesAndHiddenNames) {
+  EXPECT_FALSE(isLibraryBookFile(""));
+  EXPECT_FALSE(isLibraryBookFile("/Books/book.pdf"));
+  EXPECT_FALSE(isLibraryBookFile("/Books/book.epub.part"));
+  EXPECT_FALSE(isLibraryBookFile("/.crosspoint/library.dirty"));
+  EXPECT_FALSE(isLibraryBookFile("/.crosspoint/plugins/foo/README.md"));
+  EXPECT_FALSE(isLibraryBookFile("/.plugins/foo/notes.txt"));
+  EXPECT_FALSE(isLibraryBookFile("/Books/.hidden/book.epub"));
+  EXPECT_FALSE(isLibraryBookFile("/Books/._book.epub"));
+  EXPECT_FALSE(isLibraryBookFile("._book.epub"));
+}
+
 TEST_F(LibraryBuilderTest, UnchangedRebuildReusesMetadataAndDoesNotReplaceIndex) {
   initial();
   const auto old = fake::files[INDEX]->bytes;

@@ -139,13 +139,14 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
   // this read path; let the reader open it normally.
   if (!book->isProtected()) return nullptr;
 
-  uint8_t key[bookkey::KEY_LEN];
+  uint8_t key[bookkey::MAX_KEY_LEN];
   int64_t expiresAt = 0;
-  if (!bookkey::read(epubPath, key, &expiresAt)) {
+  const size_t keyLen = bookkey::read(epubPath, key, &expiresAt);
+  if (keyLen == 0) {
     err = "no content key for this book";
     return nullptr;
   }
-  book->setContentKey(key);
+  book->setContentKey(key, keyLen);
 
   // Loan enforcement. The clock is a persisted monotonic floor (TrustedTime):
   // it can lag real time while the device sat powered off, but can never be
