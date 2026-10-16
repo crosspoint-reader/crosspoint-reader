@@ -22,7 +22,7 @@ namespace {
 // The draw callback receives this via pDraw->pUser (set by setUserPointer()).
 // The file I/O callbacks receive the HalFile* via pFile->fHandle (set by jpegOpen()).
 struct JpegContext {
-  GfxRenderer* renderer{nullptr};
+  const DecodeTarget* target{nullptr};
   const RenderConfig* config{nullptr};
   int screenWidth{0};
   int screenHeight{0};
@@ -130,7 +130,7 @@ constexpr int32_t FP_MASK = FP_ONE - 1;
 
 int jpegDrawCallback(JPEGDRAW* pDraw) {
   JpegContext* ctx = reinterpret_cast<JpegContext*>(pDraw->pUser);
-  if (!ctx || !ctx->config || !ctx->renderer) return 0;
+  if (!ctx || !ctx->config || !ctx->target) return 0;
 
   ImageToFramebufferDecoder::yieldDuringDecode(ctx->lastYieldMs);
 
@@ -149,7 +149,6 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   const int32_t invScaleFPX = ctx->invScaleFPX;
   const int32_t fineScaleFPY = ctx->fineScaleFPY;
   const int32_t invScaleFPY = ctx->invScaleFPY;
-  GfxRenderer& renderer = *ctx->renderer;
   const int cfgX = ctx->config->x;
   const int cfgY = ctx->config->y;
   const int blockX = pDraw->x - ctx->cropLeft;
@@ -179,7 +178,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
   // Pre-compute orientation and render-mode state once per callback invocation
   DirectPixelWriter pw;
-  pw.init(renderer);
+  pw.init(*ctx->target);
 
   // The cache streams to disk one MCU-row band at a time. Flushing rows below
   // this block (raster order guarantees they are final) repositions the band;
@@ -366,6 +365,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
 }  // namespace
 
+size_t JpegToFramebufferConverter::minFreeHeapToDecode() const { return MIN_FREE_HEAP_FOR_JPEG; }
+
 bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
   size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < MIN_FREE_HEAP_FOR_JPEG) {
@@ -394,13 +395,18 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   return true;
 }
 
-bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
+bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                      const RenderConfig& config) {
   bool cacheWritten;
-  return decodeToFramebuffer(imagePath, renderer, config, cacheWritten);
+  return decodeToFramebuffer(imagePath, target, config, cacheWritten);
 }
 
 bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
+                                                     const RenderConfig& config, bool& cacheWritten) {
+  return decodeToFramebuffer(imagePath, captureDecodeTarget(renderer, !config.cacheOnly), config, cacheWritten);
+}
+
+bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, const DecodeTarget& target,
                                                      const RenderConfig& config, bool& cacheWritten) {
   cacheWritten = false;
   LOG_DBG("JPG", "Decoding JPEG: %s", imagePath.c_str());
@@ -418,10 +424,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   }
 
   JpegContext ctx;
-  ctx.renderer = &renderer;
+  ctx.target = &target;
   ctx.config = &config;
-  ctx.screenWidth = renderer.getScreenWidth();
-  ctx.screenHeight = renderer.getScreenHeight();
+  ctx.screenWidth = target.screenWidth;
+  ctx.screenHeight = target.screenHeight;
 
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegDrawCallback);
   const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};

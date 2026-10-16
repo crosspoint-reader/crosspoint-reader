@@ -136,6 +136,15 @@ class Page {
     });
   }
 
+  // Decode one still-uncached image straight to its .pxc cache (no framebuffer
+  // writes), so idle prefetch stays chunked. True when a decode succeeded.
+  bool prefetchOneImage(const DecodeTarget& target, int xOffset, int yOffset) const;
+
+  // Largest free-heap floor among this page's images still awaiting a decode
+  // (0 when none). Each image's floor is its decoder's own requirement, so the
+  // idle prefetch admission gate cannot drift from the decoder's check.
+  size_t decodeFreeHeapFloor() const;
+
   // Get bounding box of all images on the page (union of image rects)
   // Returns false if no images. Coordinates are relative to page origin.
   bool getImageBoundingBox(int16_t& outX, int16_t& outY, int16_t& outW, int16_t& outH) const {
