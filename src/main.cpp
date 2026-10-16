@@ -1533,6 +1533,87 @@ void setup() {
   logStartupMemory("setup_complete");
 }
 
+// Serial commands for scripted device tests: a script drives the UI, then checks where it went.
+//   CMD:BTN:<BACK|CONFIRM|LEFT|RIGHT|UP|DOWN>[:LONG]   -> BTN_OK
+//   CMD:ACT:<HOME|READER:<path>|SETTINGS|BOOKMARKS|LIBRARY[:<BOOKS|RECENT|NEW|AUTHORS>]|FILES:<dir>>
+//                                                      -> ACT_OK, or ACT_ERROR:<reason>
+//   CMD:STATE                                          -> STATE:activity=<name> stack=<...> <activity's pairs>
+// A press goes through HalGPIO::injectPress, so the user's button mapping and the long-press
+// threshold apply as for a real key. ACT only reaches the navigation routines the UI itself calls,
+// and none that would take the serial port away (file transfers, USB drive, sleep).
+// Returns false for a command that is not one of these.
+static bool handleTestCommand(const String& cmd) {
+  if (cmd.startsWith("BTN:")) {
+    String name = cmd.substring(4);
+    const bool longPress = name.endsWith(":LONG");
+    if (longPress) name = name.substring(0, name.length() - 5);
+    struct NamedButton {
+      const char* name;
+      uint8_t index;
+    };
+    static constexpr NamedButton kButtons[] = {{"BACK", HalGPIO::BTN_BACK}, {"CONFIRM", HalGPIO::BTN_CONFIRM},
+                                               {"LEFT", HalGPIO::BTN_LEFT}, {"RIGHT", HalGPIO::BTN_RIGHT},
+                                               {"UP", HalGPIO::BTN_UP},     {"DOWN", HalGPIO::BTN_DOWN}};
+    for (const NamedButton& button : kButtons) {
+      if (name == button.name) {
+        gpio.injectPress(button.index, longPress);
+        logSerial.printf("BTN_OK\n");
+        return true;
+      }
+    }
+    logSerial.printf("BTN_ERROR:unknown button %s\n", name.c_str());
+    return true;
+  }
+  if (cmd.startsWith("ACT:")) {
+    const String target = cmd.substring(4);
+    if (target == "HOME") {
+      activityManager.goHome();
+    } else if (target.startsWith("READER:")) {
+      std::string path = target.substring(7).c_str();
+      if (!Storage.exists(path.c_str())) {
+        logSerial.printf("ACT_ERROR:no such file %s\n", path.c_str());
+        return true;
+      }
+      activityManager.goToReader(std::move(path));
+    } else if (target == "SETTINGS") {
+      activityManager.goToSettings();
+    } else if (target == "BOOKMARKS") {
+      activityManager.goToGlobalBookmarks();
+    } else if (target.startsWith("FILES:")) {
+      activityManager.goToLibrary(LibraryTab::Books, target.substring(6).c_str());
+    } else if (target == "LIBRARY" || target.startsWith("LIBRARY:")) {
+      const String tab = target.length() > 8 ? target.substring(8) : String("BOOKS");
+      LibraryTab libraryTab = LibraryTab::Books;
+      if (tab == "RECENT") {
+        libraryTab = LibraryTab::Recent;
+      } else if (tab == "NEW") {
+        libraryTab = LibraryTab::New;
+      } else if (tab == "AUTHORS") {
+        libraryTab = LibraryTab::Authors;
+      } else if (tab != "BOOKS") {
+        logSerial.printf("ACT_ERROR:unknown library tab %s\n", tab.c_str());
+        return true;
+      }
+      activityManager.goToLibrary(libraryTab);
+    } else {
+      logSerial.printf("ACT_ERROR:unknown activity %s\n", target.c_str());
+      return true;
+    }
+    logSerial.printf("ACT_OK\n");
+    return true;
+  }
+  if (cmd == "STATE") {
+    std::string state;
+    {
+      RenderLock lock;  // the activity's state is also read by the render task
+      activityManager.describeState(state);
+    }
+    logSerial.printf("STATE:%s\n", state.c_str());
+    return true;
+  }
+  return false;
+}
+
 // ScreenshotUtil's host sender: the frame over serial, framed for scripts/debugging_monitor.py.
 static void sendScreenshotToHost(const uint8_t* frame, const uint32_t size, const int width, const int height,
                                  const bool busy) {
@@ -1682,6 +1763,8 @@ void loop() {
         // On-demand replay of this session's boot summary, for when the monitor was
         // attached too late to catch it and the automatic repeats are used up.
         BootDiag::logSummary();
+      } else if (!handleTestCommand(cmd)) {
+        logSerial.printf("CMD_ERROR:unknown command %s\n", cmd.c_str());
       }
     }
   }

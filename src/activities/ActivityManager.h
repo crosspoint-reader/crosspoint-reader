@@ -240,6 +240,10 @@ class ActivityManager {
   // buffer before a raw capture (e.g. a screenshot). See Activity::prepareFramebufferForCapture().
   void prepareFramebufferForCapture();
 
+  // For the serial CMD:STATE: "activity=<name> stack=<bottom>,...,<top>" plus the current
+  // activity's own key=value pairs (Activity::appendDebugState). Call under the render lock.
+  void describeState(std::string& out) const;
+
   // Dispatch a globally-configured button action to the current activity.
   // Reader-specific actions (page navigation, TOC, bookmarks, footnotes) are forwarded
   // only when the current activity is a reader; others are no-ops in other contexts.

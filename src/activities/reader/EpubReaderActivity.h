@@ -1167,6 +1167,8 @@ class EpubReaderActivity final : public Activity {
   // A pending pre-render leaves the *next* page in the frame buffer; redraw the current page
   // so a screenshot (or any raw frame-buffer capture) matches what the user sees.
   void prepareFramebufferForCapture() override { restoreCurrentPageToBufferIfPreRendered(); }
+  // " book=<path> spine=<i>/<count> page=<n>/<count>" (1-based page; 0/0 while no section is loaded).
+  void appendDebugState(std::string& out) const override;
   bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
   bool handleForcedRefresh(HalDisplay::RefreshMode mode) override;
