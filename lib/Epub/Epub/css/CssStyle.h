@@ -196,6 +196,8 @@ struct CssStyle {
   bool pageBreakBefore = false;                                 // (page-)break-before forces a new page
   bool pageBreakAfter = false;                                  // (page-)break-after forces a new page
   CssBorderSide borderTop, borderRight, borderBottom, borderLeft;
+  uint8_t borderWidthsDefined = 0;  // one bit per side, top/right/bottom/left
+  uint8_t borderStylesDefined = 0;
   bool shaded = false;        // light background-color, drawn as a gray fill
   bool floatLeft = false;     // float: left (marks drop-cap spans and ::first-letter rules)
   uint8_t initialLetter = 0;  // initial-letter: lines a drop cap spans, 0 = normal
@@ -299,20 +301,26 @@ struct CssStyle {
       pageBreakAfter = base.pageBreakAfter;
       defined.pageBreakAfter = 1;
     }
+    const auto applyBorder = [&](CssBorderSide& side, const CssBorderSide& incoming, const uint8_t bit) {
+      if (base.borderWidthsDefined & bit) side.width = incoming.width;
+      if (base.borderStylesDefined & bit) side.style = incoming.style;
+    };
+    borderWidthsDefined |= base.borderWidthsDefined;
+    borderStylesDefined |= base.borderStylesDefined;
     if (base.defined.borderTop) {
-      borderTop = base.borderTop;
+      applyBorder(borderTop, base.borderTop, 1);
       defined.borderTop = 1;
     }
     if (base.defined.borderRight) {
-      borderRight = base.borderRight;
+      applyBorder(borderRight, base.borderRight, 2);
       defined.borderRight = 1;
     }
     if (base.defined.borderBottom) {
-      borderBottom = base.borderBottom;
+      applyBorder(borderBottom, base.borderBottom, 4);
       defined.borderBottom = 1;
     }
     if (base.defined.borderLeft) {
-      borderLeft = base.borderLeft;
+      applyBorder(borderLeft, base.borderLeft, 8);
       defined.borderLeft = 1;
     }
     if (base.defined.shaded) {

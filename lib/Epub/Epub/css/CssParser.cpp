@@ -418,7 +418,7 @@ constexpr std::array STYLE_LENGTH_FIELDS = {
 };
 constexpr size_t STYLE_LENGTH_FIELD_COUNT = STYLE_LENGTH_FIELDS.size();
 constexpr size_t STYLE_WIRE_BYTES =
-    5 + STYLE_LENGTH_FIELD_COUNT * (sizeof(decltype(CssLength::value)) + 1) + 6 + 12 + sizeof(uint32_t);
+    5 + STYLE_LENGTH_FIELD_COUNT * (sizeof(decltype(CssLength::value)) + 1) + 6 + 13 + sizeof(uint32_t);
 constexpr uint32_t CSS_DEFINED_BITS_MASK = (1u << 31) - 1;
 constexpr uint8_t MAX_INITIAL_LETTER = 6;
 
@@ -448,6 +448,7 @@ void encodeStyleWire(const CssStyle& style, uint8_t (&out)[STYLE_WIRE_BYTES]) {
     out[offset++] = side->width;
     out[offset++] = static_cast<uint8_t>(side->style);
   }
+  out[offset++] = style.borderWidthsDefined | (style.borderStylesDefined << 4);
   out[offset++] = style.shaded ? 1 : 0;
   out[offset++] = style.floatLeft ? 1 : 0;
   out[offset++] = style.initialLetter;
@@ -545,6 +546,9 @@ bool decodeStyleWire(const uint8_t (&in)[STYLE_WIRE_BYTES], CssStyle& style) {
     if (borderStyle > static_cast<uint8_t>(CssBorderStyle::Dashed)) return false;
     side->style = static_cast<CssBorderStyle>(borderStyle);
   }
+  const uint8_t borderComponents = in[offset++];
+  style.borderWidthsDefined = borderComponents & 0x0f;
+  style.borderStylesDefined = borderComponents >> 4;
   const uint8_t shaded = in[offset++];
   const uint8_t floatLeft = in[offset++];
   const uint8_t initialLetter = in[offset++];
@@ -1074,7 +1078,9 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
 
 void CssParser::parseBorderDeclaration(const std::string_view name, const std::string_view value, CssStyle& style) {
   CssBorderSide* sides[4] = {&style.borderTop, &style.borderRight, &style.borderBottom, &style.borderLeft};
-  const auto markDefined = [&style](const size_t side) {
+  const auto markDefined = [&style](const size_t side, const bool width, const bool borderStyle) {
+    if (width) style.borderWidthsDefined |= 1u << side;
+    if (borderStyle) style.borderStylesDefined |= 1u << side;
     if (side == 0) style.defined.borderTop = 1;
     if (side == 1) style.defined.borderRight = 1;
     if (side == 2) style.defined.borderBottom = 1;
@@ -1086,7 +1092,7 @@ void CssParser::parseBorderDeclaration(const std::string_view name, const std::s
     const CssBorderSide side = interpretBorderShorthand(value);
     for (size_t i = 0; i < 4; ++i) {
       *sides[i] = side;
-      markDefined(i);
+      markDefined(i, true, true);
     }
     return;
   }
@@ -1101,7 +1107,7 @@ void CssParser::parseBorderDeclaration(const std::string_view name, const std::s
     for (size_t i = 0; i < 4; ++i) {
       const std::string_view token = tokens[source[i]];
       if (edgeWidths ? interpretBorderWidth(token, sides[i]->width) : interpretBorderStyle(token, sides[i]->style)) {
-        markDefined(i);
+        markDefined(i, edgeWidths, !edgeWidths);
       }
     }
     return;
@@ -1117,11 +1123,11 @@ void CssParser::parseBorderDeclaration(const std::string_view name, const std::s
     const std::string_view suffix = prefix.substr(SIDE_NAMES[i].size());
     if (suffix.empty()) {
       *sides[i] = interpretBorderShorthand(value);
-      markDefined(i);
+      markDefined(i, true, true);
     } else if (iequalsAscii(suffix, "-width")) {
-      if (interpretBorderWidth(trimAsciiWhitespace(value), sides[i]->width)) markDefined(i);
+      if (interpretBorderWidth(trimAsciiWhitespace(value), sides[i]->width)) markDefined(i, true, false);
     } else if (iequalsAscii(suffix, "-style")) {
-      if (interpretBorderStyle(trimAsciiWhitespace(value), sides[i]->style)) markDefined(i);
+      if (interpretBorderStyle(trimAsciiWhitespace(value), sides[i]->style)) markDefined(i, false, true);
     }
     return;
   }

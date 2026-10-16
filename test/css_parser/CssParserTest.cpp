@@ -574,3 +574,34 @@ TEST_F(CssParserTest, WhiteSpacePreservationValuesAndUnsupportedOverrides) {
   style.applyOver(unsupported);
   EXPECT_TRUE(style.preserveWhitespace);
 }
+
+TEST_F(CssParserTest, BorderComponentsCascadeIndependentlyAndSurviveCache) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer,
+                    "p { border: 1px solid; } .wide { border-width: 2px; } "
+                    "div { border-width: 3px; } .solid { border-style: solid; } "
+                    ".top { border-top-width: 4px; border-left-style: dashed; } "
+                    ".none { border-style: none; }"),
+            CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  for (const CssParser* parser : {&writer, &reader}) {
+    const auto wide = parser->resolveStyle("p", "wide");
+    EXPECT_TRUE(wide.hasVisibleBorder());
+    EXPECT_EQ(wide.borderTop.width, 2);
+    EXPECT_EQ(wide.borderTop.style, CssBorderStyle::Solid);
+    const auto solid = parser->resolveStyle("div", "solid");
+    EXPECT_TRUE(solid.hasVisibleBorder());
+    EXPECT_EQ(solid.borderLeft.width, 3);
+    const auto top = parser->resolveStyle("p", "top");
+    EXPECT_EQ(top.borderTop.width, 4);
+    EXPECT_EQ(top.borderTop.style, CssBorderStyle::Solid);
+    EXPECT_EQ(top.borderLeft.width, 1);
+    EXPECT_EQ(top.borderLeft.style, CssBorderStyle::Dashed);
+    EXPECT_FALSE(parser->resolveStyle("p", "none").hasVisibleBorder());
+  }
+  const auto inlineStyle = CssParser::parseInlineStyle("border-style: solid; border-width: 2px");
+  EXPECT_TRUE(inlineStyle.hasVisibleBorder());
+  EXPECT_EQ(inlineStyle.borderTop.width, 2);
+}

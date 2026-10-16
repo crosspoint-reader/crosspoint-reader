@@ -143,6 +143,10 @@ and uses defined-property bit 30 for `white-space`.
 CSS cache version 17 stores rules in source order and retains nonadjacent repeated
 selectors so equal-specificity declarations cascade in stylesheet order.
 
+CSS cache version 18 adds a border-component byte after the four border sides.
+Bits 0-3 mark declared widths and bits 4-7 mark declared styles, in top, right,
+bottom, left order. Width and style declarations cascade independently.
+
 ### Version 55
 
 Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
