@@ -20,6 +20,15 @@ void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>&
 
 bool isBorderBox(const PageElement& element) { return element.getTag() == TAG_PageBorderBox; }
 
+void renderBoxBackgrounds(const std::vector<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
+                          const int xOffset, const int yOffset) {
+  for (const auto& element : elements) {
+    if (isBorderBox(*element)) {
+      static_cast<const PageBorderBox&>(*element).renderBackground(renderer, xOffset, yOffset);
+    }
+  }
+}
+
 // Draws one border edge as a strip along a box side.
 void drawBorderEdge(const GfxRenderer& renderer, const int x, const int y, const int length, const CssBorderSide& side,
                     const bool horizontal) {
@@ -216,10 +225,13 @@ std::unique_ptr<PageDropCap> PageDropCap::deserialize(HalFile& file) {
   return dropCap;
 }
 
+void PageBorderBox::renderBackground(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  if (shaded) renderer.fillRectDither(xPos + xOffset, yPos + yOffset, width, height, Color::LightGray);
+}
+
 void PageBorderBox::render(GfxRenderer& renderer, const int, const int xOffset, const int yOffset) {
   const int x = xPos + xOffset;
   const int y = yPos + yOffset;
-  if (shaded) renderer.fillRectDither(x, y, width, height, Color::LightGray);
   const CssBorderSide& top = sides[0];
   const CssBorderSide& right = sides[1];
   const CssBorderSide& bottom = sides[2];
@@ -274,8 +286,9 @@ std::unique_ptr<PageBorderBox> PageBorderBox::deserialize(HalFile& file) {
   return box;
 }
 
-// Border boxes draw first so their shading sits under the text they frame.
+// Backgrounds precede every border, including borders inside shaded containers.
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  renderBoxBackgrounds(elements, renderer, xOffset, yOffset);
   renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, isBorderBox);
   renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset,
                              [](const PageElement& element) { return !isBorderBox(element); });
@@ -288,6 +301,7 @@ void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffs
 
 void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, const int xOffset,
                                        const int yOffset) const {
+  renderBoxBackgrounds(elements, renderer, xOffset, yOffset);
   renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, isBorderBox);
   for (const auto& element : elements) {
     if (isBorderBox(*element)) continue;

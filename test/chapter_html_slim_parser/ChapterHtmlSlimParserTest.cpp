@@ -1341,6 +1341,27 @@ TEST_F(ChapterBlockDecorationTest, BorderScopeExcludesPrecedingParentText) {
   }
 }
 
+TEST_F(ChapterBlockDecorationTest, AncestorShadePaintsBeforeNestedBorders) {
+  open("div", "background: #eee");
+  open("p", "border: 1px solid");
+  text("Inside");
+  close("p");
+  close("div");
+  ASSERT_NE(parser.currentPage, nullptr);
+  for (const bool placeholders : {false, true}) {
+    renderer.boxPaints.clear();
+    if (placeholders)
+      parser.currentPage->renderWithImagePlaceholders(renderer, 0, 0, 0);
+    else
+      parser.currentPage->render(renderer, 0, 0, 0);
+    ASSERT_FALSE(renderer.boxPaints.empty());
+    EXPECT_EQ(renderer.boxPaints.front(), 's');
+    EXPECT_NE(std::find(renderer.boxPaints.begin(), renderer.boxPaints.end(), 'b'), renderer.boxPaints.end());
+    const auto firstBorder = std::find(renderer.boxPaints.begin(), renderer.boxPaints.end(), 'b');
+    EXPECT_EQ(std::find(firstBorder, renderer.boxPaints.end(), 's'), renderer.boxPaints.end());
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {

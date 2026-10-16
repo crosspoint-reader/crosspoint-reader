@@ -34,8 +34,9 @@ class GfxRenderer {
     lastLineY = y;
     ++drawnLineCount;
   }
-  void fillRect(int, int, int, int, bool = true) const {}
-  void fillRectDither(int, int, int, int, Color) const {}
+  mutable std::string boxPaints;
+  void fillRect(int, int, int, int, bool = true) const { boxPaints += 'b'; }
+  void fillRectDither(int, int, int, int, Color) const { boxPaints += 's'; }
   // Fixture glyphs: 8 px advance, capitals 10 px tall.
   int drawScaledCodepoint(int, uint32_t, EpdFontFamily::Style, int, int, int scale256) const {
     return 8 * scale256 / 256;

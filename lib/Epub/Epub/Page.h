@@ -118,6 +118,7 @@ class PageBorderBox final : public PageElement {
   bool serialize(HalFile& file) override;
   PageElementTag getTag() const override { return TAG_PageBorderBox; }
   static std::unique_ptr<PageBorderBox> deserialize(HalFile& file);
+  void renderBackground(GfxRenderer& renderer, int xOffset, int yOffset) const;
 };
 
 class Page {
