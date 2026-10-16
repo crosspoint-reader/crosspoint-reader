@@ -12,8 +12,7 @@
 #include "util/PluginLocations.h"
 
 namespace {
-constexpr const char* PLUGIN_HUB_BASE_URL =
-    "https://raw.githubusercontent.com/jadehawk/PluginHub.crosspoint-plugin/stable/";
+constexpr const char* PLUGIN_HUB_BASE_URL = "https://pluginhub.crosspointreader.com/";
 constexpr const char* PLUGIN_HUB_DIR = "/.crosspoint/plugins/pluginhub";
 constexpr const char* PLUGIN_HUB_INSTALL_MARKER = "/.crosspoint/plugins/pluginhub/.installing";
 constexpr const char* PLUGIN_HUB_FILES[] = {"manifest.json", "device.json", "plugin.js", "README.md"};
