@@ -99,6 +99,8 @@ bool TtfFont::load(const ttf::FileSource (&files)[4], const uint8_t identity[kId
   LOG_INF("TTF", "family loaded: %u B scratch, %u B per native size, log %lu of %lu B used",
           static_cast<unsigned>(rasterizer_.scratchBytes()), static_cast<unsigned>(sizeof(Size)),
           static_cast<unsigned long>(store_.logUsed()), static_cast<unsigned long>(store_.geometry().logSize));
+  LOG_INF("TTF", "regular style: %u kern subtables%s, %u ligatures", styles_[0].kerning.subtableCount(),
+          styles_[0].kerning.legacy() ? " (legacy kern table)" : "", styles_[0].ligatures.count);
   return true;
 }
 
@@ -110,6 +112,9 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf
     Style& style = styles_[s];
     style.present = false;
     style.face = {};
+    style.kerning = ttf::Kerning{};
+    style.ligatures = ttf::Ligatures{};
+    std::fill_n(style.uncoveredLeft, sizeof style.uncoveredLeft, 0);
     if (files[s].size == 0) continue;
     style.block = block++;
     glyphstore::StyleInfo info{};
@@ -122,6 +127,9 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], ttf
       continue;
     }
     style.present = true;
+    // Kerning and ligatures, resolved once per style (spec 5.4): a style without them draws without.
+    style.kerning.resolve(bytes, style.face);
+    ttf::resolveLigatures(bytes, style.face, &style.ligatures);
     maxNativePx_ = std::min(maxNativePx_, nativeCeilingPx(style.face));
     // Planned for the largest size drawn: a native size (5 x 26 pt's pixels per em, about) above the body sizes.
     const uint32_t largest = std::max(ttf::ppemFromPoints(kMaxPointSize), static_cast<uint32_t>(kMaxNativePx) << 6);
@@ -200,6 +208,9 @@ bool TtfFont::configure(Size& size, const uint32_t ppem) {
     style.data.is2Bit = true;
     style.data.bitmap = store_.logBase();
     style.data.provider = &style.provider;
+    const ttf::Ligatures& ligatures = styles_[s].ligatures;
+    style.data.ligaturePairs = ligatures.count != 0 ? ligatures.pairs : nullptr;
+    style.data.ligaturePairCount = ligatures.count;
   }
   return true;
 }
@@ -328,7 +339,7 @@ const EpdGlyph* TtfFont::render(const Size& size, const uint8_t style, const uin
   FontBytes bytes;
   if (!fontBytes(style, &bytes)) return nullptr;
   const ttf::Face& face = styles_[style].face;
-  const uint16_t index = ttf::glyphIndex(bytes, face, codepoint);
+  const uint16_t index = styles_[style].ligatures.glyphFor(bytes, face, codepoint);
   if (index == 0) {
     // The font has no glyph for it. An I/O error is not an answer (SD mode): ask again next time.
     if (haveKey && !ringMode_ && !bytes.ioError()) noteCommit(store_.markNoGlyph(key));
@@ -394,6 +405,42 @@ uint32_t TtfFont::ringBytes() const {
   uint32_t bytes = 0;
   for (const uint16_t capacity : ringCapacity_) bytes += capacity;
   return bytes;
+}
+
+int8_t TtfFont::kerning(const Size& size, const uint8_t style, const uint32_t left, const uint32_t right) {
+  if (style >= 4 || !styles_[style].present || !styles_[style].kerning.any() || size.ppem == 0) return 0;
+  Style& s = styles_[style];
+  // The store keys a pair by its codepoints (BMP only) and keeps font units, so every size shares it.
+  const bool storable = left <= 0xFFFF && right <= 0xFFFF;
+  int16_t units = 0;
+  if (!storable || !store_.isOpen() ||
+      !store_.findPair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), style, &units)) {
+    if (s.knownUncovered(left)) return 0;  // without touching the font: no remap of another style
+    checkLock();
+    FontBytes bytes;
+    if (!fontBytes(style, &bytes)) return 0;
+    const uint16_t l = s.ligatures.glyphFor(bytes, s.face, left);
+    const uint16_t r = s.ligatures.glyphFor(bytes, s.face, right);
+    const bool looked = l != 0 && r != 0;
+    bool covered = false;
+    const int32_t value = looked ? s.kerning.pair(bytes, s.face, l, r, &covered) : 0;
+    ++kernLookups_;
+    if (bytes.ioError()) return 0;  // SD mode: not an answer, ask again
+    units = static_cast<int16_t>(value < INT16_MIN ? INT16_MIN : value > INT16_MAX ? INT16_MAX : value);
+    // A left glyph that kerns with nothing costs no slot (spec 8.1): the CJK repertoire would fill the index.
+    if (!covered) {
+      if (looked) s.markUncovered(left);  // whatever the right glyph: coverage depends on the left one only
+      return 0;
+    }
+    if (storable && !ringMode_) {
+      store_.storePair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), style, units);
+    }
+  }
+  // Font units to 4.4 pixels at this size, rounded, clamped like the converter's kern matrix.
+  const int64_t num = static_cast<int64_t>(units) * size.ppem;  // 26.6 ppem: units * ppem / upem * 16
+  const int64_t den = 4 * static_cast<int64_t>(s.face.unitsPerEm);
+  const int64_t value = (num >= 0 ? num + den / 2 : num - den / 2) / den;
+  return static_cast<int8_t>(value < INT8_MIN ? INT8_MIN : value > INT8_MAX ? INT8_MAX : value);
 }
 
 bool TtfFont::ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const {
@@ -462,7 +509,7 @@ void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
     key = glyphstore::makeKey(cp, style, size.index);
     if (store_.find(key, nullptr) != Lookup::NotStored) continue;
     if (std::any_of(pending_, pending_ + count, [cp](const Pending& p) { return p.codepoint == cp; })) continue;
-    const uint16_t index = ttf::glyphIndex(bytes, face, cp);
+    const uint16_t index = styles_[style].ligatures.glyphFor(bytes, face, cp);
     if (index == 0) {
       if (!bytes.ioError()) noteCommit(store_.markNoGlyph(key));
       if (ringMode_) return;

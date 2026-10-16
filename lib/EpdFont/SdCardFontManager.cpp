@@ -434,8 +434,10 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
     renderer.setFontResolver(nullptr, nullptr);
     ttfNativeBase_ = 0;
     renderer.removeFont(ttfFontId_);
-    LOG_INF("SDMGR", "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store", loadedFamilyName_.c_str(),
-            static_cast<unsigned long>(ttf_->renders()), static_cast<unsigned long>(ttf_->storeHits()));
+    LOG_INF("SDMGR",
+            "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store, %lu kerning pairs worked out",
+            loadedFamilyName_.c_str(), static_cast<unsigned long>(ttf_->renders()),
+            static_cast<unsigned long>(ttf_->storeHits()), static_cast<unsigned long>(ttf_->kernLookups()));
     ttf_.reset();  // closes the store before its flash goes
     ttfFlash_.reset();
     ttfFontId_ = 0;

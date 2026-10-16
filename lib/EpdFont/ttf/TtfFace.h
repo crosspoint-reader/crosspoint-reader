@@ -29,6 +29,12 @@ struct Face {
   uint32_t hmtxLength = 0;
   uint32_t cmapSubtable = 0;  ///< the subtable glyphIndex() reads
   uint32_t cmapEnd = 0;       ///< end of the cmap table: the subtable's reads stay below it
+  uint32_t gpos = 0;          ///< the layout tables kerning and ligatures read (TtfOpenType); 0 when absent
+  uint32_t gposLength = 0;
+  uint32_t gsub = 0;
+  uint32_t gsubLength = 0;
+  uint32_t kern = 0;  ///< the legacy kerning table
+  uint32_t kernLength = 0;
   uint16_t unitsPerEm = 0;
   uint16_t numGlyphs = 0;
   uint16_t numHMetrics = 0;

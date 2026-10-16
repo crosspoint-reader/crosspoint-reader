@@ -11,6 +11,7 @@
 #include "TtfBuilder.h"
 #include "TtfFont.h"
 #include "TtfFontTestUtil.h"
+#include "TtfLayoutBuilder.h"
 #include "TtfTestUtil.h"
 
 using namespace ttf_test;
@@ -747,4 +748,153 @@ TEST_F(TtfFontTest, PrefetchStoresANativeSizesGlyphs) {
                   nativeGlyph(fonts[kRegular], static_cast<uint8_t>(c)));
   }
   EXPECT_EQ(renders, font->renders());
+}
+
+// --- Kerning and ligatures ---
+
+namespace {
+
+// Glyphs 1-4 for A-D, 1000 units per em. A kerns B by -100 units and D by 0; C kerns with nothing.
+Font kernedBoxes() {
+  Font font;
+  font.glyphs.resize(5);
+  for (auto& glyph : font.glyphs) glyph.contours = {rect(0, 0, 400, 600)};
+  for (uint16_t g = 1; g <= 4; ++g) font.cmap[static_cast<uint32_t>('A' + g - 1)] = g;
+  LayoutLookup lookup;
+  PairSubtable pairs;
+  pairs.pairs = {{1, {{2, -100}, {4, 0}}}};
+  lookup.pairSubtables = {pairs};
+  font.extraTables = {{"GPOS", layoutTable({{"latn", {0}}}, {{"kern", {0}}}, {lookup})}};
+  return font;
+}
+
+}  // namespace
+
+TEST_F(TtfFontTest, KerningIsTheFontsAtEachSizesScale) {
+  useBuiltFont(kernedBoxes());
+  const auto font = open();
+  // -100 units at 29.17 px per em: -2.9 px, in 4.4. Asked again, as EpdFont asks, it comes from the store.
+  EXPECT_EQ(-47, font->kerning(kRegular, 'A', 'B'));
+  EXPECT_EQ(-47, font->font(kRegular)->getKerning('A', 'B'));
+  EXPECT_EQ(1u, font->kernLookups());
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(48, fonts));
+  EXPECT_EQ(-77, fonts[kRegular]->getKerning('A', 'B'));  // the same pair at 48 px: -4.8 px
+  EXPECT_EQ(1u, font->kernLookups());
+}
+
+TEST_F(TtfFontTest, StoredKerningServesTheNextBoot) {
+  useBuiltFont(kernedBoxes());
+  {
+    const auto font = open();
+    ASSERT_EQ(-47, font->kerning(kRegular, 'A', 'B'));
+  }
+  const auto font = open();
+  EXPECT_EQ(-47, font->kerning(kRegular, 'A', 'B'));
+  EXPECT_EQ(0u, font->kernLookups());
+}
+
+TEST_F(TtfFontTest, OnlyPairsWhoseLeftGlyphKernsAreStored) {
+  useBuiltFont(kernedBoxes());
+  const auto font = open();
+  const uint32_t writes = flash.programCalls();
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'A'));  // C kerns with nothing: no slot spent
+  EXPECT_EQ(writes, flash.programCalls());
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'D'));  // A kerns, not with D: remembered as 0
+  EXPECT_LT(writes, flash.programCalls());
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'D'));
+  EXPECT_EQ(2u, font->kernLookups());
+}
+
+TEST_F(TtfFontTest, ALeftGlyphThatKernsWithNothingIsLookedUpOnce) {
+  // Such pairs are not stored, yet every word gap asks for one (the space kerns with nothing in Bookerly).
+  useBuiltFont(kernedBoxes());
+  const auto font = open();
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'A'));
+  EXPECT_EQ(1u, font->kernLookups());
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'A'));  // the same pair again
+  EXPECT_EQ(0, font->kerning(kRegular, 'C', 'B'));  // another pair with C on the left
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(font->nativeFonts(48, fonts));
+  EXPECT_EQ(0, fonts[kRegular]->getKerning('C', 'D'));  // and at another size
+  EXPECT_EQ(1u, font->kernLookups());
+  // A left glyph that kerns still kerns, whatever its pairs before gave: a right glyph the font lacks ('Z') says
+  // nothing of the left one, nor does a pair it kerns by 0.
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'Z'));
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'D'));
+  EXPECT_EQ(-47, font->kerning(kRegular, 'A', 'B'));
+  EXPECT_EQ(4u, font->kernLookups());
+}
+
+TEST_F(TtfFontTest, KerningGoesOnWithoutWritesInRingMode) {
+  useBuiltFont(kernedBoxes());
+  const auto font = open();
+  flash.failNextProgram();
+  ASSERT_NE(nullptr, font->glyph(kRegular, 'A'));
+  ASSERT_TRUE(font->ringMode());
+  const uint32_t writes = flash.programCalls();
+  EXPECT_EQ(-47, font->kerning(kRegular, 'A', 'B'));
+  EXPECT_EQ(writes, flash.programCalls());
+}
+
+TEST_F(TtfFontTest, AFontWithoutKerningAsksNothing) {
+  Font plain = kernedBoxes();
+  plain.extraTables.clear();
+  useBuiltFont(plain);
+  const auto font = open();
+  EXPECT_EQ(0, font->kerning(kRegular, 'A', 'B'));
+  EXPECT_EQ(0u, font->kernLookups());
+}
+
+TEST_F(TtfFontTest, TheFiLigatureDrawsTheGlyphGsubNames) {
+  Font font;
+  font.glyphs.resize(4);
+  font.glyphs[0].contours = {rect(0, 0, 400, 600)};
+  font.glyphs[1].contours = {rect(0, 0, 300, 700)};  // f
+  font.glyphs[2].contours = {rect(0, 0, 200, 500)};  // i
+  font.glyphs[3].contours = {rect(0, 0, 900, 700)};  // the fi ligature: wider than f and i together
+  font.cmap = {{'f', 1}, {'i', 2}};
+  LayoutLookup liga;
+  liga.type = 4;
+  liga.ligatures = {{{1, 2}, 3}};
+  font.extraTables = {{"GSUB", layoutTable({{"latn", {0}}}, {{"liga", {0}}}, {liga}, /*gsub=*/true)}};
+  useBuiltFont(font);
+  const auto ttf = open();
+  ASSERT_NE(nullptr, ttf);
+  const EpdFont* regular = ttf->font(kRegular);
+  EXPECT_EQ(1u, regular->data->ligaturePairCount);
+  const char* rest = "i";
+  EXPECT_EQ(0xFB01u, regular->applyLigatures('f', rest));
+  const EpdGlyph* fi = ttf->glyph(kRegular, 0xFB01);
+  ASSERT_NE(nullptr, fi);
+  EXPECT_GE(fi->width, 26);  // 900 units at 29.17 px per em
+  // Every size shares the style's table.
+  const EpdFont* fonts[4] = {};
+  ASSERT_TRUE(ttf->nativeFonts(40, fonts));
+  EXPECT_EQ(regular->data->ligaturePairs, fonts[kRegular]->data->ligaturePairs);
+}
+
+TEST_F(TtfFontTest, ALigatureKernsAsTheGlyphGsubNames) {
+  // "fi" then "x": EpdFont asks for the pair (U+FB01, x), which the font kerns through the ligature's glyph (4),
+  // not through the cmap (no U+FB01 there) nor the i.
+  Font font;
+  font.glyphs.resize(5);
+  for (auto& glyph : font.glyphs) glyph.contours = {rect(0, 0, 400, 600)};
+  font.cmap = {{'f', 1}, {'i', 2}, {'x', 3}};
+  LayoutLookup liga;
+  liga.type = 4;
+  liga.ligatures = {{{1, 2}, 4}};
+  LayoutLookup kern;
+  PairSubtable pairs;
+  pairs.pairs = {{4, {{3, -100}}}};
+  kern.pairSubtables = {pairs};
+  font.extraTables = {{"GSUB", layoutTable({{"latn", {0}}}, {{"liga", {0}}}, {liga}, /*gsub=*/true)},
+                      {"GPOS", layoutTable({{"latn", {0}}}, {{"kern", {0}}}, {kern})}};
+  useBuiltFont(font);
+  const auto ttf = open();
+  ASSERT_NE(nullptr, ttf);
+  // -100 units at 29.17 px per em, in 4.4, as in layout so in drawing.
+  EXPECT_EQ(-47, ttf->kerning(kRegular, 0xFB01, 'x'));
+  EXPECT_EQ(-47, ttf->font(kRegular)->getKerning(0xFB01, 'x'));
+  EXPECT_EQ(0, ttf->kerning(kRegular, 'i', 'x'));
 }

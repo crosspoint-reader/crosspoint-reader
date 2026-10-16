@@ -16,6 +16,8 @@ class FontBytes {
   FontBytes(const uint8_t* data, const uint32_t size) : data_(data), size_(size) {}
 
   uint32_t size() const { return size_; }
+  /// The file in place, for readers that take a pointer and bound themselves (the SDK's OpenType layout readers).
+  const uint8_t* data() const { return data_; }
 
   uint8_t u8(const uint32_t offset) {
     if (!contains(offset, 1)) return fail();

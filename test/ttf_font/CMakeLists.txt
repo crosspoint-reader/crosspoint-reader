@@ -4,9 +4,15 @@ add_executable(TtfFontTest
   TtfFamilyTest.cpp
   TtfFontTest.cpp
   TtfRegistryTest.cpp
+  TtfOpenTypeTest.cpp
   ${REPO_ROOT}/lib/EpdFont/SdCardFontRegistry.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFamily.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFont.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/TtfOpenType.cpp
+  # the SDK's OpenType layout readers TtfOpenType uses (the firmware links them through FreeInkOpenType)
+  ${REPO_ROOT}/freeink-sdk/libs/font/FreeInkFont/src/Gpos.cpp
+  ${REPO_ROOT}/freeink-sdk/libs/font/FreeInkFont/src/Gsub.cpp
+  ${REPO_ROOT}/freeink-sdk/libs/font/FreeInkFont/src/KernTable.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/FlashGlyphStore.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/GlyphStoreFormat.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
@@ -28,6 +34,7 @@ target_include_directories(TtfFontTest PRIVATE
   ${REPO_ROOT}/lib/hal
   ${REPO_ROOT}/lib/EpdFont
   ${REPO_ROOT}/lib/EpdFont/ttf
+  ${REPO_ROOT}/freeink-sdk/libs/font/FreeInkOpenType/include
   ${REPO_ROOT}/lib/Logging
   ${REPO_ROOT}/lib/Memory
   ${REPO_ROOT}/lib/Utf8

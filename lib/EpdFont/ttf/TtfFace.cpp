@@ -195,6 +195,21 @@ FaceStatus parseFace(FontBytes& bytes, Face* face) {
   face->descender = static_cast<int16_t>(descender);
   face->height = static_cast<int16_t>(height);
 
+  // Optional: a font without them draws without kerning or ligatures.
+  Table layout;
+  if (findTable(bytes, numTables, tag("GPOS"), 10, &layout)) {
+    face->gpos = layout.offset;
+    face->gposLength = layout.length;
+  }
+  if (findTable(bytes, numTables, tag("GSUB"), 10, &layout)) {
+    face->gsub = layout.offset;
+    face->gsubLength = layout.length;
+  }
+  if (findTable(bytes, numTables, tag("kern"), 4, &layout)) {
+    face->kern = layout.offset;
+    face->kernLength = layout.length;
+  }
+
   face->cmapEnd = cmap.offset + cmap.length;
   if (!chooseCmap(bytes, cmap, face)) return readFailure(bytes, FaceStatus::Unsupported);
   if (bytes.ioError()) return FaceStatus::Transient;

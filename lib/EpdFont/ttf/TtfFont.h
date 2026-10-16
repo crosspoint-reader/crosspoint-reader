@@ -12,6 +12,7 @@
 #include "GlyphProvider.h"
 #include "TtfFace.h"
 #include "TtfFamily.h"
+#include "TtfOpenType.h"
 #include "TtfRasterizer.h"
 
 /// One TrueType family drawn from the glyph store (spec 3.2), in flash mode: every style's whole TTF is copied
@@ -20,7 +21,8 @@
 ///
 /// It serves the body size and, on demand, native sizes (headings, CSS sizes, drop caps at their own pixel size):
 /// each size is four EpdFontData without tables, so every lookup goes to a per-style GlyphProvider adapter, and has
-/// its own entry in the store's size table. Kerning and ligatures come in later stages.
+/// its own entry in the store's size table. Kerning comes from the font's GPOS (or legacy kern) table through the
+/// store's pair index, and the fi/fl/ff/ffi/ffl ligatures from its GSUB table (spec 5.4).
 ///
 /// Not thread-safe: every call runs under RenderLock (spec 3.4).
 class TtfFont {
@@ -90,6 +92,11 @@ class TtfFont {
 
   uint32_t renders() const { return renders_; }
   uint32_t storeHits() const { return hits_; }
+  /// Pairs whose kerning was worked out from the font, not read from the store.
+  uint32_t kernLookups() const { return kernLookups_; }
+
+  /// The kerning between two codepoints of `style` at the body size, in 4.4 pixels (EpdFont's unit).
+  int8_t kerning(uint8_t style, uint32_t left, uint32_t right) { return kerning(body_, style, left, right); }
 
   // The body size's glyphs, as its per-style adapters see them.
   const EpdGlyph* glyph(uint8_t style, uint32_t codepoint) { return glyph(body_, style, codepoint); }
@@ -109,6 +116,9 @@ class TtfFont {
       return owner->ownsBitmap(glyph, bitmap);
     }
     void prefetch(const char* utf8Text) override { owner->prefetch(*size, style, utf8Text); }
+    int8_t kerning(const uint32_t leftCp, const uint32_t rightCp) override {
+      return owner->kerning(*size, style, leftCp, rightCp);
+    }
   };
 
   /// One pixel size: its index in the store's size table and the four styles' fonts. Never copied or moved: each
@@ -137,6 +147,19 @@ class TtfFont {
     uint8_t block = 0;  // the store's style block
     uint32_t bytes = 0;
     ttf::Face face;
+    ttf::Kerning kerning;
+    ttf::Ligatures ligatures;  // every size's EpdFontData points at its pairs
+    // Left codepoints found to kern with nothing. Their pairs are never stored (spec 8.1), yet the space before
+    // every word asks for one: one bit each below kUncoveredEnd (Latin), so they read the font once per load.
+    static constexpr uint32_t kUncoveredEnd = 0x250;
+    uint8_t uncoveredLeft[kUncoveredEnd / 8] = {};
+
+    bool knownUncovered(const uint32_t left) const {
+      return left < kUncoveredEnd && (uncoveredLeft[left >> 3] >> (left & 7) & 1) != 0;
+    }
+    void markUncovered(const uint32_t left) {
+      if (left < kUncoveredEnd) uncoveredLeft[left >> 3] |= static_cast<uint8_t>(1u << (left & 7));
+    }
   };
 
   struct Pending {
@@ -157,6 +180,7 @@ class TtfFont {
   bool claimSize(Size& size);
   bool storeKey(Size& size, uint8_t style, uint32_t codepoint, uint32_t* key);
   const EpdGlyph* glyph(Size& size, uint8_t style, uint32_t codepoint);
+  int8_t kerning(const Size& size, uint8_t style, uint32_t left, uint32_t right);
   void prefetch(Size& size, uint8_t style, const char* utf8Text);
   const EpdGlyph* render(const Size& size, uint8_t style, uint32_t codepoint, bool haveKey, uint32_t key);
   const EpdGlyph* drawToRing(const EpdGlyph& metrics);
@@ -185,5 +209,6 @@ class TtfFont {
   Pending pending_[kPrefetchGlyphs] = {};
   uint32_t renders_ = 0;
   uint32_t hits_ = 0;
+  uint32_t kernLookups_ = 0;
   uint8_t failuresLogged_ = 0;
 };
