@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 
+#include <algorithm>
 #include <cassert>
 
 #include "MappedInputManager.h"
@@ -191,14 +192,16 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   // The band chrome (wash, divider) spans the full screen width, but the tab
   // slots keep the content side padding so the outer pills never touch the
   // bezel. The divider is drawn here rather than by tabBar(), which would
-  // inset it along with the slots; the slot band is shortened by the same 1px
-  // so pill geometry is unchanged.
+  // inset it along with the slots; the slot band is shortened by the divider
+  // so the pills end on it. The divider matches the header's bottom rule.
+  const auto divider = static_cast<int16_t>(std::max(1, metrics.headerUnderlineSize));
   const auto side = static_cast<int16_t>(metrics.contentSidePadding);
   const fui::Rect slotsRect{static_cast<int16_t>(tabRect.x + side), tabRect.y,
-                            static_cast<int16_t>(tabRect.width - 2 * side), static_cast<int16_t>(tabRect.height - 1)};
+                            static_cast<int16_t>(tabRect.width - 2 * side),
+                            static_cast<int16_t>(tabRect.height - divider)};
   tabProps.divider = false;
   fui::tabBar(screen.frame(), slotsRect, tabProps);
-  screen.target().fill(fui::Rect{tabRect.x, static_cast<int16_t>(tabRect.bottom() - 1), tabRect.width, 1},
+  screen.target().fill(fui::Rect{tabRect.x, static_cast<int16_t>(tabRect.bottom() - divider), tabRect.width, divider},
                        fui::Paint::solid(fui::Color::Black));
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 }
