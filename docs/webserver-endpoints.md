@@ -128,6 +128,10 @@ Notes:
 
 - Existing files with the same name are overwritten.
 - EPUB cache data for the uploaded path is cleared after a successful upload.
+- Uploading a book file (`.epub`, `.txt`, `.md`, `.xtc`), here or through the
+  WebSocket upload, marks the Library index stale, so the book appears the next
+  time the Library opens. Hidden files and folders (names that start with `.`)
+  don't mark it.
 - HTTP upload uses a 4 KB write buffer before flushing to the SD card.
 
 ### `POST /mkdir`
