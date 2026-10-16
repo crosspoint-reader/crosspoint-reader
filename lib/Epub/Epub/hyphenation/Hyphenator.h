@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,8 @@ class Hyphenator {
 
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
+  static bool primaryLanguageTag(const std::string& lang, char out[3]);
+  static uint32_t patternIdentity(const std::string& lang);
 
  private:
   static const LanguageHyphenator* cachedHyphenator_;

@@ -90,6 +90,15 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 59
+
+The header stores a `u32` hyphenation pack identity after
+`hyphenationEnabled`. A section is rebuilt when installing, updating, or
+removing the pack changes this value. This retains version 57's identity check
+and includes version 56's explicit-hyphen/dash line breaks. Earlier completed
+and partial caches are rebuilt. Table-grid builds use version 58 with a
+different serialized layout.
+
 ### Version 55
 
 Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
@@ -231,14 +240,19 @@ superscript, and subscript. The format also includes:
   on-disk order mirrors the in-RAM arena so the firmware reads a whole block
   payload with a single allocation and a single SD read
 
-ImHex pattern:
+Legacy ImHex illustration (not a decoder for current section caches):
+
+This example predates paragraph markers, source ranges, ruby text, and link
+serialization. Its version check and payload structures must not be used for
+version 59 files. See `Section.cpp`, `Page.cpp`, and `blocks/TextBlock.cpp`
+for the current serialized layout.
 
 ```c++
 import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 50
+#define EXPECTED_VERSION 51
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -400,6 +414,7 @@ struct SectionBin {
     u16 viewportWidth;
     u16 viewportHeight;
     bool hyphenationEnabled;
+    u32 hyphenationPatternIdentity;
     bool embeddedStyle;
     u8 imageRendering;
     bool focusReadingEnabled;
@@ -546,6 +561,23 @@ make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
+
+## Hyphenation packs
+
+`hyph-<ISO 639-1 code>.cphyph` is a self-contained, little-endian file. The
+24-byte header contains `CPHY`, format version 1, two ASCII language bytes,
+minimum prefix and suffix lengths, zero flags and reserved bytes, then the
+trie root offset, payload length, and payload CRC32. The payload is a Typst
+Hypher trie with its four-byte root prefix removed. The generator lives at
+`scripts/build-hyphenation-assets.py` and pins the upstream source revision.
+
+Installed packs occupy the existing `spiffs` partition as raw mapped data.
+The partition is split into two equal banks. Each bank has a CRC-protected
+header in its first 4 KiB sector, followed by packed trie payloads. Updates
+copy retained packs to the inactive bank and write its header last, so a power
+loss before commit leaves the previous bank readable. Firmware updates must
+continue reading version 1 packages and bank headers, and must keep this
+partition's location and size if installed packs are to survive OTA.
 
 ## Clipping store (`/.crosspoint/clippings/epub_<path-hash>.bin`)
 
