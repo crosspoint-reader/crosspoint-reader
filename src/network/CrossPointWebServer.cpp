@@ -955,7 +955,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
-        if (library::isLibraryBookFile(state.fileName.c_str())) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
     state.buffer.reset();
@@ -2735,7 +2735,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearBookCache(filePath.c_str());
-            if (library::isLibraryBookFile(wsUploadFileName.c_str())) library::markLibraryIndexDirty();
+            if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2805,7 +2805,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
         clearBookCache(filePath.c_str());
-        if (library::isLibraryBookFile(wsUploadFileName.c_str())) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
