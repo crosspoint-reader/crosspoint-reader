@@ -195,9 +195,12 @@ void ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, co
 }
 
 void ChapterHtmlSlimParser::pushBlockTextStyleEntry(const CssStyle& cssStyle) {
+  const bool sized =
+      cssStyle.hasFontSize() || std::any_of(inlineStyleStack.begin(), inlineStyleStack.end(),
+                                            [](const StyleStackEntry& entry) { return entry.hasFontScale; });
   if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
       !cssStyle.hasSmallCaps() && !cssStyle.defined.whiteSpace && !cssStyle.hasDirection() &&
-      !cssStyle.hasTextAlign()) {
+      !cssStyle.hasTextAlign() && !sized) {
     return;
   }
 
@@ -213,6 +216,12 @@ void ChapterHtmlSlimParser::pushBlockTextStyleEntry(const CssStyle& cssStyle) {
   }
   applyTextDecorationToEntry(entry, cssStyle);
   applyInlinePresentationToEntry(entry, cssStyle);
+  if (sized) {
+    // The block has already resolved its ancestors and its own declaration.
+    entry.hasFontScale = true;
+    entry.fontScaleRem = true;
+    entry.fontScale = blockStyleStack.back().fontScale;
+  }
   applyDirectionToEntry(entry, cssStyle);
   entry.setsParagraphDirection = true;
   if (cssStyle.hasTextAlign()) {
@@ -689,7 +698,10 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     const float base = inlineScale > 0.0f ? inlineScale : currentTextBlock->getBlockStyle().fontScale;
     inlineScale = entry.fontScaleRem ? entry.fontScale : base * entry.fontScale;
   }
-  const uint8_t sizeSlot = inlineScale > 0.0f ? currentTextBlock->sizeSlotFor(std::clamp(inlineScale, 0.5f, 3.0f)) : 0;
+  const uint8_t sizeSlot =
+      inlineScale > 0.0f && (inlineSize.valid || inlineScale != currentTextBlock->getBlockStyle().fontScale)
+          ? currentTextBlock->sizeSlotFor(std::clamp(inlineScale, 0.5f, 3.0f))
+          : 0;
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId,
                             sizeSlot, effectivePreserveWhitespace);
   if (insideTableCell && !tableRowStacked) {
@@ -2876,7 +2888,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::applyBlockFontScale(BlockStyle& blockStyle, const CssStyle& cssStyle,
                                                 const char* tagName) const {
-  const float parentScale = blockStyleStack.empty() ? 1.0f : blockStyleStack.back().fontScale;
+  float parentScale = blockStyleStack.empty() ? 1.0f : blockStyleStack.back().fontScale;
+  for (const auto& entry : inlineStyleStack) {
+    if (entry.hasFontScale) parentScale = entry.fontScaleRem ? entry.fontScale : parentScale * entry.fontScale;
+  }
   float scale = parentScale;
   if (cssStyle.hasFontSize()) {
     scale = cssStyle.fontSize.unit == CssUnit::Rem ? cssStyle.fontSize.value : parentScale * cssStyle.fontSize.value;

@@ -1199,6 +1199,46 @@ TEST_F(ChapterPageBreakTest, EmptyBlockDoesNotConsumePendingBreak) {
   EXPECT_EQ(pages, 2u);
 }
 
+TEST_F(ChapterInlineSizeTest, NestedRemResetKeepsItsFontInsideSizedParagraph) {
+  open("p", nullptr);
+  open("span", "font-size: 0.8em");
+  text("small ");
+  open("span", "font-size: 1rem");
+  text("normal");
+  close("span");
+  text(" small");
+  close("span");
+  close("p");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 1u);
+  const auto& block = *static_cast<const PageLine*>(lines[0])->getBlock();
+  ASSERT_EQ(block.wordCount(), 3u);
+  EXPECT_EQ(block.wordFontId(0, parser.fontId), NOTOSERIF_12_FONT_ID);
+  EXPECT_EQ(block.wordFontId(1, parser.fontId), NOTOSERIF_14_FONT_ID);
+  EXPECT_EQ(block.wordFontId(2, parser.fontId), NOTOSERIF_12_FONT_ID);
+}
+
+TEST_F(ChapterInlineSizeTest, DescendantFontSizeResolvesAfterAncestorSize) {
+  open("body", "font-size: 0.8em");
+  open("p", "font-size: 1.2rem");
+  text("Absolute");
+  close("p");
+  open("p", "font-size: 1.2em");
+  text("Relative");
+  close("p");
+  open("p", nullptr);
+  text("Inherited");
+  close("p");
+  close("body");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 3u);
+  const int expected[] = {NOTOSERIF_16_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_12_FONT_ID};
+  for (size_t i = 0; i < lines.size(); ++i) {
+    const auto& block = *static_cast<const PageLine*>(lines[i])->getBlock();
+    EXPECT_EQ(block.wordFontId(0, NOTOSERIF_14_FONT_ID), expected[i]);
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {
