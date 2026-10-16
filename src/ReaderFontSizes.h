@@ -26,9 +26,10 @@ inline int builtinReaderFontVariant(const int fontId, const float scale) {
       {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID},
       {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
   };
-  for (const auto& family : FAMILIES) {
-    const int* base = std::find(std::begin(family), std::end(family), fontId);
-    if (base == std::end(family)) continue;
+  for (const int* family : FAMILIES) {
+    const int* end = family + std::size(BUILTIN_READER_POINT_SIZES);
+    const int* base = std::find(family, end, fontId);
+    if (base == end) continue;
     const float target = BUILTIN_READER_POINT_SIZES[base - family] * scale;
     size_t pick = scale < 1.0f ? 0 : static_cast<size_t>(base - family);
     for (size_t i = 0; i < std::size(BUILTIN_READER_POINT_SIZES); ++i) {
