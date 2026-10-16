@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <JsonListParser.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <MD5Builder.h>
 #include <Memory.h>
@@ -857,6 +858,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
   }
   if (result != HttpDownloader::OK) return result;
   clearBookCache(dest);
+  if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
 
   // Optional per-book sidecar (e.g. a service book id keyed by the file's
   // path hash) so a later sync stage can associate the file with the service.

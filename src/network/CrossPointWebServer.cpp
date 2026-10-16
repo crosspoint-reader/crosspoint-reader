@@ -91,12 +91,6 @@ void releaseRequestArguments(WebServer* server) {
 // Note: Items starting with "." are automatically hidden
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
-// Formats the library index tracks (LibraryIndex isBookName): an upload of any
-// of these must mark the index dirty so the next Library entry rebuilds it.
-bool isLibraryBookFile(const String& filename) {
-  return FsHelpers::checkFileExtension(filename, ".epub") || FsHelpers::checkFileExtension(filename, ".txt") ||
-         FsHelpers::checkFileExtension(filename, ".md") || FsHelpers::checkFileExtension(filename, ".xtc");
-}
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -961,7 +955,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
-        if (isLibraryBookFile(state.fileName)) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
     state.buffer.reset();
@@ -2375,6 +2369,8 @@ void CrossPointWebServer::handleFetch() {
     Storage.remove(part.c_str());
     complete = false;
     resp["error"] = "sd write failed";
+  } else if (complete && library::isLibraryBookFile(dest)) {
+    library::markLibraryIndexDirty();
   }
   resp["status"] = status;
   resp["bytes"] = written;
@@ -2453,6 +2449,8 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
+      } else if (library::isLibraryBookFile(st.path)) {
+        library::markLibraryIndexDirty();
       }
       return;
     case UPLOAD_FILE_ABORTED:
@@ -2737,7 +2735,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearBookCache(filePath.c_str());
-            if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
+            if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2807,7 +2805,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
         clearBookCache(filePath.c_str());
-        if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;

@@ -128,6 +128,10 @@ Notes:
 
 - Existing files with the same name are overwritten.
 - EPUB cache data for the uploaded path is cleared after a successful upload.
+- Uploading a book file (`.epub`, `.txt`, `.md`, `.xtc`), here or through the
+  WebSocket upload, marks the Library index stale, so the book appears the next
+  time the Library opens. Hidden files and folders (names that start with `.`)
+  don't mark it.
 - HTTP upload uses a 4 KB write buffer before flushing to the SD card.
 
 ### `POST /mkdir`
@@ -590,6 +594,10 @@ browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...
 - `dest` must be absolute with no `..`; missing parent folders are created.
 - The transfer is staged in `<dest>.part` and replaces `dest` only when the
   whole body has arrived, so a failed update keeps the previous file.
+- Installing a book file (`.epub`, `.txt`, `.md`, `.xtc`) marks the Library
+  index stale, so the book appears the next time the Library opens. Requests
+  that end with `complete:false`, failed transfers, other file types, and
+  hidden files or folders (names that start with `.`) don't mark it.
 - Up to 5 redirects are followed. `headers` (typically the plugin's
   `Authorization`) are sent only while the target keeps the starting URL's
   scheme, host, and port; a redirect elsewhere, including https→http, gets none.
@@ -613,7 +621,8 @@ Writes one small file to SD. The content is sent as a multipart file part
 (`api.writeFile()` builds it), so binary data, including NUL bytes, arrives
 intact. It streams to `<path>.tmp` and replaces `path` only after a complete,
 non-empty body. `path` must be absolute, without `..`, and not a credential
-store. A plugin keeps its own files in its install folder (`api.dir`).
+store. A plugin keeps its own files in its install folder (`api.dir`). As with
+`/api/fetch`, writing a book file marks the Library index stale.
 
 - **Success:** `200 {"ok":true,"bytes":N}`.
 - **Errors:** `400` (`bad path`, `empty body`, `missing file part`,
