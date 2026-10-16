@@ -13,14 +13,6 @@ Run the selected build directly. Install, upgrade, re-pin, or re-download tools
 only for requested setup or a concrete missing/incompatible dependency.
 Diagnose that failure first and repair only the affected component.
 
-On Windows/Git Bash, the SdFat patches under `scripts/sdfat_patches/` must stay
-LF-only. CRLF conversion makes `git apply --check` fail against PlatformIO's LF
-SdFat sources even when the dependency hash is correct. Before treating an
-SdFat patch failure as a dependency/cache problem, check the patch file EOLs.
-The repository's `.gitattributes` pins these patch files to LF; if an older
-checkout predates that rule, renormalize or re-checkout the patches before
-building.
-
 [Getting-started setup](../../docs/contributing/getting-started.md#first-time-toolchain-setup)
 is for first-time setup or an identified environment failure, not routine builds.
 Build output follows [compact logging](testing-debugging.md#compact-build-output).

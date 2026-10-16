@@ -1,2 +1,0 @@
-# Patch files must remain LF-only so git apply can match dependency sources on Windows.
-scripts/sdfat_patches/*.patch text eol=lf
