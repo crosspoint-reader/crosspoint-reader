@@ -36,6 +36,22 @@ TEST(GlyphFallback, MapsStressAndLengthMarksToPunctuation) {
   EXPECT_EQ(fallbackGlyphCodepoint(0x02D0), static_cast<uint32_t>(':'));   // length mark
 }
 
+TEST(GlyphFallback, MapsBoxDrawingToAscii) {
+  // No built-in font carries U+2500-U+257F. The MD reader's table rows use the
+  // light vertical as a cell divider (#471); tree listings in code blocks use
+  // the rest of the light set.
+  EXPECT_EQ(fallbackGlyphCodepoint(0x2502), static_cast<uint32_t>('|'));
+  EXPECT_EQ(fallbackGlyphCodepoint(0x2500), static_cast<uint32_t>('-'));
+  EXPECT_EQ(fallbackGlyphCodepoint(0x250C), static_cast<uint32_t>('+'));
+  EXPECT_EQ(fallbackGlyphCodepoint(0x2514), static_cast<uint32_t>('+'));
+  EXPECT_EQ(fallbackGlyphCodepoint(0x251C), static_cast<uint32_t>('+'));
+  EXPECT_EQ(fallbackGlyphCodepoint(0x253C), static_cast<uint32_t>('+'));
+  // Heavy and double variants are NOT mapped: they are rare outside terminal
+  // art, and an unmapped codepoint still draws the replacement glyph.
+  EXPECT_EQ(fallbackGlyphCodepoint(0x2503), 0x2503u);
+  EXPECT_EQ(fallbackGlyphCodepoint(0x2550), 0x2550u);
+}
+
 TEST(GlyphFallback, MapsBulletShapesToABullet) {
   // U+2022 is in the General Punctuation range every font here carries.
   EXPECT_EQ(fallbackGlyphCodepoint(0x25AA), 0x2022u);
