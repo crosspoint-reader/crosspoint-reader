@@ -1154,6 +1154,35 @@ TEST_F(ChapterHtmlSlimParserTest, PassesIndentSettingsToNewTextBlock) {
   }
 }
 
+TEST_F(ChapterWidowOrphanTest, CarriedReferenceKeepsItsFootnote) {
+  for (const bool repeated : {false, true}) {
+    SCOPED_TRACE(repeated);
+    pages.clear();
+    parser.currentPage.reset();
+    paragraph(1);
+    paragraph(1);
+    parser.currentPageNextY = 32;
+    parser.recentLineCount = 2;
+    parser.recentLineOffsets[0] = 0;
+    parser.recentLineOffsets[1] = 10;
+    parser.currentPage->addFootnote("1", "#note");
+    parser.currentPage->addFootnote("2", "#other");
+    parser.currentPage->addLink("#note", 0, 16, 8, 16);
+    parser.currentPage->addLink("#other", 8, 0, 8, 16);
+    if (repeated) parser.currentPage->addLink("#note", 0, 0, 8, 16);
+    ASSERT_TRUE(parser.canCarry(1));
+    parser.breakPageCarryingLines(1, 1, 20);
+    ASSERT_EQ(pages.size(), 1u);
+    ASSERT_EQ(parser.currentPage->footnotes.size(), 1u);
+    EXPECT_STREQ(parser.currentPage->footnotes[0].href, "#note");
+    EXPECT_STREQ(parser.currentPage->footnotes[0].number, "1");
+    EXPECT_EQ(pages[0]->footnotes.size(), repeated ? 2u : 1u);
+    EXPECT_TRUE(std::any_of(pages[0]->footnotes.begin(), pages[0]->footnotes.end(),
+                            [](const auto& note) { return strcmp(note.href, "#other") == 0; }));
+    EXPECT_EQ(parser.currentPage->links[0].y, 0);
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {

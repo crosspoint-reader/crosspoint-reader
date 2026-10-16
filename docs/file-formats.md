@@ -90,6 +90,12 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 58
+
+The serialized layout is unchanged. Completed and partial sections rebuild for
+corrected rendering layout and footnote placement. Book metadata and reading
+progress are kept.
+
 ### Version 57
 
 Version 57 combines the rendering layout below with line breaks after explicit

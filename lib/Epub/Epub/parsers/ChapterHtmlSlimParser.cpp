@@ -2942,6 +2942,12 @@ bool ChapterHtmlSlimParser::canCarry(const size_t carry) const {
 // link areas to the top of the next page with their spacing intact.
 void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const size_t paragraphLines,
                                                    const uint32_t visibleOffset) {
+  auto nextPage = makeUniqueNoThrow<Page>();
+  if (!nextPage) {
+    LOG_ERR("EHP", "OOM: Page (%zu bytes)", sizeof(Page));
+    layoutOom = true;
+    return;
+  }
   std::unique_ptr<PageElement> carried[MAX_CARRIED_LINES];
   uint32_t carriedOffsets[MAX_CARRIED_LINES] = {};
   std::vector<PageLink> carriedLinks;
@@ -2964,12 +2970,25 @@ void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const siz
         ++it;
       }
     }
+    auto& footnotes = currentPage->footnotes;
+    for (auto it = footnotes.begin(); it != footnotes.end();) {
+      const auto refersToNote = [&it](const PageLink& link) { return strcmp(link.href, it->href) == 0; };
+      if (std::any_of(carriedLinks.begin(), carriedLinks.end(), refersToNote)) {
+        if (nextPage->footnotes.empty()) nextPage->footnotes.reserve(footnotes.size());
+        nextPage->addFootnote(it->number, it->href);
+        if (std::none_of(links.begin(), links.end(), refersToNote)) {
+          it = footnotes.erase(it);
+          continue;
+        }
+      }
+      ++it;
+    }
   }
 
   setCurrentPageVisibleOffset(visibleOffset);
   emitCurrentPage();
   completedPageCount++;
-  currentPage.reset(new Page());
+  currentPage = std::move(nextPage);
   currentPageNextY = 0;
   currentPageVisibleOffsetSet = false;
 
