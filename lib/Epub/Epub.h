@@ -52,7 +52,8 @@ class Epub {
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCacheMode cacheMode);
-  bool parseTocNcxFile() const;
+  // writePageList=false leaves pagelist.bin alone (an NCX tried after a parsed nav).
+  bool parseTocNcxFile(bool writePageList = true) const;
   bool parseTocNavFile() const;
   bool parsePageMapFile() const;
   void parseCssFiles() const;

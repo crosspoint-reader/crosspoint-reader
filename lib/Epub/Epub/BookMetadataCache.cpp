@@ -12,7 +12,8 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 11;
+// v12: a sparse EPUB 3 nav gives way to an NCX that maps more chapters; a v11 cache holds the sparse TOC
+constexpr uint8_t BOOK_CACHE_VERSION = 12;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -60,6 +61,7 @@ bool BookMetadataCache::beginTocPass() {
   }
   tocWriter_.emplace(tocFile);
   tocLookupPrepared_ = false;
+  tocMappedCount_ = 0;
   return true;
 }
 
@@ -148,6 +150,7 @@ bool BookMetadataCache::resetTocPassOutput() {
   tocWriter_.emplace(tocFile);
 
   tocCount = 0;
+  tocMappedCount_ = 0;
   // The fallback parse restarts the TOC from its first entry; scan from the first spine again.
   tocScanNextIndex_ = 0;
   tocScanNextOffset_ = 0;
@@ -555,6 +558,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   const TocEntry entry(title, href, anchor, level, spineIndex);
   writeTocEntry(*tocWriter_, entry);
   tocCount++;
+  if (spineIndex >= 0) tocMappedCount_++;
 }
 
 /* ============= READING / LOADING FUNCTIONS ================ */

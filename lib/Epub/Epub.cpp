@@ -27,6 +27,7 @@
 #include "Epub/ImageFormatDetector.h"
 #include "Epub/MetadataSidecar.h"
 #include "Epub/SpinePageIndex.h"
+#include "Epub/TocFallbackPolicy.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/PageListSink.h"
@@ -290,7 +291,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   return true;
 }
 
-bool Epub::parseTocNcxFile() const {
+bool Epub::parseTocNcxFile(const bool writePageList) const {
   // the ncx file should have been specified in the content.opf file
   if (tocNcxItem.empty()) {
     LOG_DBG("EBP", "No ncx file specified");
@@ -301,31 +302,33 @@ bool Epub::parseTocNcxFile() const {
 
   size_t ncxSize = 0;
   if (!getItemSize(tocNcxItem, &ncxSize)) {
-    Storage.remove((getCachePath() + "/pagelist.bin").c_str());
+    if (writePageList) Storage.remove((getCachePath() + "/pagelist.bin").c_str());
     return false;
   }
 
   // Stream <pageList> entries straight to pagelist.bin (long printed-page lists used to
   // blow the X3 heap when accumulated in a std::vector — see PageListSink).
-  PageListSink ncxPageListSink(getCachePath());
-  TocNcxParser ncxParser(contentBasePath, ncxSize, bookMetadataCache.get(), &ncxPageListSink);
+  std::optional<PageListSink> ncxPageListSink;
+  if (writePageList) ncxPageListSink.emplace(getCachePath());
+  TocNcxParser ncxParser(contentBasePath, ncxSize, bookMetadataCache.get(),
+                         ncxPageListSink ? &*ncxPageListSink : nullptr);
 
   if (!ncxParser.setup()) {
     LOG_ERR("EBP", "Could not setup toc ncx parser");
-    ncxPageListSink.discard();
+    if (ncxPageListSink) ncxPageListSink->discard();
     return false;
   }
 
   if (!readItemContentsToStream(tocNcxItem, ncxParser, 1024)) {
     LOG_ERR("EBP", "Could not stream toc ncx data");
-    ncxPageListSink.discard();
+    if (ncxPageListSink) ncxPageListSink->discard();
     return false;
   }
 
   // Flush u16 count + close pagelist.bin (or remove it if no <pageList> entries were
   // streamed). The section builder later reads this file to stamp printed-page labels
   // onto rendered pages without re-parsing the NCX.
-  ncxPageListSink.finalize();
+  if (ncxPageListSink) ncxPageListSink->finalize();
 
   LOG_DBG("EBP", "Parsed TOC items");
   return true;
@@ -792,14 +795,48 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     tocParsed = parseTocNavFile();
   }
 
-  // Fall back to NCX if nav parsing failed or wasn't available
-  if (!tocParsed && !tocNcxItem.empty()) {
+  // Fall back to NCX if nav parsing failed or wasn't available, or if the nav parsed but is sparse.
+  // Converted books (e.g. Amazon exports) often pair a coarse EPUB 3 nav (parts and front matter
+  // only) with an NCX carrying the full chapter list. A parsed nav whose spine-mapped entries cover
+  // less than half the spine gives the NCX a chance, and the source with more mapped entries wins.
+  // Raw counts would let a stale NCX full of hrefs that no longer resolve out-count a smaller,
+  // working nav (see TocFallbackPolicy.h). Each re-parse starts from an empty TOC temp file, so the
+  // loser's entries are discarded rather than appended to. Ported from crosspoint-reader PR #2603
+  // (Ryan Jarvis, @Cabalist).
+  const int navCount = bookMetadataCache->getTocCount();
+  (void)navCount;  // only read by LOG_DBG, which compiles out at lower log levels
+  const int navMappedCount = bookMetadataCache->getTocMappedCount();
+  const int spineItemCount = bookMetadataCache->getSpineCount();
+  const bool navSparse = toc_fallback::navIsSparse(tocParsed, navMappedCount, spineItemCount);
+  if ((!tocParsed || navSparse) && !tocNcxItem.empty()) {
     if (navAttempted && !bookMetadataCache->resetTocPassOutput()) {
       LOG_ERR("EBP", "Could not reset TOC temp output before NCX fallback");
       return false;
     }
-    LOG_DBG("EBP", "Falling back to NCX TOC");
-    tocParsed = parseTocNcxFile();
+    if (navSparse) {
+      LOG_DBG("EBP", "Nav TOC sparse (%d/%d entries mapped for %d spine items), trying NCX", navMappedCount, navCount,
+              spineItemCount);
+    } else {
+      LOG_DBG("EBP", "Falling back to NCX TOC");
+    }
+    // The page list stays the nav's: an NCX tried against a parsed nav must not replace or remove
+    // the nav's pagelist.bin.
+    const bool ncxParsed = parseTocNcxFile(/*writePageList=*/!tocParsed);
+    const int ncxMappedCount = bookMetadataCache->getTocMappedCount();
+    if (toc_fallback::shouldAdoptNcx(tocParsed, navMappedCount, ncxParsed, ncxMappedCount)) {
+      if (tocParsed) {
+        LOG_DBG("EBP", "NCX TOC adopted (%d/%d entries mapped)", ncxMappedCount, bookMetadataCache->getTocCount());
+      }
+      tocParsed = true;
+    } else if (tocParsed) {
+      // The NCX failed or mapped no more entries: parse the nav again to restore its entries.
+      LOG_DBG("EBP", "Keeping nav TOC (%d/%d entries mapped)", navMappedCount, navCount);
+      if (!bookMetadataCache->resetTocPassOutput()) {
+        LOG_ERR("EBP", "Could not reset TOC temp output to restore the nav TOC");
+        return false;
+      }
+      tocParsed = parseTocNavFile();
+    }
   }
 
   if (!tocParsed) {

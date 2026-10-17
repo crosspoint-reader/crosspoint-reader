@@ -105,6 +105,9 @@ class BookMetadataCache {
   uint32_t tocScanNextOffset_ = 0;
   // The index or the scan reader, set up by the first createTocEntry() of a TOC pass.
   bool tocLookupPrepared_ = false;
+  // TOC entries of this pass whose href matched a spine item (spineIndex >= 0). Build-pass only,
+  // never written to book.bin: Epub::load compares it between the nav and the NCX.
+  uint16_t tocMappedCount_ = 0;
   void prepareTocLookup();
   int16_t findSpineByScan(const std::string& href);
 
@@ -166,6 +169,8 @@ class BookMetadataCache {
   TocEntry getTocEntry(int index);
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
+  // Build-pass only (see tocMappedCount_); 0 in read mode.
+  int getTocMappedCount() const { return tocMappedCount_; }
   bool isTocReliable() const { return tocReliable; }
   bool isLoaded() const { return loaded; }
   // Mark the cache "loaded" after a METADATA-ONLY OPF parse populated coreMetadata (title, author,
