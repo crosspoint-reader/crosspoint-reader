@@ -516,12 +516,11 @@ face_idx_cps = {}
 for cp, fi in cp_to_face_idx.items():
     face_idx_cps.setdefault(fi, set()).add(cp)
 
-def extract_kerning_fonttools(font_path, codepoints, ppem):
+def extract_kerning_fonttools(font_path, codepoints):
     """Extract kerning pairs from a font file using fonttools.
 
-    Returns dict of {(leftCp, rightCp): pixel_adjust} for the given
-    codepoints.  Values are scaled from font design units to integer
-    pixels at ppem.
+    Returns ({(leftCp, rightCp): design_units}, units_per_em) for the given
+    codepoints, non-zero values only. Nothing is scaled here: see below.
     """
     font = TTFont(font_path)
     units_per_em = font['head'].unitsPerEm
@@ -539,26 +538,32 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
 
     font.close()
 
-    # Scale design-unit kerning values to 4.4 fixed-point pixels.
-    scale = ppem / units_per_em
-    result = {}  # (leftCp, rightCp) -> 4.4 fixed-point adjust
+    result = {}  # (leftCp, rightCp) -> design units
     for (lg, rg), du in raw_kern.items():
-        lcp = glyph_to_cp[lg]
-        rcp = glyph_to_cp[rg]
-        adjust = fp4_from_design_units(du, scale)
-        if adjust != 0:
-            result[(lcp, rcp)] = adjust
-    return result
+        if du != 0:
+            result[(glyph_to_cp[lg], glyph_to_cp[rg])] = du
+    return result, units_per_em
 
 # The ppem used by the existing glyph rasterization:
 #   face.set_char_size(size << 6, size << 6, 150, 150)
 # means size_pt at 150 DPI -> ppem = size * 150 / 72
 ppem = size * 150.0 / 72.0
 
-kern_map = {}  # (leftCp, rightCp) -> adjust
+# The kerning STRUCTURE -- which code points kern, their classes, which class pairs have a value --
+# is worked out in design units, and only the values are scaled to this size. Every size of a
+# typeface then emits identical codepoint, class and sparse-column tables, which
+# dedupe_font_tables.py keeps once for the whole family. Built from values already scaled, the
+# structure followed the rounding: at a small size two pairs could round alike (or to 0) where a
+# larger size kept them apart, and that size lost the shared tables (inter_ui_10_bold: ~3.3 KB).
+# Design units from a stack of fonts are made comparable by scaling each to the stack's common
+# units-per-em multiple, which keeps them exact integers.
+_kern_by_face = []
 for face_idx, cps in face_idx_cps.items():
-    font_path = args.fontstack[face_idx]
-    kern_map.update(extract_kerning_fonttools(font_path, cps, ppem))
+    _kern_by_face.append(extract_kerning_fonttools(args.fontstack[face_idx], cps))
+kern_units_per_em = math.lcm(*(upem for _, upem in _kern_by_face)) if _kern_by_face else 1
+kern_map = {}  # (leftCp, rightCp) -> design units at kern_units_per_em
+for face_kern, upem in _kern_by_face:
+    kern_map.update({pair: du * (kern_units_per_em // upem) for pair, du in face_kern.items()})
 
 print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
@@ -611,12 +616,17 @@ if kern_map:
     kern_left_class_count = left_class_id - 1
     kern_right_class_count = right_class_id - 1
 
-    # Build the class x class matrix
+    # Build the class x class matrix: which cells have a value (design units, the same at every
+    # size) and the value at this size, scaled to 4.4 fixed-point pixels. A cell can round to 0
+    # here and still be written, so its place in the shared sparse columns stays the same.
+    kern_present = [False] * (kern_left_class_count * kern_right_class_count)
     kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)
-    for (lcp, rcp), adjust in kern_map.items():
+    kern_scale = ppem / kern_units_per_em
+    for (lcp, rcp), du in kern_map.items():
         lc = left_class_map[lcp] - 1
         rc = right_class_map[rcp] - 1
-        kern_matrix[lc * kern_right_class_count + rc] = adjust
+        kern_present[lc * kern_right_class_count + rc] = True
+        kern_matrix[lc * kern_right_class_count + rc] = fp4_from_design_units(du, kern_scale)
 
     # Build sorted class entry lists
     kern_left_classes = sorted(left_class_map.items())
@@ -1287,11 +1297,10 @@ if kern_map:
     for row in range(kern_left_class_count):
         row_offsets.append(len(sparse_cols))
         row_start = row * kern_right_class_count
-        row_vals = kern_matrix[row_start:row_start + kern_right_class_count]
-        for col, v in enumerate(row_vals):
-            if v != 0:
+        for col in range(kern_right_class_count):
+            if kern_present[row_start + col]:
                 sparse_cols.append(col)
-                sparse_vals.append(v)
+                sparse_vals.append(kern_matrix[row_start + col])
     row_offsets.append(len(sparse_cols))
     if len(sparse_cols) > 0xFFFF:
         print(f"Error: {len(sparse_cols)} kern entries exceed the uint16 row-offset range", file=sys.stderr)
