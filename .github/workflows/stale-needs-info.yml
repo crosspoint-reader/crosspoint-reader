@@ -1,0 +1,52 @@
+name: "Close Unanswered Reports"
+
+# Only issues someone with triage rights has explicitly marked `needs-info`
+# enter this flow.
+# After 14 quiet days they gain `no-response`, and 7 days later they close.
+# The close also stamps `no-response-closed` — applied only by this action at
+# close time, so the reopen-on-reply workflow can tell an automatic close apart
+# from a deliberate one (a maintainer closing by hand never carries it).
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      # actions/stale cannot apply a label that does not exist, so provision the
+      # three lifecycle labels first. --force makes this idempotent.
+      - name: Ensure the lifecycle labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh label create needs-info --repo "$REPO" --force \
+            --color d4c5f9 --description "Incomplete report: missing the details needed to act"
+          gh label create no-response --repo "$REPO" --force \
+            --color fbca04 --description "Waiting on the reporter for more information"
+          gh label create no-response-closed --repo "$REPO" --force \
+            --color ededed --description "Closed automatically after no reply"
+      - uses: actions/stale@v11
+        with:
+          only-labels: needs-info
+          days-before-stale: 14
+          days-before-close: 7
+          stale-issue-label: no-response
+          close-issue-label: no-response-closed
+          exempt-issue-labels: accepted,good-first-issue
+          stale-issue-message: >
+            This report is still missing the details needed to act on it. It will
+            close in 7 days without a reply — commenting removes this label and
+            keeps it open.
+          close-issue-message: >
+            Closing because the missing details never arrived. This is not a
+            rejection: comment with them and the issue reopens automatically.
+          # PRs are handled by review, not by this schedule.
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
