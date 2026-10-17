@@ -173,11 +173,14 @@ struct CssStyle {
   CssDisplay display = CssDisplay::Block;                       // display property (Block, Inline or None)
   CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align for inline elements
 
-  bool listStyleNone = false;          // true when list-style-type: none / list-style: none
-  bool pageBreakBefore = false;        // true when page-break-before: always (or break-before: page)
-  bool pageBreakAfter = false;         // true when page-break-after: always (or break-after: page)
-  float lineHeightMultiplier = 1.0f;   // normalised line-height multiplier (relative to default y_advance)
-  float fontSizeMultiplier = 1.0f;     // font-size multiplier relative to body em size
+  bool listStyleNone = false;         // true when list-style-type: none / list-style: none
+  bool pageBreakBefore = false;       // true when page-break-before: always (or break-before: page)
+  bool pageBreakAfter = false;        // true when page-break-after: always (or break-after: page)
+  float lineHeightMultiplier = 1.0f;  // normalised line-height multiplier (relative to default y_advance)
+  float fontSizeMultiplier = 1.0f;    // font-size multiplier relative to body em size
+  // Part of font-size, set with it: true for rem, px, pt and the absolute keywords, whose size is
+  // the body's times the multiplier; false for em, % and smaller/larger, which scale the parent's.
+  bool fontSizeRootRelative = false;
   CssFloat cssFloat = CssFloat::None;  // float: left/right — signals inline image context
   bool smallCaps = false;              // font-variant: small-caps
   // Text made invisible while still in the flow. A PDF-to-EPUB conversion emits every OCR word
@@ -304,6 +307,7 @@ struct CssStyle {
     }
     if (base.hasFontSizeMultiplier() && take(defined.fontSizeMultiplier, 21)) {
       fontSizeMultiplier = base.fontSizeMultiplier;
+      fontSizeRootRelative = base.fontSizeRootRelative;
       defined.fontSizeMultiplier = 1;
     }
     if (base.hasCssFloat() && take(defined.cssFloat, 22)) {
@@ -395,6 +399,7 @@ struct CssStyle {
     pageBreakAfter = false;
     lineHeightMultiplier = 1.0f;
     fontSizeMultiplier = 1.0f;
+    fontSizeRootRelative = false;
     cssFloat = CssFloat::None;
     smallCaps = false;
     colorTransparent = false;

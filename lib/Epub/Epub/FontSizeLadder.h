@@ -77,6 +77,18 @@ struct FontSizeLadder {
     ++count;
   }
 
+  // The size of a font resolve() returned, relative to the body (1.0 for the body font, fontId 0):
+  // with a resolved block's residual it gives back the block's size, which the parser needs to put
+  // a body-relative (rem, px) span into a block of another size.
+  float scaleOf(const int32_t fontId) const {
+    if (fontId == 0) return 1.0f;
+    if (native() && (fontId & ~0xFF) == nativeBase) return static_cast<float>(fontId & 0xFF) * 64.0f / nativeBodyPpem;
+    for (int i = 0; i < count; ++i) {
+      if (rungs[i].fontId == fontId) return rungs[i].sizePct / 100.0f;
+    }
+    return 1.0f;
+  }
+
   // Residual dead zone: a leftover scale this close to 1.0 is snapped to exactly 1.0,
   // so the block renders NATIVE glyphs of the chosen rung instead of resampling every
   // glyph for a size difference below the ~5% typographic just-noticeable threshold.

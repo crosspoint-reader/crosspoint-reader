@@ -31,7 +31,11 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 90;  // v90: small caps shrink ł ń ž ÿ, Greek and
+constexpr uint8_t SECTION_FILE_VERSION = 91;  // v91: rem/px/pt font sizes are relative to the
+                                              // body (v90 compounded nested ones), and CSS
+                                              // specificity, compound, descendant/child
+                                              // selectors and `inherit` apply
+                                              // v90: small caps shrink ł ń ž ÿ, Greek and
                                               // Cyrillic, and no longer Ł Ń Ž, and set fi/fl
                                               // as two letters; v89 pages measured such words
                                               // the old way

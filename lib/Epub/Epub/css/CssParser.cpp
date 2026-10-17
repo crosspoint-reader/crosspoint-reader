@@ -893,7 +893,11 @@ void CssParser::parseDeclarationIntoStyle(const std::string_view decl, CssStyle&
     if (val != "inherit" && val != "initial" && val != "unset") {
       float parsed = 0.0f;
       bool ok = false;
+      // em, % and smaller/larger scale the parent's size; everything else is the body's (rem) or a
+      // fixed size, normalised against the body's nominal one -- CssStyle::fontSizeRootRelative.
+      bool fromRoot = true;
       if (!val.empty() && val.back() == '%') {
+        fromRoot = false;
         const char* p = val.data();
         char* end = nullptr;
         float v = std::strtof(p, &end);
@@ -910,6 +914,7 @@ void CssParser::parseDeclarationIntoStyle(const std::string_view decl, CssStyle&
           ok = true;
         }
       } else if (val.size() > 2 && val.substr(val.size() - 2) == "em") {
+        fromRoot = false;
         const char* p = val.data();
         char* end = nullptr;
         float v = std::strtof(p, &end);
@@ -955,9 +960,11 @@ void CssParser::parseDeclarationIntoStyle(const std::string_view decl, CssStyle&
           parsed = 1.6f;
         }
         ok = parsed > 0.0f;
+        fromRoot = val != "smaller" && val != "larger";
       }
       if (ok && parsed > 0.0f) {
         style.fontSizeMultiplier = parsed;
+        style.fontSizeRootRelative = fromRoot;
         style.defined.fontSizeMultiplier = 1;
       }
     }
@@ -1663,6 +1670,7 @@ bool CssParser::readCssStylePayload(FsFile& file, CssStyle& style) {
   }
   if ((fontSizeFlags & 0x1) != 0) {
     style.fontSizeMultiplier = fontSizeMul;
+    style.fontSizeRootRelative = (fontSizeFlags & 0x2) != 0;
     style.defined.fontSizeMultiplier = 1;
   }
   uint8_t blockFlags = 0;
@@ -1736,9 +1744,10 @@ void CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   // bit 0 = value, bit 1 = defined (distinguishes explicit "normal" from unset)
   uint8_t smallCapsVal = (style.smallCaps ? 0x1 : 0x0) | (style.defined.smallCaps ? 0x2 : 0x0);
   file.write(smallCapsVal);
-  // font-size multiplier: float + flags byte (bit 0 = defined)
+  // font-size multiplier: float + flags byte (bit 0 = defined, bit 1 = relative to the body, v27)
   file.write(reinterpret_cast<const uint8_t*>(&style.fontSizeMultiplier), sizeof(style.fontSizeMultiplier));
-  const uint8_t fontSizeFlags = style.defined.fontSizeMultiplier ? 0x1 : 0x0;
+  const uint8_t fontSizeFlags =
+      (style.defined.fontSizeMultiplier ? 0x1 : 0x0) | (style.fontSizeRootRelative ? 0x2 : 0x0);
   file.write(fontSizeFlags);
   // Block flags byte: value/defined pairs, same convention as smallCaps above.
   const uint8_t blockFlags = (style.listStyleNone ? 0x01 : 0x00) | (style.defined.listStyleNone ? 0x02 : 0x00) |
@@ -2091,10 +2100,12 @@ static size_t compressStyle(const CssStyle& s, uint8_t* out) {
   if (s.defined.visibilityHidden && s.visibilityHidden) mask |= 1u << 29;
   if (s.defined.display && (static_cast<unsigned>(s.display) & 2u)) mask |= 1u << 30;
   // Bit 31 announces a byte of values the uint16 below has no room for, written after it: an
-  // explicit `inherit` of font-weight (bit 0) and of font-style (bit 1).
+  // explicit `inherit` of font-weight (bit 0) and of font-style (bit 1), a font-size relative to
+  // the body (bit 2).
   uint8_t extra = 0;
   if (s.defined.fontWeight && s.fontWeight == CssFontWeight::Inherit) extra |= 0x01;
   if (s.defined.fontStyle && s.fontStyle == CssFontStyle::Inherit) extra |= 0x02;
+  if (s.defined.fontSizeMultiplier && s.fontSizeRootRelative) extra |= 0x04;
   if (extra != 0) mask |= 1u << 31;
   std::memcpy(p, &mask, 4);
   p += 4;
@@ -2226,6 +2237,7 @@ static void decompressStyle(const uint8_t* in, CssStyle& out) {
   if (d.fontSizeMultiplier) {
     std::memcpy(&out.fontSizeMultiplier, p, 4);
     p += 4;
+    out.fontSizeRootRelative = (extra & 0x04) != 0;
   }
 }
 

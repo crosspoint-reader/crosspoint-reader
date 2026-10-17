@@ -1,4 +1,4 @@
-BOOK title=CSS Selectors Test lang=en spine=2 toc=2 reliableToc=1
+BOOK title=CSS Selectors Test lang=en spine=3 toc=3 reliableToc=1
 SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
  PAGE 0 elements=7 footnotes=0
   LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=3
@@ -69,3 +69,24 @@ SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
    W x=119 s=4 z=100 t=still
    W x=168 s=4 z=100 t=underlined
    W x=264 s=0 z=100 t=plain.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=5 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=F1
+   W x=18 s=0 z=150 t=large
+   W x=101 s=0 z=100 t=body
+  LINE y=36 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=F2
+   W x=19 s=0 z=150 t=large
+   W x=102 s=0 z=100 t=body
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=F3
+   W x=20 s=0 z=150 t=large
+   W x=103 s=0 z=150 t=large
+  LINE y=108 x=0 align=0 mult=1.500 hfid=0 words=3
+   W x=0 s=0 z=100 t=F4
+   W x=32 s=0 z=100 t=large
+   W x=115 s=0 z=67 t=body
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=F5
+   W x=22 s=0 z=100 t=body

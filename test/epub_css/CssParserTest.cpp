@@ -139,6 +139,28 @@ TEST(CssParserUnits, FontSizeKeywordsAndAbsoluteUnits) {
   EXPECT_FALSE(bogus.hasFontSizeMultiplier());
 }
 
+// em, % and smaller/larger scale the parent's size; rem, px, pt and the absolute keywords are the
+// body's. The parser composes the first kind and starts over from the body for the second.
+TEST(CssParserUnits, FontSizeKnowsWhatItIsRelativeTo) {
+  for (const char* decl : {"font-size: 1.2em", "font-size: 80%", "font-size: smaller", "font-size: larger"}) {
+    const CssStyle st = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(st.hasFontSizeMultiplier()) << decl;
+    EXPECT_FALSE(st.fontSizeRootRelative) << decl;
+  }
+  for (const char* decl :
+       {"font-size: 1.2rem", "font-size: 12pt", "font-size: 20px", "font-size: small", "font-size: medium"}) {
+    const CssStyle st = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(st.hasFontSizeMultiplier()) << decl;
+    EXPECT_TRUE(st.fontSizeRootRelative) << decl;
+  }
+  // The flag travels with the size through the cascade.
+  CssStyle resolved = CssParser::parseInlineStyle("font-size: 1rem");
+  resolved.applyOver(CssParser::parseInlineStyle("font-size: 0.9em"));
+  EXPECT_FALSE(resolved.fontSizeRootRelative);
+  resolved.applyOver(CssParser::parseInlineStyle("font-size: 14px"));
+  EXPECT_TRUE(resolved.fontSizeRootRelative);
+}
+
 // A watermark span's `font-size: 1px` must read as invisible text; nothing meant to be read may.
 // The line sits at a tenth of the body (CssStyle::kInvisibleFontSizeMultiplier), 1.6 px of 16 px.
 TEST(CssParserUnits, FontSizeInvisibleOnlyBelowReadableSizes) {

@@ -18,6 +18,11 @@ Chapter 2, `inherit`: a span saying font-weight / font-style / text-decoration: 
 bold, italic or underline it sits in (I1-I3); `inherit` used to read as normal / none. (text-align:
 inherit is pinned by the CSS unit tests: the corpus profile justifies, which overrides CSS alignment.)
 
+Chapter 3, font sizes: em (and %) is relative to the parent, rem, px, pt and the absolute keywords
+to the body, so nested rem or px spans do not compound (F1, F2) while nested em spans do (F3); a rem
+span in a 1.5em paragraph is body-sized, i.e. 67% of its block (F4); and a rem paragraph inside an
+em-sized container (a <section>, which sizes its text, not a block) is body-sized too (F5).
+
 Regenerate with:  python test/epubs/make_test_css_selectors.py
 then refresh goldens: UPDATE_GOLDENS=1 ctest -R EpubPipeline
 """
@@ -48,10 +53,12 @@ OPF = """<?xml version="1.0" encoding="UTF-8"?>
     <item id="css"      href="style.css"      media-type="text/css"/>
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapter3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
   <spine toc="ncx">
     <itemref idref="chapter1"/>
     <itemref idref="chapter2"/>
+    <itemref idref="chapter3"/>
   </spine>
 </package>
 """
@@ -75,6 +82,10 @@ NCX = """<?xml version="1.0" encoding="UTF-8"?>
       <navLabel><text>inherit</text></navLabel>
       <content src="chapter2.xhtml"/>
     </navPoint>
+    <navPoint id="np3" playOrder="3">
+      <navLabel><text>Font sizes</text></navLabel>
+      <content src="chapter3.xhtml"/>
+    </navPoint>
   </navMap>
 </ncx>
 """
@@ -87,6 +98,15 @@ div.poem > p { margin-left: 4em }
 .deep p { font-weight: bold }
 .inh { font-weight: inherit; font-style: inherit; text-decoration: inherit }
 p.emph { font-style: italic }
+.r15 { font-size: 1.5rem }
+.r1 { font-size: 1rem }
+.px24 { font-size: 24px }
+.px16 { font-size: 16px }
+.em15 { font-size: 1.5em }
+.em1 { font-size: 1em }
+p.big { font-size: 1.5em }
+section.quiet { font-size: 0.8em }
+p.rem1 { font-size: 1rem }
 """
 
 
@@ -122,6 +142,22 @@ def chapter2():
 """
 
 
+def chapter3():
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Font sizes</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<p>F1 <span class="r15">large <span class="r1">body</span></span></p>
+<p>F2 <span class="px24">large <span class="px16">body</span></span></p>
+<p>F3 <span class="em15">large <span class="em1">large</span></span></p>
+<p class="big">F4 large <span class="r1">body</span></p>
+<section class="quiet"><p class="rem1">F5 body</p></section>
+</body>
+</html>
+"""
+
+
 def main():
     with zipfile.ZipFile(OUT, "w") as z:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
@@ -131,6 +167,7 @@ def main():
         z.writestr("OEBPS/style.css", CSS, compress_type=zipfile.ZIP_DEFLATED)
         z.writestr("OEBPS/chapter1.xhtml", chapter1(), compress_type=zipfile.ZIP_DEFLATED)
         z.writestr("OEBPS/chapter2.xhtml", chapter2(), compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/chapter3.xhtml", chapter3(), compress_type=zipfile.ZIP_DEFLATED)
     print(f"wrote {OUT}")
 
 

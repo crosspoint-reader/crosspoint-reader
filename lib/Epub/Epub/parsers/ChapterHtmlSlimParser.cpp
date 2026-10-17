@@ -517,6 +517,17 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   // the parent element); the block's own font-size lives in BlockStyle, so 100 here
   // means "the block size". Tracked in integer percent to match the per-word channel.
   int sizePct = 100;
+  // A body-relative size (rem, px, pt) starts over from the body: it is put relative to the
+  // block's own size rather than multiplied in, so nested rem or px spans do not compound. A
+  // resolved block keeps only its residual over a ladder font; scaleOf gives the full size back.
+  // A block whose own size is body-relative ignores the sizes of the elements it sits in, too.
+  int blockPct = 100;
+  if (currentTextBlock) {
+    const BlockStyle& bs = currentTextBlock->getBlockStyle();
+    blockPct = std::max(
+        1, static_cast<int>(fontSizeLadder_.scaleOf(bs.headingFontId) * bs.fontSizeMultiplier * 100.0f + 0.5f));
+  }
+  const int blockSizeFromDepth = currentBlockSizeFromRoot_ ? currentBlockOwnerDepth_ : -1;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
@@ -546,8 +557,9 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasMarginLeft) {
       effectiveInlineMarginLeft = entry.marginLeftPx;
     }
-    if (entry.hasFontSize) {
-      sizePct = sizePct * entry.fontSizePct / 100;
+    if (entry.hasFontSize && entry.depth >= blockSizeFromDepth) {
+      sizePct = entry.fontSizeFromRoot ? (entry.fontSizePct * 100 + blockPct / 2) / blockPct
+                                       : sizePct * entry.fontSizePct / 100;
     }
   }
   // Snap composed word sizes near body to plain body text. When font-size normalization is
@@ -572,6 +584,7 @@ void ChapterHtmlSlimParser::applyCssFontSizeToEntry(StyleStackEntry& entry, cons
   if (!cssStyle.hasFontSizeMultiplier()) return;
   const int pct = static_cast<int>(cssStyle.fontSizeMultiplier * 100.0f + 0.5f);
   entry.hasFontSize = true;
+  entry.fontSizeFromRoot = cssStyle.fontSizeRootRelative;
   entry.fontSizePct = static_cast<uint8_t>(
       std::min<int>(std::max<int>(pct, ParsedText::MIN_WORD_SIZE_PCT), ParsedText::MAX_WORD_SIZE_PCT));
 }
@@ -715,7 +728,9 @@ CssStyle ChapterHtmlSlimParser::normalizeFontSizeForElement(const char* tagName,
     normalized.fontSizeMultiplier = 1.0f;
   }
   const bool blockLevel = isHeaderOrBlock(tagName) && strcmp(tagName, "br") != 0;
-  if (hasMainTextFontSizeBaseline_ && blockLevel) {
+  // A body-relative size on an inline element is on the blocks' scale too (a 1rem span is the
+  // prose size), so it takes the same main-text normalisation.
+  if (hasMainTextFontSizeBaseline_ && (blockLevel || cssStyle.fontSizeRootRelative)) {
     normalized.fontSizeMultiplier /= mainTextFontSizeBaseline_;
   }
   // Block twin of the per-word near-body snap in updateEffectiveInlineStyle. The same
@@ -1417,10 +1432,12 @@ bool ChapterHtmlSlimParser::tryStartDropCapCapture(const CssStyle& cssStyle) {
   if (!cssStyle.hasFontSizeMultiplier() || cssStyle.fontSizeMultiplier < kDropCapMinMultiplier) return false;
 
   // Compose the cap size: span CSS (em, relative to parent) x enclosing inline spans
-  // x the paragraph block's own multiplier — all relative to the body font. Clamped so
-  // the cap stays around three text lines tall (KOReader-comparable) and never absurd.
-  float mult =
-      cssStyle.fontSizeMultiplier * (effectiveSizePct / 100.0f) * currentTextBlock->getBlockStyle().fontSizeMultiplier;
+  // x the paragraph block's own multiplier — all relative to the body font; a rem or px
+  // cap is relative to the body already. Clamped so the cap stays around three text lines
+  // tall (KOReader-comparable) and never absurd.
+  float mult = cssStyle.fontSizeRootRelative ? cssStyle.fontSizeMultiplier
+                                             : cssStyle.fontSizeMultiplier * (effectiveSizePct / 100.0f) *
+                                                   currentTextBlock->getBlockStyle().fontSizeMultiplier;
   mult = std::min(std::max(mult, kDropCapMinMultiplier), kDropCapMaxMultiplier);
 
   // Inherited bold/italic, overridden by the span's own CSS (drop-cap classes commonly
@@ -2805,6 +2822,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
     self->pushBlockStyleEntry(cssStyle);
+    self->currentBlockSizeFromRoot_ = cssStyle.hasFontSizeMultiplier() && cssStyle.fontSizeRootRelative;
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     self->addAncestorInsets(headerBlockStyle, emSize);
     headerBlockStyle.textAlignDefined = true;
@@ -2838,6 +2856,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     if (isZeroHeightSpacerParagraph(name, styleAttr)) {
       // Preserve paragraph break semantics for this <p>, but skip its inner text payload.
       self->pushBlockStyleEntry(cssStyle);
+      self->currentBlockSizeFromRoot_ = cssStyle.hasFontSizeMultiplier() && cssStyle.fontSizeRootRelative;
       auto blockStyle = userAlignmentBlockStyle;
       if (self->embeddedStyle && cssStyle.hasTextAlign() &&
           self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
@@ -2890,6 +2909,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
       self->startNewTextBlock(brStyle);
     } else {
       self->pushBlockStyleEntry(cssStyle);
+      self->currentBlockSizeFromRoot_ = cssStyle.hasFontSizeMultiplier() && cssStyle.fontSizeRootRelative;
       auto blockStyle = userAlignmentBlockStyle;
       if (self->embeddedStyle && cssStyle.hasTextAlign() &&
           self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
@@ -3730,6 +3750,10 @@ void ChapterHtmlSlimParser::endElementBody(ChapterHtmlSlimParser* self, const ch
 
   // A block's emphasis went with its style-stack entry, popped above.
   if (headerOrBlockTag) {
+    if (self->currentBlockSizeFromRoot_) {
+      self->currentBlockSizeFromRoot_ = false;
+      self->updateEffectiveInlineStyle();
+    }
     // Reset alignment on empty text blocks to prevent stale alignment from bleeding
     // into the next sibling element. This fixes issue #1026 where an empty <h1> (default
     // Center) followed by an image-only <p> causes Center to persist through the chain

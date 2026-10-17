@@ -258,8 +258,10 @@ class ChapterHtmlSlimParser final : public Print {
     bool hasMarginLeft = false;
     int16_t marginLeftPx = 0;  // margin-left in pixels, for span-level poem indents
     // Inline font-size as a percent of the PARENT element's size (em semantics).
-    // Nested entries compose multiplicatively in updateEffectiveInlineStyle().
+    // Nested entries compose multiplicatively in updateEffectiveInlineStyle(); one with
+    // fontSizeFromRoot (rem, px, pt) is a percent of the BODY size instead and does not.
     bool hasFontSize = false;
+    bool fontSizeFromRoot = false;
     uint8_t fontSizePct = 100;
   };
   // Every element's own emphasis, blocks included, in document order: an inner element's entry
@@ -664,6 +666,10 @@ class ChapterHtmlSlimParser final : public Print {
   // that element has closed. A <br> inside it splits the element into more blocks, which keep its
   // font size; after it has closed, what it leaves behind must not lend that size to a sibling.
   int currentBlockOwnerDepth_ = -1;
+  // The current block's own font-size is body-relative (rem/px/pt): its size then ignores the
+  // sizes of the inline containers it sits in. Set where a block or heading starts, cleared when
+  // it ends, as the single block-style slot did before blocks went onto the style stack.
+  bool currentBlockSizeFromRoot_ = false;
   // The open heading and the alignment and size its block was given. A block opening inside it is
   // heading text and takes both (applyHeadingScope): otherwise only the first such block got them,
   // by merging into the heading's still-empty block. INT_MAX when no heading is open.
