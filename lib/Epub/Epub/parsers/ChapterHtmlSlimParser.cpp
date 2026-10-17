@@ -103,6 +103,12 @@ constexpr size_t MAX_ANCHORS_PER_CHAPTER = 1024;
 // under -fno-exceptions) is the worst possible response to that. 256 keeps a chapter's early
 // anchors navigable for ~7 KB; the rest degrade the same way they do past any cap.
 constexpr size_t MAX_RESIDENT_ANCHORS = 256;
+// Ids on <span> recorded per chapter, on top of MAX_ANCHORS_PER_CHAPTER (recordSpanAnchor). Some
+// books put their link targets on spans -- FB2 conversions wrap every note in one -- and a notes
+// chapter measured 151 of them; converters that tag every text run with a span id would otherwise
+// add thousands of entries no link names. Half the general cap: room for any notes chapter seen,
+// and a bound on what a converter-tagged chapter adds to the map and to a footnote jump's scan.
+constexpr size_t MAX_SPAN_ANCHORS_PER_CHAPTER = 512;
 // Write buffer for the anchor spill; see the emplace site in setup().
 constexpr size_t ANCHOR_SPILL_BUFFER_BYTES = 512;
 // Anchors that may wait for their first line at once. One per id'd element that has produced no
@@ -431,11 +437,11 @@ bool isHeaderOrBlock(const char* name) {
   return matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
 }
 
-// Returns true if the HTML element is a purely inline, non-navigable wrapper.
-// IDs on these elements are never meaningful navigation targets in epub content.
-// Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
-// of such IDs for progress tracking or internal bookkeeping, and recording each one
-// as a navigation anchor exhausts the heap on memory-constrained devices.
+// Returns true if the HTML element is a purely inline wrapper whose ids are mostly not
+// navigation targets. Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject
+// thousands of such IDs for progress tracking or internal bookkeeping -- but some books do put
+// their note targets on one, so these ids are recorded under a budget of their own
+// (ChapterHtmlSlimParser::recordSpanAnchor) rather than dropped.
 // Block-level, sectioning, and structural elements are always considered navigable.
 bool isNonNavigableInlineElement(const char* name) { return strcmp(name, "span") == 0; }
 
@@ -1667,18 +1673,19 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   // Defer generic anchor recording until startNewTextBlock, after the previous block
   // is flushed to pages via makePages(). Skip pagebreak anchors since they were already recorded.
   //
-  // Skip IDs on non-navigable inline elements (e.g. <span>): these are never link targets
-  // in epub content, but reading-system converters can inject tens of thousands of them per
-  // chapter. That used to exhaust the heap; now that anchors stream it costs cache size and
-  // anchor-lookup time instead, which is what MAX_ANCHORS_PER_CHAPTER bounds -- see its
-  // definition. TOC anchors bypass both the span filter and the cap, since they drive page
-  // breaks and core navigation.
+  // IDs on <span> take their own path (recordSpanAnchor): reading-system converters inject them
+  // by the thousand, so they have a budget of their own and never count against
+  // MAX_ANCHORS_PER_CHAPTER, which the other elements keep whole -- see its definition. TOC
+  // anchors bypass both, since they drive page breaks and core navigation.
   if (!isPageBreakMarker && !idAttr.empty()) {
     const bool isTocAnchor =
         std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idAttr) != self->tocAnchors.end();
-    if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorCount < self->anchorLimit())) {
+    if (isTocAnchor ||
+        (!isNonNavigableInlineElement(name) && self->anchorCount < self->anchorLimit() + self->spanAnchorCount_)) {
       self->pendingAnchorId = idAttr;
-    } else if (!isNonNavigableInlineElement(name)) {
+    } else if (isNonNavigableInlineElement(name)) {
+      self->recordSpanAnchor(idAttr);
+    } else {
       self->noteCapOverflow(kCapAnchorsPerChapter, "anchors per chapter");
     }
   }
@@ -3614,6 +3621,37 @@ void ChapterHtmlSlimParser::queueAnchorForNextLine(std::string id) {
     return;
   }
   anchorsAwaitingLine_.push_back(std::move(id));
+}
+
+// A <span id> used to be left out of the anchor map altogether, to keep converter-injected ids
+// out, and every book whose notes are targeted on spans paid for it: the jump missed the map and
+// landed on the fallback page, usually the notes chapter's first (crosspoint-reader #3667, #3798).
+// Based on crosspoint-reader PR #3799 (Ruslan Sukharev, @skhrv), reworked: theirs records only the
+// fragment a jump asks for, so a cached chapter is rebuilt for every note it has not yet been
+// asked for; this records every span id once, at build time, within MAX_SPAN_ANCHORS_PER_CHAPTER.
+void ChapterHtmlSlimParser::recordSpanAnchor(const std::string& id) {
+  // Kobo's KePub conversion gives every sentence a span with a kobo.<paragraph>.<sentence> id, for
+  // its own position tracking; no link targets one.
+  if (id.rfind("kobo.", 0) == 0) return;
+  // Only into the spill. The resident fallback holds the other anchors in RAM under a far lower
+  // cap, and spans are not worth a byte of it.
+  if (!anchorSpillWriter.has_value()) return;
+  if (spanAnchorCount_ >= MAX_SPAN_ANCHORS_PER_CHAPTER) {
+    noteCapOverflow(kCapAnchorsPerChapter, "span anchors per chapter");
+    return;
+  }
+  spanAnchorCount_++;
+  // A span is inline, so it is usually part of the block in progress, and the next line placed is
+  // that block's first: queue it. The exception is a span opened after its block's element has
+  // closed but before the next block started (FB2 conversions wrap a whole note,
+  // <span id><div><p>..</p></div></span>, in one): the block still in progress is the previous
+  // note's, so the id waits for the next block the way any element's does.
+  const bool opensNextBlock = currentTextBlock && !currentTextBlock->isEmpty() && currentBlockOwnerDepth_ < 0;
+  if (opensNextBlock && pendingAnchorId.empty()) {
+    pendingAnchorId = id;
+    return;
+  }
+  queueAnchorForNextLine(id);
 }
 
 bool ChapterHtmlSlimParser::lookupAnchorInActiveBuild(const std::string& id, uint16_t& page) {
