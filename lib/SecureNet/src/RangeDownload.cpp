@@ -62,9 +62,13 @@ int chunkedGet(SecureHttpClient& http, const std::string& url, DownloadSink& sin
     ~RequestModeGuard() {
       client.clearRange();
       client.setQuietRequests(false);
+      client.clearCredentialScope();
     }
   } guard{http};
   http.setQuietRequests(true);
+  // The chunks sent straight to a redirect target must not carry url's credentials there: they
+  // stay url's, as they were on the redirect itself.
+  http.setCredentialScope(url);
 
   const unsigned long startMs = millis();
   std::string target = url;
