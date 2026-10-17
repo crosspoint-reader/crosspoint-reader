@@ -76,20 +76,38 @@ class Dictionary {
   bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
 
   // Clean the word, look it up, and on a miss retry dictionary-authored
-  // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). On a hit fills
-  // the definition text (capped at MAX_DEFINITION_BYTES) and the headword as
-  // stored in the index. Returns true on a hit. *outResult (if provided)
-  // reports the precise outcome so the UI can distinguish a genuine miss from a
-  // decompression / low-memory / read failure.
+  // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). The word is
+  // tried as typed first, matching the .idx/.syn's actual on-disk sort order
+  // (StarDict sorts case-insensitive-ASCII with an exact-byte tiebreak, so two
+  // entries can legitimately differ only by case — e.g. a proper noun). Only
+  // if that misses, and the word contains an uppercase letter, it's retried
+  // once more fully case-folded, so a sentence-initial capital on an ordinary
+  // word still resolves without a folded key landing in the wrong part of the
+  // index for a word that's genuinely capitalized in the dictionary. On a hit
+  // fills the definition text (capped at MAX_DEFINITION_BYTES) and the
+  // headword as stored in the index. Returns true on a hit. *outResult (if
+  // provided) reports the precise outcome so the UI can distinguish a genuine
+  // miss from a decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
               LookupResult* outResult = nullptr);
 
+  // Strip leading/trailing punctuation and symbols (a word character is any
+  // Unicode Letter, Number, or Mark codepoint — see utf8IsWordChar). Case is
+  // preserved; lookup() decides separately whether to also try a folded key.
   static std::string cleanWord(const char* word);
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
 
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
+
+  // Comparator used to bisect/scan an index. lookup() picks which one to pass:
+  // diskOrderCmp (ASCII-insensitive with an exact-byte tiebreak, non-ASCII
+  // bytes compared raw — matches the .idx/.syn's actual on-disk order) for the
+  // exact-case attempt, or utf8CaseInsensitiveCmp (full Unicode fold) for the
+  // case-folded retry. Passed through explicitly rather than hardcoded so the
+  // same bisect/scan code serves both without duplicating it.
+  using WordCmp = int (*)(const char*, const char*);
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
   // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
@@ -148,10 +166,14 @@ class Dictionary {
   // byte offset of the last sampled entry whose word is <= target, so the caller
   // only has to linear-scan at most SAMPLE_INTERVAL entries from there. Returns
   // 0 — scan source from the start — when sampleCount is 0 or a sample is
-  // unreadable. Clobbers wordBuf.
-  uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
+  // unreadable. Clobbers wordBuf. cmp must match the source's actual on-disk
+  // sort order (see the comment above bisectSamples() in the .cpp) — this is
+  // deliberately not exhaustive-scan-safe: every step touches the SD card
+  // through a mutex, so an unbounded fallback scan of a 100k+ entry .idx would
+  // blow well past the ~5s watchdog budget.
+  uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target, WordCmp cmp);
 
-  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  DictLocation locate(LookupSession& session, const char* target, WordCmp cmp, std::string* matchedHeadwordOut);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
   // the .qidx samples. Used to follow a .syn synonym back to its headword.
@@ -159,7 +181,15 @@ class Dictionary {
 
   // Bisect the .syn/.sidx synonym index for target; on a hit follow its ordinal
   // through locateByOrdinal(). Returns not-found when no .syn exists.
-  DictLocation locateSynonym(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  DictLocation locateSynonym(LookupSession& session, const char* target, WordCmp cmp, std::string* matchedHeadwordOut);
+
+  // Try target via locate(), then (on a miss) dictionary synonyms, then English
+  // mini stem variants — the shared probe sequence lookup() runs once for the
+  // exact-case key and once (only if needed) for the case-folded key. OR's any
+  // read failure into searchFailed rather than overwriting it, so a failure in
+  // an earlier attempt isn't lost if a later attempt cleanly misses.
+  DictLocation lookupKey(LookupSession& session, const std::string& key, WordCmp cmp, std::string& matchedHeadwordOut,
+                         bool& searchFailed);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
@@ -177,6 +207,10 @@ class Dictionary {
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
+
+  // Case-fold every codepoint of an already edge-stripped word (see
+  // utf8SimpleCaseFold). Case only — does not touch punctuation.
+  static std::string foldCase(const std::string& word);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
   // chars). Returns the number of characters read (excluding null), or -1 on
