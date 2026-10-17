@@ -80,6 +80,47 @@ inline bool utf8IsConjoiningJamo(const uint32_t cp) {
          || (cp >= 0x11A8 && cp <= 0x11C2);  // T: jongseong
 }
 
+// Ported from crosspoint-reader (lib/Utf8/Utf8.h at 83f9cc05): utf8IsCjkBreakable from PR #2288
+// ("feat: Support for Korean line breaks and glyph spacing", Justin Mitchell), utf8IsHangul from
+// PR #3700 ("fix: justify Korean text by word spaces only", Sung-jin Brian Hong). utf8IsUnspacedCjk
+// is ours.
+//
+// Returns true for CJK characters that break without hyphenation. Covers CJK Unified Ideographs,
+// Hiragana, Katakana, Hangul, CJK punctuation, and fullwidth forms. Han and Kana have implicit
+// word boundaries per character; Hangul is space-delimited, so layout keeps Hangul words whole
+// (see utf8IsHangul) and splits one without a hyphen only through the hyphenation path.
+inline bool utf8IsCjkBreakable(const uint32_t cp) {
+  return (cp >= 0x1100 && cp <= 0x11FF)        // Hangul Jamo
+         || (cp >= 0x3000 && cp <= 0x303F)     // CJK Symbols and Punctuation
+         || (cp >= 0x3040 && cp <= 0x309F)     // Hiragana
+         || (cp >= 0x30A0 && cp <= 0x30FF)     // Katakana
+         || (cp >= 0x3130 && cp <= 0x318F)     // Hangul Compatibility Jamo
+         || (cp >= 0x3400 && cp <= 0x4DBF)     // CJK Extension A
+         || (cp >= 0x4E00 && cp <= 0x9FFF)     // CJK Unified Ideographs
+         || (cp >= 0xAC00 && cp <= 0xD7AF)     // Hangul Syllables
+         || (cp >= 0xD7B0 && cp <= 0xD7FF)     // Hangul Jamo Extended-B
+         || (cp >= 0xF900 && cp <= 0xFAFF)     // CJK Compatibility Ideographs
+         || (cp >= 0xFE30 && cp <= 0xFE4F)     // CJK Compatibility Forms
+         || (cp >= 0xFF01 && cp <= 0xFF60)     // Fullwidth Latin / Punctuation
+         || (cp >= 0xFF65 && cp <= 0xFFEF)     // Halfwidth Katakana / Hangul
+         || (cp >= 0x20000 && cp <= 0x2A6DF)   // CJK Extension B
+         || (cp >= 0x2A700 && cp <= 0x2B73F);  // CJK Extension C
+}
+
+// Returns true for Hangul letters. Korean separates words with spaces, so a boundary touching
+// Hangul is never an implicit line-break opportunity (CSS word-break: keep-all).
+inline bool utf8IsHangul(const uint32_t cp) {
+  return (cp >= 0x1100 && cp <= 0x11FF)      // Hangul Jamo
+         || (cp >= 0x3130 && cp <= 0x318F)   // Hangul Compatibility Jamo
+         || (cp >= 0xA960 && cp <= 0xA97F)   // Hangul Jamo Extended-A
+         || (cp >= 0xAC00 && cp <= 0xD7FF)   // Hangul Syllables, Hangul Jamo Extended-B
+         || (cp >= 0xFFA0 && cp <= 0xFFDC);  // Halfwidth Hangul
+}
+
+// Han, kana, CJK punctuation and fullwidth forms: the CJK text written without spaces between
+// words. A source line break between two of these is not a word gap (CSS Text 3 segment-break rule).
+inline bool utf8IsUnspacedCjk(const uint32_t cp) { return utf8IsCjkBreakable(cp) && !utf8IsHangul(cp); }
+
 // Apply lightweight NFC-like normalization for Vietnamese precomposed characters and for
 // conjoining Hangul jamo (L+V -> LV, LV+T -> LVT).
 // Converts NFD sequences (base vowel + combining marks) into NFC precomposed
