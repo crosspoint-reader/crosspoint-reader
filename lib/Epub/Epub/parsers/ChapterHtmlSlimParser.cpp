@@ -24,6 +24,13 @@
 #include "../htmlEntities.h"
 
 namespace {
+// An entry whose name has no extension at all: FB2-to-EPUB conversions write <img
+// src="images/img_32"/>. Only its bytes can say whether it is an image we decode.
+bool hasNoFileExtension(const std::string& resolvedPath) {
+  const size_t slash = resolvedPath.rfind('/');
+  return resolvedPath.find('.', slash == std::string::npos ? 0 : slash + 1) == std::string::npos;
+}
+
 // Cache filename for an image extracted out of the EPUB, keyed by the archive entry it came from.
 //
 // The entry path is the only thing that identifies these bytes. It is deliberately NOT the parse
@@ -31,13 +38,26 @@ namespace {
 // when an image's dimensions cannot be resolved, and dimension resolution depends on images.bin
 // filling in over time -- so the same document could number its images differently between runs
 // and hand a block the file belonging to a different image. Hashing the entry cannot drift.
+//
+// The extension is the entry name's, or .img when the name has none. The decoder goes by the bytes
+// (ImageBlock::render), but the pixel-cache names are cut at the last dot: with none in the file
+// name the cut would land on the one in /.crosspoint, and every such image would share one .pxc.
 std::string imageCachePathFor(const std::string& imageBasePath, const std::string& resolvedPath) {
-  std::string ext;
-  const size_t extPos = resolvedPath.rfind('.');
-  if (extPos != std::string::npos) ext = resolvedPath.substr(extPos);
+  std::string ext = ".img";
+  if (!hasNoFileExtension(resolvedPath)) ext = resolvedPath.substr(resolvedPath.rfind('.'));
   char hash[17];
   snprintf(hash, sizeof(hash), "%016llx", static_cast<unsigned long long>(HashUtils::fnvHash64(resolvedPath)));
   return imageBasePath + hash + ext;
+}
+
+// Whether an image reference is worth resolving. A known extension goes by its name, as before; a
+// name without one is let through and judged by its bytes when its dimensions are read (the image
+// manifest and the ZIP header read both sniff the format, and neither answers for an unknown one),
+// so a non-image still ends as alt text. A name with some other extension (.svg, .webp) is still
+// turned away by name, without a ZIP read.
+// Based on crosspoint-reader PR #2386 (artwen, @artwem).
+bool isImageCandidate(const std::string& resolvedPath) {
+  return hasNoFileExtension(resolvedPath) || ImageDecoderFactory::isFormatSupported(resolvedPath);
 }
 }  // namespace
 
@@ -2020,7 +2040,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
 
-          if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+          if (isImageCandidate(resolvedPath)) {
             // Determine SD cache path (image will be extracted here lazily at first render).
             const std::string cachedImagePath = imageCachePathFor(self->imageBasePath, resolvedPath);
 
@@ -2036,7 +2056,9 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
             bool dimsOk = false;
             bool manifestAnswered = false;
             bool imageDeferred = false;
-            if (attrWidth > 0 && attrHeight > 0) {
+            // A name without an extension promises nothing: its dimensions must come from its bytes,
+            // which is what proves it is an image at all, so the tag's own size cannot stand in.
+            if (attrWidth > 0 && attrHeight > 0 && !hasNoFileExtension(resolvedPath)) {
               dims.width = attrWidth;
               dims.height = attrHeight;
               dimsOk = true;
@@ -2376,7 +2398,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
             } else {
               LOG_ERR("EHP", "Failed to read image dimensions from ZIP: %s", resolvedPath.c_str());
             }
-          }  // isFormatSupported
+          }  // isImageCandidate
         }
       }
 
@@ -4433,7 +4455,7 @@ std::unique_ptr<ImageBlock> ChapterHtmlSlimParser::buildImageFromEpubPath(
     const std::string& resolvedPath, const std::string& alt, const uint16_t maxWidth, const uint16_t maxHeight,
     uint16_t* nativeWidth, uint16_t* nativeHeight) {
   if (resolvedPath.empty() || maxWidth == 0 || maxHeight == 0) return nullptr;
-  if (!ImageDecoderFactory::isFormatSupported(resolvedPath)) return nullptr;
+  if (!isImageCandidate(resolvedPath)) return nullptr;
 
   ImageDimensions dims = {0, 0};
   bool dimsOk = false;
@@ -4488,7 +4510,7 @@ void ChapterHtmlSlimParser::noteBackgroundImage(const char* name, const std::str
   }
   if (path.empty()) return;
   std::string resolved = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(path));
-  if (!ImageDecoderFactory::isFormatSupported(resolved)) return;
+  if (!isImageCandidate(resolved)) return;
   backgroundImageScopes_.push_back({depth, std::move(resolved)});
 }
 

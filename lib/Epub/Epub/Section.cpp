@@ -31,7 +31,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 84;  // v84: text declared at font-size 2px or less (a
+constexpr uint8_t SECTION_FILE_VERSION = 85;  // v85: an <img> whose href has no extension is
+                                              // laid out as the image its bytes are; v84 pages
+                                              // hold its alt text
+                                              // v84: text declared at font-size 2px or less (a
                                               // watermark span) is dropped; v83 pages show it
                                               // v83: a TTF family kerns and draws fi/fl ligatures
                                               // v82: a TTF family draws every size with a face of its own
