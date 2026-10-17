@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "Epub/FontSizeLadder.h"
@@ -280,6 +281,72 @@ TEST(WordContinuation, AttachedPunctuationIsMarkedAsContinuation) {
   ASSERT_EQ(result.lines.size(), 1u);
   EXPECT_FALSE(result.lines[0]->wordContinues(0));
   EXPECT_TRUE(result.lines[0]->wordContinues(1));
+}
+
+// A non-breaking space reaches layout as a " " token glued to the words on both sides. In a
+// justified line it stretches like a word gap; the glue around it does not. No corpus book has one,
+// so the goldens do not pin this.
+TEST(WordContinuation, JustifiedNonBreakingSpaceStretchesLikeAWordGap) {
+  GfxRenderer renderer;
+  BlockStyle style = noIndentStyle();
+  style.alignment = CssTextAlign::Justify;
+  ParsedText text(false, false, style);
+  text.addWord("aaaa", EpdFontFamily::REGULAR);
+  text.addWord("bbbb", EpdFontFamily::REGULAR);
+  text.addWord(" ", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);
+  text.addWord("cccc", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);
+  text.addWord("dddd", EpdFontFamily::REGULAR);
+  text.addWord("eeee", EpdFontFamily::REGULAR);
+
+  // aaaa bbbb_cccc dddd is 175 px wide (the space token measures as a space); eeee would need 45
+  // more, so the first line is justified.
+  const auto result = layout(text, renderer, 200);
+  ASSERT_EQ(result.lines.size(), 2u);
+  const TextBlock& line = *result.lines[0];
+  ASSERT_EQ(line.wordCount(), 5);
+  constexpr int kWord = 4 * GfxRenderer::GLYPH_W;
+  const int wordGapStretch = line.wordXpos(1) - line.wordXpos(0) - kWord - GfxRenderer::SPACE_W;
+  EXPECT_GT(wordGapStretch, 0);
+  EXPECT_EQ(line.wordXpos(2) - line.wordXpos(1), kWord);  // bbbb is glued to the space
+  EXPECT_EQ(line.wordXpos(3) - line.wordXpos(2) - GfxRenderer::SPACE_W, wordGapStretch);
+  EXPECT_EQ(line.wordXpos(4) - line.wordXpos(3) - kWord - GfxRenderer::SPACE_W, wordGapStretch);
+}
+
+// At a page bottom the parser refuses a line that ends hyphenated; layout re-lays that line without
+// hyphenation (computeSingleLineBreakNoHyphen) and the rest with it (computeHyphenatedLineBreaksFromIndex).
+// Both must back up over glued tokens instead of breaking before them. The goldens run the retry
+// but never end a retried line at a glued token, so they do not pin this.
+TEST(WordContinuation, PageBottomRetryKeepsGluedGroupsWhole) {
+  GfxRenderer renderer;
+  ParsedText text(false, /*hyphenationEnabled=*/true, noIndentStyle());
+  text.addWord("aaaa", EpdFontFamily::REGULAR);
+  text.addWord("bb", EpdFontFamily::REGULAR);
+  text.addWord(" ", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);  // a no-break space
+  text.addWord("cc-dddddd", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);  // explicit hyphen
+  text.addWord("eeeeeee", EpdFontFamily::REGULAR);
+  text.addWord("ff", EpdFontFamily::REGULAR);
+  text.addWord("?", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);
+
+  std::vector<std::vector<std::string>> lines;
+  bool retried = false;
+  text.layoutAndExtractLines(
+      renderer, kFontId, 100,
+      [&](std::unique_ptr<TextBlock> line, const bool endsHyphenated, const bool suppressRetry) {
+        if (endsHyphenated && !suppressRetry && !retried) {  // what the parser does at a page bottom
+          retried = true;
+          return ParsedText::LineProcessResult::RetryWithoutHyphenation;
+        }
+        std::vector<std::string> words;
+        for (uint16_t i = 0; i < line->wordCount(); i++) words.emplace_back(line->wordText(i));
+        lines.push_back(std::move(words));
+        return ParsedText::LineProcessResult::Accepted;
+      },
+      /*includeLastLine=*/true);
+
+  ASSERT_TRUE(retried);
+  ASSERT_GE(lines.size(), 2u);
+  EXPECT_EQ(lines[0], (std::vector<std::string>{"aaaa"}));      // the retried line backs up over "bb cc-dddddd"
+  for (const auto& line : lines) EXPECT_NE(line.front(), "?");  // the resumed breaker backs up over "ff?"
 }
 
 // Hyphenation splits the word ACROSS lines, so the halves land in different blocks and no flag

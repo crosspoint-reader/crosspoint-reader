@@ -157,8 +157,8 @@ TextBlock::TextBlock(const WordRange& range, const std::vector<int16_t>& word_xp
   const bool hasSizeSrc = range.sizes != nullptr && !range.sizes->empty();
   // Optional, and only used when it actually spans the range -- a caller that does not track
   // continuation (or hands over a short vector) just produces space-separated words.
-  const std::vector<bool>* continuesSrc =
-      (range.continues != nullptr && first + count <= range.continues->size()) ? range.continues : nullptr;
+  const std::vector<TokenBoundary::Boundary>* boundariesSrc =
+      (range.boundaries != nullptr && first + count <= range.boundaries->size()) ? range.boundaries : nullptr;
   if (count > 10000 || first + count > words.size() || first + count > styleSrc.size() || word_xpos.size() != count ||
       (hasSizeSrc && first + count > range.sizes->size())) {
     LOG_ERR("TXB", "Construction failed: range out of bounds (first=%u, count=%u, words=%u, xpos=%u)",
@@ -224,7 +224,7 @@ TextBlock::TextBlock(const WordRange& range, const std::vector<int16_t>& word_xp
   for (uint16_t i = 0; i < numWords; i++) {
     textOff[i] = off;
     xpos[i] = word_xpos[i];
-    styles[i] = packStyle(styleSrc[first + i], continuesSrc != nullptr && (*continuesSrc)[first + i]);
+    styles[i] = packStyle(styleSrc[first + i], boundariesSrc != nullptr && (*boundariesSrc)[first + i].continues);
     // Copy the word one soft-hyphen-free run at a time.
     const std::string& w = words[first + i];
     size_t start = 0;

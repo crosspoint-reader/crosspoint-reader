@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "Epub/TokenBoundary.h"
 #include "Epub/blocks/TextBlock.h"
 
 namespace {
@@ -206,14 +207,15 @@ TEST(TextBlockContinues, RangeCtorCarriesTheFlagWithoutDisturbingStyles) {
   const std::vector<EpdFontFamily::Style> styles = {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::REGULAR,
                                                     EpdFontFamily::REGULAR, EpdFontFamily::ITALIC};
   const std::vector<uint8_t> sizes(words.size(), 100);
-  const std::vector<bool> continues = {false, false, true, true, false};
+  const std::vector<TokenBoundary::Boundary> boundaries = {
+      {false, false}, {false, false}, {true, false}, {true, false}, {false, false}};
   TextBlock::WordRange range = makeRange(words, styles, sizes, 0, words.size());
-  range.continues = &continues;
+  range.boundaries = &boundaries;
 
   TextBlock block(range, {0, 40, 70, 110, 130}, BlockStyle());
   ASSERT_TRUE(block.valid());
   for (uint16_t i = 0; i < words.size(); i++) {
-    EXPECT_EQ(block.wordContinues(i), continues[i]) << "word " << i;
+    EXPECT_EQ(block.wordContinues(i), boundaries[i].continues) << "word " << i;
     EXPECT_EQ(block.wordStyle(i), styles[i]) << "word " << i;
   }
 }
@@ -226,9 +228,9 @@ TEST(TextBlockContinues, HighStyleBitsSurviveAlongsideTheFlag) {
                                                                EpdFontFamily::SUP | EpdFontFamily::UNDERLINE);
   const std::vector<EpdFontFamily::Style> styles = {smallCapsBold, smallCapsBold};
   const std::vector<uint8_t> sizes(words.size(), 100);
-  const std::vector<bool> continues = {false, true};
+  const std::vector<TokenBoundary::Boundary> boundaries = {{false, false}, {true, false}};
   TextBlock::WordRange range = makeRange(words, styles, sizes, 0, words.size());
-  range.continues = &continues;
+  range.boundaries = &boundaries;
 
   TextBlock block(range, {0, 50}, BlockStyle());
   ASSERT_TRUE(block.valid());
@@ -242,9 +244,10 @@ TEST(TextBlockContinues, HighStyleBitsSurviveAlongsideTheFlag) {
 // flags of the words it actually holds.
 TEST(TextBlockContinues, FlagsFollowTheRangeWindow) {
   const Fixture f = uniformFixture();
-  const std::vector<bool> continues = {false, false, true, true, false};
+  const std::vector<TokenBoundary::Boundary> boundaries = {
+      {false, false}, {false, false}, {true, false}, {true, false}, {false, false}};
   TextBlock::WordRange range = makeRange(f.words, f.styles, f.sizes, 2, 2);
-  range.continues = &continues;
+  range.boundaries = &boundaries;
 
   TextBlock block(range, {0, 40}, BlockStyle());
   ASSERT_TRUE(block.valid());
@@ -261,12 +264,25 @@ TEST(TextBlockContinues, AbsentFlagsMeanNoContinuation) {
   for (uint16_t i = 0; i < 3; i++) EXPECT_FALSE(block.wordContinues(i));
 
   // A short vector is ignored rather than read out of bounds.
-  const std::vector<bool> tooShort = {true};
+  const std::vector<TokenBoundary::Boundary> tooShort = {{true, false}};
   TextBlock::WordRange range = makeRange(f.words, f.styles, f.sizes, 0, 3);
-  range.continues = &tooShort;
+  range.boundaries = &tooShort;
   TextBlock guarded(range, {0, 40, 90}, BlockStyle());
   ASSERT_TRUE(guarded.valid());
   for (uint16_t i = 0; i < 3; i++) EXPECT_FALSE(guarded.wordContinues(i));
+}
+
+// A CJK gap is a break opportunity, so the block must not record it as a continuation: the dictionary
+// would otherwise join every character of a CJK run into one "word".
+TEST(TextBlockContinues, ACjkGapIsNotAContinuation) {
+  const Fixture f = uniformFixture();
+  const std::vector<TokenBoundary::Boundary> boundaries = {{false, false}, {false, true}, {true, false}};
+  TextBlock::WordRange range = makeRange(f.words, f.styles, f.sizes, 0, 3);
+  range.boundaries = &boundaries;
+  TextBlock block(range, {0, 40, 90}, BlockStyle());
+  ASSERT_TRUE(block.valid());
+  EXPECT_FALSE(block.wordContinues(1));  // the CJK gap
+  EXPECT_TRUE(block.wordContinues(2));   // glued
 }
 
 }  // namespace
