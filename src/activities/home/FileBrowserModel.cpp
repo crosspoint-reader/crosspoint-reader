@@ -578,53 +578,69 @@ void FileBrowserModel::searchEverywhere(const std::string& query) {
   deepRoot = basepath;
   deepSearch = true;
 
-  // Explicit stack, not recursion: the depth of a card is not ours to choose, and the reader's
-  // task stack is not the place to find out. Same shape the browser's recursive delete uses.
-  std::vector<std::string> pending;
-  pending.push_back(basepath);
+  // Depth first, one open directory per level, as countBooksBelow walks: what the search holds is
+  // bounded by how deep it goes, not by how wide a folder is. A queue of the folders still to visit
+  // held a path for every one of them, and above a library of a thousand author folders that queue
+  // alone ran the heap out. Explicit levels, not recursion: the reader's task stack is not the
+  // place to find out how deep a card goes.
+  constexpr int MAX_DEPTH = 8;  // as countBooksBelow and the book index look
+  struct Level {
+    HalFile dir;
+    std::string path;
+  };
+  std::vector<Level> levels;
+  levels.reserve(MAX_DEPTH + 1);  // references into it stay valid while it grows
+  {
+    auto root = Storage.open(basepath.c_str());
+    if (!root || !root.isDirectory()) {
+      if (root) root.close();
+      return;
+    }
+    root.rewindDirectory();
+    levels.push_back(Level{std::move(root), basepath});
+  }
 
   char name[500];
-  while (!pending.empty() && deepResults.size() < MAX_DEEP_RESULTS) {
-    const std::string dirPath = std::move(pending.back());
-    pending.pop_back();
-
-    auto dir = Storage.open(dirPath.c_str());
-    if (!dir || !dir.isDirectory()) {
-      if (dir) dir.close();
+  while (!levels.empty() && deepResults.size() < MAX_DEEP_RESULTS) {
+    Level& level = levels.back();
+    auto entry = level.dir.openNextFile();
+    if (!entry) {
+      level.dir.close();
+      levels.pop_back();
       continue;
     }
-    dir.rewindDirectory();
-    for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
-      entry.getName(name, sizeof(name));
-      const bool isDir = entry.isDirectory();
-      entry.close();
-      // "." and ".." always; anything else beginning with a dot only when the browser is
-      // showing hidden files, so a search sees exactly what browsing would.
-      if (name[0] == '.') {
-        const bool dotdot = (name[1] == '\0') || (name[1] == '.' && name[2] == '\0');
-        if (dotdot || !SETTINGS.showHiddenFiles) continue;
-      }
-      std::string child = dirPath;
-      if (child.empty() || child.back() != '/') child += '/';
-      child += name;
-      if (isDir) {
-        if (acceptEntry(name, true)) pending.push_back(std::move(child));
+    entry.getName(name, sizeof(name));
+    const bool isDir = entry.isDirectory();
+    entry.close();
+    // "." and ".." always; anything else beginning with a dot only when the browser is
+    // showing hidden files, so a search sees exactly what browsing would.
+    if (name[0] == '.') {
+      const bool dotdot = (name[1] == '\0') || (name[1] == '.' && name[2] == '\0');
+      if (dotdot || !SETTINGS.showHiddenFiles) continue;
+    }
+    std::string child = level.path;
+    if (child.empty() || child.back() != '/') child += '/';
+    child += name;
+    if (isDir) {
+      if (!acceptEntry(name, true) || static_cast<int>(levels.size()) > MAX_DEPTH) continue;
+      auto sub = Storage.open(child.c_str());
+      if (!sub || !sub.isDirectory()) {
+        if (sub) sub.close();
         continue;
       }
-      if (!acceptEntry(name, false)) continue;
-      std::string folded = name;
-      for (char& c : folded) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-      if (folded.find(needle) == std::string::npos) continue;
-      if (deepResults.size() >= MAX_DEEP_RESULTS) {
-        deepTruncated = true;
-        break;
-      }
-      // Stored relative to the root, so the row shows which folder it came from.
-      deepResults.push_back(child.substr(deepRoot.size() + (deepRoot.back() == '/' ? 0 : 1)));
+      sub.rewindDirectory();
+      levels.push_back(Level{std::move(sub), std::move(child)});
+      continue;
     }
-    dir.close();
+    if (!acceptEntry(name, false)) continue;
+    std::string folded = name;
+    for (char& c : folded) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    if (folded.find(needle) == std::string::npos) continue;
+    // Stored relative to the root, so the row shows which folder it came from.
+    deepResults.push_back(child.substr(deepRoot.size() + (deepRoot.back() == '/' ? 0 : 1)));
   }
-  if (!pending.empty() && deepResults.size() >= MAX_DEEP_RESULTS) deepTruncated = true;
+  // Stopped at the cap with folders still unread: there may be more.
+  if (!levels.empty()) deepTruncated = true;
 }
 
 void FileBrowserModel::resort() {

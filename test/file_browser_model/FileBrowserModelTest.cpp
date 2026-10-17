@@ -324,4 +324,74 @@ TEST_F(FileBrowserModelTest, WithoutTheIndexAHeapBelowTheFloorListsNothing) {
   EXPECT_EQ(model.entryCount(), 0u);
 }
 
+TEST_F(FileBrowserModelTest, SearchingEverywhereFindsBooksInFoldersBelow) {
+  file("match one.epub");
+  file("A/match two.epub");
+  file("A/B/C/match three.epub");
+  file("A/other.epub");
+  file(".hidden/match hidden.epub");
+  FileBrowserModel model;
+  model.setPath(root);
+  model.searchEverywhere("MATCH");
+
+  ASSERT_TRUE(model.isDeepSearch());
+  EXPECT_FALSE(model.deepResultsTruncated());
+  ASSERT_EQ(model.entryCount(), 3u);
+  std::vector<std::string> found;
+  for (size_t i = 0; i < model.entryCount(); ++i) found.push_back(model.entryName(i));
+  std::sort(found.begin(), found.end());
+  EXPECT_EQ(found[0], "A/B/C/match three.epub");
+  EXPECT_EQ(found[1], "A/match two.epub");
+  EXPECT_EQ(found[2], "match one.epub");
+}
+
+// A card-wide search queued every folder it had still to visit, a path apiece: started above a
+// library of a thousand author folders, that queue alone ran the heap out before a single folder
+// below was read. Depth first, it holds one open folder per level.
+TEST_F(FileBrowserModelTest, SearchingEverywhereHoldsOneFolderPerLevel) {
+  char name[96];
+  for (int i = 0; i < 600; ++i) {
+    snprintf(name, sizeof(name), "An Author Called Somebody %03d/no match %03d.epub", i, i);
+    file(name);
+  }
+  file("An Author Called Somebody 599/the one.epub");
+  const long long listing = plainListingPeak(root);
+  FileBrowserModel model;
+  model.setPath(root);
+
+  const heap::Window window;
+  model.searchEverywhere("the one");
+
+  ASSERT_EQ(model.entryCount(), 1u);
+  EXPECT_EQ(model.entryName(0), "An Author Called Somebody 599/the one.epub");
+  // 600 queued paths were ~70 KB.
+  EXPECT_LT(window.peakAbove() - listing, 8 * 1024);
+}
+
+// Eight folders down, as far as the folder counts and the book index look.
+TEST_F(FileBrowserModelTest, SearchingEverywhereLooksEightFoldersDown) {
+  file("1/2/3/4/5/6/7/8/match eight.epub");
+  file("1/2/3/4/5/6/7/8/9/match nine.epub");
+  FileBrowserModel model;
+  model.setPath(root);
+  model.searchEverywhere("match");
+
+  ASSERT_EQ(model.entryCount(), 1u);
+  EXPECT_EQ(model.entryName(0), "1/2/3/4/5/6/7/8/match eight.epub");
+}
+
+TEST_F(FileBrowserModelTest, SearchingEverywhereStopsAtItsCap) {
+  char name[64];
+  for (int i = 0; i < 80; ++i) {
+    snprintf(name, sizeof(name), "folder %02d/match %02d.epub", i, i);
+    file(name);
+  }
+  FileBrowserModel model;
+  model.setPath(root);
+  model.searchEverywhere("match");
+
+  EXPECT_EQ(model.entryCount(), 64u);
+  EXPECT_TRUE(model.deepResultsTruncated());
+}
+
 }  // namespace
