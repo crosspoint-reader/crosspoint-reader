@@ -336,12 +336,11 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card and vector fonts get a wider scale than the built-ins: their
-  // faces carry their own (often generous) natural line height, so the old
-  // Bookerly-tuned 1.1/1.2 steps were visually near-indistinguishable. At
-  // 12pt in portrait (~760px viewport) this scale spans ~26/24/19/15 lines
-  // per page — each step reads as a clearly different density.
+  // .cpfont SD fonts use the built-in scale. Vector (TTF/OTF/TTC) fonts get wider
+  // Wide/Extra wide steps: their natural line height is often generous, so
+  // 1.1/1.2 looked nearly the same as Normal.
   if (sdFontFamilyName[0] != '\0') {
+    const bool vector = sdFontVectorQuery && sdFontVectorQuery(sdFontResolverCtx, sdFontFamilyName);
     switch (lineSpacing) {
       case TIGHT:
         return 0.95f;
@@ -349,9 +348,9 @@ float CrossPointSettings::getReaderLineCompression() const {
       default:
         return 1.0f;
       case WIDE:
-        return 1.3f;
+        return vector ? 1.3f : 1.1f;
       case EXTRA_WIDE:
-        return 1.6f;
+        return vector ? 1.6f : 1.2f;
     }
   }
 
