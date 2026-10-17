@@ -70,7 +70,8 @@ class DictionaryDefinitionActivity final : public Activity {
 
   BodyArea bodyArea() const;
   bool layoutHtmlPages();
-  void wrapText();
+  bool reserveLines(size_t capacity);
+  bool wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
   void drawBody(int fontId, int x, int startY) const;
 
@@ -87,6 +88,9 @@ class DictionaryDefinitionActivity final : public Activity {
   // Empty means the plain-text span path below is active.
   std::vector<std::unique_ptr<Page>> pages;
   std::vector<Line> lines;
+  // The line table could not be built (no heap for it): the body shows a
+  // low-memory message instead.
+  bool layoutFailed = false;
   int currentPage = 0;
   int totalPages = 1;
   int linesPerPage = 1;
