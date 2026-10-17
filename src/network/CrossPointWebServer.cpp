@@ -3398,9 +3398,12 @@ void CrossPointWebServer::RawFileUpload::feed(const HTTPRaw& raw) {
       return;
     case RAW_END:
       if (status != 0) return;
-      file.close();
-      if ((Storage.exists(path.c_str()) && !Storage.remove(path.c_str())) ||
-          !Storage.rename(temp.c_str(), path.c_str())) {
+      // close() writes the last cached sector and the directory entry: a failure there leaves the
+      // file cut short. The file it replaces steps aside until the new one is in its place, and
+      // comes back if it cannot be; it used to be removed first.
+      if (!file.close()) {
+        fail(500, "could not finish writing file");
+      } else if (!FileReplace::replace(temp.c_str(), path.c_str())) {
         fail(500, "could not replace file");
       }
       return;
@@ -3558,17 +3561,26 @@ void CrossPointWebServer::handleBookReplace() {
   const String backup = path + ".bak";
   // The upload wrote <path>.new.part and renamed it to <path>.new; now <path> itself moves.
   const bool keepOlderBackup = Storage.exists(backup.c_str());
-  const bool movedAside = keepOlderBackup ? Storage.remove(path.c_str()) : Storage.rename(path.c_str(), backup.c_str());
-  if (!movedAside) {
-    Storage.remove(fresh.c_str());
-    server->send(500, "application/json", "{\"error\":\"could not set the original aside\"}");
-    return;
-  }
-  if (!Storage.rename(fresh.c_str(), path.c_str())) {
-    LOG_ERR("WEB", "Could not swap in %s", fresh.c_str());
-    if (!keepOlderBackup) Storage.rename(backup.c_str(), path.c_str());
-    server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
-    return;
+  if (keepOlderBackup) {
+    // The older original stays the backup. This one steps aside only until the new book is in its
+    // place, and comes back if it cannot be; removing it first lost the book when the swap failed.
+    if (!FileReplace::replace(fresh.c_str(), path.c_str())) {
+      Storage.remove(fresh.c_str());
+      server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
+      return;
+    }
+  } else {
+    if (!Storage.rename(path.c_str(), backup.c_str())) {
+      Storage.remove(fresh.c_str());
+      server->send(500, "application/json", "{\"error\":\"could not set the original aside\"}");
+      return;
+    }
+    if (!Storage.rename(fresh.c_str(), path.c_str())) {
+      LOG_ERR("WEB", "Could not swap in %s", fresh.c_str());
+      Storage.rename(backup.c_str(), path.c_str());
+      server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
+      return;
+    }
   }
 
   const bool keep = server->arg("keep") == "1";

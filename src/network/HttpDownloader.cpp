@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <CrossPointRoots.h>
+#include <FileReplace.h>
 #include <HalClock.h>
 #include <Logging.h>
 #include <RangeDownload.h>
@@ -344,8 +345,9 @@ HttpDownloader::DownloadError finishFileDownload(HttpDownloader::DownloadError r
     Storage.remove(partPath.c_str());
     return HttpDownloader::FILE_ERROR;
   }
-  if (Storage.exists(destPath.c_str())) Storage.remove(destPath.c_str());
-  if (!Storage.rename(partPath.c_str(), destPath.c_str())) {
+  // The file it replaces steps aside until the download is in its place, and comes back if it
+  // cannot be; it used to be removed first, and was lost when the rename then failed.
+  if (!FileReplace::replace(partPath.c_str(), destPath.c_str())) {
     LOG_ERR("HTTP", "Failed to move %s into place", partPath.c_str());
     Storage.remove(partPath.c_str());
     return HttpDownloader::FILE_ERROR;
