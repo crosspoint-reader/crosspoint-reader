@@ -157,7 +157,7 @@ struct PixelCache {
       }
     }
     if (!file.close()) {
-      LOG_ERR("IMG", "Failed to close image cache");
+      LOG_ERR("IMG", "Failed to close cache: %s", cachePathStr.c_str());
       abort();
       return false;
     }
