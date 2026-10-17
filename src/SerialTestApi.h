@@ -11,6 +11,14 @@
 // The commands go through the same routes the UI does: a press is HalGPIO::injectPress, an
 // activity is an ActivityManager::goTo*(), a setting is the row the web settings API writes. The
 // argument grammar lives in util/SerialCommandGrammar so it can be tested on the host.
+//
+// SERIAL_TEST_API (set by the development environments in platformio.ini) builds the full set.
+// Without it only the original commands remain -- BTN (the six front and side keys, :LONG), ACT
+// (HOME, READER:<path>, SETTINGS, BOOKMARKS, FILES, LIBRARY), STATE (screen, stack, the reader's
+// position), SCREENSHOT and BOOTLOG -- and every probe below compiles to nothing.
+#ifndef SERIAL_TEST_API
+#define SERIAL_TEST_API 0
+#endif
 
 class GfxRenderer;
 
@@ -30,6 +38,7 @@ void sendScreenshot(const uint8_t* frame, uint32_t size, int width, int height, 
 // the restart helpers live there.
 enum class PowerRequest : uint8_t { None, Sleep, Reboot };
 
+#if SERIAL_TEST_API
 // Once from setup(): the renderer CMD:TOUCH maps screen coordinates with.
 void begin(GfxRenderer& renderer);
 
@@ -47,5 +56,13 @@ void notePopup(const char* text);
 void noteSelection(int index, const char* label);
 // A section build finished: `spineIndex` is 0-based, as the reader holds it.
 void noteBuildDone(int spineIndex, int pageCount);
+#else
+inline void begin(GfxRenderer&) {}
+inline void service() {}
+inline PowerRequest takePowerRequest() { return PowerRequest::None; }
+inline void notePopup(const char*) {}
+inline void noteSelection(int, const char*) {}
+inline void noteBuildDone(int, int) {}
+#endif
 
 }  // namespace SerialTestApi

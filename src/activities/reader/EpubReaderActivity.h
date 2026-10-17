@@ -1041,8 +1041,10 @@ class EpubReaderActivity final : public Activity {
   // this book. Rewrites progress.bin to the bookmarked position before the normal
   // reader startup path reads it.
   void applyPendingBookmarkJump();
+#if SERIAL_TEST_API
   // Opens at APP_STATE.pendingPercentJump (set by the serial CMD:ACT:READER:<path>@<n>%).
   void applyPendingPercentJump();
+#endif
   void applyOrientation(uint8_t orientation);
   void applyTextDarkness(uint8_t textDarkness);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
@@ -1194,8 +1196,10 @@ class EpubReaderActivity final : public Activity {
   // section loaded " chapter=<toc title> chapter_page=<n>/<total>[~] percent=<book %>" (1-based;
   // 0/0 while no section is loaded; ~ = the total is an estimate).
   void appendDebugState(std::string& out) const override;
+#if SERIAL_TEST_API
   bool hasPendingScreenWork() override;
   bool hasPendingBackgroundWork() override;
+#endif
   bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
   bool handleForcedRefresh(HalDisplay::RefreshMode mode) override;

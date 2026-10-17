@@ -107,7 +107,11 @@ class UiListActivity : public Activity, protected UiAppHost {
   void addList(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
   // Tells the serial test interface which row `props` highlights and its label (CMD:STATE sel=,
   // label=). addList() does it; a screen that calls screen.list() itself calls this just before.
+#if SERIAL_TEST_API
   static void noteListSelection(const freeink::ui::ListProps& props);
+#else
+  static void noteListSelection(const freeink::ui::ListProps&) {}
+#endif
   void moveSelectionTo(int index);
   // A page turn: select `row` with the screen starting at `top` (ListGrammar::page() decides both).
   void showRowPage(int row, int top);

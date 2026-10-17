@@ -725,7 +725,9 @@ void EpubReaderActivity::onEnter() {
 
   applyPendingSyncSession();
   applyPendingBookmarkJump();
+#if SERIAL_TEST_API
   applyPendingPercentJump();
+#endif
   logReaderMemSnapshot("onEnter_after_pending_sync");
 
   // True first open only: no progress.bin record. Skip the front matter to the text reference.
@@ -2712,6 +2714,7 @@ void EpubReaderActivity::applyPendingBookmarkJump() {
   APP_STATE.saveToFile();
 }
 
+#if SERIAL_TEST_API
 void EpubReaderActivity::applyPendingPercentJump() {
   auto& jump = APP_STATE.pendingPercentJump;
   if (!jump.active || !epub || jump.bookPath != epub->getPath()) {
@@ -2726,6 +2729,7 @@ void EpubReaderActivity::applyPendingPercentJump() {
   }
   jump = {};
 }
+#endif  // SERIAL_TEST_API
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   // No-op if the selected orientation matches current settings.
@@ -6047,6 +6051,7 @@ void EpubReaderActivity::appendDebugState(std::string& out) const {
   appendField(out, "spine", number);
   snprintf(number, sizeof(number), "%d/%d", section ? section->currentPage + 1 : 0, section ? section->pageCount : 0);
   appendField(out, "page", number);
+#if SERIAL_TEST_API
   std::string family;
   resolveReaderFont(&family);
   appendField(out, "font", family);
@@ -6062,8 +6067,10 @@ void EpubReaderActivity::appendDebugState(std::string& out) const {
   appendField(out, "chapter_page", number);
   snprintf(number, sizeof(number), "%.0f", statusBarBookPercent());
   appendField(out, "percent", number);
+#endif
 }
 
+#if SERIAL_TEST_API
 bool EpubReaderActivity::hasPendingScreenWork() {
   RenderLock lock(RenderLock::Mode::Try);
   if (!lock.ownsLock()) return true;  // a render pass or a build slice has it: busy by definition
@@ -6095,6 +6102,7 @@ bool EpubReaderActivity::hasPendingBackgroundWork() {
       section->pageCount > 0 && !secondaryBorrowed_ && !backgroundBorrowActive_ && renderer.hasSecondaryBuffer();
   return imageLaneCanRun && (imageWarmCleanSpine_ != currentSpineIndex || imageWarmCleanPage_ != section->currentPage);
 }
+#endif  // SERIAL_TEST_API
 
 void EpubReaderActivity::restoreCurrentPageToBufferIfPreRendered() {
   if (!preRenderedPage.ready || !section || !epub) {

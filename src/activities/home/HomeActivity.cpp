@@ -929,6 +929,7 @@ void HomeActivity::dispatchMenuAction(HomeMenuAction action) {
   activityManager.goToHomeMenuAction(action);
 }
 
+#if SERIAL_TEST_API
 void HomeActivity::appendDebugState(std::string& out) const {
   using SerialCommandGrammar::appendField;
   appendField(out, "sel", static_cast<long>(selectorIndex));
@@ -941,3 +942,4 @@ void HomeActivity::appendDebugState(std::string& out) const {
     appendField(out, "label", I18N.get(menuEntries[menuIndex].label));
   }
 }
+#endif  // SERIAL_TEST_API

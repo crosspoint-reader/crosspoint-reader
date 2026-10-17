@@ -13,6 +13,7 @@
 #include "ListRowTap.h"
 #include "MappedInputManager.h"
 #include "RenderLock.h"
+#include "SerialTestApi.h"  // SERIAL_TEST_API
 
 class Activity {
   friend class ActivityManager;
@@ -111,6 +112,7 @@ class Activity {
   // Default: nothing beyond the activity's name, which the caller already writes.
   virtual void appendDebugState(std::string& /*out*/) const {}
 
+#if SERIAL_TEST_API
   // For the serial CMD:IDLE (SerialTestApi). Both are called from the loop task WITHOUT the render
   // lock; an activity that must lock to answer should Try and report busy when it cannot.
   //
@@ -121,6 +123,7 @@ class Activity {
   // build, a cover decode. A full CMD:IDLE waits for it too. Not skipLoopDelay(): the transfer
   // screens hold that for their whole life.
   virtual bool hasPendingBackgroundWork() { return false; }
+#endif
 
   // Called while this activity is buried on the stack, before a download that needs the heap in
   // one piece (releaseMemoryForDownload()). Drop what the activity built only to draw itself, such

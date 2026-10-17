@@ -163,6 +163,7 @@ void UiListActivity::addList(UiScreen& screen, fui::ListProps& props, const bool
   screen.list(props);
 }
 
+#if SERIAL_TEST_API
 void UiListActivity::noteListSelection(const fui::ListProps& props) {
   const int index = props.selectedIndex;
   const char* label = nullptr;
@@ -179,6 +180,7 @@ void UiListActivity::noteListSelection(const fui::ListProps& props) {
   }
   SerialTestApi::noteSelection(index, label);
 }
+#endif  // SERIAL_TEST_API
 
 void UiListActivity::drawChrome() {
   const char* title = headerTitle();

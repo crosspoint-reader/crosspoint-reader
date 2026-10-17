@@ -1,35 +1,40 @@
 #include "SerialTestApi.h"
 
 #include <Arduino.h>
-#include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
+
+#include <algorithm>
+#include <cstdarg>
+#include <cstdio>
+#include <string>
+
+#include "BootDiagnostics.h"
+#include "activities/Activity.h"
+#include "activities/ActivityManager.h"
+#include "activities/RenderLock.h"
+#include "activities/home/LibraryTab.h"
+#include "util/ScreenshotUtil.h"
+#include "util/SerialCommandGrammar.h"
+
+#if SERIAL_TEST_API
+#include <GfxRenderer.h>
 #include <Memory.h>
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#include <algorithm>
-#include <cstdarg>
-#include <cstdio>
 #include <cstring>
-#include <string>
 
-#include "BootDiagnostics.h"
 #include "ButtonEventManager.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "SettingsByKey.h"
 #include "TouchUi.h"  // CP_TOUCH_UI
-#include "activities/Activity.h"
-#include "activities/ActivityManager.h"
-#include "activities/RenderLock.h"
-#include "activities/home/LibraryTab.h"
 #include "util/Dictionary.h"
 #include "util/IdleGate.h"
-#include "util/ScreenshotUtil.h"
-#include "util/SerialCommandGrammar.h"
+#endif
 
 namespace SerialTestApi {
 
@@ -93,6 +98,7 @@ void splitHead(const std::string_view text, std::string_view& head, std::string_
   rest = colon == std::string_view::npos ? std::string_view() : text.substr(colon + 1);
 }
 
+#if SERIAL_TEST_API
 // ---- Probes ---------------------------------------------------------------------------------
 
 // Filled from whichever task draws (render task, loop task), read on the loop task. The critical
@@ -196,6 +202,10 @@ bool effectHandled() {
 }
 
 PowerRequest powerRequest = PowerRequest::None;
+#else
+enum class Effect : uint8_t { Input, Screen };
+inline void noteEffect(Effect) {}
+#endif  // SERIAL_TEST_API
 
 // ---- BTN ------------------------------------------------------------------------------------
 
@@ -214,7 +224,10 @@ void cmdButton(const std::string_view arg) {
   static constexpr NamedButton kButtons[] = {{"BACK", HalGPIO::BTN_BACK},  {"CONFIRM", HalGPIO::BTN_CONFIRM},
                                              {"LEFT", HalGPIO::BTN_LEFT},  {"RIGHT", HalGPIO::BTN_RIGHT},
                                              {"UP", HalGPIO::BTN_UP},      {"DOWN", HalGPIO::BTN_DOWN},
-                                             {"POWER", HalGPIO::BTN_POWER}};
+#if SERIAL_TEST_API
+                                             {"POWER", HalGPIO::BTN_POWER}
+#endif
+  };
   for (const NamedButton& button : kButtons) {
     if (name != button.name) continue;
     switch (kind) {
@@ -222,6 +235,7 @@ void cmdButton(const std::string_view arg) {
         gpio.injectPress(button.index);
         break;
       case PressKind::Long:
+#if SERIAL_TEST_API
         if (button.index == HalGPIO::BTN_POWER) {
           // Holding power sleeps the device, and that is main.cpp's hold timer reading the live
           // pin, which an injected press never reaches. Do what the hold does.
@@ -229,9 +243,11 @@ void cmdButton(const std::string_view arg) {
           reply("BTN_OK");
           return;
         }
+#endif
         gpio.injectPress(button.index, /*longPress=*/true);
         break;
       case PressKind::Double: {
+#if SERIAL_TEST_API
         // Two taps inside ButtonEventManager::DOUBLE_WINDOW_MS (300 ms), dated apart so the
         // classifier sees two presses. A button with no double action configured takes them as two
         // short presses, as it would from a finger.
@@ -240,6 +256,10 @@ void cmdButton(const std::string_view arg) {
         gpio.injectPress(button.index, false, now > kTapGapMs ? now - kTapGapMs : 0);
         gpio.injectPress(button.index, false, now);
         break;
+#else
+        reply("BTN_ERROR:bad press ", arg);
+        return;
+#endif
       }
     }
     noteEffect(Effect::Input);
@@ -252,16 +272,21 @@ void cmdButton(const std::string_view arg) {
 // ---- ACT ------------------------------------------------------------------------------------
 
 bool openReader(const std::string_view arg) {
+#if SERIAL_TEST_API
   SerialCommandGrammar::ReaderTarget target;
   if (!SerialCommandGrammar::parseReaderTarget(arg, target)) {
     reply("ACT_ERROR:bad position ", arg);
     return false;
   }
   std::string path(target.path);
+#else
+  std::string path(arg);
+#endif
   if (!Storage.exists(path.c_str())) {
     reply("ACT_ERROR:no such file ", path);
     return false;
   }
+#if SERIAL_TEST_API
   using Kind = SerialCommandGrammar::ReaderTarget::Kind;
   switch (target.kind) {
     case Kind::Saved:
@@ -284,6 +309,7 @@ bool openReader(const std::string_view arg) {
       break;
     }
   }
+#endif
   activityManager.goToReader(std::move(path));
   return true;
 }
@@ -296,6 +322,7 @@ int indexOf(const std::string_view name, const char* const* names, const int cou
   return -1;
 }
 
+#if SERIAL_TEST_API
 // CMD:ACT:DICT:<word>. The dictionary screen's lookup without the screen: open the configured
 // dictionary, build its index if it needs one, look the word up, and say what came of it.
 void lookUpWord(const std::string_view wordView) {
@@ -337,6 +364,7 @@ void lookUpWord(const std::string_view wordView) {
   }
   reply(line);
 }
+#endif  // SERIAL_TEST_API
 
 void cmdActivity(const std::string_view arg) {
   std::string_view target;
@@ -344,7 +372,11 @@ void cmdActivity(const std::string_view arg) {
   splitHead(arg, target, rest);
   static constexpr const char* kTargets[] = {"HOME",    "READER", "SETTINGS",      "BOOKMARKS",   "FILES",
                                              "LIBRARY", "DICT",   "FILE_TRANSFER", "USB_TRANSFER"};
+#if SERIAL_TEST_API
   constexpr int kTargetCount = 9;
+#else
+  constexpr int kTargetCount = 6;  // the original targets; the rest come with SERIAL_TEST_API
+#endif
   switch (indexOf(target, kTargets, kTargetCount)) {
     case 0:
       activityManager.goHome();
@@ -354,6 +386,7 @@ void cmdActivity(const std::string_view arg) {
       break;
     case 2: {
       int tab = 0;
+#if SERIAL_TEST_API
       // SettingsActivity's tabs, in its categoryNames order, or their numbers.
       static constexpr const char* kTabs[] = {"DISPLAY", "READER", "CONTROLS", "SYSTEM"};
       if (!rest.empty()) {
@@ -363,6 +396,7 @@ void cmdActivity(const std::string_view arg) {
           return;
         }
       }
+#endif
       activityManager.goToSettings(tab);
       break;
     }
@@ -383,6 +417,7 @@ void cmdActivity(const std::string_view arg) {
       activityManager.goToLibrary(static_cast<LibraryTab>(tab));
       break;
     }
+#if SERIAL_TEST_API
     case 6:
       lookUpWord(rest);
       return;
@@ -398,6 +433,7 @@ void cmdActivity(const std::string_view arg) {
       }
       activityManager.goToSerialTransfer();
       break;
+#endif
     default:
       reply("ACT_ERROR:unknown activity ", target);
       return;
@@ -415,6 +451,7 @@ void cmdState(std::string_view /*arg*/) {
     RenderLock lock;  // the activity's state is also read by the render task
     activityManager.describeState(state);
   }
+#if SERIAL_TEST_API
   const uint32_t activity = activityManager.activityChangeCount();
   const TextProbe selection = readProbe(selectionProbe);
   // Screens that know their own selection (Home) wrote sel= already.
@@ -430,9 +467,11 @@ void cmdState(std::string_view /*arg*/) {
   appendField(state, "heap", static_cast<long>(ESP.getFreeHeap()));
   appendField(state, "maxblock",
               static_cast<long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT)));
+#endif
   reply(state);
 }
 
+#if SERIAL_TEST_API
 // ---- IDLE / EVENTS --------------------------------------------------------------------------
 
 void cmdIdle(const std::string_view arg) {
@@ -640,6 +679,7 @@ void cmdReboot(std::string_view /*arg*/) {
   reply("REBOOT_OK");
   powerRequest = PowerRequest::Reboot;
 }
+#endif  // SERIAL_TEST_API
 
 void cmdScreenshot(std::string_view /*arg*/) { ScreenshotUtil::request(ScreenshotUtil::Target::Host); }
 
@@ -659,12 +699,16 @@ struct Command {
   Handler run;
 };
 constexpr Command kCommands[] = {
-    {"BTN", &cmdButton},      {"ACT", &cmdActivity}, {"STATE", &cmdState},   {"SCREENSHOT", &cmdScreenshot},
-    {"BOOTLOG", &cmdBootLog}, {"HELP", &cmdHelp},    {"IDLE", &cmdIdle},     {"EVENTS", &cmdEvents},
-    {"GET", &cmdGet},         {"SET", &cmdSet},      {"LOG", &cmdLog},       {"TOUCH", &cmdTouch},
-    {"SWIPE", &cmdSwipe},     {"SLEEP", &cmdSleep},  {"REBOOT", &cmdReboot},
+    {"BTN", &cmdButton},      {"ACT", &cmdActivity},  {"STATE", &cmdState}, {"SCREENSHOT", &cmdScreenshot},
+    {"BOOTLOG", &cmdBootLog}, {"HELP", &cmdHelp},
+#if SERIAL_TEST_API
+    {"IDLE", &cmdIdle},       {"EVENTS", &cmdEvents}, {"GET", &cmdGet},     {"SET", &cmdSet},
+    {"LOG", &cmdLog},         {"TOUCH", &cmdTouch},   {"SWIPE", &cmdSwipe}, {"SLEEP", &cmdSleep},
+    {"REBOOT", &cmdReboot},
+#endif
 };
 
+// The commands this build has: with SERIAL_TEST_API or without.
 void cmdHelp(std::string_view /*arg*/) {
   writeText("HELP:", kReplyStallMs);
   for (const Command& command : kCommands) {
@@ -674,6 +718,7 @@ void cmdHelp(std::string_view /*arg*/) {
   writeText("\n", kReplyStallMs);
 }
 
+#if SERIAL_TEST_API
 // ---- service() helpers ----------------------------------------------------------------------
 
 void serviceEvents() {
@@ -729,6 +774,7 @@ void serviceIdle() {
       break;
   }
 }
+#endif  // SERIAL_TEST_API
 
 }  // namespace
 
@@ -769,6 +815,7 @@ void sendScreenshot(const uint8_t* frame, const uint32_t size, const int width, 
   }
 }
 
+#if SERIAL_TEST_API
 void begin(GfxRenderer& renderer) { testRenderer = &renderer; }
 
 void service() {
@@ -795,5 +842,6 @@ PowerRequest takePowerRequest() {
   powerRequest = PowerRequest::None;
   return request;
 }
+#endif  // SERIAL_TEST_API
 
 }  // namespace SerialTestApi

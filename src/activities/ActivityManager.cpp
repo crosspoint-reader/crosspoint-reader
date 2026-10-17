@@ -760,8 +760,12 @@ const char* ActivityManager::busyReason(const bool includeBackground) {
   }
   // Between taking its notification and taking the mutex the render task shows none of the above
   // for an instant; CMD:IDLE's quiet window (IdleGate) is long enough to see the pass that follows.
+#if SERIAL_TEST_API
   if (currentActivity && currentActivity->hasPendingScreenWork()) return "render";
   if (includeBackground && currentActivity && currentActivity->hasPendingBackgroundWork()) return "background";
+#else
+  (void)includeBackground;
+#endif
   return nullptr;
 }
 
