@@ -462,8 +462,24 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   font.buildAdvanceTable("", 1);
   EXPECT_FALSE(font.hasAdvanceTable());
   failNextArraySize = (4096 + 2) * sizeof(uint32_t);  // the codepoint scratch
-  EXPECT_EQ(-1, font.buildAdvanceTable(page(FIRST, 10).c_str(), 1));
+  const std::string largeText = page(FIRST, 10) + std::string(4096, ' ');
+  EXPECT_EQ(-1, font.buildAdvanceTable(largeText.c_str(), 1));
   EXPECT_FALSE(font.hasAdvanceTable());
   ASSERT_EQ(0, font.buildAdvanceTable(page(FIRST, 10).c_str(), 1));
   EXPECT_TRUE(font.hasAdvanceTable());
+}
+
+TEST(SdCardFontTest, ShortAdvancePreparationAvoidsLargeScratchAndRepeatedReads) {
+  makeFont();
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  const std::string text = page(FIRST, 3);
+  failNextArraySize = (4096 + 2) * sizeof(uint32_t);
+  const int result = font.buildAdvanceTable(text.c_str(), 1);
+  failNextArraySize = 0;
+  ASSERT_EQ(result, 0);
+  for (uint32_t cp = FIRST; cp < FIRST + 3; ++cp) EXPECT_EQ(32 << 4, font.getAdvance(cp, 0));
+  sdFontTestReads = 0;
+  ASSERT_EQ(font.buildAdvanceTable(text.c_str(), 1), 0);
+  EXPECT_EQ(sdFontTestReads, 0u);
 }

@@ -897,6 +897,7 @@ TEST_F(ChapterInlineSizeTest, UniformLinesCarryNoWordFonts) {
 }
 
 TEST_F(ChapterTableBorderTest, ScansColumnWidthsFromMarkup) {
+  renderer.sdFont = true;
   const auto path = std::filesystem::temp_directory_path() / "crosspoint-table-scan.xhtml";
   {
     HalFile output;
@@ -911,6 +912,7 @@ TEST_F(ChapterTableBorderTest, ScansColumnWidthsFromMarkup) {
   ASSERT_TRUE(input.open(path.c_str(), "rb"));
   ChapterHtmlSlimParser::TableColumnMeasure measure;
   ASSERT_TRUE(parser.measureTableColumns(input, measure));
+  EXPECT_EQ(renderer.coldMeasurements, 0u);
   EXPECT_EQ(measure.columns, 2);
   EXPECT_EQ(measure.minWidth[0], 16);  // "ID"
   EXPECT_EQ(measure.minWidth[1], 88);  // "description"

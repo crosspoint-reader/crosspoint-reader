@@ -6,7 +6,9 @@
 
 #include <deque>
 #include <map>
+#include <set>
 #include <string>
+#include <tuple>
 
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
@@ -74,13 +76,18 @@ class GfxRenderer {
     return found == fontAscenders.end() ? 12 : found->second;
   }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 4; }
-  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t tracking = 0,
+  bool sdFont = false;
+  mutable size_t coldMeasurements = 0;
+  mutable std::set<std::tuple<int, uint8_t, uint32_t>> preparedAdvances;
+  int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style, int8_t tracking = 0,
                       BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode = TextMeasureMode::Layout) const {
     int width = 0;
     uint32_t previous = 0;
     while (const uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
       if (utf8IsCombiningMark(cp)) continue;
+      const uint32_t measured = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
+      if (sdFont && !preparedAdvances.count({fontId, static_cast<uint8_t>(style) & 3, measured})) ++coldMeasurements;
       width += 8 + trackingBetween(previous, cp, tracking);
       previous = cp;
     }
@@ -90,8 +97,27 @@ class GfxRenderer {
     return trackingBetween(left, right, tracking);
   }
   int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 4; }
-  bool isSdCardFont(int) const { return false; }
-  void ensureSdCardFontReady(int, const char* const*, const size_t*, size_t, bool, bool, uint8_t) const {}
+  bool isSdCardFont(int) const { return sdFont; }
+  void ensureSdCardFontReady(int fontId, const char* text, uint8_t mask) const {
+    const auto* cursor = reinterpret_cast<const uint8_t*>(text);
+    while (const uint32_t cp = utf8NextCodepoint(&cursor)) {
+      for (uint8_t style = 0; style < 4; ++style) {
+        if (mask & (1 << style)) preparedAdvances.emplace(fontId, style, cp);
+      }
+    }
+  }
+  void ensureSdCardFontReady(int fontId, const char* const* segments, const size_t* lengths, size_t count,
+                             bool includeSpace, bool includeHyphen, uint8_t mask) const {
+    for (size_t i = 0; i < count; ++i) {
+      const char* word = segments[i];
+      while (word < segments[i] + lengths[i]) {
+        ensureSdCardFontReady(fontId, word, mask);
+        word += std::char_traits<char>::length(word) + 1;
+      }
+    }
+    if (includeSpace) ensureSdCardFontReady(fontId, " ", mask);
+    if (includeHyphen) ensureSdCardFontReady(fontId, "-", mask);
+  }
 
  private:
   FontVariantProvider fontVariantProvider_;

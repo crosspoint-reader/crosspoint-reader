@@ -940,6 +940,7 @@ void ChapterHtmlSlimParser::addTableRowSeparator() {
 bool ChapterHtmlSlimParser::measureTableColumns(HalFile& file, TableColumnMeasure& out) const {
   out = TableColumnMeasure{};
   constexpr size_t MAX_SCAN_BYTES = 32 * 1024;
+  const bool sdFont = renderer.isSdCardFont(fontId);
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
 
   char buffer[96];
@@ -961,6 +962,7 @@ bool ChapterHtmlSlimParser::measureTableColumns(HalFile& file, TableColumnMeasur
   const auto flushChunk = [&] {
     if (wordLength == 0) return;
     word[wordLength] = '\0';
+    if (sdFont) renderer.ensureSdCardFontReady(fontId, word, static_cast<uint8_t>(1u << style));
     wordWidth += renderer.getTextAdvanceX(fontId, word, style);
     wordLength = 0;
   };
