@@ -103,6 +103,7 @@ struct CssPropertyFlags {
   uint32_t colorTransparent : 1;
   uint32_t opacityZero : 1;
   uint32_t visibilityHidden : 1;
+  uint32_t fontFamily : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -131,13 +132,15 @@ struct CssPropertyFlags {
         smallCaps(0),
         colorTransparent(0),
         opacityZero(0),
-        visibilityHidden(0) {}
+        visibilityHidden(0),
+        fontFamily(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
            imageWidth || display || verticalAlign || listStyleNone || pageBreakBefore || pageBreakAfter || lineHeight ||
-           fontSizeMultiplier || cssFloat || smallCaps || colorTransparent || opacityZero || visibilityHidden;
+           fontSizeMultiplier || cssFloat || smallCaps || colorTransparent || opacityZero || visibilityHidden ||
+           fontFamily;
   }
 
   void clearAll() {
@@ -146,7 +149,7 @@ struct CssPropertyFlags {
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
     imageHeight = imageWidth = display = verticalAlign = 0;
     listStyleNone = pageBreakBefore = pageBreakAfter = lineHeight = fontSizeMultiplier = cssFloat = 0;
-    smallCaps = colorTransparent = opacityZero = visibilityHidden = 0;
+    smallCaps = colorTransparent = opacityZero = visibilityHidden = fontFamily = 0;
   }
 };
 
@@ -196,11 +199,14 @@ struct CssStyle {
   bool colorTransparent = false;
   bool opacityZero = false;
   bool visibilityHidden = false;  // visibility: hidden | collapse
+  // The first family of a font-family list, as CssParser::fontFamilyHash; 0 for a generic family
+  // (serif, sans-serif, ...) or a keyword, which mean the reader's font.
+  uint32_t fontFamily = 0;
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
   // Number of properties applyOver() merges: the size of its `ranks` array.
-  static constexpr int kCascadeProperties = 27;
+  static constexpr int kCascadeProperties = 28;
 
   // Apply properties from another style, only overwriting if the other style
   // has that property explicitly defined.
@@ -330,6 +336,10 @@ struct CssStyle {
       visibilityHidden = base.visibilityHidden;
       defined.visibilityHidden = 1;
     }
+    if (base.defined.fontFamily && take(defined.fontFamily, 27)) {
+      fontFamily = base.fontFamily;
+      defined.fontFamily = 1;
+    }
   }
 
   // An explicit `inherit` is defined (it overrides lower rules in applyOver) but reports as unset:
@@ -405,6 +415,7 @@ struct CssStyle {
     colorTransparent = false;
     opacityZero = false;
     visibilityHidden = false;
+    fontFamily = 0;
     defined.clearAll();
   }
 };

@@ -490,7 +490,8 @@ bool stylesEqual(const CssStyle& a, const CssStyle& b) {
          len(a.marginLeft) == len(b.marginLeft) && len(a.marginRight) == len(b.marginRight) &&
          len(a.paddingTop) == len(b.paddingTop) && len(a.paddingBottom) == len(b.paddingBottom) &&
          len(a.paddingLeft) == len(b.paddingLeft) && len(a.paddingRight) == len(b.paddingRight) &&
-         len(a.imageHeight) == len(b.imageHeight) && len(a.imageWidth) == len(b.imageWidth);
+         len(a.imageHeight) == len(b.imageHeight) && len(a.imageWidth) == len(b.imageWidth) &&
+         a.fontFamily == b.fontFamily && a.defined.fontFamily == b.defined.fontFamily;
 }
 }  // namespace
 
@@ -745,8 +746,8 @@ TEST(CssParserArena, ResidentPreservesAllStyleFields) {
       ".a { text-align: center; font-weight: bold; font-style: italic; text-decoration: underline; "
       "margin: 2em; padding-left: 5px; padding-right: 3px; text-indent: 1.5em; line-height: 1.6; "
       "font-size: 120%; vertical-align: super; float: left; font-variant: small-caps; "
-      "list-style: none; page-break-before: always; page-break-after: always; }\n"
-      ".b { margin-top: 3px; text-align: right; font-size: 1.25rem; }\n"
+      "list-style: none; page-break-before: always; page-break-after: always; font-family: 'EB Garamond'; }\n"
+      ".b { margin-top: 3px; text-align: right; font-size: 1.25rem; font-family: serif; }\n"
       ".c { display: none; }\n"
       ".d { display: inline; }\n";
   const std::string cacheDir = makeTempDir();
@@ -1013,4 +1014,100 @@ TEST(CssParserBackground, ABookWithoutPicturesLeavesNoSideFile) {
   removePath(cacheDir);
   std::error_code rmEc;
   std::filesystem::remove(cssPath, rmEc);
+}
+
+// @font-face rules and font-family: what a book's embedded fonts are and which elements ask for
+// them. Ported from crosspoint-reader PR #3934 (Justin Mitchell): CollectsFontFacesAndFontFamilies,
+// reworked for this parser's compile path and side file.
+TEST(CssParserFonts, FontFamilyIsTheFirstFamilyHashedAndSurvivesTheCache) {
+  const std::string css =
+      ".end { font-family: \"KubisHandscript\", serif; text-align: center }\n"
+      ".plain { font-family: serif }\n"  // generic: the reader's font
+      ".spaced { font-family:  'EB   Garamond' , Georgia }\n"
+      ".only { font-family: Garamond }\n";  // a rule with nothing else is kept
+  std::string cssPath;
+  ASSERT_TRUE(writeTempCssFile(std::vector<uint8_t>(css.begin(), css.end()), cssPath));
+  const std::string cacheDir = makeTempDir();
+  CssParser parser(cacheDir);
+  ASSERT_TRUE(compileCache(parser, cssPath));
+  ASSERT_TRUE(parser.loadFromCache());
+
+  const CssStyle end = parser.resolveStyle("p", "end");
+  ASSERT_TRUE(end.defined.fontFamily);
+  EXPECT_EQ(CssParser::fontFamilyHash("kubishandscript"), end.fontFamily);
+  EXPECT_EQ(CssTextAlign::Center, end.textAlign);
+  const CssStyle plain = parser.resolveStyle("p", "plain");
+  ASSERT_TRUE(plain.defined.fontFamily);
+  EXPECT_EQ(0u, plain.fontFamily);
+  EXPECT_EQ(CssParser::fontFamilyHash("eb garamond"), parser.resolveStyle("p", "spaced").fontFamily);
+  EXPECT_EQ(CssParser::fontFamilyHash("Garamond"), parser.resolveStyle("p", "only").fontFamily);
+  EXPECT_FALSE(parser.resolveStyle("p", "").defined.fontFamily);
+  EXPECT_NE(0u, CssParser::fontFamilyHash(""));  // never 0, which means the reader's font
+
+  // Inline styles take the same path.
+  EXPECT_EQ(CssParser::fontFamilyHash("Garamond"), CssParser::parseInlineStyle("font-family: GARAMOND").fontFamily);
+
+  parser.clear();
+  removePath(cacheDir);
+  std::error_code rmEc;
+  std::filesystem::remove(cssPath, rmEc);
+}
+
+TEST(CssParserFonts, FontFacesAreRecordedInASideFile) {
+  const std::string css =
+      "@font-face { font-family: \"KubisHandscript\"; src: url(../Fonts/kubis.ttf); }\n"
+      "@font-face { font-family: 'Garamond'; font-weight: bold; font-style: italic;\n"
+      "  src: url('g.woff2') format('woff2'), url(\"g-bi.woff\") format(\"woff\"),\n"
+      "       url(\"../Fonts/g-bi.ttf\") format(\"truetype\"); }\n"
+      "@font-face { font-family: Web; src: url(w.woff2) format(\"woff2\"); }\n"  // nothing usable
+      "@font-face { font-family: Data; src: url(data:font/ttf;base64,AAAA); }\n"
+      "@font-face { font-family: Semi; font-weight: 600; src: local('Semi'), url(semi.otf?#x) }\n"
+      "@media screen { .x { font-weight: bold } }\n"
+      "p { margin: 0 }\n";
+  std::string cssPath;
+  ASSERT_TRUE(writeTempCssFile(std::vector<uint8_t>(css.begin(), css.end()), cssPath));
+  const std::string cacheDir = makeTempDir();
+  {
+    CssParser parser(cacheDir);
+    ASSERT_TRUE(parser.beginCacheCompile());
+    parser.setStylesheetPath("OEBPS/Styles/main.css");
+    FsFile cssFile;
+    ASSERT_TRUE(Storage.openFileForRead("CSS", cssPath.c_str(), cssFile));
+    ASSERT_TRUE(parser.appendCompiledFromStream(cssFile));
+    cssFile.close();
+    ASSERT_TRUE(parser.endCacheCompile());
+    // @font-face and @media bodies are not style rules.
+    EXPECT_EQ(1u, parser.ruleCount());
+    EXPECT_FALSE(parser.resolveStyle("p", "x").hasFontWeight());
+  }
+
+  std::vector<CssParser::FontFace> faces;
+  ASSERT_TRUE(CssParser::loadFontFaces(cacheDir, faces));
+  ASSERT_EQ(3u, faces.size());
+  EXPECT_EQ(CssParser::fontFamilyHash("kubishandscript"), faces[0].family);
+  EXPECT_EQ("KubisHandscript", faces[0].name);
+  EXPECT_EQ(400, faces[0].weight);
+  EXPECT_FALSE(faces[0].italic);
+  EXPECT_EQ("OEBPS/Styles/../Fonts/kubis.ttf", faces[0].href);
+  EXPECT_EQ("Garamond", faces[1].name);
+  EXPECT_EQ(700, faces[1].weight);
+  EXPECT_TRUE(faces[1].italic);
+  EXPECT_EQ("OEBPS/Styles/../Fonts/g-bi.ttf", faces[1].href);  // TrueType before WOFF, never WOFF2
+  EXPECT_EQ(600, faces[2].weight);
+  EXPECT_EQ("OEBPS/Styles/semi.otf", faces[2].href);
+
+  // A recompile without faces removes the side file.
+  const std::string plain = "p { margin: 0 }\n";
+  std::string plainPath;
+  ASSERT_TRUE(writeTempCssFile(std::vector<uint8_t>(plain.begin(), plain.end()), plainPath));
+  CssParser parser(cacheDir);
+  ASSERT_TRUE(compileCache(parser, plainPath));
+  EXPECT_FALSE(CssParser::loadFontFaces(cacheDir, faces));
+  EXPECT_TRUE(faces.empty());
+
+  parser.clear();
+  removePath(cacheDir);
+  std::error_code rmEc;
+  std::filesystem::remove(cssPath, rmEc);
+  std::filesystem::remove(plainPath, rmEc);
 }
