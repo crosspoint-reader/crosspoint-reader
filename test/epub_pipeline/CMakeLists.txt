@@ -91,6 +91,7 @@ set(PIPELINE_INCLUDES
 
 add_executable(EpubPipelineTest
   EpubPipelineTest.cpp
+  CjkRulesTest.cpp
   FingerprintTest.cpp
   LostTocRetryTest.cpp
   TocSourceTest.cpp

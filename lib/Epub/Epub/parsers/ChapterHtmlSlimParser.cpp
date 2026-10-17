@@ -233,16 +233,18 @@ constexpr size_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT_HARD_ARENA_BIONIC = EHP_TEXT_LAYO
 // the whole-table budget it replaces, and it fires far more rarely.
 constexpr size_t MAX_TABLE_ROW_BUFFER_BYTES = EHP_TABLE_BUFFER_BUDGET_BYTES;
 
-// Attributed cost of one buffered word: the std::string header in ParsedText::words (24 B under
-// 32-bit libstdc++) plus the parallel per-word vectors (wordStyles, wordSizes, wordBoundaries) and
-// the geometric growth headroom all four carry. Deliberately a fixed constant rather than
-// sizeof(std::string) so host goldens and device builds make the SAME switch decision -- a
-// host-derived width (32 B) would charge more per word and trip earlier than the device.
+// Attributed cost of one buffered token: the std::string header in ParsedText::words (24 B under
+// 32-bit libstdc++) plus the four parallel per-token vectors (wordStyles, wordBoundaries, wordSizes,
+// wordVisibleOffsets: 8 B), 32 B in all, and half again for the growth headroom the vectors carry on
+// average (they double when full). Deliberately a fixed constant rather than sizeof(std::string) so
+// host goldens and device builds make the SAME switch decision -- a host-derived width (32 B) would
+// charge more per token and trip earlier than the device. A CJK word is one token per character,
+// and each is charged.
 constexpr size_t TABLE_BUFFER_BYTES_PER_WORD = 48;
 // Words past the SSO capacity additionally allocate their own heap block.
 constexpr size_t TABLE_BUFFER_SSO_CAPACITY = 15;
 // One buffered cell: BufferedTableCell (two std::string members, colSpan/isHeader, the owning
-// pointer) plus the heap-allocated ParsedText and its four empty vectors.
+// pointer) plus the heap-allocated ParsedText and its five empty vectors.
 constexpr size_t TABLE_BUFFER_BYTES_PER_CELL = 128;
 
 // The separate 96-word bound on a single cell is gone. It existed only because the old whole-table
@@ -299,6 +301,22 @@ const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
+
+// A CJK run has no spaces to end its words, so consumeText flushes it every this many codepoints,
+// glued to the next chunk. One flush then adds at most this many tokens, and a paragraph's word
+// lists stay within their 128-entry steady state (96 tokens before a mid-block layout, plus one
+// flush); a 200-byte flush would add up to 66 and double them to 256 entries, a 6 KB block.
+constexpr int kCjkRunCodepoints = 32;
+
+// The codepoint whose lead byte is s[0], or 0 when its sequence runs past the `avail` bytes in hand
+// (it continues in the next SAX chunk).
+uint32_t codepointAt(const char* s, const int avail) {
+  const auto lead = static_cast<uint8_t>(s[0]);
+  const int length = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+  if (length > avail) return 0;
+  const auto* p = reinterpret_cast<const unsigned char*>(s);
+  return utf8NextCodepoint(&p);
+}
 
 // Length in bytes of the Default_Ignorable UTF-8 sequence starting at s[i], or 0 if there
 // isn't one. Every BMP default-ignorable encodes as 2 bytes (U+034F, U+061C) or 3 bytes, so
@@ -881,6 +899,7 @@ bool ChapterHtmlSlimParser::recoverHeapForImageHeader() {
 
 // flush the contents of partWordBuffer to currentTextBlock
 bool ChapterHtmlSlimParser::flushPartWordBuffer() {
+  partWordCjkCodepoints_ = 0;  // the run being counted ends with this flush
   if (streamFailed) {
     partWordBufferIndex = 0;
     nextWordContinues = false;
@@ -927,12 +946,13 @@ bool ChapterHtmlSlimParser::flushPartWordBuffer() {
   if (currentTableCell && currentTableCell->text) {
     // text is null only for a cell already consumed by the streaming path; currentTableCell is
     // cleared alongside that, so this is belt-and-braces against a future reordering.
+    const size_t tokensBefore = currentTableCell->text->size();
     currentTableCell->text->addWord(partWordBuffer, fontStyle, false, nextWordContinues, effectiveSizePct,
                                     partWordVisibleOffset_);
-    // Charge the word against the row budget. Only a row still headed for the grid accumulates —
-    // a degraded cell is drained and freed at </td>.
+    // Charge every token the word became against the row budget (a CJK word is one per character).
+    // Only a row still headed for the grid accumulates — a degraded cell is drained and freed at </td>.
     if (currentTable && !currentTable->degraded && !currentTable->rowDegraded) {
-      currentTable->pendingRowBytes += TABLE_BUFFER_BYTES_PER_WORD;
+      currentTable->pendingRowBytes += TABLE_BUFFER_BYTES_PER_WORD * (currentTableCell->text->size() - tokensBefore);
       if (static_cast<size_t>(partWordBufferIndex) > TABLE_BUFFER_SSO_CAPACITY) {
         currentTable->pendingRowBytes += partWordBufferIndex + 1;
       }
@@ -1519,6 +1539,7 @@ void ChapterHtmlSlimParser::addAncestorInsets(BlockStyle& style, const float emS
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
+  cjkSegmentBreakPending_ = false;
   // Base style for the new block — normally the incoming blockStyle, but when falling
   // through from the empty-block merge path (see below) we use the merged style so that
   // accumulated parent-element margins are preserved for the inline-image paragraph.
@@ -3172,10 +3193,16 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
     if (c > 0x20 && c < 0x80) {
       if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
         // Buffer is full — flush before appending. Pure ASCII means no
-        // partial multi-byte sequence can be at the boundary.
+        // partial multi-byte sequence can be at the boundary. The next chunk continues the same
+        // word: glued, no space (crosspoint-reader PR #2652, Phạm Bình An).
         if (!self->flushPartWordBuffer()) return;
+        self->nextWordContinues = true;
       }
-      if (self->partWordBufferIndex == 0) self->partWordVisibleOffset_ = byteOff;
+      if (self->partWordBufferIndex == 0) {
+        self->partWordVisibleOffset_ = byteOff;
+        self->cjkSegmentBreakPending_ = false;  // a Latin character after a line break: it stays a space
+      }
+      self->lastTextCodepoint_ = c;
       self->partWordBuffer[self->partWordBufferIndex++] = s[i];
       continue;
     }
@@ -3205,6 +3232,8 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
       }
       // Whitespace is a real word boundary — reset continuation state
       self->nextWordContinues = false;
+      // A line break right after unspaced CJK text may vanish: the next character decides.
+      if (s[i] == '\n' && utf8IsUnspacedCjk(self->lastTextCodepoint_)) self->cjkSegmentBreakPending_ = true;
       // Skip the whitespace char
       continue;
     }
@@ -3298,11 +3327,30 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
       }
     }
 
+    // A codepoint starts here: decode it once for the CJK rules.
+    if (c >= 0xC0) {
+      const uint32_t cp = codepointAt(s + i, len - i);
+      if (self->partWordBufferIndex == 0 && self->cjkSegmentBreakPending_) {
+        // The line break before this word vanishes when the text on both sides is unspaced CJK:
+        // the word is glued to the previous one, and ParsedText turns the seam into a CJK gap.
+        if (utf8IsUnspacedCjk(cp)) self->nextWordContinues = true;
+        self->cjkSegmentBreakPending_ = false;
+      }
+      if (cp != 0) self->lastTextCodepoint_ = cp;
+      if (utf8IsCjkBreakable(cp)) {
+        if (self->partWordCjkCodepoints_ >= kCjkRunCodepoints) {
+          if (!self->flushPartWordBuffer()) return;
+          self->nextWordContinues = true;  // the run goes on: glued, and ParsedText makes it a CJK gap
+        }
+        ++self->partWordCjkCodepoints_;
+      }
+    }
+
     // If we're about to run out of space, then cut the word off and start a new one.
-    // For CJK text (no spaces), this is the primary word-breaking mechanism.
     // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
     // otherwise the trailing bytes become orphaned continuation bytes that the
-    // decoder can't interpret.
+    // decoder can't interpret. The next chunk continues the same word: glued, no space
+    // (crosspoint-reader PR #2652, Phạm Bình An).
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
       int safeLen = utf8SafeTruncateBuffer(self->partWordBuffer, self->partWordBufferIndex);
 
@@ -3315,6 +3363,7 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
         }
         self->partWordBufferIndex = safeLen;
         if (!self->flushPartWordBuffer()) return;
+        self->nextWordContinues = true;
         for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
         }
@@ -3323,6 +3372,7 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
         self->partWordVisibleOffset_ = source ? byteOff - static_cast<uint32_t>(overflow) : byteOff;
       } else {
         if (!self->flushPartWordBuffer()) return;
+        self->nextWordContinues = true;
       }
     }
 

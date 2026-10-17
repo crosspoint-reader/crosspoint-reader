@@ -31,7 +31,8 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 86;  // v86: a <span id> is in the anchor map
+constexpr uint8_t SECTION_FILE_VERSION = 87;  // v87: CJK text breaks between characters, with kinsoku
+                                              // v86: a <span id> is in the anchor map
                                               // v85: an <img> whose href has no extension is
                                               // laid out as the image its bytes are; v84 pages
                                               // hold its alt text
