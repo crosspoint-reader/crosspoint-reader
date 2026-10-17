@@ -88,6 +88,10 @@ class HalStorage {
   bool remove(const char* path);
   bool rename(const char* oldPath, const char* newPath);
   bool rmdir(const char* path);
+  // Whether two paths name one file or folder. FAT compares names without case, so
+  // "/Books/a.epub" and "/books/A.EPUB" are the same file, which comparing the strings misses.
+  // False when either cannot be opened, `same` then false as well.
+  bool areSameFile(const char* first, const char* second, bool& same);
 
   bool openFileForRead(const char* moduleName, const char* path, HalFile& file);
   bool openFileForRead(const char* moduleName, const std::string& path, HalFile& file);

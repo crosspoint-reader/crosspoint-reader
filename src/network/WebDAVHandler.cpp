@@ -20,6 +20,21 @@ namespace {
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
 // as a fallback. The date is not critical for WebDAV Class 1 operations.
 const char* FIXED_DATE = "Thu, 01 Jan 2024 00:00:00 GMT";
+
+// For a MOVE or COPY onto an existing destination: answers it, and returns true, when source and
+// destination are one file under two spellings (/Books/a.epub and /books/A.EPUB on FAT), or when
+// that cannot be told. Comparing the paths misses them, and replacing such a destination means
+// replacing the source with itself: a MOVE that removed the destination first deleted the file.
+// Ported from crosspoint-reader PR #3979 (phuclee, @phucisstupid).
+bool answeredAsSameFile(WebServer& s, const String& srcPath, const String& dstPath) {
+  bool same = false;
+  if (!Storage.areSameFile(srcPath.c_str(), dstPath.c_str(), same)) {
+    s.send(500, "text/plain", "Failed to identify source and destination");
+    return true;
+  }
+  if (same) s.send(204);  // as for an identical path: the file is already there
+  return same;
+}
 }  // namespace
 
 // ── RequestHandler interface ─────────────────────────────────────────────────
@@ -534,6 +549,7 @@ void WebDAVHandler::handleMove(WebServer& s) {
     s.send(412, "text/plain", "Destination exists and Overwrite is F");
     return;
   }
+  if (dstExists && answeredAsSameFile(s, srcPath, dstPath)) return;
 
   // The file being replaced steps aside until the source is in its place, and comes back if the
   // move fails. It used to be removed first, so a failed move lost it.
@@ -606,6 +622,10 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   if (dstExists && !overwrite) {
     srcFile.close();
     s.send(412, "text/plain", "Destination exists and Overwrite is F");
+    return;
+  }
+  if (dstExists && answeredAsSameFile(s, srcPath, dstPath)) {
+    srcFile.close();
     return;
   }
 
