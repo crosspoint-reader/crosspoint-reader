@@ -208,6 +208,21 @@ OVERRIDES = """
 #define WOLFSSL_ALT_CERT_CHAINS
 #endif
 
+/* Seed the DRBG from the hardware RNG. The library's user_settings.h undefines WOLFSSL_ESPIDF,
+ * so wc_GenerateSeed() would take its ARDUINO branch and read libc random(), which nothing here
+ * seeds: every boot, and with the reboot after each Wi-Fi session every TLS session, would start
+ * from the same DRBG state, making the ECDHE keys predictable. wc_GenerateSeed() checks
+ * CUSTOM_RAND_GENERATE_SEED before any platform branch. esp_fill_random() is true random while
+ * the radio is on, which it always is when TLS runs.
+ * Ported from crosspoint-reader PR #3897 (Rory Chatterton, @rorychatterton). */
+#include <esp_random.h>
+static inline int crosspoint_wolfssl_seed(unsigned char* output, unsigned int sz) {{
+  esp_fill_random(output, sz);
+  return 0;
+}}
+#undef  CUSTOM_RAND_GENERATE_SEED
+#define CUSTOM_RAND_GENERATE_SEED crosspoint_wolfssl_seed
+
 #endif /* CROSSPOINT_WOLFSSL_TUNED */
 {end_marker}
 """
