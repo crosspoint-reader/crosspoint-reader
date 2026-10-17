@@ -2,57 +2,11 @@
 
 #include <Utf8.h>
 
-namespace {
+// Both scripts share the one mapping in lib/Utf8. Each hyphenator feeds it only
+// codepoints its own isLetter accepted, so sharing it changes no hyphenation.
+uint32_t toLowerLatin(const uint32_t cp) { return utf8LowerCodepoint(cp); }
 
-// Convert Latin uppercase letters (ASCII plus Latin-1 supplement) to lowercase
-uint32_t toLowerLatinImpl(const uint32_t cp) {
-  if (cp >= 'A' && cp <= 'Z') {
-    return cp - 'A' + 'a';
-  }
-  if ((cp >= 0x00C0 && cp <= 0x00D6) || (cp >= 0x00D8 && cp <= 0x00DE)) {
-    return cp + 0x20;
-  }
-
-  // Latin Extended-A (U+0100..U+017E): uppercase letters are paired with
-  // lowercase at cp+1. Two sub-ranges have different alignment:
-  //   U+0100..U+0137: uppercase on EVEN codepoints
-  //   U+0139..U+0148: uppercase on ODD codepoints
-  //   U+014A..U+0177: uppercase on EVEN codepoints
-  //   U+0179..U+017E: uppercase on ODD codepoints
-  // Covers Polish (Ą/ą, Ć/ć, Ę/ę, Ł/ł, Ń/ń, Ś/ś, Ź/ź, Ż/ż), Czech, Hungarian, Turkish, etc.
-  if ((cp >= 0x0100 && cp <= 0x0137 && (cp % 2 == 0)) || (cp >= 0x0139 && cp <= 0x0148 && (cp % 2 == 1)) ||
-      (cp >= 0x014A && cp <= 0x0177 && (cp % 2 == 0)) || (cp >= 0x0179 && cp <= 0x017E && (cp % 2 == 1))) {
-    return cp + 1;
-  }
-
-  switch (cp) {
-    case 0x0178:      // Ÿ
-      return 0x00FF;  // ÿ
-    case 0x1E9E:      // ẞ
-      return 0x00DF;  // ß
-    default:
-      return cp;
-  }
-}
-
-// Convert Cyrillic uppercase letters to lowercase
-// Cyrillic uppercase range 0x0410-0x042F maps to lowercase by adding 0x20
-// Special case: Cyrillic capital IO (0x0401) maps to lowercase io (0x0451)
-uint32_t toLowerCyrillicImpl(const uint32_t cp) {
-  if (cp >= 0x0410 && cp <= 0x042F) {
-    return cp + 0x20;
-  }
-  if (cp == 0x0401) {
-    return 0x0451;
-  }
-  return cp;
-}
-
-}  // namespace
-
-uint32_t toLowerLatin(const uint32_t cp) { return toLowerLatinImpl(cp); }
-
-uint32_t toLowerCyrillic(const uint32_t cp) { return toLowerCyrillicImpl(cp); }
+uint32_t toLowerCyrillic(const uint32_t cp) { return utf8LowerCodepoint(cp); }
 
 bool isLatinLetter(const uint32_t cp) {
   if ((cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z')) {
