@@ -1,5 +1,6 @@
 #include "SdCardFontSystem.h"
 
+#include <Epub/BookFonts.h>
 #include <EspNorFlash.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -179,24 +180,49 @@ std::string txtFontSizeOptionLabel(const void* /*ctx*/, const uint8_t index) {
 const char* bookSdFontFamily(const int8_t builtinFamilyOverride, const std::string& sdFamilyOverride) {
   if (builtinFamilyOverride >= 0) return "";
   if (!sdFamilyOverride.empty()) return sdFamilyOverride.c_str();
+  if (sdFontSystem.bookFamilyName()[0] != '\0') return sdFontSystem.bookFamilyName();  // Publisher Fonts
   return SETTINGS.sdFontFamilyName;
 }
 
-ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
-  if (!familyName || familyName[0] == '\0') return ReaderSizeList::builtin();
-  // Names compared in place: findFamily() takes a std::string, and this runs while pages are laid
-  // out, where building one for a long family name would allocate.
+const SdCardFontFamilyInfo* SdCardFontSystem::findFamily(const char* name) const {
+  if (!name || name[0] == '\0') return nullptr;
+  if (bookFamily_.name == name) return &bookFamily_;
+  // Names compared in place: the registry's findFamily() takes a std::string, and this runs while pages are
+  // laid out, where building one for a long family name would allocate.
   for (const auto& family : registry_.getFamilies()) {
-    if (family.name != familyName) continue;
-    if (family.ttf()) return ReaderSizeList::native();  // drawn natively at every size
-    uint8_t sizes[ReaderSizeList::kCapacity];
-    size_t n = 0;
-    for (const auto& file : family.files) {
-      if (n < ReaderSizeList::kCapacity) sizes[n++] = file.pointSize;
-    }
-    return ReaderSizeList::forFamily(sizes, n);
+    if (family.name == name) return &family;
   }
-  return ReaderSizeList::builtin();  // not on the card: the reader draws a built-in family
+  return nullptr;
+}
+
+bool SdCardFontSystem::selectBookFamily(const std::string& cachePath) {
+  // Kept across the book's later opens; anything else is read again, since the book may have been examined since.
+  if (!bookFamily_.name.empty() && cachePath == bookCachePath_) return true;
+  bookCachePath_ = cachePath;
+  bookFamily_ = SdCardFontFamilyInfo{};
+  std::string declared;
+  if (cachePath.empty() || BookFonts::read(cachePath, &declared) != BookFonts::State::Family) return false;
+  // Scanned like a family directory on the card: the same style probe, and only when the font area can take it.
+  if (!registry_.scanFamily(BookFonts::familyDir(cachePath, declared).c_str(), bookFamily_) || !bookFamily_.ttf()) {
+    LOG_INF("SDFS", "Book font %s not usable", declared.c_str());
+    bookFamily_ = SdCardFontFamilyInfo{};
+    return false;
+  }
+  bookFamily_.name = "book:" + declared;
+  LOG_INF("SDFS", "Book font %s", declared.c_str());
+  return true;
+}
+
+ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
+  const SdCardFontFamilyInfo* family = findFamily(familyName);
+  if (!family) return ReaderSizeList::builtin();       // none, or not on the card: the reader draws a built-in family
+  if (family->ttf()) return ReaderSizeList::native();  // drawn natively at every size
+  uint8_t sizes[ReaderSizeList::kCapacity];
+  size_t n = 0;
+  for (const auto& file : family->files) {
+    if (n < ReaderSizeList::kCapacity) sizes[n++] = file.pointSize;
+  }
+  return ReaderSizeList::forFamily(sizes, n);
 }
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
@@ -226,7 +252,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   // family has a closer file than what's currently loaded.
   bool familyMatches = (currentFamily == wantedFamily);
   if (familyMatches) {
-    const auto* family = registry_.findFamily(wantedFamily);
+    const auto* family = findFamily(wantedFamily);
     if (!family) {
       LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       manager_.unloadAll(renderer);
@@ -253,7 +279,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     manager_.unloadAll(renderer);
   }
 
-  const auto* family = registry_.findFamily(wantedFamily);
+  const auto* family = findFamily(wantedFamily);
   if (family) {
     if (manager_.loadFamily(*family, renderer, targetPt)) {
       LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);
@@ -280,7 +306,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
 
   bool familyMatches = (currentFamily == wantedFamily);
   if (familyMatches) {
-    const auto* family = registry_.findFamily(wantedFamily);
+    const auto* family = findFamily(wantedFamily);
     if (!family) {
       manager_.unloadAll(renderer);
       return;
@@ -302,7 +328,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
 
   if (!currentFamily.empty()) manager_.unloadAll(renderer);
 
-  const auto* family = registry_.findFamily(wantedFamily);
+  const auto* family = findFamily(wantedFamily);
   if (!family) return;
 
   // The loader and the resolver used to disagree, and the loader lost. loadFamily() takes the

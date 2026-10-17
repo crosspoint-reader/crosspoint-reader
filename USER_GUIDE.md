@@ -395,6 +395,7 @@ Moving within a tab follows **[Moving through lists](#moving-through-lists)**.
 - **Large Image Placeholder**: Whether to substitute an explicit placeholder for images that are too large to display inline. "ON" / "OFF"
 
 - **Embedded Style**: Use the EPUB's own HTML/CSS styling. "ON" (default) / "OFF"
+- **Publisher Fonts**: "Off" (default) / "Body Text". With "Body Text", a book that embeds its body font as TrueType is read in that font instead of yours; the font is copied out of the book on its first open (the "Indexing" popup). Books whose fonts are OpenType CFF (`.otf`), WOFF or WOFF2, or encrypted, keep your font, and so does a book you give a font of its own in the reader menu's Font Family. Needs **Embedded Style** on. The reader holds one TrueType family at a time, so moving between two such books, or back to a TrueType font of yours, installs the font again (a few seconds).
 - **Hyphenation**: Automatic hyphenation while reading. "ON" / "OFF"
 - **Bionic Reading**: Bold the first half of each word to guide the eye. "ON" / "OFF"
 - **Guide Dots**: Draw a small dot centered in the space between words to guide the eye along the line (idea borrowed from [CrossInk](https://github.com/uxjulia/CrossInk)). "ON" / "OFF"

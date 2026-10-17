@@ -4,6 +4,7 @@
 #include <SdCardFontRegistry.h>
 
 #include <functional>
+#include <string>
 
 #include "ReaderFontSizes.h"
 
@@ -57,10 +58,25 @@ class SdCardFontSystem {
   /// Unload any currently loaded SD font family, freeing its heap (intervals,
   /// kern/ligature tables, glyph cache — typically 24-60KB). The registry is
   /// preserved so the font can be reloaded on next ensureLoaded() call.
-  void unload(GfxRenderer& renderer) { manager_.unloadAll(renderer); }
+  void unload(GfxRenderer& renderer) {
+    manager_.unloadAll(renderer);
+    selectBookFamily({});  // the reader is closing; its next open selects again
+  }
   // A TTF body font's native sizes, for the reader's size ladder (FontSizeLadder::setNative).
   std::optional<SdCardFontManager::NativeSizes> ttfNativeSizes(const int bodyFontId) const {
     return manager_.ttfNativeSizes(bodyFontId);
+  }
+
+  /// Publisher Fonts: the body family BookFonts copied out of the book cached at `cachePath` becomes the book
+  /// family, drawn like a family on the card while that book is open; an empty `cachePath`, or a book without
+  /// one, forgets it. True when the book has one.
+  bool selectBookFamily(const std::string& cachePath);
+  /// The book family's name ("" when none), for ensureLoaded() and resolveFontId(). It starts with "book:",
+  /// which no family directory can, so it never shadows a family on the card.
+  const char* bookFamilyName() const { return bookFamily_.name.c_str(); }
+  /// The book family's name when it belongs to the book cached at `cachePath`, else "".
+  const char* bookFamilyNameFor(const std::string& cachePath) const {
+    return cachePath == bookCachePath_ ? bookFamilyName() : "";
   }
 
   /// Access the registry (e.g. for settings UI to enumerate available fonts).
@@ -68,6 +84,11 @@ class SdCardFontSystem {
   const SdCardFontRegistry& registry() const { return registry_; }
 
  private:
+  // A family on the card, or the book family.
+  const SdCardFontFamilyInfo* findFamily(const char* name) const;
+
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
+  SdCardFontFamilyInfo bookFamily_;  // empty name: none
+  std::string bookCachePath_;        // the book bookFamily_ was selected for
 };

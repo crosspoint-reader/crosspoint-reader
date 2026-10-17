@@ -14,7 +14,14 @@ extern void ensureSdFontLoaded();
 // Ensure the correct SD card font family is loaded for the given book path.
 // Selects EPUB or TXT/MD settings depending on the file extension.
 // Defined in main.cpp.
-extern void ensureSdFontLoadedForPath(const char* path);
+// Publisher Fonts: an EPUB whose embedded fonts have not been examined yet (bookFontsPendingForPath) keeps the
+// font that is loaded while waitForBookFonts holds, so the family the setting replaces is not installed first;
+// the reader examines them while the book opens and calls again with waitForBookFonts false.
+extern void ensureSdFontLoadedForPath(const char* path, bool waitForBookFonts = true);
+
+// True when the EPUB at `path` is to be drawn in its embedded body font (Publisher Fonts on, the book's own
+// style in use, no font family chosen for it) and BookFonts has not examined it yet. Defined in main.cpp.
+extern bool bookFontsPendingForPath(const char* path);
 
 // Unload any loaded SD font payload (heap reclamation). Safe no-op when none
 // is loaded. Defined in main.cpp.
