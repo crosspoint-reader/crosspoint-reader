@@ -2124,12 +2124,14 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   text = resolveVisualText(text, visual, baseDir);
 
   // Advance table fast-path for SD card fonts during layout.
-  // No kerning/ligature lookup — consistent with previous metadataOnly behavior
-  // where kern/lig data was not loaded.
+  // Snaps each pair step like drawText does, so a measured word matches what
+  // drawText renders (rounding the summed advances once made long words
+  // measure shorter than they draw, eating the following space). Kern/ligature
+  // data is not resident during layout, so kerned-pair steps can still differ.
   auto sdIt = sdCardFonts_.find(resolvedFontId);
   if (mode == TextMeasureMode::Layout && sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    int32_t widthFP = 0;
-    int trackingPx = 0;
+    int widthPx = 0;
+    int32_t prevAdvanceFP = 0;
     uint32_t prevCp = 0;
     const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
@@ -2140,23 +2142,24 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     const auto& font = fontIt->second;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
-      if (BidiUtils::isTransparentMark(cp)) {
+      // RTL vowel marks (niqqud/harakat) and combining marks are zero-advance overlays in drawText.
+      if (BidiUtils::isTransparentMark(cp) || utf8IsCombiningMark(cp)) {
         continue;
       }
       int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
-      if (!utf8IsCombiningMark(cp)) {
-        if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
-          EpdGlyph solidFallback;
-          const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
-          advFP = glyph ? glyph->advanceX : 0;
-        }
-        trackingPx += trackingBetween(prevCp, cp, tracking);
-        prevCp = cp;
+      if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
+        EpdGlyph solidFallback;
+        const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+        advFP = glyph ? glyph->advanceX : 0;
       }
-      widthFP += isSupSub ? (advFP + 1) / 2 : advFP;
+      if (prevCp != 0) {
+        widthPx += fp4::toPixel(prevAdvanceFP) + trackingBetween(prevCp, cp, tracking);
+      }
+      prevAdvanceFP = isSupSub ? (advFP + 1) / 2 : advFP;
+      prevCp = cp;
     }
-    return fp4::toPixel(widthFP) + trackingPx;
+    widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+    return widthPx;
   }
 
   const auto fontIt = fontMap.find(resolvedFontId);
