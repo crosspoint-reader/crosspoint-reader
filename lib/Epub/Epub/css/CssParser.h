@@ -142,6 +142,10 @@ class CssParser {
   // parsed once and says so on every open, instead of re-parsing on every open and hitting the
   // cap again (memory audit 2026-09, R4).
   [[nodiscard]] bool rulesTruncated() const { return rulesTruncated_; }
+  // Selector census of the parsed (or loaded) sheets: selectors seen in rules with a supported
+  // declaration, and how many of those the resolver could not use. Diagnostics and host tests.
+  [[nodiscard]] uint32_t selectorCandidates() const { return totalSelectorCandidates_; }
+  [[nodiscard]] uint32_t unsupportedSelectors() const { return unsupportedSelectorSkips_; }
 
   [[nodiscard]] CssStyle resolveStyle(const std::string& tagName, const std::string& classAttr,
                                       const std::string& idAttr = {}) const;
