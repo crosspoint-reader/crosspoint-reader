@@ -19,6 +19,7 @@
 #include "../Epub.h"
 #include "VisibleText.h"
 #include "css/CssParser.h"
+#include "parsers/ContentOpfParser.h"
 
 namespace BookFonts {
 namespace {
@@ -196,72 +197,6 @@ class BodyFontProbe {
   std::string tag_, class_, id_, inline_;
 };
 
-// ---- The book's identifiers, for the obfuscation keys ------------------------------------------------------
-
-// The package's unique identifier (the dc:identifier its unique-identifier attribute names, else the first)
-// and the first urn:uuid: identifier, read from the OPF's metadata.
-class IdentifierScan {
- public:
-  std::string unique() const { return unique_.empty() ? first_ : unique_; }
-  const std::string& uuid() const { return uuid_; }
-
-  void beginParser(SaxParser& parser) { parser_ = &parser; }
-
-  static void onStart(void* ctx, const char* name, const char** atts) {
-    auto& self = *static_cast<IdentifierScan*>(ctx);
-    const char* local = localName(name);
-    if (strcmp(local, "package") == 0) {
-      if (const char* ref = attribute(atts, "unique-identifier")) self.uniqueRef_.assign(ref);
-    } else if (strcmp(local, "identifier") == 0) {
-      const char* id = attribute(atts, "id");
-      self.inIdentifier_ = true;
-      self.isUnique_ = id && !self.uniqueRef_.empty() && self.uniqueRef_ == id;
-      self.text_.clear();
-    }
-  }
-
-  static void onEnd(void* ctx, const char* name) {
-    auto& self = *static_cast<IdentifierScan*>(ctx);
-    const char* local = localName(name);
-    if (strcmp(local, "metadata") == 0) {
-      self.parser_->stop();  // everything needed is in the metadata
-    } else if (strcmp(local, "identifier") == 0 && self.inIdentifier_) {
-      self.inIdentifier_ = false;
-      const size_t from = self.text_.find_first_not_of(" \t\r\n");
-      const size_t to = self.text_.find_last_not_of(" \t\r\n");
-      const std::string text = from == std::string::npos ? std::string() : self.text_.substr(from, to - from + 1);
-      if (self.first_.empty()) self.first_ = text;
-      if (self.isUnique_) self.unique_ = text;
-      if (self.uuid_.empty() && strncasecmp(text.c_str(), "urn:uuid:", 9) == 0) self.uuid_ = text;
-    }
-  }
-
-  static void onText(void* ctx, const char* text, const int len) {
-    auto& self = *static_cast<IdentifierScan*>(ctx);
-    if (self.inIdentifier_ && self.text_.size() + static_cast<size_t>(len) <= kMaxIdentifier) {
-      self.text_.append(text, static_cast<size_t>(len));
-    }
-  }
-
- private:
-  static constexpr size_t kMaxIdentifier = 256;
-  static const char* localName(const char* name) {
-    const char* colon = strrchr(name, ':');
-    return colon ? colon + 1 : name;
-  }
-  static const char* attribute(const char** atts, const char* key) {
-    for (size_t i = 0; atts && atts[i] && atts[i + 1]; i += 2) {
-      if (strcmp(localName(atts[i]), key) == 0) return atts[i + 1];
-    }
-    return nullptr;
-  }
-
-  SaxParser* parser_ = nullptr;
-  std::string uniqueRef_, unique_, first_, uuid_, text_;
-  bool inIdentifier_ = false;
-  bool isUnique_ = false;
-};
-
 // One SAX pass over an item of the book, its parser state in `scratch` when there is room. False when the item
 // could not be read (or the parser not set up); a malformed document reports what it parsed and counts as read.
 template <typename Handler>
@@ -357,13 +292,25 @@ struct Keys {
 bool loadKeys(const Epub& epub, BuildArena* scratch, Keys& keys) {
   keys.loaded = true;
   std::string opfPath;
-  if (!epub.contentOpfPath(&opfPath)) return false;
-  IdentifierScan scan;
-  // Released before the face is extracted, whose inflate ring needs the room.
+  size_t opfSize = 0;
+  if (!epub.contentOpfPath(&opfPath) || !epub.getItemSize(opfPath, &opfSize)) return false;
+  // Released before the face is extracted, whose inflate ring needs the room; after the parser, which uses it.
   const ParserState state(scratch);
-  if (!parseItem(epub, opfPath, scan, nullptr, false, state.get(), scratch)) return false;
-  keys.hasIdpf = idpfKey(scan.unique(), keys.idpf);
-  keys.hasAdobe = adobeKey(scan.uuid(), keys.adobe);
+  // The package parser with no cache, as for a metadata sidecar: the metadata alone. About 1 KB, so on the heap
+  // rather than in prepare()'s frame, under the probe and the copies. It holds the paths by reference.
+  const std::string none;
+  auto opf = makeUniqueNoThrow<ContentOpfParser>(none, none, opfSize, nullptr);
+  if (!opf) {
+    LOG_ERR("BKF", "OOM: package parser");
+    return false;
+  }
+  if (state.get()) opf->setParserState(state.get());
+  if (!opf->setup() || !epub.readItemContentsToStream(opfPath, *opf, 1024, opf->metadataRead(), scratch)) {
+    LOG_ERR("BKF", "Cannot read %s", opfPath.c_str());
+    return false;
+  }
+  keys.hasIdpf = idpfKey(opf->uniqueIdentifier, keys.idpf);
+  keys.hasAdobe = adobeKey(opf->uuidIdentifier, keys.adobe);
   return true;
 }
 
