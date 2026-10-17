@@ -4,7 +4,7 @@
 
 Writes three fonts derived from <source.ttf>:
   KernTest-Regular.ttf     GPOS kept + OpenType 'kern' v0, one format-0 subtable
-                           (pairs overlap GPOS pairs, so the script adds both)
+                           (pairs overlap GPOS pairs; GPOS has kerning, so the table is ignored)
   KernTest-Italic.ttf      GPOS removed + 'kern' v0 with two format-0 subtables
                            (length field honoured) and one format-2 stub (ignored)
   KernTest-BoldItalic.ttf  GPOS removed + Apple 'kern' version 1.0, one subtable

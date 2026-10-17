@@ -312,14 +312,16 @@ export class LayoutTable {
 
   /**
    * PairPos subtable -> calls emit(leftGid, rightGid, xAdvance) for every pair the
-   * Python extractor would add, with its filters: left must be in `wanted`; for
-   * format 1 right must be in `wanted`; format 2 walks classes like the script
-   * (left glyphs = wanted ∩ coverage by ClassDef1, right = all wanted by ClassDef2).
-   * `wanted` is an ordered iterable of gids (Map keys / Set).
-   * Returns the set of (left,right) keys this subtable "matched" in OpenType's
-   * first-match sense when `matched` is given (used by the opt-in fix only).
+   * Python extractor (lib/EpdFont/scripts/kern_extract.py) adds, with its filters:
+   * left must be in `wanted`; for format 1 right must be in `wanted`; format 2 walks
+   * classes (left glyphs = wanted ∩ coverage by ClassDef1, right = all wanted by
+   * ClassDef2). `wanted` is an ordered iterable of gids (Map keys / Set).
+   * `claimed` = { pairs: Set<left*65536+right>, left: Set<gid> }: what earlier
+   * subtables of the same lookup matched, skipped here (OpenType: the first subtable
+   * that matches a pair decides it). Format 1 adds the pairs it lists, zero-valued
+   * ones included; format 2 the left glyphs it covers, as it matches all their pairs.
    */
-  pairPos(off, wanted, emit, matched = null) {
+  pairPos(off, wanted, emit, claimed) {
     const dv = this.dv;
     const format = dv.getUint16(off);
     const coverage = readCoverage(dv, off + dv.getUint16(off + 2));
@@ -329,19 +331,16 @@ export class LayoutTable {
       const setCount = dv.getUint16(off + 8);
       for (let i = 0; i < coverage.length; i++) {
         const lg = coverage[i];
-        if (!wanted.has(lg)) continue;
+        if (!wanted.has(lg) || claimed.left.has(lg)) continue;
         if (i >= setCount) throw new FontError(`${this.label}: PairPos format 1 coverage longer than PairSet list`);
         const ps = off + dv.getUint16(off + 10 + 2 * i);
         const cnt = dv.getUint16(ps);
         for (let k = 0; k < cnt; k++) {
           const r = ps + 2 + k * (2 + rec1 + rec2);
           const rg = dv.getUint16(r);
-          if (!wanted.has(rg)) continue;
           const key = lg * 65536 + rg;
-          if (matched) {
-            if (matched.has(key)) continue;
-            matched.add(key);
-          }
+          if (!wanted.has(rg) || claimed.pairs.has(key)) continue;
+          claimed.pairs.add(key);
           const xa = xAdvance(dv, r + 2, vf1);
           if (xa !== 0) emit(lg, rg, xa);
         }
@@ -353,8 +352,9 @@ export class LayoutTable {
       const covSet = new Set(coverage);
       const leftByClass = new Map();
       for (const g of wanted.keys()) {
-        if (!covSet.has(g)) continue;
+        if (!covSet.has(g) || claimed.left.has(g)) continue;
         const c = cd1.get(g) ?? 0;
+        if (c >= c1n) continue; // a class past the matrix matches nothing
         if (!leftByClass.has(c)) leftByClass.set(c, []);
         leftByClass.get(c).push(g);
       }
@@ -365,27 +365,17 @@ export class LayoutTable {
         rightByClass.get(c).push(g);
       }
       const recSize = rec1 + rec2;
-      for (let c1 = 0; c1 < c1n; c1++) {
-        const lefts = leftByClass.get(c1);
-        if (!lefts) continue;
+      for (const [c1, lefts] of leftByClass) {
         for (let c2 = 0; c2 < c2n; c2++) {
           const r = off + 16 + (c1 * c2n + c2) * recSize;
           const xa = xAdvance(dv, r, vf1);
           const rights = rightByClass.get(c2);
-          if (matched) {
-            // OpenType: a covered first glyph matches this subtable for every second glyph.
-            if (!rights) continue;
-            for (const lg of lefts) for (const rg of rights) {
-              const key = lg * 65536 + rg;
-              if (matched.has(key)) continue;
-              matched.add(key);
-              if (xa !== 0) emit(lg, rg, xa);
-            }
-            continue;
-          }
           if (xa === 0 || !rights) continue;
-          for (const lg of lefts) for (const rg of rights) emit(lg, rg, xa);
+          for (const lg of lefts) for (const rg of rights) {
+            if (!claimed.pairs.has(lg * 65536 + rg)) emit(lg, rg, xa);
+          }
         }
+        for (const lg of lefts) claimed.left.add(lg);
       }
     }
   }

@@ -8,6 +8,7 @@ import argparse
 from collections import namedtuple
 from fontTools.ttLib import TTFont
 
+from kern_extract import extract_raw_kerning
 from kern_reduce import reduce_kern_classes
 
 # Force UTF-8 stdout so that `> file.h` on Windows doesn't produce UTF-16 LE
@@ -491,9 +492,9 @@ for index, glyph in enumerate(all_glyphs):
 
 # --- Kerning pair extraction ---
 # Modern fonts store kerning in the OpenType GPOS table, which FreeType's
-# get_kerning() does not read. We use fonttools to parse both the legacy
-# kern table and the GPOS 'kern' feature (PairPos lookups, including
-# Extension wrappers).
+# get_kerning() does not read. kern_extract.py parses both the legacy
+# kern table and the GPOS 'kern' feature with fonttools, for this script and
+# fontconvert_sdcard.py alike.
 
 COMBINING_MARKS_START = 0x0300
 COMBINING_MARKS_END = 0x036F
@@ -515,53 +516,11 @@ face_idx_cps = {}
 for cp, fi in cp_to_face_idx.items():
     face_idx_cps.setdefault(fi, set()).add(cp)
 
-def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
-    """Extract kerning from a PairPos subtable (Format 1 or 2)."""
-    if subtable.Format == 1:
-        # Individual pairs
-        for i, coverage_glyph in enumerate(subtable.Coverage.glyphs):
-            if coverage_glyph not in glyph_to_cp:
-                continue
-            pair_set = subtable.PairSet[i]
-            for pvr in pair_set.PairValueRecord:
-                if pvr.SecondGlyph not in glyph_to_cp:
-                    continue
-                xa = 0
-                if hasattr(pvr, 'Value1') and pvr.Value1:
-                    xa = getattr(pvr.Value1, 'XAdvance', 0) or 0
-                if xa != 0:
-                    key = (coverage_glyph, pvr.SecondGlyph)
-                    raw_kern[key] = raw_kern.get(key, 0) + xa
-    elif subtable.Format == 2:
-        # Class-based pairs
-        class_def1 = subtable.ClassDef1.classDefs if subtable.ClassDef1 else {}
-        class_def2 = subtable.ClassDef2.classDefs if subtable.ClassDef2 else {}
-        coverage_set = set(subtable.Coverage.glyphs)
-        for left_glyph in glyph_to_cp:
-            if left_glyph not in coverage_set:
-                continue
-            c1 = class_def1.get(left_glyph, 0)
-            if c1 >= len(subtable.Class1Record):
-                continue
-            class1_rec = subtable.Class1Record[c1]
-            for right_glyph in glyph_to_cp:
-                c2 = class_def2.get(right_glyph, 0)
-                if c2 >= len(class1_rec.Class2Record):
-                    continue
-                c2_rec = class1_rec.Class2Record[c2]
-                xa = 0
-                if hasattr(c2_rec, 'Value1') and c2_rec.Value1:
-                    xa = getattr(c2_rec.Value1, 'XAdvance', 0) or 0
-                if xa != 0:
-                    key = (left_glyph, right_glyph)
-                    raw_kern[key] = raw_kern.get(key, 0) + xa
-
-def extract_kerning_fonttools(font_path, codepoints, ppem):
+def extract_kerning_fonttools(font_path, codepoints):
     """Extract kerning pairs from a font file using fonttools.
 
-    Returns dict of {(leftCp, rightCp): pixel_adjust} for the given
-    codepoints.  Values are scaled from font design units to integer
-    pixels at ppem.
+    Returns ({(leftCp, rightCp): design_units}, units_per_em) for the given
+    codepoints, non-zero values only. Nothing is scaled here: see below.
     """
     font = TTFont(font_path)
     units_per_em = font['head'].unitsPerEm
@@ -574,57 +533,37 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
         if gname:
             glyph_to_cp[gname] = cp
 
-    # Collect raw kerning values in font design units
-    raw_kern = {}  # (left_glyph_name, right_glyph_name) -> design_units
-
-    # 1. Legacy kern table
-    if 'kern' in font:
-        for subtable in font['kern'].kernTables:
-            if hasattr(subtable, 'kernTable'):
-                for (lg, rg), val in subtable.kernTable.items():
-                    if lg in glyph_to_cp and rg in glyph_to_cp:
-                        raw_kern[(lg, rg)] = raw_kern.get((lg, rg), 0) + val
-
-    # 2. GPOS 'kern' feature
-    if 'GPOS' in font:
-        gpos = font['GPOS'].table
-        kern_lookup_indices = set()
-        if gpos.FeatureList:
-            for fr in gpos.FeatureList.FeatureRecord:
-                if fr.FeatureTag == 'kern':
-                    kern_lookup_indices.update(fr.Feature.LookupListIndex)
-        for li in kern_lookup_indices:
-            lookup = gpos.LookupList.Lookup[li]
-            for st in lookup.SubTable:
-                actual = st
-                # Unwrap Extension (lookup type 9) wrappers
-                if lookup.LookupType == 9 and hasattr(st, 'ExtSubTable'):
-                    actual = st.ExtSubTable
-                if hasattr(actual, 'Format'):
-                    _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern)
+    # Raw kerning values in font design units
+    raw_kern = extract_raw_kerning(font, glyph_to_cp)  # (left_glyph_name, right_glyph_name) -> design_units
 
     font.close()
 
-    # Scale design-unit kerning values to 4.4 fixed-point pixels.
-    scale = ppem / units_per_em
-    result = {}  # (leftCp, rightCp) -> 4.4 fixed-point adjust
+    result = {}  # (leftCp, rightCp) -> design units
     for (lg, rg), du in raw_kern.items():
-        lcp = glyph_to_cp[lg]
-        rcp = glyph_to_cp[rg]
-        adjust = fp4_from_design_units(du, scale)
-        if adjust != 0:
-            result[(lcp, rcp)] = adjust
-    return result
+        if du != 0:
+            result[(glyph_to_cp[lg], glyph_to_cp[rg])] = du
+    return result, units_per_em
 
 # The ppem used by the existing glyph rasterization:
 #   face.set_char_size(size << 6, size << 6, 150, 150)
 # means size_pt at 150 DPI -> ppem = size * 150 / 72
 ppem = size * 150.0 / 72.0
 
-kern_map = {}  # (leftCp, rightCp) -> adjust
+# The kerning STRUCTURE -- which code points kern, their classes, which class pairs have a value --
+# is worked out in design units, and only the values are scaled to this size. Every size of a
+# typeface then emits identical codepoint, class and sparse-column tables, which
+# dedupe_font_tables.py keeps once for the whole family. Built from values already scaled, the
+# structure followed the rounding: at a small size two pairs could round alike (or to 0) where a
+# larger size kept them apart, and that size lost the shared tables (inter_ui_10_bold: ~3.3 KB).
+# Design units from a stack of fonts are made comparable by scaling each to the stack's common
+# units-per-em multiple, which keeps them exact integers.
+_kern_by_face = []
 for face_idx, cps in face_idx_cps.items():
-    font_path = args.fontstack[face_idx]
-    kern_map.update(extract_kerning_fonttools(font_path, cps, ppem))
+    _kern_by_face.append(extract_kerning_fonttools(args.fontstack[face_idx], cps))
+kern_units_per_em = math.lcm(*(upem for _, upem in _kern_by_face)) if _kern_by_face else 1
+kern_map = {}  # (leftCp, rightCp) -> design units at kern_units_per_em
+for face_kern, upem in _kern_by_face:
+    kern_map.update({pair: du * (kern_units_per_em // upem) for pair, du in face_kern.items()})
 
 print(f"kerning: {len(kern_map)} pairs extracted", file=sys.stderr)
 
@@ -677,12 +616,17 @@ if kern_map:
     kern_left_class_count = left_class_id - 1
     kern_right_class_count = right_class_id - 1
 
-    # Build the class x class matrix
+    # Build the class x class matrix: which cells have a value (design units, the same at every
+    # size) and the value at this size, scaled to 4.4 fixed-point pixels. A cell can round to 0
+    # here and still be written, so its place in the shared sparse columns stays the same.
+    kern_present = [False] * (kern_left_class_count * kern_right_class_count)
     kern_matrix = [0] * (kern_left_class_count * kern_right_class_count)
-    for (lcp, rcp), adjust in kern_map.items():
+    kern_scale = ppem / kern_units_per_em
+    for (lcp, rcp), du in kern_map.items():
         lc = left_class_map[lcp] - 1
         rc = right_class_map[rcp] - 1
-        kern_matrix[lc * kern_right_class_count + rc] = adjust
+        kern_present[lc * kern_right_class_count + rc] = True
+        kern_matrix[lc * kern_right_class_count + rc] = fp4_from_design_units(du, kern_scale)
 
     # Build sorted class entry lists
     kern_left_classes = sorted(left_class_map.items())
@@ -1353,11 +1297,10 @@ if kern_map:
     for row in range(kern_left_class_count):
         row_offsets.append(len(sparse_cols))
         row_start = row * kern_right_class_count
-        row_vals = kern_matrix[row_start:row_start + kern_right_class_count]
-        for col, v in enumerate(row_vals):
-            if v != 0:
+        for col in range(kern_right_class_count):
+            if kern_present[row_start + col]:
                 sparse_cols.append(col)
-                sparse_vals.append(v)
+                sparse_vals.append(kern_matrix[row_start + col])
     row_offsets.append(len(sparse_cols))
     if len(sparse_cols) > 0xFFFF:
         print(f"Error: {len(sparse_cols)} kern entries exceed the uint16 row-offset range", file=sys.stderr)

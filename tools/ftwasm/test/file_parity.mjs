@@ -1,11 +1,7 @@
 #!/usr/bin/env node
 // Whole-file parity: fontconvert_sdcard.py CLI vs cpfont-writer.mjs, byte for byte.
 //
-//   node test/file_parity.mjs [--cases Literata,Bookerly,...] [--regen] [--dist <dir>]
-//   node test/file_parity.mjs --kerning first-match --script <patched fontconvert_sdcard.py>
-//
-// --kerning first-match checks the opt-in kerning fix against a copy of the
-// script with kerning-first-match.patch applied (cached in out/cli-first-match/); patch: patches/fontconvert_sdcard-kerning-first-match.patch.
+//   node test/file_parity.mjs [--cases Literata,Bookerly,...] [--regen] [--dist <dir>] [--script <fontconvert_sdcard.py>]
 //
 // The Python side is invoked exactly like build-sd-fonts.py does it (multi-style
 // flags, or positional font + --style for a single style; --intervals --sizes
@@ -55,7 +51,7 @@ const CASES = [
 
 function parseArgs(argv) {
   const a = { cases: CASES.map((c) => c.id).join(','), regen: false, python: 'venv/bin/python', dist: '',
-              kerning: 'sum', script: path.join(REPO, 'lib/EpdFont/scripts/fontconvert_sdcard.py') };
+              script: path.join(REPO, 'lib/EpdFont/scripts/fontconvert_sdcard.py') };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i].replace(/^--/, '');
     if (k === 'regen') a.regen = true;
@@ -70,7 +66,9 @@ function runPython(args, c, outDir) {
   if (!args.regen && expected.every((f) => fs.existsSync(f))) return null;
   fs.rmSync(outDir, { recursive: true, force: true });
   const styleNames = Object.keys(c.styles);
-  const cmd = ['-I', '-B', path.resolve(ROOT, args.script)];
+  // Not -I: that also takes the script's own directory off sys.path, and with it the
+  // kern_extract.py and kern_reduce.py it imports.
+  const cmd = ['-E', '-s', '-B', path.resolve(ROOT, args.script)];
   if (styleNames.length > 1) for (const s of styleNames) cmd.push(`--${s}`, c.styles[s]);
   else cmd.push(c.styles[styleNames[0]], '--style', styleNames[0]);
   cmd.push('--intervals', c.intervals, '--sizes', c.sizes, '--name', c.name, '--output-dir', `${outDir}/`);
@@ -118,7 +116,7 @@ async function main() {
   const ft = await FreeTypeWasm.create(createFtWasm);
   const v = ft.version();
   console.log(`wasm: ${path.relative(ROOT, dist) || '.'} (FreeType ${v.string}${v.harfbuzz ? ' + HarfBuzz' : ''}), ` +
-              `kerning ${args.kerning}, python script ${args.script}\n`);
+              `python script ${args.script}\n`);
 
   let files = 0, identical = 0, bytes = 0;
   const wanted = new Set(args.cases.split(','));
@@ -134,14 +132,14 @@ async function main() {
                   (c.id === 'SourceSerif4Otf' ? ' (from https://github.com/adobe-fonts/source-serif/tree/release/OTF)' : ''));
       continue;
     }
-    const outDir = path.join(ROOT, args.kerning === 'sum' ? 'out/cli' : `out/cli-${args.kerning}`, c.id);
+    const outDir = path.join(ROOT, 'out/cli', c.id);
     runPython(args, c, outDir);
     const pySec = Number(fs.readFileSync(path.join(outDir, 'python-seconds.txt'), 'utf8'));
     const fonts = {}, fileNames = {};
     for (const [s, f] of Object.entries(c.styles)) { fonts[s] = new Uint8Array(fs.readFileSync(f)); fileNames[s] = path.basename(f); }
     const t = performance.now();
     const out = convertFamily(ft, { fonts, fileNames, sizes: c.sizes, intervals: c.intervals, name: c.name,
-                                    syntheticBold: !!c.syntheticBold, kerning: args.kerning });
+                                    syntheticBold: !!c.syntheticBold });
     const ms = performance.now() - t;
     const notes = [];
     let ok = 0;
