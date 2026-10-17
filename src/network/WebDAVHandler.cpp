@@ -1,6 +1,7 @@
 #include "WebDAVHandler.h"
 
 #include <Epub.h>
+#include <FileReplace.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <HalSystem.h>  // feedWatchdog()
@@ -98,17 +99,14 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     }
 
   } else if (raw.status == RAW_END) {
-    if (_putFile) _putFile.close();
+    // close() writes the last cached sector and the directory entry: a failure there leaves the
+    // upload cut short.
+    if (_putFile && !_putFile.close()) _putOk = false;
     if (_putOk) {
       String tempPath = _putPath + ".davtmp";
-      if (_putExisted) Storage.remove(_putPath.c_str());
-      FsFile tmp = Storage.open(tempPath.c_str());
-      if (tmp) {
-        _putOk = tmp.rename(_putPath.c_str());
-        tmp.close();
-      } else {
-        _putOk = false;
-      }
+      // The file being replaced steps aside until the upload is in its place, and comes back if
+      // it cannot be. It used to be removed first, and a failed rename then removed the upload too.
+      _putOk = FileReplace::replace(tempPath.c_str(), _putPath.c_str());
       if (!_putOk) Storage.remove(tempPath.c_str());
     }
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
@@ -537,22 +535,13 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
-    // The book being replaced takes its reading state with it.
-    clearEpubCacheIfNeeded(dstPath);
-  }
-
-  FsFile file = Storage.open(srcPath.c_str());
-  if (!file) {
-    s.send(500, "text/plain", "Failed to open source");
-    return;
-  }
-
-  bool success = file.rename(dstPath.c_str());
-  file.close();
+  // The file being replaced steps aside until the source is in its place, and comes back if the
+  // move fails. It used to be removed first, so a failed move lost it.
+  const bool success = FileReplace::replace(srcPath.c_str(), dstPath.c_str());
 
   if (success) {
+    // The book replaced takes its reading state with it, once it really is gone.
+    if (dstExists) clearEpubCacheIfNeeded(dstPath);
     // Like a move in the File Manager: the book keeps its position, bookmarks and stats.
     BookRelocation::moved(srcPath.c_str(), dstPath.c_str());
     s.send(dstExists ? 204 : 201);
@@ -620,12 +609,11 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
-  }
-
+  // The copy is made beside the destination and takes its place only once complete, like a PUT.
+  // The file it replaces used to be removed first, so a copy that failed part-way lost it.
+  const String tempPath = dstPath + ".davtmp";
   FsFile dstFile;
-  if (!Storage.openFileForWrite("DAV", dstPath, dstFile)) {
+  if (!Storage.openFileForWrite("DAV", tempPath, dstFile)) {
     srcFile.close();
     s.send(500, "text/plain", "Failed to create destination");
     return;
@@ -646,12 +634,12 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   srcFile.close();
-  dstFile.close();
+  if (!dstFile.close()) copyOk = false;
 
-  if (copyOk) {
+  if (copyOk && FileReplace::replace(tempPath.c_str(), dstPath.c_str())) {
     s.send(dstExists ? 204 : 201);
   } else {
-    Storage.remove(dstPath.c_str());
+    Storage.remove(tempPath.c_str());
     s.send(500, "text/plain", "Copy failed - disk full?");
   }
 }
