@@ -264,16 +264,18 @@ void HalGPIO::latchTouchGestures(const uint32_t timeMs) {
 // Latches the SDK's one-shot single-contact events. See TouchEvent for why they
 // cannot simply be read from the loop task. Drops the newest on a full ring,
 // matching pushEdgeLocked.
+void HalGPIO::pushTouchEvent(const TouchEvent& event) {
+  portENTER_CRITICAL(&inputMux_);
+  const int next = (touchEventTail_ + 1) % TOUCH_EVENT_BUF;
+  if (next != touchEventHead_) {
+    touchEventBuf_[touchEventTail_] = event;
+    touchEventTail_ = next;
+  }
+  portEXIT_CRITICAL(&inputMux_);
+}
+
 void HalGPIO::latchTouchEvents() {
-  const auto push = [&](const TouchEvent& event) {
-    portENTER_CRITICAL(&inputMux_);
-    const int next = (touchEventTail_ + 1) % TOUCH_EVENT_BUF;
-    if (next != touchEventHead_) {
-      touchEventBuf_[touchEventTail_] = event;
-      touchEventTail_ = next;
-    }
-    portEXIT_CRITICAL(&inputMux_);
-  };
+  const auto push = [&](const TouchEvent& event) { pushTouchEvent(event); };
 
   const uint32_t now = millis();
   TouchEvent event;
@@ -736,6 +738,36 @@ void HalGPIO::injectPress(const uint8_t buttonIndex, const bool longPress, const
   accumReleased_ |= (1u << buttonIndex);
   pushEdgeLocked(buttonIndex, true, pressAt);
   pushEdgeLocked(buttonIndex, false, releaseAt);
+  portEXIT_CRITICAL(&inputMux_);
+}
+
+void HalGPIO::injectTouch(const float nx, const float ny) {
+  if (!hasTouch()) return;
+  TouchEvent tap;
+  tap.kind = TouchEvent::Kind::Tap;
+  tap.nx = nx;
+  tap.ny = ny;
+  tap.heldMs = 80;  // a quick tap; nothing downstream times a tap's contact
+  tap.atMs = millis();
+  pushTouchEvent(tap);
+  portENTER_CRITICAL(&inputMux_);
+  touchReleasedPending_ = true;
+  portEXIT_CRITICAL(&inputMux_);
+}
+
+void HalGPIO::injectSwipe(const float nx, const float ny, const float nxEnd, const float nyEnd) {
+  if (!hasTouch()) return;
+  TouchEvent swipe;
+  swipe.kind = TouchEvent::Kind::Swipe;
+  swipe.nx = nx;
+  swipe.ny = ny;
+  swipe.nxEnd = nxEnd;
+  swipe.nyEnd = nyEnd;
+  swipe.heldMs = 200;  // well inside the SDK's TOUCH_SWIPE_MAX_MS
+  swipe.atMs = millis();
+  pushTouchEvent(swipe);
+  portENTER_CRITICAL(&inputMux_);
+  touchReleasedPending_ = true;
   portEXIT_CRITICAL(&inputMux_);
 }
 

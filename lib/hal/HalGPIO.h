@@ -240,6 +240,8 @@ class HalGPIO {
   // beside latchTouchGestures() and under the same rule: reads the SDK outside
   // inputMux_, takes the lock only to push.
   void latchTouchEvents();
+  // Queue one event for the next update(); drops it when the ring is full. Takes inputMux_.
+  void pushTouchEvent(const TouchEvent& event);
   // Drop every latched and snapshotted touch event, gestures included.
   void clearTouchEventState();
   static void samplerTask(void* arg);
@@ -289,6 +291,14 @@ class HalGPIO {
   // ButtonEventManager::LONG_PRESS_MS, which lives in src/ and cannot be included from the HAL;
   // ActivityManager static_asserts the relationship where both are visible.
   static constexpr uint32_t INJECTED_LONG_PRESS_MS = 1500;
+  // Synthesize a finished contact from something that is not a finger -- the serial CMD:TOUCH and
+  // CMD:SWIPE: a tap at (nx, ny), or a swipe from there to (nxEnd, nyEnd), in the same normalized
+  // panel-native coordinates the controller reports (GfxRenderer::logicalToTap() makes them). It
+  // joins the queue the sampler fills, so everything downstream (gestures, list taps, the reader's
+  // tap zones) reads it as the SDK's own classification. The live "finger is down" queries never
+  // see it. No-op on a board without a touch panel.
+  void injectTouch(float nx, float ny);
+  void injectSwipe(float nx, float ny, float nxEnd, float nyEnd);
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;

@@ -60,4 +60,35 @@ inline void tapToLogical(const int orientation, const int panelWidth, const int 
   }
 }
 
+// Logical screen pixels -> panel-native normalized touch: the inverse of tapToLogical(), for code
+// that has to produce a touch at a point it knows on screen (the serial CMD:TOUCH). Aims at the
+// centre of the physical pixel, so tapToLogical() maps the result back onto the same point.
+// The point must be on screen (0 <= x < logical width, 0 <= y < logical height).
+inline void logicalToTap(const int orientation, const int panelWidth, const int panelHeight, const int x, const int y,
+                         float& outNx, float& outNy) {
+  int phyX;
+  int phyY;
+  switch (orientation) {
+    case Portrait:
+      phyX = y;
+      phyY = panelHeight - 1 - x;
+      break;
+    case PortraitInverted:
+      phyX = panelWidth - 1 - y;
+      phyY = x;
+      break;
+    case LandscapeClockwise:
+      phyX = panelWidth - 1 - x;
+      phyY = panelHeight - 1 - y;
+      break;
+    case LandscapeCounterClockwise:
+    default:
+      phyX = x;
+      phyY = y;
+      break;
+  }
+  outNx = (static_cast<float>(phyX) + 0.5f) / static_cast<float>(panelWidth);
+  outNy = (static_cast<float>(phyY) + 0.5f) / static_cast<float>(panelHeight);
+}
+
 }  // namespace touchtransform
