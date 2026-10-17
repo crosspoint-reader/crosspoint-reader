@@ -1738,7 +1738,17 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   // ancestor's scope, and the reset in endElement only fires at the depth that set it.
   // Known limit of the single slot: a descendant's explicit `color: black` cannot re-enable
   // text inside a transparent ancestor. No OCR layer does that; a stack would if one ever does.
-  if (cssStyle.isTextTransparent() && self->depth < self->skipTextUntilDepth) {
+  //
+  // Text declared too small to read takes the same exit (isFontSizeInvisible): a Polish watermark
+  // is a <span style="color:white; font-size:1px">===LxkoGigb...</span> in the prose, which the
+  // MIN_WORD_SIZE_PCT floor raised into visible gibberish. html/body are exempt: a root size is a
+  // baseline (the `html { font-size: 6.25% }` 1rem = 1px idiom), not a hidden run. The single
+  // slot's limit holds here too -- a descendant re-declaring a readable size stays hidden -- which
+  // is why `font-size: 0`, the zero-size container idiom whose children do exactly that, is left
+  // alone: it is not parsed as a size at all.
+  // Based on crosspoint-reader PR #2326 (Maciej, @mchuck), reworked to hide the text only.
+  const bool unreadablySmall = cssStyle.isFontSizeInvisible() && !isRootFontSizeElement(name);
+  if ((cssStyle.isTextTransparent() || unreadablySmall) && self->depth < self->skipTextUntilDepth) {
     self->skipTextUntilDepth = self->depth;
   }
 

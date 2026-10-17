@@ -1,0 +1,142 @@
+BOOK title=Tiny Font Text lang=en spine=7 toc=0 reliableToc=0
+SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=4 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=1
+   W x=154 s=1 z=100 t=Watermark
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=VISIBLEBEFORE
+   W x=169 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=sentence
+   W x=319 s=0 z=100 t=goes
+   W x=382 s=0 z=100 t=on
+   W x=427 s=0 z=100 t=and
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=VISIBLEAFTER
+   W x=120 s=0 z=100 t=it
+   W x=142 s=0 z=100 t=ends.
+  LINE y=86 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=0 z=100 t=VISIBLETWO
+   W x=118 s=0 z=100 t=a
+   W x=136 s=0 z=100 t=class
+   W x=188 s=0 z=100 t=rule
+   W x=231 s=0 z=100 t=hides
+   W x=281 s=0 z=100 t=the
+   W x=318 s=0 z=100 t=same
+   W x=364 s=0 z=100 t=way.
+SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=1
+   W x=155 s=1 z=100 t=Threshold
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=18 s=0 z=100 t=VISIBLETHREE
+   W x=144 s=0 z=100 t=end.
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=VISIBLEFOUR
+   W x=127 s=0 z=30 t=TENPCTSTAYS
+   W x=159 s=0 z=30 t=TENTHEMSTAYS
+   W x=193 s=0 z=30 t=TWOPXSTAYS
+   W x=222 s=0 z=60 t=XXSMALLSTAYS
+   W x=297 s=0 z=100 t=end.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=5 footnotes=1
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=3
+   W x=105 s=1 z=100 t=Small
+   W x=206 s=1 z=100 t=But
+   W x=269 s=1 z=100 t=Meant
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=VISIBLEFIVE
+   W x=138 s=0 z=100 t=E
+   W x=164 s=0 z=100 t==
+   W x=189 s=0 z=100 t=mc
+   W x=206 s=16 z=50 t=2
+   W x=221 s=0 z=100 t=and
+   W x=266 s=0 z=100 t=H
+   W x=274 s=32 z=50 t=2
+   W x=278 s=0 z=100 t=O
+   W x=286 s=20 z=60 t=1
+   W x=302 s=2 z=100 t=(VISIBLESIX
+   W x=429 s=2 z=100 t=the
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=0 s=2 z=100 t=note.)
+   W x=90 s=0 z=100 t=with
+   W x=150 s=0 z=80 t=SMALLSTAYS
+   W x=229 s=0 z=100 t=,
+   W x=263 s=64 z=100 t=SmallCapsStays
+   W x=429 s=0 z=100 t=and
+  LINE y=86 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=16 z=40 t=SMALLSUPSTAYS
+   W x=51 s=0 z=100 t=.
+  LINE y=110 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=VISIBLESIX
+   W x=126 s=0 z=100 t=the
+   W x=163 s=0 z=100 t=note.
+  FN n=1 href=#n1
+SPINE 3 href=OEBPS/chapter4.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=5 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=3
+   W x=92 s=1 z=100 t=Blocks
+   W x=198 s=1 z=100 t=And
+   W x=256 s=1 z=100 t=Nesting
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=18 s=0 z=100 t=VISIBLESEVEN
+   W x=146 s=0 z=100 t=after.
+  IMG y=62 x=210 w=40 h=60 src=<cache>/epub_<hash>/img_1422329c5b1b14d1.png
+  LINE y=122 x=0 align=0 mult=1.000 hfid=0 words=7
+   W x=18 s=0 z=100 t=VISIBLEEIGHT
+   W x=141 s=0 z=100 t=the
+   W x=182 s=0 z=100 t=image
+   W x=240 s=0 z=100 t=above
+   W x=301 s=0 z=100 t=survives
+   W x=387 s=0 z=100 t=its
+   W x=422 s=0 z=100 t=tiny
+  LINE y=146 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=wrapper.
+SPINE 4 href=OEBPS/chapter5.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=2 footnotes=0
+  LINE y=0 x=0 align=2 mult=0.480 hfid=0 words=2
+   W x=197 s=1 z=100 t=Root
+   W x=224 s=1 z=100 t=Baseline
+  LINE y=12 x=0 align=0 mult=0.300 hfid=0 words=11
+   W x=5 s=0 z=100 t=ROOTVISIBLE
+   W x=38 s=0 z=100 t=a
+   W x=44 s=0 z=100 t=tiny
+   W x=57 s=0 z=100 t=body
+   W x=69 s=0 z=100 t=size
+   W x=81 s=0 z=100 t=is
+   W x=88 s=0 z=100 t=a
+   W x=94 s=0 z=100 t=baseline,
+   W x=120 s=0 z=100 t=not
+   W x=132 s=0 z=100 t=a
+   W x=138 s=0 z=100 t=watermark.
+SPINE 5 href=OEBPS/chapter6.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=2
+   W x=110 s=1 z=100 t=Zero
+   W x=192 s=1 z=100 t=Container
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=18 s=0 z=100 t=ZEROVISIBLE
+   W x=138 s=0 z=100 t=ZEROVISIBLETWO
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=VISIBLENINE
+   W x=130 s=0 z=100 t=must
+   W x=176 s=0 z=100 t=survive.
+SPINE 6 href=OEBPS/chapter7.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=3
+   W x=83 s=1 z=100 t=Nothing
+   W x=215 s=1 z=100 t=Hidden
+   W x=315 s=1 z=100 t=Here
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=18 s=0 z=100 t=A
+   W x=33 s=0 z=100 t=control
+   W x=109 s=0 z=100 t=chapter:
+   W x=188 s=0 z=100 t=every
+   W x=241 s=0 z=100 t=word
+   W x=282 s=0 z=100 t=in
+   W x=306 s=0 z=100 t=it
+   W x=329 s=0 z=100 t=must
+   W x=376 s=0 z=100 t=appear
+   W x=436 s=0 z=100 t=in
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=the
+   W x=37 s=0 z=100 t=golden.
