@@ -1,0 +1,1708 @@
+BOOK title=Text Rendering Tests lang=en spine=8 toc=8 reliableToc=1
+SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=13 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=6
+   W x=78 s=1 z=100 t=Te
+   W x=105 s=1 z=100 t=xt
+   W x=145 s=1 z=100 t=Rende
+   W x=230 s=1 z=100 t=ring
+   W x=304 s=1 z=100 t=Tes
+   W x=347 s=1 z=100 t=ts
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=15
+   W x=18 s=1 z=100 t=Th
+   W x=38 s=0 z=100 t=is
+   W x=59 s=1 z=100 t=EP
+   W x=82 s=0 z=100 t=UB
+   W x=104 s=1 z=100 t=tes
+   W x=135 s=0 z=100 t=ts
+   W x=160 s=1 z=100 t=te
+   W x=181 s=0 z=100 t=xt
+   W x=204 s=1 z=100 t=rende
+   W x=254 s=0 z=100 t=ring
+   W x=296 s=1 z=100 t=ed
+   W x=315 s=0 z=100 t=ge
+   W x=341 s=1 z=100 t=cas
+   W x=372 s=0 z=100 t=es
+   W x=390 s=0 z=100 t=.
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=1 z=100 t=Te
+   W x=35 s=1 z=100 t=st
+   W x=62 s=1 z=100 t=Pl
+   W x=82 s=1 z=100 t=an
+   W x=107 s=1 z=100 t=:
+  LINE y=86 x=27 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=0 z=100 t=•
+   W x=31 s=0 z=100 t=pre
+   W x=60 s=1 z=100 t=elem
+   W x=101 s=0 z=100 t=ent
+   W x=131 s=0 z=100 t=:
+   W x=145 s=1 z=100 t=intri
+   W x=191 s=0 z=100 t=nsic
+   W x=230 s=1 z=100 t=li
+   W x=247 s=0 z=100 t=ne
+   W x=273 s=1 z=100 t=bre
+   W x=299 s=0 z=100 t=aks
+   W x=334 s=1 z=100 t=prese
+   W x=380 s=0 z=100 t=rved
+  LINE y=110 x=27 align=0 mult=1.000 hfid=0 words=14
+   W x=18 s=0 z=100 t=•
+   W x=31 s=0 z=100 t=pre
+   W x=60 s=1 z=100 t=elem
+   W x=101 s=0 z=100 t=ent
+   W x=131 s=0 z=100 t=:
+   W x=145 s=1 z=100 t=lead
+   W x=187 s=0 z=100 t=ing
+   W x=215 s=0 z=100 t=/
+   W x=226 s=1 z=100 t=trai
+   W x=266 s=0 z=100 t=ling
+   W x=309 s=1 z=100 t=bla
+   W x=339 s=0 z=100 t=nk
+   W x=364 s=1 z=100 t=lin
+   W x=393 s=0 z=100 t=es
+  LINE y=134 x=27 align=0 mult=1.000 hfid=0 words=10
+   W x=18 s=0 z=100 t=•
+   W x=31 s=0 z=100 t=pre
+   W x=60 s=1 z=100 t=wi
+   W x=74 s=0 z=100 t=th
+   W x=102 s=1 z=100 t=inl
+   W x=131 s=0 z=100 t=ine
+   W x=163 s=1 z=100 t=co
+   W x=184 s=0 z=100 t=de
+   W x=207 s=1 z=100 t=elem
+   W x=248 s=0 z=100 t=ent
+  LINE y=158 x=27 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=horiz
+   W x=83 s=0 z=100 t=ontal
+   W x=143 s=1 z=100 t=rul
+   W x=174 s=0 z=100 t=es
+   W x=198 s=1 z=100 t=betw
+   W x=233 s=0 z=100 t=een
+   W x=268 s=1 z=100 t=parag
+   W x=322 s=0 z=100 t=raphs
+  LINE y=182 x=27 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=0 z=100 t=•
+   W x=54 s=1 z=100 t=supers
+   W x=112 s=0 z=100 t=cript
+   W x=178 s=0 z=100 t=and
+   W x=238 s=1 z=100 t=subsc
+   W x=285 s=0 z=100 t=ript
+   W x=344 s=1 z=100 t=rende
+   W x=394 s=0 z=100 t=ring
+  LINE y=206 x=27 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=0 z=100 t=(<
+   W x=21 s=0 z=100 t=sup
+   W x=47 s=0 z=100 t=>/<
+   W x=80 s=0 z=100 t=sub
+   W x=106 s=0 z=100 t=>
+   W x=124 s=1 z=100 t=ta
+   W x=148 s=0 z=100 t=gs
+   W x=168 s=0 z=100 t=)
+  LINE y=230 x=27 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=0 z=100 t=•
+   W x=53 s=1 z=100 t=supers
+   W x=111 s=0 z=100 t=cript
+   W x=176 s=0 z=100 t=and
+   W x=235 s=1 z=100 t=subsc
+   W x=282 s=0 z=100 t=ript
+   W x=340 s=0 z=100 t=via
+   W x=398 s=0 z=100 t=CSS
+  LINE y=254 x=27 align=0 mult=1.000 hfid=0 words=7
+   W x=0 s=1 z=100 t=vert
+   W x=43 s=0 z=100 t=ical
+   W x=77 s=0 z=100 t=-
+   W x=86 s=1 z=100 t=ali
+   W x=116 s=0 z=100 t=gn
+   W x=144 s=1 z=100 t=prop
+   W x=180 s=0 z=100 t=erty
+  LINE y=278 x=27 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=0 z=100 t=•
+   W x=55 s=1 z=100 t=li
+   W x=72 s=0 z=100 t=st
+   W x=121 s=1 z=100 t=rende
+   W x=171 s=0 z=100 t=ring
+   W x=207 s=0 z=100 t=:
+   W x=245 s=0 z=100 t=ul
+   W x=265 s=0 z=100 t=,
+   W x=303 s=0 z=100 t=ol
+   W x=324 s=0 z=100 t=,
+   W x=362 s=1 z=100 t=nes
+   W x=394 s=0 z=100 t=ted
+   W x=421 s=0 z=100 t=,
+  LINE y=302 x=27 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=1 z=100 t=sta
+   W x=34 s=0 z=100 t=rt
+   W x=52 s=0 z=100 t=/
+   W x=63 s=1 z=100 t=val
+   W x=99 s=0 z=100 t=ue
+   W x=125 s=1 z=100 t=attri
+   W x=176 s=0 z=100 t=butes
+   W x=221 s=0 z=100 t=,
+   W x=235 s=1 z=100 t=ba
+   W x=255 s=0 z=100 t=re
+   W x=278 s=0 z=100 t=li
+SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=8 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=8
+   W x=36 s=1 z=100 t=pre
+   W x=78 s=1 z=100 t=:
+   W x=102 s=1 z=100 t=Intri
+   W x=180 s=1 z=100 t=nsic
+   W x=249 s=1 z=100 t=Li
+   W x=281 s=1 z=100 t=ne
+   W x=326 s=1 z=100 t=Bre
+   W x=372 s=1 z=100 t=aks
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=17
+   W x=18 s=0 z=100 t=The
+   W x=53 s=1 z=100 t=blo
+   W x=83 s=0 z=100 t=ck
+   W x=106 s=1 z=100 t=bel
+   W x=133 s=0 z=100 t=ow
+   W x=159 s=0 z=100 t=is
+   W x=182 s=0 z=100 t=a
+   W x=202 s=1 z=100 t=sin
+   W x=231 s=0 z=100 t=gle
+   W x=268 s=0 z=100 t=<
+   W x=278 s=0 z=100 t=pre
+   W x=301 s=0 z=100 t=>
+   W x=321 s=1 z=100 t=elem
+   W x=362 s=0 z=100 t=ent
+   W x=392 s=0 z=100 t=.
+   W x=410 s=1 z=100 t=Ea
+   W x=436 s=0 z=100 t=ch
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=14
+   W x=0 s=1 z=100 t=sou
+   W x=35 s=0 z=100 t=rce
+   W x=65 s=1 z=100 t=li
+   W x=82 s=0 z=100 t=ne
+   W x=108 s=1 z=100 t=mu
+   W x=131 s=0 z=100 t=st
+   W x=156 s=1 z=100 t=app
+   W x=183 s=0 z=100 t=ear
+   W x=218 s=0 z=100 t=on
+   W x=247 s=0 z=100 t=its
+   W x=278 s=0 z=100 t=own
+   W x=313 s=1 z=100 t=li
+   W x=330 s=0 z=100 t=ne
+   W x=350 s=0 z=100 t=:
+  LINE y=86 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=1 z=100 t=Li
+   W x=38 s=0 z=100 t=ne
+   W x=64 s=0 z=100 t=one
+  LINE y=110 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=1 z=100 t=Li
+   W x=38 s=0 z=100 t=ne
+   W x=64 s=0 z=100 t=two
+  LINE y=134 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=18 s=1 z=100 t=Li
+   W x=38 s=0 z=100 t=ne
+   W x=64 s=1 z=100 t=thr
+   W x=97 s=0 z=100 t=ee
+  LINE y=158 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=1 z=100 t=Nor
+   W x=48 s=0 z=100 t=mal
+   W x=94 s=1 z=100 t=parag
+   W x=148 s=0 z=100 t=raph
+   W x=201 s=1 z=100 t=aft
+   W x=236 s=0 z=100 t=er
+   W x=268 s=0 z=100 t=the
+   W x=314 s=0 z=100 t=pre
+   W x=352 s=1 z=100 t=blo
+   W x=382 s=0 z=100 t=ck
+   W x=397 s=0 z=100 t=.
+   W x=422 s=1 z=100 t=Te
+   W x=439 s=0 z=100 t=xt
+  LINE y=182 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=1 z=100 t=resu
+   W x=41 s=0 z=100 t=mes
+   W x=75 s=0 z=100 t=as
+   W x=102 s=0 z=100 t=a
+   W x=120 s=1 z=100 t=regu
+   W x=163 s=0 z=100 t=lar
+   W x=198 s=1 z=100 t=wrap
+   W x=234 s=0 z=100 t=ped
+   W x=263 s=1 z=100 t=parag
+   W x=317 s=0 z=100 t=raph
+   W x=355 s=0 z=100 t=.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=10 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=6
+   W x=107 s=1 z=100 t=pre
+   W x=149 s=1 z=100 t=:
+   W x=173 s=1 z=100 t=Bla
+   W x=226 s=1 z=100 t=nk
+   W x=270 s=1 z=100 t=Lin
+   W x=321 s=1 z=100 t=es
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=The
+   W x=54 s=0 z=100 t=pre
+   W x=86 s=1 z=100 t=blo
+   W x=116 s=0 z=100 t=ck
+   W x=140 s=1 z=100 t=bel
+   W x=167 s=0 z=100 t=ow
+   W x=194 s=1 z=100 t=cont
+   W x=238 s=0 z=100 t=ains
+   W x=285 s=1 z=100 t=intent
+   W x=348 s=0 z=100 t=ional
+   W x=407 s=1 z=100 t=bla
+   W x=437 s=0 z=100 t=nk
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=1 z=100 t=lin
+   W x=29 s=0 z=100 t=es
+   W x=53 s=1 z=100 t=betw
+   W x=88 s=0 z=100 t=een
+   W x=123 s=1 z=100 t=co
+   W x=144 s=0 z=100 t=de
+   W x=167 s=1 z=100 t=lin
+   W x=196 s=0 z=100 t=es
+   W x=214 s=0 z=100 t=:
+  LINE y=86 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=18 s=1 z=100 t=Fir
+   W x=41 s=0 z=100 t=st
+   W x=66 s=1 z=100 t=li
+   W x=83 s=0 z=100 t=ne
+  LINE y=110 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=18 s=0 z=100 t= 
+  LINE y=134 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=1 z=100 t=Thi
+   W x=45 s=0 z=100 t=rd
+   W x=67 s=1 z=100 t=li
+   W x=84 s=0 z=100 t=ne
+   W x=110 s=0 z=100 t=(
+   W x=121 s=1 z=100 t=bla
+   W x=151 s=0 z=100 t=nk
+   W x=176 s=1 z=100 t=li
+   W x=193 s=0 z=100 t=ne
+   W x=219 s=1 z=100 t=abo
+   W x=252 s=0 z=100 t=ve
+   W x=273 s=0 z=100 t=)
+  LINE y=158 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=18 s=0 z=100 t= 
+  LINE y=182 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=1 z=100 t=Fif
+   W x=43 s=0 z=100 t=th
+   W x=71 s=1 z=100 t=li
+   W x=88 s=0 z=100 t=ne
+   W x=114 s=0 z=100 t=(
+   W x=125 s=1 z=100 t=bla
+   W x=155 s=0 z=100 t=nk
+   W x=180 s=1 z=100 t=li
+   W x=197 s=0 z=100 t=ne
+   W x=223 s=1 z=100 t=abo
+   W x=256 s=0 z=100 t=ve
+   W x=277 s=0 z=100 t=)
+  LINE y=206 x=0 align=0 mult=1.000 hfid=0 words=15
+   W x=18 s=1 z=100 t=Ea
+   W x=44 s=0 z=100 t=ch
+   W x=69 s=1 z=100 t=bla
+   W x=99 s=0 z=100 t=nk
+   W x=124 s=1 z=100 t=li
+   W x=141 s=0 z=100 t=ne
+   W x=167 s=0 z=100 t=in
+   W x=190 s=0 z=100 t=the
+   W x=227 s=1 z=100 t=sou
+   W x=262 s=0 z=100 t=rce
+   W x=292 s=1 z=100 t=sho
+   W x=328 s=0 z=100 t=uld
+   W x=362 s=1 z=100 t=prod
+   W x=400 s=0 z=100 t=uce
+   W x=433 s=0 z=100 t=an
+  LINE y=230 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=1 z=100 t=emp
+   W x=28 s=0 z=100 t=ty
+   W x=52 s=1 z=100 t=li
+   W x=69 s=0 z=100 t=ne
+   W x=95 s=0 z=100 t=in
+   W x=118 s=0 z=100 t=the
+   W x=155 s=1 z=100 t=out
+   W x=191 s=0 z=100 t=put
+   W x=218 s=0 z=100 t=.
+SPINE 3 href=OEBPS/chapter4.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=10 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=9
+   W x=19 s=1 z=100 t=pre
+   W x=71 s=1 z=100 t=wi
+   W x=93 s=1 z=100 t=th
+   W x=141 s=1 z=100 t=Nes
+   W x=186 s=1 z=100 t=ted
+   W x=244 s=1 z=100 t=co
+   W x=278 s=1 z=100 t=de
+   W x=318 s=1 z=100 t=Elem
+   W x=388 s=1 z=100 t=ent
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=7
+   W x=18 s=1 z=100 t=Com
+   W x=53 s=0 z=100 t=mon
+   W x=147 s=1 z=100 t=EP
+   W x=170 s=0 z=100 t=UB
+   W x=247 s=1 z=100 t=patt
+   W x=289 s=0 z=100 t=ern
+   W x=317 s=0 z=100 t=:
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=17
+   W x=0 s=0 z=100 t=<
+   W x=10 s=0 z=100 t=pre
+   W x=33 s=0 z=100 t=><
+   W x=55 s=1 z=100 t=co
+   W x=76 s=0 z=100 t=de
+   W x=93 s=0 z=100 t=>...</
+   W x=156 s=1 z=100 t=co
+   W x=177 s=0 z=100 t=de
+   W x=194 s=0 z=100 t=></
+   W x=227 s=0 z=100 t=pre
+   W x=250 s=0 z=100 t=>.
+   W x=289 s=1 z=100 t=Li
+   W x=309 s=0 z=100 t=ne
+   W x=346 s=1 z=100 t=bre
+   W x=372 s=0 z=100 t=aks
+   W x=418 s=1 z=100 t=mu
+   W x=441 s=0 z=100 t=st
+  LINE y=86 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=0 s=1 z=100 t=sti
+   W x=28 s=0 z=100 t=ll
+   W x=52 s=0 z=100 t=be
+   W x=73 s=1 z=100 t=prese
+   W x=119 s=0 z=100 t=rved
+   W x=156 s=0 z=100 t=:
+  LINE y=110 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=1 z=100 t=func
+   W x=61 s=0 z=100 t=tion
+   W x=106 s=1 z=100 t=gre
+   W x=137 s=0 z=100 t=et
+   W x=156 s=0 z=100 t=(
+   W x=167 s=1 z=100 t=na
+   W x=192 s=0 z=100 t=me
+   W x=211 s=0 z=100 t=)
+   W x=229 s=0 z=100 t={
+  LINE y=134 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=18 s=1 z=100 t=ret
+   W x=48 s=0 z=100 t=urn
+   W x=84 s=0 z=100 t="
+   W x=96 s=1 z=100 t=Hel
+   W x=125 s=0 z=100 t=lo
+   W x=146 s=0 z=100 t=,
+   W x=160 s=0 z=100 t="
+   W x=178 s=0 z=100 t=+
+   W x=191 s=1 z=100 t=na
+   W x=216 s=0 z=100 t=me
+   W x=235 s=0 z=100 t=;
+  LINE y=158 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=18 s=0 z=100 t=}
+  LINE y=182 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=18 s=0 z=100 t= 
+  LINE y=206 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=1 z=100 t=gre
+   W x=49 s=0 z=100 t=et
+   W x=68 s=0 z=100 t=("
+   W x=91 s=1 z=100 t=Wor
+   W x=123 s=0 z=100 t=ld
+   W x=140 s=0 z=100 t=");
+  LINE y=230 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=1 z=100 t=Nor
+   W x=48 s=0 z=100 t=mal
+   W x=85 s=1 z=100 t=parag
+   W x=139 s=0 z=100 t=raph
+   W x=183 s=1 z=100 t=aft
+   W x=218 s=0 z=100 t=er
+   W x=241 s=0 z=100 t=pre
+   W x=264 s=0 z=100 t=/
+   W x=275 s=1 z=100 t=co
+   W x=296 s=0 z=100 t=de
+   W x=319 s=1 z=100 t=blo
+   W x=349 s=0 z=100 t=ck
+   W x=364 s=0 z=100 t=.
+SPINE 4 href=OEBPS/chapter5.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=25 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=6
+   W x=61 s=1 z=100 t=Horiz
+   W x=138 s=1 z=100 t=ontal
+   W x=242 s=1 z=100 t=Ru
+   W x=280 s=1 z=100 t=le
+   W x=322 s=1 z=100 t=Tes
+   W x=365 s=1 z=100 t=ts
+  LINE y=38 x=0 align=0 mult=1.000 hfid=0 words=17
+   W x=18 s=0 z=100 t=A
+   W x=33 s=1 z=100 t=pla
+   W x=63 s=0 z=100 t=in
+   W x=87 s=0 z=100 t=<
+   W x=97 s=0 z=100 t=hr
+   W x=117 s=0 z=100 t=>
+   W x=136 s=1 z=100 t=betw
+   W x=171 s=0 z=100 t=een
+   W x=207 s=0 z=100 t=two
+   W x=242 s=1 z=100 t=parag
+   W x=296 s=0 z=100 t=raphs
+   W x=343 s=0 z=100 t=.
+   W x=360 s=0 z=100 t=A
+   W x=375 s=1 z=100 t=th
+   W x=399 s=0 z=100 t=in
+   W x=423 s=1 z=100 t=li
+   W x=440 s=0 z=100 t=ne
+  LINE y=62 x=0 align=0 mult=1.000 hfid=0 words=14
+   W x=0 s=1 z=100 t=sho
+   W x=36 s=0 z=100 t=uld
+   W x=70 s=1 z=100 t=app
+   W x=97 s=0 z=100 t=ear
+   W x=132 s=1 z=100 t=betw
+   W x=167 s=0 z=100 t=een
+   W x=202 s=0 z=100 t=the
+   W x=239 s=0 z=100 t=two
+   W x=273 s=1 z=100 t=blo
+   W x=303 s=0 z=100 t=cks
+   W x=333 s=0 z=100 t=of
+   W x=361 s=1 z=100 t=te
+   W x=382 s=0 z=100 t=xt
+   W x=399 s=0 z=100 t=.
+  LINE y=86 x=0 align=0 mult=1.000 hfid=0 words=14
+   W x=18 s=1 z=100 t=Parag
+   W x=75 s=0 z=100 t=raph
+   W x=123 s=1 z=100 t=bef
+   W x=151 s=0 z=100 t=ore
+   W x=190 s=0 z=100 t=the
+   W x=231 s=1 z=100 t=fir
+   W x=258 s=0 z=100 t=st
+   W x=287 s=1 z=100 t=ru
+   W x=308 s=0 z=100 t=le
+   W x=326 s=0 z=100 t=.
+   W x=346 s=1 z=100 t=Lor
+   W x=381 s=0 z=100 t=em
+   W x=410 s=1 z=100 t=ips
+   W x=434 s=0 z=100 t=um
+  LINE y=110 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=0 s=1 z=100 t=dol
+   W x=32 s=0 z=100 t=or
+   W x=58 s=0 z=100 t=sit
+   W x=89 s=1 z=100 t=am
+   W x=113 s=0 z=100 t=et
+   W x=132 s=0 z=100 t=,
+   W x=146 s=1 z=100 t=consec
+   W x=207 s=0 z=100 t=tetur
+   W x=261 s=1 z=100 t=adipi
+   W x=304 s=0 z=100 t=scing
+   W x=354 s=1 z=100 t=el
+   W x=374 s=0 z=100 t=it
+   W x=390 s=0 z=100 t=.
+  HR y=146 x=115
+  LINE y=159 x=0 align=0 mult=1.000 hfid=0 words=15
+   W x=18 s=1 z=100 t=Parag
+   W x=75 s=0 z=100 t=raph
+   W x=120 s=1 z=100 t=aft
+   W x=155 s=0 z=100 t=er
+   W x=179 s=0 z=100 t=the
+   W x=217 s=1 z=100 t=fir
+   W x=244 s=0 z=100 t=st
+   W x=270 s=1 z=100 t=ru
+   W x=291 s=0 z=100 t=le
+   W x=309 s=0 z=100 t=.
+   W x=326 s=0 z=100 t=The
+   W x=360 s=1 z=100 t=ru
+   W x=381 s=0 z=100 t=le
+   W x=406 s=1 z=100 t=abo
+   W x=439 s=0 z=100 t=ve
+  LINE y=183 x=0 align=0 mult=1.000 hfid=0 words=14
+   W x=0 s=1 z=100 t=sho
+   W x=36 s=0 z=100 t=uld
+   W x=70 s=0 z=100 t=be
+   W x=91 s=0 z=100 t=a
+   W x=109 s=1 z=100 t=fu
+   W x=132 s=0 z=100 t=ll
+   W x=150 s=0 z=100 t=-
+   W x=159 s=1 z=100 t=wid
+   W x=182 s=0 z=100 t=th
+   W x=210 s=1 z=100 t=horiz
+   W x=262 s=0 z=100 t=ontal
+   W x=322 s=1 z=100 t=li
+   W x=339 s=0 z=100 t=ne
+   W x=359 s=0 z=100 t=.
+  HR y=219 x=115
+  LINE y=232 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=1 z=100 t=Sec
+   W x=49 s=0 z=100 t=ond
+   W x=90 s=1 z=100 t=ru
+   W x=111 s=0 z=100 t=le
+   W x=139 s=1 z=100 t=abo
+   W x=172 s=0 z=100 t=ve
+   W x=193 s=0 z=100 t=.
+   W x=213 s=0 z=100 t=Two
+   W x=247 s=1 z=100 t=rul
+   W x=278 s=0 z=100 t=es
+   W x=306 s=0 z=100 t=in
+   W x=333 s=0 z=100 t=a
+   W x=355 s=0 z=100 t=row
+   W x=391 s=1 z=100 t=wi
+   W x=405 s=0 z=100 t=th
+   W x=437 s=0 z=100 t=no
+  LINE y=256 x=0 align=0 mult=1.000 hfid=0 words=7
+   W x=0 s=1 z=100 t=te
+   W x=21 s=0 z=100 t=xt
+   W x=44 s=1 z=100 t=betw
+   W x=79 s=0 z=100 t=een
+   W x=114 s=1 z=100 t=th
+   W x=138 s=0 z=100 t=em
+   W x=157 s=0 z=100 t=:
+  HR y=292 x=115
+  HR y=317 x=115
+  LINE y=330 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=0 z=100 t=Two
+   W x=48 s=1 z=100 t=rul
+   W x=79 s=0 z=100 t=es
+   W x=103 s=1 z=100 t=appe
+   W x=140 s=0 z=100 t=ared
+   W x=183 s=1 z=100 t=abo
+   W x=216 s=0 z=100 t=ve
+   W x=237 s=0 z=100 t=.
+   W x=253 s=0 z=100 t=Now
+   W x=284 s=0 z=100 t=a
+   W x=302 s=1 z=100 t=ru
+   W x=323 s=0 z=100 t=le
+   W x=347 s=1 z=100 t=rig
+   W x=375 s=0 z=100 t=ht
+   W x=403 s=1 z=100 t=aft
+   W x=438 s=0 z=100 t=er
+  LINE y=354 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=the
+   W x=37 s=1 z=100 t=head
+   W x=82 s=0 z=100 t=ing
+   W x=110 s=0 z=100 t=:
+  HR y=390 x=115
+  LINE y=403 x=0 align=0 mult=1.000 hfid=0 words=14
+   W x=18 s=1 z=100 t=Ru
+   W x=42 s=0 z=100 t=le
+   W x=66 s=1 z=100 t=appe
+   W x=103 s=0 z=100 t=ared
+   W x=146 s=1 z=100 t=rig
+   W x=174 s=0 z=100 t=ht
+   W x=202 s=1 z=100 t=aft
+   W x=237 s=0 z=100 t=er
+   W x=260 s=0 z=100 t=the
+   W x=297 s=1 z=100 t=parag
+   W x=351 s=0 z=100 t=raph
+   W x=395 s=1 z=100 t=abo
+   W x=428 s=0 z=100 t=ve
+   W x=449 s=0 z=100 t=.
+  LINE y=427 x=0 align=0 mult=1.000 hfid=0 words=15
+   W x=0 s=1 z=100 t=Fina
+   W x=39 s=0 z=100 t=lly
+   W x=65 s=0 z=100 t=,
+   W x=86 s=0 z=100 t=a
+   W x=111 s=1 z=100 t=ru
+   W x=132 s=0 z=100 t=le
+   W x=163 s=1 z=100 t=ne
+   W x=185 s=0 z=100 t=ar
+   W x=218 s=0 z=100 t=the
+   W x=262 s=0 z=100 t=end
+   W x=303 s=0 z=100 t=of
+   W x=338 s=0 z=100 t=the
+   W x=382 s=1 z=100 t=pa
+   W x=402 s=0 z=100 t=ge
+   W x=435 s=0 z=100 t=to
+  LINE y=451 x=0 align=0 mult=1.000 hfid=0 words=15
+   W x=0 s=1 z=100 t=ver
+   W x=32 s=0 z=100 t=ify
+   W x=67 s=0 z=100 t=it
+   W x=94 s=1 z=100 t=do
+   W x=116 s=0 z=100 t=es
+   W x=145 s=0 z=100 t=not
+   W x=189 s=1 z=100 t=cau
+   W x=222 s=0 z=100 t=se
+   W x=251 s=0 z=100 t=a
+   W x=274 s=1 z=100 t=spur
+   W x=312 s=0 z=100 t=ious
+   W x=361 s=1 z=100 t=pa
+   W x=381 s=0 z=100 t=ge
+   W x=412 s=1 z=100 t=bre
+   W x=438 s=0 z=100 t=ak
+  LINE y=475 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=1 z=100 t=wh
+   W x=20 s=0 z=100 t=en
+   W x=46 s=1 z=100 t=the
+   W x=80 s=0 z=100 t=re
+   W x=103 s=0 z=100 t=is
+   W x=124 s=1 z=100 t=sti
+   W x=152 s=0 z=100 t=ll
+   W x=176 s=1 z=100 t=ro
+   W x=198 s=0 z=100 t=om
+   W x=220 s=0 z=100 t=:
+  LINE y=499 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=1 z=100 t=Lor
+   W x=53 s=0 z=100 t=em
+   W x=93 s=1 z=100 t=ips
+   W x=117 s=0 z=100 t=um
+   W x=159 s=1 z=100 t=dol
+   W x=191 s=0 z=100 t=or
+   W x=232 s=0 z=100 t=sit
+   W x=278 s=1 z=100 t=am
+   W x=302 s=0 z=100 t=et
+   W x=321 s=0 z=100 t=,
+   W x=350 s=1 z=100 t=consec
+   W x=411 s=0 z=100 t=tetur
+  LINE y=523 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=0 s=1 z=100 t=adipi
+   W x=43 s=0 z=100 t=scing
+   W x=98 s=1 z=100 t=el
+   W x=118 s=0 z=100 t=it
+   W x=134 s=0 z=100 t=,
+   W x=153 s=0 z=100 t=sed
+   W x=190 s=0 z=100 t=do
+   W x=221 s=1 z=100 t=eius
+   W x=260 s=0 z=100 t=mod
+   W x=301 s=1 z=100 t=tem
+   W x=333 s=0 z=100 t=por
+   W x=370 s=1 z=100 t=incid
+   W x=413 s=0 z=100 t=idunt
+  LINE y=547 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=ut
+   W x=27 s=1 z=100 t=lab
+   W x=57 s=0 z=100 t=ore
+   W x=92 s=0 z=100 t=et
+   W x=117 s=1 z=100 t=dol
+   W x=149 s=0 z=100 t=ore
+   W x=184 s=1 z=100 t=mag
+   W x=220 s=0 z=100 t=na
+   W x=249 s=1 z=100 t=ali
+   W x=279 s=0 z=100 t=qua
+   W x=309 s=0 z=100 t=.
+  HR y=583 x=115
+  LINE y=596 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=0 z=100 t=End
+   W x=55 s=0 z=100 t=of
+   W x=83 s=1 z=100 t=horiz
+   W x=135 s=0 z=100 t=ontal
+   W x=195 s=1 z=100 t=ru
+   W x=216 s=0 z=100 t=le
+   W x=240 s=1 z=100 t=tes
+   W x=271 s=0 z=100 t=ts
+   W x=290 s=0 z=100 t=.
+SPINE 5 href=OEBPS/chapter6.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=27 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=6
+   W x=74 s=1 z=100 t=Li
+   W x=106 s=1 z=100 t=st
+   W x=150 s=1 z=100 t=Rende
+   W x=235 s=1 z=100 t=ring
+   W x=309 s=1 z=100 t=Tes
+   W x=352 s=1 z=100 t=ts
+  LINE y=38 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=67 s=1 z=100 t=Unord
+   W x=138 s=1 z=100 t=ered
+   W x=199 s=1 z=100 t=li
+   W x=223 s=1 z=100 t=st
+   W x=260 s=1 z=100 t=(
+   W x=277 s=1 z=100 t=bull
+   W x=332 s=1 z=100 t=ets
+   W x=375 s=1 z=100 t=)
+  LINE y=72 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Fir
+   W x=54 s=0 z=100 t=st
+   W x=79 s=1 z=100 t=it
+   W x=97 s=0 z=100 t=em
+  LINE y=96 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Sec
+   W x=62 s=0 z=100 t=ond
+   W x=99 s=1 z=100 t=it
+   W x=117 s=0 z=100 t=em
+  LINE y=120 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Thi
+   W x=58 s=0 z=100 t=rd
+   W x=80 s=1 z=100 t=it
+   W x=98 s=0 z=100 t=em
+  LINE y=144 x=0 align=2 mult=1.400 hfid=0 words=13
+   W x=40 s=1 z=100 t=Orde
+   W x=92 s=1 z=100 t=red
+   W x=139 s=1 z=100 t=li
+   W x=163 s=1 z=100 t=st
+   W x=200 s=1 z=100 t=(
+   W x=217 s=1 z=100 t=numb
+   W x=276 s=1 z=100 t=ers
+   W x=325 s=1 z=100 t=1
+   W x=335 s=1 z=100 t=,
+   W x=356 s=1 z=100 t=2
+   W x=367 s=1 z=100 t=,
+   W x=388 s=1 z=100 t=3
+   W x=401 s=1 z=100 t=)
+  LINE y=178 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=1
+   W x=24 s=0 z=100 t=.
+   W x=40 s=0 z=100 t=One
+  LINE y=202 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=2
+   W x=25 s=0 z=100 t=.
+   W x=41 s=0 z=100 t=Two
+  LINE y=226 x=27 align=0 mult=1.000 hfid=0 words=4
+   W x=18 s=0 z=100 t=3
+   W x=26 s=0 z=100 t=.
+   W x=42 s=1 z=100 t=Thr
+   W x=71 s=0 z=100 t=ee
+  LINE y=250 x=0 align=2 mult=1.400 hfid=0 words=11
+   W x=47 s=1 z=100 t=Orde
+   W x=99 s=1 z=100 t=red
+   W x=146 s=1 z=100 t=li
+   W x=170 s=1 z=100 t=st
+   W x=207 s=1 z=100 t=wi
+   W x=227 s=1 z=100 t=th
+   W x=269 s=1 z=100 t=sta
+   W x=317 s=1 z=100 t=rt
+   W x=345 s=1 z=100 t=="
+   W x=380 s=1 z=100 t=5
+   W x=395 s=1 z=100 t="
+  LINE y=284 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=95 s=1 z=100 t=(
+   W x=112 s=1 z=100 t=sho
+   W x=162 s=1 z=100 t=uld
+   W x=213 s=1 z=100 t=beg
+   W x=254 s=1 z=100 t=in
+   W x=289 s=1 z=100 t=at
+   W x=331 s=1 z=100 t=5
+   W x=346 s=1 z=100 t=)
+  LINE y=318 x=27 align=0 mult=1.000 hfid=0 words=4
+   W x=18 s=0 z=100 t=5
+   W x=28 s=0 z=100 t=.
+   W x=44 s=1 z=100 t=Fi
+   W x=58 s=0 z=100 t=ve
+  LINE y=342 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=6
+   W x=29 s=0 z=100 t=.
+   W x=45 s=0 z=100 t=Six
+  LINE y=366 x=27 align=0 mult=1.000 hfid=0 words=4
+   W x=18 s=0 z=100 t=7
+   W x=30 s=0 z=100 t=.
+   W x=46 s=1 z=100 t=Sev
+   W x=82 s=0 z=100 t=en
+  LINE y=390 x=0 align=2 mult=1.400 hfid=0 words=11
+   W x=2 s=1 z=100 t=Orde
+   W x=54 s=1 z=100 t=red
+   W x=101 s=1 z=100 t=li
+   W x=125 s=1 z=100 t=st
+   W x=162 s=1 z=100 t=wi
+   W x=182 s=1 z=100 t=th
+   W x=224 s=1 z=100 t=li
+   W x=256 s=1 z=100 t=val
+   W x=306 s=1 z=100 t=ue
+   W x=345 s=1 z=100 t=over
+   W x=408 s=1 z=100 t=ride
+  LINE y=424 x=0 align=2 mult=1.400 hfid=0 words=13
+   W x=70 s=1 z=100 t=(
+   W x=87 s=1 z=100 t=sho
+   W x=137 s=1 z=100 t=uld
+   W x=188 s=1 z=100 t=sh
+   W x=220 s=1 z=100 t=ow
+   W x=256 s=1 z=100 t=1
+   W x=266 s=1 z=100 t=,
+   W x=287 s=1 z=100 t=2
+   W x=298 s=1 z=100 t=,
+   W x=319 s=1 z=100 t=5
+   W x=334 s=1 z=100 t=,
+   W x=355 s=1 z=100 t=6
+   W x=372 s=1 z=100 t=)
+  LINE y=458 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=1
+   W x=24 s=0 z=100 t=.
+   W x=40 s=0 z=100 t=One
+  LINE y=482 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=2
+   W x=25 s=0 z=100 t=.
+   W x=41 s=0 z=100 t=Two
+  LINE y=506 x=27 align=0 mult=1.000 hfid=0 words=4
+   W x=18 s=0 z=100 t=5
+   W x=28 s=0 z=100 t=.
+   W x=44 s=1 z=100 t=Fi
+   W x=58 s=0 z=100 t=ve
+  LINE y=530 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=6
+   W x=29 s=0 z=100 t=.
+   W x=45 s=0 z=100 t=Six
+  LINE y=554 x=0 align=2 mult=1.400 hfid=0 words=4
+   W x=152 s=1 z=100 t=Nes
+   W x=191 s=1 z=100 t=ted
+   W x=241 s=1 z=100 t=lis
+   W x=279 s=1 z=100 t=ts
+  LINE y=588 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Fru
+   W x=59 s=0 z=100 t=it
+  LINE y=612 x=54 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=App
+   W x=54 s=0 z=100 t=le
+  LINE y=636 x=54 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Ban
+   W x=66 s=0 z=100 t=ana
+  LINE y=660 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Veget
+   W x=83 s=0 z=100 t=ables
+  LINE y=684 x=54 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Car
+   W x=64 s=0 z=100 t=rot
+  LINE y=708 x=54 align=0 mult=1.000 hfid=0 words=2
+   W x=18 s=0 z=100 t=•
+   W x=31 s=0 z=100 t=Pea
+ PAGE 1 elements=20 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.400 hfid=0 words=13
+   W x=15 s=1 z=100 t=Nes
+   W x=54 s=1 z=100 t=ted
+   W x=104 s=1 z=100 t=orde
+   W x=161 s=1 z=100 t=red
+   W x=208 s=1 z=100 t=lis
+   W x=246 s=1 z=100 t=ts
+   W x=283 s=1 z=100 t=(
+   W x=300 s=1 z=100 t=out
+   W x=350 s=1 z=100 t=er
+   W x=385 s=1 z=100 t=1
+   W x=395 s=1 z=100 t=,
+   W x=408 s=1 z=100 t=2
+   W x=427 s=1 z=100 t=/
+  LINE y=34 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=152 s=1 z=100 t=inn
+   W x=195 s=1 z=100 t=er
+   W x=230 s=1 z=100 t=1
+   W x=240 s=1 z=100 t=,
+   W x=253 s=1 z=100 t=2
+   W x=264 s=1 z=100 t=,
+   W x=277 s=1 z=100 t=3
+   W x=290 s=1 z=100 t=)
+  LINE y=68 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=1
+   W x=24 s=0 z=100 t=.
+   W x=40 s=1 z=100 t=Chap
+   W x=84 s=0 z=100 t=ter
+   W x=117 s=0 z=100 t=one
+  LINE y=92 x=54 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=1
+   W x=24 s=0 z=100 t=.
+   W x=40 s=1 z=100 t=Sect
+   W x=82 s=0 z=100 t=ion
+   W x=117 s=0 z=100 t=A
+  LINE y=116 x=54 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=2
+   W x=25 s=0 z=100 t=.
+   W x=41 s=1 z=100 t=Sect
+   W x=83 s=0 z=100 t=ion
+   W x=118 s=0 z=100 t=B
+  LINE y=140 x=54 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=3
+   W x=26 s=0 z=100 t=.
+   W x=42 s=1 z=100 t=Sect
+   W x=84 s=0 z=100 t=ion
+   W x=119 s=0 z=100 t=C
+  LINE y=164 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=2
+   W x=25 s=0 z=100 t=.
+   W x=41 s=1 z=100 t=Chap
+   W x=85 s=0 z=100 t=ter
+   W x=118 s=0 z=100 t=two
+  LINE y=188 x=54 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=1
+   W x=24 s=0 z=100 t=.
+   W x=40 s=1 z=100 t=Sect
+   W x=82 s=0 z=100 t=ion
+   W x=117 s=0 z=100 t=A
+  LINE y=212 x=54 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=2
+   W x=25 s=0 z=100 t=.
+   W x=41 s=1 z=100 t=Sect
+   W x=83 s=0 z=100 t=ion
+   W x=118 s=0 z=100 t=B
+  LINE y=236 x=0 align=2 mult=1.400 hfid=0 words=12
+   W x=-4 s=1 z=100 t=Ba
+   W x=28 s=1 z=100 t=re
+   W x=63 s=1 z=100 t=li
+   W x=95 s=1 z=100 t=outs
+   W x=159 s=1 z=100 t=ide
+   W x=203 s=1 z=100 t=any
+   W x=259 s=1 z=100 t=li
+   W x=283 s=1 z=100 t=st
+   W x=320 s=1 z=100 t=(
+   W x=337 s=1 z=100 t=no
+   W x=380 s=1 z=100 t=bul
+   W x=421 s=1 z=100 t=let
+  LINE y=270 x=0 align=2 mult=1.400 hfid=0 words=5
+   W x=129 s=1 z=100 t=sho
+   W x=179 s=1 z=100 t=uld
+   W x=230 s=1 z=100 t=app
+   W x=268 s=1 z=100 t=ear
+   W x=313 s=1 z=100 t=)
+  LINE y=304 x=0 align=0 mult=1.000 hfid=0 words=17
+   W x=18 s=0 z=100 t=The
+   W x=54 s=1 z=100 t=li
+   W x=71 s=0 z=100 t=ne
+   W x=100 s=1 z=100 t=bel
+   W x=127 s=0 z=100 t=ow
+   W x=154 s=0 z=100 t=is
+   W x=178 s=0 z=100 t=a
+   W x=199 s=1 z=100 t=ba
+   W x=219 s=0 z=100 t=re
+   W x=245 s=0 z=100 t=<
+   W x=255 s=0 z=100 t=li
+   W x=270 s=0 z=100 t=>
+   W x=291 s=1 z=100 t=wi
+   W x=305 s=0 z=100 t=th
+   W x=336 s=0 z=100 t=no
+   W x=368 s=1 z=100 t=enclo
+   W x=421 s=0 z=100 t=sing
+  LINE y=328 x=0 align=0 mult=1.000 hfid=0 words=17
+   W x=0 s=0 z=100 t=<
+   W x=10 s=0 z=100 t=ul
+   W x=30 s=0 z=100 t=>
+   W x=50 s=0 z=100 t=or
+   W x=78 s=0 z=100 t=<
+   W x=88 s=0 z=100 t=ol
+   W x=109 s=0 z=100 t=>.
+   W x=139 s=0 z=100 t=No
+   W x=166 s=1 z=100 t=bul
+   W x=195 s=0 z=100 t=let
+   W x=231 s=0 z=100 t=or
+   W x=259 s=1 z=100 t=num
+   W x=294 s=0 z=100 t=ber
+   W x=325 s=1 z=100 t=sho
+   W x=361 s=0 z=100 t=uld
+   W x=397 s=1 z=100 t=app
+   W x=424 s=0 z=100 t=ear
+  LINE y=352 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=1 z=100 t=bef
+   W x=28 s=0 z=100 t=ore
+   W x=63 s=0 z=100 t=it
+   W x=79 s=0 z=100 t=.
+  LINE y=376 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=1 z=100 t=Th
+   W x=38 s=0 z=100 t=is
+   W x=59 s=1 z=100 t=ba
+   W x=79 s=0 z=100 t=re
+   W x=102 s=0 z=100 t=li
+   W x=123 s=1 z=100 t=sho
+   W x=159 s=0 z=100 t=uld
+   W x=193 s=1 z=100 t=ha
+   W x=219 s=0 z=100 t=ve
+   W x=246 s=0 z=100 t=no
+   W x=275 s=1 z=100 t=mar
+   W x=308 s=0 z=100 t=ker
+  LINE y=400 x=0 align=0 mult=1.000 hfid=0 words=7
+   W x=18 s=1 z=100 t=Nor
+   W x=48 s=0 z=100 t=mal
+   W x=85 s=1 z=100 t=parag
+   W x=139 s=0 z=100 t=raph
+   W x=183 s=1 z=100 t=resu
+   W x=224 s=0 z=100 t=med
+   W x=251 s=0 z=100 t=.
+  LINE y=424 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=44 s=1 z=100 t=Li
+   W x=72 s=1 z=100 t=st
+   W x=109 s=1 z=100 t=wi
+   W x=129 s=1 z=100 t=th
+   W x=171 s=1 z=100 t=inl
+   W x=212 s=1 z=100 t=ine
+   W x=261 s=1 z=100 t=forma
+   W x=341 s=1 z=100 t=tting
+  LINE y=458 x=27 align=0 mult=1.000 hfid=0 words=7
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=Bo
+   W x=54 s=1 z=100 t=ld
+   W x=79 s=1 z=100 t=it
+   W x=97 s=0 z=100 t=em
+   W x=122 s=1 z=100 t=te
+   W x=143 s=0 z=100 t=xt
+  LINE y=482 x=27 align=0 mult=1.000 hfid=0 words=7
+   W x=18 s=0 z=100 t=•
+   W x=31 s=3 z=100 t=Ita
+   W x=65 s=2 z=100 t=lic
+   W x=93 s=1 z=100 t=it
+   W x=111 s=0 z=100 t=em
+   W x=136 s=1 z=100 t=te
+   W x=157 s=0 z=100 t=xt
+  LINE y=506 x=27 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=•
+   W x=31 s=1 z=100 t=It
+   W x=52 s=0 z=100 t=em
+   W x=77 s=1 z=100 t=wi
+   W x=91 s=0 z=100 t=th
+   W x=119 s=1 z=100 t=bo
+   W x=139 s=1 z=100 t=ld
+   W x=164 s=0 z=100 t=and
+   W x=201 s=3 z=100 t=ita
+   W x=232 s=2 z=100 t=lic
+   W x=260 s=1 z=100 t=mix
+   W x=286 s=0 z=100 t=ed
+SPINE 6 href=OEBPS/chapter7.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=27 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=5
+   W x=43 s=1 z=100 t=Supers
+   W x=141 s=1 z=100 t=cript
+   W x=218 s=1 z=100 t=and
+   W x=282 s=1 z=100 t=Subsc
+   W x=362 s=1 z=100 t=ript
+  LINE y=38 x=0 align=2 mult=1.400 hfid=0 words=4
+   W x=122 s=1 z=100 t=Bas
+   W x=168 s=1 z=100 t=ic
+   W x=197 s=1 z=100 t=supers
+   W x=278 s=1 z=100 t=cript
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=15
+   W x=18 s=0 z=100 t=E
+   W x=36 s=0 z=100 t==
+   W x=53 s=0 z=100 t=mc
+   W x=70 s=16 z=50 t=2
+   W x=77 s=0 z=100 t=is
+   W x=98 s=1 z=100 t=Einst
+   W x=151 s=0 z=100 t=ein's
+   W x=202 s=1 z=100 t=ma
+   W x=226 s=0 z=100 t=ss
+   W x=244 s=0 z=100 t=-
+   W x=253 s=1 z=100 t=ene
+   W x=285 s=0 z=100 t=rgy
+   W x=318 s=1 z=100 t=equiva
+   W x=381 s=0 z=100 t=lence
+   W x=426 s=0 z=100 t=.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=The
+   W x=51 s=1 z=100 t=ar
+   W x=73 s=0 z=100 t=ea
+   W x=100 s=0 z=100 t=of
+   W x=128 s=0 z=100 t=a
+   W x=146 s=1 z=100 t=cir
+   W x=170 s=0 z=100 t=cle
+   W x=201 s=0 z=100 t=is
+   W x=222 s=0 z=100 t=π
+   W x=229 s=0 z=100 t=r
+   W x=237 s=16 z=50 t=2
+   W x=241 s=0 z=100 t=.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=2
+   W x=25 s=16 z=50 t=10
+   W x=37 s=0 z=100 t==
+   W x=54 s=1 z=100 t=10
+   W x=74 s=0 z=100 t=24
+   W x=90 s=0 z=100 t=.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=0 z=100 t=x
+   W x=25 s=16 z=50 t=n
+   W x=34 s=0 z=100 t=+
+   W x=47 s=0 z=100 t=y
+   W x=55 s=16 z=50 t=n
+   W x=64 s=0 z=100 t==
+   W x=81 s=0 z=100 t=z
+   W x=90 s=16 z=50 t=n
+  LINE y=168 x=0 align=2 mult=1.400 hfid=0 words=4
+   W x=135 s=1 z=100 t=Bas
+   W x=181 s=1 z=100 t=ic
+   W x=210 s=1 z=100 t=subsc
+   W x=276 s=1 z=100 t=ript
+  LINE y=202 x=0 align=0 mult=1.000 hfid=0 words=7
+   W x=18 s=1 z=100 t=Wat
+   W x=52 s=0 z=100 t=er
+   W x=75 s=0 z=100 t=is
+   W x=96 s=0 z=100 t=H
+   W x=104 s=32 z=50 t=2
+   W x=108 s=0 z=100 t=O
+   W x=116 s=0 z=100 t=.
+  LINE y=226 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=1 z=100 t=Car
+   W x=51 s=0 z=100 t=bon
+   W x=86 s=1 z=100 t=diox
+   W x=123 s=0 z=100 t=ide
+   W x=152 s=0 z=100 t=is
+   W x=173 s=0 z=100 t=CO
+   W x=191 s=32 z=50 t=2
+   W x=195 s=0 z=100 t=.
+  LINE y=250 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=0 z=100 t=The
+   W x=51 s=1 z=100 t=sequ
+   W x=91 s=0 z=100 t=ence
+   W x=133 s=0 z=100 t=a
+   W x=145 s=32 z=50 t=1
+   W x=148 s=0 z=100 t=,
+   W x=162 s=0 z=100 t=a
+   W x=174 s=32 z=50 t=2
+   W x=178 s=0 z=100 t=,
+   W x=192 s=0 z=100 t=a
+   W x=204 s=32 z=50 t=3
+   W x=208 s=0 z=100 t=,
+   W x=222 s=0 z=100 t=...,
+   W x=266 s=0 z=100 t=a
+   W x=278 s=32 z=50 t=n
+   W x=284 s=0 z=100 t=.
+  LINE y=274 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=18 s=1 z=100 t=Gluc
+   W x=56 s=0 z=100 t=ose
+   W x=86 s=0 z=100 t=:
+   W x=100 s=0 z=100 t=C
+   W x=110 s=32 z=50 t=6
+   W x=116 s=0 z=100 t=H
+   W x=124 s=32 z=50 t=12
+   W x=131 s=0 z=100 t=O
+   W x=139 s=32 z=50 t=6
+   W x=145 s=0 z=100 t=.
+  LINE y=298 x=0 align=2 mult=1.400 hfid=0 words=5
+   W x=124 s=1 z=100 t=Mix
+   W x=155 s=1 z=100 t=ed
+   W x=190 s=1 z=100 t=sup
+   W x=239 s=1 z=100 t=and
+   W x=295 s=1 z=100 t=sub
+  LINE y=332 x=0 align=0 mult=1.000 hfid=0 words=24
+   W x=18 s=0 z=100 t=The
+   W x=51 s=0 z=100 t=pH
+   W x=71 s=0 z=100 t=of
+   W x=99 s=1 z=100 t=wat
+   W x=130 s=0 z=100 t=er
+   W x=153 s=0 z=100 t=is
+   W x=174 s=0 z=100 t=7
+   W x=186 s=0 z=100 t=,
+   W x=200 s=1 z=100 t=mean
+   W x=246 s=0 z=100 t=ing
+   W x=280 s=0 z=100 t=[
+   W x=286 s=0 z=100 t=H
+   W x=294 s=32 z=50 t=3
+   W x=298 s=0 z=100 t=O
+   W x=306 s=16 z=50 t=+
+   W x=310 s=0 z=100 t=]
+   W x=324 s=0 z=100 t==
+   W x=341 s=0 z=100 t=10
+   W x=359 s=16 z=50 t=-
+   W x=364 s=16 z=50 t=7
+   W x=373 s=0 z=100 t=mol
+   W x=404 s=0 z=100 t=/
+   W x=415 s=0 z=100 t=L
+   W x=427 s=0 z=100 t=.
+  LINE y=356 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=1 z=100 t=Foot
+   W x=62 s=0 z=100 t=note
+   W x=115 s=1 z=100 t=refer
+   W x=164 s=0 z=100 t=ence
+   W x=200 s=16 z=50 t=1
+   W x=211 s=0 z=100 t=and
+   W x=253 s=1 z=100 t=anot
+   W x=302 s=0 z=100 t=her
+   W x=331 s=16 z=50 t=2
+   W x=343 s=0 z=100 t=in
+   W x=371 s=0 z=100 t=the
+   W x=413 s=1 z=100 t=sa
+   W x=436 s=0 z=100 t=me
+  LINE y=380 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=1 z=100 t=sent
+   W x=43 s=0 z=100 t=ence
+   W x=79 s=0 z=100 t=.
+  LINE y=404 x=0 align=2 mult=1.400 hfid=0 words=2
+   W x=174 s=1 z=100 t=Ordi
+   W x=222 s=1 z=100 t=nals
+  LINE y=438 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=0 z=100 t=On
+   W x=46 s=0 z=100 t=the
+   W x=86 s=0 z=100 t=1
+   W x=92 s=16 z=50 t=st
+   W x=108 s=0 z=100 t=of
+   W x=139 s=1 z=100 t=Janu
+   W x=187 s=0 z=100 t=ary
+   W x=215 s=0 z=100 t=,
+   W x=232 s=0 z=100 t=the
+   W x=272 s=0 z=100 t=2
+   W x=279 s=16 z=50 t=nd
+   W x=295 s=1 z=100 t=quar
+   W x=337 s=0 z=100 t=ter
+   W x=373 s=1 z=100 t=beg
+   W x=402 s=0 z=100 t=ins
+   W x=437 s=0 z=100 t=on
+  LINE y=462 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=0 s=0 z=100 t=the
+   W x=37 s=0 z=100 t=3
+   W x=45 s=16 z=50 t=rd
+   W x=56 s=1 z=100 t=mon
+   W x=92 s=0 z=100 t=th
+   W x=114 s=0 z=100 t=.
+  LINE y=486 x=0 align=2 mult=1.400 hfid=0 words=9
+   W x=56 s=1 z=100 t=Nes
+   W x=95 s=1 z=100 t=ted
+   W x=145 s=1 z=100 t=wi
+   W x=165 s=1 z=100 t=th
+   W x=207 s=1 z=100 t=bo
+   W x=235 s=1 z=100 t=ld
+   W x=270 s=1 z=100 t=and
+   W x=326 s=1 z=100 t=ita
+   W x=369 s=1 z=100 t=lic
+  LINE y=520 x=0 align=0 mult=1.000 hfid=0 words=18
+   W x=18 s=1 z=100 t=Spe
+   W x=48 s=0 z=100 t=ed
+   W x=71 s=0 z=100 t=of
+   W x=99 s=1 z=100 t=lig
+   W x=128 s=0 z=100 t=ht
+   W x=150 s=0 z=100 t=:
+   W x=164 s=0 z=100 t=c
+   W x=177 s=0 z=100 t==
+   W x=194 s=0 z=100 t=2
+   W x=201 s=0 z=100 t=.
+   W x=211 s=0 z=100 t=998
+   W x=237 s=0 z=100 t=×
+   W x=254 s=0 z=100 t=10
+   W x=272 s=16 z=50 t=8
+   W x=278 s=0 z=100 t=m
+   W x=288 s=0 z=100 t=/
+   W x=299 s=0 z=100 t=s
+   W x=308 s=0 z=100 t=.
+  LINE y=544 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=1 z=100 t=Avog
+   W x=65 s=0 z=100 t=adro
+   W x=105 s=0 z=100 t=:
+   W x=119 s=0 z=100 t=6
+   W x=130 s=0 z=100 t=.
+   W x=140 s=0 z=100 t=022
+   W x=172 s=0 z=100 t=×
+   W x=189 s=0 z=100 t=10
+   W x=207 s=16 z=50 t=23
+   W x=218 s=0 z=100 t=mol
+   W x=249 s=16 z=50 t=-
+   W x=254 s=16 z=50 t=1
+   W x=257 s=0 z=100 t=.
+  LINE y=568 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=1 z=100 t=Bo
+   W x=41 s=0 z=100 t=ld
+   W x=64 s=1 z=100 t=supers
+   W x=122 s=0 z=100 t=cript
+   W x=159 s=0 z=100 t=:
+   W x=173 s=0 z=100 t=x
+   W x=180 s=17 z=50 t=2
+   W x=187 s=0 z=100 t=and
+   W x=224 s=1 z=100 t=ita
+   W x=255 s=0 z=100 t=lic
+   W x=283 s=1 z=100 t=subsc
+   W x=330 s=0 z=100 t=ript
+   W x=360 s=0 z=100 t=:
+   W x=374 s=0 z=100 t=H
+   W x=382 s=34 z=50 t=n
+   W x=388 s=0 z=100 t=.
+  LINE y=592 x=0 align=2 mult=1.400 hfid=0 words=4
+   W x=161 s=1 z=100 t=Lo
+   W x=197 s=1 z=100 t=ng
+   W x=239 s=1 z=100 t=ru
+   W x=268 s=1 z=100 t=ns
+  LINE y=626 x=0 align=0 mult=1.000 hfid=0 words=18
+   W x=18 s=1 z=100 t=Th
+   W x=38 s=0 z=100 t=is
+   W x=64 s=1 z=100 t=wo
+   W x=84 s=0 z=100 t=rd
+   W x=100 s=16 z=50 t=has
+   W x=125 s=16 z=50 t=a
+   W x=139 s=17 z=50 t=rat
+   W x=156 s=16 z=50 t=her
+   W x=179 s=17 z=50 t=lo
+   W x=191 s=16 z=50 t=ng
+   W x=210 s=17 z=50 t=supers
+   W x=239 s=16 z=50 t=cript
+   W x=266 s=17 z=50 t=atta
+   W x=290 s=16 z=50 t=ched
+   W x=316 s=16 z=50 t=to
+   W x=335 s=16 z=50 t=it
+   W x=351 s=1 z=100 t=conti
+   W x=402 s=0 z=100 t=nuing
+  LINE y=650 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=1 z=100 t=norm
+   W x=45 s=0 z=100 t=ally
+   W x=83 s=0 z=100 t=.
+  LINE y=674 x=0 align=0 mult=1.000 hfid=0 words=18
+   W x=18 s=1 z=100 t=Th
+   W x=38 s=0 z=100 t=is
+   W x=65 s=1 z=100 t=wo
+   W x=85 s=0 z=100 t=rd
+   W x=101 s=32 z=50 t=has
+   W x=127 s=32 z=50 t=a
+   W x=142 s=33 z=50 t=rat
+   W x=159 s=32 z=50 t=her
+   W x=183 s=33 z=50 t=lo
+   W x=195 s=32 z=50 t=ng
+   W x=215 s=33 z=50 t=subsc
+   W x=239 s=32 z=50 t=ript
+   W x=263 s=33 z=50 t=atta
+   W x=287 s=32 z=50 t=ched
+   W x=314 s=32 z=50 t=to
+   W x=334 s=32 z=50 t=it
+   W x=351 s=1 z=100 t=conti
+   W x=402 s=0 z=100 t=nuing
+  LINE y=698 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=1 z=100 t=norm
+   W x=45 s=0 z=100 t=ally
+   W x=83 s=0 z=100 t=.
+SPINE 7 href=OEBPS/chapter8.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=24 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=6
+   W x=79 s=1 z=100 t=vert
+   W x=148 s=1 z=100 t=ical
+   W x=209 s=1 z=100 t=-
+   W x=225 s=1 z=100 t=ali
+   W x=273 s=1 z=100 t=gn
+   W x=321 s=1 z=100 t=CSS
+  LINE y=38 x=0 align=2 mult=1.600 hfid=0 words=5
+   W x=43 s=1 z=100 t=Supers
+   W x=141 s=1 z=100 t=cript
+   W x=218 s=1 z=100 t=and
+   W x=282 s=1 z=100 t=Subsc
+   W x=362 s=1 z=100 t=ript
+  LINE y=76 x=0 align=2 mult=1.600 hfid=0 words=11
+   W x=39 s=0 z=100 t=.
+   W x=55 s=0 z=100 t=sup
+   W x=97 s=0 z=100 t=-
+   W x=111 s=0 z=100 t=css
+   W x=161 s=0 z=100 t={
+   W x=187 s=1 z=100 t=vert
+   W x=256 s=0 z=100 t=ical
+   W x=310 s=0 z=100 t=-
+   W x=324 s=1 z=100 t=ali
+   W x=372 s=0 z=100 t=gn
+   W x=407 s=0 z=100 t=:
+  LINE y=114 x=0 align=2 mult=1.600 hfid=0 words=9
+   W x=98 s=1 z=100 t=sup
+   W x=144 s=0 z=100 t=er
+   W x=171 s=0 z=100 t=;
+   W x=195 s=0 z=100 t=}
+   W x=224 s=0 z=100 t=.
+   W x=240 s=0 z=100 t=sub
+   W x=282 s=0 z=100 t=-
+   W x=296 s=0 z=100 t=css
+   W x=346 s=0 z=100 t={
+  LINE y=152 x=0 align=2 mult=1.600 hfid=0 words=8
+   W x=80 s=1 z=100 t=vert
+   W x=149 s=0 z=100 t=ical
+   W x=203 s=0 z=100 t=-
+   W x=217 s=1 z=100 t=ali
+   W x=265 s=0 z=100 t=gn
+   W x=300 s=0 z=100 t=:
+   W x=323 s=0 z=100 t=sub
+   W x=365 s=0 z=100 t=;
+  LINE y=190 x=0 align=2 mult=1.600 hfid=0 words=8
+   W x=89 s=0 z=100 t=}
+   W x=118 s=0 z=100 t=.
+   W x=134 s=1 z=100 t=base
+   W x=198 s=0 z=100 t=line
+   W x=254 s=0 z=100 t=-
+   W x=268 s=1 z=100 t=res
+   W x=314 s=0 z=100 t=et
+   W x=354 s=0 z=100 t={
+  LINE y=228 x=0 align=2 mult=1.600 hfid=0 words=10
+   W x=27 s=1 z=100 t=vert
+   W x=96 s=0 z=100 t=ical
+   W x=150 s=0 z=100 t=-
+   W x=164 s=1 z=100 t=ali
+   W x=212 s=0 z=100 t=gn
+   W x=247 s=0 z=100 t=:
+   W x=270 s=1 z=100 t=base
+   W x=334 s=0 z=100 t=line
+   W x=390 s=0 z=100 t=;
+   W x=414 s=0 z=100 t=}
+  LINE y=266 x=0 align=2 mult=1.400 hfid=0 words=12
+   W x=-2 s=1 z=100 t=Inl
+   W x=43 s=1 z=100 t=ine
+   W x=92 s=1 z=100 t=sty
+   W x=134 s=1 z=100 t=le
+   W x=162 s=1 z=100 t=:
+   W x=183 s=1 z=100 t=vert
+   W x=243 s=1 z=100 t=ical
+   W x=296 s=1 z=100 t=-
+   W x=310 s=1 z=100 t=ali
+   W x=352 s=1 z=100 t=gn
+   W x=394 s=1 z=100 t=sup
+   W x=435 s=1 z=100 t=er
+  LINE y=300 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=82 s=1 z=100 t=(
+   W x=99 s=1 z=100 t=sho
+   W x=149 s=1 z=100 t=uld
+   W x=200 s=1 z=100 t=mat
+   W x=249 s=1 z=100 t=ch
+   W x=286 s=1 z=100 t=<
+   W x=301 s=1 z=100 t=sup
+   W x=342 s=1 z=100 t=>)
+  LINE y=334 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=E
+   W x=36 s=0 z=100 t==
+   W x=53 s=0 z=100 t=mc
+   W x=70 s=16 z=50 t=2
+   W x=77 s=0 z=100 t=(
+   W x=88 s=1 z=100 t=inl
+   W x=117 s=0 z=100 t=ine
+   W x=149 s=1 z=100 t=sty
+   W x=179 s=0 z=100 t=le
+   W x=203 s=1 z=100 t=sup
+   W x=232 s=0 z=100 t=er
+   W x=249 s=0 z=100 t=)
+  LINE y=358 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=2
+   W x=25 s=16 z=50 t=10
+   W x=37 s=0 z=100 t==
+   W x=54 s=1 z=100 t=10
+   W x=74 s=0 z=100 t=24
+  LINE y=382 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=0 z=100 t=x
+   W x=25 s=16 z=50 t=n
+   W x=34 s=0 z=100 t=+
+   W x=47 s=0 z=100 t=y
+   W x=55 s=16 z=50 t=n
+   W x=64 s=0 z=100 t==
+   W x=81 s=0 z=100 t=z
+   W x=90 s=16 z=50 t=n
+  LINE y=406 x=0 align=2 mult=1.400 hfid=0 words=11
+   W x=11 s=1 z=100 t=Inl
+   W x=56 s=1 z=100 t=ine
+   W x=105 s=1 z=100 t=sty
+   W x=147 s=1 z=100 t=le
+   W x=175 s=1 z=100 t=:
+   W x=196 s=1 z=100 t=vert
+   W x=256 s=1 z=100 t=ical
+   W x=309 s=1 z=100 t=-
+   W x=323 s=1 z=100 t=ali
+   W x=365 s=1 z=100 t=gn
+   W x=407 s=1 z=100 t=sub
+  LINE y=440 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=82 s=1 z=100 t=(
+   W x=99 s=1 z=100 t=sho
+   W x=149 s=1 z=100 t=uld
+   W x=200 s=1 z=100 t=mat
+   W x=249 s=1 z=100 t=ch
+   W x=286 s=1 z=100 t=<
+   W x=301 s=1 z=100 t=sub
+   W x=342 s=1 z=100 t=>)
+  LINE y=474 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=1 z=100 t=Wat
+   W x=52 s=0 z=100 t=er
+   W x=75 s=0 z=100 t=is
+   W x=96 s=0 z=100 t=H
+   W x=104 s=32 z=50 t=2
+   W x=108 s=0 z=100 t=O
+   W x=122 s=0 z=100 t=(
+   W x=133 s=1 z=100 t=inl
+   W x=162 s=0 z=100 t=ine
+   W x=194 s=1 z=100 t=sty
+   W x=224 s=0 z=100 t=le
+   W x=248 s=0 z=100 t=sub
+   W x=274 s=0 z=100 t=)
+  LINE y=498 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=CO
+   W x=36 s=32 z=50 t=2
+   W x=43 s=1 z=100 t=car
+   W x=73 s=0 z=100 t=bon
+   W x=108 s=1 z=100 t=diox
+   W x=145 s=0 z=100 t=ide
+  LINE y=522 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=18 s=0 z=100 t=C
+   W x=28 s=32 z=50 t=6
+   W x=34 s=0 z=100 t=H
+   W x=42 s=32 z=50 t=12
+   W x=49 s=0 z=100 t=O
+   W x=57 s=32 z=50 t=6
+   W x=66 s=1 z=100 t=gluc
+   W x=108 s=0 z=100 t=ose
+  LINE y=546 x=0 align=2 mult=1.400 hfid=0 words=10
+   W x=3 s=1 z=100 t=Style
+   W x=77 s=1 z=100 t=sheet
+   W x=161 s=1 z=100 t=cla
+   W x=204 s=1 z=100 t=ss
+   W x=232 s=1 z=100 t=:
+   W x=253 s=1 z=100 t=vert
+   W x=313 s=1 z=100 t=ical
+   W x=366 s=1 z=100 t=-
+   W x=380 s=1 z=100 t=ali
+   W x=422 s=1 z=100 t=gn
+  LINE y=580 x=0 align=2 mult=1.400 hfid=0 words=2
+   W x=196 s=1 z=100 t=sup
+   W x=237 s=1 z=100 t=er
+  LINE y=614 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=E
+   W x=36 s=0 z=100 t==
+   W x=53 s=0 z=100 t=mc2
+   W x=83 s=0 z=100 t=(
+   W x=94 s=1 z=100 t=cla
+   W x=125 s=0 z=100 t=ss
+   W x=143 s=0 z=100 t=-
+   W x=152 s=1 z=100 t=bas
+   W x=182 s=0 z=100 t=ed
+   W x=205 s=1 z=100 t=sup
+   W x=234 s=0 z=100 t=er
+   W x=251 s=0 z=100 t=)
+  LINE y=638 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=1 z=100 t=Footn
+   W x=74 s=0 z=100 t=ote1
+   W x=117 s=0 z=100 t=and
+   W x=154 s=1 z=100 t=anot
+   W x=203 s=0 z=100 t=her2
+  LINE y=662 x=0 align=2 mult=1.400 hfid=0 words=10
+   W x=3 s=1 z=100 t=Style
+   W x=77 s=1 z=100 t=sheet
+   W x=161 s=1 z=100 t=cla
+   W x=204 s=1 z=100 t=ss
+   W x=232 s=1 z=100 t=:
+   W x=253 s=1 z=100 t=vert
+   W x=313 s=1 z=100 t=ical
+   W x=366 s=1 z=100 t=-
+   W x=380 s=1 z=100 t=ali
+   W x=422 s=1 z=100 t=gn
+  LINE y=696 x=0 align=2 mult=1.400 hfid=0 words=1
+   W x=209 s=1 z=100 t=sub
+  LINE y=730 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=0 z=100 t=H2O
+   W x=47 s=0 z=100 t=(
+   W x=58 s=1 z=100 t=cla
+   W x=89 s=0 z=100 t=ss
+   W x=107 s=0 z=100 t=-
+   W x=116 s=1 z=100 t=bas
+   W x=146 s=0 z=100 t=ed
+   W x=169 s=0 z=100 t=sub
+   W x=195 s=0 z=100 t=)
+ PAGE 1 elements=16 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=a1
+   W x=36 s=0 z=100 t=,
+   W x=50 s=0 z=100 t=a2
+   W x=69 s=0 z=100 t=,
+   W x=83 s=0 z=100 t=...,
+   W x=127 s=0 z=100 t=an
+  LINE y=24 x=0 align=2 mult=1.400 hfid=0 words=14
+   W x=3 s=1 z=100 t=Mix
+   W x=34 s=1 z=100 t=ed
+   W x=61 s=1 z=100 t=:
+   W x=82 s=1 z=100 t=tag
+   W x=132 s=1 z=100 t=-
+   W x=146 s=1 z=100 t=bas
+   W x=188 s=1 z=100 t=ed
+   W x=223 s=1 z=100 t=vs
+   W x=263 s=1 z=100 t=CSS
+   W x=315 s=1 z=100 t=-
+   W x=329 s=1 z=100 t=bas
+   W x=371 s=1 z=100 t=ed
+   W x=406 s=1 z=100 t=si
+   W x=430 s=1 z=100 t=de
+  LINE y=58 x=0 align=2 mult=1.400 hfid=0 words=3
+   W x=189 s=1 z=100 t=by
+   W x=219 s=1 z=100 t=si
+   W x=243 s=1 z=100 t=de
+  LINE y=92 x=0 align=0 mult=1.000 hfid=0 words=19
+   W x=18 s=0 z=100 t=Tag
+   W x=47 s=0 z=100 t=:
+   W x=61 s=0 z=100 t=H
+   W x=69 s=32 z=50 t=2
+   W x=73 s=0 z=100 t=O
+   W x=87 s=0 z=100 t=—
+   W x=100 s=0 z=100 t=CSS
+   W x=134 s=0 z=100 t=:
+   W x=148 s=0 z=100 t=H
+   W x=156 s=32 z=50 t=2
+   W x=160 s=0 z=100 t=O
+   W x=174 s=0 z=100 t=(
+   W x=185 s=1 z=100 t=sho
+   W x=221 s=0 z=100 t=uld
+   W x=255 s=1 z=100 t=lo
+   W x=278 s=0 z=100 t=ok
+   W x=304 s=1 z=100 t=ident
+   W x=353 s=0 z=100 t=ical
+   W x=387 s=0 z=100 t=)
+  LINE y=116 x=0 align=0 mult=1.000 hfid=0 words=17
+   W x=18 s=0 z=100 t=Tag
+   W x=47 s=0 z=100 t=:
+   W x=61 s=0 z=100 t=mc
+   W x=78 s=16 z=50 t=2
+   W x=85 s=0 z=100 t=—
+   W x=98 s=0 z=100 t=CSS
+   W x=132 s=0 z=100 t=:
+   W x=146 s=0 z=100 t=mc
+   W x=163 s=16 z=50 t=2
+   W x=170 s=0 z=100 t=(
+   W x=181 s=1 z=100 t=sho
+   W x=217 s=0 z=100 t=uld
+   W x=251 s=1 z=100 t=lo
+   W x=274 s=0 z=100 t=ok
+   W x=300 s=1 z=100 t=ident
+   W x=349 s=0 z=100 t=ical
+   W x=383 s=0 z=100 t=)
+  LINE y=140 x=0 align=2 mult=1.400 hfid=0 words=8
+   W x=16 s=1 z=100 t=base
+   W x=72 s=1 z=100 t=line
+   W x=135 s=1 z=100 t=res
+   W x=176 s=1 z=100 t=et
+   W x=213 s=1 z=100 t=canc
+   W x=270 s=1 z=100 t=els
+   W x=320 s=1 z=100 t=inher
+   W x=391 s=1 z=100 t=ited
+  LINE y=174 x=0 align=2 mult=1.400 hfid=0 words=2
+   W x=196 s=1 z=100 t=sup
+   W x=237 s=1 z=100 t=er
+  LINE y=208 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=1 z=100 t=Out
+   W x=50 s=0 z=100 t=er
+   W x=67 s=17 z=50 t=raisednor
+   W x=113 s=16 z=50 t=malraised
+   W x=155 s=1 z=100 t=out
+   W x=191 s=0 z=100 t=er
+  LINE y=232 x=0 align=2 mult=1.400 hfid=0 words=12
+   W x=0 s=1 z=100 t=vert
+   W x=60 s=1 z=100 t=ical
+   W x=113 s=1 z=100 t=-
+   W x=127 s=1 z=100 t=ali
+   W x=169 s=1 z=100 t=gn
+   W x=211 s=1 z=100 t=sup
+   W x=252 s=1 z=100 t=er
+   W x=287 s=1 z=100 t=wi
+   W x=307 s=1 z=100 t=th
+   W x=349 s=1 z=100 t=bo
+   W x=377 s=1 z=100 t=ld
+   W x=412 s=1 z=100 t=and
+  LINE y=266 x=0 align=2 mult=1.400 hfid=0 words=2
+   W x=191 s=1 z=100 t=ita
+   W x=234 s=1 z=100 t=lic
+  LINE y=300 x=0 align=0 mult=1.000 hfid=0 words=14
+   W x=18 s=1 z=100 t=Bo
+   W x=41 s=0 z=100 t=ld
+   W x=64 s=1 z=100 t=sup
+   W x=93 s=0 z=100 t=er
+   W x=110 s=0 z=100 t=:
+   W x=124 s=0 z=100 t=x
+   W x=131 s=17 z=50 t=2
+   W x=138 s=0 z=100 t=and
+   W x=175 s=1 z=100 t=ita
+   W x=206 s=0 z=100 t=lic
+   W x=234 s=0 z=100 t=sub
+   W x=260 s=0 z=100 t=:
+   W x=274 s=0 z=100 t=H
+   W x=282 s=34 z=50 t=n
+  LINE y=324 x=0 align=2 mult=1.400 hfid=0 words=5
+   W x=111 s=1 z=100 t=Lo
+   W x=147 s=1 z=100 t=ng
+   W x=189 s=1 z=100 t=run
+   W x=243 s=1 z=100 t=via
+   W x=297 s=1 z=100 t=CSS
+  LINE y=358 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=1 z=100 t=Th
+   W x=38 s=0 z=100 t=is
+   W x=69 s=1 z=100 t=wo
+   W x=89 s=0 z=100 t=rd
+   W x=105 s=16 z=50 t=has
+   W x=135 s=16 z=50 t=a
+   W x=154 s=17 z=50 t=rat
+   W x=171 s=16 z=50 t=her
+   W x=199 s=17 z=50 t=lo
+   W x=211 s=16 z=50 t=ng
+   W x=235 s=17 z=50 t=supers
+   W x=264 s=16 z=50 t=cript
+   W x=296 s=16 z=50 t=via
+   W x=324 s=16 z=50 t=CSS
+   W x=354 s=1 z=100 t=conti
+   W x=405 s=0 z=100 t=nuing
+  LINE y=382 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=1 z=100 t=norm
+   W x=45 s=0 z=100 t=ally
+   W x=83 s=0 z=100 t=.
+  LINE y=406 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=1 z=100 t=Th
+   W x=38 s=0 z=100 t=is
+   W x=70 s=1 z=100 t=wo
+   W x=90 s=0 z=100 t=rd
+   W x=106 s=32 z=50 t=has
+   W x=137 s=32 z=50 t=a
+   W x=157 s=33 z=50 t=rat
+   W x=174 s=32 z=50 t=her
+   W x=203 s=33 z=50 t=lo
+   W x=215 s=32 z=50 t=ng
+   W x=240 s=33 z=50 t=subsc
+   W x=264 s=32 z=50 t=ript
+   W x=293 s=32 z=50 t=via
+   W x=322 s=32 z=50 t=CSS
+   W x=353 s=1 z=100 t=conti
+   W x=404 s=0 z=100 t=nuing
+  LINE y=430 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=1 z=100 t=norm
+   W x=45 s=0 z=100 t=ally
+   W x=83 s=0 z=100 t=.

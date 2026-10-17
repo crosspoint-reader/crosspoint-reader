@@ -282,6 +282,35 @@ TEST(WordContinuation, AttachedPunctuationIsMarkedAsContinuation) {
   EXPECT_TRUE(result.lines[0]->wordContinues(1));
 }
 
+// A non-breaking space reaches layout as a " " token glued to the words on both sides. In a
+// justified line it stretches like a word gap; the glue around it does not. No corpus book has one,
+// so the goldens do not pin this.
+TEST(WordContinuation, JustifiedNonBreakingSpaceStretchesLikeAWordGap) {
+  GfxRenderer renderer;
+  BlockStyle style = noIndentStyle();
+  style.alignment = CssTextAlign::Justify;
+  ParsedText text(false, false, style);
+  text.addWord("aaaa", EpdFontFamily::REGULAR);
+  text.addWord("bbbb", EpdFontFamily::REGULAR);
+  text.addWord(" ", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);
+  text.addWord("cccc", EpdFontFamily::REGULAR, /*underline=*/false, /*attachToPrevious=*/true);
+  text.addWord("dddd", EpdFontFamily::REGULAR);
+  text.addWord("eeee", EpdFontFamily::REGULAR);
+
+  // aaaa bbbb_cccc dddd is 175 px wide (the space token measures as a space); eeee would need 45
+  // more, so the first line is justified.
+  const auto result = layout(text, renderer, 200);
+  ASSERT_EQ(result.lines.size(), 2u);
+  const TextBlock& line = *result.lines[0];
+  ASSERT_EQ(line.wordCount(), 5);
+  constexpr int kWord = 4 * GfxRenderer::GLYPH_W;
+  const int wordGapStretch = line.wordXpos(1) - line.wordXpos(0) - kWord - GfxRenderer::SPACE_W;
+  EXPECT_GT(wordGapStretch, 0);
+  EXPECT_EQ(line.wordXpos(2) - line.wordXpos(1), kWord);  // bbbb is glued to the space
+  EXPECT_EQ(line.wordXpos(3) - line.wordXpos(2) - GfxRenderer::SPACE_W, wordGapStretch);
+  EXPECT_EQ(line.wordXpos(4) - line.wordXpos(3) - kWord - GfxRenderer::SPACE_W, wordGapStretch);
+}
+
 // Hyphenation splits the word ACROSS lines, so the halves land in different blocks and no flag
 // can join them. What survives is the shape the overlay keys on: the first line ends on the
 // inserted hyphen and the next starts with the rest of the word.

@@ -10,6 +10,11 @@
 // with it ON (the ±10% band that snaps publisher near-body
 // <span font-size:0.92em> wrappers back to native size), against a golden of
 // their own: <book>.golden.txt for OFF, <book>_norm.golden.txt for ON.
+//
+// The default goldens run with hyphenation and bionic reading off, so they reach one
+// line breaker of four. The prose books therefore also run with hyphenation ON
+// (<book>_hyph.golden.txt: the two greedy breakers and the page-bottom retry), and
+// a few with bionic reading ON (<book>_bionic.golden.txt: the word-list rebuild).
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -32,16 +37,32 @@ std::string freshCacheDir(const std::string& tag) {
   return dir.string();
 }
 
-// One corpus book under one font-size-normalization setting.
+// The render setting a case turns ON; every other one stays as in the default.
+enum class Variant { Default, Normalization, Hyphenation, Bionic };
+
+// One corpus book under one variant.
 struct Case {
   std::string epub;
-  bool fontSizeNormalization = false;
+  Variant variant = Variant::Default;
 };
+
+const char* variantName(const Variant v) {
+  switch (v) {
+    case Variant::Normalization:
+      return "fontSizeNormalization";
+    case Variant::Hyphenation:
+      return "hyphenation";
+    case Variant::Bionic:
+      return "bionicReading";
+    case Variant::Default:
+      break;
+  }
+  return "default";
+}
 
 // Without this gtest dumps the struct as raw bytes in failure messages.
 void PrintTo(const Case& c, std::ostream* os) {
-  *os << fs::path(c.epub).filename().string() << " [fontSizeNormalization=" << (c.fontSizeNormalization ? "on" : "off")
-      << "]";
+  *os << fs::path(c.epub).filename().string() << " [" << variantName(c.variant) << "]";
 }
 
 std::string stem(const std::string& path) { return fs::path(path).stem().string(); }
@@ -50,19 +71,39 @@ std::string stem(const std::string& path) { return fs::path(path).stem().string(
 // byte-identical to OFF, so an ON case would only re-assert the OFF golden under a second name.
 const char* const kNormalizationSensitiveBooks[] = {"test_font_normalization", "test_font_sizes"};
 
-// Distinguishes the two variants' cache dirs and golden files. OFF keeps the
+// Books with enough running text that hyphenation splits words, and a hyphenated line lands at
+// the bottom of a page (the retry).
+const char* const kHyphenationBooks[] = {"test_anchor_pagebreak", "test_kerning_ligature", "test_wrapped_paragraphs"};
+
+// Bionic reading bolds a prefix of every word. Paragraphs over 96 words (test_long_paragraph_spacing
+// has seven) are laid out before they end, and the rebuild resumes where it stopped.
+const char* const kBionicBooks[] = {"test_long_paragraph_spacing", "test_text_rendering"};
+
+// Distinguishes the variants' cache dirs and golden files. The default keeps the
 // historical unsuffixed golden name so its committed layout stays reviewable
 // across the normalization change.
-std::string variantSuffix(const Case& c) { return c.fontSizeNormalization ? "_norm" : ""; }
+std::string variantSuffix(const Case& c) {
+  switch (c.variant) {
+    case Variant::Normalization:
+      return "_norm";
+    case Variant::Hyphenation:
+      return "_hyph";
+    case Variant::Bionic:
+      return "_bionic";
+    case Variant::Default:
+      break;
+  }
+  return "";
+}
 
 std::string runOnce(const Case& c, const std::string& cacheDir) {
   pipeline_harness::Profile profile;
-  profile.fontSizeNormalization = c.fontSizeNormalization;
+  profile.fontSizeNormalization = c.variant == Variant::Normalization;
+  profile.hyphenationEnabled = c.variant == Variant::Hyphenation;
+  profile.bionicReadingEnabled = c.variant == Variant::Bionic;
   std::ostringstream dump;
   const bool ok = pipeline_harness::runAndDump(c.epub, cacheDir, profile, dump);
-  EXPECT_TRUE(ok) << "pipeline failed for " << c.epub
-                  << " (fontSizeNormalization=" << (c.fontSizeNormalization ? "on" : "off") << ")\n"
-                  << dump.str();
+  EXPECT_TRUE(ok) << "pipeline failed for " << c.epub << " (" << variantName(c.variant) << ")\n" << dump.str();
   return dump.str();
 }
 
@@ -109,20 +150,25 @@ TEST_P(EpubPipelineTest, MatchesGolden) {
   std::string golden;
   ASSERT_TRUE(readFile(goldenPath, golden))
       << "missing golden " << goldenPath << " — run with UPDATE_GOLDENS=1 to create it";
-  EXPECT_EQ(golden, dump) << "layout drift vs golden for " << c.epub
-                          << " (fontSizeNormalization=" << (c.fontSizeNormalization ? "on" : "off")
+  EXPECT_EQ(golden, dump) << "layout drift vs golden for " << c.epub << " (" << variantName(c.variant)
                           << ") — if intentional, regenerate with UPDATE_GOLDENS=1 and explain in the commit";
 
-  // The ON case is only worth its golden while normalization still changes this book's layout.
-  if (c.fontSizeNormalization) {
-    std::string offGolden;
-    ASSERT_TRUE(readFile(fs::path(GOLDEN_DIR) / (stem(c.epub) + ".golden.txt"), offGolden));
-    EXPECT_NE(offGolden, dump) << c.epub << " no longer lays out differently with normalization ON; "
-                               << "drop it from kNormalizationSensitiveBooks and delete its _norm golden";
+  // A variant is only worth its golden while it still changes this book's layout.
+  if (c.variant != Variant::Default) {
+    std::string defaultGolden;
+    ASSERT_TRUE(readFile(fs::path(GOLDEN_DIR) / (stem(c.epub) + ".golden.txt"), defaultGolden));
+    EXPECT_NE(defaultGolden, dump) << c.epub << " no longer lays out differently with " << variantName(c.variant)
+                                   << " ON; drop it from its book list and delete its " << variantSuffix(c)
+                                   << " golden";
   }
 }
 
-// Every corpus book with normalization OFF, plus ON for the books it changes.
+template <size_t N>
+bool listed(const char* const (&books)[N], const std::string& name) {
+  return std::find(std::begin(books), std::end(books), name) != std::end(books);
+}
+
+// Every corpus book in the default variant, plus the other variants for the books they cover.
 std::vector<Case> corpusCases() {
   std::vector<std::string> paths;
   for (const auto& entry : fs::directory_iterator(CORPUS_DIR)) {
@@ -132,12 +178,10 @@ std::vector<Case> corpusCases() {
 
   std::vector<Case> cases;
   for (const auto& path : paths) {
-    cases.push_back(Case{path, /*fontSizeNormalization=*/false});
-    const auto* const sensitive =
-        std::find(std::begin(kNormalizationSensitiveBooks), std::end(kNormalizationSensitiveBooks), stem(path));
-    if (sensitive != std::end(kNormalizationSensitiveBooks)) {
-      cases.push_back(Case{path, /*fontSizeNormalization=*/true});
-    }
+    cases.push_back(Case{path});
+    if (listed(kNormalizationSensitiveBooks, stem(path))) cases.push_back(Case{path, Variant::Normalization});
+    if (listed(kHyphenationBooks, stem(path))) cases.push_back(Case{path, Variant::Hyphenation});
+    if (listed(kBionicBooks, stem(path))) cases.push_back(Case{path, Variant::Bionic});
   }
   return cases;
 }
