@@ -95,7 +95,9 @@ class HalFile : public Print {
       std::filesystem::create_directories(parent, ec);
       if (ec) return false;
     }
-    fp_ = fopen(path.c_str(), "wb");
+    // Read/write, as on the device (SDCardManager::openFileForWrite: O_RDWR | O_CREAT | O_TRUNC):
+    // a section build reads its anchor map back through the write handle.
+    fp_ = fopen(path.c_str(), "w+b");
     applyStdioPolicy(fp_);
     return fp_ != nullptr;
   }

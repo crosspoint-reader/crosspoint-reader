@@ -1745,7 +1745,11 @@ Section::BuildPhaseResult Section::runBuildFinalize(BuildState& st) {
     st.cssParser->clearCaches();
   }
 
-  buildTocBoundaries(anchors);
+  // From the anchor map just written, not from `anchors`: that holds only the records the parser
+  // kept resident, which since anchors spill to SD is normally none, so every TOC entry of the
+  // spine started at page 0 until the section was next loaded from the cache. The write handle
+  // is read/write, so this opens no second handle (see the LUT note below for why that matters).
+  buildTocBoundariesFromFile(file);
 
   // The labels were just written to the cache; the first query reads them back from there
   // (see pageBreakLabelsPending_ for why they are not copied from the parser here). Swap, not
@@ -2232,56 +2236,12 @@ void Section::warmAllImageCaches(const int xOffset, const int yOffset, const boo
   }
 }
 
-// Resolve TOC anchor-to-page mappings from the parser's in-memory anchor vector.
-// Called after createSectionFile when anchors are already in memory.
-// See buildTocBoundariesFromFile for the on-disk variant; the two are kept separate
-// because the anchor resolution has fundamentally different iteration patterns
-// (scan in-memory vector vs. stream from file with early exit).
-void Section::buildTocBoundaries(const std::vector<std::pair<std::string, uint16_t>>& anchors) {
-  const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
-  if (startTocIndex < 0) return;
-
-  // Count TOC entries for this spine and how many have anchors to resolve
-  const int tocCount = epub->getTocItemsCount();
-  uint16_t totalEntries = 0;
-  uint16_t unresolvedCount = 0;
-  for (int i = startTocIndex; i < tocCount; i++) {
-    const auto entry = epub->getTocItem(i);
-    if (entry.spineIndex != spineIndex) break;
-    totalEntries++;
-    if (!entry.anchor.empty()) unresolvedCount++;
-  }
-
-  // If no TOC entries have anchors, all chapters start at page 0 and
-  // getTocIndexForPage falls back to epub->getTocIndexForSpineIndex,
-  // so there's nothing to resolve and no value in storing boundaries.
-  if (totalEntries == 0 || unresolvedCount == 0) return;
-
-  tocBoundaries.reserve(totalEntries);
-  for (int i = startTocIndex; i < startTocIndex + totalEntries; i++) {
-    const auto entry = epub->getTocItem(i);
-    uint16_t page = 0;
-    if (!entry.anchor.empty()) {
-      for (const auto& [key, val] : anchors) {
-        if (key == entry.anchor) {
-          page = val;
-          break;
-        }
-      }
-    }
-    tocBoundaries.push_back({i, page});
-  }
-
-  // Defensive sort in case TOC entries are out of document order in a malformed epub
-  std::sort(tocBoundaries.begin(), tocBoundaries.end(),
-            [](const TocBoundary& a, const TocBoundary& b) { return a.startPage < b.startPage; });
-}
-
 // Resolve TOC anchor-to-page mappings by scanning the section cache's on-disk anchor data.
-// Called from loadSectionFile when anchors are not in memory. Caches the small set of
-// TOC anchor strings first (since getTocItem does file I/O to BookMetadataCache), then
-// streams through on-disk anchors matching only those, stopping as soon as all are found.
-// See buildTocBoundaries for the in-memory variant.
+// Called from loadSectionFile, and at the end of a build with the still-open write handle (the
+// anchors spill to SD during the parse, so the cache's anchor map is the only complete copy).
+// Caches the small set of TOC anchor strings first (since getTocItem does file I/O to
+// BookMetadataCache), then streams through on-disk anchors matching only those, stopping as
+// soon as all are found.
 void Section::buildTocBoundariesFromFile(FsFile& f) {
   const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
   if (startTocIndex < 0) return;
