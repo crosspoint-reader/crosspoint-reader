@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Epub.h"
@@ -137,7 +138,7 @@ class Section {
   // Look up an anchor among the pages built so far by the in-progress build, so an anchor jump
   // (TOC / chapter select, usually the chapter top = page 0) can resolve without laying out the
   // whole chapter. Returns nullopt if the anchor hasn't been reached yet (build more) or no build.
-  std::optional<uint16_t> findAnchorDuringBuild(const std::string& anchor) const;
+  std::optional<uint16_t> findAnchorDuringBuild(std::string_view anchor) const;
 
   // Get the page count from the section cache file without fully loading it.
   std::optional<uint16_t> getCachedPageCount() const;

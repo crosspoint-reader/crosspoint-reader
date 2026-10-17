@@ -64,8 +64,10 @@ namespace {
 // v53: Persist per-word source ranges alongside the redaction layout changes.
 // v54: Source ranges retain codepoints absorbed by NFC composition.
 // v55: Persist the first logical word of each paragraph for clipping separators.
-// v56: Split hyphen and dash tokens (e.g "foo—bar" into "foo—" and "bar") in standard reading mode
-constexpr uint8_t SECTION_FILE_VERSION = 56;
+// v56: Split tokens at explicit hyphens/dashes; also used by earlier table-grid builds.
+// v57 was used by external-hyphenation builds with a different cache header.
+// v58: Combine explicit-hyphen line breaks with serialized table-grid rows.
+constexpr uint8_t SECTION_FILE_VERSION = 58;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -513,10 +515,10 @@ bool Section::hasHtmlCache() const {
   return Storage.exists(htmlPath.c_str());
 }
 
-std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string& anchor) const {
+std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string_view anchor) const {
   if (!build_ || !build_->parser) return std::nullopt;
-  for (const auto& [key, page] : build_->parser->getAnchors()) {
-    if (key == anchor) return page;
+  for (const auto& entry : build_->parser->getAnchors()) {
+    if (anchor.size() == entry.length && memcmp(anchor.data(), entry.id.get(), entry.length) == 0) return entry.page;
   }
   return std::nullopt;
 }
@@ -555,8 +557,8 @@ int Section::getTocIndexForPage(const int page) const {
   }
   std::string cachedAnchor;
   size_t count = 0;
-  const auto considerAnchor = [&](const std::string& anchor, const uint16_t anchorPage, const bool fromDisk) {
-    const size_t hash = std::hash<std::string>{}(anchor);
+  const auto considerAnchor = [&](const std::string_view anchor, const uint16_t anchorPage, const bool fromDisk) {
+    const size_t hash = std::hash<std::string_view>{}(anchor);
     for (size_t i = 0; i < count; ++i) {
       if (targets[i].hash != hash || epub->getTocItem(targets[i].index).anchor != anchor) continue;
       const int resolvedPage = fromDisk ? findAnchorDuringBuild(anchor).value_or(anchorPage) : anchorPage;
@@ -569,8 +571,8 @@ int Section::getTocIndexForPage(const int page) const {
   };
   const auto resolveBatch = [&]() {
     if (build_ && build_->parser) {
-      for (const auto& [anchor, anchorPage] : build_->parser->getAnchors()) {
-        considerAnchor(anchor, anchorPage, false);
+      for (const auto& anchor : build_->parser->getAnchors()) {
+        considerAnchor(std::string_view(anchor.id.get(), anchor.length), anchor.page, false);
       }
     }
     if (anchorReader && anchorReader->seek(anchorStart)) {
@@ -593,7 +595,7 @@ int Section::getTocIndexForPage(const int page) const {
         latestPage = 0;
       }
     } else {
-      targets[count++] = {std::hash<std::string>{}(item.anchor), i};
+      targets[count++] = {std::hash<std::string_view>{}(item.anchor), i};
       if (count == BATCH_SIZE) resolveBatch();
     }
   }
@@ -673,14 +675,15 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   const uint32_t anchorMapOffset = file.position();
   const auto& anchors = build_->parser->getAnchors();
   uint16_t anchorCount = 0;
-  for (const auto& [anchor, page] : anchors) {
-    if (!asPartial || page < builtPageCount_) anchorCount++;
+  for (const auto& anchor : anchors) {
+    if (!asPartial || anchor.page < builtPageCount_) anchorCount++;
   }
   serialization::writePod(file, anchorCount);
-  for (const auto& [anchor, page] : anchors) {
-    if (asPartial && page >= builtPageCount_) continue;
-    serialization::writeString(file, anchor);
-    serialization::writePod(file, page);
+  for (const auto& anchor : anchors) {
+    if (asPartial && anchor.page >= builtPageCount_) continue;
+    serialization::writePod(file, anchor.length);
+    file.write(reinterpret_cast<const uint8_t*>(anchor.id.get()), anchor.length);
+    serialization::writePod(file, anchor.page);
   }
 
   const uint32_t paragraphLutOffset = file.position();
