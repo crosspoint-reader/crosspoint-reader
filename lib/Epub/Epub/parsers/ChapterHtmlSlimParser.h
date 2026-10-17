@@ -931,6 +931,16 @@ class ChapterHtmlSlimParser final : public Print {
   void wireTextBlock();
   void wireParagraphLines(ParsedText& text);
   void beforeLineHook(uint8_t maxSizePct);
+  // Widow/orphan control and keep-with-next (CSS defaults: orphans 2, widows 2), decided before
+  // each line of currentTextBlock is placed: true when the page should end before a line that
+  // still fits. A placed line is never moved, so the decision looks ahead instead. `nextLine`
+  // asks the same for the line after the one about to be placed.
+  bool keepTogetherBreak(int lineHeight, bool nextLine = false) const;
+  static constexpr int kOrphans = 2;
+  static constexpr int kWidows = 2;
+  static constexpr int kKeepWithNextLines = 2;  // body lines a heading keeps room for below it
+  // Lines of the paragraph being laid out already on the current page.
+  uint16_t paragraphLinesOnPage_ = 0;
   void ensurePageBlock();
   void releasePageBlock();
 };

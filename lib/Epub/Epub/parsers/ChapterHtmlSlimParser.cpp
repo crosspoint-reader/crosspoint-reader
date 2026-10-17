@@ -1124,6 +1124,7 @@ void ChapterHtmlSlimParser::emitPage() {
   if (currentPage) currentPage->elements.reserve(Page::TYPICAL_ELEMENTS);
   currentPageNextY = 0;
   lastBlockMarginBottom = 0;
+  paragraphLinesOnPage_ = 0;
 
   // A floated image never crosses a page boundary, so any active float ended on the
   // page we just emitted. Clear it and drop stale float zones from the block that
@@ -1216,11 +1217,59 @@ void ChapterHtmlSlimParser::beforeLineHook(const uint8_t maxSizePct) {
     if (maxSizePct != 100) {
       lineHeight = lineHeight * maxSizePct / 100;
     }
-    if (currentPageNextY + lineHeight > viewportHeight) {
+    if (currentPageNextY + lineHeight > viewportHeight || keepTogetherBreak(lineHeight)) {
       emitPage();
     }
   }
   ensurePageBlock();
+}
+
+// Widows and orphans are kept off a page by ending it early, never by moving lines: a placed
+// line's bytes live in the page's arena block, rewound when the page is handed off, so a line
+// carried over would dangle. The decision runs before each line, from where the line sits in its
+// paragraph (ParsedText::LinePlace), so it is the same in beforeLineHook and addLineToPage, and
+// it never ends an empty page: a block taller than a page still splits, and nothing loops.
+// The idea is crosspoint-reader PR #3891's (Justin Mitchell, @itsthisjustin; Uri Tauber), which
+// moves the page's last lines over instead.
+bool ChapterHtmlSlimParser::keepTogetherBreak(const int lineHeight, const bool nextLine) const {
+  if (!currentPage || !currentTextBlock || lineHeight <= 0) return false;
+  if (currentPage->elements.empty() && !nextLine) return false;
+  const BlockStyle& style = currentTextBlock->getBlockStyle();
+  // A float (image or drop cap) is placed with its paragraph's first line: those keep the
+  // ordinary break.
+  if (style.floatZoneCount > 0 || deferredPageImage_ || deferredDropCapLine_) return false;
+  ParsedText::LinePlace place = currentTextBlock->linePlace();
+  int y = currentPageNextY;
+  int onPage = place.paragraphStart ? 0 : paragraphLinesOnPage_;
+  if (nextLine) {
+    // The line after this one, once this one is placed: for the hyphenation retry below.
+    if (place.linesLeft == 1) return false;  // this is the paragraph's last
+    if (place.linesLeft > 1) place.linesLeft--;
+    place.paragraphStart = false;
+    y += lineHeight;
+    onPage++;
+  }
+  const int room = viewportHeight - y;
+  if (style.keepWithNext) {
+    // A heading goes over unless it fits with its bottom spacing and the first lines below it.
+    if (!place.paragraphStart || place.linesLeft == 0) return false;
+    const int bodyLineHeight = static_cast<int>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
+    const int need = place.linesLeft * lineHeight + std::max<int>(style.marginBottom, 0) +
+                     std::max<int>(style.paddingBottom, 0) + kKeepWithNextLines * bodyLineHeight;
+    return need > room;
+  }
+  const int fit = room / lineHeight;  // lines of this height still on the page, this one included
+  if (fit <= 0) return false;         // it does not fit at all: the ordinary break
+  // Not known yet: the paragraph runs on past this layout pass, so it has lines enough to split.
+  const int left = place.linesLeft != 0 ? place.linesLeft : INT16_MAX;
+  if (fit >= left) return false;  // the rest of the paragraph fits
+  // How many of its lines may stay on this page, from this one, so that kWidows go over.
+  const int keep = std::min(fit, left - kWidows);
+  // Its first lines move together unless kOrphans of them can stay.
+  if (onPage == 0) return keep < kOrphans;
+  // Further on, the page ends here once the rest must go over -- unless that leaves an orphan
+  // behind. The lines already placed cannot follow, so the widow is then the lesser evil.
+  return keep <= 0 && onPage >= kOrphans;
 }
 
 void ChapterHtmlSlimParser::ensurePageBlock() {
@@ -2735,6 +2784,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     self->addAncestorInsets(headerBlockStyle, emSize);
     headerBlockStyle.textAlignDefined = true;
+    headerBlockStyle.keepWithNext = true;
     if (self->embeddedStyle && cssStyle.hasTextAlign() &&
         self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
       headerBlockStyle.alignment = cssStyle.textAlign;
@@ -2810,6 +2860,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
         brStyle.fontSizeMultiplier = currentStyle.fontSizeMultiplier;
         brStyle.headingFontId = currentStyle.headingFontId;
         brStyle.fontResolved = currentStyle.fontResolved;
+        brStyle.keepWithNext = currentStyle.keepWithNext;
       }
       brStyle.fromBrElement = true;
       self->startNewTextBlock(brStyle);
@@ -4068,12 +4119,15 @@ ParsedText::LineProcessResult ChapterHtmlSlimParser::addLineToPage(std::unique_p
     currentPageNextY = 0;
   }
 
-  if (currentPageNextY + lineHeight > viewportHeight) {
+  if (currentPageNextY + lineHeight > viewportHeight || keepTogetherBreak(lineHeight)) {
     emitPage();
   }
 
+  // The page's last line must not end in a hyphenated word: also when the page ends early, before
+  // the next line, to keep a widow or an orphan off it.
   const bool noRoomForAnotherLine =
-      currentPageNextY + lineHeight <= viewportHeight && currentPageNextY + (lineHeight * 2) > viewportHeight;
+      currentPageNextY + lineHeight <= viewportHeight &&
+      (currentPageNextY + (lineHeight * 2) > viewportHeight || keepTogetherBreak(lineHeight, /*nextLine=*/true));
   if (lineEndsWithHyphenatedWord && !suppressHyphenationRetry && noRoomForAnotherLine) {
     const std::string linePreview = buildTextBlockPreview(line.get());
     LOG_TRC("EHP", "Requesting line rerender without hyphenation to avoid page-break split word: %s",
@@ -4121,6 +4175,8 @@ ParsedText::LineProcessResult ChapterHtmlSlimParser::addLineToPage(std::unique_p
   }
   noteElementOnPage(lineVisibleOffset);
   currentPage->elements.push_back(std::move(pageLine));
+  const bool paragraphStart = currentTextBlock && currentTextBlock->linePlace().paragraphStart;
+  paragraphLinesOnPage_ = static_cast<uint16_t>((paragraphStart ? 0 : paragraphLinesOnPage_) + 1);
 
   // On the first line of a block with a deferred inline image, fix the image's
   // yPos so its top aligns with the glyph top of the first text line.
@@ -4151,6 +4207,7 @@ void ChapterHtmlSlimParser::applyHeadingScope(BlockStyle& blockStyle, const CssS
       embeddedStyle && cssStyle.hasTextAlign() && paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None);
   if (!booksOwnAlignment) blockStyle.alignment = headingAlignment_;
   blockStyle.textAlignDefined = true;
+  blockStyle.keepWithNext = true;
   if (!cssStyle.hasFontSizeMultiplier()) blockStyle.fontSizeMultiplier = headingFontSizeMultiplier_;
 }
 
@@ -4187,6 +4244,7 @@ void ChapterHtmlSlimParser::endBlockSpan() {
   resumed.fontSizeMultiplier = blockSpan_.fontSizeMultiplier;
   resumed.headingFontId = blockSpan_.headingFontId;
   resumed.fontResolved = blockSpan_.fontResolved;
+  resumed.keepWithNext = depth > headingDepth_;  // the rest of a heading the span sat in
   addAncestorInsets(resumed, static_cast<float>(renderer.getFontAscenderSize(fontId)));
 
   if (currentTextBlock && currentTextBlock->isEmpty()) {
@@ -4216,6 +4274,7 @@ void ChapterHtmlSlimParser::clearSpentBlockHeadingStyle() {
   spent.fontSizeMultiplier = 1.0f;
   spent.headingFontId = 0;
   spent.fontResolved = false;
+  spent.keepWithNext = false;
 }
 
 void ChapterHtmlSlimParser::makePages() {

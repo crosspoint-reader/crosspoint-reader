@@ -22,6 +22,15 @@ class ParsedText {
     RetryWithoutHyphenation,
   };
 
+  // Where the line being laid out sits in its paragraph (linePlace()): set before beforeLine_
+  // and processLine run, for the parser's widow/orphan and keep-with-next decisions.
+  struct LinePlace {
+    bool paragraphStart = false;  // the paragraph's first line (not a continuation pass)
+    // Lines from this one to the paragraph's last; 0 when that is not known yet (the pass
+    // stops short of the paragraph's end, see includeLastLine).
+    uint16_t linesLeft = 0;
+  };
+
  public:
   // Per-word font-size bounds, percent of the block's font size (microreader-style).
   // Inline CSS font-size composes multiplicatively through nested elements; anything
@@ -85,6 +94,7 @@ class ParsedText {
   // The first word's offset of the line most recently handed to processLine. Read by the parser's
   // line callbacks, which only get the TextBlock.
   uint32_t lastLineVisibleOffset_ = 0;
+  LinePlace linePlace_;
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
@@ -193,6 +203,7 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   uint32_t lastLineVisibleOffset() const { return lastLineVisibleOffset_; }
+  const LinePlace& linePlace() const { return linePlace_; }
   std::optional<uint32_t> firstWordVisibleOffset() const {
     if (wordVisibleOffsets.empty()) return std::nullopt;
     return wordVisibleOffsets.front();

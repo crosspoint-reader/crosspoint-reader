@@ -259,7 +259,7 @@ SPINE 8 href=OEBPS/chapter9.xhtml pages=1 truncated=0 cssFallback=0
    W x=0 s=0 z=100 t=from
    W x=46 s=0 z=100 t=cache.
 SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
- PAGE 0 elements=15 footnotes=0
+ PAGE 0 elements=14 footnotes=0
   LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=4
    W x=25 s=1 z=100 t=Image
    W x=125 s=1 z=100 t=Centering
@@ -354,7 +354,8 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=285 s=0 z=100 t=text
    W x=334 s=0 z=100 t=blocks.
    W x=408 s=0 z=100 t=Lorem
-  LINE y=726 x=0 align=0 mult=1.000 hfid=0 words=7
+ PAGE 1 elements=9 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=ipsum
    W x=54 s=0 z=100 t=dolor
    W x=115 s=0 z=100 t=sit
@@ -362,13 +363,12 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=213 s=0 z=100 t=consectetur
    W x=328 s=0 z=100 t=adipiscing
    W x=422 s=0 z=100 t=elit
- PAGE 1 elements=8 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=4
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=4
    W x=0 s=0 z=100 t=sed
    W x=32 s=0 z=100 t=do
    W x=58 s=0 z=100 t=eiusmod
    W x=129 s=0 z=100 t=tempor.
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=18 s=0 z=100 t=SECOND
    W x=86 s=0 z=100 t=PARAGRAPH
    W x=173 s=0 z=100 t=in
@@ -377,7 +377,7 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=285 s=0 z=100 t=div.
    W x=329 s=0 z=100 t=This
    W x=370 s=0 z=100 t=paragraph
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=should
    W x=80 s=0 z=100 t=always
    W x=155 s=0 z=100 t=be
@@ -385,7 +385,7 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=284 s=0 z=100 t=because
    W x=366 s=0 z=100 t=the
    W x=416 s=0 z=100 t=first
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=paragraph's
    W x=121 s=0 z=100 t=text
    W x=172 s=0 z=100 t=block
@@ -393,7 +393,7 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=271 s=0 z=100 t=flushed.
    W x=364 s=0 z=100 t=Duis
    W x=416 s=0 z=100 t=aute
-  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=irure
    W x=56 s=0 z=100 t=dolor
    W x=119 s=0 z=100 t=in
@@ -401,7 +401,7 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=277 s=0 z=100 t=in
    W x=308 s=0 z=100 t=voluptate
    W x=413 s=0 z=100 t=velit
-  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=esse
    W x=52 s=0 z=100 t=cillum
    W x=120 s=0 z=100 t=dolore
@@ -409,14 +409,14 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=230 s=0 z=100 t=fugiat
    W x=306 s=0 z=100 t=nulla
    W x=374 s=0 z=100 t=pariatur.
-  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=6
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=6
    W x=0 s=0 z=100 t=Excepteur
    W x=95 s=0 z=100 t=sint
    W x=147 s=0 z=100 t=occaecat
    W x=239 s=0 z=100 t=cupidatat
    W x=337 s=0 z=100 t=non
    W x=387 s=0 z=100 t=proident
-  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=5
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=5
    W x=0 s=0 z=100 t=sunt
    W x=47 s=0 z=100 t=in
    W x=70 s=0 z=100 t=culpa

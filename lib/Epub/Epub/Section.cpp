@@ -31,7 +31,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 88;  // v88: page-break-after breaks, and a
+constexpr uint8_t SECTION_FILE_VERSION = 89;  // v89: widow/orphan control, and a heading
+                                              // keeps room for two lines below it, so pages
+                                              // end earlier than in v88
+                                              // v88: page-break-after breaks, and a
                                               // page-break-before keeps the paragraph before
                                               // it on the old page
                                               // v87: a block's bold/italic reaches the blocks

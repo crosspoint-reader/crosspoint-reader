@@ -116,6 +116,7 @@ add_executable(EpubPipelineTest
   HeadingBlockLayoutTest.cpp
   BlockEmphasisTest.cpp
   PageBreakAfterTest.cpp
+  KeepTogetherTest.cpp
   NativeSizeLayoutTest.cpp
   SpineCacheLayoutTest.cpp
   SaxStateInArenaTest.cpp
