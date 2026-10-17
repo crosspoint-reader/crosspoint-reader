@@ -7,6 +7,7 @@ dictionary, wait until the device has finished drawing and building, ask what is
 screenshot. This page explains what the commands do, how to use them, and how to add one.
 
 - [Why it exists](#why-it-exists)
+- [Which builds have it](#which-builds-have-it)
 - [Connecting](#connecting)
 - [How a command works](#how-a-command-works)
 - [Command reference](#command-reference)
@@ -48,6 +49,19 @@ enters the firmware, so the user's button mapping and long/double-press handling
 opened with the same navigation call the menus use; a setting is changed by the same code as the
 web settings page. A test therefore exercises the real code paths, not a back door.
 
+## Which builds have it
+
+The development builds (`pio run -e default`, `-e x4pro`, `-e lilygo_t5s3`) are compiled with
+`-DSERIAL_TEST_API=1` and have everything on this page. The release builds (`gh_release`,
+`gh_release_rc` and their X4 Pro and LilyGo twins) and `slim` leave the flag off and keep only the
+first commands: `BTN` (the six front and side keys, `:LONG`), `ACT` (`HOME`, `READER:<path>`,
+`SETTINGS`, `BOOKMARKS`, `FILES`, `LIBRARY`), `STATE` (screen, stack, the reader's book, spine and
+page), `SCREENSHOT`, `BOOTLOG` and `HELP`. Anything else gets `CMD_ERROR:unknown command`, and
+`CMD:HELP` lists what the build in hand has.
+
+The full set costs about 10.4 KB of flash and 280 B of RAM on the X4 build (the basic commands
+about 3 KB more than before this API). A new command belongs inside `#if SERIAL_TEST_API`.
+
 ## Connecting
 
 Every supported board has a USB serial port on the chip itself (see [debugging.md](debugging.md)):
@@ -71,7 +85,8 @@ Things to know about the port:
 
 ## How a command works
 
-A command is one line starting with `CMD:`, ended by LF, CR or CRLF, at most 1 KB long:
+A command is one line starting with `CMD:`, ended by LF, CR or CRLF, at most 1 KB long (127
+bytes on the USB Transfer screen):
 
 ```
 CMD:BTN:RIGHT
@@ -109,7 +124,8 @@ Reply: `BTN_OK`, or `BTN_ERROR:unknown button <name>` / `BTN_ERROR:bad press <te
 - `:LONG` holds the key long enough to count as a long press (1.5 s, dated back, so the reply is
   immediate).
 - `:DOUBLE` sends two taps 120 ms apart, inside the 300 ms double-press window. A key with no
-  double action reads them as two short presses, as it would from a finger.
+  double action reads them as two short presses, as it would from a finger. `POWER` and `:DOUBLE`
+  need the full API.
 - `POWER:LONG` puts the device to sleep, like holding the power key (see
   [Power](#power-sleep-and-reboot) before you use it).
 
@@ -141,8 +157,13 @@ Reply: `ACT_OK`, or `ACT_ERROR:<reason>` (`no such file <path>`, `bad position <
 
 - Paths are paths on the SD card (`/test/book.epub`). A file name may itself contain `@`: only the
   text after the last `@` is read as a position, and only when it has one of the two forms.
-- Positions are for EPUB books. `@<spine>:<page>` uses the hand-off the bookmark list uses, so it
-  also saves that position as the book's progress. `@<percent>%` lands where the reader's own
+- Positions are for EPUB books, and need the full API (so do `DICT`, `FILE_TRANSFER`,
+  `USB_TRANSFER` and the settings tab). `@<spine>:<page>` counts from 1, exactly as `STATE` reports
+  `spine=` and `page=`: `@20:12` opens the 12th page of the 20th spine item and `STATE` then says
+  `spine=20/.. page=12/..`. That is the page within the spine item; the status bar counts pages in
+  the whole TOC chapter (`chapter_page=` in `STATE`), which is a larger number when the chapter
+  started in an earlier spine item. `@<spine>:<page>` uses the hand-off the bookmark list uses, so
+  it also saves that position as the book's progress. `@<percent>%` lands where the reader's own
   "go to percent" lands.
 - The new screen opens on the next loop pass; wait with `CMD:IDLE` before you look at it. Opening a
   book that has never been opened indexes it first, which can take seconds (a full `CMD:IDLE`
@@ -171,13 +192,13 @@ Reply: one line, `STATE:` followed by `key=value` pairs.
 | `stack` | always | the screens below it, bottom first, comma-separated (`""` when none) |
 | `sel`, `label` | menus and lists | the highlighted row (0-based) and its text; `sel=-1` when a tab bar has the focus |
 | `popup`, `popup_ms` | when a popup is up | its text, and how long ago it was drawn |
-| `book`, `spine`, `page` | EPUB reader | the file, spine item `n/count`, page in that item `n/count` |
+| `book`, `spine`, `page` | EPUB reader | the file, spine item `n/count`, page within that spine item `n/count`; both count from 1 |
 | `font`, `font_pt` | EPUB reader | the font family and point size the book is set in |
-| `chapter`, `chapter_page`, `percent` | EPUB reader | what the status bar works from: the TOC chapter title, the page within the chapter (`~` when the total is still an estimate), the book percentage |
+| `chapter`, `chapter_page`, `percent` | EPUB reader | what the status bar shows: the TOC chapter title, the page within the whole chapter, which can span several spine items (`~` when the total is still an estimate), the book percentage |
 | `heap`, `maxblock` | always | free heap and the largest free block, in bytes |
 
-A popup counts as on screen until the screen is redrawn (the dictionary's "Not found" is up for
-1.5 s). Lists report the row of the list drawn last on the current screen. Screens that draw their
+Everything but `activity`, `stack`, `book`, `spine` and `page` needs the full API. A popup counts as
+on screen until the screen is redrawn (the dictionary's "Not found" is up for 1.5 s). Lists report the row of the list drawn last on the current screen. Screens that draw their
 own lists without the shared list code (a few older pickers) report no `sel`.
 
 ```
@@ -207,7 +228,8 @@ released` (the Wi-Fi file server has the memory), `SCREENSHOT_ERROR:transfer sta
 stopped reading).
 
 The capture waits for the current render pass and copies the frame that is on the panel, not one
-being drawn. The frame is 1 bit per pixel, rows from top to bottom, 8 pixels per byte with the
+being drawn. In the reader, whose next page may already be drawn off-screen in the same memory, the
+page on screen is drawn again, status bar included, for the capture. The frame is 1 bit per pixel, rows from top to bottom, 8 pixels per byte with the
 leftmost pixel in the highest bit; a set bit is white. It is in the panel's **native** orientation
 (800x480 on the X4, landscape), so rotate it to the orientation the screen is used in:
 
@@ -238,20 +260,26 @@ Reply, once the device is idle: `IDLE:<milliseconds waited>`. If it is not idle 
 timeout (default 10000 ms, at most 600000): `IDLE_TIMEOUT:<what kept it busy>`.
 `IDLE_ERROR:...` for a malformed argument.
 
+`IDLE` follows the last command that should change the screen (`BTN`, `TOUCH`, `SWIPE`, an `ACT`
+that opens a screen) to its end, so it never answers between the command and its effect. The
+device stays busy until the press has been taken in by the input path (and the double-press window
+is over), or until the new screen is on top; then until the frame that causes has been drawn. A
+press that changes nothing on screen counts as done 1 s after it was taken in.
+
 "Idle" means that for 250 ms in a row none of these was true:
 
 | Reason | What it means |
 | --- | --- |
 | `transition` | a screen change is queued |
-| `input` | a press has not been taken in yet, or is waiting out the double-press window |
-| `render` | a frame is queued, being drawn, or still being refreshed onto the panel |
+| `input` | a press (or touch) has not been taken in yet, or is waiting out the double-press window |
+| `render` | a frame is queued, being drawn, or still being refreshed onto the panel; or the screen is about to change by itself (the reader's page still being built, a page turn on its way, the anti-aliasing redraw of the page); or the frame of the last command's effect is still to come |
 | `background` | the screen has work of its own to finish: the reader's chapter builds (the current one and the look-ahead), the pre-render of the next page, image decodes; Home's cover loading |
 | `settling` | nothing was busy, but not yet for 250 ms when the timeout came |
 
-With `:SCREEN` it waits only until the screen has settled (the first four rows without
-`background`). That is what you want before a screenshot after a page turn. A full `CMD:IDLE` in
-the reader also waits for the look-ahead builds of the next chapters, which start 1.5 s after a page
-appears and can take tens of seconds on a long book.
+With `:SCREEN` it waits only until the screen has settled (everything above but `background`).
+That is what you want before a screenshot after a page turn or after opening a book. A full
+`CMD:IDLE` in the reader also waits for the look-ahead builds of the next chapters, which start
+1.5 s after a page appears and can take tens of seconds on a long book.
 
 Send `CMD:IDLE` after the command it should wait for; the device handles them in order. While an
 `IDLE` is pending, the device still answers other commands; a second `IDLE` replaces the first.
@@ -301,7 +329,7 @@ GET:<key>=<value>[ label=<option>]
 GET_END:<number of keys>                     (after GET:*)
 SET_OK:<key>=<value>[ label=<option>]        the value as stored afterwards
 GET_ERROR:unknown key <key>
-SET_ERROR:unknown key <key> | out of range <value> | not a number or option <value>
+SET_ERROR:unknown key <key> | out of range <value> | bad value <value>
 SET_ERROR:not writable <key> | expected <key>=<value>
 ```
 
@@ -355,8 +383,9 @@ CMD:TOUCH:<x>,<y>
 CMD:SWIPE:<x1>,<y1>,<x2>,<y2>
 ```
 
-Reply: `TOUCH_OK` / `SWIPE_OK`; `TOUCH_ERROR:no touch panel` on boards without one (X3, X4);
-`TOUCH_ERROR:expected x,y on screen, got <text>` for a point off the screen.
+Reply: `TOUCH_OK` / `SWIPE_OK`; `TOUCH_ERROR:no touch panel` on boards without one (the X3/X4
+build does not carry the touch code at all); `TOUCH_ERROR:not on screen <text>` for a malformed
+argument or a point off the screen.
 
 Coordinates are screen pixels as the screen is drawn now: origin top-left, x to the right, in the
 current orientation (the rotated screenshot shows the same frame). The touch is queued where the
@@ -397,16 +426,18 @@ Replies: `SLEEP_OK`, `REBOOT_OK`, sent before the device acts.
 
 - `CMD:BOOTLOG` prints the boot summary again (for a monitor attached after boot) as log lines,
   then `BOOTLOG_OK`.
-- `CMD:HELP` replies `HELP:` and the list of command names.
+- `CMD:HELP` replies `HELP:` and the names of the commands this build has (see
+  [Which builds have it](#which-builds-have-it)).
 
 ## The USB Transfer screen
 
 File Transfer > USB Transfer (`CMD:ACT:USB_TRANSFER`) speaks a binary file-transfer protocol on the
 same port (`tools/serial_transfer.py`, compatible with MicroReader's tools). While it is up:
 
-- It still answers `CMD:` lines between transfer messages, so a script can check it with
-  `CMD:STATE` and leave it with `CMD:BTN:BACK` or `CMD:ACT:HOME`. A transfer message starts with
-  `CMND` or `EPUB`; a line starting with `CMD:` is told apart by its first four bytes.
+- It still answers `CMD:` lines between transfer messages (full API, lines up to 127 bytes), so a
+  script can check it with `CMD:STATE` and leave it with `CMD:BTN:BACK` or `CMD:ACT:HOME`. A
+  transfer message starts with `CMND` or `EPUB`; a line starting with `CMD:` is told apart by its
+  first four bytes.
 - Leaving it always restarts the device to Home (by design: a clean start is the simplest way back
   from what the transfer screen turns off). So does opening any other screen from it.
 - Log lines are held back from the wire so they cannot corrupt a transfer; replies still come.
@@ -497,10 +528,14 @@ so it can be tested on the host (`test/serial_command_grammar`).
    (`notePopup()` and friends) and `service()` reports it.
 4. Reuse the route the UI takes (an `ActivityManager::goTo*()`, `HalGPIO::injectPress()`, the
    settings rows) rather than a shortcut, so a test exercises what users run.
-5. Keep it cheap: no heap held between commands, nothing on the hot path. Everything here is compiled
-   into every build (about 16 KB of flash in all).
+5. Keep it cheap: no heap held between commands, nothing on the hot path. Put it inside
+   `#if SERIAL_TEST_API` so release builds do not carry it (see
+   [Which builds have it](#which-builds-have-it)); a probe the UI calls gets an empty inline twin in
+   `SerialTestApi.h` for builds without the flag.
 6. Add the reply prefix to `REPLY` in `tools/devctl.py` and document the command on this page.
 
 For what a screen reports in `STATE`, override `Activity::appendDebugState()` and write each pair
 with `SerialCommandGrammar::appendField()`. For work `IDLE` should wait for, override
-`Activity::hasPendingBackgroundWork()`.
+`Activity::hasPendingScreenWork()` (the screen is about to change) or
+`Activity::hasPendingBackgroundWork()` (work of its own that does not change the screen). The
+waiting rules themselves are in `src/util/IdleGate.h`, tested in `test/idle_gate`.
