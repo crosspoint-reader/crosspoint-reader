@@ -222,9 +222,9 @@ HttpDownloader::DownloadError runGetSecureOnSession(HttpDownloader::Session& ses
   impl->http->setAllowInsecureFallback(false);
   impl->http->setAllowCertificateDateErrors(!clockReady);
   impl->http->clearHeaders();
-  if (!username.empty() && !password.empty()) {
-    impl->http->setBasicAuth(username, password);
-  }
+  // Unconditionally, so a file without credentials does not inherit the previous one's
+  // (sendRequest() leaves basic auth out unless both are set).
+  impl->http->setBasicAuth(username, password);
 
   const int rc = crosspoint::downloadToSink(*impl->http, url, sink, impl->chunking, &largestFreeBlock);
   if (rc == crosspoint::SecureHttpClient::ERR_ABORTED) return HttpDownloader::ABORTED;
