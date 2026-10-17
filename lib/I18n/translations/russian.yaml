@@ -529,6 +529,7 @@ STR_UNSUPPORTED_IMAGE_FORMAT: "Формат изображения не подд
 STR_COULD_NOT_RENDER_IMAGE: "Не удалось отобразить изображение"
 STR_FAILED_TO_SET_SLEEP_SCREEN: "Не удалось установить экран сна"
 STR_SET_SLEEP_SCREEN: "Установить экран сна"
+STR_SET_SLEEP_SCREEN_QUESTION: "Сделать это изображение экраном сна?"
 STR_SLEEP_SCREEN_SET: "Экран сна обновлён!"
 STR_IMAGE_DISPLAY_BW: ">> Ч/Б"
 STR_IMAGE_DISPLAY_GRAYSCALE: ">> Оттенки серого"

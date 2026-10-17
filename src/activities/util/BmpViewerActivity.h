@@ -7,6 +7,7 @@
 #include <string>
 
 #include "../Activity.h"
+#include "ConfirmationActivity.h"
 #include "MappedInputManager.h"
 
 class BmpViewerActivity final : public Activity {
@@ -41,10 +42,14 @@ class BmpViewerActivity final : public Activity {
   StrId getCurrentDitherModeLabel() const;
 #endif
   void renderError(const char* message);
+  void confirmSetAsSleepScreen();
   void setAsSleepScreen();
 
  public:
   // Sets a BMP file as the sleep screen without needing an open viewer instance.
   // Returns true on success.  Only works for .bmp files; for JPG/PNG open BmpViewerActivity.
   static bool setBmpFileAsSleepScreen(const std::string& filePath);
+
+  // Asked before an image replaces /sleep.bmp, which keeps no copy of the image it held.
+  static ConfirmationActivity::Question sleepScreenQuestion(const std::string& imagePath);
 };

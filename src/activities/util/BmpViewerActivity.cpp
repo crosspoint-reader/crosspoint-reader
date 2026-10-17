@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 
 #include <cmath>
 
@@ -372,6 +373,37 @@ bool BmpViewerActivity::setBmpFileAsSleepScreen(const std::string& filePath) {
   return success;
 }
 
+ConfirmationActivity::Question BmpViewerActivity::sleepScreenQuestion(const std::string& imagePath) {
+  ConfirmationActivity::Question question;
+  question.headline = tr(STR_SET_SLEEP_SCREEN_QUESTION);
+  question.message = imagePath.substr(imagePath.find_last_of('/') + 1);
+  question.acceptLabel = StrId::STR_SET_SLEEP_SCREEN;
+  return question;
+}
+
+// One press used to replace /sleep.bmp, and replaceSleepBmpFromTemp() drops the backup once the
+// new image is in, so a stray press lost the previous sleep image for good.
+// Ported from crosspoint-reader commit 6d649b66f (PR #3994, Uri Tauber).
+void BmpViewerActivity::confirmSetAsSleepScreen() {
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, sleepScreenQuestion(filePath));
+  if (!confirmation) {
+    LOG_ERR("BMP", "OOM: sleep screen confirmation (%zu bytes)", sizeof(ConfirmationActivity));
+    return;
+  }
+  startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
+    // The question was drawn over the image. A decoded image is drawn again by setAsSleepScreen(),
+    // which renders it for the capture; a BMP is drawn here, so that the outcome's popup (drawn over
+    // the frame on the panel) lands on the image.
+    if (result.isCancelled || isBmpFile(filePath)) {
+      if (!renderCurrentImage()) {
+        renderError(tr(STR_COULD_NOT_RENDER_IMAGE));
+        return;
+      }
+    }
+    if (!result.isCancelled) setAsSleepScreen();
+  });
+}
+
 void BmpViewerActivity::setAsSleepScreen() {
   bool success = false;
 
@@ -449,7 +481,7 @@ void BmpViewerActivity::loop() {
     // two is drawn first changes with orientation, and frontStripPrevious/Next answer for that
     // exactly as mapLabels() does below.
     if (ev.button == MappedInputManager::frontStripNext() && ev.type == ButtonEventManager::PressType::Short) {
-      setAsSleepScreen();
+      confirmSetAsSleepScreen();
       return;
     }
   }
