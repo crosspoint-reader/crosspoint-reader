@@ -2,177 +2,81 @@
 
 ### Build Commands
 
-Follow the [existing-environment protocol](environment.md#build-in-an-existing-environment):
-run the selected build directly and use setup instructions only when needed.
+Use the [existing environment](environment.md#build-in-an-existing-environment).
+Run the selected `pio run -e <environment>` target; `pio run` selects `default`.
+Host suites use `pio run -t unit-tests` or their existing CMake/CTest commands.
 
-**Via CLI**:
+### Compact build output
 
-```bash
-# Build firmware (default environment)
-pio run
+The main agent records full build output in a task-specific log, preserving the
+process exit status. Report target, outcome, and log path; read bounded error
+context on failure. Full compiler output stays in the log unless needed to
+diagnose an error.
 
-# Build and upload to device
-pio run -t upload
-
-# Build specific environment
-pio run -e gh_release
-
-# Run the host CMake/CTest unit suites
-pio run -t unit-tests
-
-# Clean build artifacts
-pio run -t clean
-```
-
-**Via VS Code**:
-
-* Use PlatformIO toolbar: Build (✓), Upload (→), Clean (🗑️)
-* Or Command Palette: `PlatformIO: Build`, `PlatformIO: Upload`, etc.
-
-### Monitoring and Debugging
-
-Use the [serial monitor options](#serial-monitor-options) below.
+For an active build, use waits of 10-30 seconds rather than repeated one-second
+polls. Inspect a short progress/error excerpt when needed and the final result
+on completion. Keep user updates within 60 seconds. A sandbox/cache-lock failure
+is an environment issue, not a completed firmware build.
 
 ### Code Quality
 
-```bash
-# Static analysis (cppcheck)
-pio check
+Use `./bin/clang-format-fix -g` on every host, including formatter diagnostics;
+never invoke or probe raw `clang-format`. Run `pio check` when relevant.
 
-# Format only Git-modified C/C++ files, on every host
-./bin/clang-format-fix -g
-```
+### Testing and Verification Workflow
 
-Do not run raw `clang-format` or probe it with `command -v`; use the wrapper even for diagnostics.
+[firmware-handoff](../skills/firmware-handoff/SKILL.md) owns firmware review rounds,
+final build ordering, and human acceptance. The main agent owns tests, builds,
+and diagnostic code. Reviewers inspect source and recorded results only.
+
+Run the smallest meaningful regression checks for the changed contract. Reuse
+green results until a change or failure invalidates them. Test-only, diagnostic,
+documentation, and host-only changes use relevant lighter checks unless they
+alter firmware output/build. Check ignored outputs before staging, using the
+[generated-file rules](generated-files-cache.md#files-generated-by-build-scripts).
+
+Human device checks cover changed behavior, relevant orientations/remapping,
+and resource/cache effects. Changed input, display, or layout paths cover all
+four orientations: portrait, inverted, landscape CW, and landscape CCW.
+C3 baseline target: more than 50 KB free and no leaks;
+measure internal/PSRAM heaps and largest blocks separately across relevant repeated
+book, dictionary, font, or WiFi transitions. Free bytes alone do not prove an
+allocation will fit. For layout changes, back up progress and verify affected
+cache regeneration, including TXT/Markdown and partial-build resume when relevant.
 
 ### Debugging Crashes
 
-**Common Crash Causes**:
+Use serial traces to establish the failure path before changing resources.
 
-1. **Out of Memory** (Most common):
-
-   ```cpp
-   LOG_DBG("MEM", "Free heap: %d bytes", ESP.getFreeHeap());
-   ```
-
-   - Monitor heap usage throughout activity lifecycle
-
-   - Check if large allocations (>10KB) occur before crash
-
-   - Verify buffers are freed in `onExit()`
-
-2. **Stack Overflow**:
-
-   ```cpp
-   LOG_DBG("TASK", "Stack high water: %d", uxTaskGetStackHighWaterMark(taskHandle));
-   ```
-
-   - Occurs during deep recursion or large local variables
-
-   - Increase task stack size in `xTaskCreate()` (2048 → 4096)
-
-   - Move large buffers to checked `makeUniqueNoThrow` storage when reuse or
-     a static buffer cannot meet the ownership and lifetime requirements
-
-3. **Use-After-Free**:
-
-   - Activity deleted but task still running
-
-   - Always `vTaskDelete()` in `onExit()` BEFORE activity destruction
-
-   - Set pointers to `nullptr` after `free()`
-
-4. **Corrupt Cache Files**:
-
-   - Back up book state and remove only the affected book cache or its
-     `sections/`; deleting all of `.crosspoint/` also removes settings/state
-
-   - Forces clean re-parse of all EPUBs
-
-   - Check file format versions in [docs/file-formats.md](../../docs/file-formats.md)
-
-5. **Watchdog Timeout**:
-
-   - Loop/task blocked for >5 seconds
-
-   - Add `vTaskDelay(1)` in tight loops
-
-   - Check for blocking I/O operations
-
-**Verification Steps**:
-
-1. Check serial output for stack traces
-2. Monitor heap with `ESP.getFreeHeap()` before/after operations
-3. Verify task deletion with task list (`vTaskList()`)
-4. Test with `LOG_LEVEL=2` (debug logging enabled)
-
----
-
-
-## Testing and Verification Workflow
-
-### Testing Checklist
-
-**AI agent scope** (what you CAN verify):
-
-1. ✅ **Build**: Build once after the last code edit with the relevant `pio run` target. Do not clean by default, repeat a target that already passed, or rebuild after formatting/comment-only/documentation-only changes.
-2. ✅ **Quality**: `pio check` when relevant + `./bin/clang-format-fix -g`
-3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.gitignore`-excluded files staged (e.g., `*.generated.h`, `.pio/`, `platformio.local.ini`)
-4. ✅ **CI**: Fix GitHub Actions failures before review
-5. ✅ **Code review**: Ensure orientation-aware logic is correct in all 4 modes by inspecting switch/case coverage
-
-**Human tester scope** (flag these for the user):
-6. 🔲 **Device**: Test on hardware
-7. 🔲 **Orientations**: Verify all 4 modes (Portrait/Inverted/Landscape CW/CCW)
-8. 🔲 **Heap**: C3 baseline target: > 50KB free, no leaks. Also measure
-   `HalMemory` internal/PSRAM heaps and largest blocks across repeated book,
-   dictionary, font, and WiFi transitions; free bytes alone do not prove an
-   allocation will fit.
-9. 🔲 **Cache**: If EPUB/layout behavior changes, back up progress, remove the
-   affected book's `sections/` or cache as needed, and verify regeneration,
-   including TXT/Markdown and partial-build resume when relevant.
+- Heap/OOM: measure `HalMemory` internal/PSRAM statistics and largest blocks
+  before/after the operation; account for peak coexistence, allocation failure,
+  and activity cleanup. See [resource rules](hardware-resources.md#the-resource-protocol).
+- Stack: inspect call chains and `uxTaskGetStackHighWaterMark()`; adjust stack
+  or buffer placement from evidence, not a copied task size.
+- Task lifetime: follow [activity cleanup](ui-activities.md#activity-lifecycle-and-memory-management)
+  and shutdown before destruction; inspect shared-state synchronization.
+- Cache corruption: reset only affected data after backup and check the
+  [format contract](generated-files-cache.md#cache-file-format-versioning).
+- Watchdog: inspect blocking I/O and loops against the configured timeout;
+  preserve task scheduling/yield behavior when changing the work.
 
 ### CI/CD Pipeline Awareness
 
-**GitHub Actions** run automatically on pull requests:
-
-| Workflow      | File                                        | Purpose                |
-| ------------- | ------------------------------------------- | ---------------------- |
-| Build Check   | `.github/workflows/ci.yml`                  | Verifies code compiles |
-| Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
-| Release Build | `.github/workflows/release.yml`             | Production releases    |
-| RC Build      | `.github/workflows/release_candidate.yml`   | Release candidates     |
-| PR Firmware Links | `.github/workflows/pr-firmware-links.yml` | Links downloadable PR artifacts |
-
-Inspect each workflow's current board matrix before claiming CI coverage.
-Release and RC assets use board-specific names; OTA discovery must agree with
-that naming. Preserve the pinned pioarduino core/package setup across workflows.
-
-**Rules**:
-
-- **Fix CI failures BEFORE** requesting review
-- CI runs on: Push to PR, PR updates
-- Format check fails → Run `./bin/clang-format-fix -g`
-- Build check fails → Fix compile errors
-
----
-
-## Serial Monitoring and Live Debugging
+Inspect current matrices under `.github/workflows/` before claiming board
+coverage. Preserve pinned core/packages and patches. Release/RC board-specific
+asset naming must agree with OTA discovery. Fix existing CI failures affecting
+the change before handoff.
 
 ### Serial Monitor Options
 
-1. **Enhanced**: `python3 scripts/debugging_monitor.py` (color-coded logging, recommended)
-2. **Standard**: `pio device monitor` (basic, no colors)
-3. **VS Code**: Monitor (🔌) button (IDE-integrated)
+Use `python3 scripts/debugging_monitor.py` for enhanced logs or
+`pio device monitor` / the IDE monitor. Device access and measurements remain
+within the authorized task.
 
 ### Live Debugging Patterns
 
-**Heap**: `LOG_DBG("MEM", "Free: %d", ESP.getFreeHeap());` (every 5s in loop)
-For board-aware measurements, use `HalMemory` as above; the enhanced monitor
-plots PSRAM separately when those log values are present.
-**Stack**: `uxTaskGetStackHighWaterMark(nullptr)` (< 512 bytes → increase stack)
-**Flush**: `logSerial.flush();` (force output before crash)
-
-**Port Detection**: Windows: `mode` | Linux: `ls /dev/ttyUSB* /dev/ttyACM*` or `dmesg | grep tty`
-
----
+Use `LOG_DBG` for measurements, `LOG_LEVEL=2` for debug logging, and
+`logSerial.flush()` when a crash may lose buffered output. Task stack diagnostics
+use `uxTaskGetStackHighWaterMark()`; heap diagnostics follow `HalMemory`, not
+a combined free-byte reading. The enhanced monitor plots PSRAM separately when
+those log values are supplied.

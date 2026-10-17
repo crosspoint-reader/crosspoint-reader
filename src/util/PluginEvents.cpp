@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <HalStorage.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <esp_random.h>
 #include <time.h>
@@ -357,6 +358,7 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
           return -1;
         }
         Storage.remove(bak.c_str());
+        if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
       } else {
         Storage.remove(tmp.c_str());
       }

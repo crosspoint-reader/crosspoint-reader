@@ -111,8 +111,20 @@ inline bool readBasicInfo(HalFile& file, GifBasicInfo& info) {
       info.frameWidth = readLe16(&descriptor[4]);
       info.frameHeight = readLe16(&descriptor[6]);
       info.interlaced = (descriptor[8] & 0x40) != 0;
-      file.seek(0);
-      return true;
+      if ((descriptor[8] & 0x80) != 0) {
+        const uint32_t paletteBytes = 3u << ((descriptor[8] & 0x07) + 1u);
+        if (!file.seekCur(paletteBytes)) {
+          file.seek(0);
+          return false;
+        }
+      }
+      uint8_t codeSize = 0;
+      if (file.read(&codeSize, 1) != 1 || codeSize < 2 || codeSize > 8) {
+        LOG_ERR("GIF", "Invalid or missing LZW minimum code size");
+        file.seek(0);
+        return false;
+      }
+      return file.seek(0);
     }
 
     LOG_ERR("GIF", "Unexpected GIF block marker 0x%02X", marker);
