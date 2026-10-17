@@ -322,6 +322,9 @@ class HalStorage {
   bool openFileForUpdate(const char*, const std::string& path, HalFile& f) { return f.openForUpdate(path); }
   bool openFileForUpdate(const char*, const char* path, HalFile& f) { return f.openForUpdate(path); }
   bool exists(const char* path) { return std::filesystem::exists(path); }
+  // The device counts the firmware's own writes, for caches keyed on the card's contents; a host
+  // test changes its tree between runs, not under a cache.
+  uint32_t contentGeneration() const { return 0; }
   // Mirrors the device HalStorage: stream a whole file into a Print sink in
   // chunks. Epub::applyMetadataSidecar() feeds ContentOpfParser through this,
   // so the host pipeline exercises the same code path the device runs.

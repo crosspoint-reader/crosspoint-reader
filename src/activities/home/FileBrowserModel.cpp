@@ -637,19 +637,28 @@ void FileBrowserModel::resort() {
     return cmp < 0;
   });
 
-  // Reorder files vector and metadata arrays based on sorted indices
-  std::vector<std::string> sorted_files(files.size());
-  std::vector<uint32_t> sorted_sizes(fileSizes.size());
-  std::vector<uint32_t> sorted_dateTimes(fileDateTimes.size());
-  for (size_t i = 0; i < indices.size(); ++i) {
-    size_t idx = indices[i];
-    sorted_files[i] = files[idx];
-    if (idx < fileSizes.size()) sorted_sizes[i] = fileSizes[idx];
-    if (idx < fileDateTimes.size()) sorted_dateTimes[i] = fileDateTimes[idx];
+  // Put the rows in that order in place, one cycle of the permutation at a time (indices[row] is
+  // the entry that belongs at row): each name is moved to its row, not copied into a second
+  // listing, which held every name twice at once. A row done is marked by indices[row] == row.
+  for (size_t start = 0; start < indices.size(); ++start) {
+    if (indices[start] == start) continue;
+    std::string name = std::move(files[start]);
+    const uint32_t size = fileSizes[start];
+    const uint32_t dateTime = fileDateTimes[start];
+    size_t row = start;
+    while (indices[row] != start) {
+      const size_t from = indices[row];
+      files[row] = std::move(files[from]);
+      fileSizes[row] = fileSizes[from];
+      fileDateTimes[row] = fileDateTimes[from];
+      indices[row] = row;
+      row = from;
+    }
+    files[row] = std::move(name);
+    fileSizes[row] = size;
+    fileDateTimes[row] = dateTime;
+    indices[row] = row;
   }
-  files = std::move(sorted_files);
-  fileSizes = std::move(sorted_sizes);
-  fileDateTimes = std::move(sorted_dateTimes);
   rebuildMatches();  // the rows were just renumbered
 }
 
