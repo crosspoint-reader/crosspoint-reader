@@ -58,10 +58,10 @@ class BuildArena;  // lib/Memory -- optional page-scoped storage for the arena b
 // serialized either. See BlockStyle for the parse-time-only fields (floatZones,
 // fromBrElement, fontResolved) that are deliberately absent.
 //
-// RTL / CJK note: this slice is not a barrier to either. CJK already works and
-// needs nothing here -- its line breaking is a parse-time concern
-// (ChapterHtmlSlimParser, "primary word-breaking mechanism" for spaceless text),
-// so a CJK line reaches TextBlock already broken and positioned like any other.
+// RTL / CJK note: this slice is not a barrier to either. CJK line breaking happens
+// in ParsedText -- a word with CJK characters becomes one token per allowed break
+// (CjkLineBreak.h) -- so a CJK line reaches TextBlock already broken and positioned
+// like any other; of its token boundaries only the continuation bit is kept.
 // For RTL, the direction state the compiled-content design reserves is per-word
 // bidiLevel and a base-direction flag on the block (see CompiledContent.h), not
 // a BlockStyle field -- BlockStyle has no direction member at all. Mirroring
