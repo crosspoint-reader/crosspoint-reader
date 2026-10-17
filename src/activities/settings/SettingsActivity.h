@@ -23,6 +23,8 @@ enum class SettingAction {
   Network,
   Bluetooth,
   ClearCache,
+  ResetSettings,
+  FactoryReset,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
