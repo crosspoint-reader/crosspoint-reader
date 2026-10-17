@@ -531,6 +531,44 @@ TEST_F(DictionaryTest, ExactCaseHeadwordIsFoundWhenItsRunStraddlesASample) {
   }
 }
 
+// Asserts that `word` resolves to `headword` and reads back `definition`.
+void expectHit(Dictionary& dict, const char* word, const char* headword, const char* definition) {
+  std::string gotDefinition;
+  std::string gotHeadword;
+  ASSERT_TRUE(dict.lookup(word, gotDefinition, gotHeadword)) << word;
+  EXPECT_EQ(gotHeadword, headword) << word;
+  EXPECT_EQ(gotDefinition, definition) << word;
+}
+
+TEST_F(DictionaryTest, CapitalisedNonAsciiWordsFindTheirLowercaseHeadword) {
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("Folded", {{"über", "over"},
+                                                     {"straße", "street"},
+                                                     {"привет", "hello"},
+                                                     {"γεια", "hi"},
+                                                     {"τους", "them"},
+                                                     {"їжак", "hedgehog"},
+                                                     {"Ärzte", "doctors"},
+                                                     {"ärzte", "a lowercase decoy"},
+                                                     {"Москва", "Moscow"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "Folded"));
+
+  // Sentence-initial and all-caps forms: cleanWord() lowercases only ASCII.
+  expectHit(dict, "Über", "über", "over");
+  expectHit(dict, "ÜBER", "über", "over");
+  expectHit(dict, "STRAẞE", "straße", "street");
+  expectHit(dict, "Привет", "привет", "hello");
+  expectHit(dict, "ПРИВЕТ", "привет", "hello");
+  expectHit(dict, "Γεια", "γεια", "hi");
+  expectHit(dict, "ΤΟΥΣ", "τους", "them");  // a word-final sigma lowercases to ς
+  expectHit(dict, "Їжак", "їжак", "hedgehog");
+
+  // A headword stored capitalised keeps its exact hit: the lowercase form is
+  // only the fallback, so the decoy is never reached.
+  expectHit(dict, "Ärzte", "Ärzte", "doctors");
+  expectHit(dict, "Москва", "Москва", "Moscow");
+}
+
 TEST_F(DictionaryTest, ResolveFindsTheLocationWithoutReadingIt) {
   const std::string folder = provision("plain", "Resolving");
   Dictionary dict;

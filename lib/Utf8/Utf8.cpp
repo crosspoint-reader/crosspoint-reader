@@ -483,3 +483,23 @@ uint32_t utf8LowerCodepoint(const uint32_t cp) {
       return cp;
   }
 }
+
+std::string utf8ToLower(const std::string& s) {
+  std::string out;
+  out.reserve(s.size());  // no mapping lengthens its codepoint's encoding
+  const auto* p = reinterpret_cast<const unsigned char*>(s.c_str());
+  while (*p != '\0') {
+    const unsigned char* start = p;
+    const uint32_t cp = utf8NextCodepoint(&p);
+    uint32_t lower = utf8LowerCodepoint(cp);
+    // Greek spells a word-final sigma ς; σ only ever stands inside a word.
+    if (cp == 0x03A3 && *p == '\0' && !out.empty()) lower = 0x03C2;
+    if (lower == cp) {
+      // Copied as bytes, so a sequence that did not decode passes through as it was.
+      out.append(reinterpret_cast<const char*>(start), static_cast<size_t>(p - start));
+    } else {
+      appendCodepoint(out, lower);
+    }
+  }
+  return out;
+}

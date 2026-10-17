@@ -17,6 +17,10 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 // caller that folds case: the hyphenators and the dictionary lookup.
 uint32_t utf8LowerCodepoint(uint32_t cp);
 
+// utf8LowerCodepoint() over a single word. A capital sigma ending the word becomes the final
+// form ς, the spelling Greek text and dictionaries use. Never longer than the input.
+std::string utf8ToLower(const std::string& s);
+
 // Truncate a raw char buffer to the last complete UTF-8 codepoint boundary.
 // Returns the new length (<= len). If the buffer ends mid-sequence, the
 // incomplete trailing bytes are excluded.

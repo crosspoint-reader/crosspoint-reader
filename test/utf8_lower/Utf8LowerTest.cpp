@@ -1,5 +1,5 @@
 // utf8LowerCodepoint, the one lowercase mapping the hyphenators and the
-// dictionary lookup share.
+// dictionary lookup share, and utf8ToLower, its whole-word form.
 //
 // Every block it covers is a few arithmetic rules rather than a table, so the
 // cases pin each rule's ends and the exceptions that break a block's pattern.
@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <string>
 
 #include "Utf8.h"
 
@@ -70,6 +71,32 @@ TEST(Utf8Lower, OtherScriptsAreUnchanged) {
   EXPECT_EQ(utf8LowerCodepoint(0x4E2D), 0x4E2Du);  // 中
   EXPECT_EQ(utf8LowerCodepoint(0xFF21), 0xFF21u);  // fullwidth Ａ, outside the covered blocks
   EXPECT_EQ(utf8LowerCodepoint(0x0000), 0x0000u);
+}
+
+TEST(Utf8Lower, WholeWord) {
+  EXPECT_EQ(utf8ToLower("Über"), "über");
+  EXPECT_EQ(utf8ToLower("STRAẞE"), "straße");  // three bytes become two
+  EXPECT_EQ(utf8ToLower("İSTANBUL"), "istanbul");
+  EXPECT_EQ(utf8ToLower("ПРИВЕТ"), "привет");
+  EXPECT_EQ(utf8ToLower("already lower"), "already lower");
+  EXPECT_EQ(utf8ToLower(""), "");
+}
+
+TEST(Utf8Lower, WordFinalSigma) {
+  EXPECT_EQ(utf8ToLower("ΤΟΥΣ"), "τους");
+  EXPECT_EQ(utf8ToLower("ΣΟΦΟΣ"), "σοφος");  // only the last one is final
+  EXPECT_EQ(utf8ToLower("Σ"), "σ");          // a lone letter is not a word ending
+}
+
+TEST(Utf8Lower, UndecodableBytesPassThrough) {
+  // A stray continuation byte and a truncated sequence: copied, not replaced by
+  // a three-byte U+FFFD that would make the result longer than the input.
+  const std::string broken =
+      "A\x80"
+      "B\xC3";
+  EXPECT_EQ(utf8ToLower(broken),
+            "a\x80"
+            "b\xC3");
 }
 
 }  // namespace

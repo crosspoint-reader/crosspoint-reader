@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
@@ -881,7 +882,26 @@ bool Dictionary::resolve(const char* word, DictLocation& locationOut, std::strin
       return found;
     };
 
-    location = probe(cleaned);
+    // cleanWord() lowercases ASCII only, so a sentence-initial or all-caps
+    // non-ASCII word ("Über", "STRAẞE", "Привет", "Γεια") misses its lowercase
+    // headword. The fully lowercased word is the fallback, never the first try:
+    // a dictionary that stores a word capitalised ("Ärzte", "Москва") has to
+    // keep its exact hit, and the index cannot fold non-ASCII case in its
+    // comparisons, because it is sorted with ASCII-only folding.
+    //
+    // Based on crosspoint-reader PR #3123 (Esben Sorig, @sorig) and PR #3611
+    // (Anton Lijcklama à Nijeholt, @alycklama), reworked onto the shared
+    // utf8LowerCodepoint() instead of a German-only fold or a Unicode table.
+    const auto probeCased = [&](const std::string& target) {
+      DictLocation found = probe(target);
+      if (!found.found) {
+        const std::string lowered = utf8ToLower(target);
+        if (lowered != target) found = probe(lowered);
+      }
+      return found;
+    };
+
+    location = probeCased(cleaned);
 
     // Still nothing, and the word is a hyphenated compound: look up its parts.
     // The compound itself is tried first and often wins -- "mother-in-law" and
@@ -891,7 +911,7 @@ bool Dictionary::resolve(const char* word, DictLocation& locationOut, std::strin
       std::vector<std::string> parts;
       hyphenParts(cleaned, parts);
       for (const auto& part : parts) {
-        location = probe(part);
+        location = probeCased(part);
         if (location.found) break;
       }
     }
