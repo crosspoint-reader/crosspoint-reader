@@ -1,5 +1,6 @@
 #include "FileBrowserModel.h"
 
+#include <Arduino.h>
 #include <CooperativeAbort.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -7,6 +8,7 @@
 #include <I18n.h>
 #include <LibraryOrder.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <ProtectedPaths.h>
 
 #include <algorithm>
@@ -98,12 +100,25 @@ std::string fileExtension(const std::string& name) {
   return std::string(dot + 1);
 }
 
+// The in-RAM listing of a folder whose SD index could not be built. Free heap it leaves to the
+// rest of the screen: a page of rows, a cover thumbnail, the render task. The figure is the one
+// crosspoint-reader PR #2385 settled on for the same listing, from the X3's observed low point.
+constexpr uint32_t RAM_LISTING_HEAP_FLOOR = 24 * 1024;
+// What one kept entry costs the heap: its std::string, the block its name takes (book filenames
+// run 30 to 60 bytes; with the allocator's header and the heap-poisoning canaries, about 64), its
+// size and date, and its row in resort()'s index.
+constexpr size_t RAM_LISTING_ENTRY_BYTES = sizeof(std::string) + 64 + 2 * sizeof(uint32_t) + sizeof(size_t);
+// The four per-entry arrays -- names, sizes, dates, the sort's index -- are a block each, and are
+// counted as if all of them came out of the largest free one, less some slack for the allocator.
+constexpr size_t RAM_LISTING_ARRAY_BYTES = sizeof(std::string) + 2 * sizeof(uint32_t) + sizeof(size_t);
+constexpr uint32_t RAM_LISTING_BLOCK_SLACK = 1024;
+
 }  // namespace
 
 void FileBrowserModel::load() {
-  files.clear();
-  fileSizes.clear();
-  fileDateTimes.clear();
+  // What the last load listed goes first: its names, and an index open on the old folder.
+  releaseRamListing();
+  fileIndex = nullptr;
   if (mode == Mode::Recents) {
     loadRecents();
     return;
@@ -121,17 +136,48 @@ void FileBrowserModel::load() {
   std::optional<EmptyFolderCheck> emptyFolders;
   if (mode == Mode::Books) emptyFolders.emplace(basepath);
 
+  // Names are kept only while the folder may still turn out small. A large one is counted, and the
+  // SD index then reads it for itself. Reading it into RAM first held every name, size and date as
+  // well, for as long as the folder was open; and the name vector's doubling asked for one 24 KB
+  // block at the 513th entry, which a heap with both framebuffers in it seldom has -- the device
+  // aborted on the way into the folder.
+  //
+  // Based on crosspoint-reader PR #2385 (Adrian Ratiu, @10ne1), reworked for the SD index: there
+  // the listing is always in RAM and is cut off at a heap floor; here only the fallback is.
+  const size_t entries = readDirectory(INDEX_THRESHOLD, 0);
+  if (entries >= INDEX_THRESHOLD) {
+    releaseRamListing();
+    if (openIndex()) return;
+    // No index (an SD write error): the folder is listed from RAM, as far as the heap has room.
+    readDirectory(ramListingRoom(entries), RAM_LISTING_HEAP_FLOOR);
+    if (files.size() < entries) {
+      LOG_ERR("FBR", "Low heap: listing %u of %u entries in %s", static_cast<unsigned>(files.size()),
+              static_cast<unsigned>(entries), basepath.c_str());
+    }
+  }
+  resort();
+}
+
+size_t FileBrowserModel::readDirectory(const size_t keep, const uint32_t heapFloor) {
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
     if (root) root.close();
-    return;
+    return 0;
   }
 
   root.rewindDirectory();
 
+  // One block each for what is kept: grown entry by entry, every doubling asked for twice the room
+  // while the old block was still held, and left it behind as a hole.
+  files.reserve(keep);
+  fileSizes.reserve(keep);
+  fileDateTimes.reserve(keep);
+  size_t room = keep;
+
   // A book or folder listed here that is newer than everything the book index knows was put on the
   // card where the firmware did not see it (LibraryFreshness::checkListedEntry).
   const bool checkForUnseen = mode == Mode::Books && depthOf(basepath) <= INDEXED_DEPTH;
+  size_t accepted = 0;
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
@@ -141,9 +187,18 @@ void FileBrowserModel::load() {
       continue;
     }
     if (checkForUnseen) LibraryFreshness::checkListedEntry(latestDate(file));
+    ++accepted;
+    // Below the floor nothing more is kept, even should the heap recover: the list stays a prefix.
+    if (files.size() < room && heapFloor > 0 && ESP.getFreeHeap() < heapFloor) room = files.size();
+    if (files.size() >= room) {
+      file.close();
+      continue;
+    }
 
     if (isDir) {
-      files.emplace_back(std::string(name) + "/");
+      std::string& dirName = files.emplace_back();
+      dirName.reserve(strlen(name) + 1);  // the name and its '/' in one block
+      dirName.append(name).push_back('/');
       fileSizes.push_back(0);      // directories have size 0
       fileDateTimes.push_back(0);  // will use default date
     } else {
@@ -157,14 +212,26 @@ void FileBrowserModel::load() {
     file.close();
   }
   root.close();
+  return accepted;
+}
 
-  // Try to use FileIndex for large folders (64+ entries); fall back to in-RAM sort
-  openIndexIfLarge();
+size_t FileBrowserModel::ramListingRoom(const size_t entries) {
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  const uint32_t largestBlock = ESP.getMaxAllocHeap();
+  const size_t byHeap =
+      freeHeap > RAM_LISTING_HEAP_FLOOR ? (freeHeap - RAM_LISTING_HEAP_FLOOR) / RAM_LISTING_ENTRY_BYTES : 0;
+  const size_t byBlock =
+      largestBlock > RAM_LISTING_BLOCK_SLACK ? (largestBlock - RAM_LISTING_BLOCK_SLACK) / RAM_LISTING_ARRAY_BYTES : 0;
+  return std::min({entries, byHeap, byBlock});
+}
 
-  // Only sort in-RAM if FileIndex is not in use
-  if (!fileIndex) {
-    resort();
-  }
+void FileBrowserModel::releaseRamListing() {
+  files.clear();
+  files.shrink_to_fit();
+  fileSizes.clear();
+  fileSizes.shrink_to_fit();
+  fileDateTimes.clear();
+  fileDateTimes.shrink_to_fit();
 }
 
 bool FileBrowserModel::acceptForBooks(const char* name, const bool isDir) {
@@ -348,19 +415,22 @@ FileIndex::AcceptFn FileBrowserModel::indexFilter() const {
   return &acceptForBooks;
 }
 
-void FileBrowserModel::openIndexIfLarge() {
-  if (files.size() < INDEX_THRESHOLD) {
-    fileIndex = nullptr;
-    return;
+// The SD index for a folder of INDEX_THRESHOLD entries or more. False when it could not be had,
+// and the folder is then listed from RAM.
+bool FileBrowserModel::openIndex() {
+  fileIndex = makeUniqueNoThrow<FileIndex>();
+  if (!fileIndex) {
+    LOG_ERR("FBR", "OOM: FileIndex for %s", basepath.c_str());
+    return false;
   }
-
-  fileIndex = std::make_unique<FileIndex>();
   const FileIndex::SortMode indexSortMode = static_cast<FileIndex::SortMode>(sortMode);
   if (!fileIndex->open(basepath.c_str(), indexSortMode, indexFilter())) {
     LOG_ERR("FBR", "FileIndex build failed for %s, falling back to in-RAM sort", basepath.c_str());
     fileIndex = nullptr;
+    return false;
   }
   rebuildMatches();  // the rows were just renumbered
+  return true;
 }
 
 size_t FileBrowserModel::unfilteredEntryCount() const { return fileIndex ? fileIndex->totalCount() : files.size(); }
@@ -680,9 +750,7 @@ void FileBrowserModel::loadRecents() {
 }
 
 void FileBrowserModel::clear() {
-  files.clear();
-  fileSizes.clear();
-  fileDateTimes.clear();
+  releaseRamListing();
   filterQuery.clear();
   matches.clear();
   matches.shrink_to_fit();

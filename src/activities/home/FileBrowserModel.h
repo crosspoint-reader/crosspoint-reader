@@ -15,9 +15,10 @@
 //
 // Two interchangeable backends behind one interface. A small folder keeps its names and
 // metadata in RAM and is sorted here; a folder of INDEX_THRESHOLD entries or more builds an
-// SD-backed FileIndex instead, so RAM stays bounded whatever the card holds. Both present the
-// same entry-name form -- a trailing '/' marks a directory -- so nothing above this class has
-// to know which one is live.
+// SD-backed FileIndex instead, so RAM stays bounded whatever the card holds. Should the index
+// fail to build (an SD write error), the folder is listed in RAM as far as the heap has room
+// for, and no further. Both present the same entry-name form -- a trailing '/' marks a
+// directory -- so nothing above this class has to know which one is live.
 //
 // Deliberately free of rendering, input and activity transitions: it answers "what is in this
 // directory, in what order", and leaves what a row MEANS to the activity. That is also why the
@@ -188,7 +189,8 @@ class FileBrowserModel {
   [[nodiscard]] bool usesIndex() const { return fileIndex != nullptr; }
 
  private:
-  // At or above this many entries, the folder moves to the SD-backed index.
+  // At or above this many entries, the folder moves to the SD-backed index. Reading a folder
+  // keeps no more names than this: past it the entries are only counted, and the index lists them.
   static constexpr size_t INDEX_THRESHOLD = 64;
   // Ceiling on a single search's match list, so a one-letter query in a huge folder cannot
   // turn into an unbounded allocation. Four bytes each, so this is 4 KB at worst.
@@ -231,7 +233,16 @@ class FileBrowserModel {
   [[nodiscard]] bool acceptEntry(const char* name, bool isDir) const;
   [[nodiscard]] FileIndex::AcceptFn indexFilter() const;
 
-  void openIndexIfLarge();
+  // Reads the directory into the in-RAM backend: keeps the first `keep` entries it accepts and
+  // only counts the rest, and with a `heapFloor` keeps none once free heap falls below it.
+  // Returns how many entries it accepted in all.
+  size_t readDirectory(size_t keep, uint32_t heapFloor);
+  // How many of a folder's `entries` the in-RAM backend has room for on the heap as it is now:
+  // the listing for a folder whose index could not be built.
+  static size_t ramListingRoom(size_t entries);
+  // Lets go of the in-RAM backend's names and metadata, capacity included.
+  void releaseRamListing();
+  bool openIndex();
   void loadRecents();
   bool indexEntryAt(size_t displayIndex, FileIndex::Entry& out);
 

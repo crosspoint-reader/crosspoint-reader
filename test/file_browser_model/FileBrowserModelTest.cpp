@@ -152,6 +152,39 @@ class FileBrowserModelTest : public ::testing::Test {
   std::string root;
 };
 
+// The bug: a folder over the index threshold was read whole into RAM first -- every name, size and
+// date -- and only then handed to the SD index, which listed it again; the RAM copy was kept for as
+// long as the folder was open. On the device that is ~92 bytes a book, and at the 513th the name
+// vector asked for one 24 KB block: with ~60 KB free, five hundred books rebooted it.
+TEST_F(FileBrowserModelTest, AnIndexedFolderKeepsNoNamesInRam) {
+  books(400);
+  FileBrowserModel model;
+  model.setPath(root);
+
+  const heap::Window window;
+  model.load();
+
+  ASSERT_TRUE(model.usesIndex());
+  EXPECT_EQ(model.entryCount(), 400u);
+  // The index object and what it keeps of the path, nothing per entry.
+  EXPECT_LT(window.retained(), 2 * 1024);
+}
+
+TEST_F(FileBrowserModelTest, AnIndexedFolderIsNeverHeldWholeOnTheWay) {
+  books(400);
+  const long long listing = plainListingPeak(root);
+  FileBrowserModel model;
+  model.setPath(root);
+
+  const heap::Window window;
+  model.load();
+
+  ASSERT_TRUE(model.usesIndex());
+  // At most the threshold's worth of names before the folder turns out to be large: 64 of them are
+  // ~6 KB here. All 400 were ~45 KB.
+  EXPECT_LT(window.peakAbove() - listing, 12 * 1024);
+}
+
 TEST_F(FileBrowserModelTest, ASmallFolderIsListedInRamAndSorted) {
   file("b book 10.epub");
   file("b book 9.epub");
@@ -173,6 +206,27 @@ TEST_F(FileBrowserModelTest, ASmallFolderIsListedInRamAndSorted) {
   EXPECT_EQ(model.entryName(1), "b book 10.epub");
   EXPECT_EQ(model.entryName(2), "b book 9.epub");
   EXPECT_EQ(model.findEntry("b book 9.epub"), 2u);
+}
+
+// A folder left -- the browser on the activity stack, or the Library switching tabs -- gives back
+// what its listing took, capacity included.
+TEST_F(FileBrowserModelTest, ClearGivesTheListingBack) {
+  books(40);
+  {
+    // Once first, so the folder string load() keeps for the next one is not counted below.
+    FileBrowserModel first;
+    first.setPath(root);
+    first.load();
+  }
+  FileBrowserModel model;
+  model.setPath(root);
+
+  const heap::Window window;
+  model.load();
+  ASSERT_EQ(model.entryCount(), 40u);
+  model.clear();
+
+  EXPECT_EQ(window.retained(), 0);
 }
 
 // Re-sorting moves the names into their new order rather than copying the listing, which held
@@ -214,6 +268,60 @@ TEST_F(FileBrowserModelTest, ResortKeepsEachNameWithItsSize) {
     const int book = std::stoi(model.entryName(row).substr(5, 2));
     EXPECT_EQ(static_cast<size_t>((book * 37) % 50 + 1), model.entrySize(row)) << model.entryName(row);
   }
+}
+
+// The index could not be built (an SD write error): the folder is listed from RAM, all of it when
+// the heap has room.
+TEST_F(FileBrowserModelTest, WithoutTheIndexAFolderIsListedInRam) {
+  books(300);
+  FileIndex::failOpen = true;
+  FileBrowserModel model;
+  model.setPath(root);
+  model.load();
+
+  ASSERT_FALSE(model.usesIndex());
+  ASSERT_EQ(model.entryCount(), 300u);
+  EXPECT_EQ(model.entryName(0), "Some Author - A Title Of Ordinary Length 0000.epub");
+  EXPECT_EQ(model.entryName(299), "Some Author - A Title Of Ordinary Length 0299.epub");
+}
+
+// ... and as much of it as the heap has room for when it has not, rather than aborting.
+TEST_F(FileBrowserModelTest, WithoutTheIndexALowHeapShortensTheList) {
+  books(300);
+  FileIndex::failOpen = true;
+  ESP.setFreeHeap(40 * 1024);
+  FileBrowserModel model;
+  model.setPath(root);
+  model.load();
+
+  ASSERT_FALSE(model.usesIndex());
+  EXPECT_GT(model.entryCount(), 0u);
+  EXPECT_LT(model.entryCount(), 300u);
+  // Still sorted, whatever was left out.
+  for (size_t i = 1; i < model.entryCount(); ++i) EXPECT_LT(model.entryName(i - 1), model.entryName(i));
+}
+
+TEST_F(FileBrowserModelTest, WithoutTheIndexAFragmentedHeapShortensTheList) {
+  books(300);
+  FileIndex::failOpen = true;
+  ESP.setMaxAllocHeap(4 * 1024);  // the names' vector is one block
+  FileBrowserModel model;
+  model.setPath(root);
+  model.load();
+
+  EXPECT_GT(model.entryCount(), 0u);
+  EXPECT_LT(model.entryCount(), 4 * 1024 / sizeof(std::string));
+}
+
+TEST_F(FileBrowserModelTest, WithoutTheIndexAHeapBelowTheFloorListsNothing) {
+  books(300);
+  FileIndex::failOpen = true;
+  ESP.setFreeHeap(8 * 1024);
+  FileBrowserModel model;
+  model.setPath(root);
+  model.load();
+
+  EXPECT_EQ(model.entryCount(), 0u);
 }
 
 }  // namespace
