@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <HeapFit.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <SaxParser/SaxParser.h>
@@ -1095,6 +1096,14 @@ void ChapterHtmlSlimParser::recordPageBreakLabel(const std::string& label) {
     return;
   }
 
+  // One label per printed page, so in a book that is one XHTML file these two run to thousands of
+  // entries and double into blocks of several KB mid-parse. A label is worth less than the
+  // chapter: without the block, drop it rather than abort the build.
+  if (!heapReserveFor(pageBreakLabelPages, 1) || !heapReserveFor(pageBreakLabelPool, label.size() + 1)) {
+    noteCapOverflow(kCapPageLabels, "printed-page labels: no heap block to grow the record");
+    return;
+  }
+
   // Record the printed page label for the current rendered section page.
   // Do not alter pagination; the reader keeps its own page breaks. A label is text from the
   // page list or the markup, never containing a NUL, so the pool's separators are unambiguous.
@@ -1167,6 +1176,12 @@ void ChapterHtmlSlimParser::addExternalPageBreakAnchor(const std::string& id, co
     return;
   }
   if (externalPageBreakAnchorCount == UINT16_MAX) return;  // the page list itself is u16-counted
+  // A book that is one XHTML file brings its whole page list here, ~20 bytes an entry: this pool
+  // doubles into blocks of tens of KB. Without the block, the entry's label is lost, not the build.
+  if (!heapReserveFor(externalPageBreakAnchorPool, id.size() + label.size() + 2)) {
+    noteCapOverflow(kCapPageLabels, "page-list labels: no heap block to grow the pool");
+    return;
+  }
   externalPageBreakAnchorPool.append(id);
   externalPageBreakAnchorPool.push_back('\0');
   externalPageBreakAnchorPool.append(label);
@@ -1176,11 +1191,13 @@ void ChapterHtmlSlimParser::addExternalPageBreakAnchor(const std::string& id, co
 }
 
 void ChapterHtmlSlimParser::endExternalPageBreakAnchors() {
-  externalPageBreakAnchorPool.shrink_to_fit();
+  // Shrinking is a copy into a block of the exact size, which the heap may not have either.
+  if (heapHasBlockFor(externalPageBreakAnchorPool.size() + 1)) externalPageBreakAnchorPool.shrink_to_fit();
   // One label per matched anchor plus the top-of-file one: size the record here so it never
-  // doubles mid-parse (inline pagebreak markers past this hint still grow it normally).
-  pageBreakLabelPages.reserve(externalPageBreakAnchorCount + 1u);
-  pageBreakLabelPool.reserve(externalPageBreakLabelBytes);
+  // doubles mid-parse (inline pagebreak markers past this hint still grow it, through
+  // recordPageBreakLabel's heap check). Hints: without the blocks the record grows as it goes.
+  heapReserveFor(pageBreakLabelPages, externalPageBreakAnchorCount + 1u);
+  heapReserveFor(pageBreakLabelPool, externalPageBreakLabelBytes);
 }
 
 void ChapterHtmlSlimParser::attachPendingFloatImage(BlockStyle& bs) {
@@ -3671,6 +3688,12 @@ void ChapterHtmlSlimParser::recordAnchor(std::string id, const uint16_t page) {
   if (anchorSpillFailed || anchorCount >= MAX_RESIDENT_ANCHORS) {
     return;
   }
+  // Up to MAX_RESIDENT_ANCHORS the vector doubles to a 7 KB block (28 B an entry on the device),
+  // through the throwing operator new: without the block, drop the anchor the way the cap does.
+  if (!heapReserveFor(anchorData, 1)) {
+    noteCapOverflow(kCapAnchorsPerChapter, "resident anchors: no heap block to grow the table");
+    return;
+  }
   // Counts UP rather than being assigned anchorData.size(), so that a resident anchor recorded
   // after some were already spilled adds to them instead of replacing the total. Section writes
   // the spill first and these after, which is the order they were recorded in.
@@ -3738,7 +3761,7 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
     // Fallback only. Reserve for the common case: reserving for the cap would cost ~28 KB up
     // front to save reallocations that only an anchor-heavy chapter would ever pay.
     constexpr size_t TYPICAL_ANCHORS_PER_CHAPTER = 32;
-    anchorData.reserve(TYPICAL_ANCHORS_PER_CHAPTER);
+    heapReserveFor(anchorData, TYPICAL_ANCHORS_PER_CHAPTER);  // a hint: recordAnchor asks again
   }
 
   // Choose progress granularity by chapter size. Each callback drives a full-screen

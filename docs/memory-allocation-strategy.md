@@ -578,3 +578,9 @@ What would otherwise grow without bound is not held in memory: anchors stream to
 during the parse (`Section::getAnchorSpillPath`) and are copied into the section file at the end,
 and the page-list anchors are packed into one pool reserved at setup
 (`ChapterHtmlSlimParser::addExternalPageBreakAnchor`).
+
+The tables a chapter can lose entries from without losing the chapter stay `std` containers and
+grow only when the heap holds the block (`heapReserveFor`, `HeapFit.h`): the page-list pool, the
+printed-page label record and the resident anchors used when the spill will not open. Past that
+their entries are dropped, the section is marked simplified (`kCapPageLabels`,
+`kCapAnchorsPerChapter`), and the chapter builds whole.

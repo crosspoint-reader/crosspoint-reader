@@ -793,9 +793,9 @@ class ChapterHtmlSlimParser final : public Print {
   [[nodiscard]] bool tableRowDegraded() const { return tableRowDegradedAny_; }
   enum CapOverflow : uint8_t {
     kCapFootnotesPerPage = 1u << 0,   // Page::MAX_FOOTNOTES_PER_PAGE: later links on the page dropped
-    kCapAnchorsPerChapter = 1u << 1,  // MAX_ANCHORS_PER_CHAPTER: later ids not recorded
+    kCapAnchorsPerChapter = 1u << 1,  // MAX_ANCHORS_PER_CHAPTER, or no heap for resident ones: ids dropped
     kCapPageElements = 1u << 2,       // Page::MAX_ELEMENTS: a page's tail elements not written
-    kCapPageLabels = 1u << 3,         // 65535 printed-page labels: later ones not recorded
+    kCapPageLabels = 1u << 3,         // 65535 printed-page labels, or no heap to grow them: labels dropped
     kCapFootnoteHref = 1u << 4,       // FOOTNOTE_HREF_LEN: a link too long to navigate, kept as text
     kCapSaxDepth = 1u << 5,           // SaxParser kMaxDepth: nesting flattened past 64
     kCapPagesPerSection = 1u << 6,    // Page::MAX_PAGES_PER_SECTION: parse stopped (truncated cache)

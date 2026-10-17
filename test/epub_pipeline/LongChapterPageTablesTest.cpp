@@ -10,6 +10,7 @@
 // allocations on purpose (CHUNKED_VECTOR_FAULT_INJECTION) and checks what a refusal leaves: a
 // truncated chapter whose pages, page LUT and paragraph LUT all stop at the same page.
 #include <ChunkedVector.h>
+#include <esp_heap_caps.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
@@ -199,4 +200,93 @@ TEST(LongChapterPageTables, ARefusedChunkStopsTheBuildWithBothTablesInStep) {
     fs::remove_all(work);
   }
   EXPECT_GT(previousPages, 0) << "no round got far enough to keep a page";
+}
+
+// The chapter-scaled tables whose entries the chapter can do without -- printed-page labels and,
+// when the anchor spill will not open, the resident anchors -- stay std containers, grown only
+// when the heap has the block (heapReserveFor). On a heap without it the entries past that point
+// are dropped and the section is marked simplified; the chapter itself builds whole. Unguarded,
+// the growth went through the throwing operator new, an abort on the device.
+
+TEST(LongChapterPageTables, PrintedPageLabelsPastTheHeapAreDroppedNotTheChapter) {
+  // One printed-page marker per paragraph: the label pool reaches ~12 KB.
+  std::string body;
+  for (int i = 0; i < kParagraphs; ++i) {
+    body += "<p><span epub:type=\"pagebreak\" title=\"" + std::to_string(i + 1) + "\"/>" + word(i) + "</p>\n";
+  }
+  const auto p = shortPages();
+  GfxRenderer renderer;
+  const auto lastLabel = [&](const int index, const size_t largestBlock, bool& simplified) {
+    const auto work = freshWorkDir("labels_" + std::to_string(index));
+    auto epub = syntheticBook(work, index, body);
+    int label = -1;
+    {
+      Section built(epub, 0, renderer);
+      bool ok = false;
+      {
+        const HostLargestFreeBlock heap(largestBlock);
+        ok = built.createSectionFile(p, {}, /*skipEviction=*/true);
+      }
+      EXPECT_TRUE(ok);
+      EXPECT_FALSE(built.isTruncatedCache()) << "a label is never worth the chapter";
+      EXPECT_EQ(built.pageCount, kParagraphs / 2);
+      Section loaded(epub, 0, renderer);
+      EXPECT_TRUE(loaded.loadSectionFile(p));
+      simplified = loaded.isSimplified();
+      expectChapterPrefix(wordsOfAllPages(loaded), kParagraphs);
+      if (const auto last = loaded.getNearestPrintedPageLabelAtOrBefore(loaded.pageCount - 1)) label = std::stoi(*last);
+    }
+    epub.reset();
+    fs::remove_all(work);
+    return label;
+  };
+
+  bool simplified = true;
+  EXPECT_EQ(lastLabel(0, 200 * 1024, simplified), kParagraphs) << "with the heap, every label is kept";
+  EXPECT_FALSE(simplified);
+  // An 8 KB largest block: the pool doubles to 7,680 bytes and no further.
+  const int kept = lastLabel(1, 8 * 1024, simplified);
+  EXPECT_GT(kept, 0);
+  EXPECT_LT(kept, kParagraphs);
+  EXPECT_TRUE(simplified) << "the dropped labels are latched in the status byte";
+}
+
+TEST(LongChapterPageTables, ResidentAnchorsPastTheHeapAreDroppedNotTheChapter) {
+  constexpr int kAnchors = 100;
+  std::string body;
+  for (int i = 0; i < kAnchors; ++i) body += "<p id=\"a" + std::to_string(i) + "\">" + word(i) + "</p>\n";
+  const auto p = shortPages();
+  GfxRenderer renderer;
+  const auto build = [&](const int index, const size_t largestBlock, const auto& check) {
+    const auto work = freshWorkDir("anchors_" + std::to_string(index));
+    auto epub = syntheticBook(work, index, body);
+    // A directory where the spill file goes: it will not open, so the anchors stay in RAM.
+    fs::create_directories(Epub::spineCacheDir(epub->getCachePath(), 0) + "/anchors_0.tmp");
+    {
+      Section built(epub, 0, renderer);
+      {
+        const HostLargestFreeBlock heap(largestBlock);
+        EXPECT_TRUE(built.createSectionFile(p, {}, /*skipEviction=*/true));
+      }
+      EXPECT_FALSE(built.isTruncatedCache());
+      EXPECT_EQ(built.pageCount, kAnchors / 2);
+      Section loaded(epub, 0, renderer);
+      EXPECT_TRUE(loaded.loadSectionFile(p));
+      check(loaded);
+    }
+    epub.reset();
+    fs::remove_all(work);
+  };
+
+  build(0, 200 * 1024, [](const Section& s) {
+    EXPECT_FALSE(s.isSimplified());
+    EXPECT_EQ(s.getPageForAnchor("a" + std::to_string(kAnchors - 1)), std::optional<uint16_t>(kAnchors / 2 - 1));
+  });
+  // A 2 KB largest block: room for the 32-entry reserve, not for its doubling.
+  build(1, 2 * 1024, [](const Section& s) {
+    EXPECT_TRUE(s.isSimplified()) << "the dropped anchors are latched in the status byte";
+    EXPECT_EQ(s.getPageForAnchor("a0"), std::optional<uint16_t>(0));
+    EXPECT_EQ(s.getPageForAnchor("a31"), std::optional<uint16_t>(15));
+    EXPECT_FALSE(s.getPageForAnchor("a" + std::to_string(kAnchors - 1)).has_value());
+  });
 }
