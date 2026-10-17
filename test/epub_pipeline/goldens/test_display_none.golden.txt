@@ -442,7 +442,7 @@ SPINE 6 href=OEBPS/chapter7.xhtml pages=1 truncated=0 cssFallback=0
    W x=67 s=0 z=100 t=appear
    W x=126 s=0 z=100 t=above.
 SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
- PAGE 0 elements=21 footnotes=0
+ PAGE 0 elements=23 footnotes=0
   LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=3
    W x=80 s=1 z=100 t=Test:
    W x=165 s=1 z=100 t=Style
@@ -546,7 +546,16 @@ SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
    W x=273 s=0 z=100 t=at
    W x=301 s=0 z=100 t=higher
    W x=365 s=0 z=100 t=priority.
-  LINE y=520 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=520 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=VISIBLE:
+   W x=108 s=0 z=100 t=p.force-show
+   W x=229 s=0 z=100 t=overrides
+   W x=316 s=0 z=100 t=.hidden
+   W x=391 s=0 z=100 t=back
+   W x=435 s=0 z=100 t=to
+  LINE y=544 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=display:block.
+  LINE y=568 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=If
    W x=45 s=0 z=100 t=the
    W x=84 s=0 z=100 t=paragraph
@@ -554,7 +563,7 @@ SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
    W x=238 s=0 z=100 t=is
    W x=261 s=0 z=100 t=visible,
    W x=334 s=0 z=100 t=element.class
-  LINE y=544 x=0 align=0 mult=1.000 hfid=0 words=2
+  LINE y=592 x=0 align=0 mult=1.000 hfid=0 words=2
    W x=0 s=0 z=100 t=priority
    W x=70 s=0 z=100 t=works.
 SPINE 8 href=OEBPS/chapter9.xhtml pages=1 truncated=0 cssFallback=0

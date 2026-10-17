@@ -51,7 +51,7 @@ bookmarks included, and `fontprev/` (`ClearCacheActivity`).
 | `book.bin` | EPUB | `BOOK_CACHE_VERSION` (11) | Metadata, spine and TOC: [below](#bookbin) |
 | `fingerprint.bin`, `toc.retry` | EPUB | none | [below](#fingerprintbin-and-tocretry) |
 | `pagelist.bin` | EPUB | none | The printed-page list: [below](#pagelistbin) |
-| `css_rules.cache`, `css_bg.bin` | EPUB | `CSS_CACHE_VERSION` (21), `BACKGROUND_IMAGES_FILE_VERSION` (1) | [below](#css_rulescache-and-css_bgbin) |
+| `css_rules.cache`, `css_bg.bin` | EPUB | `CSS_CACHE_VERSION` (22), `BACKGROUND_IMAGES_FILE_VERSION` (1) | [below](#css_rulescache-and-css_bgbin) |
 | `spines/<n>/<spine>_<hash>.bin` | EPUB | `SECTION_FILE_VERSION` | Laid-out pages: [`section.bin`](#sectionbin) |
 | `spines/<n>/html_<spine>.bin` | EPUB | none | The spine item's inflated XHTML, banked by its build for the footnote pass and later builds; checked against the inflated size |
 | `pages.bin` | EPUB | `kFormatVersion` (1) in `SpinePageIndex.cpp`, plus the section version and property hash | Each spine item's page count and size under one render variant (`SpinePageIndex`), to count pages across a chapter split over several files |
@@ -278,7 +278,7 @@ Two small files beside `book.bin` (`lib/Epub/Epub.cpp`).
 
 ## `css_rules.cache` and `css_bg.bin`
 
-The book's compiled stylesheets, written by `CssParser` (`lib/Epub/Epub/css/`). `css_rules.cache` starts with a 12-byte header (`u8` version, `u16` rule count, `u32` selector candidates, `u32` unsupported-selector skips, `u8` flags), then the sorted `{hash, offset}` index, then the rule payloads. The version byte is `CssParser::CSS_CACHE_VERSION` (21); the comment above it lists what each version changed. A file with another version is deleted and the CSS compiled again, and the book's section caches go with it. It is compiled into `css_rules.compile.tmp` first.
+The book's compiled stylesheets, written by `CssParser` (`lib/Epub/Epub/css/`). `css_rules.cache` starts with a 12-byte header (`u8` version, `u16` rule count, `u32` selector candidates, `u32` unsupported-selector skips, `u8` flags), then the sorted `{hash, offset}` index, then the rule records (`u16` selector length, selector, `u16` source order, style payload). A selector declared again after other rules has a record per declaration, so rules of equal specificity can apply in stylesheet order. The version byte is `CssParser::CSS_CACHE_VERSION` (22); the comment above it lists what each version changed. A file with another version is deleted and the CSS compiled again, and the book's section caches go with it. It is compiled into `css_rules.compile.tmp` first.
 
 `css_bg.bin` sits beside it and holds the CSS background pictures (`CssParser::backgroundImageFor`): the `no-repeat` `background-image` of each rule that sets one. Absent when the book has none.
 

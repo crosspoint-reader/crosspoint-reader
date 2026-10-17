@@ -63,3 +63,29 @@ target_link_libraries(EpubCssCacheTest PRIVATE
 )
 
 gtest_discover_tests(EpubCssCacheTest)
+
+# The cascade (which matching rule wins), resolved through every store the resolver serves from:
+# an in-RAM parse, the compiled cache through the heap index, and both arena layouts.
+add_executable(EpubCssCascadeTest
+  CssCascadeTest.cpp
+  ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/css/CssParser.cpp
+)
+
+target_include_directories(EpubCssCascadeTest PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${REPO_ROOT}
+  ${REPO_ROOT}/lib
+  ${REPO_ROOT}/lib/Logging
+  ${REPO_ROOT}/lib/Serialization
+  ${REPO_ROOT}/lib/Memory
+  ${REPO_ROOT}/test/zip_entry_reader
+  ${REPO_ROOT}/test/shims
+)
+
+target_link_libraries(EpubCssCascadeTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(EpubCssCascadeTest)

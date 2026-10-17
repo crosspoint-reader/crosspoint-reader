@@ -11,7 +11,7 @@
 #include <new>
 #include <string_view>
 
-// Sparse resident-style codec (defined below, used by lookupRule before its definition).
+// Sparse resident-style codec (defined below, used by lookupRules before its definition).
 static size_t compressStyle(const CssStyle& s, uint8_t* out);
 static void decompressStyle(const uint8_t* in, CssStyle& out);
 
@@ -104,6 +104,16 @@ constexpr size_t CSS_FIXED_STYLE_BYTES = 4 * sizeof(uint8_t) + (CSS_LENGTH_FIELD
                                          sizeof(uint8_t);
 static_assert(CSS_FIXED_STYLE_BYTES == 73,
               "style payload layout changed — update read/writeCssStylePayload and bump CSS_CACHE_VERSION");
+// A rule record is selectorLen(2) selector order(2) payload; the order sits between selector and
+// payload so a reader that has matched the selector reads the rest in one go (v22).
+constexpr size_t CSS_RULE_ORDER_BYTES = sizeof(uint16_t);
+
+// Specificity, packed so that comparing two values compares (ids, classes, element names) in that
+// order: five bits each, the element count lowest. resolveStyle ranks a rule as
+// specificity << 16 | source order (CssStyle::applyOver), so a rank is ordered by specificity first.
+constexpr uint32_t SPECIFICITY_TAG = 1u;
+constexpr uint32_t SPECIFICITY_CLASS = 1u << 5;
+constexpr uint32_t SPECIFICITY_ID = 1u << 10;
 
 // Cache file name (version is CssParser::CSS_CACHE_VERSION)
 constexpr char rulesCache[] = "/css_rules.cache";
@@ -822,6 +832,11 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
   //
   // Now: walk the group in place and normalize each part straight into one reused buffer. Zero
   // allocations per selector after the buffer's first growth.
+  //
+  // Every selector of the group is the same rule, so they share one source order; the counter
+  // moves on once the group stored something.
+  const uint16_t order = nextRuleOrder_;
+  bool stored = false;
   size_t partStart = 0;
   for (size_t i = 0; i <= selectorGroup.size(); ++i) {
     if (i != selectorGroup.size() && selectorGroup[i] != ',') continue;
@@ -855,7 +870,8 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
     if (key.find('#') != std::string::npos) hasIdSelectors_ = true;
 
     // Skip if this would exceed the rule limit
-    const size_t ruleCount = compileModeActive_ ? compileSelectorOffsets_.size() : rulesBySelector_.size();
+    const size_t ruleCount =
+        compileModeActive_ ? compileSelectorOffsets_.size() + compileRetiredOffsets_.size() : rulesBySelector_.size();
     if (ruleCount >= MAX_RULES) {
       // The cache keeps the first MAX_RULES rules and is stamped truncated (flags bit 1), so
       // the book is parsed once and every open logs what is missing. The compile used to fail
@@ -869,6 +885,11 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
       return;
     }
 
+    // A selector declared again merges into its earlier rule only when no other rule was declared
+    // in between (the same rule block, or the next one). Otherwise the earlier declarations keep
+    // their place: merged, they would take the later position and beat an intervening rule of
+    // equal specificity they should lose to (`.a{x} .b{y} .a{z}` on class="a b": y beats x).
+    // The adjacency rule is crosspoint-reader PR #3891's (Justin Mitchell, @itsthisjustin).
     if (compileModeActive_) {
       if (!compileTempFile_) {
         compileModeFailed_ = true;
@@ -877,37 +898,52 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
 
       compileTempFile_.flush();
       CssStyle merged = style;
-      auto existingOffsetIt = compileSelectorOffsets_.find(key);
-      if (existingOffsetIt != compileSelectorOffsets_.end()) {
+      auto existingIt = compileSelectorOffsets_.find(key);
+      if (existingIt != compileSelectorOffsets_.end() && existingIt->second.order + 1 >= order) {
         CssStyle existing;
         FsFile tempRead;
-        if (Storage.openFileForRead("CSS", compileTempPath_, tempRead) && tempRead.seek(existingOffsetIt->second) &&
+        if (Storage.openFileForRead("CSS", compileTempPath_, tempRead) &&
+            tempRead.seek(existingIt->second.offset + sizeof(uint16_t) + key.size() + CSS_RULE_ORDER_BYTES) &&
             readCssStylePayload(tempRead, existing)) {
           existing.applyOver(merged);
           merged = existing;
         } else {
           LOG_ERR("CSS", "Failed to read compiled style for selector '%s' at offset %u", key.c_str(),
-                  existingOffsetIt->second);
+                  existingIt->second.offset);
         }
         if (tempRead) {
           tempRead.close();
         }
+      } else if (existingIt != compileSelectorOffsets_.end()) {
+        compileRetiredOffsets_.push_back(existingIt->second.offset);
       }
 
-      const uint32_t styleOffset = compileTempFile_.position();
-      writeCssStylePayload(compileTempFile_, merged);
-      compileSelectorOffsets_[key] = styleOffset;
+      const StagedRule staged{static_cast<uint32_t>(compileTempFile_.position()), order};
+      writeRuleRecord(compileTempFile_, key, order, merged);
+      if (existingIt != compileSelectorOffsets_.end()) {
+        existingIt->second = staged;
+      } else {
+        compileSelectorOffsets_.emplace(key, staged);
+      }
+      stored = true;
       continue;
     }
 
-    // Store or merge with existing (non-compile mode)
-    auto it = rulesBySelector_.find(key);
-    if (it != rulesBySelector_.end()) {
-      it->second.applyOver(style);
-    } else {
-      rulesBySelector_[key] = style;
+    // Store or merge with existing (non-compile mode), by the same rule as above.
+    auto range = rulesBySelector_.equal_range(key);
+    auto latest = range.second;
+    for (auto it = range.first; it != range.second; ++it) {
+      if (latest == range.second || it->second.order > latest->second.order) latest = it;
     }
+    if (latest != range.second && latest->second.order + 1 >= order) {
+      latest->second.style.applyOver(style);
+      latest->second.order = order;
+    } else {
+      rulesBySelector_.emplace(key, OrderedStyle{style, order});
+    }
+    stored = true;
   }
+  if (stored && nextRuleOrder_ < UINT16_MAX) ++nextRuleOrder_;
 }
 
 // Main parsing entry point
@@ -1103,6 +1139,7 @@ bool CssParser::beginCacheCompile() {
     return false;
   }
   compileSelectorOffsets_.clear();
+  compileRetiredOffsets_.clear();
   compileModeActive_ = true;
   compileModeFailed_ = false;
   rulesTruncated_ = false;
@@ -1137,22 +1174,27 @@ bool CssParser::endCacheCompile() {
 
   compileModeActive_ = false;
   compileTempFile_.close();
+  // swap, not clear(): clear() frees the nodes but keeps the bucket array, which would sit
+  // under the index ensureCacheIndexLoaded() is about to allocate.
+  const auto dropStaging = [this] {
+    Storage.remove(compileTempPath_.c_str());
+    std::unordered_map<std::string, StagedRule>().swap(compileSelectorOffsets_);
+    std::vector<uint32_t>().swap(compileRetiredOffsets_);
+  };
 
   if (compileModeFailed_) {
-    Storage.remove(compileTempPath_.c_str());
-    compileSelectorOffsets_.clear();
+    dropStaging();
     return false;
   }
 
   FsFile outFile;
   if (!Storage.openFileForWrite("CSS", cachePath + rulesCache, outFile)) {
-    Storage.remove(compileTempPath_.c_str());
-    compileSelectorOffsets_.clear();
+    dropStaging();
     return false;
   }
 
   outFile.write(CssParser::CSS_CACHE_VERSION);
-  const auto ruleCount = static_cast<uint16_t>(compileSelectorOffsets_.size());
+  const auto ruleCount = static_cast<uint16_t>(compileSelectorOffsets_.size() + compileRetiredOffsets_.size());
   outFile.write(reinterpret_cast<const uint8_t*>(&ruleCount), sizeof(ruleCount));
   outFile.write(reinterpret_cast<const uint8_t*>(&totalSelectorCandidates_), sizeof(totalSelectorCandidates_));
   outFile.write(reinterpret_cast<const uint8_t*>(&unsupportedSelectorSkips_), sizeof(unsupportedSelectorSkips_));
@@ -1163,8 +1205,7 @@ bool CssParser::endCacheCompile() {
   if (!Storage.openFileForRead("CSS", compileTempPath_, tempFile)) {
     outFile.close();
     Storage.remove((cachePath + rulesCache).c_str());
-    Storage.remove(compileTempPath_.c_str());
-    compileSelectorOffsets_.clear();
+    dropStaging();
     return false;
   }
 
@@ -1177,34 +1218,33 @@ bool CssParser::endCacheCompile() {
     }
   }
 
-  std::array<uint8_t, CSS_FIXED_STYLE_BYTES> styleBytes{};
-  for (const auto& it : compileSelectorOffsets_) {
+  // The staging records are already in the cache's record format; copy each live one across.
+  char selectorBuf[MAX_SELECTOR_LENGTH];
+  std::array<uint8_t, CSS_RULE_ORDER_BYTES + CSS_FIXED_STYLE_BYTES> tail{};
+  const auto copyRecord = [&](const uint32_t stagedOffset) {
+    uint16_t selectorLen = 0;
+    if (!tempFile.seek(stagedOffset) || tempFile.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen) ||
+        selectorLen > MAX_SELECTOR_LENGTH || tempFile.read(selectorBuf, selectorLen) != selectorLen ||
+        tempFile.read(tail.data(), tail.size()) != static_cast<int>(tail.size())) {
+      return false;
+    }
     const uint32_t ruleOffset = outFile.position();
-    const auto selectorLen = static_cast<uint16_t>(it.first.size());
     outFile.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
-    outFile.write(reinterpret_cast<const uint8_t*>(it.first.data()), selectorLen);
-
-    if (!tempFile.seek(it.second)) {
-      tempFile.close();
-      outFile.close();
-      Storage.remove((cachePath + rulesCache).c_str());
-      Storage.remove(compileTempPath_.c_str());
-      compileSelectorOffsets_.clear();
-      return false;
-    }
-    if (tempFile.read(styleBytes.data(), styleBytes.size()) != static_cast<int>(styleBytes.size())) {
-      tempFile.close();
-      outFile.close();
-      Storage.remove((cachePath + rulesCache).c_str());
-      Storage.remove(compileTempPath_.c_str());
-      compileSelectorOffsets_.clear();
-      return false;
-    }
-    outFile.write(styleBytes.data(), styleBytes.size());
-    indexEntries.push_back({selectorHash(it.first), ruleOffset});
-  }
-
+    outFile.write(reinterpret_cast<const uint8_t*>(selectorBuf), selectorLen);
+    outFile.write(tail.data(), tail.size());
+    indexEntries.push_back({selectorHash(std::string_view(selectorBuf, selectorLen)), ruleOffset});
+    return true;
+  };
+  bool copied = true;
+  for (const auto& it : compileSelectorOffsets_) copied = copied && copyRecord(it.second.offset);
+  for (const uint32_t offset : compileRetiredOffsets_) copied = copied && copyRecord(offset);
   tempFile.close();
+  if (!copied) {
+    outFile.close();
+    Storage.remove((cachePath + rulesCache).c_str());
+    dropStaging();
+    return false;
+  }
 
   // Sort and patch the index placeholder at position 11.
   std::sort(indexEntries.begin(), indexEntries.end(),
@@ -1215,13 +1255,9 @@ bool CssParser::endCacheCompile() {
   }
 
   outFile.close();
-  Storage.remove(compileTempPath_.c_str());
   saveBackgroundImages();
   backgroundImagesLoaded_ = true;  // what was just compiled is what the file now holds
-
-  // swap, not clear(): clear() frees the nodes but keeps the bucket array, which would sit
-  // under the index ensureCacheIndexLoaded() is about to allocate.
-  std::unordered_map<std::string, uint32_t>().swap(compileSelectorOffsets_);
+  dropStaging();
 
   rulesBySelector_.clear();
   hotRuleCache_.clear();
@@ -1261,8 +1297,8 @@ void CssParser::clearCaches(const bool evictEverything) {
     // Defragmentation eviction: swap the unordered containers down so their bucket
     // arrays are freed too (clear() keeps them), and drop the retained disk index.
     // Everything here reloads lazily from SD on the next resolve.
-    std::unordered_map<std::string, CssStyle>().swap(rulesBySelector_);
-    std::unordered_map<std::string, std::pair<CssStyle, std::list<std::string>::iterator>>().swap(hotRuleCache_);
+    std::unordered_multimap<std::string, OrderedStyle>().swap(rulesBySelector_);
+    std::unordered_map<std::string, std::pair<OrderedStyle, std::list<std::string>::iterator>>().swap(hotRuleCache_);
     std::unordered_set<std::string>().swap(negativeRuleCache_);
     std::vector<SelectorEntry>().swap(cacheRuleOffsets_);
     cacheIndexLoaded_ = false;
@@ -1297,7 +1333,9 @@ void CssParser::clear() {
   compileModeActive_ = false;
   compileModeFailed_ = false;
   rulesTruncated_ = false;
-  std::unordered_map<std::string, uint32_t>().swap(compileSelectorOffsets_);
+  std::unordered_map<std::string, StagedRule>().swap(compileSelectorOffsets_);
+  std::vector<uint32_t>().swap(compileRetiredOffsets_);
+  nextRuleOrder_ = 0;
   totalSelectorCandidates_ = 0;
   unsupportedSelectorSkips_ = 0;
   // Cleared to FALSE, unlike its conservative default: what follows is either a parse, which
@@ -1512,6 +1550,15 @@ void CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   file.write(visibilityFlags);
 }
 
+void CssParser::writeRuleRecord(FsFile& file, const std::string& selector, const uint16_t order,
+                                const CssStyle& style) {
+  const auto selectorLen = static_cast<uint16_t>(selector.size());
+  file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
+  file.write(reinterpret_cast<const uint8_t*>(selector.data()), selectorLen);
+  file.write(reinterpret_cast<const uint8_t*>(&order), sizeof(order));
+  writeCssStylePayload(file, style);
+}
+
 void CssParser::touchHotRule(const std::string& selector) const {
   auto it = hotRuleCache_.find(selector);
   if (it == hotRuleCache_.end()) {
@@ -1522,7 +1569,7 @@ void CssParser::touchHotRule(const std::string& selector) const {
   it->second.second = hotRuleLru_.begin();
 }
 
-void CssParser::cacheHotRule(const std::string& selector, const CssStyle& style) const {
+void CssParser::cacheHotRule(const std::string& selector, const OrderedStyle& rule) const {
   // Lean/arena builds skip the hot LRU entirely: its ~100 B/entry heap growth is exactly what
   // the CSS floor guarded against, and arena builds resolve from the resident/index store
   // instead (FreeInkBook keeps no such cache). This is a no-op call from the arena index-only
@@ -1532,13 +1579,13 @@ void CssParser::cacheHotRule(const std::string& selector, const CssStyle& style)
   }
   auto it = hotRuleCache_.find(selector);
   if (it != hotRuleCache_.end()) {
-    it->second.first = style;
+    it->second.first = rule;
     touchHotRule(selector);
     return;
   }
 
   hotRuleLru_.push_front(selector);
-  hotRuleCache_.emplace(selector, std::make_pair(style, hotRuleLru_.begin()));
+  hotRuleCache_.emplace(selector, std::make_pair(rule, hotRuleLru_.begin()));
   if (hotRuleCache_.size() > HOT_RULE_CACHE_SIZE) {
     const std::string& evictKey = hotRuleLru_.back();
     hotRuleCache_.erase(evictKey);
@@ -1549,8 +1596,8 @@ void CssParser::cacheHotRule(const std::string& selector, const CssStyle& style)
 // Reads the rule record at ruleOffset and returns its style only if the stored
 // selector matches `selector` exactly. A mismatch is not an error — it means the
 // 32-bit index hash collided and the caller should try the next candidate.
-bool CssParser::readRuleFromDiskAtOffset(const uint32_t ruleOffset, const std::string& selector,
-                                         CssStyle& outStyle) const {
+bool CssParser::readRuleFromDiskAtOffset(const uint32_t ruleOffset, const std::string& selector, CssStyle& outStyle,
+                                         uint16_t& outOrder) const {
   FsFile file;
   if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
     return false;
@@ -1558,29 +1605,41 @@ bool CssParser::readRuleFromDiskAtOffset(const uint32_t ruleOffset, const std::s
 
   // 256 B stack buffer (bounded by MAX_SELECTOR_LENGTH): render-path code, so no
   // heap; not live at the same time as the index-load buffer — both are reached
-  // sequentially from lookupRule, so peak stack on this chain stays ~256 B.
+  // sequentially from lookupRules, so peak stack on this chain stays ~256 B.
   char selectorBuf[MAX_SELECTOR_LENGTH];
   uint16_t selectorLen = 0;
   bool ok = file.seek(ruleOffset) && file.read(&selectorLen, sizeof(selectorLen)) == sizeof(selectorLen) &&
             selectorLen == selector.size() && selectorLen <= MAX_SELECTOR_LENGTH &&
             file.read(selectorBuf, selectorLen) == selectorLen &&
             std::string_view(selectorBuf, selectorLen) == selector;
-  ok = ok && readCssStylePayload(file, outStyle);
+  ok = ok && file.read(&outOrder, sizeof(outOrder)) == sizeof(outOrder) && readCssStylePayload(file, outStyle);
   file.close();
   return ok;
 }
 
-bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, const bool allowDiskLookup) const {
-  auto mapIt = rulesBySelector_.find(selector);
-  if (mapIt != rulesBySelector_.end()) {
-    outStyle = mapIt->second;
-    resolveStats_.mapHits++;
-    return true;
+struct CssParser::Cascade {
+  CssStyle result;
+  uint32_t ranks[CssStyle::kCascadeProperties] = {};
+  void apply(const CssStyle& style, const uint32_t specificity, const uint16_t order) {
+    result.applyOver(style, specificity << 16 | order, ranks);
+  }
+};
+
+bool CssParser::lookupRules(const std::string& selector, const uint32_t specificity, Cascade& cascade,
+                            const bool allowDiskLookup) const {
+  // Rules held in RAM from a parse (rather than loaded from the cache).
+  if (!rulesBySelector_.empty()) {
+    const auto range = rulesBySelector_.equal_range(selector);
+    for (auto it = range.first; it != range.second; ++it) {
+      cascade.apply(it->second.style, specificity, it->second.order);
+      resolveStats_.mapHits++;
+    }
+    if (range.first != range.second) return true;
   }
 
   auto hotIt = hotRuleCache_.find(selector);
   if (hotIt != hotRuleCache_.end()) {
-    outStyle = hotIt->second.first;
+    cascade.apply(hotIt->second.first.style, specificity, hotIt->second.first.order);
     touchHotRule(selector);
     resolveStats_.hotHits++;
     return true;
@@ -1592,6 +1651,28 @@ bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, cons
   }
 
   const auto byHash = [](const SelectorEntry& e, uint32_t key) { return e.hash < key; };
+  // Every record of the selector: a selector redeclared further down has one per declaration
+  // (see processRuleBlockWithStyle). Equal hashes are adjacent after the sort; each candidate's
+  // stored selector is compared, so a 32-bit collision costs a read, not a wrong style.
+  const auto readAll = [&](const SelectorEntry* begin, const SelectorEntry* end, const bool cacheIfSingle) {
+    const uint32_t h = selectorHash(selector);
+    OrderedStyle rule;
+    int matched = 0;
+    for (auto it = std::lower_bound(begin, end, h, byHash); it != end && it->hash == h; ++it) {
+      if (readRuleFromDiskAtOffset(it->offset, selector, rule.style, rule.order)) {
+        cascade.apply(rule.style, specificity, rule.order);
+        resolveStats_.diskHits++;
+        ++matched;
+      }
+    }
+    if (matched == 1 && cacheIfSingle) cacheHotRule(selector, rule);
+    if (matched > 0) return true;
+    if (negativeRuleCache_.size() >= NEGATIVE_CACHE_SIZE) {
+      negativeRuleCache_.clear();
+    }
+    negativeRuleCache_.insert(selector);
+    return false;
+  };
 
   // --- Arena mode (Phase 2) ---
   // The ruleset lives in arena memory (a heap-free fill), so load it even under heap pressure.
@@ -1599,7 +1680,6 @@ bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, cons
     if (!ensureCacheIndexLoaded()) {
       return false;
     }
-    const uint32_t h = selectorHash(selector);
 
     // RESIDENT: the whole ruleset is in RAM — resolve by hash with no disk read and no caching
     // (FreeInkBook's model). A hash collision between two distinct selectors is astronomically
@@ -1607,15 +1687,19 @@ bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, cons
     // rather than paying a disk read to verify the selector string, and so do we. No low-heap
     // guard applies — nothing here touches SD or grows the heap.
     if (arenaResident_) {
+      const uint32_t h = selectorHash(selector);
       const ResidentEntry* begin = arenaResident_;
       const ResidentEntry* end = arenaResident_ + cachedRuleCount_;
       auto it = std::lower_bound(begin, end, h, [](const ResidentEntry& e, uint32_t key) { return e.hash < key; });
-      if (it != end && it->hash == h) {
-        decompressStyle(arenaStylePool_ + it->styleOff + 1, outStyle);  // +1 skips the length prefix
-        resolveStats_.diskHits++;                                       // resolved from the (in-RAM) ruleset
-        return true;
+      bool matched = false;
+      for (; it != end && it->hash == h; ++it) {
+        CssStyle style;
+        decompressStyle(arenaStylePool_ + it->styleOff + 1, style);  // +1 skips the length prefix
+        cascade.apply(style, specificity, it->order);
+        resolveStats_.diskHits++;  // resolved from the (in-RAM) ruleset
+        matched = true;
       }
-      return false;  // cheap re-scan next time; no negative cache needed in RAM
+      return matched;  // a miss is a cheap re-scan next time; no negative cache needed in RAM
     }
 
     // Index-only fallback: payloads are on disk, so honor the low-heap bypass.
@@ -1623,19 +1707,7 @@ bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, cons
       resolveStats_.lowHeapDiskBypasses++;
       return false;
     }
-    const SelectorEntry* begin = arenaIndex_;
-    const SelectorEntry* end = arenaIndex_ + cachedRuleCount_;
-    for (auto it = std::lower_bound(begin, end, h, byHash); it != end && it->hash == h; ++it) {
-      if (readRuleFromDiskAtOffset(it->offset, selector, outStyle)) {
-        resolveStats_.diskHits++;
-        return true;
-      }
-    }
-    if (negativeRuleCache_.size() >= NEGATIVE_CACHE_SIZE) {
-      negativeRuleCache_.clear();
-    }
-    negativeRuleCache_.insert(selector);
-    return false;
+    return readAll(arenaIndex_, arenaIndex_ + cachedRuleCount_, false);
   }
 
   // --- Heap mode (disk index + hot cache) ---
@@ -1646,23 +1718,7 @@ bool CssParser::lookupRule(const std::string& selector, CssStyle& outStyle, cons
   if (!ensureCacheIndexLoaded()) {
     return false;
   }
-  const uint32_t h = selectorHash(selector);
-  auto it = std::lower_bound(cacheRuleOffsets_.begin(), cacheRuleOffsets_.end(), h, byHash);
-  // Equal hashes are adjacent after the sort; probe each candidate until the
-  // on-disk selector matches (collisions are expected to be rare).
-  for (; it != cacheRuleOffsets_.end() && it->hash == h; ++it) {
-    if (readRuleFromDiskAtOffset(it->offset, selector, outStyle)) {
-      cacheHotRule(selector, outStyle);
-      resolveStats_.diskHits++;
-      return true;
-    }
-  }
-
-  if (negativeRuleCache_.size() >= NEGATIVE_CACHE_SIZE) {
-    negativeRuleCache_.clear();
-  }
-  negativeRuleCache_.insert(selector);
-  return false;
+  return readAll(cacheRuleOffsets_.data(), cacheRuleOffsets_.data() + cacheRuleOffsets_.size(), true);
 }
 
 bool CssParser::ensureCacheIndexLoaded() const {
@@ -1969,8 +2025,9 @@ bool CssParser::loadArenaResident(FsFile& file, const uint16_t ruleCount, const 
     uint8_t rec[kMaxCompressedStyle];
     for (uint16_t i = 0; i < ruleCount; ++i) {
       uint16_t selectorLen = 0;
+      uint16_t order = 0;
       if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen) || selectorLen > MAX_SELECTOR_LENGTH ||
-          file.read(selectorBuf, selectorLen) != selectorLen) {
+          file.read(selectorBuf, selectorLen) != selectorLen || file.read(&order, sizeof(order)) != sizeof(order)) {
         indexArena_->release(block);
         return false;
       }
@@ -1996,7 +2053,9 @@ bool CssParser::loadArenaResident(FsFile& file, const uint16_t ruleCount, const 
       }
       if (!found) {
         auto* slot = static_cast<uint8_t*>(indexArena_->alloc(1 + recLen, 1));
-        if (slot == nullptr) {  // pool grew past the arena even after dedup — fall back to index
+        // The pool grew past the arena even after dedup, or past what a 16-bit styleOff addresses
+        // (no arena is that large today) — fall back to the index.
+        if (slot == nullptr || (poolBase != nullptr && slot - poolBase > UINT16_MAX)) {
           indexArena_->release(block);
           return false;
         }
@@ -2007,9 +2066,10 @@ bool CssParser::loadArenaResident(FsFile& file, const uint16_t ruleCount, const 
         poolBytes = static_cast<size_t>(off) + 1 + recLen;
         ++poolCount;
       }
-      index[i] = ResidentEntry{selectorHash(std::string_view(selectorBuf, selectorLen)), off};
+      index[i] =
+          ResidentEntry{selectorHash(std::string_view(selectorBuf, selectorLen)), static_cast<uint16_t>(off), order};
     }
-    // Sort by hash so lookupRule can binary-search, matching the on-disk index ordering.
+    // Sort by hash so lookupRules can binary-search, matching the on-disk index ordering.
     std::sort(index, index + ruleCount, [](const ResidentEntry& a, const ResidentEntry& b) { return a.hash < b.hash; });
     arenaResident_ = index;
     arenaStylePool_ = poolBase;
@@ -2063,7 +2123,7 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
   const uint32_t freeHeap = ESP.getFreeHeap();
   // Lean/arena builds keep the resolver's footprint off the heap (index in arena, hot cache
   // disabled), so they stay correct at the lower LEAN_MIN_FREE_HEAP_FOR_CSS floor. RESIDENT
-  // lookups ignore lowHeapMode entirely inside lookupRule — they touch no SD.
+  // lookups ignore lowHeapMode entirely inside lookupRules — they touch no SD.
   const bool lowHeapMode = freeHeap < (leanResolve_ ? LEAN_MIN_FREE_HEAP_FOR_CSS : MIN_FREE_HEAP_FOR_CSS);
   if (lowHeapMode) {
     if (!lowHeapWarningLogged) {
@@ -2080,22 +2140,23 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
     }
     resolveStats_.lowHeapSkips++;
   }
-  CssStyle result;
+  // Every matching rule is merged in ranked by specificity, then stylesheet order, so the
+  // lookups below may run in any order (Cascade, CssStyle::applyOver). The fixed sequence they
+  // used to be applied in interleaved .a and p.a per class, which let a plain `.b` beat `p.a`
+  // and made the class attribute's order, not the stylesheet's, settle ties between classes.
+  // Based on crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin), which sorts the matches
+  // by specificity and source order; reworked to rank each property instead, so no match list
+  // (and no style per match) has to be held while the index is read from disk.
+  Cascade cascade;
+  const auto lookup = [&](const std::string& selector, const uint32_t specificity) {
+    if (lookupRules(selector, specificity, cascade, !lowHeapMode) && lowHeapMode) {
+      resolveStats_.lowHeapRescuedHits++;
+    }
+  };
   const std::string tag = normalized(tagName);
 
-  // 1. Apply element-level style (lowest priority)
-  {
-    CssStyle tagStyle;
-    if (lookupRule(tag, tagStyle, !lowHeapMode)) {
-      if (lowHeapMode) {
-        resolveStats_.lowHeapRescuedHits++;
-      }
-      result.applyOver(tagStyle);
-    }
-  }
+  lookup(tag, SPECIFICITY_TAG);
 
-  // TODO: Support combinations of classes (e.g. style on .class1.class2)
-  // 2. Apply class styles (medium priority)
   if (!classAttr.empty()) {
     std::string classToken;
     std::string classKey;
@@ -2107,34 +2168,20 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       classKey.clear();
       classKey.push_back('.');
       classKey.append(cls);
-
-      CssStyle classStyle;
-      if (lookupRule(classKey, classStyle, !lowHeapMode)) {
-        if (lowHeapMode) {
-          resolveStats_.lowHeapRescuedHits++;
-        }
-        result.applyOver(classStyle);
-      }
+      lookup(classKey, SPECIFICITY_CLASS);
 
       combinedKey.clear();
       combinedKey.append(tag);
       combinedKey.push_back('.');
       combinedKey.append(cls);
-
-      CssStyle combinedStyle;
-      if (lookupRule(combinedKey, combinedStyle, !lowHeapMode)) {
-        if (lowHeapMode) {
-          resolveStats_.lowHeapRescuedHits++;
-        }
-        result.applyOver(combinedStyle);
-      }
+      lookup(combinedKey, SPECIFICITY_CLASS + SPECIFICITY_TAG);
     });
   }
 
-  // 3. Apply ID styles (highest priority: #id < tag#id). Skipped outright when the sheet has no
-  // id selector at all, which is the common case: both lookups below would build a key, hash it,
-  // probe the index and come back empty, twice per id-bearing element. On a converted endnotes
-  // chapter with one generated id per note that was ~700 guaranteed misses per chapter.
+  // Skipped outright when the sheet has no id selector at all, which is the common case: both
+  // lookups below would build a key, hash it, probe the index and come back empty, twice per
+  // id-bearing element. On a converted endnotes chapter with one generated id per note that was
+  // ~700 guaranteed misses per chapter.
   if (!idAttr.empty() && hasIdSelectors_) {
     std::string idKey;
     idKey.reserve(1 + idAttr.size());
@@ -2142,33 +2189,20 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
     for (const char c : idAttr) {
       idKey.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
     }
-
-    CssStyle idStyle;
-    if (lookupRule(idKey, idStyle, !lowHeapMode)) {
-      if (lowHeapMode) resolveStats_.lowHeapRescuedHits++;
-      result.applyOver(idStyle);
-    }
+    lookup(idKey, SPECIFICITY_ID);
 
     std::string tagIdKey;
-    tagIdKey.reserve(tag.size() + 1 + idAttr.size());
+    tagIdKey.reserve(tag.size() + idKey.size());
     tagIdKey.append(tag);
-    tagIdKey.push_back('#');
-    for (const char c : idAttr) {
-      tagIdKey.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    }
-
-    CssStyle tagIdStyle;
-    if (lookupRule(tagIdKey, tagIdStyle, !lowHeapMode)) {
-      if (lowHeapMode) resolveStats_.lowHeapRescuedHits++;
-      result.applyOver(tagIdStyle);
-    }
+    tagIdKey.append(idKey);
+    lookup(tagIdKey, SPECIFICITY_ID + SPECIFICITY_TAG);
   }
 
-  if (!result.defined.anySet()) {
+  if (!cascade.result.defined.anySet()) {
     resolveStats_.misses++;
   }
 
-  return result;
+  return cascade.result;
 }
 
 // Inline style parsing (static - doesn't need rule database)
@@ -2260,7 +2294,11 @@ void CssParser::recordBackgroundImage(const std::string_view selectorGroup, cons
     auto existing = std::find_if(backgroundImages_.begin(), backgroundImages_.end(),
                                  [&](const BackgroundImageRule& r) { return r.selector == key; });
     if (existing != backgroundImages_.end()) {
-      existing->path = path;  // the later rule wins, a `none` included
+      // The later rule wins, a `none` included, and takes the later place: the list is kept in
+      // stylesheet order, which settles ties between selectors in backgroundImageFor.
+      BackgroundImageRule redeclared{std::move(existing->selector), path};
+      backgroundImages_.erase(existing);
+      backgroundImages_.push_back(std::move(redeclared));
     } else if (!path.empty() && backgroundImages_.size() < MAX_BACKGROUND_IMAGE_RULES) {
       backgroundImages_.push_back({key, path});
     }
@@ -2329,33 +2367,39 @@ const std::string* CssParser::backgroundImageFor(const std::string& tagName, con
                                                  const std::string& idAttr) const {
   if (!backgroundImagesLoaded_) loadBackgroundImages();
   if (backgroundImages_.empty()) return nullptr;
-  const auto find = [&](const std::string& key) -> const std::string* {
+  // resolveStyle's cascade: the most specific matching rule wins, and between equally specific
+  // ones the later in the stylesheets (the list is in that order, see recordBackgroundImage).
+  const BackgroundImageRule* result = nullptr;
+  uint32_t resultSpecificity = 0;
+  const auto consider = [&](const std::string& key, const uint32_t specificity) {
     for (const auto& r : backgroundImages_) {
-      if (r.selector == key) return &r.path;
+      if (r.selector != key) continue;
+      if (!result || specificity > resultSpecificity || (specificity == resultSpecificity && &r > result)) {
+        result = &r;
+        resultSpecificity = specificity;
+      }
+      return;
     }
-    return nullptr;
   };
-  // Lowest priority first; each later match overrides (resolveStyle's cascade).
-  const std::string* result = nullptr;
   const std::string tag = normalized(tagName);
-  if (const auto* p = find(tag)) result = p;
+  consider(tag, SPECIFICITY_TAG);
   if (!classAttr.empty()) {
     std::string token;
     std::string key;
     forEachNormalizedClassToken(classAttr, token, [&](const std::string& cls) {
       key = "." + cls;
-      if (const auto* p = find(key)) result = p;
+      consider(key, SPECIFICITY_CLASS);
       key = tag + "." + cls;
-      if (const auto* p = find(key)) result = p;
+      consider(key, SPECIFICITY_CLASS + SPECIFICITY_TAG);
     });
   }
   if (!idAttr.empty()) {
     std::string id = "#";
     for (const char c : idAttr) id.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    if (const auto* p = find(id)) result = p;
-    if (const auto* p = find(tag + id)) result = p;
+    consider(id, SPECIFICITY_ID);
+    consider(tag + id, SPECIFICITY_ID + SPECIFICITY_TAG);
   }
-  return (result && !result->empty()) ? result : nullptr;
+  return (result && !result->path.empty()) ? &result->path : nullptr;
 }
 
 bool CssParser::saveToCache() const {
@@ -2390,10 +2434,7 @@ bool CssParser::saveToCache() const {
   // Record {hash, ruleOffset} pairs as we go so we can build the sorted index.
   for (const auto& pair : rulesBySelector_) {
     const uint32_t ruleOffset = file.position();
-    const auto selectorLen = static_cast<uint16_t>(pair.first.size());
-    file.write(reinterpret_cast<const uint8_t*>(&selectorLen), sizeof(selectorLen));
-    file.write(reinterpret_cast<const uint8_t*>(pair.first.data()), selectorLen);
-    writeCssStylePayload(file, pair.second);
+    writeRuleRecord(file, pair.first, pair.second.order, pair.second.style);
     indexEntries.push_back({selectorHash(pair.first), ruleOffset});
   }
 

@@ -1595,7 +1595,7 @@ Section::BuildPhaseResult Section::runBuildParse(BuildState& st, const uint32_t 
     // means pages were cached with styles silently missing.
     //
     // ...but ONLY when the resolver could actually lose a rule. An arena-RESIDENT ruleset is
-    // served entirely from arena memory: lookupRule() returns from arenaResident_ before it
+    // served entirely from arena memory: lookupRules() returns from arenaResident_ before it
     // ever reads allowDiskLookup, so a lowHeapSkip there costs nothing and the styles are
     // complete. Counting those as degradation threw away correct builds — measured on X3, a
     // 14-page background build discarded after a single 960-byte dip below the lean floor,

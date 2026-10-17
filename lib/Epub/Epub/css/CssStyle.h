@@ -193,117 +193,131 @@ struct CssStyle {
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
+  // Number of properties applyOver() merges: the size of its `ranks` array.
+  static constexpr int kCascadeProperties = 27;
+
   // Apply properties from another style, only overwriting if the other style
-  // has that property explicitly defined
-  void applyOver(const CssStyle& base) {
-    if (base.hasTextAlign()) {
+  // has that property explicitly defined.
+  //
+  // With `ranks`, a property is taken only when `rank` is at least the rank of the rule that set
+  // it so far (ranks[i], meaningful while the property is defined here), and the winner's rank is
+  // recorded there. Rules can then be merged in any order and still end as if they had been
+  // applied sorted by rank -- CssParser::resolveStyle ranks by specificity, then source order.
+  void applyOver(const CssStyle& base, const uint32_t rank = 0, uint32_t* ranks = nullptr) {
+    const auto take = [rank, ranks](const bool alreadySet, const int property) {
+      if (ranks == nullptr) return true;
+      if (alreadySet && rank < ranks[property]) return false;
+      ranks[property] = rank;
+      return true;
+    };
+    if (base.hasTextAlign() && take(defined.textAlign, 0)) {
       textAlign = base.textAlign;
       defined.textAlign = 1;
     }
-    if (base.hasFontStyle()) {
+    if (base.hasFontStyle() && take(defined.fontStyle, 1)) {
       fontStyle = base.fontStyle;
       defined.fontStyle = 1;
     }
-    if (base.hasFontWeight()) {
+    if (base.hasFontWeight() && take(defined.fontWeight, 2)) {
       fontWeight = base.fontWeight;
       defined.fontWeight = 1;
     }
-    if (base.hasTextDecoration()) {
+    if (base.hasTextDecoration() && take(defined.textDecoration, 3)) {
       textDecoration = base.textDecoration;
       defined.textDecoration = 1;
     }
-    if (base.hasTextIndent()) {
+    if (base.hasTextIndent() && take(defined.textIndent, 4)) {
       textIndent = base.textIndent;
       defined.textIndent = 1;
     }
-    if (base.hasMarginTop()) {
+    if (base.hasMarginTop() && take(defined.marginTop, 5)) {
       marginTop = base.marginTop;
       defined.marginTop = 1;
     }
-    if (base.hasMarginBottom()) {
+    if (base.hasMarginBottom() && take(defined.marginBottom, 6)) {
       marginBottom = base.marginBottom;
       defined.marginBottom = 1;
     }
-    if (base.hasMarginLeft()) {
+    if (base.hasMarginLeft() && take(defined.marginLeft, 7)) {
       marginLeft = base.marginLeft;
       defined.marginLeft = 1;
     }
-    if (base.hasMarginRight()) {
+    if (base.hasMarginRight() && take(defined.marginRight, 8)) {
       marginRight = base.marginRight;
       defined.marginRight = 1;
     }
-    if (base.hasPaddingTop()) {
+    if (base.hasPaddingTop() && take(defined.paddingTop, 9)) {
       paddingTop = base.paddingTop;
       defined.paddingTop = 1;
     }
-    if (base.hasPaddingBottom()) {
+    if (base.hasPaddingBottom() && take(defined.paddingBottom, 10)) {
       paddingBottom = base.paddingBottom;
       defined.paddingBottom = 1;
     }
-    if (base.hasPaddingLeft()) {
+    if (base.hasPaddingLeft() && take(defined.paddingLeft, 11)) {
       paddingLeft = base.paddingLeft;
       defined.paddingLeft = 1;
     }
-    if (base.hasPaddingRight()) {
+    if (base.hasPaddingRight() && take(defined.paddingRight, 12)) {
       paddingRight = base.paddingRight;
       defined.paddingRight = 1;
     }
     // Keyed on the defined bit, not has*(): an explicit `auto` has to travel up the cascade so it
     // can clear a length a lower-priority rule set. has*() reports it as unset, which is what the
     // layout wants but the wrong test here.
-    if (base.defined.imageHeight) {
+    if (base.defined.imageHeight && take(defined.imageHeight, 13)) {
       imageHeight = base.imageHeight;
       defined.imageHeight = 1;
     }
-    if (base.defined.imageWidth) {
+    if (base.defined.imageWidth && take(defined.imageWidth, 14)) {
       imageWidth = base.imageWidth;
       defined.imageWidth = 1;
     }
-    if (base.hasDisplay()) {
+    if (base.hasDisplay() && take(defined.display, 15)) {
       display = base.display;
       defined.display = 1;
     }
-    if (base.hasVerticalAlign()) {
+    if (base.hasVerticalAlign() && take(defined.verticalAlign, 16)) {
       verticalAlign = base.verticalAlign;
       defined.verticalAlign = 1;
     }
-    if (base.hasListStyleNone()) {
+    if (base.hasListStyleNone() && take(defined.listStyleNone, 17)) {
       listStyleNone = base.listStyleNone;
       defined.listStyleNone = 1;
     }
-    if (base.hasPageBreakBefore()) {
+    if (base.hasPageBreakBefore() && take(defined.pageBreakBefore, 18)) {
       pageBreakBefore = base.pageBreakBefore;
       defined.pageBreakBefore = 1;
     }
-    if (base.hasPageBreakAfter()) {
+    if (base.hasPageBreakAfter() && take(defined.pageBreakAfter, 19)) {
       pageBreakAfter = base.pageBreakAfter;
       defined.pageBreakAfter = 1;
     }
-    if (base.hasLineHeight()) {
+    if (base.hasLineHeight() && take(defined.lineHeight, 20)) {
       lineHeightMultiplier = base.lineHeightMultiplier;
       defined.lineHeight = 1;
     }
-    if (base.hasFontSizeMultiplier()) {
+    if (base.hasFontSizeMultiplier() && take(defined.fontSizeMultiplier, 21)) {
       fontSizeMultiplier = base.fontSizeMultiplier;
       defined.fontSizeMultiplier = 1;
     }
-    if (base.hasCssFloat()) {
+    if (base.hasCssFloat() && take(defined.cssFloat, 22)) {
       cssFloat = base.cssFloat;
       defined.cssFloat = 1;
     }
-    if (base.hasSmallCaps()) {
+    if (base.hasSmallCaps() && take(defined.smallCaps, 23)) {
       smallCaps = base.smallCaps;
       defined.smallCaps = 1;
     }
-    if (base.hasColorTransparent()) {
+    if (base.hasColorTransparent() && take(defined.colorTransparent, 24)) {
       colorTransparent = base.colorTransparent;
       defined.colorTransparent = 1;
     }
-    if (base.hasOpacityZero()) {
+    if (base.hasOpacityZero() && take(defined.opacityZero, 25)) {
       opacityZero = base.opacityZero;
       defined.opacityZero = 1;
     }
-    if (base.hasVisibilityHidden()) {
+    if (base.hasVisibilityHidden() && take(defined.visibilityHidden, 26)) {
       visibilityHidden = base.visibilityHidden;
       defined.visibilityHidden = 1;
     }

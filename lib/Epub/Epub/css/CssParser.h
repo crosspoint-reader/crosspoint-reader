@@ -48,9 +48,9 @@ class CssParser {
   };
 
   // True when the whole ruleset (index + style pool) is resident in arena memory, so every
-  // lookupRule() is served without touching SD. Callers use this to tell a REAL low-heap
+  // lookupRules() is served without touching SD. Callers use this to tell a REAL low-heap
   // degradation from a harmless one: under heap pressure resolveStyle() still counts a
-  // lowHeapSkip and passes allowDiskLookup=false, but the resident branch in lookupRule()
+  // lowHeapSkip and passes allowDiskLookup=false, but the resident branch in lookupRules()
   // returns before that flag is ever read — the styles come back complete either way.
   // Treating those skips as degradation discards correct work (measured on X3: a 14-page
   // background build thrown away, forcing the released-path rebuild that then fails its
@@ -93,7 +93,10 @@ class CssParser {
   //      a book whose picture is a CSS background (Alice's rabbit hole) kept showing none.
   // v21: `display` keeps Inline apart from Block (#388). A v20 cache stored display:inline as
   //      Block, which would now lay those spans out as blocks.
-  static constexpr uint8_t CSS_CACHE_VERSION = 21;
+  // v22: every rule record carries its source order (u16 after the selector), and a selector
+  //      declared again further down is kept as a second record instead of merged into the first:
+  //      rules now apply by specificity, then stylesheet order (see resolveStyle).
+  static constexpr uint8_t CSS_CACHE_VERSION = 22;
   // Bytes before the sorted offset index: version(1) + ruleCount(2) + totalSelectorCandidates(4)
   // + unsupportedSelectorSkips(4) + flags(1).
   static constexpr uint32_t CSS_CACHE_HEADER_BYTES = 12;
@@ -120,7 +123,9 @@ class CssParser {
 
   /**
    * Look up the style for an HTML element, considering tag name, class, and id attributes.
-   * Applies CSS cascade: element < class < element.class < #id < tag#id
+   * Applies the CSS cascade: every matching rule, ordered by specificity (ids, then classes, then
+   * the element name) and, between rules of equal specificity, by stylesheet order -- the later
+   * rule wins. The order of the classes in the class attribute plays no part.
    *
    * @param tagName The HTML element name (e.g., "p", "div")
    * @param classAttr The class attribute value (may contain multiple space-separated classes)
@@ -270,8 +275,8 @@ class CssParser {
   // directory. Set before each appendCompiledFromStream / loadFromStream.
   void setStylesheetPath(const std::string& sheetPathInEpub);
   // The background picture of an element as an EPUB path (directory of its sheet + url, not yet
-  // normalised or unescaped), or nullptr. Same cascade as resolveStyle: tag < .class < tag.class
-  // < #id < tag#id, and among rules for the same selector the later one.
+  // normalised or unescaped), or nullptr. Same cascade as resolveStyle for the selectors it keeps
+  // (tag, .class, tag.class, #id, tag#id): the most specific wins, then the later rule.
   [[nodiscard]] const std::string* backgroundImageFor(const std::string& tagName, const std::string& classAttr,
                                                       const std::string& idAttr = {}) const;
 
@@ -290,8 +295,20 @@ class CssParser {
   void saveBackgroundImages() const;
   void loadBackgroundImages() const;
 
-  // Storage: maps normalized selector -> style properties
-  std::unordered_map<std::string, CssStyle> rulesBySelector_;
+  // A rule's place in the stylesheets: rules of equal specificity apply in this order. Every
+  // selector of one rule block shares it, and it counts on across stylesheets, so a later sheet's
+  // rules come after an earlier sheet's. Saturates (rule blocks beyond 65535 tie, which only a
+  // pathological sheet reaches: MAX_RULES caps the stored rules far below it).
+  uint16_t nextRuleOrder_ = 0;
+  struct OrderedStyle {
+    CssStyle style;
+    uint16_t order = 0;
+  };
+
+  // Storage: maps normalized selector -> style properties. A multimap: a selector declared again
+  // after other rules is kept as a second entry, because merging it into the first would move the
+  // first's declarations past the rules in between (see processRuleBlockWithStyle).
+  std::unordered_multimap<std::string, OrderedStyle> rulesBySelector_;
 
   std::string cachePath;
 
@@ -336,8 +353,9 @@ class CssParser {
   // drops them on clear()/clearCaches() and reloads on the next resolve.
   struct ResidentEntry {
     uint32_t hash;      // FNV-1a of the normalized selector (same as SelectorEntry::hash)
-    uint32_t styleOff;  // byte offset of this rule's compressed style within arenaStylePool_
-  };  // {u32,u32} = 8 B with no padding (vs a padded {u32,u16})
+    uint16_t styleOff;  // byte offset of this rule's compressed style within arenaStylePool_
+    uint16_t order;     // the rule's source order (see nextRuleOrder_)
+  };  // 8 B with no padding; a pool past 64 KB cannot be addressed and falls back to INDEX-only
   BuildArena* indexArena_ = nullptr;
   mutable ResidentEntry* arenaResident_ = nullptr;  // sorted by hash, cachedRuleCount_ entries
   mutable uint8_t* arenaStylePool_ = nullptr;       // distinct styles, sparse-compressed, length-prefixed
@@ -356,9 +374,10 @@ class CssParser {
 
   static uint32_t selectorHash(std::string_view s);
 
-  // Bounded hot cache of most recently used rules.
+  // Bounded hot cache of most recently used rules. Holds only selectors with a single rule: one
+  // declared again further down has several, and is always read from the index.
   mutable std::list<std::string> hotRuleLru_;
-  mutable std::unordered_map<std::string, std::pair<CssStyle, std::list<std::string>::iterator>> hotRuleCache_;
+  mutable std::unordered_map<std::string, std::pair<OrderedStyle, std::list<std::string>::iterator>> hotRuleCache_;
   mutable std::unordered_set<std::string> negativeRuleCache_;
   mutable ResolveStats resolveStats_;
   // Set while parsing when a selector matches on an id, and restored from the cache header
@@ -370,7 +389,14 @@ class CssParser {
   bool compileModeFailed_ = false;
   std::string compileTempPath_;
   FsFile compileTempFile_;
-  std::unordered_map<std::string, uint32_t> compileSelectorOffsets_;
+  // The latest staged record of each selector (the one a redeclaration may merge into), and the
+  // earlier records of selectors redeclared after other rules, which stay rules of their own.
+  struct StagedRule {
+    uint32_t offset;  // of the record in the staging file
+    uint16_t order;
+  };
+  std::unordered_map<std::string, StagedRule> compileSelectorOffsets_;
+  std::vector<uint32_t> compileRetiredOffsets_;
 
   // Reused scratch for the selector currently being processed (processRuleBlockWithStyle).
   // A member rather than a local so its buffer survives across selectors AND across rule
@@ -405,10 +431,19 @@ class CssParser {
 
   // On-demand rule loading helpers
   bool ensureCacheIndexLoaded() const;
-  bool lookupRule(const std::string& selector, CssStyle& outStyle, bool allowDiskLookup = true) const;
-  bool readRuleFromDiskAtOffset(uint32_t ruleOffset, const std::string& selector, CssStyle& outStyle) const;
+  // resolveStyle's accumulator: every matching rule is merged into it ranked by specificity, then
+  // source order (CssStyle::applyOver with ranks), so lookups may run in any order.
+  struct Cascade;
+  // Merges every rule stored for `selector` into `cascade` at `specificity`; true when any matched.
+  bool lookupRules(const std::string& selector, uint32_t specificity, Cascade& cascade,
+                   bool allowDiskLookup = true) const;
+  bool readRuleFromDiskAtOffset(uint32_t ruleOffset, const std::string& selector, CssStyle& outStyle,
+                                uint16_t& outOrder) const;
   static bool readCssStylePayload(FsFile& file, CssStyle& style);
   static void writeCssStylePayload(FsFile& file, const CssStyle& style);
+  // A rule record, the unit of the cache file and the compile staging file:
+  // selectorLen(2) selector order(2) style payload.
+  static void writeRuleRecord(FsFile& file, const std::string& selector, uint16_t order, const CssStyle& style);
   void touchHotRule(const std::string& selector) const;
-  void cacheHotRule(const std::string& selector, const CssStyle& style) const;
+  void cacheHotRule(const std::string& selector, const OrderedStyle& rule) const;
 };
