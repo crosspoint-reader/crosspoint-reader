@@ -112,9 +112,6 @@ void checkPanic() {
       const size_t written = file.write(panicInfo.c_str(), panicInfo.size());
       file.close();
       if (written == panicInfo.size()) {
-        // Keep the crash data for CrashActivity, but mark it consumed so a
-        // later watchdog reset cannot be mistaken for this panic.
-        panicCaptureMarker = 0;
         LOG_INF("SYS", "Dumped panic info to SD card");
       } else {
         LOG_ERR("SYS", "Failed to write complete crash report (%zu of %zu bytes)", written, panicInfo.size());
@@ -122,6 +119,11 @@ void checkPanic() {
     } else {
       LOG_ERR("SYS", "Failed to open crash_report.txt for writing");
     }
+    // Keep panicMessage/panicStack for CrashActivity, but mark the panic
+    // consumed after this boot's write attempt regardless of outcome -- a
+    // marker left set by a failed SD write would otherwise make a later,
+    // unrelated watchdog reset misreport as this same stale panic.
+    panicCaptureMarker = 0;
   }
 }
 
