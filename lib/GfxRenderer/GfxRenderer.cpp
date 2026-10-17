@@ -140,7 +140,7 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_
 
 void GfxRenderer::ensureSdCardFontReady(const int fontId, const char* const* segments, const size_t* segmentLens,
                                         const size_t segmentCount, const bool includeSpace, const bool includeHyphen,
-                                        const uint8_t styleMask) const {
+                                        const uint8_t styleMask, const bool includeSmallCaps) const {
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {
     // Augment the persistent advance-only table for layout measurement.
@@ -155,8 +155,9 @@ void GfxRenderer::ensureSdCardFontReady(const int fontId, const char* const* seg
         p += strlen(p) + 1;
       }
     }
-    int missed = it->second->buildAdvanceTablePacked(segments, segmentLens, segmentCount, includeSpace, includeHyphen,
-                                                     styleMask, shaped.empty() ? nullptr : shaped.c_str());
+    int missed =
+        it->second->buildAdvanceTablePacked(segments, segmentLens, segmentCount, includeSpace, includeHyphen, styleMask,
+                                            shaped.empty() ? nullptr : shaped.c_str(), includeSmallCaps);
     if (missed > 0) {
       LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
     }

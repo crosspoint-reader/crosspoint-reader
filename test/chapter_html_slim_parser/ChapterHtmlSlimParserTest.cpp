@@ -343,6 +343,27 @@ TEST_F(ChapterHtmlSlimParserTest, SmallCapsSpanMarksWordsWithoutChangingText) {
   EXPECT_EQ(block.wordStyle(2) & EpdFontFamily::SMALL_CAPS, 0);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, SmallCapsMetricsArePreparedForEachInlineFont) {
+  renderer.sdFont = true;
+  ParsedText text;
+  const uint8_t slot = text.sizeSlotFor(0.8f);
+  text.setSizeSlotFontId(slot, 42);
+  text.addWord("Chapter", EpdFontFamily::SMALL_CAPS);
+  text.addWord("other", static_cast<EpdFontFamily::Style>(EpdFontFamily::BOLD | EpdFontFamily::SMALL_CAPS), false,
+               false, 8, 0, slot);
+  size_t lines = 0;
+  text.layoutAndExtractLines(renderer, 0, 480, [&](std::unique_ptr<TextBlock> line, auto) {
+    ++lines;
+    ASSERT_EQ(line->wordCount(), 2);
+    EXPECT_STREQ(line->wordText(0), "Chapter");
+    EXPECT_STREQ(line->wordText(1), "other");
+    EXPECT_EQ(line->wordFontId(1, 0), 42);
+    EXPECT_NE(line->wordStyle(1) & EpdFontFamily::SMALL_CAPS, 0);
+  });
+  EXPECT_EQ(lines, 1u);
+  EXPECT_EQ(renderer.coldMeasurements, 0u);
+}
+
 class ChapterPageBreakTest : public ChapterHtmlSlimParserTest {
  protected:
   unsigned pages = 0;

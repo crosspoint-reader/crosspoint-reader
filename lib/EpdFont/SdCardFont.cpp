@@ -56,22 +56,20 @@ inline uint32_t readU32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] <<
 // Walks a null-terminated UTF-8 string and appends each unique codepoint to
 // codepoints[0..cpCount-1] via O(n²) dedup.  Returns true if the buffer
 // reached maxCount (cap hit), false if all codepoints fit.
-bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& cpCount, uint32_t maxCount) {
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-  while (*p) {
-    uint32_t cp = utf8NextCodepoint(&p);
-    if (cp == 0) break;
-    bool found = false;
-    for (uint32_t i = 0; i < cpCount; i++) {
-      if (codepoints[i] == cp) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
+bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& cpCount, uint32_t maxCount,
+                             const bool includeSmallCaps) {
+  const auto append = [&](const uint32_t cp) {
+    if (std::find(codepoints, codepoints + cpCount, cp) == codepoints + cpCount) {
       if (cpCount >= maxCount) return true;
       codepoints[cpCount++] = cp;
     }
+    return false;
+  };
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
+  while (*p) {
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0) break;
+    if (append(cp) || (includeSmallCaps && append(utf8SmallCapsUpper(cp)))) return true;
   }
   return false;
 }
@@ -1641,7 +1639,7 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
 
 int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_t* segmentLens,
                                         const size_t segmentCount, const bool includeSpace, const bool includeHyphen,
-                                        uint8_t styleMask, const char* extraText) {
+                                        uint8_t styleMask, const char* extraText, const bool includeSmallCaps) {
   if (!loaded_) return -1;
   styleMask = resolveStyleMask(styleMask);
   if (styleMask == 0) return 0;
@@ -1668,6 +1666,7 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
     maxCodepoints = std::min<size_t>(MAX_UNIQUE_CODEPOINTS,
                                      maxCodepoints + std::min<size_t>(segmentLens[seg], MAX_UNIQUE_CODEPOINTS));
   }
+  if (includeSmallCaps) maxCodepoints = std::min<size_t>(MAX_UNIQUE_CODEPOINTS, maxCodepoints * 2);
   // Byte counts bound codepoints. Short table words need no heap scratch; paragraphs keep the existing cap.
   static constexpr size_t INLINE_CODEPOINTS = 32;
   uint32_t inlineCodepoints[INLINE_CODEPOINTS + 2];  // space and hyphen can be injected below
@@ -1690,12 +1689,12 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
     const char* p = segments[seg];
     const char* const end = p + segmentLens[seg];
     while (p < end && !hitCap) {
-      hitCap = collectUniqueCodepoints(p, codepoints, cpCount, maxCodepoints);
+      hitCap = collectUniqueCodepoints(p, codepoints, cpCount, maxCodepoints, includeSmallCaps);
       p += strlen(p) + 1;
     }
   }
   if (extraText && !hitCap) {
-    hitCap = collectUniqueCodepoints(extraText, codepoints, cpCount, maxCodepoints);
+    hitCap = collectUniqueCodepoints(extraText, codepoints, cpCount, maxCodepoints, includeSmallCaps);
   }
 
   if (includeSpace && std::none_of(codepoints, codepoints + cpCount, [](uint32_t c) { return c == ' '; }))

@@ -217,7 +217,8 @@ class GfxRenderer {
   // consecutive NUL-terminated words (WordStore chunks), so a whole paragraph
   // is scanned without materializing per-word strings.
   void ensureSdCardFontReady(int fontId, const char* const* segments, const size_t* segmentLens, size_t segmentCount,
-                             bool includeSpace, bool includeHyphen, uint8_t styleMask = 0x0F) const;
+                             bool includeSpace, bool includeHyphen, uint8_t styleMask = 0x0F,
+                             bool includeSmallCaps = false) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

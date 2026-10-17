@@ -98,20 +98,23 @@ class GfxRenderer {
   }
   int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 4; }
   bool isSdCardFont(int) const { return sdFont; }
-  void ensureSdCardFontReady(int fontId, const char* text, uint8_t mask) const {
+  void ensureSdCardFontReady(int fontId, const char* text, uint8_t mask, bool includeSmallCaps = false) const {
     const auto* cursor = reinterpret_cast<const uint8_t*>(text);
     while (const uint32_t cp = utf8NextCodepoint(&cursor)) {
       for (uint8_t style = 0; style < 4; ++style) {
-        if (mask & (1 << style)) preparedAdvances.emplace(fontId, style, cp);
+        if (mask & (1 << style)) {
+          preparedAdvances.emplace(fontId, style, cp);
+          if (includeSmallCaps) preparedAdvances.emplace(fontId, style, utf8SmallCapsUpper(cp));
+        }
       }
     }
   }
   void ensureSdCardFontReady(int fontId, const char* const* segments, const size_t* lengths, size_t count,
-                             bool includeSpace, bool includeHyphen, uint8_t mask) const {
+                             bool includeSpace, bool includeHyphen, uint8_t mask, bool includeSmallCaps = false) const {
     for (size_t i = 0; i < count; ++i) {
       const char* word = segments[i];
       while (word < segments[i] + lengths[i]) {
-        ensureSdCardFontReady(fontId, word, mask);
+        ensureSdCardFontReady(fontId, word, mask, includeSmallCaps);
         word += std::char_traits<char>::length(word) + 1;
       }
     }

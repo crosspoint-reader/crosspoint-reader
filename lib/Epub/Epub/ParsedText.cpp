@@ -929,6 +929,9 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(s) & 0x03));
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
+    const bool includeSmallCaps = std::any_of(wordSizeSlots.begin(), wordSizeSlots.end(), [](const uint8_t slot) {
+      return (slot & TextBlock::SMALL_CAPS_SLOT_FLAG) != 0;
+    });
     // Hand the arena chunks over as packed NUL-separated word runs. Two small
     // pointer tables (~8 B per live chunk) instead of per-word iteration.
     std::vector<const char*> segments;
@@ -944,7 +947,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     for (size_t i = 0; i < paragraphFontCount; ++i) {
       if (!renderer.isSdCardFont(paragraphFonts[i])) continue;
       renderer.ensureSdCardFontReady(paragraphFonts[i], segments.data(), segmentLens.data(), segments.size(),
-                                     words.size() > 1, hyphenationEnabled, styleMask);
+                                     words.size() > 1, hyphenationEnabled, styleMask, includeSmallCaps);
     }
   }
 
