@@ -201,8 +201,6 @@
 <main class="page-content">
 
 
-  <div id="message" class="toast"></div>
-
   <div id="settings-container">
     <div class="loader-container">
       <span class="loader"></span>
@@ -238,14 +236,6 @@
       .replaceAll("'", "&#039;");
   }
 
-
-  function showMessage(text, isError) {
-    const msg = document.getElementById('message');
-    msg.textContent = text;
-    msg.className = 'toast ' + (isError ? 'error' : 'success');
-    msg.style.display = 'block';
-    setTimeout(function() { msg.style.display = 'none'; }, 4000);
-  }
 
   function renderControl(setting) {
     const id = 'setting-' + setting.key;
@@ -488,7 +478,7 @@
     });
 
     if (Object.keys(changes).length === 0) {
-      showMessage('No changes to save.', false);
+      showWebToast('No changes to save.', false);
       btn.textContent = 'Save Settings';
       return;
     }
@@ -510,10 +500,10 @@
         originalValues[key] = changes[key];
       }
 
-      showMessage('Settings saved successfully!', false);
+      showWebToast('Settings saved successfully!', false);
     } catch (e) {
       console.error(e);
-      showMessage('Error: ' + e.message, true);
+      showWebToast('Error: ' + e.message, true);
     }
 
     btn.textContent = 'Save Settings';
@@ -591,7 +581,7 @@
     const id = idx === -1 ? 'new' : idx;
     const ssid = document.getElementById('wifi-ssid-' + id).value.trim();
     if (!ssid) {
-      showMessage('SSID is required.', true);
+      showWebToast('SSID is required.', true);
       return;
     }
 
@@ -609,15 +599,15 @@
         body: JSON.stringify(data)
       });
       if (!resp.ok) throw new Error(await resp.text());
-      showMessage('Wi-Fi network saved!', false);
+      showWebToast('Wi-Fi network saved!', false);
       await loadWifiNetworks();
     } catch (e) {
-      showMessage('Error: ' + e.message, true);
+      showWebToast('Error: ' + e.message, true);
     }
   }
 
   async function deleteWifiNetwork(idx) {
-    if (!confirm('Delete this Wi-Fi network?')) return;
+    if (!await showWebConfirm('Delete this Wi-Fi network?')) return;
     try {
       const resp = await fetch('/api/wifi/delete', {
         method: 'POST',
@@ -625,10 +615,10 @@
         body: JSON.stringify({index: idx})
       });
       if (!resp.ok) throw new Error(await resp.text());
-      showMessage('Wi-Fi network deleted', false);
+      showWebToast('Wi-Fi network deleted', false);
       await loadWifiNetworks();
     } catch (e) {
-      showMessage('Error: ' + e.message, true);
+      showWebToast('Error: ' + e.message, true);
     }
   }
 
@@ -758,15 +748,15 @@
         body: JSON.stringify(data)
       });
       if (!resp.ok) throw new Error(await resp.text());
-      showMessage('OPDS server saved!', false);
+      showWebToast('OPDS server saved!', false);
       await loadOpdsServers();
     } catch (e) {
-      showMessage('Error: ' + e.message, true);
+      showWebToast('Error: ' + e.message, true);
     }
   }
 
   async function deleteOpdsServer(idx) {
-    if (!confirm('Delete this OPDS server?')) return;
+    if (!await showWebConfirm('Delete this OPDS server?')) return;
     try {
       const resp = await fetch('/api/opds/delete', {
         method: 'POST',
@@ -774,10 +764,10 @@
         body: JSON.stringify({index: idx})
       });
       if (!resp.ok) throw new Error(await resp.text());
-      showMessage('OPDS server deleted', false);
+      showWebToast('OPDS server deleted', false);
       await loadOpdsServers();
     } catch (e) {
-      showMessage('Error: ' + e.message, true);
+      showWebToast('Error: ' + e.message, true);
     }
   }
 

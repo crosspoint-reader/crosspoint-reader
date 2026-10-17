@@ -52,6 +52,7 @@
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
+#include "util/FirmwareIdentity.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 #include "util/TaskWatchdog.h"
@@ -91,12 +92,6 @@ void releaseRequestArguments(WebServer* server) {
 // Note: Items starting with "." are automatically hidden
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
-// Formats the library index tracks (LibraryIndex isBookName): an upload of any
-// of these must mark the index dirty so the next Library entry rebuilds it.
-bool isLibraryBookFile(const String& filename) {
-  return FsHelpers::checkFileExtension(filename, ".epub") || FsHelpers::checkFileExtension(filename, ".txt") ||
-         FsHelpers::checkFileExtension(filename, ".md") || FsHelpers::checkFileExtension(filename, ".xtc");
-}
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -535,6 +530,9 @@ void CrossPointWebServer::handleStatus() const {
 
   JsonDocument doc;
   doc["version"] = CROSSPOINT_VERSION;
+  doc["firmwareFamily"] = firmwareidentity::FAMILY;
+  doc["pluginApi"] = firmwareidentity::PLUGIN_API_VERSION;
+  doc["pluginCapabilities"] = firmwareidentity::PLUGIN_CAPABILITIES;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
@@ -961,7 +959,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
-        if (isLibraryBookFile(state.fileName)) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
     state.buffer.reset();
@@ -1364,7 +1362,7 @@ void CrossPointWebServer::handleGetSettings() const {
   JsonDocument doc;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;  // Skip ACTION-only entries
+    if (!s.key || s.webHidden) continue;  // Skip ACTION-only entries
 
     doc.clear();
     doc["key"] = s.key;
@@ -1473,7 +1471,7 @@ void CrossPointWebServer::handlePostSettings() {
   int applied = 0;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;
+    if (!s.key || s.webHidden) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
     switch (s.type) {
@@ -1885,6 +1883,12 @@ void CrossPointWebServer::sendJson(const JsonDocument& doc) const {
   server->send(200, "application/json", out);
 }
 
+bool CrossPointWebServer::rejectIfPluginsDisabled() const {
+  if (SETTINGS.pluginsEnabled) return false;
+  server->send(403, "text/plain", "plugin system disabled");
+  return true;
+}
+
 // GET /api/plugins -> [{ "name", "title", "mount" }, ...]. Only plugins with a
 // plugin.js are listed (the page loads it); optional manifest.json supplies the
 // title and mount point.
@@ -1944,6 +1948,7 @@ void CrossPointWebServer::handlePluginFile() const {
 // device makes it via SecureNet. Sending the body raw avoids escaping it into
 // JSON on the device; PluginHost.relay() rebuilds {status, headers, body}.
 void CrossPointWebServer::handleRelay() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const String plugin = req["plugin"] | "";
@@ -2005,6 +2010,7 @@ namespace {}  // namespace
 // Generic wolfSSL primitives (hash, random, AES, RSA, PKCS#12) a plugin can use.
 // Stateless; keys are base64 in the request/reply.
 void CrossPointWebServer::handleCrypto() {
+  if (rejectIfPluginsDisabled()) return;
   using namespace freeink::content;
   JsonDocument req;
   if (!readJsonBody(req)) return;
@@ -2188,6 +2194,7 @@ void CrossPointWebServer::handleCrypto() {
 // Device downloads a URL straight to SD, so a large body never passes through
 // the browser.
 void CrossPointWebServer::handleFetch() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const std::string url = req["url"] | "";
@@ -2375,6 +2382,8 @@ void CrossPointWebServer::handleFetch() {
     Storage.remove(part.c_str());
     complete = false;
     resp["error"] = "sd write failed";
+  } else if (complete && library::isLibraryBookFile(dest)) {
+    library::markLibraryIndexDirty();
   }
   resp["status"] = status;
   resp["bytes"] = written;
@@ -2415,6 +2424,10 @@ void CrossPointWebServer::handlePluginFsUpload() {
       st.started = true;
       st.errorStatus = 0;
       st.error = nullptr;
+      if (!SETTINGS.pluginsEnabled) {
+        fail(403, "plugin system disabled");
+        return;
+      }
       const String plugin = server->arg("plugin");
       if (!safeComponent(plugin) || !protectedpaths::isPluginPath(st.path)) {
         LOG_ERR("WEB", "Rejected plugin file write: plugin='%s' path='%s'", plugin.c_str(), st.path.c_str());
@@ -2453,6 +2466,8 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
+      } else if (library::isLibraryBookFile(st.path)) {
+        library::markLibraryIndexDirty();
       }
       return;
     case UPLOAD_FILE_ABORTED:
@@ -2463,6 +2478,10 @@ void CrossPointWebServer::handlePluginFsUpload() {
 
 void CrossPointWebServer::handlePluginFs() {
   auto& st = pluginFsUpload;
+  if (!SETTINGS.pluginsEnabled && !st.started) {
+    server->send(403, "text/plain", "plugin system disabled");
+    return;
+  }
   if (!st.started) {
     server->send(400, "application/json", "{\"error\":\"missing file part\"}");
   } else if (st.errorStatus) {
@@ -2478,22 +2497,23 @@ void CrossPointWebServer::handlePluginFs() {
   st.started = false;
 }
 
-// POST /api/book-key {path, key (base64, 16 bytes), expires?} -> {ok}
+// POST /api/book-key {path, key (base64, 16 or 32 bytes), expires?} -> {ok}
 // Stores a protected book's content key, wrapped to this device, as
 // "<path>.key" for the reader to open the book with.
 void CrossPointWebServer::handleBookKey() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const std::string path = req["path"] | "";
   const char* keyB64 = req["key"] | "";
   const int64_t expires = req["expires"] | static_cast<int64_t>(0);
-  uint8_t key[bookkey::KEY_LEN];
+  uint8_t key[bookkey::MAX_KEY_LEN];
   const int32_t n = freeink::content::base64Decode(keyB64, strlen(keyB64), key, sizeof(key));
-  if (!protectedpaths::isPluginPath(path) || n != static_cast<int32_t>(sizeof(key)) || expires < 0) {
+  if (!protectedpaths::isPluginPath(path) || (n != 16 && n != 32) || expires < 0) {
     server->send(400, "application/json", "{\"error\":\"bad path/key\"}");
     return;
   }
-  if (!bookkey::write(path, key, expires)) {
+  if (!bookkey::write(path, key, static_cast<size_t>(n), expires)) {
     server->send(500, "application/json", "{\"error\":\"cannot store key\"}");
     return;
   }
@@ -2501,6 +2521,7 @@ void CrossPointWebServer::handleBookKey() {
 }
 
 void CrossPointWebServer::handlePluginRunnerPage() const {
+  if (rejectIfPluginsDisabled()) return;
   sendStaticContent(server.get(), RunnerPageHtml, sizeof(RunnerPageHtml), RunnerPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served plugin runner page");
 }
@@ -2517,6 +2538,7 @@ CrossPointWebServer::PluginJob* CrossPointWebServer::allocPluginJob() {
 
 // POST /api/plugin-jobs {plugin, action, args?} -> {id}
 void CrossPointWebServer::handlePluginJobSubmit() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const String plugin = req["plugin"] | "";
@@ -2554,6 +2576,7 @@ void CrossPointWebServer::handlePluginJobSubmit() {
 
 // GET /api/plugin-jobs/claim?plugin=<name> -> {id, action, args} or {id:0}
 void CrossPointWebServer::handlePluginJobClaim() {
+  if (rejectIfPluginsDisabled()) return;
   const String plugin = server->arg("plugin");
   const uint32_t now = millis();
   for (auto& job : pluginJobs) {
@@ -2578,6 +2601,7 @@ void CrossPointWebServer::handlePluginJobClaim() {
 // 409 when `claim` is stale: the lease expired and another runner re-claimed
 // the job, so this late result must not overwrite that runner's.
 void CrossPointWebServer::handlePluginJobComplete() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const uint32_t id = req["id"] | 0;
@@ -2613,6 +2637,7 @@ void CrossPointWebServer::handlePluginJobComplete() {
 
 // GET /api/plugin-jobs/status?id=<n> -> {id, state, result}
 void CrossPointWebServer::handlePluginJobStatus() {
+  if (rejectIfPluginsDisabled()) return;
   const uint32_t id = strtoul(server->arg("id").c_str(), nullptr, 10);
   static constexpr const char* STATE_NAMES[] = {"empty", "pending", "running", "done", "error"};
   for (auto& job : pluginJobs) {
@@ -2737,7 +2762,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearBookCache(filePath.c_str());
-            if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
+            if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2807,7 +2832,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
         clearBookCache(filePath.c_str());
-        if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
