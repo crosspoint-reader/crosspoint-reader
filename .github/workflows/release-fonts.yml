@@ -1,14 +1,24 @@
 name: Build & Publish SD Card Fonts
 
-# Fonts change rarely — run manually when font sources or the conversion
-# pipeline are updated.  Publishes .cpfont files + fonts.json manifest as
-# GitHub Release assets on the crosspoint-fonts repo so font releases don't
-# clutter the firmware releases page.
+# Rebuilds automatically when font definitions or conversion scripts change
+# on develop, and can also be run manually. Publishes .cpfont files +
+# fonts.json manifest as GitHub Release assets on the crosspoint-fonts repo so
+# font releases don't clutter the firmware releases page.
 #
 # Requires a repository secret FONTS_REPO_TOKEN — a fine-grained PAT (or
 # classic PAT) with contents:write permission on the target fonts repo.
 on:
   workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - 'lib/EpdFont/scripts/sd-fonts.yaml'
+      - 'lib/EpdFont/scripts/*.py'
+      - 'lib/EpdFont/scripts/requirements.txt'
+
+concurrency:
+  group: release-sd-card-fonts
+  cancel-in-progress: false
 
 env:
   FONTS_REPO: crosspoint-reader/crosspoint-fonts
