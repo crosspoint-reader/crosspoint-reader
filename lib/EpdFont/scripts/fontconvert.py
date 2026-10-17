@@ -800,9 +800,6 @@ def to_byte_aligned(packed, width, height):
 
 
 # Build groups for compression
-if compress and not is2Bit:
-    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
-    sys.exit(1)
 if compress:
     # Script-based grouping: glyphs that co-occur in typical text rendering
     # are grouped together for efficient LRU caching on the embedded target.
@@ -834,10 +831,9 @@ if compress:
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]
 
-    # 64 KB cap: large enough to hold any single built-in script group with
-    # headroom, small enough to be a comfortable transient malloc on the
-    # ESP32-C3.
-    GROUP_MAX_UNCOMPRESSED_BYTES = 65536
+    # Preserve reader grouping; UI fonts keep their packed 1-bit pixels and
+    # bound the hot-group allocation to 2 KiB on heap-tight screens.
+    GROUP_MAX_UNCOMPRESSED_BYTES = 65536 if is2Bit else 2048
 
     def get_script_group(code_point):
         for i, (start, end) in enumerate(SCRIPT_GROUP_RANGES):
@@ -853,11 +849,9 @@ if compress:
 
     for i, (props, _) in enumerate(all_glyphs):
         sg = get_script_group(props.code_point)
-        # Use the byte-aligned size (4-pixel-aligned row stride) rather than
-        # the packed length, since the decompressor consumes byte-aligned
-        # buffers. Empty glyphs contribute zero.
+        # 2-bit groups pad each row; 1-bit groups retain packed glyph bytes.
         glyph_aligned_size = (((props.width + 3) // 4) * props.height
-                              if props.width > 0 and props.height > 0 else 0)
+                              if is2Bit else props.data_length)
         if glyph_aligned_size > GROUP_MAX_UNCOMPRESSED_BYTES:
             raise ValueError(
                 f"Glyph {i} (code point U+{props.code_point:04X}) byte-aligned size "
@@ -909,9 +903,10 @@ if compress:
                 code_point=old_props.code_point,
             )
             packed_len += len(packed)
-            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
+            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height)
+                                 if is2Bit else packed)
 
-        # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
+        # Compress group data with raw DEFLATE (no zlib/gzip header)
         compressed = deflate_raw(group_aligned)
 
         compressed_groups.append((compressed, len(group_aligned), count, first_idx))

@@ -22,7 +22,7 @@ class FontDecompressor {
   // Free all cached data (page buffer + hot group).
   void clearCache();
 
-  // Pre-scan UTF-8 text and extract needed glyph bitmaps into a flat page buffer.
+  // Pre-scan 2-bit reader text into a flat page buffer; 1-bit UI fonts use the hot group.
   // Each group is decompressed once into a temp buffer; only needed glyphs are kept.
   // Returns the number of glyphs that couldn't be loaded (0 on full success).
   int prewarmCache(const EpdFontData* fontData, const char* utf8Text);
@@ -63,8 +63,8 @@ class FontDecompressor {
   PageSlot pageSlots[MAX_PAGE_SLOTS] = {};
   uint8_t pageSlotCount = 0;
 
-  // Hot group: last decompressed group (byte-aligned) for non-prewarmed fallback path.
-  // Kept in byte-aligned format; individual glyphs are compacted on demand into hotGlyphBuf.
+  // Hot group: last decompressed group for non-prewarmed fallback path.
+  // 2-bit rows are compacted into hotGlyphBuf; packed 1-bit glyphs are borrowed directly.
   // Nothrow high-water malloc buffers, NOT std::vector: getBitmap() runs on the render path,
   // and under -fno-exceptions a vector resize that hits OOM abort()s the firmware instead of
   // failing (field crash: hotGroup.resize() -> std::bad_alloc -> abort with ~11 KB free).

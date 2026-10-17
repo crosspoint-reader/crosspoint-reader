@@ -213,6 +213,12 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     stats.cacheHits++;
   }
 
+  // 1-bit groups already contain packed glyphs; no compaction scratch is needed.
+  if (!fontData->is2Bit) {
+    stats.getBitmapTimeUs += micros() - tStart;
+    return &hotGroup[glyph->dataOffset];
+  }
+
   // Compact just the requested glyph from byte-aligned data into scratch buffer
   if (!ensureCapacity(hotGlyphBuf, hotGlyphBufCapacity, glyph->dataLength)) {
     LOG_ERR("FDC", "Failed to allocate %u bytes for glyph scratch", (unsigned)glyph->dataLength);
@@ -256,6 +262,8 @@ int32_t FontDecompressor::findGlyphIndex(const EpdFontData* fontData, uint32_t c
 
 int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8Text) {
   if (!fontData || !fontData->groups || !utf8Text) return 0;
+  // Packed UI fonts use the bounded hot group, preserving page slots for reader styles.
+  if (!fontData->is2Bit) return 0;
 
   // Allocate the next available slot (caller must call freePageBuffer/clearCache to reset)
   if (pageSlotCount >= MAX_PAGE_SLOTS) {

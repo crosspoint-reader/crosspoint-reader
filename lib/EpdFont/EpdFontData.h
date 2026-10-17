@@ -138,7 +138,7 @@ typedef struct {
   uint32_t dataOffset;  ///< Pointer into EpdFont->bitmap (or within-group offset for compressed fonts)
 } EpdGlyph;
 
-/// Compressed font group: a DEFLATE-compressed block of glyph bitmaps
+/// DEFLATE group: row-aligned 2-bit pixels, or packed 1-bit glyphs.
 typedef struct {
   uint32_t compressedOffset;  ///< Byte offset into compressed data array
   uint32_t compressedSize;    ///< Compressed DEFLATE stream size
