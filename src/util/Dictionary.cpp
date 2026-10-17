@@ -1039,3 +1039,24 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   if (!resolve(word, location, matchedHeadwordOut, outResult)) return false;
   return readResolved(location, definitionOut, outResult);
 }
+
+const char* Dictionary::resultName(const LookupResult result) {
+  switch (result) {
+    case LookupResult::Found:
+      return "found";
+    case LookupResult::NotFound:
+      return "not_found";
+    case LookupResult::LowMemory:
+      return "low_memory";
+    case LookupResult::Decompress:
+      return "decompress_error";
+    case LookupResult::ReadError:
+      return "read_error";
+  }
+  return "?";
+}
+
+void Dictionary::logLookup(const char* dictionaryName, const char* word, const char* outcome, const char* headword) {
+  LOG_INF("DICT", "Lookup dict=%s word=\"%s\": %s%s%s", dictionaryName, word, outcome, headword ? " headword=" : "",
+          headword ? headword : "");
+}
