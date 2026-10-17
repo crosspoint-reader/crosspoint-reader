@@ -10,4 +10,8 @@
 // The fallback for a dictionary definition whose HTML the layout path could not
 // use -- too damaged to parse, too large to keep resident as laid-out Pages, or
 // laid out on a heap that could not spare the room. See DictHtmlPages.h.
-std::string htmlToPlainText(const std::string& html);
+//
+// Converts in place: the result never needs more bytes than the markup it
+// replaces, so the definition's own buffer holds it and no second copy of a
+// large definition is ever allocated.
+void htmlToPlainTextInPlace(std::string& text);

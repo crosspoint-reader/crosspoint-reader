@@ -3,6 +3,7 @@ add_executable(DictionaryTest
   ${REPO_ROOT}/src/util/Dictionary.cpp
   ${REPO_ROOT}/src/util/DictionaryRegistry.cpp
   ${REPO_ROOT}/src/util/DictZip.cpp
+  ${REPO_ROOT}/lib/Utf8/Utf8.cpp
   ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
 )
 
@@ -13,6 +14,7 @@ target_include_directories(DictionaryTest PRIVATE
   ${REPO_ROOT}/lib/InflateReader
   ${REPO_ROOT}/lib/Logging
   ${REPO_ROOT}/lib/Memory
+  ${REPO_ROOT}/lib/Utf8
 )
 
 # The registry scans absolute SD roots (/dictionaries, /.dictionaries). Redirect

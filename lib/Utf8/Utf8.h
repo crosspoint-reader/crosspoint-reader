@@ -10,6 +10,17 @@ size_t utf8RemoveLastChar(std::string& str);
 // Truncate string by removing N UTF-8 codepoints from the end.
 void utf8TruncateChars(std::string& str, size_t numChars);
 
+// Simple (single-codepoint) lowercase for the scripts the reader's fonts and languages cover:
+// ASCII, Latin-1 Supplement, Latin Extended-A, the Vietnamese and Romanian letters of Latin
+// Extended-B, Latin Extended Additional, monotonic Greek and Cyrillic. Anything else, and any
+// letter whose lowercase is not one codepoint, comes back unchanged. One mapping for every
+// caller that folds case: the hyphenators and the dictionary lookup.
+uint32_t utf8LowerCodepoint(uint32_t cp);
+
+// utf8LowerCodepoint() over a single word. A capital sigma ending the word becomes the final
+// form ς, the spelling Greek text and dictionaries use. Never longer than the input.
+std::string utf8ToLower(const std::string& s);
+
 // Truncate a raw char buffer to the last complete UTF-8 codepoint boundary.
 // Returns the new length (<= len). If the buffer ends mid-sequence, the
 // incomplete trailing bytes are excluded.

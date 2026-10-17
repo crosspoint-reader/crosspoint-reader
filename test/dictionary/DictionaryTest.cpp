@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@
 
 #include "Dictionary.h"
 #include "DictionaryRegistry.h"
+#include "StringUtils.h"
 
 namespace fs = std::filesystem;
 
@@ -82,6 +84,63 @@ std::string provision(const std::string& fixtureFolder, const std::string& asFol
     fs::copy_file(e.path(), dest / e.path().filename(), fs::copy_options::overwrite_existing);
   }
   return asFolder;
+}
+
+// A hand-built dictionary for the lookup-rule tests, which need headwords the
+// generated fixture does not carry (case variants, umlauts, elisions).
+struct HeadwordSpec {
+  std::string word;
+  std::string definition;
+};
+struct SynonymSpec {
+  std::string word;
+  std::string headword;  // must be one of the dictionary's headwords
+};
+
+// StarDict's own order: g_ascii_strcasecmp, ties broken by strcmp.
+bool stardictLess(const std::string& a, const std::string& b) {
+  const int c = StringUtils::asciiCaseCmp(a.c_str(), b.c_str());
+  return c != 0 ? c < 0 : a < b;
+}
+
+void appendBe32(std::string& out, uint32_t v) {
+  const char bytes[4] = {static_cast<char>(v >> 24), static_cast<char>(v >> 16), static_cast<char>(v >> 8),
+                         static_cast<char>(v)};
+  out.append(bytes, sizeof(bytes));
+}
+
+// Write an uncompressed dictionary (plus a .syn when synonyms are given) under
+// /dictionaries/<folder>, both indexes sorted the way StarDict sorts them.
+void writeDictionary(const std::string& folder, std::vector<HeadwordSpec> headwords,
+                     std::vector<SynonymSpec> synonyms = {}) {
+  std::sort(headwords.begin(), headwords.end(),
+            [](const HeadwordSpec& a, const HeadwordSpec& b) { return stardictLess(a.word, b.word); });
+  std::sort(synonyms.begin(), synonyms.end(),
+            [](const SynonymSpec& a, const SynonymSpec& b) { return stardictLess(a.word, b.word); });
+  std::string idx;
+  std::string dict;
+  for (const auto& h : headwords) {
+    idx += h.word;
+    idx += '\0';
+    appendBe32(idx, static_cast<uint32_t>(dict.size()));
+    appendBe32(idx, static_cast<uint32_t>(h.definition.size()));
+    dict += h.definition;
+  }
+  std::string syn;
+  for (const auto& s : synonyms) {
+    const auto it =
+        std::find_if(headwords.begin(), headwords.end(), [&s](const HeadwordSpec& h) { return h.word == s.headword; });
+    ASSERT_NE(it, headwords.end()) << "synonym " << s.word << " names no headword";
+    syn += s.word;
+    syn += '\0';
+    appendBe32(syn, static_cast<uint32_t>(it - headwords.begin()));
+  }
+  const fs::path dir = kDictRoot / folder;
+  fs::remove_all(dir);
+  writeWholeFile(dir / "words.idx", idx);
+  writeWholeFile(dir / "words.dict", dict);
+  writeWholeFile(dir / "words.ifo", "StarDict's dict ifo file\nsametypesequence=m\n");
+  if (!syn.empty()) writeWholeFile(dir / "words.syn", syn);
 }
 
 // open() + buildIndex(), the sequence every caller runs before a first lookup.
@@ -407,6 +466,152 @@ TEST_F(DictionaryTest, SynonymsResolveThroughTheOrdinalIndex) {
   EXPECT_EQ(definition, expectedDefinition("quixotic"));
 }
 
+TEST_F(DictionaryTest, ExactCaseHeadwordWinsOverItsCapitalisedVariants) {
+  // StarDict sorts case variants capitals first, so a scan that took the first
+  // case-insensitive match answered "husk" with the surname.
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("CaseRun",
+                                          {{"HUSK", "an acronym"},
+                                           {"Husk", "a surname"},
+                                           {"husk", "the dry outer covering"},
+                                           {"Matter", "a surname"},
+                                           {"matter", "substance"},
+                                           {"Paris", "the capital of France"}},
+                                          {{"Husks", "Husk"}, {"husks", "husk"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "CaseRun"));
+
+  std::string definition;
+  std::string headword;
+  ASSERT_TRUE(dict.lookup("husk", definition, headword));
+  EXPECT_EQ(headword, "husk");
+  EXPECT_EQ(definition, "the dry outer covering");
+  ASSERT_TRUE(dict.lookup("matter", definition, headword));
+  EXPECT_EQ(headword, "matter");
+  EXPECT_EQ(definition, "substance");
+
+  // A sentence-initial capital is cleaned away, so it gets the common word too.
+  ASSERT_TRUE(dict.lookup("Husk", definition, headword));
+  EXPECT_EQ(headword, "husk");
+
+  // A word the dictionary only has capitalised is still found.
+  ASSERT_TRUE(dict.lookup("paris", definition, headword));
+  EXPECT_EQ(headword, "Paris");
+  EXPECT_EQ(definition, "the capital of France");
+
+  // The .syn has the same runs and takes the same rule.
+  ASSERT_TRUE(dict.lookup("husks", definition, headword));
+  EXPECT_EQ(headword, "husk");
+  EXPECT_EQ(definition, "the dry outer covering");
+}
+
+TEST_F(DictionaryTest, ExactCaseHeadwordIsFoundWhenItsRunStraddlesASample) {
+  // The sidecar samples every 256th entry. Slide a three-entry case run across
+  // that boundary so the descent lands before, inside and at the end of it.
+  for (int fillers = 253; fillers <= 257; fillers++) {
+    std::vector<HeadwordSpec> headwords;
+    for (int i = 0; i < fillers; i++) {
+      char word[16];
+      snprintf(word, sizeof(word), "aaa%03d", i);
+      headwords.push_back({word, "filler"});
+    }
+    headwords.push_back({"HUSK", "an acronym"});
+    headwords.push_back({"Husk", "a surname"});
+    headwords.push_back({"husk", "the dry outer covering"});
+    headwords.push_back({"zebra", "the striped one"});
+    const std::string folder = "Straddle" + std::to_string(fillers);
+    ASSERT_NO_FATAL_FAILURE(writeDictionary(folder, headwords));
+    Dictionary dict;
+    ASSERT_NO_FATAL_FAILURE(openIndexed(dict, folder));
+
+    std::string definition;
+    std::string headword;
+    ASSERT_TRUE(dict.lookup("husk", definition, headword)) << fillers;
+    EXPECT_EQ(headword, "husk") << fillers;
+    EXPECT_EQ(definition, "the dry outer covering") << fillers;
+  }
+}
+
+// Asserts that `word` resolves to `headword` and reads back `definition`.
+void expectHit(Dictionary& dict, const char* word, const char* headword, const char* definition) {
+  std::string gotDefinition;
+  std::string gotHeadword;
+  ASSERT_TRUE(dict.lookup(word, gotDefinition, gotHeadword)) << word;
+  EXPECT_EQ(gotHeadword, headword) << word;
+  EXPECT_EQ(gotDefinition, definition) << word;
+}
+
+TEST_F(DictionaryTest, CapitalisedNonAsciiWordsFindTheirLowercaseHeadword) {
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("Folded", {{"über", "over"},
+                                                     {"straße", "street"},
+                                                     {"привет", "hello"},
+                                                     {"γεια", "hi"},
+                                                     {"τους", "them"},
+                                                     {"їжак", "hedgehog"},
+                                                     {"Ärzte", "doctors"},
+                                                     {"ärzte", "a lowercase decoy"},
+                                                     {"Москва", "Moscow"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "Folded"));
+
+  // Sentence-initial and all-caps forms: cleanWord() lowercases only ASCII.
+  expectHit(dict, "Über", "über", "over");
+  expectHit(dict, "ÜBER", "über", "over");
+  expectHit(dict, "STRAẞE", "straße", "street");
+  expectHit(dict, "Привет", "привет", "hello");
+  expectHit(dict, "ПРИВЕТ", "привет", "hello");
+  expectHit(dict, "Γεια", "γεια", "hi");
+  expectHit(dict, "ΤΟΥΣ", "τους", "them");  // a word-final sigma lowercases to ς
+  expectHit(dict, "Їжак", "їжак", "hedgehog");
+
+  // A headword stored capitalised keeps its exact hit: the lowercase form is
+  // only the fallback, so the decoy is never reached.
+  expectHit(dict, "Ärzte", "Ärzte", "doctors");
+  expectHit(dict, "Москва", "Москва", "Moscow");
+}
+
+TEST_F(DictionaryTest, FrenchElisionsFallBackToTheWordAfterTheApostrophe) {
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("Elisions", {{"histoire", "story"},
+                                                       {"après", "after"},
+                                                       {"aime", "loves"},
+                                                       {"est", "is"},
+                                                       {"été", "summer"},
+                                                       {"avant", "before"},
+                                                       {"arc-en-ciel", "rainbow"},
+                                                       {"d'accord", "agreed"},
+                                                       {"accord", "a decoy"},
+                                                       {"aujourd'hui", "today"},
+                                                       {"brien", "a decoy"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "Elisions"));
+
+  expectHit(dict, "l'histoire", "histoire", "story");
+  expectHit(dict, "l’histoire", "histoire", "story");
+  expectHit(dict, "L’Histoire", "histoire", "story");
+  expectHit(dict, "qu'après", "après", "after");
+  expectHit(dict, "QU’Après", "après", "after");  // and the remainder is lowercased as a fallback
+  expectHit(dict, "Lʼété", "été", "summer");      // U+02BC modifier apostrophe
+  expectHit(dict, "j'aime", "aime", "loves");
+  expectHit(dict, "n’aime", "aime", "loves");
+  expectHit(dict, "c’est", "est", "is");
+  // The remainder gets the whole probe, stems included, and its hyphen parts.
+  expectHit(dict, "d'histoires", "histoire", "story");
+  expectHit(dict, "l'arc-en-ciel", "arc-en-ciel", "rainbow");
+  expectHit(dict, "d'avant-garde", "avant", "before");  // split from "avant-garde", not "d'avant-garde"
+
+  // A headword that is itself elided wins over its remainder.
+  expectHit(dict, "d'accord", "d'accord", "agreed");
+  expectHit(dict, "aujourd'hui", "aujourd'hui", "today");
+
+  // Only the French prefixes are stripped, and never down to nothing.
+  std::string definition;
+  std::string headword;
+  Dictionary::LookupResult result = Dictionary::LookupResult::Found;
+  EXPECT_FALSE(dict.lookup("O'Brien", definition, headword, &result));
+  EXPECT_EQ(result, Dictionary::LookupResult::NotFound);
+  EXPECT_FALSE(dict.lookup("l'", definition, headword, &result));
+  EXPECT_EQ(result, Dictionary::LookupResult::NotFound);
+}
+
 TEST_F(DictionaryTest, ResolveFindsTheLocationWithoutReadingIt) {
   const std::string folder = provision("plain", "Resolving");
   Dictionary dict;
@@ -598,6 +803,37 @@ TEST_F(DictionaryTest, CleanWordStripsPunctuationAndFoldsCase) {
   EXPECT_EQ(Dictionary::cleanWord("...."), "");
   EXPECT_EQ(Dictionary::cleanWord(""), "");
   EXPECT_EQ(Dictionary::cleanWord(nullptr), "");
+}
+
+TEST_F(DictionaryTest, CleanWordStripsNonAsciiPunctuation) {
+  // Outside General Punctuation, every byte >= 0x80 used to count as a letter.
+  EXPECT_EQ(Dictionary::cleanWord("«Über»"), "Über");  // non-ASCII case is resolve()'s job
+  EXPECT_EQ(Dictionary::cleanWord("« mot »"), "mot");
+  EXPECT_EQ(Dictionary::cleanWord("¿Qué?"), "qué");
+  EXPECT_EQ(Dictionary::cleanWord("¡Hola!"), "hola");
+  EXPECT_EQ(Dictionary::cleanWord("„Wort“"), "wort");
+  EXPECT_EQ(Dictionary::cleanWord("‹word›"), "word");
+  EXPECT_EQ(Dictionary::cleanWord("word¹"), "word");
+  EXPECT_EQ(Dictionary::cleanWord("\xC2\xA0word\xC2\xA0"), "word");  // no-break spaces
+  EXPECT_EQ(Dictionary::cleanWord("\xEF\xBB\xBFword"), "word");      // zero-width no-break space
+  EXPECT_EQ(Dictionary::cleanWord("（привет），"), "привет");
+  EXPECT_EQ(Dictionary::cleanWord("「言葉」。"), "言葉");
+  EXPECT_EQ(Dictionary::cleanWord("《书》"), "书");
+  EXPECT_EQ(Dictionary::cleanWord("«»"), "");
+
+  // Letters among those code blocks, and marks inside a word, stay.
+  EXPECT_EQ(Dictionary::cleanWord("nº"), "nº");
+  EXPECT_EQ(Dictionary::cleanWord("µm"), "µm");
+  EXPECT_EQ(Dictionary::cleanWord("rock’n’roll"), "rock’n’roll");
+  EXPECT_EQ(Dictionary::cleanWord("々"), "々");  // ideographic iteration mark
+}
+
+TEST_F(DictionaryTest, GuillemetsDoNotHideAWord) {
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("Guillemets", {{"über", "over"}, {"qué", "what"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "Guillemets"));
+  expectHit(dict, "«Über»", "über", "over");
+  expectHit(dict, "¿Qué?", "qué", "what");
 }
 
 }  // namespace

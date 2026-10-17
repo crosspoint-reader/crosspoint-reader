@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
@@ -60,6 +61,65 @@ uint32_t readBe32(const uint8_t* p) {
 // Word characters for cleaning: ASCII alphanumerics plus any UTF-8
 // continuation/lead byte, so accented words keep their edges.
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
+
+// Punctuation, symbols and spaces beyond ASCII that cleanWord() strips from a
+// word's edges. isWordByte() keeps every byte >= 0x80 so accented letters
+// survive, which also left «Über», ¿Qué, （词） and 「言葉」 in their marks.
+//
+// Based on crosspoint-reader PR #3611 (Anton Lijcklama à Nijeholt,
+// @alycklama), reworked as a short list of the marks books put against a word
+// instead of Unicode's category data (~6 KB of tables there).
+struct CodepointRange {
+  uint16_t first;
+  uint16_t last;
+};
+constexpr CodepointRange EDGE_PUNCTUATION[] = {
+    {0x00A0, 0x00A9},  // no-break space ¡ ¢ £ ¤ ¥ ¦ § ¨ ©
+    {0x00AB, 0x00B4},  // « ¬ soft hyphen ® ¯ ° ± ² ³ ´
+    {0x00B6, 0x00B9},  // ¶ · ¸ ¹
+    {0x00BB, 0x00BF},  // » ¼ ½ ¾ ¿ (ª µ º between them are letters)
+    {0x037E, 0x037E},  // Greek question mark
+    {0x0387, 0x0387},  // Greek ano teleia
+    {0x2000, 0x207F},  // General Punctuation (quotes, dashes, ellipsis, ‹ ›) and superscripts
+    {0x3000, 0x3004},  // ideographic space 、 。 〃 〄
+    {0x3008, 0x3020},  // CJK brackets and quotes 〈 〉 《 》 「 」 『 』 【 】 〜 〝 〞
+    {0xFF01, 0xFF0F},  // fullwidth ！ ＂ ＃ ＄ ％ ＆ ＇ （ ） ＊ ＋ ， － ． ／
+    {0xFF1A, 0xFF20},  // fullwidth ： ； ＜ ＝ ＞ ？ ＠
+    {0xFF3B, 0xFF40},  // fullwidth ［ ＼ ］ ＾ ＿ ｀
+    {0xFF5B, 0xFF65},  // fullwidth ｛ ｜ ｝ ～ ｟ ｠, halfwidth ｡ ｢ ｣ ､ ･
+};
+
+// Byte length of the strippable non-ASCII codepoint that starts at b[i] and
+// ends at or before b[end], or 0 when there is none there. b is NUL-terminated.
+size_t edgePunctuationLen(const unsigned char* b, size_t i, size_t end) {
+  if (b[i] < 0x80) return 0;
+  const unsigned char* p = b + i;
+  const uint32_t cp = utf8NextCodepoint(&p);
+  const auto len = static_cast<size_t>(p - (b + i));
+  if (i + len > end) return 0;
+  if (utf8IsDefaultIgnorable(cp)) return len;
+  for (const auto& range : EDGE_PUNCTUATION) {
+    if (cp >= range.first && cp <= range.last) return len;
+  }
+  return 0;
+}
+
+// Headwords equal under asciiCaseCmp sit in one contiguous run, ordered among
+// themselves by StarDict's strcmp tiebreak -- which puts "Husk" (a surname)
+// ahead of "husk", since uppercase sorts first in ASCII. Taking the first of
+// the run answered a lookup of "husk" with the proper noun. So the scan keeps
+// the first entry of the run as a fallback (a query for "paris" against a
+// dictionary holding only "Paris") but moves on to the entry spelled exactly
+// like the target when the run has one. True when `word` becomes the pick;
+// `exact` tells the caller the run needs no further scanning. Shared by the
+// .idx and .syn scans, which have the same runs.
+//
+// Ported from crosspoint-reader PR #3480 (Lennon Anderson, @YurBoiRene); the
+// same fix is PR #3436 (@PrashikshitSaini). Upstream fixed the .idx scan only.
+bool takesRunEntry(const char* word, const char* target, bool havePick, bool& exact) {
+  exact = strcmp(word, target) == 0;
+  return exact || !havePick;
+}
 
 // Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
 // headers are tiny and both keys always appear early when present.
@@ -508,6 +568,9 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
+  // The exact-case entry of a run is always reached: cleanWord lowercases the
+  // target's ASCII letters, so it sorts last among its case variants, and even
+  // a descent that lands inside the run starts at or before it.
   if (!session.idxScan.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
@@ -523,14 +586,16 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
     if (!session.idxScan.readBytes(suffix, 8)) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) {
+    if (cmp > 0) break;
+    if (cmp < 0) continue;
+    bool exact = false;
+    if (takesRunEntry(wordBuf, target, result.found, exact)) {
       result.offset = readBe32(suffix);
       result.size = readBe32(suffix + 4);
       result.found = true;
       if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-      return result;
     }
-    if (cmp > 0) break;
+    if (exact) break;
   }
   return result;
 }
@@ -589,22 +654,32 @@ DictLocation Dictionary::locateSynonym(LookupSession& session, const char* targe
   const uint32_t startByte = bisectSamples(session.sidx, session.synScan, session.synSampleCount, target, nullptr);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: synonym NUL, BE32 ordinal.
-  // Sorted, so stop at the first synonym > target. Reading the ordinal before
-  // calling locateByOrdinal() (which reuses wordBuf) avoids any aliasing.
+  // Sorted, so stop at the first synonym > target, preferring the exact-case
+  // entry of a run as locate() does. The ordinal is resolved only once the scan
+  // is done, because locateByOrdinal() reuses wordBuf.
   if (!session.synScan.seekSet(startByte)) {
     LOG_ERR("DICT", "Synonym seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
     return result;
   }
+  bool havePick = false;
+  uint32_t pickedOrdinal = 0;
   while (session.synScan.position() < session.synSize) {
     if (session.synScan.readWord(wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
     if (!session.synScan.readBytes(ordBytes, 4)) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) return locateByOrdinal(session, readBe32(ordBytes), matchedHeadwordOut);
     if (cmp > 0) break;
+    if (cmp < 0) continue;
+    bool exact = false;
+    if (takesRunEntry(wordBuf, target, havePick, exact)) {
+      pickedOrdinal = readBe32(ordBytes);
+      havePick = true;
+    }
+    if (exact) break;
   }
+  if (havePick) return locateByOrdinal(session, pickedOrdinal, matchedHeadwordOut);
   return result;
 }
 
@@ -698,24 +773,29 @@ std::string Dictionary::cleanWord(const char* word) {
   const auto* b = reinterpret_cast<const unsigned char*>(word);
   size_t start = 0;
   size_t end = strlen(word);
-  // Curly quotes and dashes (General Punctuation U+2000-U+206F = E2 80/81 xx)
-  // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
-  // from the edges too, or EPUB text like garage.” never matches a headword.
+  // Curly quotes, dashes, guillemets and the like are all >= 0x80, so
+  // isWordByte keeps them; strip those codepoints from the edges too, or EPUB
+  // text like garage.” never matches a headword. See EDGE_PUNCTUATION.
   while (start < end) {
-    if (!isWordByte(b[start]))
+    if (!isWordByte(b[start])) {
       start++;
-    else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
-      start += 3;
-    else
-      break;
+      continue;
+    }
+    const size_t len = edgePunctuationLen(b, start, end);
+    if (len == 0) break;
+    start += len;
   }
   while (end > start) {
-    if (!isWordByte(b[end - 1]))
+    if (!isWordByte(b[end - 1])) {
       end--;
-    else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
-      end -= 3;
-    else
-      break;
+      continue;
+    }
+    // Back up to the lead byte of the last codepoint (at most 3 continuations).
+    size_t lead = end - 1;
+    while (lead > start && end - lead < 4 && (b[lead] & 0xC0) == 0x80) lead--;
+    const size_t len = edgePunctuationLen(b, lead, end);
+    if (len == 0 || lead + len != end) break;
+    end = lead;
   }
   if (start >= end) return "";
 
@@ -771,6 +851,43 @@ void Dictionary::hyphenParts(const std::string& word, std::vector<std::string>& 
   }
   std::stable_sort(out.begin(), out.end(),
                    [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
+}
+
+// The word after a French elided article, pronoun or conjunction -- c' d' j'
+// l' m' n' s' t' qu' -- with any of the apostrophes books set (' ’ ʼ), or
+// empty when the word does not start with one. cleanWord() has already
+// lowercased the ASCII prefix, so "L’Histoire" arrives as "l’Histoire".
+//
+// Adapted from CrossInk (uxjulia/CrossInk) commit 1babd9da (Julia Nguyen),
+// MIT. There the remainder replaces the English stem variants; here it gets
+// the full probe, so a French .syn and the plural rule still apply to it.
+std::string Dictionary::elisionRemainder(const std::string& word) {
+  size_t prefix = 0;
+  if (word.compare(0, 2, "qu") == 0) {
+    prefix = 2;
+  } else if (!word.empty()) {
+    switch (word[0]) {
+      case 'c':
+      case 'd':
+      case 'j':
+      case 'l':
+      case 'm':
+      case 'n':
+      case 's':
+      case 't':
+        prefix = 1;
+        break;
+      default:
+        return {};
+    }
+  }
+  if (prefix == 0) return {};
+  static constexpr const char* APOSTROPHES[] = {"'", "\xE2\x80\x99", "\xCA\xBC"};  // ' ’ ʼ
+  for (const char* apostrophe : APOSTROPHES) {
+    const size_t len = strlen(apostrophe);
+    if (word.size() > prefix + len && word.compare(prefix, len, apostrophe) == 0) return word.substr(prefix + len);
+  }
+  return {};
 }
 
 void Dictionary::stemVariants(const std::string& word, std::vector<std::string>& out) {
@@ -849,7 +966,37 @@ bool Dictionary::resolve(const char* word, DictLocation& locationOut, std::strin
       return found;
     };
 
-    location = probe(cleaned);
+    // cleanWord() lowercases ASCII only, so a sentence-initial or all-caps
+    // non-ASCII word ("Über", "STRAẞE", "Привет", "Γεια") misses its lowercase
+    // headword. The fully lowercased word is the fallback, never the first try:
+    // a dictionary that stores a word capitalised ("Ärzte", "Москва") has to
+    // keep its exact hit, and the index cannot fold non-ASCII case in its
+    // comparisons, because it is sorted with ASCII-only folding.
+    //
+    // Based on crosspoint-reader PR #3123 (Esben Sorig, @sorig) and PR #3611
+    // (Anton Lijcklama à Nijeholt, @alycklama), reworked onto the shared
+    // utf8LowerCodepoint() instead of a German-only fold or a Unicode table.
+    const auto probeCased = [&](const std::string& target) {
+      DictLocation found = probe(target);
+      if (!found.found) {
+        const std::string lowered = utf8ToLower(target);
+        if (lowered != target) found = probe(lowered);
+      }
+      return found;
+    };
+
+    location = probeCased(cleaned);
+
+    // A French elision ("l'histoire", "qu’après") is no headword, the word
+    // after its apostrophe is. Tried after the whole word, which some
+    // dictionaries carry ("d'accord"). From here on that bare word stands in
+    // for the whole one: "d'avant-garde" splits into "avant" and "garde", not
+    // into a "d'avant" no probe would find.
+    std::string bare;
+    if (!location.found) {
+      bare = elisionRemainder(cleaned);
+      if (!bare.empty()) location = probeCased(bare);
+    }
 
     // Still nothing, and the word is a hyphenated compound: look up its parts.
     // The compound itself is tried first and often wins -- "mother-in-law" and
@@ -857,9 +1004,9 @@ bool Dictionary::resolve(const char* word, DictLocation& locationOut, std::strin
     // returning the definition of "billionaire" beats returning nothing.
     if (!location.found) {
       std::vector<std::string> parts;
-      hyphenParts(cleaned, parts);
+      hyphenParts(bare.empty() ? cleaned : bare, parts);
       for (const auto& part : parts) {
-        location = probe(part);
+        location = probeCased(part);
         if (location.found) break;
       }
     }

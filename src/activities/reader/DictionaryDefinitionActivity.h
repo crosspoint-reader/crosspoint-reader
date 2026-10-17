@@ -49,8 +49,13 @@ class DictionaryDefinitionActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool takesButtonAction(CrossPointSettings::BUTTON_ACTION action, MappedInputManager::Button button) const override;
+  void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
 
  private:
+  void nextPage();
+  void previousPage();
+
   // One wrapped display line: a byte span of `definition`. Wrapping keeps lines
   // under the screen width, so uint16_t length is ample.
   struct Line {
@@ -70,13 +75,15 @@ class DictionaryDefinitionActivity final : public Activity {
 
   BodyArea bodyArea() const;
   bool layoutHtmlPages();
-  void wrapText();
+  bool reserveLines(size_t capacity);
+  bool wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
   void drawBody(int fontId, int x, int startY) const;
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
-  // separators) to newlines so C-string APIs see the whole text.
+  // separators) to newlines so C-string APIs see the whole text, and the
+  // plain-text path converts it in place, in this same buffer.
   std::string definition;
   const bool htmlDefinition;
   // Empty when there is nothing to switch to.
@@ -86,6 +93,9 @@ class DictionaryDefinitionActivity final : public Activity {
   // Empty means the plain-text span path below is active.
   std::vector<std::unique_ptr<Page>> pages;
   std::vector<Line> lines;
+  // The line table could not be built (no heap for it): the body shows a
+  // low-memory message instead.
+  bool layoutFailed = false;
   int currentPage = 0;
   int totalPages = 1;
   int linesPerPage = 1;

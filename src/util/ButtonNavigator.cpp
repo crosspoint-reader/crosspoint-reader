@@ -56,7 +56,7 @@ void ButtonNavigator::onRelease(const Buttons& buttons, Callback callback) {
   // there just makes Left/Right navigation feel sluggish (300ms lag) compared to Up/Down
   // (which have no FSM at all). So skip the gate outside reader activities.
   //
-  // "In a reader" means the reader is ON TOP, the same test dispatchButtonAction() makes -- not
+  // "In a reader" means the reader is ON TOP, the test currentTakesButtonAction() starts from -- not
   // isReaderActivity(), which also answers true for a list opened from the reader. There the gate
   // is worse than sluggish: the release edge lives for one tick, so a release it holds back is
   // lost, not delayed. With the default double actions on Left/Right, the reader menu dropped

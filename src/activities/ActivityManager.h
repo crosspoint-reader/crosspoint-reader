@@ -226,8 +226,9 @@ class ActivityManager {
   bool requiresExclusiveStorageLoop() const;
   // True while a reader is anywhere on the stack -- including under its own menu or TOC.
   bool isReaderActivity() const;
-  // True only while the reader itself is on top: the one case dispatchButtonAction() delivers a
-  // configured action. A list opened from the reader answers false here but true above.
+  // True only while the reader itself is on top: the one case every configured reader action is
+  // delivered (see currentTakesButtonAction()). A list opened from the reader answers false here
+  // but true above.
   bool currentIsReaderActivity() const;
   bool skipLoopDelay() const;
 
@@ -244,9 +245,15 @@ class ActivityManager {
   // activity's own key=value pairs (Activity::appendDebugState). Call under the render lock.
   void describeState(std::string& out) const;
 
+  // True when a reader-scoped `action` configured on `button` goes to the activity on top instead
+  // of falling through as the raw press: always for the reader itself, and for another screen only
+  // when it opts in (Activity::takesButtonAction()).
+  bool currentTakesButtonAction(CrossPointSettings::BUTTON_ACTION action, MappedInputManager::Button button) const;
+
   // Dispatch a globally-configured button action to the current activity.
   // Reader-specific actions (page navigation, TOC, bookmarks, footnotes) are forwarded
-  // only when the current activity is a reader; others are no-ops in other contexts.
+  // to the reader on top, and to another screen only for what it opted into through
+  // currentTakesButtonAction(); others are no-ops in other contexts.
   void dispatchButtonAction(CrossPointSettings::BUTTON_ACTION action);
 
   // Offer a manual force refresh to the activity on top. False when it leaves the refresh to the

@@ -271,6 +271,9 @@ class Dictionary {
   // LowMemory / ReadError).
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
+  // The word after a French elision ("l'histoire" -> "histoire"); empty when
+  // the word starts with none.
+  static std::string elisionRemainder(const std::string& word);
   // Components of a hyphenated compound, longest first; empty when there is no
   // hyphen. The last resort when the compound itself is not a headword.
   static void hyphenParts(const std::string& word, std::vector<std::string>& out);

@@ -402,3 +402,104 @@ std::string utf8NfcNorm(std::string s) {
 
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Lowercase
+// ---------------------------------------------------------------------------
+
+uint32_t utf8LowerCodepoint(const uint32_t cp) {
+  if (cp >= 'A' && cp <= 'Z') {
+    return cp - 'A' + 'a';
+  }
+  if ((cp >= 0x00C0 && cp <= 0x00D6) || (cp >= 0x00D8 && cp <= 0x00DE)) {
+    return cp + 0x20;
+  }
+
+  // Latin Extended-A (U+0100..U+017E): uppercase letters are paired with
+  // lowercase at cp+1. Two sub-ranges have different alignment:
+  //   U+0100..U+0137: uppercase on EVEN codepoints
+  //   U+0139..U+0148: uppercase on ODD codepoints
+  //   U+014A..U+0177: uppercase on EVEN codepoints
+  //   U+0179..U+017E: uppercase on ODD codepoints
+  // Covers Polish (Ą/ą, Ć/ć, Ę/ę, Ł/ł, Ń/ń, Ś/ś, Ź/ź, Ż/ż), Czech, Hungarian, Turkish, etc.
+  // U+0130 İ is the exception: its lowercase is a plain i, not the dotless ı after it.
+  if (cp == 0x0130) {
+    return 'i';
+  }
+  if ((cp >= 0x0100 && cp <= 0x0137 && (cp % 2 == 0)) || (cp >= 0x0139 && cp <= 0x0148 && (cp % 2 == 1)) ||
+      (cp >= 0x014A && cp <= 0x0177 && (cp % 2 == 0)) || (cp >= 0x0179 && cp <= 0x017E && (cp % 2 == 1))) {
+    return cp + 1;
+  }
+
+  // Greek, monotonic: the capitals with tonos sit apart from the plain ones.
+  if ((cp >= 0x0391 && cp <= 0x03A1) || (cp >= 0x03A3 && cp <= 0x03AB)) {
+    return cp + 0x20;  // Α..Ρ, Σ..Ϋ (U+03A2 is unassigned)
+  }
+  if (cp >= 0x0388 && cp <= 0x038A) {
+    return cp + 0x25;  // Έ Ή Ί
+  }
+  if (cp == 0x038E || cp == 0x038F) {
+    return cp + 0x3F;  // Ύ Ώ
+  }
+
+  // Cyrillic: Ѐ..Џ (Ukrainian Є І Ї, Serbian Ђ Ј Љ Њ Ћ Џ, Belarusian Ў) sit 0x50 below their
+  // lowercase, А..Я 0x20; the extended blocks pair capital and small letter in adjacent slots.
+  if (cp >= 0x0400 && cp <= 0x040F) {
+    return cp + 0x50;
+  }
+  if (cp >= 0x0410 && cp <= 0x042F) {
+    return cp + 0x20;
+  }
+  if (((cp >= 0x0460 && cp <= 0x0481) || (cp >= 0x048A && cp <= 0x04BF) || (cp >= 0x04D0 && cp <= 0x052F)) &&
+      cp % 2 == 0) {
+    return cp + 1;  // Ukrainian Ґ, and the Kazakh, Tatar, Bashkir, ... letters
+  }
+  if (cp >= 0x04C1 && cp <= 0x04CE && cp % 2 == 1) {
+    return cp + 1;
+  }
+
+  // Latin Extended Additional: Vietnamese tone-marked vowels, Welsh, and so on, all paired.
+  if (((cp >= 0x1E00 && cp <= 0x1E95) || (cp >= 0x1EA0 && cp <= 0x1EFF)) && cp % 2 == 0) {
+    return cp + 1;
+  }
+
+  switch (cp) {
+    case 0x0178:      // Ÿ
+      return 0x00FF;  // ÿ
+    case 0x01A0:      // Ơ (Vietnamese)
+    case 0x01AF:      // Ư (Vietnamese)
+    case 0x0218:      // Ș (Romanian)
+    case 0x021A:      // Ț (Romanian)
+      return cp + 1;
+    case 0x0386:      // Ά
+      return 0x03AC;  // ά
+    case 0x038C:      // Ό
+      return 0x03CC;  // ό
+    case 0x04C0:      // Ӏ palochka
+      return 0x04CF;  // ӏ
+    case 0x1E9E:      // ẞ
+      return 0x00DF;  // ß
+    default:
+      return cp;
+  }
+}
+
+std::string utf8ToLower(const std::string& s) {
+  std::string out;
+  out.reserve(s.size());  // no mapping lengthens its codepoint's encoding
+  const auto* p = reinterpret_cast<const unsigned char*>(s.c_str());
+  while (*p != '\0') {
+    const unsigned char* start = p;
+    const uint32_t cp = utf8NextCodepoint(&p);
+    uint32_t lower = utf8LowerCodepoint(cp);
+    // Greek spells a word-final sigma ς; σ only ever stands inside a word.
+    if (cp == 0x03A3 && *p == '\0' && !out.empty()) lower = 0x03C2;
+    if (lower == cp) {
+      // Copied as bytes, so a sequence that did not decode passes through as it was.
+      out.append(reinterpret_cast<const char*>(start), static_cast<size_t>(p - start));
+    } else {
+      appendCodepoint(out, lower);
+    }
+  }
+  return out;
+}

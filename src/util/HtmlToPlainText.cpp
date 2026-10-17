@@ -43,26 +43,35 @@ TagBreak tagBreak(const std::string& input, size_t start, size_t end) {
   return TagBreak::None;
 }
 
-void appendCodepoint(std::string& output, uint32_t codepoint) {
-  if (codepoint == 0 || codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) return;
+// UTF-8 encode into `out` (room for 4); returns the byte count, 0 for a code
+// point that is dropped (NUL, out of range, or a surrogate).
+size_t encodeCodepoint(char* out, uint32_t codepoint) {
+  if (codepoint == 0 || codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) return 0;
   if (codepoint <= 0x7F) {
-    output.push_back(static_cast<char>(codepoint));
-  } else if (codepoint <= 0x7FF) {
-    output.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
-    output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-  } else if (codepoint <= 0xFFFF) {
-    output.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
-    output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-    output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-  } else {
-    output.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
-    output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
-    output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-    output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    out[0] = static_cast<char>(codepoint);
+    return 1;
   }
+  if (codepoint <= 0x7FF) {
+    out[0] = static_cast<char>(0xC0 | (codepoint >> 6));
+    out[1] = static_cast<char>(0x80 | (codepoint & 0x3F));
+    return 2;
+  }
+  if (codepoint <= 0xFFFF) {
+    out[0] = static_cast<char>(0xE0 | (codepoint >> 12));
+    out[1] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+    out[2] = static_cast<char>(0x80 | (codepoint & 0x3F));
+    return 3;
+  }
+  out[0] = static_cast<char>(0xF0 | (codepoint >> 18));
+  out[1] = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+  out[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+  out[3] = static_cast<char>(0x80 | (codepoint & 0x3F));
+  return 4;
 }
 
-bool appendNumericEntity(std::string& output, const char* entity, size_t len) {
+// Decode "&#N;" / "&#xH;" into `out` (room for 4). False when it is not a
+// numeric reference, in which case it stays as written.
+bool decodeNumericEntity(const char* entity, size_t len, char* out, size_t* outLen) {
   if (len < 4 || entity[0] != '&' || entity[1] != '#' || entity[len - 1] != ';') return false;
   size_t pos = 2;
   uint32_t base = 10;
@@ -87,67 +96,88 @@ bool appendNumericEntity(std::string& output, const char* entity, size_t len) {
     if (value > (0x10FFFF - digit) / base) return false;
     value = value * base + digit;
   }
-  appendCodepoint(output, value);
+  *outLen = encodeCodepoint(out, value);
   return true;
 }
 
-void appendBreak(std::string& output, size_t count = 1) {
-  while (!output.empty() && output.back() == ' ') output.pop_back();
-  if (output.empty()) return;
+// Ends the text so far with `count` newlines, folding into any already there.
+void appendBreak(std::string& text, size_t& written, size_t count = 1) {
+  while (written > 0 && text[written - 1] == ' ') written--;
+  if (written == 0) return;
   size_t existing = 0;
-  while (existing < output.size() && output[output.size() - existing - 1] == '\n') existing++;
-  while (existing++ < count) output.push_back('\n');
+  while (existing < written && text[written - existing - 1] == '\n') existing++;
+  while (existing++ < count) text[written++] = '\n';
 }
 
 }  // namespace
 
-std::string htmlToPlainText(const std::string& html) {
-  std::string output;
-  output.reserve(html.size());
+// The output is written over the input it is read from, so a definition of
+// tens of KB never needs a second buffer that size (with -fno-exceptions, the
+// allocation failing aborts). `written` -- the output length -- never passes
+// the read position `i`, because no step emits more bytes than it consumes: a
+// tag is at least three bytes ("<p>") for its at most two breaks, and a decoded
+// reference is never longer than the reference (checked where it is decoded,
+// not assumed of the entity table). Lookahead (find, tagBreak) therefore only
+// ever reads input that has not been overwritten.
+//
+// Ported from crosspoint-reader PR #3988 (Uri Tauber), which compacts into the
+// input buffer the same way; the length guard is extended here to the numeric
+// references as well.
+void htmlToPlainTextInPlace(std::string& text) {
+  size_t written = 0;
 
-  for (size_t i = 0; i < html.size();) {
-    if (html[i] == '<' && isTagStart(html, i)) {
-      const size_t close = html.find('>', i + 1);
+  for (size_t i = 0; i < text.size();) {
+    if (text[i] == '<' && isTagStart(text, i)) {
+      const size_t close = text.find('>', i + 1);
       if (close == std::string::npos) {
-        output.push_back(html[i++]);
+        text[written++] = text[i++];
         continue;
       }
-      const TagBreak separator = tagBreak(html, i + 1, close);
+      const TagBreak separator = tagBreak(text, i + 1, close);
       if (separator == TagBreak::Line)
-        appendBreak(output);
+        appendBreak(text, written);
       else if (separator == TagBreak::Paragraph)
-        appendBreak(output, 2);
+        appendBreak(text, written, 2);
       i = close + 1;
       continue;
     }
 
-    if (html[i] == '&') {
-      const size_t semicolon = html.find(';', i + 1);
+    if (text[i] == '&') {
+      const size_t semicolon = text.find(';', i + 1);
       if (semicolon != std::string::npos && semicolon - i <= 16) {
         const size_t len = semicolon - i + 1;
-        const char* value = lookupHtmlEntity(html.data() + i, len);
+        // Decode before writing: the bytes being decoded are where the output
+        // lands. A value longer than its reference would overrun the read
+        // position, so it is left as written instead.
+        const char* value = lookupHtmlEntity(text.data() + i, len);
+        char decoded[4];
+        size_t valueLen = 0;
         if (value != nullptr) {
-          output.append(value);
-          i = semicolon + 1;
-          continue;
+          valueLen = strlen(value);
+        } else if (decodeNumericEntity(text.data() + i, len, decoded, &valueLen)) {
+          value = decoded;
         }
-        if (appendNumericEntity(output, html.data() + i, len)) {
+        if (value != nullptr && valueLen <= len) {
+          memcpy(&text[written], value, valueLen);
+          written += valueLen;
           i = semicolon + 1;
           continue;
         }
       }
     }
 
-    const unsigned char c = html[i++];
+    const unsigned char c = text[i++];
     if (c == '\r' || c == '\t') {
-      if (!output.empty() && output.back() != ' ' && output.back() != '\n') output.push_back(' ');
+      if (written > 0 && text[written - 1] != ' ' && text[written - 1] != '\n') text[written++] = ' ';
     } else if (c == '\n') {
-      appendBreak(output);
+      appendBreak(text, written);
     } else {
-      output.push_back(static_cast<char>(c));
+      text[written++] = static_cast<char>(c);
     }
   }
 
-  while (!output.empty() && (output.back() == ' ' || output.back() == '\n')) output.pop_back();
-  return output;
+  while (written > 0 && (text[written - 1] == ' ' || text[written - 1] == '\n')) written--;
+  // Shrinking never reallocates; the markup's bytes stay as slack capacity
+  // rather than paying for a second, exact-size copy.
+  text.resize(written);
 }
