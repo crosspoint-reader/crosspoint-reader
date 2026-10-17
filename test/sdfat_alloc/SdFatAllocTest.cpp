@@ -36,11 +36,12 @@ class SparseCard final : public FsBlockDeviceInterface {
   size_t fatReads = 0;
   Sector_t fatBegin = 0;  // both FAT copies, set once the card is formatted
   Sector_t fatEnd = 0;
+  Sector_t failReadsOf = ~Sector_t(0);
 
   bool isBusy() override { return false; }
   bool readSector(const Sector_t sector, uint8_t* dst) override {
     if (sector >= fatBegin && sector < fatEnd) ++fatReads;
-    if (sector >= sectors_) return false;
+    if (sector == failReadsOf || sector >= sectors_) return false;
     peek(sector, dst);
     return true;
   }
@@ -140,6 +141,7 @@ class Card {
     putLe32(sector, validSignature ? FSINFO_LEAD_SIGNATURE : 0);
     dev.poke(partStart_ + fsInfoSector_, sector);
   }
+  Sector_t fsInfoSector() const { return partStart_ + fsInfoSector_; }
 
   // As SDCardManager::openFileForWrite(): O_TRUNC frees the old clusters first.
   bool write(const char* path, const uint64_t size, const uint32_t stamp = 0) {
@@ -424,6 +426,97 @@ TEST(SdFatAlloc, ARewriteOnAFullCardGetsItsClusterBack) {
   EXPECT_TRUE(card.write("/progress.bin", 16, 2));
   EXPECT_TRUE(card.dataIntact("/progress.bin", 16, 2));
   EXPECT_EQ(card.check(), "");
+}
+
+// Every wake is a reboot and a fresh mount, and SdFat 2.3.1 started each mount's search at
+// cluster 2, so the first new file after a wake read the FAT up to the free space. SdFat never
+// writes FSInfo; a card a PC wrote last carries the PC's hint, behind which lies only what the
+// reader has written since.
+TEST(SdFatAlloc, AMountStartsTheSearchAtTheFsInfoHint) {
+  Card card(16 * GB);
+  ASSERT_TRUE(card.vol.mkdir("/.crosspoint/epub_1/spines/0", true));
+  ASSERT_TRUE(card.fill("/books1.epub", 4 * GB - MB));
+  ASSERT_TRUE(card.fill("/books2.epub", 4 * GB - MB));
+  // preAllocate() is contiguous: the PC's last cluster is books2's last.
+  const uint32_t pcLast = card.firstCluster("/books2.epub") + (4 * GB - MB) / card.bytesPerCluster - 1;
+  for (int i = 0; i < 50; ++i) {  // 100 MB of caches the reader wrote since
+    const std::string path = "/.crosspoint/epub_1/spines/0/" + std::to_string(i) + ".bin";
+    ASSERT_TRUE(card.write(path.c_str(), 2 * MB));
+  }
+  card.setFsInfoNextFree(NO_HINT);
+  card.remount();
+  EXPECT_GT(card.fatReadsToWrite("/wake0.bin", 1), 2000u);  // no hint: the whole used FAT
+  card.setFsInfoNextFree(pcLast);
+  card.remount();
+  EXPECT_LE(card.fatReadsToWrite("/wake1.bin", 1), 30u);  // 3,200 clusters of caches: 25 sectors
+  EXPECT_EQ(card.check(), "");
+}
+
+// FSInfo is advisory and other systems leave anything in it. Whatever the hint, a mount must
+// still find every free cluster, below the hint as well, and never hand out a used one.
+TEST(SdFatAlloc, AnyFsInfoHintCostsTimeNeverClusters) {
+  Card card(2 * GB + 64 * MB);
+  ASSERT_EQ(card.fatType, 32);
+  for (int i = 0; i < 12; ++i) {
+    const std::string path = "/low" + std::to_string(i) + ".bin";
+    ASSERT_TRUE(card.write(path.c_str(), 1, i + 1));
+  }
+  const uint32_t ballastStart = card.firstCluster("/low11.bin") + 1;
+  const uint64_t allButEight = static_cast<uint64_t>(card.rawFreeClusters() - 8) * card.bytesPerCluster;
+  ASSERT_TRUE(card.fill("/ballast.epub", allButEight));
+  for (const int i : {3, 7}) ASSERT_TRUE(card.vol.remove(("/low" + std::to_string(i) + ".bin").c_str()));
+  ASSERT_EQ(card.rawFreeClusters(), 10u);  // two holes low, eight clusters at the end
+
+  struct Hint {
+    uint32_t nextFree;
+    bool validSignature;
+  };
+  const Hint hints[] = {
+      {NO_HINT, true},
+      {0, true},
+      {1, true},
+      {2, true},
+      {ballastStart + 1000, true},  // inside a used run
+      {card.lastCluster, true},
+      {card.lastCluster + 1, true},
+      {0x0FFFFFF7, true},
+      {0xFFFFFFFE, true},
+      {card.lastCluster - 4, false},
+  };
+  uint32_t stamp = 100;
+  for (const Hint& hint : hints) {
+    card.setFsInfoNextFree(hint.nextFree, hint.validSignature);
+    card.remount();
+    // Ten clusters free: ten one-cluster files fit whatever the hint, the eleventh does not.
+    for (int i = 0; i < 10; ++i) {
+      const std::string path = "/w" + std::to_string(i) + ".bin";
+      ASSERT_TRUE(card.write(path.c_str(), 1, stamp + i)) << "hint " << hint.nextFree << ", file " << i;
+    }
+    EXPECT_EQ(card.rawFreeClusters(), 0u);
+    EXPECT_FALSE(card.write("/w10.bin", 1, stamp + 10)) << "hint " << hint.nextFree;
+    card.vol.remove("/w10.bin");
+    EXPECT_EQ(card.check(), "") << "hint " << hint.nextFree;
+    for (int i = 0; i < 10; ++i) {
+      const std::string path = "/w" + std::to_string(i) + ".bin";
+      EXPECT_TRUE(card.dataIntact(path.c_str(), 1, stamp + i)) << "hint " << hint.nextFree;
+      ASSERT_TRUE(card.vol.remove(path.c_str()));
+    }
+    stamp += 100;
+  }
+}
+
+// An unreadable FSInfo sector leaves the search at cluster 2; the mount works as it did.
+TEST(SdFatAlloc, AnUnreadableFsInfoSectorDoesNotFailTheMount) {
+  Card card(2 * GB + 64 * MB);
+  ASSERT_EQ(card.fatType, 32);
+  ASSERT_TRUE(card.write("/before.bin", 1, 1));
+  card.dev.failReadsOf = card.fsInfoSector();
+  card.remount();
+  EXPECT_TRUE(card.write("/after.bin", 1, 2));
+  card.dev.failReadsOf = ~Sector_t(0);
+  EXPECT_EQ(card.check(), "");
+  EXPECT_TRUE(card.dataIntact("/before.bin", 1, 1));
+  EXPECT_TRUE(card.dataIntact("/after.bin", 1, 2));
 }
 
 // Random rounds on a nearly full card, remounting with good and garbage FSInfo hints in

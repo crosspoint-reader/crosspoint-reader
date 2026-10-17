@@ -1,8 +1,11 @@
-Subject: [PATCH] FatPartition: keep the free cluster search moving forward
+Subject: [PATCH] FatPartition: keep the free cluster search moving forward,
+ start it at the FSInfo hint
 
-From crosspoint-reader PR #3969 (Tuan Q. Nguyen, @martinqnguyen), whose
-FatPartition.cpp change this is, verbatim; it is their 0003 there and our
-0004 here, after our own 0003.
+The allocateCluster(), allocContiguous() and freeChain() hunks are from
+crosspoint-reader PR #3969 (Tuan Q. Nguyen, @martinqnguyen), verbatim; it
+is their 0003 there and our 0004 here, after our own 0003. The init()
+hunks are ours: the second half that PR leaves for later, as described in
+crosspoint-reader issue #3886.
 
 freeChain() pulled m_allocSearchStart down to every cluster it freed. The
 freed cluster is taken again by the next allocation, and the one after it
@@ -26,6 +29,19 @@ Every candidate is still checked against its FAT entry, so where the
 search starts decides only how long it takes, never which clusters may be
 handed out. FAT16 takes the same path; exFAT has its own bitmap search
 and is not changed.
+
+init() set the search start to cluster 1 on every mount, so the first
+allocation after a mount read the FAT from cluster 2 up to the free
+space; on these readers every wake from deep sleep is a mount. On FAT32
+init() now starts the search at the FSInfo next-free hint, when the
+FSInfo sector carries all three signatures and the hint names a cluster
+of the volume (one below it: drivers store the last cluster they
+allocated or the next free one). SdFat never writes FSInfo, so the hint
+is whatever a PC or USB host left there. A stale or garbage hint costs
+time, never a cluster: every candidate is still read from the FAT, and
+the wrap above reaches the clusters below the hint. The free count
+beside it is not read. A failed FSInfo read leaves the search at
+cluster 2 and the mount as it was.
 
 ---
 --- a/src/FatLib/FatPartition.cpp
@@ -102,3 +118,43 @@ and is not changed.
      cluster = next;
    } while (fg);
 
+@@ -399,6 +414,7 @@
+   const BpbFat32_t* bpb;
+   const MbrSector_t* mbr;
+   uint8_t tmp;
++  uint16_t fsInfoSector = 0;
+   m_fatType = 0;
+   m_allocSearchStart = 1;
+   m_cache.init(dev);
+@@ -495,11 +511,31 @@
+   } else {
+     m_rootDirStart = getLe32(bpb->fat32RootCluster);
+     m_fatType = 32;
++    fsInfoSector = getLe16(bpb->fat32FSInfoSector);
+   }
+   m_cache.setMirrorOffset(m_sectorsPerFat);
+ #if USE_SEPARATE_FAT_CACHE
+   m_fatCache.setMirrorOffset(m_sectorsPerFat);
+ #endif  // USE_SEPARATE_FAT_CACHE
++  // Start the free cluster search at FAT32's FSInfo hint rather than at
++  // cluster 2, so the first allocation after a mount does not read every FAT
++  // sector below the free space. The hint is advisory: only range-checked
++  // here, since allocateCluster() reads each candidate's FAT entry and wraps
++  // once, a stale or garbage hint costs time, never a cluster. The free count
++  // beside it is not used.
++  if (fsInfoSector && startSector + fsInfoSector < m_fatStartSector) {
++    const FsInfo_t* fsi = reinterpret_cast<const FsInfo_t*>(
++        dataCachePrepare(startSector + fsInfoSector, FsCache::CACHE_FOR_READ));
++    if (fsi && getLe32(fsi->leadSignature) == FSINFO_LEAD_SIGNATURE &&
++        getLe32(fsi->structSignature) == FSINFO_STRUCT_SIGNATURE &&
++        getLe32(fsi->trailSignature) == FSINFO_TRAIL_SIGNATURE) {
++      uint32_t hint = getLe32(fsi->nextFree);
++      if (hint >= 2 && hint <= m_lastCluster) {
++        // One below: drivers store the last cluster allocated or the next free.
++        m_allocSearchStart = hint - 1;
++      }
++    }
++  }
+   return true;
+
+ fail:
