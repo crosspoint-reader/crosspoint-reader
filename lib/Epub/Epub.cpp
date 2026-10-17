@@ -110,8 +110,12 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
 }
 
 Epub::Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
+  cachePath = cachePathFor(this->filepath, cacheDir);
+}
+
+std::string Epub::cachePathFor(const std::string& filepath, const std::string& cacheDir) {
   // create a cache key based on the filepath
-  cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
+  return cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(filepath));
 }
 
 bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCacheMode cacheMode) {

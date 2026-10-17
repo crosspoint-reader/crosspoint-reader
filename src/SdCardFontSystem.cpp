@@ -213,6 +213,11 @@ bool SdCardFontSystem::selectBookFamily(const std::string& cachePath) {
   return true;
 }
 
+void SdCardFontSystem::unload(GfxRenderer& renderer) {
+  manager_.unloadAll(renderer);
+  selectBookFamily({});  // the reader is closing; its next open selects again
+}
+
 ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
   const SdCardFontFamilyInfo* family = findFamily(familyName);
   if (!family) return ReaderSizeList::builtin();       // none, or not on the card: the reader draws a built-in family

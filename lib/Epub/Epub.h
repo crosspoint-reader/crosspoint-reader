@@ -134,6 +134,8 @@ class Epub {
   // Out of line: it initialises every member, about 1.5 KB of code, and GCC inlined it into a dozen of the
   // callers that open an Epub only for its cache path.
   explicit Epub(std::string filepath, const std::string& cacheDir);
+  // Where the book at `filepath` keeps its cache under `cacheDir` (what getCachePath() gives), without an Epub.
+  static std::string cachePathFor(const std::string& filepath, const std::string& cacheDir);
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   // `scratch`: a region lent for the duration of the load (the secondary framebuffer, on a

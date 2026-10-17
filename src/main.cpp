@@ -769,20 +769,23 @@ void ensureSdFontLoaded() { sdFontSystem.ensureLoaded(renderer); }
 void unloadSdFontIfLoaded() { sdFontSystem.unload(renderer); }
 
 namespace {
-// Publisher Fonts apply to a book: the setting is on, the book's own style is in use, and no font family has been
-// chosen for it, which is how a reader keeps one such book in their own font.
-bool publisherFontsFor(const RecentBook& book) {
+// The cache of the EPUB at `path` when Publisher Fonts apply to it, else "": the setting is on, the book's own style
+// is in use, and no font family has been chosen for it, which is how a reader keeps one such book in their own font.
+std::string publisherFontsCache(const char* path, const RecentBook& book) {
   const bool embeddedStyle =
       book.embeddedStyleOverride >= 0 ? book.embeddedStyleOverride != 0 : SETTINGS.embeddedStyle != 0;
-  return SETTINGS.publisherFonts != 0 && embeddedStyle && book.fontFamilyOverride < 0 &&
-         book.sdFontFamilyOverride.empty();
+  if (SETTINGS.publisherFonts == 0 || !embeddedStyle || book.fontFamilyOverride >= 0 ||
+      !book.sdFontFamilyOverride.empty()) {
+    return {};
+  }
+  return Epub::cachePathFor(path, "/.crosspoint");
 }
 }  // namespace
 
 bool bookFontsPendingForPath(const char* path) {
   if (!path || !FsHelpers::hasEpubExtension(std::string_view(path)) || SETTINGS.publisherFonts == 0) return false;
-  return publisherFontsFor(RECENT_BOOKS.getBookByPath(path)) &&
-         BookFonts::read(Epub(path, "/.crosspoint").getCachePath()) == BookFonts::State::Pending;
+  const std::string cachePath = publisherFontsCache(path, RECENT_BOOKS.getBookByPath(path));
+  return !cachePath.empty() && BookFonts::read(cachePath) == BookFonts::State::Pending;
 }
 
 void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
@@ -815,7 +818,7 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
 
   // Publisher Fonts: the book's embedded body family, when BookFonts found one. Not examined yet: what is loaded
   // stays, until the reader has examined the book and asks again.
-  const std::string cachePath = publisherFontsFor(book) ? Epub(path, "/.crosspoint").getCachePath() : std::string();
+  const std::string cachePath = publisherFontsCache(path, book);
   if (waitForBookFonts && !cachePath.empty() && BookFonts::read(cachePath) == BookFonts::State::Pending) return;
   const bool bookFamily = sdFontSystem.selectBookFamily(cachePath);
 
