@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "BookRelocation.h"
 #include "KOReaderCredentialStore.h"
 #include "OpdsServerStore.h"
 #include "ReaderActivity.h"
@@ -503,7 +504,8 @@ std::string findNextBookInDirectory(const std::string& currentBookPath, const st
   return findNextAlphabeticalBook(directory, currentFilename);
 }
 
-bool moveFinishedBookToCompleted(const std::string& currentBookPath, std::string& outMovedPath) {
+bool moveFinishedBookToCompleted(const std::string& currentBookPath, std::string& outMovedPath,
+                                 const bool openInReader) {
   if (pathIsInCompleted(currentBookPath)) {
     outMovedPath = currentBookPath;
     return true;
@@ -532,9 +534,29 @@ bool moveFinishedBookToCompleted(const std::string& currentBookPath, std::string
   if (!moveSidecarFilesToCompleted(currentBookPath, targetPath)) {
     LOG_ERR("FIN", "One or more sidecar files failed to move for %s", currentBookPath.c_str());
   }
+  // Without this the book reopened from /COMPLETED at its first page with no bookmarks, its cache
+  // stayed behind under the old path, and a kept recents row pointed at a missing file.
+  // Based on crosspoint-reader PR #3354 (Sylve, @s0lness).
+  if (openInReader) {
+    BookRelocation::bookMovedWhileOpen(currentBookPath, targetPath);
+  } else {
+    BookRelocation::bookMoved(currentBookPath, targetPath);
+  }
 
   outMovedPath = targetPath;
   return true;
+}
+
+std::string applyFinishedBookSettings(const std::string& bookPath, const bool openInReader) {
+  // Forget first: the move carries a recents row over to the new path.
+  if (SETTINGS.removeFinishedBooksFromRecents) {
+    RECENT_BOOKS.removeBook(bookPath);
+  }
+  std::string movedPath;
+  if (SETTINGS.moveFinishedBooksToCompleted && moveFinishedBookToCompleted(bookPath, movedPath, openInReader)) {
+    return movedPath;
+  }
+  return bookPath;
 }
 
 void launchFinishedBookFlow(Activity& host, GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -574,16 +596,7 @@ void launchFinishedBookFlow(Activity& host, GfxRenderer& renderer, MappedInputMa
         // The move-to-/COMPLETED and forget-book settings apply no matter which of the three
         // actions below was picked, and no matter whether the sync toggle is also on — the
         // toggle composes with the picked action rather than replacing it.
-        std::string effectiveBookPath = bookPath;
-        if (SETTINGS.moveFinishedBooksToCompleted) {
-          std::string movedPath;
-          if (moveFinishedBookToCompleted(bookPath, movedPath)) {
-            effectiveBookPath = movedPath;
-          }
-        }
-        if (SETTINGS.removeFinishedBooksFromRecents) {
-          RECENT_BOOKS.removeBook(bookPath);
-        }
+        const std::string effectiveBookPath = applyFinishedBookSettings(bookPath, true);
         const bool syncToKOReader =
             onSyncToKOReader != nullptr && KOREADER_STORE.hasCredentials() && SETTINGS.syncFinishedBookToKOReader;
         if (syncToKOReader) {

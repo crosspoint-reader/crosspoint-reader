@@ -41,6 +41,7 @@
 #include <memory>
 #include <optional>
 
+#include "BookRelocation.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
@@ -929,6 +930,9 @@ void EpubReaderActivity::onExit() {
   // Sleep paths that bypass onExit() still end up here on resume because the activity is
   // recreated.
   globalReadingSessionTracker().end();
+
+  // Last: everything above saved under the book's path, which the finished-book flow may have moved.
+  BookRelocation::bookClosed();
 }
 
 void EpubReaderActivity::loop() {

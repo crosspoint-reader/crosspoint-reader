@@ -1703,36 +1703,18 @@ void FileBrowserActivity::doMarkAsRead(const std::string& fullPath) {
                            }
                            const auto& menuResult = std::get<MenuResult>(result.data);
                            if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::GoHome)) {
-                             if (SETTINGS.moveFinishedBooksToCompleted) {
-                               std::string movedPath;
-                               BookFinished::moveFinishedBookToCompleted(fullPath, movedPath);
-                             }
-                             if (SETTINGS.removeFinishedBooksFromRecents) {
-                               RECENT_BOOKS.removeBook(fullPath);
-                             }
+                             BookFinished::applyFinishedBookSettings(fullPath, false);
                              onGoHome();
                              return;
                            }
                            if (menuResult.action == static_cast<int>(BookFinished::FinishedBookAction::OpenNextBook) &&
                                !nextBookPath.empty()) {
-                             if (SETTINGS.moveFinishedBooksToCompleted) {
-                               std::string movedPath;
-                               BookFinished::moveFinishedBookToCompleted(fullPath, movedPath);
-                             }
-                             if (SETTINGS.removeFinishedBooksFromRecents) {
-                               RECENT_BOOKS.removeBook(fullPath);
-                             }
+                             BookFinished::applyFinishedBookSettings(fullPath, false);
                              activityManager.replaceWithReader(nextBookPath, returnHint({}));
                              return;
                            }
                            // Stay — apply side effects then reload the list (file may have moved to /COMPLETED).
-                           if (SETTINGS.moveFinishedBooksToCompleted) {
-                             std::string movedPath;
-                             BookFinished::moveFinishedBookToCompleted(fullPath, movedPath);
-                           }
-                           if (SETTINGS.removeFinishedBooksFromRecents) {
-                             RECENT_BOOKS.removeBook(fullPath);
-                           }
+                           BookFinished::applyFinishedBookSettings(fullPath, false);
                            bookRows.clear();  // its row now says Finished
                            model.load();
                            resetNavigation(nav.selected);
