@@ -106,9 +106,11 @@ class ChapterHtmlSlimParser final : public Print {
   int partWordCjkCodepoints_ = 0;
   // The last codepoint of the last word flushed, kept across whitespace (set by flushPartWordBuffer).
   uint32_t lastTextCodepoint_ = 0;
-  // A whitespace run with a line break in it followed unspaced CJK text (lastTextCodepoint_). If the
-  // next word starts with unspaced CJK too (flushPartWordBuffer decides), the run vanishes instead of becoming a space
-  // (CSS Text 3 segment-break rule): hard-wrapped Chinese and Japanese sources break lines mid-sentence.
+  // A whitespace run with a line break in it followed unspaced CJK text or a quotation mark
+  // (lastTextCodepoint_). If the next word starts with unspaced CJK, or with a quote after unspaced
+  // CJK (flushPartWordBuffer decides), the run vanishes instead of becoming a space (CSS Text 3
+  // segment-break rule; in CJK text the quotes are CJK punctuation): hard-wrapped Chinese and
+  // Japanese sources break lines mid-sentence.
   bool cjkSegmentBreakPending_ = false;
   // KOReader sync content offsets (docs/contributing/koreader-synchronization.md).
   // visibleTextOffset_ counts VisibleText.h's visible bytes of the source text the SAX parser has

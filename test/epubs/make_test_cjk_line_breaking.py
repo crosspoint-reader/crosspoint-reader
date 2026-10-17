@@ -17,6 +17,10 @@
   9. chunk seams   the SAX parser hands text over in 256-byte pieces that may cut a character in two:
                    a line break between CJK characters still vanishes when the character after it
                    (or the one before it) straddles a piece boundary
+ 10. quote seams   a line break between unspaced CJK and a quotation mark (“ ” ‘ ’ " ' ＂ ＇) on
+                   either side vanishes too: in CJK text the quotes are CJK punctuation. Quotes on
+                   both sides of the line break keep the space
+                   (CjkQuoteSeams.ALineBreakNextToAQuoteInCjkTextVanishes)
 
 Each case paragraph opens with an indented first line (CSS text-indent), so the rule checker tells a
 paragraph's first line from a line the layout broke.
@@ -60,6 +64,17 @@ SEAM_AFTER_2 = "漢" * 84 + "\n  字字字"
 # the last character before the line break.
 SEAM_BEFORE = "abcdefghi " * 25 + "abc " + "字\n字字"
 
+# Case 10, after Hong lou meng's hard-wrapped source: CJK then a closing quote, CJK then an ASCII
+# quote, a closing quote then CJK, and CJK then an opening quote. The last paragraph is the control,
+# with quotes on both sides of the line break.
+QUOTE_SEAMS = (
+    "<p>到那富貴鄉去安身樂業。\n”石頭听了，喜不能禁。</p>\n"
+    '<p>那僧笑說：\n"通靈寶玉"之說也。</p>\n'
+    "<p>富貴場中安居樂業。”\n兄听了。</p>\n"
+    "<p>途中の漢字\n“引用”の文字。</p>\n"
+    "<p>引用の“前半”\n“後半”も同じ。</p>"
+)
+
 CASES = [
     ("1. kinsoku", f"<p>{KINSOKU}</p>\n<p>{KINSOKU}</p>"),
     (
@@ -92,6 +107,7 @@ CASES = [
     ),
     ("8. table budget", f"<table><tr><td><p>鑑{LONG_RUN * 3}</p></td></tr></table>"),
     ("9. chunk seams", f"<p>{SEAM_AFTER_1}</p>\n<p>{SEAM_AFTER_2}</p>\n<p>{SEAM_BEFORE}</p>"),
+    ("10. quote seams", QUOTE_SEAMS),
 ]
 
 CHAPTER = """<?xml version="1.0" encoding="UTF-8"?>

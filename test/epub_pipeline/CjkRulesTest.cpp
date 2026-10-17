@@ -270,3 +270,50 @@ TEST(CjkBlockSeams, ALineBreakAtABlockOrListItemStaysASpace) {
     EXPECT_GT(gap, 0) << "節の文章 and 図の説明 glued";
   }
 }
+
+// In CJK text the quotation marks are CJK punctuation: a source line break between one and unspaced
+// CJK text vanishes, as one between two CJK characters does, so 樂業。\n”石頭 reads 樂業。”石頭 and ”
+// cannot start a line (the fixture's case 10, after Hong lou meng's hard-wrapped source). With
+// quotes on both sides, the line break stays a space.
+TEST(CjkQuoteSeams, ALineBreakNextToAQuoteInCjkTextVanishes) {
+  const auto cacheDir = fs::temp_directory_path() / "epub_pipeline_test" / "cjk_quote_seams";
+  fs::remove_all(cacheDir);
+  fs::create_directories(cacheDir);
+  pipeline_harness::Profile profile;
+  profile.paragraphAlignment = 1;  // left: a line's gaps are its natural gaps
+  std::ostringstream dump;
+  ASSERT_TRUE(pipeline_harness::runAndDump((fs::path(CORPUS_DIR) / "test_cjk_line_breaking.epub").string(),
+                                           cacheDir.string(), profile, dump));
+  const std::vector<DumpLine> lines = parseLines(dump.str());
+  const GfxRenderer renderer;
+
+  // The gap before every word starting with `right` whose left neighbour on its line ends with `left`.
+  const auto gapsAt = [&](const uint32_t left, const uint32_t right) {
+    std::vector<int> gaps;
+    for (const auto& line : lines) {
+      for (size_t i = 0; i + 1 < line.words.size(); ++i) {
+        const DumpWord& l = line.words[i];
+        const DumpWord& r = line.words[i + 1];
+        if (lastCodepoint(l.text) == left && firstCodepoint(r.text) == right) {
+          gaps.push_back(r.x - l.x - wordWidth(renderer, line, l));
+        }
+      }
+    }
+    return gaps;
+  };
+
+  const struct {
+    uint32_t left;
+    uint32_t right;
+    const char* seam;
+  } glued[] = {
+      {0x3002, 0x201D, "。 + ”"}, {0xFF1A, '"', "： + \""}, {0x201D, 0x5144, "” + 兄"}, {0x5B57, 0x201C, "字 + “"}};
+  for (const auto& s : glued) {
+    const std::vector<int> gaps = gapsAt(s.left, s.right);
+    ASSERT_FALSE(gaps.empty()) << "no line has the seam " << s.seam;
+    for (const int gap : gaps) EXPECT_EQ(gap, 0) << "the line break at " << s.seam << " stayed a space";
+  }
+  const std::vector<int> control = gapsAt(0x201D, 0x201C);  // ” + “
+  ASSERT_FALSE(control.empty()) << "no line has the seam ” + “";
+  for (const int gap : control) EXPECT_GT(gap, 0) << "the line break between two quotes lost its space";
+}

@@ -551,7 +551,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
   LINE y=702 x=0 align=2 mult=1.000 hfid=0 words=2
    W x=189 s=1 z=100 t=7.
    W x=219 s=1 z=100 t=table
- PAGE 1 elements=20 footnotes=0
+ PAGE 1 elements=26 footnotes=0
   TABLE y=0 x=0 w=460 h=60 cols=2 border=1 rows=1
    ROW h=58 hdr=0 cells=2
     CELL 0 hdr=0 span=1 lines=2
@@ -1112,3 +1112,75 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=31 s=0 z=100 t=字
    W x=40 s=0 z=100 t=字
    W x=49 s=0 z=100 t=字
+  LINE y=570 x=0 align=2 mult=1.000 hfid=0 words=3
+   W x=154 s=1 z=100 t=10.
+   W x=191 s=1 z=100 t=quote
+   W x=251 s=1 z=100 t=seams
+  LINE y=594 x=0 align=0 mult=1.000 hfid=0 words=19
+   W x=18 s=0 z=100 t=到
+   W x=29 s=0 z=100 t=那
+   W x=39 s=0 z=100 t=富
+   W x=46 s=0 z=100 t=貴
+   W x=57 s=0 z=100 t=鄉
+   W x=64 s=0 z=100 t=去
+   W x=71 s=0 z=100 t=安
+   W x=81 s=0 z=100 t=身
+   W x=91 s=0 z=100 t=樂
+   W x=103 s=0 z=100 t=業。
+   W x=124 s=0 z=100 t=”
+   W x=133 s=0 z=100 t=石
+   W x=144 s=0 z=100 t=頭
+   W x=152 s=0 z=100 t=听
+   W x=160 s=0 z=100 t=了，
+   W x=180 s=0 z=100 t=喜
+   W x=192 s=0 z=100 t=不
+   W x=201 s=0 z=100 t=能
+   W x=209 s=0 z=100 t=禁。
+  LINE y=618 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=18 s=0 z=100 t=那
+   W x=28 s=0 z=100 t=僧
+   W x=39 s=0 z=100 t=笑
+   W x=50 s=0 z=100 t=說：
+   W x=66 s=0 z=100 t="
+   W x=78 s=0 z=100 t=通
+   W x=84 s=0 z=100 t=靈
+   W x=94 s=0 z=100 t=寶
+   W x=101 s=0 z=100 t=玉
+   W x=109 s=0 z=100 t="
+   W x=121 s=0 z=100 t=之
+   W x=129 s=0 z=100 t=說
+   W x=136 s=0 z=100 t=也。
+  LINE y=642 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=18 s=0 z=100 t=富
+   W x=25 s=0 z=100 t=貴
+   W x=36 s=0 z=100 t=場
+   W x=47 s=0 z=100 t=中
+   W x=53 s=0 z=100 t=安
+   W x=63 s=0 z=100 t=居
+   W x=72 s=0 z=100 t=樂
+   W x=84 s=0 z=100 t=業。”
+   W x=114 s=0 z=100 t=兄
+   W x=120 s=0 z=100 t=听
+   W x=128 s=0 z=100 t=了。
+  LINE y=666 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=18 s=0 z=100 t=途
+   W x=25 s=0 z=100 t=中
+   W x=31 s=0 z=100 t=の
+   W x=38 s=0 z=100 t=漢
+   W x=46 s=0 z=100 t=字
+   W x=55 s=0 z=100 t=“引
+   W x=71 s=0 z=100 t=用”
+   W x=90 s=0 z=100 t=の
+   W x=97 s=0 z=100 t=文
+   W x=103 s=0 z=100 t=字。
+  LINE y=690 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=18 s=0 z=100 t=引
+   W x=26 s=0 z=100 t=用
+   W x=36 s=0 z=100 t=の
+   W x=43 s=0 z=100 t=“前
+   W x=63 s=0 z=100 t=半”
+   W x=84 s=0 z=100 t=“後
+   W x=100 s=0 z=100 t=半”
+   W x=115 s=0 z=100 t=も
+   W x=121 s=0 z=100 t=同
+   W x=132 s=0 z=100 t=じ。

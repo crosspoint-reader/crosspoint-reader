@@ -319,12 +319,12 @@ bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c
 // flush); a 200-byte flush would add up to 66 and double them to 256 entries, a 6 KB block.
 constexpr int kCjkRunCodepoints = 32;
 
-// The codepoint whose lead byte is s[0], or 0 when its sequence runs past the `avail` bytes in hand
+// The codepoint whose first byte is s[0], or 0 when its sequence runs past the `avail` bytes in hand
 // (it continues in the next SAX chunk). Such a character is not counted toward kCjkRunCodepoints, so
 // a run can reach 33 codepoints before it is flushed.
 static uint32_t codepointAt(const char* s, const int avail) {
   const auto lead = static_cast<uint8_t>(s[0]);
-  const int length = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+  const int length = lead < 0x80 ? 1 : lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
   if (length > avail) return 0;
   const auto* p = reinterpret_cast<const unsigned char*>(s);
   return utf8NextCodepoint(&p);
@@ -337,6 +337,25 @@ static uint32_t lastCodepointOf(const char* s, const int len) {
   for (int back = 0; back < 3 && i > 0 && (static_cast<uint8_t>(s[i]) & 0xC0) == 0x80; ++back) --i;
   const auto* p = reinterpret_cast<const unsigned char*>(s + i);
   return utf8NextCodepoint(&p);
+}
+
+// Quotation marks. In CJK text they are CJK punctuation, so a source line break between one and
+// unspaced CJK text vanishes as one between two CJK characters does (cjkSegmentBreakPending_). With a
+// quote on both sides, or Latin on either, the line break stays a space.
+static bool isQuotationMark(const uint32_t cp) {
+  switch (cp) {
+    case '"':
+    case '\'':
+    case 0x2018:  // ‘
+    case 0x2019:  // ’
+    case 0x201C:  // “
+    case 0x201D:  // ”
+    case 0xFF02:  // ＂
+    case 0xFF07:  // ＇
+      return true;
+    default:
+      return false;
+  }
 }
 
 // Length in bytes of the Default_Ignorable UTF-8 sequence starting at s[i], or 0 if there
@@ -968,9 +987,14 @@ bool ChapterHtmlSlimParser::flushPartWordBuffer() {
   // inside a codepoint, so consumeText can see half a character.
   if (partWordBufferIndex > 0) {
     if (cjkSegmentBreakPending_) {
-      // The line break before this word vanishes when the text on both sides is unspaced CJK:
-      // the word is glued to the previous one, and ParsedText turns the seam into a CJK gap.
-      if (utf8IsUnspacedCjk(codepointAt(partWordBuffer, partWordBufferIndex))) nextWordContinues = true;
+      // The line break before this word vanishes when the text on both sides is unspaced CJK, or
+      // when a quote meets unspaced CJK (lastTextCodepoint_ is still the previous word's last
+      // character): the word is glued to the previous one, and ParsedText turns the seam into a CJK
+      // gap where the rules allow a break there.
+      const uint32_t first = codepointAt(partWordBuffer, partWordBufferIndex);
+      if (utf8IsUnspacedCjk(first) || (isQuotationMark(first) && utf8IsUnspacedCjk(lastTextCodepoint_))) {
+        nextWordContinues = true;
+      }
       cjkSegmentBreakPending_ = false;
     }
     lastTextCodepoint_ = lastCodepointOf(partWordBuffer, partWordBufferIndex);
@@ -3263,8 +3287,10 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
       }
       // Whitespace is a real word boundary — reset continuation state
       self->nextWordContinues = false;
-      // A line break right after unspaced CJK text may vanish: the next character decides.
-      if (s[i] == '\n' && utf8IsUnspacedCjk(self->lastTextCodepoint_)) self->cjkSegmentBreakPending_ = true;
+      // A line break right after unspaced CJK text or a quote may vanish: the next character decides.
+      if (s[i] == '\n' && (utf8IsUnspacedCjk(self->lastTextCodepoint_) || isQuotationMark(self->lastTextCodepoint_))) {
+        self->cjkSegmentBreakPending_ = true;
+      }
       // Skip the whitespace char
       continue;
     }

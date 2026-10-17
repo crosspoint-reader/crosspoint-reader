@@ -327,9 +327,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=125 s=0 z=100 t=賈
    W x=135 s=0 z=100 t=雨
    W x=147 s=0 z=100 t=村
-   W x=162 s=0 z=100 t="
-   W x=174 s=0 z=100 t=云
-   W x=182 s=0 z=100 t=云．
+   W x=156 s=0 z=100 t="
+   W x=168 s=0 z=100 t=云
+   W x=176 s=0 z=100 t=云．
   LINE y=239 x=0 align=0 mult=1.000 hfid=0 words=26
    W x=18 s=0 z=100 t=此
    W x=27 s=0 z=100 t=回
@@ -638,17 +638,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=288 s=0 z=100 t=說
    W x=295 s=0 z=100 t=道：
    W x=311 s=0 z=100 t=“
-   W x=325 s=0 z=100 t=大
-   W x=334 s=0 z=100 t=師，
-   W x=355 s=0 z=100 t=弟
-   W x=366 s=0 z=100 t=子
-   W x=375 s=0 z=100 t=蠢
-   W x=385 s=0 z=100 t=物，
-   W x=401 s=0 z=100 t=不
-   W x=410 s=0 z=100 t=能
-   W x=418 s=0 z=100 t=見
-   W x=425 s=0 z=100 t=禮
-   W x=431 s=0 z=100 t=了．
+   W x=319 s=0 z=100 t=大
+   W x=328 s=0 z=100 t=師，
+   W x=349 s=0 z=100 t=弟
+   W x=360 s=0 z=100 t=子
+   W x=369 s=0 z=100 t=蠢
+   W x=379 s=0 z=100 t=物，
+   W x=395 s=0 z=100 t=不
+   W x=404 s=0 z=100 t=能
+   W x=412 s=0 z=100 t=見
+   W x=419 s=0 z=100 t=禮
+   W x=425 s=0 z=100 t=了．
   LINE y=455 x=0 align=0 mult=1.000 hfid=0 words=45
    W x=0 s=0 z=100 t=适
    W x=10 s=0 z=100 t=聞
@@ -1101,30 +1101,30 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=137 s=0 z=100 t=樂
    W x=149 s=0 z=100 t=業
    W x=159 s=0 z=100 t=。
-   W x=176 s=0 z=100 t=”
-   W x=185 s=0 z=100 t=石
-   W x=196 s=0 z=100 t=頭
-   W x=204 s=0 z=100 t=听
-   W x=212 s=0 z=100 t=了，
-   W x=232 s=0 z=100 t=喜
-   W x=244 s=0 z=100 t=不
-   W x=253 s=0 z=100 t=能
-   W x=261 s=0 z=100 t=禁，
-   W x=280 s=0 z=100 t=乃
-   W x=287 s=0 z=100 t=問：
-   W x=308 s=0 z=100 t=“不
-   W x=325 s=0 z=100 t=知
-   W x=336 s=0 z=100 t=賜
-   W x=345 s=0 z=100 t=了
-   W x=356 s=0 z=100 t=弟
-   W x=367 s=0 z=100 t=子
-   W x=376 s=0 z=100 t=那
-   W x=386 s=0 z=100 t=几
-   W x=394 s=0 z=100 t=件
-   W x=405 s=0 z=100 t=奇
-   W x=411 s=0 z=100 t=處，
-   W x=431 s=0 z=100 t=又
-   W x=437 s=0 z=100 t=不
+   W x=170 s=0 z=100 t=”
+   W x=179 s=0 z=100 t=石
+   W x=190 s=0 z=100 t=頭
+   W x=198 s=0 z=100 t=听
+   W x=206 s=0 z=100 t=了，
+   W x=226 s=0 z=100 t=喜
+   W x=238 s=0 z=100 t=不
+   W x=247 s=0 z=100 t=能
+   W x=255 s=0 z=100 t=禁，
+   W x=274 s=0 z=100 t=乃
+   W x=281 s=0 z=100 t=問：
+   W x=302 s=0 z=100 t=“不
+   W x=319 s=0 z=100 t=知
+   W x=330 s=0 z=100 t=賜
+   W x=339 s=0 z=100 t=了
+   W x=350 s=0 z=100 t=弟
+   W x=361 s=0 z=100 t=子
+   W x=370 s=0 z=100 t=那
+   W x=380 s=0 z=100 t=几
+   W x=388 s=0 z=100 t=件
+   W x=399 s=0 z=100 t=奇
+   W x=405 s=0 z=100 t=處，
+   W x=425 s=0 z=100 t=又
+   W x=431 s=0 z=100 t=不
   LINE y=719 x=0 align=0 mult=1.000 hfid=0 words=38
    W x=0 s=0 z=100 t=知
    W x=11 s=0 z=100 t=攜
