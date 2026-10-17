@@ -76,7 +76,8 @@ class DictionaryDefinitionActivity final : public Activity {
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
-  // separators) to newlines so C-string APIs see the whole text.
+  // separators) to newlines so C-string APIs see the whole text, and the
+  // plain-text path converts it in place, in this same buffer.
   std::string definition;
   const bool htmlDefinition;
   // Empty when there is nothing to switch to.

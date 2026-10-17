@@ -41,7 +41,7 @@ void DictionaryDefinitionActivity::onEnter() {
   // font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
   if (!(htmlDefinition && definition.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages())) {
-    definition = htmlToPlainText(definition);
+    htmlToPlainTextInPlace(definition);
     wrapText();
   }
   requestUpdate();
