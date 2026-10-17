@@ -13,7 +13,9 @@
   7. table         CJK text in a table cell
   8. table budget  a cell of 289 CJK characters, one token each: charged per token (about 14 KB), the
                    row passes the 12 KB row budget and flows as text
-                   (CjkTable.ALongCjkCellIsChargedPerToken)
+                   (CjkTable.ALongCjkCellIsChargedPerToken). The row degrades before the run that
+                   would cross the budget is added, so the cell's word lists never double to 512
+                   entries (the heap baseline guards it)
   9. chunk seams   the SAX parser hands text over in 256-byte pieces that may cut a character in two:
                    a line break between CJK characters still vanishes when the character after it
                    (or the one before it) straddles a piece boundary
@@ -21,6 +23,9 @@
                    either side vanishes too: in CJK text the quotes are CJK punctuation. Quotes on
                    both sides of the line break keep the space
                    (CjkQuoteSeams.ALineBreakNextToAQuoteInCjkTextVanishes)
+ 11. dense digits  600 codepoints of Han characters alternating with digits: every digit is a token
+                   of its own, and the parser's 32-token run flush counts it, so the paragraph's
+                   word lists keep their 128-entry steady state (the heap baseline guards it)
 
 Each case paragraph opens with an indented first line (CSS text-indent), so the rule checker tells a
 paragraph's first line from a line the layout broke.
@@ -75,6 +80,9 @@ QUOTE_SEAMS = (
     "<p>引用の“前半”\n“後半”も同じ。</p>"
 )
 
+# Case 11: 300 Han characters, each followed by a digit, in one paragraph of 600 codepoints.
+DENSE_DIGITS = "".join(f"{c}{i % 10}" for i, c in enumerate((LONG_RUN * 4)[:300]))
+
 CASES = [
     ("1. kinsoku", f"<p>{KINSOKU}</p>\n<p>{KINSOKU}</p>"),
     (
@@ -108,6 +116,7 @@ CASES = [
     ("8. table budget", f"<table><tr><td><p>鑑{LONG_RUN * 3}</p></td></tr></table>"),
     ("9. chunk seams", f"<p>{SEAM_AFTER_1}</p>\n<p>{SEAM_AFTER_2}</p>\n<p>{SEAM_BEFORE}</p>"),
     ("10. quote seams", QUOTE_SEAMS),
+    ("11. dense digits", f"<p>{DENSE_DIGITS}</p>"),
 ]
 
 CHAPTER = """<?xml version="1.0" encoding="UTF-8"?>

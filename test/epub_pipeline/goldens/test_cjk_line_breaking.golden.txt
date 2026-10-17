@@ -1,10 +1,10 @@
 BOOK title=CJK Line Breaking lang=ja spine=1 toc=0 reliableToc=0
-SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
+SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
  PAGE 0 elements=25 footnotes=0
   LINE y=18 x=0 align=2 mult=1.000 hfid=0 words=2
    W x=182 s=1 z=100 t=1.
    W x=206 s=1 z=100 t=kinsoku
-  LINE y=42 x=0 align=0 mult=1.000 hfid=0 words=32
+  LINE y=42 x=0 align=0 mult=1.000 hfid=0 words=31
    W x=18 s=0 z=100 t=「こ
    W x=33 s=0 z=100 t=ん
    W x=42 s=0 z=100 t=に
@@ -27,8 +27,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=271 s=0 z=100 t=（も
    W x=289 s=0 z=100 t=ち
    W x=297 s=0 z=100 t=ろ
-   W x=307 s=0 z=100 t=ん
-   W x=316 s=0 z=100 t=、
+   W x=307 s=0 z=100 t=ん、
    W x=326 s=0 z=100 t=そ
    W x=337 s=0 z=100 t=う
    W x=346 s=0 z=100 t=で
@@ -103,7 +102,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=300 s=0 z=100 t=え
    W x=311 s=0 z=100 t=な
    W x=321 s=0 z=100 t=い。
-  LINE y=114 x=0 align=0 mult=1.000 hfid=0 words=32
+  LINE y=114 x=0 align=0 mult=1.000 hfid=0 words=31
    W x=18 s=0 z=100 t=「こ
    W x=33 s=0 z=100 t=ん
    W x=42 s=0 z=100 t=に
@@ -126,8 +125,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=271 s=0 z=100 t=（も
    W x=289 s=0 z=100 t=ち
    W x=297 s=0 z=100 t=ろ
-   W x=307 s=0 z=100 t=ん
-   W x=316 s=0 z=100 t=、
+   W x=307 s=0 z=100 t=ん、
    W x=326 s=0 z=100 t=そ
    W x=337 s=0 z=100 t=う
    W x=346 s=0 z=100 t=で
@@ -551,7 +549,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
   LINE y=702 x=0 align=2 mult=1.000 hfid=0 words=2
    W x=189 s=1 z=100 t=7.
    W x=219 s=1 z=100 t=table
- PAGE 1 elements=26 footnotes=0
+ PAGE 1 elements=27 footnotes=0
   TABLE y=0 x=0 w=460 h=60 cols=2 border=1 rows=1
    ROW h=58 hdr=0 cells=2
     CELL 0 hdr=0 span=1 lines=2
@@ -788,7 +786,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=392 s=0 z=100 t=服
    W x=403 s=0 z=100 t=衣
    W x=415 s=0 z=100 t=裳
-  LINE y=198 x=0 align=0 mult=1.000 hfid=0 words=47
+  LINE y=198 x=0 align=0 mult=1.000 hfid=0 words=41
    W x=0 s=0 z=100 t=推
    W x=10 s=0 z=100 t=位
    W x=17 s=0 z=100 t=讓
@@ -830,71 +828,71 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=339 s=0 z=100 t=調
    W x=346 s=0 z=100 t=陽
    W x=356 s=0 z=100 t=雲
-   W x=364 s=0 z=100 t=騰
-   W x=376 s=0 z=100 t=致
-   W x=386 s=0 z=100 t=雨
-   W x=398 s=0 z=100 t=露
-   W x=407 s=0 z=100 t=結
-   W x=419 s=0 z=100 t=為
-  LINE y=222 x=0 align=0 mult=1.000 hfid=0 words=26
-   W x=0 s=0 z=100 t=霜
-   W x=8 s=0 z=100 t=金
-   W x=19 s=0 z=100 t=生
-   W x=27 s=0 z=100 t=麗
-   W x=39 s=0 z=100 t=水
-   W x=46 s=0 z=100 t=玉
-   W x=54 s=0 z=100 t=出
-   W x=60 s=0 z=100 t=崑
-   W x=70 s=0 z=100 t=岡
-   W x=80 s=0 z=100 t=劍
-   W x=86 s=0 z=100 t=號
-   W x=93 s=0 z=100 t=巨
-   W x=101 s=0 z=100 t=闕
-   W x=111 s=0 z=100 t=珠
-   W x=122 s=0 z=100 t=稱
-   W x=133 s=0 z=100 t=夜
-   W x=145 s=0 z=100 t=光
-   W x=156 s=0 z=100 t=果
-   W x=163 s=0 z=100 t=珍
-   W x=169 s=0 z=100 t=李
-   W x=175 s=0 z=100 t=柰
-   W x=182 s=0 z=100 t=菜
-   W x=190 s=0 z=100 t=重
-   W x=197 s=0 z=100 t=芥
-   W x=209 s=0 z=100 t=薑
-   W x=220 s=0 z=100 t=海
-  LINE y=246 x=0 align=0 mult=1.000 hfid=0 words=31
-   W x=18 s=0 z=100 t=鹹
-   W x=28 s=0 z=100 t=河
-   W x=36 s=0 z=100 t=淡
-   W x=45 s=0 z=100 t=鱗
-   W x=55 s=0 z=100 t=潛
-   W x=64 s=0 z=100 t=羽
-   W x=74 s=0 z=100 t=翔
-   W x=86 s=0 z=100 t=龍
-   W x=92 s=0 z=100 t=師
-   W x=104 s=0 z=100 t=火
-   W x=112 s=0 z=100 t=帝
-   W x=124 s=0 z=100 t=鳥
-   W x=136 s=0 z=100 t=官
-   W x=147 s=0 z=100 t=人
-   W x=154 s=0 z=100 t=皇
-   W x=165 s=0 z=100 t=始
-   W x=177 s=0 z=100 t=制
-   W x=187 s=0 z=100 t=文
-   W x=193 s=0 z=100 t=字
-   W x=202 s=0 z=100 t=乃
-   W x=209 s=0 z=100 t=服
-   W x=220 s=0 z=100 t=衣
-   W x=232 s=0 z=100 t=裳
-   W x=241 s=0 z=100 t=推
-   W x=251 s=0 z=100 t=位
-   W x=258 s=0 z=100 t=讓
-   W x=267 s=0 z=100 t=國
-   W x=275 s=0 z=100 t=有
-   W x=282 s=0 z=100 t=虞
-   W x=288 s=0 z=100 t=陶
-   W x=298 s=0 z=100 t=唐
+  LINE y=222 x=0 align=0 mult=1.000 hfid=0 words=45
+   W x=18 s=0 z=100 t=騰
+   W x=30 s=0 z=100 t=致
+   W x=40 s=0 z=100 t=雨
+   W x=52 s=0 z=100 t=露
+   W x=61 s=0 z=100 t=結
+   W x=73 s=0 z=100 t=為
+   W x=83 s=0 z=100 t=霜
+   W x=91 s=0 z=100 t=金
+   W x=102 s=0 z=100 t=生
+   W x=110 s=0 z=100 t=麗
+   W x=122 s=0 z=100 t=水
+   W x=129 s=0 z=100 t=玉
+   W x=137 s=0 z=100 t=出
+   W x=143 s=0 z=100 t=崑
+   W x=153 s=0 z=100 t=岡
+   W x=163 s=0 z=100 t=劍
+   W x=169 s=0 z=100 t=號
+   W x=176 s=0 z=100 t=巨
+   W x=184 s=0 z=100 t=闕
+   W x=194 s=0 z=100 t=珠
+   W x=205 s=0 z=100 t=稱
+   W x=216 s=0 z=100 t=夜
+   W x=228 s=0 z=100 t=光
+   W x=239 s=0 z=100 t=果
+   W x=246 s=0 z=100 t=珍
+   W x=252 s=0 z=100 t=李
+   W x=258 s=0 z=100 t=柰
+   W x=265 s=0 z=100 t=菜
+   W x=273 s=0 z=100 t=重
+   W x=280 s=0 z=100 t=芥
+   W x=292 s=0 z=100 t=薑
+   W x=303 s=0 z=100 t=海
+   W x=311 s=0 z=100 t=鹹
+   W x=321 s=0 z=100 t=河
+   W x=329 s=0 z=100 t=淡
+   W x=338 s=0 z=100 t=鱗
+   W x=348 s=0 z=100 t=潛
+   W x=357 s=0 z=100 t=羽
+   W x=367 s=0 z=100 t=翔
+   W x=379 s=0 z=100 t=龍
+   W x=385 s=0 z=100 t=師
+   W x=397 s=0 z=100 t=火
+   W x=405 s=0 z=100 t=帝
+   W x=417 s=0 z=100 t=鳥
+   W x=429 s=0 z=100 t=官
+  LINE y=246 x=0 align=0 mult=1.000 hfid=0 words=18
+   W x=0 s=0 z=100 t=人
+   W x=7 s=0 z=100 t=皇
+   W x=18 s=0 z=100 t=始
+   W x=30 s=0 z=100 t=制
+   W x=40 s=0 z=100 t=文
+   W x=46 s=0 z=100 t=字
+   W x=55 s=0 z=100 t=乃
+   W x=62 s=0 z=100 t=服
+   W x=73 s=0 z=100 t=衣
+   W x=85 s=0 z=100 t=裳
+   W x=94 s=0 z=100 t=推
+   W x=104 s=0 z=100 t=位
+   W x=111 s=0 z=100 t=讓
+   W x=120 s=0 z=100 t=國
+   W x=128 s=0 z=100 t=有
+   W x=135 s=0 z=100 t=虞
+   W x=141 s=0 z=100 t=陶
+   W x=151 s=0 z=100 t=唐
   LINE y=288 x=0 align=2 mult=1.000 hfid=0 words=3
    W x=160 s=1 z=100 t=9.
    W x=185 s=1 z=100 t=chunk
@@ -1184,3 +1182,621 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=115 s=0 z=100 t=も
    W x=121 s=0 z=100 t=同
    W x=132 s=0 z=100 t=じ。
+  LINE y=732 x=0 align=2 mult=1.000 hfid=0 words=3
+   W x=158 s=1 z=100 t=11.
+   W x=189 s=1 z=100 t=dense
+   W x=246 s=1 z=100 t=digits
+ PAGE 2 elements=13 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=48
+   W x=18 s=0 z=100 t=天
+   W x=29 s=0 z=100 t=0
+   W x=41 s=0 z=100 t=地
+   W x=51 s=0 z=100 t=1
+   W x=57 s=0 z=100 t=玄
+   W x=67 s=0 z=100 t=2
+   W x=74 s=0 z=100 t=黃
+   W x=81 s=0 z=100 t=3
+   W x=89 s=0 z=100 t=宇
+   W x=97 s=0 z=100 t=4
+   W x=106 s=0 z=100 t=宙
+   W x=118 s=0 z=100 t=5
+   W x=128 s=0 z=100 t=洪
+   W x=136 s=0 z=100 t=6
+   W x=147 s=0 z=100 t=荒
+   W x=157 s=0 z=100 t=7
+   W x=169 s=0 z=100 t=日
+   W x=178 s=0 z=100 t=8
+   W x=184 s=0 z=100 t=月
+   W x=190 s=0 z=100 t=9
+   W x=197 s=0 z=100 t=盈
+   W x=203 s=0 z=100 t=0
+   W x=215 s=0 z=100 t=昃
+   W x=226 s=0 z=100 t=1
+   W x=232 s=0 z=100 t=辰
+   W x=244 s=0 z=100 t=2
+   W x=251 s=0 z=100 t=宿
+   W x=259 s=0 z=100 t=3
+   W x=267 s=0 z=100 t=列
+   W x=274 s=0 z=100 t=4
+   W x=283 s=0 z=100 t=張
+   W x=295 s=0 z=100 t=5
+   W x=305 s=0 z=100 t=寒
+   W x=311 s=0 z=100 t=6
+   W x=322 s=0 z=100 t=來
+   W x=330 s=0 z=100 t=7
+   W x=342 s=0 z=100 t=暑
+   W x=348 s=0 z=100 t=8
+   W x=354 s=0 z=100 t=往
+   W x=364 s=0 z=100 t=9
+   W x=371 s=0 z=100 t=秋
+   W x=378 s=0 z=100 t=0
+   W x=390 s=0 z=100 t=收
+   W x=399 s=0 z=100 t=1
+   W x=405 s=0 z=100 t=冬
+   W x=417 s=0 z=100 t=2
+   W x=424 s=0 z=100 t=藏
+   W x=434 s=0 z=100 t=3
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=47
+   W x=0 s=0 z=100 t=閏
+   W x=10 s=0 z=100 t=4
+   W x=19 s=0 z=100 t=餘
+   W x=31 s=0 z=100 t=5
+   W x=41 s=0 z=100 t=成
+   W x=49 s=0 z=100 t=6
+   W x=60 s=0 z=100 t=歲
+   W x=69 s=0 z=100 t=7
+   W x=81 s=0 z=100 t=律
+   W x=88 s=0 z=100 t=8
+   W x=94 s=0 z=100 t=呂
+   W x=103 s=0 z=100 t=9
+   W x=110 s=0 z=100 t=調
+   W x=117 s=0 z=100 t=0
+   W x=129 s=0 z=100 t=陽
+   W x=139 s=0 z=100 t=1
+   W x=145 s=0 z=100 t=雲
+   W x=153 s=0 z=100 t=2
+   W x=160 s=0 z=100 t=騰
+   W x=172 s=0 z=100 t=3
+   W x=180 s=0 z=100 t=致
+   W x=190 s=0 z=100 t=4
+   W x=199 s=0 z=100 t=雨
+   W x=211 s=0 z=100 t=5
+   W x=221 s=0 z=100 t=露
+   W x=230 s=0 z=100 t=6
+   W x=241 s=0 z=100 t=結
+   W x=253 s=0 z=100 t=7
+   W x=265 s=0 z=100 t=為
+   W x=275 s=0 z=100 t=8
+   W x=281 s=0 z=100 t=霜
+   W x=289 s=0 z=100 t=9
+   W x=296 s=0 z=100 t=金
+   W x=307 s=0 z=100 t=0
+   W x=319 s=0 z=100 t=生
+   W x=327 s=0 z=100 t=1
+   W x=333 s=0 z=100 t=麗
+   W x=345 s=0 z=100 t=2
+   W x=352 s=0 z=100 t=水
+   W x=359 s=0 z=100 t=3
+   W x=367 s=0 z=100 t=玉
+   W x=375 s=0 z=100 t=4
+   W x=384 s=0 z=100 t=出
+   W x=390 s=0 z=100 t=5
+   W x=400 s=0 z=100 t=崑
+   W x=410 s=0 z=100 t=6
+   W x=421 s=0 z=100 t=岡
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=50
+   W x=0 s=0 z=100 t=7
+   W x=12 s=0 z=100 t=劍
+   W x=18 s=0 z=100 t=8
+   W x=24 s=0 z=100 t=號
+   W x=31 s=0 z=100 t=9
+   W x=38 s=0 z=100 t=巨
+   W x=46 s=0 z=100 t=0
+   W x=58 s=0 z=100 t=闕
+   W x=68 s=0 z=100 t=1
+   W x=74 s=0 z=100 t=珠
+   W x=85 s=0 z=100 t=2
+   W x=92 s=0 z=100 t=稱
+   W x=103 s=0 z=100 t=3
+   W x=111 s=0 z=100 t=夜
+   W x=123 s=0 z=100 t=4
+   W x=132 s=0 z=100 t=光
+   W x=143 s=0 z=100 t=5
+   W x=153 s=0 z=100 t=果
+   W x=160 s=0 z=100 t=6
+   W x=171 s=0 z=100 t=珍
+   W x=177 s=0 z=100 t=7
+   W x=189 s=0 z=100 t=李
+   W x=195 s=0 z=100 t=8
+   W x=201 s=0 z=100 t=柰
+   W x=208 s=0 z=100 t=9
+   W x=215 s=0 z=100 t=菜
+   W x=223 s=0 z=100 t=0
+   W x=235 s=0 z=100 t=重
+   W x=242 s=0 z=100 t=1
+   W x=248 s=0 z=100 t=芥
+   W x=260 s=0 z=100 t=2
+   W x=267 s=0 z=100 t=薑
+   W x=278 s=0 z=100 t=3
+   W x=286 s=0 z=100 t=海
+   W x=294 s=0 z=100 t=4
+   W x=303 s=0 z=100 t=鹹
+   W x=313 s=0 z=100 t=5
+   W x=323 s=0 z=100 t=河
+   W x=331 s=0 z=100 t=6
+   W x=342 s=0 z=100 t=淡
+   W x=351 s=0 z=100 t=7
+   W x=363 s=0 z=100 t=鱗
+   W x=373 s=0 z=100 t=8
+   W x=379 s=0 z=100 t=潛
+   W x=388 s=0 z=100 t=9
+   W x=395 s=0 z=100 t=羽
+   W x=405 s=0 z=100 t=0
+   W x=417 s=0 z=100 t=翔
+   W x=429 s=0 z=100 t=1
+   W x=435 s=0 z=100 t=龍
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=48
+   W x=0 s=0 z=100 t=2
+   W x=7 s=0 z=100 t=師
+   W x=19 s=0 z=100 t=3
+   W x=27 s=0 z=100 t=火
+   W x=35 s=0 z=100 t=4
+   W x=44 s=0 z=100 t=帝
+   W x=56 s=0 z=100 t=5
+   W x=66 s=0 z=100 t=鳥
+   W x=78 s=0 z=100 t=6
+   W x=89 s=0 z=100 t=官
+   W x=100 s=0 z=100 t=7
+   W x=112 s=0 z=100 t=人
+   W x=119 s=0 z=100 t=8
+   W x=125 s=0 z=100 t=皇
+   W x=136 s=0 z=100 t=9
+   W x=143 s=0 z=100 t=始
+   W x=155 s=0 z=100 t=0
+   W x=167 s=0 z=100 t=制
+   W x=177 s=0 z=100 t=1
+   W x=183 s=0 z=100 t=文
+   W x=189 s=0 z=100 t=2
+   W x=196 s=0 z=100 t=字
+   W x=205 s=0 z=100 t=3
+   W x=213 s=0 z=100 t=乃
+   W x=220 s=0 z=100 t=4
+   W x=229 s=0 z=100 t=服
+   W x=240 s=0 z=100 t=5
+   W x=250 s=0 z=100 t=衣
+   W x=262 s=0 z=100 t=6
+   W x=273 s=0 z=100 t=裳
+   W x=282 s=0 z=100 t=7
+   W x=294 s=0 z=100 t=推
+   W x=304 s=0 z=100 t=8
+   W x=310 s=0 z=100 t=位
+   W x=317 s=0 z=100 t=9
+   W x=324 s=0 z=100 t=讓
+   W x=333 s=0 z=100 t=0
+   W x=345 s=0 z=100 t=國
+   W x=353 s=0 z=100 t=1
+   W x=359 s=0 z=100 t=有
+   W x=366 s=0 z=100 t=2
+   W x=373 s=0 z=100 t=虞
+   W x=379 s=0 z=100 t=3
+   W x=387 s=0 z=100 t=陶
+   W x=397 s=0 z=100 t=4
+   W x=406 s=0 z=100 t=唐
+   W x=418 s=0 z=100 t=5
+   W x=428 s=0 z=100 t=天
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=50
+   W x=0 s=0 z=100 t=6
+   W x=11 s=0 z=100 t=地
+   W x=21 s=0 z=100 t=7
+   W x=33 s=0 z=100 t=玄
+   W x=43 s=0 z=100 t=8
+   W x=49 s=0 z=100 t=黃
+   W x=56 s=0 z=100 t=9
+   W x=63 s=0 z=100 t=宇
+   W x=71 s=0 z=100 t=0
+   W x=83 s=0 z=100 t=宙
+   W x=95 s=0 z=100 t=1
+   W x=101 s=0 z=100 t=洪
+   W x=109 s=0 z=100 t=2
+   W x=116 s=0 z=100 t=荒
+   W x=126 s=0 z=100 t=3
+   W x=134 s=0 z=100 t=日
+   W x=143 s=0 z=100 t=4
+   W x=152 s=0 z=100 t=月
+   W x=158 s=0 z=100 t=5
+   W x=168 s=0 z=100 t=盈
+   W x=174 s=0 z=100 t=6
+   W x=185 s=0 z=100 t=昃
+   W x=196 s=0 z=100 t=7
+   W x=208 s=0 z=100 t=辰
+   W x=220 s=0 z=100 t=8
+   W x=226 s=0 z=100 t=宿
+   W x=234 s=0 z=100 t=9
+   W x=241 s=0 z=100 t=列
+   W x=248 s=0 z=100 t=0
+   W x=260 s=0 z=100 t=張
+   W x=272 s=0 z=100 t=1
+   W x=278 s=0 z=100 t=寒
+   W x=284 s=0 z=100 t=2
+   W x=291 s=0 z=100 t=來
+   W x=299 s=0 z=100 t=3
+   W x=307 s=0 z=100 t=暑
+   W x=313 s=0 z=100 t=4
+   W x=322 s=0 z=100 t=往
+   W x=332 s=0 z=100 t=5
+   W x=342 s=0 z=100 t=秋
+   W x=349 s=0 z=100 t=6
+   W x=360 s=0 z=100 t=收
+   W x=369 s=0 z=100 t=7
+   W x=381 s=0 z=100 t=冬
+   W x=393 s=0 z=100 t=8
+   W x=399 s=0 z=100 t=藏
+   W x=409 s=0 z=100 t=9
+   W x=416 s=0 z=100 t=閏
+   W x=426 s=0 z=100 t=0
+   W x=438 s=0 z=100 t=餘
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=50
+   W x=0 s=0 z=100 t=1
+   W x=6 s=0 z=100 t=成
+   W x=14 s=0 z=100 t=2
+   W x=21 s=0 z=100 t=歲
+   W x=30 s=0 z=100 t=3
+   W x=38 s=0 z=100 t=律
+   W x=45 s=0 z=100 t=4
+   W x=54 s=0 z=100 t=呂
+   W x=63 s=0 z=100 t=5
+   W x=73 s=0 z=100 t=調
+   W x=80 s=0 z=100 t=6
+   W x=91 s=0 z=100 t=陽
+   W x=101 s=0 z=100 t=7
+   W x=113 s=0 z=100 t=雲
+   W x=121 s=0 z=100 t=8
+   W x=127 s=0 z=100 t=騰
+   W x=139 s=0 z=100 t=9
+   W x=146 s=0 z=100 t=致
+   W x=156 s=0 z=100 t=0
+   W x=168 s=0 z=100 t=雨
+   W x=180 s=0 z=100 t=1
+   W x=186 s=0 z=100 t=露
+   W x=195 s=0 z=100 t=2
+   W x=202 s=0 z=100 t=結
+   W x=214 s=0 z=100 t=3
+   W x=222 s=0 z=100 t=為
+   W x=232 s=0 z=100 t=4
+   W x=241 s=0 z=100 t=霜
+   W x=249 s=0 z=100 t=5
+   W x=259 s=0 z=100 t=金
+   W x=270 s=0 z=100 t=6
+   W x=281 s=0 z=100 t=生
+   W x=289 s=0 z=100 t=7
+   W x=301 s=0 z=100 t=麗
+   W x=313 s=0 z=100 t=8
+   W x=319 s=0 z=100 t=水
+   W x=326 s=0 z=100 t=9
+   W x=333 s=0 z=100 t=玉
+   W x=341 s=0 z=100 t=0
+   W x=353 s=0 z=100 t=出
+   W x=359 s=0 z=100 t=1
+   W x=365 s=0 z=100 t=崑
+   W x=375 s=0 z=100 t=2
+   W x=382 s=0 z=100 t=岡
+   W x=392 s=0 z=100 t=3
+   W x=400 s=0 z=100 t=劍
+   W x=406 s=0 z=100 t=4
+   W x=415 s=0 z=100 t=號
+   W x=422 s=0 z=100 t=5
+   W x=432 s=0 z=100 t=巨
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=49
+   W x=0 s=0 z=100 t=6
+   W x=11 s=0 z=100 t=闕
+   W x=21 s=0 z=100 t=7
+   W x=33 s=0 z=100 t=珠
+   W x=44 s=0 z=100 t=8
+   W x=50 s=0 z=100 t=稱
+   W x=61 s=0 z=100 t=9
+   W x=68 s=0 z=100 t=夜
+   W x=80 s=0 z=100 t=0
+   W x=92 s=0 z=100 t=光
+   W x=103 s=0 z=100 t=1
+   W x=109 s=0 z=100 t=果
+   W x=116 s=0 z=100 t=2
+   W x=123 s=0 z=100 t=珍
+   W x=129 s=0 z=100 t=3
+   W x=137 s=0 z=100 t=李
+   W x=143 s=0 z=100 t=4
+   W x=152 s=0 z=100 t=柰
+   W x=159 s=0 z=100 t=5
+   W x=169 s=0 z=100 t=菜
+   W x=177 s=0 z=100 t=6
+   W x=188 s=0 z=100 t=重
+   W x=195 s=0 z=100 t=7
+   W x=207 s=0 z=100 t=芥
+   W x=219 s=0 z=100 t=8
+   W x=225 s=0 z=100 t=薑
+   W x=236 s=0 z=100 t=9
+   W x=243 s=0 z=100 t=海
+   W x=251 s=0 z=100 t=0
+   W x=263 s=0 z=100 t=鹹
+   W x=273 s=0 z=100 t=1
+   W x=279 s=0 z=100 t=河
+   W x=287 s=0 z=100 t=2
+   W x=294 s=0 z=100 t=淡
+   W x=303 s=0 z=100 t=3
+   W x=311 s=0 z=100 t=鱗
+   W x=321 s=0 z=100 t=4
+   W x=330 s=0 z=100 t=潛
+   W x=339 s=0 z=100 t=5
+   W x=349 s=0 z=100 t=羽
+   W x=359 s=0 z=100 t=6
+   W x=370 s=0 z=100 t=翔
+   W x=382 s=0 z=100 t=7
+   W x=394 s=0 z=100 t=龍
+   W x=400 s=0 z=100 t=8
+   W x=406 s=0 z=100 t=師
+   W x=418 s=0 z=100 t=9
+   W x=425 s=0 z=100 t=火
+   W x=433 s=0 z=100 t=0
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=49
+   W x=0 s=0 z=100 t=帝
+   W x=12 s=0 z=100 t=1
+   W x=18 s=0 z=100 t=鳥
+   W x=30 s=0 z=100 t=2
+   W x=37 s=0 z=100 t=官
+   W x=48 s=0 z=100 t=3
+   W x=56 s=0 z=100 t=人
+   W x=63 s=0 z=100 t=4
+   W x=72 s=0 z=100 t=皇
+   W x=83 s=0 z=100 t=5
+   W x=93 s=0 z=100 t=始
+   W x=105 s=0 z=100 t=6
+   W x=116 s=0 z=100 t=制
+   W x=126 s=0 z=100 t=7
+   W x=138 s=0 z=100 t=文
+   W x=144 s=0 z=100 t=8
+   W x=150 s=0 z=100 t=字
+   W x=159 s=0 z=100 t=9
+   W x=166 s=0 z=100 t=乃
+   W x=173 s=0 z=100 t=0
+   W x=185 s=0 z=100 t=服
+   W x=196 s=0 z=100 t=1
+   W x=202 s=0 z=100 t=衣
+   W x=214 s=0 z=100 t=2
+   W x=221 s=0 z=100 t=裳
+   W x=230 s=0 z=100 t=3
+   W x=238 s=0 z=100 t=推
+   W x=248 s=0 z=100 t=4
+   W x=257 s=0 z=100 t=位
+   W x=264 s=0 z=100 t=5
+   W x=274 s=0 z=100 t=讓
+   W x=283 s=0 z=100 t=6
+   W x=294 s=0 z=100 t=國
+   W x=302 s=0 z=100 t=7
+   W x=314 s=0 z=100 t=有
+   W x=321 s=0 z=100 t=8
+   W x=327 s=0 z=100 t=虞
+   W x=333 s=0 z=100 t=9
+   W x=340 s=0 z=100 t=陶
+   W x=350 s=0 z=100 t=0
+   W x=362 s=0 z=100 t=唐
+   W x=374 s=0 z=100 t=1
+   W x=380 s=0 z=100 t=天
+   W x=391 s=0 z=100 t=2
+   W x=398 s=0 z=100 t=地
+   W x=408 s=0 z=100 t=3
+   W x=416 s=0 z=100 t=玄
+   W x=426 s=0 z=100 t=4
+   W x=435 s=0 z=100 t=黃
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=50
+   W x=0 s=0 z=100 t=5
+   W x=10 s=0 z=100 t=宇
+   W x=18 s=0 z=100 t=6
+   W x=29 s=0 z=100 t=宙
+   W x=41 s=0 z=100 t=7
+   W x=53 s=0 z=100 t=洪
+   W x=61 s=0 z=100 t=8
+   W x=67 s=0 z=100 t=荒
+   W x=77 s=0 z=100 t=9
+   W x=84 s=0 z=100 t=日
+   W x=93 s=0 z=100 t=0
+   W x=105 s=0 z=100 t=月
+   W x=111 s=0 z=100 t=1
+   W x=117 s=0 z=100 t=盈
+   W x=123 s=0 z=100 t=2
+   W x=130 s=0 z=100 t=昃
+   W x=141 s=0 z=100 t=3
+   W x=149 s=0 z=100 t=辰
+   W x=161 s=0 z=100 t=4
+   W x=170 s=0 z=100 t=宿
+   W x=178 s=0 z=100 t=5
+   W x=188 s=0 z=100 t=列
+   W x=195 s=0 z=100 t=6
+   W x=206 s=0 z=100 t=張
+   W x=218 s=0 z=100 t=7
+   W x=230 s=0 z=100 t=寒
+   W x=236 s=0 z=100 t=8
+   W x=242 s=0 z=100 t=來
+   W x=250 s=0 z=100 t=9
+   W x=257 s=0 z=100 t=暑
+   W x=263 s=0 z=100 t=0
+   W x=275 s=0 z=100 t=往
+   W x=285 s=0 z=100 t=1
+   W x=291 s=0 z=100 t=秋
+   W x=298 s=0 z=100 t=2
+   W x=305 s=0 z=100 t=收
+   W x=314 s=0 z=100 t=3
+   W x=322 s=0 z=100 t=冬
+   W x=334 s=0 z=100 t=4
+   W x=343 s=0 z=100 t=藏
+   W x=353 s=0 z=100 t=5
+   W x=363 s=0 z=100 t=閏
+   W x=373 s=0 z=100 t=6
+   W x=384 s=0 z=100 t=餘
+   W x=396 s=0 z=100 t=7
+   W x=408 s=0 z=100 t=成
+   W x=416 s=0 z=100 t=8
+   W x=422 s=0 z=100 t=歲
+   W x=431 s=0 z=100 t=9
+   W x=438 s=0 z=100 t=律
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=49
+   W x=0 s=0 z=100 t=0
+   W x=12 s=0 z=100 t=呂
+   W x=21 s=0 z=100 t=1
+   W x=27 s=0 z=100 t=調
+   W x=34 s=0 z=100 t=2
+   W x=41 s=0 z=100 t=陽
+   W x=51 s=0 z=100 t=3
+   W x=59 s=0 z=100 t=雲
+   W x=67 s=0 z=100 t=4
+   W x=76 s=0 z=100 t=騰
+   W x=88 s=0 z=100 t=5
+   W x=98 s=0 z=100 t=致
+   W x=108 s=0 z=100 t=6
+   W x=119 s=0 z=100 t=雨
+   W x=131 s=0 z=100 t=7
+   W x=143 s=0 z=100 t=露
+   W x=152 s=0 z=100 t=8
+   W x=158 s=0 z=100 t=結
+   W x=170 s=0 z=100 t=9
+   W x=177 s=0 z=100 t=為
+   W x=187 s=0 z=100 t=0
+   W x=199 s=0 z=100 t=霜
+   W x=207 s=0 z=100 t=1
+   W x=213 s=0 z=100 t=金
+   W x=224 s=0 z=100 t=2
+   W x=231 s=0 z=100 t=生
+   W x=239 s=0 z=100 t=3
+   W x=247 s=0 z=100 t=麗
+   W x=259 s=0 z=100 t=4
+   W x=268 s=0 z=100 t=水
+   W x=275 s=0 z=100 t=5
+   W x=285 s=0 z=100 t=玉
+   W x=293 s=0 z=100 t=6
+   W x=304 s=0 z=100 t=出
+   W x=310 s=0 z=100 t=7
+   W x=322 s=0 z=100 t=崑
+   W x=332 s=0 z=100 t=8
+   W x=338 s=0 z=100 t=岡
+   W x=348 s=0 z=100 t=9
+   W x=355 s=0 z=100 t=劍
+   W x=361 s=0 z=100 t=0
+   W x=373 s=0 z=100 t=號
+   W x=380 s=0 z=100 t=1
+   W x=386 s=0 z=100 t=巨
+   W x=394 s=0 z=100 t=2
+   W x=401 s=0 z=100 t=闕
+   W x=411 s=0 z=100 t=3
+   W x=419 s=0 z=100 t=珠
+   W x=430 s=0 z=100 t=4
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=48
+   W x=0 s=0 z=100 t=稱
+   W x=11 s=0 z=100 t=5
+   W x=21 s=0 z=100 t=夜
+   W x=33 s=0 z=100 t=6
+   W x=44 s=0 z=100 t=光
+   W x=55 s=0 z=100 t=7
+   W x=67 s=0 z=100 t=果
+   W x=74 s=0 z=100 t=8
+   W x=80 s=0 z=100 t=珍
+   W x=86 s=0 z=100 t=9
+   W x=93 s=0 z=100 t=李
+   W x=99 s=0 z=100 t=0
+   W x=111 s=0 z=100 t=柰
+   W x=118 s=0 z=100 t=1
+   W x=124 s=0 z=100 t=菜
+   W x=132 s=0 z=100 t=2
+   W x=139 s=0 z=100 t=重
+   W x=146 s=0 z=100 t=3
+   W x=154 s=0 z=100 t=芥
+   W x=166 s=0 z=100 t=4
+   W x=175 s=0 z=100 t=薑
+   W x=186 s=0 z=100 t=5
+   W x=196 s=0 z=100 t=海
+   W x=204 s=0 z=100 t=6
+   W x=215 s=0 z=100 t=鹹
+   W x=225 s=0 z=100 t=7
+   W x=237 s=0 z=100 t=河
+   W x=245 s=0 z=100 t=8
+   W x=251 s=0 z=100 t=淡
+   W x=260 s=0 z=100 t=9
+   W x=267 s=0 z=100 t=鱗
+   W x=277 s=0 z=100 t=0
+   W x=289 s=0 z=100 t=潛
+   W x=298 s=0 z=100 t=1
+   W x=304 s=0 z=100 t=羽
+   W x=314 s=0 z=100 t=2
+   W x=321 s=0 z=100 t=翔
+   W x=333 s=0 z=100 t=3
+   W x=341 s=0 z=100 t=龍
+   W x=347 s=0 z=100 t=4
+   W x=356 s=0 z=100 t=師
+   W x=368 s=0 z=100 t=5
+   W x=378 s=0 z=100 t=火
+   W x=386 s=0 z=100 t=6
+   W x=397 s=0 z=100 t=帝
+   W x=409 s=0 z=100 t=7
+   W x=421 s=0 z=100 t=鳥
+   W x=433 s=0 z=100 t=8
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=49
+   W x=0 s=0 z=100 t=官
+   W x=11 s=0 z=100 t=9
+   W x=18 s=0 z=100 t=人
+   W x=25 s=0 z=100 t=0
+   W x=37 s=0 z=100 t=皇
+   W x=48 s=0 z=100 t=1
+   W x=54 s=0 z=100 t=始
+   W x=66 s=0 z=100 t=2
+   W x=73 s=0 z=100 t=制
+   W x=83 s=0 z=100 t=3
+   W x=91 s=0 z=100 t=文
+   W x=97 s=0 z=100 t=4
+   W x=106 s=0 z=100 t=字
+   W x=115 s=0 z=100 t=5
+   W x=125 s=0 z=100 t=乃
+   W x=132 s=0 z=100 t=6
+   W x=143 s=0 z=100 t=服
+   W x=154 s=0 z=100 t=7
+   W x=166 s=0 z=100 t=衣
+   W x=178 s=0 z=100 t=8
+   W x=184 s=0 z=100 t=裳
+   W x=193 s=0 z=100 t=9
+   W x=200 s=0 z=100 t=推
+   W x=210 s=0 z=100 t=0
+   W x=222 s=0 z=100 t=位
+   W x=229 s=0 z=100 t=1
+   W x=235 s=0 z=100 t=讓
+   W x=244 s=0 z=100 t=2
+   W x=251 s=0 z=100 t=國
+   W x=259 s=0 z=100 t=3
+   W x=267 s=0 z=100 t=有
+   W x=274 s=0 z=100 t=4
+   W x=283 s=0 z=100 t=虞
+   W x=289 s=0 z=100 t=5
+   W x=299 s=0 z=100 t=陶
+   W x=309 s=0 z=100 t=6
+   W x=320 s=0 z=100 t=唐
+   W x=332 s=0 z=100 t=7
+   W x=344 s=0 z=100 t=天
+   W x=355 s=0 z=100 t=8
+   W x=361 s=0 z=100 t=地
+   W x=371 s=0 z=100 t=9
+   W x=378 s=0 z=100 t=玄
+   W x=388 s=0 z=100 t=0
+   W x=400 s=0 z=100 t=黃
+   W x=407 s=0 z=100 t=1
+   W x=413 s=0 z=100 t=宇
+   W x=421 s=0 z=100 t=2
+   W x=428 s=0 z=100 t=宙
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=0 s=0 z=100 t=3
+   W x=8 s=0 z=100 t=洪
+   W x=16 s=0 z=100 t=4
+   W x=25 s=0 z=100 t=荒
+   W x=35 s=0 z=100 t=5
+   W x=45 s=0 z=100 t=日
+   W x=54 s=0 z=100 t=6
+   W x=65 s=0 z=100 t=月
+   W x=71 s=0 z=100 t=7
+   W x=83 s=0 z=100 t=盈
+   W x=89 s=0 z=100 t=8
+   W x=95 s=0 z=100 t=昃
+   W x=106 s=0 z=100 t=9

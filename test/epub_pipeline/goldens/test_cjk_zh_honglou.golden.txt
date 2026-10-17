@@ -1165,7 +1165,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=424 s=0 z=100 t=袖
    W x=431 s=0 z=100 t=了
  PAGE 1 elements=4 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=19
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=20
    W x=0 s=0 z=100 t=這
    W x=12 s=0 z=100 t=石，
    W x=32 s=0 z=100 t=同
@@ -1184,7 +1184,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=165 s=0 z=100 t=何
    W x=173 s=0 z=100 t=方
    W x=180 s=0 z=100 t=何
-   W x=188 s=0 z=100 t=舍．
+   W x=188 s=0 z=100 t=舍
+   W x=195 s=0 z=100 t=．
   LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=45
    W x=18 s=0 z=100 t=后
    W x=24 s=0 z=100 t=來，

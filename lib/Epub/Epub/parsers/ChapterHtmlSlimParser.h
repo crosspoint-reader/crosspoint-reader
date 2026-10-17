@@ -102,8 +102,13 @@ class ChapterHtmlSlimParser final : public Print {
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
-  // CJK codepoints in partWordBuffer: consumeText flushes a CJK run every kCjkRunCodepoints of them.
+  // The tokens partWordBuffer's CJK run will become: its CJK codepoints, plus one for each run of
+  // non-CJK characters after the first CJK codepoint. consumeText flushes the run at
+  // kCjkRunCodepoints of them.
   int partWordCjkCodepoints_ = 0;
+  // The last codepoint added to partWordBuffer was CJK, so a non-CJK character after it starts a
+  // run that counts toward partWordCjkCodepoints_.
+  bool partWordLastWasCjk_ = false;
   // The last codepoint of the last word flushed, kept across whitespace (set by flushPartWordBuffer).
   uint32_t lastTextCodepoint_ = 0;
   // A whitespace run with a line break in it followed unspaced CJK text or a quotation mark
