@@ -26,8 +26,8 @@ namespace {
 
 constexpr char kFontsDir[] = "/fonts";
 constexpr char kStateFile[] = "/fonts/state.bin";
-// The state file: kVersion, then a code -- None, Family (then u8 nameLen and the name), or kFailed + n for n
-// failed attempts so far. At kMaxAttempts the book is given up on, as None.
+// The state file: kVersion, then a code -- None, Family (then the name, to the end of the file), or kFailed + n
+// for n failed attempts so far. At kMaxAttempts the book is given up on, as None.
 constexpr uint8_t kCodeNone = 0;
 constexpr uint8_t kCodeFamily = 1;
 constexpr uint8_t kCodeFailed = 2;
@@ -419,41 +419,72 @@ std::string facePath(const std::string& dir, const uint8_t style, const std::str
 constexpr uint8_t kNoCode = 0xFF;
 uint8_t readCode(const std::string& cachePath, std::string* name) {
   const std::string path = cachePath + kStateFile;
-  HalFile file;
-  if (!Storage.exists(path.c_str()) || !Storage.openFileForRead("BKF", path, file)) return kNoCode;
-  uint8_t head[3] = {};
-  const int got = file.read(head, sizeof(head));
-  uint8_t code = got >= 2 && head[0] == kVersion ? head[1] : kNoCode;
-  if (code == kCodeFamily) {
-    std::string declared(got == 3 ? head[2] : 0, '\0');
-    if (declared.empty() || file.read(declared.data(), declared.size()) != static_cast<int>(declared.size())) {
-      code = kNoCode;
-    } else if (name) {
-      *name = std::move(declared);
-    }
+  std::string bytes;
+  // Checked first: an unexamined book has none, and a failed open logs.
+  if (!Storage.exists(path.c_str()) || !Storage.readFileToString("BKF", path, 2 + 255, bytes) || bytes.size() < 2 ||
+      bytes[0] != static_cast<char>(kVersion)) {
+    return kNoCode;
   }
-  file.close();
+  const auto code = static_cast<uint8_t>(bytes[1]);
+  if (code == kCodeFamily) {
+    if (bytes.size() == 2) return kNoCode;
+    bytes.erase(0, 2);
+    if (name) *name = std::move(bytes);
+  }
   return code;
 }
 
-uint8_t failedAttempts(const std::string& cachePath) {
-  const uint8_t code = readCode(cachePath, nullptr);
-  return code != kNoCode && code >= kCodeFailed ? static_cast<uint8_t>(code - kCodeFailed) : 0;
+State stateOf(const uint8_t code) {
+  if (code == kCodeFamily) return State::Family;
+  if (code == kCodeNone || (code != kNoCode && code >= kCodeFailed + kMaxAttempts)) return State::None;
+  return State::Pending;
 }
 
-State writeState(const std::string& cachePath, const uint8_t code, const std::string_view name = {}) {
+State writeState(const std::string& cachePath, const uint8_t code, const std::string_view name) {
   Storage.mkdir((cachePath + kFontsDir).c_str());
+  std::string bytes{static_cast<char>(kVersion), static_cast<char>(code)};
+  if (code == kCodeFamily) bytes.append(name.data(), std::min<size_t>(name.size(), 255));
+  const std::string path = cachePath + kStateFile;
   HalFile file;
-  if (!Storage.openFileForWrite("BKF", cachePath + kStateFile, file)) return State::Pending;
-  const uint8_t head[3] = {kVersion, code, static_cast<uint8_t>(std::min<size_t>(name.size(), 255))};
-  bool ok = file.write(head, code == kCodeFamily ? 3 : 2) == (code == kCodeFamily ? 3u : 2u);
-  if (code == kCodeFamily) ok = ok && file.write(name.data(), head[2]) == head[2];
-  ok = file.close() && ok;
-  if (!ok) {
-    Storage.remove((cachePath + kStateFile).c_str());
+  if (!Storage.openFileForWrite("BKF", path, file)) return State::Pending;
+  const bool written = file.write(bytes.data(), bytes.size()) == bytes.size();
+  if (!file.close() || !written) {
+    Storage.remove(path.c_str());
     return State::Pending;
   }
-  return BookFonts::read(cachePath);
+  return stateOf(code);
+}
+
+// Finds the body family and copies its faces out of the book; the state file's code for what came of it
+// (kCodeFailed for a failed read), and for a Family `*name`, the name it declares (into `records`).
+uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, std::string_view& name) {
+  if (!CssParser::loadFontFaces(epub.getCachePath(), records)) return kCodeNone;
+  bool failed = false;
+  const uint32_t body = detectBodyFamily(epub, scratch, &failed);
+  if (failed) return kCodeFailed;
+  CssParser::FontFace picked[4];
+  pickFaces(records, body, picked);
+  if (picked[0].name.empty()) {
+    LOG_INF("BKF", "Body font not embedded");
+    return kCodeNone;
+  }
+
+  const std::string dir = familyDir(epub.getCachePath(), picked[0].name);
+  Storage.mkdir(dir.c_str());
+  Keys keys;
+  for (uint8_t style = 0; style < 4; ++style) {
+    if (picked[style].name.empty()) continue;
+    const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(std::string(picked[style].href)));
+    const Copy copy = copyFace(epub, href, facePath(dir, style, href), keys, scratch);
+    // A style refused falls back to regular; regular refused, the book keeps the reader's font.
+    if (copy == Copy::Failed || (style == 0 && copy == Copy::Refused)) {
+      Storage.removeDir(dir.c_str());
+      return copy == Copy::Failed ? kCodeFailed : kCodeNone;
+    }
+  }
+  LOG_INF("BKF", "Body font: %s", dir.c_str());
+  name = picked[0].name;
+  return kCodeFamily;
 }
 
 int hexValue(const char c) {
@@ -496,12 +527,7 @@ bool adobeKey(const std::string_view uuid, uint8_t (&key)[16]) {
   return bytes == sizeof(key) && high < 0;
 }
 
-State read(const std::string& cachePath, std::string* name) {
-  const uint8_t code = readCode(cachePath, name);
-  if (code == kCodeFamily) return State::Family;
-  if (code == kCodeNone || (code != kNoCode && code >= kCodeFailed + kMaxAttempts)) return State::None;
-  return State::Pending;
-}
+State read(const std::string& cachePath, std::string* name) { return stateOf(readCode(cachePath, name)); }
 
 std::string familyDir(const std::string& cachePath, const std::string_view name) {
   std::string dir = cachePath + kFontsDir;
@@ -548,45 +574,14 @@ State prepare(const Epub& epub, BuildArena* scratch) {
   const std::string& cachePath = epub.getCachePath();
   // The CSS was not loaded, or did not compile: nothing to decide from yet.
   if (!epub.getCssParser() || !epub.getCssParser()->hasCache()) return State::Pending;
-  const uint8_t attempts = failedAttempts(cachePath);
+  const uint8_t last = readCode(cachePath, nullptr);
+  const uint8_t attempts = last != kNoCode && last >= kCodeFailed ? static_cast<uint8_t>(last - kCodeFailed) : 0;
   Storage.removeDir((cachePath + kFontsDir).c_str());  // whatever an earlier attempt left
 
   std::string records;
-  if (!CssParser::loadFontFaces(cachePath, records)) return writeState(cachePath, kCodeNone);
-  bool failed = false;
-  const uint32_t body = detectBodyFamily(epub, scratch, &failed);
-  if (failed) return writeState(cachePath, static_cast<uint8_t>(kCodeFailed + attempts + 1));
-  CssParser::FontFace picked[4];
-  pickFaces(records, body, picked);
-  if (picked[0].name.empty()) {
-    LOG_INF("BKF", "Body font not embedded");
-    return writeState(cachePath, kCodeNone);
-  }
-
-  const std::string_view name = picked[0].name;
-  const std::string dir = familyDir(cachePath, name);
-  Storage.mkdir(dir.c_str());
-  Keys keys;
-  Copy regular = Copy::Refused;
-  bool anyFailed = false;
-  for (uint8_t style = 0; style < 4; ++style) {
-    if (picked[style].name.empty()) continue;
-    const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(std::string(picked[style].href)));
-    const Copy copy = copyFace(epub, href, facePath(dir, style, href), keys, scratch);
-    if (style == 0) regular = copy;
-    anyFailed = anyFailed || copy == Copy::Failed;
-    if (regular != Copy::Done) break;  // every other style falls back to regular
-  }
-  if (anyFailed) {
-    Storage.removeDir(dir.c_str());
-    return writeState(cachePath, static_cast<uint8_t>(kCodeFailed + attempts + 1));
-  }
-  if (regular != Copy::Done) {
-    Storage.removeDir(dir.c_str());
-    return writeState(cachePath, kCodeNone);
-  }
-  LOG_INF("BKF", "Body font: %s", dir.c_str());
-  return writeState(cachePath, kCodeFamily, name);
+  std::string_view name;
+  const uint8_t code = examine(epub, scratch, records, name);
+  return writeState(cachePath, code == kCodeFailed ? static_cast<uint8_t>(kCodeFailed + attempts + 1) : code, name);
 }
 
 }  // namespace BookFonts

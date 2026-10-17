@@ -19,7 +19,8 @@ class Epub;
 namespace BookFonts {
 
 /// Bump when what prepare() decides or writes changes: every book is examined again.
-constexpr uint8_t kVersion = 1;
+/// v2: the state file holds a Family's name to its end, without a length byte.
+constexpr uint8_t kVersion = 2;
 /// A face bigger than this is not copied: the font area could not install it in flash mode anyway.
 constexpr size_t kMaxFaceBytes = 2 * 1024 * 1024;
 /// prepare() reads at most this much of each chapter, and at most kProbeChapters chapters from the text start.
