@@ -111,8 +111,12 @@ class CjkRules : public testing::TestWithParam<Case> {
  protected:
   void SetUp() override {
     const Case c = GetParam();
+    // One directory per test, not per book: ctest -j runs a book's three tests side by side, and one
+    // test's remove_all would pull the cache from under another's build.
+    const std::string test = testing::UnitTest::GetInstance()->current_test_info()->name();
     const auto cacheDir = fs::temp_directory_path() / "epub_pipeline_test" /
-                          ("cjk_rules_" + fs::path(c.epub).stem().string() + (c.hyphenation ? "_hyph" : ""));
+                          ("cjk_rules_" + test.substr(0, test.find('/')) + "_" + fs::path(c.epub).stem().string() +
+                           (c.hyphenation ? "_hyph" : ""));
     fs::remove_all(cacheDir);
     fs::create_directories(cacheDir);
     pipeline_harness::Profile profile;
