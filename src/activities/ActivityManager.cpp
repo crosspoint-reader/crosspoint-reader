@@ -734,8 +734,18 @@ void ActivityManager::describeState(std::string& out) const {
   if (currentActivity) currentActivity->appendDebugState(out);
 }
 
+bool ActivityManager::currentTakesButtonAction(const CrossPointSettings::BUTTON_ACTION action,
+                                               const MappedInputManager::Button button) const {
+  if (currentIsReaderActivity()) return true;
+  return currentActivity && currentActivity->takesButtonAction(action, button);
+}
+
 void ActivityManager::dispatchButtonAction(const CrossPointSettings::BUTTON_ACTION action) {
-  if (currentIsReaderActivity()) {
+  // A screen other than the reader opts in per button, which this call does not know, so it is
+  // let through here and vetted by the callers: main.cpp hands a reader-scoped button action to
+  // such a screen only once currentTakesButtonAction() agreed, and the gesture path offers it none
+  // outside the reader. Every other screen keeps the no-op onButtonAction().
+  if (currentActivity) {
     currentActivity->onButtonAction(action);
   }
 }

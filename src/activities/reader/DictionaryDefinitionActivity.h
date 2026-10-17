@@ -49,8 +49,13 @@ class DictionaryDefinitionActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool takesButtonAction(CrossPointSettings::BUTTON_ACTION action, MappedInputManager::Button button) const override;
+  void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
 
  private:
+  void nextPage();
+  void previousPage();
+
   // One wrapped display line: a byte span of `definition`. Wrapping keeps lines
   // under the screen width, so uint16_t length is ample.
   struct Line {

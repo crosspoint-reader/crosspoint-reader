@@ -76,6 +76,7 @@ When a word is found, the definition screen shows the matched headword at the to
 HTML dictionaries that declare `sametypesequence=h` use the EPUB text-layout engine for semantic formatting such as headings, bold, italics, lists, and line breaks. Images and CSS styling are ignored. Definitions that are too large or cannot be laid out within the available memory fall back to plain text.
 
 - **Left/Right** or side **Up/Down** — previous / next page
+- **Power** — next or previous page too, when its Short Press is set to page forward or back (Settings → Controls → Button Actions → Power), as in the book
 - **Confirm** — look the same word up in the next installed dictionary, cycling through them. Only offered when more than one dictionary is installed; the current one is named to the right of the headword. The choice is remembered, so later lookups use it too.
 - **Back** — return to word selection
 

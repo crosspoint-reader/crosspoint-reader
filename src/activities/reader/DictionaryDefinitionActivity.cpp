@@ -257,19 +257,6 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  const auto nextPage = [this] {
-    if (currentPage + 1 < totalPages) {
-      currentPage++;
-      requestUpdate();
-    }
-  };
-  const auto prevPage = [this] {
-    if (currentPage > 0) {
-      currentPage--;
-      requestUpdate();
-    }
-  };
-
   // A definition long enough to page turns by tapping the two halves of its text, the way a book
   // page does. Bounded to the body rectangle rather than the reader's full-height zones: this
   // screen draws a hint strip, and full-height zones would claim the taps meant for it.
@@ -281,7 +268,7 @@ void DictionaryDefinitionActivity::loop() {
     const BodyArea body = bodyArea();
     switch (TapZones::halfOfBand(tapX, tapY, body.x, body.y, body.width, body.height)) {
       case TapZones::Half::Previous:
-        prevPage();
+        previousPage();
         return;
       case TapZones::Half::Next:
         nextPage();
@@ -291,8 +278,49 @@ void DictionaryDefinitionActivity::loop() {
     }
   }
 
-  buttonNavigator.onNext(nextPage);
-  buttonNavigator.onPrevious(prevPage);
+  buttonNavigator.onNext([this] { nextPage(); });
+  buttonNavigator.onPrevious([this] { previousPage(); });
+}
+
+void DictionaryDefinitionActivity::nextPage() {
+  if (currentPage + 1 < totalPages) {
+    currentPage++;
+    requestUpdate();
+  }
+}
+
+void DictionaryDefinitionActivity::previousPage() {
+  if (currentPage > 0) {
+    currentPage--;
+    requestUpdate();
+  }
+}
+
+// Power set to turn pages turned them in the book but did nothing here: a reader-scoped action
+// reaches no screen but the reader, and the raw Power press that falls through instead is one this
+// screen has no use for. Taken only from Power -- the front and side buttons already page here, and
+// taking their configured page action as well would turn twice per press.
+//
+// Based on crosspoint-reader PR #3361 (Amin Alaee, @aminalaee), reworked to take the configured
+// action through the shared dispatch instead of reading the Power setting here.
+bool DictionaryDefinitionActivity::takesButtonAction(const CrossPointSettings::BUTTON_ACTION action,
+                                                     const MappedInputManager::Button button) const {
+  using BA = CrossPointSettings::BUTTON_ACTION;
+  return button == MappedInputManager::Button::Power && (action == BA::BTN_PAGE_FORWARD || action == BA::BTN_PAGE_BACK);
+}
+
+void DictionaryDefinitionActivity::onButtonAction(const CrossPointSettings::BUTTON_ACTION action) {
+  using BA = CrossPointSettings::BUTTON_ACTION;
+  switch (action) {
+    case BA::BTN_PAGE_FORWARD:
+      nextPage();
+      break;
+    case BA::BTN_PAGE_BACK:
+      previousPage();
+      break;
+    default:
+      break;
+  }
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,

@@ -1974,11 +1974,14 @@ void loop() {
     // (button, pressType) event fall through to the activity instead. The predicate is
     // shared with the gesture path, which needs the same answer for the same reason.
     //
-    // "In the reader" is currentIsReaderActivity(), the reader ON TOP — the same test
-    // dispatchButtonAction() makes. isReaderActivity() also answers true under a screen opened
+    // "In the reader" is currentIsReaderActivity(), the reader ON TOP — the test
+    // currentTakesButtonAction() starts from. isReaderActivity() also answers true under a screen opened
     // from the reader (its menu, TOC, starred pages), where the action would be claimed and then
     // dropped: in landscape the printed-page dialog lost its Double (±10) that way, because its
     // digit buttons are the front Left/Right and those carry a reader-scoped double by default.
+    //
+    // The one exception is a screen that opts in for a button it has no use for of its own: the
+    // dictionary definition takes the page turns configured on Power, a button it otherwise ignores.
     const auto isReaderScopedAction = [](const uint8_t a) { return CrossPointSettings::isReaderScopedAction(a); };
     // Executes one resolved action. Extracted from the button loop below so the
     // gesture path runs exactly the same code: a gesture bound to "Reader Menu"
@@ -2138,8 +2141,10 @@ void loop() {
     while (buttonEventManager.consumeEvent(ev)) {
       const uint8_t action = actionFor(ev);
       // Fall through to the activity when the event has no global effect here: either an
-      // explicit Default mapping, or a reader-scoped action while not in the reader.
-      if (action == BA::BTN_DEFAULT || (isReaderScopedAction(action) && !activityManager.currentIsReaderActivity())) {
+      // explicit Default mapping, or a reader-scoped action while not in the reader -- unless the
+      // screen on top takes that action from this button (Activity::takesButtonAction()).
+      if (action == BA::BTN_DEFAULT || (isReaderScopedAction(action) && !activityManager.currentTakesButtonAction(
+                                                                            static_cast<BA>(action), ev.button))) {
         defaultEvents.push_back(ev);
         continue;
       }

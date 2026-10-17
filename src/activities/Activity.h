@@ -138,6 +138,13 @@ class Activity {
   // Non-reader activities can ignore this (default is no-op).
   virtual void onButtonAction(CrossPointSettings::BUTTON_ACTION) {}
 
+  // Whether a reader-scoped `action` configured on `button` comes here through onButtonAction()
+  // although this is not the reader. Off that screen the press normally falls through raw, so the
+  // screen's own use of the button wins (see main.cpp) -- which leaves a button it has no use for
+  // doing nothing. A paginated screen opened from the reader opts in for the page turns on such a
+  // button, so a Power button set to turn pages turns its pages too.
+  virtual bool takesButtonAction(CrossPointSettings::BUTTON_ACTION, MappedInputManager::Button) const { return false; }
+
   // A manual force refresh (a button or gesture bound to Force Refresh) while this activity is on
   // top. Return true when the activity repaints itself in `mode`; false lets main.cpp re-flush the
   // displayed frame as it stands. Override when that frame is more than the B/W buffer -- an
