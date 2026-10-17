@@ -654,6 +654,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            }),
             v.end());
   }
+  // Home-key boards use the Home button actions instead; the Picco has no
+  // usable Confirm key. UI-only: persistence keeps the key for migration.
+  if (!forPersistence && (BoardConfig::hasHomeKey() || BoardConfig::isPicco())) {
+    v.erase(
+        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_LONG_PRESS_MENU; }),
+        v.end());
+  }
   // Frontlit and lightless variants of a board share one binary (EEGO A4);
   // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
   // has not run at load time, so persistence must keep the key (forPersistence).
