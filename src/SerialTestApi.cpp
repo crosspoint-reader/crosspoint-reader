@@ -17,15 +17,17 @@
 #include <string>
 
 #include "BootDiagnostics.h"
+#include "ButtonEventManager.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "SettingsByKey.h"
-#include "SettingsList.h"
+#include "TouchUi.h"  // CP_TOUCH_UI
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
 #include "activities/home/LibraryTab.h"
 #include "util/Dictionary.h"
+#include "util/IdleGate.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SerialCommandGrammar.h"
 
@@ -34,9 +36,6 @@ namespace SerialTestApi {
 namespace {
 
 using SerialCommandGrammar::appendField;
-using SerialCommandGrammar::appendValue;
-
-GfxRenderer* testRenderer = nullptr;
 
 // ---- Output ---------------------------------------------------------------------------------
 
@@ -60,27 +59,25 @@ bool writeAll(const uint8_t* data, const size_t len, const unsigned long stallMs
   return true;
 }
 
-// A reply waits up to 2 s for the host; an event line (sent unasked once EVENTS:ON) only 50 ms,
-// so a host that enabled events and went away cannot hold the loop up.
-constexpr unsigned long kReplyStallMs = 2000;
-constexpr unsigned long kEventStallMs = 50;
-
-void writeLine(const std::string_view text, const unsigned long stallMs = kReplyStallMs) {
-  if (writeAll(reinterpret_cast<const uint8_t*>(text.data()), text.size(), stallMs)) {
-    const uint8_t newline = '\n';
-    writeAll(&newline, 1, stallMs);
-  }
+bool writeText(const std::string_view text, const unsigned long stallMs) {
+  return writeAll(reinterpret_cast<const uint8_t*>(text.data()), text.size(), stallMs);
 }
 
-// A reply short enough for a stack buffer (anything with a path or a label goes through a
-// std::string and writeLine() instead).
+// A reply waits up to 2 s for the host to read it.
+constexpr unsigned long kReplyStallMs = 2000;
+
+// One reply line: `head`, then `tail` (an argument echoed back), then the line end.
+void reply(const std::string_view head, const std::string_view tail = {}, const unsigned long stallMs = kReplyStallMs) {
+  if (writeText(head, stallMs) && writeText(tail, stallMs)) writeText("\n", stallMs);
+}
+
 void replyf(const char* format, ...) {
-  char line[160];
+  char line[96];
   va_list args;
   va_start(args, format);
   const int n = vsnprintf(line, sizeof(line), format, args);
   va_end(args);
-  if (n > 0) writeLine(std::string_view(line, std::min(static_cast<size_t>(n), sizeof(line) - 1)));
+  if (n > 0) reply(std::string_view(line, std::min(static_cast<size_t>(n), sizeof(line) - 1)));
 }
 
 std::string_view trim(std::string_view text) {
@@ -162,26 +159,41 @@ uint8_t buildTail = 0;
 
 // ---- State shared by the commands and service() ---------------------------------------------
 
+GfxRenderer* testRenderer = nullptr;
 bool eventsOn = false;
 uint32_t reportedActivity = 0;
 uint32_t reportedPopup = 0;
+// An event line (sent unasked once EVENTS:ON) waits only 50 ms, so a host that enabled events and
+// went away cannot hold the loop up.
+constexpr unsigned long kEventStallMs = 50;
 
-struct IdleWait {
-  bool active = false;
-  bool screenOnly = false;
-  uint32_t startMs = 0;
-  uint32_t timeoutMs = 0;
-  uint32_t quietSinceMs = 0;
-  bool quiet = false;
-  const char* lastBusy = "settling";  // nothing was busy, but not for kIdleQuietMs yet
-};
-IdleWait idleWait;
-// How long nothing may be busy before CMD:IDLE answers: longer than the gaps between the steps of
-// one piece of work (a press handled on the next pass, its render queued at the end of that pass,
-// a reader build slice per pass).
-constexpr uint32_t kIdleQuietMs = 250;
+IdleGate idleGate;
+bool idleScreenOnly = false;
 constexpr uint32_t kIdleDefaultTimeoutMs = 10000;
 constexpr uint32_t kIdleMaxTimeoutMs = 600000;
+
+// The last command meant to change the screen, which CMD:IDLE waits to see through (IdleGate).
+// Input: a press or touch, handed over once HalGPIO has delivered it and the classifier is done
+// with it. Screen: an ACT, handed over once the activity on top has changed.
+enum class Effect : uint8_t { Input, Screen };
+Effect effect = Effect::Input;
+uint32_t effectActivityBase = 0;
+
+void noteEffect(const Effect kind) {
+  effect = kind;
+  effectActivityBase = activityManager.activityChangeCount();
+  idleGate.noteEffect();
+}
+
+bool effectHandled() {
+  switch (effect) {
+    case Effect::Input:
+      return !gpio.injectedInputPending() && !globalButtonEvents().isMidGesture();
+    case Effect::Screen:
+      return activityManager.activityChangeCount() != effectActivityBase;
+  }
+  return true;
+}
 
 PowerRequest powerRequest = PowerRequest::None;
 
@@ -192,7 +204,7 @@ void cmdButton(const std::string_view arg) {
   std::string_view name;
   PressKind kind = PressKind::Short;
   if (!SerialCommandGrammar::parseButtonArg(arg, name, kind)) {
-    writeLine(std::string("BTN_ERROR:bad press ") + std::string(arg));
+    reply("BTN_ERROR:bad press ", arg);
     return;
   }
   struct NamedButton {
@@ -214,7 +226,8 @@ void cmdButton(const std::string_view arg) {
           // Holding power sleeps the device, and that is main.cpp's hold timer reading the live
           // pin, which an injected press never reaches. Do what the hold does.
           powerRequest = PowerRequest::Sleep;
-          break;
+          reply("BTN_OK");
+          return;
         }
         gpio.injectPress(button.index, /*longPress=*/true);
         break;
@@ -229,10 +242,11 @@ void cmdButton(const std::string_view arg) {
         break;
       }
     }
-    writeLine("BTN_OK");
+    noteEffect(Effect::Input);
+    reply("BTN_OK");
     return;
   }
-  writeLine(std::string("BTN_ERROR:unknown button ") + std::string(name));
+  reply("BTN_ERROR:unknown button ", name);
 }
 
 // ---- ACT ------------------------------------------------------------------------------------
@@ -240,12 +254,12 @@ void cmdButton(const std::string_view arg) {
 bool openReader(const std::string_view arg) {
   SerialCommandGrammar::ReaderTarget target;
   if (!SerialCommandGrammar::parseReaderTarget(arg, target)) {
-    writeLine(std::string("ACT_ERROR:bad position ") + std::string(arg));
+    reply("ACT_ERROR:bad position ", arg);
     return false;
   }
   std::string path(target.path);
   if (!Storage.exists(path.c_str())) {
-    writeLine("ACT_ERROR:no such file " + path);
+    reply("ACT_ERROR:no such file ", path);
     return false;
   }
   using Kind = SerialCommandGrammar::ReaderTarget::Kind;
@@ -274,53 +288,28 @@ bool openReader(const std::string_view arg) {
   return true;
 }
 
-// SettingsActivity's tabs, in its categoryNames order.
-bool settingsTab(const std::string_view name, int& tab) {
-  static constexpr const char* kTabs[] = {"DISPLAY", "READER", "CONTROLS", "SYSTEM"};
-  for (int i = 0; i < static_cast<int>(sizeof(kTabs) / sizeof(kTabs[0])); ++i) {
-    if (name == kTabs[i]) {
-      tab = i;
-      return true;
-    }
+// A keyword's position in `names`, or -1.
+int indexOf(const std::string_view name, const char* const* names, const int count) {
+  for (int i = 0; i < count; ++i) {
+    if (name == names[i]) return i;
   }
-  return SerialCommandGrammar::parseInt(name, tab) && tab >= 0 && tab < 4;
-}
-
-bool libraryTab(const std::string_view name, LibraryTab& tab) {
-  struct NamedTab {
-    const char* name;
-    LibraryTab tab;
-  };
-  static constexpr NamedTab kTabs[] = {{"BOOKS", LibraryTab::Books},
-                                       {"RECENT", LibraryTab::Recent},
-                                       {"NEW", LibraryTab::New},
-                                       {"AUTHORS", LibraryTab::Authors}};
-  for (const NamedTab& named : kTabs) {
-    if (name == named.name) {
-      tab = named.tab;
-      return true;
-    }
-  }
-  return false;
+  return -1;
 }
 
 // CMD:ACT:DICT:<word>. The dictionary screen's lookup without the screen: open the configured
 // dictionary, build its index if it needs one, look the word up, and say what came of it.
 void lookUpWord(const std::string_view wordView) {
   if (wordView.empty()) {
-    writeLine("DICT_ERROR:no word");
+    reply("DICT_ERROR:no word");
     return;
   }
   const std::string text(wordView);  // not `word`: Arduino.h typedefs that
   const char* dictionaryName = SETTINGS.dictionaryName;
-  std::string reply = "DICT:result=";
-  const char* outcome = nullptr;
+  const char* outcome = "no_dictionary";
   std::string definition;
   std::string headword;
   bool found = false;
-  if (dictionaryName[0] == '\0') {
-    outcome = "no_dictionary";
-  } else {
+  if (dictionaryName[0] != '\0') {
     // The object carries scan buffers and an inflate window between lookups; on the heap for the
     // length of this command only, and makeUniqueNoThrow so a fragmented heap is an answer, not
     // an abort.
@@ -338,58 +327,83 @@ void lookUpWord(const std::string_view wordView) {
     }
   }
   Dictionary::logLookup(dictionaryName, text.c_str(), outcome, found ? headword.c_str() : nullptr);
-  reply += outcome;
-  appendField(reply, "dict", dictionaryName);
-  appendField(reply, "word", text);
+  std::string line = "DICT:result=";
+  line += outcome;
+  appendField(line, "dict", dictionaryName);
+  appendField(line, "word", text);
   if (found) {
-    appendField(reply, "headword", headword);
-    appendField(reply, "bytes", static_cast<long>(definition.size()));
+    appendField(line, "headword", headword);
+    appendField(line, "bytes", static_cast<long>(definition.size()));
   }
-  writeLine(reply);
+  reply(line);
 }
 
 void cmdActivity(const std::string_view arg) {
   std::string_view target;
   std::string_view rest;
   splitHead(arg, target, rest);
-  if (target == "HOME") {
-    activityManager.goHome();
-  } else if (target == "READER") {
-    if (!openReader(rest)) return;
-  } else if (target == "SETTINGS") {
-    int tab = 0;
-    if (!rest.empty() && !settingsTab(rest, tab)) {
-      writeLine(std::string("ACT_ERROR:unknown settings tab ") + std::string(rest));
-      return;
+  static constexpr const char* kTargets[] = {"HOME",    "READER", "SETTINGS",      "BOOKMARKS",   "FILES",
+                                             "LIBRARY", "DICT",   "FILE_TRANSFER", "USB_TRANSFER"};
+  constexpr int kTargetCount = 9;
+  switch (indexOf(target, kTargets, kTargetCount)) {
+    case 0:
+      activityManager.goHome();
+      break;
+    case 1:
+      if (!openReader(rest)) return;
+      break;
+    case 2: {
+      int tab = 0;
+      // SettingsActivity's tabs, in its categoryNames order, or their numbers.
+      static constexpr const char* kTabs[] = {"DISPLAY", "READER", "CONTROLS", "SYSTEM"};
+      if (!rest.empty()) {
+        tab = indexOf(rest, kTabs, 4);
+        if (tab < 0 && (!SerialCommandGrammar::parseInt(rest, tab) || tab < 0 || tab > 3)) {
+          reply("ACT_ERROR:unknown settings tab ", rest);
+          return;
+        }
+      }
+      activityManager.goToSettings(tab);
+      break;
     }
-    activityManager.goToSettings(tab);
-  } else if (target == "BOOKMARKS") {
-    activityManager.goToGlobalBookmarks();
-  } else if (target == "FILES") {
-    activityManager.goToLibrary(LibraryTab::Books, std::string(rest));
-  } else if (target == "LIBRARY") {
-    LibraryTab tab = LibraryTab::Books;
-    if (!rest.empty() && !libraryTab(rest, tab)) {
-      writeLine(std::string("ACT_ERROR:unknown library tab ") + std::string(rest));
-      return;
+    case 3:
+      activityManager.goToGlobalBookmarks();
+      break;
+    case 4:
+      activityManager.goToLibrary(LibraryTab::Books, std::string(rest));
+      break;
+    case 5: {
+      // LibraryTab's order.
+      static constexpr const char* kTabs[] = {"BOOKS", "RECENT", "NEW", "AUTHORS"};
+      const int tab = rest.empty() ? 0 : indexOf(rest, kTabs, 4);
+      if (tab < 0) {
+        reply("ACT_ERROR:unknown library tab ", rest);
+        return;
+      }
+      activityManager.goToLibrary(static_cast<LibraryTab>(tab));
+      break;
     }
-    activityManager.goToLibrary(tab);
-  } else if (target == "FILE_TRANSFER") {
-    activityManager.goToFileTransfer();
-  } else if (target == "USB_TRANSFER") {
-    // Leaving the transfer screen reboots (SerialTransferActivity::onExit), so replacing it with
-    // a fresh one would land on Home: already there is already done.
-    if (std::strcmp(activityManager.currentActivityName(), "SerialTransfer") != 0) {
+    case 6:
+      lookUpWord(rest);
+      return;
+    case 7:
+      activityManager.goToFileTransfer();
+      break;
+    case 8:
+      // Leaving the transfer screen reboots (SerialTransferActivity::onExit), so replacing it with
+      // a fresh one would land on Home: already there is already done.
+      if (std::strcmp(activityManager.currentActivityName(), "SerialTransfer") == 0) {
+        reply("ACT_OK");
+        return;
+      }
       activityManager.goToSerialTransfer();
-    }
-  } else if (target == "DICT") {
-    lookUpWord(rest);
-    return;
-  } else {
-    writeLine(std::string("ACT_ERROR:unknown activity ") + std::string(target));
-    return;
+      break;
+    default:
+      reply("ACT_ERROR:unknown activity ", target);
+      return;
   }
-  writeLine("ACT_OK");
+  noteEffect(Effect::Screen);
+  reply("ACT_OK");
 }
 
 // ---- STATE ----------------------------------------------------------------------------------
@@ -416,7 +430,7 @@ void cmdState(std::string_view /*arg*/) {
   appendField(state, "heap", static_cast<long>(ESP.getFreeHeap()));
   appendField(state, "maxblock",
               static_cast<long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT)));
-  writeLine(state);
+  reply(state);
 }
 
 // ---- IDLE / EVENTS --------------------------------------------------------------------------
@@ -427,33 +441,25 @@ void cmdIdle(const std::string_view arg) {
   std::string_view second;
   splitHead(arg, first, second);
   int timeout = static_cast<int>(kIdleDefaultTimeoutMs);
-  bool screenOnly = false;
   if (first == "SCREEN") {
-    screenOnly = true;
+    second = first;
   } else if (!first.empty() && (!SerialCommandGrammar::parseInt(first, timeout) || timeout <= 0)) {
-    writeLine(std::string("IDLE_ERROR:bad timeout ") + std::string(first));
+    reply("IDLE_ERROR:bad timeout ", first);
     return;
   }
-  if (second == "SCREEN") {
-    screenOnly = true;
-  } else if (!second.empty()) {
-    writeLine(std::string("IDLE_ERROR:bad mode ") + std::string(second));
+  if (!second.empty() && second != "SCREEN") {
+    reply("IDLE_ERROR:bad mode ", second);
     return;
   }
-  idleWait = IdleWait{};
-  idleWait.active = true;
-  idleWait.screenOnly = screenOnly;
-  idleWait.startMs = millis();
-  idleWait.timeoutMs = std::min(static_cast<uint32_t>(timeout), kIdleMaxTimeoutMs);
+  idleScreenOnly = !second.empty();
+  idleGate.begin(millis(), std::min(static_cast<uint32_t>(timeout), kIdleMaxTimeoutMs));
 }
 
 void cmdEvents(const std::string_view arg) {
-  if (arg == "ON") {
-    eventsOn = true;
-  } else if (arg == "OFF") {
-    eventsOn = false;
+  if (arg == "ON" || arg == "OFF") {
+    eventsOn = arg == "ON";
   } else if (!arg.empty()) {
-    writeLine(std::string("EVENTS_ERROR:expected ON or OFF, got ") + std::string(arg));
+    reply("EVENTS_ERROR:expected ON or OFF, got ", arg);
     return;
   }
   replyf("EVENTS_OK:%s", eventsOn ? "on" : "off");
@@ -461,195 +467,177 @@ void cmdEvents(const std::string_view arg) {
 
 // ---- GET / SET ------------------------------------------------------------------------------
 
-// Hands the settings row with this key to `use`; false when there is none.
-template <typename Use>
-bool withSetting(const std::string_view key, Use&& use) {
-  bool found = false;
-  forEachSetting([&](const SettingInfo& s) {
-    if (found || !s.key || key != s.key) return;
-    found = true;
-    use(s);
-  });
-  return found;
-}
-
 // "<key>=<value>[ label=<option label>]" for a GET or SET_OK reply.
 void appendSetting(std::string& line, const SettingInfo& s) {
   line += s.key;
   line += '=';
   int number = 0;
   if (SettingsByKey::readNumber(s, number)) {
-    line += std::to_string(number);
+    char digits[12];
+    snprintf(digits, sizeof(digits), "%d", number);
+    line += digits;
     if (s.type == SettingType::ENUM && number >= 0 && number < SettingsByKey::optionCount(s)) {
       appendField(line, "label", SettingsByKey::optionLabel(s, static_cast<uint8_t>(number)));
     }
-    return;
-  }
-  if (s.type != SettingType::STRING) {
+  } else if (s.type != SettingType::STRING) {
     line += "(none)";
-    return;
-  }
-  // Credentials never leave the device, as on the web settings page.
-  if (s.obfuscated) {
-    line += "(hidden)";
-    return;
-  }
-  if (s.stringGetter) {
-    appendValue(line, s.callStringGetter());
-  } else if (s.stringMaxLen > 0) {
-    appendValue(line, reinterpret_cast<const char*>(&SETTINGS) + s.stringOffset);
+  } else if (s.obfuscated) {
+    line += "(hidden)";  // credentials never leave the device, as on the web settings page
+  } else if (s.stringGetter) {
+    SerialCommandGrammar::appendValue(line, s.callStringGetter());
   } else {
-    appendValue(line, "");
+    SerialCommandGrammar::appendValue(
+        line, s.stringMaxLen > 0 ? reinterpret_cast<const char*>(&SETTINGS) + s.stringOffset : "");
   }
+}
+
+// GET and GET:* both go through SettingsByKey::visitKeyed(), one walk with the web settings API.
+void replyGetRow(const SettingInfo& s, void* /*ctx*/) {
+  std::string line = "GET:";
+  appendSetting(line, s);
+  reply(line);
 }
 
 void cmdGet(const std::string_view key) {
   if (key == "*") {
-    int count = 0;
-    forEachSetting([&](const SettingInfo& s) {
-      if (!s.key) return;
-      std::string line = "GET:";
-      appendSetting(line, s);
-      writeLine(line);
-      count++;
-    });
-    replyf("GET_END:%d", count);
-    return;
+    replyf("GET_END:%d", SettingsByKey::visitKeyed({}, &replyGetRow, nullptr));
+  } else if (key.empty() || SettingsByKey::visitKeyed(key, &replyGetRow, nullptr) == 0) {
+    reply("GET_ERROR:unknown key ", key);
   }
-  std::string line = "GET:";
-  if (!withSetting(key, [&](const SettingInfo& s) { appendSetting(line, s); })) {
-    writeLine(std::string("GET_ERROR:unknown key ") + std::string(key));
-    return;
+}
+
+struct SetRequest {
+  std::string_view value;
+  const char* error;     // the reply's head when the write did not happen
+  bool errorNamesValue;  // the error is about the value, not the key
+};
+
+void writeSetRow(const SettingInfo& s, void* ctx) {
+  auto& request = *static_cast<SetRequest*>(ctx);
+  SettingsByKey::WriteResult result = SettingsByKey::WriteResult::NotWritable;
+  if (s.type == SettingType::STRING) {
+    result = SettingsByKey::writeString(s, std::string(request.value));
+  } else {
+    int number = 0;
+    bool parsed = SerialCommandGrammar::parseInt(request.value, number);
+    // An ENUM row also takes one of its option labels, as GET shows them.
+    for (uint8_t i = 0; !parsed && s.type == SettingType::ENUM && i < SettingsByKey::optionCount(s); ++i) {
+      if (request.value == SettingsByKey::optionLabel(s, i)) {
+        number = i;
+        parsed = true;
+      }
+    }
+    if (!parsed) {
+      request.error = "SET_ERROR:bad value ";
+      request.errorNamesValue = true;
+      return;
+    }
+    result = SettingsByKey::writeNumber(s, number);
   }
-  writeLine(line);
+  switch (result) {
+    case SettingsByKey::WriteResult::Applied:
+      request.error = nullptr;
+      return;
+    case SettingsByKey::WriteResult::OutOfRange:
+      request.error = "SET_ERROR:out of range ";
+      request.errorNamesValue = true;
+      return;
+    case SettingsByKey::WriteResult::NotWritable:
+      request.error = "SET_ERROR:not writable ";
+      return;
+  }
+}
+
+void replySetRow(const SettingInfo& s, void* /*ctx*/) {
+  std::string line = "SET_OK:";
+  appendSetting(line, s);
+  reply(line);
 }
 
 void cmdSet(const std::string_view arg) {
   std::string_view key;
-  std::string_view value;
-  if (!SerialCommandGrammar::splitKeyValue(arg, key, value)) {
-    writeLine("SET_ERROR:expected <key>=<value>");
+  SetRequest request{{}, "SET_ERROR:unknown key ", false};
+  if (!SerialCommandGrammar::splitKeyValue(arg, key, request.value)) {
+    reply("SET_ERROR:expected <key>=<value>");
     return;
   }
-  std::string reply;
-  const bool known = withSetting(key, [&](const SettingInfo& s) {
-    SettingsByKey::WriteResult result = SettingsByKey::WriteResult::NotWritable;
-    if (s.type == SettingType::STRING) {
-      result = SettingsByKey::writeString(s, std::string(value));
-    } else {
-      int number = 0;
-      bool parsed = SerialCommandGrammar::parseInt(value, number);
-      // An ENUM row also takes one of its option labels, as GET shows them.
-      for (uint8_t i = 0; !parsed && s.type == SettingType::ENUM && i < SettingsByKey::optionCount(s); ++i) {
-        if (value == SettingsByKey::optionLabel(s, i)) {
-          number = i;
-          parsed = true;
-        }
-      }
-      if (!parsed) {
-        reply = "SET_ERROR:not a number or option " + std::string(value);
-        return;
-      }
-      result = SettingsByKey::writeNumber(s, number);
-    }
-    switch (result) {
-      case SettingsByKey::WriteResult::Applied:
-        reply = "SET_OK:";
-        break;
-      case SettingsByKey::WriteResult::OutOfRange:
-        reply = "SET_ERROR:out of range " + std::string(value);
-        return;
-      case SettingsByKey::WriteResult::NotWritable:
-        reply = "SET_ERROR:not writable " + std::string(key);
-        return;
-    }
-  });
-  if (!known) {
-    writeLine(std::string("SET_ERROR:unknown key ") + std::string(key));
-    return;
-  }
-  if (reply != "SET_OK:") {
-    writeLine(reply);
+  SettingsByKey::visitKeyed(key, &writeSetRow, &request);
+  if (request.error) {
+    reply(request.error, request.errorNamesValue ? request.value : key);
     return;
   }
   // As the web settings page does: settle the settings that depend on others, save, and read the
   // value back so the reply shows what was stored (a dependent setting may have moved it).
   SettingsByKey::commit();
-  withSetting(key, [&](const SettingInfo& s) { appendSetting(reply, s); });
-  writeLine(reply);
+  SettingsByKey::visitKeyed(key, &replySetRow, nullptr);
 }
 
 // ---- LOG ------------------------------------------------------------------------------------
 
-constexpr const char* kLevelTags[] = {"ERR", "INF", "DBG", "TRC"};
-
 void cmdLog(const std::string_view arg) {
+  static constexpr const char* kLevelTags[] = {"ERR", "INF", "DBG", "TRC"};
   uint8_t level = 0;
   if (!arg.empty()) {
     if (!SerialCommandGrammar::parseLogLevel(arg, level)) {
-      writeLine(std::string("LOG_ERROR:unknown level ") + std::string(arg));
+      reply("LOG_ERROR:unknown level ", arg);
       return;
     }
     setLogWireLevel(level);
   }
   constexpr int kCompiled = LOG_LEVEL < 3 ? LOG_LEVEL : 3;
-  replyf("LOG_OK:level=%s compiled=%s", kLevelTags[logWireLevel() < 3 ? logWireLevel() : 3], kLevelTags[kCompiled]);
+  replyf("LOG_OK:level=%s compiled=%s", kLevelTags[std::min<int>(logWireLevel(), 3)], kLevelTags[kCompiled]);
 }
 
 // ---- TOUCH / SWIPE --------------------------------------------------------------------------
 
-// Logical (x, y) on the screen as drawn now -> the touch HAL's normalized panel coordinates.
-bool toTouch(const int x, const int y, float& nx, float& ny) {
-  if (!testRenderer) return false;
-  if (x < 0 || y < 0 || x >= testRenderer->getScreenWidth() || y >= testRenderer->getScreenHeight()) return false;
-  testRenderer->logicalToTap(x, y, nx, ny);
-  return true;
+// CMD:TOUCH:<x>,<y> (2 numbers) or CMD:SWIPE:<x1>,<y1>,<x2>,<y2> (4): logical screen pixels as drawn
+// now, mapped to the touch HAL's normalized panel coordinates and queued like a contact. Builds
+// for boards without a digitiser (CP_TOUCH_UI 0: X3, X4) only say so.
+void injectContact(const std::string_view arg, const size_t count, const char* ok) {
+#if CP_TOUCH_UI
+  if (!gpio.hasTouch() || !testRenderer) {
+    reply("TOUCH_ERROR:no touch panel");
+    return;
+  }
+  int xy[4];
+  float n[4];
+  bool onScreen = SerialCommandGrammar::parseIntList(arg, xy, count);
+  for (size_t i = 0; onScreen && i < count; i += 2) {
+    onScreen = xy[i] >= 0 && xy[i + 1] >= 0 && xy[i] < testRenderer->getScreenWidth() &&
+               xy[i + 1] < testRenderer->getScreenHeight();
+    if (onScreen) testRenderer->logicalToTap(xy[i], xy[i + 1], n[i], n[i + 1]);
+  }
+  if (!onScreen) {
+    reply("TOUCH_ERROR:not on screen ", arg);
+    return;
+  }
+  if (count == 2) {
+    gpio.injectTouch(n[0], n[1]);
+  } else {
+    gpio.injectSwipe(n[0], n[1], n[2], n[3]);
+  }
+  noteEffect(Effect::Input);
+  reply(ok);
+#else
+  (void)arg;
+  (void)count;
+  (void)ok;
+  reply("TOUCH_ERROR:no touch panel");
+#endif
 }
 
-void cmdTouch(const std::string_view arg) {
-  if (!gpio.hasTouch()) {
-    writeLine("TOUCH_ERROR:no touch panel");
-    return;
-  }
-  int xy[2];
-  float nx = 0.0f;
-  float ny = 0.0f;
-  if (!SerialCommandGrammar::parseIntList(arg, xy, 2) || !toTouch(xy[0], xy[1], nx, ny)) {
-    writeLine(std::string("TOUCH_ERROR:expected x,y on screen, got ") + std::string(arg));
-    return;
-  }
-  gpio.injectTouch(nx, ny);
-  writeLine("TOUCH_OK");
-}
+void cmdTouch(const std::string_view arg) { injectContact(arg, 2, "TOUCH_OK"); }
+void cmdSwipe(const std::string_view arg) { injectContact(arg, 4, "SWIPE_OK"); }
 
-void cmdSwipe(const std::string_view arg) {
-  if (!gpio.hasTouch()) {
-    writeLine("TOUCH_ERROR:no touch panel");
-    return;
-  }
-  int points[4];
-  float nx = 0.0f;
-  float ny = 0.0f;
-  float nxEnd = 0.0f;
-  float nyEnd = 0.0f;
-  if (!SerialCommandGrammar::parseIntList(arg, points, 4) || !toTouch(points[0], points[1], nx, ny) ||
-      !toTouch(points[2], points[3], nxEnd, nyEnd)) {
-    writeLine(std::string("TOUCH_ERROR:expected x1,y1,x2,y2 on screen, got ") + std::string(arg));
-    return;
-  }
-  gpio.injectSwipe(nx, ny, nxEnd, nyEnd);
-  writeLine("SWIPE_OK");
-}
-
-// ---- Power and the rest ---------------------------------------------------------------------
+// ---- Power ----------------------------------------------------------------------------------
 
 void cmdSleep(std::string_view /*arg*/) {
-  writeLine("SLEEP_OK");
+  reply("SLEEP_OK");
   powerRequest = PowerRequest::Sleep;
 }
 
 void cmdReboot(std::string_view /*arg*/) {
-  writeLine("REBOOT_OK");
+  reply("REBOOT_OK");
   powerRequest = PowerRequest::Reboot;
 }
 
@@ -660,7 +648,7 @@ void cmdScreenshot(std::string_view /*arg*/) { ScreenshotUtil::request(Screensho
 // tells a script it is complete.
 void cmdBootLog(std::string_view /*arg*/) {
   BootDiag::logSummary();
-  writeLine("BOOTLOG_OK");
+  reply("BOOTLOG_OK");
 }
 
 void cmdHelp(std::string_view arg);
@@ -671,19 +659,19 @@ struct Command {
   Handler run;
 };
 constexpr Command kCommands[] = {
-    {"BTN", &cmdButton},    {"ACT", &cmdActivity},    {"STATE", &cmdState}, {"SCREENSHOT", &cmdScreenshot},
-    {"IDLE", &cmdIdle},     {"EVENTS", &cmdEvents},   {"GET", &cmdGet},     {"SET", &cmdSet},
-    {"LOG", &cmdLog},       {"TOUCH", &cmdTouch},     {"SWIPE", &cmdSwipe}, {"SLEEP", &cmdSleep},
-    {"REBOOT", &cmdReboot}, {"BOOTLOG", &cmdBootLog}, {"HELP", &cmdHelp},
+    {"BTN", &cmdButton},      {"ACT", &cmdActivity}, {"STATE", &cmdState},   {"SCREENSHOT", &cmdScreenshot},
+    {"BOOTLOG", &cmdBootLog}, {"HELP", &cmdHelp},    {"IDLE", &cmdIdle},     {"EVENTS", &cmdEvents},
+    {"GET", &cmdGet},         {"SET", &cmdSet},      {"LOG", &cmdLog},       {"TOUCH", &cmdTouch},
+    {"SWIPE", &cmdSwipe},     {"SLEEP", &cmdSleep},  {"REBOOT", &cmdReboot},
 };
 
 void cmdHelp(std::string_view /*arg*/) {
-  std::string line = "HELP:";
+  writeText("HELP:", kReplyStallMs);
   for (const Command& command : kCommands) {
-    if (line.size() > 5) line += ' ';
-    line += command.name;
+    writeText(" ", kReplyStallMs);
+    writeText(command.name, kReplyStallMs);
   }
-  writeLine(line);
+  writeText("\n", kReplyStallMs);
 }
 
 // ---- service() helpers ----------------------------------------------------------------------
@@ -707,43 +695,42 @@ void serviceEvents() {
   }
   if (activity != reportedActivity) {
     reportedActivity = activity;
-    writeLine(std::string("EVT:ACT ") + activityManager.currentActivityName(), kEventStallMs);
+    reply("EVT:ACT ", activityManager.currentActivityName(), kEventStallMs);
   }
   if (popup.sequence != reportedPopup) {
     reportedPopup = popup.sequence;
-    writeLine(std::string("EVT:POPUP ") + popup.text, kEventStallMs);
+    reply("EVT:POPUP ", popup.text, kEventStallMs);
   }
   for (int i = 0; i < buildCount; ++i) {
     char line[48];
     snprintf(line, sizeof(line), "EVT:BUILD_DONE spine=%d pages=%u", builds[i].spine + 1,
              static_cast<unsigned>(builds[i].pages));
-    writeLine(line, kEventStallMs);
+    reply(line, {}, kEventStallMs);
   }
 }
 
 void serviceIdle() {
-  if (!idleWait.active) return;
-  const uint32_t now = millis();
-  const char* busy = activityManager.busyReason(/*includeBackground=*/!idleWait.screenOnly);
-  if (busy) {
-    idleWait.quiet = false;
-    idleWait.lastBusy = busy;
-  } else if (!idleWait.quiet) {
-    idleWait.quiet = true;
-    idleWait.quietSinceMs = now;
-  }
-  if (idleWait.quiet && now - idleWait.quietSinceMs >= kIdleQuietMs) {
-    idleWait.active = false;
-    replyf("IDLE:%lu", static_cast<unsigned long>(now - idleWait.startMs));
-  } else if (now - idleWait.startMs >= idleWait.timeoutMs) {
-    idleWait.active = false;
-    replyf("IDLE_TIMEOUT:%s", busy ? busy : idleWait.lastBusy);
+  // Nothing to follow most of the time: then the device is not sampled at all, which keeps the
+  // reader's lock attempt in hasPendingBackgroundWork() off the ordinary loop pass.
+  if (!idleGate.active()) return;
+  IdleGate::Sample sample;
+  sample.nowMs = millis();
+  sample.busy = activityManager.busyReason(/*includeBackground=*/idleGate.waiting() && !idleScreenOnly);
+  sample.effectHandled = effectHandled();
+  sample.renderPasses = activityManager.renderPassCount();
+  switch (idleGate.step(sample)) {
+    case IdleGate::Verdict::Waiting:
+      break;
+    case IdleGate::Verdict::Idle:
+      replyf("IDLE:%lu", static_cast<unsigned long>(idleGate.elapsedMs(sample.nowMs)));
+      break;
+    case IdleGate::Verdict::TimedOut:
+      reply("IDLE_TIMEOUT:", idleGate.reason());
+      break;
   }
 }
 
 }  // namespace
-
-void begin(GfxRenderer& renderer) { testRenderer = &renderer; }
 
 void handleLine(const std::string_view line) {
   constexpr std::string_view kPrefix = "CMD:";
@@ -758,22 +745,17 @@ void handleLine(const std::string_view line) {
       return;
     }
   }
-  writeLine(std::string("CMD_ERROR:unknown command ") + std::string(command));
-}
-
-void service() {
-  serviceEvents();
-  serviceIdle();
+  reply("CMD_ERROR:unknown command ", command);
 }
 
 void sendScreenshot(const uint8_t* frame, const uint32_t size, const int width, const int height, const bool busy) {
   if (busy) {
-    writeLine("SCREENSHOT_ERROR:busy");
+    reply("SCREENSHOT_ERROR:busy");
     return;
   }
   if (!frame) {
     // Framebuffers are released during the web server session — nothing to send.
-    writeLine("SCREENSHOT_ERROR:framebuffer released");
+    reply("SCREENSHOT_ERROR:framebuffer released");
     return;
   }
   replyf("SCREENSHOT_START:%d:%d:%lu", width, height, static_cast<unsigned long>(size));
@@ -781,10 +763,17 @@ void sendScreenshot(const uint8_t* frame, const uint32_t size, const int width, 
   // END marker must not be sent if the payload was cut short: a truncated frame with a valid
   // trailer looks complete to the host. 15 s without progress matches SerialTransferDevice.
   if (writeAll(frame, size, 15000)) {
-    writeLine("SCREENSHOT_END");
+    reply("SCREENSHOT_END");
   } else {
-    writeLine("SCREENSHOT_ERROR:transfer stalled");
+    reply("SCREENSHOT_ERROR:transfer stalled");
   }
+}
+
+void begin(GfxRenderer& renderer) { testRenderer = &renderer; }
+
+void service() {
+  serviceEvents();
+  serviceIdle();
 }
 
 void notePopup(const char* text) { noteText(popupProbe, -1, text); }

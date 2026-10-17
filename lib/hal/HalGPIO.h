@@ -202,6 +202,9 @@ class HalGPIO {
 
   // Loop-side snapshot refreshed by update(); only the loop task reads/writes these.
   uint8_t snapState_ = 0;
+  // Counts of injected inputs, and of those update() has handed over; under inputMux_.
+  uint32_t injectedInputs_ = 0;
+  uint32_t deliveredInputs_ = 0;
   uint8_t snapPressed_ = 0;
   uint8_t snapReleased_ = 0;
   TouchEvent snapTouchEvent_{};
@@ -299,6 +302,9 @@ class HalGPIO {
   // see it. No-op on a board without a touch panel.
   void injectTouch(float nx, float ny);
   void injectSwipe(float nx, float ny, float nxEnd, float nyEnd);
+  // True while something injected (a press or a touch above) has not yet been handed to the loop
+  // by update(). The serial CMD:IDLE uses it to know a press it sent has reached the screen.
+  bool injectedInputPending() const;
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;

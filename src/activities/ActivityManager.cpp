@@ -758,13 +758,9 @@ const char* ActivityManager::busyReason(const bool includeBackground) {
       RenderLock::peek() || renderer.isRefreshPending()) {
     return "render";
   }
-  // Between taking its notification and taking the mutex the render task is ready to run but
-  // shows none of the above. Parked on its notification it is blocked (eSuspended when the wait
-  // has no timeout, in this FreeRTOS).
-  if (renderTaskHandle) {
-    const eTaskState state = eTaskGetState(renderTaskHandle);
-    if (state != eBlocked && state != eSuspended) return "render";
-  }
+  // Between taking its notification and taking the mutex the render task shows none of the above
+  // for an instant; CMD:IDLE's quiet window (IdleGate) is long enough to see the pass that follows.
+  if (currentActivity && currentActivity->hasPendingScreenWork()) return "render";
   if (includeBackground && currentActivity && currentActivity->hasPendingBackgroundWork()) return "background";
   return nullptr;
 }

@@ -116,14 +116,11 @@ bool parseIntList(std::string_view text, int* out, const size_t count) {
 }
 
 bool parseLogLevel(const std::string_view text, uint8_t& level) {
-  struct Name {
-    const char* tag;
-    const char* longName;
-  };
-  static constexpr Name kLevels[] = {{"ERR", "ERROR"}, {"INF", "INFO"}, {"DBG", "DEBUG"}, {"TRC", "TRACE"}};
-  for (uint8_t i = 0; i < sizeof(kLevels) / sizeof(kLevels[0]); ++i) {
-    if (equalsIgnoreCase(text, kLevels[i].tag) || equalsIgnoreCase(text, kLevels[i].longName)) {
-      level = i;
+  // Tag and long name per level, in level order: "ERR" or "ERROR" is 0.
+  static constexpr const char* kNames[] = {"ERR", "ERROR", "INF", "INFO", "DBG", "DEBUG", "TRC", "TRACE"};
+  for (uint8_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]); ++i) {
+    if (equalsIgnoreCase(text, kNames[i])) {
+      level = i / 2;
       return true;
     }
   }

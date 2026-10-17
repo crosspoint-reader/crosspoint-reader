@@ -145,17 +145,19 @@ bool SerialTransferActivity::continueTextCommand() {
   while (device_.available() > 0) {
     const int b = device_.readByte();
     if (b < 0) break;
-    const char c = static_cast<char>(b);
-    const bool complete = textLine_.feed(c);
-    if (complete || c == '\n' || c == '\r') {  // a line too long for the buffer also ends here
+    if (b == '\n' || b == '\r') {
       readingTextCommand_ = false;
-      if (complete) SerialTestApi::handleLine(textLine_.take());
+      // One that overflowed the buffer is dropped: a cut command could act differently.
+      if (textLineLength_ < kTextLineBytes) SerialTestApi::handleLine(std::string_view(textLine_, textLineLength_));
+      textLineLength_ = 0;
       return true;
     }
+    if (textLineLength_ < kTextLineBytes) textLine_[textLineLength_] = static_cast<char>(b);
+    if (textLineLength_ <= kTextLineBytes) textLineLength_++;
   }
   if (millis() - textCommandStartMs_ >= kTextCommandTimeoutMs) {
     LOG_DBG("SXF", "Dropped an unfinished CMD: line");
-    textLine_.reset();
+    textLineLength_ = 0;
     readingTextCommand_ = false;
     return true;
   }

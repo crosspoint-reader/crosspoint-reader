@@ -1194,6 +1194,7 @@ class EpubReaderActivity final : public Activity {
   // section loaded " chapter=<toc title> chapter_page=<n>/<total>[~] percent=<book %>" (1-based;
   // 0/0 while no section is loaded; ~ = the total is an estimate).
   void appendDebugState(std::string& out) const override;
+  bool hasPendingScreenWork() override;
   bool hasPendingBackgroundWork() override;
   bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;

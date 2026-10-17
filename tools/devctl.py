@@ -125,7 +125,21 @@ class Device:
         data, self.buf = self.buf[:size], self.buf[size:]
         return data
 
+    def drain(self):
+        """Log and drop the lines already received, so a late reply to an earlier command (one that
+        timed out here) cannot pass for the reply to the next. A partial line is kept."""
+        try:
+            waiting = self.ser.in_waiting
+        except (serial.SerialException, OSError):
+            waiting = 0
+        if waiting:
+            self.buf += self._read(waiting)
+        while (nl := self.buf.find(b"\n")) >= 0:
+            line, self.buf = self.buf[:nl], self.buf[nl + 1:]
+            self.note(line.decode("utf-8", errors="replace").rstrip("\r"))
+
     def send(self, text):
+        self.drain()
         self.note(f">>> CMD:{text}")
         self.ser.write(("CMD:" + text + "\n").encode())
 
@@ -164,6 +178,12 @@ class Device:
         return "no reply"
 
 
+def idle_timeout(arg):
+    """Seconds to wait for the reply to CMD:IDLE<arg>: the device's own timeout and some slack."""
+    first = arg.split(":")[0] if arg else ""
+    return (int(first) if first.isdigit() else 10000) / 1000 + 5
+
+
 def run(device, steps, rotate, keep_going=False):
     state = {}
     all_ok = True
@@ -172,7 +192,8 @@ def run(device, steps, rotate, keep_going=False):
         ok = True
         if kind == "cmd":
             until = re.compile(r"^GET_END") if rest == "GET:*" else None
-            reply = device.command(rest, until=until)
+            timeout = idle_timeout(rest[5:]) if rest.startswith("IDLE") else 20
+            reply = device.command(rest, timeout=timeout, until=until)
             print(reply if reply else f"NO REPLY to {rest}")
             ok = bool(reply) and not FAILED.search(reply)
         elif kind == "state":
@@ -187,9 +208,7 @@ def run(device, steps, rotate, keep_going=False):
             ok = value is not None and re.fullmatch(pattern, value) is not None
             print(f"check {key}={value!r} ~ /{pattern}/: {'ok' if ok else 'FAILED'}")
         elif kind == "idle":
-            parts = rest.split(":") if rest else []
-            timeout_ms = int(parts[0]) if parts and parts[0].isdigit() else 10000
-            reply = device.command("IDLE" + (":" + rest if rest else ""), timeout=timeout_ms / 1000 + 5)
+            reply = device.command("IDLE" + (":" + rest if rest else ""), timeout=idle_timeout(rest))
             print(reply if reply else "NO REPLY to IDLE")
             ok = bool(reply) and reply.startswith("IDLE:")
         elif kind == "shot":

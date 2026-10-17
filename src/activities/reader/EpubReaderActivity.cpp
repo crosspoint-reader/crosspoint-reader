@@ -6040,26 +6040,37 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
 
 void EpubReaderActivity::appendDebugState(std::string& out) const {
   using SerialCommandGrammar::appendField;
+  // 1-based throughout, as the screen counts: spine item n of the book, page n of that item.
+  char number[24];
   appendField(out, "book", epub ? epub->getPath() : std::string("none"));
-  appendField(out, "spine",
-              std::to_string(currentSpineIndex + 1) + "/" + std::to_string(epub ? epub->getSpineItemsCount() : 0));
-  const int page = section ? section->currentPage + 1 : 0;
-  const int pages = section ? section->pageCount : 0;
-  appendField(out, "page", std::to_string(page) + "/" + std::to_string(pages));
+  snprintf(number, sizeof(number), "%d/%d", currentSpineIndex + 1, epub ? epub->getSpineItemsCount() : 0);
+  appendField(out, "spine", number);
+  snprintf(number, sizeof(number), "%d/%d", section ? section->currentPage + 1 : 0, section ? section->pageCount : 0);
+  appendField(out, "page", number);
   std::string family;
   resolveReaderFont(&family);
   appendField(out, "font", family);
   appendField(out, "font_pt",
               static_cast<long>(bookFontSizeOverride >= 0 ? bookFontSizeOverride : SETTINGS.fontPointSize));
   if (!epub || !section) return;
-  // What the status bar works from, whatever parts of it the settings show.
+  // What the status bar shows, whichever parts of it the settings turn on: the chapter title, the
+  // page within the whole TOC chapter (which can span several spine items, so it can differ from
+  // page=), and the book percentage.
   appendField(out, "chapter", chapterTitle());
   const ChapterPageSpan::Display chapter = chapterPageDisplay();
-  appendField(out, "chapter_page",
-              std::to_string(chapter.page) + "/" + std::to_string(chapter.total) + (chapter.approximate ? "~" : ""));
-  char percent[8];
-  snprintf(percent, sizeof(percent), "%.0f", statusBarBookPercent());
-  appendField(out, "percent", percent);
+  snprintf(number, sizeof(number), "%d/%d%s", chapter.page, chapter.total, chapter.approximate ? "~" : "");
+  appendField(out, "chapter_page", number);
+  snprintf(number, sizeof(number), "%.0f", statusBarBookPercent());
+  appendField(out, "percent", number);
+}
+
+bool EpubReaderActivity::hasPendingScreenWork() {
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return true;  // a render pass or a build slice has it: busy by definition
+  // The section on screen still being built (its pages appear as they are laid out), a page turn
+  // handed to the render task, a deferred anti-aliasing redraw of the page on screen.
+  return !section || readerPhase_ != ReaderPhase::READING || section->hasActiveBuild() || usePreRenderedBuffer ||
+         pendingGrayscale_.active;
 }
 
 bool EpubReaderActivity::hasPendingBackgroundWork() {

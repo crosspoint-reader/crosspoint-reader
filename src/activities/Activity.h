@@ -111,10 +111,15 @@ class Activity {
   // Default: nothing beyond the activity's name, which the caller already writes.
   virtual void appendDebugState(std::string& /*out*/) const {}
 
-  // True while work the screen does on its own, without input, is running or about to start: a
-  // section build, a cover decode. The serial CMD:IDLE waits for it to end. Called from the loop
-  // task WITHOUT the render lock; an activity that must lock to answer should Try and report busy
-  // when it cannot. Not skipLoopDelay(): the transfer screens hold that for their whole life.
+  // For the serial CMD:IDLE (SerialTestApi). Both are called from the loop task WITHOUT the render
+  // lock; an activity that must lock to answer should Try and report busy when it cannot.
+  //
+  // True while what is on screen is about to change without input: the reader's page still being
+  // built, a page turn on its way to the panel. CMD:IDLE:SCREEN waits for it.
+  virtual bool hasPendingScreenWork() { return false; }
+  // True while work the screen does on its own is running or about to start: a look-ahead section
+  // build, a cover decode. A full CMD:IDLE waits for it too. Not skipLoopDelay(): the transfer
+  // screens hold that for their whole life.
   virtual bool hasPendingBackgroundWork() { return false; }
 
   // Called while this activity is buried on the stack, before a download that needs the heap in

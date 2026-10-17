@@ -262,8 +262,9 @@ class ActivityManager {
   const char* currentActivityName() const;
   // What keeps the device from being idle, or nullptr when nothing does: "transition" (an
   // activity change is queued), "input" (a press or gesture not yet handled), "render" (a frame
-  // queued, drawing or still refreshing), "background" (Activity::hasPendingBackgroundWork()).
-  // `includeBackground` false asks only whether the screen has settled. Loop task only.
+  // queued, drawing or still refreshing, or Activity::hasPendingScreenWork()), "background"
+  // (Activity::hasPendingBackgroundWork()). `includeBackground` false asks only whether the screen
+  // has settled. Loop task only.
   const char* busyReason(bool includeBackground);
 
   // True when a reader-scoped `action` configured on `button` goes to the activity on top instead

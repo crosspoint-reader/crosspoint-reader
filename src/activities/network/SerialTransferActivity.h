@@ -4,7 +4,6 @@
 
 #include "SerialTransferDevice.h"
 #include "activities/Activity.h"
-#include "util/SerialLineBuffer.h"
 
 // USB serial file-transfer mode. Wire-compatible with CidVonHighwind/MicroReader
 // (https://github.com/CidVonHighwind/microreader): a host (its Calibre plugin or
@@ -52,7 +51,10 @@ class SerialTransferActivity final : public Activity {
   bool statusDirty_ = false;  // a new status message is waiting to be painted (in loop())
   // A "CMD:" line being read, and since when: one that never ends is dropped, so a host that sent
   // half a line cannot keep the transfer protocol from seeing its next message.
-  SerialLineBuffer textLine_;
+  // Commands here are short (a press, STATE, leaving); a longer line is dropped whole.
+  static constexpr size_t kTextLineBytes = 128;
+  char textLine_[kTextLineBytes] = {};
+  size_t textLineLength_ = 0;
   bool readingTextCommand_ = false;
   unsigned long textCommandStartMs_ = 0;
 };
