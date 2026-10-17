@@ -3,8 +3,8 @@
 Round-trip verification for compressed font headers.
 
 Parses each generated .h file in the given directory, identifies compressed fonts
-(those with a Groups array), decompresses each group (byte-aligned bitmap format),
-compacts to packed format, and verifies the data matches expected glyph sizes.
+(those with a Groups array), decompresses each group, compacts row-aligned 2-bit
+pixels (1-bit groups are already packed), and checks expected glyph sizes.
 
 Supports both contiguous-group fonts (Latin) and frequency-grouped fonts (CJK)
 with glyphToGroup mapping arrays.
@@ -107,6 +107,7 @@ def verify_font_file(filepath):
         return (os.path.basename(filepath), None, "uncompressed, skipping")
 
     font_name = groups_match.group(1)
+    is_2bit = 'mode: 2-bit' in content
 
     # Extract bitmap data
     bitmap_match = re.search(
@@ -195,8 +196,8 @@ def verify_font_file(filepath):
                     return (font_name, False, f"group {gi}, glyph {glyph_idx}: zero-size glyph dataLength {glyph['dataLength']} != expected 0")
                 continue
 
-            aligned_size = ((width + 3) // 4) * height
-            packed_size = math.ceil(width * height / 4)
+            packed_size = math.ceil(width * height / (4 if is_2bit else 8))
+            aligned_size = ((width + 3) // 4) * height if is_2bit else packed_size
 
             # Verify packed offset and size match glyph metadata
             if glyph['dataOffset'] != packed_offset:
@@ -213,7 +214,7 @@ def verify_font_file(filepath):
             aligned_glyph = decompressed[byte_aligned_offset:byte_aligned_offset + aligned_size]
 
             # Compact to packed and verify pixel values are valid (0-3 for 2-bit)
-            packed_glyph = compact_aligned_to_packed(aligned_glyph, width, height)
+            packed_glyph = compact_aligned_to_packed(aligned_glyph, width, height) if is_2bit else aligned_glyph
             if len(packed_glyph) != packed_size:
                 return (font_name, False, f"group {gi}, glyph {glyph_idx}: compacted size {len(packed_glyph)} != expected {packed_size}")
 
@@ -243,7 +244,7 @@ def main():
         print(f"Error: {font_dir} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    files = sorted(f for f in os.listdir(font_dir) if f.endswith('.h') and f != 'all.h')
+    files = sorted(f for f in os.listdir(font_dir) if f.endswith('.h') and f not in ('all.h', 'SharedFontTables.h'))
     passed = 0
     failed = 0
     skipped = 0
