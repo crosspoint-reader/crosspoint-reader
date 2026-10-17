@@ -1,4 +1,6 @@
 #pragma once
+#include <ChunkedVector.h>
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -21,12 +23,19 @@ class Section {
   struct BuildParams;
 
  private:
+  // Page byte-offsets, one per page: the build appends one per laid-out page, and a book that is
+  // one XHTML file runs to thousands. Chunked rather than a std::vector so that growing it past
+  // the build's reserve never asks for one ever-larger block (and aborts when it is not there):
+  // chunks of at most 256 entries, 1 KB, each allocated nothrow. 10000 is
+  // Page::MAX_PAGES_PER_SECTION (static_assert in Section.cpp).
+  using PageLut = ChunkedVector<uint32_t, 16, 256, 10000>;
+
   std::shared_ptr<Epub> epub;
   const int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
   FsFile file;
-  std::vector<uint32_t> lut;  // Cached page byte-offsets; loaded once, avoids per-page LUT seek
+  PageLut lut;  // Cached page byte-offsets; loaded once, avoids per-page LUT seek
   // Where the LUT sits in the cache file when `lut` could not be held (no heap block for it on a
   // long single-file book): page loads then read their offset from the file. 0 otherwise.
   uint32_t lutFileOffset_ = 0;

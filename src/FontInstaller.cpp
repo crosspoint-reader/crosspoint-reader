@@ -92,11 +92,12 @@ bool FontInstaller::validateCpfontFile(const char* path) {
   }
 
   uint8_t magic[CPFONT_MAGIC_LEN];
-  size_t bytesRead = file.read(magic, CPFONT_MAGIC_LEN);
+  // Signed: a failed read (-1) as a size_t passed the size check and left `magic` uninitialised.
+  const int bytesRead = file.read(magic, CPFONT_MAGIC_LEN);
   file.close();
 
-  if (bytesRead < CPFONT_MAGIC_LEN) {
-    LOG_ERR("FONT", "File too small: %s (%zu bytes)", path, bytesRead);
+  if (bytesRead < static_cast<int>(CPFONT_MAGIC_LEN)) {
+    LOG_ERR("FONT", "File too small or unreadable: %s (%d bytes)", path, bytesRead);
     return false;
   }
 

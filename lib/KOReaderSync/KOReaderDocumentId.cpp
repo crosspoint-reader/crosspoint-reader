@@ -261,20 +261,26 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
       continue;
     }
 
-    // Seek to offset
+    // A skipped or partial sample hashes a different file: the id would match no other device,
+    // and saveCachedHash() below would keep it until the book file changes. So any failure
+    // fails the whole id. Ported from crosspoint-reader PR #3425 (Daviex).
     if (!file.seekSet(offset)) {
-      LOG_DBG("KODoc", "Failed to seek to offset %zu", offset);
-      continue;
+      LOG_ERR("KODoc", "Failed to seek to hash sample at offset %zu", offset);
+      file.close();
+      return "";
     }
 
-    // Read up to CHUNK_SIZE bytes
+    // Read up to CHUNK_SIZE bytes. read() returns -1 on error: kept signed until checked, as a
+    // size_t it became SIZE_MAX and md5.add() hashed far past the end of `buffer`.
     const size_t bytesToRead = std::min(CHUNK_SIZE, fileSize - offset);
-    const size_t bytesRead = file.read(buffer, bytesToRead);
-
-    if (bytesRead > 0) {
-      md5.add(buffer, bytesRead);
-      totalBytesRead += bytesRead;
+    const int bytesRead = file.read(buffer, bytesToRead);
+    if (bytesRead < 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
+      LOG_ERR("KODoc", "Incomplete hash sample at %zu: read %d of %zu bytes", offset, bytesRead, bytesToRead);
+      file.close();
+      return "";
     }
+    md5.add(buffer, bytesToRead);
+    totalBytesRead += bytesToRead;
   }
 
   file.close();

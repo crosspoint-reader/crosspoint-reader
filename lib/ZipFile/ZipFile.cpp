@@ -551,7 +551,14 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
   const auto deflatedDataSize = fileStat.compressedSize;
   const auto inflatedDataSize = fileStat.uncompressedSize;
-  const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
+  // A corrupt entry (or a ZIP64 one, whose 32-bit size field holds the 0xFFFFFFFF marker) claims
+  // 4 GB. With the trailing NUL that size wraps to a 0-byte allocation, which the read below would
+  // then fill with the entry: a heap overflow from a crafted EPUB.
+  if (trailingNullByte && inflatedDataSize == UINT32_MAX) {
+    LOG_ERR("ZIP", "Entry claims %u bytes, refusing %s", static_cast<unsigned>(inflatedDataSize), filename);
+    return nullptr;
+  }
+  const size_t dataSize = trailingNullByte ? size_t{inflatedDataSize} + 1 : inflatedDataSize;
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
   if (data == nullptr) {
     LOG_ERR("ZIP", "Failed to allocate memory for output buffer (%zu bytes)", dataSize);
@@ -638,13 +645,17 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
     size_t remaining = inflatedDataSize;
     while (remaining > 0) {
-      const size_t dataRead = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
-      if (dataRead == 0) {
+      // HalFile::read() reports an error as -1. Stored straight into a size_t it became SIZE_MAX,
+      // passed the `== 0` check and went to the sink as the length of a 4 GB write out of this
+      // chunk buffer. Ported from crosspoint-reader PR #3979 (phucisstupid).
+      const int readResult = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
+      if (readResult <= 0) {
         LOG_ERR("ZIP", "Could not read more bytes");
         free(buffer);
         return false;
       }
 
+      const size_t dataRead = static_cast<size_t>(readResult);
       if (out.write(buffer, dataRead) != dataRead) {
         LOG_ERR("ZIP", "Failed to write all output bytes to stream");
         free(buffer);
@@ -848,15 +859,17 @@ size_t ZipFile::readBytesFromStat(const FileStatSlim& fileStat, uint8_t* outBuf,
     auto* compBuf = static_cast<uint8_t*>(malloc(compChunkSize));
     if (!compBuf) return 0;
 
-    const size_t compRead = file.read(compBuf, compChunkSize);
-    if (compRead == 0) {
+    // Same -1-as-a-length hazard as readFileToStream: SIZE_MAX here would have uzlib inflate far
+    // past the end of compBuf.
+    const int compRead = file.read(compBuf, compChunkSize);
+    if (compRead <= 0) {
       free(compBuf);
       return 0;
     }
 
     InflateReader oneShot;
     oneShot.init(false);
-    oneShot.setSource(compBuf, compRead);
+    oneShot.setSource(compBuf, static_cast<size_t>(compRead));
 
     // One-shot read: decompress up to wantBytes; partial output is still useful
     // (e.g. a JPEG SOF marker within the first kHeaderBufSize bytes).

@@ -155,6 +155,10 @@ class HalFile : public Print {
   // The same for one read only: the first read starting at or past this offset fails, and the
   // hook turns itself off -- a single bad sector, with everything after it readable again.
   static inline long failOneReadFrom = -1;
+  // Every read that starts exactly at this offset fails, reads elsewhere do not: hits one known
+  // record (a ZIP entry's data) even when the reader visits later offsets first (the central
+  // directory at the end of the archive). -1 turns it off.
+  static inline long failReadAt = -1;
   // Test instrumentation: bytes delivered by read(), across all files. Lets a test bound how much
   // a pass reads, where wall-clock time on a host says little about SD cost.
   static inline size_t bytesRead = 0;
@@ -162,6 +166,7 @@ class HalFile : public Print {
   int read(void* buf, size_t n) {
     if (!fp_) return -1;
     if (failReadsFrom >= 0 && ftell(fp_) >= failReadsFrom) return -1;
+    if (failReadAt >= 0 && ftell(fp_) == failReadAt) return -1;
     if (failOneReadFrom >= 0 && ftell(fp_) >= failOneReadFrom) {
       failOneReadFrom = -1;
       return -1;
@@ -317,6 +322,9 @@ class HalStorage {
   bool openFileForUpdate(const char*, const std::string& path, HalFile& f) { return f.openForUpdate(path); }
   bool openFileForUpdate(const char*, const char* path, HalFile& f) { return f.openForUpdate(path); }
   bool exists(const char* path) { return std::filesystem::exists(path); }
+  // The device counts the firmware's own writes, for caches keyed on the card's contents; a host
+  // test changes its tree between runs, not under a cache.
+  uint32_t contentGeneration() const { return 0; }
   // Mirrors the device HalStorage: stream a whole file into a Print sink in
   // chunks. Epub::applyMetadataSidecar() feeds ContentOpfParser through this,
   // so the host pipeline exercises the same code path the device runs.

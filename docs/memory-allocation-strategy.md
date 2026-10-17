@@ -247,7 +247,8 @@ What a bump arena is for, and what it is not:
    side and the load side apply the same cap (`Page::MAX_ELEMENTS`, `Page::MAX_PAGES_PER_SECTION`).
 8. A contiguous-block floor carries `LARGEST_FREE_BLOCK_SLACK` (16 B): the allocator reports its
    largest block a few bytes under round numbers.
-9. A vector that grows across a whole parse is reserved up front from an estimate (§9.6).
+9. A table that grows across a whole parse is reserved up front from an estimate, and past it grows
+   in nothrow chunks rather than by doubling into one block (§9.6).
 
 ---
 
@@ -557,15 +558,29 @@ objects (§4, class D). All are strictly nested, so each could take a scoped are
 per-line and per-cell objects are the larger lever; see
 [future_work/memory-and-parsing.md](future_work/memory-and-parsing.md).
 
-### 9.6 Pre-size build-scoped vectors
+### 9.6 Pre-size and chunk the per-page build tables
 
 `st.lut` (4 B a page) and the parser's `paragraphLutPerPage` (8 B a page) grow by one entry per page
 for the whole parse. Both reserve `estimatePagesForSpine(inflatedSize)` up front (512 bytes of XHTML
-a page, at most 512 pages), so they do not climb a doubling ladder of allocate-copy-free
-interleaved with the parse. Err high: at the old estimate of 1,024 bytes a page, a chapter of 634
-bytes a page doubled both LUTs at page 112 (X3, 2026-09-26).
+a page, at most 512 pages), so a chapter within the estimate takes one block at setup instead of a
+run of allocations interleaved with the parse. Err high: at the old estimate of 1,024 bytes a page,
+a chapter of 634 bytes a page doubled both LUTs at page 112 (X3, 2026-09-26).
+
+Past the reserve both grow in chunks (`ChunkedVector`, `lib/Memory`) of at most 1 KB, allocated
+nothrow and never copied; the page LUT then moves into the `Section` as it is. As `std::vector`s
+they doubled into one block, 8 KB and 4 KB past 512 pages and 16 KB and 8 KB past 1,024, through
+the throwing `operator new`: a chapter of a book that is one XHTML file aborted the reader mid-build,
+and again at the same page on every reopen (crosspoint-reader PR #3027, a 1,300-page chapter). A
+refused chunk stops the build at that page (`ChapterHtmlSlimParser::stopOnFullPageTable`) and the
+pages before it are kept as a truncated section, the same exit as a low-heap stop.
 
 What would otherwise grow without bound is not held in memory: anchors stream to a spill file
 during the parse (`Section::getAnchorSpillPath`) and are copied into the section file at the end,
 and the page-list anchors are packed into one pool reserved at setup
 (`ChapterHtmlSlimParser::addExternalPageBreakAnchor`).
+
+The tables a chapter can lose entries from without losing the chapter stay `std` containers and
+grow only when the heap holds the block (`heapReserveFor`, `HeapFit.h`): the page-list pool, the
+printed-page label record and the resident anchors used when the spill will not open. Past that
+their entries are dropped, the section is marked simplified (`kCapPageLabels`,
+`kCapAnchorsPerChapter`), and the chapter builds whole.

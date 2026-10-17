@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <HeapFit.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <SaxParser/SaxParser.h>
@@ -1018,17 +1019,25 @@ void ChapterHtmlSlimParser::emitPage() {
   // A page with no noted element (nothing but spacing) starts where the next element does, which
   // noteElementOnPage fills in. The counter stands in only if no element ever follows; taken now,
   // mid-chunk, it could lie past the next page's first word.
-  const uint32_t start = currentPageVisibleOffsetSet_ ? currentPageVisibleOffset_ : visibleTextOffset_;
-  if (!currentPageVisibleOffsetSet_) pageStartsAwaitingElement_++;  // bounded by MAX_PAGES_PER_SECTION
-  paragraphLutPerPage.push_back({start, xpathParagraphIndex, xpathListItemIndex});
+  const bool awaitingElement = !currentPageVisibleOffsetSet_;
+  const uint32_t start = awaitingElement ? visibleTextOffset_ : currentPageVisibleOffset_;
   currentPageVisibleOffsetSet_ = false;
   // Both of these borrow elements of the page being handed off, so they must be dropped
   // before it goes -- and the deferred yPos update is moot on a fresh page anyway (a drop
   // cap stays on the emitted page).
   deferredPageImage_ = nullptr;
   deferredDropCapLine_ = nullptr;
-  completePageFn(std::move(currentPage));
-  completedPageCount++;
+  // The page is handed over only once both tables have its entry, so this table, the consumer's
+  // and completedPageCount move in lockstep or not at all.
+  if (pageTableFull_ || !paragraphLutPerPage.push_back({start, xpathParagraphIndex, xpathListItemIndex})) {
+    stopOnFullPageTable();
+  } else if (!completePageFn(std::move(currentPage))) {
+    paragraphLutPerPage.pop_back();
+    stopOnFullPageTable();
+  } else {
+    if (awaitingElement) pageStartsAwaitingElement_++;  // bounded by MAX_PAGES_PER_SECTION
+    completedPageCount++;
+  }
   releasePageBlock();  // the page and its lines are gone: rewind their arena bytes
   // The load side refuses a section past this many pages; stop here with the truncated status
   // (the pages so far are kept) rather than build a cache that is rebuilt on every open.
@@ -1053,6 +1062,24 @@ void ChapterHtmlSlimParser::emitPage() {
   }
 }
 
+void ChapterHtmlSlimParser::stopOnFullPageTable() {
+  // Destroyed before emitPage rewinds the page block its lines live in.
+  currentPage.reset();
+  if (pageTableFull_) return;
+  pageTableFull_ = true;
+  // A chunk of a page table could not be had: what the old std::vector growth turned into an
+  // abort -- and, since the same chapter rebuilds from page 0 on the next open, a reboot loop.
+  // Stopping here instead keeps the pages so far as a truncated section, like any low-heap stop:
+  // the reader shows it with its hint, and a background build discards it for a rebuild with the
+  // framebuffer released, which has the heap to finish the chapter. Based on crosspoint-reader
+  // PR #3027 (Sidney San Martín, @s4y), whose build likewise keeps its pages when the LUT runs out.
+  LOG_ERR("EHP", "Page table full at %d pages (%u free, %u max alloc); stopping the parse", completedPageCount,
+          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  streamFailed = true;
+  layoutFailed = true;
+  saxParser_.stop();
+}
+
 void ChapterHtmlSlimParser::noteCapOverflow(const uint8_t flag, const char* what) {
   if (capOverflowFlags_ & flag) return;
   capOverflowFlags_ |= flag;
@@ -1066,6 +1093,14 @@ void ChapterHtmlSlimParser::recordPageBreakLabel(const std::string& label) {
   // The section file stores the count as a uint16.
   if (pageBreakLabelPages.size() >= 65535) {
     noteCapOverflow(kCapPageLabels, "printed-page labels per chapter");
+    return;
+  }
+
+  // One label per printed page, so in a book that is one XHTML file these two run to thousands of
+  // entries and double into blocks of several KB mid-parse. A label is worth less than the
+  // chapter: without the block, drop it rather than abort the build.
+  if (!heapReserveFor(pageBreakLabelPages, 1) || !heapReserveFor(pageBreakLabelPool, label.size() + 1)) {
+    noteCapOverflow(kCapPageLabels, "printed-page labels: no heap block to grow the record");
     return;
   }
 
@@ -1141,6 +1176,12 @@ void ChapterHtmlSlimParser::addExternalPageBreakAnchor(const std::string& id, co
     return;
   }
   if (externalPageBreakAnchorCount == UINT16_MAX) return;  // the page list itself is u16-counted
+  // A book that is one XHTML file brings its whole page list here, ~20 bytes an entry: this pool
+  // doubles into blocks of tens of KB. Without the block, the entry's label is lost, not the build.
+  if (!heapReserveFor(externalPageBreakAnchorPool, id.size() + label.size() + 2)) {
+    noteCapOverflow(kCapPageLabels, "page-list labels: no heap block to grow the pool");
+    return;
+  }
   externalPageBreakAnchorPool.append(id);
   externalPageBreakAnchorPool.push_back('\0');
   externalPageBreakAnchorPool.append(label);
@@ -1150,11 +1191,13 @@ void ChapterHtmlSlimParser::addExternalPageBreakAnchor(const std::string& id, co
 }
 
 void ChapterHtmlSlimParser::endExternalPageBreakAnchors() {
-  externalPageBreakAnchorPool.shrink_to_fit();
+  // Shrinking is a copy into a block of the exact size, which the heap may not have either.
+  if (heapHasBlockFor(externalPageBreakAnchorPool.size() + 1)) externalPageBreakAnchorPool.shrink_to_fit();
   // One label per matched anchor plus the top-of-file one: size the record here so it never
-  // doubles mid-parse (inline pagebreak markers past this hint still grow it normally).
-  pageBreakLabelPages.reserve(externalPageBreakAnchorCount + 1u);
-  pageBreakLabelPool.reserve(externalPageBreakLabelBytes);
+  // doubles mid-parse (inline pagebreak markers past this hint still grow it, through
+  // recordPageBreakLabel's heap check). Hints: without the blocks the record grows as it goes.
+  heapReserveFor(pageBreakLabelPages, externalPageBreakAnchorCount + 1u);
+  heapReserveFor(pageBreakLabelPool, externalPageBreakLabelBytes);
 }
 
 void ChapterHtmlSlimParser::attachPendingFloatImage(BlockStyle& bs) {
@@ -3645,6 +3688,12 @@ void ChapterHtmlSlimParser::recordAnchor(std::string id, const uint16_t page) {
   if (anchorSpillFailed || anchorCount >= MAX_RESIDENT_ANCHORS) {
     return;
   }
+  // Up to MAX_RESIDENT_ANCHORS the vector doubles to a 7 KB block (28 B an entry on the device),
+  // through the throwing operator new: without the block, drop the anchor the way the cap does.
+  if (!heapReserveFor(anchorData, 1)) {
+    noteCapOverflow(kCapAnchorsPerChapter, "resident anchors: no heap block to grow the table");
+    return;
+  }
   // Counts UP rather than being assigned anchorData.size(), so that a resident anchor recorded
   // after some were already spilled adds to them instead of replacing the total. Section writes
   // the spill first and these after, which is the order they were recorded in.
@@ -3687,12 +3736,12 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
   layoutFailed = false;
   streamStartTimeMs = millis();
 
-  // Pre-size the two vectors that grow one entry at a time across the whole parse. Without
-  // this each doubles ~10 times mid-parse, and every growth is an allocate-copy-free of an
-  // increasing size interleaved with all the other parse traffic — the churn shape a
-  // no-compaction heap cannot recover from (CLAUDE.md Resource Protocol rule 7,
-  // docs/memory-allocation-strategy.md §9.6). The blocks are individually small, so this is
-  // an allocation-COUNT fix; it is not expected to move contig on its own.
+  // Pre-size the two tables that grow one entry at a time across the whole parse (this one and
+  // Section's page LUT), so a chapter within the estimate takes one block, at setup, instead of
+  // a run of chunks interleaved with all the other parse traffic (CLAUDE.md Resource Protocol
+  // rule 7, docs/memory-allocation-strategy.md §9.6). It is an allocation-COUNT fix; it is not
+  // expected to move contig on its own. Best effort: without the block the first page allocates
+  // a small chunk instead.
   paragraphLutPerPage.reserve(estimatePagesForSpine(totalInflatedSize));
   // Anchors stream to a spill file (see setAnchorSpillPath), so nothing here scales with how
   // many a chapter has. Opened at setup rather than lazily so a chapter that cannot spill finds
@@ -3712,7 +3761,7 @@ bool ChapterHtmlSlimParser::setup(const size_t totalInflatedSize) {
     // Fallback only. Reserve for the common case: reserving for the cap would cost ~28 KB up
     // front to save reallocations that only an anchor-heavy chapter would ever pay.
     constexpr size_t TYPICAL_ANCHORS_PER_CHAPTER = 32;
-    anchorData.reserve(TYPICAL_ANCHORS_PER_CHAPTER);
+    heapReserveFor(anchorData, TYPICAL_ANCHORS_PER_CHAPTER);  // a hint: recordAnchor asks again
   }
 
   // Choose progress granularity by chapter size. Each callback drives a full-screen

@@ -122,21 +122,10 @@ bool Txt::generateCoverBmp() const {
   if (FsHelpers::hasBmpExtension(coverImagePath)) {
     // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
-    FsFile src, dst;
-    if (!Storage.openFileForRead("TXT", coverImagePath, src)) {
+    if (!Storage.copyFile("TXT", coverImagePath, getCoverBmpPath().c_str())) {
+      LOG_ERR("TXT", "Failed to copy BMP cover to cache");
       return false;
     }
-    if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
-      src.close();
-      return false;
-    }
-    uint8_t buffer[1024];
-    while (src.available()) {
-      size_t bytesRead = src.read(buffer, sizeof(buffer));
-      dst.write(buffer, bytesRead);
-    }
-    src.close();
-    dst.close();
     LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
   } else if (FsHelpers::hasJpgExtension(coverImagePath)) {
@@ -295,8 +284,10 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
     return false;
   }
 
-  size_t bytesRead = file.read(buffer, length);
+  const int bytesRead = file.read(buffer, length);
   file.close();
 
-  return bytesRead > 0;
+  // A failed read (-1) passed `> 0` as a size_t, and a short one left stale bytes in the tail:
+  // callers lay out all `length` bytes, so anything less than all of them is a failure.
+  return bytesRead > 0 && static_cast<size_t>(bytesRead) == length;
 }

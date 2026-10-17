@@ -2,6 +2,7 @@
 
 #include <BufferedFileIO.h>
 #include <BuildArena.h>
+#include <ChunkedVector.h>
 #include <HalStorage.h>
 #include <Print.h>
 #include <SaxParser/SaxParser.h>
@@ -50,7 +51,8 @@ class Epub;
 //
 // Erring low is cheap here because MAX_RESERVED_PAGES bounds the whole downside: even a spine
 // that saturates it reserves only 2 KB (Section's u32 LUT) and 4 KB (the 8-byte paragraph LUT).
-// Past the cap the vector grows normally.
+// Past the reserve both tables grow in chunks of at most 1 KB (ChunkedVector), never by a
+// doubling of the whole table.
 //
 // 512 bytes of XHTML per rendered page, not 1024: Strange Pictures' Chapter 3 is 114,201 bytes
 // and lays out to 180 pages (634 B/page), so the old estimate (111 pages) had both LUTs doubling
@@ -70,7 +72,9 @@ class BuildArena;  // lib/Memory -- see setBuildArena
 class ChapterHtmlSlimParser final : public Print {
   std::shared_ptr<Epub> epub;
   GfxRenderer& renderer;
-  std::function<void(std::unique_ptr<Page>)> completePageFn;
+  // Takes each finished page. False: the consumer could not take it (no room to index it), and
+  // the parse stops there -- see emitPage.
+  std::function<bool(std::unique_ptr<Page>)> completePageFn;
   std::function<void(int)> progressFn;  // Progress callback (0-100)
   int depth = 0;
   int skipUntilDepth = INT_MAX;
@@ -487,7 +491,16 @@ class ChapterHtmlSlimParser final : public Print {
     uint16_t paragraphIndex;     // 1-based <p> index at page completion
     uint16_t listItemIndex;      // running <li> count at page completion (any depth)
   };
-  std::vector<ParagraphLutEntry> paragraphLutPerPage;  // deep LUT: one entry per page
+  // One entry per page, held for the whole parse: chunked (at most 128 entries, 1 KB, per
+  // block, allocated nothrow) for the same reason as Section's page LUT -- see ChunkedVector.
+  using ParagraphLut = ChunkedVector<ParagraphLutEntry, 16, 128, Page::MAX_PAGES_PER_SECTION>;
+  ParagraphLut paragraphLutPerPage;  // deep LUT: one entry per page
+  // Latched when a page could not be indexed (this table or the consumer's could not grow): the
+  // parse stops there, and every page after it is dropped too so the tables stay in step.
+  bool pageTableFull_ = false;
+  // Drops the page in hand and stops the parse the way a low-heap abort does: the pages already
+  // emitted are kept as a truncated section.
+  void stopOnFullPageTable();
 
   // Active parser for streaming. A member so write() can feed it and the abort paths can stop
   // it from inside a callback.
@@ -729,7 +742,7 @@ class ChapterHtmlSlimParser final : public Print {
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const bool fontSizeNormalization, const bool bionicReadingEnabled,
-                                 const std::function<void(std::unique_ptr<Page>)>& completePageFn,
+                                 const std::function<bool(std::unique_ptr<Page>)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
                                  std::vector<std::string> tocAnchors = {},
@@ -780,9 +793,9 @@ class ChapterHtmlSlimParser final : public Print {
   [[nodiscard]] bool tableRowDegraded() const { return tableRowDegradedAny_; }
   enum CapOverflow : uint8_t {
     kCapFootnotesPerPage = 1u << 0,   // Page::MAX_FOOTNOTES_PER_PAGE: later links on the page dropped
-    kCapAnchorsPerChapter = 1u << 1,  // MAX_ANCHORS_PER_CHAPTER: later ids not recorded
+    kCapAnchorsPerChapter = 1u << 1,  // MAX_ANCHORS_PER_CHAPTER, or no heap for resident ones: ids dropped
     kCapPageElements = 1u << 2,       // Page::MAX_ELEMENTS: a page's tail elements not written
-    kCapPageLabels = 1u << 3,         // 65535 printed-page labels: later ones not recorded
+    kCapPageLabels = 1u << 3,         // 65535 printed-page labels, or no heap to grow them: labels dropped
     kCapFootnoteHref = 1u << 4,       // FOOTNOTE_HREF_LEN: a link too long to navigate, kept as text
     kCapSaxDepth = 1u << 5,           // SaxParser kMaxDepth: nesting flattened past 64
     kCapPagesPerSection = 1u << 6,    // Page::MAX_PAGES_PER_SECTION: parse stopped (truncated cache)
@@ -861,7 +874,7 @@ class ChapterHtmlSlimParser final : public Print {
       label += len + 1;
     }
   }
-  const std::vector<ParagraphLutEntry>& getParagraphLutPerPage() const { return paragraphLutPerPage; }
+  const ParagraphLut& getParagraphLutPerPage() const { return paragraphLutPerPage; }
 
   // Supplies printed-page labels from NCX <pageList> for this chapter. `anchors` maps
   // HTML id -> label; an entry with an empty id applies to the first page of this file.

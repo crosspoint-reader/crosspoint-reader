@@ -106,6 +106,8 @@ class HalStorage {
   bool openFileForUpdate(const char* moduleName, const char* path, HalFile& file);
   bool openFileForUpdate(const char* moduleName, const std::string& path, HalFile& file);
   bool removeDir(const char* path);
+  // Copies srcPath to dstPath (replacing it). True only for a complete copy: on any failure,
+  // a read error included, dstPath is removed rather than left half-written.
   bool copyFile(const char* moduleName, const std::string& srcPath, const char* dstPath);
 
   uint64_t sdTotalBytes() const;

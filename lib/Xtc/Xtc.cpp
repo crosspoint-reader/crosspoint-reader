@@ -520,19 +520,7 @@ bool Xtc::generateThumbBmp(int width, int height) const {
 
   if (scale >= 1.0f) {
     if (generateCoverBmp()) {
-      FsFile src, dst;
-      if (Storage.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (Storage.openFileForWrite("XTC", getThumbBmpPath(width, height), dst)) {
-          uint8_t buffer[512];
-          while (src.available()) {
-            size_t bytesRead = src.read(buffer, sizeof(buffer));
-            dst.write(buffer, bytesRead);
-          }
-          dst.close();
-        }
-        src.close();
-      }
-      return Storage.exists(getThumbBmpPath(width, height).c_str());
+      return Storage.copyFile("XTC", getCoverBmpPath(), getThumbBmpPath(width, height).c_str());
     }
     return false;
   }

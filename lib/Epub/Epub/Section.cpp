@@ -687,23 +687,29 @@ bool Section::loadSectionFile(const BuildParams& p) {
     return false;
   }
   // 4 bytes a page: a chapter is a few hundred bytes, a book that is one XHTML file several KB in
-  // one block. Without that block the pages read their offsets from the file instead (one more
-  // 4-byte read per page load) -- a failed resize would abort the device, and failing the load
-  // would delete a good cache.
-  if (!heapHasBlockFor(pageCount * sizeof(uint32_t))) {
+  // one block, taken as the table's first chunk. Without that block the pages read their offsets
+  // from the file instead (one more 4-byte read per page load) -- failing the load would delete a
+  // good cache. The reserve is nothrow, so an answer that went stale falls back the same way.
+  lut.clear();
+  if (!heapHasBlockFor(pageCount * sizeof(uint32_t)) || !lut.reserve(pageCount)) {
     LOG_ERR("SCT", "No %u-byte block for the %u-page LUT; reading page offsets from the file",
             static_cast<unsigned>(pageCount * sizeof(uint32_t)), pageCount);
-    lut.clear();
-    lut.shrink_to_fit();
     lutFileOffset_ = lutOffset;
   } else {
-    lut.resize(pageCount);
-    for (uint32_t& pos : lut) {
+    for (uint16_t i = 0; i < pageCount; ++i) {
+      uint32_t pos = 0;
       serialization::readPod(file, pos);
       if (pos < header::kSize || pos >= lutOffset) {
         LOG_ERR("SCT", "Deserialization failed: LUT entry %u out of range [%u, %u)", pos, header::kSize, lutOffset);
         clearCache();
         return false;
+      }
+      if (!lut.push_back(pos)) {
+        // Inside the reserved chunk this cannot be refused; if it ever is, read from the file
+        // (which range-checks every entry as it loads) rather than hold a table with a hole.
+        lut.clear();
+        lutFileOffset_ = lutOffset;
+        break;
       }
     }
   }
@@ -772,7 +778,9 @@ struct Section::BuildState {
   bool statValid = false;
   bool statResolved = false;  // resolveSpineStat ran (statValid/inflatedSize are meaningful)
   CssParser* cssParser = nullptr;
-  std::vector<uint32_t> lut;
+  // The parser stops a build at MAX_PAGES_PER_SECTION, so the table must never refuse below it.
+  static_assert(PageLut::minMaxSize() >= Page::MAX_PAGES_PER_SECTION, "page LUT smaller than a section may be");
+  PageLut lut;
   std::unique_ptr<ChapterHtmlSlimParser> visitor;
   // Live ZIP-side state of the parse, created on the first runBuildParse call and
   // released the moment the compressed stream is exhausted. zip must outlive reader
@@ -1068,7 +1076,8 @@ Section::BuildPhaseResult Section::runBuildSetup(BuildState& st) {
   st.lut.clear();
   // One u32 per page, appended by the completePageFn below across the whole parse. Pre-sized for
   // the same reason as the parser's paragraph LUT — see estimatePagesForSpine and
-  // docs/memory-allocation-strategy.md §9.6.
+  // docs/memory-allocation-strategy.md §9.6. Best effort: without the block the first page
+  // allocates a small chunk instead, and a chapter past the estimate grows in chunks either way.
   st.lut.reserve(estimatePagesForSpine(st.inflatedSize));
 
   // Derive the content base directory and image cache path prefix for the parser
@@ -1129,7 +1138,17 @@ Section::BuildPhaseResult Section::runBuildSetup(BuildState& st) {
   st.visitor = std::make_unique<ChapterHtmlSlimParser>(
       epub, renderer, p.fontId, p.lineCompression, p.extraParagraphSpacing, p.paragraphAlignment, p.viewportWidth,
       p.viewportHeight, p.hyphenationEnabled, p.fontSizeNormalization, p.bionicReadingEnabled,
-      [this, &st](std::unique_ptr<Page> page) { st.lut.emplace_back(this->onPageComplete(std::move(page))); },
+      [this, &st](std::unique_ptr<Page> page) {
+        // The page's LUT entry first: a page written without one could never be loaded, and
+        // pageCount would run ahead of the table. Refused (no chunk for it), the page is not
+        // written and the parser stops the build there, keeping the pages before it.
+        if (!st.lut.push_back(0)) {
+          LOG_ERR("SCT", "No room in the page LUT for page %u; the build stops here", pageCount);
+          return false;
+        }
+        st.lut.back() = this->onPageComplete(std::move(page));
+        return true;
+      },
       p.embeddedStyle, st.contentBase, st.imageBasePath, p.imageRendering, std::move(tocAnchors), st.progressFn,
       st.cssParser, epub->getImageManifest());
   // Load printed-page list entries (NCX <pageList> or EPUB 3 nav page-list) for this
