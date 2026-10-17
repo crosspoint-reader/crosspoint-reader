@@ -60,6 +60,7 @@ bookmarks included, and `fontprev/` (`ClearCacheActivity`).
 | `img_<hash><ext>`, `<image>.1bit.pxc`, `<image>.bayer.pxc` | EPUB | `PixelCache::PXC_MAGIC` | Images extracted from the book (`<hash>` is FNV-1a 64 of the entry), and their dithered pixel caches: `u16` magic, `u16` width, `u16` height, 2-bit pixels |
 | `cover.img` | EPUB | none | The cover image's bytes, extracted once (or copied from a cover sidecar) |
 | `linkstack.bin` | EPUB | `EpubLinkBackStack::kVersion` (1) | The link Back stack: [below](#linkstackbin) |
+| `fonts/state.bin`, `fonts/<family>/*.ttf` | EPUB | `BookFonts::kVersion` (1) | The book's embedded body font (Publisher Fonts): [below](#fontsstatebin) |
 | `kosync_push.bin` | EPUB | `LastPush::kVersion` (1) | Our last KOReader push: [below](#kosync_pushbin) |
 | `koreader_docid.txt`, `koreader_syncmethod.txt` | EPUB | none | The KOReader document id, after the file size and fingerprint it was computed for, and the match method learned for the book |
 | `index.bin` | TXT, Markdown | `CACHE_VERSION`: TXT 2 (magic `TXTI`), Markdown 4 (`MKDI`) | Page offsets under the current layout. `SleepActivity` checks the TXT magic and version too |
@@ -357,6 +358,19 @@ depth x { u16 spine, u16 page, u16 pageCount, u16 paragraph }   oldest first; 0 
 ```
 
 An empty stack is stored as no file. The file is written when the reader closes the book (and before a heap-recovery restart), and removed as soon as the stack changes while a copy is on the card, to be written again on the next close. A file of another version, of a size that does not match its depth, or naming a spine item the book no longer has is ignored and deleted. An entry is restored like a saved position: by its paragraph, else by its page rescaled to the page count, so it survives a layout change.
+
+## `fonts/state.bin`
+
+What `BookFonts::prepare` (`lib/Epub/Epub/BookFonts.*`) found when the Publisher Fonts setting first met the book: whether its body text is set in a family it embeds, and if so where the copy is. Written once per book, last, after the font files; the next open trusts it.
+
+```text
+u8  version             BookFonts::kVersion (1)
+u8  code                0 none: the book keeps the reader's font
+                        1 family: then u8 nameLen and the name the book declares
+                        2 + n: n failed attempts (a read failed); examined again at the next open, given up at 3
+```
+
+The family's files sit in `fonts/<the name, [A-Za-z0-9-] kept, the rest as _>/`, one per style, named `<style>-<the file's name in the book>.ttf` (style 0 regular, 1 bold, 2 italic, 3 bold italic): plain TrueType, any IDPF or Adobe font obfuscation undone. The reader loads the directory as it loads a `.ttf` family directory on the card. A file of another version, or none, means the book has not been examined; `prepare` then removes the whole `fonts/` directory first.
 
 ## `kosync_push.bin`
 

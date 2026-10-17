@@ -277,8 +277,10 @@ class Epub {
                                                        BuildArena* scratch = nullptr) const;
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
-  bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
-                                const bool* stop = nullptr) const;
+  // `scratch` (optional): hosts the read buffer and the inflate ring when it has room for the largest ring, as
+  // the region lent to load() does; else the heap.
+  bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize, const bool* stop = nullptr,
+                                BuildArena* scratch = nullptr) const;
   // Where the OPF package document sits inside the book, read from META-INF/container.xml without
   // loading anything else: for handing the OPF out as it is, sidecar or not (the web interface's
   // Details dialog reads a book's own metadata from it).

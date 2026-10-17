@@ -1936,20 +1936,22 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
   return content;
 }
 
-bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
-                                    const bool* stop) const {
+bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize, const bool* stop,
+                                    BuildArena* scratch) const {
   if (itemHref.empty()) {
     LOG_DBG("EBP", "Failed to read item, empty href");
     return false;
   }
 
-  // A lent region (see load()) hosts the read buffer and the inflate ring when it has room for
-  // the largest ring; the decision is made before any byte reaches `out`, so a refusal falls
-  // through to the heap path cleanly. A missing entry fails there again, at negligible cost.
-  if (loadScratch_ != nullptr && loadScratch_->valid()) {
+  // A lent region (the caller's, or the one lent to load()) hosts the read buffer and the inflate
+  // ring when it has room for the largest ring; the decision is made before any byte reaches
+  // `out`, so a refusal falls through to the heap path cleanly. A missing entry fails there
+  // again, at negligible cost.
+  BuildArena* const arena = scratch != nullptr ? scratch : loadScratch_;
+  if (arena != nullptr && arena->valid()) {
     const size_t wanted = 1024 + InflateReader::ringSizeFor(0) + 2 * alignof(std::max_align_t);
-    if (loadScratch_->capacity() - loadScratch_->used() >= wanted) {
-      return readItemContentsToStreamWithArena(itemHref, out, loadScratch_, stop);
+    if (arena->capacity() - arena->used() >= wanted) {
+      return readItemContentsToStreamWithArena(itemHref, out, arena, stop);
     }
   }
 
