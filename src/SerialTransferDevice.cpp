@@ -9,6 +9,7 @@
 #include <cstdarg>
 #include <ctime>
 
+#include "BookRelocation.h"
 #include "RecentBooksStore.h"
 
 namespace {
@@ -300,6 +301,9 @@ void SerialTransferDevice::listDirEnd() {
 
 bool SerialTransferDevice::renameFile(const std::string& src, const std::string& dst) {
   const bool ok = Storage.rename(src.c_str(), dst.c_str());
+  // A book (or a folder of them) renamed from the host keeps its position and bookmarks, as it
+  // does when moved through the web server, WebDAV or the file browser.
+  if (ok) BookRelocation::moved(src, dst);
   emitStatus(ok ? "Moved '%s'" : "Move failed: '%s'", baseName(src).c_str());
   return ok;
 }
