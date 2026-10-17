@@ -6105,6 +6105,9 @@ void EpubReaderActivity::restoreCurrentPageToBufferIfPreRendered() {
     return;
   }
   renderPageContentOnly(*p, orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  // The page on the panel has its status bar; without it a screenshot, the sleep overlay and the
+  // light drawer all showed the page bare.
+  renderStatusBar();
   preRenderedPage.ready = false;
   preRenderedPlanesStaged_ = false;
   pendingPreRender = false;
