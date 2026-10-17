@@ -162,6 +162,40 @@ TEST_F(ImageExtractionFixture, ATruncatedExtractIsReplacedBeforeItIsDecoded) {
   EXPECT_TRUE(fs::exists(path + ".1bit.pxc") || fs::exists((work / "cut.1bit.pxc").string()));
 }
 
+// --- the bytes pick the decoder, not the name ---------------------------------------------
+//
+// FB2 conversions reference their images with no extension at all (images/img_32, which the
+// parser caches as .img), and some books call a PNG .jpg. A decoder chosen by the cache file's
+// extension was then none, or the wrong one, and the page showed nothing where the picture was.
+
+namespace {
+const char* kJpegBook = CORPUS_DIR "/test_jpeg_images.epub";
+const char* kJpegEntry = "OEBPS/images/jpeg_format.jpg";
+
+// Renders a block whose cache file `name` is extracted from `entry` on first render, and reports
+// whether the decode produced the 1-bit pixel cache that every later view of the page draws from.
+bool decodesTo(const fs::path& work, const char* name, const char* book, const char* entry) {
+  const fs::path path = work / name;
+  ImageBlock block(path.string(), 120, 160, "", book, entry);
+  GfxRenderer renderer;
+  block.render(renderer, 0, 0, /*forceLoad=*/true, /*monochromeOutput=*/true);
+  return fs::exists(fs::path(path).replace_extension(".1bit.pxc"));
+}
+}  // namespace
+
+TEST_F(ImageExtractionFixture, APngNamedJpgDecodesAsAPng) {
+  EXPECT_TRUE(decodesTo(work, "mislabeled.jpg", kBook, kEntry));
+}
+
+TEST_F(ImageExtractionFixture, AJpegNamedPngDecodesAsAJpeg) {
+  EXPECT_TRUE(decodesTo(work, "mislabeled.png", kJpegBook, kJpegEntry));
+}
+
+TEST_F(ImageExtractionFixture, AnImageCachedWithoutItsExtensionDecodesByItsBytes) {
+  EXPECT_TRUE(decodesTo(work, "nameless_png.img", kBook, kEntry));
+  EXPECT_TRUE(decodesTo(work, "nameless_jpeg.img", kJpegBook, kJpegEntry));
+}
+
 // --- large-image placeholder gate ------------------------------------------------------------
 //
 // This used to compare ImageBlock's width*height — the DISPLAY dimensions — against 800*600.
