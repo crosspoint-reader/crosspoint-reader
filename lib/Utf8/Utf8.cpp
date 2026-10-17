@@ -422,21 +422,61 @@ uint32_t utf8LowerCodepoint(const uint32_t cp) {
   //   U+014A..U+0177: uppercase on EVEN codepoints
   //   U+0179..U+017E: uppercase on ODD codepoints
   // Covers Polish (Ą/ą, Ć/ć, Ę/ę, Ł/ł, Ń/ń, Ś/ś, Ź/ź, Ż/ż), Czech, Hungarian, Turkish, etc.
+  // U+0130 İ is the exception: its lowercase is a plain i, not the dotless ı after it.
+  if (cp == 0x0130) {
+    return 'i';
+  }
   if ((cp >= 0x0100 && cp <= 0x0137 && (cp % 2 == 0)) || (cp >= 0x0139 && cp <= 0x0148 && (cp % 2 == 1)) ||
       (cp >= 0x014A && cp <= 0x0177 && (cp % 2 == 0)) || (cp >= 0x0179 && cp <= 0x017E && (cp % 2 == 1))) {
     return cp + 1;
   }
 
-  // Cyrillic uppercase range 0x0410-0x042F maps to lowercase by adding 0x20
+  // Greek, monotonic: the capitals with tonos sit apart from the plain ones.
+  if ((cp >= 0x0391 && cp <= 0x03A1) || (cp >= 0x03A3 && cp <= 0x03AB)) {
+    return cp + 0x20;  // Α..Ρ, Σ..Ϋ (U+03A2 is unassigned)
+  }
+  if (cp >= 0x0388 && cp <= 0x038A) {
+    return cp + 0x25;  // Έ Ή Ί
+  }
+  if (cp == 0x038E || cp == 0x038F) {
+    return cp + 0x3F;  // Ύ Ώ
+  }
+
+  // Cyrillic: Ѐ..Џ (Ukrainian Є І Ї, Serbian Ђ Ј Љ Њ Ћ Џ, Belarusian Ў) sit 0x50 below their
+  // lowercase, А..Я 0x20; the extended blocks pair capital and small letter in adjacent slots.
+  if (cp >= 0x0400 && cp <= 0x040F) {
+    return cp + 0x50;
+  }
   if (cp >= 0x0410 && cp <= 0x042F) {
     return cp + 0x20;
+  }
+  if (((cp >= 0x0460 && cp <= 0x0481) || (cp >= 0x048A && cp <= 0x04BF) || (cp >= 0x04D0 && cp <= 0x052F)) &&
+      cp % 2 == 0) {
+    return cp + 1;  // Ukrainian Ґ, and the Kazakh, Tatar, Bashkir, ... letters
+  }
+  if (cp >= 0x04C1 && cp <= 0x04CE && cp % 2 == 1) {
+    return cp + 1;
+  }
+
+  // Latin Extended Additional: Vietnamese tone-marked vowels, Welsh, and so on, all paired.
+  if (((cp >= 0x1E00 && cp <= 0x1E95) || (cp >= 0x1EA0 && cp <= 0x1EFF)) && cp % 2 == 0) {
+    return cp + 1;
   }
 
   switch (cp) {
     case 0x0178:      // Ÿ
       return 0x00FF;  // ÿ
-    case 0x0401:      // Ё
-      return 0x0451;  // ё
+    case 0x01A0:      // Ơ (Vietnamese)
+    case 0x01AF:      // Ư (Vietnamese)
+    case 0x0218:      // Ș (Romanian)
+    case 0x021A:      // Ț (Romanian)
+      return cp + 1;
+    case 0x0386:      // Ά
+      return 0x03AC;  // ά
+    case 0x038C:      // Ό
+      return 0x03CC;  // ό
+    case 0x04C0:      // Ӏ palochka
+      return 0x04CF;  // ӏ
     case 0x1E9E:      // ẞ
       return 0x00DF;  // ß
     default:
