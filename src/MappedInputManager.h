@@ -58,6 +58,13 @@ class MappedInputManager {
   // One-shot threshold event while the button is down; consumes its release.
   bool wasLongPressed(Button button, unsigned long thresholdMs) const;
   bool consumeSuppressedRelease() const;
+  // Suppressed releases are keyed by logical button; a rotation can remap the held page button.
+  void clearPageButtonSuppressedReleases() const {
+    constexpr uint16_t pageButtons =
+        (1u << static_cast<uint8_t>(Button::Left)) | (1u << static_cast<uint8_t>(Button::Right)) |
+        (1u << static_cast<uint8_t>(Button::PageBack)) | (1u << static_cast<uint8_t>(Button::PageForward));
+    suppressedReleaseButtons &= ~pageButtons;
+  }
   bool isPressed(Button button) const;
   bool hasTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
