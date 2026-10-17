@@ -130,6 +130,52 @@ TEST(EpubLinkBackStack, SessionPushesOverAFullLoadedStackCountOnlyWhatIsLeft) {
   EXPECT_EQ(0, session);
 }
 
+// The reader on chapter 3 page 10 follows a note into the notes chapter (spine 7), then the note's
+// "Return" link back to its marker. The return lands on the page it was followed from, so the
+// stack unwinds to empty, as two presses of Back would have: Back no longer goes to the note, and
+// the session has no link open any more.
+TEST(EpubLinkBackStack, AReturnLinkUnwindsToBelowItsOrigin) {
+  Entry stack[kMax] = {};
+  int depth = 0;
+  int session = 0;
+  EpubLinkBackStack::push(stack, depth, session, entry(3, 10));  // the note marker, tapped
+  EpubLinkBackStack::push(stack, depth, session, entry(7, 2));   // the note's Return, tapped
+
+  const int target = EpubLinkBackStack::returnDepth(stack, depth, 3, 10);
+  ASSERT_EQ(0, target);
+  while (depth > target) EpubLinkBackStack::pop(depth, session);
+  EXPECT_EQ(0, depth);
+  EXPECT_EQ(0, session) << "the sleep push is due again";
+}
+
+// The marker's id names the page of a nearby line, so the return can land a page either side.
+TEST(EpubLinkBackStack, AReturnMayLandAPageEitherSideOfItsOrigin) {
+  const Entry stack[kMax] = {entry(3, 10), entry(7, 2)};
+  EXPECT_EQ(0, EpubLinkBackStack::returnDepth(stack, 2, 3, 9));
+  EXPECT_EQ(0, EpubLinkBackStack::returnDepth(stack, 2, 3, 11));
+  EXPECT_EQ(-1, EpubLinkBackStack::returnDepth(stack, 2, 3, 8));
+  EXPECT_EQ(-1, EpubLinkBackStack::returnDepth(stack, 2, 3, 12));
+  EXPECT_EQ(-1, EpubLinkBackStack::returnDepth(stack, 2, 4, 10)) << "another spine is a new detour";
+}
+
+// The newest entry was pushed for the link being checked, so landing near it is no return: a link
+// to the next page ("see the figure below") is a detour like any other.
+TEST(EpubLinkBackStack, TheEntryPushedForTheLinkItselfIsNeverMatched) {
+  const Entry stack[kMax] = {entry(3, 10), entry(3, 40)};
+  EXPECT_EQ(-1, EpubLinkBackStack::returnDepth(stack, 1, 3, 11));
+  EXPECT_EQ(-1, EpubLinkBackStack::returnDepth(stack, 2, 3, 40));
+  EXPECT_EQ(-1, EpubLinkBackStack::returnDepth(stack, 0, 3, 10));
+}
+
+// Two detours deep, the return from the inner note unwinds only that one: the newest match wins,
+// and Back then returns to where the first link was followed from.
+TEST(EpubLinkBackStack, TheNewestMatchingOriginIsTheOneReturnedTo) {
+  const Entry stack[kMax] = {entry(3, 10), entry(3, 11), entry(7, 2)};
+  EXPECT_EQ(1, EpubLinkBackStack::returnDepth(stack, 3, 3, 11));
+  EXPECT_EQ(1, EpubLinkBackStack::returnDepth(stack, 3, 3, 10)) << "within a page of both";
+  EXPECT_EQ(0, EpubLinkBackStack::returnDepth(stack, 3, 3, 9));
+}
+
 TEST(EpubLinkBackStack, PopOnAnEmptyStackDoesNothing) {
   int depth = 0;
   int session = 0;

@@ -465,12 +465,6 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
   if (alsoCacheOtherVariant) {
     config.companionCachePath = monochromeOutput ? getGrayscaleCachePath(imagePath) : getBwCachePath(imagePath);
   }
-  // A JPEG decode stopped for input parks here and the next decode of it resumes (see
-  // RenderConfig::checkpointPath): the reader's image lane gives its region back on every page
-  // turn, and used to throw the decode away with it.
-  const bool jpeg = FsHelpers::hasJpgExtension(imagePath);
-  if (jpeg) config.checkpointPath = imagePath + ".ckpt";
-
   // Deliberately no adaptive tone on either variant: both .pxc files are dithered straight
   // from the raw luminance. The curve has to be derived from a completed histogram, and a
   // PNG cannot be rewound to build one -- it costs a second full inflate of every image, on
@@ -505,6 +499,10 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
     return;
   }
   size_t fileSize = file.size();
+  // The bytes pick the decoder, not the name: FB2 conversions reference images with no extension
+  // at all (cached as .img), and some books call a PNG .jpg. A truncated extract replaced below
+  // starts with the same bytes, so the answer holds for it too.
+  const ImageFormatDetector::Format format = ImageFormatDetector::detect(file);
   file.close();
   if (fileSize == 0) {
     LOG_ERR("IMG", "Image file is empty: %s", imagePath.c_str());
@@ -528,13 +526,23 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
 
   LOG_TRC("IMG", "Decoding and caching: %s", imagePath.c_str());
 
-  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+  // Adapted from crosspoint-reader PR #2386 (artwen, @artwem), which sniffs in the factory when the
+  // extension is unknown; here the content always decides, so a wrong extension decodes too.
+  ImageToFramebufferDecoder* decoder = format != ImageFormatDetector::Format::Unknown
+                                           ? ImageDecoderFactory::getDecoder(format)
+                                           : ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
     return;
   }
 
   LOG_TRC("IMG", "Using %s decoder", decoder->getFormatName());
+
+  // A JPEG decode stopped for input parks here and the next decode of it resumes (see
+  // RenderConfig::checkpointPath): the reader's image lane gives its region back on every page
+  // turn, and used to throw the decode away with it.
+  const bool jpeg = format == ImageFormatDetector::Format::Jpeg;
+  if (jpeg) config.checkpointPath = imagePath + ".ckpt";
 
   // A resumed decode draws only the rows after its park; the finished cache has them all.
   const bool resuming = jpeg && Storage.exists(config.checkpointPath.c_str());

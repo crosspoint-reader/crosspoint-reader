@@ -114,6 +114,10 @@ class EpubReaderActivity final : public Activity {
     // is exact, while the paragraph resolves to the page where that paragraph STARTS, a page early
     // whenever the reader had turned into a paragraph running over a page break.
     uint16_t restoreParagraph = 0;
+    // Kind::Anchor from a followed link that pushed a Back entry: where it lands is checked once
+    // against the Back stack (settleFollowedLink). Any other navigation assigns a new target, which
+    // clears it.
+    bool followedLink = false;
 
     NavigationTarget() : kind(Kind::Page), page(0) {}
 
@@ -1087,6 +1091,10 @@ class EpubReaderActivity final : public Activity {
   // way back.
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+  // A followed link's anchor has resolved to `page` of the current spine: if that is where an
+  // earlier link was followed from, unwinds the Back stack below it (EpubLinkBackStack::returnDepth).
+  // Called with the render lock held, wherever an Anchor target resolves.
+  void settleFollowedLink(int page);
   // Persistence of savedPositions, in linkstack.bin beside progress.bin (EpubLinkBackStack).
   // Loaded on open; written on exit (and before a heap-recovery reboot, which skips onExit) when
   // it changed; deleted at the first change after it was loaded. See linkStackOnDisk_.

@@ -27,24 +27,40 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
     ext = "";
   }
 
+  ImageFormatDetector::Format format = ImageFormatDetector::Format::Unknown;
   if (JpegToFramebufferConverter::supportsFormat(ext)) {
-    if (!jpegDecoder) {
-      jpegDecoder.reset(new JpegToFramebufferConverter());
-    }
-    return jpegDecoder.get();
+    format = ImageFormatDetector::Format::Jpeg;
   } else if (PngToFramebufferConverter::supportsFormat(ext)) {
-    if (!pngDecoder) {
-      pngDecoder.reset(new PngToFramebufferConverter());
-    }
-    return pngDecoder.get();
+    format = ImageFormatDetector::Format::Png;
   } else if (GifToFramebufferConverter::supportsFormat(ext)) {
-    if (!gifDecoder) {
-      gifDecoder.reset(new GifToFramebufferConverter());
-    }
-    return gifDecoder.get();
+    format = ImageFormatDetector::Format::Gif;
   }
 
-  LOG_ERR("DEC", "No decoder found for image: %s", imagePath.c_str());
+  ImageToFramebufferDecoder* decoder = getDecoder(format);
+  if (!decoder) LOG_ERR("DEC", "No decoder found for image: %s", imagePath.c_str());
+  return decoder;
+}
+
+ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const ImageFormatDetector::Format format) {
+  switch (format) {
+    case ImageFormatDetector::Format::Jpeg:
+      if (!jpegDecoder) {
+        jpegDecoder.reset(new JpegToFramebufferConverter());
+      }
+      return jpegDecoder.get();
+    case ImageFormatDetector::Format::Png:
+      if (!pngDecoder) {
+        pngDecoder.reset(new PngToFramebufferConverter());
+      }
+      return pngDecoder.get();
+    case ImageFormatDetector::Format::Gif:
+      if (!gifDecoder) {
+        gifDecoder.reset(new GifToFramebufferConverter());
+      }
+      return gifDecoder.get();
+    case ImageFormatDetector::Format::Unknown:
+      return nullptr;
+  }
   return nullptr;
 }
 

@@ -434,6 +434,12 @@ class ChapterHtmlSlimParser final : public Print {
   void flushAnchorsAwaitingLine();
   // Holds an anchor until a line settles its page; see anchorsAwaitingLine_.
   void queueAnchorForNextLine(std::string id);
+  // Records the id of a <span>, within MAX_SPAN_ANCHORS_PER_CHAPTER and never counted against the
+  // general cap: see the definition.
+  void recordSpanAnchor(const std::string& id);
+  // Span ids taken so far (recordSpanAnchor). The general cap is checked against anchorCount less
+  // these, so a chapter whose spans fill their budget keeps every slot it had for the rest.
+  uint16_t spanAnchorCount_ = 0;
 
   std::string anchorSpillPath;
   FsFile anchorSpillFile;

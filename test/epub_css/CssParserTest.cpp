@@ -138,3 +138,26 @@ TEST(CssParserUnits, FontSizeKeywordsAndAbsoluteUnits) {
   const CssStyle bogus = CssParser::parseInlineStyle("font-size: enormous");
   EXPECT_FALSE(bogus.hasFontSizeMultiplier());
 }
+
+// A watermark span's `font-size: 1px` must read as invisible text; nothing meant to be read may.
+// The line sits at a tenth of the body (CssStyle::kInvisibleFontSizeMultiplier), 1.6 px of 16 px.
+TEST(CssParserUnits, FontSizeInvisibleOnlyBelowReadableSizes) {
+  const char* const invisible[] = {"font-size: 1px",    "font-size: 0.5px",   "font-size: 1.5px", "font-size: 1pt",
+                                   "font-size: 0.09em", "font-size: 0.05rem", "font-size: 9%"};
+  for (const char* decl : invisible) {
+    EXPECT_TRUE(CssParser::parseInlineStyle(decl).isFontSizeInvisible()) << decl;
+  }
+
+  // 10 % is the renderer's clamp case (test_font_sizes.epub): raised to the 30 % floor, not hidden.
+  const char* const readable[] = {"font-size: 10%",   "font-size: 0.1em", "font-size: 2px",      "font-size: 2pt",
+                                  "font-size: 0.2em", "font-size: 0.5em", "font-size: xx-small", "font-size: smaller",
+                                  "font-size: 1em",   "color: white",     "font-size: inherit"};
+  for (const char* decl : readable) {
+    EXPECT_FALSE(CssParser::parseInlineStyle(decl).isFontSizeInvisible()) << decl;
+  }
+
+  // Zero is not a size the parser records (it stays inherited), so it is not invisible either:
+  // the zero-size container idiom relies on its children re-declaring a size.
+  EXPECT_FALSE(CssParser::parseInlineStyle("font-size: 0").isFontSizeInvisible());
+  EXPECT_FALSE(CssParser::parseInlineStyle("font-size: 0px").isFontSizeInvisible());
+}

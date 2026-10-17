@@ -93,7 +93,6 @@ class Section {
   // runs at render time, after the reader has re-taken the framebuffer.
   mutable bool pageBreakLabelsPending_ = false;
 
-  void buildTocBoundaries(const std::vector<std::pair<std::string, uint16_t>>& anchors);
   void buildTocBoundariesFromFile(FsFile& f);
   void buildPageBreakLabelsFromFile(FsFile& f) const;
   void ensurePageBreakLabels() const;

@@ -63,6 +63,26 @@ struct EpubLinkBackStack {
     if (sessionDepth > 0) sessionDepth--;
   }
 
+  // A link that lands back where an earlier one was followed from -- a note's "Return", a backlink
+  // to the marker the reader tapped -- is a return, not one more detour. Answers the depth the stack
+  // goes back to: the index of the newest entry on `spine` within a page of `page`, which is dropped
+  // with everything above it, as Back would have. -1 when there is none. The newest entry itself is
+  // never matched: it was pushed for this very link, and is where it was tapped.
+  //
+  // Within a page rather than on it, because an id inside a paragraph names the page of a nearby
+  // line, not of the marker itself: the page its paragraph starts on, or the one the next block
+  // starts on. A backlink to the marker can therefore land a page either side of the saved one.
+  //
+  // Based on crosspoint-reader PR #3799 (Ruslan Sukharev, @skhrv), whose FootnoteHistory unwinds the
+  // same way; theirs matches any page of the origin's spine when the link crosses spines.
+  static int returnDepth(const Entry (&stack)[kMaxDepth], const int depth, const int spine, const int page) {
+    for (int i = depth - 2; i >= 0; i--) {
+      const int pagesAway = stack[i].pageNumber - page;
+      if (stack[i].spineIndex == spine && pagesAway >= -1 && pagesAway <= 1) return i;
+    }
+    return -1;
+  }
+
   // Bytes written to `out`; 0 for an empty stack, which is stored as no file at all.
   static size_t encode(const Entry (&stack)[kMaxDepth], const int depth, uint8_t (&out)[kMaxSize]) {
     if (depth <= 0 || depth > kMaxDepth) return 0;

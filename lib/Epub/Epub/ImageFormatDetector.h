@@ -1,5 +1,7 @@
 #pragma once
 
+#include <HalStorage.h>
+
 #include <cstdint>
 #include <cstring>
 
@@ -32,6 +34,24 @@ class ImageFormatDetector {
     }
 
     return Format::Unknown;
+  }
+
+  // Bytes detect(FsFile&) reads: enough for every signature above.
+  static constexpr uint32_t kSniffBytes = 8;
+
+  // detect() on the leading bytes of an image in a file. `base` is where the image starts inside
+  // the file: 0 for an extracted image, the entry's data offset when the image is read in place
+  // out of the EPUB. The stream is left back at `base` either way, ready for a decoder.
+  static Format detect(FsFile& file, const uint32_t base = 0) {
+    if (!file || !file.seek(base)) {
+      return Format::Unknown;
+    }
+
+    uint8_t header[kSniffBytes] = {};
+    const int readBytes = file.read(header, sizeof(header));
+    file.seek(base);
+
+    return detect(header, readBytes > 0 ? static_cast<size_t>(readBytes) : 0);
   }
 
   // Helper to check if detected format is actually valid (covers at least the minimum header size)

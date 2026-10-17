@@ -341,6 +341,18 @@ struct CssStyle {
     return (defined.opacityZero && opacityZero) || (defined.visibilityHidden && visibilityHidden);
   }
   [[nodiscard]] bool isTextTransparent() const { return defined.colorTransparent && colorTransparent; }
+  // Text declared too small to read: the `font-size: 1px` span a watermarking service hides in the
+  // prose. Like colorTransparent a TEXT-only question (images are not sized by it), asked of the
+  // element's own declared multiplier, before any baseline normalisation.
+  // The line is a tenth of the body: 1.6 px of the CSS 16 px medium, 1.2 pt of 12 pt. Watermarks
+  // sit at 1 px (0.0625) or 1 pt (0.083). Nothing meant to be read comes near it: the smallest
+  // keyword (xx-small) is 0.6, the sup/sub default 0.5, and the renderer's own floor
+  // (ParsedText::MIN_WORD_SIZE_PCT, 30 %) is three times above it. A tenth itself is left to that
+  // floor, as test_font_sizes.epub pins.
+  static constexpr float kInvisibleFontSizeMultiplier = 0.1f;
+  [[nodiscard]] bool isFontSizeInvisible() const {
+    return defined.fontSizeMultiplier && fontSizeMultiplier < kInvisibleFontSizeMultiplier;
+  }
   [[nodiscard]] bool hasPageBreakBefore() const { return defined.pageBreakBefore; }
   [[nodiscard]] bool hasPageBreakAfter() const { return defined.pageBreakAfter; }
   [[nodiscard]] bool hasLineHeight() const { return defined.lineHeight; }
