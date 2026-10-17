@@ -46,7 +46,9 @@ class DictionaryDefinitionActivity final : public Activity {
 
   BodyArea bodyArea() const;
   bool layoutHtmlPages();
-  void wrapText();
+  bool reserveLines(size_t capacity);
+  bool prepareFont(int fontId);
+  bool wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
   void drawBody(int fontId, int x, int startY) const;
 
@@ -58,7 +60,10 @@ class DictionaryDefinitionActivity final : public Activity {
   // Styled path: reader-identical Pages laid out from the HTML definition.
   // Empty means the plain-text span path below is active.
   std::vector<std::unique_ptr<Page>> pages;
-  std::vector<Line> lines;
+  std::unique_ptr<Line[]> lines;
+  size_t lineCount = 0;
+  size_t lineCapacity = 0;
+  bool plainTextLayoutFailed = false;
   int currentPage = 0;
   int totalPages = 1;
   int linesPerPage = 1;
