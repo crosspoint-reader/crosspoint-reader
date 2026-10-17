@@ -60,6 +60,7 @@
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SerialLineBuffer.h"
 #include "util/Timezones.h"
 #include "util/WakeTrace.h"
 
@@ -1752,8 +1753,20 @@ void loop() {
   // Skip while an activity owns the serial input (e.g. the USB serial
   // file-transfer activity): it drives a binary protocol on logSerial and this
   // line reader would otherwise steal bytes from its stream.
-  if (logSerial.available() > 0 && !activityManager.currentOwnsSerialInput()) {
-    String line = logSerial.readStringUntil('\n');
+  // Only what has arrived is read; a line still on its way is finished on a later pass
+  // (SerialLineBuffer says why). One line per pass, as before: a script's next command waits for
+  // the loop to act on this one.
+  static SerialLineBuffer serialLine;
+  bool serialLineComplete = false;
+  if (activityManager.currentOwnsSerialInput()) {
+    serialLine.reset();
+  } else {
+    while (!serialLineComplete && logSerial.available() > 0) {
+      serialLineComplete = serialLine.feed(static_cast<char>(logSerial.read()));
+    }
+  }
+  if (serialLineComplete) {
+    const String line(serialLine.take().c_str());
     if (line.startsWith("CMD:")) {
       String cmd = line.substring(4);
       cmd.trim();

@@ -161,6 +161,7 @@ add_subdirectory(font_cache_manager)  # after font_group_stream: links its uzlib
 add_subdirectory(gif_decoder)
 add_subdirectory(jpeg_decoder)
 add_subdirectory(serial_transfer)
+add_subdirectory(serial_line_buffer)
 add_subdirectory(opds_filename)
 add_subdirectory(epub_pipeline)
 add_subdirectory(memory_arena)
