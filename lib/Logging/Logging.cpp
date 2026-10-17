@@ -111,11 +111,17 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   }
   // add the user message
   {
-    int len = vsnprintf(c, sizeof(buf) - (c - buf), format, args);
+    const size_t room = sizeof(buf) - (c - buf);
+    int len = vsnprintf(c, room, format, args);
     if (len < 0) {
       va_end(args);
       return;
     }
+    // A line cut short at the buffer's end lost the '\n' its format ends in (the LOG_* macros append
+    // it), so it ran into the next line on the wire, and getLastLogs() spliced the two into one in
+    // a crash report. Keep the line end and lose a character of the message instead.
+    // Based on crosspoint-reader PR #2686 (DarkStarDS9, a draft).
+    if (static_cast<size_t>(len) >= room) buf[sizeof(buf) - 2] = '\n';
   }
   va_end(args);
   // Everything above is local state (buf, and HalClock::formatLogTime, which is
