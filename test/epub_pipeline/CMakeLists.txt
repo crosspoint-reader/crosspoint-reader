@@ -103,6 +103,7 @@ add_executable(EpubPipelineTest
   ParagraphAnchorTest.cpp
   ParsedTextOffsetTest.cpp
   LowHeapLoadTest.cpp
+  LongChapterPageTablesTest.cpp
   TableRowFallbackArenaTest.cpp
   AnchorMapTest.cpp
   AnchorPageAccuracyTest.cpp
@@ -146,6 +147,9 @@ target_compile_definitions(EpubPipelineTest PRIVATE
   JPEG_FIXTURE_DIR="${REPO_ROOT}/test/jpeg_decoder/fixtures"
   ENABLE_SERIAL_LOG=1
   LOG_LEVEL=2
+  # LongChapterPageTablesTest refuses build-table chunks on purpose (see ChunkedVector.h). The
+  # hook is inert until a test arms it; firmware and the dump tools never define it.
+  CHUNKED_VECTOR_FAULT_INJECTION
 )
 target_link_libraries(EpubPipelineTest PRIVATE
   crosspoint_test_common
