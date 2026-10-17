@@ -638,6 +638,12 @@ class ChapterHtmlSlimParser final : public Print {
   // if caches were actually released, i.e. it is worth re-testing the gate.
   bool recoverHeapForImageHeader();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  // The text before this point and the text after it are not in one inline formatting context, so
+  // a line break between them stays a space (cjkSegmentBreakPending_).
+  void endCjkSegment() {
+    cjkSegmentBreakPending_ = false;
+    lastTextCodepoint_ = 0;
+  }
   void clearSpentBlockHeadingStyle();
   // Depth of the header/block element whose start tag set up the current text block, or -1 once
   // that element has closed. A <br> inside it splits the element into more blocks, which keep its

@@ -297,6 +297,17 @@ constexpr int NUM_STRIKETHROUGH_TAGS = sizeof(STRIKETHROUGH_TAGS) / sizeof(STRIK
 const char* IMAGE_TAGS[] = {"img", "image"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
+// Inline formatting: the text on both sides of one of these elements' tags is in one inline
+// formatting context. CSS removes a segment break only between two CJK characters inside one inline
+// formatting context; a block boundary or an element the parser does not lay out inline (<br>,
+// <img>, table parts, <li>, <dt>, <dd>, <div>, <section>, <figure>, ...) is a word boundary, so
+// every element not listed here ends the CJK segment (endCjkSegment) at its start and its end.
+const char* INLINE_FORMATTING_TAGS[] = {"span", "a",      "b",    "strong", "i",     "em",   "u",       "ins",  "s",
+                                        "del",  "strike", "sup",  "sub",    "small", "big",  "ruby",    "rb",   "rt",
+                                        "rp",   "rtc",    "font", "q",      "cite",  "abbr", "acronym", "code", "mark",
+                                        "dfn",  "kbd",    "samp", "var",    "tt",    "bdi",  "bdo",     "time", "data"};
+constexpr int NUM_INLINE_FORMATTING_TAGS = sizeof(INLINE_FORMATTING_TAGS) / sizeof(INLINE_FORMATTING_TAGS[0]);
+
 const char* SKIP_TAGS[] = {"head"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
@@ -1560,7 +1571,7 @@ void ChapterHtmlSlimParser::addAncestorInsets(BlockStyle& style, const float emS
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
-  cjkSegmentBreakPending_ = false;
+  endCjkSegment();
   // Base style for the new block — normally the incoming blockStyle, but when falling
   // through from the empty-block merge path (see below) we use the merged style so that
   // accumulated parent-element margins are preserved for the inline-image paragraph.
@@ -1653,6 +1664,9 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   if (self->streamFailed) {
     return;
   }
+
+  // An element that is not inline formatting is a word boundary (INLINE_FORMATTING_TAGS).
+  if (!matches(name, INLINE_FORMATTING_TAGS, NUM_INLINE_FORMATTING_TAGS)) self->endCjkSegment();
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
@@ -3473,6 +3487,9 @@ void ChapterHtmlSlimParser::endElementBody(ChapterHtmlSlimParser* self, const ch
       }
     }
   }
+  // An element that is not inline formatting is a word boundary (INLINE_FORMATTING_TAGS). After the
+  // flush above, which records the last character of the element's own text.
+  if (!matches(name, INLINE_FORMATTING_TAGS, NUM_INLINE_FORMATTING_TAGS)) self->endCjkSegment();
 
   // An item that closes without text (<li></li>, or one holding only hidden content) still shows
   // its marker, and a marker never outlives its item into the text after the list.

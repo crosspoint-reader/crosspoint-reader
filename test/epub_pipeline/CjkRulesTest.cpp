@@ -91,6 +91,13 @@ std::string lineText(const DumpLine& line) {
   return text;
 }
 
+// As ParsedText measures a word: the block's multiplier times the word's own size, rounded.
+int wordWidth(const GfxRenderer& renderer, const DumpLine& line, const DumpWord& w) {
+  const int raw = renderer.getTextAdvanceX(1, w.text.c_str(), static_cast<EpdFontFamily::Style>(w.style));
+  const float scale = line.sizeMultiplier * (w.sizePct / 100.0f);
+  return scale == 1.0f ? raw : static_cast<int>(raw * scale + 0.5f);
+}
+
 struct Case {
   std::string epub;
   bool hyphenation = false;
@@ -117,12 +124,7 @@ class CjkRules : public testing::TestWithParam<Case> {
     ASSERT_FALSE(lines.empty());
   }
 
-  // As ParsedText measures a word: the block's multiplier times the word's own size, rounded.
-  int wordWidth(const DumpLine& line, const DumpWord& w) const {
-    const int raw = renderer.getTextAdvanceX(1, w.text.c_str(), static_cast<EpdFontFamily::Style>(w.style));
-    const float scale = line.sizeMultiplier * (w.sizePct / 100.0f);
-    return scale == 1.0f ? raw : static_cast<int>(raw * scale + 0.5f);
-  }
+  int wordWidth(const DumpLine& line, const DumpWord& w) const { return ::wordWidth(renderer, line, w); }
 
   GfxRenderer renderer;
   std::vector<DumpLine> lines;
@@ -210,4 +212,61 @@ TEST(CjkTable, ALongCjkCellIsChargedPerToken) {
     }
   }
   FAIL() << "case 8's first character is missing from the dump";
+}
+
+// A source line break next to an element that is not inline formatting is a word gap, not a CJK
+// segment break to drop (test_cjk_block_seams.epub; not in cjkBooks(), since these spaces are
+// correct). A list item whose text sits on its own indented line keeps the space after its marker
+// that its one-line control has, and the text of <dl>, <section> and <figure>, which the parser lays
+// out in one block, keeps a space at each seam.
+TEST(CjkBlockSeams, ALineBreakAtABlockOrListItemStaysASpace) {
+  const auto cacheDir = fs::temp_directory_path() / "epub_pipeline_test" / "cjk_block_seams";
+  fs::remove_all(cacheDir);
+  fs::create_directories(cacheDir);
+  pipeline_harness::Profile profile;
+  profile.paragraphAlignment = 1;  // left: a line's gaps are its natural gaps
+  std::ostringstream dump;
+  ASSERT_TRUE(pipeline_harness::runAndDump((fs::path(CORPUS_DIR) / "test_cjk_block_seams.epub").string(),
+                                           cacheDir.string(), profile, dump));
+  const std::vector<DumpLine> lines = parseLines(dump.str());
+  const GfxRenderer renderer;
+
+  // The gap between words[i] and words[i + 1] of the line where `left` is followed by `right`, or
+  // -1 when no line has them side by side.
+  const auto gapBetween = [&](const std::string& left, const std::string& right) {
+    for (const auto& line : lines) {
+      for (size_t i = 0; i + 1 < line.words.size(); ++i) {
+        if (line.words[i].text == left && line.words[i + 1].text == right) {
+          return line.words[i + 1].x - line.words[i].x - wordWidth(renderer, line, line.words[i]);
+        }
+      }
+    }
+    return -1;
+  };
+  // The gap between an item's marker and the first character of its text, 第 followed by `second`.
+  const auto markerGap = [&](const std::string& second) {
+    for (const auto& line : lines) {
+      for (size_t i = 1; i + 1 < line.words.size(); ++i) {
+        if (line.words[i].text == "第" && line.words[i + 1].text == second) {
+          return line.words[i].x - line.words[i - 1].x - wordWidth(renderer, line, line.words[i - 1]);
+        }
+      }
+    }
+    return -1;
+  };
+
+  // Pretty-printed item and one-line control: the <ul> pair, then the <ol> pair. The <ol> markers
+  // (1. and 2.) differ in width, so each pair compares the gap after the marker.
+  ASSERT_GT(markerGap("二"), 0) << "the <ul> control item is missing";
+  EXPECT_EQ(markerGap("一"), markerGap("二")) << "the pretty-printed <ul> item is glued to its marker";
+  ASSERT_GT(markerGap("四"), 0) << "the <ol> control item is missing";
+  EXPECT_EQ(markerGap("三"), markerGap("四")) << "the pretty-printed <ol> item is glued to its marker";
+
+  // When the two sides share a line, a space separates them.
+  if (const int gap = gapBetween("語", "説"); gap != -1) {
+    EXPECT_GT(gap, 0) << "用語 and 説明文 glued";
+  }
+  if (const int gap = gapBetween("章", "図"); gap != -1) {
+    EXPECT_GT(gap, 0) << "節の文章 and 図の説明 glued";
+  }
 }
