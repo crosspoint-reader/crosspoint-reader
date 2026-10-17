@@ -166,6 +166,137 @@ bool isSelectorUsableByResolver(std::string_view selector) {
   return dotPos + 1 < selector.size() && selector.find('.', dotPos + 1) == std::string_view::npos;
 }
 
+// FNV-1a 32-bit (CssParser::selectorHash, and the names of complex-rule compounds).
+uint32_t fnv1a32(const std::string_view s) {
+  uint32_t h = 2166136261u;
+  for (const unsigned char c : s) {
+    h ^= c;
+    h *= 16777619u;
+  }
+  return h;
+}
+
+// The complex-rule table (CssParser::complexTable). Caps keep it a few KB at most; a selector
+// past one is counted unsupported like any other the resolver cannot use.
+constexpr size_t MAX_COMPLEX_BYTES = 4096;
+constexpr uint8_t MAX_COMPLEX_COMPOUNDS = 64;  // one bit each in an element's u64 compound mask
+constexpr uint8_t MAX_COMPLEX_RULES = 255;
+constexpr size_t MAX_COMPOUND_CLASSES = 7;  // the low 3 bits of a compound's flags byte
+constexpr size_t COMPLEX_HEADER_BYTES = 4;  // compoundCount(1) ruleCount(1) compoundBytes(2)
+constexpr size_t COMPLEX_RULE_HEADER_BYTES = 6;
+constexpr uint8_t COMPOUND_HAS_TAG = 0x80;
+constexpr uint8_t COMPOUND_HAS_ID = 0x40;
+constexpr uint8_t COMPOUND_CLASS_COUNT = 0x07;
+// An element's classes past this many take no part in compound matching.
+constexpr size_t MAX_ELEMENT_CLASSES = 8;
+
+bool isNameChar(const char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || static_cast<unsigned char>(c) >= 0x80;
+}
+
+// One compound selector -- an element name or `*`, then any .class and at most one #id -- with
+// its names hashed. False for anything else: an escape, an attribute or pseudo part, a combinator.
+struct Compound {
+  uint8_t flags = 0;
+  uint32_t tag = 0;
+  uint32_t id = 0;
+  uint32_t classes[MAX_COMPOUND_CLASSES] = {};
+
+  uint8_t classCount() const { return flags & COMPOUND_CLASS_COUNT; }
+  uint32_t specificity() const {
+    return ((flags & COMPOUND_HAS_ID) ? SPECIFICITY_ID : 0) + classCount() * SPECIFICITY_CLASS +
+           ((flags & COMPOUND_HAS_TAG) ? SPECIFICITY_TAG : 0);
+  }
+  // The table form: flags, then the names it has, classes sorted.
+  size_t serialize(uint8_t* out) const {
+    uint8_t* p = out;
+    *p++ = flags;
+    if (flags & COMPOUND_HAS_TAG) p = static_cast<uint8_t*>(std::memcpy(p, &tag, 4)) + 4;
+    if (flags & COMPOUND_HAS_ID) p = static_cast<uint8_t*>(std::memcpy(p, &id, 4)) + 4;
+    for (uint8_t i = 0; i < classCount(); ++i) p = static_cast<uint8_t*>(std::memcpy(p, &classes[i], 4)) + 4;
+    return static_cast<size_t>(p - out);
+  }
+};
+constexpr size_t MAX_COMPOUND_BYTES = 1 + 4 + 4 + 4 * MAX_COMPOUND_CLASSES;
+
+bool parseCompound(const std::string_view text, Compound& out) {
+  out = Compound{};
+  if (text.empty()) return false;
+  size_t i = 0;
+  if (text[0] == '*') {
+    i = 1;
+  } else {
+    while (i < text.size() && isNameChar(text[i])) ++i;
+    if (i > 0) {
+      out.flags |= COMPOUND_HAS_TAG;
+      out.tag = fnv1a32(text.substr(0, i));
+    }
+  }
+  uint8_t classCount = 0;
+  while (i < text.size()) {
+    const char marker = text[i++];
+    const size_t start = i;
+    while (i < text.size() && isNameChar(text[i])) ++i;
+    if (i == start) return false;
+    const uint32_t name = fnv1a32(text.substr(start, i - start));
+    if (marker == '#' && !(out.flags & COMPOUND_HAS_ID)) {
+      out.flags |= COMPOUND_HAS_ID;
+      out.id = name;
+    } else if (marker == '.' && classCount < MAX_COMPOUND_CLASSES) {
+      out.classes[classCount++] = name;
+    } else {
+      return false;
+    }
+  }
+  std::sort(out.classes, out.classes + classCount);
+  out.flags |= classCount;
+  return true;
+}
+
+uint16_t readU16(const uint8_t* p) {
+  uint16_t v;
+  std::memcpy(&v, p, sizeof(v));
+  return v;
+}
+
+size_t compoundSize(const uint8_t flags) {
+  return 1 + ((flags & COMPOUND_HAS_TAG) ? 4 : 0) + ((flags & COMPOUND_HAS_ID) ? 4 : 0) +
+         4 * (flags & COMPOUND_CLASS_COUNT);
+}
+
+// Bounds-checks a table read from the cache, so a damaged file cannot send the per-element scan
+// past its end.
+bool complexTableValid(const uint8_t* table, const size_t bytes) {
+  if (bytes < COMPLEX_HEADER_BYTES) return false;
+  size_t pos = COMPLEX_HEADER_BYTES;
+  for (uint8_t i = 0; i < table[0]; ++i) {
+    if (pos >= bytes) return false;
+    pos += compoundSize(table[pos]);
+  }
+  if (pos != COMPLEX_HEADER_BYTES + readU16(table + 2)) return false;
+  for (uint8_t r = 0; r < table[1]; ++r) {
+    if (pos + COMPLEX_RULE_HEADER_BYTES > bytes) return false;
+    const uint8_t steps = table[pos + 4];
+    const uint8_t styleLen = table[pos + 5];
+    if (steps == 0 || pos + COMPLEX_RULE_HEADER_BYTES + steps + styleLen > bytes) return false;
+    for (uint8_t s = 0; s < steps; ++s) {
+      if ((table[pos + COMPLEX_RULE_HEADER_BYTES + s] & 0x3F) >= table[0]) return false;
+    }
+    pos += COMPLEX_RULE_HEADER_BYTES + steps + styleLen;
+  }
+  return pos == bytes;
+}
+
+// FNV-1a of the lowercased name, without building the lowercase copy.
+uint32_t fnv1a32Lower(const std::string_view s) {
+  uint32_t h = 2166136261u;
+  for (const char c : s) {
+    h ^= static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(c)));
+    h *= 16777619u;
+  }
+  return h;
+}
+
 template <typename Fn>
 void forEachNormalizedClassToken(const std::string& classAttr, std::string& normalizedBuf, Fn&& fn) {
   size_t i = 0;
@@ -221,14 +352,7 @@ std::string_view stripTrailingImportant(std::string_view value) {
 // FNV-1a 32-bit hash — no heap, good distribution over short selector strings.
 // 32 bits keep the selector index at 8 bytes/entry; collisions are resolved by
 // verifying the on-disk selector string in readRuleFromDiskAtOffset().
-uint32_t CssParser::selectorHash(std::string_view s) {
-  uint32_t h = 2166136261u;
-  for (unsigned char c : s) {
-    h ^= c;
-    h *= 16777619u;
-  }
-  return h;
-}
+uint32_t CssParser::selectorHash(std::string_view s) { return fnv1a32(s); }
 
 // String utilities implementation
 
@@ -854,11 +978,22 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
       continue;
     }
 
+    // `*.a` and `*#id` are `.a` and `#id`: the universal selector adds nothing to a compound,
+    // not even specificity.
+    if (selectorKeyBuf_.size() > 1 && selectorKeyBuf_[0] == '*' &&
+        (selectorKeyBuf_[1] == '.' || selectorKeyBuf_[1] == '#')) {
+      selectorKeyBuf_.erase(0, 1);
+    }
+
     // Already normalized into selectorKeyBuf_ above — no second pass, no second allocation.
     const std::string& key = selectorKeyBuf_;
 
     if (!isSelectorUsableByResolver(key)) {
-      unsupportedSelectorSkips_++;
+      if (addComplexRule(key, style, order)) {
+        stored = true;
+      } else {
+        unsupportedSelectorSkips_++;
+      }
       continue;
     }
 
@@ -1176,10 +1311,13 @@ bool CssParser::endCacheCompile() {
   compileTempFile_.close();
   // swap, not clear(): clear() frees the nodes but keeps the bucket array, which would sit
   // under the index ensureCacheIndexLoaded() is about to allocate.
+  // The complex-rule table is staged in RAM: dropIndex() releases it (written to the cache by
+  // then, or abandoned with the failed compile).
   const auto dropStaging = [this] {
     Storage.remove(compileTempPath_.c_str());
     std::unordered_map<std::string, StagedRule>().swap(compileSelectorOffsets_);
     std::vector<uint32_t>().swap(compileRetiredOffsets_);
+    dropIndex();
   };
 
   if (compileModeFailed_) {
@@ -1199,6 +1337,7 @@ bool CssParser::endCacheCompile() {
   outFile.write(reinterpret_cast<const uint8_t*>(&totalSelectorCandidates_), sizeof(totalSelectorCandidates_));
   outFile.write(reinterpret_cast<const uint8_t*>(&unsupportedSelectorSkips_), sizeof(unsupportedSelectorSkips_));
   outFile.write(static_cast<uint8_t>((hasIdSelectors_ ? 1 : 0) | (rulesTruncated_ ? 2 : 0)));  // v17 flags byte
+  writeComplexTable(outFile);
   // v10: index immediately after the header — write zeroed placeholder, patch below.
 
   FsFile tempFile;
@@ -1249,7 +1388,7 @@ bool CssParser::endCacheCompile() {
   // Sort and patch the index placeholder at position 11.
   std::sort(indexEntries.begin(), indexEntries.end(),
             [](const SelectorEntry& a, const SelectorEntry& b) { return a.hash < b.hash; });
-  outFile.seek(CssParser::CSS_CACHE_HEADER_BYTES);
+  outFile.seek(CssParser::CSS_CACHE_HEADER_BYTES + complexBytes_);
   for (const auto& entry : indexEntries) {
     outFile.write(reinterpret_cast<const uint8_t*>(&entry), sizeof(entry));
   }
@@ -1300,9 +1439,7 @@ void CssParser::clearCaches(const bool evictEverything) {
     std::unordered_multimap<std::string, OrderedStyle>().swap(rulesBySelector_);
     std::unordered_map<std::string, std::pair<OrderedStyle, std::list<std::string>::iterator>>().swap(hotRuleCache_);
     std::unordered_set<std::string>().swap(negativeRuleCache_);
-    std::vector<SelectorEntry>().swap(cacheRuleOffsets_);
-    cacheIndexLoaded_ = false;
-    cachedRuleCount_ = 0;
+    dropIndex();
     return;
   }
   // Retain the sorted disk index if it fits in 10 KB — avoids a cold SD re-read
@@ -1550,6 +1687,11 @@ void CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   file.write(visibilityFlags);
 }
 
+void CssParser::writeComplexTable(FsFile& file) const {
+  file.write(reinterpret_cast<const uint8_t*>(&complexBytes_), sizeof(complexBytes_));
+  if (complexBytes_ > 0) file.write(complexTable(), complexBytes_);
+}
+
 void CssParser::writeRuleRecord(FsFile& file, const std::string& selector, const uint16_t order,
                                 const CssStyle& style) {
   const auto selectorLen = static_cast<uint16_t>(selector.size());
@@ -1755,9 +1897,11 @@ bool CssParser::ensureCacheIndexLoaded() const {
   uint32_t totalCandidates = 0;
   uint32_t unsupportedSkips = 0;
   uint8_t flags = 0;
+  uint16_t complexBytes = 0;
   if (file.read(reinterpret_cast<uint8_t*>(&totalCandidates), sizeof(totalCandidates)) != sizeof(totalCandidates) ||
       file.read(reinterpret_cast<uint8_t*>(&unsupportedSkips), sizeof(unsupportedSkips)) != sizeof(unsupportedSkips) ||
-      file.read(&flags, 1) != 1) {
+      file.read(&flags, 1) != 1 || file.read(&complexBytes, sizeof(complexBytes)) != sizeof(complexBytes) ||
+      complexBytes > MAX_COMPLEX_BYTES) {
     file.close();
     return false;
   }
@@ -1767,11 +1911,32 @@ bool CssParser::ensureCacheIndexLoaded() const {
     LOG_ERR("CSS", "This book's stylesheets exceed %zu rules; the rules past the cap are not applied", MAX_RULES);
   }
 
-  // v10: index is immediately after the 11-byte header — read sequentially, no seek.
+  // v10: index is immediately after the header (v23: and the complex-rule table) — read
+  // sequentially, no seek.
   dropIndex();  // clears the heap vector and any arena view; resets cachedRuleCount_
   hotRuleCache_.clear();
   hotRuleLru_.clear();
   negativeRuleCache_.clear();
+
+  // The complex rules are always in RAM (see complexTable): in the arena next to the index, or on
+  // the heap. Placed before the index so a failed RESIDENT attempt rewinds only past itself.
+  if (complexBytes > 0) {
+    uint8_t* table = nullptr;
+    if (indexArena_) {
+      table = static_cast<uint8_t*>(indexArena_->alloc(complexBytes, 1));
+    } else {
+      complexHeap_ = makeUniqueNoThrow<uint8_t[]>(complexBytes);
+      table = complexHeap_.get();
+    }
+    if (table == nullptr || file.read(table, complexBytes) != complexBytes || !complexTableValid(table, complexBytes)) {
+      LOG_ERR("CSS", "Could not load %u bytes of complex CSS rules", static_cast<unsigned>(complexBytes));
+      file.close();
+      dropIndex();
+      return false;
+    }
+    if (indexArena_) complexArena_ = table;
+    complexBytes_ = complexBytes;
+  }
 
   // Arena mode (Phase 2): prefer the resident {hash, CssStyle} ruleset (in-RAM resolve, no
   // disk reads — see loadArenaResident); fall back to an arena-backed offset index when the
@@ -1786,7 +1951,7 @@ bool CssParser::ensureCacheIndexLoaded() const {
     const size_t indexBytes = static_cast<size_t>(ruleCount) * sizeof(SelectorEntry);
     if (ruleCount > 0) {
       auto* idx = static_cast<SelectorEntry*>(indexArena_->alloc(indexBytes, alignof(SelectorEntry)));
-      if (!idx || !file.seek(CssParser::CSS_CACHE_HEADER_BYTES) ||
+      if (!idx || !file.seek(CssParser::CSS_CACHE_HEADER_BYTES + complexBytes_) ||
           file.read(reinterpret_cast<uint8_t*>(idx), indexBytes) != static_cast<int>(indexBytes)) {
         file.close();
         return false;  // arena exhausted or short read — caller falls back to a released build
@@ -2016,7 +2181,7 @@ bool CssParser::loadArenaResident(FsFile& file, const uint16_t ruleCount, const 
   if (ruleCount > 0) {
     // Skip the sorted offset index (11-byte header + ruleCount * 8) to reach the payload block,
     // then stream it in one sequential pass (fixed-size payloads → no per-record seeking).
-    if (!file.seek(static_cast<uint32_t>(CssParser::CSS_CACHE_HEADER_BYTES +
+    if (!file.seek(static_cast<uint32_t>(CssParser::CSS_CACHE_HEADER_BYTES + complexBytes_ +
                                          static_cast<size_t>(ruleCount) * sizeof(SelectorEntry)))) {
       indexArena_->release(block);
       return false;
@@ -2100,6 +2265,10 @@ void CssParser::dropIndex() const {
   arenaStyleCount_ = 0;
   arenaPoolBytes_ = 0;
   arenaIndex_ = nullptr;
+  complexHeap_.reset();
+  complexArena_ = nullptr;
+  complexBytes_ = 0;
+  complexCapacity_ = 0;
   cacheIndexLoaded_ = false;
   cachedRuleCount_ = 0;
 }
@@ -2112,6 +2281,121 @@ CssParser::ResidentFootprint CssParser::getResidentFootprint() const {
   f.indexBytes = static_cast<uint32_t>(cachedRuleCount_) * sizeof(ResidentEntry);
   f.poolBytes = arenaPoolBytes_;
   return f;
+}
+
+// --- Complex rules (see CssParser.h, complexTable) ---
+
+bool CssParser::growComplexTable(const size_t needed) {
+  if (needed <= complexCapacity_) return true;
+  if (needed > MAX_COMPLEX_BYTES) return false;
+  const size_t capacity =
+      std::min(MAX_COMPLEX_BYTES, std::max<size_t>(needed, complexCapacity_ ? complexCapacity_ * 2u : 256u));
+  auto grown = makeUniqueNoThrow<uint8_t[]>(capacity);
+  if (!grown) {
+    LOG_ERR("CSS", "No heap for %u bytes of complex CSS rules", static_cast<unsigned>(capacity));
+    return false;
+  }
+  if (complexHeap_) std::memcpy(grown.get(), complexHeap_.get(), complexBytes_);
+  complexHeap_ = std::move(grown);
+  complexCapacity_ = static_cast<uint16_t>(capacity);
+  return true;
+}
+
+bool CssParser::addComplexRule(const std::string_view selector, const CssStyle& style, const uint16_t order) {
+  Compound compound;
+  if (!parseCompound(selector, compound)) return false;
+  uint8_t compoundBytes[MAX_COMPOUND_BYTES];
+  const size_t compoundLen = compound.serialize(compoundBytes);
+  uint8_t styleBytes[kMaxCompressedStyle];
+  const size_t styleLen = compressStyle(style, styleBytes);
+
+  if (complexBytes_ == 0) {
+    if (!growComplexTable(COMPLEX_HEADER_BYTES)) return false;
+    std::memset(complexHeap_.get(), 0, COMPLEX_HEADER_BYTES);
+    complexBytes_ = COMPLEX_HEADER_BYTES;
+  }
+  if (complexHeap_.get()[1] >= MAX_COMPLEX_RULES) return false;
+
+  // The compound's index, interning it if the table does not have it yet.
+  const size_t compoundsEnd = COMPLEX_HEADER_BYTES + readU16(complexHeap_.get() + 2);
+  int index = -1;
+  for (size_t pos = COMPLEX_HEADER_BYTES, i = 0; i < complexHeap_.get()[0]; ++i) {
+    const size_t len = compoundSize(complexHeap_.get()[pos]);
+    if (len == compoundLen && std::memcmp(complexHeap_.get() + pos, compoundBytes, len) == 0) {
+      index = static_cast<int>(i);
+      break;
+    }
+    pos += len;
+  }
+  const size_t ruleLen = COMPLEX_RULE_HEADER_BYTES + 1 + styleLen;
+  if (index < 0 && complexHeap_.get()[0] >= MAX_COMPLEX_COMPOUNDS) return false;
+  if (!growComplexTable(complexBytes_ + ruleLen + (index < 0 ? compoundLen : 0))) return false;
+  uint8_t* table = complexHeap_.get();
+  if (index < 0) {
+    std::memmove(table + compoundsEnd + compoundLen, table + compoundsEnd, complexBytes_ - compoundsEnd);
+    std::memcpy(table + compoundsEnd, compoundBytes, compoundLen);
+    index = table[0]++;
+    const auto compoundBytesTotal = static_cast<uint16_t>(compoundsEnd + compoundLen - COMPLEX_HEADER_BYTES);
+    std::memcpy(table + 2, &compoundBytesTotal, sizeof(compoundBytesTotal));
+    complexBytes_ = static_cast<uint16_t>(complexBytes_ + compoundLen);
+  }
+
+  uint8_t* rule = table + complexBytes_;
+  const auto specificity = static_cast<uint16_t>(compound.specificity());
+  std::memcpy(rule, &order, sizeof(order));
+  std::memcpy(rule + 2, &specificity, sizeof(specificity));
+  rule[4] = 1;
+  rule[5] = static_cast<uint8_t>(styleLen);
+  rule[COMPLEX_RULE_HEADER_BYTES] = static_cast<uint8_t>(index);
+  std::memcpy(rule + COMPLEX_RULE_HEADER_BYTES + 1, styleBytes, styleLen);
+  complexBytes_ = static_cast<uint16_t>(complexBytes_ + ruleLen);
+  ++table[1];
+  if (compound.flags & COMPOUND_HAS_ID) hasIdSelectors_ = true;
+  return true;
+}
+
+void CssParser::applyComplexRules(const uint32_t tagHash, const uint32_t* idHash, const uint32_t* classHashes,
+                                  const size_t classCount, Cascade& cascade) const {
+  const uint8_t* table = complexTable();
+  if (table == nullptr || table[1] == 0) return;
+
+  // Which compounds the element matches: every part it names must be the element's.
+  uint64_t matched = 0;
+  const uint8_t* p = table + COMPLEX_HEADER_BYTES;
+  for (uint8_t i = 0; i < table[0]; ++i) {
+    const uint8_t flags = *p++;
+    bool match = true;
+    uint32_t name = 0;
+    if (flags & COMPOUND_HAS_TAG) {
+      std::memcpy(&name, p, 4);
+      p += 4;
+      match = name == tagHash;
+    }
+    if (flags & COMPOUND_HAS_ID) {
+      std::memcpy(&name, p, 4);
+      p += 4;
+      match = match && idHash != nullptr && name == *idHash;
+    }
+    for (uint8_t c = 0; c < (flags & COMPOUND_CLASS_COUNT); ++c) {
+      std::memcpy(&name, p, 4);
+      p += 4;
+      match = match && std::find(classHashes, classHashes + classCount, name) != classHashes + classCount;
+    }
+    if (match) matched |= uint64_t{1} << i;
+  }
+  if (matched == 0) return;
+
+  for (uint8_t r = 0; r < table[1]; ++r) {
+    const uint8_t steps = p[4];
+    const uint8_t styleLen = p[5];
+    const uint8_t* compounds = p + COMPLEX_RULE_HEADER_BYTES;
+    if ((matched >> (compounds[0] & 0x3F)) & 1u) {
+      CssStyle style;
+      decompressStyle(compounds + steps, style);
+      cascade.apply(style, readU16(p + 2), readU16(p));
+    }
+    p += COMPLEX_RULE_HEADER_BYTES + steps + styleLen;
+  }
 }
 
 // Style resolution
@@ -2157,6 +2441,11 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
 
   lookup(tag, SPECIFICITY_TAG);
 
+  // The element's class names, hashed for the complex rules (when the sheet has any).
+  const bool complexRules = complexBytes_ > 0;
+  uint32_t classHashes[MAX_ELEMENT_CLASSES];
+  size_t classCount = 0;
+
   if (!classAttr.empty()) {
     std::string classToken;
     std::string classKey;
@@ -2175,6 +2464,8 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       combinedKey.push_back('.');
       combinedKey.append(cls);
       lookup(combinedKey, SPECIFICITY_CLASS + SPECIFICITY_TAG);
+
+      if (complexRules && classCount < MAX_ELEMENT_CLASSES) classHashes[classCount++] = selectorHash(cls);
     });
   }
 
@@ -2196,6 +2487,11 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
     tagIdKey.append(tag);
     tagIdKey.append(idKey);
     lookup(tagIdKey, SPECIFICITY_ID + SPECIFICITY_TAG);
+  }
+
+  if (complexRules) {
+    const uint32_t idHash = fnv1a32Lower(idAttr);
+    applyComplexRules(selectorHash(tag), idAttr.empty() ? nullptr : &idHash, classHashes, classCount, cascade);
   }
 
   if (!cascade.result.defined.anySet()) {
@@ -2418,6 +2714,7 @@ bool CssParser::saveToCache() const {
   file.write(reinterpret_cast<const uint8_t*>(&totalSelectorCandidates_), sizeof(totalSelectorCandidates_));
   file.write(reinterpret_cast<const uint8_t*>(&unsupportedSelectorSkips_), sizeof(unsupportedSelectorSkips_));
   file.write(static_cast<uint8_t>((hasIdSelectors_ ? 1 : 0) | (rulesTruncated_ ? 2 : 0)));  // v17 flags byte
+  writeComplexTable(file);
   // v10: index lives immediately after the header (before rule payloads).
   // Write zeroed placeholder entries now; patch with sorted data below.
   // ensureCacheIndexLoaded() reads header + index sequentially — no seek over payloads.
@@ -2441,7 +2738,7 @@ bool CssParser::saveToCache() const {
   // Sort and patch the index placeholder at position 11.
   std::sort(indexEntries.begin(), indexEntries.end(),
             [](const SelectorEntry& a, const SelectorEntry& b) { return a.hash < b.hash; });
-  file.seek(CssParser::CSS_CACHE_HEADER_BYTES);
+  file.seek(CssParser::CSS_CACHE_HEADER_BYTES + complexBytes_);
   for (const auto& entry : indexEntries) {
     file.write(reinterpret_cast<const uint8_t*>(&entry), sizeof(entry));
   }

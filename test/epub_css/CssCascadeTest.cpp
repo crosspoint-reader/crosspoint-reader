@@ -91,7 +91,8 @@ void resolveEverywhere(const std::vector<std::string>& sheets, const Probe& prob
     parser.setIndexArena(&arena);
     parser.setLeanResolve(true);
     ASSERT_TRUE(parser.loadFromCache());
-    ASSERT_TRUE(parser.isArenaResident());
+    // A sheet of complex rules only has no indexed rule, so no RESIDENT index to report.
+    if (parser.ruleCount() > 0) ASSERT_TRUE(parser.isArenaResident());
     check(Store::ArenaResident, parser.resolveStyle(probe.tag, probe.classes, probe.id));
     parser.clear();
   }
@@ -233,5 +234,81 @@ TEST(CssCascade, BackgroundPictureFollowsTheCascade) {
   EXPECT_EQ(*picture, "y.png") << ".y comes after .z";
   std::error_code ec;
   std::filesystem::remove_all(cacheDir, ec);
+  std::filesystem::remove(path, ec);
+}
+
+// --- Compound selectors (.a.b, p.a.b, p#id.a, *) ---
+
+// A compound matches only an element that has every one of its classes, in any order.
+TEST(CssCascade, CompoundMatchesOnlyAnElementWithEveryClass) {
+  const std::vector<std::string> css = {".a.b { font-weight: bold; }\n"};
+  expectWeight(css, {"p", "a b"}, CssFontWeight::Bold);
+  expectWeight(css, {"p", "b x a"}, CssFontWeight::Bold);
+  for (const char* classes : {"a", "b", "a c", ""}) {
+    resolveEverywhere(css, {"p", classes}, [&](const Store store, const CssStyle& style) {
+      EXPECT_FALSE(style.hasFontWeight()) << storeName(store) << " class=\"" << classes << "\"";
+    });
+  }
+}
+
+// .a.b has two classes of specificity: it beats .a, .b and p.a even when they come later.
+TEST(CssCascade, CompoundOutranksItsPartsWhereverItStands) {
+  const std::vector<std::string> css = {
+      ".a.b { text-align: right; }\n.a { text-align: center; }\n.b { text-align: left; }\n"
+      "p.a { text-align: justify; }\n"};
+  expectAlign(css, {"p", "a b"}, CssTextAlign::Right);
+  expectAlign(css, {"p", "b a"}, CssTextAlign::Right);
+}
+
+// Two compounds of equal specificity: the later one wins.
+TEST(CssCascade, LaterCompoundOfEqualSpecificityWins) {
+  expectWeight({".a.b { font-weight: bold; }\n.c.d { font-weight: normal; }\n"}, {"p", "d c b a"},
+               CssFontWeight::Normal);
+  expectWeight({".c.d { font-weight: normal; }\n.a.b { font-weight: bold; }\n"}, {"p", "a b c d"}, CssFontWeight::Bold);
+}
+
+TEST(CssCascade, ElementCompoundNeedsTheElement) {
+  const std::vector<std::string> css = {"p.a.b { margin-top: 3px; }\n"};
+  resolveEverywhere(css, {"p", "b a"}, [&](const Store store, const CssStyle& style) {
+    EXPECT_TRUE(style.hasMarginTop()) << storeName(store);
+  });
+  resolveEverywhere(css, {"div", "a b"}, [&](const Store store, const CssStyle& style) {
+    EXPECT_FALSE(style.hasMarginTop()) << storeName(store);
+  });
+}
+
+// p#x.a (one id, one class, one element) beats #x; without the class only #x applies.
+TEST(CssCascade, IdAndClassCompound) {
+  const std::vector<std::string> css = {"p#x.a { text-align: right; }\n#x { text-align: center; }\n"};
+  expectAlign(css, {"p", "a", "x"}, CssTextAlign::Right);
+  expectAlign(css, {"p", "", "x"}, CssTextAlign::Center);
+  expectAlign(css, {"div", "a", "x"}, CssTextAlign::Center);
+  expectAlign(css, {"p", "a", "X"}, CssTextAlign::Right);  // ids match case-insensitively, as #id rules do
+}
+
+// `*` matches every element at the lowest specificity; `*.a` is `.a`.
+TEST(CssCascade, UniversalSelector) {
+  const std::vector<std::string> css = {
+      "p { font-style: normal; }\n* { font-style: italic; }\n*.note { font-weight: bold; }\n"};
+  resolveEverywhere(css, {"p", ""}, [&](const Store store, const CssStyle& style) {
+    EXPECT_EQ(style.fontStyle, CssFontStyle::Normal) << storeName(store) << ": p outranks *";
+  });
+  resolveEverywhere(css, {"span", "note"}, [&](const Store store, const CssStyle& style) {
+    EXPECT_EQ(style.fontStyle, CssFontStyle::Italic) << storeName(store);
+    EXPECT_EQ(style.fontWeight, CssFontWeight::Bold) << storeName(store) << ": *.note is .note";
+  });
+}
+
+// Compounds are no longer counted unsupported; what the resolver still cannot use is.
+TEST(CssCascade, CompoundsAreNoLongerUnsupported) {
+  const std::string path =
+      writeCss(".a.b, p#x.y, * { margin-top: 1px; }\na:hover, ul + p, [title] { margin-top: 2px; }\n");
+  CssParser parser("");
+  FsFile file;
+  ASSERT_TRUE(Storage.openFileForRead("CSS", path.c_str(), file));
+  ASSERT_TRUE(parser.loadFromStream(file));
+  EXPECT_EQ(parser.selectorCandidates(), 6u);
+  EXPECT_EQ(parser.unsupportedSelectors(), 3u);
+  std::error_code ec;
   std::filesystem::remove(path, ec);
 }

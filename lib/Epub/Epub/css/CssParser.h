@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <list>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -25,6 +26,7 @@ class BuildArena;  // lib/Memory — optional backing store for the disk index (
  *   - Element selectors: p, div, h1, etc.
  *   - Class selectors: .classname
  *   - Combined: element.classname
+ *   - Compounds: .a.b, p.a.b, #id.a, p#id.a (up to 7 classes), and the universal *
  *   - Grouped: selector1, selector2 { }
  *
  * Not supported (silently ignored):
@@ -96,10 +98,12 @@ class CssParser {
   // v22: every rule record carries its source order (u16 after the selector), and a selector
   //      declared again further down is kept as a second record instead of merged into the first:
   //      rules now apply by specificity, then stylesheet order (see resolveStyle).
-  static constexpr uint8_t CSS_CACHE_VERSION = 22;
-  // Bytes before the sorted offset index: version(1) + ruleCount(2) + totalSelectorCandidates(4)
-  // + unsupportedSelectorSkips(4) + flags(1).
-  static constexpr uint32_t CSS_CACHE_HEADER_BYTES = 12;
+  // v23: compound selectors (.a.b, p#id.a, *): the header gains the byte count of the complex-rule
+  //      table, which follows it, before the sorted index (see complexTable).
+  static constexpr uint8_t CSS_CACHE_VERSION = 23;
+  // Bytes before the complex-rule table and the sorted offset index: version(1) + ruleCount(2) +
+  // totalSelectorCandidates(4) + unsupportedSelectorSkips(4) + flags(1) + complexTableBytes(2).
+  static constexpr uint32_t CSS_CACHE_HEADER_BYTES = 14;
 
   // Retained RAM per rule in disk-backed lookup mode (the sorted SelectorEntry index).
   // Heap gates (Section::heapAllowsEmbeddedStyle) size their contiguous-block floor
@@ -448,6 +452,39 @@ class CssParser {
   // A rule record, the unit of the cache file and the compile staging file:
   // selectorLen(2) selector order(2) style payload.
   static void writeRuleRecord(FsFile& file, const std::string& selector, uint16_t order, const CssStyle& style);
+  // complexTableBytes(2) and the complex-rule table, as the cache header ends.
+  void writeComplexTable(FsFile& file) const;
   void touchHotRule(const std::string& selector) const;
   void cacheHotRule(const std::string& selector, const OrderedStyle& rule) const;
+
+  // --- Complex rules (v23) ---
+  // Selectors the hashed index cannot key -- a compound of several parts (.a.b, p.a.b, p#id.a) or
+  // the universal `*` -- live in a small table of their own, matched by a scan per element. Only a
+  // sheet that has them pays: resolveStyle skips the scan when the table is empty. The table is
+  // held in RAM in every mode, built on the heap while parsing and loaded with the index (heap, or
+  // the build arena), because it is small and capped (MAX_COMPLEX_BYTES), and resolving from it
+  // must not cost a disk read per element. One contiguous block:
+  //   compoundCount(1) ruleCount(1) compoundBytes(2)
+  //   compounds: the distinct compounds, each flags(1) [tag(4)] [id(4)] class(4)...
+  //              (flags 0x80 element name, 0x40 id, low 3 bits the class count; names are
+  //              selectorHash of the lowercase name, classes sorted so equal compounds are equal
+  //              bytes). An element matches a compound when it has every part; bit i of an
+  //              element's compound mask says it matches compound i.
+  //   rules:     order(2) specificity(2) steps(1) styleLen(1) compound index(steps)
+  //              (steps: the compounds of the selector; a compound selector has one)
+  //              compressed style(styleLen)
+  // The pointer is the heap block (parse or heap-mode load) or the arena copy; nullptr = no table.
+  mutable std::unique_ptr<uint8_t[]> complexHeap_;
+  mutable const uint8_t* complexArena_ = nullptr;
+  mutable uint16_t complexBytes_ = 0;
+  mutable uint16_t complexCapacity_ = 0;  // of complexHeap_ while parsing
+  const uint8_t* complexTable() const { return complexArena_ ? complexArena_ : complexHeap_.get(); }
+  // Adds a compound selector to the table; false (the selector is then unsupported) for anything
+  // that is not one, or when a cap is reached.
+  bool addComplexRule(std::string_view selector, const CssStyle& style, uint16_t order);
+  bool growComplexTable(size_t needed);
+  // Merges the complex rules that match the element into `cascade`. The element's names come
+  // hashed like the table's (selectorHash of the lowercase name); idHash is nullptr without an id.
+  void applyComplexRules(uint32_t tagHash, const uint32_t* idHash, const uint32_t* classHashes, size_t classCount,
+                         Cascade& cascade) const;
 };
