@@ -6,13 +6,17 @@
                    one (「『（), and small kana and ー, which may start one
   2. newlines      hard-wrapped source: a line break between two CJK characters vanishes, one between
                    CJK and Latin stays a space
-  3. long run      a CJK run longer than 200 bytes and 96 tokens, with no punctuation to break it
+  3. long run      a CJK run longer than 200 bytes and than the 96 tokens of a mid-block layout, with no punctuation to break it
   4. inline        CJK split across <b>, <i> and <span>: the seams are breaks without spaces
   5. mixed         Latin, digits, fullwidth and halfwidth forms next to CJK
   6. korean        Hangul words stay whole and keep their spaces
   7. table         CJK text in a table cell
-  8. table budget  a cell of 385 CJK characters, one token each: charged per token, the row passes the
-                   12 KB row budget and flows as text (CjkTable.ALongCjkCellIsChargedPerToken)
+  8. table budget  a cell of 289 CJK characters, one token each: charged per token (about 14 KB), the
+                   row passes the 12 KB row budget and flows as text
+                   (CjkTable.ALongCjkCellIsChargedPerToken)
+  9. chunk seams   the SAX parser hands text over in 256-byte pieces that may cut a character in two:
+                   a line break between CJK characters still vanishes when the character after it
+                   (or the one before it) straddles a piece boundary
 
 Each case paragraph opens with an indented first line (CSS text-indent), so the rule checker tells a
 paragraph's first line from a line the layout broke.
@@ -44,6 +48,18 @@ LONG_RUN = (
     "劍號巨闕珠稱夜光果珍李柰菜重芥薑海鹹河淡鱗潛羽翔龍師火帝鳥官人皇始制文字乃服衣裳推位讓國有虞陶唐"
 )
 
+# Case 3 passes the 96-token mid-block layout by 12 characters.
+LONG_RUN_PLUS = LONG_RUN + "舟車馬牛羊犬豕鹿鳥魚貝石"
+
+# Case 9: each paragraph's text starts right after its <p>, so the 256-byte piece boundary falls
+# where noted. 84 Han characters are 252 bytes; the first character after the line break then starts
+# at byte 253 + spaces, and is cut after 1 or 2 of its 3 bytes.
+SEAM_AFTER_1 = "漢" * 84 + "\n 字字字"
+SEAM_AFTER_2 = "漢" * 84 + "\n  字字字"
+# 25 words of 10 bytes and one of 4 make 254 bytes; the 字 that follows is cut after 2 bytes and is
+# the last character before the line break.
+SEAM_BEFORE = "abcdefghi " * 25 + "abc " + "字\n字字"
+
 CASES = [
     ("1. kinsoku", f"<p>{KINSOKU}</p>\n<p>{KINSOKU}</p>"),
     (
@@ -53,7 +69,7 @@ CASES = [
         "<p>漢字の文章の途中で\n改行があっても、\n空白にはならない。しかし漢字\nLatin の前では空白になる。\n"
         "「引用」の後も\n「次の引用」の前も同じ。</p>",
     ),
-    ("3. long run", f"<p>{LONG_RUN}</p>"),
+    ("3. long run", f"<p>{LONG_RUN_PLUS}</p>"),
     (
         "4. inline",
         "<p>漢字の<b>強調された文字</b>と<i>斜体の文字</i>、<span>そして</span>普通の文字が"
@@ -75,6 +91,7 @@ CASES = [
         "<td><p>短い</p></td></tr></table>",
     ),
     ("8. table budget", f"<table><tr><td><p>鑑{LONG_RUN * 3}</p></td></tr></table>"),
+    ("9. chunk seams", f"<p>{SEAM_AFTER_1}</p>\n<p>{SEAM_AFTER_2}</p>\n<p>{SEAM_BEFORE}</p>"),
 ]
 
 CHAPTER = """<?xml version="1.0" encoding="UTF-8"?>

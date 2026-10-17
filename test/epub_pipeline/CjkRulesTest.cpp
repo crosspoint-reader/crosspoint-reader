@@ -188,8 +188,8 @@ INSTANTIATE_TEST_SUITE_P(CjkCorpus, CjkRules, testing::ValuesIn(cjkBooks()),
 }  // namespace
 
 // A CJK word is one token per character, and the table row budget charges every token: the fixture's
-// case 8, a cell of 385 CJK characters (18 KB of tokens), passes the 12 KB row budget and flows as
-// text, as a cell of 385 Latin words does. Charged once per flushed run, it would count as a dozen
+// case 8, a cell of 289 CJK characters (14 KB of tokens), passes the 12 KB row budget and flows as
+// text, as a cell of 289 Latin words does. Charged once per flushed run, it would count as a dozen
 // words and stay buffered.
 TEST(CjkTable, ALongCjkCellIsChargedPerToken) {
   const auto cacheDir = fs::temp_directory_path() / "epub_pipeline_test" / "cjk_table_budget";

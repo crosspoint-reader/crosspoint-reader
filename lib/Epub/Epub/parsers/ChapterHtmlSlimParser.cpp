@@ -309,12 +309,22 @@ bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c
 constexpr int kCjkRunCodepoints = 32;
 
 // The codepoint whose lead byte is s[0], or 0 when its sequence runs past the `avail` bytes in hand
-// (it continues in the next SAX chunk).
-uint32_t codepointAt(const char* s, const int avail) {
+// (it continues in the next SAX chunk). Such a character is not counted toward kCjkRunCodepoints, so
+// a run can reach 33 codepoints before it is flushed.
+static uint32_t codepointAt(const char* s, const int avail) {
   const auto lead = static_cast<uint8_t>(s[0]);
   const int length = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
   if (length > avail) return 0;
   const auto* p = reinterpret_cast<const unsigned char*>(s);
+  return utf8NextCodepoint(&p);
+}
+
+// The last codepoint of the `len` bytes at s, which end on a sequence boundary (0 when len is 0).
+static uint32_t lastCodepointOf(const char* s, const int len) {
+  if (len <= 0) return 0;
+  int i = len - 1;
+  for (int back = 0; back < 3 && i > 0 && (static_cast<uint8_t>(s[i]) & 0xC0) == 0x80; ++back) --i;
+  const auto* p = reinterpret_cast<const unsigned char*>(s + i);
   return utf8NextCodepoint(&p);
 }
 
@@ -943,6 +953,17 @@ bool ChapterHtmlSlimParser::flushPartWordBuffer() {
 
   // flush the buffer — route to table cell text when inside a <td>/<th>
   partWordBuffer[partWordBufferIndex] = '\0';
+  // The CJK segment-break decisions are made here, where the word is whole: a SAX chunk may end
+  // inside a codepoint, so consumeText can see half a character.
+  if (partWordBufferIndex > 0) {
+    if (cjkSegmentBreakPending_) {
+      // The line break before this word vanishes when the text on both sides is unspaced CJK:
+      // the word is glued to the previous one, and ParsedText turns the seam into a CJK gap.
+      if (utf8IsUnspacedCjk(codepointAt(partWordBuffer, partWordBufferIndex))) nextWordContinues = true;
+      cjkSegmentBreakPending_ = false;
+    }
+    lastTextCodepoint_ = lastCodepointOf(partWordBuffer, partWordBufferIndex);
+  }
   if (currentTableCell && currentTableCell->text) {
     // text is null only for a cell already consumed by the streaming path; currentTableCell is
     // cleared alongside that, so this is belt-and-braces against a future reordering.
@@ -3198,11 +3219,7 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
         if (!self->flushPartWordBuffer()) return;
         self->nextWordContinues = true;
       }
-      if (self->partWordBufferIndex == 0) {
-        self->partWordVisibleOffset_ = byteOff;
-        self->cjkSegmentBreakPending_ = false;  // a Latin character after a line break: it stays a space
-      }
-      self->lastTextCodepoint_ = c;
+      if (self->partWordBufferIndex == 0) self->partWordVisibleOffset_ = byteOff;
       self->partWordBuffer[self->partWordBufferIndex++] = s[i];
       continue;
     }
@@ -3327,16 +3344,9 @@ void ChapterHtmlSlimParser::consumeText(void* userData, const char* s, const int
       }
     }
 
-    // A codepoint starts here: decode it once for the CJK rules.
+    // A codepoint starts here: count it toward the CJK run.
     if (c >= 0xC0) {
       const uint32_t cp = codepointAt(s + i, len - i);
-      if (self->partWordBufferIndex == 0 && self->cjkSegmentBreakPending_) {
-        // The line break before this word vanishes when the text on both sides is unspaced CJK:
-        // the word is glued to the previous one, and ParsedText turns the seam into a CJK gap.
-        if (utf8IsUnspacedCjk(cp)) self->nextWordContinues = true;
-        self->cjkSegmentBreakPending_ = false;
-      }
-      if (cp != 0) self->lastTextCodepoint_ = cp;
       if (utf8IsCjkBreakable(cp)) {
         if (self->partWordCjkCodepoints_ >= kCjkRunCodepoints) {
           if (!self->flushPartWordBuffer()) return;
