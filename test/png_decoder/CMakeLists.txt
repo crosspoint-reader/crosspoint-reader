@@ -1,5 +1,6 @@
 add_executable(PngDecoderArenaTest
   PngDecoderArenaTest.cpp
+  PngDecoderIhdrTest.cpp
   ${REPO_ROOT}/test/zip_entry_reader/LoggingStub.cpp
   ${REPO_ROOT}/lib/PngDecoder/PngStreamDecoder.cpp
 )

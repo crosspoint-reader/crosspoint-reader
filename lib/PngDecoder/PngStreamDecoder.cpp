@@ -54,6 +54,27 @@ bool readBE32(FsFile& file, uint32_t& value) {
   return true;
 }
 
+// PNG spec table 11.1: the bit depths each colour type allows. Any other pairing is a corrupt
+// IHDR that nextRow() cannot unpack: a grayscale/palette depth of 3/5/6/7 indexes past the end
+// of the row buffer, and a sub-byte path with a depth above 8 (grayscale 9-15, palette 16) makes
+// ppb = 8 / bitDepth zero and divides by it. RISC-V does not trap that division, so a corrupt
+// EPUB image read garbage memory instead of being rejected.
+// Ported from crosspoint-reader PR #3979 (phucisstupid).
+bool isValidBitDepth(const uint8_t colorType, const uint8_t bitDepth) {
+  switch (colorType) {
+    case PNG_COLOR_GRAYSCALE:
+      return bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16;
+    case PNG_COLOR_PALETTE:
+      return bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8;
+    case PNG_COLOR_RGB:
+    case PNG_COLOR_GRAYSCALE_ALPHA:
+    case PNG_COLOR_RGBA:
+      return bitDepth == 8 || bitDepth == 16;
+    default:
+      return false;
+  }
+}
+
 constexpr int MAX_IMAGE_WIDTH = 2048;
 constexpr int MAX_IMAGE_HEIGHT = 3072;
 constexpr uint32_t MAX_RAW_ROW_BYTES = 16384;
@@ -158,6 +179,10 @@ bool PngStreamDecoder::begin(FsFile& file, Info& info) {
     default:
       LOG_ERR("PNG", "Unsupported color type: %d", colorType_);
       return false;
+  }
+  if (!isValidBitDepth(colorType_, bitDepth_)) {
+    LOG_ERR("PNG", "Invalid bit depth %d for color type %d", bitDepth_, colorType_);
+    return false;
   }
   if (rawRowBytes_ == 0 || rawRowBytes_ > MAX_RAW_ROW_BYTES) {
     LOG_ERR("PNG", "Row too large: %u bytes", rawRowBytes_);
