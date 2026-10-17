@@ -22,11 +22,14 @@
 #include <limits>
 #include <optional>
 
+#include "Epub/CoverImageRefScanner.h"
 #include "Epub/CoverThumbSession.h"
 #include "Epub/HashUtils.h"
 #include "Epub/ImageFormatDetector.h"
 #include "Epub/MetadataSidecar.h"
+#include "Epub/SpineHrefMatch.h"
 #include "Epub/SpinePageIndex.h"
+#include "Epub/TocFallbackPolicy.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/PageListSink.h"
@@ -78,6 +81,14 @@ bool coverImageComplete(FsFile& imageFile, ImageFormatDetector::Format format) {
   }
 
   return format != ImageFormatDetector::Format::Unknown;
+}
+
+// A markup document rather than a picture: an SVG wrapper (or an XHTML page) named as the cover.
+bool isCoverWrapperDocument(const std::string& href) {
+  for (const char* ext : {".svg", ".xhtml", ".html", ".htm"}) {
+    if (FsHelpers::checkFileExtension(href, ext)) return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -158,6 +169,24 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   bookMetadata.isbn = opfParser.isbn;
   bookMetadata.asin = opfParser.asin;
 
+  // The manifest can name an SVG wrapper as the cover image instead of the picture itself:
+  //
+  //   <item properties="cover-image" media-type="image/svg+xml" href="cover.svg"/>
+  //   cover.svg: <svg viewBox="0 0 1135 1600"><image xlink:href="cover.jpg"/></svg>
+  //
+  // Cover and thumbnail generation decode JPEG and PNG only, so the picture inside is the cover. A
+  // wrapper that holds none is dropped, and the guide and ZIP-name scans below look for one instead.
+  // Ported from crosspoint-reader PR #3539 (OSAKANA TARO, @osakanataro).
+  if (isCoverWrapperDocument(bookMetadata.coverItemHref)) {
+    std::string inWrapper = findCoverImageInDocument(bookMetadata.coverItemHref);
+    if (inWrapper.empty()) {
+      LOG_DBG("EBP", "Cover document holds no JPEG/PNG reference: %s", bookMetadata.coverItemHref.c_str());
+    } else {
+      LOG_DBG("EBP", "Cover document %s wraps %s", bookMetadata.coverItemHref.c_str(), inWrapper.c_str());
+    }
+    bookMetadata.coverItemHref = std::move(inWrapper);
+  }
+
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // or if the manifest-declared cover path is invalid, try extracting the image
   // reference from the guide's cover page XHTML.
@@ -173,44 +202,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
 
   if (shouldTryGuideCoverFallback && !opfParser.guideCoverPageHref.empty()) {
     LOG_DBG("EBP", "Trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
-    size_t coverPageSize;
-    uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
-    if (coverPageData) {
-      const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData), coverPageSize);
-      free(coverPageData);
-
-      // Determine base path of the cover page for resolving relative image references
-      std::string coverPageBase;
-      const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
-      if (lastSlash != std::string::npos) {
-        coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
-      }
-
-      // Search for image references: xlink:href="..." (SVG) and src="..." (img)
-      std::string imageRef;
-      for (const char* pattern : {"xlink:href=\"", "src=\""}) {
-        auto pos = coverPageHtml.find(pattern);
-        while (pos != std::string::npos) {
-          pos += strlen(pattern);
-          const auto endPos = coverPageHtml.find('"', pos);
-          if (endPos != std::string::npos) {
-            const auto ref = std::string_view{coverPageHtml}.substr(pos, endPos - pos);
-            // Cover BMP generation supports JPG/PNG only; skip GIF so an unsupported wrapper image
-            // does not block a later supported cover reference.
-            if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref)) {
-              imageRef = ref;
-              break;
-            }
-          }
-          pos = coverPageHtml.find(pattern, pos);
-        }
-        if (!imageRef.empty()) break;
-      }
-
-      if (!imageRef.empty()) {
-        bookMetadata.coverItemHref = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(coverPageBase + imageRef));
-        LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
-      }
+    std::string fromGuide = findCoverImageInDocument(opfParser.guideCoverPageHref);
+    if (!fromGuide.empty()) {
+      bookMetadata.coverItemHref = std::move(fromGuide);
+      LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
     }
   }
 
@@ -223,6 +218,8 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   if (!hasReadableCover(bookMetadata.coverItemHref)) {
     if (!bookMetadata.coverItemHref.empty()) {
       LOG_DBG("EBP", "Cover href unresolved, trying common cover candidates: %s", bookMetadata.coverItemHref.c_str());
+      // Not a cover: the scan below takes a set href for one already found and would never look.
+      bookMetadata.coverItemHref.clear();
     }
 
     // Single forward pass through the ZIP central directory.
@@ -290,7 +287,27 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   return true;
 }
 
-bool Epub::parseTocNcxFile() const {
+std::string Epub::findCoverImageInDocument(const std::string& docHref) const {
+  // ~0.5 KB of fixed buffers, once per OPF parse that needs it: on the heap, not the loop stack.
+  const auto scanner = makeUniqueNoThrow<CoverImageRefScanner>();
+  if (!scanner) {
+    LOG_ERR("EBP", "No memory to scan cover document %s", docHref.c_str());
+    return {};
+  }
+  if (!readItemContentsToStream(docHref, *scanner, 1024, scanner->stopFlag())) {
+    LOG_DBG("EBP", "Could not read cover document %s", docHref.c_str());
+  }
+  const std::string_view ref = scanner->result();
+  if (ref.empty()) return {};
+
+  // Relative references inside the document resolve against its own folder.
+  const size_t lastSlash = docHref.rfind('/');
+  std::string path = lastSlash == std::string::npos ? std::string{} : docHref.substr(0, lastSlash + 1);
+  path.append(ref);
+  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(path));
+}
+
+bool Epub::parseTocNcxFile(const bool writePageList) const {
   // the ncx file should have been specified in the content.opf file
   if (tocNcxItem.empty()) {
     LOG_DBG("EBP", "No ncx file specified");
@@ -301,31 +318,33 @@ bool Epub::parseTocNcxFile() const {
 
   size_t ncxSize = 0;
   if (!getItemSize(tocNcxItem, &ncxSize)) {
-    Storage.remove((getCachePath() + "/pagelist.bin").c_str());
+    if (writePageList) Storage.remove((getCachePath() + "/pagelist.bin").c_str());
     return false;
   }
 
   // Stream <pageList> entries straight to pagelist.bin (long printed-page lists used to
   // blow the X3 heap when accumulated in a std::vector — see PageListSink).
-  PageListSink ncxPageListSink(getCachePath());
-  TocNcxParser ncxParser(contentBasePath, ncxSize, bookMetadataCache.get(), &ncxPageListSink);
+  std::optional<PageListSink> ncxPageListSink;
+  if (writePageList) ncxPageListSink.emplace(getCachePath());
+  TocNcxParser ncxParser(contentBasePath, ncxSize, bookMetadataCache.get(),
+                         ncxPageListSink ? &*ncxPageListSink : nullptr);
 
   if (!ncxParser.setup()) {
     LOG_ERR("EBP", "Could not setup toc ncx parser");
-    ncxPageListSink.discard();
+    if (ncxPageListSink) ncxPageListSink->discard();
     return false;
   }
 
   if (!readItemContentsToStream(tocNcxItem, ncxParser, 1024)) {
     LOG_ERR("EBP", "Could not stream toc ncx data");
-    ncxPageListSink.discard();
+    if (ncxPageListSink) ncxPageListSink->discard();
     return false;
   }
 
   // Flush u16 count + close pagelist.bin (or remove it if no <pageList> entries were
   // streamed). The section builder later reads this file to stamp printed-page labels
   // onto rendered pages without re-parsing the NCX.
-  ncxPageListSink.finalize();
+  if (ncxPageListSink) ncxPageListSink->finalize();
 
   LOG_DBG("EBP", "Parsed TOC items");
   return true;
@@ -792,14 +811,48 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     tocParsed = parseTocNavFile();
   }
 
-  // Fall back to NCX if nav parsing failed or wasn't available
-  if (!tocParsed && !tocNcxItem.empty()) {
+  // Fall back to NCX if nav parsing failed or wasn't available, or if the nav parsed but is sparse.
+  // Converted books (e.g. Amazon exports) often pair a coarse EPUB 3 nav (parts and front matter
+  // only) with an NCX carrying the full chapter list. A parsed nav whose spine-mapped entries cover
+  // less than half the spine gives the NCX a chance, and the source with more mapped entries wins.
+  // Raw counts would let a stale NCX full of hrefs that no longer resolve out-count a smaller,
+  // working nav (see TocFallbackPolicy.h). Each re-parse starts from an empty TOC temp file, so the
+  // loser's entries are discarded rather than appended to. Ported from crosspoint-reader PR #2603
+  // (Ryan Jarvis, @Cabalist).
+  const int navCount = bookMetadataCache->getTocCount();
+  (void)navCount;  // only read by LOG_DBG, which compiles out at lower log levels
+  const int navMappedCount = bookMetadataCache->getTocMappedCount();
+  const int spineItemCount = bookMetadataCache->getSpineCount();
+  const bool navSparse = toc_fallback::navIsSparse(tocParsed, navMappedCount, spineItemCount);
+  if ((!tocParsed || navSparse) && !tocNcxItem.empty()) {
     if (navAttempted && !bookMetadataCache->resetTocPassOutput()) {
       LOG_ERR("EBP", "Could not reset TOC temp output before NCX fallback");
       return false;
     }
-    LOG_DBG("EBP", "Falling back to NCX TOC");
-    tocParsed = parseTocNcxFile();
+    if (navSparse) {
+      LOG_DBG("EBP", "Nav TOC sparse (%d/%d entries mapped for %d spine items), trying NCX", navMappedCount, navCount,
+              spineItemCount);
+    } else {
+      LOG_DBG("EBP", "Falling back to NCX TOC");
+    }
+    // The page list stays the nav's: an NCX tried against a parsed nav must not replace or remove
+    // the nav's pagelist.bin.
+    const bool ncxParsed = parseTocNcxFile(/*writePageList=*/!tocParsed);
+    const int ncxMappedCount = bookMetadataCache->getTocMappedCount();
+    if (toc_fallback::shouldAdoptNcx(tocParsed, navMappedCount, ncxParsed, ncxMappedCount)) {
+      if (tocParsed) {
+        LOG_DBG("EBP", "NCX TOC adopted (%d/%d entries mapped)", ncxMappedCount, bookMetadataCache->getTocCount());
+      }
+      tocParsed = true;
+    } else if (tocParsed) {
+      // The NCX failed or mapped no more entries: parse the nav again to restore its entries.
+      LOG_DBG("EBP", "Keeping nav TOC (%d/%d entries mapped)", navMappedCount, navCount);
+      if (!bookMetadataCache->resetTocPassOutput()) {
+        LOG_ERR("EBP", "Could not reset TOC temp output to restore the nav TOC");
+        return false;
+      }
+      tocParsed = parseTocNavFile();
+    }
   }
 
   if (!tocParsed) {
@@ -2437,18 +2490,10 @@ int Epub::resolveHrefToSpineIndex(const std::string& href) const {
   // Same-file reference (anchor-only)
   if (target.empty()) return -1;
 
-  // Extract just the filename for comparison
-  size_t targetSlash = target.find_last_of('/');
-  std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
-
+  // The first spine item that matches exactly or by filename alone: in-book links are kept as
+  // written, relative to their own document.
   for (int i = 0; i < getSpineItemsCount(); i++) {
-    const auto& spineHref = getSpineItem(i).href;
-    // Try exact match first
-    if (spineHref == target) return i;
-    // Then filename-only match
-    size_t spineSlash = spineHref.find_last_of('/');
-    std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
-    if (spineFilename == targetFilename) return i;
+    if (spine_href::match(target, getSpineItem(i).href) != SpineHrefMatch::None) return i;
   }
   return -1;
 }

@@ -25,6 +25,7 @@
 
 #include "AllocationRefusal.h"
 #include "BookMetadataCache.h"
+#include "SpineHrefMatch.h"
 
 namespace fs = std::filesystem;
 
@@ -226,6 +227,88 @@ TEST_F(BookMetadataCacheTest, TheResumedScanResolvesAnyOrderLikeAFullScan) {
   const std::vector<int16_t> got = resolveTocToSpine(cacheDir_, spine, toc, kIndexDoesNotFit);
   const std::vector<int16_t> expected = {5, 2, 63, 63, 0, 40, -1, 41, 1};
   EXPECT_EQ(got, expected);
+}
+
+// --- TOC hrefs that only match a spine item by filename -------------------------------------
+//
+// A nav in OEBPS/ that links "chapter1.xhtml" while the spine carries OEBPS/text/chapter1.xhtml:
+// the parser resolves the link to OEBPS/chapter1.xhtml, which no spine href matches exactly. Every
+// entry used to be written with spineIndex -1, so the contents list showed titles that could not
+// be opened. The filename alone now maps it, as it already did for in-book links.
+
+std::vector<std::string> hrefsIn(const std::string& dir, int count) {
+  std::vector<std::string> hrefs;
+  hrefs.reserve(static_cast<size_t>(count));
+  for (int i = 0; i < count; i++) {
+    hrefs.push_back(dir + "chapter" + std::to_string(i) + ".xhtml");
+  }
+  return hrefs;
+}
+
+TEST(SpineHrefMatchTest, APathMatchesExactlyOrByItsFilename) {
+  EXPECT_EQ(spine_href::match("OEBPS/text/c1.xhtml", "OEBPS/text/c1.xhtml"), SpineHrefMatch::Exact);
+  EXPECT_EQ(spine_href::match("OEBPS/c1.xhtml", "OEBPS/text/c1.xhtml"), SpineHrefMatch::Filename);
+  EXPECT_EQ(spine_href::match("c1.xhtml", "OEBPS/text/c1.xhtml"), SpineHrefMatch::Filename);
+  EXPECT_EQ(spine_href::match("OEBPS/c1.xhtml", "OEBPS/text/c11.xhtml"), SpineHrefMatch::None);
+  EXPECT_EQ(spine_href::match("OEBPS/", "OEBPS/text/"), SpineHrefMatch::None) << "no filename, nothing to match";
+}
+
+TEST_F(BookMetadataCacheTest, TocHrefsOffByAFolderResolveByFilenameInBothModes) {
+  for (const int spines : {8, 64}) {  // the linear scan, then the index
+    const std::vector<int16_t> got =
+        resolveTocToSpine(cacheDir_, hrefsIn("OEBPS/text/", spines), hrefsIn("OEBPS/", spines));
+    ASSERT_EQ(got.size(), static_cast<size_t>(spines));
+    for (int i = 0; i < spines; i++) {
+      EXPECT_EQ(got[i], static_cast<int16_t>(i)) << "toc entry " << i << " of " << spines;
+    }
+  }
+}
+
+TEST_F(BookMetadataCacheTest, AFilenameTwoSpineItemsShareIsNotGuessed) {
+  std::vector<std::string> spine = chapterHrefs(8);
+  spine.push_back("OEBPS/a/notes.xhtml");  // 8
+  spine.push_back("OEBPS/b/notes.xhtml");  // 9
+  const std::vector<std::string> toc = {"OEBPS/notes.xhtml", "OEBPS/b/notes.xhtml", "OEBPS/a/notes.xhtml",
+                                        "OEBPS/x/chapter3.xhtml"};
+
+  const std::vector<int16_t> got = resolveTocToSpine(cacheDir_, spine, toc);
+  const std::vector<int16_t> expected = {-1, 9, 8, 3};
+  EXPECT_EQ(got, expected);
+}
+
+// The book this exists for has every entry off by a folder. Rereading the spine file for each of
+// them would be the O(entries x spine) cost the resumed scan was written to remove; the folder the
+// first match was found in answers the rest with the index.
+TEST_F(BookMetadataCacheTest, AnOffByAFolderTocReadsTheSpineAboutTwice) {
+  const std::vector<std::string> spine = hrefsIn("OEBPS/text/", 3000);
+
+  size_t bytesRead = 0;
+  const std::vector<int16_t> got = resolveTocToSpine(cacheDir_, spine, hrefsIn("OEBPS/", 3000), 0, &bytesRead);
+
+  ASSERT_EQ(got.size(), spine.size());
+  for (size_t i = 0; i < got.size(); i++) {
+    ASSERT_EQ(got[i], static_cast<int16_t>(i)) << "toc entry " << i;
+  }
+  const auto spineFileBytes = static_cast<size_t>(fs::file_size(fs::path(cacheDir_) / "spine.bin.tmp"));
+  // Once to build the index, once for the first entry's filename scan.
+  EXPECT_LE(bytesRead, 3 * spineFileBytes) << "spine file is " << spineFileBytes << " bytes";
+}
+
+// Hrefs that match nothing, not even by filename, each cost a read of the whole spine; on a book
+// with thousands of spine items that must stop well short of one read per entry.
+TEST_F(BookMetadataCacheTest, TocHrefsThatMatchNothingStopCostingWholeSpineReads) {
+  const std::vector<std::string> spine = chapterHrefs(3000);
+  std::vector<std::string> toc;
+  toc.reserve(3000);
+  for (int i = 0; i < 3000; i++) toc.push_back("OEBPS/missing" + std::to_string(i) + ".xhtml");
+
+  size_t bytesRead = 0;
+  const std::vector<int16_t> got = resolveTocToSpine(cacheDir_, spine, toc, 0, &bytesRead);
+  ASSERT_EQ(got.size(), toc.size());
+  EXPECT_EQ(got.back(), -1);
+  const auto spineFileBytes = static_cast<size_t>(fs::file_size(fs::path(cacheDir_) / "spine.bin.tmp"));
+  // 32768 spine records of full scans per parse: 10 reads of a 3000-item spine, plus the index.
+  EXPECT_LE(bytesRead, 12 * spineFileBytes) << "spine file is " << spineFileBytes << " bytes";
 }
 
 }  // namespace

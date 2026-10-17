@@ -92,6 +92,7 @@ add_executable(EpubPipelineTest
   EpubPipelineTest.cpp
   FingerprintTest.cpp
   LostTocRetryTest.cpp
+  TocSourceTest.cpp
   PageListSinkTest.cpp
   MetadataSidecarTest.cpp
   SidecarFilesTest.cpp
@@ -122,6 +123,7 @@ add_executable(EpubPipelineTest
   PixelCacheWriteTest.cpp
   BufferedPrintTest.cpp
   CoverPipelineTest.cpp
+  CoverWrapperTest.cpp
   ProgressMapperTest.cpp
   ProgressMapperRoundTripTest.cpp
   XPathExtractionTest.cpp

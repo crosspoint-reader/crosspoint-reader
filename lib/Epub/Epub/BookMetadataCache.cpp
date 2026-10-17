@@ -10,9 +10,14 @@
 #include <vector>
 
 #include "FsHelpers.h"
+#include "SpineHrefMatch.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 11;
+// v12: a sparse EPUB 3 nav gives way to an NCX that maps more chapters; a v11 cache holds the sparse TOC
+// v13: TOC hrefs that match a spine item by filename only are mapped; a v12 cache holds them as -1
+// v14: coverItemHref follows an SVG wrapper to its picture; a v13 cache holds the .svg path
+// v15: a named cover missing from the archive no longer blocks the ZIP-name scan; a v14 cache holds the dead path
+constexpr uint8_t BOOK_CACHE_VERSION = 15;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -60,7 +65,14 @@ bool BookMetadataCache::beginTocPass() {
   }
   tocWriter_.emplace(tocFile);
   tocLookupPrepared_ = false;
+  tocMappedCount_ = 0;
+  resetTocFilenameFallback();
   return true;
+}
+
+void BookMetadataCache::resetTocFilenameFallback() {
+  tocFolderShiftKnown_ = false;
+  tocFilenameScanBudget_ = TOC_FILENAME_SCAN_BUDGET;
 }
 
 void BookMetadataCache::prepareTocLookup() {
@@ -148,9 +160,11 @@ bool BookMetadataCache::resetTocPassOutput() {
   tocWriter_.emplace(tocFile);
 
   tocCount = 0;
+  tocMappedCount_ = 0;
   // The fallback parse restarts the TOC from its first entry; scan from the first spine again.
   tocScanNextIndex_ = 0;
   tocScanNextOffset_ = 0;
+  resetTocFilenameFallback();
   LOG_DBG("BMC", "Reset TOC temp output for fallback parse");
   return true;
 }
@@ -516,6 +530,85 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
   spineCount++;
 }
 
+int16_t BookMetadataCache::findSpineExact(const std::string& href) {
+  if (!useSpineHrefIndex) return findSpineByScan(href);
+
+  const uint64_t targetHash = HashUtils::fnvHash64(href);
+  const uint16_t targetLen = static_cast<uint16_t>(href.size());
+  const SpineHrefIndexEntry* const indexBegin = spineHrefIndex.get();
+  const SpineHrefIndexEntry* const indexEnd = indexBegin + spineCount;
+  const auto it =
+      std::lower_bound(indexBegin, indexEnd, SpineHrefIndexEntry{targetHash, targetLen, 0},
+                       [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
+                         return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
+                       });
+  if (it != indexEnd && it->hrefHash == targetHash && it->hrefLen == targetLen) return it->spineIndex;
+  return -1;
+}
+
+// A TOC href that no spine href matches exactly can still name a spine item by its filename, as
+// Epub::resolveHrefToSpineIndex accepts for in-book links. Books ship nav documents whose links are
+// relative to a folder the nav does not sit in (nav.xhtml in OEBPS/ linking "c1.xhtml" for
+// OEBPS/text/c1.xhtml): every entry missed, and the contents list showed titles that could not be
+// opened. A filename that several spine items share in different folders is not guessed at; that
+// entry stays unmapped.
+//
+// Such a document is off by the same folder throughout, so the folder the last match was found in
+// is tried first for the next miss from the same folder, as an exact lookup: a TOC whose every
+// entry misses reads the spine file once, not once per entry, and no per-spine table is built. The
+// full reads that remain are budgeted per parse, so hrefs that match nothing at all cannot cost a
+// read of the whole spine each on a book with thousands of spine items.
+//
+// Based on crosspoint-reader PR #2987 (Hoang Manh Linh, @jetaudio), reworked to scan the spine
+// temp file instead of building a RAM index of every spine filename.
+int16_t BookMetadataCache::findSpineByFilename(const std::string& href) {
+  const std::string_view name = spine_href::filenameOf(href);
+  if (name.empty()) return -1;
+  const std::string_view dir = std::string_view(href).substr(0, href.size() - name.size());
+
+  if (tocFolderShiftKnown_ && dir == tocMissDir_) {
+    tocShiftedHref_.assign(tocFoundDir_).append(name);
+    const int16_t shifted = findSpineExact(tocShiftedHref_);
+    if (shifted >= 0) return shifted;
+  }
+
+  if (tocFilenameScanBudget_ < spineCount) {
+    if (tocFilenameScanBudget_ > 0) {
+      LOG_INF("BMC", "TOC filename fallback spent its spine reads (%d spines); later misses stay unmapped", spineCount);
+      tocFilenameScanBudget_ = 0;
+    }
+    return -1;
+  }
+  tocFilenameScanBudget_ -= spineCount;
+
+  // The resumed scan seeks its own position before every read, so its view can be shared.
+  if (!spineScanReader_.has_value()) spineScanReader_.emplace(spineFile);
+  spineScanReader_->seek(0);
+  SpineEntry entry;
+  int16_t found = -1;
+  int sameName = 0;
+  std::string foundDir;
+  for (int i = 0; i < spineCount; i++) {
+    readSpineEntry(*spineScanReader_, entry);
+    if (spine_href::match(href, entry.href) == SpineHrefMatch::None) continue;
+    if (sameName++ == 0) {
+      found = static_cast<int16_t>(i);
+      foundDir.assign(entry.href, 0, entry.href.size() - name.size());
+    }
+  }
+  if (sameName != 1) {
+    if (sameName > 1) {
+      LOG_DBG("BMC", "TOC href %s: %d spine items share its filename, left unmapped", href.c_str(), sameName);
+    }
+    return -1;
+  }
+
+  tocMissDir_.assign(dir);
+  tocFoundDir_ = std::move(foundDir);
+  tocFolderShiftKnown_ = true;
+  return found;
+}
+
 void BookMetadataCache::createTocEntry(const std::string& title, const std::string& href, const std::string& anchor,
                                        const uint8_t level) {
   if (!buildMode || !tocFile || !spineFile || !tocWriter_.has_value()) {
@@ -528,26 +621,8 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   // first, it once left the NCX parser no room to start, and the book was cached with no TOC.
   if (!tocLookupPrepared_) prepareTocLookup();
 
-  int16_t spineIndex = -1;
-
-  if (useSpineHrefIndex) {
-    uint64_t targetHash = HashUtils::fnvHash64(href);
-    uint16_t targetLen = static_cast<uint16_t>(href.size());
-
-    const SpineHrefIndexEntry* const indexBegin = spineHrefIndex.get();
-    const SpineHrefIndexEntry* const indexEnd = indexBegin + spineCount;
-    auto it = std::lower_bound(indexBegin, indexEnd, SpineHrefIndexEntry{targetHash, targetLen, 0},
-                               [](const SpineHrefIndexEntry& a, const SpineHrefIndexEntry& b) {
-                                 return a.hrefHash < b.hrefHash || (a.hrefHash == b.hrefHash && a.hrefLen < b.hrefLen);
-                               });
-
-    while (it != indexEnd && it->hrefHash == targetHash && it->hrefLen == targetLen) {
-      spineIndex = it->spineIndex;
-      break;
-    }
-  } else {
-    spineIndex = findSpineByScan(href);
-  }
+  int16_t spineIndex = findSpineExact(href);
+  if (spineIndex == -1) spineIndex = findSpineByFilename(href);
   if (spineIndex == -1) {
     LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
   }
@@ -555,6 +630,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   const TocEntry entry(title, href, anchor, level, spineIndex);
   writeTocEntry(*tocWriter_, entry);
   tocCount++;
+  if (spineIndex >= 0) tocMappedCount_++;
 }
 
 /* ============= READING / LOADING FUNCTIONS ================ */

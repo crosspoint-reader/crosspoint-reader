@@ -105,8 +105,26 @@ class BookMetadataCache {
   uint32_t tocScanNextOffset_ = 0;
   // The index or the scan reader, set up by the first createTocEntry() of a TOC pass.
   bool tocLookupPrepared_ = false;
+  // TOC entries of this pass whose href matched a spine item (spineIndex >= 0). Build-pass only,
+  // never written to book.bin: Epub::load compares it between the nav and the NCX.
+  uint16_t tocMappedCount_ = 0;
   void prepareTocLookup();
   int16_t findSpineByScan(const std::string& href);
+  // The index or the resumed scan: the spine item whose href is exactly `href`, else -1.
+  int16_t findSpineExact(const std::string& href);
+  // Last resort for a TOC href no spine href matches exactly (see the definition).
+  int16_t findSpineByFilename(const std::string& href);
+  void resetTocFilenameFallback();
+  // Filename fallback state, reset with every TOC parse. The folder a TOC href missed from and the
+  // spine folder its filename was found in, tried first for the next miss from that folder.
+  std::string tocMissDir_;
+  std::string tocFoundDir_;
+  bool tocFolderShiftKnown_ = false;
+  std::string tocShiftedHref_;  // scratch for tocFoundDir_ + filename; keeps its capacity
+  // Spine records the fallback may still read in full scans this parse: every one on a book of a
+  // few hundred spine items, about ten whole reads of a 3000-item spine.
+  uint32_t tocFilenameScanBudget_ = 0;
+  static constexpr uint32_t TOC_FILENAME_SCAN_BUDGET = 32768;
 
   // Batch ZIP size lookup and fast spine-href index are always better when N is
   // larger than a handful — lower threshold so even moderate books (e.g. 105
@@ -166,6 +184,8 @@ class BookMetadataCache {
   TocEntry getTocEntry(int index);
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
+  // Build-pass only (see tocMappedCount_); 0 in read mode.
+  int getTocMappedCount() const { return tocMappedCount_; }
   bool isTocReliable() const { return tocReliable; }
   bool isLoaded() const { return loaded; }
   // Mark the cache "loaded" after a METADATA-ONLY OPF parse populated coreMetadata (title, author,
