@@ -76,6 +76,9 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   SETTINGS.sdFontIdResolver = [](void* ctx, const char* familyName, uint8_t pointSize) -> int {
     return static_cast<SdCardFontSystem*>(ctx)->resolveFontId(familyName, pointSize);
   };
+  SETTINGS.sdFontVectorQuery = [](void* ctx, const char* familyName) -> bool {
+    return static_cast<const SdCardFontSystem*>(ctx)->isVectorFamily(familyName);
+  };
   SETTINGS.sdFontResolverCtx = this;
 
   // If user has a saved SD font selection, load it
@@ -255,6 +258,16 @@ int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*
   // SETTINGS.fontPointSize, so the size argument is implicit — always return
   // that font's ID. ensureLoaded() must have run for the current settings first.
   return manager_.getFontId(familyName);
+}
+
+bool SdCardFontSystem::isVectorFamily(const char* familyName) const {
+#if CROSSPOINT_VECTOR_FONTS
+  // Same loaded-state check as resolveFontId(): no registry scan or allocation.
+  return ttfFontId_ != 0 && familyName && ttfFamily_ == familyName;
+#else
+  (void)familyName;
+  return false;
+#endif
 }
 
 #if CROSSPOINT_VECTOR_FONTS

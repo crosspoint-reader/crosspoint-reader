@@ -399,6 +399,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Returns font ID or 0 if not found.
   using SdFontIdResolver = int (*)(void* ctx, const char* familyName, uint8_t fontSize);
   SdFontIdResolver sdFontIdResolver = nullptr;
+  // True if familyName is the loaded vector (TTF/OTF/TTC) family. Shares sdFontResolverCtx.
+  using SdFontVectorQuery = bool (*)(void* ctx, const char* familyName);
+  SdFontVectorQuery sdFontVectorQuery = nullptr;
   void* sdFontResolverCtx = nullptr;
 
   uint16_t getPowerButtonDuration() const {
