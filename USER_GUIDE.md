@@ -265,8 +265,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Reader Font Family**: Choose the font used for reading:
   
-  - "Noto Serif" (default) - Google's serif font
-  - "Noto Sans" - Google's sans-serif font
+  - "Noto Sans" (default) - Google's sans-serif font
   - Installed SD card families
 
 - **Reader Font Size**: Choose a point size. Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
@@ -599,6 +598,11 @@ Transparent overlay files are intentionally separate from normal sleep images. R
 ---
 
 ### 3.8 Custom Fonts (SD Card)
+
+Noto Serif and OpenDyslexic are optional SD card fonts. Install `NotoSerif` to use
+the former built-in serif family. On upgrade, an existing Noto Serif selection
+uses `NotoSerif` if installed; otherwise, the reader switches to Noto Sans. After
+installing the family later, select it in **Settings → Reader → Font Family**.
 
 CrossPoint loads additional fonts from the SD card. Custom fonts can add Chinese, Japanese, Korean, and other scripts that the built-in reader fonts lack. If your device have external RAM, you can copy `.ttf`, `.otf`, and `.ttc` files directly. Otherwise, use `.cpfont` files made from those fonts. 
 
