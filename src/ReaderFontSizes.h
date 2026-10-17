@@ -23,7 +23,6 @@ inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
 // Selects a built-in size without loading it; returns 0 for other font families.
 inline int builtinReaderFontVariant(const int fontId, const float scale) {
   static constexpr int FAMILIES[][std::size(BUILTIN_READER_POINT_SIZES)] = {
-      {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID},
       {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
   };
   for (const int* family : FAMILIES) {
