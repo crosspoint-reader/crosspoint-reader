@@ -1,7 +1,10 @@
 #include "ImageDecoderFactory.h"
 
+#include <FsHelpers.h>
+#include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -10,6 +13,25 @@
 
 std::unique_ptr<JpegToFramebufferConverter> ImageDecoderFactory::jpegDecoder = nullptr;
 std::unique_ptr<PngToFramebufferConverter> ImageDecoderFactory::pngDecoder = nullptr;
+
+namespace {
+// Detect the real image format by reading a file's leading magic bytes.
+// Returns ".jpg"/".png" for a recognised format, or "" (file missing, empty, or
+// not a supported image). Lets the reader render images whose path has a missing
+// or incorrect extension. The path must point to a file already on storage.
+std::string sniffImageExtFromFile(const std::string& imagePath) {
+  HalFile file;
+  if (!Storage.openFileForRead("DEC", imagePath, file)) {
+    return "";
+  }
+  uint8_t header[8] = {0};
+  int read = file.read(header, sizeof(header));
+  if (read <= 0) {
+    return "";
+  }
+  return FsHelpers::detectImageExtFromMagic(header, static_cast<size_t>(read));
+}
+}  // namespace
 
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& imagePath) {
   std::string ext = imagePath;
@@ -21,6 +43,16 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& im
     }
   } else {
     ext = "";
+  }
+
+  // Some EPUBs reference images without (or with an incorrect) file extension, so
+  // extension-based selection alone fails. Fall back to detecting the real format
+  // from the file's magic bytes before giving up.
+  if (!JpegToFramebufferConverter::supportsFormat(ext) && !PngToFramebufferConverter::supportsFormat(ext)) {
+    std::string sniffed = sniffImageExtFromFile(imagePath);
+    if (!sniffed.empty()) {
+      ext = sniffed;
+    }
   }
 
   if (JpegToFramebufferConverter::supportsFormat(ext)) {
