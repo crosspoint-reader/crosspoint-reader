@@ -2155,6 +2155,7 @@ void EpubReaderActivity::stepCurrentSectionBuild() {
         LOG_INF("ERS", "Background-C spine=%d: target resolved mid-build to page %u", currentSpineIndex,
                 static_cast<unsigned>(*landed));
         section->currentPage = *landed;
+        settleFollowedLink(*landed);
         navTarget = NavigationTarget::makePage(*landed);
       }
     }
@@ -2240,6 +2241,7 @@ void EpubReaderActivity::stepCurrentSectionBuild() {
     }
   } else {
     navTarget.resolveInto(*section, currentSpineIndex);
+    settleFollowedLink(section->currentPage);
   }
   anchorNavTargetToCurrentPage();
   forceLoadLargeImages = false;
@@ -4694,6 +4696,7 @@ bool EpubReaderActivity::buildSection(const RenderLayout& layout) {
   LOG_DBG("ERS", "resolveInto: navTarget.kind=%d pageCount=%d", (int)navTarget.kind, (int)section->pageCount);
   navTarget.resolveInto(*section, currentSpineIndex);
   LOG_DBG("ERS", "resolveInto result: currentPage=%d", (int)section->currentPage);
+  settleFollowedLink(section->currentPage);
   anchorNavTargetToCurrentPage();
   forceLoadLargeImages = false;
   pageHasPlaceholders = false;
@@ -6503,7 +6506,8 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   // bring that entry back anyway.
   {
     RenderLock lock(*this);
-    if (savePosition && section) {
+    const bool pushed = savePosition && section;
+    if (pushed) {
       SavedPosition saved;
       saved.spineIndex = currentSpineIndex;
       saved.pageNumber = section->currentPage;
@@ -6522,11 +6526,30 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
               saved.pageNumber, saved.hasParagraph ? saved.paragraphIndex : -1);
     }
     navTarget = anchor.empty() ? NavigationTarget::makePage(0) : NavigationTarget::makeAnchor(std::move(anchor));
+    // Only a fragment can lead back to an origin: a note's return link names the marker's id.
+    navTarget.followedLink = pushed && navTarget.kind == NavigationTarget::Kind::Anchor;
     currentSpineIndex = targetSpineIndex;
     section.reset();
   }
   requestUpdate();
   LOG_DBG("ERS", "Navigated to spine %d for href: %s", targetSpineIndex, hrefStr.c_str());
+}
+
+// Following a note's "Return" link pushed the note as one more Back entry, so Back from the reader's
+// own page went to the note again, and the KOSync push on sleep kept waiting for a return that had
+// happened (sessionLinkDepth_ stayed above 0). Now a link that lands where an earlier one was
+// followed from unwinds the stack to below that entry, the same entries Back would have popped.
+// Checked where the page is known rather than when the link is tapped: a link into another spine
+// has no page until that spine's section is open.
+void EpubReaderActivity::settleFollowedLink(const int page) {
+  if (!navTarget.followedLink) return;
+  navTarget.followedLink = false;
+  const int depth = EpubLinkBackStack::returnDepth(savedPositions, footnoteDepth, currentSpineIndex, page);
+  if (depth < 0) return;
+  LOG_DBG("ERS", "Link returned to saved position [%d] (spine %d, page %d); Back stack %d -> %d", depth,
+          currentSpineIndex, page, footnoteDepth, depth);
+  while (footnoteDepth > depth) EpubLinkBackStack::pop(footnoteDepth, sessionLinkDepth_);
+  noteLinkBackStackChanged();
 }
 
 void EpubReaderActivity::restoreSavedPosition() {
