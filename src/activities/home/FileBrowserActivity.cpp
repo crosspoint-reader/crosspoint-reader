@@ -1724,16 +1724,29 @@ void FileBrowserActivity::doMarkAsRead(const std::string& fullPath) {
 
 void FileBrowserActivity::doSetAsSleepCover(const std::string& fullPath) {
   if (FsHelpers::hasBmpExtension(fullPath)) {
-    // BMP: use the shared helper that just does a file copy + settings update.
-    const bool success = BmpViewerActivity::setBmpFileAsSleepScreen(fullPath);
-    {
-      RenderLock lock(*this);
-      const char* msg = success ? tr(STR_SLEEP_SCREEN_SET) : tr(STR_FAILED_TO_SET_SLEEP_SCREEN);
-      // drawPopup ships the frame; preseed its refresh mode to HALF instead of shipping twice.
-      renderer.setNextDisplayRefreshMode(HalDisplay::HALF_REFRESH);
-      GUI.drawPopup(renderer, msg);
+    // BMP: use the shared helper that just does a file copy + settings update, once the user has
+    // agreed to lose the image /sleep.bmp holds now (the viewer asks the same).
+    auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput,
+                                                                BmpViewerActivity::sleepScreenQuestion(fullPath));
+    if (!confirmation) {
+      LOG_ERR("FBR", "OOM: sleep screen confirmation (%zu bytes)", sizeof(ConfirmationActivity));
+      return;
     }
-    requestUpdate();
+    startActivityForResult(std::move(confirmation), [this, fullPath](const ActivityResult& res) {
+      if (res.isCancelled) {
+        requestUpdate();
+        return;
+      }
+      const bool success = BmpViewerActivity::setBmpFileAsSleepScreen(fullPath);
+      {
+        RenderLock lock(*this);
+        const char* msg = success ? tr(STR_SLEEP_SCREEN_SET) : tr(STR_FAILED_TO_SET_SLEEP_SCREEN);
+        // drawPopup ships the frame; preseed its refresh mode to HALF instead of shipping twice.
+        renderer.setNextDisplayRefreshMode(HalDisplay::HALF_REFRESH);
+        GUI.drawPopup(renderer, msg);
+      }
+      requestUpdate();
+    });
   } else {
     // JPG/PNG: must render to framebuffer — open the image viewer so the user can use its Set Sleep button.
     std::string entry;

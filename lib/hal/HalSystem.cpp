@@ -20,18 +20,84 @@ extern "C" {
 
 void __real_panic_abort(const char* message);
 void __real_panic_print_backtrace(const void* frame, int core);
+void __real_panic_arch_fill_info(void* frame, panic_info_t* info);
+void __real_panic_soc_fill_info(void* frame, panic_info_t* info);
 
 static DRAM_ATTR const char PANIC_REASON_UNKNOWN[] = "(unknown panic reason)";
+
+// IRAM-safe bounded appends to panicMessage (strncpy and snprintf are not IRAM-safe in panic
+// context). Each returns the new length and leaves the message terminated.
+static size_t IRAM_ATTR appendPanicText(size_t at, const char* text) {
+  while (at < sizeof(panicMessage) - 1 && *text) panicMessage[at++] = *text++;
+  panicMessage[at] = '\0';
+  return at;
+}
+
+static DRAM_ATTR const char HEX_DIGITS[] = "0123456789ABCDEF";
+static size_t IRAM_ATTR appendPanicHex(size_t at, const uint32_t value) {
+  for (int shift = 28; shift >= 0 && at < sizeof(panicMessage) - 1; shift -= 4) {
+    panicMessage[at++] = HEX_DIGITS[(value >> shift) & 0xF];
+  }
+  panicMessage[at] = '\0';
+  return at;
+}
+
 void IRAM_ATTR __wrap_panic_abort(const char* message) {
   if (!message) message = PANIC_REASON_UNKNOWN;
-  // IRAM-safe bounded copy (strncpy is not IRAM-safe in panic context)
-  int i = 0;
-  for (; i < (int)sizeof(panicMessage) - 1 && message[i]; i++) {
-    panicMessage[i] = message[i];
-  }
-  panicMessage[i] = '\0';
+  appendPanicText(0, message);
 
   __real_panic_abort(message);
+}
+
+// The register names IDF's own register dump uses: the faulting instruction, and what the CPU
+// records about the access that faulted (on RISC-V, MTVAL holds the encoding of an illegal
+// instruction rather than an address).
+#if defined(__riscv)
+static DRAM_ATTR const char PANIC_PC_LABEL[] = ", MEPC 0x";
+static DRAM_ATTR const char PANIC_FAULT_LABEL[] = ", MTVAL 0x";
+#elif defined(__XTENSA__)
+static DRAM_ATTR const char PANIC_PC_LABEL[] = ", PC 0x";
+static DRAM_ATTR const char PANIC_FAULT_LABEL[] = ", EXCVADDR 0x";
+#endif
+
+// For every panic but an abort(), "Panic reason:" in the crash report used to be empty: only an
+// abort() passes through panic_abort(). A raw CPU fault or a SoC-level panic goes from the port's
+// handler to these two, which turn the exception frame into IDF's panic_info_t; the reason is
+// recorded from what they found, with the faulting PC and, for a CPU fault, what the CPU recorded
+// about the access. An abort() comes here too (panic_abort() raises a trap to get here), and keeps
+// its own message: the trap is not what went wrong.
+//
+// Based on crosspoint-reader PR #2686 (DarkStarDS9, a draft), which decodes mcause in the
+// backtrace hook with a copy of IDF's RISC-V table. Taking IDF's own decoding covers the S3's
+// exception causes too, and the SoC-level panics, which the frame alone does not tell apart from
+// CPU exceptions on Xtensa. Not esp_panic_handler, which has the same information: the Arduino core
+// defines a wrap of it (esp32-hal-misc.c) that this build does not enable, and a second one would
+// not link.
+static void IRAM_ATTR recordPanicReason(const void* frame, const panic_info_t* info, const bool cpuFault) {
+  if (g_panic_abort || !info) return;
+  size_t at = appendPanicText(0, info->reason ? info->reason : PANIC_REASON_UNKNOWN);
+  at = appendPanicText(at, PANIC_PC_LABEL);
+  at = appendPanicHex(at, (uint32_t)info->addr);
+  // A SoC-level panic (a watchdog, a cache error) interrupted the code at that PC; the fault
+  // register describes no access.
+  if (!cpuFault || !frame) return;
+#if defined(__riscv)
+  const uint32_t faultValue = (uint32_t)((const RvExcFrame*)frame)->mtval;
+#elif defined(__XTENSA__)
+  const uint32_t faultValue = (uint32_t)((const XtExcFrame*)frame)->excvaddr;
+#endif
+  at = appendPanicText(at, PANIC_FAULT_LABEL);
+  appendPanicHex(at, faultValue);
+}
+
+void IRAM_ATTR __wrap_panic_arch_fill_info(void* frame, panic_info_t* info) {
+  __real_panic_arch_fill_info(frame, info);
+  recordPanicReason(frame, info, true);
+}
+
+void IRAM_ATTR __wrap_panic_soc_fill_info(void* frame, panic_info_t* info) {
+  __real_panic_soc_fill_info(frame, info);
+  recordPanicReason(frame, info, false);
 }
 
 void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
