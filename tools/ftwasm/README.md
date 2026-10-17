@@ -190,7 +190,7 @@ JS (`js/cpfont-raster.mjs`, no Node or DOM dependencies):
 - `rasterizeStyle(ft, fontBytes, size, intervals)` returns
   `{intervals, glyphs[{codePoint, width, height, advanceX, left, top, dataLength, dataOffset, bitmap}], bitmap, totalBitmapSize, advanceY, ascender, descender}`.
 - `INTERVAL_PRESETS`, `resolveIntervals()`, `isDefaultIgnorable()` and `pack2bit()` are copies
-  of the Python ones.
+  of the Python ones; `test/web/interval_presets_test.mjs` checks that the presets stay identical.
 
 `rasterizeStyle` follows `rasterize_font_style` step for step:
 - Load flags `FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT` at 150 dpi, with the size set before any

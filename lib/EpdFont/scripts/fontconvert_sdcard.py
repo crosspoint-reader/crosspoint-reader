@@ -43,16 +43,24 @@ except ImportError:
     Image = None
 
 # --- Unicode interval presets ---
+# The browser converter has the same presets in tools/ftwasm/js/cpfont-raster.mjs; change both
+# (test/web/interval_presets_test.mjs compares them).
+
+# European languages: Latin with Extended-A/B and Additional, General Punctuation, Currency Symbols
+# (euro), Letterlike Symbols (trade mark, numero) and the minus sign. Shared by latin-ext and
+# latin-cyrillic. Currency, letterlike and minus ported from crosspoint-reader commit 14423d4af
+# (PR #3801, Stefan VanBuren): without them a latin-ext font had no glyph for "€", "™", "№" or "−".
+_LATIN_EXT = [(0x0020, 0x007E), (0x0080, 0x00FF), (0x0100, 0x024F),
+              (0x1E00, 0x1EFF), (0x2000, 0x206F),
+              (0x20A0, 0x20CF), (0x2100, 0x214F), (0x2212, 0x2212)]
+_CYRILLIC = [(0x0400, 0x04FF), (0x0500, 0x052F),
+             (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 
 INTERVAL_PRESETS = {
     "ascii":       [(0x0020, 0x007E)],
     "latin1":      [(0x0080, 0x00FF)],
-    "latin-ext":      [(0x0020, 0x007E), (0x0080, 0x00FF), (0x0100, 0x024F),
-                        (0x1E00, 0x1EFF), (0x2000, 0x206F)],
-    "latin-cyrillic": [(0x0020, 0x007E), (0x0080, 0x00FF), (0x0100, 0x024F),
-                        (0x1E00, 0x1EFF), (0x2000, 0x206F),
-                        (0x0400, 0x04FF), (0x0500, 0x052F),
-                        (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)],
+    "latin-ext":      _LATIN_EXT,
+    "latin-cyrillic": _LATIN_EXT + _CYRILLIC,
     # Pronunciation notation. Dictionaries write it in IPA Extensions plus the
     # stress and length marks from Spacing Modifier Letters, and reach into Greek
     # for theta and chi; the rest of IPA's letters are already in Latin-1 and
@@ -63,8 +71,7 @@ INTERVAL_PRESETS = {
     "greek":          [(0x0370, 0x03FF), (0x1F00, 0x1FFF)],
     "greek-letters":  [(0x0370, 0x03FF)],
     "musical-symbols": [(0x2660, 0x266F), (0x1D100, 0x1D1FF)],
-    "cyrillic":       [(0x0400, 0x04FF), (0x0500, 0x052F),
-                        (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)],
+    "cyrillic":       _CYRILLIC,
     "georgian":       [(0x10A0, 0x10FF), (0x2D00, 0x2D2F)],
     "armenian":    [(0x0530, 0x058F)],
     "ethiopic":    [(0x1200, 0x137F), (0x1380, 0x139F), (0x2D80, 0x2DDF)],
