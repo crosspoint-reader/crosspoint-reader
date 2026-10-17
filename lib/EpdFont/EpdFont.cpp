@@ -127,6 +127,10 @@ static uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t 
 }
 
 int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const {
+  // CJK text is set on a grid, so no pair touching a CJK character kerns. This also keeps CJK pairs
+  // away from a TTF family's pair store, which they would fill with zeros. Ported from crosspoint-reader
+  // PR #2288 (Justin Mitchell).
+  if (utf8IsCjkBreakable(leftCp) || utf8IsCjkBreakable(rightCp)) return 0;
   const bool hasKernTables =
       (data->kernMatrix || data->kernRowOffsets) && (data->kernLeftClasses || data->kernLeftCodepoints);
   if (!hasKernTables) {

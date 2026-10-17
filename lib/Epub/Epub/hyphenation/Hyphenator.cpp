@@ -1,5 +1,7 @@
 #include "Hyphenator.h"
 
+#include <Utf8.h>
+
 #include <algorithm>
 #include <cassert>
 #include <vector>
@@ -247,7 +249,11 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   std::vector<Hyphenator::BreakInfo> breaks;
   breaks.reserve(indexes.size());
   for (const size_t idx : indexes) {
-    breaks.push_back({byteOffsetForIndex(cps, idx), true});
+    // CJK scripts are not hyphenated: a break next to a CJK character draws no hyphen. Ported from
+    // crosspoint-reader PR #2288 (Justin Mitchell).
+    const bool cjkSide =
+        (idx < cps.size() && utf8IsCjkBreakable(cps[idx].value)) || (idx > 0 && utf8IsCjkBreakable(cps[idx - 1].value));
+    breaks.push_back({byteOffsetForIndex(cps, idx), !cjkSide});
   }
 
   return breaks;

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Epub/CjkLineBreak.h"
+#include "Epub/hyphenation/Hyphenator.h"
 #include "Utf8.h"
 
 TEST(CjkClasses, HanKanaHangulPunctuationAndFullwidthAreBreakable) {
@@ -108,4 +109,20 @@ TEST(HangulLineEndBreaks, NeverBeforeClosingPunctuationButAtDigitsAndBrackets) {
   EXPECT_EQ(offsetsOf("사."), (std::vector<size_t>{}));
   EXPECT_EQ(offsetsOf("12월"), (std::vector<size_t>{2}));
   EXPECT_EQ(offsetsOf("소신(ab)이"), (std::vector<size_t>{3, 6, 10}));  // 소|신|(ab)|이
+}
+
+// Hyphenator::breakOffsets offers fallback breaks inside a word that has no pattern breaks. Next to
+// a CJK character such a break draws no hyphen: CJK scripts are not hyphenated.
+TEST(CjkHyphenator, FallbackBreaksNextToCjkDrawNoHyphen) {
+  Hyphenator::setPreferredLanguage("ja");
+  const auto breaks = Hyphenator::breakOffsets("漢字仮名交", /*includeFallback=*/true);
+  ASSERT_FALSE(breaks.empty());
+  for (const auto& b : breaks) EXPECT_FALSE(b.requiresInsertedHyphen) << "offset " << b.byteOffset;
+}
+
+TEST(CjkHyphenator, LatinFallbackBreaksStillDrawAHyphen) {
+  Hyphenator::setPreferredLanguage("ja");
+  const auto breaks = Hyphenator::breakOffsets("abcdefgh", /*includeFallback=*/true);
+  ASSERT_FALSE(breaks.empty());
+  for (const auto& b : breaks) EXPECT_TRUE(b.requiresInsertedHyphen) << "offset " << b.byteOffset;
 }
