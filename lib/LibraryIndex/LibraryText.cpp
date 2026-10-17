@@ -329,15 +329,26 @@ std::string authorKey(const std::string_view author) {
     if (!key.empty()) key.push_back(' ');
     key.append(tokens[i]);
   }
-  // Truncate on bytes, not on a token boundary. Sorting puts a short forename
-  // first, so a whole-token cut would reduce "Wollstonecraft, Mary" to the key
-  // "alex" and merge every Alex in the library; the byte cut keeps
-  // "mary wollsto", which stays a prefix of the full key and discriminates.
-  if (key.size() > AUTHOR_KEY_MAX_BYTES) {
-    key.resize(static_cast<size_t>(utf8SafeTruncateBuffer(key.data(), AUTHOR_KEY_MAX_BYTES)));
+  if (key.empty()) return key;
+
+  // Hashed rather than truncated: a byte prefix cannot tell apart names that
+  // share their first sorted word, such as "christopher paolini" and
+  // "christopher ruocchio". Two FNV-1a passes with different offset bases fill
+  // the field; only equality is ever tested, so the bytes need no order.
+  uint64_t h1 = 0xcbf29ce484222325ULL;
+  uint64_t h2 = 0x84222325cbf29ce4ULL;
+  for (const char c : key) {
+    h1 = (h1 ^ static_cast<uint8_t>(c)) * 0x100000001b3ULL;
+    h2 = (h2 ^ static_cast<uint8_t>(c)) * 0x100000001b3ULL;
   }
-  while (!key.empty() && key.back() == ' ') key.pop_back();
-  return key;
+  std::string hashed(AUTHOR_KEY_MAX_BYTES, '\0');
+  for (size_t i = 0; i < AUTHOR_KEY_MAX_BYTES; i++) {
+    const uint64_t h = i < 8 ? h1 : h2;
+    hashed[i] = static_cast<char>((h >> (8 * (i % 8))) & 0xFF);
+  }
+  // A leading 0xFF is the builder's unknown-author sentinel.
+  if (static_cast<uint8_t>(hashed[0]) == 0xFF) hashed[0] = static_cast<char>(0xFE);
+  return hashed;
 }
 
 // fold() keeps the apostrophe, which is right for sorting — "L'Eneide" belongs
