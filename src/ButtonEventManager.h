@@ -89,6 +89,11 @@ class ButtonEventManager {
   // a page-turn tap drained inside the double-click window was held for a whole 1.5-5 s image
   // decode ("next turn 18 ms after the decode ended").
   bool isGestureInFlight() const;
+  // The first half of that: a button is held, or released once and waiting out the double-click
+  // window, so an event is still to come. Unlike isGestureInFlight() it ignores emitted events no
+  // one consumed, which stay queued on a screen that reads presses another way (see the
+  // pushEventFront() note in main.cpp) -- the serial CMD:IDLE would otherwise wait on them forever.
+  bool isMidGesture() const;
 
   // Returns true if a double-click action is configured for this button.
   // ButtonEventManager queries CrossPointSettings internally. Answers identically for

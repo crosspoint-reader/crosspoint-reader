@@ -107,8 +107,15 @@ class Activity {
 
   // Appends what a test script needs to know about this activity's state to `out`, as
   // space-separated key=value pairs, for the serial CMD:STATE. Called under the render lock.
+  // Write each pair with SerialCommandGrammar::appendField(), which quotes a value with spaces.
   // Default: nothing beyond the activity's name, which the caller already writes.
   virtual void appendDebugState(std::string& /*out*/) const {}
+
+  // True while work the screen does on its own, without input, is running or about to start: a
+  // section build, a cover decode. The serial CMD:IDLE waits for it to end. Called from the loop
+  // task WITHOUT the render lock; an activity that must lock to answer should Try and report busy
+  // when it cannot. Not skipLoopDelay(): the transfer screens hold that for their whole life.
+  virtual bool hasPendingBackgroundWork() { return false; }
 
   // Called while this activity is buried on the stack, before a download that needs the heap in
   // one piece (releaseMemoryForDownload()). Drop what the activity built only to draw itself, such

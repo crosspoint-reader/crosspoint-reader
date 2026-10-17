@@ -61,6 +61,7 @@
 #include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontGlobals.h"
+#include "SerialTestApi.h"
 #include "SilentRestart.h"
 #include "StarredPagesActivity.h"
 #include "activities/home/BookInfoActivity.h"
@@ -70,6 +71,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SerialCommandGrammar.h"
 #include "util/WakeTrace.h"
 
 // Defined further down (near the other font helpers); declared here because
@@ -723,6 +725,7 @@ void EpubReaderActivity::onEnter() {
 
   applyPendingSyncSession();
   applyPendingBookmarkJump();
+  applyPendingPercentJump();
   logReaderMemSnapshot("onEnter_after_pending_sync");
 
   // True first open only: no progress.bin record. Skip the front matter to the text reference.
@@ -1426,6 +1429,7 @@ void EpubReaderActivity::resetBackgroundBuild() {
   backgroundBuildState_ = BackgroundBuildState::Probe;
   backgroundBuildPercent_ = -1;
   backgroundPreemptCount_ = 0;
+  backgroundBuildStarved_ = false;
 }
 
 bool EpubReaderActivity::beginBackgroundBorrow() {
@@ -1736,8 +1740,11 @@ void EpubReaderActivity::stepBackgroundSectionBuild() {
                   section->currentPage + 1, section->pageCount);
         }
         backgroundBuildState_ = BackgroundBuildState::Building;
+        backgroundBuildStarved_ = false;
         return;
       }
+      // Settled and nothing queued, so only the heap or the buffer said no: see hasPendingBackgroundWork().
+      backgroundBuildStarved_ = !inputQueued && (buildThrough || (now - lastActivityMs) >= BG_BUILD_BORROW_QUIET_MS);
       // No buffer to lend (a C build holds it, or a realloc never came back), or the reader is
       // not settled: wait. There is no heap-backed B any more (see the BG_BUILD_BORROW_* note).
       return;
@@ -1828,6 +1835,7 @@ void EpubReaderActivity::stepBackgroundSectionBuild() {
 #endif
           backgroundWindowPagesBuilt_ += backgroundSection_->pageCount;  // count this section toward the page budget
           LOG_INF("ERS", "Background build spine=%d complete: %u pages", targetSpine, backgroundSection_->pageCount);
+          SerialTestApi::noteBuildDone(targetSpine, backgroundSection_->pageCount);
           // The build recorded its page count (SpinePageIndex). If that firms up the chapter
           // counter on screen, redraw it now rather than at the next page turn:
           // endBackgroundBorrow() below requests the deferred status refresh.
@@ -2214,6 +2222,7 @@ void EpubReaderActivity::stepCurrentSectionBuild() {
   bgCounters_.cCompletes++;
 #endif
   LOG_INF("ERS", "Background-C spine=%d complete: %u pages", currentSpineIndex, section->pageCount);
+  SerialTestApi::noteBuildDone(currentSpineIndex, section->pageCount);
   readerPhase_ = ReaderPhase::READING;
 
   // Resolve the display position. For a Page target, section->currentPage already tracked the
@@ -2257,14 +2266,30 @@ void EpubReaderActivity::stepCurrentSectionBuild() {
 
 // Translate an absolute percent into a spine index plus a normalized position
 // within that spine so we can jump after the section is loaded.
-void EpubReaderActivity::jumpToPercent(int percent) {
-  if (!epub) {
+void EpubReaderActivity::jumpToPercent(const int percent) {
+  int targetSpineIndex = 0;
+  float spineProgress = 0.0f;
+  if (!resolvePercent(percent, targetSpineIndex, spineProgress)) {
     return;
+  }
+
+  // Reset state so render() reloads and repositions on the target spine.
+  {
+    RenderLock lock(*this);
+    currentSpineIndex = targetSpineIndex;
+    navTarget = NavigationTarget::makePercent(spineProgress);
+    section.reset();
+  }
+}
+
+bool EpubReaderActivity::resolvePercent(int percent, int& targetSpineIndex, float& spineProgress) const {
+  if (!epub) {
+    return false;
   }
 
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) {
-    return;
+    return false;
   }
 
   // Normalize input to 0-100 to avoid invalid jumps.
@@ -2281,10 +2306,10 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
   const int spineCount = epub->getSpineItemsCount();
   if (spineCount == 0) {
-    return;
+    return false;
   }
 
-  int targetSpineIndex = spineCount - 1;
+  targetSpineIndex = spineCount - 1;
   size_t prevCumulative = 0;
 
   for (int i = 0; i < spineCount; i++) {
@@ -2299,20 +2324,13 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
   const size_t cumulative = epub->getCumulativeSpineItemSize(targetSpineIndex);
   const size_t spineSize = (cumulative > prevCumulative) ? (cumulative - prevCumulative) : 0;
-  float spineProgress =
+  spineProgress =
       (spineSize == 0) ? 0.0f : static_cast<float>(targetSize - prevCumulative) / static_cast<float>(spineSize);
   if (spineProgress < 0.0f)
     spineProgress = 0.0f;
   else if (spineProgress > 1.0f)
     spineProgress = 1.0f;
-
-  // Reset state so render() reloads and repositions on the target spine.
-  {
-    RenderLock lock(*this);
-    currentSpineIndex = targetSpineIndex;
-    navTarget = NavigationTarget::makePercent(spineProgress);
-    section.reset();
-  }
+  return true;
 }
 
 void EpubReaderActivity::openDictionary() {
@@ -2694,6 +2712,21 @@ void EpubReaderActivity::applyPendingBookmarkJump() {
   APP_STATE.saveToFile();
 }
 
+void EpubReaderActivity::applyPendingPercentJump() {
+  auto& jump = APP_STATE.pendingPercentJump;
+  if (!jump.active || !epub || jump.bookPath != epub->getPath()) {
+    return;
+  }
+  int spine = 0;
+  float progress = 0.0f;
+  if (resolvePercent(jump.percent, spine, progress)) {
+    LOG_DBG("ERS", "Applying pending percent jump: %d%% -> spine=%d at %.3f", jump.percent, spine, progress);
+    currentSpineIndex = spine;
+    navTarget = NavigationTarget::makePercent(progress);
+  }
+  jump = {};
+}
+
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   // No-op if the selected orientation matches current settings.
   if (SETTINGS.orientation == orientation) {
@@ -2991,7 +3024,9 @@ float EpubReaderActivity::getEffectiveReaderLineCompression() const {
   }
 }
 
-int EpubReaderActivity::getEffectiveReaderFontId() const {
+int EpubReaderActivity::getEffectiveReaderFontId() const { return resolveReaderFont(nullptr); }
+
+int EpubReaderActivity::resolveReaderFont(std::string* familyOut) const {
   // Per-book font override: when set, force a specific BUILT-IN family even if
   // an SD card font is the global default. This makes the override predictable
   // ("override forces back to a known built-in") and avoids surprising users
@@ -2999,23 +3034,22 @@ int EpubReaderActivity::getEffectiveReaderFontId() const {
   const uint8_t pointSize =
       (bookFontSizeOverride >= 0) ? static_cast<uint8_t>(bookFontSizeOverride) : SETTINGS.fontPointSize;
   if (bookFontFamilyOverride >= 0) {
+    if (familyOut) *familyOut = fontFamilyOptionLabel(static_cast<uint8_t>(bookFontFamilyOverride));
     return CrossPointSettings::getBuiltinReaderFontIdForPoints(static_cast<uint8_t>(bookFontFamilyOverride), pointSize);
   }
-  if (!bookSdFontFamilyOverride.empty()) {
-    const int id = resolveSdCardFontId(bookSdFontFamilyOverride.c_str(), pointSize);
-    if (id != 0) return id;
-  }
-  // No override: defer to global resolution (which honors SD card font selection).
-  // We synthesize a temporary lookup using the override size if it's set; otherwise
-  // SETTINGS.getReaderFontId() is the canonical answer.
-  if (bookFontSizeOverride >= 0) {
-    if (SETTINGS.sdFontFamilyName[0] != '\0') {
-      const int id = resolveSdCardFontId(SETTINGS.sdFontFamilyName, pointSize);
-      if (id != 0) return id;
+  // Then the book's SD family, then the global one, each only while it is loaded at this size
+  // (resolveSdCardFontId() is 0 for a family taken off the card); otherwise the built-in family.
+  // With no size override this is SETTINGS.getReaderFontId().
+  for (const char* sdFamily : {bookSdFontFamilyOverride.c_str(), static_cast<const char*>(SETTINGS.sdFontFamilyName)}) {
+    if (sdFamily[0] == '\0') continue;
+    const int id = resolveSdCardFontId(sdFamily, pointSize);
+    if (id != 0) {
+      if (familyOut) *familyOut = sdFamily;
+      return id;
     }
-    return CrossPointSettings::getBuiltinReaderFontIdForPoints(SETTINGS.fontFamily, pointSize);
   }
-  return SETTINGS.getReaderFontId();
+  if (familyOut) *familyOut = fontFamilyOptionLabel(SETTINGS.fontFamily);
+  return CrossPointSettings::getBuiltinReaderFontIdForPoints(SETTINGS.fontFamily, pointSize);
 }
 
 // Sibling-size ladder for a built-in body font: every size of the same family, with its
@@ -4694,6 +4728,7 @@ bool EpubReaderActivity::buildSection(const RenderLayout& layout) {
 
   // Section is ready (cache hit, blocking build, or a tiny C build that finished in one slice):
   // the Background-C fallback latches for this spine have served their purpose.
+  if (needBuild) SerialTestApi::noteBuildDone(currentSpineIndex, section->pageCount);
   forceBlockingBuildSpine_ = -1;
   forceReleasedBuildSpine_ = -1;
 
@@ -6004,13 +6039,50 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
 }
 
 void EpubReaderActivity::appendDebugState(std::string& out) const {
-  out += " book=";
-  out += epub ? epub->getPath() : std::string("none");
-  out +=
-      " spine=" + std::to_string(currentSpineIndex + 1) + "/" + std::to_string(epub ? epub->getSpineItemsCount() : 0);
+  using SerialCommandGrammar::appendField;
+  appendField(out, "book", epub ? epub->getPath() : std::string("none"));
+  appendField(out, "spine",
+              std::to_string(currentSpineIndex + 1) + "/" + std::to_string(epub ? epub->getSpineItemsCount() : 0));
   const int page = section ? section->currentPage + 1 : 0;
   const int pages = section ? section->pageCount : 0;
-  out += " page=" + std::to_string(page) + "/" + std::to_string(pages);
+  appendField(out, "page", std::to_string(page) + "/" + std::to_string(pages));
+  std::string family;
+  resolveReaderFont(&family);
+  appendField(out, "font", family);
+  appendField(out, "font_pt",
+              static_cast<long>(bookFontSizeOverride >= 0 ? bookFontSizeOverride : SETTINGS.fontPointSize));
+  if (!epub || !section) return;
+  // What the status bar works from, whatever parts of it the settings show.
+  appendField(out, "chapter", chapterTitle());
+  const ChapterPageSpan::Display chapter = chapterPageDisplay();
+  appendField(out, "chapter_page",
+              std::to_string(chapter.page) + "/" + std::to_string(chapter.total) + (chapter.approximate ? "~" : ""));
+  char percent[8];
+  snprintf(percent, sizeof(percent), "%.0f", statusBarBookPercent());
+  appendField(out, "percent", percent);
+}
+
+bool EpubReaderActivity::hasPendingBackgroundWork() {
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return true;  // a render pass or a build slice has it: busy by definition
+  if (pendingPreRender || usePreRenderedBuffer || pendingGrayscale_.active || imageProcessingActive_) return true;
+  if (section && section->hasActiveBuild()) return true;
+  if (backgroundBuildState_ == BackgroundBuildState::Building) return true;
+  if (!epub || !section || readerPhase_ != ReaderPhase::READING || backgroundWorkSuspended_) return false;
+  // Work that has not started yet but will on its own. Background-B waits out its quiet period
+  // after a page appears (and rechecks its gates once a second) before it borrows the buffer; past
+  // that, a WaitHeap the heap keeps refusing is starved, not pending.
+  const unsigned long sinceActivity = millis() - std::max(lastPageTurnTime, lastPageOnScreenMs_);
+  if (backgroundBuildState_ == BackgroundBuildState::WaitHeap &&
+      (!backgroundBuildStarved_ || sinceActivity < BG_BUILD_BORROW_QUIET_MS + 1100UL)) {
+    return true;
+  }
+  // The image lane looks at the pages around the reader once after each move and marks the window
+  // clean when nothing is left to decode; until then it has its scan (and maybe a decode) to do.
+  // The same preconditions as stepImageWarmLocked(), without which it never runs.
+  const bool imageLaneCanRun =
+      section->pageCount > 0 && !secondaryBorrowed_ && !backgroundBorrowActive_ && renderer.hasSecondaryBuffer();
+  return imageLaneCanRun && (imageWarmCleanSpine_ != currentSpineIndex || imageWarmCleanPage_ != section->currentPage);
 }
 
 void EpubReaderActivity::restoreCurrentPageToBufferIfPreRendered() {
@@ -6039,7 +6111,7 @@ void EpubReaderActivity::restoreCurrentPageToBufferIfPreRendered() {
   usePreRenderedBuffer = false;
 }
 
-void EpubReaderActivity::renderStatusBar() const {
+float EpubReaderActivity::statusBarBookPercent() const {
   // Calculate progress in book. During an active section build pageCount only reflects pages
   // built so far, not the final chapter length, so show a byte-based estimate ("page X of ~Y")
   // instead of the misleading watermark. estimatedTotalPages() returns 0 while it's still too
@@ -6049,7 +6121,19 @@ void EpubReaderActivity::renderStatusBar() const {
   const int displayPageCount = building ? section->estimatedTotalPages() : section->pageCount;
   const float pageCount = static_cast<float>(displayPageCount);
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
-  const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
+  return epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
+}
+
+std::string EpubReaderActivity::chapterTitle() const {
+  const int tocIndex =
+      section ? section->getTocIndexForPage(section->currentPage) : epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (tocIndex == -1) return tr(STR_UNNAMED);
+  return epub->getTocItem(tocIndex).title;
+}
+
+void EpubReaderActivity::renderStatusBar() const {
+  const int currentPage = section->currentPage + 1;
+  const float bookProgress = statusBarBookPercent();
   // The page counter and the chapter progress bar count the whole TOC chapter, which can span
   // several spine items (#325). The book percentage above stays per spine.
   const ChapterPageSpan::Display chapter = chapterPageDisplay();
@@ -6061,14 +6145,7 @@ void EpubReaderActivity::renderStatusBar() const {
   if (automaticPageTurnActive) {
     title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
-    const int tocIndex =
-        section ? section->getTocIndexForPage(section->currentPage) : epub->getTocIndexForSpineIndex(currentSpineIndex);
-    if (tocIndex == -1) {
-      title = tr(STR_UNNAMED);
-    } else {
-      const auto tocItem = epub->getTocItem(tocIndex);
-      title = tocItem.title;
-    }
+    title = chapterTitle();
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = epub->getTitle();
   }

@@ -160,6 +160,13 @@ class SerialTransferProtocol {
   SerialTransferHost& host_;
 };
 
+// True when the next four bytes are "CMD:", the prefix of the firmware's own text commands
+// (src/SerialTestApi.h), which neither magic shares. poll() leaves such a line alone like any
+// foreign bytes; the caller then reads it up to its line end and answers it, instead of sliding the
+// magic probe over it a byte at a time, so a test script can still drive a device that sits on the
+// transfer screen.
+bool textCommandAhead(SerialTransferHost& host);
+
 // Incremental CRC32 (zlib/IEEE, poly 0xEDB88320), matching zlib.crc32 on the
 // host. Seed with 0; feed chunks; the running value is the final CRC.
 uint32_t crc32Update(uint32_t crc, const uint8_t* data, size_t len);

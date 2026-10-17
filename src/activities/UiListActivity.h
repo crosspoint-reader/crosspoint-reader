@@ -105,6 +105,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   [[nodiscard]] freeink::ui::ListProps listProps(UiScreen& screen) const;
   // Syncs the viewport (subtitle rows are taller on button-only boards) and adds the list.
   void addList(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
+  // Tells the serial test interface which row `props` highlights and its label (CMD:STATE sel=,
+  // label=). addList() does it; a screen that calls screen.list() itself calls this just before.
+  static void noteListSelection(const freeink::ui::ListProps& props);
   void moveSelectionTo(int index);
   // A page turn: select `row` with the screen starting at `top` (ListGrammar::page() decides both).
   void showRowPage(int row, int top);

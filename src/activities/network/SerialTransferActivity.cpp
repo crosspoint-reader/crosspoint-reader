@@ -7,6 +7,7 @@
 #include <Logging.h>
 
 #include "MappedInputManager.h"
+#include "SerialTestApi.h"
 #include "SilentRestart.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -20,6 +21,9 @@ constexpr uint32_t kLowHeapTrimThreshold = 60 * 1024;
 // Process at most this many protocol messages per loop() so a flood of small
 // commands can't starve the Back-button check.
 constexpr int kMaxMessagesPerLoop = 64;
+
+// A "CMD:" line arrives in one write from a script; one still unfinished after this long is noise.
+constexpr unsigned long kTextCommandTimeoutMs = 2000;
 
 // Raise HWCDC's TX timeout for the session from its 100ms default. At 100ms, a
 // brief ring-drain timing race at a chunk boundary flips the link to
@@ -108,10 +112,20 @@ void SerialTransferActivity::loop() {
 
   // Drive the protocol. Each poll() handles at most one complete message and
   // returns false when the leading bytes aren't a magic or fewer than 4 bytes
-  // are buffered. In the former case slide the probe forward a byte to resync.
+  // are buffered. A "CMD:" there is a test command, read to its line end;
+  // anything else slides the probe forward a byte to resync.
   for (int i = 0; i < kMaxMessagesPerLoop; ++i) {
+    if (readingTextCommand_) {
+      if (continueTextCommand()) continue;
+      break;  // the rest of the line has not arrived yet
+    }
     if (device_.poll()) continue;
     if (device_.available() >= 4) {
+      if (device_.textCommandAhead()) {
+        readingTextCommand_ = true;
+        textCommandStartMs_ = millis();
+        continue;
+      }
       device_.dropByte();
       continue;
     }
@@ -125,6 +139,27 @@ void SerialTransferActivity::loop() {
     statusDirty_ = false;
     requestUpdateAndWait();
   }
+}
+
+bool SerialTransferActivity::continueTextCommand() {
+  while (device_.available() > 0) {
+    const int b = device_.readByte();
+    if (b < 0) break;
+    const char c = static_cast<char>(b);
+    const bool complete = textLine_.feed(c);
+    if (complete || c == '\n' || c == '\r') {  // a line too long for the buffer also ends here
+      readingTextCommand_ = false;
+      if (complete) SerialTestApi::handleLine(textLine_.take());
+      return true;
+    }
+  }
+  if (millis() - textCommandStartMs_ >= kTextCommandTimeoutMs) {
+    LOG_DBG("SXF", "Dropped an unfinished CMD: line");
+    textLine_.reset();
+    readingTextCommand_ = false;
+    return true;
+  }
+  return false;
 }
 
 void SerialTransferActivity::render(RenderLock&&) {

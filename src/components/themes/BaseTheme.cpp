@@ -15,6 +15,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "SerialTestApi.h"
 #include "UiFontScale.h"
 #include "components/BookProgressPresentation.h"
 #include "components/UITheme.h"
@@ -513,6 +514,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     // Draw name
     auto itemName = rowTitle(i);
+    if (i == selectedIndex) SerialTestApi::noteSelection(i, itemName.c_str());  // CMD:STATE sel=, label=
     const bool isSeparator = UITheme::isSeparatorTitle(itemName);
     touchBand.addRow(itemY, rowHeight, !isSeparator);
     if (isSeparator) {
@@ -1008,6 +1010,7 @@ void BaseTheme::shipPopup(const GfxRenderer& renderer, const PopupShip ship) {
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const bool overlayDisplayedFrame,
                           const PopupShip ship) const {
+  SerialTestApi::notePopup(message);  // for CMD:STATE and EVT:POPUP; LyraTheme::drawPopup does the same
   // Re-seed the write buffer from the frame on screen so the box overlays current content, not the
   // stale two-refreshes-ago frame left by the last buffer swap. Compose-then-popup callers skip this.
   if (overlayDisplayedFrame) renderer.syncWriteBufferFromDisplayed();

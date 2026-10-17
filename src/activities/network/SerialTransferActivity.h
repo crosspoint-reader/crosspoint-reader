@@ -4,6 +4,7 @@
 
 #include "SerialTransferDevice.h"
 #include "activities/Activity.h"
+#include "util/SerialLineBuffer.h"
 
 // USB serial file-transfer mode. Wire-compatible with CidVonHighwind/MicroReader
 // (https://github.com/CidVonHighwind/microreader): a host (its Calibre plugin or
@@ -20,6 +21,9 @@
 //    handles serial + SD with no display/SD SPI contention.
 //  - SerialTransferDevice reports per-operation status strings which are painted
 //    on screen (the only user-visible / debug channel while logs are muted).
+//  - Between transfer messages it still answers the serial test commands (a "CMD:" line, see
+//    src/SerialTestApi.h), which it reads itself since main.cpp's reader stands down: a test
+//    script can check the screen with CMD:STATE and leave it with CMD:BTN:BACK or CMD:ACT:HOME.
 class SerialTransferActivity final : public Activity {
  public:
   explicit SerialTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -40,8 +44,15 @@ class SerialTransferActivity final : public Activity {
  private:
   static void statusThunk(void* ctx, const char* msg);
   void onStatus(const char* msg);
+  // Reads the "CMD:" line in progress without waiting; true once it ended (and was answered).
+  bool continueTextCommand();
 
   SerialTransferDevice device_;
   std::string statusMessage_;
   bool statusDirty_ = false;  // a new status message is waiting to be painted (in loop())
+  // A "CMD:" line being read, and since when: one that never ends is dropped, so a host that sent
+  // half a line cannot keep the transfer protocol from seeing its next message.
+  SerialLineBuffer textLine_;
+  bool readingTextCommand_ = false;
+  unsigned long textCommandStartMs_ = 0;
 };

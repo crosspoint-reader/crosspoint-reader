@@ -41,6 +41,7 @@
 #include "settings/SettingsSubmenuActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#include "util/SerialCommandGrammar.h"
 #include "weather/WeatherActivity.h"
 
 // Guards ActivityManager's cross-task state (requestedUpdate, waitingTaskHandle),
@@ -139,6 +140,7 @@ void ActivityManager::renderTaskLoop() {
       // window where render() drops the mutex (renderContents' pre-waveform unlock), which is
       // exactly the window a plain RenderLock cannot see — see RenderLock(ExclusiveActivityAccess).
       renderPassActive.store(true, std::memory_order_release);
+      renderPassesStarted.fetch_add(1, std::memory_order_relaxed);
       // Every touch recorder starts each pass empty, so what they hold afterwards is exactly
       // what THIS frame painted. Clearing on activity transitions alone is not enough: a screen
       // can stop drawing its list without changing activity (WifiSelection swaps the network
@@ -327,6 +329,7 @@ void ActivityManager::loop() {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         refreshWifiActivityFlag();
+        noteActivityChanged();
         if (exitingReader && !currentActivity->isReaderActivity()) {
           unloadSdFontIfLoaded();
         }
@@ -400,6 +403,7 @@ void ActivityManager::loop() {
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
       refreshWifiActivityFlag();
+      noteActivityChanged();
 
       lock.unlock();  // onEnter may acquire its own lock
       currentActivity->onEnter();
@@ -458,6 +462,7 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
     // No current activity, safe to launch immediately
     currentActivity = std::move(newActivity);
     refreshWifiActivityFlag();
+    noteActivityChanged();
     currentActivity->onEnter();
   }
 }
@@ -483,7 +488,9 @@ void ActivityManager::goToUsbDrive() {
 #endif
 }
 
-void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
+void ActivityManager::goToSettings(const int tab) {
+  replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput, tab));
+}
 
 void ActivityManager::goToClockSettings() {
   replaceActivity(std::make_unique<ClockSettingsActivity>(renderer, mappedInput));
@@ -725,13 +732,41 @@ void ActivityManager::prepareFramebufferForCapture() {
 
 void ActivityManager::describeState(std::string& out) const {
   out += "activity=";
-  out += currentActivity ? currentActivity->getName() : std::string("none");
-  out += " stack=";
+  out += currentActivityName();
+  std::string stack;
   for (size_t i = 0; i < stackActivities.size(); ++i) {
-    if (i > 0) out += ',';
-    out += stackActivities[i]->getName();
+    if (i > 0) stack += ',';
+    stack += stackActivities[i]->getName();
   }
+  SerialCommandGrammar::appendField(out, "stack", stack);
   if (currentActivity) currentActivity->appendDebugState(out);
+}
+
+const char* ActivityManager::currentActivityName() const {
+  return currentActivity ? currentActivity->getName().c_str() : "none";
+}
+
+const char* ActivityManager::busyReason(const bool includeBackground) {
+  if (pendingAction != PendingAction::None) return "transition";
+  // A press the loop has not taken in yet, or one the classifier is still deciding about. Not
+  // isGestureInFlight(): its emitted-but-unconsumed events can stay queued for a screen's life.
+  if (mappedInput.hasPendingInput() || buttonEvents.isMidGesture()) return "input";
+  // A frame is queued (requestedUpdate, or a notification the render task has not taken), is
+  // being drawn (renderPassActive covers the stretch where render() lets go of the mutex), has a
+  // task waiting on it, or is still going onto the panel.
+  if (isUpdateSuperseded() || renderPassActive.load(std::memory_order_acquire) || waitingTaskHandle != nullptr ||
+      RenderLock::peek() || renderer.isRefreshPending()) {
+    return "render";
+  }
+  // Between taking its notification and taking the mutex the render task is ready to run but
+  // shows none of the above. Parked on its notification it is blocked (eSuspended when the wait
+  // has no timeout, in this FreeRTOS).
+  if (renderTaskHandle) {
+    const eTaskState state = eTaskGetState(renderTaskHandle);
+    if (state != eBlocked && state != eSuspended) return "render";
+  }
+  if (includeBackground && currentActivity && currentActivity->hasPendingBackgroundWork()) return "background";
+  return nullptr;
 }
 
 bool ActivityManager::currentTakesButtonAction(const CrossPointSettings::BUTTON_ACTION action,

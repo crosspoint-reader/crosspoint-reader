@@ -8,6 +8,7 @@
 #include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "SerialTestApi.h"
 #include "activities/ActivityManager.h"
 #include "activities/SliderPickerActivity.h"
 #include "components/UITheme.h"
@@ -158,7 +159,25 @@ fui::ListProps UiListActivity::listProps(UiScreen& screen) const {
 
 void UiListActivity::addList(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
   syncListViewport(screen, props, hasSubtitle);
+  noteListSelection(props);
   screen.list(props);
+}
+
+void UiListActivity::noteListSelection(const fui::ListProps& props) {
+  const int index = props.selectedIndex;
+  const char* label = nullptr;
+  fui::ListItem row;  // the provider formats into buffers it owns; the probe copies the label at once
+  if (index >= 0 && index < props.count) {
+    if (props.rowProvider) {
+      props.rowProvider(props.rowProviderCtx, static_cast<uint16_t>(index), row);
+      label = row.label;
+    } else if (props.items) {
+      const int inWindow = index - props.itemsWindowFirst;
+      const int windowRows = props.itemsWindowCount ? props.itemsWindowCount : props.count - props.itemsWindowFirst;
+      if (inWindow >= 0 && inWindow < windowRows) label = props.items[inWindow].label;
+    }
+  }
+  SerialTestApi::noteSelection(index, label);
 }
 
 void UiListActivity::drawChrome() {

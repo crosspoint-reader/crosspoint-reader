@@ -26,6 +26,8 @@ class SettingsActivity final : public TabbedUiListActivity {
 
   std::vector<SettingInfo::SubmenuData> submenuData;
   bool needsHalfRefresh = false;
+  // The tab onEnter() opens on (a categoryNames slot), with its bar focused.
+  int initialTab = 0;
 
   void enterCategory(int categoryIndex);
 
@@ -55,8 +57,8 @@ class SettingsActivity final : public TabbedUiListActivity {
   void render(RenderLock&&) override;
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : TabbedUiListActivity("Settings", renderer, mappedInput) {}
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const int tab = 0)
+      : TabbedUiListActivity("Settings", renderer, mappedInput), initialTab(tab) {}
   void onEnter() override;
   void onExit() override;
   bool releaseBuriedState() override;

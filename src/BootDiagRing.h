@@ -83,6 +83,7 @@ enum class SleepTrigger : uint8_t {
   ButtonAction,      // a button mapped to the Sleep action
   WakeGateRejected,  // woke, gate refused the press, going straight back down
   UsbPowerBoot,      // USB power caused a cold boot; nothing else was initialised
+  SerialCommand,     // a host sent CMD:SLEEP (or CMD:BTN:POWER:LONG) over USB serial
   Count,
 };
 

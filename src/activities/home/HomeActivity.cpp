@@ -38,6 +38,7 @@
 #include "components/themes/TapTargets.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "fontIds.h"
+#include "util/SerialCommandGrammar.h"
 
 namespace {
 constexpr int CLASSIC_MIN_RECENT_TILE_HEIGHT = 280;
@@ -926,4 +927,17 @@ void HomeActivity::dispatchMenuAction(HomeMenuAction action) {
   activityManager.setReturnHint(std::move(hint));
 
   activityManager.goToHomeMenuAction(action);
+}
+
+void HomeActivity::appendDebugState(std::string& out) const {
+  using SerialCommandGrammar::appendField;
+  appendField(out, "sel", static_cast<long>(selectorIndex));
+  if (selectorIndex < 0) return;
+  const int books = static_cast<int>(recentBooks.size());
+  const int menuIndex = selectorIndex - books;
+  if (menuIndex < 0) {
+    appendField(out, "label", recentBooks[selectorIndex].title);
+  } else if (menuIndex < static_cast<int>(menuEntries.size())) {
+    appendField(out, "label", I18N.get(menuEntries[menuIndex].label));
+  }
 }

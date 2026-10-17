@@ -49,6 +49,15 @@ struct PendingBookmarkJumpState {
   }
 };
 
+// Where the next EPUB open should land, as a share of the book (the serial
+// CMD:ACT:READER:<path>@<n>%). RAM only: unlike a bookmark jump it is acted on by the open that
+// follows it at once, so there is nothing to survive a reboot for.
+struct PendingPercentJumpState {
+  bool active = false;
+  std::string bookPath;
+  uint8_t percent = 0;
+};
+
 struct KOReaderSyncSessionState {
   bool active = false;
   std::string epubPath;
@@ -153,6 +162,7 @@ class CrossPointState {
   bool showBootScreen = true;
   KOReaderSyncSessionState koReaderSyncSession;
   PendingBookmarkJumpState pendingBookmarkJump;
+  PendingPercentJumpState pendingPercentJump;  // not saved; see the type
   ~CrossPointState() = default;
 
   // Get singleton instance
