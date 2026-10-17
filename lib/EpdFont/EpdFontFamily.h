@@ -17,6 +17,7 @@ class EpdFontFamily {
     SUP = 16,            // superscript: glyph scaled 50%, raised ~40% of ascender
     SUB = 32,            // subscript: glyph scaled 50%, lowered ~25% of ascender
     RUBY_CONTINUE = 64,  // Group ruby follower marker (used internally by Epub layout)
+    SMALL_CAPS = 128,    // lowercase letters drawn as uppercase glyphs at 3/4 scale
   };
   static constexpr uint8_t TEXT_DECORATION_MASK = static_cast<uint8_t>(UNDERLINE | STRIKETHROUGH);
 
