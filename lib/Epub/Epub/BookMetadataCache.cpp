@@ -15,7 +15,8 @@
 namespace {
 // v12: a sparse EPUB 3 nav gives way to an NCX that maps more chapters; a v11 cache holds the sparse TOC
 // v13: TOC hrefs that match a spine item by filename only are mapped; a v12 cache holds them as -1
-constexpr uint8_t BOOK_CACHE_VERSION = 13;
+// v14: coverItemHref follows an SVG wrapper to its picture; a v13 cache holds the .svg path
+constexpr uint8_t BOOK_CACHE_VERSION = 14;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
