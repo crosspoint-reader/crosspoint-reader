@@ -227,6 +227,7 @@
 
   <script>
 <!--#include file="shared/SideNav.js.inc" -->
+<!--#include file="shared/FileNames.js.inc" -->
 
     function formatSize(bytes) {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
@@ -429,8 +430,9 @@
 
     // Derive family name from a .cpfont filename: take everything before the
     // last '-' or '_' (separator that precedes the size suffix, e.g. Bookerly_12.cpfont).
+    // From the NFC name, the one the file is uploaded under.
     function familyFromFilename(name) {
-      const stem = name.replace(/\.cpfont$/i, '');
+      const stem = nfcName(name).replace(/\.cpfont$/i, '');
       const cut = Math.max(stem.lastIndexOf('-'), stem.lastIndexOf('_'));
       return cut > 0 ? stem.slice(0, cut) : stem;
     }
@@ -486,7 +488,7 @@
         status.textContent = 'Uploading ' + (uploaded + 1) + '/' + files.length + ': ' + file.name;
         const formData = new FormData();
         formData.append('family', family);
-        formData.append('file', file, file.name);
+        formData.append('file', file, nfcName(file.name));
         try {
           const res = await fetch('/api/fonts/upload', { method: 'POST', body: formData });
           const data = await res.json();

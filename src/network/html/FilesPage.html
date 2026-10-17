@@ -2162,6 +2162,8 @@
   </div>
 
   <script>
+<!--#include file="shared/FileNames.js.inc" -->
+
     // get current path from query parameter
     const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
     if (currentPath !== '/') {
@@ -3489,7 +3491,8 @@
       }
       if (!entry.isDirectory) return;
 
-      const childRel = relDir ? relDir + '/' + entry.name : entry.name;
+      // NFC, as the files inside get it: the folders made for them must carry the same names.
+      const childRel = relDir ? relDir + '/' + nfcName(entry.name) : nfcName(entry.name);
       const reader = entry.createReader();
       for (;;) {
         const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
@@ -6801,14 +6804,21 @@
       uploadClash = { folders: new Map(), applyToAll: null };
     }
 
-    // Lower-cased names already in `folder`, fetched once per upload and kept up to date as this upload
-    // adds to it. FAT names are case-insensitive, so "Book.epub" and "book.epub" are the same file.
+    // How a name is compared for a clash. FAT names are case-insensitive, so "Book.epub" and
+    // "book.epub" are the same file; and a name uploaded before uploads were normalized may sit on the
+    // card in NFD, which looks the same as the NFC upload, so that counts as a clash too.
+    function clashKey(name) {
+      return nfcName(name).toLowerCase();
+    }
+
+    // The clash keys of the names already in `folder`, fetched once per upload and kept up to date as
+    // this upload adds to it.
     async function namesInFolder(folder) {
       if (!uploadClash.folders.has(folder)) {
         const names = new Set();
         try {
           const response = await fetch('/api/files?path=' + encodeURIComponent(folder) + '&_=' + Date.now());
-          if (response.ok) (await response.json()).forEach(f => names.add(f.name.toLowerCase()));
+          if (response.ok) (await response.json()).forEach(f => names.add(clashKey(f.name)));
         } catch (e) {
           console.warn('[Upload] Could not list ' + folder + ' for name clashes:', e);
         }
@@ -6823,7 +6833,7 @@
       const ext = dot > 0 ? fileName.slice(dot) : '';
       for (let n = 2; ; n++) {
         const candidate = `${stem} (${n})${ext}`;
-        if (!names.has(candidate.toLowerCase())) return candidate;
+        if (!names.has(clashKey(candidate))) return candidate;
       }
     }
 
@@ -6847,15 +6857,22 @@
     async function resolveUploadClash(file, folder) {
       const names = await namesInFolder(folder);
       let upload = file;
-      if (names.has(file.name.toLowerCase())) {
+      if (names.has(clashKey(file.name))) {
         const action = uploadClash.applyToAll || await askUploadClash(file.name, folder);
         if (action === 'skip') return null;
         if (action === 'keep') {
           upload = new File([file], freeNameIn(names, file.name), { type: file.type, lastModified: file.lastModified });
         }
       }
-      names.add(upload.name.toLowerCase());
+      names.add(clashKey(upload.name));
       return upload;
+    }
+
+    // `file` under its NFC name (shared/FileNames.js.inc), which is the one both transports send:
+    // the WebSocket START line and the multipart filename. The same File when its name already is.
+    function nfcFile(file) {
+      const name = nfcName(file.name);
+      return name === file.name ? file : new File([file], name, { type: file.type, lastModified: file.lastModified });
     }
 
     function uploadFile() {
@@ -6945,7 +6962,8 @@
           return;
         }
 
-        let file = files[currentIndex];
+        // In NFC from here on, so conversion, the clash check and the upload all see the name that lands.
+        let file = nfcFile(files[currentIndex]);
         // Only a folder drop supplies destinations; everything else uploads
         // into the folder currently being browsed.
         const destPath = pendingFolderUpload ? pendingFolderUpload[currentIndex].destPath : currentPath;
@@ -7247,7 +7265,7 @@
     }
 
     function createFolder() {
-      const folderName = document.getElementById('folderName').value.trim();
+      const folderName = nfcName(document.getElementById('folderName').value.trim());
 
       if (!folderName) {
         alert('Please enter a folder name!');
@@ -7303,7 +7321,8 @@
 
     function confirmRename() {
       const path = document.getElementById('renameItemPath').value;
-      const newName = document.getElementById('renameNewName').value.trim();
+      // NFC, like an upload's name (shared/FileNames.js.inc).
+      const newName = nfcName(document.getElementById('renameNewName').value.trim());
 
       if (!newName) {
         alert('Please enter a new name.');
