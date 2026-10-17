@@ -126,6 +126,19 @@ python3 -m pip install pyserial colorama matplotlib
 python3 scripts/debugging_monitor.py
 ```
 
+## Drive the device from a script
+
+The firmware answers serial commands that press buttons, open screens and books, read and change
+settings, wait until drawing and background work are done, report what is on screen and take
+screenshots. `tools/devctl.py` runs them as steps:
+
+```sh
+python3 tools/devctl.py --log run.log cmd:ACT:HOME idle state shot:home.png
+```
+
+See [Serial Test API](../serial-test-api.md) for every command, the screenshot format and a worked
+session.
+
 ## Test release workflows locally with `act`
 
 Use [`act`](https://github.com/nektos/act) to dry-run the release workflows
