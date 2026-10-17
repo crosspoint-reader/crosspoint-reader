@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@
 
 #include "Dictionary.h"
 #include "DictionaryRegistry.h"
+#include "StringUtils.h"
 
 namespace fs = std::filesystem;
 
@@ -82,6 +84,63 @@ std::string provision(const std::string& fixtureFolder, const std::string& asFol
     fs::copy_file(e.path(), dest / e.path().filename(), fs::copy_options::overwrite_existing);
   }
   return asFolder;
+}
+
+// A hand-built dictionary for the lookup-rule tests, which need headwords the
+// generated fixture does not carry (case variants, umlauts, elisions).
+struct HeadwordSpec {
+  std::string word;
+  std::string definition;
+};
+struct SynonymSpec {
+  std::string word;
+  std::string headword;  // must be one of the dictionary's headwords
+};
+
+// StarDict's own order: g_ascii_strcasecmp, ties broken by strcmp.
+bool stardictLess(const std::string& a, const std::string& b) {
+  const int c = StringUtils::asciiCaseCmp(a.c_str(), b.c_str());
+  return c != 0 ? c < 0 : a < b;
+}
+
+void appendBe32(std::string& out, uint32_t v) {
+  const char bytes[4] = {static_cast<char>(v >> 24), static_cast<char>(v >> 16), static_cast<char>(v >> 8),
+                         static_cast<char>(v)};
+  out.append(bytes, sizeof(bytes));
+}
+
+// Write an uncompressed dictionary (plus a .syn when synonyms are given) under
+// /dictionaries/<folder>, both indexes sorted the way StarDict sorts them.
+void writeDictionary(const std::string& folder, std::vector<HeadwordSpec> headwords,
+                     std::vector<SynonymSpec> synonyms = {}) {
+  std::sort(headwords.begin(), headwords.end(),
+            [](const HeadwordSpec& a, const HeadwordSpec& b) { return stardictLess(a.word, b.word); });
+  std::sort(synonyms.begin(), synonyms.end(),
+            [](const SynonymSpec& a, const SynonymSpec& b) { return stardictLess(a.word, b.word); });
+  std::string idx;
+  std::string dict;
+  for (const auto& h : headwords) {
+    idx += h.word;
+    idx += '\0';
+    appendBe32(idx, static_cast<uint32_t>(dict.size()));
+    appendBe32(idx, static_cast<uint32_t>(h.definition.size()));
+    dict += h.definition;
+  }
+  std::string syn;
+  for (const auto& s : synonyms) {
+    const auto it =
+        std::find_if(headwords.begin(), headwords.end(), [&s](const HeadwordSpec& h) { return h.word == s.headword; });
+    ASSERT_NE(it, headwords.end()) << "synonym " << s.word << " names no headword";
+    syn += s.word;
+    syn += '\0';
+    appendBe32(syn, static_cast<uint32_t>(it - headwords.begin()));
+  }
+  const fs::path dir = kDictRoot / folder;
+  fs::remove_all(dir);
+  writeWholeFile(dir / "words.idx", idx);
+  writeWholeFile(dir / "words.dict", dict);
+  writeWholeFile(dir / "words.ifo", "StarDict's dict ifo file\nsametypesequence=m\n");
+  if (!syn.empty()) writeWholeFile(dir / "words.syn", syn);
 }
 
 // open() + buildIndex(), the sequence every caller runs before a first lookup.
@@ -405,6 +464,71 @@ TEST_F(DictionaryTest, SynonymsResolveThroughTheOrdinalIndex) {
   EXPECT_EQ(result, Dictionary::LookupResult::Found);
   EXPECT_EQ(headword, "quixotic");
   EXPECT_EQ(definition, expectedDefinition("quixotic"));
+}
+
+TEST_F(DictionaryTest, ExactCaseHeadwordWinsOverItsCapitalisedVariants) {
+  // StarDict sorts case variants capitals first, so a scan that took the first
+  // case-insensitive match answered "husk" with the surname.
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("CaseRun",
+                                          {{"HUSK", "an acronym"},
+                                           {"Husk", "a surname"},
+                                           {"husk", "the dry outer covering"},
+                                           {"Matter", "a surname"},
+                                           {"matter", "substance"},
+                                           {"Paris", "the capital of France"}},
+                                          {{"Husks", "Husk"}, {"husks", "husk"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "CaseRun"));
+
+  std::string definition;
+  std::string headword;
+  ASSERT_TRUE(dict.lookup("husk", definition, headword));
+  EXPECT_EQ(headword, "husk");
+  EXPECT_EQ(definition, "the dry outer covering");
+  ASSERT_TRUE(dict.lookup("matter", definition, headword));
+  EXPECT_EQ(headword, "matter");
+  EXPECT_EQ(definition, "substance");
+
+  // A sentence-initial capital is cleaned away, so it gets the common word too.
+  ASSERT_TRUE(dict.lookup("Husk", definition, headword));
+  EXPECT_EQ(headword, "husk");
+
+  // A word the dictionary only has capitalised is still found.
+  ASSERT_TRUE(dict.lookup("paris", definition, headword));
+  EXPECT_EQ(headword, "Paris");
+  EXPECT_EQ(definition, "the capital of France");
+
+  // The .syn has the same runs and takes the same rule.
+  ASSERT_TRUE(dict.lookup("husks", definition, headword));
+  EXPECT_EQ(headword, "husk");
+  EXPECT_EQ(definition, "the dry outer covering");
+}
+
+TEST_F(DictionaryTest, ExactCaseHeadwordIsFoundWhenItsRunStraddlesASample) {
+  // The sidecar samples every 256th entry. Slide a three-entry case run across
+  // that boundary so the descent lands before, inside and at the end of it.
+  for (int fillers = 253; fillers <= 257; fillers++) {
+    std::vector<HeadwordSpec> headwords;
+    for (int i = 0; i < fillers; i++) {
+      char word[16];
+      snprintf(word, sizeof(word), "aaa%03d", i);
+      headwords.push_back({word, "filler"});
+    }
+    headwords.push_back({"HUSK", "an acronym"});
+    headwords.push_back({"Husk", "a surname"});
+    headwords.push_back({"husk", "the dry outer covering"});
+    headwords.push_back({"zebra", "the striped one"});
+    const std::string folder = "Straddle" + std::to_string(fillers);
+    ASSERT_NO_FATAL_FAILURE(writeDictionary(folder, headwords));
+    Dictionary dict;
+    ASSERT_NO_FATAL_FAILURE(openIndexed(dict, folder));
+
+    std::string definition;
+    std::string headword;
+    ASSERT_TRUE(dict.lookup("husk", definition, headword)) << fillers;
+    EXPECT_EQ(headword, "husk") << fillers;
+    EXPECT_EQ(definition, "the dry outer covering") << fillers;
+  }
 }
 
 TEST_F(DictionaryTest, ResolveFindsTheLocationWithoutReadingIt) {

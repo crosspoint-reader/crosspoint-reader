@@ -61,6 +61,23 @@ uint32_t readBe32(const uint8_t* p) {
 // continuation/lead byte, so accented words keep their edges.
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 
+// Headwords equal under asciiCaseCmp sit in one contiguous run, ordered among
+// themselves by StarDict's strcmp tiebreak -- which puts "Husk" (a surname)
+// ahead of "husk", since uppercase sorts first in ASCII. Taking the first of
+// the run answered a lookup of "husk" with the proper noun. So the scan keeps
+// the first entry of the run as a fallback (a query for "paris" against a
+// dictionary holding only "Paris") but moves on to the entry spelled exactly
+// like the target when the run has one. True when `word` becomes the pick;
+// `exact` tells the caller the run needs no further scanning. Shared by the
+// .idx and .syn scans, which have the same runs.
+//
+// Ported from crosspoint-reader PR #3480 (Lennon Anderson, @YurBoiRene); the
+// same fix is PR #3436 (@PrashikshitSaini). Upstream fixed the .idx scan only.
+bool takesRunEntry(const char* word, const char* target, bool havePick, bool& exact) {
+  exact = strcmp(word, target) == 0;
+  return exact || !havePick;
+}
+
 // Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
 // headers are tiny and both keys always appear early when present.
 struct IfoFacts {
@@ -508,6 +525,9 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
+  // The exact-case entry of a run is always reached: cleanWord lowercases the
+  // target's ASCII letters, so it sorts last among its case variants, and even
+  // a descent that lands inside the run starts at or before it.
   if (!session.idxScan.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
@@ -523,14 +543,16 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
     if (!session.idxScan.readBytes(suffix, 8)) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) {
+    if (cmp > 0) break;
+    if (cmp < 0) continue;
+    bool exact = false;
+    if (takesRunEntry(wordBuf, target, result.found, exact)) {
       result.offset = readBe32(suffix);
       result.size = readBe32(suffix + 4);
       result.found = true;
       if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-      return result;
     }
-    if (cmp > 0) break;
+    if (exact) break;
   }
   return result;
 }
@@ -589,22 +611,32 @@ DictLocation Dictionary::locateSynonym(LookupSession& session, const char* targe
   const uint32_t startByte = bisectSamples(session.sidx, session.synScan, session.synSampleCount, target, nullptr);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: synonym NUL, BE32 ordinal.
-  // Sorted, so stop at the first synonym > target. Reading the ordinal before
-  // calling locateByOrdinal() (which reuses wordBuf) avoids any aliasing.
+  // Sorted, so stop at the first synonym > target, preferring the exact-case
+  // entry of a run as locate() does. The ordinal is resolved only once the scan
+  // is done, because locateByOrdinal() reuses wordBuf.
   if (!session.synScan.seekSet(startByte)) {
     LOG_ERR("DICT", "Synonym seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
     return result;
   }
+  bool havePick = false;
+  uint32_t pickedOrdinal = 0;
   while (session.synScan.position() < session.synSize) {
     if (session.synScan.readWord(wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
     if (!session.synScan.readBytes(ordBytes, 4)) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
-    if (cmp == 0) return locateByOrdinal(session, readBe32(ordBytes), matchedHeadwordOut);
     if (cmp > 0) break;
+    if (cmp < 0) continue;
+    bool exact = false;
+    if (takesRunEntry(wordBuf, target, havePick, exact)) {
+      pickedOrdinal = readBe32(ordBytes);
+      havePick = true;
+    }
+    if (exact) break;
   }
+  if (havePick) return locateByOrdinal(session, pickedOrdinal, matchedHeadwordOut);
   return result;
 }
 
