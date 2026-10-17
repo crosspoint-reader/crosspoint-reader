@@ -36,25 +36,9 @@
 
 namespace {
 
-// Wrapper around ImageFormatDetector that reads from file and seeks to origin
-// Bytes detectCoverImageFormat() sniffs. Also the threshold at which "this is not a format we
-// support" becomes a PERMANENT answer rather than "the extractor hasn't got that far yet".
-constexpr uint32_t COVER_FORMAT_SNIFF_BYTES = 8;
-
-// `base` is where the image starts inside the file: 0 for an extracted cover.img, the entry's
-// data offset when the cover is being read in place out of the EPUB. The stream is left back at
-// `base` either way, ready for a decoder.
-ImageFormatDetector::Format detectCoverImageFormat(FsFile& imageFile, const uint32_t base = 0) {
-  if (!imageFile || !imageFile.seek(base)) {
-    return ImageFormatDetector::Format::Unknown;
-  }
-
-  uint8_t header[8] = {};
-  const int readBytes = imageFile.read(header, sizeof(header));
-  imageFile.seek(base);
-
-  return ImageFormatDetector::detect(header, readBytes);
-}
+// Bytes ImageFormatDetector::detect(FsFile&) sniffs. Also the threshold at which "this is not a
+// format we support" becomes a PERMANENT answer rather than "the extractor hasn't got that far yet".
+constexpr uint32_t COVER_FORMAT_SNIFF_BYTES = ImageFormatDetector::kSniffBytes;
 
 bool coverImageComplete(FsFile& imageFile, ImageFormatDetector::Format format) {
   const uint32_t size = imageFile.size();
@@ -1230,7 +1214,7 @@ bool Epub::coverImageCachedValidOnly() const {
     existing.close();
     return true;  // can't open to validate — assume valid, let the decode fail if needed
   }
-  const auto fmt = detectCoverImageFormat(existing);
+  const auto fmt = ImageFormatDetector::detect(existing);
   const bool complete = coverImageComplete(existing, fmt);
   existing.close();
   return complete;
@@ -1245,9 +1229,9 @@ bool Epub::coverImageCachedButUnsupported() const {
     return false;  // can't open to validate — treat as transient, not as a permanent verdict
   }
   const uint32_t size = existing.size();
-  const auto fmt = detectCoverImageFormat(existing);
+  const auto fmt = ImageFormatDetector::detect(existing);
   existing.close();
-  // detectCoverImageFormat sniffs the first 8 bytes only, and those are the first bytes the
+  // ImageFormatDetector::detect sniffs the first 8 bytes only, and those are the first bytes the
   // sliced extractor writes — so a PARTIALLY extracted PNG/JPEG/GIF already sniffs correctly
   // and never reaches this verdict. Requiring the full 8 bytes is what keeps a mid-extraction
   // file (0..7 bytes on disk) from being condemned as undecodable.
@@ -1267,7 +1251,7 @@ bool Epub::ensureCoverImageCached() const {
   if (Storage.exists(coverCachePath.c_str())) {
     FsFile existing;
     if (Storage.openFileForRead("EBP", coverCachePath, existing)) {
-      const auto fmt = detectCoverImageFormat(existing);
+      const auto fmt = ImageFormatDetector::detect(existing);
       const bool complete = coverImageComplete(existing, fmt);
       existing.close();
       if (complete) return true;
@@ -1335,7 +1319,7 @@ bool Epub::ensureCoverImageCached() const {
 
   if (!Storage.openFileForRead("EBP", coverCachePath, coverFile)) return false;
   const bool empty = coverFile.size() == 0;
-  const auto fmt = empty ? ImageFormatDetector::Format::Unknown : detectCoverImageFormat(coverFile);
+  const auto fmt = empty ? ImageFormatDetector::Format::Unknown : ImageFormatDetector::detect(coverFile);
   coverFile.close();
   if (empty || fmt == ImageFormatDetector::Format::Unknown) {
     LOG_ERR("EBP", "Cover image %s: %s", empty ? "extracted as empty file" : "has unsupported format",
@@ -1407,7 +1391,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
   FsFile coverImage;
   if (!Storage.openFileForRead("EBP", coverCachePath, coverImage)) return false;
 
-  const auto detectedFormat = detectCoverImageFormat(coverImage);
+  const auto detectedFormat = ImageFormatDetector::detect(coverImage);
   if (detectedFormat == ImageFormatDetector::Format::Jpeg) {
     LOG_DBG("EBP", "Generating BMP from JPEG cover image (%s mode)", cropped ? "cropped" : "fit");
   } else if (detectedFormat == ImageFormatDetector::Format::Png) {
@@ -1539,7 +1523,7 @@ ThumbResult Epub::generateThumbBmp(int height, bool allowExtract, BuildArena* sc
     return ThumbResult::TransientFail;
   }
 
-  const auto detectedFormat = detectCoverImageFormat(coverImage, coverBase);
+  const auto detectedFormat = ImageFormatDetector::detect(coverImage, coverBase);
   if (detectedFormat == ImageFormatDetector::Format::Unknown) {
     // Cover extracted but its format is unsupported — structural, re-extraction yields the same
     // bytes. Sentinel so we stop trying.
@@ -1629,7 +1613,7 @@ ThumbResult Epub::generateThumbBmp(int width, int height, bool allowExtract, Bui
     return ThumbResult::TransientFail;
   }
 
-  const auto detectedFormat = detectCoverImageFormat(coverImage, coverBase);
+  const auto detectedFormat = ImageFormatDetector::detect(coverImage, coverBase);
   if (detectedFormat == ImageFormatDetector::Format::Unknown) {
     // Cover extracted but its format is unsupported — structural, re-extraction yields the same
     // bytes. Sentinel so we stop trying.
@@ -1721,7 +1705,7 @@ ThumbResult Epub::generateThumbBmps(const std::pair<int, int>* sizes, const int 
     return ThumbResult::TransientFail;
   }
 
-  const auto detectedFormat = detectCoverImageFormat(coverImage, coverBase);
+  const auto detectedFormat = ImageFormatDetector::detect(coverImage, coverBase);
   if (detectedFormat == ImageFormatDetector::Format::Unknown) {
     LOG_ERR("EBP", "Cached cover image is not a supported format — writing structural sentinels");
     coverImage.close();
@@ -1813,7 +1797,7 @@ std::unique_ptr<CoverThumbSession> Epub::beginThumbSession(const std::pair<int, 
   } else if (!openStoredCoverInPlace(session->cover_, &coverBase)) {
     return nullptr;
   }
-  if (detectCoverImageFormat(session->cover_, coverBase) != ImageFormatDetector::Format::Jpeg) return nullptr;
+  if (ImageFormatDetector::detect(session->cover_, coverBase) != ImageFormatDetector::Format::Jpeg) return nullptr;
 
   JpegToBmpConverter::BmpTarget targets[kMax];
   for (int i = 0; i < count; ++i) {
