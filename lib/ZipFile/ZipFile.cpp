@@ -551,7 +551,14 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
   const auto deflatedDataSize = fileStat.compressedSize;
   const auto inflatedDataSize = fileStat.uncompressedSize;
-  const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
+  // A corrupt entry (or a ZIP64 one, whose 32-bit size field holds the 0xFFFFFFFF marker) claims
+  // 4 GB. With the trailing NUL that size wraps to a 0-byte allocation, which the read below would
+  // then fill with the entry: a heap overflow from a crafted EPUB.
+  if (trailingNullByte && inflatedDataSize == UINT32_MAX) {
+    LOG_ERR("ZIP", "Entry claims %u bytes, refusing %s", static_cast<unsigned>(inflatedDataSize), filename);
+    return nullptr;
+  }
+  const size_t dataSize = trailingNullByte ? size_t{inflatedDataSize} + 1 : inflatedDataSize;
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
   if (data == nullptr) {
     LOG_ERR("ZIP", "Failed to allocate memory for output buffer (%zu bytes)", dataSize);
