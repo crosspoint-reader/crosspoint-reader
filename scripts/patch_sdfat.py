@@ -21,6 +21,17 @@ One more is OURS, not upstream's (see its header):
         power cut mid-sync cannot leave an entry pointing at clusters the FAT
         still marks free.
 
+And one mostly from crosspoint-reader PR #3969 ("fix: keep SdFat's free cluster
+search moving forward after a delete", Tuan Q. Nguyen / @martinqnguyen), theirs
+verbatim apart from the init() hunks:
+
+  0004  FatPartition: freeing a cluster no longer pulls the free cluster search
+        back down to it; the search wraps once instead. Each O_TRUNC rewrite of a
+        file low on the card made the next new file read the FAT from there to
+        the free space, some 2,000 sectors on a 16 GB card half full. Ours on
+        top: a FAT32 mount starts the search at the FSInfo next-free hint,
+        range-checked, instead of at cluster 2.
+
 Their safety gates come along too: SdFat must be exactly the release the patches were
 reviewed against, and every file a patch touches must hash to that release's bytes or
 to the reviewed patched bytes. Everything is checked before anything is written, and
@@ -87,6 +98,12 @@ PATCHES = (
         "src/FatLib/FatPartition.h",
         "fb91c81beac2779a0d4b08e886a5fefdf8062b8ad422ccec4e178ae4e88b72e5",
         "ad9d6a745aa8c91c8f006a61b2a6296e8dd89a1d05f1b335446e371ec541efcc",
+    ),
+    (
+        "0004-keep-free-cluster-search-moving-forward.patch",
+        "src/FatLib/FatPartition.cpp",
+        "36163b3dc4ee985da9a6c6fb99b635fb5b63255d35fa5b3ccc1778db1534c0fe",
+        "46847407b29354adb72be0448d60fccd4eb23e01fdb2061ee231aa58ff108396",
     ),
 )
 
