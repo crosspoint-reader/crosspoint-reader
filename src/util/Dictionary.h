@@ -82,7 +82,10 @@ class Dictionary {
   // reports the precise outcome so the UI can distinguish a genuine miss from a
   // decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-              LookupResult* outResult = nullptr);
+              LookupResult* outResult = nullptr, DictLocation* locationOut = nullptr);
+
+  // Reload the exact entry, including synonym targets with duplicate headwords.
+  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
 
   static std::string cleanWord(const char* word);
 
@@ -173,9 +176,6 @@ class Dictionary {
   // buildIndex() so each sidecar is rebuilt only when actually stale.
   static bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
 
-  // Read the definition at location. On failure returns false and, if outResult
-  // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
-  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
