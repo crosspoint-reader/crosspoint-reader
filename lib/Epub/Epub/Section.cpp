@@ -32,8 +32,9 @@
 
 namespace {
 constexpr uint8_t SECTION_FILE_VERSION = 90;  // v90: small caps shrink ł ń ž ÿ, Greek and
-                                              // Cyrillic, and no longer Ł Ń Ž; v89 pages
-                                              // measured such words the other way round
+                                              // Cyrillic, and no longer Ł Ń Ž, and set fi/fl
+                                              // as two letters; v89 pages measured such words
+                                              // the old way
                                               // v89: widow/orphan control, and a heading
                                               // keeps room for two lines below it, so pages
                                               // end earlier than in v88
