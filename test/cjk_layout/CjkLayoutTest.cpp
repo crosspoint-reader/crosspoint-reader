@@ -10,6 +10,7 @@
 
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/TextBlock.h"
+#include "Epub/hyphenation/Hyphenator.h"
 #include "GfxRenderer.h"
 
 namespace {
@@ -166,4 +167,121 @@ TEST(CjkSpaces, ANoBreakSpaceNextToCjkStaysGlued) {
   text.addWord("仮名", EpdFontFamily::REGULAR, false, /*attachToPrevious=*/true);
   const auto lines = layout(text, 25);
   EXPECT_EQ(wordsOf(lines), (std::vector<std::vector<std::string>>{{"漢"}, {"字", " ", "仮"}, {"名"}}));
+}
+
+// Korean. Ported from crosspoint-reader's KoreanLineBreaking tests (PR #3700, Sung-jin Brian Hong) and
+// KoreanLayout tests (PRs #2288 and #3700), with the widths recomputed for this shim (10 px per
+// glyph, 5 px per space; upstream's is 8 and 4).
+namespace {
+
+BlockStyle justified() {
+  BlockStyle bs = leftAligned();
+  bs.alignment = CssTextAlign::Justify;
+  return bs;
+}
+
+std::vector<Line> layoutWords(const std::vector<const char*>& words, const bool hyphenation, const uint16_t width,
+                              const BlockStyle& style = justified()) {
+  Hyphenator::setPreferredLanguage("ko");
+  ParsedText text(false, hyphenation, style);
+  for (const char* word : words) text.addWord(word, EpdFontFamily::REGULAR);
+  return layout(text, width);
+}
+
+}  // namespace
+
+TEST(KoreanLineBreaking, HyphenationOffWrapsAtSpacesOnly) {
+  // 가나 다라마바 needs 65 px; with hyphenation off the Hangul word moves down whole.
+  EXPECT_EQ(wordsOf(layoutWords({"가나", "다라마바", "사"}, false, 62)),
+            (std::vector<std::vector<std::string>>{{"가나"}, {"다라마바", "사"}}));
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenSyllablesWithoutHyphen) {
+  // 가나 + space leaves 37 px: the widest syllable prefix that fits is 다라마 (30 px).
+  const auto lines = layoutWords({"가나", "다라마바사아", "자"}, true, 62);
+  ASSERT_EQ(wordsOf(lines), (std::vector<std::vector<std::string>>{{"가나", "다라마"}, {"바사아", "자"}}));
+  // 20 + 5 + 30 = 55 px leaves 7 px, all of it on the one word space.
+  EXPECT_EQ(lines[0].xpos, (std::vector<int16_t>{0, 32}));
+}
+
+TEST(KoreanLineBreaking, HyphenationOnKeepsTrailingPunctuationWithSyllable) {
+  // 가나다 + space leaves 45 px. 라마바사 (40 px) would fit, but 사. stays together, so 라마바 is used.
+  EXPECT_EQ(wordsOf(layoutWords({"가나다", "라마바사.", "자"}, true, 80)),
+            (std::vector<std::vector<std::string>>{{"가나다", "라마바"}, {"사.", "자"}}));
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsShortWords) {
+  // 가나다 + space leaves 25 px, so the three-syllable word splits after 라마 (20 px).
+  EXPECT_EQ(wordsOf(layoutWords({"가나다", "라마바", "자"}, true, 60)),
+            (std::vector<std::vector<std::string>>{{"가나다", "라마"}, {"바", "자"}}));
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsWhereHangulMeetsOtherScriptsOrBrackets) {
+  // 가 + space leaves 65 px. 소신(ab) (60 px) fits; the split may fall before "(" or after ")",
+  // never inside the brackets.
+  EXPECT_EQ(wordsOf(layoutWords({"가", "소신(ab)이"}, true, 80)),
+            (std::vector<std::vector<std::string>>{{"가", "소신(ab)"}, {"이"}}));
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenDigitAndHangul) {
+  // 가나다 + space leaves 25 px: 12 (20 px) fits, 12월 (30 px) does not.
+  EXPECT_EQ(wordsOf(layoutWords({"가나다", "12월부터", "자"}, true, 60)),
+            (std::vector<std::vector<std::string>>{{"가나다", "12"}, {"월부터", "자"}}));
+}
+
+TEST(KoreanLayout, HangulWordsStayWholeAndWrapAtSpaces) {
+  // 가나다 라마 is 55 px; adding 3개입니다 would need 110 px, and no break exists inside it. (Upstream's
+  // 3개를 ties two layouts under our line breaker, which keeps the first it finds.)
+  EXPECT_EQ(wordsOf(layoutWords({"가나다", "라마", "3개입니다", "iPhone을"}, false, 75, leftAligned())),
+            (std::vector<std::vector<std::string>>{{"가나다", "라마"}, {"3개입니다"}, {"iPhone을"}}));
+}
+
+TEST(KoreanLayout, JustifiedHangulStretchesOnlyWordSpaces) {
+  // 3 x 20 px words + 2 x 5 px spaces leave 4 px, split across the two spaces only.
+  const auto lines = layoutWords({"가나", "다라", "마바", "사아"}, false, 74);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0].xpos, (std::vector<int16_t>{0, 27, 54}));
+}
+
+TEST(KoreanLayout, HangulGluedAcrossInlineStyleIsUnbreakable) {
+  ParsedText text(false, false, justified());
+  text.addWord("가나", EpdFontFamily::REGULAR);
+  text.addWord("한국", EpdFontFamily::REGULAR);
+  text.addWord("어", EpdFontFamily::BOLD, false, /*attachToPrevious=*/true);
+  // 가나 한국 fits in 50 px, but 어 is glued to 한국, so the whole word moves down.
+  EXPECT_EQ(wordsOf(layout(text, 50)), (std::vector<std::vector<std::string>>{{"가나"}, {"한국", "어"}}));
+}
+
+// Ours: a Hangul split is a hyphenated line end, so at a page bottom the parser's retry re-lays the
+// line with the word whole, as it does for a Latin hyphenation.
+TEST(KoreanLayout, PageBottomRetryKeepsTheHangulWordWhole) {
+  Hyphenator::setPreferredLanguage("ko");
+  ParsedText text(false, /*hyphenationEnabled=*/true, justified());
+  for (const char* word : {"가나", "다라마바사아", "자"}) text.addWord(word, EpdFontFamily::REGULAR);
+  GfxRenderer renderer;
+  std::vector<std::vector<std::string>> lines;
+  bool retried = false;
+  text.layoutAndExtractLines(
+      renderer, kFontId, 62,
+      [&](std::unique_ptr<TextBlock> line, const bool endsHyphenated, const bool suppressRetry) {
+        if (endsHyphenated && !suppressRetry && !retried) {  // what the parser does at a page bottom
+          retried = true;
+          return ParsedText::LineProcessResult::RetryWithoutHyphenation;
+        }
+        std::vector<std::string> words;
+        for (uint16_t i = 0; i < line->wordCount(); i++) words.emplace_back(line->wordText(i));
+        lines.push_back(std::move(words));
+        return ParsedText::LineProcessResult::Accepted;
+      },
+      /*includeLastLine=*/true);
+  ASSERT_TRUE(retried);
+  // The retried line takes 가나 alone; the word moves down whole and fills the next line (60 of 62 px).
+  EXPECT_EQ(lines, (std::vector<std::vector<std::string>>{{"가나"}, {"다라마바사아"}, {"자"}}));
+}
+
+// Ours: with hyphenation off, a Hangul word wider than the whole line still splits between syllables,
+// without a hyphen, rather than overflow the line.
+TEST(KoreanLayout, AWordWiderThanTheLineSplitsBetweenSyllables) {
+  const auto lines = layoutWords({"다라마바사아"}, false, 35);
+  EXPECT_EQ(wordsOf(lines), (std::vector<std::vector<std::string>>{{"다라마"}, {"바사아"}}));
 }

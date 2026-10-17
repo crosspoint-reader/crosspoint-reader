@@ -1174,8 +1174,13 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   const auto style = wordStyles[wordIndex];
   const float scale = wordScale(wordIndex);
 
-  // Collect candidate breakpoints (byte offsets and hyphen requirements).
-  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  // Collect candidate breakpoints (byte offsets and hyphen requirements). A Hangul word may split
+  // between syllables at a line end, without a hyphen; those breaks come first, so they win a width
+  // tie. From crosspoint-reader PR #3700 ("fix: justify Korean text by word spaces only", Sung-jin
+  // Brian Hong).
+  std::vector<Hyphenator::BreakInfo> breakInfos = CjkLineBreak::hangulLineEndBreaks(word);
+  const std::vector<Hyphenator::BreakInfo> hyphenatorBreaks = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  breakInfos.insert(breakInfos.end(), hyphenatorBreaks.begin(), hyphenatorBreaks.end());
   if (breakInfos.empty()) {
     return false;
   }
