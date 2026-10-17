@@ -502,19 +502,16 @@ namespace {
 constexpr int nearBodyDeadZonePct(const bool normalizationEnabled) { return normalizationEnabled ? 10 : 3; }
 }  // namespace
 
-// Update effective bold/italic/underline based on block style and inline style stack
+// Update effective bold/italic/underline from the style stack. Blocks are on it too
+// (pushBlockStyleEntry), so a block's emphasis reaches the blocks nested inside it.
 void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
-  // Start with block-level styles
-  effectiveBold = currentCssStyle.hasFontWeight() && currentCssStyle.fontWeight == CssFontWeight::Bold;
-  effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
-  effectiveUnderline = currentCssStyle.hasTextDecoration() && (static_cast<uint8_t>(currentCssStyle.textDecoration) &
-                                                               static_cast<uint8_t>(CssTextDecoration::Underline)) != 0;
-  effectiveStrikethrough =
-      currentCssStyle.hasTextDecoration() && (static_cast<uint8_t>(currentCssStyle.textDecoration) &
-                                              static_cast<uint8_t>(CssTextDecoration::LineThrough)) != 0;
+  effectiveBold = false;
+  effectiveItalic = false;
+  effectiveUnderline = false;
+  effectiveStrikethrough = false;
   effectiveSup = false;
   effectiveSub = false;
-  effectiveSmallCaps = currentCssStyle.hasSmallCaps() && currentCssStyle.smallCaps;
+  effectiveSmallCaps = false;
   effectiveInlineMarginLeft = 0;
   // Inline font-size composes multiplicatively through the stack (em is relative to
   // the parent element); the block's own font-size lives in BlockStyle, so 100 here
@@ -577,6 +574,56 @@ void ChapterHtmlSlimParser::applyCssFontSizeToEntry(StyleStackEntry& entry, cons
   entry.hasFontSize = true;
   entry.fontSizePct = static_cast<uint8_t>(
       std::min<int>(std::max<int>(pct, ParsedText::MIN_WORD_SIZE_PCT), ParsedText::MAX_WORD_SIZE_PCT));
+}
+
+void ChapterHtmlSlimParser::applyCssEmphasisToEntry(StyleStackEntry& entry, const CssStyle& cssStyle) {
+  if (cssStyle.hasFontWeight()) {
+    entry.hasBold = true;
+    entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+  }
+  if (cssStyle.hasFontStyle()) {
+    entry.hasItalic = true;
+    entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+  }
+  if (cssStyle.hasTextDecoration()) {
+    const uint8_t dec = static_cast<uint8_t>(cssStyle.textDecoration);
+    if (dec == static_cast<uint8_t>(CssTextDecoration::None)) {
+      entry.hasUnderline = true;
+      entry.underline = false;
+      entry.hasStrikethrough = true;
+      entry.strikethrough = false;
+    } else {
+      if (dec & static_cast<uint8_t>(CssTextDecoration::Underline)) {
+        entry.hasUnderline = true;
+        entry.underline = true;
+      }
+      if (dec & static_cast<uint8_t>(CssTextDecoration::LineThrough)) {
+        entry.hasStrikethrough = true;
+        entry.strikethrough = true;
+      }
+    }
+  }
+  if (cssStyle.hasSmallCaps()) {
+    entry.hasSmallCaps = true;
+    entry.smallCaps = cssStyle.smallCaps;
+  }
+}
+
+// A block's emphasis used to sit in one slot (currentCssStyle) that each nested block overwrote
+// and each block end cleared, so <div style="font-style:italic"><p>..</p>tail</div> came out
+// upright, and the slot sat under the stack, so an italic <section> beat its own <p
+// style="font-style:normal">. On the stack, in document order, both inherit and override as in
+// CSS. Based on crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin), whose
+// pushBlockTextStyleEntry does the same for every block.
+void ChapterHtmlSlimParser::pushBlockStyleEntry(const CssStyle& cssStyle) {
+  if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
+      !cssStyle.hasSmallCaps()) {
+    return;
+  }
+  StyleStackEntry entry;
+  entry.depth = depth;
+  applyCssEmphasisToEntry(entry, cssStyle);
+  inlineStyleStack.push_back(entry);
 }
 
 void ChapterHtmlSlimParser::applySupSubDefaultSize(StyleStackEntry& entry) {
@@ -2665,7 +2712,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   }
 
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    self->currentCssStyle = cssStyle;
+    self->pushBlockStyleEntry(cssStyle);
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     self->addAncestorInsets(headerBlockStyle, emSize);
     headerBlockStyle.textAlignDefined = true;
@@ -2697,7 +2744,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (isZeroHeightSpacerParagraph(name, styleAttr)) {
       // Preserve paragraph break semantics for this <p>, but skip its inner text payload.
-      self->currentCssStyle = cssStyle;
+      self->pushBlockStyleEntry(cssStyle);
       auto blockStyle = userAlignmentBlockStyle;
       if (self->embeddedStyle && cssStyle.hasTextAlign() &&
           self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
@@ -2748,7 +2795,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
       brStyle.fromBrElement = true;
       self->startNewTextBlock(brStyle);
     } else {
-      self->currentCssStyle = cssStyle;
+      self->pushBlockStyleEntry(cssStyle);
       auto blockStyle = userAlignmentBlockStyle;
       if (self->embeddedStyle && cssStyle.hasTextAlign() &&
           self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None)) {
@@ -2978,37 +3025,8 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
       }
       StyleStackEntry entry;
       entry.depth = self->depth;  // Track depth for matching pop
-      if (cssStyle.hasFontWeight()) {
-        entry.hasBold = true;
-        entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
-      }
-      if (cssStyle.hasFontStyle()) {
-        entry.hasItalic = true;
-        entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
-      }
-      if (cssStyle.hasTextDecoration()) {
-        const uint8_t dec = static_cast<uint8_t>(cssStyle.textDecoration);
-        if (dec == static_cast<uint8_t>(CssTextDecoration::None)) {
-          entry.hasUnderline = true;
-          entry.underline = false;
-          entry.hasStrikethrough = true;
-          entry.strikethrough = false;
-        } else {
-          if (dec & static_cast<uint8_t>(CssTextDecoration::Underline)) {
-            entry.hasUnderline = true;
-            entry.underline = true;
-          }
-          if (dec & static_cast<uint8_t>(CssTextDecoration::LineThrough)) {
-            entry.hasStrikethrough = true;
-            entry.strikethrough = true;
-          }
-        }
-      }
+      applyCssEmphasisToEntry(entry, cssStyle);
       applyVerticalAlignToEntry(entry, cssStyle);
-      if (cssStyle.hasSmallCaps()) {
-        entry.hasSmallCaps = true;
-        entry.smallCaps = cssStyle.smallCaps;
-      }
       if (spanIndent) {
         // margin-left on an inline span acts as a per-line indent (poem stanza pattern).
         // Applied immediately to the current block because the span closes before the
@@ -3609,11 +3627,8 @@ void ChapterHtmlSlimParser::endElementBody(ChapterHtmlSlimParser* self, const ch
     self->effectiveItalic = surroundingItalic;
   }
 
-  // Clear block style when leaving header or block elements
+  // A block's emphasis went with its style-stack entry, popped above.
   if (headerOrBlockTag) {
-    self->currentCssStyle.reset();
-    self->updateEffectiveInlineStyle();
-
     // Reset alignment on empty text blocks to prevent stale alignment from bleeding
     // into the next sibling element. This fixes issue #1026 where an empty <h1> (default
     // Center) followed by an image-only <p> causes Center to persist through the chain

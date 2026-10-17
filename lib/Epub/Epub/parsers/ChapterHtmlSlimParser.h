@@ -252,8 +252,9 @@ class ChapterHtmlSlimParser final : public Print {
     bool hasFontSize = false;
     uint8_t fontSizePct = 100;
   };
+  // Every element's own emphasis, blocks included, in document order: an inner element's entry
+  // comes later, so it overrides the ones around it, and is popped when the element closes.
   std::vector<StyleStackEntry> inlineStyleStack;
-  CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;
   bool effectiveUnderline = false;
@@ -606,6 +607,12 @@ class ChapterHtmlSlimParser final : public Print {
   // Fold an element's CSS vertical-align into an inline style-stack entry. `baseline`
   // explicitly cancels an inherited sup/sub rather than being ignored.
   static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& cssStyle);
+  // Fold an element's CSS font-weight, font-style, text-decoration and font-variant into an
+  // inline style-stack entry. `text-decoration: none` cancels an inherited underline/strike.
+  static void applyCssEmphasisToEntry(StyleStackEntry& entry, const CssStyle& cssStyle);
+  // A block's (or heading's) own emphasis, pushed at its depth so the blocks nested inside it
+  // inherit it and its end tag pops it. Nothing is pushed for a block that sets none.
+  void pushBlockStyleEntry(const CssStyle& cssStyle);
   void initializeFontSizeBaseline();
   void observeFontSizeBaseline(const char* tagName, const CssStyle& cssStyle);
   CssStyle normalizeFontSizeForElement(const char* tagName, const CssStyle& cssStyle) const;

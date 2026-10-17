@@ -1,0 +1,94 @@
+BOOK title=Block Emphasis lang=en spine=8 toc=0 reliableToc=0
+SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=2 z=100 t=DIVINNER
+   W x=80 s=2 z=100 t=slanted.
+   W x=164 s=2 z=100 t=DIVTAIL
+   W x=233 s=2 z=100 t=slanted
+   W x=307 s=2 z=100 t=too.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=AFTERDIV
+   W x=77 s=0 z=100 t=upright.
+SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=4 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=UPRIGHT
+   W x=63 s=0 z=100 t=child.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=SLANTED
+   W x=74 s=2 z=100 t=sibling.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=LIGHT
+   W x=48 s=0 z=100 t=child.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=1 z=100 t=HEAVY
+   W x=58 s=1 z=100 t=sibling.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=•
+   W x=13 s=1 z=100 t=LISTITEM
+   W x=99 s=1 z=100 t=bold.
+  LINE y=24 x=27 align=0 mult=1.000 hfid=0 words=3
+   W x=18 s=0 z=100 t=1.
+   W x=40 s=2 z=100 t=OLITEM
+   W x=99 s=2 z=100 t=slanted.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=AFTERLIST
+   W x=88 s=0 z=100 t=upright.
+SPINE 3 href=OEBPS/chapter4.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=QUOTED
+   W x=60 s=2 z=100 t=slanted.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=18 s=1 z=100 t=PRECODE
+   W x=104 s=1 z=100 t=bold
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=AFTERPRE
+   W x=81 s=0 z=100 t=upright.
+SPINE 4 href=OEBPS/chapter5.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=SECTIONROMAN
+   W x=110 s=0 z=100 t=upright.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=SECTIONOBLIQUE
+   W x=137 s=2 z=100 t=slanted.
+SPINE 5 href=OEBPS/chapter6.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=4 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.400 hfid=0 words=2
+   W x=150 s=3 z=100 t=HEADING
+   W x=255 s=3 z=100 t=bold
+  LINE y=34 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=HEADBODY
+   W x=84 s=2 z=100 t=slanted.
+  LINE y=58 x=0 align=2 mult=1.200 hfid=0 words=2
+   W x=147 s=1 z=100 t=PLAINHEAD
+   W x=266 s=1 z=100 t=bold
+  LINE y=87 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=AFTERHEAD
+   W x=88 s=0 z=100 t=upright.
+SPINE 6 href=OEBPS/chapter7.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=BEFOREBREAK
+   W x=115 s=2 z=100 t=slanted
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=AFTERBREAK
+   W x=100 s=2 z=100 t=slanted.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=NEXTPARA
+   W x=77 s=0 z=100 t=upright.
+SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=4 z=100 t=UNDERLINED
+   W x=105 s=4 z=100 t=words.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=64 z=100 t=Smallcaps
+   W x=92 s=64 z=100 t=words.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=PLAINEND
+   W x=81 s=0 z=100 t=words.
