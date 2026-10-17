@@ -83,6 +83,10 @@ std::string convertSidecarToBmp(const std::string& cacheDir, const std::string& 
   if (Storage.exists(bmpPath.c_str())) {
     return bmpPath;
   }
+  // A BMP sidecar is cached as it is (copyFile removes a failed copy).
+  if (FsHelpers::hasBmpExtension(sidecarPath)) {
+    return Storage.copyFile("FIN", sidecarPath, bmpPath.c_str()) ? bmpPath : "";
+  }
 
   FsFile src;
   if (!Storage.openFileForRead("FIN", sidecarPath, src)) {
@@ -100,13 +104,6 @@ std::string convertSidecarToBmp(const std::string& cacheDir, const std::string& 
                                                              CoverGridLayout::kThumbCrop);
   } else if (FsHelpers::hasPngExtension(sidecarPath)) {
     ok = PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(src, dst, width, height, CoverGridLayout::kThumbCrop);
-  } else if (FsHelpers::hasBmpExtension(sidecarPath)) {
-    uint8_t buffer[1024];
-    while (src.available()) {
-      size_t bytesRead = src.read(buffer, sizeof(buffer));
-      dst.write(buffer, bytesRead);
-    }
-    ok = true;
   }
 
   src.close();

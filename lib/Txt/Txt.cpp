@@ -122,21 +122,10 @@ bool Txt::generateCoverBmp() const {
   if (FsHelpers::hasBmpExtension(coverImagePath)) {
     // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
-    FsFile src, dst;
-    if (!Storage.openFileForRead("TXT", coverImagePath, src)) {
+    if (!Storage.copyFile("TXT", coverImagePath, getCoverBmpPath().c_str())) {
+      LOG_ERR("TXT", "Failed to copy BMP cover to cache");
       return false;
     }
-    if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
-      src.close();
-      return false;
-    }
-    uint8_t buffer[1024];
-    while (src.available()) {
-      size_t bytesRead = src.read(buffer, sizeof(buffer));
-      dst.write(buffer, bytesRead);
-    }
-    src.close();
-    dst.close();
     LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
   } else if (FsHelpers::hasJpgExtension(coverImagePath)) {

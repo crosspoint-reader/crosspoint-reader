@@ -472,12 +472,17 @@ bool HalStorage::copyFile(const char* moduleName, const std::string& srcPath, co
   if (!buf) {
     dst.close();
     src.close();
+    remove(dstPath);
     return false;
   }
   bool ok = true;
   while (src.available()) {
     const auto bytesRead = src.read(buf, BUF_SIZE);
-    if (bytesRead <= 0) break;
+    if (bytesRead <= 0) {
+      // available() said there was more, so this is a failed read, not the end of the file.
+      ok = false;
+      break;
+    }
     if (dst.write(buf, bytesRead) != static_cast<size_t>(bytesRead)) {
       ok = false;
       break;
@@ -486,6 +491,9 @@ bool HalStorage::copyFile(const char* moduleName, const std::string& srcPath, co
   delete[] buf;
   dst.close();
   src.close();
+  // Callers treat an existing destination as a finished copy (cover and thumb caches do), so a
+  // failed or partial one must not stay behind.
+  if (!ok) remove(dstPath);
   return ok;
 }
 
