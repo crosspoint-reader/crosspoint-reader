@@ -205,7 +205,7 @@ Books cannot be removed from your device through Calibre. Use the web interface 
 
 ### 3.6 Settings
 
-Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, and Move Finished Books to Read Folder. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
+Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, Clock (where available), firmware updates, reset actions, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, and Move Finished Books to Read Folder. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
 
 #### 3.6.1 Display
 
@@ -340,6 +340,10 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
 - **Clear Reading Cache** (**Settings → Reader**): Clear the internal SD card cache.
+
+- **Reset Settings** (**Settings → System**): Restore default preferences without clearing Wi-Fi networks, OPDS/sync accounts, reading progress, recents, bookmarks, clippings, plugins, or caches. **No** is selected by default on the warning screen; choose **Yes** and confirm to reset. On touch screens, choose **Yes** again in a second prompt. No, Back, or a tap outside the dialog cancels. This removes only `/.crosspoint/settings.json`, then restarts to load the firmware's device-specific defaults, including language, button mappings, theme, and reader preferences. Fonts and dictionaries remain installed; their selections reset. Cached pages may be regenerated when a book is next opened with the default reader preferences. If the settings file cannot be removed, including a missing file or unreadable card, **Reset incomplete** appears before restarting.
+
+- **Factory Reset** (**Settings → System**): Show a confirmation screen explaining what will be erased. **No** is selected by default; navigate to **Yes** and confirm to reset. On touch screens, choose **Yes** again in a second prompt. **No**, Back, or a tap outside the dialog cancels. Reset removes the `/.crosspoint/` directory, including settings, saved Wi-Fi/OPDS/sync accounts, reading progress, recents, bookmarks, stored clippings, caches, and any plugins or plugin data in that directory. Back up this data first. Book files, fonts, dictionaries, exported clippings, and plugins stored outside `/.crosspoint/` remain. Device calibration, the NVS wrapping secret, and book key sidecars outside `/.crosspoint/` remain. LCP enrollment and saved passphrase hashes inside that directory are erased. The reader restarts after the attempt so old settings cannot be saved back. A failed deletion, including an unreadable card or missing data directory, is shown as **Reset incomplete** before restarting; an SD error can leave a partial reset.
 
 - **Use book metadata**: Read the title and author stored inside each book when the Library index is rebuilt. When disabled or unavailable, the Library uses the filename.
 

@@ -27,6 +27,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
+#include "ResetActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -82,7 +83,7 @@ SettingsSection sectionFor(const SettingInfo& setting) {
 }
 
 // Device-only action rows added per section, beyond the shared list.
-constexpr size_t EXTRA_ROWS_PER_SECTION = 6;
+constexpr size_t EXTRA_ROWS_PER_SECTION = 8;
 }  // namespace
 
 void SettingsActivity::rebuildSettings() {
@@ -143,6 +144,8 @@ void SettingsActivity::rebuildSettings() {
   // asset isn't published yet just report no update available.
   addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
   addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
+  addAction(SettingsSection::General, StrId::STR_RESET_SETTINGS, SettingAction::ResetSettings);
+  addAction(SettingsSection::General, StrId::STR_FACTORY_RESET, SettingAction::FactoryReset);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -342,6 +345,17 @@ void SettingsActivity::toggleSelectedSetting() {
       }
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ResetSettings:
+      case SettingAction::FactoryReset:
+        if (auto activity = makeUniqueNoThrow<ResetActivity>(renderer, mappedInput,
+                                                             setting.action == SettingAction::ResetSettings
+                                                                 ? ResetActivity::Mode::SettingsOnly
+                                                                 : ResetActivity::Mode::Factory)) {
+          startActivityForResult(std::move(activity), nullptr);
+        } else {
+          LOG_ERR("SETTINGS", "OOM: ResetActivity");
+        }
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
