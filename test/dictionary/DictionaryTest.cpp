@@ -762,4 +762,35 @@ TEST_F(DictionaryTest, CleanWordStripsPunctuationAndFoldsCase) {
   EXPECT_EQ(Dictionary::cleanWord(nullptr), "");
 }
 
+TEST_F(DictionaryTest, CleanWordStripsNonAsciiPunctuation) {
+  // Outside General Punctuation, every byte >= 0x80 used to count as a letter.
+  EXPECT_EQ(Dictionary::cleanWord("«Über»"), "Über");  // non-ASCII case is resolve()'s job
+  EXPECT_EQ(Dictionary::cleanWord("« mot »"), "mot");
+  EXPECT_EQ(Dictionary::cleanWord("¿Qué?"), "qué");
+  EXPECT_EQ(Dictionary::cleanWord("¡Hola!"), "hola");
+  EXPECT_EQ(Dictionary::cleanWord("„Wort“"), "wort");
+  EXPECT_EQ(Dictionary::cleanWord("‹word›"), "word");
+  EXPECT_EQ(Dictionary::cleanWord("word¹"), "word");
+  EXPECT_EQ(Dictionary::cleanWord("\xC2\xA0word\xC2\xA0"), "word");  // no-break spaces
+  EXPECT_EQ(Dictionary::cleanWord("\xEF\xBB\xBFword"), "word");      // zero-width no-break space
+  EXPECT_EQ(Dictionary::cleanWord("（привет），"), "привет");
+  EXPECT_EQ(Dictionary::cleanWord("「言葉」。"), "言葉");
+  EXPECT_EQ(Dictionary::cleanWord("《书》"), "书");
+  EXPECT_EQ(Dictionary::cleanWord("«»"), "");
+
+  // Letters among those code blocks, and marks inside a word, stay.
+  EXPECT_EQ(Dictionary::cleanWord("nº"), "nº");
+  EXPECT_EQ(Dictionary::cleanWord("µm"), "µm");
+  EXPECT_EQ(Dictionary::cleanWord("rock’n’roll"), "rock’n’roll");
+  EXPECT_EQ(Dictionary::cleanWord("々"), "々");  // ideographic iteration mark
+}
+
+TEST_F(DictionaryTest, GuillemetsDoNotHideAWord) {
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("Guillemets", {{"über", "over"}, {"qué", "what"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "Guillemets"));
+  expectHit(dict, "«Über»", "über", "over");
+  expectHit(dict, "¿Qué?", "qué", "what");
+}
+
 }  // namespace

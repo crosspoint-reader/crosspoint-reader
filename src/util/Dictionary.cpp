@@ -62,6 +62,48 @@ uint32_t readBe32(const uint8_t* p) {
 // continuation/lead byte, so accented words keep their edges.
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 
+// Punctuation, symbols and spaces beyond ASCII that cleanWord() strips from a
+// word's edges. isWordByte() keeps every byte >= 0x80 so accented letters
+// survive, which also left «Über», ¿Qué, （词） and 「言葉」 in their marks.
+//
+// Based on crosspoint-reader PR #3611 (Anton Lijcklama à Nijeholt,
+// @alycklama), reworked as a short list of the marks books put against a word
+// instead of Unicode's category data (~6 KB of tables there).
+struct CodepointRange {
+  uint16_t first;
+  uint16_t last;
+};
+constexpr CodepointRange EDGE_PUNCTUATION[] = {
+    {0x00A0, 0x00A9},  // no-break space ¡ ¢ £ ¤ ¥ ¦ § ¨ ©
+    {0x00AB, 0x00B4},  // « ¬ soft hyphen ® ¯ ° ± ² ³ ´
+    {0x00B6, 0x00B9},  // ¶ · ¸ ¹
+    {0x00BB, 0x00BF},  // » ¼ ½ ¾ ¿ (ª µ º between them are letters)
+    {0x037E, 0x037E},  // Greek question mark
+    {0x0387, 0x0387},  // Greek ano teleia
+    {0x2000, 0x207F},  // General Punctuation (quotes, dashes, ellipsis, ‹ ›) and superscripts
+    {0x3000, 0x3004},  // ideographic space 、 。 〃 〄
+    {0x3008, 0x3020},  // CJK brackets and quotes 〈 〉 《 》 「 」 『 』 【 】 〜 〝 〞
+    {0xFF01, 0xFF0F},  // fullwidth ！ ＂ ＃ ＄ ％ ＆ ＇ （ ） ＊ ＋ ， － ． ／
+    {0xFF1A, 0xFF20},  // fullwidth ： ； ＜ ＝ ＞ ？ ＠
+    {0xFF3B, 0xFF40},  // fullwidth ［ ＼ ］ ＾ ＿ ｀
+    {0xFF5B, 0xFF65},  // fullwidth ｛ ｜ ｝ ～ ｟ ｠, halfwidth ｡ ｢ ｣ ､ ･
+};
+
+// Byte length of the strippable non-ASCII codepoint that starts at b[i] and
+// ends at or before b[end], or 0 when there is none there. b is NUL-terminated.
+size_t edgePunctuationLen(const unsigned char* b, size_t i, size_t end) {
+  if (b[i] < 0x80) return 0;
+  const unsigned char* p = b + i;
+  const uint32_t cp = utf8NextCodepoint(&p);
+  const auto len = static_cast<size_t>(p - (b + i));
+  if (i + len > end) return 0;
+  if (utf8IsDefaultIgnorable(cp)) return len;
+  for (const auto& range : EDGE_PUNCTUATION) {
+    if (cp >= range.first && cp <= range.last) return len;
+  }
+  return 0;
+}
+
 // Headwords equal under asciiCaseCmp sit in one contiguous run, ordered among
 // themselves by StarDict's strcmp tiebreak -- which puts "Husk" (a surname)
 // ahead of "husk", since uppercase sorts first in ASCII. Taking the first of
@@ -731,24 +773,29 @@ std::string Dictionary::cleanWord(const char* word) {
   const auto* b = reinterpret_cast<const unsigned char*>(word);
   size_t start = 0;
   size_t end = strlen(word);
-  // Curly quotes and dashes (General Punctuation U+2000-U+206F = E2 80/81 xx)
-  // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
-  // from the edges too, or EPUB text like garage.” never matches a headword.
+  // Curly quotes, dashes, guillemets and the like are all >= 0x80, so
+  // isWordByte keeps them; strip those codepoints from the edges too, or EPUB
+  // text like garage.” never matches a headword. See EDGE_PUNCTUATION.
   while (start < end) {
-    if (!isWordByte(b[start]))
+    if (!isWordByte(b[start])) {
       start++;
-    else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
-      start += 3;
-    else
-      break;
+      continue;
+    }
+    const size_t len = edgePunctuationLen(b, start, end);
+    if (len == 0) break;
+    start += len;
   }
   while (end > start) {
-    if (!isWordByte(b[end - 1]))
+    if (!isWordByte(b[end - 1])) {
       end--;
-    else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
-      end -= 3;
-    else
-      break;
+      continue;
+    }
+    // Back up to the lead byte of the last codepoint (at most 3 continuations).
+    size_t lead = end - 1;
+    while (lead > start && end - lead < 4 && (b[lead] & 0xC0) == 0x80) lead--;
+    const size_t len = edgePunctuationLen(b, lead, end);
+    if (len == 0 || lead + len != end) break;
+    end = lead;
   }
   if (start >= end) return "";
 
