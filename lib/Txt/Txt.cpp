@@ -284,8 +284,10 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
     return false;
   }
 
-  size_t bytesRead = file.read(buffer, length);
+  const int bytesRead = file.read(buffer, length);
   file.close();
 
-  return bytesRead > 0;
+  // A failed read (-1) passed `> 0` as a size_t, and a short one left stale bytes in the tail:
+  // callers lay out all `length` bytes, so anything less than all of them is a failure.
+  return bytesRead > 0 && static_cast<size_t>(bytesRead) == length;
 }
