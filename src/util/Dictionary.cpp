@@ -853,6 +853,43 @@ void Dictionary::hyphenParts(const std::string& word, std::vector<std::string>& 
                    [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
 }
 
+// The word after a French elided article, pronoun or conjunction -- c' d' j'
+// l' m' n' s' t' qu' -- with any of the apostrophes books set (' ’ ʼ), or
+// empty when the word does not start with one. cleanWord() has already
+// lowercased the ASCII prefix, so "L’Histoire" arrives as "l’Histoire".
+//
+// Adapted from CrossInk (uxjulia/CrossInk) commit 1babd9da (Julia Nguyen),
+// MIT. There the remainder replaces the English stem variants; here it gets
+// the full probe, so a French .syn and the plural rule still apply to it.
+std::string Dictionary::elisionRemainder(const std::string& word) {
+  size_t prefix = 0;
+  if (word.compare(0, 2, "qu") == 0) {
+    prefix = 2;
+  } else if (!word.empty()) {
+    switch (word[0]) {
+      case 'c':
+      case 'd':
+      case 'j':
+      case 'l':
+      case 'm':
+      case 'n':
+      case 's':
+      case 't':
+        prefix = 1;
+        break;
+      default:
+        return {};
+    }
+  }
+  if (prefix == 0) return {};
+  static constexpr const char* APOSTROPHES[] = {"'", "\xE2\x80\x99", "\xCA\xBC"};  // ' ’ ʼ
+  for (const char* apostrophe : APOSTROPHES) {
+    const size_t len = strlen(apostrophe);
+    if (word.size() > prefix + len && word.compare(prefix, len, apostrophe) == 0) return word.substr(prefix + len);
+  }
+  return {};
+}
+
 void Dictionary::stemVariants(const std::string& word, std::vector<std::string>& out) {
   out.clear();
   out.reserve(6);
@@ -950,13 +987,24 @@ bool Dictionary::resolve(const char* word, DictLocation& locationOut, std::strin
 
     location = probeCased(cleaned);
 
+    // A French elision ("l'histoire", "qu’après") is no headword, the word
+    // after its apostrophe is. Tried after the whole word, which some
+    // dictionaries carry ("d'accord"). From here on that bare word stands in
+    // for the whole one: "d'avant-garde" splits into "avant" and "garde", not
+    // into a "d'avant" no probe would find.
+    std::string bare;
+    if (!location.found) {
+      bare = elisionRemainder(cleaned);
+      if (!bare.empty()) location = probeCased(bare);
+    }
+
     // Still nothing, and the word is a hyphenated compound: look up its parts.
     // The compound itself is tried first and often wins -- "mother-in-law" and
     // "well-being" are headwords -- but "multi-billionaire" usually is not, and
     // returning the definition of "billionaire" beats returning nothing.
     if (!location.found) {
       std::vector<std::string> parts;
-      hyphenParts(cleaned, parts);
+      hyphenParts(bare.empty() ? cleaned : bare, parts);
       for (const auto& part : parts) {
         location = probeCased(part);
         if (location.found) break;

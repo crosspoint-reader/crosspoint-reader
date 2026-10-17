@@ -569,6 +569,49 @@ TEST_F(DictionaryTest, CapitalisedNonAsciiWordsFindTheirLowercaseHeadword) {
   expectHit(dict, "Москва", "Москва", "Moscow");
 }
 
+TEST_F(DictionaryTest, FrenchElisionsFallBackToTheWordAfterTheApostrophe) {
+  ASSERT_NO_FATAL_FAILURE(writeDictionary("Elisions", {{"histoire", "story"},
+                                                       {"après", "after"},
+                                                       {"aime", "loves"},
+                                                       {"est", "is"},
+                                                       {"été", "summer"},
+                                                       {"avant", "before"},
+                                                       {"arc-en-ciel", "rainbow"},
+                                                       {"d'accord", "agreed"},
+                                                       {"accord", "a decoy"},
+                                                       {"aujourd'hui", "today"},
+                                                       {"brien", "a decoy"}}));
+  Dictionary dict;
+  ASSERT_NO_FATAL_FAILURE(openIndexed(dict, "Elisions"));
+
+  expectHit(dict, "l'histoire", "histoire", "story");
+  expectHit(dict, "l’histoire", "histoire", "story");
+  expectHit(dict, "L’Histoire", "histoire", "story");
+  expectHit(dict, "qu'après", "après", "after");
+  expectHit(dict, "QU’Après", "après", "after");  // and the remainder is lowercased as a fallback
+  expectHit(dict, "Lʼété", "été", "summer");      // U+02BC modifier apostrophe
+  expectHit(dict, "j'aime", "aime", "loves");
+  expectHit(dict, "n’aime", "aime", "loves");
+  expectHit(dict, "c’est", "est", "is");
+  // The remainder gets the whole probe, stems included, and its hyphen parts.
+  expectHit(dict, "d'histoires", "histoire", "story");
+  expectHit(dict, "l'arc-en-ciel", "arc-en-ciel", "rainbow");
+  expectHit(dict, "d'avant-garde", "avant", "before");  // split from "avant-garde", not "d'avant-garde"
+
+  // A headword that is itself elided wins over its remainder.
+  expectHit(dict, "d'accord", "d'accord", "agreed");
+  expectHit(dict, "aujourd'hui", "aujourd'hui", "today");
+
+  // Only the French prefixes are stripped, and never down to nothing.
+  std::string definition;
+  std::string headword;
+  Dictionary::LookupResult result = Dictionary::LookupResult::Found;
+  EXPECT_FALSE(dict.lookup("O'Brien", definition, headword, &result));
+  EXPECT_EQ(result, Dictionary::LookupResult::NotFound);
+  EXPECT_FALSE(dict.lookup("l'", definition, headword, &result));
+  EXPECT_EQ(result, Dictionary::LookupResult::NotFound);
+}
+
 TEST_F(DictionaryTest, ResolveFindsTheLocationWithoutReadingIt) {
   const std::string folder = provision("plain", "Resolving");
   Dictionary dict;
