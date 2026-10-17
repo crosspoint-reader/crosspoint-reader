@@ -483,6 +483,7 @@ std::vector<std::string> CssParser::splitWhitespace(const std::string& s) {
 // there when a later chapter needs a contiguous block.
 
 CssTextAlign CssParser::interpretAlignment(const std::string_view v) {
+  if (v == "inherit") return CssTextAlign::Inherit;
   if (v == "left" || v == "start") return CssTextAlign::Left;
   if (v == "right" || v == "end") return CssTextAlign::Right;
   if (v == "center") return CssTextAlign::Center;
@@ -492,12 +493,14 @@ CssTextAlign CssParser::interpretAlignment(const std::string_view v) {
 }
 
 CssFontStyle CssParser::interpretFontStyle(const std::string_view v) {
+  if (v == "inherit") return CssFontStyle::Inherit;
   if (v == "italic" || v == "oblique") return CssFontStyle::Italic;
   return CssFontStyle::Normal;
 }
 
 CssFontWeight CssParser::interpretFontWeight(const std::string_view v) {
   // Named values
+  if (v == "inherit") return CssFontWeight::Inherit;
   if (v == "bold" || v == "bolder") return CssFontWeight::Bold;
   if (v == "normal" || v == "lighter") return CssFontWeight::Normal;
 
@@ -680,8 +683,12 @@ void CssParser::parseDeclarationIntoStyle(const std::string_view decl, CssStyle&
     style.fontWeight = interpretFontWeight(propValueBuf);
     style.defined.fontWeight = 1;
   } else if (propNameBuf == "text-decoration" || propNameBuf == "text-decoration-line") {
-    style.textDecoration = interpretDecoration(propValueBuf);
-    style.defined.textDecoration = 1;
+    // `inherit` names no line, and read as `none` it cancelled an underline the element sits in.
+    // It is left unset instead: the element keeps what it inherits.
+    if (propValueBuf != "inherit") {
+      style.textDecoration = interpretDecoration(propValueBuf);
+      style.defined.textDecoration = 1;
+    }
   } else if (propNameBuf == "text-indent") {
     style.textIndent = interpretLength(propValueBuf);
     style.defined.textIndent = 1;
@@ -2055,8 +2062,8 @@ bool CssParser::ensureCacheIndexLoaded() const {
 // decompresses back to a full CssStyle. Values are copied with memcpy so the byte-packed
 // (unaligned) records are safe to read on the C3.
 
-// Worst case: 4 (mask) + 2 (packed enums) + 11 lengths * 5 + 2 multipliers * 4 = 69 bytes.
-constexpr size_t kMaxCompressedStyle = 4 + 2 + 11 * 5 + 2 * 4;
+// Worst case: 4 (mask) + 2 (packed enums) + 1 (extra values) + 11 lengths * 5 + 2 multipliers * 4 = 70 bytes.
+constexpr size_t kMaxCompressedStyle = 4 + 2 + 1 + 11 * 5 + 2 * 4;
 
 // Canonical "which properties are set" mask: 27 defined bits (0-26), then the three boolean
 // VALUES of the invisibility properties in bits 27-29 and the high bit of `display` in bit 30 --
@@ -2083,6 +2090,12 @@ static size_t compressStyle(const CssStyle& s, uint8_t* out) {
   if (s.defined.opacityZero && s.opacityZero) mask |= 1u << 28;
   if (s.defined.visibilityHidden && s.visibilityHidden) mask |= 1u << 29;
   if (s.defined.display && (static_cast<unsigned>(s.display) & 2u)) mask |= 1u << 30;
+  // Bit 31 announces a byte of values the uint16 below has no room for, written after it: an
+  // explicit `inherit` of font-weight (bit 0) and of font-style (bit 1).
+  uint8_t extra = 0;
+  if (s.defined.fontWeight && s.fontWeight == CssFontWeight::Inherit) extra |= 0x01;
+  if (s.defined.fontStyle && s.fontStyle == CssFontStyle::Inherit) extra |= 0x02;
+  if (extra != 0) mask |= 1u << 31;
   std::memcpy(p, &mask, 4);
   p += 4;
   uint16_t enums = 0;
@@ -2100,6 +2113,7 @@ static size_t compressStyle(const CssStyle& s, uint8_t* out) {
   if (d.smallCaps) enums |= static_cast<uint16_t>((s.smallCaps ? 1u : 0u) << 15);
   std::memcpy(p, &enums, 2);
   p += 2;
+  if (extra != 0) *p++ = extra;
   const auto putLen = [&](bool def, const CssLength& l) {
     if (def) {
       std::memcpy(p, &l.value, 4);
@@ -2139,6 +2153,7 @@ static void decompressStyle(const uint8_t* in, CssStyle& out) {
   uint16_t enums = 0;
   std::memcpy(&enums, p, 2);
   p += 2;
+  const uint8_t extra = ((mask >> 31) & 1u) ? *p++ : 0;
   const auto isDefined = [&](int index) { return (mask >> index) & 1u; };
   CssPropertyFlags& d = out.defined;
   d.textAlign = isDefined(0);
@@ -2172,8 +2187,12 @@ static void decompressStyle(const uint8_t* in, CssStyle& out) {
   if (d.opacityZero) out.opacityZero = ((mask >> 28) & 1u) != 0;
   if (d.visibilityHidden) out.visibilityHidden = ((mask >> 29) & 1u) != 0;
   if (d.textAlign) out.textAlign = static_cast<CssTextAlign>(enums & 7u);
-  if (d.fontStyle) out.fontStyle = static_cast<CssFontStyle>((enums >> 3) & 1u);
-  if (d.fontWeight) out.fontWeight = static_cast<CssFontWeight>((enums >> 4) & 1u);
+  if (d.fontStyle) {
+    out.fontStyle = (extra & 0x02) ? CssFontStyle::Inherit : static_cast<CssFontStyle>((enums >> 3) & 1u);
+  }
+  if (d.fontWeight) {
+    out.fontWeight = (extra & 0x01) ? CssFontWeight::Inherit : static_cast<CssFontWeight>((enums >> 4) & 1u);
+  }
   if (d.textDecoration) out.textDecoration = static_cast<CssTextDecoration>((enums >> 5) & 3u);
   if (d.display) out.display = static_cast<CssDisplay>(((enums >> 7) & 1u) | (((mask >> 30) & 1u) << 1));
   if (d.verticalAlign) out.verticalAlign = static_cast<CssVerticalAlign>((enums >> 8) & 3u);

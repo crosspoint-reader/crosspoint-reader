@@ -2,8 +2,11 @@
 
 #include <cstdint>
 
-// Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
-enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
+// Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings. Inherit is not an alignment: it is
+// the marker for an explicit `inherit`, which must beat a value set lower in the cascade and then
+// leave the element to its parent's alignment (CssStyle::hasTextAlign reports it as unset).
+// Based on the `inherit` patch Leopoldo Pla Sempere (@lpla) posted on crosspoint-reader PR #3891.
+enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4, Inherit = 5 };
 // Auto is not a length: it is the marker for an explicit `width: auto` / `height: auto`, which
 // must beat a length set earlier in the cascade rather than be ignored as unparseable. Only
 // imageWidth/imageHeight carry it (see CssStyle::hasImageWidth/hasImageHeight, which report the
@@ -49,11 +52,11 @@ struct CssLength {
   }
 };
 
-// Font style options matching CSS font-style property
-enum class CssFontStyle : uint8_t { Normal = 0, Italic = 1 };
+// Font style options matching CSS font-style property. Inherit: see CssTextAlign.
+enum class CssFontStyle : uint8_t { Normal = 0, Italic = 1, Inherit = 2 };
 
-// Font weight options - CSS supports 100-900, we simplify to normal/bold
-enum class CssFontWeight : uint8_t { Normal = 0, Bold = 1 };
+// Font weight options - CSS supports 100-900, we simplify to normal/bold. Inherit: see CssTextAlign.
+enum class CssFontWeight : uint8_t { Normal = 0, Bold = 1, Inherit = 2 };
 
 // Text decoration options
 enum class CssTextDecoration : uint8_t { None = 0, Underline = 1, LineThrough = 2, UnderlineLineThrough = 3 };
@@ -210,15 +213,17 @@ struct CssStyle {
       ranks[property] = rank;
       return true;
     };
-    if (base.hasTextAlign() && take(defined.textAlign, 0)) {
+    // Keyed on the defined bit, not has*(), for these three: an explicit `inherit` has to travel up
+    // the cascade so it beats a value a lower-priority rule set, like `auto` for images below.
+    if (base.defined.textAlign && take(defined.textAlign, 0)) {
       textAlign = base.textAlign;
       defined.textAlign = 1;
     }
-    if (base.hasFontStyle() && take(defined.fontStyle, 1)) {
+    if (base.defined.fontStyle && take(defined.fontStyle, 1)) {
       fontStyle = base.fontStyle;
       defined.fontStyle = 1;
     }
-    if (base.hasFontWeight() && take(defined.fontWeight, 2)) {
+    if (base.defined.fontWeight && take(defined.fontWeight, 2)) {
       fontWeight = base.fontWeight;
       defined.fontWeight = 1;
     }
@@ -323,9 +328,11 @@ struct CssStyle {
     }
   }
 
-  [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
-  [[nodiscard]] bool hasFontStyle() const { return defined.fontStyle; }
-  [[nodiscard]] bool hasFontWeight() const { return defined.fontWeight; }
+  // An explicit `inherit` is defined (it overrides lower rules in applyOver) but reports as unset:
+  // the element takes its parent's value, which is what an unset property does in the parser.
+  [[nodiscard]] bool hasTextAlign() const { return defined.textAlign && textAlign != CssTextAlign::Inherit; }
+  [[nodiscard]] bool hasFontStyle() const { return defined.fontStyle && fontStyle != CssFontStyle::Inherit; }
+  [[nodiscard]] bool hasFontWeight() const { return defined.fontWeight && fontWeight != CssFontWeight::Inherit; }
   [[nodiscard]] bool hasTextDecoration() const { return defined.textDecoration; }
   [[nodiscard]] bool hasTextIndent() const { return defined.textIndent; }
   [[nodiscard]] bool hasMarginTop() const { return defined.marginTop; }

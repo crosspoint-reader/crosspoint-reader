@@ -456,3 +456,23 @@ TEST(CssCascade, SiblingAndOverlongChainsStayUnsupported) {
   std::error_code ec;
   std::filesystem::remove(path, ec);
 }
+
+// --- inherit ---
+
+// A more specific `inherit` beats the broader rule's value in every store -- the RESIDENT pool's
+// compressed form included -- and reports the property unset, so the element takes its parent's.
+TEST(CssCascade, InheritBeatsALowerRuleInEveryStore) {
+  const std::vector<std::string> css = {
+      "p { font-weight: bold; font-style: italic; text-align: center; }\n"
+      "p.x { font-weight: inherit; font-style: inherit; text-align: inherit; }\n"
+      "p.y { font-weight: inherit; }\np.y { font-weight: bold; }\n"};
+  resolveEverywhere(css, {"p", "x"}, [&](const Store store, const CssStyle& style) {
+    EXPECT_FALSE(style.hasFontWeight()) << storeName(store);
+    EXPECT_FALSE(style.hasFontStyle()) << storeName(store);
+    EXPECT_FALSE(style.hasTextAlign()) << storeName(store);
+  });
+  expectWeight(css, {"p", "y"}, CssFontWeight::Bold);  // a later bold beats the inherit
+  resolveEverywhere(css, {"p", ""}, [&](const Store store, const CssStyle& style) {
+    EXPECT_EQ(style.fontStyle, CssFontStyle::Italic) << storeName(store);
+  });
+}

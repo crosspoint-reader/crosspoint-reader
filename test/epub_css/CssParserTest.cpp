@@ -188,3 +188,30 @@ TEST(CssParserDeclarations, PageBreakAvoidIsAnExplicitNoBreak) {
   resolved.applyOver(CssParser::parseInlineStyle("page-break-before: auto"));
   EXPECT_FALSE(resolved.pageBreakBefore);
 }
+
+// `inherit` leaves the element to its parent: unset to the parser (has*() false), yet defined, so
+// it beats a lower rule's value in the cascade. It used to read as normal / left / none, which
+// cancelled the bold, italic, alignment or underline the element sat in.
+TEST(CssParserDeclarations, InheritDefersToTheParent) {
+  const CssStyle style = CssParser::parseInlineStyle("font-weight: inherit; font-style: inherit; text-align: inherit");
+  EXPECT_FALSE(style.hasFontWeight());
+  EXPECT_FALSE(style.hasFontStyle());
+  EXPECT_FALSE(style.hasTextAlign());
+  EXPECT_TRUE(style.defined.fontWeight && style.defined.fontStyle && style.defined.textAlign);
+
+  EXPECT_FALSE(CssParser::parseInlineStyle("text-decoration: inherit").hasTextDecoration());
+  EXPECT_FALSE(CssParser::parseInlineStyle("font-weight: bold; font-weight: inherit").hasFontWeight());
+  const CssStyle later = CssParser::parseInlineStyle("font-weight: inherit; font-weight: bold");
+  EXPECT_TRUE(later.hasFontWeight());
+  EXPECT_EQ(later.fontWeight, CssFontWeight::Bold);
+  // Explicit normal still resets.
+  const CssStyle normal = CssParser::parseInlineStyle("font-style: normal");
+  EXPECT_TRUE(normal.hasFontStyle());
+  EXPECT_EQ(normal.fontStyle, CssFontStyle::Normal);
+
+  // A more specific (here: inline) inherit cancels a stylesheet's bold.
+  CssStyle resolved = CssParser::parseInlineStyle("font-weight: bold; text-align: center");
+  resolved.applyOver(CssParser::parseInlineStyle("font-weight: inherit; text-align: inherit"));
+  EXPECT_FALSE(resolved.hasFontWeight());
+  EXPECT_FALSE(resolved.hasTextAlign());
+}
