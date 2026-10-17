@@ -1,0 +1,83 @@
+Subject: [PATCH 3/3] FatPartition: keep free cluster search moving forward
+
+Keep the allocation search start from moving backward when a chain is freed.
+When the forward scan reaches the end of the FAT, make one bounded pass from
+cluster 1 so clusters freed below the search start remain available. Apply the
+same single wrap to contiguous allocation from cluster 2. This keeps the
+change local to FatPartition.cpp and leaves FSInfo handling unchanged.
+
+---
+--- a/src/FatLib/FatPartition.cpp
++++ b/src/FatLib/FatPartition.cpp
+@@ -30,6 +30,7 @@
+ bool FatPartition::allocateCluster(Cluster_t current, Cluster_t* next) {
+   Cluster_t find;
+   bool setStart;
++  Cluster_t wrapEnd = 0;  // after a wrap: where the search began
+   if (m_allocSearchStart < current) {
+     // Try to keep file contiguous. Start just after current cluster.
+     find = current;
+@@ -40,21 +41,31 @@
+   }
+   while (1) {
+     find++;
+-    if (find > m_lastCluster) {
++    if (find > m_lastCluster || (setStart && !wrapEnd && find == current)) {
+       if (setStart) {
+-        // Can't find space, checked all clusters.
+-        DBG_FAIL_MACRO;
+-        goto fail;
++        if (wrapEnd) {
++          // Can't find space, checked all clusters.
++          DBG_FAIL_MACRO;
++          goto fail;
++        }
++        // Clusters freed below the search start: one more pass from the first cluster.
++        wrapEnd = current > m_allocSearchStart ? current : m_allocSearchStart;
++        find = 1;
++        continue;
+       }
+       find = m_allocSearchStart;
+       setStart = true;
+       continue;
+     }
+-    if (find == current) {
+-      // Can't find space, already searched clusters after current.
++    if (wrapEnd && find > wrapEnd) {
++      // Can't find space, checked all clusters.
+       DBG_FAIL_MACRO;
+       goto fail;
+     }
++    if (find == current) {
++      // Only reached after the wrap: the file's own last cluster.
++      continue;
++    }
+     uint32_t f;
+     int8_t fg = fatGet(find, &f);
+     if (fg < 0) {
+@@ -100,8 +111,15 @@
+   endCluster = bgnCluster = m_allocSearchStart + 1;
+ 
+   // search the FAT for free clusters
++  bool wrapped = false;
+   while (1) {
+     if (endCluster > m_lastCluster) {
++      if (!wrapped && m_allocSearchStart > 1) {
++        wrapped = true;
++        setStart = false;
++        endCluster = bgnCluster = 2;
++        continue;
++      }
+       // Can't find space.
+       DBG_FAIL_MACRO;
+       goto fail;
+@@ -314,9 +332,6 @@
+     }
+     // Add one to count of free clusters.
+     updateFreeClusterCount(1);
+-    if (cluster < m_allocSearchStart) {
+-      m_allocSearchStart = cluster - 1;
+-    }
+     cluster = next;
+   } while (fg);
+ 
