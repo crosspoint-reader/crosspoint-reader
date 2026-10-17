@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -214,4 +215,53 @@ TEST_F(ZipEntryReaderTest, CloseCannotReleaseNewerCallerBlock) {
   EXPECT_TRUE(arena.release(callerBlock));
   reader.close();
   EXPECT_EQ(arena.used(), 0u);
+}
+
+// Records how long a write the zip asked for, without touching the bytes: a SIZE_MAX length must
+// show up as a number in the test, not as a 4 GB memcpy that takes the test binary down.
+class LengthRecordingSink : public Print {
+ public:
+  std::vector<uint8_t> data;
+  size_t largestWrite = 0;
+  size_t write(uint8_t b) override { return write(&b, 1); }
+  size_t write(const uint8_t* buf, size_t n) override {
+    if (n > largestWrite) largestWrite = n;
+    if (n > 1024 * 1024) return 0;  // nothing this test streams is that long
+    data.insert(data.end(), buf, buf + n);
+    return n;
+  }
+};
+
+// Where a STORED entry's bytes start: its local header (30 bytes, name and extra lengths at 26/28)
+// sits at offset 0 for the first entry of an EPUB, which is always the stored "mimetype".
+static long firstEntryDataOffset(const std::string& path) {
+  FILE* fp = std::fopen(path.c_str(), "rb");
+  if (!fp) return -1;
+  uint8_t header[30];
+  const size_t got = std::fread(header, 1, sizeof(header), fp);
+  std::fclose(fp);
+  if (got != sizeof(header)) return -1;
+  const long nameLen = header[26] | (header[27] << 8);
+  const long extraLen = header[28] | (header[29] << 8);
+  return 30 + nameLen + extraLen;
+}
+
+// HalFile::read() reports an error as -1. readFileToStream's STORED path kept it in a size_t, so
+// the failed read passed its `== 0` check and reached the sink as a SIZE_MAX-byte write.
+TEST_F(ZipEntryReaderTest, FailedStoredReadIsNotStreamedAsALength) {
+  const long dataOffset = firstEntryDataOffset(epubPath_);
+  ASSERT_GT(dataOffset, 30);
+
+  LengthRecordingSink intact;
+  ASSERT_TRUE(zip_.readFileToStream("mimetype", intact, 1024));
+  EXPECT_EQ(std::string(intact.data.begin(), intact.data.end()), "application/epub+zip");
+
+  HalFile::failReadAt = dataOffset;
+  LengthRecordingSink sink;
+  const bool ok = zip_.readFileToStream("mimetype", sink, 1024);
+  HalFile::failReadAt = -1;
+
+  EXPECT_FALSE(ok) << "a failed read must fail the stream";
+  EXPECT_LE(sink.largestWrite, 1024u) << "the -1 from read() reached the sink as a length";
+  EXPECT_TRUE(sink.data.empty());
 }
