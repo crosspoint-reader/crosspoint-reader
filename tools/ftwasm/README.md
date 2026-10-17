@@ -19,7 +19,7 @@ It has two layers:
 | Parity vs the repo's Python converter | **70,148 / 70,148 glyphs byte-identical (100 %)**: 62 style-sizes over 7 families, every glyph checked for bitmap, width, height, advance, left and top. advanceY, ascender, descender and the validated intervals are identical for all 62 |
 | Whole family in Node (Literata, 4 styles × 10/12/14/16/18 pt, 18,060 glyphs, 1.75 MB bitmaps) | **~145 ms** warm, 160 ms first run; module load + init 4 ms |
 | Same family in Python (`rasterize_font_style`, includes fontTools kerning) | ~234 s (measured while other jobs were running, so only a rough figure) |
-| **Complete .cpfont files vs the Python CLI** | **18 / 18 files byte-identical** (8 cases, 8.8 MiB), plus 11 / 11 with the opt-in kerning fix against the patched script; see [Writer](#writer-complete-cpfont-files) |
+| **Complete .cpfont files vs the Python CLI** | **18 / 18 files byte-identical** (8 cases, 8.8 MiB); again 17 / 17 after the first-match kerning change (the downloaded SourceSerif4 OTF case not run); see [Writer](#writer-complete-cpfont-files) |
 | Complete family in Node (Literata, 4 styles × 5 sizes → 5 files, 2.93 MB) | **~0.8 s** warm, 0.9 s first run. The Python CLI takes 247 s |
 | JS modules (raster + writer + OpenType reader) | 52 KB raw / 16.5 KB gzip -9, no dependencies |
 
@@ -113,7 +113,6 @@ js/cpfont-raster.mjs     JS rasteriser (port of rasterize_font_style's glyph hal
 js/cpfont-writer.mjs     convertFamily(): kerning, ligatures, synthetic bold, v4 file layout
 js/otf-tables.mjs        the fontTools subset the script uses: head, cmap, kern, GPOS/GSUB
 js/pyset-order.mjs       CPython set iteration order (ligature lookups are visited in it)
-patches/                 fontconvert_sdcard-kerning-first-match.patch (opt-in fix, not applied)
 dist/<variant>/          ftwasm.mjs + ftwasm.wasm + BUILDINFO.txt (versions, sha256s, sizes)
 test/parity.mjs          parity test (Python dump vs JS, byte for byte)
 test/py_dump.py          runs the repo's own rasterize_font_style() and dumps JSON
@@ -123,14 +122,14 @@ test/compare_refs.mjs    Python-vs-Python (wheel 2.13.2 vs native 2.13.3)
 test/build_native_ft.sh  native FreeType+HarfBuzz via freetype-py's recipe -> venv-ft<ver>/
 test/bench.mjs           whole-family timing
 test/smoke.mjs           page-style load (wasmBinary), memory growth mid-run
-test/kern_semantics.py   measures the kerning-summing quirk described below
+test/kern_semantics.py   cross-checks the script's kerning against a separate first-match reading
 test/file_parity.mjs     whole-file parity: Python CLI vs convertFamily(), byte for byte
 test/make_kern_fonts.py  builds test fonts with a legacy 'kern' table (none in the repo has one)
 test/bench_writer.mjs    whole-family timing of the complete conversion
 venv/                    freetype-py 2.5.1 wheel (FreeType 2.13.2 + HarfBuzz 8.3.0) + fonttools 4.63.0
 venv-ft2.13.3/           same, with a native FreeType 2.13.3 + HarfBuzz 8.3.0 libfreetype.so
 out/                     Python reference dumps (ref-wheel/, ref-native-ft2.13.3/), CLI output
-                         (cli/, cli-first-match/), generated kern fonts (fonts-kern/), logs
+                         (cli/), generated kern fonts (fonts-kern/), logs
 dl/                      downloads: tarballs + .sig, GnuPG keyring, freetype-py sdist, OTF test fonts
 emsdk/                   the pinned emscripten SDK (created by build.sh)
 ```
@@ -254,7 +253,6 @@ const files = convertFamily(ft, {
   name: 'Literata',                                       // file names: Literata_<size>.cpfont
   // fileNames: { regular: 'Literata-Regular.ttf', ... }  // optional: error messages, default name
   // syntheticBold: false,                                // --synthetic-bold
-  // kerning: 'sum',                                      // 'first-match' = the fix, off by default
   // onProgress: ({ size, style, done, total }) => {},
 });
 // files: [{ fileName, size, bytes: Uint8Array, styles: [{ style, glyphs, kernLeftClasses,
@@ -298,7 +296,7 @@ first differing byte's section, for example "style 2 kern matrix [37]".
 | OpenDyslexic (4 styles) | **CFF** outlines (in the repo) | 12, 16 | 2/2 | 0.14 s | 243 s |
 | SourceSerif4 OTF (2 styles) | CFF, Adobe release | 14 | 1/1 | 0.15 s | 14 s |
 | Inter (2 styles) | 2048 upem: 129 kerning values in Inter Bold 12 pt are exact .5 ties where `Math.round` would differ | 12, 14 | 2/2 | 0.44 s | 43 s |
-| KernTest (3 styles, generated) | legacy `kern`: one subtable + GPOS (both summed), two format-0 subtables + a format-2 stub, Apple version 1 | 12, 14 | 2/2 | 0.32 s | 59 s |
+| KernTest (3 styles, generated) | legacy `kern`: one subtable + GPOS (the table ignored), two format-0 subtables + a format-2 stub, Apple version 1 | 12, 14 | 2/2 | 0.32 s | 59 s |
 | SynthBold | `--synthetic-bold`, with bold = regular file (dilation verified as applied) | 14 | 1/1 | 0.18 s | 27 s |
 | Charis | single-style mode (positional font + `--style`) | 14 | 1/1 | 0.07 s | 11 s |
 | **total** | | | **18/18** (8.8 MiB) | | |
@@ -335,12 +333,14 @@ glyph id; fontTools keeps glyph names unique, so ids and names map one to one.
 - Coverage format 2 ranges are stable-sorted by StartCoverageIndex. ClassDef never stores
   class 0. ValueRecord sizes count all 16 format bits.
 
-**Kerning, as `extract_kerning_fonttools` does it today.**
-- What is read and summed:
-  - every format-0 `kern` pair, plus every `kern`-feature lookup from all scripts and
-    languages;
+**Kerning, as `extract_raw_kerning` (`lib/EpdFont/scripts/kern_extract.py`) does it.**
+- What is read:
+  - every `kern`-feature lookup from all scripts and languages; the format-0 `kern` pairs
+    only when GPOS has no `kern` feature;
   - only PairPos (type 2, also inside type-9 extensions), `Value1.XAdvance` only;
-  - values are **summed across all subtables and lookups and both tables**.
+  - lookups add up. Within a lookup the **first subtable that matches a pair decides it**, as
+    in OpenType: format 1 matches the pairs it lists (zero values too), format 2 every pair
+    whose left glyph it covers. `pairPos()` keeps the matched pairs and left glyphs per lookup.
 - Rounding: Python `round()` is half to even; JS uses its own `roundHalfEven()`. The doubles
   are computed in the same order: `size*150.0/72.0`, `/upem`, then `du*scale*16`.
 - Values are clamped to int8, and pairs that end up 0 are dropped before the codepoint
@@ -377,12 +377,13 @@ otherwise regular.
   `<HB`, kern right `<HB`, the int8 matrix, ligatures `<II`, then the bitmaps.
 - Every field is range-checked like `struct.pack`.
 
-### The kerning fix (opt-in, not used yet)
+### Kerning: the first matching subtable, not the sum
 
-The script sums every subtable. OpenType applies only the first subtable of a lookup that
-matches a pair, which is how glyph-pair exceptions override class kerning, and shapers ignore
-`kern` when GPOS has kerning. Summing over-kerns: for example SourceSerif4 "Vã" ships at
-−3.8 px instead of −1.4 px. Pairs that differ at 14 pt:
+Until 2026-10 the script and this writer added up every subtable, and the legacy `kern` table
+on top. OpenType applies only the first subtable of a lookup that matches a pair, which is how
+glyph-pair exceptions override class kerning, and shapers ignore `kern` when GPOS has kerning.
+Summing over-kerned: for example SourceSerif4 "Vã" shipped at −3.8 px instead of −1.4 px. Pairs
+that changed at 14 pt:
 
 | font | pairs |
 |---|---:|
@@ -395,15 +396,12 @@ matches a pair, which is how glyph-pair exceptions override class kerning, and s
 | Spectral | 26 |
 | Charis, GentiumBookPlus | 0 |
 
-- JS: `convertFamily(ft, { ..., kerning: 'first-match' })`. The default is `'sum'`, today's
-  behaviour.
-- Python: `patches/fontconvert_sdcard-kerning-first-match.patch` applies cleanly with
-  `git apply`. It makes the same change in `extract_kerning_fonttools`.
-- Verified: `node test/file_parity.mjs --kerning first-match --script <patched copy>` gives
-  **11/11 files byte-identical** (Literata 10–18, Inter, KernTest, SourceSerif4 OTF, Charis).
-  The fix really changes the output: 201,195 bytes of Inter 12, 38 of SourceSerif4 OTF 14, and
-  KernTest Regular's legacy table is ignored because the font has GPOS.
-- Switch both sides in the same change, or browser and CLI files will differ.
+Both sides switched in the same change: `lib/EpdFont/scripts/kern_extract.py` for the two
+Python converters, `prepareKerning()` and `pairPos()` here. `lib/EpdFont/scripts/test_kern_extract.py`
+holds them to the same answers on fonts built for each case (exception before class kerning,
+zero-valued exceptions, class 0, extension lookups, a non-pair lookup under `kern`, the legacy
+table with and without GPOS). The SD fonts in `assets/sd-fonts/` pick it up when they are next
+rebuilt with `build-sd-fonts.py`.
 
 ### Remaining caveats
 

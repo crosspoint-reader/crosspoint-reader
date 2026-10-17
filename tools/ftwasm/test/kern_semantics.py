@@ -1,6 +1,6 @@
-"""How often does fontconvert_sdcard.py's 'sum every subtable' kerning differ from
-OpenType's 'first matching subtable per lookup' rule? Uses the repo's own
-extraction for the summed side.  python -I kern_semantics.py <repo> <size> <font>..."""
+"""Does fontconvert_sdcard.py's kerning differ from a separate reading of OpenType's
+'first matching subtable per lookup' rule (GPOS only)? It summed every subtable until
+2026-10, which this measured.  python -I kern_semantics.py <repo> <size> <font>..."""
 import contextlib, io, os, sys
 repo, size, fonts = sys.argv[1], int(sys.argv[2]), sys.argv[3:]
 sys.path.insert(0, os.path.join(repo, "lib", "EpdFont", "scripts"))

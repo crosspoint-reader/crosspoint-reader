@@ -14,10 +14,10 @@
 //   fontconvert_sdcard.py --regular R --bold B --italic I --bolditalic BI \
 //     --intervals <set> --sizes <list> --name <name> --output-dir <dir>/
 // which is how build-sd-fonts.py invokes it for every family in sd-fonts.yaml.
-// That includes the script's current quirks (kerning summed over all subtables
-// plus the legacy 'kern' table, Python round-half-to-even, CPython set order
-// for ligature lookups). The OpenType first-match kerning fix is available as
-// `kerning: 'first-match'` and is off by default.
+// That includes the script's quirks (Python round-half-to-even, CPython set
+// order for ligature lookups) and its kerning rule, lib/EpdFont/scripts/
+// kern_extract.py: OpenType's, the first subtable of a lookup that matches a
+// pair decides it.
 //
 // No Node or DOM APIs; runs in a module Web Worker.
 
@@ -49,14 +49,13 @@ export function fp4FromDesignUnits(du, scale) {
 
 /**
  * The size-independent half of extract_kerning_fonttools(): design-unit sums per
- * glyph pair. `codepoints` = every emitted glyph's codepoint (all_cps).
- * mode 'sum' (default, what the script does): add every format-0 'kern' pair and
- * every GPOS 'kern' PairPos value, across all lookups and all subtables.
- * mode 'first-match' (opt-in fix): within a lookup only the first subtable that
- * matches a pair counts (OpenType/HarfBuzz rule), and the legacy 'kern' table
- * is used only when GPOS has no 'kern' feature.
+ * glyph pair, as kern_extract.py's extract_raw_kerning() reads them.
+ * `codepoints` = every emitted glyph's codepoint (all_cps). The GPOS 'kern'
+ * lookups add up; within a lookup only the first subtable that matches a pair
+ * counts (OpenType's rule), and the legacy 'kern' table is used only when GPOS
+ * has no 'kern' feature.
  */
-export function prepareKerning(font, codepoints, mode = 'sum') {
+export function prepareKerning(font, codepoints) {
   const cmap = font.bestCmap();
   const glyphToCps = new Map(); // gid -> [cp...]
   for (const cp of codepoints) {
@@ -71,9 +70,16 @@ export function prepareKerning(font, codepoints, mode = 'sum') {
 
   const gpos = font.layout('GPOS');
   const kernLookups = new Set();
-  if (gpos) for (const f of gpos.features()) if (f.tag === 'kern') for (const i of f.lookupIndices) kernLookups.add(i);
+  let hasGposKern = false;
+  if (gpos) {
+    for (const f of gpos.features()) {
+      if (f.tag !== 'kern') continue;
+      hasGposKern = true;
+      for (const i of f.lookupIndices) kernLookups.add(i);
+    }
+  }
 
-  if (mode === 'sum' || kernLookups.size === 0) {
+  if (!hasGposKern) {
     for (const pairs of font.kernSubtables()) {
       for (const [k, v] of pairs) {
         const lg = Math.floor(k / 65536), rg = k % 65536;
@@ -83,9 +89,9 @@ export function prepareKerning(font, codepoints, mode = 'sum') {
   }
   for (const li of kernLookups) {
     const lookup = gpos.lookup(li);
-    const matched = mode === 'first-match' ? new Set() : null;
+    const claimed = { pairs: new Set(), left: new Set() };
     for (const st of lookup.subtables) {
-      if (st.type === 2) gpos.pairPos(st.off, glyphToCps, add, matched);
+      if (st.type === 2) gpos.pairPos(st.off, glyphToCps, add, claimed);
     }
   }
   return { upem: font.unitsPerEm(), raw, glyphToCps };
@@ -368,7 +374,6 @@ export function familyNameFromFileName(fileName) {
  * @param {string} [o.name]                     family name for file names (build-sd-fonts.py passes --name)
  * @param {{regular?:string,...}} [o.fileNames] used for the default name and error messages
  * @param {boolean} [o.syntheticBold=false]     --synthetic-bold
- * @param {'sum'|'first-match'} [o.kerning='sum']  'first-match' = the OpenType-correct fix (not used yet)
  * @param {(p:{size:number,style:string,done:number,total:number})=>void} [o.onProgress]
  * @returns {{fileName:string,size:number,bytes:Uint8Array,styles:object[]}[]}
  */
@@ -381,8 +386,6 @@ export function convertFamily(ft, o) {
   const sizes = typeof o.sizes === 'string' ? o.sizes.split(',').map((s) => parseInt(s.trim(), 10)) : [...o.sizes];
   if (!sizes.length || sizes.some((s) => !Number.isInteger(s) || s <= 0)) throw new Error(`bad size list ${o.sizes}`);
   const intervals = Array.isArray(o.intervals) ? o.intervals : resolveIntervals(o.intervals);
-  const kerningMode = o.kerning ?? 'sum';
-  if (kerningMode !== 'sum' && kerningMode !== 'first-match') throw new Error(`kerning must be 'sum' or 'first-match'`);
   const fileNames = o.fileNames ?? {};
   let name = o.name;
   if (!name) {
@@ -415,7 +418,7 @@ export function convertFamily(ft, o) {
       const st = perStyle.get(id);
       const sd = rasterizeStyle(ft, st.bytes, size, intervals, { dpi: CONVERTER_DPI });
       const allCps = new Set(sd.glyphs.map((g) => g.codePoint));
-      if (!st.kern) st.kern = prepareKerning(st.font, allCps, kerningMode);
+      if (!st.kern) st.kern = prepareKerning(st.font, allCps);
       if (!st.ligatures) st.ligatures = extractLigatures(st.font, allCps);
       sd.kern = deriveKernClasses(scaleKerning(st.kern, ppem));
       sd.ligatures = st.ligatures.slice(0, 255);
