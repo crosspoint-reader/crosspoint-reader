@@ -1,4 +1,6 @@
 #pragma once
+#include <Utf8.h>
+
 #include <cstdint>
 
 // Shared helpers for font-variant: small-caps rendering.
@@ -18,37 +20,15 @@ inline constexpr float SCALE = 0.75f;
 // lowercase letter (and therefore should be drawn scaled); returns false and leaves
 // `cp` unchanged otherwise.
 //
-// Coverage: ASCII a-z, Latin-1 Supplement lowercase (à-þ, excluding ÷ and ß which
-// has no single-codepoint uppercase), and Latin Extended-A even/odd lowercase pairs.
+// Coverage is utf8UpperCodepoint()'s, the inverse of the lowercase mapping the
+// hyphenators and the dictionary use: Latin (including the odd-aligned Ĺ-ň and Ź-ž
+// runs of Latin Extended-A, ÿ, Vietnamese, Romanian), monotonic Greek with final ς,
+// and Cyrillic. A letter whose capital is not one codepoint (ß, ŉ) stays full-size.
 inline bool fold(uint32_t& cp) {
-  // ASCII a-z -> A-Z
-  if (cp >= 0x61 && cp <= 0x7A) {
-    cp -= 0x20;
-    return true;
-  }
-  // Latin-1 Supplement lowercase 0x00E0-0x00FE -> uppercase -0x20.
-  // 0x00F7 (÷) is a math symbol, not a letter; 0x00DF (ß) is below this range and
-  // has no single-codepoint uppercase, so both are left full-size.
-  if (cp >= 0xE0 && cp <= 0xFE && cp != 0xF7) {
-    cp -= 0x20;
-    return true;
-  }
-  // Latin Extended-A 0x0100-0x017F: most letters come in (even=upper, odd=lower)
-  // pairs, e.g. 0x0100 Ā / 0x0101 ā.  An odd codepoint folds to the preceding even.
-  // The handful of irregular entries in this block (0x0130/0x0131, 0x0138, 0x0149,
-  // 0x017F) are rare and intentionally left unfolded rather than mis-mapped.
-  if (cp >= 0x0100 && cp <= 0x017F && (cp & 1) == 1) {
-    switch (cp) {
-      case 0x0131:  // ı dotless i — no regular pairing here
-      case 0x0149:  // ŉ — deprecated, no single uppercase
-      case 0x017F:  // ſ long s
-        return false;
-      default:
-        cp -= 1;
-        return true;
-    }
-  }
-  return false;
+  const uint32_t upper = utf8UpperCodepoint(cp);
+  if (upper == cp) return false;
+  cp = upper;
+  return true;
 }
 
 }  // namespace smallCaps

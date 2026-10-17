@@ -31,7 +31,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 89;  // v89: widow/orphan control, and a heading
+constexpr uint8_t SECTION_FILE_VERSION = 90;  // v90: small caps shrink ł ń ž ÿ, Greek and
+                                              // Cyrillic, and no longer Ł Ń Ž; v89 pages
+                                              // measured such words the other way round
+                                              // v89: widow/orphan control, and a heading
                                               // keeps room for two lines below it, so pages
                                               // end earlier than in v88
                                               // v88: page-break-after breaks, and a

@@ -414,8 +414,47 @@ TEST(SmallCapsFold, LatinExtendedAPairs) {
   EXPECT_TRUE(smallCaps::fold(cp));
   EXPECT_EQ(cp, 0x0100u);  // Ā
 
-  cp = 0x0131;  // ı dotless i — intentionally not folded
-  EXPECT_FALSE(smallCaps::fold(cp));
+  cp = 0x0131;  // ı dotless i: its capital is a plain I
+  EXPECT_TRUE(smallCaps::fold(cp));
+  EXPECT_EQ(cp, static_cast<uint32_t>('I'));
+}
+
+// In U+0139-U+0148 and U+0179-U+017E the capital sits on the ODD codepoint. Folding every odd
+// codepoint drew Ł as a shrunken ŀ and left ł, ń, ž at full size.
+TEST(SmallCapsFold, LatinExtendedAOddAlignedRuns) {
+  for (const auto& [lower, upper] : {std::pair<uint32_t, uint32_t>{0x0142, 0x0141},  // ł Ł
+                                     {0x0144, 0x0143},                               // ń Ń
+                                     {0x013A, 0x0139},                               // ĺ Ĺ
+                                     {0x0148, 0x0147},                               // ň Ň
+                                     {0x017A, 0x0179},                               // ź Ź
+                                     {0x017C, 0x017B},                               // ż Ż
+                                     {0x017E, 0x017D}}) {                            // ž Ž
+    uint32_t cp = lower;
+    EXPECT_TRUE(smallCaps::fold(cp)) << std::hex << lower;
+    EXPECT_EQ(cp, upper) << std::hex << lower;
+  }
+  // The capitals themselves stay full-size capitals.
+  for (const uint32_t upper : {0x0141u, 0x0143u, 0x0139u, 0x0147u, 0x0179u, 0x017Bu, 0x017Du, 0x0178u}) {
+    uint32_t cp = upper;
+    EXPECT_FALSE(smallCaps::fold(cp)) << std::hex << upper;
+    EXPECT_EQ(cp, upper);
+  }
+}
+
+TEST(SmallCapsFold, BeyondLatinExtendedA) {
+  for (const auto& [lower, upper] : {std::pair<uint32_t, uint32_t>{0x00FF, 0x0178},  // ÿ Ÿ
+                                     {0x03B1, 0x0391},                               // α Α
+                                     {0x03C2, 0x03A3},                               // final ς Σ
+                                     {0x03AC, 0x0386},                               // ά Ά
+                                     {0x0436, 0x0416},                               // ж Ж
+                                     {0x0451, 0x0401},                               // ё Ё
+                                     {0x0491, 0x0490},                               // ґ Ґ
+                                     {0x0219, 0x0218},                               // ș Ș
+                                     {0x1EDF, 0x1EDE}}) {                            // ở Ở
+    uint32_t cp = lower;
+    EXPECT_TRUE(smallCaps::fold(cp)) << std::hex << lower;
+    EXPECT_EQ(cp, upper) << std::hex << lower;
+  }
 }
 
 // Uppercase letters render full-size even under small-caps, so width is unchanged.

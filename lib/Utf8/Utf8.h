@@ -17,6 +17,13 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 // caller that folds case: the hyphenators and the dictionary lookup.
 uint32_t utf8LowerCodepoint(uint32_t cp);
 
+// The inverse of utf8LowerCodepoint(): the capital of every small letter it produces, plus the
+// lowercase-only ı, ſ and final ς (I, S, Σ). Same coverage, so a letter with no single-codepoint
+// capital (ß, ŉ, ΐ) and anything outside the covered blocks come back unchanged. Derived from
+// utf8LowerCodepoint() rather than kept as a second table, so the two cannot disagree. Never
+// lengthens the UTF-8 encoding. Used by small caps to pick the glyph a lowercase letter draws with.
+uint32_t utf8UpperCodepoint(uint32_t cp);
+
 // utf8LowerCodepoint() over a single word. A capital sigma ending the word becomes the final
 // form ς, the spelling Greek text and dictionaries use. Never longer than the input.
 std::string utf8ToLower(const std::string& s);
