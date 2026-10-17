@@ -8,6 +8,7 @@ import argparse
 from collections import namedtuple
 from fontTools.ttLib import TTFont
 
+from kern_extract import extract_raw_kerning
 from kern_reduce import reduce_kern_classes
 
 # Force UTF-8 stdout so that `> file.h` on Windows doesn't produce UTF-16 LE
@@ -491,9 +492,9 @@ for index, glyph in enumerate(all_glyphs):
 
 # --- Kerning pair extraction ---
 # Modern fonts store kerning in the OpenType GPOS table, which FreeType's
-# get_kerning() does not read. We use fonttools to parse both the legacy
-# kern table and the GPOS 'kern' feature (PairPos lookups, including
-# Extension wrappers).
+# get_kerning() does not read. kern_extract.py parses both the legacy
+# kern table and the GPOS 'kern' feature with fonttools, for this script and
+# fontconvert_sdcard.py alike.
 
 COMBINING_MARKS_START = 0x0300
 COMBINING_MARKS_END = 0x036F
@@ -515,47 +516,6 @@ face_idx_cps = {}
 for cp, fi in cp_to_face_idx.items():
     face_idx_cps.setdefault(fi, set()).add(cp)
 
-def _extract_pairpos_subtable(subtable, glyph_to_cp, raw_kern):
-    """Extract kerning from a PairPos subtable (Format 1 or 2)."""
-    if subtable.Format == 1:
-        # Individual pairs
-        for i, coverage_glyph in enumerate(subtable.Coverage.glyphs):
-            if coverage_glyph not in glyph_to_cp:
-                continue
-            pair_set = subtable.PairSet[i]
-            for pvr in pair_set.PairValueRecord:
-                if pvr.SecondGlyph not in glyph_to_cp:
-                    continue
-                xa = 0
-                if hasattr(pvr, 'Value1') and pvr.Value1:
-                    xa = getattr(pvr.Value1, 'XAdvance', 0) or 0
-                if xa != 0:
-                    key = (coverage_glyph, pvr.SecondGlyph)
-                    raw_kern[key] = raw_kern.get(key, 0) + xa
-    elif subtable.Format == 2:
-        # Class-based pairs
-        class_def1 = subtable.ClassDef1.classDefs if subtable.ClassDef1 else {}
-        class_def2 = subtable.ClassDef2.classDefs if subtable.ClassDef2 else {}
-        coverage_set = set(subtable.Coverage.glyphs)
-        for left_glyph in glyph_to_cp:
-            if left_glyph not in coverage_set:
-                continue
-            c1 = class_def1.get(left_glyph, 0)
-            if c1 >= len(subtable.Class1Record):
-                continue
-            class1_rec = subtable.Class1Record[c1]
-            for right_glyph in glyph_to_cp:
-                c2 = class_def2.get(right_glyph, 0)
-                if c2 >= len(class1_rec.Class2Record):
-                    continue
-                c2_rec = class1_rec.Class2Record[c2]
-                xa = 0
-                if hasattr(c2_rec, 'Value1') and c2_rec.Value1:
-                    xa = getattr(c2_rec.Value1, 'XAdvance', 0) or 0
-                if xa != 0:
-                    key = (left_glyph, right_glyph)
-                    raw_kern[key] = raw_kern.get(key, 0) + xa
-
 def extract_kerning_fonttools(font_path, codepoints, ppem):
     """Extract kerning pairs from a font file using fonttools.
 
@@ -574,34 +534,8 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
         if gname:
             glyph_to_cp[gname] = cp
 
-    # Collect raw kerning values in font design units
-    raw_kern = {}  # (left_glyph_name, right_glyph_name) -> design_units
-
-    # 1. Legacy kern table
-    if 'kern' in font:
-        for subtable in font['kern'].kernTables:
-            if hasattr(subtable, 'kernTable'):
-                for (lg, rg), val in subtable.kernTable.items():
-                    if lg in glyph_to_cp and rg in glyph_to_cp:
-                        raw_kern[(lg, rg)] = raw_kern.get((lg, rg), 0) + val
-
-    # 2. GPOS 'kern' feature
-    if 'GPOS' in font:
-        gpos = font['GPOS'].table
-        kern_lookup_indices = set()
-        if gpos.FeatureList:
-            for fr in gpos.FeatureList.FeatureRecord:
-                if fr.FeatureTag == 'kern':
-                    kern_lookup_indices.update(fr.Feature.LookupListIndex)
-        for li in kern_lookup_indices:
-            lookup = gpos.LookupList.Lookup[li]
-            for st in lookup.SubTable:
-                actual = st
-                # Unwrap Extension (lookup type 9) wrappers
-                if lookup.LookupType == 9 and hasattr(st, 'ExtSubTable'):
-                    actual = st.ExtSubTable
-                if hasattr(actual, 'Format'):
-                    _extract_pairpos_subtable(actual, glyph_to_cp, raw_kern)
+    # Raw kerning values in font design units
+    raw_kern = extract_raw_kerning(font, glyph_to_cp)  # (left_glyph_name, right_glyph_name) -> design_units
 
     font.close()
 
