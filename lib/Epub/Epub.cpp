@@ -218,6 +218,8 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   if (!hasReadableCover(bookMetadata.coverItemHref)) {
     if (!bookMetadata.coverItemHref.empty()) {
       LOG_DBG("EBP", "Cover href unresolved, trying common cover candidates: %s", bookMetadata.coverItemHref.c_str());
+      // Not a cover: the scan below takes a set href for one already found and would never look.
+      bookMetadata.coverItemHref.clear();
     }
 
     // Single forward pass through the ZIP central directory.

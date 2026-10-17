@@ -185,6 +185,30 @@ TEST_F(CoverWrapper, TheGuideCoverPageStillPrefersItsSvgImage) {
   EXPECT_EQ(coverViaLoad(), "item/image/big.jpg");
 }
 
+// --- A named cover missing from the archive -------------------------------------------------------
+//
+// The ZIP-name scan ran, but took the dead href still set for a cover already found and never
+// looked, so the book kept a cover path nothing could extract.
+
+TEST_F(CoverWrapper, ANamedCoverMissingFromTheArchiveFallsBackToTheZipNameScan) {
+  Book book;
+  book.coverItem = "image/missing.png";
+  book.coverItemType = "image/png";
+  book.files = {{"item/image/cover.png", kPng}};
+  writeBook(book);
+
+  EXPECT_EQ(coverViaLoad(), "item/image/cover.png");
+}
+
+TEST_F(CoverWrapper, ANamedCoverMissingFromTheArchiveLeavesNoDeadHref) {
+  Book book;
+  book.coverItem = "image/missing.png";
+  book.coverItemType = "image/png";
+  writeBook(book);
+
+  EXPECT_EQ(coverViaLoad(), "") << "a book without a cover is known to have none, not one that fails to extract";
+}
+
 // --- The scanner on its own ---------------------------------------------------------------------
 
 namespace {
