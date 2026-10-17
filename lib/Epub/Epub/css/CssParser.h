@@ -100,7 +100,9 @@ class CssParser {
   //      rules now apply by specificity, then stylesheet order (see resolveStyle).
   // v23: compound selectors (.a.b, p#id.a, *): the header gains the byte count of the complex-rule
   //      table, which follows it, before the sorted index (see complexTable).
-  static constexpr uint8_t CSS_CACHE_VERSION = 23;
+  // v24: page-break-before/after (and break-*) `auto`, `avoid` and `avoid-page` are kept as an explicit
+  //      "no break", so a more specific or later rule cancels an `always`; v23 dropped them.
+  static constexpr uint8_t CSS_CACHE_VERSION = 24;
   // Bytes before the complex-rule table and the sorted offset index: version(1) + ruleCount(2) +
   // totalSelectorCandidates(4) + unsupportedSelectorSkips(4) + flags(1) + complexTableBytes(2).
   static constexpr uint32_t CSS_CACHE_HEADER_BYTES = 14;

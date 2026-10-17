@@ -161,3 +161,30 @@ TEST(CssParserUnits, FontSizeInvisibleOnlyBelowReadableSizes) {
   EXPECT_FALSE(CssParser::parseInlineStyle("font-size: 0").isFontSizeInvisible());
   EXPECT_FALSE(CssParser::parseInlineStyle("font-size: 0px").isFontSizeInvisible());
 }
+
+// auto / avoid / avoid-page are an explicit "no break", kept so they can cancel an `always` from a
+// rule they outrank; values that are not about pages leave the property unset.
+TEST(CssParserDeclarations, PageBreakAvoidIsAnExplicitNoBreak) {
+  for (const char* decl :
+       {"page-break-before: always", "break-before: page", "page-break-before: left", "break-before: recto"}) {
+    const CssStyle style = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(style.hasPageBreakBefore() && style.pageBreakBefore) << decl;
+  }
+  for (const char* decl : {"page-break-before: auto", "page-break-before: avoid", "break-before: avoid-page",
+                           "page-break-before: always; page-break-before: avoid"}) {
+    const CssStyle style = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(style.hasPageBreakBefore()) << decl;
+    EXPECT_FALSE(style.pageBreakBefore) << decl;
+  }
+  for (const char* decl : {"break-after: column", "page-break-after: inherit"}) {
+    EXPECT_FALSE(CssParser::parseInlineStyle(decl).hasPageBreakAfter()) << decl;
+  }
+  const CssStyle after = CssParser::parseInlineStyle("page-break-after: avoid");
+  EXPECT_TRUE(after.hasPageBreakAfter());
+  EXPECT_FALSE(after.pageBreakAfter);
+
+  // An inline `avoid` cancels the stylesheet's `always`.
+  CssStyle resolved = CssParser::parseInlineStyle("page-break-before: always");
+  resolved.applyOver(CssParser::parseInlineStyle("page-break-before: auto"));
+  EXPECT_FALSE(resolved.pageBreakBefore);
+}

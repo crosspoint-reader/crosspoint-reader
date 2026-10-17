@@ -312,3 +312,21 @@ TEST(CssCascade, CompoundsAreNoLongerUnsupported) {
   std::error_code ec;
   std::filesystem::remove(path, ec);
 }
+
+// A more specific or later `avoid`/`auto` cancels a page break an earlier or broader rule forces.
+TEST(CssCascade, AvoidCancelsAForcedPageBreak) {
+  const std::vector<std::string> css = {
+      ".chapter { page-break-before: always; }\n.chapter.first { page-break-before: avoid; }\n"
+      "h2 { break-after: page; }\nh2 { break-after: auto; }\n"};
+  resolveEverywhere(css, {"div", "chapter"}, [&](const Store store, const CssStyle& style) {
+    EXPECT_TRUE(style.hasPageBreakBefore() && style.pageBreakBefore) << storeName(store);
+  });
+  resolveEverywhere(css, {"div", "first chapter"}, [&](const Store store, const CssStyle& style) {
+    EXPECT_TRUE(style.hasPageBreakBefore()) << storeName(store);
+    EXPECT_FALSE(style.pageBreakBefore) << storeName(store) << ": .chapter.first outranks .chapter";
+  });
+  resolveEverywhere(css, {"h2", ""}, [&](const Store store, const CssStyle& style) {
+    EXPECT_TRUE(style.hasPageBreakAfter()) << storeName(store);
+    EXPECT_FALSE(style.pageBreakAfter) << storeName(store) << ": the later h2 rule wins";
+  });
+}

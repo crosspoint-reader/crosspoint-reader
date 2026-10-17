@@ -587,6 +587,15 @@ bool isTransparentColour(const std::string_view v) {
   }
   return false;
 }
+// A (page-)break-before/after value: 1 forces a page break, 0 asks for none -- auto, avoid,
+// avoid-page -- and is kept, so a more specific or later rule can cancel an `always` (a
+// `.chapter.first { page-break-before: avoid }` under `.chapter { page-break-before: always }`),
+// -1 is neither (column and region breaks, cascade keywords) and leaves the property alone.
+int interpretPageBreak(const std::string_view v) {
+  if (v == "always" || v == "page" || v == "left" || v == "right" || v == "recto" || v == "verso") return 1;
+  if (v == "auto" || v == "avoid" || v == "avoid-page") return 0;
+  return -1;
+}
 }  // namespace
 
 void CssParser::parseDeclarationIntoStyle(const std::string_view decl, CssStyle& style, std::string& propNameBuf,
@@ -773,15 +782,15 @@ void CssParser::parseDeclarationIntoStyle(const std::string_view decl, CssStyle&
       style.defined.listStyleNone = 1;
     }
   } else if (propNameBuf == "page-break-before" || propNameBuf == "break-before") {
-    const std::string_view val = propValueBuf;
-    if (val == "always" || val == "page" || val == "left" || val == "right") {
-      style.pageBreakBefore = true;
+    const int forced = interpretPageBreak(propValueBuf);
+    if (forced >= 0) {
+      style.pageBreakBefore = forced == 1;
       style.defined.pageBreakBefore = 1;
     }
   } else if (propNameBuf == "page-break-after" || propNameBuf == "break-after") {
-    const std::string_view val = propValueBuf;
-    if (val == "always" || val == "page" || val == "left" || val == "right") {
-      style.pageBreakAfter = true;
+    const int forced = interpretPageBreak(propValueBuf);
+    if (forced >= 0) {
+      style.pageBreakAfter = forced == 1;
       style.defined.pageBreakAfter = 1;
     }
   } else if (propNameBuf == "line-height") {
