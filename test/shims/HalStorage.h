@@ -134,6 +134,10 @@ class HalStorage {
   String readFile(const char*) { return ""; }
   bool readFileToStream(const char*, Print&, size_t = 256) { return false; }
   size_t readFileToBuffer(const char*, char*, size_t, size_t = 0) { return 0; }
+  bool readFileToString(const char*, const std::string&, size_t, std::string& out) {
+    out.clear();
+    return false;
+  }
   bool writeFile(const char*, const String&) { return false; }
   bool ensureDirectoryExists(const char*) { return false; }
   HalFile open(const char*, int = 0) { return HalFile::opened(); }

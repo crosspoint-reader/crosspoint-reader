@@ -962,9 +962,9 @@ with one font ID (per-word data carries only the style bits).
       way out. Off by default because of the store switching below. A per-book on/off of its own would add a field
       to the 13-argument override path (`RecentBook`, `QuickOverridesActivity`, `applyBookReaderOverrides`): not
       cheap, so not built.
-    - **CSS (`CssParser`, `CSS_CACHE_VERSION` 22):** `font-family` keeps its first family as a case-insensitive
+    - **CSS (`CssParser`, `CSS_CACHE_VERSION` 23):** `font-family` keeps its first family as a case-insensitive
       hash (`fontFamilyHash`); a generic family is 0. It rides in the rule payload and the arena-resident record
-      (mask bit 31). `@font-face` rules go to a side file, `css_fonts.bin`: name, hash, weight, italic, and the
+      (mask bit 31). `@font-face` rules go to a side file, `css_fonts.bin`: name, weight, italic, and the
       `src` url ranked TrueType, then OpenType, then anything else, never WOFF2, SVG, EOT, `data:` or remote.
     - **Which family (`BookFonts::detectBodyFamily`):** html/body's `font-family` when one is declared, else the
       family with the most ordinary paragraph text (p, div, li, dd; not headings, tables, blockquotes, figures,

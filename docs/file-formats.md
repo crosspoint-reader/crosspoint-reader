@@ -292,16 +292,15 @@ count x {
 }
 ```
 
-`css_fonts.bin` holds the book's `@font-face` rules (`CssParser::loadFontFaces`), in source order, for its embedded fonts. Absent when the book declares none.
+`css_fonts.bin` holds the book's `@font-face` rules (`CssParser::loadFontFaces`, read one at a time by `CssParser::nextFontFace`), in source order, for its embedded fonts: at most `MAX_FONT_FACES` (32). Absent when the book declares none.
 
 ```text
-u8  version             CSS_CACHE_VERSION (22)
-u8  count               at most MAX_FONT_FACES (32)
-count x {
-    u32 family          CssParser::fontFamilyHash of the name: what a style's font-family is compared with
+u8  version             CSS_CACHE_VERSION (23)
+then, to the end of the file, one record per face {
     u16 weight          font-weight, 100-900 (normal 400, bold 700)
     u8  italic          1 when font-style is not normal
-    u8  nameLen, name bytes       the declared family name, unquoted
+    u8  nameLen, name bytes       the declared family name, unquoted; CssParser::fontFamilyHash of it is
+                                  what a style's font-family is compared with
     u8  hrefLen, href bytes       the src url() chosen (TrueType, else OpenType, else another format;
                                   never WOFF2, SVG, EOT or data:), joined to its sheet's folder
 }

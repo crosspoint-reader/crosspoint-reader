@@ -436,18 +436,14 @@ Copy copyFace(const Epub& epub, const std::string& href, const std::string& dest
 }
 
 // For each style (EpdFontFamily numbering: bit 0 bold, bit 1 italic), the face of `family` nearest weight 400,
-// or 700 for the bold styles.
-void pickFaces(const std::vector<CssParser::FontFace>& faces, const uint32_t family,
-               const CssParser::FontFace* (&out)[4]) {
-  for (auto& o : out) o = nullptr;
-  for (const CssParser::FontFace& face : faces) {
+// or 700 for the bold styles; one with an empty name where the family has none.
+void pickFaces(std::string_view records, const uint32_t family, CssParser::FontFace (&out)[4]) {
+  for (CssParser::FontFace face; CssParser::nextFontFace(records, face);) {
     if (face.family != family) continue;
     const uint8_t style = (face.weight >= 600 ? 1 : 0) | (face.italic ? 2 : 0);
     const int target = (style & 1) != 0 ? 700 : 400;
-    const auto distance = [target](const CssParser::FontFace& f) {
-      return std::abs(static_cast<int>(f.weight) - target);
-    };
-    if (!out[style] || distance(face) < distance(*out[style])) out[style] = &face;
+    CssParser::FontFace& best = out[style];
+    if (best.name.empty() || std::abs(face.weight - target) < std::abs(best.weight - target)) best = face;
   }
 }
 
@@ -498,7 +494,7 @@ uint8_t failedAttempts(const std::string& cachePath) {
   return code != kNoCode && code >= kCodeFailed ? static_cast<uint8_t>(code - kCodeFailed) : 0;
 }
 
-State writeState(const std::string& cachePath, const uint8_t code, const std::string& name = {}) {
+State writeState(const std::string& cachePath, const uint8_t code, const std::string_view name = {}) {
   Storage.mkdir((cachePath + kFontsDir).c_str());
   HalFile file;
   if (!Storage.openFileForWrite("BKF", cachePath + kStateFile, file)) return State::Pending;
@@ -608,27 +604,27 @@ State prepare(const Epub& epub, BuildArena* scratch) {
   const uint8_t attempts = failedAttempts(cachePath);
   Storage.removeDir((cachePath + kFontsDir).c_str());  // whatever an earlier attempt left
 
-  std::vector<CssParser::FontFace> faces;
-  if (!CssParser::loadFontFaces(cachePath, faces)) return writeState(cachePath, kCodeNone);
+  std::string records;
+  if (!CssParser::loadFontFaces(cachePath, records)) return writeState(cachePath, kCodeNone);
   bool failed = false;
   const uint32_t body = detectBodyFamily(epub, scratch, &failed);
   if (failed) return writeState(cachePath, static_cast<uint8_t>(kCodeFailed + attempts + 1));
-  const CssParser::FontFace* picked[4];
-  pickFaces(faces, body, picked);
-  if (!picked[0]) {
+  CssParser::FontFace picked[4];
+  pickFaces(records, body, picked);
+  if (picked[0].name.empty()) {
     LOG_INF("BKF", "Body font not embedded");
     return writeState(cachePath, kCodeNone);
   }
 
-  const std::string& name = picked[0]->name;
+  const std::string_view name = picked[0].name;
   const std::string dir = familyDir(cachePath, name);
   Storage.mkdir(dir.c_str());
   Keys keys;
   Copy regular = Copy::Refused;
   bool anyFailed = false;
   for (uint8_t style = 0; style < 4; ++style) {
-    if (!picked[style]) continue;
-    const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(picked[style]->href));
+    if (picked[style].name.empty()) continue;
+    const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(std::string(picked[style].href)));
     const Copy copy = copyFace(epub, href, facePath(dir, style, href), keys, scratch);
     if (style == 0) regular = copy;
     anyFailed = anyFailed || copy == Copy::Failed;

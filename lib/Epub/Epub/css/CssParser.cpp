@@ -122,8 +122,8 @@ constexpr char rulesCache[] = "/css_rules.cache";
 // version(1) + count(2) + count x {selectorLen(2) selector pathLen(2) path}.
 constexpr char backgroundImagesFile[] = "/css_bg.bin";
 constexpr uint8_t BACKGROUND_IMAGES_FILE_VERSION = 1;
-// @font-face rules (CssParser::loadFontFaces), when the book has any: CSS_CACHE_VERSION(1) +
-// count(1) + count x {family(4) weight(2) italic(1) nameLen(1) name hrefLen(1) href}.
+// @font-face rules (CssParser::loadFontFaces), when the book has any: CSS_CACHE_VERSION(1), then
+// one record per face to the end of the file: {weight(2) italic(1) nameLen(1) name hrefLen(1) href}.
 constexpr char fontFacesFile[] = "/css_fonts.bin";
 constexpr size_t MAX_FONT_FACE_TEXT = 255;  // a name or href longer than this is not recorded
 constexpr char compileTempRulesCache[] = "/css_rules.compile.tmp";
@@ -434,6 +434,21 @@ std::string_view unquoteCss(std::string_view v) {
     v = trimCss(v.substr(1, v.size() - 2));
   }
   return v;
+}
+
+// Takes the first `name: value` declaration off `rest` (a block's ';'-separated declarations),
+// both trimmed. A declaration without a colon is passed over; false when none is left.
+bool nextDeclaration(std::string_view& rest, std::string_view& name, std::string_view& value) {
+  while (!rest.empty()) {
+    const std::string_view decl(rest.data(), std::min(rest.find(';'), rest.size()));
+    rest.remove_prefix(std::min(decl.size() + 1, rest.size()));
+    const size_t colon = decl.find(':');
+    if (colon == std::string_view::npos) continue;
+    name = trimCss(std::string_view(decl.data(), colon));
+    value = trimCss(std::string_view(decl.data() + colon + 1, decl.size() - colon - 1));
+    return true;
+  }
+  return false;
 }
 
 // The first family of a font-family list (normalized text), hashed; 0 for a generic family or a
@@ -1233,12 +1248,9 @@ bool CssParser::loadFromStream(FsFile& source) {
 
   bool inAtRule = false;
   int atDepth = 0;
-  // The at-rule's keyword, lowercased ("font-face", "media", ...), and whether its body is an
-  // @font-face being collected into declBuffer. Ported from crosspoint-reader PR #3934 (Justin
-  // Mitchell, @itsthisjustin).
-  char atKeyword[10];
-  size_t atKeywordLen = 0;
-  bool atKeywordDone = false;
+  // Whether the at-rule is an @font-face, whose body is collected into declBuffer (as its prelude,
+  // "font-face" or "media screen", was before the brace). Ported from crosspoint-reader PR #3934
+  // (Justin Mitchell, @itsthisjustin).
   bool inFontFace = false;
 
   int bodyDepth = 0;
@@ -1264,9 +1276,8 @@ bool CssParser::loadFromStream(FsFile& source) {
   auto handleChar = [&](const char c) {
     if (inAtRule) {
       if (c == '{') {
-        ++atDepth;
-        if (atDepth == 1 && std::string_view(atKeyword, atKeywordLen) == "font-face") {
-          inFontFace = true;
+        if (++atDepth == 1) {
+          inFontFace = equalsIgnoreCase(trimCss(declBuffer.view()), "font-face");
           declBuffer.clear();
         }
       } else if (c == '}') {
@@ -1278,15 +1289,9 @@ bool CssParser::loadFromStream(FsFile& source) {
           inAtRule = false;
         }
       } else if (c == ';' && atDepth == 0) {
+        declBuffer.clear();
         inAtRule = false;
-      } else if (atDepth == 0 && !atKeywordDone) {
-        const bool identChar = std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '-' || c == '_';
-        if (identChar && atKeywordLen < sizeof(atKeyword)) {
-          atKeyword[atKeywordLen++] = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        } else {
-          atKeywordDone = true;
-        }
-      } else if (inFontFace && atDepth == 1) {
+      } else if (atDepth == 0 || (inFontFace && atDepth == 1)) {
         declBuffer.push_back(c);
       }
       return;
@@ -1299,8 +1304,7 @@ bool CssParser::loadFromStream(FsFile& source) {
       if (c == '@' && selector.empty()) {
         inAtRule = true;
         atDepth = 0;
-        atKeywordLen = 0;
-        atKeywordDone = false;
+        declBuffer.clear();  // the prelude gathers here
         return;
       }
       if (c == '{') {
@@ -1553,7 +1557,9 @@ bool CssParser::endCacheCompile() {
   saveBackgroundImages();
   backgroundImagesLoaded_ = true;  // what was just compiled is what the file now holds
   saveFontFaces();
-  std::vector<FontFace>().swap(fontFaces_);  // read back from the side file by whoever needs them
+  fontFaces_.clear();  // read back from the side file by whoever needs them
+  fontFaces_.shrink_to_fit();
+  fontFaceCount_ = 0;
   dropStaging();
 
   rulesBySelector_.clear();
@@ -1624,7 +1630,9 @@ void CssParser::clear() {
   resolveStats_ = {};
   std::vector<BackgroundImageRule>().swap(backgroundImages_);
   backgroundImagesLoaded_ = false;  // reread from the side file on the next query
-  std::vector<FontFace>().swap(fontFaces_);
+  fontFaces_.clear();
+  fontFaces_.shrink_to_fit();
+  fontFaceCount_ = 0;
   stylesheetDir_.clear();
   compileModeActive_ = false;
   compileModeFailed_ = false;
@@ -2764,16 +2772,9 @@ void CssParser::deleteCache() const {
 CssParser::BackgroundDeclaration CssParser::parseBackground(const std::string_view declarations) {
   BackgroundDeclaration result;
 
-  size_t pos = 0;
-  while (pos <= declarations.size()) {
-    size_t end = declarations.find(';', pos);
-    if (end == std::string_view::npos) end = declarations.size();
-    const std::string_view decl = declarations.substr(pos, end - pos);
-    pos = end + 1;
-    const size_t colon = decl.find(':');
-    if (colon == std::string_view::npos) continue;
-    const std::string_view name = trimCss(decl.substr(0, colon));
-    const std::string_view value = decl.substr(colon + 1);
+  std::string_view name;
+  std::string_view value;
+  for (std::string_view rest = declarations; nextDeclaration(rest, name, value);) {
     const bool image = equalsIgnoreCase(name, "background-image");
     const bool shorthand = equalsIgnoreCase(name, "background");
     if (equalsIgnoreCase(name, "background-repeat") || shorthand) {
@@ -2825,36 +2826,41 @@ uint32_t CssParser::fontFamilyHash(const std::string_view name) {
 }
 
 void CssParser::parseFontFace(const std::string_view declarations) {
-  FontFace face;
+  std::string_view family;
   std::string_view src;
-  size_t pos = 0;
-  while (pos <= declarations.size()) {
-    size_t end = declarations.find(';', pos);
-    if (end == std::string_view::npos) end = declarations.size();
-    const std::string_view decl = declarations.substr(pos, end - pos);
-    pos = end + 1;
-    const size_t colon = decl.find(':');
-    if (colon == std::string_view::npos) continue;
-    const std::string_view name = trimCss(decl.substr(0, colon));
-    const std::string_view value = stripTrailingImportant(trimCss(decl.substr(colon + 1)));
-    if (equalsIgnoreCase(name, "font-family")) {
-      face.name.assign(unquoteCss(value));
-    } else if (equalsIgnoreCase(name, "src")) {
+  uint16_t weight = 400;
+  bool italic = false;
+  std::string_view prop;
+  std::string_view value;
+  for (std::string_view rest = declarations; nextDeclaration(rest, prop, value);) {
+    value = stripTrailingImportant(value);
+    if (equalsIgnoreCase(prop, "font-family")) {
+      family = unquoteCss(value);
+    } else if (equalsIgnoreCase(prop, "src")) {
       src = value;
-    } else if (equalsIgnoreCase(name, "font-style")) {
-      face.italic = !equalsIgnoreCase(value, "normal");
-    } else if (equalsIgnoreCase(name, "font-weight")) {
-      uint16_t weight = 0;  // a number up to 999, else 0
-      for (const char c : value.substr(0, 3)) weight = c >= '0' && c <= '9' ? weight * 10 + (c - '0') : 0;
-      face.weight = findIgnoreCase(value, "bold") != std::string_view::npos ? 700 : weight != 0 ? weight : 400;
+    } else if (equalsIgnoreCase(prop, "font-style")) {
+      italic = !equalsIgnoreCase(value, "normal");
+    } else if (equalsIgnoreCase(prop, "font-weight")) {
+      uint16_t number = 0;  // a number up to 999, else 0
+      for (const char c : value.substr(0, 3)) number = c >= '0' && c <= '9' ? number * 10 + (c - '0') : 0;
+      weight = findIgnoreCase(value, "bold") != std::string_view::npos ? 700 : number != 0 ? number : 400;
     }
   }
-  if (face.name.empty() || face.name.size() > MAX_FONT_FACE_TEXT || fontFaces_.size() >= MAX_FONT_FACES) return;
-  face.family = fontFamilyHash(face.name);
+  if (family.empty() || family.size() > MAX_FONT_FACE_TEXT || fontFaceCount_ >= MAX_FONT_FACES) return;
 
   // src: a comma-separated list of url(...) [format(...)] and local(...). Rank each url by what
   // the reader can draw: 0 TrueType, 1 OpenType (TrueType or CFF outlines), 2 anything else; WOFF2,
-  // SVG and EOT never, nor fonts that are not in the book.
+  // SVG and EOT never, nor fonts that are not in the book. The first kind whose extension or
+  // format() matches decides, the refused kinds first.
+  struct Kind {
+    const char* ext;
+    const char* format;
+    int rank;  // -1: refused
+  };
+  static constexpr Kind KINDS[] = {
+      {"woff2", "woff2", -1}, {"svg", "svg", -1},     {"eot", "embedded-opentype", -1},
+      {"ttf", "truetype", 0}, {"otf", "opentype", 1},
+  };
   int bestRank = 3;
   std::string_view best;
   for (size_t at = 0; (at = findIgnoreCase(src, "url(")) != std::string_view::npos;) {
@@ -2865,27 +2871,33 @@ void CssParser::parseFontFace(const std::string_view declarations) {
     src.remove_prefix(close);
     const std::string_view format = src.substr(0, src.find(','));  // ") format('woff2')"
     const size_t dot = url.find_last_of('.');
-    const std::string_view ext = dot == std::string_view::npos ? std::string_view() : url.substr(dot + 1);
-    if (ext.empty() || findIgnoreCase(url, "data:") == 0 || url.find("://") != std::string_view::npos ||
-        equalsIgnoreCase(ext, "woff2") || equalsIgnoreCase(ext, "svg") || equalsIgnoreCase(ext, "eot") ||
-        findIgnoreCase(format, "woff2") != std::string_view::npos ||
-        findIgnoreCase(format, "svg") != std::string_view::npos ||
-        findIgnoreCase(format, "embedded-opentype") != std::string_view::npos) {
+    if (dot == std::string_view::npos || dot + 1 == url.size() || findIgnoreCase(url, "data:") == 0 ||
+        url.find("://") != std::string_view::npos) {
       continue;
     }
-    const int rank = equalsIgnoreCase(ext, "ttf") || findIgnoreCase(format, "truetype") != std::string_view::npos   ? 0
-                     : equalsIgnoreCase(ext, "otf") || findIgnoreCase(format, "opentype") != std::string_view::npos ? 1
-                                                                                                                    : 2;
-    if (rank < bestRank) {
+    const std::string_view ext = url.substr(dot + 1);
+    int rank = 2;
+    for (const Kind& kind : KINDS) {
+      if (equalsIgnoreCase(ext, kind.ext) || findIgnoreCase(format, kind.format) != std::string_view::npos) {
+        rank = kind.rank;
+        break;
+      }
+    }
+    if (rank >= 0 && rank < bestRank) {
       bestRank = rank;
       best = url;
     }
   }
-  if (best.empty() || stylesheetDir_.size() + best.size() > MAX_FONT_FACE_TEXT) return;
-  if (fontFaces_.empty()) fontFaces_.reserve(4);
-  face.href = stylesheetDir_;
-  face.href.append(best.data(), best.size());
-  fontFaces_.push_back(std::move(face));
+  const size_t hrefLen = stylesheetDir_.size() + best.size();
+  if (best.empty() || hrefLen > MAX_FONT_FACE_TEXT) return;
+  const char head[] = {static_cast<char>(weight), static_cast<char>(weight >> 8), static_cast<char>(italic),
+                       static_cast<char>(family.size())};
+  fontFaces_.append(head, sizeof(head));
+  fontFaces_.append(family.data(), family.size());
+  fontFaces_ += static_cast<char>(hrefLen);
+  fontFaces_ += stylesheetDir_;
+  fontFaces_.append(best.data(), best.size());
+  ++fontFaceCount_;
 }
 
 void CssParser::saveFontFaces() const {
@@ -2897,49 +2909,36 @@ void CssParser::saveFontFaces() const {
   FsFile out;
   if (!Storage.openFileForWrite("CSS", file, out)) return;
   out.write(CSS_CACHE_VERSION);
-  out.write(static_cast<uint8_t>(fontFaces_.size()));
-  for (const FontFace& face : fontFaces_) {
-    out.write(reinterpret_cast<const uint8_t*>(&face.family), sizeof(face.family));
-    out.write(reinterpret_cast<const uint8_t*>(&face.weight), sizeof(face.weight));
-    out.write(static_cast<uint8_t>(face.italic ? 1 : 0));
-    for (const std::string* text : {&face.name, &face.href}) {
-      out.write(static_cast<uint8_t>(text->size()));
-      out.write(reinterpret_cast<const uint8_t*>(text->data()), text->size());
-    }
-  }
+  out.write(reinterpret_cast<const uint8_t*>(fontFaces_.data()), fontFaces_.size());
   out.close();
-  LOG_DBG("CSS", "Recorded %u @font-face rule(s)", static_cast<unsigned>(fontFaces_.size()));
+  LOG_DBG("CSS", "Recorded %u @font-face rule(s)", fontFaceCount_);
 }
 
-bool CssParser::loadFontFaces(const std::string& cachePath, std::vector<FontFace>& out) {
-  out.clear();
+bool CssParser::loadFontFaces(const std::string& cachePath, std::string& records) {
   const std::string file = cachePath + fontFacesFile;
+  constexpr size_t MAX_FILE = 1 + MAX_FONT_FACES * (5 + 2 * MAX_FONT_FACE_TEXT);
   // Checked first: the file is absent for almost every book, and a failed open logs.
-  if (!Storage.exists(file.c_str())) return false;
-  FsFile in;
-  if (!Storage.openFileForRead("CSS", file, in)) return false;
-  uint8_t header[2] = {};
-  bool ok = in.read(header, sizeof(header)) == sizeof(header) && header[0] == CSS_CACHE_VERSION &&
-            header[1] <= MAX_FONT_FACES;
-  if (ok) out.reserve(header[1]);
-  for (uint8_t i = 0; ok && i < header[1]; ++i) {
-    FontFace face;
-    uint8_t italic = 0;
-    ok = in.read(&face.family, sizeof(face.family)) == sizeof(face.family) &&
-         in.read(&face.weight, sizeof(face.weight)) == sizeof(face.weight) && in.read(&italic, 1) == 1;
-    face.italic = italic != 0;
-    for (std::string* text : {&face.name, &face.href}) {
-      uint8_t len = 0;
-      ok = ok && in.read(&len, 1) == 1;
-      if (!ok) break;
-      text->resize(len);
-      ok = in.read(text->data(), len) == len;
-    }
-    if (ok) out.push_back(std::move(face));
+  if (!Storage.exists(file.c_str()) || !Storage.readFileToString("CSS", file, MAX_FILE, records) ||
+      records[0] != static_cast<char>(CSS_CACHE_VERSION)) {
+    records.clear();
+    return false;
   }
-  in.close();
-  if (!ok) out.clear();
-  return !out.empty();
+  records.erase(0, 1);
+  return !records.empty();
+}
+
+bool CssParser::nextFontFace(std::string_view& records, FontFace& face) {
+  const auto* p = reinterpret_cast<const uint8_t*>(records.data());
+  // weight(2) italic(1) nameLen(1) name hrefLen(1) href
+  const size_t hrefAt = records.size() >= 5 ? 5 + p[3] : records.size() + 1;
+  if (records.size() < hrefAt || records.size() < hrefAt + p[hrefAt - 1]) return false;
+  face.weight = static_cast<uint16_t>(p[0] | p[1] << 8);
+  face.italic = p[2] != 0;
+  face.name = std::string_view(records.data() + 4, p[3]);
+  face.href = std::string_view(records.data() + hrefAt, p[hrefAt - 1]);
+  face.family = fontFamilyHash(face.name);
+  records.remove_prefix(hrefAt + face.href.size());
+  return true;
 }
 
 void CssParser::setStylesheetPath(const std::string& sheetPathInEpub) {
