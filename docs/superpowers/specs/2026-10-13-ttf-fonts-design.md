@@ -998,11 +998,17 @@ with one font ID (per-word data carries only the style bits).
       (an erase of the sectors that hold data, then the copy: about 5 s per MB on the X3, 1-2 s for a usual subset);
       the next book in another family, or a book in the reader's TTF family, installs again and renders its glyphs
       again (about 1.3 ms each on first contact). A built-in reader font costs nothing to switch back to.
-    - **Cost, `env:default` (C3):** flash +16.1 KB (6,326,073 -> 6,342,199 B, 96.5 -> 96.8 %), static RAM +64 B.
-      About 3 KB is the CSS side, 7.5 KB `BookFonts`, 2 KB the reader wiring, 0.7 KB the face vector's template
-      code, 0.45 KB the two strings in 24 languages, the rest log text. MMU pages unchanged (41 code + 55 rodata),
-      but the code segment now ends 2.8 KB short of its 42nd page. No resident heap beyond the TTF family's own;
-      `prepare` holds about 0.7 KB of heap and the CSS index while it runs.
+    - **Cost, `env:default` (C3):** flash +12.4 KB, static RAM +64 B: 6,299,587 -> 6,312,301 B against master
+      with `Epub`'s constructor out of line, a commit of the branch that is not about fonts (-3.8 KB on master
+      alone; master itself is 6,303,393 B). As first built it was +16.0 KB; the slimming took the face list from a
+      vector of strings to records (-1.5 KB), the font keys from `ContentOpfParser` instead of a parser of their
+      own (-1.2 KB, its constructor out of line), the state file to one read and one write (-0.2 KB), and the
+      wiring off temporary `Epub`s (-0.2 KB). About 2.6 KB is the CSS side, 5.4 KB `BookFonts` and 0.6 KB of
+      `std::string` helpers GCC clones into its file, 2 KB the reader wiring, 0.45 KB the two strings in 24
+      languages, the rest log text. MMU pages unchanged (41 code + 55 rodata); the code segment ends 12.0 KB short
+      of filling its 41st page (master: 19.4 KB). No resident heap beyond the TTF family's own; `prepare` holds
+      the face records (the side file, usually well under 1 KB), the probe's 0.9 KB, the package parser's 1 KB
+      while it reads the keys, and the CSS index while it runs.
 - **More than one font family in a book** (a sans heading, a monospace code block): designed in 11.1 (Stage B).
 - **From 2c-2 (2026-10-15):**
   - **Inline sizes:** a `<small>` or `<sup>` inside a paragraph is still the block's face scaled. Native per-word
