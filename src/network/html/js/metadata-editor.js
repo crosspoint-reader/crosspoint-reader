@@ -66,7 +66,8 @@
   function buildOverlay() {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay open';
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    // closeOnBackdropClick() is the File Manager's (shared/Dialogs.js.inc), the page this loads into.
+    closeOnBackdropClick(overlay, close);
     overlay.innerHTML =
       '<div class="modal" style="max-width:640px;max-height:90vh;overflow:auto">' +
       '<button class="modal-close" id="md-close">&times;</button>' +

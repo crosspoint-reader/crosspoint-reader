@@ -2266,22 +2266,20 @@
       fetchVersion();
       await fetchShowFileExtensions();
 
-      // Close modals when clicking overlay - call proper cleanup functions
+      // Close modals when clicking overlay (shared/Dialogs.js.inc) - call proper cleanup functions
       document.querySelectorAll('.modal-overlay').forEach(function (overlay) {
-        overlay.addEventListener('click', function (e) {
-          if (e.target === overlay) {
-            // Call the appropriate close function for each modal to ensure cleanup
-            if (overlay.id === 'uploadModal') return closeUploadModal();
-            if (overlay.id === 'folderModal') return closeFolderModal();
-            if (overlay.id === 'deleteModal') return closeDeleteModal();
-            if (overlay.id === 'optimizeModal') return closeOptimizeModal();
-            if (overlay.id === 'renameModal') return closeRenameModal();
-            if (overlay.id === 'moveModal') return closeMoveModal();
-            // The upload is waiting on this answer; a click beside the dialog is not one.
-            if (overlay.id === 'clashModal') return;
-            if (overlay.id === 'imagePreviewModal') return closeImagePreview();
-            overlay.classList.remove('open');
-          }
+        closeOnBackdropClick(overlay, function () {
+          // Call the appropriate close function for each modal to ensure cleanup
+          if (overlay.id === 'uploadModal') return closeUploadModal();
+          if (overlay.id === 'folderModal') return closeFolderModal();
+          if (overlay.id === 'deleteModal') return closeDeleteModal();
+          if (overlay.id === 'optimizeModal') return closeOptimizeModal();
+          if (overlay.id === 'renameModal') return closeRenameModal();
+          if (overlay.id === 'moveModal') return closeMoveModal();
+          // The upload is waiting on this answer; a click beside the dialog is not one.
+          if (overlay.id === 'clashModal') return;
+          if (overlay.id === 'imagePreviewModal') return closeImagePreview();
+          overlay.classList.remove('open');
         });
       });
 
@@ -7539,6 +7537,7 @@
       moveNext(0);
     }
 
+<!--#include file="shared/Dialogs.js.inc" -->
 <!--#include file="shared/PluginHost.js.inc" -->
 
     // Plugins load after the listing, not beside it: the device serves one
