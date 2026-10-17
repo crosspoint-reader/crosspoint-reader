@@ -1,0 +1,730 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1114" height="776" font-family="Menlo, monospace" font-size="11"><rect width="100%" height="100%" fill="#fff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">Heap map, snapshot 2 @ 2.3 s</text>
+<text x="70" y="36">free 105,568 B · largest 102,388 B · fragmentation 0.03 · 11 free / 246 used blocks · 1 px = 4 B, 1 row = 4096 B</text>
+<text id="info" x="70" y="52" fill="#555">Hover a block for its details and same-site blocks. Black outline: largest free block. Red outline: runs that cap it (0).</text>
+<text id="info2" x="70" y="62" fill="#b00" font-size="10"></text>
+<text x="4" y="71" font-size="7" fill="#777">0x3fca3000</text>
+<text x="4" y="79" font-size="7" fill="#777">0x3fca4000</text>
+<text x="4" y="87" font-size="7" fill="#777">0x3fca5000</text>
+<text x="4" y="95" font-size="7" fill="#777">0x3fca6000</text>
+<text x="4" y="103" font-size="7" fill="#777">0x3fca7000</text>
+<text x="4" y="111" font-size="7" fill="#777">0x3fca8000</text>
+<text x="4" y="119" font-size="7" fill="#777">0x3fca9000</text>
+<text x="4" y="127" font-size="7" fill="#777">0x3fcaa000</text>
+<text x="4" y="135" font-size="7" fill="#777">0x3fcab000</text>
+<text x="4" y="143" font-size="7" fill="#777">0x3fcac000</text>
+<text x="4" y="151" font-size="7" fill="#777">0x3fcad000</text>
+<text x="4" y="159" font-size="7" fill="#777">0x3fcae000</text>
+<text x="4" y="167" font-size="7" fill="#777">0x3fcaf000</text>
+<text x="4" y="175" font-size="7" fill="#777">0x3fcb0000</text>
+<text x="4" y="183" font-size="7" fill="#777">0x3fcb1000</text>
+<text x="4" y="191" font-size="7" fill="#777">0x3fcb2000</text>
+<text x="4" y="199" font-size="7" fill="#777">0x3fcb3000</text>
+<text x="4" y="207" font-size="7" fill="#777">0x3fcb4000</text>
+<text x="4" y="215" font-size="7" fill="#777">0x3fcb5000</text>
+<text x="4" y="223" font-size="7" fill="#777">0x3fcb6000</text>
+<text x="4" y="231" font-size="7" fill="#777">0x3fcb7000</text>
+<text x="4" y="239" font-size="7" fill="#777">0x3fcb8000</text>
+<text x="4" y="247" font-size="7" fill="#777">0x3fcb9000</text>
+<text x="4" y="255" font-size="7" fill="#777">0x3fcba000</text>
+<text x="4" y="263" font-size="7" fill="#777">0x3fcbb000</text>
+<text x="4" y="271" font-size="7" fill="#777">0x3fcbc000</text>
+<text x="4" y="279" font-size="7" fill="#777">0x3fcbd000</text>
+<text x="4" y="287" font-size="7" fill="#777">0x3fcbe000</text>
+<text x="4" y="295" font-size="7" fill="#777">0x3fcbf000</text>
+<text x="4" y="303" font-size="7" fill="#777">0x3fcc0000</text>
+<text x="4" y="311" font-size="7" fill="#777">0x3fcc1000</text>
+<text x="4" y="319" font-size="7" fill="#777">0x3fcc2000</text>
+<text x="4" y="327" font-size="7" fill="#777">0x3fcc3000</text>
+<text x="4" y="335" font-size="7" fill="#777">0x3fcc4000</text>
+<text x="4" y="343" font-size="7" fill="#777">0x3fcc5000</text>
+<text x="4" y="351" font-size="7" fill="#777">0x3fcc6000</text>
+<text x="4" y="359" font-size="7" fill="#777">0x3fcc7000</text>
+<text x="4" y="367" font-size="7" fill="#777">0x3fcc8000</text>
+<text x="4" y="375" font-size="7" fill="#777">0x3fcc9000</text>
+<text x="4" y="383" font-size="7" fill="#777">0x3fcca000</text>
+<text x="4" y="391" font-size="7" fill="#777">0x3fccb000</text>
+<text x="4" y="399" font-size="7" fill="#777">0x3fccc000</text>
+<text x="4" y="407" font-size="7" fill="#777">0x3fccd000</text>
+<text x="4" y="415" font-size="7" fill="#777">0x3fcce000</text>
+<text x="4" y="423" font-size="7" fill="#777">0x3fccf000</text>
+<text x="4" y="431" font-size="7" fill="#777">0x3fcd0000</text>
+<text x="4" y="439" font-size="7" fill="#777">0x3fcd1000</text>
+<text x="4" y="447" font-size="7" fill="#777">0x3fcd2000</text>
+<text x="4" y="455" font-size="7" fill="#777">0x3fcd3000</text>
+<text x="4" y="463" font-size="7" fill="#777">0x3fcd4000</text>
+<text x="4" y="471" font-size="7" fill="#777">0x3fcd5000</text>
+<text x="4" y="479" font-size="7" fill="#777">0x3fcd6000</text>
+<text x="4" y="487" font-size="7" fill="#777">0x3fcd7000</text>
+<text x="4" y="495" font-size="7" fill="#777">0x3fcd8000</text>
+<text x="4" y="503" font-size="7" fill="#777">0x3fcd9000</text>
+<text x="4" y="511" font-size="7" fill="#777">0x3fcda000</text>
+<text x="4" y="519" font-size="7" fill="#777">0x3fcdb000</text>
+<text x="4" y="527" font-size="7" fill="#777">0x3fcdc000</text>
+<text x="4" y="535" font-size="7" fill="#777">0x3fcdc000</text>
+<text x="4" y="543" font-size="7" fill="#777">0x3fcdd000</text>
+<text x="4" y="551" font-size="7" fill="#777">0x3fcde000</text>
+<text x="4" y="559" font-size="7" fill="#777">0x3fcdf000</text>
+<text x="4" y="567" font-size="7" fill="#777">0x50001000</text>
+<rect class="b" data-s="0" x="901.0" y="64" width="40.0" height="7" fill="#d65f5f"><title>used 0x3fca3cfc 160 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="942.0" y="64" width="4.0" height="7" fill="#d65f5f"><title>used 0x3fca3da0 16 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="947.0" y="64" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca3db4 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="953.0" y="64" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca3dcc 28 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="961.0" y="64" width="8.0" height="7" fill="#d65f5f"><title>used 0x3fca3dec 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="970.0" y="64" width="11.0" height="7" fill="#d65f5f"><title>used 0x3fca3e10 44 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="982.0" y="64" width="12.0" height="7" fill="#d65f5f"><title>used 0x3fca3e40 48 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="995.0" y="64" width="11.0" height="7" fill="#d65f5f"><title>used 0x3fca3e74 44 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1007.0" y="64" width="12.0" height="7" fill="#d65f5f"><title>used 0x3fca3ea4 48 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1020.0" y="64" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca3ed8 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1047.0" y="64" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca3f44 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1074.0" y="64" width="20.0" height="7" fill="#d65f5f"><title>used 0x3fca3fb0 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="72" width="6.0" height="7" fill="#d65f5f"><title>used 0x3fca3fb0 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="77.0" y="72" width="112.0" height="7" fill="#d65f5f"><title>used 0x3fca401c 448 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="190.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca41e0 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="217.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca424c 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="244.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca42b8 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="271.0" y="72" width="36.0" height="7" fill="#d65f5f"><title>used 0x3fca4324 144 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="308.0" y="72" width="36.0" height="7" fill="#d65f5f"><title>used 0x3fca43b8 144 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="345.0" y="72" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca444c 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="351.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca4464 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="378.0" y="72" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca44d0 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="384.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca44e8 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="411.0" y="72" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca4554 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="417.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca456c 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="444.0" y="72" width="6.0" height="7" fill="#d65f5f"><title>used 0x3fca45d8 24 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="451.0" y="72" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca45f4 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="457.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca460c 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="484.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca4678 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="511.0" y="72" width="29.0" height="7" fill="#d65f5f"><title>used 0x3fca46e4 116 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="541.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca475c 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="568.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca47c8 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="595.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca4834 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="622.0" y="72" width="13.0" height="7" fill="#d65f5f"><title>used 0x3fca48a0 52 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="636.0" y="72" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca48d8 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="642.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca48f0 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="-1" x="669.0" y="72" width="4.0" height="7" fill="#e4e4e4"><title>free 0x3fca495c 16 B</title></rect>
+<rect class="b" data-s="0" x="674.0" y="72" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca4970 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="680.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca4988 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="707.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca49f4 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="734.0" y="72" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca4a60 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="761.0" y="72" width="333.0" height="7" fill="#d65f5f"><title>used 0x3fca4acc 4864 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="80" width="883.0" height="7" fill="#d65f5f"><title>used 0x3fca4acc 4864 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="954.0" y="80" width="92.0" height="7" fill="#d65f5f"><title>used 0x3fca5dd0 368 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1047.0" y="80" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca5f44 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1053.0" y="80" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca5f5c 28 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1061.0" y="80" width="10.0" height="7" fill="#d65f5f"><title>used 0x3fca5f7c 40 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1072.0" y="80" width="14.0" height="7" fill="#d65f5f"><title>used 0x3fca5fa8 56 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1087.0" y="80" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca5fe4 56 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="88" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca5fe4 56 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="78.0" y="88" width="14.0" height="7" fill="#d65f5f"><title>used 0x3fca6020 56 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="93.0" y="88" width="16.0" height="7" fill="#d65f5f"><title>used 0x3fca605c 64 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="110.0" y="88" width="16.0" height="7" fill="#d65f5f"><title>used 0x3fca60a0 64 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="127.0" y="88" width="16.0" height="7" fill="#d65f5f"><title>used 0x3fca60e4 64 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="144.0" y="88" width="16.0" height="7" fill="#d65f5f"><title>used 0x3fca6128 64 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="161.0" y="88" width="16.0" height="7" fill="#d65f5f"><title>used 0x3fca616c 64 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="178.0" y="88" width="16.0" height="7" fill="#d65f5f"><title>used 0x3fca61b0 64 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="195.0" y="88" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca61f4 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="222.0" y="88" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca6260 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="249.0" y="88" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fca62cc 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="265.0" y="88" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca630c 28 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="273.0" y="88" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca632c 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="300.0" y="88" width="92.0" height="7" fill="#d65f5f"><title>used 0x3fca6398 368 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="393.0" y="88" width="31.0" height="7" fill="#d65f5f"><title>used 0x3fca650c 124 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="425.0" y="88" width="68.0" height="7" fill="#d65f5f"><title>used 0x3fca658c 272 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="494.0" y="88" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca66a0 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="500.0" y="88" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca66b8 28 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="1" x="508.0" y="88" width="586.0" height="7" fill="#76b7b2"><title>used 0x3fca66d8 3200 B, age 2.0 s
+HeapTrace::begin() (framework-arduinoespressif32-libs/esp32c3/include/freertos/FreeRTOS-Kernel/include/freertos/task.h:394)</title></rect>
+<rect class="b" data-s="1" x="70.0" y="96" width="214.0" height="7" fill="#76b7b2"><title>used 0x3fca66d8 3200 B, age 2.0 s
+HeapTrace::begin() (framework-arduinoespressif32-libs/esp32c3/include/freertos/FreeRTOS-Kernel/include/freertos/task.h:394)</title></rect>
+<rect class="b" data-s="1" x="285.0" y="96" width="92.0" height="7" fill="#76b7b2"><title>used 0x3fca735c 368 B, age 2.0 s
+HeapTrace::begin() (framework-arduinoespressif32-libs/esp32c3/include/freertos/FreeRTOS-Kernel/include/freertos/task.h:394)</title></rect>
+<rect class="b" data-s="2" x="378.0" y="96" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fca74d0 104 B, age 1.9 s
+spiStartBus (arduino/cores/esp32/esp32-hal-spi.c:762)</title></rect>
+<rect class="b" data-s="3" x="405.0" y="96" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fca753c 104 B, age 1.9 s
+initApbChangeCallback (arduino/cores/esp32/esp32-hal-cpu.c:92)</title></rect>
+<rect class="b" data-s="4" x="432.0" y="96" width="7.0" height="7" fill="#8a94a6"><title>used 0x3fca75a8 28 B, age 1.9 s
+addApbChangeCallback (arduino/cores/esp32/esp32-hal-cpu.c:124)</title></rect>
+<rect class="b" data-s="5" x="440.0" y="96" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fca75c8 104 B, age 1.9 s
+HalPowerManager::begin() (lib/hal/HalPowerManager.cpp:30)</title></rect>
+<rect class="b" data-s="6" x="467.0" y="96" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fca7634 104 B, age 1.8 s
+TwoWire::begin(int, int, unsigned long) (arduino/libraries/Wire/src/Wire.cpp:281)</title></rect>
+<rect class="b" data-s="7" x="494.0" y="96" width="36.0" height="7" fill="#8a94a6"><title>used 0x3fca76a0 144 B, age 1.8 s
+TwoWire::allocateWireBuffer() (arduino/libraries/Wire/src/Wire.cpp:147)</title></rect>
+<rect class="b" data-s="8" x="531.0" y="96" width="27.0" height="7" fill="#8a94a6"><title>used 0x3fca7734 108 B, age 1.8 s
+i2cInit (arduino/cores/esp32/esp32-hal-i2c-ng.c:80)</title></rect>
+<rect class="b" data-s="0" x="559.0" y="96" width="535.0" height="7" fill="#d65f5f"><title>used 0x3fca77a4 2432 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="104" width="73.0" height="7" fill="#d65f5f"><title>used 0x3fca77a4 2432 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="144.0" y="104" width="92.0" height="7" fill="#d65f5f"><title>used 0x3fca8128 368 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="237.0" y="104" width="672.0" height="7" fill="#d65f5f"><title>used 0x3fca829c 2688 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="910.0" y="104" width="92.0" height="7" fill="#d65f5f"><title>used 0x3fca8d20 368 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1003.0" y="104" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca8e94 28 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1011.0" y="104" width="5.0" height="7" fill="#d65f5f"><title>used 0x3fca8eb4 20 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1017.0" y="104" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca8ecc 28 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1025.0" y="104" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca8eec 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1052.0" y="104" width="8.0" height="7" fill="#d65f5f"><title>used 0x3fca8f58 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1061.0" y="104" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fca8f7c 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1088.0" y="104" width="6.0" height="7" fill="#d65f5f"><title>used 0x3fca8fe8 52 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="112" width="7.0" height="7" fill="#d65f5f"><title>used 0x3fca8fe8 52 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="78.0" y="112" width="29.0" height="7" fill="#d65f5f"><title>used 0x3fca9020 116 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="108.0" y="112" width="112.0" height="7" fill="#d65f5f"><title>used 0x3fca9098 448 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="221.0" y="112" width="36.0" height="7" fill="#d65f5f"><title>used 0x3fca925c 144 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="258.0" y="112" width="36.0" height="7" fill="#d65f5f"><title>used 0x3fca92f0 144 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="295.0" y="112" width="36.0" height="7" fill="#d65f5f"><title>used 0x3fca9384 144 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="332.0" y="112" width="36.0" height="7" fill="#d65f5f"><title>used 0x3fca9418 144 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="369.0" y="112" width="10.0" height="7" fill="#d65f5f"><title>used 0x3fca94ac 40 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="380.0" y="112" width="10.0" height="7" fill="#d65f5f"><title>used 0x3fca94d8 40 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="391.0" y="112" width="10.0" height="7" fill="#d65f5f"><title>used 0x3fca9504 40 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="402.0" y="112" width="10.0" height="7" fill="#d65f5f"><title>used 0x3fca9530 40 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="413.0" y="112" width="681.0" height="7" fill="#d65f5f"><title>used 0x3fca955c 17408 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="120" width="1024.0" height="7" fill="#d65f5f"><title>used 0x3fca955c 17408 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="128" width="1024.0" height="7" fill="#d65f5f"><title>used 0x3fca955c 17408 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="136" width="1024.0" height="7" fill="#d65f5f"><title>used 0x3fca955c 17408 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="144" width="599.0" height="7" fill="#d65f5f"><title>used 0x3fca955c 17408 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="670.0" y="144" width="92.0" height="7" fill="#d65f5f"><title>used 0x3fcad960 368 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="9" x="763.0" y="144" width="36.0" height="7" fill="#8a94a6"><title>used 0x3fcadad4 144 B, age 1.8 s
+TwoWire::allocateWireBuffer() (arduino/libraries/Wire/src/Wire.cpp:154)</title></rect>
+<rect class="b" data-s="10" x="800.0" y="144" width="200.0" height="7" fill="#8a94a6"><title>used 0x3fcadb68 800 B, age 1.8 s
+i2c_new_master_bus (framework-espidf/components/esp_driver_i2c/i2c_master.c:1054)</title></rect>
+<rect class="b" data-s="11" x="1001.0" y="144" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcade8c 104 B, age 1.8 s
+i2c_acquire_bus_handle (framework-espidf/components/esp_driver_i2c/i2c_common.c:161)</title></rect>
+<rect class="b" data-s="12" x="1028.0" y="144" width="16.0" height="7" fill="#8a94a6"><title>used 0x3fcadef8 64 B, age 1.8 s
+s_i2c_bus_handle_acquire (framework-espidf/components/esp_driver_i2c/i2c_common.c:93)</title></rect>
+<rect class="b" data-s="13" x="1045.0" y="144" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcadf3c 104 B, age 1.8 s
+xSemaphoreCreateGenericWithCaps (framework-espidf/components/freertos/esp_additions/idf_additions.c:300)</title></rect>
+<rect class="b" data-s="13" x="1072.0" y="144" width="22.0" height="7" fill="#8a94a6"><title>used 0x3fcadfa8 104 B, age 1.8 s
+xSemaphoreCreateGenericWithCaps (framework-espidf/components/freertos/esp_additions/idf_additions.c:300)</title></rect>
+<rect class="b" data-s="13" x="70.0" y="152" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcadfa8 104 B, age 1.8 s
+xSemaphoreCreateGenericWithCaps (framework-espidf/components/freertos/esp_additions/idf_additions.c:300)</title></rect>
+<rect class="b" data-s="14" x="75.0" y="152" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcae014 104 B, age 1.8 s
+xQueueCreateWithCaps (framework-espidf/components/freertos/esp_additions/idf_additions.c:228)</title></rect>
+<rect class="b" data-s="15" x="102.0" y="152" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcae080 16 B, age 1.8 s
+xQueueCreateWithCaps (framework-espidf/components/freertos/esp_additions/idf_additions.c:236)</title></rect>
+<rect class="b" data-s="16" x="107.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae094 20 B, age 1.8 s
+esp_intr_alloc_intrstatus_bind (framework-espidf/components/esp_hw_support/intr_alloc.c:574)</title></rect>
+<rect class="b" data-s="17" x="113.0" y="152" width="7.0" height="7" fill="#8a94a6"><title>used 0x3fcae0ac 28 B, age 1.8 s
+get_desc_for_int (framework-espidf/components/esp_hw_support/intr_alloc.c:172)</title></rect>
+<rect class="b" data-s="18" x="121.0" y="152" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcae0cc 36 B, age 1.8 s
+esp_intr_alloc_intrstatus_bind (framework-espidf/components/esp_hw_support/intr_alloc.c:611)</title></rect>
+<rect class="b" data-s="19" x="131.0" y="152" width="7.0" height="7" fill="#8a94a6"><title>used 0x3fcae0f4 28 B, age 1.8 s
+add_to_list (framework-espidf/components/log/src/log_level/tag_log_level/linked_list/log_linked_list.c:93)</title></rect>
+<rect class="b" data-s="20" x="139.0" y="152" width="11.0" height="7" fill="#8a94a6"><title>used 0x3fcae114 44 B, age 1.8 s
+i2c_master_bus_add_device (framework-espidf/components/esp_driver_i2c/i2c_master.c:1188)</title></rect>
+<rect class="b" data-s="21" x="151.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae144 20 B, age 1.8 s
+i2c_master_bus_add_device (framework-espidf/components/esp_driver_i2c/i2c_master.c:1197)</title></rect>
+<rect class="b" data-s="20" x="157.0" y="152" width="11.0" height="7" fill="#8a94a6"><title>used 0x3fcae15c 44 B, age 1.8 s
+i2c_master_bus_add_device (framework-espidf/components/esp_driver_i2c/i2c_master.c:1188)</title></rect>
+<rect class="b" data-s="21" x="169.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae18c 20 B, age 1.8 s
+i2c_master_bus_add_device (framework-espidf/components/esp_driver_i2c/i2c_master.c:1197)</title></rect>
+<rect class="b" data-s="22" x="175.0" y="152" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcae1a4 104 B, age 1.8 s
+__cxa_guard_acquire (framework-espidf/components/cxx/cxx_guards.cpp:47)</title></rect>
+<rect class="b" data-s="23" x="202.0" y="152" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcae210 104 B, age 1.8 s
+static_init_prepare (framework-espidf/components/cxx/cxx_guards.cpp:48)</title></rect>
+<rect class="b" data-s="24" x="229.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae27c 20 B, age 1.8 s
+pthread_mutex_init (framework-espidf/components/pthread/pthread.c:641)</title></rect>
+<rect class="b" data-s="25" x="235.0" y="152" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcae294 104 B, age 1.8 s
+pthread_mutex_init (framework-espidf/components/pthread/pthread.c:650)</title></rect>
+<rect class="b" data-s="26" x="262.0" y="152" width="11.0" height="7" fill="#8a94a6"><title>used 0x3fcae300 44 B, age 1.8 s
+PersistableStore&lt;CrossPointState&gt;::loadFromFile() (lib/Serialization/PersistableStore.h:119)</title></rect>
+<rect class="b" data-s="27" x="274.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae330 20 B, age 1.8 s
+_setenv_r (src/newlib/newlib/libc/stdlib/setenv_r.c:102)</title></rect>
+<rect class="b" data-s="28" x="280.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae348 20 B, age 1.8 s
+_setenv_r (src/newlib/newlib/libc/stdlib/setenv_r.c:116)</title></rect>
+<rect class="b" data-s="29" x="286.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae360 20 B, age 1.8 s
+_tzset_unlocked_r (src/newlib/newlib/libc/time/tzset_r.c:47)</title></rect>
+<rect class="b" data-s="24" x="292.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae378 20 B, age 1.8 s
+pthread_mutex_init (framework-espidf/components/pthread/pthread.c:641)</title></rect>
+<rect class="b" data-s="25" x="298.0" y="152" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcae390 104 B, age 1.8 s
+pthread_mutex_init (framework-espidf/components/pthread/pthread.c:650)</title></rect>
+<rect class="b" data-s="30" x="325.0" y="152" width="26.0" height="7" fill="#4e79a7"><title>used 0x3fcae3fc 104 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="31" x="352.0" y="152" width="92.0" height="7" fill="#f28e2b"><title>used 0x3fcae468 368 B, age 1.6 s
+ActivityManager::begin() (src/activities/ActivityManager.cpp:49)</title></rect>
+<rect class="b" data-s="32" x="445.0" y="152" width="13.0" height="7" fill="#8a94a6"><title>used 0x3fcae5dc 52 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:331)</title></rect>
+<rect class="b" data-s="0" x="459.0" y="152" width="8.0" height="7" fill="#d65f5f"><title>used 0x3fcae614 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="33" x="468.0" y="152" width="7.0" height="7" fill="#8a94a6"><title>used 0x3fcae638 28 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="476.0" y="152" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcae658 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="481.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae66c 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="487.0" y="152" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcae684 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="492.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae698 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="498.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae6b0 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="505.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae6cc 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="511.0" y="152" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcae6e4 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="516.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae6f8 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="522.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae710 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="529.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae72c 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="536.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae748 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="542.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae760 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="548.0" y="152" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcae778 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="553.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae78c 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="560.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae7a8 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="567.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae7c4 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="574.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae7e0 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="580.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae7f8 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="586.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae810 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="592.0" y="152" width="6.0" height="7" fill="#8a94a6"><title>used 0x3fcae828 24 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="599.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcae844 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="605.0" y="152" width="8.0" height="7" fill="#8a94a6"><title>used 0x3fcae85c 32 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="0" x="614.0" y="152" width="248.0" height="7" fill="#d65f5f"><title>used 0x3fcae880 992 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="863.0" y="152" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fcaec64 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="34" x="879.0" y="152" width="15.0" height="7" fill="#8a94a6"><title>used 0x3fcaeca4 60 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="34" x="895.0" y="152" width="10.0" height="7" fill="#8a94a6"><title>used 0x3fcaece4 40 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="34" x="906.0" y="152" width="15.0" height="7" fill="#8a94a6"><title>used 0x3fcaed10 60 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="0" x="922.0" y="152" width="10.0" height="7" fill="#d65f5f"><title>used 0x3fcaed50 40 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="933.0" y="152" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fcaed7c 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="21" x="949.0" y="152" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcaedbc 20 B, age 1.6 s
+i2c_master_bus_add_device (framework-espidf/components/esp_driver_i2c/i2c_master.c:1197)</title></rect>
+<rect class="b" data-s="35" x="955.0" y="152" width="10.0" height="7" fill="#8a94a6"><title>used 0x3fcaedd4 40 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:321)</title></rect>
+<rect class="b" data-s="-1" x="966.0" y="152" width="6.0" height="7" fill="#e4e4e4"><title>free 0x3fcaee00 24 B</title></rect>
+<rect class="b" data-s="0" x="973.0" y="152" width="11.0" height="7" fill="#d65f5f"><title>used 0x3fcaee1c 44 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="985.0" y="152" width="23.0" height="7" fill="#d65f5f"><title>used 0x3fcaee4c 92 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="34" x="1009.0" y="152" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaeeac 48 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="36" x="1022.0" y="152" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaeee0 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:333)</title></rect>
+<rect class="b" data-s="37" x="1035.0" y="152" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaef14 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:334)</title></rect>
+<rect class="b" data-s="38" x="1048.0" y="152" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaef48 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:335)</title></rect>
+<rect class="b" data-s="39" x="1061.0" y="152" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaef7c 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:337)</title></rect>
+<rect class="b" data-s="40" x="1074.0" y="152" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaefb0 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:338)</title></rect>
+<rect class="b" data-s="41" x="1087.0" y="152" width="7.0" height="7" fill="#8a94a6"><title>used 0x3fcaefe4 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:339)</title></rect>
+<rect class="b" data-s="41" x="70.0" y="160" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcaefe4 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:339)</title></rect>
+<rect class="b" data-s="42" x="76.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf018 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:340)</title></rect>
+<rect class="b" data-s="43" x="89.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf04c 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:342)</title></rect>
+<rect class="b" data-s="44" x="102.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf080 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:343)</title></rect>
+<rect class="b" data-s="45" x="115.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf0b4 48 B, age 1.6 s
+setupDisplayAndFonts(bool) (src/main.cpp:344)</title></rect>
+<rect class="b" data-s="46" x="128.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf0e8 48 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:58)</title></rect>
+<rect class="b" data-s="47" x="141.0" y="160" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcaf11c 36 B, age 1.5 s
+SdCardFontSystem::setupUiFallbacks(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:226)</title></rect>
+<rect class="b" data-s="46" x="151.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf144 48 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:58)</title></rect>
+<rect class="b" data-s="48" x="164.0" y="160" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcaf178 36 B, age 1.5 s
+SdCardFontSystem::begin(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:96)</title></rect>
+<rect class="b" data-s="-1" x="174.0" y="160" width="11.0" height="7" fill="#e4e4e4"><title>free 0x3fcaf1a0 44 B</title></rect>
+<rect class="b" data-s="34" x="186.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf1d0 48 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="0" x="199.0" y="160" width="14.0" height="7" fill="#d65f5f"><title>used 0x3fcaf204 56 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="214.0" y="160" width="9.0" height="7" fill="#d65f5f"><title>used 0x3fcaf240 36 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="224.0" y="160" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fcaf268 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="240.0" y="160" width="8.0" height="7" fill="#d65f5f"><title>used 0x3fcaf2a8 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="249.0" y="160" width="6.0" height="7" fill="#d65f5f"><title>used 0x3fcaf2cc 24 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="256.0" y="160" width="14.0" height="7" fill="#d65f5f"><title>used 0x3fcaf2e8 56 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="49" x="271.0" y="160" width="28.0" height="7" fill="#9c755f"><title>used 0x3fcaf324 112 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="-1" x="300.0" y="160" width="6.0" height="7" fill="#e4e4e4"><title>free 0x3fcaf398 24 B</title></rect>
+<rect class="b" data-s="49" x="307.0" y="160" width="22.0" height="7" fill="#9c755f"><title>used 0x3fcaf3b4 88 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="50" x="330.0" y="160" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcaf410 36 B, age 1.5 s
+SdCardFontManager::loadFamily(SdCardFontFamilyInfo const&amp;, GfxRenderer&amp;, unsigned char) (lib/EpdFont/SdCardFontManager.cpp:74)</title></rect>
+<rect class="b" data-s="-1" x="340.0" y="160" width="4.0" height="7" fill="#e4e4e4"><title>free 0x3fcaf438 16 B</title></rect>
+<rect class="b" data-s="49" x="345.0" y="160" width="22.0" height="7" fill="#9c755f"><title>used 0x3fcaf44c 88 B, age 1.6 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="51" x="368.0" y="160" width="13.0" height="7" fill="#8a94a6"><title>used 0x3fcaf4a8 52 B, age 1.5 s
+SdCardFontRegistry::discover() (lib/EpdFont/SdCardFontRegistry.cpp:398)</title></rect>
+<rect class="b" data-s="49" x="382.0" y="160" width="22.0" height="7" fill="#9c755f"><title>used 0x3fcaf4e0 88 B, age 1.6 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="46" x="405.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf53c 48 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:58)</title></rect>
+<rect class="b" data-s="-1" x="418.0" y="160" width="4.0" height="7" fill="#e4e4e4"><title>free 0x3fcaf570 16 B</title></rect>
+<rect class="b" data-s="49" x="423.0" y="160" width="22.0" height="7" fill="#9c755f"><title>used 0x3fcaf584 88 B, age 1.6 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="46" x="446.0" y="160" width="12.0" height="7" fill="#8a94a6"><title>used 0x3fcaf5e0 48 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:58)</title></rect>
+<rect class="b" data-s="48" x="459.0" y="160" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcaf614 36 B, age 1.5 s
+SdCardFontSystem::begin(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:96)</title></rect>
+<rect class="b" data-s="17" x="469.0" y="160" width="8.0" height="7" fill="#8a94a6"><title>used 0x3fcaf63c 32 B, age 1.3 s
+get_desc_for_int (framework-espidf/components/esp_hw_support/intr_alloc.c:172)</title></rect>
+<rect class="b" data-s="49" x="478.0" y="160" width="22.0" height="7" fill="#9c755f"><title>used 0x3fcaf660 88 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="49" x="501.0" y="160" width="22.0" height="7" fill="#9c755f"><title>used 0x3fcaf6bc 88 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="52" x="524.0" y="160" width="60.0" height="7" fill="#8a94a6"><title>used 0x3fcaf718 240 B, age 1.5 s
+SdCardFontRegistry::scanRoot(char const*, std::vector&lt;SdCardFontFamilyInfo, std::allocator&lt;SdCardFontFamilyInfo&gt; &gt;&amp;) (lib/EpdFont/SdCardFontRegistry.cpp:350)</title></rect>
+<rect class="b" data-s="47" x="585.0" y="160" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcaf80c 36 B, age 1.5 s
+SdCardFontSystem::setupUiFallbacks(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:226)</title></rect>
+<rect class="b" data-s="48" x="595.0" y="160" width="10.0" height="7" fill="#8a94a6"><title>used 0x3fcaf834 40 B, age 1.5 s
+SdCardFontSystem::begin(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:96)</title></rect>
+<rect class="b" data-s="53" x="606.0" y="160" width="488.0" height="7" fill="#59a14f"><title>used 0x3fcaf860 9216 B, age 1.8 s
+void std::vector&lt;SettingInfo, std::allocator&lt;SettingInfo&gt; &gt;::_M_range_initialize&lt;SettingInfo const*&gt;(SettingInfo const*, SettingInfo const*, std::forward_iterator_tag) (c++/stl_vector.h:1694)</title></rect>
+<rect class="b" data-s="53" x="70.0" y="168" width="1024.0" height="7" fill="#59a14f"><title>used 0x3fcaf860 9216 B, age 1.8 s
+void std::vector&lt;SettingInfo, std::allocator&lt;SettingInfo&gt; &gt;::_M_range_initialize&lt;SettingInfo const*&gt;(SettingInfo const*, SettingInfo const*, std::forward_iterator_tag) (c++/stl_vector.h:1694)</title></rect>
+<rect class="b" data-s="53" x="70.0" y="176" width="792.0" height="7" fill="#59a14f"><title>used 0x3fcaf860 9216 B, age 1.8 s
+void std::vector&lt;SettingInfo, std::allocator&lt;SettingInfo&gt; &gt;::_M_range_initialize&lt;SettingInfo const*&gt;(SettingInfo const*, SettingInfo const*, std::forward_iterator_tag) (c++/stl_vector.h:1694)</title></rect>
+<rect class="b" data-s="33" x="863.0" y="176" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcb1c64 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="868.0" y="176" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcb1c78 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="873.0" y="176" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcb1c8c 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="878.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1ca0 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="884.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1cb8 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="890.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1cd0 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="896.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1ce8 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="902.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1d00 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="908.0" y="176" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcb1d18 16 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="33" x="913.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1d2c 20 B, age 1.8 s
+void std::_Construct&lt;SettingInfo, SettingInfo const&amp;&gt;(SettingInfo*, SettingInfo const&amp;) (c++/stl_construct.h:119)</title></rect>
+<rect class="b" data-s="0" x="919.0" y="176" width="26.0" height="7" fill="#d65f5f"><title>used 0x3fcb1d44 104 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="25" x="946.0" y="176" width="26.0" height="7" fill="#8a94a6"><title>used 0x3fcb1db0 104 B, age 1.7 s
+pthread_mutex_init (framework-espidf/components/pthread/pthread.c:650)</title></rect>
+<rect class="b" data-s="20" x="973.0" y="176" width="13.0" height="7" fill="#8a94a6"><title>used 0x3fcb1e1c 52 B, age 1.6 s
+i2c_master_bus_add_device (framework-espidf/components/esp_driver_i2c/i2c_master.c:1188)</title></rect>
+<rect class="b" data-s="0" x="987.0" y="176" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fcb1e54 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="34" x="1003.0" y="176" width="23.0" height="7" fill="#8a94a6"><title>used 0x3fcb1e94 92 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="34" x="1027.0" y="176" width="15.0" height="7" fill="#8a94a6"><title>used 0x3fcb1ef4 60 B, age 1.7 s
+void std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char*&gt;(char*, char*, std::forward_iterator_tag) (c++/basic_string.tcc:229)</title></rect>
+<rect class="b" data-s="24" x="1043.0" y="176" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcb1f34 20 B, age 1.7 s
+pthread_mutex_init (framework-espidf/components/pthread/pthread.c:641)</title></rect>
+<rect class="b" data-s="54" x="1049.0" y="176" width="4.0" height="7" fill="#8a94a6"><title>used 0x3fcb1f4c 16 B, age 1.7 s
+setup() (src/main.cpp:444)</title></rect>
+<rect class="b" data-s="-1" x="1054.0" y="176" width="4.0" height="7" fill="#e4e4e4"><title>free 0x3fcb1f60 16 B</title></rect>
+<rect class="b" data-s="0" x="1059.0" y="176" width="19.0" height="7" fill="#d65f5f"><title>used 0x3fcb1f74 76 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1079.0" y="176" width="8.0" height="7" fill="#d65f5f"><title>used 0x3fcb1fc4 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="1088.0" y="176" width="6.0" height="7" fill="#d65f5f"><title>used 0x3fcb1fe8 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="70.0" y="184" width="2.0" height="7" fill="#d65f5f"><title>used 0x3fcb1fe8 32 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="73.0" y="184" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fcb200c 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="89.0" y="184" width="9.0" height="7" fill="#d65f5f"><title>used 0x3fcb204c 36 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="99.0" y="184" width="9.0" height="7" fill="#d65f5f"><title>used 0x3fcb2074 36 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="109.0" y="184" width="9.0" height="7" fill="#d65f5f"><title>used 0x3fcb209c 36 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="0" x="119.0" y="184" width="15.0" height="7" fill="#d65f5f"><title>used 0x3fcb20c4 60 B
+untraced (allocated before tracing or record lost)</title></rect>
+<rect class="b" data-s="30" x="135.0" y="184" width="959.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="192" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="200" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="208" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="216" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="224" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="232" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="240" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="248" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="256" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="264" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="272" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="280" width="1024.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="30" x="70.0" y="288" width="65.0" height="7" fill="#4e79a7"><title>used 0x3fcb2104 53248 B, age 1.7 s
+HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</title></rect>
+<rect class="b" data-s="49" x="136.0" y="288" width="28.0" height="7" fill="#9c755f"><title>used 0x3fcbf108 112 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="49" x="165.0" y="288" width="28.0" height="7" fill="#9c755f"><title>used 0x3fcbf17c 112 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="49" x="194.0" y="288" width="28.0" height="7" fill="#9c755f"><title>used 0x3fcbf1f0 112 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="47" x="223.0" y="288" width="9.0" height="7" fill="#8a94a6"><title>used 0x3fcbf264 36 B, age 1.5 s
+SdCardFontSystem::setupUiFallbacks(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:226)</title></rect>
+<rect class="b" data-s="47" x="233.0" y="288" width="15.0" height="7" fill="#8a94a6"><title>used 0x3fcbf28c 60 B, age 1.5 s
+SdCardFontSystem::setupUiFallbacks(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:226)</title></rect>
+<rect class="b" data-s="16" x="249.0" y="288" width="5.0" height="7" fill="#8a94a6"><title>used 0x3fcbf2cc 20 B, age 1.3 s
+esp_intr_alloc_intrstatus_bind (framework-espidf/components/esp_hw_support/intr_alloc.c:574)</title></rect>
+<rect class="b" data-s="49" x="255.0" y="288" width="28.0" height="7" fill="#9c755f"><title>used 0x3fcbf2e4 112 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="49" x="284.0" y="288" width="28.0" height="7" fill="#9c755f"><title>used 0x3fcbf358 112 B, age 1.5 s
+std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;(std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;&amp;&amp;, char const*) (c++/basic_string.h:3735)</title></rect>
+<rect class="b" data-s="52" x="313.0" y="288" width="60.0" height="7" fill="#8a94a6"><title>used 0x3fcbf3cc 240 B, age 1.5 s
+SdCardFontRegistry::scanRoot(char const*, std::vector&lt;SdCardFontFamilyInfo, std::allocator&lt;SdCardFontFamilyInfo&gt; &gt;&amp;) (lib/EpdFont/SdCardFontRegistry.cpp:350)</title></rect>
+<rect class="b" data-s="55" x="374.0" y="288" width="544.0" height="7" fill="#b07aa1"><title>used 0x3fcbf4c0 2176 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</title></rect>
+<rect class="b" data-s="56" x="919.0" y="288" width="112.0" height="7" fill="#ff9da7"><title>used 0x3fcbfd44 448 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:38)</title></rect>
+<rect class="b" data-s="57" x="1032.0" y="288" width="31.0" height="7" fill="#8a94a6"><title>used 0x3fcbff08 124 B, age 1.5 s
+setup() (src/main.cpp:539)</title></rect>
+<rect class="b" data-s="-1" x="1064.0" y="288" width="29.0" height="7" fill="#e4e4e4"><title>free 0x3fcbff88 116 B</title></rect>
+<rect class="b" data-s="58" x="289.0" y="296" width="805.0" height="7" fill="#edc948"><title>used 0x3fcc036c 5376 B, age 1.6 s
+SdCardFontSystem::begin(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:72)</title></rect>
+<rect class="b" data-s="58" x="70.0" y="304" width="539.0" height="7" fill="#edc948"><title>used 0x3fcc036c 5376 B, age 1.6 s
+SdCardFontSystem::begin(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:72)</title></rect>
+<rect class="b" data-s="55" x="610.0" y="304" width="484.0" height="7" fill="#b07aa1"><title>used 0x3fcc1870 2176 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</title></rect>
+<rect class="b" data-s="55" x="70.0" y="312" width="60.0" height="7" fill="#b07aa1"><title>used 0x3fcc1870 2176 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</title></rect>
+<rect class="b" data-s="55" x="131.0" y="312" width="544.0" height="7" fill="#b07aa1"><title>used 0x3fcc20f4 2176 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</title></rect>
+<rect class="b" data-s="55" x="676.0" y="312" width="418.0" height="7" fill="#b07aa1"><title>used 0x3fcc2978 2176 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</title></rect>
+<rect class="b" data-s="55" x="70.0" y="320" width="126.0" height="7" fill="#b07aa1"><title>used 0x3fcc2978 2176 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</title></rect>
+<rect class="b" data-s="56" x="197.0" y="320" width="112.0" height="7" fill="#ff9da7"><title>used 0x3fcc31fc 448 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:38)</title></rect>
+<rect class="b" data-s="59" x="310.0" y="320" width="48.0" height="7" fill="#8a94a6"><title>used 0x3fcc33c0 192 B, age 1.3 s
+gpio_install_isr_service (framework-espidf/components/esp_driver_gpio/src/gpio.c:537)</title></rect>
+<rect class="b" data-s="-1" x="359.0" y="320" width="735.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="328" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="336" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="344" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="352" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="360" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="368" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="376" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="384" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="392" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="400" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="408" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="416" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="424" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="432" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="440" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="448" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="456" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="464" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="472" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="480" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="488" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="496" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="504" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="512" width="1024.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="-1" x="70.0" y="528" width="451.0" height="7" fill="#e4e4e4"><title>free 0x3fcc3484 103048 B</title></rect>
+<rect class="b" data-s="31" x="627.0" y="528" width="467.0" height="7" fill="#f28e2b"><title>used 0x3fcdc8b4 9216 B, age 1.6 s
+ActivityManager::begin() (src/activities/ActivityManager.cpp:49)</title></rect>
+<rect class="b" data-s="31" x="70.0" y="536" width="1024.0" height="7" fill="#f28e2b"><title>used 0x3fcdc8b4 9216 B, age 1.6 s
+ActivityManager::begin() (src/activities/ActivityManager.cpp:49)</title></rect>
+<rect class="b" data-s="31" x="70.0" y="544" width="813.0" height="7" fill="#f28e2b"><title>used 0x3fcdc8b4 9216 B, age 1.6 s
+ActivityManager::begin() (src/activities/ActivityManager.cpp:49)</title></rect>
+<rect class="b" data-s="56" x="884.0" y="544" width="112.0" height="7" fill="#ff9da7"><title>used 0x3fcdecb8 448 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:38)</title></rect>
+<rect class="b" data-s="56" x="997.0" y="544" width="97.0" height="7" fill="#ff9da7"><title>used 0x3fcdee7c 448 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:38)</title></rect>
+<rect class="b" data-s="56" x="70.0" y="552" width="15.0" height="7" fill="#ff9da7"><title>used 0x3fcdee7c 448 B, age 1.5 s
+SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:38)</title></rect>
+<rect class="b" data-s="-1" x="86.0" y="552" width="7.0" height="7" fill="#e4e4e4"><title>free 0x3fcdf040 28 B</title></rect>
+<rect class="b" data-s="-1" x="531.0" y="560" width="552.0" height="7" fill="#e4e4e4"><title>free 0x50001734 2208 B</title></rect>
+<rect x="359.0" y="320" width="735.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="328" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="336" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="344" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="352" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="360" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="368" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="376" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="384" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="392" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="400" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="408" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="416" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="424" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="432" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="440" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="448" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="456" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="464" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="472" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="480" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="488" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="496" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="504" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="512" width="1024.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70.0" y="528" width="451.0" height="7" fill="none" stroke="#000" stroke-width="1.2" pointer-events="none"/>
+<rect x="70" y="583" width="10" height="10" fill="#e4e4e4"/>
+<text x="86" y="592">free</text>
+<rect x="70" y="597" width="10" height="10" fill="#d65f5f"/>
+<text x="86" y="606">untraced</text>
+<rect x="70" y="611" width="10" height="10" fill="#4e79a7"/>
+<text x="86" y="620">HalDisplay::begin(bool) (lib/hal/HalDisplay.cpp:21)</text>
+<rect x="70" y="625" width="10" height="10" fill="#f28e2b"/>
+<text x="86" y="634">ActivityManager::begin() (src/activities/ActivityManager.cpp:49)</text>
+<rect x="70" y="639" width="10" height="10" fill="#59a14f"/>
+<text x="86" y="648">void std::vector&lt;SettingInfo, std::allocator&lt;SettingInfo&gt; &gt;::_M_range_initialize&lt;SettingInfo const*&gt;(SettingInfo const*, SettingInfo const*, std::f...</text>
+<rect x="70" y="653" width="10" height="10" fill="#b07aa1"/>
+<text x="86" y="662">SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:32)</text>
+<rect x="70" y="667" width="10" height="10" fill="#edc948"/>
+<text x="86" y="676">SdCardFontSystem::begin(GfxRenderer&amp;) (src/SdCardFontSystem.cpp:72)</text>
+<rect x="70" y="681" width="10" height="10" fill="#76b7b2"/>
+<text x="86" y="690">HeapTrace::begin() (framework-arduinoespressif32-libs/esp32c3/include/freertos/FreeRTOS-Kernel/include/freertos/task.h:394)</text>
+<rect x="70" y="695" width="10" height="10" fill="#ff9da7"/>
+<text x="86" y="704">SdCardFontManager::loadFile(SdCardFontFileInfo const&amp;, char const*, GfxRenderer&amp;) (lib/EpdFont/SdCardFontManager.cpp:38)</text>
+<rect x="70" y="709" width="10" height="10" fill="#9c755f"/>
+<text x="86" y="718">std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; std::operator+&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;...</text>
+<rect x="70" y="723" width="10" height="10" fill="#8a94a6"/>
+<text x="86" y="732">other call sites</text>
+<style>.b.hl{stroke:#000;stroke-width:1}</style><script><![CDATA[
+const info = document.getElementById('info'), info2 = document.getElementById('info2');
+const blocks = document.querySelectorAll('.b');
+let current = null;
+document.addEventListener('mousemove', (event) => {
+  const block = event.target.closest && event.target.closest('.b');
+  const site = block ? block.dataset.s : null;
+  if (block) {
+    const lines = block.querySelector('title').textContent.split('\n');
+    info.textContent = lines[0];
+    info2.textContent = lines[1] || '';
+  }
+  if (site === current) return;
+  current = site;
+  blocks.forEach((b) => b.classList.toggle('hl', site !== null && site !== '-1' && b.dataset.s === site));
+});
+]]></script>
+</svg>
