@@ -4,6 +4,7 @@
 
 #include "CrossPointSettings.h"
 #include "SdCardFontGlobals.h"
+#include "SettingsList.h"
 
 namespace SettingsByKey {
 
@@ -99,6 +100,16 @@ WriteResult writeString(const SettingInfo& s, const std::string& value) {
 void commit() {
   CrossPointSettings::normalizeDependentSettings(SETTINGS);
   SETTINGS.saveToFile();
+}
+
+int visitKeyed(const std::string_view key, const RowVisitor visit, void* ctx) {
+  int count = 0;
+  forEachSetting([&](const SettingInfo& s) {
+    if (!s.key || (!key.empty() && key != s.key)) return;
+    visit(s, ctx);
+    count++;
+  });
+  return count;
 }
 
 }  // namespace SettingsByKey

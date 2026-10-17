@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "activities/settings/SettingInfo.h"
 
@@ -32,5 +33,11 @@ WriteResult writeString(const SettingInfo& s, const std::string& value);
 
 // After a batch of writes: settle the settings that depend on others, then save to the card.
 void commit();
+
+// Hands `visit` every row that has a key (`key` empty) or the row with that key, and returns how
+// many it handed over. One walk for every caller that works by key, behind a plain function
+// pointer, so a caller does not compile its own copy of forEachSetting()'s visitor.
+using RowVisitor = void (*)(const SettingInfo& row, void* ctx);
+int visitKeyed(std::string_view key, RowVisitor visit, void* ctx);
 
 }  // namespace SettingsByKey

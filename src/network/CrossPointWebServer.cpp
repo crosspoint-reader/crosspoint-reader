@@ -2113,32 +2113,31 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  // One row at a time, as in handleGetSettings().
-  int applied = 0;
-
-  const auto isFontFamilyKey = [](const char* key) {
-    return key && (std::strcmp(key, "fontFamily") == 0 || std::strcmp(key, "txtFontFamily") == 0);
+  // One row at a time, as in handleGetSettings(), through SettingsByKey's keyed walk (the one the
+  // serial SET uses). Families last: a font-size value is an index into the sizes of the family the
+  // page was showing, which is the one selected now, so it has to be applied before this request
+  // changes that family. Two walks rather than a reordered list: rows are never held.
+  struct PostedRows {
+    JsonDocument& doc;
+    int applied;
+    bool families;  // this walk applies the font-family rows; the other one everything else
   };
-  const auto applyRow = [&](const SettingInfo& s) {
-    if (!s.key) return;
-    if (!doc[s.key].is<JsonVariant>()) return;
+  const SettingsByKey::RowVisitor applyRow = [](const SettingInfo& s, void* ctx) {
+    auto& posted = *static_cast<PostedRows*>(ctx);
+    const bool family = std::strcmp(s.key, "fontFamily") == 0 || std::strcmp(s.key, "txtFontFamily") == 0;
+    if (family != posted.families || !posted.doc[s.key].is<JsonVariant>()) return;
     // Slider rows are ACTIONs here; the two the page edits are posted under their own keys below.
     if (s.type == SettingType::ACTION) return;
     const SettingsByKey::WriteResult result = s.type == SettingType::STRING
-                                                  ? SettingsByKey::writeString(s, doc[s.key].as<std::string>())
-                                                  : SettingsByKey::writeNumber(s, doc[s.key].as<int>());
-    if (result == SettingsByKey::WriteResult::Applied) applied++;
+                                                  ? SettingsByKey::writeString(s, posted.doc[s.key].as<std::string>())
+                                                  : SettingsByKey::writeNumber(s, posted.doc[s.key].as<int>());
+    if (result == SettingsByKey::WriteResult::Applied) posted.applied++;
   };
-
-  // Families last. A font-size value is an index into the sizes of the family the page was showing,
-  // which is the one selected now, so it has to be applied before this request changes that
-  // family. Two walks rather than a reordered list: rows are visited one at a time, never held.
-  forEachSetting([&](const SettingInfo& s) {
-    if (!isFontFamilyKey(s.key)) applyRow(s);
-  });
-  forEachSetting([&](const SettingInfo& s) {
-    if (isFontFamilyKey(s.key)) applyRow(s);
-  });
+  PostedRows posted{doc, 0, false};
+  SettingsByKey::visitKeyed({}, applyRow, &posted);
+  posted.families = true;
+  SettingsByKey::visitKeyed({}, applyRow, &posted);
+  int applied = posted.applied;
 
   // Handle sleepTimeoutMinutes and refreshFrequencyPages posted as VALUE types.
   if (doc["sleepTimeoutMinutes"].is<int>()) {
