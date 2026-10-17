@@ -258,3 +258,46 @@ TEST_F(TocSource, TheNavsPageListOutlivesAnAdoptedNcx) {
   ASSERT_TRUE(page.has_value()) << "the nav's printed-page list was dropped by the NCX parse";
   EXPECT_EQ(page->href, "OEBPS/text/c5.xhtml");
 }
+
+// --- Nav links relative to another folder -------------------------------------------------------
+//
+// The nav sits in OEBPS/ but links as if it sat beside the chapters in OEBPS/text/. Each link
+// resolves to OEBPS/cN.xhtml, which no spine item matches exactly: the contents list showed every
+// title and opened none. Ported from crosspoint-reader PR #2987 (Hoang Manh Linh, @jetaudio).
+
+TEST_F(TocSource, ANavLinkingFromTheWrongFolderStillOpensItsChapters) {
+  BookShape shape;
+  shape.spine = chapters(8);
+  shape.nav = links({0, 1, 2, 3, 4, 5, 6, 7}, "Chapter", /*dir=*/"");
+  writeBook(shape);
+
+  const auto epub = open();
+  EXPECT_EQ(spineIndices(*epub), (std::vector<int>{0, 1, 2, 3, 4, 5, 6, 7}));
+}
+
+TEST_F(TocSource, AFilenameTwoFoldersShareIsNotGuessed) {
+  BookShape shape;
+  shape.spine = chapters(4);
+  shape.spine.push_back("a/notes.xhtml");      // 4
+  shape.spine.push_back("extra/notes.xhtml");  // 5
+  shape.nav = {{"text/c0.xhtml", "One"}, {"notes.xhtml", "Notes?"}, {"extra/notes.xhtml", "Notes"}};
+  writeBook(shape);
+
+  const auto epub = open();
+  EXPECT_EQ(spineIndices(*epub), (std::vector<int>{0, -1, 5}));
+}
+
+// In-book links resolve through the same filename match, unchanged: the first spine item that
+// matches exactly or by filename.
+TEST_F(TocSource, InBookLinksStillResolveByFilename) {
+  BookShape shape;
+  shape.spine = chapters(4);
+  shape.nav = links({0, 1, 2, 3}, "Chapter");
+  writeBook(shape);
+
+  const auto epub = open();
+  EXPECT_EQ(epub->resolveHrefToSpineIndex("c2.xhtml#note"), 2);
+  EXPECT_EQ(epub->resolveHrefToSpineIndex("OEBPS/text/c3.xhtml"), 3);
+  EXPECT_EQ(epub->resolveHrefToSpineIndex("nowhere.xhtml"), -1);
+  EXPECT_EQ(epub->resolveHrefToSpineIndex("#same-file"), -1);
+}

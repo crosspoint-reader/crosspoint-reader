@@ -26,6 +26,7 @@
 #include "Epub/HashUtils.h"
 #include "Epub/ImageFormatDetector.h"
 #include "Epub/MetadataSidecar.h"
+#include "Epub/SpineHrefMatch.h"
 #include "Epub/SpinePageIndex.h"
 #include "Epub/TocFallbackPolicy.h"
 #include "Epub/parsers/ContainerParser.h"
@@ -2474,18 +2475,10 @@ int Epub::resolveHrefToSpineIndex(const std::string& href) const {
   // Same-file reference (anchor-only)
   if (target.empty()) return -1;
 
-  // Extract just the filename for comparison
-  size_t targetSlash = target.find_last_of('/');
-  std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
-
+  // The first spine item that matches exactly or by filename alone: in-book links are kept as
+  // written, relative to their own document.
   for (int i = 0; i < getSpineItemsCount(); i++) {
-    const auto& spineHref = getSpineItem(i).href;
-    // Try exact match first
-    if (spineHref == target) return i;
-    // Then filename-only match
-    size_t spineSlash = spineHref.find_last_of('/');
-    std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
-    if (spineFilename == targetFilename) return i;
+    if (spine_href::match(target, getSpineItem(i).href) != SpineHrefMatch::None) return i;
   }
   return -1;
 }
