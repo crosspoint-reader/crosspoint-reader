@@ -208,6 +208,30 @@ console.log('- File Manager uploads');
   page.dom.window.close();
 }
 
+{
+  // Replace: the NFD file is renamed to the upload's NFC name first, so the upload replaces it rather
+  // than landing beside it under a name that looks the same.
+  const page = await uploadThroughFilesPage(NFC + '.epub', {
+    url: 'http://reader.test/files?path=%2Fbooks',
+    card: { '/books': [{ name: NFD + '.epub', isDirectory: false }] },
+    answer: (u) => (u === '/rename' ? response(200, 'ok') : undefined),
+    clash: 'replace',
+  });
+  const rename = page.sent.requests.find((r) => r.url === '/rename');
+  same(rename && rename.init.body.get('path'), '/books/' + NFD + '.epub', 'Replace renames the NFD file on the card');
+  same(rename && rename.init.body.get('name'), NFC + '.epub', 'to the upload\'s NFC name');
+  same(page.sent.sockets[0] && page.sent.sockets[0].start, `START:${NFC}.epub:10:/books`, 'and then uploads under that name');
+  page.dom.window.close();
+}
+{
+  const page = await uploadThroughFilesPage(NFC + '.epub', {
+    card: { '/': [{ name: NFC.toUpperCase() + '.EPUB', isDirectory: false }] },
+    clash: 'replace',
+  });
+  check(!page.sent.requests.some((r) => r.url === '/rename'), 'Replace renames nothing when the card has the name in NFC');
+  page.dom.window.close();
+}
+
 console.log('- File Manager folders and names');
 {
   const { w, sent, dom } = loadPage('FilesPage.html', {

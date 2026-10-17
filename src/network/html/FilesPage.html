@@ -6811,14 +6811,14 @@
       return nfcName(name).toLowerCase();
     }
 
-    // The clash keys of the names already in `folder`, fetched once per upload and kept up to date as
-    // this upload adds to it.
+    // The names already in `folder` by clash key, each as the card has it, fetched once per upload and
+    // kept up to date as this upload adds to it.
     async function namesInFolder(folder) {
       if (!uploadClash.folders.has(folder)) {
-        const names = new Set();
+        const names = new Map();
         try {
           const response = await fetch('/api/files?path=' + encodeURIComponent(folder) + '&_=' + Date.now());
-          if (response.ok) (await response.json()).forEach(f => names.add(clashKey(f.name)));
+          if (response.ok) (await response.json()).forEach(f => names.set(clashKey(f.name), f.name));
         } catch (e) {
           console.warn('[Upload] Could not list ' + folder + ' for name clashes:', e);
         }
@@ -6853,18 +6853,38 @@
       if (resolve) resolve(action);
     }
 
+    // Replace overwrites the file of the same name. A name an earlier upload left on the card in NFD
+    // is another name to FAT, however alike the two look, so that file is first renamed to the
+    // upload's NFC name: then it is the one the upload replaces. Should the rename fail, the upload
+    // still goes ahead, beside it.
+    async function takeOverNameOnCard(folder, cardName, name) {
+      if (nfcName(cardName) === cardName) return;
+      const formData = new FormData();
+      formData.append('path', joinBrowsePath(folder, cardName));
+      formData.append('name', name);
+      try {
+        const resp = await fetch('/rename', { method: 'POST', body: formData });
+        if (!resp.ok) console.warn('[Upload] Could not rename ' + cardName + ' to ' + name + ':', resp.status);
+      } catch (e) {
+        console.warn('[Upload] Could not rename ' + cardName + ' to ' + name + ':', e);
+      }
+    }
+
     // The file to upload in place of `file` (renamed for Keep both), or null to skip it.
     async function resolveUploadClash(file, folder) {
       const names = await namesInFolder(folder);
       let upload = file;
-      if (names.has(clashKey(file.name))) {
+      const cardName = names.get(clashKey(file.name));
+      if (cardName !== undefined) {
         const action = uploadClash.applyToAll || await askUploadClash(file.name, folder);
         if (action === 'skip') return null;
         if (action === 'keep') {
           upload = new File([file], freeNameIn(names, file.name), { type: file.type, lastModified: file.lastModified });
+        } else if (action === 'replace') {
+          await takeOverNameOnCard(folder, cardName, file.name);
         }
       }
-      names.add(clashKey(upload.name));
+      names.set(clashKey(upload.name), upload.name);
       return upload;
     }
 
