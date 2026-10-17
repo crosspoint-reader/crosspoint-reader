@@ -407,6 +407,32 @@ bool HalStorage::rmdir(const char* path) {
   HAL_STORAGE_WRAPPED_CALL(rmdir, path);
 }
 
+// Ported from crosspoint-reader PR #3979 (phuclee, @phucisstupid). A directory entry is known by
+// where it sits: the first cluster of its folder and its index in that folder. Every spelling that
+// opens it, other letter case or 8.3 alias alike, lands on the same entry.
+bool HalStorage::areSameFile(const char* first, const char* second, bool& same) {
+  StorageLock lock;
+  same = false;
+  const auto locate = [](const char* path, uint32_t& folderCluster, uint32_t& entryIndex) {
+    const std::string name(path);
+    const size_t slash = name.rfind('/');
+    const std::string folderPath = slash == std::string::npos || slash == 0 ? "/" : name.substr(0, slash);
+    FsFile folder = SDCard.open(folderPath.c_str(), O_RDONLY);
+    FsFile entry = SDCard.open(path, O_RDONLY);
+    if (!folder || !folder.isDirectory() || !entry) {
+      LOG_ERR("SD", "Cannot tell which file %s is", path);
+      return false;
+    }
+    folderCluster = folder.firstCluster();
+    entryIndex = entry.dirIndex();
+    return true;
+  };
+  uint32_t firstFolder = 0, firstEntry = 0, secondFolder = 0, secondEntry = 0;
+  if (!locate(first, firstFolder, firstEntry) || !locate(second, secondFolder, secondEntry)) return false;
+  same = firstFolder == secondFolder && firstEntry == secondEntry;
+  return true;
+}
+
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;

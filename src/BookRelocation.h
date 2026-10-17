@@ -26,4 +26,14 @@ void folderMoved(const std::string& oldDir, const std::string& newDir);
 // Either of the two, depending on what is at `newPath` now.
 void moved(const std::string& oldPath, const std::string& newPath);
 
+// bookMoved() for a book a reader still has open (the finished-book flow's move to /COMPLETED).
+// That reader saves its bookmarks, link-back stack and reading session under the old path when it
+// closes the book, so carrying the state over now would leave those behind. Held until
+// bookClosed().
+void bookMovedWhileOpen(const std::string& oldPath, const std::string& newPath);
+
+// Every reader calls this at the end of onExit(), when it writes nothing more under its book's
+// path: carries over a move recorded by bookMovedWhileOpen(). No-op otherwise.
+void bookClosed();
+
 }  // namespace BookRelocation

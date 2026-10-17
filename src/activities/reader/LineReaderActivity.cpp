@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "BookRelocation.h"
 #include "CrossPointState.h"
 #include "FinishedBookActivity.h"
 #include "KOReaderDocumentId.h"
@@ -90,6 +91,8 @@ void LineReaderActivity::onExit() {
   APP_STATE.saveToFile();
   UITheme::getInstance().getMutableTheme().onBookWillClose(txt ? txt->getPath() : "", nullptr, nullptr, txt.get());
   txt.reset();
+  // Last, as in EpubReaderActivity::onExit().
+  BookRelocation::bookClosed();
 }
 
 void LineReaderActivity::loop() {

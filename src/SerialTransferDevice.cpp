@@ -1,6 +1,7 @@
 #include "SerialTransferDevice.h"
 
 #include <Arduino.h>
+#include <FileReplace.h>
 #include <FsHelpers.h>
 #include <HalSystem.h>  // feedWatchdog()
 #include <Logging.h>
@@ -8,6 +9,7 @@
 #include <cstdarg>
 #include <ctime>
 
+#include "BookRelocation.h"
 #include "RecentBooksStore.h"
 
 namespace {
@@ -45,6 +47,11 @@ std::string baseName(const std::string& path) {
 // Where uploaded books land. MicroReader scans the whole card recursively, so
 // the exact folder is cosmetic; a dedicated folder keeps uploads tidy.
 constexpr char kBooksRoot[] = "/books";
+
+// An upload is written to <path>.part and takes the place of <path> only once it is complete and
+// its CRC checks out, so a transfer that fails leaves the book it would replace as it was. Opening
+// <path> for writing truncated that book at once, and the failure path then removed it.
+std::string uploadPartPath(const std::string& path) { return path + ".part"; }
 
 // Recursively collect .epub paths, capped to keep RAM bounded on huge cards.
 constexpr size_t kMaxListed = 500;
@@ -158,7 +165,7 @@ void SerialTransferDevice::writeBytes(const uint8_t* data, size_t len) {
 bool SerialTransferDevice::fileBegin(const std::string& path) {
   Storage.ensureDirectoryExists(kBooksRoot);
   uploadName_ = baseName(path);
-  if (!Storage.openFileForWrite("SerialTransfer", path, uploadFile_)) {
+  if (!Storage.openFileForWrite("SerialTransfer", uploadPartPath(path), uploadFile_)) {
     emitStatus("Upload failed (open): %s", uploadName_.c_str());
     return false;
   }
@@ -200,12 +207,16 @@ void SerialTransferDevice::fileEnd(bool keep) {
   if (!uploadOpen_) return;
   bool ok = keep;
   if (keep) ok = flushCoalesceBuffer();
-  uploadFile_.close();
+  // close() writes the last cached sector and the directory entry: a failure there leaves the
+  // upload cut short.
+  if (!uploadFile_.close()) ok = false;
   uploadOpen_ = false;
   coalesce_.clear();
   coalesce_.shrink_to_fit();
+  const std::string partPath = uploadPartPath(uploadPath_);
+  if (ok) ok = FileReplace::replace(partPath.c_str(), uploadPath_.c_str());
 
-  if (keep && ok) {
+  if (ok) {
     const unsigned long elapsed = millis() - uploadStartMs_;
     const unsigned long kbps =
         elapsed > 0 ? (static_cast<unsigned long>(uploadBytes_) * 1000UL) / (elapsed * 1024UL) : 0;
@@ -217,8 +228,8 @@ void SerialTransferDevice::fileEnd(bool keep) {
     emitStatus("Saved '%s': %lu KB in %lu.%lus (%lu KB/s)", uploadName_.c_str(), kb, elapsed / 1000UL,
                (elapsed % 1000UL) / 100UL, kbps);
   } else {
-    // Caller asked to discard (timeout/CRC mismatch) or the final flush failed.
-    Storage.remove(uploadPath_.c_str());
+    // Caller asked to discard (timeout/CRC mismatch), or the final flush, close or replace failed.
+    Storage.remove(partPath.c_str());
     emitStatus("Upload failed: '%s'", uploadName_.c_str());
   }
 }
@@ -290,6 +301,9 @@ void SerialTransferDevice::listDirEnd() {
 
 bool SerialTransferDevice::renameFile(const std::string& src, const std::string& dst) {
   const bool ok = Storage.rename(src.c_str(), dst.c_str());
+  // A book (or a folder of them) renamed from the host keeps its position and bookmarks, as it
+  // does when moved through the web server, WebDAV or the file browser.
+  if (ok) BookRelocation::moved(src, dst);
   emitStatus(ok ? "Moved '%s'" : "Move failed: '%s'", baseName(src).c_str());
   return ok;
 }

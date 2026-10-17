@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <BoardConfig.h>
 #include <Epub.h>
+#include <FileReplace.h>
 #include <FsHelpers.h>
 #include <HalClock.h>
 #include <HalGPIO.h>
@@ -169,6 +170,23 @@ void clearBookCacheIfNeeded(const String& filePath) {
       LOG_DBG("WEB", "Cleared txt cache for: %s", filePath.c_str());
     }
   }
+}
+
+// An upload (HTTP or WebSocket) is written to <file>.part and takes the place of <file> only once
+// it has all arrived, so one that breaks off -- Wi-Fi gone, the browser closed, Back on the device
+// -- leaves the file it would replace as it was. The file used to be removed before the first
+// byte came. From crosspoint-reader PR #2053 (Danila Yudin, @sabraman), which stages both uploads
+// in temporary files; the names and FileReplace are ours.
+constexpr char UPLOAD_PART_SUFFIX[] = ".part";
+
+// Closes a complete upload and puts it in the place of `filePath`. False when either fails: the
+// caller then discards the part, and any file that was there stays.
+bool finishUploadPart(FsFile& file, const String& filePath) {
+  // close() writes the last cached sector and the directory entry: a failure there leaves the
+  // upload cut short.
+  if (!file.close()) return false;
+  const String partPath = filePath + UPLOAD_PART_SUFFIX;
+  return FileReplace::replace(partPath.c_str(), filePath.c_str());
 }
 
 // Recursively clear book caches for all ebooks inside a directory
@@ -548,6 +566,7 @@ void CrossPointWebServer::abortWsUpload(const char* tag) {
   String filePath = wsUploadPath;
   if (!filePath.endsWith("/")) filePath += "/";
   filePath += wsUploadFileName;
+  filePath += UPLOAD_PART_SUFFIX;  // the upload; the file it would replace stays
   if (Storage.remove(filePath.c_str())) {
     LOG_DBG(tag, "Deleted incomplete upload: %s", filePath.c_str());
   } else {
@@ -1341,8 +1360,8 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
   return true;
 }
 
-// Closes the upload's file and deletes it. A write that failed part-way leaves a file cut short,
-// and the Library and Home would list that truncated book.
+// Closes the upload's file and deletes it: the part that arrived, never the file it would replace.
+// A write that failed part-way leaves a file cut short.
 // Ported from CrossInk commit e092f81da ("fix: protect files and reduce unnecessary reader work",
 // Julia Nguyen): there a failed write removes the partial file; the helper is ours.
 static void discardUploadFile(CrossPointWebServer::UploadState& state) {
@@ -1350,6 +1369,7 @@ static void discardUploadFile(CrossPointWebServer::UploadState& state) {
   String filePath = state.path;
   if (!filePath.endsWith("/")) filePath += "/";
   filePath += state.fileName;
+  filePath += UPLOAD_PART_SUFFIX;
   Storage.remove(filePath.c_str());
 }
 
@@ -1426,9 +1446,8 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     if (!filePath.endsWith("/")) filePath += "/";
     filePath += state.fileName;
 
-    // Before the overwrite below removes anything. The folder is judged as a folder
-    // and the target as an item, so a dot-named file is refused even where hidden
-    // folders are allowed.
+    // Before anything is written. The folder is judged as a folder and the target as an item, so
+    // a dot-named file is refused even where hidden folders are allowed.
     if (isProtectedWebPath(state.path, Target::Directory, hiddenAllowed()) ||
         isProtectedWebPath(filePath, Target::Item, hiddenAllowed())) {
       state.error = "Cannot write to a protected location";
@@ -1436,24 +1455,24 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       return;
     }
 
-    // Check if file already exists - SD operations can be slow
+    // Check if file already exists - SD operations can be slow. It stays until the upload has
+    // all arrived (finishUploadPart()).
     HalSystem::feedWatchdog();
     if (Storage.exists(filePath.c_str())) {
-      LOG_DBG("WEB", "[UPLOAD] Overwriting existing file: %s", filePath.c_str());
-      HalSystem::feedWatchdog();
-      Storage.remove(filePath.c_str());
+      LOG_DBG("WEB", "[UPLOAD] Will replace existing file: %s", filePath.c_str());
     }
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     HalSystem::feedWatchdog();
-    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
+    const String partPath = filePath + UPLOAD_PART_SUFFIX;
+    if (!Storage.openFileForWrite("WEB", partPath, state.file)) {
       state.error = "Failed to create file on SD card";
-      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
+      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", partPath.c_str());
       return;
     }
     HalSystem::feedWatchdog();
 
-    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
+    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", partPath.c_str());
   } else if (up.status == UPLOAD_FILE_WRITE) {
     if (dropUploadIfCancelled()) {
       state.cancelled = true;
@@ -1503,13 +1522,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     // that is still open, so finishing it here would keep the file of an aborted upload.
     if (!server->client().connected()) return;
     if (state.file) {
+      String filePath = state.path;
+      if (!filePath.endsWith("/")) filePath += "/";
+      filePath += state.fileName;
+
       // Flush any remaining buffered data
       if (!flushUploadBuffer(state)) {
         state.error = "Failed to write final data to SD card";
       }
-      // close() writes the last cached sector and the directory entry: a failure there also
-      // leaves a file cut short.
-      if (!state.file.close() && state.error.isEmpty()) {
+      if (state.error.isEmpty() && !finishUploadPart(state.file, filePath)) {
         state.error = "Failed to write final data to SD card";
       }
       if (!state.error.isEmpty()) discardUploadFile(state);
@@ -1525,9 +1546,6 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
                 writePercent);
 
         // Clear epub cache to prevent stale metadata issues when overwriting files
-        String filePath = state.path;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += state.fileName;
         clearBookCacheIfNeeded(filePath);
       }
     }
@@ -3380,9 +3398,12 @@ void CrossPointWebServer::RawFileUpload::feed(const HTTPRaw& raw) {
       return;
     case RAW_END:
       if (status != 0) return;
-      file.close();
-      if ((Storage.exists(path.c_str()) && !Storage.remove(path.c_str())) ||
-          !Storage.rename(temp.c_str(), path.c_str())) {
+      // close() writes the last cached sector and the directory entry: a failure there leaves the
+      // file cut short. The file it replaces steps aside until the new one is in its place, and
+      // comes back if it cannot be; it used to be removed first.
+      if (!file.close()) {
+        fail(500, "could not finish writing file");
+      } else if (!FileReplace::replace(temp.c_str(), path.c_str())) {
         fail(500, "could not replace file");
       }
       return;
@@ -3540,17 +3561,26 @@ void CrossPointWebServer::handleBookReplace() {
   const String backup = path + ".bak";
   // The upload wrote <path>.new.part and renamed it to <path>.new; now <path> itself moves.
   const bool keepOlderBackup = Storage.exists(backup.c_str());
-  const bool movedAside = keepOlderBackup ? Storage.remove(path.c_str()) : Storage.rename(path.c_str(), backup.c_str());
-  if (!movedAside) {
-    Storage.remove(fresh.c_str());
-    server->send(500, "application/json", "{\"error\":\"could not set the original aside\"}");
-    return;
-  }
-  if (!Storage.rename(fresh.c_str(), path.c_str())) {
-    LOG_ERR("WEB", "Could not swap in %s", fresh.c_str());
-    if (!keepOlderBackup) Storage.rename(backup.c_str(), path.c_str());
-    server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
-    return;
+  if (keepOlderBackup) {
+    // The older original stays the backup. This one steps aside only until the new book is in its
+    // place, and comes back if it cannot be; removing it first lost the book when the swap failed.
+    if (!FileReplace::replace(fresh.c_str(), path.c_str())) {
+      Storage.remove(fresh.c_str());
+      server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
+      return;
+    }
+  } else {
+    if (!Storage.rename(path.c_str(), backup.c_str())) {
+      Storage.remove(fresh.c_str());
+      server->send(500, "application/json", "{\"error\":\"could not set the original aside\"}");
+      return;
+    }
+    if (!Storage.rename(fresh.c_str(), path.c_str())) {
+      LOG_ERR("WEB", "Could not swap in %s", fresh.c_str());
+      Storage.rename(backup.c_str(), path.c_str());
+      server->send(500, "application/json", "{\"error\":\"could not replace the book\"}");
+      return;
+    }
   }
 
   const bool keep = server->arg("keep") == "1";
@@ -3780,7 +3810,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += wsUploadFileName;
 
-          // Before the overwrite below removes anything; same rule as the HTTP upload.
+          // Before anything is written; same rule as the HTTP upload.
           if (isProtectedWebPath(wsUploadPath, Target::Directory, hiddenAllowed()) ||
               isProtectedWebPath(filePath, Target::Item, hiddenAllowed())) {
             LOG_DBG("WS", "START rejected: protected target '%s'", filePath.c_str());
@@ -3791,15 +3821,10 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
                   filePath.c_str());
 
-          // Check if file exists and remove it
+          // Open file for writing: <name>.part, as for the HTTP upload. An existing file stays
+          // until the upload has all arrived (finishUploadPart()).
           HalSystem::feedWatchdog();
-          if (Storage.exists(filePath.c_str())) {
-            Storage.remove(filePath.c_str());
-          }
-
-          // Open file for writing
-          HalSystem::feedWatchdog();
-          if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
+          if (!Storage.openFileForWrite("WS", filePath + UPLOAD_PART_SUFFIX, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
             wsUploadInProgress = false;
             wsUploadClientNum = 255;
@@ -3809,7 +3834,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
           // Zero-byte upload: complete immediately without waiting for BIN frames
           if (wsUploadSize == 0) {
-            wsUploadFile.close();
+            if (!finishUploadPart(wsUploadFile, filePath)) {
+              abortWsUpload("WS");
+              wsServer->sendTXT(num, "ERROR:Failed to save file");
+              return;
+            }
             wsLastCompleteName = wsUploadFileName;
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
@@ -3864,7 +3893,14 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
       // Check if upload complete
       if (wsUploadReceived >= wsUploadSize) {
-        wsUploadFile.close();
+        String filePath = wsUploadPath;
+        if (!filePath.endsWith("/")) filePath += "/";
+        filePath += wsUploadFileName;
+        if (!finishUploadPart(wsUploadFile, filePath)) {
+          abortWsUpload("WS");
+          wsServer->sendTXT(num, "ERROR:Failed to save file");
+          return;
+        }
         wsUploadInProgress = false;
         wsUploadClientNum = 255;
 
@@ -3879,9 +3915,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
                 elapsed, kbps);
 
         // Clear epub cache to prevent stale metadata issues when overwriting files
-        String filePath = wsUploadPath;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += wsUploadFileName;
         clearBookCacheIfNeeded(filePath);
 
         wsServer->sendTXT(num, "DONE");

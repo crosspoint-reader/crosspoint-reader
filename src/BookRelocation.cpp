@@ -32,6 +32,10 @@ std::string cacheKind(const std::string& cacheDir) {
   return cacheDir.substr(slash + 1, underscore - slash - 1);
 }
 
+// One move at a time: the reader that has the book open closes it right after the move.
+std::string pendingOldPath;
+std::string pendingNewPath;
+
 }  // namespace
 
 std::string cacheDirFor(const std::string& path) {
@@ -125,6 +129,22 @@ void moved(const std::string& oldPath, const std::string& newPath) {
   } else {
     bookMoved(oldPath, newPath);
   }
+}
+
+void bookMovedWhileOpen(const std::string& oldPath, const std::string& newPath) {
+  // A move still held would be lost by overwriting it; carry it over now instead.
+  bookClosed();
+  pendingOldPath = oldPath;
+  pendingNewPath = newPath;
+}
+
+void bookClosed() {
+  if (pendingOldPath.empty()) return;
+  const std::string oldPath = std::move(pendingOldPath);
+  const std::string newPath = std::move(pendingNewPath);
+  pendingOldPath.clear();
+  pendingNewPath.clear();
+  bookMoved(oldPath, newPath);
 }
 
 }  // namespace BookRelocation

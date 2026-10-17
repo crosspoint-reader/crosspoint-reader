@@ -10,7 +10,13 @@ namespace BookFinished {
 std::string findNextBookInDirectory(const std::string& currentBookPath, const std::string& currentBookSeries,
                                     const std::string& currentBookSeriesIndex);
 
-bool moveFinishedBookToCompleted(const std::string& currentBookPath, std::string& outMovedPath);
+// Moves the book and its sidecar files into /COMPLETED; outMovedPath gets its new path. Its reading
+// state follows it (BookRelocation): at once, or with `openInReader` once that reader has closed it.
+bool moveFinishedBookToCompleted(const std::string& currentBookPath, std::string& outMovedPath, bool openInReader);
+
+// Applies the remove-from-recents and move-to-/COMPLETED settings to a finished book; returns the
+// path it has afterwards.
+std::string applyFinishedBookSettings(const std::string& bookPath, bool openInReader);
 
 enum class FinishedBookAction {
   Stay = 0,

@@ -117,6 +117,7 @@ add_subdirectory(${REPO_ROOT}/lib/SaxParser ${CMAKE_CURRENT_BINARY_DIR}/SaxParse
 add_subdirectory(buffered_io)
 add_subdirectory(natural_sort)
 add_subdirectory(sidecar_files)
+add_subdirectory(file_replace)
 add_subdirectory(book_details_cache)
 add_subdirectory(timezone)
 add_subdirectory(path_containment)

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdlib>
 
+#include "BookRelocation.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "FinishedBookActivity.h"
@@ -81,6 +82,8 @@ void XtcReaderActivity::onExit() {
 
   UITheme::getInstance().getMutableTheme().onBookWillClose(xtc ? xtc->getPath() : "", nullptr, xtc.get(), nullptr);
   xtc.reset();
+  // Last, as in EpubReaderActivity::onExit().
+  BookRelocation::bookClosed();
 }
 
 bool XtcReaderActivity::openChapterSelection() {
