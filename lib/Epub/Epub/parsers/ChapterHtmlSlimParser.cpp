@@ -207,7 +207,7 @@ constexpr size_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT_HARD_ARENA_BIONIC = EHP_TEXT_LAYO
 constexpr size_t MAX_TABLE_ROW_BUFFER_BYTES = EHP_TABLE_BUFFER_BUDGET_BYTES;
 
 // Attributed cost of one buffered word: the std::string header in ParsedText::words (24 B under
-// 32-bit libstdc++) plus the parallel per-word vectors (wordStyles, wordSizes, wordContinues) and
+// 32-bit libstdc++) plus the parallel per-word vectors (wordStyles, wordSizes, wordBoundaries) and
 // the geometric growth headroom all four carry. Deliberately a fixed constant rather than
 // sizeof(std::string) so host goldens and device builds make the SAME switch decision -- a
 // host-derived width (32 B) would charge more per word and trip earlier than the device.

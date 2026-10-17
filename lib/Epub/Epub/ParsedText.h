@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "TokenBoundary.h"
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
@@ -69,7 +70,9 @@ class ParsedText {
   // bytes that die with page N.
   std::function<void(uint8_t maxSizePct)> beforeLine_;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<bool> wordContinues;  // true = word attaches to previous (no space before it)
+  // How each word joins the one before it (TokenBoundary.h): a space, glued, or a breakable CJK gap.
+  // In lockstep with `words` through every insert/erase, like the per-word vectors below.
+  std::vector<TokenBoundary::Boundary> wordBoundaries;
   // Per-word font size, percent of the block font size (100 = block size). Kept in
   // lockstep with `words` through every insert/erase; the sizes are handed to each
   // TextBlock line so inline font-size spans survive into the page cache.
@@ -103,14 +106,18 @@ class ParsedText {
   // for any active float zones in blockStyle.  lineHeight==0 is a fast path
   // (no float zones active) that returns pageWidth unchanged.
   int widthForLine(int lineIndex, int lineHeight, int16_t blockStartY, int pageWidth) const;
+  // The natural gap before words[j] (j > 0), unscaled: kerning across a glued boundary, nothing at a
+  // CJK gap, else the space advance. Every breaker measures gaps through this.
+  int naturalGapBefore(const GfxRenderer& renderer, int fontId, size_t j) const;
 
   // The three breakers fill `lineBreakIndices` (cleared first) rather than returning a vector,
   // so the caller's scratch member is reused instead of reallocated per paragraph.
   void computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth, std::vector<uint16_t>& wordWidths,
-                         std::vector<bool>& continuesVec, int firstLineIndent, int16_t blockStartY, int lineHeight,
-                         std::vector<size_t>& lineBreakIndices);
+                         const std::vector<TokenBoundary::Boundary>& boundaries, int firstLineIndent,
+                         int16_t blockStartY, int lineHeight, std::vector<size_t>& lineBreakIndices);
   void computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
-                                   std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                   std::vector<uint16_t>& wordWidths,
+                                   const std::vector<TokenBoundary::Boundary>& boundaries,
                                    std::vector<bool>& lineEndsWithHyphenatedWord,
                                    std::vector<int>& splitPrefixWordIndexes, std::vector<bool>& splitInsertedHyphen,
                                    int firstLineIndent, int16_t blockStartY, int lineHeight,
@@ -118,23 +125,24 @@ class ParsedText {
   // Recompute hyphenated breaks for a suffix that starts at startIndex.
   // Used after a single-line retry so later lines keep normal hyphenation.
   void computeHyphenatedLineBreaksFromIndex(const GfxRenderer& renderer, int fontId, int pageWidth,
-                                            std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
-                                            size_t startIndex, std::vector<bool>& lineEndsWithHyphenatedWord,
+                                            std::vector<uint16_t>& wordWidths,
+                                            const std::vector<TokenBoundary::Boundary>& boundaries, size_t startIndex,
+                                            std::vector<bool>& lineEndsWithHyphenatedWord,
                                             std::vector<int>& splitPrefixWordIndexes,
                                             std::vector<bool>& splitInsertedHyphen, int16_t blockStartY, int lineHeight,
                                             int startLineIdx, std::vector<size_t>& lineBreakIndices);
   // Compute exactly one line break without hyphenating words.
   // Used only for the page-boundary retry line.
   size_t computeSingleLineBreakNoHyphen(const GfxRenderer& renderer, int fontId, int pageWidth,
-                                        const std::vector<uint16_t>& wordWidths, const std::vector<bool>& continuesVec,
-                                        size_t lineStartIndex, int firstLineIndent, int16_t blockStartY = 0,
-                                        int lineHeight = 0) const;
+                                        const std::vector<uint16_t>& wordWidths,
+                                        const std::vector<TokenBoundary::Boundary>& boundaries, size_t lineStartIndex,
+                                        int firstLineIndent, int16_t blockStartY = 0, int lineHeight = 0) const;
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks,
                             bool* outInsertedHyphen = nullptr);
   LineProcessResult extractLine(
-      size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths, const std::vector<bool>& continuesVec,
-      const std::vector<size_t>& lineBreakIndices,
+      size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
+      const std::vector<TokenBoundary::Boundary>& boundaries, const std::vector<size_t>& lineBreakIndices,
       const std::function<LineProcessResult(std::unique_ptr<TextBlock>, bool, bool)>& processLine,
       const GfxRenderer& renderer, int fontId, bool lineEndsWithHyphenatedWord, bool suppressHyphenationRetry,
       int firstLineIndent, int16_t blockStartY = 0, int lineHeight = 0);

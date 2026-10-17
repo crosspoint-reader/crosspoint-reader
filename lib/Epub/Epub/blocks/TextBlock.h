@@ -9,6 +9,7 @@
 
 class BuildArena;  // lib/Memory -- optional page-scoped storage for the arena bytes
 
+#include "../TokenBoundary.h"
 #include "Block.h"
 #include "BlockStyle.h"
 
@@ -152,9 +153,9 @@ class TextBlock final : public Block {
     const std::vector<std::string>* words = nullptr;
     const std::vector<EpdFontFamily::Style>* styles = nullptr;
     const std::vector<uint8_t>* sizes = nullptr;  // may be null/empty => uniform 100%
-    // Layout's per-word "attaches to the previous word with no space" flags, indexed like
-    // `words`. May be null, meaning every word is space-separated.
-    const std::vector<bool>* continues = nullptr;
+    // Layout's per-word boundaries, indexed like `words`; only `continues` is kept (style bit 7).
+    // May be null, meaning every word is space-separated.
+    const std::vector<TokenBoundary::Boundary>* boundaries = nullptr;
     size_t first = 0;
     size_t count = 0;
   };
