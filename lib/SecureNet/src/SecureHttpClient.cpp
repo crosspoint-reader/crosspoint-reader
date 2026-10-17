@@ -18,6 +18,13 @@ std::string toLowerAscii(const std::string& s) {
   for (char& c : r) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
   return r;
 }
+bool equalsIgnoreCaseAscii(const std::string& a, const std::string& b) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (::tolower(static_cast<unsigned char>(a[i])) != ::tolower(static_cast<unsigned char>(b[i]))) return false;
+  }
+  return true;
+}
 }  // namespace
 
 bool SecureHttpClient::parseUrl(const std::string& in, Url& out) {
@@ -49,6 +56,42 @@ std::string SecureHttpClient::resolveRedirect(const Url& base, const std::string
   const size_t slash = base.path.rfind('/');
   const std::string dir = slash == std::string::npos ? "/" : base.path.substr(0, slash + 1);
   return base.scheme + "://" + base.host + ":" + std::to_string(base.port) + dir + location;
+}
+
+// A server that redirects a request elsewhere, compromised or merely misconfigured, must not hand
+// the next host the user's password: the hop is followed, without the credentials. The origin is
+// scheme, host and port. Host names compare without case, and parseUrl() has already filled in an
+// omitted port with the scheme's default, so "https://Example.org:443/a" and "https://example.org/b"
+// are one origin. A single step across schemes stays: http to https on the same host and the
+// default ports, a server upgrading its own connection. That takes the credentials nowhere the
+// first hop had not already sent them, in clear text, and a sync URL typed without a scheme starts
+// out as http (KOReaderCredentialStore::getBaseUrl()). Python requests' should_strip_auth() allows
+// the same step. The reverse, https to http, is never the same origin.
+// Based on crosspoint-reader PR #3253 (Foulad / @sfoulad), reworked for SecureHttpClient: one rule
+// for basic auth and the custom headers, in the client every download and sync goes through.
+bool SecureHttpClient::sameCredentialOrigin(const Url& scope, const Url& hop) {
+  if (!equalsIgnoreCaseAscii(scope.host, hop.host)) return false;
+  if (scope.scheme == hop.scheme) return scope.port == hop.port;
+  return !scope.https() && hop.https() && scope.port == 80 && hop.port == 443;
+}
+
+bool SecureHttpClient::credentialsFollow(Url& scope, const Url& hop, int index) const {
+  if (index == 0) {
+    if (!_credentialScopePinned) {
+      scope = hop;
+    } else if (!parseUrl(_credentialScopeUrl, scope)) {
+      scope = Url{};  // an empty host, which no hop matches: nothing is sent
+    }
+  }
+  if (sameCredentialOrigin(scope, hop)) return true;
+  // Logged at the redirect that leaves scope. A request that starts outside a pinned scope (each
+  // later chunk of a download) is that decision again, and stays quiet.
+  if (index > 0 && ((!_user.empty() && !_pass.empty()) || !_headers.empty())) {
+    LOG_DBG("HTTP", "%s://%s:%u is not %s://%s:%u, where the credentials belong: sent without them", hop.scheme.c_str(),
+            hop.host.c_str(), static_cast<unsigned>(hop.port), scope.scheme.c_str(), scope.host.c_str(),
+            static_cast<unsigned>(scope.port));
+  }
+  return false;
 }
 
 void SecureHttpClient::close() {
@@ -116,7 +159,8 @@ void SecureHttpClient::noteResponse(const ResponseMeta& meta, const std::string&
   _lastUrl = url;
 }
 
-bool SecureHttpClient::sendRequest(const char* method, const Url& u, const uint8_t* body, size_t bodyLen) {
+bool SecureHttpClient::sendRequest(const char* method, const Url& u, const uint8_t* body, size_t bodyLen,
+                                   bool credentials) {
   const uint16_t defPort = u.https() ? 443 : 80;
   const std::string hostHeader = (u.port == defPort) ? u.host : (u.host + ":" + std::to_string(u.port));
 
@@ -125,11 +169,13 @@ bool SecureHttpClient::sendRequest(const char* method, const Url& u, const uint8
   req += "User-Agent: " + _userAgent + "\r\n";
   // Keep-alive so a Session can reuse the handshake across files.
   req += "Connection: keep-alive\r\n";
-  if (!_user.empty() && !_pass.empty()) {
-    const std::string creds = _user + ":" + _pass;
-    req += "Authorization: Basic " + std::string(base64::encode(creds.c_str()).c_str()) + "\r\n";
+  if (credentials) {
+    if (!_user.empty() && !_pass.empty()) {
+      const std::string creds = _user + ":" + _pass;
+      req += "Authorization: Basic " + std::string(base64::encode(creds.c_str()).c_str()) + "\r\n";
+    }
+    for (const std::string& h : _headers) req += h + "\r\n";
   }
-  for (const std::string& h : _headers) req += h + "\r\n";
   if (!_rangeHeader.empty()) req += "Range: " + _rangeHeader + "\r\n";
   if (body && bodyLen) req += "Content-Length: " + std::to_string(bodyLen) + "\r\n";
   req += "\r\n";
@@ -163,7 +209,7 @@ void SecureHttpClient::logRequestTrace(const char* method, const Url& u, int rc)
 // looked connected. That failure belongs to the reused connection, not the
 // request, so it earns exactly one attempt on a fresh connection. A request
 // that failed on a fresh connection is a real error and is not retried.
-int SecureHttpClient::transact(const char* method, const Url& u, const uint8_t* body, size_t bodyLen,
+int SecureHttpClient::transact(const char* method, const Url& u, const uint8_t* body, size_t bodyLen, bool credentials,
                                ResponseMeta& meta) {
   _trace = RequestTrace{};
   _trace.startMs = millis();
@@ -177,7 +223,7 @@ int SecureHttpClient::transact(const char* method, const Url& u, const uint8_t* 
       return ERR_CONNECT;
     }
     _trace.connectMs = millis() - connectStartMs;
-    if (!sendRequest(method, u, body, bodyLen)) {
+    if (!sendRequest(method, u, body, bodyLen, credentials)) {
       close();
       if (reusing && attempt == 0) continue;
       logRequestTrace(method, u, ERR_SEND);
@@ -354,11 +400,14 @@ int SecureHttpClient::readBody(const BodySink& sink, const ProgressFn& progress,
 
 int SecureHttpClient::get(const std::string& url, const BodySink& sink, const ProgressFn& progress) {
   std::string current = url;
+  Url scope;  // the origin the credentials belong to, set at the first hop
+  bool credentials = true;
   for (int hop = 0; hop <= _maxRedirects; ++hop) {
     Url u;
     if (!parseUrl(current, u)) return ERR_BAD_URL;
+    credentials = credentials && credentialsFollow(scope, u, hop);
     ResponseMeta meta;
-    const int trc = transact("GET", u, nullptr, 0, meta);
+    const int trc = transact("GET", u, nullptr, 0, credentials, meta);
     if (trc < 0) return trc;
     noteResponse(meta, current);
 
@@ -405,14 +454,17 @@ int SecureHttpClient::request(const char* method, const std::string& url, const 
   std::string current = url;
   std::string activeMethod = method;
   std::string activeBody = body;
+  Url scope;  // see get()
+  bool credentials = true;
   for (int hop = 0; hop <= _maxRedirects; ++hop) {
     Url u;
     if (!parseUrl(current, u)) return ERR_BAD_URL;
+    credentials = credentials && credentialsFollow(scope, u, hop);
     ResponseMeta meta;
     const bool hasBody = !activeBody.empty();
     const int trc =
         transact(activeMethod.c_str(), u, hasBody ? reinterpret_cast<const uint8_t*>(activeBody.data()) : nullptr,
-                 activeBody.size(), meta);
+                 activeBody.size(), credentials, meta);
     if (trc < 0) return trc;
     noteResponse(meta, current);
 

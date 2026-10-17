@@ -394,6 +394,41 @@ TEST_F(Fixture, ARedirectTargetThatStillRefusesFails) {
   EXPECT_EQ(FakeNet::requests().size(), 5u);
 }
 
+// The chunks after the first go straight to the redirect target, and the credentials given for the
+// original URL went there with every one of them.
+TEST_F(Fixture, ChunksSentToAnotherHostCarryNoCredentials) {
+  http.setBasicAuth("reader", "secret");
+  const std::string resource = makeResource(20000);
+  const size_t c = firstChunk();
+  const std::string redirect =
+      "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/signed\r\nContent-Length: 0\r\n\r\n";
+  FakeNet::replies().push_back({redirect, FakeReply::End::KeepOpen});
+  FakeNet::replies().push_back({"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-" + std::to_string(c - 1) +
+                                    "/20000\r\nContent-Length: " + std::to_string(c) + "\r\n\r\n" +
+                                    resource.substr(0, c),
+                                FakeReply::End::KeepOpen});
+  FakeNet::replies().push_back(
+      {"HTTP/1.1 403 Forbidden\r\nContent-Length: 9\r\n\r\nForbidden", FakeReply::End::KeepOpen});
+  FakeNet::replies().push_back({redirect, FakeReply::End::KeepOpen});
+  serve(resource);
+
+  EXPECT_EQ(download(), 200);
+  EXPECT_EQ(file, resource);
+  const std::vector<std::string>& requests = FakeNet::requests();
+  ASSERT_GE(requests.size(), 5u);
+  for (size_t i = 0; i < requests.size(); ++i) {
+    // Only the original URL, asked first and again when the target refused, gets them.
+    const bool original = requests[i].rfind("GET /fonts/f.cpfont ", 0) == 0;
+    EXPECT_EQ(requests[i].find("\r\nAuthorization: ") != std::string::npos, original) << i << ":\n" << requests[i];
+  }
+  EXPECT_EQ(requests[2].rfind("GET /signed ", 0), 0u);  // a chunk straight to the target, without them
+
+  // The download's scope ends with it: a request of the caller's own to that host is the caller's.
+  FakeNet::replies().push_back({"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", FakeReply::End::KeepOpen});
+  EXPECT_EQ(http.get("https://cdn.example/other", nullptr), 200);
+  EXPECT_NE(FakeNet::requests().back().find("\r\nAuthorization: "), std::string::npos);
+}
+
 TEST_F(Fixture, AFailedRewindIsAFileError) {
   const std::string resource = makeResource(20000);
   serve(resource);

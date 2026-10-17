@@ -49,13 +49,29 @@ class SecureHttpClient {
   void setAllowCertificateDateErrors(bool allow) { _allowCertificateDateErrors = allow; }
   void setTimeout(uint32_t ms) { _timeoutMs = ms; }
   void setUserAgent(const std::string& ua) { _userAgent = ua; }
+  // Basic auth and the addHeader() headers are the credentials of the server a request starts at
+  // (KOSync's x-auth-user and x-auth-key ride in custom headers). They go only to that origin
+  // (scheme, host, port): a redirect anywhere else is followed without them, and they stay off for
+  // the rest of the request even if a later hop comes back. sameCredentialOrigin() has the rule.
   void setBasicAuth(const std::string& user, const std::string& pass) {
     _user = user;
     _pass = pass;
   }
-  // Per-request custom headers (cleared after each request unless keep()).
+  // Custom headers, sent until clearHeaders(). Credentials, as above.
   void addHeader(const std::string& name, const std::string& value) { _headers.push_back(name + ": " + value); }
   void clearHeaders() { _headers.clear(); }
+  // The credentials belong to url's origin instead of the URL each request starts at, until
+  // clearCredentialScope(). For a caller that sends later requests straight to where an earlier
+  // one was redirected (a chunked download's later chunks): that target is not the server the
+  // credentials were given for.
+  void setCredentialScope(const std::string& url) {
+    _credentialScopeUrl = url;
+    _credentialScopePinned = true;
+  }
+  void clearCredentialScope() {
+    _credentialScopeUrl.clear();
+    _credentialScopePinned = false;
+  }
   // Max redirect hops to follow (default 5; 0 disables following).
   void setMaxRedirects(int n) { _maxRedirects = n; }
   // Allow a redirect to step down from https to http. Off by default, because
@@ -139,6 +155,12 @@ class SecureHttpClient {
   };
   static bool parseUrl(const std::string& in, Url& out);
   static std::string resolveRedirect(const Url& base, const std::string& location);
+  // Whether hop is the origin the credentials belong to (scope), so that they may go there.
+  static bool sameCredentialOrigin(const Url& scope, const Url& hop);
+  // Whether hop, number index of a request, may carry the credentials. The first hop sets scope:
+  // the pinned one, else its own origin. The caller stops asking once a hop says no, so no later
+  // hop of the request gets them back.
+  bool credentialsFollow(Url& scope, const Url& hop, int index) const;
 
   // Per-request trace for the half of a request that was never instrumented.
   //
@@ -192,9 +214,11 @@ class SecureHttpClient {
   // Connect (or reuse), send the request, and read the response headers — with
   // one transparent retry when a reused keep-alive socket turns out to be dead.
   // Returns 0, or a negative SecureHttpError.
-  int transact(const char* method, const Url& u, const uint8_t* body, size_t bodyLen, ResponseMeta& meta);
-  // Send the request line + headers (+ body for POST/PUT). Returns false on write failure.
-  bool sendRequest(const char* method, const Url& u, const uint8_t* body, size_t bodyLen);
+  int transact(const char* method, const Url& u, const uint8_t* body, size_t bodyLen, bool credentials,
+               ResponseMeta& meta);
+  // Send the request line + headers (+ body for POST/PUT), with the credentials only when told to.
+  // Returns false on write failure.
+  bool sendRequest(const char* method, const Url& u, const uint8_t* body, size_t bodyLen, bool credentials);
   // Read status line + headers into meta (status, body framing, Location, Content-Range).
   bool readHeaders(ResponseMeta& meta);
   // Stream the body per framing to sink (with progress). Returns 0 on success,
@@ -220,6 +244,8 @@ class SecureHttpClient {
   std::string _user;
   std::string _pass;
   std::vector<std::string> _headers;
+  std::string _credentialScopeUrl;  // setCredentialScope(), parsed as each request starts
+  bool _credentialScopePinned = false;
   std::string _rangeHeader;  // "bytes=a-b" while a Range is set, else empty
   bool _quietRequests = false;
   size_t _maxBufferedBody = 0;

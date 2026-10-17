@@ -15,11 +15,14 @@
 // The Arduino-wolfSSL library's logging.c references this hook, normally defined
 // in the library's wolfssl.h sketch glue (not compiled in a PlatformIO lib build),
 // so we provide it. Signature must match wolfcrypt/logging.h exactly (int return).
-// Routes wolfSSL's internal debug logging to our logger.
+// Routes wolfSSL's internal debug logging to our logger. Only a CROSSPOINT_WOLFSSL_DEBUG build
+// keeps DEBUG_WOLFSSL (scripts/patch_wolfssl.py), and only then does logging.c call it.
+#if defined(DEBUG_WOLFSSL)
 extern "C" int wolfSSL_Arduino_Serial_Print(const char* const s) {
   if (s) LOG_DBG("WOLF", "%s", s);
   return 0;
 }
+#endif
 #endif
 
 namespace crosspoint {

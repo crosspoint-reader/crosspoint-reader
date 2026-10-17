@@ -208,25 +208,64 @@ OVERRIDES = """
 #define WOLFSSL_ALT_CERT_CHAINS
 #endif
 
+/* Seed the DRBG from the hardware RNG. The library's user_settings.h undefines WOLFSSL_ESPIDF,
+ * so wc_GenerateSeed() would take its ARDUINO branch and read libc random(), which nothing here
+ * seeds: every boot, and with the reboot after each Wi-Fi session every TLS session, would start
+ * from the same DRBG state, making the ECDHE keys predictable. wc_GenerateSeed() checks
+ * CUSTOM_RAND_GENERATE_SEED before any platform branch. esp_fill_random() is true random while
+ * the radio is on, which it always is when TLS runs.
+ * Ported from crosspoint-reader PR #3897 (Rory Chatterton, @rorychatterton). */
+#include <esp_random.h>
+static inline int crosspoint_wolfssl_seed(unsigned char* output, unsigned int sz) {{
+  esp_fill_random(output, sz);
+  return 0;
+}}
+#undef  CUSTOM_RAND_GENERATE_SEED
+#define CUSTOM_RAND_GENERATE_SEED crosspoint_wolfssl_seed
+
 #endif /* CROSSPOINT_WOLFSSL_TUNED */
 {end_marker}
 """
+
+TAIL_MARKER = "/* ---- CrossPoint wolfSSL tail overrides ---- */"
+TAIL_END_MARKER = "/* ---- end CrossPoint wolfSSL tail overrides ---- */"
+
+# Appended, not prepended: these undo defines the library's user_settings.h makes
+# unconditionally further down, which the prepended block above cannot reach.
+TAIL_OVERRIDES = """
+{marker}
+/* No wolfSSL trace. The library defines DEBUG_WOLFSSL, which compiles the string of every
+ * WOLFSSL_ENTER/WOLFSSL_LEAVE/WOLFSSL_MSG call into flash (~1000 of them), yet nothing turns the
+ * trace on: SecureClient never calls wolfSSL_Debugging_ON(). Errors still reach our logs through
+ * wolfSSL_get_error(), which does not depend on it. Build with -DCROSSPOINT_WOLFSSL_DEBUG to keep
+ * the trace (and call wolfSSL_Debugging_ON() to see it).
+ * Adapted from CrossInk (uxjulia/CrossInk) commit 9e27d1dd (Julia Nguyen), MIT. */
+#ifndef CROSSPOINT_WOLFSSL_DEBUG
+#undef  DEBUG_WOLFSSL
+#endif
+{end_marker}
+"""
+
+
+def strip_block(text, start, end):
+    # Remove a prior injection delimited by start/end markers, wherever it sits.
+    if start in text and end in text:
+        text = text.split(start, 1)[0] + text.split(end, 1)[1]
+    return text
 
 
 def patch(path):
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         text = f.read()
-    # Strip any prior injection (idempotent). Our block is delimited by MARKER at
-    # the start and END_MARKER at the end so we can remove it wherever it sits.
-    if MARKER in text and END_MARKER in text:
-        head = text.split(MARKER, 1)[0]
-        tail = text.split(END_MARKER, 1)[1]
-        text = head + tail
+    # Strip any prior injection (idempotent).
+    text = strip_block(text, MARKER, END_MARKER)
+    text = strip_block(text, TAIL_MARKER, TAIL_END_MARKER)
     # Prepend so our defines (esp. WOLFSSL_CLIENT_EXAMPLE) are seen BEFORE the
     # library's own #if checks near the top of user_settings.h, avoiding a
     # spurious "define WOLFSSL_CLIENT_EXAMPLE" #warning.
     block = OVERRIDES.format(marker=MARKER, end_marker=END_MARKER).lstrip() + "\n"
-    text = block + text.lstrip()
+    tail_block = TAIL_OVERRIDES.format(marker=TAIL_MARKER, end_marker=TAIL_END_MARKER).lstrip()
+    text = block + text.strip() + "\n\n" + tail_block
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     print("Patched wolfSSL user_settings: {}".format(os.path.relpath(path, PROJECT_DIR)))

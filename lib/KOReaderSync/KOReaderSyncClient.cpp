@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "KOReaderCredentialStore.h"
+#include "KOReaderProgressReply.h"
 
 int KOReaderSyncClient::lastHttpCode = 0;
 int KOReaderSyncClient::lastEspError = 0;
@@ -522,7 +523,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   beginRequest("get progress");
   if (!checkHeapForTls()) return NETWORK_ERROR;
 
-  std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
+  // Calibre-Web NextGen withholds a percentage-only position (one its web reader or a Kobo
+  // wrote) from a client that does not say it can seek to one. Servers without the parameter
+  // route on the path and ignore it. Ported from crosspoint-reader PR #3219 (Micah Halter,
+  // @mehalter).
+  std::string url =
+      KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash + "?position_kinds=locator,percentage";
   LOG_DBG("KOSync", "Getting progress: %s (heap: %u, contig: %u)", url.c_str(), lastHeapAtFailure,
           lastContigHeapAtFailure);
 
@@ -587,36 +593,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
       LOG_INF("KOSync", "HTTP %d with no body — treating as not found", httpCode);
       return NOT_FOUND;
     }
-
-    JsonDocument doc;
-    const DeserializationError error = deserializeJson(doc, responseBody);
-
-    if (error) {
-      LOG_ERR("KOSync", "JSON parse failed: %s", error.c_str());
-      return JSON_ERROR;
-    }
-
-    // kosync convention: no stored progress for the document is signalled by a 2xx
-    // carrying an empty payload, not by 404. What "empty" serializes to varies by
-    // implementation — "{}", "[]", "\"\"", or a bare null — so anything that is not an
-    // object carrying a "progress" key means no record. Detect that so the caller doesn't
-    // apply a zeroed-out position as if it were real progress.
-    if (!doc.is<JsonObject>() || doc["progress"].isNull()) {
-      std::string jsonDump;
-      serializeJson(doc, jsonDump);
-      LOG_INF("KOSync", "Empty progress payload — treating as not found | payload=%s", jsonDump.c_str());
-      return NOT_FOUND;
-    }
-
-    outProgress.document = documentHash;
-    outProgress.progress = doc["progress"].as<std::string>();
-    outProgress.percentage = doc["percentage"].as<float>();
-    outProgress.device = doc["device"].as<std::string>();
-    outProgress.deviceId = doc["device_id"].as<std::string>();
-    outProgress.timestamp = doc["timestamp"].as<int64_t>();
-
-    LOG_INF("KOSync", "Got progress: %.2f%% at %s", outProgress.percentage * 100, outProgress.progress.c_str());
-    return OK;
+    return parseProgressReply(responseBody, documentHash, outProgress);
   }
 
   if (httpCode == 401) return AUTH_FAILED;
