@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - CI (build)
+      - Browser preview
     types:
       - completed
 
@@ -16,10 +17,10 @@ jobs:
     if: github.event.workflow_run.event == 'pull_request'
     concurrency:
       group: pr-firmware-links-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
-      - name: Update firmware links comment
+      - name: Update firmware and preview links comment
         uses: actions/github-script@v9
         with:
           script: |
@@ -28,7 +29,7 @@ jobs:
             const { owner, repo } = context.repo;
 
             const headOwner = run.head_repository?.owner?.login;
-            if (!headOwner) {
+            if (!headOwner || !run.head_repository?.id) {
               core.notice(`No head repository found for ${run.head_sha}.`);
               return;
             }
@@ -37,11 +38,12 @@ jobs:
               owner,
               repo,
               head: `${headOwner}:${run.head_branch}`,
-              state: 'all',
+              state: 'open',
               per_page: 100,
             });
             const associatedPullRequest = pullRequests.find(
-              (pr) => pr.state === 'open' && pr.head.sha === run.head_sha,
+              (pr) => pr.state === 'open' && pr.head.sha === run.head_sha &&
+                pr.head.repo?.id === run.head_repository.id,
             );
 
             if (!associatedPullRequest) {
@@ -55,12 +57,14 @@ jobs:
               pull_number: associatedPullRequest.number,
             });
 
-            if (pullRequest.state !== 'open' || pullRequest.head.sha !== run.head_sha) {
+            const matchesPullRequest = (pr) => pr.state === 'open' &&
+              pr.head.sha === run.head_sha && pr.head.repo?.id === run.head_repository.id;
+            if (!matchesPullRequest(pullRequest)) {
               core.notice(`Skipping closed or superseded workflow run for ${run.head_sha}.`);
               return;
             }
 
-            const builds = [
+            const firmwareBuilds = [
               { name: 'firmware.bin', device: 'X3 / X4' },
               { name: 'firmware-sticky.bin', device: 'Sticky' },
               { name: 'firmware-x4pro.bin', device: 'X4 Pro' },
@@ -69,42 +73,88 @@ jobs:
               { name: 'firmware-metalio_eink4.bin', device: 'MetalIO EInk4' },
               { name: 'firmware-eego_a4.bin', device: 'EEGO A4' },
             ];
-            const { data: artifactResponse } =
-              await github.rest.actions.listWorkflowRunArtifacts({
+            const previewBuilds = [
+              { name: 'crosspoint-x4.html', device: 'X4' },
+              { name: 'crosspoint-x3.html', device: 'X3' },
+              { name: 'crosspoint-x4pro.html', device: 'X4 Pro' },
+            ];
+
+            // Resolve both workflows afresh: completion events can arrive out of order.
+            async function latestRun(workflow) {
+              let runs;
+              try {
+                runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                  owner,
+                  repo,
+                  workflow_id: workflow,
+                  event: 'pull_request',
+                  head_sha: run.head_sha,
+                  per_page: 100,
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                return undefined;
+              }
+              return runs.filter((candidate) => candidate.event === 'pull_request' &&
+                candidate.head_sha === run.head_sha && candidate.head_branch === run.head_branch &&
+                candidate.head_repository?.id === run.head_repository.id)
+                .sort((a, b) => b.id - a.id)[0];
+            }
+
+            async function buildLinks(workflow, builds, requireSuccess) {
+              const latest = await latestRun(workflow);
+              if (!latest) return { text: 'No build has started for this commit yet.' };
+              const runLink = `[View the build](${latest.html_url}).`;
+              if (latest.status !== 'completed') {
+                return { text: `Build ${latest.status.replaceAll('_', ' ')}. ${runLink}` };
+              }
+              if (requireSuccess && latest.conclusion !== 'success') {
+                return { text: `Preview unavailable: the build finished with ${latest.conclusion}. ${runLink}` };
+              }
+              const uploaded = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
                 owner,
                 repo,
-                run_id: run.id,
+                run_id: latest.id,
                 per_page: 100,
               });
-            const artifacts = new Map(
-              artifactResponse.artifacts
-                .filter((artifact) => !artifact.expired)
-                .map((artifact) => [artifact.name, artifact]),
-            );
-            const missingBuilds = builds.filter((build) => !artifacts.has(build.name));
-            const shortSha = run.head_sha.slice(0, 7);
-            let body = `${marker}\n### Firmware builds\n\n`;
-
-            if (missingBuilds.length === 0) {
+              const artifacts = new Map(uploaded.filter((artifact) => !artifact.expired)
+                .map((artifact) => [artifact.name, artifact]));
+              const missing = builds.filter((build) => !artifacts.has(build.name));
+              if (missing.length) {
+                const names = missing.map(({ name }) => `\`${name}\``).join(', ');
+                return { text: `Downloads unavailable: ${names} were not produced or have expired. ${runLink}` };
+              }
               const links = builds.map(({ name, device }) => {
                 const artifact = artifacts.get(name);
-                const url = `https://github.com/${owner}/${repo}/actions/runs/${run.id}/artifacts/${artifact.id}`;
+                const url = `https://github.com/${owner}/${repo}/actions/runs/${latest.id}/artifacts/${artifact.id}`;
                 return `- [${device} (\`${name}\`)](${url})`;
               });
-              body += `Automatically generated for the latest commit of this PR (\`${shortSha}\`).\n\n`;
-              body += `${links.join('\n')}\n\n`;
+              let text = links.join('\n');
+              if (latest.conclusion !== 'success') {
+                text += `\n\n> Firmware artifacts are available, but CI finished with ${latest.conclusion}. ${runLink}`;
+              }
+              return { text, available: true };
+            }
+
+            const [firmware, preview] = await Promise.all([
+              buildLinks('ci.yml', firmwareBuilds, false),
+              buildLinks('browser-preview.yml', previewBuilds, true),
+            ]);
+            const shortSha = run.head_sha.slice(0, 7);
+            let body = `${marker}\nBuilds for PR commit \`${shortSha}\`.\n\n`;
+            body += `### Firmware builds\n\n${firmware.text}`;
+            if (firmware.available) {
+              body += '\n\n';
               body += 'Download the file for your device, extract the `.bin` from the ZIP, then flash it with ';
               body += '[CrossPoint Reader Flash Tools](https://crosspointreader.com/#flash-tools). ';
               body += '**Make sure you use the correct firmware file for your device.**';
-
-              if (run.conclusion !== 'success') {
-                body += `\n\n> The firmware builds succeeded, but [another CI check finished with ${run.conclusion}](${run.html_url}).`;
-              }
-            } else {
-              const missingNames = missingBuilds.map(({ name }) => `\`${name}\``).join(', ');
-              body += `Firmware is not available for the latest commit of this PR (\`${shortSha}\`). `;
-              body += `The build did not produce ${missingNames}. [View the CI run](${run.html_url}).`;
             }
+            body += `\n\n### Browser previews\n\n${preview.text}`;
+            if (preview.available) {
+              body += '\n\nDownload the HTML for your device and open it in Chrome. No server or device is needed. ';
+              body += 'Preview downloads expire after 14 days.';
+            }
+            body += '\n\nGitHub sign-in is required to download these artifacts.';
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -116,6 +166,16 @@ jobs:
               (comment) =>
                 comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker),
             );
+
+            const { data: currentPullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullRequest.number,
+            });
+            if (!matchesPullRequest(currentPullRequest)) {
+              core.notice(`PR changed while collecting artifacts for ${run.head_sha}; skipping comment.`);
+              return;
+            }
 
             if (existingComment) {
               await github.rest.issues.updateComment({
