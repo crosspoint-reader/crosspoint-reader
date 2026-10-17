@@ -98,7 +98,7 @@ void utf8TruncateChars(std::string& str, const size_t numChars) {
 // ---------------------------------------------------------------------------
 
 // Encode a Unicode codepoint as UTF-8 bytes appended to `out`.
-static void appendCodepoint(std::string& out, const uint32_t cp) {
+void utf8AppendCodepoint(std::string& out, const uint32_t cp) {
   if (cp < 0x80u) {
     out += static_cast<char>(cp);
   } else if (cp < 0x800u) {
@@ -392,12 +392,12 @@ std::string utf8NfcNorm(std::string s) {
       } else {
         // Cannot compose: emit current base as-is, the unmatched mark becomes
         // the new base token (it will be emitted or further composed next loop).
-        appendCodepoint(out, base);
+        utf8AppendCodepoint(out, base);
         base = mark;
       }
     }
 
-    appendCodepoint(out, base);
+    utf8AppendCodepoint(out, base);
   }
 
   return out;
@@ -534,7 +534,7 @@ std::string utf8ToLower(const std::string& s) {
       // Copied as bytes, so a sequence that did not decode passes through as it was.
       out.append(reinterpret_cast<const char*>(start), static_cast<size_t>(p - start));
     } else {
-      appendCodepoint(out, lower);
+      utf8AppendCodepoint(out, lower);
     }
   }
   return out;
