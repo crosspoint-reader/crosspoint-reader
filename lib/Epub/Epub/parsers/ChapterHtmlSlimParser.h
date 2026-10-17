@@ -144,6 +144,16 @@ class ChapterHtmlSlimParser final : public Print {
   int16_t currentPageNextY = 0;
   int16_t lastBlockMarginBottom = 0;  // tracks previous block's marginBottom for CSS margin collapsing
 
+  // CSS page-break-before / page-break-after: a break waiting for the next content. It is taken
+  // once the text before it is laid out (applyPendingPageBreak), not at the tag: at a start tag
+  // the previous paragraph is still in currentTextBlock, and at an end tag so is the element's own.
+  bool pageBreakPending_ = false;
+  // Depths of the open elements that break after themselves. Fixed size, no heap; nesting deeper
+  // than this is pathological, and a deeper one only loses its own break.
+  static constexpr uint8_t kMaxBreakAfterDepth = 4;
+  uint8_t breakAfterCount_ = 0;
+  int breakAfterDepths_[kMaxBreakAfterDepth] = {};
+
   // Inline image beside paragraph text (CSS float context)
   // Fixed-size arrays — no heap allocation. Float nesting > 4 is pathological in practice.
   static constexpr int kMaxFloatDepth = 4;
@@ -730,6 +740,9 @@ class ChapterHtmlSlimParser final : public Print {
   // in lockstep. Every page break MUST go through this helper; open-coded completePageFn
   // calls risk desynchronising paragraphLutPerPage and failing the size check in Section.cpp.
   void emitPage();
+  // Take a pending page break (pageBreakPending_): emit the page if anything is on it. Called
+  // where the content before the break has been laid out and the next is about to be placed.
+  void applyPendingPageBreak();
   void recordPageBreakLabel(const std::string& label);
   // Attach the pending inline float image to `bs` and place it on the current page.
   // Clears pendingInlineImage_ on return.  No-op if pendingInlineImage_ is not active.

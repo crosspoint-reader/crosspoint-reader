@@ -1135,6 +1135,14 @@ void ChapterHtmlSlimParser::emitPage() {
   }
 }
 
+// Based on crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin; the deferral is Uri
+// Tauber's), reworked for our parser, which has no block-style stack to carry the flags on.
+void ChapterHtmlSlimParser::applyPendingPageBreak() {
+  if (!pageBreakPending_) return;
+  pageBreakPending_ = false;
+  if (currentPage && !currentPage->elements.empty()) emitPage();
+}
+
 void ChapterHtmlSlimParser::stopOnFullPageTable() {
   // Destroyed before emitPage rewinds the page block its lines live in.
   currentPage.reset();
@@ -1600,6 +1608,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       }
       currentTextBlock->setBlockStyle(merged);
 
+      // Whatever came before is laid out already: the block is empty.
+      applyPendingPageBreak();
       if (!pendingAnchorId.empty()) {
         if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
           if (currentPage && !currentPage->elements.empty()) {
@@ -1621,6 +1631,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 
     if (!currentTextBlock->isEmpty()) makePages();
   }
+  applyPendingPageBreak();
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   if (!pendingAnchorId.empty() &&
@@ -1927,6 +1938,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     // heading sizing rather than destroying the block: text can still arrive before the next
     // block tag opens, and flushPartWordBuffer drops words when there is no block to take them.
     self->clearSpentBlockHeadingStyle();
+    self->applyPendingPageBreak();
     self->currentTable = std::unique_ptr<BufferedTable>(new BufferedTable());
     self->currentTable->depth = 1;
     if (atts != nullptr) {
@@ -2409,6 +2421,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
                   const BlockStyle parentBlockStyle = self->currentTextBlock->getBlockStyle();
                   self->startNewTextBlock(parentBlockStyle);
                 }
+                self->applyPendingPageBreak();
 
                 // If the current text block is still empty, it may carry accumulated parent
                 // block spacing (e.g. div/figure/h1 wrappers). Apply that spacing around the
@@ -2695,11 +2708,17 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     if (!self->flushPartWordBuffer()) return;
   }
 
-  // CSS page-break-before: always — emit the current page before this block starts.
-  if (cssStyle.pageBreakBefore &&
-      (matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || opensBlockSpan) &&
-      self->currentPage && !self->currentPage->elements.empty()) {
-    self->emitPage();
+  // CSS page-break-before / page-break-after: always. The break before waits for the block's
+  // startNewTextBlock, which lays out the paragraph still pending before it: taken here, the page
+  // was emitted first and that paragraph went over with this block. The break after is taken at
+  // the first content after the end tag. Not inside a table, whose rows are placed as a whole.
+  const bool breakableBlock =
+      matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || opensBlockSpan;
+  if (breakableBlock && !self->currentTable) {
+    if (cssStyle.pageBreakBefore) self->pageBreakPending_ = true;
+    if (cssStyle.pageBreakAfter && self->breakAfterCount_ < ChapterHtmlSlimParser::kMaxBreakAfterDepth) {
+      self->breakAfterDepths_[self->breakAfterCount_++] = self->depth;
+    }
   }
 
   if (opensBlockSpan) {
@@ -2838,6 +2857,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
       if (!self->flushPartWordBuffer()) return;
     }
     self->makePages();
+    self->applyPendingPageBreak();
     if (!self->currentPage) {
       self->currentPage.reset(new Page());
       self->currentPageNextY = 0;
@@ -3471,6 +3491,12 @@ void ChapterHtmlSlimParser::endElementBody(ChapterHtmlSlimParser* self, const ch
   while (!self->heldBottomSpacing_.empty() && self->heldBottomSpacing_.back().depth >= self->depth) {
     self->applyHeldBottomSpacing(self->heldBottomSpacing_.back());
     self->heldBottomSpacing_.pop_back();
+  }
+
+  // An element that breaks after itself has closed: what follows starts the next page.
+  while (self->breakAfterCount_ > 0 && self->breakAfterDepths_[self->breakAfterCount_ - 1] >= self->depth) {
+    self->breakAfterCount_--;
+    self->pageBreakPending_ = true;
   }
 
   // Pop explicit-width container entries whose block is now out of scope
@@ -4620,6 +4646,7 @@ void ChapterHtmlSlimParser::placeBackgroundImage(const std::string& resolvedPath
   // The element's text first: the picture follows everything it held.
   if (partWordBufferIndex > 0 && !flushPartWordBuffer()) return;
   if (currentTextBlock && !currentTextBlock->isEmpty()) makePages();
+  applyPendingPageBreak();
   uint16_t nativeWidth = 0;
   uint16_t nativeHeight = 0;
   auto image = buildImageFromEpubPath(resolvedPath, {}, static_cast<uint16_t>(viewportWidth),

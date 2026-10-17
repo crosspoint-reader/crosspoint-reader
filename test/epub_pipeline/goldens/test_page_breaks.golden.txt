@@ -1,0 +1,84 @@
+BOOK title=Page Breaks lang=en spine=7 toc=0 reliableToc=0
+SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=AFTERONE
+   W x=76 s=0 z=100 t=ends
+   W x=119 s=0 z=100 t=the
+   W x=156 s=0 z=100 t=page.
+ PAGE 1 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=AFTERTWO
+   W x=72 s=0 z=100 t=starts
+   W x=136 s=0 z=100 t=the
+   W x=173 s=0 z=100 t=next.
+SPINE 1 href=OEBPS/chapter2.xhtml pages=3 truncated=0 cssFallback=0
+ PAGE 0 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=PARTONE
+   W x=67 s=0 z=100 t=first.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=PARTTWO
+   W x=63 s=0 z=100 t=second.
+ PAGE 1 elements=1 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.400 hfid=0 words=1
+   W x=165 s=1 z=100 t=TITLEHEAD
+ PAGE 2 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=0 z=100 t=TITLEBODY
+   W x=90 s=0 z=100 t=under
+   W x=143 s=0 z=100 t=its
+   W x=174 s=0 z=100 t=own
+   W x=209 s=0 z=100 t=page.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=KEEPONE
+   W x=77 s=0 z=100 t=stays.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=KEEPTWO
+   W x=73 s=0 z=100 t=stays
+   W x=127 s=0 z=100 t=as
+   W x=154 s=0 z=100 t=well.
+ PAGE 1 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=BREAKBEFORE
+   W x=115 s=0 z=100 t=starts
+   W x=179 s=0 z=100 t=the
+   W x=216 s=0 z=100 t=page.
+SPINE 3 href=OEBPS/chapter4.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=ONEBREAK
+   W x=84 s=0 z=100 t=before.
+ PAGE 1 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=ONEBREAKNEXT
+   W x=119 s=0 z=100 t=after.
+SPINE 4 href=OEBPS/chapter5.xhtml pages=3 truncated=0 cssFallback=0
+ PAGE 0 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=NESTINNER
+ PAGE 1 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=NESTSIBLING
+ PAGE 2 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=NESTOUTSIDE
+SPINE 5 href=OEBPS/chapter6.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=1 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=PICCAPTION
+   W x=91 s=0 z=100 t=above.
+ PAGE 1 elements=1 footnotes=0
+  IMG y=0 x=170 w=120 h=60 src=<cache>/epub_<hash>/img_2bf1feda9b4b5c3e.png
+SPINE 6 href=OEBPS/chapter7.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=ENDONE
+   W x=63 s=0 z=100 t=first.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=ENDLAST
+   W x=74 s=0 z=100 t=and
+   W x=111 s=0 z=100 t=nothing
+   W x=190 s=0 z=100 t=after.

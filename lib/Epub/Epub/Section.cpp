@@ -31,7 +31,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 87;  // v87: a block's bold/italic reaches the blocks
+constexpr uint8_t SECTION_FILE_VERSION = 88;  // v88: page-break-after breaks, and a
+                                              // page-break-before keeps the paragraph before
+                                              // it on the old page
+                                              // v87: a block's bold/italic reaches the blocks
                                               // nested inside it; v86 pages set them upright
                                               // v86: a <span id> is in the anchor map
                                               // v85: an <img> whose href has no extension is
