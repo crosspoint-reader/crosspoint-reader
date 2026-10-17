@@ -2,6 +2,8 @@
 // spaces may break, and the kinsoku pairs that must stay together.
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -125,4 +127,28 @@ TEST(CjkHyphenator, LatinFallbackBreaksStillDrawAHyphen) {
   const auto breaks = Hyphenator::breakOffsets("abcdefgh", /*includeFallback=*/true);
   ASSERT_FALSE(breaks.empty());
   for (const auto& b : breaks) EXPECT_TRUE(b.requiresInsertedHyphen) << "offset " << b.byteOffset;
+}
+
+namespace {
+size_t gAllocations = 0;
+}
+
+void* operator new(std::size_t size) {
+  ++gAllocations;
+  if (void* p = std::malloc(size ? size : 1)) return p;
+  std::abort();
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+
+TEST(CjkBreakOffsets, ALatinWordAllocatesNothing) {
+  const std::string hello = "hello";
+  const std::string longWord(200, 'a');
+  const size_t before = gAllocations;
+  const auto a = CjkLineBreak::breakByteOffsets(hello);
+  const auto b = CjkLineBreak::breakByteOffsets(longWord);
+  const size_t after = gAllocations;
+  EXPECT_TRUE(a.empty());
+  EXPECT_TRUE(b.empty());
+  EXPECT_EQ(after - before, 0u);
 }

@@ -157,3 +157,13 @@ TEST(CjkTokens, BionicReadingLeavesCjkTokensAlone) {
   EXPECT_EQ(lines[0].styles[1], EpdFontFamily::REGULAR);
   EXPECT_EQ(lines[0].styles[2], EpdFontFamily::BOLD);
 }
+
+TEST(CjkSpaces, ANoBreakSpaceNextToCjkStaysGlued) {
+  // The parser turns U+00A0 into a glued " " token: no break on either side of it.
+  ParsedText text(false, false, leftAligned());
+  text.addWord("漢字", EpdFontFamily::REGULAR);
+  text.addWord(" ", EpdFontFamily::REGULAR, false, /*attachToPrevious=*/true);
+  text.addWord("仮名", EpdFontFamily::REGULAR, false, /*attachToPrevious=*/true);
+  const auto lines = layout(text, 25);
+  EXPECT_EQ(wordsOf(lines), (std::vector<std::vector<std::string>>{{"漢"}, {"字", " ", "仮"}, {"名"}}));
+}

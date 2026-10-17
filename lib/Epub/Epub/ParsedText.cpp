@@ -246,7 +246,9 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   // Chinese and Japanese are written without spaces: a word with CJK characters becomes one token
   // per break the CJK rules allow, so a line can end between its characters. Kinsoku pairs such as
-  // 字。 share a token. Latin words get no offsets and stay whole.
+  // 字。 share a token. Latin words get no offsets and stay whole. Our implementation of
+  // crosspoint-reader PR #2288 ("feat: Support for Korean line breaks and glyph spacing", Justin
+  // Mitchell, 22f35750).
   const std::vector<size_t> cjkBreaks = CjkLineBreak::breakByteOffsets(word);
   if (!reserveWords(cjkBreaks.size() + 1)) return;
 
@@ -259,10 +261,11 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // Glued to the previous token in the source (no whitespace between them): where the CJK rules
   // allow a break there, the two meet at a breakable zero-width gap. Where the source had
   // whitespace, the space is content and stays. From crosspoint-reader PR #2768 ("fix: restore
-  // spaces between CJK words", Uri Tauber). A glued Latin "foo—" + "bar" stays glued: the gap needs
+  // spaces between CJK words", Uri Tauber, 9163149a). A glued Latin "foo—" + "bar" stays glued: the gap needs
   // a CJK character on one side, since the dash rule of upstream PR #3883 is not ported.
   TokenBoundary::Boundary boundary{attachToPrevious, false};
-  if (attachToPrevious && !words.empty()) {
+  // A glued " " is the parser's no-break space (U+00A0 / U+202F): no break on either side of it.
+  if (attachToPrevious && !words.empty() && words.back() != " " && word != " ") {
     const uint32_t left = lastCodepoint(words.back());
     const uint32_t right = firstCodepoint(word);
     if ((utf8IsCjkBreakable(left) || utf8IsCjkBreakable(right)) && CjkLineBreak::isGapBetween(left, right)) {

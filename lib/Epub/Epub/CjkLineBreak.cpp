@@ -135,30 +135,31 @@ bool isGapBetween(const uint32_t leftCp, const uint32_t rightCp) {
 }
 
 std::vector<size_t> breakByteOffsets(const std::string& text) {
-  struct CodepointEnd {
-    uint32_t cp;
-    size_t endOffset;
-  };
-
-  std::vector<CodepointEnd> codepoints;
-  codepoints.reserve(text.size());
+  // First pass allocates nothing: most words are Latin and return here.
   bool hasCjk = false;
-
-  const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
-  const auto* const start = ptr;
-  while (*ptr) {
-    const uint32_t cp = utf8NextCodepoint(&ptr);
-    if (cp == 0) break;
-    if (utf8IsCjkBreakable(cp)) hasCjk = true;
-    codepoints.push_back({cp, static_cast<size_t>(ptr - start)});
+  size_t count = 0;
+  {
+    const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
+    while (*ptr) {
+      const uint32_t cp = utf8NextCodepoint(&ptr);
+      if (cp == 0) break;
+      if (utf8IsCjkBreakable(cp)) hasCjk = true;
+      ++count;
+    }
   }
-
-  if (!hasCjk || codepoints.size() < 2) return {};
+  if (!hasCjk || count < 2) return {};
 
   std::vector<size_t> offsets;
-  offsets.reserve(codepoints.size() - 1);
-  for (size_t i = 0; i + 1 < codepoints.size(); ++i) {
-    if (isGapBetween(codepoints[i].cp, codepoints[i + 1].cp)) offsets.push_back(codepoints[i].endOffset);
+  offsets.reserve(count - 1);
+  const auto* const start = reinterpret_cast<const unsigned char*>(text.c_str());
+  const auto* ptr = start;
+  uint32_t prev = utf8NextCodepoint(&ptr);
+  while (*ptr) {
+    const size_t prevEnd = static_cast<size_t>(ptr - start);
+    const uint32_t cur = utf8NextCodepoint(&ptr);
+    if (cur == 0) break;
+    if (isGapBetween(prev, cur)) offsets.push_back(prevEnd);
+    prev = cur;
   }
   return offsets;
 }
