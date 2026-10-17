@@ -523,7 +523,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   beginRequest("get progress");
   if (!checkHeapForTls()) return NETWORK_ERROR;
 
-  std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
+  // Calibre-Web NextGen withholds a percentage-only position (one its web reader or a Kobo
+  // wrote) from a client that does not say it can seek to one. Servers without the parameter
+  // route on the path and ignore it. Ported from crosspoint-reader PR #3219 (Micah Halter,
+  // @mehalter).
+  std::string url =
+      KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash + "?position_kinds=locator,percentage";
   LOG_DBG("KOSync", "Getting progress: %s (heap: %u, contig: %u)", url.c_str(), lastHeapAtFailure,
           lastContigHeapAtFailure);
 

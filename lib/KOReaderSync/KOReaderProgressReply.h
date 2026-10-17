@@ -26,9 +26,19 @@ inline KOReaderSyncClient::Error parseProgressReply(const std::string& body, con
   // kosync convention: no stored progress for the document is signalled by a 2xx
   // carrying an empty payload, not by 404. What "empty" serializes to varies by
   // implementation — "{}", "[]", "\"\"", or a bare null — so anything that is not an
-  // object carrying a "progress" key means no record. Detect that so the caller doesn't
+  // object carrying a position means no record. Detect that so the caller doesn't
   // apply a zeroed-out position as if it were real progress.
-  if (!doc.is<JsonObject>() || doc["progress"].isNull()) {
+  //
+  // A position is an XPath in "progress", or a percentage on its own. Calibre-Web NextGen
+  // serves what its web reader and a Kobo report as "progress": null plus a percentage (the
+  // GET asks for those, see getProgress()), and ProgressMapper places a record without an
+  // XPath by its percentage. Requiring "progress" read every such record as "nothing stored":
+  // a pull found nothing, and smart sync uploaded instead of applying it. Its reply naming a
+  // position it withholds, {"position_kinds_available":[...]}, holds neither. Strings are
+  // read through `| ""`: as<std::string>() turns a missing field into "null".
+  const char* const progress = doc["progress"] | "";
+  const bool hasPercentage = doc["percentage"].is<float>();
+  if (!doc.is<JsonObject>() || (progress[0] == '\0' && !hasPercentage)) {
     std::string jsonDump;
     serializeJson(doc, jsonDump);
     LOG_INF("KOSync", "Empty progress payload — treating as not found | payload=%s", jsonDump.c_str());
@@ -36,10 +46,10 @@ inline KOReaderSyncClient::Error parseProgressReply(const std::string& body, con
   }
 
   outProgress.document = documentHash;
-  outProgress.progress = doc["progress"].as<std::string>();
+  outProgress.progress = progress;
   outProgress.percentage = doc["percentage"].as<float>();
-  outProgress.device = doc["device"].as<std::string>();
-  outProgress.deviceId = doc["device_id"].as<std::string>();
+  outProgress.device = doc["device"] | "";
+  outProgress.deviceId = doc["device_id"] | "";
   outProgress.timestamp = doc["timestamp"].as<int64_t>();
 
   LOG_INF("KOSync", "Got progress: %.2f%% at %s", outProgress.percentage * 100, outProgress.progress.c_str());
