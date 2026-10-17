@@ -102,6 +102,51 @@ TEST(CjkKinsoku, AnOpeningBracketNeverEndsALine) {
   EXPECT_EQ(wordsOf(layout(text, 50)), (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"「五」"}}));
 }
 
+namespace {
+
+// True when a line the layout broke ends with `character`, or the line after it starts with it.
+bool aBreakFallsNextTo(const std::vector<Line>& lines, const std::string& character) {
+  for (size_t i = 0; i + 1 < lines.size(); ++i) {
+    const std::string& end = lines[i].words.back();
+    const std::string& start = lines[i + 1].words.front();
+    if (end.size() >= character.size() &&
+        end.compare(end.size() - character.size(), character.size(), character) == 0) {
+      return true;
+    }
+    if (start.compare(0, character.size(), character) == 0) return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+TEST(CjkKinsoku, NoLineBreakFallsNextToAStraightQuote) {
+  // Unbroken, 一二三四"五 would end the first line with the opening quote.
+  ParsedText text(false, false, leftAligned());
+  text.addWord("一二三四\"五六\"", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 50);
+  ASSERT_GT(lines.size(), 1u);
+  EXPECT_FALSE(aBreakFallsNextTo(lines, "\"")) << testing::PrintToString(wordsOf(lines));
+
+  // Project Gutenberg Chinese quotes with ASCII quotes: 而借"通靈"之說 at three characters a line.
+  ParsedText pg(false, false, leftAligned());
+  pg.addWord("而借\"通靈\"之說", EpdFontFamily::REGULAR);
+  const auto pgLines = layout(pg, 30);
+  ASSERT_GT(pgLines.size(), 1u);
+  EXPECT_FALSE(aBreakFallsNextTo(pgLines, "\"")) << testing::PrintToString(wordsOf(pgLines));
+}
+
+TEST(CjkKinsoku, NoLineStartsWithAnIdeographicSpace) {
+  // ！　 is how Japanese fiction follows an exclamation; a line starting with 　 reads as a new paragraph.
+  ParsedText text(false, false, leftAligned());
+  text.addWord("一二三四！　彼女は", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 50);
+  ASSERT_GT(lines.size(), 1u);
+  for (size_t i = 1; i < lines.size(); ++i) {
+    EXPECT_NE(lines[i].words.front().rfind("　", 0), 0u) << testing::PrintToString(wordsOf(lines));
+  }
+}
+
 TEST(CjkSpaces, AWordGapInTheSourceStaysASpace) {
   ParsedText text(false, false, leftAligned());
   text.addWord("漢字", EpdFontFamily::REGULAR);

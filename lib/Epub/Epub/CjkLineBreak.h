@@ -15,13 +15,14 @@
 // and glyph spacing", Justin Mitchell), the dashes in the no-line-start set from PR #3883 (Phạm Bình
 // An), the Hangul exclusion and hangulLineEndBreaks from PR #3700 (Sung-jin Brian Hong). Ours: the
 // characters added to both sets from KOReader's crengine (UAX #14 classes CL, EX, NS, IN and OP;
-// spec Appendix A.1), and this module.
+// spec Appendix A.1), the straight quotes (QU, LB19), the ideographic space (BA) and the middle
+// dot, and this module.
 namespace CjkLineBreak {
 
 // Kinsoku: characters that must not start a line (closing brackets and quotes, sentence and
 // clause punctuation, iteration marks, dashes and ellipses), and characters that must not end one
-// (opening brackets and quotes). Small kana and the prolonged sound mark may start a line, as in
-// KOReader's default.
+// (opening brackets and quotes). A straight quote (" ' ＂ ＇) may open or close, so it is in both.
+// Small kana and the prolonged sound mark may start a line, as in KOReader's default.
 bool isNoLineStart(uint32_t cp);
 bool isNoLineEnd(uint32_t cp);
 

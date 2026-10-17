@@ -52,6 +52,28 @@ TEST(CjkKinsoku, OpeningBracketsAndQuotesNeverEndALine) {
   EXPECT_FALSE(CjkLineBreak::isNoLineEnd(0x300D));  // 」
 }
 
+TEST(CjkKinsoku, StraightQuotesNeverBreakOnEitherSide) {
+  // " ' ＂ ＇ may open or close a quotation, so neither side of one is a break (UAX #14 LB19).
+  for (const uint32_t cp : {uint32_t{'"'}, uint32_t{'\''}, 0xFF02u, 0xFF07u}) {
+    EXPECT_TRUE(CjkLineBreak::isNoLineStart(cp)) << std::hex << cp;
+    EXPECT_TRUE(CjkLineBreak::isNoLineEnd(cp)) << std::hex << cp;
+  }
+}
+
+TEST(CjkKinsoku, TheMiddleDotAndTheIdeographicSpaceNeverStartALine) {
+  EXPECT_TRUE(CjkLineBreak::isNoLineStart(0x00B7));  // · in transliterated names: 列夫·托尔斯泰
+  EXPECT_TRUE(CjkLineBreak::isNoLineStart(0x3000));  // 　 (UAX #14 BA): ！　 stays together
+}
+
+TEST(CjkBreakOffsets, AStraightQuoteStaysWithTheCharactersOnBothSides) {
+  // 而|借"通|靈"之|說: no break on either side of either quote.
+  EXPECT_EQ(CjkLineBreak::breakByteOffsets("而借\"通靈\"之說"), (std::vector<size_t>{3, 10, 17}));
+}
+
+TEST(CjkBreakOffsets, TheIdeographicSpaceStaysWithTheCharacterBeforeIt) {
+  EXPECT_EQ(CjkLineBreak::breakByteOffsets("四！　彼"), (std::vector<size_t>{9}));
+}
+
 TEST(CjkBreakOffsets, EveryHanCharacterIsABreak) {
   EXPECT_EQ(CjkLineBreak::breakByteOffsets("漢字です"), (std::vector<size_t>{3, 6, 9}));
 }

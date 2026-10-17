@@ -5,7 +5,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=209 s=1 z=100 t=第
    W x=222 s=1 z=100 t=一
    W x=235 s=1 z=100 t=回
-  LINE y=47 x=0 align=0 mult=1.000 hfid=0 words=41
+  LINE y=47 x=0 align=0 mult=1.000 hfid=0 words=37
    W x=18 s=0 z=100 t=此
    W x=27 s=0 z=100 t=開
    W x=33 s=0 z=100 t=卷
@@ -34,12 +34,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=265 s=0 z=100 t=隱
    W x=271 s=0 z=100 t=去，
    W x=287 s=0 z=100 t=而
-   W x=299 s=0 z=100 t=借
-   W x=306 s=0 z=100 t="
-   W x=318 s=0 z=100 t=通
-   W x=324 s=0 z=100 t=靈
-   W x=334 s=0 z=100 t="
-   W x=346 s=0 z=100 t=之
+   W x=299 s=0 z=100 t=借"通
+   W x=324 s=0 z=100 t=靈"之
    W x=354 s=0 z=100 t=說，
    W x=370 s=0 z=100 t=撰
    W x=378 s=0 z=100 t=此
@@ -47,17 +43,13 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=410 s=0 z=100 t=頭
    W x=418 s=0 z=100 t=記》
    W x=432 s=0 z=100 t=一
-  LINE y=71 x=0 align=0 mult=1.000 hfid=0 words=42
+  LINE y=71 x=0 align=0 mult=1.000 hfid=0 words=38
    W x=0 s=0 z=100 t=書
    W x=11 s=0 z=100 t=也．
    W x=29 s=0 z=100 t=故
-   W x=39 s=0 z=100 t=曰
-   W x=49 s=0 z=100 t="
-   W x=61 s=0 z=100 t=甄
+   W x=39 s=0 z=100 t=曰"甄
    W x=70 s=0 z=100 t=士
-   W x=82 s=0 z=100 t=隱
-   W x=88 s=0 z=100 t="
-   W x=100 s=0 z=100 t=云
+   W x=82 s=0 z=100 t=隱"云
    W x=108 s=0 z=100 t=云．
    W x=127 s=0 z=100 t=但
    W x=134 s=0 z=100 t=書
@@ -312,23 +304,18 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=412 s=0 z=100 t=之
    W x=420 s=0 z=100 t=目，
    W x=438 s=0 z=100 t=破
-  LINE y=215 x=0 align=0 mult=1.000 hfid=0 words=17
+  LINE y=215 x=0 align=0 mult=1.000 hfid=0 words=12
    W x=0 s=0 z=100 t=人
    W x=7 s=0 z=100 t=愁
    W x=17 s=0 z=100 t=悶，
    W x=38 s=0 z=100 t=不
    W x=47 s=0 z=100 t=亦
    W x=55 s=0 z=100 t=宜
-   W x=63 s=0 z=100 t=乎？
-   W x=81 s=0 z=100 t="
-   W x=93 s=0 z=100 t=故
-   W x=103 s=0 z=100 t=曰
-   W x=113 s=0 z=100 t="
-   W x=125 s=0 z=100 t=賈
+   W x=63 s=0 z=100 t=乎？"故
+   W x=103 s=0 z=100 t=曰"賈
    W x=135 s=0 z=100 t=雨
    W x=147 s=0 z=100 t=村
-   W x=156 s=0 z=100 t="
-   W x=168 s=0 z=100 t=云
+   W x=156 s=0 z=100 t="云
    W x=176 s=0 z=100 t=云．
   LINE y=239 x=0 align=0 mult=1.000 hfid=0 words=26
    W x=18 s=0 z=100 t=此
@@ -783,16 +770,14 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=409 s=0 z=100 t=有
    W x=416 s=0 z=100 t=`
    W x=427 s=0 z=100 t=美
-  LINE y=527 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=527 x=0 align=0 mult=1.000 hfid=0 words=42
    W x=0 s=0 z=100 t=中
    W x=6 s=0 z=100 t=不
    W x=15 s=0 z=100 t=足，
    W x=31 s=0 z=100 t=好
    W x=42 s=0 z=100 t=事
    W x=51 s=0 z=100 t=多
-   W x=61 s=0 z=100 t=魔
-   W x=71 s=0 z=100 t='
-   W x=81 s=0 z=100 t=八
+   W x=61 s=0 z=100 t=魔'八
    W x=91 s=0 z=100 t=個
    W x=99 s=0 z=100 t=字
    W x=108 s=0 z=100 t=緊
@@ -954,7 +939,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=411 s=0 z=100 t=待
    W x=419 s=0 z=100 t=劫
    W x=427 s=0 z=100 t=終
-  LINE y=623 x=0 align=0 mult=1.000 hfid=0 words=38
+  LINE y=623 x=0 align=0 mult=1.000 hfid=0 words=36
    W x=0 s=0 z=100 t=之
    W x=8 s=0 z=100 t=日，
    W x=26 s=0 z=100 t=复
@@ -968,9 +953,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=119 s=0 z=100 t=你
    W x=131 s=0 z=100 t=道
    W x=138 s=0 z=100 t=好
-   W x=149 s=0 z=100 t=否？
-   W x=165 s=0 z=100 t="
-   W x=177 s=0 z=100 t=石
+   W x=149 s=0 z=100 t=否？"石
    W x=188 s=0 z=100 t=頭
    W x=196 s=0 z=100 t=听
    W x=204 s=0 z=100 t=了，

@@ -36,7 +36,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=411 s=0 z=100 t=し
    W x=423 s=0 z=100 t=て、
    W x=439 s=0 z=100 t=静
-  LINE y=66 x=0 align=0 mult=1.000 hfid=0 words=35
+  LINE y=66 x=0 align=0 mult=1.000 hfid=0 words=34
    W x=0 s=0 z=100 t=か
    W x=8 s=0 z=100 t=に
    W x=20 s=0 z=100 t=な
@@ -65,13 +65,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=295 s=0 z=100 t=い
    W x=303 s=0 z=100 t=だ。
    W x=322 s=0 z=100 t=あ
-   W x=335 s=0 z=100 t=あ……！
-   W x=382 s=0 z=100 t=　
-   W x=392 s=0 z=100 t=彼
-   W x=399 s=0 z=100 t=女
-   W x=408 s=0 z=100 t=は
-   W x=417 s=0 z=100 t=「え
-   W x=436 s=0 z=100 t=え、
+   W x=335 s=0 z=100 t=あ……！　
+   W x=391 s=0 z=100 t=彼
+   W x=398 s=0 z=100 t=女
+   W x=407 s=0 z=100 t=は
+   W x=416 s=0 z=100 t=「え
+   W x=435 s=0 z=100 t=え、
   LINE y=90 x=0 align=0 mult=1.000 hfid=0 words=29
    W x=0 s=0 z=100 t=そ
    W x=11 s=0 z=100 t=う
@@ -134,7 +133,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=411 s=0 z=100 t=し
    W x=423 s=0 z=100 t=て、
    W x=439 s=0 z=100 t=静
-  LINE y=138 x=0 align=0 mult=1.000 hfid=0 words=35
+  LINE y=138 x=0 align=0 mult=1.000 hfid=0 words=34
    W x=0 s=0 z=100 t=か
    W x=8 s=0 z=100 t=に
    W x=20 s=0 z=100 t=な
@@ -163,13 +162,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=295 s=0 z=100 t=い
    W x=303 s=0 z=100 t=だ。
    W x=322 s=0 z=100 t=あ
-   W x=335 s=0 z=100 t=あ……！
-   W x=382 s=0 z=100 t=　
-   W x=392 s=0 z=100 t=彼
-   W x=399 s=0 z=100 t=女
-   W x=408 s=0 z=100 t=は
-   W x=417 s=0 z=100 t=「え
-   W x=436 s=0 z=100 t=え、
+   W x=335 s=0 z=100 t=あ……！　
+   W x=391 s=0 z=100 t=彼
+   W x=398 s=0 z=100 t=女
+   W x=407 s=0 z=100 t=は
+   W x=416 s=0 z=100 t=「え
+   W x=435 s=0 z=100 t=え、
   LINE y=162 x=0 align=0 mult=1.000 hfid=0 words=29
    W x=0 s=0 z=100 t=そ
    W x=11 s=0 z=100 t=う
@@ -1134,18 +1132,15 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=192 s=0 z=100 t=不
    W x=201 s=0 z=100 t=能
    W x=209 s=0 z=100 t=禁。
-  LINE y=618 x=0 align=0 mult=1.000 hfid=0 words=13
+  LINE y=618 x=0 align=0 mult=1.000 hfid=0 words=10
    W x=18 s=0 z=100 t=那
    W x=28 s=0 z=100 t=僧
    W x=39 s=0 z=100 t=笑
    W x=50 s=0 z=100 t=說：
-   W x=66 s=0 z=100 t="
-   W x=78 s=0 z=100 t=通
+   W x=66 s=0 z=100 t="通
    W x=84 s=0 z=100 t=靈
    W x=94 s=0 z=100 t=寶
-   W x=101 s=0 z=100 t=玉
-   W x=109 s=0 z=100 t="
-   W x=121 s=0 z=100 t=之
+   W x=101 s=0 z=100 t=玉"之
    W x=129 s=0 z=100 t=說
    W x=136 s=0 z=100 t=也。
   LINE y=642 x=0 align=0 mult=1.000 hfid=0 words=11

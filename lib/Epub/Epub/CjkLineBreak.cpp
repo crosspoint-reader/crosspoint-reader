@@ -64,6 +64,7 @@ bool isNoLineStart(const uint32_t cp) {
     case 0x30FD:  // ヽ
     case 0x30FE:  // ヾ
     case 0x30FB:  // ・
+    case 0x00B7:  // · (ours, not crengine's: transliterated names in Chinese, 列夫·托尔斯泰)
     case 0x301C:  // 〜
     case 0x30A0:  // ゠
     case 0x203C:  // ‼
@@ -78,6 +79,15 @@ bool isNoLineStart(const uint32_t cp) {
     case 0x303C:  // 〼
     case 0x2025:  // ‥
     case 0x2024:  // ․
+    // Ours: a straight quote may open or close a quotation, so it never breaks on either side
+    // (UAX #14 LB19, class QU); it is in isNoLineEnd too.
+    case '"':
+    case '\'':
+    case 0xFF02:  // ＂
+    case 0xFF07:  // ＇
+    // Ours: no break before the ideographic space (UAX #14 BA), so ！　 never leaves a line starting
+    // with what reads as a paragraph indent.
+    case 0x3000:  //
       return true;
     default:
       return false;
@@ -110,6 +120,12 @@ bool isNoLineEnd(const uint32_t cp) {
     case 0xFF62:  // ｢
     case 0x201E:  // „
     case 0x201A:  // ‚
+    // Ours: a straight quote may open or close a quotation, so it never breaks on either side
+    // (UAX #14 LB19, class QU); it is in isNoLineStart too.
+    case '"':
+    case '\'':
+    case 0xFF02:  // ＂
+    case 0xFF07:  // ＇
       return true;
     default:
       return false;

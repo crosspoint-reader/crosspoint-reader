@@ -130,8 +130,9 @@ class CjkRules : public testing::TestWithParam<Case> {
   std::vector<DumpLine> lines;
 };
 
-// A line the layout broke between two unspaced CJK characters does not start with closing
-// punctuation and the line before it does not end with an opening bracket (spec Appendix A.1).
+// At a line break with unspaced CJK on either side, the line after it does not start with closing
+// punctuation and the line before it does not end with an opening bracket (spec Appendix A.1): a
+// line starting with " after a CJK line, or ending with " before one, is caught too.
 TEST_P(CjkRules, KinsokuHoldsAtEveryCjkLineBreak) {
   for (size_t i = 1; i < lines.size(); ++i) {
     const DumpLine& prev = lines[i - 1];
@@ -140,9 +141,11 @@ TEST_P(CjkRules, KinsokuHoldsAtEveryCjkLineBreak) {
     if (line.words.front().x > 0) continue;  // a paragraph's indented first line: not a layout break
     const uint32_t end = lastCodepoint(prev.words.back().text);
     const uint32_t start = firstCodepoint(line.words.front().text);
-    if (!utf8IsUnspacedCjk(end) || !utf8IsUnspacedCjk(start)) continue;
-    EXPECT_FALSE(CjkLineBreak::isNoLineEnd(end)) << "line ends with an opening bracket: " << lineText(prev);
-    EXPECT_FALSE(CjkLineBreak::isNoLineStart(start)) << "line starts with closing punctuation: " << lineText(line);
+    if (!utf8IsUnspacedCjk(end) && !utf8IsUnspacedCjk(start)) continue;
+    EXPECT_FALSE(CjkLineBreak::isNoLineEnd(end))
+        << "line ends with an opening bracket: " << lineText(prev) << " before: " << lineText(line);
+    EXPECT_FALSE(CjkLineBreak::isNoLineStart(start))
+        << "line starts with closing punctuation: " << lineText(line) << " after: " << lineText(prev);
   }
 }
 
