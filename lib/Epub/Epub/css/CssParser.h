@@ -27,10 +27,11 @@ class BuildArena;  // lib/Memory — optional backing store for the disk index (
  *   - Class selectors: .classname
  *   - Combined: element.classname
  *   - Compounds: .a.b, p.a.b, #id.a, p#id.a (up to 7 classes), and the universal *
+ *   - Descendant and child combinators between compounds: blockquote p, div.poem > p
  *   - Grouped: selector1, selector2 { }
  *
  * Not supported (silently ignored):
- *   - Descendant/child selectors
+ *   - Sibling combinators (+, ~) and attribute selectors
  *   - Pseudo-classes and pseudo-elements
  *   - Media queries (content is skipped)
  *   - @import, @font-face, etc.
@@ -102,7 +103,8 @@ class CssParser {
   //      table, which follows it, before the sorted index (see complexTable).
   // v24: page-break-before/after (and break-*) `auto`, `avoid` and `avoid-page` are kept as an explicit
   //      "no break", so a more specific or later rule cancels an `always`; v23 dropped them.
-  static constexpr uint8_t CSS_CACHE_VERSION = 24;
+  // v25: descendant and child selectors: a complex rule is a chain of compounds (see complexTable).
+  static constexpr uint8_t CSS_CACHE_VERSION = 25;
   // Bytes before the complex-rule table and the sorted offset index: version(1) + ruleCount(2) +
   // totalSelectorCandidates(4) + unsupportedSelectorSkips(4) + flags(1) + complexTableBytes(2).
   static constexpr uint32_t CSS_CACHE_HEADER_BYTES = 14;
@@ -152,9 +154,30 @@ class CssParser {
   // declaration, and how many of those the resolver could not use. Diagnostics and host tests.
   [[nodiscard]] uint32_t selectorCandidates() const { return totalSelectorCandidates_; }
   [[nodiscard]] uint32_t unsupportedSelectors() const { return unsupportedSelectorSkips_; }
+  [[nodiscard]] uint16_t complexTableBytes() const { return complexBytes_; }
 
+  // Descendant and child selectors (`blockquote p`, `div.poem > p`) match an element against its
+  // open ancestors. A caller that walks the document keeps, for each open element, which of the
+  // sheet's compounds it matches (compoundMask) and passes those of the element's ancestors. No
+  // Ancestry (or depth 0): descendant and child rules do not match, everything else does.
+  struct Ancestry {
+    const uint64_t* masks = nullptr;  // outermost first; masks[depth - 1] is the parent
+    size_t depth = 0;
+    uint64_t self = 0;  // the element's own compoundMask
+  };
+  // True when the sheet has compound, descendant or child selectors, so compoundMask is worth
+  // calling; false for most books, which then pay nothing for any of this.
+  [[nodiscard]] bool hasComplexRules() const { return complexBytes_ > 0; }
+  // Which of the sheet's compounds the element matches, one bit each; 0 without complex rules.
+  [[nodiscard]] uint64_t compoundMask(const std::string& tagName, const std::string& classAttr,
+                                      const std::string& idAttr) const;
+
+  // dependsOnAncestors (optional) is set when a descendant or child rule could apply to the element:
+  // the style then depends on where the element stands, and must not be reused for another element
+  // with the same tag and class.
   [[nodiscard]] CssStyle resolveStyle(const std::string& tagName, const std::string& classAttr,
-                                      const std::string& idAttr = {}) const;
+                                      const std::string& idAttr = {}, const Ancestry* ancestry = nullptr,
+                                      bool* dependsOnAncestors = nullptr) const;
 
   /**
    * Parse an inline style attribute string.
@@ -460,9 +483,10 @@ class CssParser {
   void cacheHotRule(const std::string& selector, const OrderedStyle& rule) const;
 
   // --- Complex rules (v23) ---
-  // Selectors the hashed index cannot key -- a compound of several parts (.a.b, p.a.b, p#id.a) or
-  // the universal `*` -- live in a small table of their own, matched by a scan per element. Only a
-  // sheet that has them pays: resolveStyle skips the scan when the table is empty. The table is
+  // Selectors the hashed index cannot key -- a compound of several parts (.a.b, p.a.b, p#id.a), the
+  // universal `*`, and (v25) descendant and child selectors -- live in a small table of their own,
+  // matched by a scan per element. Only a sheet that has them pays: resolveStyle skips the scan
+  // when the table is empty. The table is
   // held in RAM in every mode, built on the heap while parsing and loaded with the index (heap, or
   // the build arena), because it is small and capped (MAX_COMPLEX_BYTES), and resolving from it
   // must not cost a disk read per element. One contiguous block:
@@ -472,9 +496,10 @@ class CssParser {
   //              selectorHash of the lowercase name, classes sorted so equal compounds are equal
   //              bytes). An element matches a compound when it has every part; bit i of an
   //              element's compound mask says it matches compound i.
-  //   rules:     order(2) specificity(2) steps(1) styleLen(1) compound index(steps)
-  //              (steps: the compounds of the selector; a compound selector has one)
-  //              compressed style(styleLen)
+  //   rules:     order(2) specificity(2) steps(1) styleLen(1) step(steps) compressed style(styleLen)
+  //              (v25) the steps are the selector's compounds right to left, the subject first:
+  //              each the compound index (low 6 bits) and, from the second on, 0x40 when it must
+  //              be the parent of the step before it (`>`) rather than any ancestor (a space).
   // The pointer is the heap block (parse or heap-mode load) or the arena copy; nullptr = no table.
   mutable std::unique_ptr<uint8_t[]> complexHeap_;
   mutable const uint8_t* complexArena_ = nullptr;
@@ -485,8 +510,11 @@ class CssParser {
   // that is not one, or when a cap is reached.
   bool addComplexRule(std::string_view selector, const CssStyle& style, uint16_t order);
   bool growComplexTable(size_t needed);
-  // Merges the complex rules that match the element into `cascade`. The element's names come
-  // hashed like the table's (selectorHash of the lowercase name); idHash is nullptr without an id.
-  void applyComplexRules(uint32_t tagHash, const uint32_t* idHash, const uint32_t* classHashes, size_t classCount,
-                         Cascade& cascade) const;
+  // The element's compound mask from its names, hashed like the table's (selectorHash of the
+  // lowercase name); idHash is nullptr without an id.
+  uint64_t matchCompounds(uint32_t tagHash, const uint32_t* idHash, const uint32_t* classHashes,
+                          size_t classCount) const;
+  // Merges the complex rules that match the element (its compound mask `self`, its ancestors in
+  // `ancestry`) into `cascade`.
+  void applyComplexRules(uint64_t self, const Ancestry* ancestry, Cascade& cascade, bool* dependsOnAncestors) const;
 };

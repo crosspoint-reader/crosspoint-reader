@@ -168,38 +168,40 @@ SPINE 2 href=OEBPS/frontmatter.xhtml pages=3 truncated=0 cssFallback=0
    W x=230 s=0 z=100 t=the
    W x=267 s=0 z=100 t=wrong
    W x=321 s=0 z=100 t=shore.
- PAGE 1 elements=4 footnotes=0
+ PAGE 1 elements=6 footnotes=0
   LINE y=27 x=0 align=2 mult=1.150 hfid=0 words=1
    W x=183 s=1 z=100 t=Epigraph
-  LINE y=64 x=0 align=0 mult=1.000 hfid=0 words=9
-   W x=27 s=0 z=100 t=“A
-   W x=49 s=0 z=100 t=captain
-   W x=119 s=0 z=100 t=who
-   W x=155 s=0 z=100 t=trusts
-   W x=218 s=0 z=100 t=a
-   W x=236 s=0 z=100 t=single
-   W x=297 s=0 z=100 t=table
-   W x=349 s=0 z=100 t=of
-   W x=377 s=0 z=100 t=contents
-  LINE y=88 x=0 align=0 mult=1.000 hfid=0 words=9
-   W x=0 s=0 z=100 t=has
-   W x=39 s=0 z=100 t=never
-   W x=94 s=0 z=100 t=sailed
-   W x=153 s=0 z=100 t=past
-   W x=196 s=0 z=100 t=the
-   W x=233 s=0 z=100 t=edge
-   W x=276 s=0 z=100 t=of
-   W x=304 s=0 z=100 t=a
-   W x=322 s=0 z=100 t=spine.”
-  LINE y=116 x=0 align=0 mult=1.000 hfid=0 words=8
-   W x=27 s=0 z=100 t=—
-   W x=40 s=0 z=100 t=Admiral
-   W x=107 s=0 z=100 t=Fragmenta,
-   W x=210 s=2 z=100 t=On
-   W x=235 s=2 z=100 t=the
-   W x=272 s=2 z=100 t=Perils
-   W x=328 s=2 z=100 t=of
-   W x=356 s=2 z=100 t=Pagination
+  LINE y=64 x=27 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=2 z=100 t=“A
+   W x=30 s=2 z=100 t=captain
+   W x=108 s=2 z=100 t=who
+   W x=152 s=2 z=100 t=trusts
+   W x=223 s=2 z=100 t=a
+   W x=249 s=2 z=100 t=single
+   W x=318 s=2 z=100 t=table
+   W x=378 s=2 z=100 t=of
+  LINE y=88 x=27 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=2 z=100 t=contents
+   W x=85 s=2 z=100 t=has
+   W x=124 s=2 z=100 t=never
+   W x=179 s=2 z=100 t=sailed
+   W x=238 s=2 z=100 t=past
+   W x=281 s=2 z=100 t=the
+   W x=318 s=2 z=100 t=edge
+   W x=361 s=2 z=100 t=of
+   W x=389 s=2 z=100 t=a
+  LINE y=112 x=27 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=2 z=100 t=spine.”
+  LINE y=145 x=27 align=0 mult=1.000 hfid=0 words=7
+   W x=0 s=2 z=100 t=—
+   W x=26 s=2 z=100 t=Admiral
+   W x=106 s=2 z=100 t=Fragmenta,
+   W x=222 s=2 z=100 t=On
+   W x=260 s=2 z=100 t=the
+   W x=310 s=2 z=100 t=Perils
+   W x=379 s=2 z=100 t=of
+  LINE y=169 x=27 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=2 z=100 t=Pagination
  PAGE 2 elements=15 footnotes=0
   LINE y=27 x=0 align=2 mult=1.150 hfid=0 words=1
    W x=185 s=1 z=100 t=Foreword

@@ -1174,50 +1174,50 @@ SPINE 4 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
    W x=56 s=0 z=100 t=of
    W x=84 s=0 z=100 t=tricky
    W x=137 s=0 z=100 t=pairs:
-  LINE y=248 x=0 align=0 mult=1.000 hfid=0 words=5
-   W x=27 s=2 z=100 t=Twelve
-   W x=107 s=2 z=100 t=Welsh
-   W x=184 s=2 z=100 t=calligraphers
-   W x=331 s=2 z=100 t=traveled
-   W x=437 s=2 z=100 t=to
-  LINE y=272 x=0 align=0 mult=1.000 hfid=0 words=6
+  LINE y=253 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=2 z=100 t=Twelve
+   W x=73 s=2 z=100 t=Welsh
+   W x=143 s=2 z=100 t=calligraphers
+   W x=283 s=2 z=100 t=traveled
+   W x=382 s=2 z=100 t=to
+  LINE y=277 x=27 align=0 mult=1.000 hfid=0 words=5
    W x=0 s=2 z=100 t=Avignon,
-   W x=94 s=2 z=100 t=where
-   W x=153 s=2 z=100 t=they
-   W x=207 s=2 z=100 t=studied
-   W x=283 s=2 z=100 t=Venetian
-   W x=374 s=2 z=100 t=lettering
-  LINE y=296 x=0 align=0 mult=1.000 hfid=0 words=6
-   W x=0 s=2 z=100 t=techniques.
-   W x=124 s=2 z=100 t=Years
-   W x=196 s=2 z=100 t=later,
-   W x=275 s=2 z=100 t=they
-   W x=337 s=2 z=100 t=returned
-   W x=434 s=2 z=100 t=to
-  LINE y=320 x=0 align=0 mult=1.000 hfid=0 words=5
-   W x=0 s=2 z=100 t=Pwllheli,
-   W x=110 s=2 z=100 t=Tywyn,
-   W x=190 s=2 z=100 t=and
-   W x=254 s=2 z=100 t=Aberystwyth,
-   W x=389 s=2 z=100 t=bringing
-  LINE y=344 x=0 align=0 mult=1.000 hfid=0 words=8
-   W x=0 s=2 z=100 t=with
-   W x=49 s=2 z=100 t=them
-   W x=105 s=2 z=100 t=a
-   W x=132 s=2 z=100 t=wealth
-   W x=205 s=2 z=100 t=of
-   W x=242 s=2 z=100 t=knowledge
-   W x=340 s=2 z=100 t=about
-   W x=406 s=2 z=100 t=vowel
-  LINE y=368 x=0 align=0 mult=1.000 hfid=0 words=5
-   W x=0 s=2 z=100 t=placement,
-   W x=118 s=2 z=100 t=Tuscan
-   W x=201 s=2 z=100 t=ornament,
-   W x=319 s=2 z=100 t=and
-   W x=377 s=2 z=100 t=Lombardic
-  LINE y=392 x=0 align=0 mult=1.000 hfid=0 words=1
-   W x=0 s=2 z=100 t=versals.
-  LINE y=420 x=0 align=0 mult=1.000 hfid=0 words=13
+   W x=105 s=2 z=100 t=where
+   W x=175 s=2 z=100 t=they
+   W x=240 s=2 z=100 t=studied
+   W x=327 s=2 z=100 t=Venetian
+  LINE y=301 x=27 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=2 z=100 t=lettering
+   W x=102 s=2 z=100 t=techniques.
+   W x=222 s=2 z=100 t=Years
+   W x=290 s=2 z=100 t=later,
+   W x=365 s=2 z=100 t=they
+  LINE y=325 x=27 align=0 mult=1.000 hfid=0 words=6
+   W x=0 s=2 z=100 t=returned
+   W x=84 s=2 z=100 t=to
+   W x=116 s=2 z=100 t=Pwllheli,
+   W x=203 s=2 z=100 t=Tywyn,
+   W x=260 s=2 z=100 t=and
+   W x=301 s=2 z=100 t=Aberystwyth,
+  LINE y=349 x=27 align=0 mult=1.000 hfid=0 words=7
+   W x=0 s=2 z=100 t=bringing
+   W x=84 s=2 z=100 t=with
+   W x=132 s=2 z=100 t=them
+   W x=187 s=2 z=100 t=a
+   W x=213 s=2 z=100 t=wealth
+   W x=285 s=2 z=100 t=of
+   W x=321 s=2 z=100 t=knowledge
+  LINE y=373 x=27 align=0 mult=1.000 hfid=0 words=6
+   W x=0 s=2 z=100 t=about
+   W x=58 s=2 z=100 t=vowel
+   W x=113 s=2 z=100 t=placement,
+   W x=211 s=2 z=100 t=Tuscan
+   W x=274 s=2 z=100 t=ornament,
+   W x=372 s=2 z=100 t=and
+  LINE y=397 x=27 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=2 z=100 t=Lombardic
+   W x=87 s=2 z=100 t=versals.
+  LINE y=430 x=0 align=0 mult=1.000 hfid=0 words=13
    W x=27 s=0 z=100 t=The
    W x=66 s=0 z=100 t=Tw
    W x=90 s=0 z=100 t=in
@@ -1231,7 +1231,7 @@ SPINE 4 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
    W x=360 s=0 z=100 t=the
    W x=403 s=0 z=100 t=Av
    W x=435 s=0 z=100 t=in
-  LINE y=444 x=0 align=0 mult=1.000 hfid=0 words=12
+  LINE y=454 x=0 align=0 mult=1.000 hfid=0 words=12
    W x=0 s=2 z=100 t=Avignon
    W x=71 s=0 z=100 t=,
    W x=92 s=0 z=100 t=the
@@ -1244,7 +1244,7 @@ SPINE 4 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
    W x=370 s=0 z=100 t=in
    W x=400 s=2 z=100 t=Years
    W x=449 s=0 z=100 t=,
-  LINE y=468 x=0 align=0 mult=1.000 hfid=0 words=13
+  LINE y=478 x=0 align=0 mult=1.000 hfid=0 words=13
    W x=0 s=0 z=100 t=the
    W x=46 s=0 z=100 t=Ty
    W x=75 s=0 z=100 t=in
@@ -1258,7 +1258,7 @@ SPINE 4 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
    W x=358 s=0 z=100 t=the
    W x=404 s=0 z=100 t=Lo
    W x=443 s=0 z=100 t=in
-  LINE y=492 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=502 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=2 z=100 t=Lombardic
    W x=87 s=0 z=100 t=—
    W x=110 s=0 z=100 t=every
@@ -1267,7 +1267,7 @@ SPINE 4 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
    W x=267 s=0 z=100 t=comfortably
    W x=387 s=0 z=100 t=on
    W x=426 s=0 z=100 t=the
-  LINE y=516 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=526 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=baseline,
    W x=94 s=0 z=100 t=with
    W x=143 s=0 z=100 t=not
@@ -1276,7 +1276,7 @@ SPINE 4 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
    W x=292 s=0 z=100 t=breadth
    W x=372 s=0 z=100 t=of
    W x=409 s=0 z=100 t=excess
-  LINE y=540 x=0 align=0 mult=1.000 hfid=0 words=1
+  LINE y=550 x=0 align=0 mult=1.000 hfid=0 words=1
    W x=0 s=0 z=100 t=space.
 SPINE 5 href=OEBPS/chapter4.xhtml pages=2 truncated=0 cssFallback=0
  PAGE 0 elements=28 footnotes=0

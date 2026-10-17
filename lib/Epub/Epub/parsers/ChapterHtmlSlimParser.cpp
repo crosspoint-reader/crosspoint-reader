@@ -754,9 +754,24 @@ CssStyle ChapterHtmlSlimParser::resolvedImgStyle(const std::string& classAttr) {
   key += classAttr;
   const auto it = cssStyleCache_.find(key);
   if (it != cssStyleCache_.end()) return it->second;
-  CssStyle resolved = cssParser->resolveStyle("img", classAttr);
-  if (styleMemoHasRoom(cssStyleCache_)) cssStyleCache_.emplace(std::move(key), resolved);
+  // `figure img`, `div.illustration > img`: the image is the element opening at `depth`.
+  const CssParser::Ancestry ancestry = cssAncestry("img", classAttr, {});
+  bool dependsOnAncestors = false;
+  CssStyle resolved = cssParser->resolveStyle("img", classAttr, {}, &ancestry, &dependsOnAncestors);
+  if (!dependsOnAncestors && styleMemoHasRoom(cssStyleCache_)) cssStyleCache_.emplace(std::move(key), resolved);
   return resolved;
+}
+
+CssParser::Ancestry ChapterHtmlSlimParser::cssAncestry(const std::string& tagName, const std::string& classAttr,
+                                                       const std::string& idAttr) const {
+  CssParser::Ancestry ancestry;
+  if (!cssParser->hasComplexRules()) return ancestry;
+  ancestry.self = cssParser->compoundMask(tagName, classAttr, idAttr);
+  if (depth >= 0 && static_cast<size_t>(depth) <= kMaxCssAncestors) {
+    ancestry.masks = cssAncestorMasks_;
+    ancestry.depth = static_cast<size_t>(depth);
+  }
+  return ancestry;
 }
 
 bool ChapterHtmlSlimParser::ensureHeapForTextLayout(const char* phase, const ParsedText* block) {
@@ -1729,6 +1744,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   // nested <svg> elements increment the counter rather than being swallowed as unknowns.
   if (strcmp(name, "svg") == 0) {
     self->svgDepth += 1;
+    if (static_cast<size_t>(self->depth) < kMaxCssAncestors) self->cssAncestorMasks_[self->depth] = 0;
     self->depth += 1;
     return;
   }
@@ -1737,6 +1753,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   // SVG child elements like <path>, <rect>, <circle>, <text> must not reach the layout
   // engine — they would accumulate path data and exhaust heap on large inline SVG.
   if (self->svgDepth > 0 && !matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
+    if (static_cast<size_t>(self->depth) < kMaxCssAncestors) self->cssAncestorMasks_[self->depth] = 0;
     self->depth += 1;
     return;
   }
@@ -1848,6 +1865,9 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
   // before tag-specific branches emit any content or metadata.
   CssStyle cssStyle;
   if (self->cssParser) {
+    // Descendant and child selectors: what this element matches is kept for its descendants.
+    const CssParser::Ancestry ancestry = self->cssAncestry(name, classAttr, idAttr);
+    if (static_cast<size_t>(self->depth) < kMaxCssAncestors) self->cssAncestorMasks_[self->depth] = ancestry.self;
     {
       // An element with an id is resolved but NOT cached. The key would have to carry the id --
       // the style can legitimately differ per id, that is what a #id selector is for -- and an id
@@ -1869,7 +1889,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
       // dropped from the key entirely and the element shares the tag|class entry, so a chapter of
       // uniquely-id'd notes gets cache HITS instead of a re-resolve (and its SD reads) per note.
       if (!idAttr.empty() && self->cssParser->hasIdSelectors()) {
-        cssStyle = self->cssParser->resolveStyle(name, classAttr, idAttr);
+        cssStyle = self->cssParser->resolveStyle(name, classAttr, idAttr, &ancestry);
       } else {
         std::string cacheKey(name);
         cacheKey += '|';
@@ -1878,10 +1898,14 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
         if (it != self->cssStyleCache_.end()) {
           cssStyle = it->second;
         } else {
-          CssStyle resolved = self->cssParser->resolveStyle(name, classAttr, idAttr);
+          bool dependsOnAncestors = false;
+          CssStyle resolved = self->cssParser->resolveStyle(name, classAttr, idAttr, &ancestry, &dependsOnAncestors);
           // An empty result stays out so future calls can re-resolve; anything else is memoised
           // while the memo has room (kStyleMemoMaxEntries). Either way the element uses `resolved`.
-          if (resolved.defined.anySet() && self->styleMemoHasRoom(self->cssStyleCache_))
+          // A style a descendant or child rule could reach is not memoised at all: the next
+          // element with this tag and class may stand elsewhere. Whether that can happen depends
+          // on the tag and class alone, so such a key is never in the memo and never hit.
+          if (resolved.defined.anySet() && !dependsOnAncestors && self->styleMemoHasRoom(self->cssStyleCache_))
             self->cssStyleCache_.emplace(std::move(cacheKey), resolved);
           cssStyle = resolved;
         }

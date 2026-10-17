@@ -32,11 +32,32 @@ std::string writeCss(const std::string& css) {
   return path;
 }
 
+struct Element {
+  const char* tag;
+  const char* classes = "";
+  const char* id = "";
+};
+
 struct Probe {
   const char* tag;
   const char* classes;
   const char* id = "";
+  std::vector<Element> ancestors = {};  // outermost first; empty: resolved without an Ancestry
 };
+
+// Resolves the probe the way the chapter parser does: each ancestor's compound mask, then the
+// element against them.
+CssStyle resolve(const CssParser& parser, const Probe& probe, bool* dependsOnAncestors = nullptr) {
+  if (probe.ancestors.empty())
+    return parser.resolveStyle(probe.tag, probe.classes, probe.id, nullptr, dependsOnAncestors);
+  std::vector<uint64_t> masks;
+  for (const Element& e : probe.ancestors) masks.push_back(parser.compoundMask(e.tag, e.classes, e.id));
+  CssParser::Ancestry ancestry;
+  ancestry.masks = masks.data();
+  ancestry.depth = masks.size();
+  ancestry.self = parser.compoundMask(probe.tag, probe.classes, probe.id);
+  return parser.resolveStyle(probe.tag, probe.classes, probe.id, &ancestry, dependsOnAncestors);
+}
 
 enum class Store { Parsed, HeapIndex, ArenaResident, ArenaIndex };
 const char* storeName(const Store s) {
@@ -69,7 +90,7 @@ void resolveEverywhere(const std::vector<std::string>& sheets, const Probe& prob
       ASSERT_TRUE(Storage.openFileForRead("CSS", path.c_str(), file));
       ASSERT_TRUE(parsed.loadFromStream(file));
     }
-    check(Store::Parsed, parsed.resolveStyle(probe.tag, probe.classes, probe.id));
+    check(Store::Parsed, resolve(parsed, probe));
   }
 
   CssParser parser(cacheDir);
@@ -83,7 +104,7 @@ void resolveEverywhere(const std::vector<std::string>& sheets, const Probe& prob
 
   parser.clear();
   ASSERT_TRUE(parser.loadFromCache());
-  check(Store::HeapIndex, parser.resolveStyle(probe.tag, probe.classes, probe.id));
+  check(Store::HeapIndex, resolve(parser, probe));
 
   {
     BuildArena arena(64 * 1024);
@@ -93,7 +114,7 @@ void resolveEverywhere(const std::vector<std::string>& sheets, const Probe& prob
     ASSERT_TRUE(parser.loadFromCache());
     // A sheet of complex rules only has no indexed rule, so no RESIDENT index to report.
     if (parser.ruleCount() > 0) ASSERT_TRUE(parser.isArenaResident());
-    check(Store::ArenaResident, parser.resolveStyle(probe.tag, probe.classes, probe.id));
+    check(Store::ArenaResident, resolve(parser, probe));
     parser.clear();
   }
 
@@ -106,7 +127,7 @@ void resolveEverywhere(const std::vector<std::string>& sheets, const Probe& prob
     parser.setLeanResolve(true);
     if (!parser.loadFromCache()) continue;
     ASSERT_FALSE(parser.isArenaResident());
-    check(Store::ArenaIndex, parser.resolveStyle(probe.tag, probe.classes, probe.id));
+    check(Store::ArenaIndex, resolve(parser, probe));
     parser.clear();
     break;
   }
@@ -329,4 +350,109 @@ TEST(CssCascade, AvoidCancelsAForcedPageBreak) {
     EXPECT_TRUE(style.hasPageBreakAfter()) << storeName(store);
     EXPECT_FALSE(style.pageBreakAfter) << storeName(store) << ": the later h2 rule wins";
   });
+}
+
+// --- Descendant and child selectors ---
+
+namespace {
+void expectIndent(const std::vector<std::string>& sheets, const Probe& probe, const bool expected) {
+  resolveEverywhere(sheets, probe, [&](const Store store, const CssStyle& style) {
+    EXPECT_EQ(style.hasMarginLeft(), expected) << storeName(store) << ": <" << probe.tag << " class=\"" << probe.classes
+                                               << "\"> under " << probe.ancestors.size() << " ancestors";
+  });
+}
+}  // namespace
+
+TEST(CssCascade, DescendantMatchesAnyAncestor) {
+  const std::vector<std::string> css = {"blockquote p { margin-left: 2em; }\n"};
+  expectIndent(css, {"p", "", "", {{"body"}, {"blockquote"}}}, true);
+  expectIndent(css, {"p", "", "", {{"blockquote"}, {"div"}, {"section"}}}, true);
+  expectIndent(css, {"p", "", "", {{"body"}, {"div"}}}, false);
+  expectIndent(css, {"div", "", "", {{"blockquote"}}}, false);
+  expectIndent(css, {"p", "", "", {}}, false);  // no ancestry: the rule cannot be checked, and is not applied
+}
+
+TEST(CssCascade, ChildNeedsTheParent) {
+  const std::vector<std::string> css = {"div.poem > p { margin-left: 2em; }\n"};
+  expectIndent(css, {"p", "", "", {{"body"}, {"div", "poem"}}}, true);
+  expectIndent(css, {"p", "", "", {{"div", "poem"}, {"span"}}}, false);
+  expectIndent(css, {"p", "", "", {{"body"}, {"div", "verse"}}}, false);
+}
+
+// `div.a > p span`: the span anywhere under a p whose parent is div.a.
+TEST(CssCascade, MixedChainOfChildAndDescendant) {
+  const std::vector<std::string> css = {"div.a > p span { margin-left: 1em; }\n"};
+  expectIndent(css, {"span", "", "", {{"div", "a"}, {"p"}}}, true);
+  expectIndent(css, {"span", "", "", {{"div", "a"}, {"p"}, {"em"}}}, true);
+  expectIndent(css, {"span", "", "", {{"div", "a"}, {"section"}, {"p"}}}, false);
+}
+
+// The nearest ancestor that fits a step is not always the one that completes the chain:
+// `a > b c` under a, b, x, b (outermost first) matches through the outer b, not the inner one.
+TEST(CssCascade, ChildRunIsRetriedFurtherUp) {
+  const std::vector<std::string> css = {"a > b c { margin-left: 1em; }\n"};
+  expectIndent(css, {"c", "", "", {{"a"}, {"b"}, {"x"}, {"b"}}}, true);
+  expectIndent(css, {"c", "", "", {{"y"}, {"b"}, {"x"}, {"b"}}}, false);
+}
+
+// Deep nesting with a chain that cannot match: the answer is still no, after a linear scan.
+TEST(CssCascade, DeepNestingWithAFailingChain) {
+  const std::vector<std::string> css = {
+      "x div div div div div div p { margin-left: 1em; }\ndiv div div div div div div p { margin-top: 1px; }\n"};
+  std::vector<Element> divs(32, Element{"div"});
+  resolveEverywhere(css, {"p", "", "", divs}, [&](const Store store, const CssStyle& style) {
+    EXPECT_FALSE(style.hasMarginLeft()) << storeName(store);
+    EXPECT_TRUE(style.hasMarginTop()) << storeName(store);
+  });
+}
+
+TEST(CssCascade, UniversalChildAndIdAncestor) {
+  const std::vector<std::string> css = {"#toc > * { margin-left: 1em; }\n"};
+  expectIndent(css, {"li", "", "", {{"body"}, {"ul", "", "toc"}}}, true);
+  expectIndent(css, {"li", "", "", {{"ul", "", "toc"}, {"li"}}}, false);
+}
+
+// A contextual rule ranks by its whole selector: `blockquote p` (two element names) beats a later
+// `p`; `.note p` and `p.x` tie at one class and one element, so the later one wins.
+TEST(CssCascade, ContextualSpecificityAndOrder) {
+  expectAlign({"blockquote p { text-align: right; }\np { text-align: center; }\n"}, {"p", "", "", {{"blockquote"}}},
+              CssTextAlign::Right);
+  expectAlign({".note p { text-align: right; }\np.x { text-align: center; }\n"}, {"p", "x", "", {{"div", "note"}}},
+              CssTextAlign::Center);
+  expectAlign({"p.x { text-align: center; }\n.note p { text-align: right; }\n"}, {"p", "x", "", {{"div", "note"}}},
+              CssTextAlign::Right);
+}
+
+// What the chapter parser's memo relies on: a style that a descendant or child rule could reach
+// is flagged, matched or not, and nothing else is.
+TEST(CssCascade, ContextDependenceIsReported) {
+  const std::string path =
+      writeCss("blockquote p { margin-left: 2em; }\n.a.b { margin-top: 1px; }\nspan { margin-top: 2px; }\n");
+  CssParser parser("");
+  FsFile file;
+  ASSERT_TRUE(Storage.openFileForRead("CSS", path.c_str(), file));
+  ASSERT_TRUE(parser.loadFromStream(file));
+  ASSERT_TRUE(parser.hasComplexRules());
+  bool depends = false;
+  resolve(parser, {"p", "", "", {{"body"}}}, &depends);
+  EXPECT_TRUE(depends) << "p outside a blockquote: the rule could have applied";
+  resolve(parser, {"p", "", "", {{"blockquote"}}}, &depends);
+  EXPECT_TRUE(depends);
+  resolve(parser, {"span", "a b", "", {{"blockquote"}}}, &depends);
+  EXPECT_FALSE(depends) << "no descendant or child rule ends in a span";
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+}
+
+TEST(CssCascade, SiblingAndOverlongChainsStayUnsupported) {
+  const std::string path = writeCss(
+      "h1 + p, h1 ~ p, a b c d e f g h i, div >> p, > p { margin-top: 1px; }\nul li, ol > li { margin-top: 2px; }\n");
+  CssParser parser("");
+  FsFile file;
+  ASSERT_TRUE(Storage.openFileForRead("CSS", path.c_str(), file));
+  ASSERT_TRUE(parser.loadFromStream(file));
+  EXPECT_EQ(parser.selectorCandidates(), 7u);
+  EXPECT_EQ(parser.unsupportedSelectors(), 5u);
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
 }

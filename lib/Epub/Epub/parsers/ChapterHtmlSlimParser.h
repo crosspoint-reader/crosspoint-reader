@@ -601,6 +601,18 @@ class ChapterHtmlSlimParser final : public Print {
   // there is room. Requires cssParser != nullptr.
   CssStyle resolvedImgStyle(const std::string& classAttr);
 
+  // Descendant and child selectors: which of the sheet's compounds each open element matches
+  // (CssParser::compoundMask), indexed by depth, so an element is matched against its ancestors
+  // without keeping their names. Fixed size, written in place: no heap per element. An element
+  // deeper than the stack resolves with no ancestry, so descendant and child rules skip it. Every
+  // element that opens below the CSS resolve records its slot; the SVG paths, which return
+  // earlier, clear theirs so a descendant never sees a stale sibling's mask.
+  static constexpr size_t kMaxCssAncestors = 32;
+  uint64_t cssAncestorMasks_[kMaxCssAncestors] = {};
+  // The ancestry of the element opening at `depth` (whose own mask it computes).
+  CssParser::Ancestry cssAncestry(const std::string& tagName, const std::string& classAttr,
+                                  const std::string& idAttr) const;
+
   // Default size for superscript/subscript text, percent of the surrounding size.
   // Sup/sub scaling flows through the ordinary per-word size channel (the SUP/SUB
   // style bits only shift the baseline at render time); an explicit CSS font-size

@@ -189,6 +189,11 @@ constexpr uint8_t COMPOUND_HAS_ID = 0x40;
 constexpr uint8_t COMPOUND_CLASS_COUNT = 0x07;
 // An element's classes past this many take no part in compound matching.
 constexpr size_t MAX_ELEMENT_CLASSES = 8;
+// A complex rule's steps: the compound index, and whether the step must be the parent of the one
+// before it (child combinator) rather than any ancestor (descendant combinator).
+constexpr uint8_t STEP_COMPOUND = 0x3F;
+constexpr uint8_t STEP_CHILD = 0x40;
+constexpr size_t MAX_COMPLEX_STEPS = 8;
 
 bool isNameChar(const char c) {
   return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || static_cast<unsigned char>(c) >= 0x80;
@@ -280,7 +285,7 @@ bool complexTableValid(const uint8_t* table, const size_t bytes) {
     const uint8_t styleLen = table[pos + 5];
     if (steps == 0 || pos + COMPLEX_RULE_HEADER_BYTES + steps + styleLen > bytes) return false;
     for (uint8_t s = 0; s < steps; ++s) {
-      if ((table[pos + COMPLEX_RULE_HEADER_BYTES + s] & 0x3F) >= table[0]) return false;
+      if ((table[pos + COMPLEX_RULE_HEADER_BYTES + s] & STEP_COMPOUND) >= table[0]) return false;
     }
     pos += COMPLEX_RULE_HEADER_BYTES + steps + styleLen;
   }
@@ -295,6 +300,51 @@ uint32_t fnv1a32Lower(const std::string_view s) {
     h *= 16777619u;
   }
   return h;
+}
+
+// The specificity of a selector is the sum of its compounds', field by field, each field
+// saturating at its five bits.
+uint32_t addSpecificity(const uint32_t a, const uint32_t b) {
+  uint32_t sum = 0;
+  for (int shift = 0; shift <= 10; shift += 5) {
+    sum |= std::min<uint32_t>(31, ((a >> shift) & 31) + ((b >> shift) & 31)) << shift;
+  }
+  return sum;
+}
+
+// Whether a complex rule's ancestor steps (steps[1..count)) sit on the element's ancestors, whose
+// compound masks are masks[0..depth), masks[depth - 1] the parent. Right to left: a run of child
+// steps must sit on consecutive ancestors, and a descendant step starts a run that may sit on any
+// ancestor above the last one matched. Placing each run as near as it fits leaves the most
+// ancestors to the runs further left, so the first fit is the answer and nothing backtracks:
+// linear in depth x steps whatever the sheet.
+bool chainMatches(const uint8_t* steps, const uint8_t count, const uint64_t* masks, size_t depth) {
+  for (uint8_t i = 1; i < count;) {
+    uint8_t end = i + 1;
+    while (end < count && (steps[end] & STEP_CHILD)) ++end;
+    const size_t run = end - i;
+    // The run with step i on masks[top], step i + k on masks[top - k].
+    const auto runAt = [&](const size_t top) {
+      if (top + 1 < run) return false;
+      for (size_t k = 0; k < run; ++k) {
+        if (!((masks[top - k] >> (steps[i + k] & STEP_COMPOUND)) & 1u)) return false;
+      }
+      return true;
+    };
+    if (depth == 0) return false;
+    size_t top = depth - 1;
+    if (steps[i] & STEP_CHILD) {
+      if (!runAt(top)) return false;
+    } else {
+      while (!runAt(top)) {
+        if (top == 0) return false;
+        --top;
+      }
+    }
+    depth = top + 1 - run;
+    i = end;
+  }
+  return true;
 }
 
 template <typename Fn>
@@ -2311,10 +2361,28 @@ bool CssParser::growComplexTable(const size_t needed) {
 }
 
 bool CssParser::addComplexRule(const std::string_view selector, const CssStyle& style, const uint16_t order) {
-  Compound compound;
-  if (!parseCompound(selector, compound)) return false;
-  uint8_t compoundBytes[MAX_COMPOUND_BYTES];
-  const size_t compoundLen = compound.serialize(compoundBytes);
+  // The compounds right to left, the subject first, each step marked when it must be the parent
+  // of the step before it (`div > p`) rather than any ancestor (`div p`).
+  Compound compounds[MAX_COMPLEX_STEPS];
+  uint8_t steps[MAX_COMPLEX_STEPS] = {};
+  size_t count = 0;
+  uint32_t specificity = 0;
+  for (std::string_view rest = selector;;) {
+    size_t start = rest.size();
+    while (start > 0 && rest[start - 1] != ' ' && rest[start - 1] != '>') --start;
+    if (count == MAX_COMPLEX_STEPS || !parseCompound(rest.substr(start), compounds[count])) return false;
+    specificity = addSpecificity(specificity, compounds[count].specificity());
+    rest = rest.substr(0, start);
+    ++count;
+    if (rest.empty()) break;
+    int children = 0;
+    while (!rest.empty() && (rest.back() == ' ' || rest.back() == '>')) {
+      children += rest.back() == '>' ? 1 : 0;
+      rest.remove_suffix(1);
+    }
+    if (rest.empty() || children > 1 || count == MAX_COMPLEX_STEPS) return false;
+    if (children == 1) steps[count] = STEP_CHILD;
+  }
   uint8_t styleBytes[kMaxCompressedStyle];
   const size_t styleLen = compressStyle(style, styleBytes);
 
@@ -2325,50 +2393,58 @@ bool CssParser::addComplexRule(const std::string_view selector, const CssStyle& 
   }
   if (complexHeap_.get()[1] >= MAX_COMPLEX_RULES) return false;
 
-  // The compound's index, interning it if the table does not have it yet.
-  const size_t compoundsEnd = COMPLEX_HEADER_BYTES + readU16(complexHeap_.get() + 2);
-  int index = -1;
-  for (size_t pos = COMPLEX_HEADER_BYTES, i = 0; i < complexHeap_.get()[0]; ++i) {
-    const size_t len = compoundSize(complexHeap_.get()[pos]);
-    if (len == compoundLen && std::memcmp(complexHeap_.get() + pos, compoundBytes, len) == 0) {
-      index = static_cast<int>(i);
-      break;
+  // Each compound's index, interning it when the table does not have it yet. A cap reached part
+  // way leaves the compounds interned so far unreferenced, which costs their bytes and nothing else.
+  const auto intern = [this](const Compound& compound) -> int {
+    uint8_t bytes[MAX_COMPOUND_BYTES];
+    const size_t len = compound.serialize(bytes);
+    const size_t compoundsEnd = COMPLEX_HEADER_BYTES + readU16(complexHeap_.get() + 2);
+    for (size_t pos = COMPLEX_HEADER_BYTES, i = 0; i < complexHeap_.get()[0]; ++i) {
+      const size_t existing = compoundSize(complexHeap_.get()[pos]);
+      if (existing == len && std::memcmp(complexHeap_.get() + pos, bytes, len) == 0) return static_cast<int>(i);
+      pos += existing;
     }
-    pos += len;
-  }
-  const size_t ruleLen = COMPLEX_RULE_HEADER_BYTES + 1 + styleLen;
-  if (index < 0 && complexHeap_.get()[0] >= MAX_COMPLEX_COMPOUNDS) return false;
-  if (!growComplexTable(complexBytes_ + ruleLen + (index < 0 ? compoundLen : 0))) return false;
-  uint8_t* table = complexHeap_.get();
-  if (index < 0) {
-    std::memmove(table + compoundsEnd + compoundLen, table + compoundsEnd, complexBytes_ - compoundsEnd);
-    std::memcpy(table + compoundsEnd, compoundBytes, compoundLen);
-    index = table[0]++;
-    const auto compoundBytesTotal = static_cast<uint16_t>(compoundsEnd + compoundLen - COMPLEX_HEADER_BYTES);
-    std::memcpy(table + 2, &compoundBytesTotal, sizeof(compoundBytesTotal));
-    complexBytes_ = static_cast<uint16_t>(complexBytes_ + compoundLen);
+    if (complexHeap_.get()[0] >= MAX_COMPLEX_COMPOUNDS || !growComplexTable(complexBytes_ + len)) return -1;
+    uint8_t* table = complexHeap_.get();
+    std::memmove(table + compoundsEnd + len, table + compoundsEnd, complexBytes_ - compoundsEnd);
+    std::memcpy(table + compoundsEnd, bytes, len);
+    const auto compoundBytes = static_cast<uint16_t>(compoundsEnd + len - COMPLEX_HEADER_BYTES);
+    std::memcpy(table + 2, &compoundBytes, sizeof(compoundBytes));
+    complexBytes_ = static_cast<uint16_t>(complexBytes_ + len);
+    return table[0]++;
+  };
+  for (size_t i = 0; i < count; ++i) {
+    const int index = intern(compounds[i]);
+    if (index < 0) return false;
+    steps[i] = static_cast<uint8_t>(steps[i] | index);
   }
 
+  const size_t ruleLen = COMPLEX_RULE_HEADER_BYTES + count + styleLen;
+  if (!growComplexTable(complexBytes_ + ruleLen)) return false;
+  uint8_t* table = complexHeap_.get();
   uint8_t* rule = table + complexBytes_;
-  const auto specificity = static_cast<uint16_t>(compound.specificity());
+  const auto packed = static_cast<uint16_t>(specificity);
   std::memcpy(rule, &order, sizeof(order));
-  std::memcpy(rule + 2, &specificity, sizeof(specificity));
-  rule[4] = 1;
+  std::memcpy(rule + 2, &packed, sizeof(packed));
+  rule[4] = static_cast<uint8_t>(count);
   rule[5] = static_cast<uint8_t>(styleLen);
-  rule[COMPLEX_RULE_HEADER_BYTES] = static_cast<uint8_t>(index);
-  std::memcpy(rule + COMPLEX_RULE_HEADER_BYTES + 1, styleBytes, styleLen);
+  std::memcpy(rule + COMPLEX_RULE_HEADER_BYTES, steps, count);
+  std::memcpy(rule + COMPLEX_RULE_HEADER_BYTES + count, styleBytes, styleLen);
   complexBytes_ = static_cast<uint16_t>(complexBytes_ + ruleLen);
   ++table[1];
-  if (compound.flags & COMPOUND_HAS_ID) hasIdSelectors_ = true;
+  // A compound with an id anywhere in the selector: the element's own id may matter, or an
+  // ancestor's -- either way the caller must not share one style between elements by tag|class.
+  for (size_t i = 0; i < count; ++i) {
+    if (compounds[i].flags & COMPOUND_HAS_ID) hasIdSelectors_ = true;
+  }
   return true;
 }
 
-void CssParser::applyComplexRules(const uint32_t tagHash, const uint32_t* idHash, const uint32_t* classHashes,
-                                  const size_t classCount, Cascade& cascade) const {
+uint64_t CssParser::matchCompounds(const uint32_t tagHash, const uint32_t* idHash, const uint32_t* classHashes,
+                                   const size_t classCount) const {
   const uint8_t* table = complexTable();
-  if (table == nullptr || table[1] == 0) return;
-
-  // Which compounds the element matches: every part it names must be the element's.
+  if (table == nullptr) return 0;
+  // Which compounds the element matches: every part a compound names must be the element's.
   uint64_t matched = 0;
   const uint8_t* p = table + COMPLEX_HEADER_BYTES;
   for (uint8_t i = 0; i < table[0]; ++i) {
@@ -2392,16 +2468,41 @@ void CssParser::applyComplexRules(const uint32_t tagHash, const uint32_t* idHash
     }
     if (match) matched |= uint64_t{1} << i;
   }
-  if (matched == 0) return;
+  return matched;
+}
 
+uint64_t CssParser::compoundMask(const std::string& tagName, const std::string& classAttr,
+                                 const std::string& idAttr) const {
+  if (complexBytes_ == 0) return 0;
+  uint32_t classHashes[MAX_ELEMENT_CLASSES];
+  size_t classCount = 0;
+  std::string token;
+  forEachNormalizedClassToken(classAttr, token, [&](const std::string& cls) {
+    if (classCount < MAX_ELEMENT_CLASSES) classHashes[classCount++] = selectorHash(cls);
+  });
+  const uint32_t idHash = fnv1a32Lower(idAttr);
+  return matchCompounds(fnv1a32Lower(tagName), idAttr.empty() ? nullptr : &idHash, classHashes, classCount);
+}
+
+void CssParser::applyComplexRules(const uint64_t self, const Ancestry* ancestry, Cascade& cascade,
+                                  bool* dependsOnAncestors) const {
+  const uint8_t* table = complexTable();
+  if (table == nullptr || self == 0) return;
+  const uint8_t* p = table + COMPLEX_HEADER_BYTES + readU16(table + 2);
   for (uint8_t r = 0; r < table[1]; ++r) {
     const uint8_t steps = p[4];
     const uint8_t styleLen = p[5];
-    const uint8_t* compounds = p + COMPLEX_RULE_HEADER_BYTES;
-    if ((matched >> (compounds[0] & 0x3F)) & 1u) {
-      CssStyle style;
-      decompressStyle(compounds + steps, style);
-      cascade.apply(style, readU16(p + 2), readU16(p));
+    const uint8_t* chain = p + COMPLEX_RULE_HEADER_BYTES;
+    if ((self >> (chain[0] & STEP_COMPOUND)) & 1u) {
+      // A rule with ancestor steps makes the result depend on where the element stands, matched
+      // or not: the caller must not reuse it for another element with the same tag and class.
+      if (steps > 1 && dependsOnAncestors != nullptr) *dependsOnAncestors = true;
+      if (steps == 1 || (ancestry != nullptr && ancestry->masks != nullptr &&
+                         chainMatches(chain, steps, ancestry->masks, ancestry->depth))) {
+        CssStyle style;
+        decompressStyle(chain + steps, style);
+        cascade.apply(style, readU16(p + 2), readU16(p));
+      }
     }
     p += COMPLEX_RULE_HEADER_BYTES + steps + styleLen;
   }
@@ -2409,8 +2510,9 @@ void CssParser::applyComplexRules(const uint32_t tagHash, const uint32_t* idHash
 
 // Style resolution
 
-CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr,
-                                 const std::string& idAttr) const {
+CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& classAttr, const std::string& idAttr,
+                                 const Ancestry* ancestry, bool* dependsOnAncestors) const {
+  if (dependsOnAncestors != nullptr) *dependsOnAncestors = false;
   static bool lowHeapWarningLogged = false;
   resolveStats_.resolveCalls++;
   const uint32_t freeHeap = ESP.getFreeHeap();
@@ -2450,8 +2552,10 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
 
   lookup(tag, SPECIFICITY_TAG);
 
-  // The element's class names, hashed for the complex rules (when the sheet has any).
+  // The element's class names, hashed for the complex rules when the sheet has any and the caller
+  // has not matched the element against them already (Ancestry::self).
   const bool complexRules = complexBytes_ > 0;
+  const bool hashClasses = complexRules && ancestry == nullptr;
   uint32_t classHashes[MAX_ELEMENT_CLASSES];
   size_t classCount = 0;
 
@@ -2474,7 +2578,7 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
       combinedKey.append(cls);
       lookup(combinedKey, SPECIFICITY_CLASS + SPECIFICITY_TAG);
 
-      if (complexRules && classCount < MAX_ELEMENT_CLASSES) classHashes[classCount++] = selectorHash(cls);
+      if (hashClasses && classCount < MAX_ELEMENT_CLASSES) classHashes[classCount++] = selectorHash(cls);
     });
   }
 
@@ -2500,7 +2604,10 @@ CssStyle CssParser::resolveStyle(const std::string& tagName, const std::string& 
 
   if (complexRules) {
     const uint32_t idHash = fnv1a32Lower(idAttr);
-    applyComplexRules(selectorHash(tag), idAttr.empty() ? nullptr : &idHash, classHashes, classCount, cascade);
+    const uint64_t self = ancestry != nullptr ? ancestry->self
+                                              : matchCompounds(selectorHash(tag), idAttr.empty() ? nullptr : &idHash,
+                                                               classHashes, classCount);
+    applyComplexRules(self, ancestry, cascade, dependsOnAncestors);
   }
 
   if (!cascade.result.defined.anySet()) {

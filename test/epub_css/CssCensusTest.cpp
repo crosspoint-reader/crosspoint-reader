@@ -108,11 +108,13 @@ void census(const std::string& css, std::map<std::string, size_t>& kinds) {
 }  // namespace
 
 TEST(CssSelectorCensus, CorpusEpubs) {
+  // CSS_CENSUS_DIR points the census at another folder of books (a local collection).
+  const char* otherDir = std::getenv("CSS_CENSUS_DIR");
   std::vector<std::filesystem::path> books;
-  for (const auto& entry : std::filesystem::directory_iterator(CORPUS_DIR)) {
+  for (const auto& entry : std::filesystem::directory_iterator(otherDir ? otherDir : CORPUS_DIR)) {
     if (entry.path().extension() == ".epub") books.push_back(entry.path());
   }
-  books.push_back(MOBY_DICK_EPUB);
+  if (!otherDir) books.push_back(MOBY_DICK_EPUB);
   std::sort(books.begin(), books.end());
 
   std::map<std::string, size_t> total;
@@ -153,6 +155,7 @@ TEST(CssSelectorCensus, CorpusEpubs) {
       std::string line = "CSS_CENSUS " + book.filename().string();
       for (const auto& [kind, count] : kinds) line += " " + kind + "=" + std::to_string(count);
       line += " unsupported=" + std::to_string(parser.unsupportedSelectors());
+      line += " complexTableBytes=" + std::to_string(parser.complexTableBytes());
       std::printf("%s\n", line.c_str());
     }
     for (const auto& [kind, count] : kinds) total[kind] += count;
@@ -161,5 +164,5 @@ TEST(CssSelectorCensus, CorpusEpubs) {
   for (const char* kind : kKinds) line += " " + std::string(kind) + "=" + std::to_string(total[kind]);
   line += " candidates=" + std::to_string(candidates) + " unsupported=" + std::to_string(unsupported);
   std::printf("%s\n", line.c_str());
-  EXPECT_GT(total["descendant"] + total["child"], 0u) << "the corpus has descendant selectors to count";
+  if (!otherDir) EXPECT_GT(total["descendant"] + total["child"], 0u) << "the corpus has descendant selectors to count";
 }
