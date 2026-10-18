@@ -72,6 +72,54 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
                                &cssParser};
 
   void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(); }
+
+  // Lays out a body fragment through the cached-page path and joins its words the way a
+  // clipping does: '\n' at a paragraph start, ' ' across a source gap, nothing otherwise.
+  std::string parseToParagraphText(const std::string& body) {
+    const std::string html = "<html><body>" + body + "</body></html>";
+    const std::string testId = std::to_string(std::hash<std::string>{}(html));
+    const auto tempDir = std::filesystem::temp_directory_path();
+    filepath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".xhtml")).string();
+    {
+      HalFile file;
+      EXPECT_TRUE(file.open(filepath.c_str(), "wb"));
+      EXPECT_EQ(file.write(html.data(), html.size()), html.size());
+    }
+    const auto cachePath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".bin")).string();
+    std::string selected;
+    uint32_t previousEnd = 0;
+    bool paragraphStartPending = false;
+    parser.completePageFn = [&](std::unique_ptr<Page> page, auto, auto, auto) {
+      {
+        HalFile file;
+        ASSERT_TRUE(file.open(cachePath.c_str(), "wb"));
+        ASSERT_TRUE(page->serialize(file));
+      }
+      HalFile file;
+      ASSERT_TRUE(file.open(cachePath.c_str(), "rb"));
+      auto cached = Page::deserialize(file);
+      ASSERT_NE(cached, nullptr);
+      for (const auto& element : cached->elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& block = *static_cast<const PageLine&>(*element).getBlock();
+        for (uint16_t i = 0; i < block.wordCount(); ++i) {
+          if (block.wordStartsParagraph(i)) paragraphStartPending = true;
+          if (!clippingText::hasVisibleText(block.wordText(i))) continue;
+          const auto range = block.wordSourceRange(i);
+          const char separator = paragraphStartPending ? '\n' : range.start > previousEnd ? ' ' : '\0';
+          ASSERT_TRUE(clippingText::append(selected, block.wordText(i), separator, 4096));
+          paragraphStartPending = false;
+          previousEnd = range.end;
+        }
+      }
+      EXPECT_EQ(file.position(), file.size());
+    };
+    parser.paragraphIndentSpaces = 0;
+    EXPECT_TRUE(parser.parseAndBuildPages());
+    std::filesystem::remove(filepath);
+    std::filesystem::remove(cachePath);
+    return selected;
+  }
 };
 
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
@@ -1616,56 +1664,20 @@ TEST_F(ChapterHtmlSlimParserTest, NfdWordAcrossInlineStyleKeepsSourceRange) {
 class ClippingParagraphTest : public ChapterHtmlSlimParserTest {};
 
 TEST_P(ClippingParagraphTest, CachedBlocksSeparateAdjacentParagraphs) {
-  const std::string html = std::string("<html><body>") + GetParam() + "</body></html>";
-  const std::string testId = std::to_string(std::hash<std::string>{}(html));
-  const auto tempDir = std::filesystem::temp_directory_path();
-  filepath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".xhtml")).string();
-  {
-    HalFile file;
-    ASSERT_TRUE(file.open(filepath.c_str(), "wb"));
-    ASSERT_EQ(file.write(html.data(), html.size()), html.size());
-  }
-  const auto cachePath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".bin")).string();
-  std::string selected;
-  uint32_t previousEnd = 0;
-  bool paragraphStartPending = false;
-  parser.completePageFn = [&](std::unique_ptr<Page> page, auto, auto, auto) {
-    {
-      HalFile file;
-      ASSERT_TRUE(file.open(cachePath.c_str(), "wb"));
-      ASSERT_TRUE(page->serialize(file));
-    }
-    HalFile file;
-    ASSERT_TRUE(file.open(cachePath.c_str(), "rb"));
-    auto cached = Page::deserialize(file);
-    ASSERT_NE(cached, nullptr);
-    for (const auto& element : cached->elements) {
-      if (element->getTag() != TAG_PageLine) continue;
-      const auto& block = *static_cast<const PageLine&>(*element).getBlock();
-      for (uint16_t i = 0; i < block.wordCount(); ++i) {
-        if (block.wordStartsParagraph(i)) paragraphStartPending = true;
-        if (!clippingText::hasVisibleText(block.wordText(i))) continue;
-        const auto range = block.wordSourceRange(i);
-        const char separator = paragraphStartPending ? '\n' : range.start > previousEnd ? ' ' : '\0';
-        ASSERT_TRUE(clippingText::append(selected, block.wordText(i), separator, 4096));
-        paragraphStartPending = false;
-        previousEnd = range.end;
-      }
-    }
-    EXPECT_EQ(file.position(), file.size());
-  };
-  parser.paragraphIndentSpaces = 0;
-  ASSERT_TRUE(parser.parseAndBuildPages());
-  EXPECT_EQ(selected, "one\ntwo");
-  std::filesystem::remove(filepath);
-  std::filesystem::remove(cachePath);
+  EXPECT_EQ(parseToParagraphText(GetParam()), "one\ntwo");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, TextBetweenBlocksStaysInItsOwnParagraph) {
+  EXPECT_EQ(parseToParagraphText("<p>one</p>two<div>three</div>"), "one\ntwo\nthree");
 }
 
 INSTANTIATE_TEST_SUITE_P(ClippingBoundaries, ClippingParagraphTest,
                          ::testing::Values("<p>one</p><p>two</p>", "<p>one</p>\n  <p>two</p>",
                                            "<div>one</div><div>two</div>", "<div>one</div>\n  <div>two</div>",
                                            "<p>one<br/>two</p>", "<p>o<b>ne</b></p><p>two</p>",
-                                           "<p>one</p><p>&#160;two</p>", "<p>one</p><p>&#8239;two</p>"));
+                                           "<p>one</p><p>&#160;two</p>", "<p>one</p><p>&#8239;two</p>",
+                                           "one<div>two</div>", "<div>one<div>two</div></div>",
+                                           "<div>one<p>two</p></div>", "<div>one<h3>two</h3></div>"));
 
 TEST(TextSpacingLayout, ParagraphMarkerSurvivesBidiAndOnlyMarksFirstExtractedLine) {
   GfxRenderer renderer;

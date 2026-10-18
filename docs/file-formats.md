@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 60
+
+The serialized layout is unchanged. Text that runs straight into a block or
+heading start (`text<div>…`) now stays in its own paragraph instead of being
+joined to the first word of the new block. Older completed and partial section
+caches rebuild automatically; book metadata and reading progress are kept.
+
 ### Version 59
 
 The serialized layout is unchanged. Stored CSS rules now apply even below
