@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "SerialTestApi.h"
 #include "UiFontScale.h"
 #include "components/BookProgressPresentation.h"
 #include "components/UITheme.h"
@@ -328,6 +329,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     auto itemName = rowTitle(i);
+    if (i == selectedIndex) SerialTestApi::noteSelection(i, itemName.c_str());  // CMD:STATE sel=, label=
     const bool isSeparator = UITheme::isSeparatorTitle(itemName);
     touchBand.addRow(itemY, rowHeight, !isSeparator);
     if (isSeparator) {
@@ -831,6 +833,7 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
 Rect LyraTheme::drawPopup(const GfxRenderer& renderer, const char* message, const bool overlayDisplayedFrame,
                           const PopupShip ship) const {
+  SerialTestApi::notePopup(message);
   // See BaseTheme::drawPopup: overlay the box on the displayed frame unless the caller composed its
   // own full frame into the write buffer.
   if (overlayDisplayedFrame) renderer.syncWriteBufferFromDisplayed();

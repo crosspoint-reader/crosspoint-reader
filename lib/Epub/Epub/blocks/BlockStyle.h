@@ -58,6 +58,11 @@ struct BlockStyle {
   // residual multiplier. NOT serialised and NOT propagated through getCombinedBlockStyle
   // (a fresh combined style defaults to unresolved, which is correct — it precedes layout).
   bool fontResolved = false;
+  // A heading: the page must not end right after it (ChapterHtmlSlimParser::keepTogetherBreak
+  // keeps room for it and the first lines of what follows). Parse-time only, NOT serialised;
+  // getCombinedBlockStyle takes the child's, so a wrapper's empty block merging into a heading
+  // gets it and a spent heading block lends it to nothing.
+  bool keepWithNext = false;
   // Heading sizing. Two strategies share these two fields:
   //  - headingFontId == 0: scale the *body* font by fontSizeMultiplier (nearest-neighbor
   //    upscale path). Used for SD fonts (only one size loaded), steps past the largest
@@ -132,6 +137,7 @@ struct BlockStyle {
     // fromBrElement is never propagated — it is consumed by startNewTextBlock
     // when the empty <br> block is merged with the following paragraph.
     combinedBlockStyle.fromBrElement = false;
+    combinedBlockStyle.keepWithNext = child.keepWithNext;
     // fontSizeMultiplier: use child's if != 1.0, else parent's
     combinedBlockStyle.fontSizeMultiplier =
         (child.fontSizeMultiplier != 1.0f) ? child.fontSizeMultiplier : fontSizeMultiplier;

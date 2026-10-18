@@ -1,0 +1,1357 @@
+BOOK title=Keep Together lang=en spine=6 toc=0 reliableToc=0
+SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=30 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=01.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=02.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=03.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=04.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=05.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=06.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=07.
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=08.
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=09.
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=10.
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=11.
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=12.
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=13.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=14.
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=15.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=16.
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=17.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=18.
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=19.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=20.
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=21.
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=22.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=23.
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=24.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=25.
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=26.
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=27.
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=28.
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=29.
+  LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=30.
+ PAGE 1 elements=4 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=ORPHANSTART
+   W x=102 s=0 z=100 t=the
+   W x=141 s=0 z=100 t=quick
+   W x=188 s=0 z=100 t=brown
+   W x=239 s=0 z=100 t=fox
+   W x=276 s=0 z=100 t=jumps
+   W x=327 s=0 z=100 t=over
+   W x=376 s=0 z=100 t=the
+   W x=415 s=0 z=100 t=lazy
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=dog
+   W x=39 s=0 z=100 t=while
+   W x=89 s=0 z=100 t=the
+   W x=128 s=0 z=100 t=reader
+   W x=190 s=0 z=100 t=turns
+   W x=247 s=0 z=100 t=another
+   W x=329 s=0 z=100 t=page,
+   W x=383 s=0 z=100 t=and
+   W x=422 s=0 z=100 t=the
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=quick
+   W x=49 s=0 z=100 t=brown
+   W x=102 s=0 z=100 t=fox
+   W x=141 s=0 z=100 t=jumps
+   W x=194 s=0 z=100 t=over
+   W x=245 s=0 z=100 t=the
+   W x=286 s=0 z=100 t=lazy
+   W x=334 s=0 z=100 t=dog
+   W x=375 s=0 z=100 t=while
+   W x=427 s=0 z=100 t=the
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=reader
+   W x=60 s=0 z=100 t=turns
+   W x=115 s=0 z=100 t=another
+   W x=195 s=0 z=100 t=page.
+SPINE 1 href=OEBPS/chapter2.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=30 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=01.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=02.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=03.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=04.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=05.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=06.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=07.
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=08.
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=09.
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=10.
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=11.
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=12.
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=13.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=14.
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=15.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=16.
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=17.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=18.
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=19.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=20.
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=21.
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=22.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=23.
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=24.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=25.
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=26.
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=WIDOWSTART
+   W x=98 s=0 z=100 t=the
+   W x=138 s=0 z=100 t=quick
+   W x=186 s=0 z=100 t=brown
+   W x=238 s=0 z=100 t=fox
+   W x=276 s=0 z=100 t=jumps
+   W x=328 s=0 z=100 t=over
+   W x=378 s=0 z=100 t=the
+   W x=418 s=0 z=100 t=lazy
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=dog
+   W x=39 s=0 z=100 t=while
+   W x=89 s=0 z=100 t=the
+   W x=128 s=0 z=100 t=reader
+   W x=190 s=0 z=100 t=turns
+   W x=247 s=0 z=100 t=another
+   W x=329 s=0 z=100 t=page,
+   W x=383 s=0 z=100 t=and
+   W x=422 s=0 z=100 t=the
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=quick
+   W x=49 s=0 z=100 t=brown
+   W x=102 s=0 z=100 t=fox
+   W x=141 s=0 z=100 t=jumps
+   W x=194 s=0 z=100 t=over
+   W x=245 s=0 z=100 t=the
+   W x=286 s=0 z=100 t=lazy
+   W x=334 s=0 z=100 t=dog
+   W x=375 s=0 z=100 t=while
+   W x=427 s=0 z=100 t=the
+  LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=0 z=100 t=reader
+   W x=67 s=0 z=100 t=turns
+   W x=129 s=0 z=100 t=another
+   W x=216 s=0 z=100 t=page,
+   W x=275 s=0 z=100 t=and
+   W x=319 s=0 z=100 t=the
+   W x=363 s=0 z=100 t=quick
+   W x=415 s=0 z=100 t=brown
+ PAGE 1 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=another
+   W x=80 s=0 z=100 t=page.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=29 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=01.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=02.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=03.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=04.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=05.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=06.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=07.
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=08.
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=09.
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=10.
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=11.
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=12.
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=13.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=14.
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=15.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=16.
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=17.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=18.
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=19.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=20.
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=21.
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=22.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=23.
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=24.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=25.
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=26.
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=27.
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=28.
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=29.
+ PAGE 1 elements=3 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=THREELINES
+   W x=109 s=0 z=100 t=the
+   W x=148 s=0 z=100 t=quick
+   W x=195 s=0 z=100 t=brown
+   W x=246 s=0 z=100 t=fox
+   W x=283 s=0 z=100 t=jumps
+   W x=334 s=0 z=100 t=over
+   W x=383 s=0 z=100 t=the
+   W x=422 s=0 z=100 t=lazy
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=dog
+   W x=39 s=0 z=100 t=while
+   W x=89 s=0 z=100 t=the
+   W x=128 s=0 z=100 t=reader
+   W x=190 s=0 z=100 t=turns
+   W x=247 s=0 z=100 t=another
+   W x=329 s=0 z=100 t=page,
+   W x=383 s=0 z=100 t=and
+   W x=422 s=0 z=100 t=the
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=quick
+   W x=45 s=0 z=100 t=brown
+   W x=94 s=0 z=100 t=fox.
+SPINE 3 href=OEBPS/chapter4.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=31 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=01.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=02.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=03.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=04.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=05.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=06.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=07.
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=08.
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=09.
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=10.
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=11.
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=12.
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=13.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=14.
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=15.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=16.
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=17.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=18.
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=19.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=20.
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=21.
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=22.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=23.
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=24.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=25.
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=26.
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=27.
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=28.
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=GOODSPLIT
+   W x=92 s=0 z=100 t=the
+   W x=133 s=0 z=100 t=quick
+   W x=182 s=0 z=100 t=brown
+   W x=235 s=0 z=100 t=fox
+   W x=274 s=0 z=100 t=jumps
+   W x=327 s=0 z=100 t=over
+   W x=378 s=0 z=100 t=the
+   W x=419 s=0 z=100 t=lazy
+  LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=dog
+   W x=39 s=0 z=100 t=while
+   W x=89 s=0 z=100 t=the
+   W x=128 s=0 z=100 t=reader
+   W x=190 s=0 z=100 t=turns
+   W x=247 s=0 z=100 t=another
+   W x=329 s=0 z=100 t=page,
+   W x=383 s=0 z=100 t=and
+   W x=422 s=0 z=100 t=the
+  LINE y=720 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=quick
+   W x=49 s=0 z=100 t=brown
+   W x=102 s=0 z=100 t=fox
+   W x=141 s=0 z=100 t=jumps
+   W x=194 s=0 z=100 t=over
+   W x=245 s=0 z=100 t=the
+   W x=286 s=0 z=100 t=lazy
+   W x=334 s=0 z=100 t=dog
+   W x=375 s=0 z=100 t=while
+   W x=427 s=0 z=100 t=the
+ PAGE 1 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=reader
+   W x=62 s=0 z=100 t=turns
+   W x=119 s=0 z=100 t=another
+   W x=201 s=0 z=100 t=page,
+   W x=255 s=0 z=100 t=and
+   W x=294 s=0 z=100 t=the
+   W x=333 s=0 z=100 t=quick
+   W x=380 s=0 z=100 t=brown
+   W x=431 s=0 z=100 t=fox
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=0 z=100 t=jumps
+   W x=49 s=0 z=100 t=over
+   W x=96 s=0 z=100 t=the
+   W x=133 s=0 z=100 t=lazy
+   W x=177 s=0 z=100 t=dog.
+SPINE 4 href=OEBPS/chapter5.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=30 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=01.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=02.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=03.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=04.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=05.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=06.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=07.
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=08.
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=09.
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=10.
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=11.
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=12.
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=13.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=14.
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=15.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=16.
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=17.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=18.
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=19.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=20.
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=21.
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=22.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=23.
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=24.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=25.
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=26.
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=27.
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=28.
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=29.
+  LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=30.
+ PAGE 1 elements=7 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.400 hfid=0 words=1
+   W x=146 s=1 z=100 t=HEADINGMOVES
+  LINE y=34 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=HEADINGTEXT
+   W x=104 s=0 z=100 t=the
+   W x=143 s=0 z=100 t=quick
+   W x=190 s=0 z=100 t=brown
+   W x=241 s=0 z=100 t=fox
+   W x=278 s=0 z=100 t=jumps
+   W x=329 s=0 z=100 t=over
+   W x=378 s=0 z=100 t=the
+   W x=417 s=0 z=100 t=lazy
+  LINE y=58 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=dog
+   W x=39 s=0 z=100 t=while
+   W x=89 s=0 z=100 t=the
+   W x=128 s=0 z=100 t=reader
+   W x=190 s=0 z=100 t=turns
+   W x=247 s=0 z=100 t=another
+   W x=329 s=0 z=100 t=page,
+   W x=383 s=0 z=100 t=and
+   W x=422 s=0 z=100 t=the
+  LINE y=82 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=quick
+   W x=49 s=0 z=100 t=brown
+   W x=102 s=0 z=100 t=fox
+   W x=141 s=0 z=100 t=jumps
+   W x=194 s=0 z=100 t=over
+   W x=245 s=0 z=100 t=the
+   W x=286 s=0 z=100 t=lazy
+   W x=334 s=0 z=100 t=dog
+   W x=375 s=0 z=100 t=while
+   W x=427 s=0 z=100 t=the
+  LINE y=106 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=0 z=100 t=reader
+   W x=67 s=0 z=100 t=turns
+   W x=129 s=0 z=100 t=another
+   W x=216 s=0 z=100 t=page,
+   W x=275 s=0 z=100 t=and
+   W x=319 s=0 z=100 t=the
+   W x=363 s=0 z=100 t=quick
+   W x=415 s=0 z=100 t=brown
+  LINE y=130 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=154 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=another
+   W x=80 s=0 z=100 t=page.
+SPINE 5 href=OEBPS/chapter6.xhtml pages=3 truncated=0 cssFallback=0
+ PAGE 0 elements=30 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=01.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=02.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=03.
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=04.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=05.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=06.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=07.
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=08.
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=09.
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=10.
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=11.
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=12.
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=13.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=14.
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=15.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=16.
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=17.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=18.
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=19.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=20.
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=21.
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=22.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=23.
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=24.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=25.
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=26.
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=27.
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=28.
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=29.
+  LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=Filler
+   W x=53 s=0 z=100 t=30.
+ PAGE 1 elements=31 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=LONGSTART
+   W x=83 s=0 z=100 t=the
+   W x=120 s=0 z=100 t=quick
+   W x=165 s=0 z=100 t=brown
+   W x=214 s=0 z=100 t=fox
+   W x=249 s=0 z=100 t=jumps
+   W x=298 s=0 z=100 t=over
+   W x=345 s=0 z=100 t=the
+   W x=382 s=0 z=100 t=lazy
+   W x=426 s=0 z=100 t=dog
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=while
+   W x=49 s=0 z=100 t=the
+   W x=87 s=0 z=100 t=reader
+   W x=148 s=0 z=100 t=turns
+   W x=204 s=0 z=100 t=another
+   W x=285 s=0 z=100 t=page,
+   W x=338 s=0 z=100 t=and
+   W x=376 s=0 z=100 t=the
+   W x=414 s=0 z=100 t=quick
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=brown
+   W x=51 s=0 z=100 t=fox
+   W x=88 s=0 z=100 t=jumps
+   W x=139 s=0 z=100 t=over
+   W x=188 s=0 z=100 t=the
+   W x=227 s=0 z=100 t=lazy
+   W x=273 s=0 z=100 t=dog
+   W x=312 s=0 z=100 t=while
+   W x=362 s=0 z=100 t=the
+   W x=401 s=0 z=100 t=reader
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=turns
+   W x=58 s=0 z=100 t=another
+   W x=141 s=0 z=100 t=page,
+   W x=196 s=0 z=100 t=and
+   W x=236 s=0 z=100 t=the
+   W x=276 s=0 z=100 t=quick
+   W x=324 s=0 z=100 t=brown
+   W x=376 s=0 z=100 t=fox
+   W x=414 s=0 z=100 t=jumps
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=over
+   W x=49 s=0 z=100 t=the
+   W x=88 s=0 z=100 t=lazy
+   W x=134 s=0 z=100 t=dog
+   W x=173 s=0 z=100 t=while
+   W x=223 s=0 z=100 t=the
+   W x=262 s=0 z=100 t=reader
+   W x=324 s=0 z=100 t=turns
+   W x=381 s=0 z=100 t=another
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=page,
+   W x=55 s=0 z=100 t=and
+   W x=95 s=0 z=100 t=the
+   W x=135 s=0 z=100 t=quick
+   W x=183 s=0 z=100 t=brown
+   W x=235 s=0 z=100 t=fox
+   W x=273 s=0 z=100 t=jumps
+   W x=325 s=0 z=100 t=over
+   W x=375 s=0 z=100 t=the
+   W x=415 s=0 z=100 t=lazy
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=dog
+   W x=39 s=0 z=100 t=while
+   W x=89 s=0 z=100 t=the
+   W x=128 s=0 z=100 t=reader
+   W x=190 s=0 z=100 t=turns
+   W x=247 s=0 z=100 t=another
+   W x=329 s=0 z=100 t=page,
+   W x=383 s=0 z=100 t=and
+   W x=422 s=0 z=100 t=the
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=quick
+   W x=49 s=0 z=100 t=brown
+   W x=102 s=0 z=100 t=fox
+   W x=141 s=0 z=100 t=jumps
+   W x=194 s=0 z=100 t=over
+   W x=245 s=0 z=100 t=the
+   W x=286 s=0 z=100 t=lazy
+   W x=334 s=0 z=100 t=dog
+   W x=375 s=0 z=100 t=while
+   W x=427 s=0 z=100 t=the
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=0 z=100 t=reader
+   W x=67 s=0 z=100 t=turns
+   W x=129 s=0 z=100 t=another
+   W x=216 s=0 z=100 t=page,
+   W x=275 s=0 z=100 t=and
+   W x=319 s=0 z=100 t=the
+   W x=363 s=0 z=100 t=quick
+   W x=415 s=0 z=100 t=brown
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=624 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=648 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=672 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=720 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+ PAGE 2 elements=26 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=lazy
+   W x=85 s=0 z=100 t=dog
+   W x=124 s=0 z=100 t=while
+   W x=174 s=0 z=100 t=the
+   W x=213 s=0 z=100 t=reader
+   W x=275 s=0 z=100 t=turns
+   W x=332 s=0 z=100 t=another
+   W x=414 s=0 z=100 t=page,
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=0 s=0 z=100 t=and
+   W x=37 s=0 z=100 t=the
+   W x=74 s=0 z=100 t=quick
+   W x=119 s=0 z=100 t=brown
+   W x=168 s=0 z=100 t=fox
+   W x=203 s=0 z=100 t=jumps
+   W x=252 s=0 z=100 t=over
+   W x=299 s=0 z=100 t=the
+   W x=336 s=0 z=100 t=lazy
+   W x=380 s=0 z=100 t=dog
+   W x=417 s=0 z=100 t=while
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=38 s=0 z=100 t=reader
+   W x=99 s=0 z=100 t=turns
+   W x=155 s=0 z=100 t=another
+   W x=236 s=0 z=100 t=page,
+   W x=289 s=0 z=100 t=and
+   W x=327 s=0 z=100 t=the
+   W x=365 s=0 z=100 t=quick
+   W x=411 s=0 z=100 t=brown
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=fox
+   W x=36 s=0 z=100 t=jumps
+   W x=86 s=0 z=100 t=over
+   W x=134 s=0 z=100 t=the
+   W x=172 s=0 z=100 t=lazy
+   W x=217 s=0 z=100 t=dog
+   W x=255 s=0 z=100 t=while
+   W x=304 s=0 z=100 t=the
+   W x=342 s=0 z=100 t=reader
+   W x=403 s=0 z=100 t=turns
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=another
+   W x=84 s=0 z=100 t=page,
+   W x=140 s=0 z=100 t=and
+   W x=181 s=0 z=100 t=the
+   W x=222 s=0 z=100 t=quick
+   W x=271 s=0 z=100 t=brown
+   W x=324 s=0 z=100 t=fox
+   W x=363 s=0 z=100 t=jumps
+   W x=416 s=0 z=100 t=over
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=the
+   W x=37 s=0 z=100 t=lazy
+   W x=81 s=0 z=100 t=dog
+   W x=118 s=0 z=100 t=while
+   W x=166 s=0 z=100 t=the
+   W x=203 s=0 z=100 t=reader
+   W x=263 s=0 z=100 t=turns
+   W x=318 s=0 z=100 t=another
+   W x=398 s=0 z=100 t=page.

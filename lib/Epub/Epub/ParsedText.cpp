@@ -462,6 +462,11 @@ void ParsedText::layoutAndExtractLines(
 
   for (size_t i = 0; i < lineCount; ++i) {
     const bool lineEndedWithHyphenation = i < lineEndsWithHyphenatedWord.size() ? lineEndsWithHyphenatedWord[i] : false;
+    // A retried line below keeps this place: it is the same line, laid out again.
+    linePlace_.paragraphStart = !isContinuation_ && i == 0;
+    linePlace_.linesLeft =
+        includeLastLine ? static_cast<uint16_t>(std::min<size_t>(lineCount - i, std::numeric_limits<uint16_t>::max()))
+                        : 0;
     const auto result = extractLine(i, pageWidth, wordWidths, wordBoundaries, lineBreakIndices, processLine, renderer,
                                     fontId, lineEndedWithHyphenation, false, firstLineIndent, blockStartY, lineHeight);
 

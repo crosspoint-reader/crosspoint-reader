@@ -442,7 +442,7 @@ SPINE 6 href=OEBPS/chapter7.xhtml pages=1 truncated=0 cssFallback=0
    W x=67 s=0 z=100 t=appear
    W x=126 s=0 z=100 t=above.
 SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
- PAGE 0 elements=21 footnotes=0
+ PAGE 0 elements=23 footnotes=0
   LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=3
    W x=80 s=1 z=100 t=Test:
    W x=165 s=1 z=100 t=Style
@@ -546,7 +546,16 @@ SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
    W x=273 s=0 z=100 t=at
    W x=301 s=0 z=100 t=higher
    W x=365 s=0 z=100 t=priority.
-  LINE y=520 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=520 x=0 align=0 mult=1.000 hfid=0 words=6
+   W x=18 s=0 z=100 t=VISIBLE:
+   W x=108 s=0 z=100 t=p.force-show
+   W x=229 s=0 z=100 t=overrides
+   W x=316 s=0 z=100 t=.hidden
+   W x=391 s=0 z=100 t=back
+   W x=435 s=0 z=100 t=to
+  LINE y=544 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=display:block.
+  LINE y=568 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=If
    W x=45 s=0 z=100 t=the
    W x=84 s=0 z=100 t=paragraph
@@ -554,7 +563,7 @@ SPINE 7 href=OEBPS/chapter8.xhtml pages=1 truncated=0 cssFallback=0
    W x=238 s=0 z=100 t=is
    W x=261 s=0 z=100 t=visible,
    W x=334 s=0 z=100 t=element.class
-  LINE y=544 x=0 align=0 mult=1.000 hfid=0 words=2
+  LINE y=592 x=0 align=0 mult=1.000 hfid=0 words=2
    W x=0 s=0 z=100 t=priority
    W x=70 s=0 z=100 t=works.
 SPINE 8 href=OEBPS/chapter9.xhtml pages=1 truncated=0 cssFallback=0
@@ -614,7 +623,7 @@ SPINE 8 href=OEBPS/chapter9.xhtml pages=1 truncated=0 cssFallback=0
    W x=287 s=0 z=100 t=between
    W x=353 s=0 z=100 t=them.
 SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
- PAGE 0 elements=26 footnotes=0
+ PAGE 0 elements=25 footnotes=0
   LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=3
    W x=84 s=1 z=100 t=Test:
    W x=169 s=1 z=100 t=Hidden
@@ -754,13 +763,13 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
   LINE y=696 x=0 align=0 mult=1.000 hfid=0 words=2
    W x=0 s=0 z=100 t=paragraphs
    W x=102 s=0 z=100 t=above.
-  LINE y=720 x=0 align=2 mult=1.400 hfid=0 words=4
+ PAGE 1 elements=13 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.400 hfid=0 words=4
    W x=55 s=1 z=100 t=Image
    W x=141 s=1 z=100 t=inside
    W x=226 s=1 z=100 t=hidden
    W x=318 s=1 z=100 t=parent
- PAGE 1 elements=12 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=34 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=18 s=0 z=100 t=The
    W x=55 s=0 z=100 t=div
    W x=91 s=0 z=100 t=below
@@ -770,11 +779,11 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=282 s=0 z=100 t=image
    W x=340 s=0 z=100 t=inside
    W x=399 s=0 z=100 t=should
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=3
+  LINE y=58 x=0 align=0 mult=1.000 hfid=0 words=3
    W x=0 s=0 z=100 t=also
    W x=48 s=0 z=100 t=be
    W x=69 s=0 z=100 t=hidden:
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=10
+  LINE y=82 x=0 align=0 mult=1.000 hfid=0 words=10
    W x=18 s=0 z=100 t=No
    W x=43 s=0 z=100 t=image
    W x=97 s=0 z=100 t=or
@@ -785,18 +794,18 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=308 s=0 z=100 t=div
    W x=340 s=0 z=100 t=should
    W x=407 s=0 z=100 t=appear
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=1
+  LINE y=106 x=0 align=0 mult=1.000 hfid=0 words=1
    W x=0 s=0 z=100 t=above.
-  LINE y=96 x=0 align=2 mult=1.400 hfid=0 words=3
+  LINE y=130 x=0 align=2 mult=1.400 hfid=0 words=3
    W x=52 s=1 z=100 t=Image
    W x=138 s=1 z=100 t=with
    W x=199 s=1 z=100 t=class="hidden"
-  LINE y=130 x=0 align=2 mult=1.400 hfid=0 words=4
+  LINE y=164 x=0 align=2 mult=1.400 hfid=0 words=4
    W x=61 s=1 z=100 t=overridden
    W x=210 s=1 z=100 t=by
    W x=240 s=1 z=100 t=inline
    W x=329 s=1 z=100 t=style
-  LINE y=164 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=198 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=The
    W x=58 s=0 z=100 t=image
    W x=119 s=0 z=100 t=below
@@ -804,19 +813,19 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=220 s=0 z=100 t=class="hidden"
    W x=368 s=0 z=100 t=but
    W x=408 s=0 z=100 t=inline
-  LINE y=188 x=0 align=0 mult=1.000 hfid=0 words=6
+  LINE y=222 x=0 align=0 mult=1.000 hfid=0 words=6
    W x=0 s=0 z=100 t=style="display:block"
    W x=198 s=0 z=100 t=overrides
    W x=289 s=0 z=100 t=it
    W x=315 s=0 z=100 t=back
    W x=358 s=0 z=100 t=to
    W x=390 s=0 z=100 t=visible.
-  LINE y=212 x=0 align=0 mult=1.000 hfid=0 words=3
+  LINE y=246 x=0 align=0 mult=1.000 hfid=0 words=3
    W x=0 s=0 z=100 t=It
    W x=25 s=0 z=100 t=SHOULD
    W x=89 s=0 z=100 t=appear:
-  IMG y=236 x=170 w=120 h=80 src=<cache>/epub_<hash>/img_de279f00d41522d8.png
-  LINE y=316 x=0 align=0 mult=1.000 hfid=0 words=9
+  IMG y=270 x=170 w=120 h=80 src=<cache>/epub_<hash>/img_de279f00d41522d8.png
+  LINE y=350 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=18 s=0 z=100 t=If
    W x=45 s=0 z=100 t=the
    W x=84 s=0 z=100 t=image
@@ -826,7 +835,7 @@ SPINE 9 href=OEBPS/chapter10.xhtml pages=2 truncated=0 cssFallback=0
    W x=295 s=0 z=100 t=inline
    W x=355 s=0 z=100 t=override
    W x=435 s=0 z=100 t=on
-  LINE y=340 x=0 align=0 mult=1.000 hfid=0 words=3
+  LINE y=374 x=0 align=0 mult=1.000 hfid=0 words=3
    W x=0 s=0 z=100 t=img
    W x=33 s=0 z=100 t=works
    W x=82 s=0 z=100 t=correctly.

@@ -47,5 +47,9 @@ void EpdFontFamily::prefetch(const char* utf8Text, const uint8_t styleMask) cons
 }
 
 uint32_t EpdFontFamily::applyLigatures(const uint32_t cp, const char*& text, const Style style) const {
+  // Small caps set every letter on its own: "fi" is two small capitals, never a lowercase ligature
+  // the fold cannot reach. Every measure and draw loop forms ligatures through here, so they agree.
+  // From crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin).
+  if (style & SMALL_CAPS) return cp;
   return getFont(style)->applyLigatures(cp, text);
 }

@@ -118,6 +118,14 @@ class Dictionary {
 
   static std::string cleanWord(const char* word);
 
+  // A short fixed name for a lookup outcome ("found", "not_found", ...), for log lines and the
+  // serial CMD:ACT:DICT reply.
+  static const char* resultName(LookupResult result);
+  // The one log line per lookup, from the dictionary screen and the serial lookup alike:
+  // dictionary, word, outcome (a resultName() or why the dictionary could not be searched) and,
+  // on a hit, the headword it matched (null otherwise).
+  static void logLookup(const char* dictionaryName, const char* word, const char* outcome, const char* headword);
+
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
 
  private:

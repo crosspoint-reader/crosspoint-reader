@@ -9,6 +9,7 @@ It is written for software developers who may be new to embedded development.
 - [Touch Architecture](./touch-architecture.md): touch input on the X4 Pro and the LilyGo T5S3
 - [Development Workflow](./development-workflow.md)
 - [Testing and Debugging](./testing-debugging.md)
+- [Serial Test API](../serial-test-api.md): drive and observe a device over USB serial for automated tests
 
 **Memory and performance design:**
 - [Heap and Data Structure Design](./heap-and-data-structures.md)

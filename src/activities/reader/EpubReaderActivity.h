@@ -529,6 +529,10 @@ class EpubReaderActivity final : public Activity {
   //              next section in the lookahead window (or idles if the window is exhausted)
   enum class BackgroundBuildState : uint8_t { Probe, WaitHeap, Building, Settled };
   BackgroundBuildState backgroundBuildState_ = BackgroundBuildState::Probe;
+  // WaitHeap's last gate check found the reader settled and no input queued, so only the heap or
+  // the buffer refused: B may wait like this for the rest of the chapter. Read by
+  // hasPendingBackgroundWork(), which then stops calling B pending.
+  bool backgroundBuildStarved_ = false;
   // Set between suspendBackgroundWork() and resumeBackgroundWork(): no look-ahead
   // build is probed, armed or stepped, and no page is pre-rendered.
   bool backgroundWorkSuspended_ = false;
@@ -922,6 +926,9 @@ class EpubReaderActivity final : public Activity {
   // SleepActivity's OVERLAY mode — rely on when transitioning out of the reader.
   void restoreCurrentPageToBufferIfPreRendered();
   void renderStatusBar() const;
+  // The book percentage and the chapter title the status bar shows; section must be loaded.
+  float statusBarBookPercent() const;
+  std::string chapterTitle() const;
   // The status bar's chapter page counter: the current file's page and total, widened to the
   // whole TOC chapter when that spans several spine items (#325; see ChapterPageSpan).
   ChapterPageSpan::Display chapterPageDisplay() const;
@@ -977,6 +984,9 @@ class EpubReaderActivity final : public Activity {
                                        const std::optional<EpubProgressRecord::Shown>& shown = std::nullopt);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
+  // The spine and the position within it that `percent` (0-100) of the book falls on. False
+  // when the book has no size or spines to measure.
+  bool resolvePercent(int percent, int& targetSpineIndex, float& spineProgress) const;
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
 
   // Open word selection over the current page, or the dictionary picker when no
@@ -1031,6 +1041,10 @@ class EpubReaderActivity final : public Activity {
   // this book. Rewrites progress.bin to the bookmarked position before the normal
   // reader startup path reads it.
   void applyPendingBookmarkJump();
+#if SERIAL_TEST_API
+  // Opens at APP_STATE.pendingPercentJump (set by the serial CMD:ACT:READER:<path>@<n>%).
+  void applyPendingPercentJump();
+#endif
   void applyOrientation(uint8_t orientation);
   void applyTextDarkness(uint8_t textDarkness);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
@@ -1059,6 +1073,9 @@ class EpubReaderActivity final : public Activity {
   bool getEffectiveGuideDots() const;
   bool getEffectiveInlineFootnotePreviews() const;
   int getEffectiveReaderFontId() const;
+  // getEffectiveReaderFontId(), and the family it resolved to (a built-in's label or an SD family
+  // name) when `familyOut` is given.
+  int resolveReaderFont(std::string* familyOut) const;
   float getEffectiveReaderLineCompression() const;
   // Re-point navTarget at the page currently displayed. Must be called after every move of
   // section->currentPage that stays inside the loaded section — see the definition for why.
@@ -1175,8 +1192,14 @@ class EpubReaderActivity final : public Activity {
   // A pending pre-render leaves the *next* page in the frame buffer; redraw the current page
   // so a screenshot (or any raw frame-buffer capture) matches what the user sees.
   void prepareFramebufferForCapture() override { restoreCurrentPageToBufferIfPreRendered(); }
-  // " book=<path> spine=<i>/<count> page=<n>/<count>" (1-based page; 0/0 while no section is loaded).
+  // " book=<path> spine=<i>/<count> page=<n>/<count> font=<family> font_pt=<size>", then with a
+  // section loaded " chapter=<toc title> chapter_page=<n>/<total>[~] percent=<book %>" (1-based;
+  // 0/0 while no section is loaded; ~ = the total is an estimate).
   void appendDebugState(std::string& out) const override;
+#if SERIAL_TEST_API
+  bool hasPendingScreenWork() override;
+  bool hasPendingBackgroundWork() override;
+#endif
   bool shouldSkipPeriodicUpdate() const override;
   void onButtonAction(CrossPointSettings::BUTTON_ACTION action) override;
   bool handleForcedRefresh(HalDisplay::RefreshMode mode) override;

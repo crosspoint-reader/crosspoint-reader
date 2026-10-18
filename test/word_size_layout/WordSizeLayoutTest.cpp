@@ -564,6 +564,21 @@ TEST(FontSizeLadderTest, AnIncompleteNativeLadderIsIgnored) {
   EXPECT_FLOAT_EQ(1.6f, ladder.resolve(160.0f).residual);  // the scale fallback
 }
 
+// scaleOf undoes resolve: the chosen font's size times the residual is the size asked for, which
+// is how the chapter parser puts a body-relative (rem) span into an already resolved block.
+TEST(FontSizeLadderTest, ScaleOfTimesResidualIsTheResolvedSize) {
+  for (const auto& ladder : {bookerly14Ladder(), nativeLadder(), FontSizeLadder{}}) {
+    for (const float pct : {60.0f, 80.0f, 100.0f, 114.0f, 160.0f, 240.0f}) {
+      const auto r = ladder.resolve(pct);
+      const float size = ladder.scaleOf(r.fontId) * r.residual;
+      // Within the residual dead zone: resolve snaps a residual that close to 1.0.
+      EXPECT_NEAR(pct / 100.0f, size, pct / 100.0f * FontSizeLadder::kResidualDeadZone) << pct;
+    }
+  }
+  EXPECT_FLOAT_EQ(1.0f, bookerly14Ladder().scaleOf(0));
+  EXPECT_FLOAT_EQ(1.0f, bookerly14Ladder().scaleOf(12345));  // not a font of the ladder
+}
+
 // ---------------------------------------------------------------------------
 // ParsedText::foldUniformWordSizes — whole-paragraph spans join the block channel
 // ---------------------------------------------------------------------------

@@ -98,8 +98,9 @@ bool ButtonEventManager::isShortPending(const Button button) const {
   return buttons[idx].state == State::ReleasedOnce;
 }
 
-bool ButtonEventManager::isGestureInFlight() const {
-  if (eventHead != eventTail) return true;
+bool ButtonEventManager::isGestureInFlight() const { return eventHead != eventTail || isMidGesture(); }
+
+bool ButtonEventManager::isMidGesture() const {
   for (const auto& b : buttons) {
     if (b.state != State::Idle) return true;
   }

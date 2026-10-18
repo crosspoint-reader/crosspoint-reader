@@ -134,4 +134,28 @@ TEST(TouchTransform, OppositeOrientationsDiffer) {
   EXPECT_NE(portrait.y, inverted.y);
 }
 
+// The inverse used to inject touches: every on-screen point survives the round trip in every
+// orientation, so a CMD:TOUCH at (x, y) is a tap the screen reads at (x, y).
+TEST(TouchTransform, LogicalToTapRoundTripsEveryOrientation) {
+  for (const int orientation : {touchtransform::Portrait, touchtransform::LandscapeClockwise,
+                                touchtransform::PortraitInverted, touchtransform::LandscapeCounterClockwise}) {
+    const bool portrait = orientation == touchtransform::Portrait || orientation == touchtransform::PortraitInverted;
+    const int width = portrait ? kPanelH : kPanelW;
+    const int height = portrait ? kPanelW : kPanelH;
+    for (const Pt in : {Pt{0, 0}, Pt{width - 1, 0}, Pt{0, height - 1}, Pt{width - 1, height - 1}, Pt{123, 456 % height},
+                        Pt{width / 2, height / 3}}) {
+      float nx = -1.0f;
+      float ny = -1.0f;
+      touchtransform::logicalToTap(orientation, kPanelW, kPanelH, in.x, in.y, nx, ny);
+      EXPECT_GE(nx, 0.0f);
+      EXPECT_LT(nx, 1.0f);
+      EXPECT_GE(ny, 0.0f);
+      EXPECT_LT(ny, 1.0f);
+      const Pt out = map(orientation, nx, ny);
+      EXPECT_EQ(out.x, in.x) << "orientation " << orientation;
+      EXPECT_EQ(out.y, in.y) << "orientation " << orientation;
+    }
+  }
+}
+
 }  // namespace

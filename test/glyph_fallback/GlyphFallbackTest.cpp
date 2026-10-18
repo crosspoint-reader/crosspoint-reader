@@ -36,6 +36,14 @@ TEST(GlyphFallback, MapsStressAndLengthMarksToPunctuation) {
   EXPECT_EQ(fallbackGlyphCodepoint(0x02D0), static_cast<uint32_t>(':'));   // length mark
 }
 
+TEST(GlyphFallback, MapsTheOkinaToAnOpeningQuote) {
+  // ʻ, the Hawaiian ʻokina: a turned comma, the shape of ‘ (General
+  // Punctuation, which every font here carries). Not ', which would make it
+  // the same mark as the modifier apostrophe ʼ beside it.
+  EXPECT_EQ(fallbackGlyphCodepoint(0x02BB), 0x2018u);
+  EXPECT_EQ(fallbackGlyphCodepoint(0x02BC), static_cast<uint32_t>('\''));
+}
+
 TEST(GlyphFallback, MapsBoxDrawingToAscii) {
   // No built-in font carries U+2500-U+257F. The MD reader's table rows use the
   // light vertical as a cell divider (#471); tree listings in code blocks use

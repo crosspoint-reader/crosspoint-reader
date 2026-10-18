@@ -36,6 +36,7 @@
 #include "ReadingStats.h"
 #include "SdCardFontGlobals.h"
 #include "SdCardFontRegistry.h"
+#include "SettingsByKey.h"
 #include "SettingsList.h"
 #include "SystemStatus.h"
 #include "UploadStallTolerance.h"
@@ -2005,20 +2006,12 @@ void CrossPointWebServer::handleGetSettings() const {
     switch (s.type) {
       case SettingType::TOGGLE: {
         doc["type"] = "toggle";
-        if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
-        } else if (s.valueGetter) {
-          doc["value"] = static_cast<int>(s.callValueGetter());
-        }
+        if (int value; SettingsByKey::readNumber(s, value)) doc["value"] = value;
         break;
       }
       case SettingType::ENUM: {
         doc["type"] = "enum";
-        if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
-        } else if (s.valueGetter) {
-          doc["value"] = static_cast<int>(s.callValueGetter());
-        }
+        if (int value; SettingsByKey::readNumber(s, value)) doc["value"] = value;
         JsonArray options = doc["options"].to<JsonArray>();
         // Through the shared accessors, not the vectors. A row may draw its options from
         // enumValues, from enumLabels, or from a flash-resident literal callback that extends
@@ -2040,11 +2033,7 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::VALUE: {
         doc["type"] = "value";
-        if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
-        } else if (s.valueGetter) {
-          doc["value"] = static_cast<int>(s.callValueGetter());
-        }
+        if (int value; SettingsByKey::readNumber(s, value)) doc["value"] = value;
         doc["min"] = s.valueRange.min;
         doc["max"] = s.valueRange.max;
         doc["step"] = s.valueRange.step;
@@ -2124,84 +2113,31 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  // One row at a time, as in handleGetSettings().
-  int applied = 0;
-
-  const auto isFontFamilyKey = [](const char* key) {
-    return key && (std::strcmp(key, "fontFamily") == 0 || std::strcmp(key, "txtFontFamily") == 0);
+  // One row at a time, as in handleGetSettings(), through SettingsByKey's keyed walk (the one the
+  // serial SET uses). Families last: a font-size value is an index into the sizes of the family the
+  // page was showing, which is the one selected now, so it has to be applied before this request
+  // changes that family. Two walks rather than a reordered list: rows are never held.
+  struct PostedRows {
+    JsonDocument& doc;
+    int applied;
+    bool families;  // this walk applies the font-family rows; the other one everything else
   };
-  const auto applyRow = [&](const SettingInfo& s) {
-    if (!s.key) return;
-    if (!doc[s.key].is<JsonVariant>()) return;
-
-    switch (s.type) {
-      case SettingType::TOGGLE: {
-        const int val = doc[s.key].as<int>() ? 1 : 0;
-        if (s.valuePtr) {
-          SETTINGS.*(s.valuePtr) = val;
-        } else if (s.valueSetter) {
-          s.callValueSetter(static_cast<uint8_t>(val));
-        }
-        applied++;
-        break;
-      }
-      case SettingType::ENUM: {
-        const int val = doc[s.key].as<int>();
-        // For font-family keys the enumLabels in the static list are empty by design
-        // (built lazily by handleGetSettings); use the dynamic option count instead.
-        const bool familyKey = isFontFamilyKey(s.key);
-        // Otherwise getEnumOptionCount(), for the same reason as the options array above: it is
-        // the one definition of how many options a row has, whichever form they come in.
-        const int count =
-            familyKey ? static_cast<int>(fontFamilyOptionCount()) : static_cast<int>(s.getEnumOptionCount());
-        if (val >= 0 && val < count) {
-          if (s.valuePtr) {
-            SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
-          } else if (s.valueSetter) {
-            s.callValueSetter(static_cast<uint8_t>(val));
-          }
-          applied++;
-        }
-        break;
-      }
-      case SettingType::VALUE: {
-        const int val = doc[s.key].as<int>();
-        if (val >= s.valueRange.min && val <= s.valueRange.max) {
-          if (s.valuePtr) {
-            SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
-          } else if (s.valueSetter) {
-            s.callValueSetter(static_cast<uint8_t>(val));
-          }
-          applied++;
-        }
-        break;
-      }
-      case SettingType::STRING: {
-        const std::string val = doc[s.key].as<std::string>();
-        if (s.stringSetter) {
-          s.callStringSetter(val);
-        } else if (s.stringMaxLen > 0) {
-          char* ptr = reinterpret_cast<char*>(&SETTINGS) + s.stringOffset;
-          strncpy(ptr, val.c_str(), s.stringMaxLen - 1);
-          ptr[s.stringMaxLen - 1] = '\0';
-        }
-        applied++;
-        break;
-      }
-      default:
-        break;
-    }
+  const SettingsByKey::RowVisitor applyRow = [](const SettingInfo& s, void* ctx) {
+    auto& posted = *static_cast<PostedRows*>(ctx);
+    const bool family = std::strcmp(s.key, "fontFamily") == 0 || std::strcmp(s.key, "txtFontFamily") == 0;
+    if (family != posted.families || !posted.doc[s.key].is<JsonVariant>()) return;
+    // Slider rows are ACTIONs here; the two the page edits are posted under their own keys below.
+    if (s.type == SettingType::ACTION) return;
+    const SettingsByKey::WriteResult result = s.type == SettingType::STRING
+                                                  ? SettingsByKey::writeString(s, posted.doc[s.key].as<std::string>())
+                                                  : SettingsByKey::writeNumber(s, posted.doc[s.key].as<int>());
+    if (result == SettingsByKey::WriteResult::Applied) posted.applied++;
   };
-
-  // Families last. A font-size value is an index into the sizes of the family the page was showing,
-  // which is the one selected now, so it has to be applied before this request changes that
-  // family. Two walks rather than a reordered list: rows are visited one at a time, never held.
-  forEachSetting([&](const SettingInfo& s) {
-    if (!isFontFamilyKey(s.key)) applyRow(s);
-  });
-  forEachSetting([&](const SettingInfo& s) {
-    if (isFontFamilyKey(s.key)) applyRow(s);
-  });
+  PostedRows posted{doc, 0, false};
+  SettingsByKey::visitKeyed({}, applyRow, &posted);
+  posted.families = true;
+  SettingsByKey::visitKeyed({}, applyRow, &posted);
+  int applied = posted.applied;
 
   // Handle sleepTimeoutMinutes and refreshFrequencyPages posted as VALUE types.
   if (doc["sleepTimeoutMinutes"].is<int>()) {
@@ -2219,8 +2155,7 @@ void CrossPointWebServer::handlePostSettings() {
     }
   }
 
-  CrossPointSettings::normalizeDependentSettings(SETTINGS);
-  SETTINGS.saveToFile();
+  SettingsByKey::commit();
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");

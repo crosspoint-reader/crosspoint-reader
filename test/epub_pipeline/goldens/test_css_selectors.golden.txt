@@ -1,0 +1,92 @@
+BOOK title=CSS Selectors Test lang=en spine=3 toc=3 reliableToc=1
+SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=7 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=P1
+   W x=21 s=0 z=100 t=outside:
+   W x=100 s=0 z=100 t=plain.
+  LINE y=24 x=36 align=0 mult=1.000 hfid=0 words=7
+   W x=0 s=2 z=100 t=P2
+   W x=22 s=2 z=100 t=inside
+   W x=77 s=2 z=100 t=a
+   W x=95 s=2 z=100 t=blockquote:
+   W x=200 s=2 z=100 t=inset
+   W x=251 s=2 z=100 t=and
+   W x=288 s=2 z=100 t=italic.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=0 z=100 t=P3
+   W x=23 s=0 z=100 t=outside
+   W x=94 s=0 z=100 t=again:
+   W x=160 s=0 z=100 t=plain,
+   W x=218 s=0 z=100 t=not
+   W x=257 s=0 z=100 t=the
+   W x=294 s=0 z=100 t=blockquote
+   W x=391 s=0 z=100 t=style.
+  LINE y=72 x=72 align=0 mult=1.000 hfid=0 words=8
+   W x=0 s=0 z=100 t=P4
+   W x=24 s=0 z=100 t=a
+   W x=42 s=0 z=100 t=child
+   W x=90 s=0 z=100 t=of
+   W x=118 s=0 z=100 t=the
+   W x=155 s=0 z=100 t=poem:
+   W x=206 s=0 z=100 t=inset
+   W x=257 s=0 z=100 t=4em.
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=0 z=100 t=P5
+   W x=25 s=0 z=100 t=a
+   W x=43 s=0 z=100 t=grandchild:
+   W x=149 s=0 z=100 t=plain.
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
+   W x=0 s=0 z=100 t=P6
+   W x=26 s=0 z=100 t=below
+   W x=74 s=0 z=100 t=the
+   W x=111 s=0 z=100 t=ancestor
+   W x=195 s=0 z=100 t=stack:
+   W x=255 s=0 z=100 t=not
+   W x=294 s=0 z=100 t=bold.
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=4
+   W x=0 s=1 z=100 t=P7
+   W x=29 s=1 z=100 t=under
+   W x=87 s=1 z=100 t=.deep:
+   W x=149 s=1 z=100 t=bold.
+SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=3 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=0 z=100 t=I1
+   W x=21 s=1 z=100 t=bold
+   W x=66 s=1 z=100 t=still
+   W x=120 s=1 z=100 t=bold
+   W x=165 s=0 z=100 t=plain.
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=2 z=100 t=I2
+   W x=22 s=2 z=100 t=italic
+   W x=78 s=2 z=100 t=still
+   W x=127 s=2 z=100 t=italic
+   W x=183 s=2 z=100 t=end.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=0 z=100 t=I3
+   W x=23 s=4 z=100 t=underlined
+   W x=119 s=4 z=100 t=still
+   W x=168 s=4 z=100 t=underlined
+   W x=264 s=0 z=100 t=plain.
+SPINE 2 href=OEBPS/chapter3.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=5 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=F1
+   W x=18 s=0 z=150 t=large
+   W x=101 s=0 z=100 t=body
+  LINE y=36 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=F2
+   W x=19 s=0 z=150 t=large
+   W x=102 s=0 z=100 t=body
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=F3
+   W x=20 s=0 z=150 t=large
+   W x=103 s=0 z=150 t=large
+  LINE y=108 x=0 align=0 mult=1.500 hfid=0 words=3
+   W x=0 s=0 z=100 t=F4
+   W x=32 s=0 z=100 t=large
+   W x=115 s=0 z=67 t=body
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=F5
+   W x=22 s=0 z=100 t=body

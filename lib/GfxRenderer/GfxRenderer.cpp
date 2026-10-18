@@ -3216,6 +3216,10 @@ void GfxRenderer::tapToLogical(const Orientation orientation, const float nx, co
   touchtransform::tapToLogical(static_cast<int>(orientation), panelWidth, panelHeight, nx, ny, outX, outY);
 }
 
+void GfxRenderer::logicalToTap(const int x, const int y, float& outNx, float& outNy) const {
+  touchtransform::logicalToTap(static_cast<int>(getOrientation()), panelWidth, panelHeight, x, y, outNx, outNy);
+}
+
 static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, int lx, int ly, int lw, int lh,
                                         uint16_t panelWidth, uint16_t panelHeight, int* outX0, int* outY0, int* outX1,
                                         int* outY1) {

@@ -493,7 +493,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=297 s=0 z=100 t=being
    W x=346 s=0 z=100 t=consulted.
   FN n=1 href=notes.xhtml#n1
- PAGE 2 elements=31 footnotes=0
+ PAGE 2 elements=30 footnotes=0
   LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=The
    W x=55 s=0 z=100 t=correspondence
@@ -728,7 +728,8 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=0 s=0 z=100 t=meaningful
    W x=106 s=0 z=100 t=sense
    W x=159 s=0 z=100 t=obeyed.
-  LINE y=720 x=0 align=0 mult=1.000 hfid=0 words=8
+ PAGE 3 elements=18 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=18 s=0 z=100 t=The
    W x=60 s=0 z=100 t=Company's
    W x=163 s=0 z=100 t=clerks
@@ -737,8 +738,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=336 s=0 z=100 t=ledgers
    W x=414 s=0 z=100 t=in
    W x=446 s=0 z=100 t=a
- PAGE 3 elements=17 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=hand
    W x=59 s=0 z=100 t=so
    W x=96 s=0 z=100 t=small
@@ -747,7 +747,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=268 s=0 z=100 t=columns
    W x=353 s=0 z=100 t=looked
    W x=427 s=0 z=100 t=like
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=brickwork,
    W x=88 s=0 z=100 t=and
    W x=130 s=0 z=100 t=the
@@ -757,7 +757,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=302 s=0 z=100 t=were
    W x=345 s=0 z=100 t=larger
    W x=413 s=0 z=100 t=than
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=the
    W x=45 s=0 z=100 t=revenue
    W x=128 s=0 z=100 t=of
@@ -765,9 +765,9 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=246 s=0 z=100 t=European
    W x=341 s=0 z=100 t=kingdoms
    W x=430 s=0 z=100 t=put
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=1
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=1
    W x=0 s=0 z=100 t=together.
-  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=Nobody
    W x=88 s=0 z=100 t=in
    W x=122 s=0 z=100 t=the
@@ -775,7 +775,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=271 s=0 z=100 t=Hall
    W x=326 s=0 z=100 t=that
    W x=387 s=0 z=100 t=morning
-  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=imagined
    W x=84 s=0 z=100 t=that
    W x=139 s=0 z=100 t=the
@@ -783,7 +783,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=293 s=0 z=100 t=being
    W x=347 s=0 z=100 t=raised
    W x=410 s=0 z=100 t=would
-  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=one
    W x=50 s=0 z=100 t=day
    W x=96 s=0 z=100 t=command
@@ -792,7 +792,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=289 s=0 z=100 t=but
    W x=334 s=0 z=100 t=the
    W x=383 s=0 z=100 t=notaries
-  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=wrote
    W x=56 s=0 z=100 t=it
    W x=83 s=0 z=100 t=all
@@ -802,11 +802,11 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=322 s=0 z=100 t=that
    W x=377 s=0 z=100 t=was
    W x=415 s=0 z=100 t=what
-  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=3
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=3
    W x=0 s=0 z=100 t=notaries
    W x=83 s=0 z=100 t=were
    W x=121 s=0 z=100 t=for.
-  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=18 s=0 z=100 t=A
    W x=38 s=0 z=100 t=monsoon
    W x=127 s=0 z=100 t=was
@@ -816,7 +816,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=319 s=0 z=100 t=was
    W x=358 s=0 z=100 t=early,
    W x=424 s=0 z=100 t=and
-  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=between
    W x=75 s=0 z=100 t=the
    W x=121 s=0 z=100 t=two
@@ -826,7 +826,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=284 s=0 z=100 t=great
    W x=349 s=0 z=100 t=many
    W x=405 s=0 z=100 t=people
-  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=who
    W x=48 s=0 z=100 t=had
    W x=98 s=0 z=100 t=never
@@ -835,13 +835,13 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=272 s=0 z=100 t=either
    W x=344 s=0 z=100 t=found
    W x=414 s=0 z=100 t=their
-  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=5
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=5
    W x=0 s=0 z=100 t=circumstances
    W x=122 s=0 z=100 t=rearranged
    W x=224 s=0 z=100 t=without
    W x=297 s=0 z=100 t=being
    W x=346 s=0 z=100 t=consulted.
-  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=The
    W x=55 s=0 z=100 t=correspondence
    W x=191 s=0 z=100 t=took
@@ -849,7 +849,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=301 s=0 z=100 t=months
    W x=375 s=0 z=100 t=to
    W x=407 s=0 z=100 t=reach
-  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=London
    W x=81 s=0 z=100 t=and
    W x=127 s=0 z=100 t=eight
@@ -858,7 +858,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=306 s=0 z=100 t=come
    W x=359 s=0 z=100 t=back,
    W x=415 s=0 z=100 t=which
-  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=meant
    W x=62 s=0 z=100 t=that
    W x=116 s=0 z=100 t=every
@@ -866,7 +866,7 @@ SPINE 0 href=OEBPS/wrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=283 s=0 z=100 t=arrived
    W x=356 s=0 z=100 t=describing
    W x=447 s=0 z=100 t=a
-  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=6
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=6
    W x=0 s=0 z=100 t=world
    W x=49 s=0 z=100 t=that
    W x=99 s=0 z=100 t=had
@@ -1367,7 +1367,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=297 s=0 z=100 t=being
    W x=346 s=0 z=100 t=consulted.
   FN n=1 href=notes.xhtml#n1
- PAGE 2 elements=31 footnotes=0
+ PAGE 2 elements=30 footnotes=0
   LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=The
    W x=55 s=0 z=100 t=correspondence
@@ -1602,7 +1602,8 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=0 s=0 z=100 t=meaningful
    W x=106 s=0 z=100 t=sense
    W x=159 s=0 z=100 t=obeyed.
-  LINE y=720 x=0 align=0 mult=1.000 hfid=0 words=8
+ PAGE 3 elements=18 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=18 s=0 z=100 t=The
    W x=60 s=0 z=100 t=Company's
    W x=163 s=0 z=100 t=clerks
@@ -1611,8 +1612,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=336 s=0 z=100 t=ledgers
    W x=414 s=0 z=100 t=in
    W x=446 s=0 z=100 t=a
- PAGE 3 elements=17 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=hand
    W x=59 s=0 z=100 t=so
    W x=96 s=0 z=100 t=small
@@ -1621,7 +1621,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=268 s=0 z=100 t=columns
    W x=353 s=0 z=100 t=looked
    W x=427 s=0 z=100 t=like
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=brickwork,
    W x=88 s=0 z=100 t=and
    W x=130 s=0 z=100 t=the
@@ -1631,7 +1631,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=302 s=0 z=100 t=were
    W x=345 s=0 z=100 t=larger
    W x=413 s=0 z=100 t=than
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=the
    W x=45 s=0 z=100 t=revenue
    W x=128 s=0 z=100 t=of
@@ -1639,9 +1639,9 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=246 s=0 z=100 t=European
    W x=341 s=0 z=100 t=kingdoms
    W x=430 s=0 z=100 t=put
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=1
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=1
    W x=0 s=0 z=100 t=together.
-  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=Nobody
    W x=88 s=0 z=100 t=in
    W x=122 s=0 z=100 t=the
@@ -1649,7 +1649,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=271 s=0 z=100 t=Hall
    W x=326 s=0 z=100 t=that
    W x=387 s=0 z=100 t=morning
-  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=imagined
    W x=84 s=0 z=100 t=that
    W x=139 s=0 z=100 t=the
@@ -1657,7 +1657,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=293 s=0 z=100 t=being
    W x=347 s=0 z=100 t=raised
    W x=410 s=0 z=100 t=would
-  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=one
    W x=50 s=0 z=100 t=day
    W x=96 s=0 z=100 t=command
@@ -1666,7 +1666,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=289 s=0 z=100 t=but
    W x=334 s=0 z=100 t=the
    W x=383 s=0 z=100 t=notaries
-  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=wrote
    W x=56 s=0 z=100 t=it
    W x=83 s=0 z=100 t=all
@@ -1676,11 +1676,11 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=322 s=0 z=100 t=that
    W x=377 s=0 z=100 t=was
    W x=415 s=0 z=100 t=what
-  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=3
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=3
    W x=0 s=0 z=100 t=notaries
    W x=83 s=0 z=100 t=were
    W x=121 s=0 z=100 t=for.
-  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=18 s=0 z=100 t=A
    W x=38 s=0 z=100 t=monsoon
    W x=127 s=0 z=100 t=was
@@ -1690,7 +1690,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=319 s=0 z=100 t=was
    W x=358 s=0 z=100 t=early,
    W x=424 s=0 z=100 t=and
-  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=between
    W x=75 s=0 z=100 t=the
    W x=121 s=0 z=100 t=two
@@ -1700,7 +1700,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=284 s=0 z=100 t=great
    W x=349 s=0 z=100 t=many
    W x=405 s=0 z=100 t=people
-  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=who
    W x=48 s=0 z=100 t=had
    W x=98 s=0 z=100 t=never
@@ -1709,13 +1709,13 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=272 s=0 z=100 t=either
    W x=344 s=0 z=100 t=found
    W x=414 s=0 z=100 t=their
-  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=5
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=5
    W x=0 s=0 z=100 t=circumstances
    W x=122 s=0 z=100 t=rearranged
    W x=224 s=0 z=100 t=without
    W x=297 s=0 z=100 t=being
    W x=346 s=0 z=100 t=consulted.
-  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=18 s=0 z=100 t=The
    W x=55 s=0 z=100 t=correspondence
    W x=191 s=0 z=100 t=took
@@ -1723,7 +1723,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=301 s=0 z=100 t=months
    W x=375 s=0 z=100 t=to
    W x=407 s=0 z=100 t=reach
-  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=8
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=8
    W x=0 s=0 z=100 t=London
    W x=81 s=0 z=100 t=and
    W x=127 s=0 z=100 t=eight
@@ -1732,7 +1732,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=306 s=0 z=100 t=come
    W x=359 s=0 z=100 t=back,
    W x=415 s=0 z=100 t=which
-  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=7
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=7
    W x=0 s=0 z=100 t=meant
    W x=62 s=0 z=100 t=that
    W x=116 s=0 z=100 t=every
@@ -1740,7 +1740,7 @@ SPINE 1 href=OEBPS/unwrapped.xhtml pages=4 truncated=0 cssFallback=0
    W x=283 s=0 z=100 t=arrived
    W x=356 s=0 z=100 t=describing
    W x=447 s=0 z=100 t=a
-  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=6
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=6
    W x=0 s=0 z=100 t=world
    W x=49 s=0 z=100 t=that
    W x=99 s=0 z=100 t=had

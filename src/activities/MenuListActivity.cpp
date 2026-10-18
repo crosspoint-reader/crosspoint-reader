@@ -135,6 +135,7 @@ void MenuListActivity::buildScreen(UiScreen& screen) {
   props.items = windowItems.data();
   props.itemsWindowFirst = windowFirst;
   props.itemsWindowCount = windowCount;
+  noteListSelection(props);
   screen.list(props);
 }
 

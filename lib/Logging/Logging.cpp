@@ -33,6 +33,29 @@ static volatile bool serialWireMuted = false;
 void setSerialWireMuted(bool muted) { serialWireMuted = muted; }
 bool isSerialWireMuted() { return serialWireMuted; }
 
+// Same single-writer argument as serialWireMuted (the loop task's CMD:LOG).
+static volatile uint8_t wireLevel = LOG_LEVEL;
+
+void setLogWireLevel(const uint8_t level) {
+  constexpr int kCompiled = LOG_LEVEL;  // int: an unsigned compare against 0 would warn
+  wireLevel = static_cast<uint8_t>(static_cast<int>(level) < kCompiled ? level : kCompiled);
+}
+uint8_t logWireLevel() { return wireLevel; }
+
+// The rank of a LOG_* level tag ("ERR", "INF", "DBG", "TRC"), by its first letter.
+static uint8_t levelRank(const char* level) {
+  switch (level[0]) {
+    case 'E':
+      return 0;
+    case 'I':
+      return 1;
+    case 'D':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
 // Serializes the EMIT half of logPrintf: the transport write and the RTC ring
 // append. Formatting stays outside it.
 //
@@ -140,7 +163,7 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   //
   // serialWireMuted is honoured on every path: it is how the serial-transfer
   // activity keeps log noise out of a binary protocol stream.
-  if (!serialWireMuted) {
+  if (!serialWireMuted && levelRank(level) <= wireLevel) {
 #if FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF
     // IDF/ROM console: the most robust path when the USB bridge is external
     // (Sticky) and Arduino's Serial object is not the thing being monitored.

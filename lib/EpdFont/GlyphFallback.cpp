@@ -78,6 +78,8 @@ constexpr Fallback FALLBACKS[] = {
     {0x02B0, 'h'},   // ʰ modifier h
     {0x02B2, 'j'},   // ʲ modifier j
     {0x02B7, 'w'},   // ʷ modifier w
+    {0x02BB, u'‘'},  // ʻ turned comma, the Hawaiian ʻokina; not ', or it reads as the ʼ below
+                     // (crosspoint-reader PR #3891, Justin Mitchell)
     {0x02BC, '\''},  // ʼ modifier apostrophe
     {0x02C8, '\''},  // ˈ primary stress -- a vertical tick
     {0x02CC, ','},   // ˌ secondary stress -- a low tick

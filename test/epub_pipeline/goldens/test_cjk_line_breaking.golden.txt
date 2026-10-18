@@ -1,6 +1,6 @@
 BOOK title=CJK Line Breaking lang=ja spine=1 toc=0 reliableToc=0
 SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
- PAGE 0 elements=25 footnotes=0
+ PAGE 0 elements=24 footnotes=0
   LINE y=18 x=0 align=2 mult=1.000 hfid=0 words=2
    W x=182 s=1 z=100 t=1.
    W x=206 s=1 z=100 t=kinsoku
@@ -544,11 +544,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=123 s=0 z=100 t=비가
    W x=145 s=0 z=100 t=추적추적
    W x=185 s=0 z=100 t=내리었다.
-  LINE y=702 x=0 align=2 mult=1.000 hfid=0 words=2
+ PAGE 1 elements=27 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.000 hfid=0 words=2
    W x=189 s=1 z=100 t=7.
    W x=219 s=1 z=100 t=table
- PAGE 1 elements=27 footnotes=0
-  TABLE y=0 x=0 w=460 h=60 cols=2 border=1 rows=1
+  TABLE y=24 x=0 w=460 h=60 cols=2 border=1 rows=1
    ROW h=58 hdr=0 cells=2
     CELL 0 hdr=0 span=1 lines=2
      LN words=22
@@ -591,11 +591,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
      LN words=2
       W x=18 s=0 z=100 t=短
       W x=30 s=0 z=100 t=い
-  LINE y=78 x=0 align=2 mult=1.000 hfid=0 words=3
+  LINE y=102 x=0 align=2 mult=1.000 hfid=0 words=3
    W x=159 s=1 z=100 t=8.
    W x=183 s=1 z=100 t=table
    W x=240 s=1 z=100 t=budget
-  LINE y=102 x=0 align=0 mult=1.000 hfid=0 words=47
+  LINE y=126 x=0 align=0 mult=1.000 hfid=0 words=47
    W x=18 s=0 z=100 t=鑑
    W x=25 s=0 z=100 t=天
    W x=36 s=0 z=100 t=地
@@ -643,7 +643,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=424 s=0 z=100 t=水
    W x=431 s=0 z=100 t=玉
    W x=439 s=0 z=100 t=出
-  LINE y=126 x=0 align=0 mult=1.000 hfid=0 words=46
+  LINE y=150 x=0 align=0 mult=1.000 hfid=0 words=46
    W x=0 s=0 z=100 t=崑
    W x=10 s=0 z=100 t=岡
    W x=20 s=0 z=100 t=劍
@@ -690,7 +690,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=401 s=0 z=100 t=位
    W x=408 s=0 z=100 t=讓
    W x=417 s=0 z=100 t=國
-  LINE y=150 x=0 align=0 mult=1.000 hfid=0 words=46
+  LINE y=174 x=0 align=0 mult=1.000 hfid=0 words=46
    W x=0 s=0 z=100 t=有
    W x=7 s=0 z=100 t=虞
    W x=13 s=0 z=100 t=陶
@@ -737,7 +737,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=395 s=0 z=100 t=霜
    W x=403 s=0 z=100 t=金
    W x=414 s=0 z=100 t=生
-  LINE y=174 x=0 align=0 mult=1.000 hfid=0 words=46
+  LINE y=198 x=0 align=0 mult=1.000 hfid=0 words=46
    W x=0 s=0 z=100 t=麗
    W x=12 s=0 z=100 t=水
    W x=19 s=0 z=100 t=玉
@@ -784,7 +784,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=392 s=0 z=100 t=服
    W x=403 s=0 z=100 t=衣
    W x=415 s=0 z=100 t=裳
-  LINE y=198 x=0 align=0 mult=1.000 hfid=0 words=41
+  LINE y=222 x=0 align=0 mult=1.000 hfid=0 words=41
    W x=0 s=0 z=100 t=推
    W x=10 s=0 z=100 t=位
    W x=17 s=0 z=100 t=讓
@@ -826,7 +826,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=339 s=0 z=100 t=調
    W x=346 s=0 z=100 t=陽
    W x=356 s=0 z=100 t=雲
-  LINE y=222 x=0 align=0 mult=1.000 hfid=0 words=45
+  LINE y=246 x=0 align=0 mult=1.000 hfid=0 words=45
    W x=18 s=0 z=100 t=騰
    W x=30 s=0 z=100 t=致
    W x=40 s=0 z=100 t=雨
@@ -872,7 +872,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=405 s=0 z=100 t=帝
    W x=417 s=0 z=100 t=鳥
    W x=429 s=0 z=100 t=官
-  LINE y=246 x=0 align=0 mult=1.000 hfid=0 words=18
+  LINE y=270 x=0 align=0 mult=1.000 hfid=0 words=18
    W x=0 s=0 z=100 t=人
    W x=7 s=0 z=100 t=皇
    W x=18 s=0 z=100 t=始
@@ -891,11 +891,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=135 s=0 z=100 t=虞
    W x=141 s=0 z=100 t=陶
    W x=151 s=0 z=100 t=唐
-  LINE y=288 x=0 align=2 mult=1.000 hfid=0 words=3
+  LINE y=312 x=0 align=2 mult=1.000 hfid=0 words=3
    W x=160 s=1 z=100 t=9.
    W x=185 s=1 z=100 t=chunk
    W x=245 s=1 z=100 t=seams
-  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=53
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=53
    W x=18 s=0 z=100 t=漢
    W x=26 s=0 z=100 t=漢
    W x=34 s=0 z=100 t=漢
@@ -949,7 +949,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=418 s=0 z=100 t=漢
    W x=426 s=0 z=100 t=漢
    W x=434 s=0 z=100 t=漢
-  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=34
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=34
    W x=0 s=0 z=100 t=漢
    W x=8 s=0 z=100 t=漢
    W x=16 s=0 z=100 t=漢
@@ -984,7 +984,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=248 s=0 z=100 t=字
    W x=257 s=0 z=100 t=字
    W x=266 s=0 z=100 t=字
-  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=53
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=53
    W x=18 s=0 z=100 t=漢
    W x=26 s=0 z=100 t=漢
    W x=34 s=0 z=100 t=漢
@@ -1038,7 +1038,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=418 s=0 z=100 t=漢
    W x=426 s=0 z=100 t=漢
    W x=434 s=0 z=100 t=漢
-  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=34
+  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=34
    W x=0 s=0 z=100 t=漢
    W x=8 s=0 z=100 t=漢
    W x=16 s=0 z=100 t=漢
@@ -1073,18 +1073,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=248 s=0 z=100 t=字
    W x=257 s=0 z=100 t=字
    W x=266 s=0 z=100 t=字
-  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=5
+  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=5
    W x=18 s=0 z=100 t=abcdefghi
    W x=108 s=0 z=100 t=abcdefghi
    W x=198 s=0 z=100 t=abcdefghi
    W x=288 s=0 z=100 t=abcdefghi
    W x=378 s=0 z=100 t=abcdefghi
-  LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=5
-   W x=0 s=0 z=100 t=abcdefghi
-   W x=94 s=0 z=100 t=abcdefghi
-   W x=188 s=0 z=100 t=abcdefghi
-   W x=282 s=0 z=100 t=abcdefghi
-   W x=376 s=0 z=100 t=abcdefghi
   LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=5
    W x=0 s=0 z=100 t=abcdefghi
    W x=94 s=0 z=100 t=abcdefghi
@@ -1103,16 +1097,22 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=188 s=0 z=100 t=abcdefghi
    W x=282 s=0 z=100 t=abcdefghi
    W x=376 s=0 z=100 t=abcdefghi
-  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=4
+  LINE y=528 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=0 s=0 z=100 t=abcdefghi
+   W x=94 s=0 z=100 t=abcdefghi
+   W x=188 s=0 z=100 t=abcdefghi
+   W x=282 s=0 z=100 t=abcdefghi
+   W x=376 s=0 z=100 t=abcdefghi
+  LINE y=552 x=0 align=0 mult=1.000 hfid=0 words=4
    W x=0 s=0 z=100 t=abc
    W x=31 s=0 z=100 t=字
    W x=40 s=0 z=100 t=字
    W x=49 s=0 z=100 t=字
-  LINE y=570 x=0 align=2 mult=1.000 hfid=0 words=3
+  LINE y=594 x=0 align=2 mult=1.000 hfid=0 words=3
    W x=154 s=1 z=100 t=10.
    W x=191 s=1 z=100 t=quote
    W x=251 s=1 z=100 t=seams
-  LINE y=594 x=0 align=0 mult=1.000 hfid=0 words=19
+  LINE y=618 x=0 align=0 mult=1.000 hfid=0 words=19
    W x=18 s=0 z=100 t=到
    W x=29 s=0 z=100 t=那
    W x=39 s=0 z=100 t=富
@@ -1132,7 +1132,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=192 s=0 z=100 t=不
    W x=201 s=0 z=100 t=能
    W x=209 s=0 z=100 t=禁。
-  LINE y=618 x=0 align=0 mult=1.000 hfid=0 words=10
+  LINE y=642 x=0 align=0 mult=1.000 hfid=0 words=10
    W x=18 s=0 z=100 t=那
    W x=28 s=0 z=100 t=僧
    W x=39 s=0 z=100 t=笑
@@ -1143,7 +1143,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=101 s=0 z=100 t=玉"之
    W x=129 s=0 z=100 t=說
    W x=136 s=0 z=100 t=也。
-  LINE y=642 x=0 align=0 mult=1.000 hfid=0 words=11
+  LINE y=666 x=0 align=0 mult=1.000 hfid=0 words=11
    W x=18 s=0 z=100 t=富
    W x=25 s=0 z=100 t=貴
    W x=36 s=0 z=100 t=場
@@ -1155,7 +1155,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=114 s=0 z=100 t=兄
    W x=120 s=0 z=100 t=听
    W x=128 s=0 z=100 t=了。
-  LINE y=666 x=0 align=0 mult=1.000 hfid=0 words=10
+  LINE y=690 x=0 align=0 mult=1.000 hfid=0 words=10
    W x=18 s=0 z=100 t=途
    W x=25 s=0 z=100 t=中
    W x=31 s=0 z=100 t=の
@@ -1166,7 +1166,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=90 s=0 z=100 t=の
    W x=97 s=0 z=100 t=文
    W x=103 s=0 z=100 t=字。
-  LINE y=690 x=0 align=0 mult=1.000 hfid=0 words=10
+  LINE y=714 x=0 align=0 mult=1.000 hfid=0 words=10
    W x=18 s=0 z=100 t=引
    W x=26 s=0 z=100 t=用
    W x=36 s=0 z=100 t=の
@@ -1177,12 +1177,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=115 s=0 z=100 t=も
    W x=121 s=0 z=100 t=同
    W x=132 s=0 z=100 t=じ。
-  LINE y=732 x=0 align=2 mult=1.000 hfid=0 words=3
+ PAGE 2 elements=14 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.000 hfid=0 words=3
    W x=158 s=1 z=100 t=11.
    W x=189 s=1 z=100 t=dense
    W x=246 s=1 z=100 t=digits
- PAGE 2 elements=13 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=48
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=48
    W x=18 s=0 z=100 t=天
    W x=29 s=0 z=100 t=0
    W x=41 s=0 z=100 t=地
@@ -1231,7 +1231,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=417 s=0 z=100 t=2
    W x=424 s=0 z=100 t=藏
    W x=434 s=0 z=100 t=3
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=47
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=47
    W x=0 s=0 z=100 t=閏
    W x=10 s=0 z=100 t=4
    W x=19 s=0 z=100 t=餘
@@ -1279,7 +1279,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=400 s=0 z=100 t=崑
    W x=410 s=0 z=100 t=6
    W x=421 s=0 z=100 t=岡
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=7
    W x=12 s=0 z=100 t=劍
    W x=18 s=0 z=100 t=8
@@ -1330,7 +1330,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=417 s=0 z=100 t=翔
    W x=429 s=0 z=100 t=1
    W x=435 s=0 z=100 t=龍
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=48
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=48
    W x=0 s=0 z=100 t=2
    W x=7 s=0 z=100 t=師
    W x=19 s=0 z=100 t=3
@@ -1379,7 +1379,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=406 s=0 z=100 t=唐
    W x=418 s=0 z=100 t=5
    W x=428 s=0 z=100 t=天
-  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=6
    W x=11 s=0 z=100 t=地
    W x=21 s=0 z=100 t=7
@@ -1430,7 +1430,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=416 s=0 z=100 t=閏
    W x=426 s=0 z=100 t=0
    W x=438 s=0 z=100 t=餘
-  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=1
    W x=6 s=0 z=100 t=成
    W x=14 s=0 z=100 t=2
@@ -1481,7 +1481,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=415 s=0 z=100 t=號
    W x=422 s=0 z=100 t=5
    W x=432 s=0 z=100 t=巨
-  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=49
    W x=0 s=0 z=100 t=6
    W x=11 s=0 z=100 t=闕
    W x=21 s=0 z=100 t=7
@@ -1531,7 +1531,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=418 s=0 z=100 t=9
    W x=425 s=0 z=100 t=火
    W x=433 s=0 z=100 t=0
-  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=49
    W x=0 s=0 z=100 t=帝
    W x=12 s=0 z=100 t=1
    W x=18 s=0 z=100 t=鳥
@@ -1581,7 +1581,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=416 s=0 z=100 t=玄
    W x=426 s=0 z=100 t=4
    W x=435 s=0 z=100 t=黃
-  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=5
    W x=10 s=0 z=100 t=宇
    W x=18 s=0 z=100 t=6
@@ -1632,7 +1632,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=422 s=0 z=100 t=歲
    W x=431 s=0 z=100 t=9
    W x=438 s=0 z=100 t=律
-  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=49
    W x=0 s=0 z=100 t=0
    W x=12 s=0 z=100 t=呂
    W x=21 s=0 z=100 t=1
@@ -1682,7 +1682,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=411 s=0 z=100 t=3
    W x=419 s=0 z=100 t=珠
    W x=430 s=0 z=100 t=4
-  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=48
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=48
    W x=0 s=0 z=100 t=稱
    W x=11 s=0 z=100 t=5
    W x=21 s=0 z=100 t=夜
@@ -1731,7 +1731,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=409 s=0 z=100 t=7
    W x=421 s=0 z=100 t=鳥
    W x=433 s=0 z=100 t=8
-  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=49
    W x=0 s=0 z=100 t=官
    W x=11 s=0 z=100 t=9
    W x=18 s=0 z=100 t=人
@@ -1781,7 +1781,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=3 truncated=0 cssFallback=0
    W x=413 s=0 z=100 t=宇
    W x=421 s=0 z=100 t=2
    W x=428 s=0 z=100 t=宙
-  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=13
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=13
    W x=0 s=0 z=100 t=3
    W x=8 s=0 z=100 t=洪
    W x=16 s=0 z=100 t=4

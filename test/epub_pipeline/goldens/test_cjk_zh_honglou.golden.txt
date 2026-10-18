@@ -1,6 +1,6 @@
 BOOK title=紅樓夢 lang=zh-Hant spine=1 toc=0 reliableToc=0
 SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
- PAGE 0 elements=30 footnotes=0
+ PAGE 0 elements=29 footnotes=0
   LINE y=0 x=0 align=2 mult=1.200 hfid=0 words=3
    W x=209 s=1 z=100 t=第
    W x=222 s=1 z=100 t=一
@@ -1108,7 +1108,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=405 s=0 z=100 t=處，
    W x=425 s=0 z=100 t=又
    W x=431 s=0 z=100 t=不
-  LINE y=719 x=0 align=0 mult=1.000 hfid=0 words=38
+ PAGE 1 elements=5 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=38
    W x=0 s=0 z=100 t=知
    W x=11 s=0 z=100 t=攜
    W x=22 s=0 z=100 t=了
@@ -1147,8 +1148,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=415 s=0 z=100 t=便
    W x=424 s=0 z=100 t=袖
    W x=431 s=0 z=100 t=了
- PAGE 1 elements=4 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=20
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=20
    W x=0 s=0 z=100 t=這
    W x=12 s=0 z=100 t=石，
    W x=32 s=0 z=100 t=同
@@ -1169,7 +1169,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=180 s=0 z=100 t=何
    W x=188 s=0 z=100 t=舍
    W x=195 s=0 z=100 t=．
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=45
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=45
    W x=18 s=0 z=100 t=后
    W x=24 s=0 z=100 t=來，
    W x=41 s=0 z=100 t=又
@@ -1215,7 +1215,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=422 s=0 z=100 t=石
    W x=433 s=0 z=100 t=上
    W x=439 s=0 z=100 t=字
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=43
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=43
    W x=0 s=0 z=100 t=跡
    W x=11 s=0 z=100 t=分
    W x=22 s=0 z=100 t=明，
@@ -1259,7 +1259,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=394 s=0 z=100 t=塵，
    W x=409 s=0 z=100 t=歷
    W x=416 s=0 z=100 t=盡
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=21
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=21
    W x=0 s=0 z=100 t=离
    W x=12 s=0 z=100 t=合
    W x=19 s=0 z=100 t=悲

@@ -5,11 +5,38 @@
 #include <HeapFit.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <SmallCaps.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cstring>
 #include <utility>
 #include <vector>
+
+namespace {
+
+// Appends the first `take` bytes of `text` as small caps draw them: each lowercase letter as the
+// capital whose glyph it is drawn with (smallCaps::fold), so the prewarm warms that glyph and not
+// the lowercase one nobody draws. A fold never lengthens a codepoint's encoding and a sequence
+// that does not decode is copied as it is, so this appends at most `take` bytes.
+// Based on crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin), which folds the
+// codepoints its scan records; this scan records text.
+void appendSmallCapsFolded(std::string& scan, const char* text, const size_t take) {
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  const unsigned char* const end = p + take;
+  while (p < end && *p != '\0') {
+    const unsigned char* const start = p;
+    uint32_t cp = utf8NextCodepoint(&p);
+    if (p > end) break;  // a sequence the cap cuts in two: leave it out, like the bytes after it
+    if (smallCaps::fold(cp)) {
+      utf8AppendCodepoint(scan, cp);
+    } else {
+      scan.append(reinterpret_cast<const char*>(start), static_cast<size_t>(p - start));
+    }
+  }
+}
+
+}  // namespace
 
 FontCacheManager::FontCacheManager(const std::map<int, EpdFontFamily>& fontMap,
                                    const std::map<int, SdCardFont*>& sdCardFonts,
@@ -131,7 +158,11 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
     if (!heapHasBlockFor(std::max(want, 2 * scan.capacity()) + 1)) return;
     scan.reserve(want);
   }
-  scan.append(text, take);
+  if (style & EpdFontFamily::SMALL_CAPS) {
+    appendSmallCapsFolded(scan, text, take);  // stays within the capacity reserved for `take`
+  } else {
+    scan.append(text, take);
+  }
 }
 
 // --- PrewarmScope implementation ---

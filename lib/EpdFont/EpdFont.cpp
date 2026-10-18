@@ -35,7 +35,8 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
     const bool isCombining = utf8IsCombiningMark(cp);
 
-    if (!isCombining) {
+    // No ligatures under small caps, as EpdFontFamily::applyLigatures() for the renderer.
+    if (!isCombining && !useSmallCaps) {
       cp = applyLigatures(cp, string);
     }
 

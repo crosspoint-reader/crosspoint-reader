@@ -366,6 +366,8 @@ const char* triggerName(SleepTrigger trigger) {
       return "gate-rejected";
     case SleepTrigger::UsbPowerBoot:
       return "usb-boot";
+    case SleepTrigger::SerialCommand:
+      return "serial";
     case SleepTrigger::Count:
       break;
   }

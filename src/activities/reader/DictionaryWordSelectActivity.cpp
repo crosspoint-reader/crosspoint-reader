@@ -517,6 +517,8 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
   bool found = false;
+  char text[WORD_TEXT_CAPACITY];
+  buildWordText(selected, text, sizeof(text), true);
   if (ok && speculationIdx == selected && speculation != Speculation::Unknown) {
     // The index search already ran while the cursor sat here. A hit only has to
     // read the definition; a known miss needs no SD access at all.
@@ -527,14 +529,14 @@ void DictionaryWordSelectActivity::performLookup() {
       result = Dictionary::LookupResult::NotFound;
     }
   } else if (ok) {
-    char text[WORD_TEXT_CAPACITY];
-    buildWordText(selected, text, sizeof(text), true);
     found = dict.lookup(text, definition, headword, &result);
     if (!found && result == Dictionary::LookupResult::NotFound && isHyphenJoined(selected)) {
       buildWordText(selected, text, sizeof(text), false);
       found = dict.lookup(text, definition, headword, &result);
     }
   }
+  Dictionary::logLookup(SETTINGS.dictionaryName, text, ok ? Dictionary::resultName(result) : "open_or_index_failed",
+                        found ? headword.c_str() : nullptr);
 
   if (found) {
     popup = Popup::None;

@@ -55,7 +55,9 @@ std::string paragraphs(const char* label, const int count, const char* tail = ""
   std::string out;
   for (int i = 1; i <= count; ++i) {
     out += "<p>" + std::string(label) + " paragraph " + std::to_string(i) +
-           " carries enough ordinary words to give it some weight on the page." + (i == 1 ? tail : "") + "</p>\n";
+           " carries enough ordinary words to give it some weight on the page, and then a second"
+           " clause long enough that a page can end inside it." +
+           (i == 1 ? tail : "") + "</p>\n";
   }
   return out;
 }
@@ -425,24 +427,26 @@ struct OffsetPushFixture : ProgressMapperFixture {
 TEST_F(OffsetPushFixture, AMidParagraphPageStartPushesAsATextPoint) {
   const auto section = build(kSectionSpine);
   ASSERT_GT(section->pageCount, 3);
-  // 60 equal paragraphs over 4 pages with the stub renderer: page 1 starts inside a paragraph,
-  // not at its first word (page 2 happens to start at one).
-  const auto pos = pageWithOffset(*section, kSectionSpine, 1);
+  // 60 equal paragraphs of four lines and more with the stub renderer: page 2 starts inside a
+  // paragraph, not at its first word (page 1 happens to start at one). Shorter paragraphs would
+  // not do: widow and orphan control never splits one of three lines or fewer.
+  const auto pos = pageWithOffset(*section, kSectionSpine, 2);
   ASSERT_TRUE(pos.hasVisibleTextOffset);
 
   const auto ko = ProgressMapper::toKOReader(epub, pos);
-  // "Target paragraph 16 carries enough ordinary words " is 50 codepoints: the page opens on "to".
-  EXPECT_EQ(ko.xpath, "/body/DocFragment[2]/body/section[1]/p[16]/text()[1].50");
+  // "Target paragraph 20 carries ... on the page, and then a " is 97 codepoints: the page opens
+  // on "second".
+  EXPECT_EQ(ko.xpath, "/body/DocFragment[2]/body/section[1]/p[20]/text()[1].97");
 }
 
 TEST_F(OffsetPushFixture, APageStartingAtAParagraphPushesAsItsFirstCodepoint) {
   const auto section = build(kSectionSpine);
   ASSERT_GT(section->pageCount, 3);
-  const auto pos = pageWithOffset(*section, kSectionSpine, 2);
+  const auto pos = pageWithOffset(*section, kSectionSpine, 1);
   ASSERT_TRUE(pos.hasVisibleTextOffset);
 
   const auto ko = ProgressMapper::toKOReader(epub, pos);
-  EXPECT_EQ(ko.xpath, "/body/DocFragment[2]/body/section[1]/p[33]/text()[1].0");
+  EXPECT_EQ(ko.xpath, "/body/DocFragment[2]/body/section[1]/p[11]/text()[1].0");
 }
 
 TEST_F(OffsetPushFixture, TheChapterStartPushesAsOffsetZeroOfItsFirstText) {
@@ -473,8 +477,9 @@ TEST_F(OffsetPushFixture, AParagraphAfterAnEntityPushesToTheExactCodepoint) {
   const auto pos = pageWithOffset(*section, kFlatSpine, 1);
   ASSERT_TRUE(pos.hasVisibleTextOffset);
   const auto ko = ProgressMapper::toKOReader(epub, pos);
-  // "Earlier paragraph 17 carries enough ordinary words " is 51 codepoints: the page opens on "to".
-  EXPECT_EQ(ko.xpath, "/body/DocFragment[1]/body/p[17]/text()[1].51");
+  // "Earlier paragraph 9 carries ... on the page, and then a " is 97 codepoints: the page opens
+  // on "second".
+  EXPECT_EQ(ko.xpath, "/body/DocFragment[1]/body/p[9]/text()[1].97");
 }
 
 // --- Pull by content offset ---------------------------------------------------------------------
@@ -520,14 +525,14 @@ TEST_F(ProgressMapperFixture, AFailedResolveCarriesNoOffset) {
 TEST_F(OffsetPushFixture, AMidParagraphPageStartPullsBackToItsOffset) {
   const auto section = build(kSectionSpine);
   ASSERT_GT(section->pageCount, 3);
-  const auto pos = pageWithOffset(*section, kSectionSpine, 1);
+  const auto pos = pageWithOffset(*section, kSectionSpine, 2);  // see AMidParagraphPageStart...
   ASSERT_TRUE(pos.hasVisibleTextOffset);
 
   const auto ko = ProgressMapper::toKOReader(epub, pos);
   const auto back = ProgressMapper::toCrossPoint(epub, ko, kSectionSpine, section->pageCount);
   ASSERT_TRUE(back.hasVisibleTextOffset) << ko.xpath;
   EXPECT_EQ(back.visibleTextOffset, pos.visibleTextOffset) << ko.xpath;
-  EXPECT_EQ(section->getPageForVisibleTextOffset(back.visibleTextOffset), std::optional<uint16_t>(1));
+  EXPECT_EQ(section->getPageForVisibleTextOffset(back.visibleTextOffset), std::optional<uint16_t>(2));
 }
 
 TEST_F(OffsetPushFixture, AParagraphAfterAnEntityPullsBackToItsOffset) {

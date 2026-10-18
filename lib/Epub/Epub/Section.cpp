@@ -31,7 +31,23 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 87;  // v87: CJK text breaks between characters, with kinsoku
+constexpr uint8_t SECTION_FILE_VERSION = 92;  // v92: CJK text breaks between characters, with kinsoku
+                                              // v91: rem/px/pt font sizes are relative to the
+                                              // body (v90 compounded nested ones), and CSS
+                                              // specificity, compound, descendant/child
+                                              // selectors and `inherit` apply
+                                              // v90: small caps shrink ł ń ž ÿ, Greek and
+                                              // Cyrillic, and no longer Ł Ń Ž, and set fi/fl
+                                              // as two letters; v89 pages measured such words
+                                              // the old way
+                                              // v89: widow/orphan control, and a heading
+                                              // keeps room for two lines below it, so pages
+                                              // end earlier than in v88
+                                              // v88: page-break-after breaks, and a
+                                              // page-break-before keeps the paragraph before
+                                              // it on the old page
+                                              // v87: a block's bold/italic reaches the blocks
+                                              // nested inside it; v86 pages set them upright
                                               // v86: a <span id> is in the anchor map
                                               // v85: an <img> whose href has no extension is
                                               // laid out as the image its bytes are; v84 pages
@@ -1584,7 +1600,7 @@ Section::BuildPhaseResult Section::runBuildParse(BuildState& st, const uint32_t 
     // means pages were cached with styles silently missing.
     //
     // ...but ONLY when the resolver could actually lose a rule. An arena-RESIDENT ruleset is
-    // served entirely from arena memory: lookupRule() returns from arenaResident_ before it
+    // served entirely from arena memory: lookupRules() returns from arenaResident_ before it
     // ever reads allowDiskLookup, so a lowHeapSkip there costs nothing and the styles are
     // complete. Counting those as degradation threw away correct builds — measured on X3, a
     // 14-page background build discarded after a single 960-byte dip below the lean floor,

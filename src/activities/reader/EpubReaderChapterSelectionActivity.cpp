@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "SerialTestApi.h"
 #include "components/UITheme.h"
 #include "components/themes/ListTouchBand.h"
 #include "fontIds.h"
@@ -105,6 +106,7 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
     const bool isSelected = (itemIndex == selectorIndex);
 
     auto item = epub->getTocItem(itemIndex);
+    if (isSelected) SerialTestApi::noteSelection(itemIndex, item.title.c_str());  // CMD:STATE sel=, label=
 
     // Indent per TOC level while keeping content within the gutter-safe region.
     const int indentSize = contentRect.x + 20 + (item.level - 1) * 15;

@@ -412,6 +412,9 @@ class GfxRenderer {
   // the frame the boxes were recorded in is what makes the hit test orientation-independent
   // instead of only correct while the screen happens to be portrait.
   void tapToLogical(Orientation orientation, float nx, float ny, int& outX, int& outY) const;
+  // The inverse, in the live orientation: where on the panel a touch at logical (x, y) lands,
+  // as the normalized coordinates the touch HAL reports.
+  void logicalToTap(int x, int y, float& outNx, float& outNy) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   void setNextDisplayRefreshMode(HalDisplay::RefreshMode refreshMode) const;
   // True if a setNextDisplayRefreshMode() override is armed but not yet consumed. Peek only —

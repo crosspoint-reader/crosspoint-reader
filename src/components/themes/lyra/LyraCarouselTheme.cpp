@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "SerialTestApi.h"
 #include "UiFontScale.h"
 #include "components/BookProgressPresentation.h"
 #include "components/UITheme.h"
@@ -878,6 +879,7 @@ void LyraCarouselTheme::drawList(const GfxRenderer& renderer, Rect rect, int ite
     }
 
     auto itemName = rowTitle(i);
+    if (i == selectedIndex) SerialTestApi::noteSelection(i, itemName.c_str());  // CMD:STATE sel=, label=
     const bool isSeparator = UITheme::isSeparatorTitle(itemName);
     touchBand.addRow(itemY, rowHeight, !isSeparator);
     if (isSeparator) {

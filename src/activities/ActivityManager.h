@@ -105,6 +105,16 @@ class ActivityManager {
   // currentActivity acquires its lock through that constructor.
   std::atomic<bool> renderPassActive{false};
 
+  // Counts every change of currentActivity (push, pop, replace, first launch). The serial test
+  // interface stamps what it observes on screen with it, so a popup or a highlighted row noted
+  // on one screen is never reported for the next. Written on the loop task, read from any.
+  std::atomic<uint32_t> activityChanges{0};
+  void noteActivityChanged() { activityChanges.fetch_add(1, std::memory_order_relaxed); }
+  // Counts render passes as they start. A popup drawn in one pass (or between two) is gone once the
+  // next pass has redrawn the screen, which is how the serial CMD:STATE tells a popup on screen
+  // from one that was.
+  std::atomic<uint32_t> renderPassesStarted{0};
+
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   volatile bool requestedUpdate = false;
@@ -148,9 +158,9 @@ class ActivityManager {
   // goTo... functions are convenient wrapper for replaceActivity()
   // File Transfer, its menu opening on `selected`'s row.
   void goToFileTransfer(NetworkMode selected = NetworkMode::JOIN_NETWORK);
-  void goToSerialTransfer();  // direct entry (also used by the boot-into-transfer path)
-  void goToUsbDrive();        // no-op logging an error on boards without FREEINK_CAP_USB_MSC
-  void goToSettings();
+  void goToSerialTransfer();       // direct entry (also used by the boot-into-transfer path)
+  void goToUsbDrive();             // no-op logging an error on boards without FREEINK_CAP_USB_MSC
+  void goToSettings(int tab = 0);  // tab: SettingsActivity's category slot (0 = Display)
   void goToClockSettings();
   void goToKOReaderSettings();
   // The Library on `tab`: Books in `path` (the root when empty); `focusName` selected; on Authors,
@@ -244,6 +254,18 @@ class ActivityManager {
   // For the serial CMD:STATE: "activity=<name> stack=<bottom>,...,<top>" plus the current
   // activity's own key=value pairs (Activity::appendDebugState). Call under the render lock.
   void describeState(std::string& out) const;
+
+  // For the serial test interface (SerialTestApi): see activityChanges.
+  uint32_t activityChangeCount() const { return activityChanges.load(std::memory_order_relaxed); }
+  uint32_t renderPassCount() const { return renderPassesStarted.load(std::memory_order_relaxed); }
+  // The name of the activity on top, or "none". Loop task only.
+  const char* currentActivityName() const;
+  // What keeps the device from being idle, or nullptr when nothing does: "transition" (an
+  // activity change is queued), "input" (a press or gesture not yet handled), "render" (a frame
+  // queued, drawing or still refreshing, or Activity::hasPendingScreenWork()), "background"
+  // (Activity::hasPendingBackgroundWork()). `includeBackground` false asks only whether the screen
+  // has settled. Loop task only.
+  const char* busyReason(bool includeBackground);
 
   // True when a reader-scoped `action` configured on `button` goes to the activity on top instead
   // of falling through as the raw press: always for the reader itself, and for another screen only
