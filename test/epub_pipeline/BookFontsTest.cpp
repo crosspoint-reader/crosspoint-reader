@@ -226,11 +226,11 @@ TEST_F(BookFontsTest, AnEmbeddedTrueTypeBodyIsCopiedWithItsBoldFace) {
   std::string name;
   ASSERT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &name));
   EXPECT_EQ("Ubuntu Book", name);
-  const fs::path dir = BookFonts::familyDir(epub->getCachePath(), name);
-  EXPECT_EQ("Ubuntu_Book", dir.filename().string());
-  EXPECT_EQ(kTrueType, readFile(dir / "0-u.ttf"));
-  EXPECT_EQ(kTrueTypeBold, readFile(dir / "1-ub.ttf"));  // weight 700 nearer than 600
-  EXPECT_FALSE(fs::exists(dir / "1-semi.ttf"));
+  const fs::path dir = BookFonts::familyDir(epub->getCachePath());
+  EXPECT_EQ(kTrueType, readFile(dir / "0.ttf"));
+  EXPECT_EQ(kTrueTypeBold, readFile(dir / "1.ttf"));  // weight 700 nearer than 600, whose file is not copied
+  EXPECT_FALSE(fs::exists(dir / "2.ttf"));
+  EXPECT_FALSE(fs::exists(dir / "3.ttf"));
 }
 
 TEST_F(BookFontsTest, AnIdpfObfuscatedFaceIsUndoneWithTheUniqueIdentifier) {
@@ -244,7 +244,7 @@ TEST_F(BookFontsTest, AnIdpfObfuscatedFaceIsUndoneWithTheUniqueIdentifier) {
                          "<dc:identifier id=\"uid\">  " +
                              uid + "\n</dc:identifier>");
   ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, nullptr));
-  EXPECT_EQ(kTrueType, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), "Body")) / "0-b.ttf"));
+  EXPECT_EQ(kTrueType, readFile(fs::path(BookFonts::familyDir(epub->getCachePath())) / "0.ttf"));
 }
 
 TEST_F(BookFontsTest, AnAdobeObfuscatedFaceIsUndoneWithTheUuid) {
@@ -259,14 +259,14 @@ TEST_F(BookFontsTest, AnAdobeObfuscatedFaceIsUndoneWithTheUuid) {
   ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, &arena));
   EXPECT_GE(arena.highWater(), SaxParser::stateBytes());  // the parser state came from it
   EXPECT_EQ(0u, arena.used());                            // and everything was given back
-  EXPECT_EQ(kTrueType, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), "Body")) / "0-b.ttf"));
+  EXPECT_EQ(kTrueType, readFile(fs::path(BookFonts::familyDir(epub->getCachePath())) / "0.ttf"));
 }
 
 TEST_F(BookFontsTest, CffOutlinesAndUnknownBytesKeepTheReadersFont) {
   const auto cff = book("@font-face { font-family: Body; src: url(../Fonts/b.otf); }\np { font-family: Body }\n",
                         {"<body><p>Body text.</p></body>"}, {{"OEBPS/Fonts/b.otf", "font/otf", kCff}});
   EXPECT_EQ(BookFonts::State::None, BookFonts::prepare(*cff, nullptr));
-  EXPECT_FALSE(fs::exists(BookFonts::familyDir(cff->getCachePath(), "Body")));
+  EXPECT_FALSE(fs::exists(fs::path(BookFonts::familyDir(cff->getCachePath())) / "0.ttf"));
 
   // Neither a font nor obfuscated with this book's keys: encrypted, so refused.
   const auto encrypted =

@@ -20,7 +20,8 @@ namespace BookFonts {
 
 /// Bump when what prepare() decides or writes changes: every book is examined again.
 /// v2: the state file holds a Family's name to its end, without a length byte.
-constexpr uint8_t kVersion = 2;
+/// v3: the faces sit in fonts/ itself as <style>.ttf, not in a folder named after the family.
+constexpr uint8_t kVersion = 3;
 /// A face bigger than this is not copied: the font area could not install it in flash mode anyway.
 constexpr size_t kMaxFaceBytes = 2 * 1024 * 1024;
 /// prepare() reads at most this much of each chapter, and at most kProbeChapters chapters from the text start.
@@ -38,8 +39,9 @@ enum class State : uint8_t {
 /// What prepare() found for the book whose cache is at `cachePath`. For Family, `*name` gets the family's name
 /// as the book declares it.
 State read(const std::string& cachePath, std::string* name = nullptr);
-/// Where a Family's files are: `<cachePath>/fonts/<the name, made safe for a FAT name>`.
-std::string familyDir(const std::string& cachePath, std::string_view name);
+/// Where a Family's files are: `<cachePath>/fonts`, one `<style>.ttf` per style (EpdFontFamily numbering), beside
+/// the state file.
+std::string familyDir(const std::string& cachePath);
 
 /// Finds the book's body family and copies its font files to the card. `scratch`, when set, hosts the inflate
 /// ring and the parser state (the lent framebuffer at book open); otherwise the heap. The CSS must be loaded

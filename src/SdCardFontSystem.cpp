@@ -199,17 +199,17 @@ bool SdCardFontSystem::selectBookFamily(const std::string& cachePath) {
   // Kept across the book's later opens; anything else is read again, since the book may have been examined since.
   if (!bookFamily_.name.empty() && cachePath == bookCachePath_) return true;
   bookCachePath_ = cachePath;
-  bookFamily_ = SdCardFontFamilyInfo{};
-  std::string declared;
-  if (cachePath.empty() || BookFonts::read(cachePath, &declared) != BookFonts::State::Family) return false;
-  // Scanned like a family directory on the card: the same style probe, and only when the font area can take it.
-  if (!registry_.scanFamily(BookFonts::familyDir(cachePath, declared).c_str(), bookFamily_) || !bookFamily_.ttf()) {
-    LOG_INF("SDFS", "Book font %s not usable", declared.c_str());
-    bookFamily_ = SdCardFontFamilyInfo{};
+  bookFamily_.name.clear();
+  // Its files are scanned like a family directory on the card: the same style probe, and only when the font area
+  // can take them.
+  if (cachePath.empty() || BookFonts::read(cachePath, &bookFamily_.name) != BookFonts::State::Family ||
+      !registry_.scanFamily(BookFonts::familyDir(cachePath).c_str(), bookFamily_) || !bookFamily_.ttf()) {
+    bookFamily_.name.clear();
+    std::vector<SdCardFontFileInfo>().swap(bookFamily_.files);
     return false;
   }
-  bookFamily_.name = "book:" + declared;
-  LOG_INF("SDFS", "Book font %s", declared.c_str());
+  bookFamily_.name.insert(0, "book:");
+  LOG_INF("SDFS", "Book font %s", bookFamily_.name.c_str());
   return true;
 }
 

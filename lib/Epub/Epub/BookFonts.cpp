@@ -188,44 +188,13 @@ class ParserState {
 
 // ---- The font files --------------------------------------------------------------------------------------
 
-enum class Kind : uint8_t { TrueType, Cff, Woff, Woff2, Collection, Unknown };
-
-Kind classify(const uint8_t (&b)[4]) {
-  const uint32_t tag = (static_cast<uint32_t>(b[0]) << 24) | (static_cast<uint32_t>(b[1]) << 16) |
-                       (static_cast<uint32_t>(b[2]) << 8) | b[3];
-  switch (tag) {
-    case 0x00010000u:  // TrueType outlines
-    case 0x74727565u:  // 'true' (Apple)
-      return Kind::TrueType;
-    case 0x4F54544Fu:  // 'OTTO': CFF outlines
-      return Kind::Cff;
-    case 0x774F4646u:  // 'wOFF'
-      return Kind::Woff;
-    case 0x774F4632u:  // 'wOF2'
-      return Kind::Woff2;
-    case 0x74746366u:  // 'ttcf'
-      return Kind::Collection;
-    default:
-      return Kind::Unknown;
-  }
-}
-
-const char* kindName(const Kind kind) {
-  switch (kind) {
-    case Kind::TrueType:
-      return "TrueType";
-    case Kind::Cff:
-      return "CFF";
-    case Kind::Woff:
-      return "WOFF";
-    case Kind::Woff2:
-      return "WOFF2";
-    case Kind::Collection:
-      return "a collection";
-    case Kind::Unknown:
-      break;
-  }
-  return "encrypted";  // neither a font nor obfuscated with this book's identifiers
+// Whether the font's first four bytes, XORed with `key`'s first four when it is set, are a TrueType signature
+// (0x00010000, or 'true' from Apple). Anything else is not drawn: CFF outlines ('OTTO'), WOFF, WOFF2, a
+// collection, or a font encrypted rather than obfuscated.
+bool isTrueType(const uint8_t (&sig)[4], const uint8_t* key) {
+  uint32_t tag = 0;
+  for (int i = 0; i < 4; ++i) tag = tag << 8 | static_cast<uint8_t>(sig[i] ^ (key ? key[i] : 0));
+  return tag == 0x00010000u || tag == 0x74727565u;
 }
 
 // The book's two obfuscation keys, read from the OPF the first time an obfuscated face needs them.
@@ -262,12 +231,6 @@ bool loadKeys(const Epub& epub, BuildArena* scratch, Keys& keys) {
   return true;
 }
 
-Kind xoredKind(const uint8_t (&sig)[4], const uint8_t* key) {
-  const uint8_t b[4] = {static_cast<uint8_t>(sig[0] ^ key[0]), static_cast<uint8_t>(sig[1] ^ key[1]),
-                        static_cast<uint8_t>(sig[2] ^ key[2]), static_cast<uint8_t>(sig[3] ^ key[3])};
-  return classify(b);
-}
-
 // XORs the first `count` bytes of the file at `path` with `key` (`keyLen` bytes, repeated), in place.
 bool xorPrefix(const std::string& path, const uint8_t* key, const size_t keyLen, const size_t count) {
   HalFile file;
@@ -296,37 +259,33 @@ Copy copyFace(const Epub& epub, const std::string& href, const std::string& dest
   }
   uint8_t sig[4] = {};
   if (epub.readItemHeaderBytes(href, sig, sizeof(sig)) != sizeof(sig)) return Copy::Failed;
-  Kind kind = classify(sig);
   const uint8_t* key = nullptr;
   size_t keyLen = 0;
   size_t obfuscated = 0;
-  if (kind == Kind::Unknown) {
-    // An obfuscated font starts with its first bytes XORed; a key that gives a font's signature back is the
-    // one. Testing the signature replaces reading META-INF/encryption.xml: an algorithm it names that is real
+  if (!isTrueType(sig, nullptr)) {
+    // An obfuscated font starts with its first bytes XORed; a key that gives the signature back is the one.
+    // Testing the signature replaces reading META-INF/encryption.xml: an algorithm it names that is real
     // encryption gives no signature back, and the face is refused.
     if (!keys.loaded && !loadKeys(epub, scratch, keys)) return Copy::Failed;
-    if (keys.hasIdpf && xoredKind(sig, keys.idpf) != Kind::Unknown) {
+    if (keys.hasIdpf && isTrueType(sig, keys.idpf)) {
       key = keys.idpf;
       keyLen = sizeof(keys.idpf);
       obfuscated = kIdpfBytes;
-    } else if (keys.hasAdobe && xoredKind(sig, keys.adobe) != Kind::Unknown) {
+    } else if (keys.hasAdobe && isTrueType(sig, keys.adobe)) {
       key = keys.adobe;
       keyLen = sizeof(keys.adobe);
       obfuscated = kAdobeBytes;
+    } else {
+      // The signature tells a support log what it is: 4f54544f 'OTTO' is CFF, 774f4646 WOFF, 774f4632 WOFF2.
+      LOG_INF("BKF", "%s: not TrueType (%02x%02x%02x%02x)", href.c_str(), sig[0], sig[1], sig[2], sig[3]);
+      return Copy::Refused;
     }
-    if (key) kind = xoredKind(sig, key);
-  }
-  if (kind != Kind::TrueType) {
-    LOG_INF("BKF", "%s is %s: not drawn", href.c_str(), kindName(kind));
-    return Copy::Refused;
   }
   if (!epub.extractItemToFile(href, dest, scratch)) return Copy::Failed;
   if (key && !xorPrefix(dest, key, keyLen, obfuscated)) {
     Storage.remove(dest.c_str());
     return Copy::Failed;
   }
-  LOG_DBG("BKF", "Copied %s%s", href.c_str(),
-          key == nullptr ? "" : (obfuscated == kIdpfBytes ? " (IDPF)" : " (Adobe)"));
   return Copy::Done;
 }
 
@@ -340,27 +299,6 @@ void pickFaces(std::string_view records, const uint32_t family, CssParser::FontF
     CssParser::FontFace& best = out[style];
     if (best.name.empty() || std::abs(face.weight - target) < std::abs(best.weight - target)) best = face;
   }
-}
-
-// Appends at most 40 characters of `text`, every one but [A-Za-z0-9-] as '_': a name any card takes.
-void appendSafe(std::string& out, const std::string_view text) {
-  for (const char c : text.substr(0, 40)) {
-    const bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
-    out += safe ? c : '_';
-  }
-}
-
-// Where a face is copied: `<dir>/<style>-<the name of its file in the book>.ttf`.
-std::string facePath(const std::string& dir, const uint8_t style, const std::string& href) {
-  std::string_view file(href);
-  file.remove_prefix(file.find_last_of('/') + 1);  // npos + 1 == 0: no folder
-  std::string path = dir;
-  path += '/';
-  path += static_cast<char>('0' + style);
-  path += '-';
-  appendSafe(path, file.substr(0, file.find_last_of('.')));
-  path += ".ttf";
-  return path;
 }
 
 // The state file's code, and for a Family its name; kNoCode when there is no file of this kVersion.
@@ -417,21 +355,23 @@ uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, std
     return kCodeNone;
   }
 
-  const std::string dir = familyDir(epub.getCachePath(), picked[0].name);
+  const std::string dir = familyDir(epub.getCachePath());
   Storage.mkdir(dir.c_str());
+  std::string dest = dir + "/0.ttf";  // the style's digit goes in place of the 0
   Keys keys;
   for (uint8_t style = 0; style < 4; ++style) {
     if (picked[style].name.empty()) continue;
+    dest[dest.size() - 5] = static_cast<char>('0' + style);
     const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(std::string(picked[style].href)));
-    const Copy copy = copyFace(epub, href, facePath(dir, style, href), keys, scratch);
+    const Copy copy = copyFace(epub, href, dest, keys, scratch);
     // A style refused falls back to regular; regular refused, the book keeps the reader's font.
     if (copy == Copy::Failed || (style == 0 && copy == Copy::Refused)) {
       Storage.removeDir(dir.c_str());
       return copy == Copy::Failed ? kCodeFailed : kCodeNone;
     }
   }
-  LOG_INF("BKF", "Body font: %s", dir.c_str());
   name = picked[0].name;
+  LOG_INF("BKF", "Body font %.*s", static_cast<int>(name.size()), name.data());
   return kCodeFamily;
 }
 
@@ -477,12 +417,7 @@ bool adobeKey(const std::string_view uuid, uint8_t (&key)[16]) {
 
 State read(const std::string& cachePath, std::string* name) { return stateOf(readCode(cachePath, name)); }
 
-std::string familyDir(const std::string& cachePath, const std::string_view name) {
-  std::string dir = cachePath + kFontsDir;
-  dir += '/';
-  appendSafe(dir, name.empty() ? std::string_view("font") : name);
-  return dir;
-}
+std::string familyDir(const std::string& cachePath) { return cachePath + kFontsDir; }
 
 uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed) {
   *failed = false;
