@@ -569,17 +569,17 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this, &currentPage, totalPages] {
-    if (currentPage + 1 < totalPages) {
-      currentPage++;
+  buttonNavigator.onNext([this] {
+    if (content.currentPage + 1 < content.totalPages) {
+      content.currentPage++;
       content.selection.valid = false;
       requestUpdate();
     }
   });
 
-  buttonNavigator.onPrevious([this, &currentPage] {
-    if (currentPage > 0) {
-      currentPage--;
+  buttonNavigator.onPrevious([this] {
+    if (content.currentPage > 0) {
+      content.currentPage--;
       content.selection.valid = false;
       requestUpdate();
     }

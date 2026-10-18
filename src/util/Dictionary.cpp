@@ -1,6 +1,7 @@
 #include "Dictionary.h"
 
 #include <Arduino.h>
+#include <HalMemory.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -642,7 +643,8 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   // including growth of a concatenated variant. Keep the viewer intact on OOM.
   const size_t wordBytes = word ? strlen(word) + 1 : 1;
   const size_t workingBytes = 5 * wordBytes + 6 * sizeof(std::string) + DEFINITION_HEAP_HEADROOM_BYTES;
-  if (ESP.getFreeHeap() < workingBytes || ESP.getMaxAllocHeap() < 2 * wordBytes) {
+  const auto heap = HalMemory::getDefaultHeap();
+  if (heap.freeBytes < workingBytes || heap.largestBlockBytes < 2 * wordBytes) {
     LOG_ERR("DICT", "Low heap for lookup (%u byte working set)", static_cast<unsigned>(workingBytes));
     setResult(LookupResult::LowMemory);
     return false;

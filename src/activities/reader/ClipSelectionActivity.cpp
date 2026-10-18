@@ -463,7 +463,10 @@ void ClipSelectionActivity::loopButtons() {
 }
 
 void ClipSelectionActivity::loop() {
-  if (wordCount == 0 && !actionPopup.isActive()) return;
+  if (wordCount == 0 && !actionPopup.isActive()) {
+    cancel();
+    return;
+  }
   if (!mappedInput.hasTouch()) {
     loopButtons();
     return;

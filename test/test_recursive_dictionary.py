@@ -299,11 +299,11 @@ lookup_harness = r'''
 #include <vector>
 #define LOG_ERR(...) ((void)0)
 constexpr size_t DEFINITION_HEAP_HEADROOM_BYTES = 8192;
-struct EspHeap {
-  size_t freeBytes = 65536, largest = 65536;
-  size_t getFreeHeap() const { return freeBytes; }
-  size_t getMaxAllocHeap() const { return largest; }
-} ESP;
+struct HalMemory {
+  struct Heap { size_t freeBytes, largestBlockBytes; };
+  static inline Heap heap{65536, 65536};
+  static Heap getDefaultHeap() { return heap; }
+};
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 ''' + location + r'''
 class Dictionary {
@@ -329,15 +329,15 @@ int main() {
     const std::string phrase = std::string(4096 - std::strlen(suffix), 'a') + suffix;
     auto result = Dictionary::LookupResult::Found;
     DictLocation location{10, 20, true};
-    ESP = {12288, 12288};
+    HalMemory::heap = {12288, 12288};
     dictionary.searches = 0;
     assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result, &location));
     assert(result == Dictionary::LookupResult::LowMemory && dictionary.searches == 0 && !location.found);
     assert(definition == "unchanged" && headword == "unchanged");
-    ESP = {65536, 4096};
+    HalMemory::heap = {65536, 4096};
     assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result, &location));
     assert(result == Dictionary::LookupResult::LowMemory && dictionary.searches == 0);
-    ESP = {65536, 65536};
+    HalMemory::heap = {65536, 65536};
     assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result, &location));
     assert(result == Dictionary::LookupResult::NotFound && dictionary.searches > 1);
   }
