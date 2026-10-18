@@ -7,6 +7,7 @@ When an item is done, delete it from its file; when a file has no items left, de
 | File | Topic |
 |---|---|
 | [alternative-sync-providers.md](alternative-sync-providers.md) | OPDS progression sync (Kavita, Audiobookshelf) and BookOrbit, offered in the reader itself |
+| [cjk.md](cjk.md) | CJK: justification, squeeze and grid (A3), ruby (B), an installable CJK font, TTF SD mode, UI text, the dictionary, arena follow-ups, edge cases from the A2 reviews |
 | [boards-and-touch.md](boards-and-touch.md) | Light sleep with the frontlight, board-name checks still to convert, the T5S3 SD clock, trace scaffolding, the X4 Pro fast-DU shortcut, device validation, touch follow-ups |
 | [display-and-refresh.md](display-and-refresh.md) | Framebuffer baselines, sleep ghosting follow-ups, windowed refresh, busy indicator, pre-render coverage |
 | [font-flash.md](font-flash.md) | Remaining flash and speed levers on the font path |
