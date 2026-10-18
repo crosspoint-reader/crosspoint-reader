@@ -1193,9 +1193,9 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
   56 KB (largest block 23.5-36.9 KB), Accents with the accent family loaded 53-55 KB (27.6-36.9 KB); at Home after
   each mode 76.4-76.6 KB, unchanged across the switches (master, same book: 70.5 KB in it, 77.2 KB at Home). Found
   on the way: the repository's Inter-Bold.ttf has no bold bit in `head.macStyle` (its weight, 700, is only in OS/2),
-  so the registry files it as a second regular and the accent family installs one style: its headings draw regular.
-  A book font with the same flaw loses its bold the same way; the registry could take OS/2's weight when macStyle
-  has no bold bit.
+  so the registry filed it as a second regular and the accent family installed one style: its headings drew regular.
+  A book font with the same flaw lost its bold the same way. Fixed on the branch: `ttf::assignStyles` lets a file of
+  weight 600 or more that declares regular (italic) serve bold (bold italic), unless it serves its own style.
 - **Tests:** `FontFamilyLayoutTest`, the `BookFontsTest` accent cases, the generic cases of
   `CssParserFonts`, and the corpus book `test_font_families.epub` (generator `test/epubs/make_test_font_families.py`,
   which with `--fonts` also writes the device copy with Ubuntu, Inter and Noto Sans faces) with goldens for the

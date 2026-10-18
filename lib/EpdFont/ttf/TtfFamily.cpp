@@ -41,19 +41,28 @@ bool isTtfFileName(const char* name) {
 }
 
 bool assignStyles(const FileProbe* files, const size_t count, int (&out)[4]) {
-  // Lower is better: a variable font ranks after every static one, then the distance from the style's weight.
-  const auto rank = [&](const size_t i, const uint8_t style) {
+  // Lower is better: a variable font ranks after every static one, then the distance from the style's weight, then
+  // a file declaring the style before one that only weighs as it (below).
+  const auto rank = [&](const size_t i, const int style) {
     const int target = (style & 1) ? 700 : 400;
     const int distance = files[i].weight > target ? files[i].weight - target : target - files[i].weight;
-    return (files[i].variable ? 0x10000 : 0) + distance;
+    return (files[i].variable ? 0x10000 : 0) + 2 * distance + (files[i].style != style ? 1 : 0);
   };
-  for (int& file : out) file = -1;
-  for (size_t i = 0; i < count; ++i) {
-    const int style = files[i].style;
-    if (style < 0 || style > 3) continue;
+  const auto offer = [&](const size_t i, const int style) {
     if (out[style] < 0 || rank(i, style) < rank(static_cast<size_t>(out[style]), style)) {
       out[style] = static_cast<int>(i);
     }
+  };
+  for (int& file : out) file = -1;
+  for (size_t i = 0; i < count; ++i) {
+    if (files[i].style >= 0 && files[i].style <= 3) offer(i, files[i].style);
+  }
+  // A bold weight whose macStyle says regular, as some exports mark a Bold only by its OS/2 weight class (Inter's
+  // static Inter-Bold.ttf, embedded book fonts made from it), may serve the bold style too: not when it already
+  // serves the regular one, since a single heavy face is a regular with no bold.
+  for (size_t i = 0; i < count; ++i) {
+    const int style = files[i].style;
+    if ((style == 0 || style == 2) && files[i].weight >= 600 && out[style] != static_cast<int>(i)) offer(i, style | 1);
   }
   return out[0] >= 0;
 }

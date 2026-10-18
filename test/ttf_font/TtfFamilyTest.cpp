@@ -257,6 +257,46 @@ TEST(TtfFamily, TheProbeReadsTheWeightClassAndSpotsVariableFonts) {
   EXPECT_EQ(700, probe.weight);
 }
 
+TEST(TtfFamily, ABoldWeightDeclaringRegularServesBold) {
+  // Inter's static Bold marks itself bold only by its OS/2 weight class: macStyle 0, fsSelection REGULAR.
+  MemoryFile interRegular{readFont("Inter/Inter-Regular.ttf")};
+  MemoryFile interBold{readFont("Inter/Inter-Bold.ttf")};
+  const ttf::FileProbe inter[] = {ttf::probeFile(interBold.source()), ttf::probeFile(interRegular.source())};
+  ASSERT_EQ(0, inter[0].style);
+  ASSERT_EQ(700, inter[0].weight);
+  int chosen[4];
+  ASSERT_TRUE(ttf::assignStyles(inter, 2, chosen));
+  EXPECT_EQ(1, chosen[0]);  // Regular, though Bold sorts first
+  EXPECT_EQ(0, chosen[1]);
+
+  const ttf::FileProbe italics[] = {{0, 400}, {2, 400}, {2, 700}};  // the same for an italic
+  ASSERT_TRUE(ttf::assignStyles(italics, 3, chosen));
+  EXPECT_EQ(1, chosen[2]);
+  EXPECT_EQ(2, chosen[3]);
+  EXPECT_EQ(-1, chosen[1]);
+}
+
+TEST(TtfFamily, AFileDeclaringBoldWinsOverOneOfTheSameWeightThatDoesNot) {
+  const ttf::FileProbe files[] = {{0, 700}, {1, 700}, {0, 400}};
+  int chosen[4];
+  ASSERT_TRUE(ttf::assignStyles(files, 3, chosen));
+  EXPECT_EQ(2, chosen[0]);
+  EXPECT_EQ(1, chosen[1]);
+}
+
+TEST(TtfFamily, ASingleHeavyFaceIsARegularWithoutBold) {
+  const ttf::FileProbe display[] = {{0, 900}};  // a display family with one Black face
+  int chosen[4];
+  ASSERT_TRUE(ttf::assignStyles(display, 1, chosen));
+  EXPECT_EQ(0, chosen[0]);
+  EXPECT_EQ(-1, chosen[1]);  // falls back to the regular, not the same file twice in the store
+
+  const ttf::FileProbe semiAndBlack[] = {{0, 650}, {0, 900}};  // the heavier one is still free to be the bold
+  ASSERT_TRUE(ttf::assignStyles(semiAndBlack, 2, chosen));
+  EXPECT_EQ(0, chosen[0]);
+  EXPECT_EQ(1, chosen[1]);
+}
+
 TEST(TtfFamily, TheBundledFilesCarryTheirWeights) {
   MemoryFile regular{readFont("NotoSans/NotoSans-Regular.ttf")};
   MemoryFile bold{readFont("NotoSans/NotoSans-Bold.ttf")};
