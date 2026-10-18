@@ -77,6 +77,9 @@ class SdBlock {
   glyphstore::SdOutlines outlines() const { return {glyf_.fileOffset, bytes_, glyf_.length}; }
   /// The block as a file, bytes() long. Valid while the block and its file are.
   FileSource source() { return {bytes_, &SdBlock::readSource, this}; }
+  /// Whether `block`, `size` bytes, starts with this block's table directory: every table's tag, checksum, length and
+  /// place the same, so the file is the one it was made from.
+  bool sameAs(const uint8_t* block, uint32_t size) const;
 
  private:
   static constexpr uint8_t kMaxTables = 11;  // the ten tables the engine reads, and glyf
@@ -92,12 +95,14 @@ class SdBlock {
   bool read(uint32_t offset, uint8_t* dst, uint32_t len) const;
   static bool readSource(void* ctx, uint32_t offset, void* dst, uint32_t len);
 
+  // Set by plan(); no initializers, so making a block costs no code beyond what plan() does.
   FileSource file_;
-  uint32_t version_ = 0;
-  Table tables_[kMaxTables] = {};  // in file order, glyf among them
-  Table glyf_{};
-  uint8_t count_ = 0;
-  uint32_t bytes_ = 0;
+  uint32_t version_;
+  Table tables_[kMaxTables];  // in file order, glyf among them
+  Table glyf_;
+  uint16_t seen_;  // the tags met in the directory
+  uint8_t count_;
+  uint32_t bytes_;
 };
 
 /// True when the glyph store can install a family with these styles: in flash mode, every style's file

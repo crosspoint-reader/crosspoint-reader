@@ -197,6 +197,9 @@ TEST_F(GlyphStoreInstall, AFlashModeStyleMapsAloneBesideTheSdModeOnes) {
   StyleInfo info[kMaxStyles] = {{}, {}, sdStyle()};
   ASSERT_TRUE(install(store, layout, kIdentityA, info));
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
+  // The SD-mode tables map at open, beside the regions and before any flash-mode block: they stay, and a flash-mode
+  // block mapped after them leaves, when it goes, a gap joined to the free pages past it.
+  EXPECT_EQ(2u, flash.mappings());
   const uint8_t* accent = store.mapStyle(2);
   ASSERT_NE(nullptr, store.mapStyle(0));
   const uint8_t* bold = store.mapStyle(1);

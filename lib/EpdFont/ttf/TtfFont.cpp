@@ -204,6 +204,8 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
   in.usableBytes = flash_.size();
   in.freeMapPages = flash_.freeMapPages();
   glyphstore::Layout layout{};
+  glyphstore::Layout fits{};  // the first plan that fits, should none keep the log the rule asks for
+  bool fitted = false;
   bool planned = false;
   for (int sdFrom = count; sdFrom >= 0 && !planned; --sdFrom) {
     for (uint8_t b = 0; b < styles; ++b) {
@@ -219,7 +221,14 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
       in.styleMode[b] = card ? glyphstore::kModeSd : glyphstore::kModeFlash;
       in.styleBytes[b] = card ? sd.size : files[b]->size;
     }
-    planned = glyphstore::planLayout(in, layout) && (sdFrom <= 1 || layout.geometry.logSize >= kAccentFlashLogBytes);
+    if (!glyphstore::planLayout(in, layout)) continue;
+    planned = sdFrom <= 1 || layout.geometry.logSize >= kAccentFlashLogBytes;
+    if (!fitted) fits = layout;
+    fitted = true;
+  }
+  if (!planned && fitted) {
+    layout = fits;  // nothing with more on the card fits: whole, with a smaller log, beats a family left out
+    planned = true;
   }
   if (!planned) {
     // Not an error yet: the manager tries again without the last accent family, and logs if even the body cannot.
@@ -401,6 +410,15 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], uin
     }
     FontBytes bytes;
     if (!fontBytes(s, &bytes)) return StylesResult::MapFailed;
+    if (style.onCard) {
+      // The stamp misses a file rewritten in place at the same size and time; its table directory does not.
+      auto block = makeUniqueNoThrow<ttf::SdBlock>();
+      if (!block) return StylesResult::Failed;
+      if (!block->plan(files[s]) || !block->sameAs(bytes.span(0, style.bytes), style.bytes) ||
+          block->outlines().fileOffset != style.sd.fileOffset) {
+        return StylesResult::Changed;
+      }
+    }
     if (ttf::parseFace(bytes, &style.face) != ttf::FaceStatus::Ok) {
       LOG_ERR("TTF", "family %u style %u is not a font the engine draws", family_, s);
       continue;

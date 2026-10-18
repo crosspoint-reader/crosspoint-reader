@@ -130,8 +130,18 @@ TEST(TtfFace, Format4ReadsStayInsideTheCmapTable) {
   set32(data, lengthField, length - 2);  // B's glyph array entry is past the table
   EXPECT_EQ(1, lookup(data, 'A'));
   EXPECT_EQ(0, lookup(data, 'B'));
-  set32(data, lengthField, length - 6);  // the segment arrays run past it too
-  EXPECT_EQ(0, lookup(data, 'A'));
+  set32(data, lengthField, length - 6);  // the segment arrays run past it too: passed over, and no other map
+  Face face;
+  EXPECT_EQ(FaceStatus::Unsupported, parse(data, &face));
+}
+
+TEST(TtfFace, AFormat4SubtableRunningPastTheTableGivesWayToTheNext) {
+  // FreeType's validator drops the (3,1) subtable whose arrays the table cuts short, and takes the (0,3) one.
+  Bytes cut = cmapFormat4({{'A', 2}}, false);
+  cut.resize(cut.size() - 4);  // the cmap table ends inside the subtable's last arrays
+  Font font = threeGlyphs();
+  font.extraTables = {{"cmap", cmapTable({{0, 3, cmapFormat4({{'A', 1}}, false)}, {3, 1, cut}})}};
+  EXPECT_EQ(1, lookup(buildFont(font), 'A'));
 }
 
 TEST(TtfFace, Format12ReachesPastTheBmp) {

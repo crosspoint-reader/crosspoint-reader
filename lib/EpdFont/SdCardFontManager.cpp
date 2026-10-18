@@ -246,7 +246,7 @@ bool SdCardFontManager::loadTtfFamilies(const SdCardFontFamilyInfo* const* famil
       onCard = true;
       continue;
     }
-    for (HalFile& file : opened->files[f]) file.close();
+    for (HalFile& file : opened->files[f]) file = HalFile();  // closed, and its handle freed
   }
   if (onCard) ttfSources_ = std::move(opened);
   renderer.setFontResolver(&SdCardFontManager::resolveTtfSize, this);

@@ -21,14 +21,24 @@ constexpr uint32_t tag(const char (&t)[5]) {
 constexpr uint32_t kRequired[] = {tag("cmap"), tag("glyf"), tag("head"), tag("hhea"),
                                   tag("hmtx"), tag("loca"), tag("maxp")};
 constexpr uint32_t kAllRequired = (1u << (sizeof kRequired / sizeof kRequired[0])) - 1;
-// The tables an SD-mode block copies: every one the engine reads (parseFace(), the layout readers) but glyf.
-constexpr uint32_t kCopiedInSdMode[] = {tag("cmap"), tag("head"), tag("hhea"), tag("hmtx"), tag("loca"),
-                                        tag("maxp"), tag("OS/2"), tag("GPOS"), tag("GSUB"), tag("kern")};
-bool copiedInSdMode(const uint32_t tableTag) {
-  for (const uint32_t copied : kCopiedInSdMode) {
-    if (tableTag == copied) return true;
+// What an SD-mode block lists: every table the engine reads (parseFace(), the layout readers), all copied but glyf.
+// A font cannot draw without the first seven; the others it draws without, as parseFace() takes them absent when
+// their record lies outside the file.
+constexpr uint32_t kSdTables[] = {tag("cmap"), tag("head"), tag("hhea"), tag("hmtx"), tag("loca"), tag("maxp"),
+                                  tag("glyf"), tag("OS/2"), tag("GPOS"), tag("GSUB"), tag("kern")};
+constexpr int kSdGlyf = 6;
+constexpr int kSdFirstOptional = 7;
+
+// Which of kSdTables a record is, or -1, and whether it is its tag's first record: parseFace() reads only that one.
+// `seen` remembers the tags met.
+int sdTable(const uint32_t tableTag, uint16_t& seen) {
+  for (int k = 0; k < static_cast<int>(sizeof kSdTables / sizeof kSdTables[0]); ++k) {
+    if (tableTag != kSdTables[k]) continue;
+    const bool first = (seen >> k & 1u) == 0;
+    seen |= static_cast<uint16_t>(1u << k);
+    return first ? k : -1;
   }
-  return false;
+  return -1;
 }
 // An SD-mode block's bytes: the sfnt header, a record per copied table and one for glyf, then the tables.
 constexpr uint64_t sdBlockBytes(const uint32_t copied, const uint64_t tableBytes) {
@@ -151,6 +161,7 @@ FileProbe probeFile(const FileSource& file) {
     uint32_t headOffset = 0;
     uint32_t os2Offset = 0;
     bool hasOs2Weight = false;
+    uint16_t sdSeen = 0;
     uint32_t sdTables = 0;
     uint64_t sdTableBytes = 0;
   } scan{file};
@@ -158,7 +169,8 @@ FileProbe probeFile(const FileSource& file) {
   const auto visit = [](void* ctx, const Record& record) {
     Scan& scan = *static_cast<Scan*>(ctx);
     if (record.tag == tag("fvar")) scan.probe.variable = true;
-    if (copiedInSdMode(record.tag)) {
+    const int sd = sdTable(record.tag, scan.sdSeen);
+    if (sd >= 0 && sd != kSdGlyf && inFile(scan.file, record.offset, record.length)) {
       ++scan.sdTables;
       scan.sdTableBytes += glyphstore::align4(record.length);
     }
@@ -180,7 +192,7 @@ FileProbe probeFile(const FileSource& file) {
   if (!forEachTable(file, &version, visit, &scan) || scan.found != kAllRequired) return {};
   FileProbe& probe = scan.probe;
   const uint32_t headOffset = scan.headOffset;
-  // As SdBlock::plan() lays it out; a tag listed twice (a broken directory) is counted twice, which only overstates.
+  // As SdBlock::plan() lays it out, by the same rule (sdTable()).
   const uint64_t sdBytes = sdBlockBytes(scan.sdTables, scan.sdTableBytes);
   probe.sdBytes = sdBytes < UINT32_MAX ? static_cast<uint32_t>(sdBytes) : UINT32_MAX;
 
@@ -200,6 +212,7 @@ FileProbe probeFile(const FileSource& file) {
 
 bool SdBlock::plan(const FileSource& file) {
   file_ = file;
+  seen_ = 0;
   count_ = 0;
   bytes_ = 0;
   glyf_ = {};
@@ -209,7 +222,7 @@ bool SdBlock::plan(const FileSource& file) {
   uint64_t end = 12 + 16u * count_;
   int glyf = -1;
   for (uint8_t i = 0; i < count_; ++i) {
-    if (tables_[i].tag == tag("glyf")) {
+    if (tables_[i].tag == kSdTables[kSdGlyf]) {
       glyf = i;
       continue;
     }
@@ -227,11 +240,10 @@ bool SdBlock::plan(const FileSource& file) {
 // A directory record (a Record): kept when SD mode copies its table, or it is glyf.
 bool SdBlock::addTable(const void* record) {
   const Record& table = *static_cast<const Record*>(record);
-  if (table.tag != tag("glyf") && !copiedInSdMode(table.tag)) return true;
-  for (uint8_t i = 0; i < count_; ++i) {
-    if (tables_[i].tag == table.tag) return true;  // the first record of a tag is the one parseFace() reads
-  }
-  if (!inFile(file_, table.offset, table.length) || count_ == kMaxTables) return false;
+  const int k = sdTable(table.tag, seen_);
+  if (k < 0) return true;
+  // A table the font needs outside the file: it cannot be drawn. An optional one: absent, as parseFace() takes it.
+  if (!inFile(file_, table.offset, table.length)) return k >= kSdFirstOptional;
   // In file order, so the install reads the file forward.
   uint8_t at = count_++;
   for (; at > 0 && tables_[at - 1].fileOffset > table.offset; --at) tables_[at] = tables_[at - 1];
@@ -285,6 +297,14 @@ bool SdBlock::read(uint32_t offset, uint8_t* dst, uint32_t len) const {
     dst += n;
     offset += n;
     len -= n;
+  }
+  return true;
+}
+
+bool SdBlock::sameAs(const uint8_t* block, const uint32_t size) const {
+  if (block == nullptr || size != bytes_) return false;
+  for (uint32_t word = 0; word < 3 + 4u * count_; ++word) {
+    if (directoryWord(word) != be32(block + 4 * word)) return false;
   }
   return true;
 }

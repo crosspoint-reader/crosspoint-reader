@@ -209,6 +209,19 @@ FlashGlyphStore::OpenResult FlashGlyphStore::open(const uint8_t identity[kIdenti
   index_ = region_;
   pairs_ = region_ + (g.pairOffset - g.indexOffset);
   log_ = region_ + (g.logOffset - g.indexOffset);
+  if (firstSd_ < g.styleCount) {
+    // The SD-mode blocks, which stay mapped, go right beside the regions, before any flash-mode block: a flash-mode
+    // block mapped after them leaves, when it goes, a gap that joins the free pages past it. Mapped after one, they
+    // would split those pages, and a larger flash-mode block could find no run long enough to map into.
+    const uint8_t last = g.styleCount - 1;
+    sdMap_ = flash_.map(styleOffset_[firstSd_], styleOffset_[last] + styleSize_[last] - styleOffset_[firstSd_]);
+    if (!sdMap_) {
+      LOG_ERR("GST", "open: cannot map the SD-mode styles' tables (%u map pages free)",
+              static_cast<unsigned>(flash_.freeMapPages()));
+      close();
+      return OpenResult::MapFailed;
+    }
+  }
   uint32_t wipeWord = kErased;
   if (!flash_.read(kWipeWordOffset, &wipeWord, sizeof wipeWord)) wipeWord = 0;  // unreadable: assume pending
   wipePending_ = wipeWord != kErased;
@@ -245,18 +258,8 @@ void FlashGlyphStore::close() {
 
 const uint8_t* FlashGlyphStore::mapStyle(const uint8_t style) {
   if (!open_ || style >= geometry_.styleCount) return nullptr;
-  if (style >= firstSd_) {
-    // The SD-mode blocks, the last ones, map together: the budget counted them all.
-    if (!sdMap_) {
-      const uint8_t last = geometry_.styleCount - 1;
-      sdMap_ = flash_.map(styleOffset_[firstSd_], styleOffset_[last] + styleSize_[last] - styleOffset_[firstSd_]);
-      if (!sdMap_) {
-        LOG_ERR("GST", "cannot map the SD-mode styles' tables");
-        return nullptr;
-      }
-    }
-    return sdMap_ + (styleOffset_[style] - styleOffset_[firstSd_]);
-  }
+  // The SD-mode blocks, the last ones, are mapped together from open() on: the budget counted them all.
+  if (style >= firstSd_) return sdMap_ + (styleOffset_[style] - styleOffset_[firstSd_]);
   // Flash mode: one style at a time, so the budget holds only the largest.
   if (styleMap_ && mappedStyle_ == style) return styleMap_;
   if (styleMap_) flash_.unmap(styleMap_);

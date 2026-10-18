@@ -66,6 +66,8 @@ bool chooseCmap(FontBytes& bytes, const Table& cmap, Face* face) {
       if (offset == 0 || offset > cmap.length - 2) continue;
       const uint16_t format = bytes.u16(cmap.offset + offset);
       if (format != 4 && format != 12) continue;
+      // FreeType's validator drops a format-4 subtable whose segment arrays run past the table, and takes the next.
+      if (format == 4 && offset + 16 + 4u * (bytes.u16(cmap.offset + offset + 6) & ~1u) > cmap.length) continue;
       face->cmapSubtable = cmap.offset + offset;
       face->cmapFormat = static_cast<uint8_t>(format);
       return true;
@@ -105,8 +107,8 @@ uint32_t format4Glyph(FontBytes& bytes, const Face& face, const uint32_t codepoi
   const uint32_t deltas = starts + segX2;
   const uint32_t rangeOffsets = deltas + segX2;
   // Every read stays inside the cmap table, as format 12's do: in SD mode a stray offset past the copied tables
-  // would read the card. FreeType's validator refuses a subtable whose arrays run past the table; here such a
-  // subtable, or a glyph array entry past it, maps nothing.
+  // would read the card. chooseCmap() passes over a subtable whose arrays run past the table; a glyph array entry
+  // past it maps nothing.
   if (static_cast<uint64_t>(rangeOffsets) + segX2 > face.cmapEnd) return 0;
   uint32_t lo = 0;
   uint32_t hi = segX2 / 2;

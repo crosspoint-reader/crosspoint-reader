@@ -453,6 +453,30 @@ TEST(TtfSdBlock, AnyRangeReadsAsTheWholeBlockDoes) {
   EXPECT_FALSE(source.read(source.ctx, block.bytes(), &past, 1));
 }
 
+TEST(TtfSdBlock, AnOptionalTableOutsideTheFileIsLeftOutAsTheFaceLeavesItOut) {
+  // A GPOS record past the end of the file: parseFace() takes the font as having no GPOS, so the block copies none,
+  // and the probe's size says so too.
+  Font font;
+  font.glyphs.resize(1);
+  font.glyphs[0].contours = {rect(0, 0, 64, 64)};
+  font.extraTables = {{"GPOS", Bytes(64, 0)}};
+  Bytes bytes = buildFont(font);
+  set32(bytes, findRecord(bytes, "GPOS") + 12, static_cast<uint32_t>(bytes.size()));
+  MemoryFile file{bytes};
+  ttf::SdBlock block;
+  ASSERT_TRUE(block.plan(file.source()));
+  EXPECT_EQ(block.bytes(), ttf::probeFile(file.source()).sdBytes);
+  const std::vector<uint8_t> image = blockImage(block);
+  const glyphstore::SdOutlines outlines = block.outlines();
+  ttf::SdPageCache cache;
+  const ttf::SdRange sd{file.source(), outlines.fontOffset, outlines.fileOffset, outlines.length, &cache};
+  FontBytes card(image.data(), static_cast<uint32_t>(image.size()), &sd);
+  ttf::Face face;
+  ASSERT_EQ(ttf::FaceStatus::Ok, ttf::parseFace(card, &face));
+  EXPECT_EQ(0u, face.gpos);
+  EXPECT_TRUE(block.sameAs(image.data(), static_cast<uint32_t>(image.size())));
+}
+
 TEST(TtfSdBlock, AFileWithoutOutlinesOrNotTrueTypeHasNone) {
   ttf::SdBlock block;
   Bytes noGlyf = builtFont();

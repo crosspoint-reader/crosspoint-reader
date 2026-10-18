@@ -824,7 +824,9 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   time), its size, and where glyf is (`SdOutlines`: in the file, and past the block). The table map of 4.2 is gone
   (an SD-mode block is a font of its own, below). `Geometry` lost its mode; the header is 312 B (version 2: 1,240).
   SD-mode blocks follow every flash-mode one, so they map together, in one mapping beside the one flash-mode block
-  mapped at a time (three of `EspNorFlash`'s four mappings). The planner counts the largest flash-mode block and
+  mapped at a time (three of `EspNorFlash`'s four mappings). They are mapped at open, right after the index and log,
+  before any flash-mode block: mapped after one, they would sit between its pages and the free ones, and a larger
+  flash-mode block could find no run of free pages long enough once the smaller one went (review finding). The planner counts the largest flash-mode block and
   every SD-mode block against the mapping budget, and expects 250 B records when the body itself is in SD mode (a
   font too large for flash mode is CJK in practice), else 100 B. An older store reads as not installed.
 - **An SD-mode block (`ttf::SdBlock`, `TtfFamily.h`)** holds the file's tables the engine reads but glyf (cmap,
@@ -833,7 +835,9 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   read it in place, unchanged; only an outline read lands past the block, where `FontBytes` reads the file. Rather
   than the design's table map translated at every read: no lookup per read, and the SDK's layout readers keep a
   pointer. `SdBlock` makes the block on the fly from the file's directory (`source()` serves any range), so an
-  install copies it, and the kept-blocks check (11.1.3) compares it, as it does a whole file. Blocks: Bookerly
+  install copies it, and the kept-blocks check (11.1.3) compares it, as it does a whole file. An optional table
+  (OS/2, GPOS, GSUB, kern) whose record lies outside the file is left out, as `parseFace` takes it absent; the
+  first record of a tag is the one used, as in `parseFace`. Blocks: Bookerly
   176 KB of its 450 KB a style (GPOS 111 KB of it), Inter 167 of 341 KB, Ubuntu 92 of 300 KB, Noto Sans 245 of
   630 KB, DroidSansFallbackFull 357 KB of 4 MB.
 - **`FontBytes`:** the inline reads serve what is in place and call out of line for the rest: the SD range through
@@ -844,18 +848,25 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   families go to SD mode from the last on (the least used accent first, as the book ranks them), the body last of
   all, so the body stays whole while it fits and a body too large for flash mode takes the accents with it. An
   accent family stays whole only while the log keeps 8 pages (about 5,000 Latin glyphs): beside BookerlyTT, Inter
-  whole with the other two accents on the card leaves a 4-page log, all three on the card a 10-page one. The mode is
-  chosen per family, so a family's styles share it.
+  whole with the other two accents on the card leaves a 4-page log, all three on the card a 10-page one. When no plan
+  with more on the card fits at all (SD-mode blocks map together, so they can cost more mapping pages than one whole
+  style), the first plan that fit is taken, small log and all, rather than a family left out. The mode is chosen per
+  family, so a family's styles share it.
 - **Forward reads:** prefetch renders a run's misses in glyph order (3.2), which is file order, so a batch's outline
   reads move forward through the file (host test: a reversed alphabet reads the file in rising offsets). A miss
   outside a batch reads where it must.
 - **A changed file:** an SD-mode style whose file's stamp or size differs from the install's installs the set again
   at open (`StylesResult::Changed`), so a store never reads another file's outlines at its own loca offsets. The
-  identity already covered each file's name, size and time; the stamp adds its directory.
+  identity already covered each file's name, size and time; the stamp adds its directory. A file rewritten in place
+  at the same size and time passes both, so the open also reads the file's table directory (two small reads a style)
+  and compares the block it would make with the block's own directory: every table's tag, checksum, length and
+  place (`SdBlock::sameAs`).
 - **Errors:** a failed card read is an I/O error, Transient (6.1): drawn as missing, not marked, asked again; the page
   that failed is not kept.
 - **Scratch:** a body in SD mode gets the 8 KB cell pool (5.3); accent families in SD mode keep 4 KB.
-- **`cmapEnd`:** format-4 reads stay inside the cmap table; a subtable whose arrays run past it maps nothing (8.1).
+- **`cmapEnd`:** format-4 reads stay inside the cmap table (8.1). A subtable whose segment arrays run past it is
+  passed over when the map is chosen, as FreeType's validator drops it, so another Unicode subtable serves; a glyph
+  array entry past it maps nothing.
 - **Registry (7.1):** lists a family the store takes at all (`ttf::fitsStore`: flash mode, else SD mode). The probe
   discovery already runs sums what the SD-mode block would take (`FileProbe::sdBytes`), so nothing more is read.
   DroidSansFallbackFull and other large families are listed, and a book family too large for flash mode loads in SD
@@ -876,9 +887,10 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
 - **Cost, `env:default` (C3), against Stage B phase 3 with the drop-cap fix (987b431e7, 5,840,705 B, 55,416 B RAM):**
   the cmap bound +52 B; `FontBytes`' SD mode +640 B; the per-block format +266 B; the engine's SD mode +2,034 B
   (`SdBlock` 770 B, the mode choice and SD-mode install about 520 B, the rest the shared directory walk, load and
-  open); registry and manager +570 B. **+3,562 B in all** (5,844,267 B), static RAM unchanged. x4pro +2,980 B,
-  lilygo_t5s3 +2,768 B (static RAM +8 B each). No MMU page boundary crossed: code leaves 43.0 KB of its 42nd page
-  (46.3 KB before), rodata 20.3 KB of its 47th (20.6 KB), 89 pages in all.
+  open); registry and manager +570 B; the review follow-ups +430 B (the directory check at open, the fallback plan,
+  the cmap choice, the SD-mode blocks mapped at open). **+3,992 B in all** (5,844,697 B), static RAM unchanged.
+  x4pro +3,472 B, lilygo_t5s3 +3,236 B (static RAM +8 B each). No MMU page boundary crossed: code leaves 42.6 KB of
+  its 42nd page (46.3 KB before), rodata 20.3 KB of its 47th (20.6 KB), 89 pages in all.
 - **Tests:** `FontBytesSd` (routing between the tables and the card, the page cache's reads, eviction and failures,
   two files); `TtfFace.Format4ReadsStayInsideTheCmapTable`; the glyph store's per-block modes, SD blocks after flash
   blocks, an SD-mode style's records, older versions installed over, and the session power-cut sweep over a store
@@ -887,8 +899,10 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   flash mode draws it, next boot from the store; kerning and ligatures alike; prefetch reads forward; a changed file
   installs again; a card read error asked again; the body whole and the accent on the card; the 8-page log rule; a
   body in SD mode taking the accents along; an SD-mode block kept; a power cut at every 997th step of an SD-mode
-  install; the X4 set of phase 3 loading in full; a family too large even for SD mode refused before any erase.
-  Host suite 2879/2879.
+  install; the X4 set of phase 3 loading in full; a family too large even for SD mode refused before any erase; a
+  file rewritten in place at the same size and time installed again; an accent kept whole when nothing with more on
+  the card fits; an optional table outside the file left out of the block; a cut-short format-4 subtable passed over
+  for the next. Host suite 2883/2883.
 - **X4 test:** see below.
 
 ## 9. Testing

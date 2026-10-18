@@ -1249,14 +1249,18 @@ TEST_F(TtfFontSetTest, AFamilyTooLargeForFlashModeIsDrawnFromTheCardAsFlashModeD
     expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(40)), font, kRegular, nativeGlyph(fonts[kRegular], 'M'));
     EXPECT_GT(set->sdPageReads(), 0u);
   }
-  // The next boot draws them from the store: neither rendered again nor read from the card.
-  for (MemoryFile& file : files) file.reads = 0;
+  // The next boot draws them from the store: neither rendered again nor read from the card, but for the table
+  // directory the open compares with the block's.
+  for (MemoryFile& file : files) file.offsets.clear();
   const auto set = openFamilies(chip, {files}, busy);
   ASSERT_NE(nullptr, set);
   EXPECT_EQ(1, busy);
   expectDrawnAs(reference(files[kBold].bytes, 'W', 14), *set->font(0), kBold, set->font(0)->glyph(kBold, 'W'));
   EXPECT_EQ(0u, set->font(0)->renders());
-  EXPECT_EQ(0u, files[kBold].reads);
+  const std::vector<uint8_t>& bold = files[kBold].bytes;
+  const uint32_t directoryEnd = 12 + 16u * static_cast<uint32_t>(bold[4] << 8 | bold[5]);
+  ASSERT_FALSE(files[kBold].offsets.empty());
+  for (const uint32_t offset : files[kBold].offsets) EXPECT_LT(offset, directoryEnd);
   expectWrittenOnce(chip);
 }
 
@@ -1323,6 +1327,31 @@ TEST_F(TtfFontSetTest, AFileOnTheCardThatChangedInstallsTheSetAgain) {
   ASSERT_NE(nullptr, openFamilies(chip, {files}, busy));
   EXPECT_EQ(3, busy);  // and kept from then on
   expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, AFileRewrittenInPlaceAtTheSameSizeAndTimeInstallsTheSetAgain) {
+  // The stamp and the size match; the file's table directory does not (one table's checksum changed).
+  SimNorFlash chip{kSdOnlyBytes};
+  ASSERT_NE(nullptr, openFamilies(chip, {files}, busy));
+  std::vector<uint8_t>& italic = files[kItalic].bytes;
+  italic[findRecord(italic, "GPOS") + 4] ^= 0x5A;
+  const auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, busy);
+  expectDrawnAs(reference(italic, 'k', 14), *set->font(0), kItalic, set->font(0)->glyph(kItalic, 'k'));
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, AnAccentStaysWholeWhenNothingWithMoreOnTheCardFits) {
+  // 47 pages and 17 free mapping pages: both families whole fit with a 4-page log, which the 8-page rule would
+  // refuse; but Inter's tables, mapped beside Bookerly's largest style, pass the mapping budget. Whole beats left
+  // out.
+  SimNorFlash tight{47 * kPage, 17};
+  const auto set = openFamilies(tight, {files, accent}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, set->familyCount());
+  EXPECT_FALSE(set->font(0)->readsCard());
+  EXPECT_FALSE(set->font(1)->readsCard());
 }
 
 TEST_F(TtfFontSetTest, ACardReadErrorDrawsTheGlyphAsMissingAndAsksAgain) {

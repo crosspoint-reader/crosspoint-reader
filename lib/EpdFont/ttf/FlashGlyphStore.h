@@ -99,7 +99,8 @@ class FlashGlyphStore {
 
   // --- Session ---
 
-  /// Maps the store and finds where writing resumes.
+  /// Maps the store (the index, the pairs and the log, and the SD-mode styles' blocks) and finds where writing
+  /// resumes.
   OpenResult open(const uint8_t identity[glyphstore::kIdentityBytes]);
   void close();
   bool isOpen() const { return open_; }
@@ -107,8 +108,8 @@ class FlashGlyphStore {
   /// EpdFontData::bitmap for every TTF face: EpdGlyph::dataOffset is relative to it.
   const uint8_t* logBase() const { return log_; }
   /// A style's data, mapped. Flash-mode blocks map one at a time: the pointer stays valid until mapStyle() is
-  /// called for another flash-mode style, so re-fetch it after a miss in another style. SD-mode blocks map together,
-  /// beside it, and stay mapped.
+  /// called for another flash-mode style, so re-fetch it after a miss in another style. SD-mode blocks are mapped
+  /// together by open(), and stay mapped.
   const uint8_t* mapStyle(uint8_t style);
   /// A style's header record (its mode; in SD mode its file and outlines). False when not open.
   bool styleInfo(uint8_t style, glyphstore::StyleInfo& out) const;
