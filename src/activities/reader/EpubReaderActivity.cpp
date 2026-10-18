@@ -185,7 +185,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     for (size_t j = 0; j < i; j++) {
       Storage.rename((dstPath + SIDECARS[j]).c_str(), (srcPath + SIDECARS[j]).c_str());
     }
-    if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
+    if (!ClippingStore::moveBook(dstPath, srcPath)) {
       LOG_ERR("ERS", "Failed to restore epub after sidecar move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
     }
     return;
