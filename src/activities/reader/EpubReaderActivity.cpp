@@ -268,11 +268,13 @@ bool EpubReaderActivity::loadBook() {
 
   epub->setupCacheDir();
 
+  bool loadedProgress = false;
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
     int dataSize = f.read(data, sizeof(data));
     if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
+      loadedProgress = true;
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
       if (nextPageNumber == UINT16_MAX) {
@@ -291,7 +293,7 @@ bool EpubReaderActivity::loadBook() {
     }
   }
 
-  if (currentSpineIndex == 0) {
+  if (!loadedProgress) {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
