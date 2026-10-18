@@ -158,8 +158,6 @@ bool HalGPIO::hasToggleSwitch() const { return inputMgr.hasToggleSwitch(); }
 
 bool HalGPIO::isToggleSwitchOn() const { return inputMgr.isToggleSwitchOn(); }
 
-bool HalGPIO::wasToggleSwitchChanged() const { return inputMgr.wasToggleSwitchChanged(); }
-
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
 bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }

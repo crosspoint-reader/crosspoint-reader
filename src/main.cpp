@@ -22,9 +22,7 @@
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
-#include <driver/gpio.h>
 #include <esp_heap_caps.h>
-#include <esp_sleep.h>
 #include <esp_wifi.h>
 #include <time.h>
 
@@ -223,10 +221,14 @@ void toggleFrontlight() {
 // of truth, as on stock.
 void handleSlideSwitch() {
   static int appliedAction = -1;
+  static int appliedOn = -1;
   if (!gpio.hasToggleSwitch()) return;
-  if (!gpio.wasToggleSwitchChanged() && appliedAction == SETTINGS.slideSwitchAction) return;
-  appliedAction = SETTINGS.slideSwitchAction;
+  // Compare the position, not the change edge: transfer loops poll input and
+  // clear the edge before this runs.
   const bool on = gpio.isToggleSwitchOn();
+  if (appliedAction == SETTINGS.slideSwitchAction && appliedOn == static_cast<int>(on)) return;
+  appliedAction = SETTINGS.slideSwitchAction;
+  appliedOn = on;
   switch (SETTINGS.slideSwitchAction) {
     case CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE:
       if ((SETTINGS.screenInverted != 0) == on) return;
@@ -419,10 +421,6 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
 }
 
 #if FREEINK_DEVICE_PICCO
-// ponytail: 30 s poll; the SGM41562 status is I2C-only, so USB unplug and
-// charge-done are only seen when the timer fires.
-constexpr uint64_t USB_HOLD_POLL_US = 30ULL * 1000 * 1000;
-
 // Charge strip along the bottom of the retained sleep screen.
 static void drawSleepChargeStrip(const bool charging, const uint16_t percent) {
   RenderLock lock;
@@ -435,43 +433,17 @@ static void drawSleepChargeStrip(const bool charging, const uint16_t percent) {
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
-// While USB powers the device, stay in light sleep instead of deep sleep and
-// keep the charge strip current (deep sleep cannot observe the charger). Returns
-// true when the power button ended the hold, false when USB went away.
+// Shows the charge strip while the power HAL holds sleep on USB power, and
+// removes it again if USB goes away. Returns true when the power button ended
+// the hold.
 static bool holdSleepWhileUsbPowered() {
   if (!gpio.isUsbConnected()) return false;
-  LOG_DBG("MAIN", "USB power present, holding in light sleep");
-  const auto powerPin = static_cast<gpio_num_t>(BoardConfig::ACTIVE.input.power);
-  // The press that requested sleep may still be down; it must not end the hold.
-  while (digitalRead(powerPin) == LOW) delay(10);  // Picco power button is active-low
   // Keep the sleep frame so unplugging can remove the strip. 48 KB of PSRAM,
   // freed when the hold ends.
   const size_t frameSize = renderer.getBufferSize();
   auto* const sleepFrame = static_cast<uint8_t*>(heap_caps_malloc(frameSize, MALLOC_CAP_SPIRAM));
   if (sleepFrame) memcpy(sleepFrame, renderer.getFrameBuffer(), frameSize);
-  const BatteryMonitor battery;
-  int lastCharging = -1;
-  bool buttonPressed = false;
-  while (gpio.isUsbConnected()) {
-    const bool charging = battery.isCharging();
-    if (static_cast<int>(charging) != lastCharging) {
-      lastCharging = charging;
-      drawSleepChargeStrip(charging, powerManager.getBatteryPercentage());
-    }
-    esp_sleep_enable_timer_wakeup(USB_HOLD_POLL_US);
-    gpio_wakeup_enable(powerPin, GPIO_INTR_LOW_LEVEL);
-    esp_sleep_enable_gpio_wakeup();
-    esp_light_sleep_start();
-    gpio_wakeup_disable(powerPin);
-    // gpio_wakeup_disable() keeps the LOW_LEVEL type, and a later pinMode() would
-    // enable it as an interrupt that storms while the button is held.
-    gpio_set_intr_type(powerPin, GPIO_INTR_DISABLE);
-    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-    if (digitalRead(powerPin) == LOW) {
-      buttonPressed = true;
-      break;
-    }
-  }
+  const bool buttonPressed = powerManager.holdWhileUsbPowered(gpio, drawSleepChargeStrip);
   if (sleepFrame) {
     if (!buttonPressed) {
       RenderLock lock;

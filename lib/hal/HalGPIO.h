@@ -92,7 +92,6 @@ class HalGPIO {
   // Two-position slide switch (Picco). Debounced position and its change edge.
   bool hasToggleSwitch() const;
   bool isToggleSwitchOn() const;
-  bool wasToggleSwitchChanged() const;
   bool wasHomeKeyPressed() const;
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;

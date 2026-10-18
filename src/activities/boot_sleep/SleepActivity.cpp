@@ -348,6 +348,27 @@ AlphaScanResult scanForUsefulAlpha(HalFile& file, const OverlayBmpInfo& info, ui
   return AlphaScanResult::NotUseful;
 }
 
+// The gray planes overwrite the framebuffer with plane data. On Picco the
+// charge strip is drawn onto the sleep frame afterwards, so keep the visible
+// B/W image there instead (48 KB in PSRAM, held only while the planes render).
+class KeepBwFrame {
+#if FREEINK_DEVICE_PICCO
+  GfxRenderer& renderer;
+  const bool stored;
+
+ public:
+  explicit KeepBwFrame(GfxRenderer& renderer) : renderer(renderer), stored(renderer.storeBwBuffer()) {}
+  ~KeepBwFrame() {
+    if (stored) renderer.restoreBwBuffer();
+  }
+#else
+ public:
+  explicit KeepBwFrame(GfxRenderer&) {}
+#endif
+  KeepBwFrame(const KeepBwFrame&) = delete;
+  KeepBwFrame& operator=(const KeepBwFrame&) = delete;
+};
+
 AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const char* pathForLog) {
   OverlayBmpInfo info;
   if (!parseOverlayBmpHeader(file, info, false)) return AlphaOverlayResult::NotAlphaOverlay;
@@ -374,6 +395,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   } else {
     renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   }
+  const KeepBwFrame keepBwFrame(renderer);
 
   // Absolute planes retain B/W background bits; each visible overlay pixel is rewritten in both passes.
   if (!absolute) renderer.clearScreen(0x00);
@@ -692,6 +714,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   if (hasGreyscale) {
+    const KeepBwFrame keepBwFrame(renderer);
     bool ready = true;
     for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
       if (bitmap.rewindToData() != BmpReaderError::Ok) {
@@ -762,6 +785,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   } else {
     renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   }
+  const KeepBwFrame keepBwFrame(renderer);
 
   // Absolute planes retain B/W background bits; each visible overlay pixel is rewritten in both passes.
   if (!absolute) renderer.clearScreen(0x00);
