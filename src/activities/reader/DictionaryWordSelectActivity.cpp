@@ -150,31 +150,37 @@ void DictionaryWordSelectActivity::extractWords() {
   words.clear();
   rowCount = 0;
   // Each array is one contiguous block, and a failed reserve aborts the device. A CJK page is one
-  // token per character -- 600 and more on a dense page -- and a CJK font leaves the reader's heap
-  // in small blocks (X3: 15-21 KB free, no block over 4-7 KB), so there the arrays need not fit.
-  // Then nothing is selectable and the popup says why; Back returns to the page.
-  if (!heapHasBlockFor(fragmentCapacity * sizeof(Fragment)) || !heapHasBlockFor(wordCapacity * sizeof(Word))) {
-    LOG_ERR("DICT", "No block for %u fragments / %u words: word selection refused", static_cast<unsigned>(tokenCount),
+  // token per character -- 600 and more on a dense page -- and its glyphs fill the font cache with
+  // ~29 KB of bitmaps (X3, Hong Lou Meng at 14pt), leaving no block over 4-7 KB. The page is on
+  // screen by now, so that cache can go: glyphs load on demand afterwards, which slows only this
+  // fallback. If the arrays still do not fit, nothing is selectable and the popup says why.
+  const size_t fragmentBytes = fragmentCapacity * sizeof(Fragment);
+  const size_t wordBytes = wordCapacity * sizeof(Word);
+  // Larger first; the words are checked against what the fragments left.
+  const auto reserveArrays = [&] {
+    if (!heapHasBlockFor(fragmentBytes)) return false;
+    fragments.reserve(fragmentCapacity);
+    if (!heapHasBlockFor(wordBytes)) {
+      std::vector<Fragment>().swap(fragments);
+      return false;
+    }
+    words.reserve(wordCapacity);
+    return true;
+  };
+  if (!reserveArrays()) {
+    renderer.releaseFontCaches();
+    LOG_INF("DICT", "Released the font caches for %u fragments / %u words", static_cast<unsigned>(tokenCount),
             static_cast<unsigned>(wordEstimate));
-    wordsExtracted = true;
-    popup = Popup::Error;
-    popupMsg = StrId::STR_DICT_LOW_MEMORY;
-    popupTime = millis();
-    return;
+    if (!reserveArrays()) {
+      LOG_ERR("DICT", "No block for %u fragments / %u words: word selection refused", static_cast<unsigned>(tokenCount),
+              static_cast<unsigned>(wordEstimate));
+      wordsExtracted = true;
+      popup = Popup::Error;
+      popupMsg = StrId::STR_DICT_LOW_MEMORY;
+      popupTime = millis();
+      return;
+    }
   }
-  fragments.reserve(fragmentCapacity);
-  if (!heapHasBlockFor(wordCapacity * sizeof(Word))) {
-    // The fragments took the block the words were counted against.
-    std::vector<Fragment>().swap(fragments);
-    LOG_ERR("DICT", "No block for %u words after the fragments: word selection refused",
-            static_cast<unsigned>(wordEstimate));
-    wordsExtracted = true;
-    popup = Popup::Error;
-    popupMsg = StrId::STR_DICT_LOW_MEMORY;
-    popupTime = millis();
-    return;
-  }
-  words.reserve(wordCapacity);
 
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageLine) continue;
@@ -534,6 +540,14 @@ void DictionaryWordSelectActivity::performLookup() {
   popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
+  // A found word is inflated through dictzip's 32 KB window (DictZip::Scratch), one contiguous
+  // block taken at the session's first hit. On a CJK page the font cache holds most of the heap;
+  // the page and the busy popup are drawn, so let the cache go -- glyphs load on demand after.
+  if (!heapHasBlockFor(LOOKUP_CONTIGUOUS_BYTES)) {
+    renderer.releaseFontCaches();
+    LOG_INF("DICT", "Released the font caches for the lookup");
+  }
+
   bool ok = dictOpenOk;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
   if (ok && dictNeedsIndex) {
@@ -886,8 +900,9 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   auto scope = fcm->createPrewarmScope();
   page->renderTextOnly(renderer, fontId, marginLeft, marginTop);
   scope.endScanAndPrewarm();
-  if (!wordsExtracted) extractWords();
   page->render(renderer, fontId, marginLeft, marginTop);
+  // After the draw: extraction may release the font caches to make room for its arrays.
+  if (!wordsExtracted) extractWords();
 
   speculationRepaintPending = false;
   if (!words.empty()) drawHighlightWithSnapshot();
