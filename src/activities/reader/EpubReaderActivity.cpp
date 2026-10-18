@@ -313,11 +313,12 @@ ChapterPosition EpubReaderActivity::chapterPosition() const {
   return {nextPageNumber, cachedChapterTotalPageCount};
 }
 
-int EpubReaderActivity::bookPercentFor(const ChapterPosition& position) const {
+int EpubReaderActivity::bookPercentFor(const ChapterPosition& position, const int spineIndex) const {
   if (!epub || epub->getBookSize() == 0 || !position.hasTotal()) return 0;
   // The page index can run past the chapter's estimated total while it is still
   // building, so the fraction is clamped before the cast.
-  const float fraction = epub->calculateProgress(currentSpineIndex, position.chapterFraction());
+  const float fraction =
+      epub->calculateProgress(spineIndex < 0 ? currentSpineIndex : spineIndex, position.chapterFraction());
   return static_cast<int>(std::clamp(fraction, 0.0f, 1.0f) * 100.0f + 0.5f);
 }
 
@@ -340,8 +341,12 @@ void EpubReaderActivity::openReaderMenu() {
   }
   // Child screens (chapter list, text settings) release the section to free its
   // pagination buffers; chapterPosition() covers that with the cached position.
-  const ChapterPosition position = chapterPosition();
-  const int bookProgressPercent = bookPercentFor(position);
+  ChapterPosition position = chapterPosition();
+  int bookProgressPercent = bookPercentFor(position);
+  if (showingLastDrawnPage()) {
+    position = {lastDrawnPage, lastDrawnPageCount};
+    bookProgressPercent = bookPercentFor(position, lastDrawnSpineIndex);
+  }
 
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(
@@ -1261,7 +1266,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // Handled in-place by EpubReaderMenuActivity using the live frontlight HAL.
       break;
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
-      const int initialPercent = bookPercentFor(chapterPosition());
+      const int initialPercent = showingLastDrawnPage()
+                                     ? bookPercentFor({lastDrawnPage, lastDrawnPageCount}, lastDrawnSpineIndex)
+                                     : bookPercentFor(chapterPosition());
       startActivityForResult(
           std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
           [this](const ActivityResult& result) {
@@ -1300,6 +1307,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           uint16_t backupSpine = currentSpineIndex;
           uint16_t backupPage = section->currentPage;
           uint16_t backupPageCount = section->pageCount;
+          if (showingLastDrawnPage()) {
+            backupSpine = lastDrawnSpineIndex;
+            backupPage = lastDrawnPage;
+            backupPageCount = lastDrawnPageCount;
+          }
           section.reset();
           epub->clearCache();
           epub->setupCacheDir();
@@ -1985,6 +1997,9 @@ void EpubReaderActivity::renderBook() {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
+    lastDrawnSpineIndex = currentSpineIndex;
+    lastDrawnPage = section->currentPage;
+    lastDrawnPageCount = section->estimatedTotalPages();
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
@@ -3281,10 +3296,15 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     }
     // A child screen (menu, footnote list) may have released the section;
     // nextPageNumber then holds the page it was on.
-    const int page = section ? section->currentPage : nextPageNumber;
-    savedPositions[footnoteDepth] = {currentSpineIndex, page};
+    int spine = currentSpineIndex;
+    int page = section ? section->currentPage : nextPageNumber;
+    if (showingLastDrawnPage()) {
+      spine = lastDrawnSpineIndex;
+      page = lastDrawnPage;
+    }
+    savedPositions[footnoteDepth] = {spine, page};
     footnoteDepth++;
-    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
+    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, spine, page);
   }
 
   {
@@ -3451,16 +3471,24 @@ void EpubReaderActivity::updateBookmarkFlag() {
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Epub;
+  int spine = currentSpineIndex;
+  int page = section ? section->currentPage : -1;
+  int totalPages = section ? section->estimatedTotalPages() : 0;
+  if (showingLastDrawnPage()) {
+    spine = lastDrawnSpineIndex;
+    page = lastDrawnPage;
+    totalPages = lastDrawnPageCount;
+  }
   if (epub) {
     snprintf(info.title, sizeof(info.title), "%s", epub->getTitle().c_str());
-    info.spineIndex = currentSpineIndex;
+    info.spineIndex = spine;
   }
-  if (section) {
-    info.currentPage = section->currentPage + 1;
-    info.totalPages = section->estimatedTotalPages();
+  if (page >= 0) {
+    info.currentPage = page + 1;
+    info.totalPages = totalPages;
     if (epub && epub->getBookSize() > 0 && info.totalPages > 0) {
-      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(info.totalPages);
-      int pct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
+      const float chapterProgress = static_cast<float>(page) / static_cast<float>(info.totalPages);
+      int pct = static_cast<int>(epub->calculateProgress(spine, chapterProgress) * 100.0f + 0.5f);
       if (pct < 0) pct = 0;
       if (pct > 100) pct = 100;
       info.progressPercent = pct;

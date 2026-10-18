@@ -164,7 +164,6 @@ class EpubReaderActivity final : public ReaderActivity {
   // A re-layout of the same chapter carries it there too; any new navigation clears it first.
   void restoreSectionTarget();
   void clearPendingJump();
-  bool pageDrawPending() const override { return renderWaitsForBuild; }
   // A build step on the loop task failed and dropped the section; renderBook() shows the index
   // error once instead of rebuilding straight away.
   bool backgroundBuildFailed = false;
@@ -198,7 +197,15 @@ class EpubReaderActivity final : public ReaderActivity {
   // Live section position, or the values cached before a child screen
   // released the section.
   ChapterPosition chapterPosition() const;
-  int bookPercentFor(const ChapterPosition& position) const;
+  // spineIndex < 0 means the current spine.
+  int bookPercentFor(const ChapterPosition& position, int spineIndex = -1) const;
+  // The page on screen, recorded at every page draw (saving progress can fail). While a requested
+  // page is still being prepared, reader chrome, exit reports, progress backups and footnote return
+  // points use it instead of the requested page.
+  int lastDrawnSpineIndex = -1;
+  int lastDrawnPage = -1;
+  int lastDrawnPageCount = 0;
+  bool showingLastDrawnPage() const { return renderWaitsForBuild && lastDrawnSpineIndex >= 0; }
   void openReaderMenu();
   // Toolbar reader menu (see Overlay above).
   bool usesToolbarMenu() const;

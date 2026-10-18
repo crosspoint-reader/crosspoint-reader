@@ -261,9 +261,9 @@ void ReaderActivity::render(RenderLock&&) {
     return;
   }
 
+  pageDrawnThisRender = false;
   renderBook();
-  // A page still being prepared was not shown: the session hears about the render that draws it.
-  if (!pageDrawPending()) {
+  if (pageDrawnThisRender) {
     readerSession.onRenderComplete(millis(), trustedtime::trustedNow(), getProgressBasisPoints());
   }
 }
