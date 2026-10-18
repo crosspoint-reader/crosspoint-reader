@@ -153,6 +153,16 @@ struct CssPropertyFlags {
   }
 };
 
+// CssStyle::fontFamily: the identity of a font-family list's first family (CssParser::fontFamilyHash, whose low two
+// bits are always 0; 0 when it is a generic family or a keyword), or-ed with the list's generic serif or sans-serif
+// in those two bits, the family Publisher Fonts falls back to when the book does not have the named one.
+namespace CssFontFamily {
+constexpr uint32_t kGenericMask = 3;
+constexpr uint32_t kSerif = 1;
+constexpr uint32_t kSansSerif = 2;
+constexpr uint32_t identity(const uint32_t family) { return family & ~kGenericMask; }
+}  // namespace CssFontFamily
+
 // Represents a collection of CSS style properties
 // Only stores properties relevant to e-ink text rendering
 // Length values are stored as CssLength (value + unit) for deferred resolution
@@ -199,8 +209,8 @@ struct CssStyle {
   bool colorTransparent = false;
   bool opacityZero = false;
   bool visibilityHidden = false;  // visibility: hidden | collapse
-  // The first family of a font-family list, as CssParser::fontFamilyHash; 0 for a generic family
-  // (serif, sans-serif, ...) or a keyword, which mean the reader's font.
+  // A font-family list as CssFontFamily describes it: its first family's identity and its generic serif or
+  // sans-serif; 0 for the reader's font.
   uint32_t fontFamily = 0;
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set

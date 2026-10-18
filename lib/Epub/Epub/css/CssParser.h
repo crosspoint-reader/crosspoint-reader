@@ -114,7 +114,9 @@ class CssParser {
   // v28: `font-family` is parsed and persisted (its first family, hashed; see fontFamilyHash), and
   //      @font-face rules are recorded in a side file (see loadFontFaces). A v27 compile never
   //      looked at either, so a book's embedded fonts would stay unknown.
-  static constexpr uint8_t CSS_CACHE_VERSION = 28;
+  // v29: `font-family` also keeps the list's generic serif or sans-serif (CssFontFamily), which v28
+  //      dropped.
+  static constexpr uint8_t CSS_CACHE_VERSION = 29;
   // Bytes before the complex-rule table and the sorted offset index: version(1) + ruleCount(2) +
   // totalSelectorCandidates(4) + unsupportedSelectorSkips(4) + flags(1) + complexTableBytes(2).
   static constexpr uint32_t CSS_CACHE_HEADER_BYTES = 14;
@@ -340,7 +342,7 @@ class CssParser {
   static constexpr size_t MAX_FONT_FACES = 32;
   // A family name's identity, as font-family and @font-face compare names: case-insensitive, runs
   // of whitespace as one space, quotes removed. Never 0, which CssStyle::fontFamily keeps for the
-  // reader's font.
+  // reader's font, and its low two bits are 0 (CssFontFamily).
   [[nodiscard]] static uint32_t fontFamilyHash(std::string_view name);
   // The face records of the book whose cache is at `cachePath`, for nextFontFace. False when there
   // are none or the side file cannot be read.

@@ -51,7 +51,7 @@ bookmarks included, and `fontprev/` (`ClearCacheActivity`).
 | `book.bin` | EPUB | `BOOK_CACHE_VERSION` (11) | Metadata, spine and TOC: [below](#bookbin) |
 | `fingerprint.bin`, `toc.retry` | EPUB | none | [below](#fingerprintbin-and-tocretry) |
 | `pagelist.bin` | EPUB | none | The printed-page list: [below](#pagelistbin) |
-| `css_rules.cache`, `css_bg.bin`, `css_fonts.bin` | EPUB | `CSS_CACHE_VERSION` (28), `BACKGROUND_IMAGES_FILE_VERSION` (1) | [below](#css_rulescache-css_bgbin-and-css_fontsbin) |
+| `css_rules.cache`, `css_bg.bin`, `css_fonts.bin` | EPUB | `CSS_CACHE_VERSION` (29), `BACKGROUND_IMAGES_FILE_VERSION` (1) | [below](#css_rulescache-css_bgbin-and-css_fontsbin) |
 | `spines/<n>/<spine>_<hash>.bin` | EPUB | `SECTION_FILE_VERSION` | Laid-out pages: [`section.bin`](#sectionbin) |
 | `spines/<n>/html_<spine>.bin` | EPUB | none | The spine item's inflated XHTML, banked by its build for the footnote pass and later builds; checked against the inflated size |
 | `pages.bin` | EPUB | `kFormatVersion` (1) in `SpinePageIndex.cpp`, plus the section version and property hash | Each spine item's page count and size under one render variant (`SpinePageIndex`), to count pages across a chapter split over several files |
@@ -60,7 +60,7 @@ bookmarks included, and `fontprev/` (`ClearCacheActivity`).
 | `img_<hash><ext>`, `<image>.1bit.pxc`, `<image>.bayer.pxc` | EPUB | `PixelCache::PXC_MAGIC` | Images extracted from the book (`<hash>` is FNV-1a 64 of the entry), and their dithered pixel caches: `u16` magic, `u16` width, `u16` height, 2-bit pixels |
 | `cover.img` | EPUB | none | The cover image's bytes, extracted once (or copied from a cover sidecar) |
 | `linkstack.bin` | EPUB | `EpubLinkBackStack::kVersion` (1) | The link Back stack: [below](#linkstackbin) |
-| `fonts.bin`, `fonts/<style>.ttf` | EPUB | `BookFonts::kVersion` (3) | The book's embedded body font (Publisher Fonts): [below](#fontsbin) |
+| `fonts.bin`, `fonts/<style>.ttf`, `fonts/accent/<style>.ttf` | EPUB | `BookFonts::kVersion` (4) | The book's embedded body and accent fonts (Publisher Fonts): [below](#fontsbin) |
 | `kosync_push.bin` | EPUB | `LastPush::kVersion` (1) | Our last KOReader push: [below](#kosync_pushbin) |
 | `koreader_docid.txt`, `koreader_syncmethod.txt` | EPUB | none | The KOReader document id, after the file size and fingerprint it was computed for, and the match method learned for the book |
 | `index.bin` | TXT, Markdown | `CACHE_VERSION`: TXT 2 (magic `TXTI`), Markdown 4 (`MKDI`) | Page offsets under the current layout. `SleepActivity` checks the TXT magic and version too |
@@ -279,7 +279,7 @@ Two small files beside `book.bin` (`lib/Epub/Epub.cpp`).
 
 ## `css_rules.cache`, `css_bg.bin` and `css_fonts.bin`
 
-The book's compiled stylesheets, written by `CssParser` (`lib/Epub/Epub/css/`). `css_rules.cache` starts with a 14-byte header (`u8` version, `u16` rule count, `u32` selector candidates, `u32` unsupported-selector skips, `u8` flags, `u16` complex-table bytes), then the complex-rule table (compound, descendant and child selectors, which the hashed index cannot key; its layout is described at `CssParser::complexTable`), then the sorted `{hash, offset}` index, then the rule records (`u16` selector length, selector, `u16` source order, style payload). A selector declared again after other rules has a record per declaration, so rules of equal specificity can apply in stylesheet order. The version byte is `CssParser::CSS_CACHE_VERSION` (28); the comment above it lists what each version changed. A file with another version is deleted and the CSS compiled again, and the book's section caches go with it. It is compiled into `css_rules.compile.tmp` first.
+The book's compiled stylesheets, written by `CssParser` (`lib/Epub/Epub/css/`). `css_rules.cache` starts with a 14-byte header (`u8` version, `u16` rule count, `u32` selector candidates, `u32` unsupported-selector skips, `u8` flags, `u16` complex-table bytes), then the complex-rule table (compound, descendant and child selectors, which the hashed index cannot key; its layout is described at `CssParser::complexTable`), then the sorted `{hash, offset}` index, then the rule records (`u16` selector length, selector, `u16` source order, style payload). A selector declared again after other rules has a record per declaration, so rules of equal specificity can apply in stylesheet order. The version byte is `CssParser::CSS_CACHE_VERSION` (29); the comment above it lists what each version changed. A file with another version is deleted and the CSS compiled again, and the book's section caches go with it. It is compiled into `css_rules.compile.tmp` first.
 
 `css_bg.bin` sits beside it and holds the CSS background pictures (`CssParser::backgroundImageFor`): the `no-repeat` `background-image` of each rule that sets one. Absent when the book has none.
 
@@ -295,7 +295,7 @@ count x {
 `css_fonts.bin` holds the book's `@font-face` rules (`CssParser::loadFontFaces`, read one at a time by `CssParser::nextFontFace`), in source order, for its embedded fonts: at most `MAX_FONT_FACES` (32). Absent when the book declares none.
 
 ```text
-u8  version             CSS_CACHE_VERSION (23)
+u8  version             CSS_CACHE_VERSION (29)
 then, to the end of the file, one record per face {
     u16 weight          font-weight, 100-900 (normal 400, bold 700)
     u8  italic          1 when font-style is not normal
@@ -360,16 +360,21 @@ An empty stack is stored as no file. The file is written when the reader closes 
 
 ## `fonts.bin`
 
-What `BookFonts::prepare` (`lib/Epub/Epub/BookFonts.*`) found when the Publisher Fonts setting first met the book: whether its body text is set in a family it embeds, and if so where the copy is. Written once per book, last, after the font files; the next open trusts it.
+What `BookFonts::prepare` (`lib/Epub/Epub/BookFonts.*`) found when the Publisher Fonts setting first met the book: the family its body text is set in, whether it embeds it, and the accent family (the embedded family the most other blocks are set in), with where the copies are. Written once per book, last, after the font files; the next open trusts it.
 
 ```text
-u8  version             BookFonts::kVersion (3)
-u8  code                0 none: the book keeps the reader's font
-                        1 family: then the name the book declares, to the end of the file
+u8  version             BookFonts::kVersion (4)
+u8  code                0 none: the book's body keeps the reader's font
+                        1 family: its body family is in fonts/
                         2 + n: n failed attempts (a read failed); examined again at the next open, given up at 3
+u32 body                the body text's font-family, as CssStyle::fontFamily keeps it (CssFontFamily: the family's
+                        identity, its generic serif or sans-serif in the low two bits); 0 for the reader's font
+u32 accent              the accent family's identity when it is in fonts/accent/, else 0
+    names               the body family's name as the book declares it (empty unless code is 1), then, when there
+                        is an accent family, '\0' and its name; to the end of the file
 ```
 
-The family's files sit in `fonts/`, one per style, named `<style>.ttf` (0 regular, 1 bold, 2 italic, 3 bold italic): plain TrueType, any IDPF or Adobe font obfuscation undone. The reader loads the directory as it loads a `.ttf` family directory on the card. A file of another version, or none, means the book has not been examined; `prepare` then removes the whole `fonts/` directory first.
+The body family's files sit in `fonts/`, the accent family's in `fonts/accent/`, one per style, named `<style>.ttf` (0 regular, 1 bold, 2 italic, 3 bold italic): plain TrueType, any IDPF or Adobe font obfuscation undone. The reader loads either directory as it loads a `.ttf` family directory on the card. A file of another version, or none, means the book has not been examined; `prepare` then removes the whole `fonts/` directory first.
 
 ## `kosync_push.bin`
 
