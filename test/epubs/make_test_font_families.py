@@ -22,13 +22,17 @@ spans and the inline <code> of the mixed body paragraph do.
 
 With --fonts DIR the book embeds TrueType faces for the device test (Ubuntu as Book Body, Inter as Book Display,
 Noto Sans Italic as Book Script, Ubuntu Bold as Book Code, all from lib/EpdFont/builtinFonts/source) and is written
-to --out; the corpus copy embeds none, the layout does not read them.
+to --out; the corpus copy embeds none, the layout does not read them. The device copy also has a third chapter with
+a baseline JPEG, a progressive JPEG and a PNG among text in every family, made here with Pillow and large enough
+that their decodes need real heap: the pages the reader's memory ladder (ImageMemoryLadder) is tested on.
 
 Regenerate with:  python test/epubs/make_test_font_families.py
 then refresh goldens: UPDATE_GOLDENS=1 ctest --test-dir <build> -R EpubPipeline
 """
 
 import argparse
+import io
+import math
 import os
 import zipfile
 
@@ -105,6 +109,60 @@ CHAPTERS = [
 ]
 
 
+# The device copy's chapter with pictures: each image on a page with text in the body and accent families, so that
+# drawing the page needs every family of the set and the decode.
+IMAGE_CHAPTER = (
+    "Three",
+    "    <h1>Chapter Three</h1>\n"
+    '    <p class="dedication">Pictures among the publisher\'s fonts.</p>\n'
+    '    <p><img src="images/baseline.jpg" alt="A baseline JPEG"/></p>\n'
+    '    <p class="script">A paragraph in the second accent family, under a baseline JPEG.</p>\n'
+    "    <p>Body text with <code>inline code</code> and an <span class=\"inline\">accent</span> after it.</p>\n"
+    '    <h2 class="script">A Progressive Picture</h2>\n'
+    '    <p><img src="images/progressive.jpg" alt="A progressive JPEG"/></p>\n'
+    f"    <p>{PROSE}</p>\n"
+    "    <h1>A Figure</h1>\n"
+    '    <p><img src="images/figure.png" alt="A PNG figure"/></p>\n'
+    "    <pre><code>code in the code family</code></pre>\n"
+    f"    <p>{PROSE}</p>",
+)
+
+
+def make_images():
+    """A baseline JPEG, a progressive JPEG and a PNG: smooth shapes over gradients, the same bytes every run."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        raise SystemExit("--fonts needs Pillow for the test images: pip install pillow")
+
+    def picture(width, height, phase):
+        image = Image.new("RGB", (width, height))
+        pixels = image.load()
+        for y in range(height):
+            for x in range(width):
+                r = int(127 + 127 * math.sin((x + phase) / 37.0))
+                g = int(127 + 127 * math.sin((y - phase) / 23.0))
+                b = (x * 255 // width + y * 255 // height) // 2
+                pixels[x, y] = (r, g, b)
+        draw = ImageDraw.Draw(image)
+        for i in range(12):
+            cx = (i * 97 + phase) % width
+            cy = (i * 61 + phase * 2) % height
+            draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], outline=(0, 0, 0), width=4)
+        return image
+
+    def saved(image, **options):
+        buffer = io.BytesIO()
+        image.save(buffer, **options)
+        return buffer.getvalue()
+
+    return {
+        "images/baseline.jpg": saved(picture(900, 675, 0), format="JPEG", quality=80, optimize=False),
+        "images/progressive.jpg": saved(picture(800, 600, 40), format="JPEG", quality=80, progressive=True),
+        "images/figure.png": saved(picture(640, 480, 80), format="PNG"),
+    }
+
+
 def build(out, fonts_dir):
     manifest, spine, files = [], [], {}
     css = CSS
@@ -116,9 +174,13 @@ def build(out, fonts_dir):
             manifest.append(f'<item id="font{i}" href="fonts/{name}" media-type="font/ttf"/>')
             rules.append(f'@font-face {{ font-family: "{family}"; font-weight: {weight}; src: url(fonts/{name}); }}')
         css = "\n".join(rules) + "\n" + css
+        for i, (name, data) in enumerate(make_images().items()):
+            files[name] = data
+            media = "image/png" if name.endswith(".png") else "image/jpeg"
+            manifest.append(f'<item id="image{i}" href="{name}" media-type="{media}"/>')
     files["style.css"] = css
     manifest.append('<item id="css" href="style.css" media-type="text/css"/>')
-    for i, (title, body) in enumerate(CHAPTERS, start=1):
+    for i, (title, body) in enumerate(CHAPTERS + ([IMAGE_CHAPTER] if fonts_dir else []), start=1):
         name = f"chapter{i}.xhtml"
         files[name] = CHAPTER.format(title=title, body=body)
         manifest.append(f'<item id="chapter{i}" href="{name}" media-type="application/xhtml+xml"/>')
@@ -155,7 +217,9 @@ def build(out, fonts_dir):
         z.writestr(*entry("META-INF/container.xml", container, zipfile.ZIP_DEFLATED))
         z.writestr(*entry("OEBPS/content.opf", opf, zipfile.ZIP_DEFLATED))
         for name, content in files.items():
-            z.writestr(*entry("OEBPS/" + name, content, zipfile.ZIP_DEFLATED))
+            # Images are stored, as books store them: they do not deflate.
+            stored = name.startswith("images/")
+            z.writestr(*entry("OEBPS/" + name, content, zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED))
     print("wrote", out)
 
 
