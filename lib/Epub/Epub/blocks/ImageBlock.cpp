@@ -418,10 +418,11 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 }
 
 bool ImageBlock::serialize(HalFile& file) {
-  serialization::writeString(file, imagePath);
-  serialization::writeString(file, srcPath);
-  serialization::writePod(file, width);
-  serialization::writePod(file, height);
+  if (!(serialization::tryWriteString(file, imagePath) && serialization::tryWriteString(file, srcPath) &&
+        serialization::tryWritePod(file, width) && serialization::tryWritePod(file, height))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
   return true;
 }
 

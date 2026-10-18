@@ -385,10 +385,12 @@ bool TextBlock::serialize(HalFile& file) const {
   // Word data: scalars, then the arena verbatim -- its in-memory layout is
   // exactly the on-disk layout (see TextBlock.h), so one write covers all
   // per-word arrays and the text blob.
-  serialization::writePod(file, numWords);
-  serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
-  serialization::writePod(file, textBytes);
-  serialization::writePod(file, paragraphStartWord);
+  if (!(serialization::tryWritePod(file, numWords) &&
+        serialization::tryWritePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0)) &&
+        serialization::tryWritePod(file, textBytes) && serialization::tryWritePod(file, paragraphStartWord))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
   if (numWords > 0) {
     const size_t size = arenaSize(numWords, focusPresent, textBytes);
     if (file.write(arena.get(), size) != size) {
@@ -399,30 +401,39 @@ bool TextBlock::serialize(HalFile& file) const {
 
   // Ruby text data
   for (size_t i = 0; i < numWords; i++) {
-    serialization::writeString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string());
+    if (!serialization::tryWriteString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string())) {
+      LOG_ERR("CACHE", "Failed cache writeString");
+      return false;
+    }
   }
 
   // Style (alignment + margins/padding/indent)
-  serialization::writePod(file, blockStyle.alignment);
-  serialization::writePod(file, blockStyle.textAlignDefined);
-  serialization::writePod(file, blockStyle.marginTop);
-  serialization::writePod(file, blockStyle.marginBottom);
-  serialization::writePod(file, blockStyle.marginLeft);
-  serialization::writePod(file, blockStyle.marginRight);
-  serialization::writePod(file, blockStyle.paddingTop);
-  serialization::writePod(file, blockStyle.paddingBottom);
-  serialization::writePod(file, blockStyle.paddingLeft);
-  serialization::writePod(file, blockStyle.paddingRight);
-  serialization::writePod(file, blockStyle.textIndent);
-  serialization::writePod(file, blockStyle.textIndentDefined);
-  serialization::writePod(file, blockStyle.isRtl);
-  serialization::writePod(file, blockStyle.directionDefined);
-  serialization::writePod(file, blockStyle.characterSpacing);
-  serialization::writePod(file, blockStyle.fontId);
+  if (!(serialization::tryWritePod(file, blockStyle.alignment) &&
+        serialization::tryWritePod(file, blockStyle.textAlignDefined) &&
+        serialization::tryWritePod(file, blockStyle.marginTop) &&
+        serialization::tryWritePod(file, blockStyle.marginBottom) &&
+        serialization::tryWritePod(file, blockStyle.marginLeft) &&
+        serialization::tryWritePod(file, blockStyle.marginRight) &&
+        serialization::tryWritePod(file, blockStyle.paddingTop) &&
+        serialization::tryWritePod(file, blockStyle.paddingBottom) &&
+        serialization::tryWritePod(file, blockStyle.paddingLeft) &&
+        serialization::tryWritePod(file, blockStyle.paddingRight) &&
+        serialization::tryWritePod(file, blockStyle.textIndent) &&
+        serialization::tryWritePod(file, blockStyle.textIndentDefined) &&
+        serialization::tryWritePod(file, blockStyle.isRtl) &&
+        serialization::tryWritePod(file, blockStyle.directionDefined) &&
+        serialization::tryWritePod(file, blockStyle.characterSpacing) &&
+        serialization::tryWritePod(file, blockStyle.fontId))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return false;
+  }
 
   // Per-word fonts: a flag, then the font table and one slot per word.
   const uint8_t hasWordFonts = wordFontData ? 1 : 0;
-  serialization::writePod(file, hasWordFonts);
+  if (!serialization::tryWritePod(file, hasWordFonts)) {
+    LOG_ERR("CACHE", "Incomplete cache write");
+    return false;
+  }
   if (hasWordFonts) {
     const size_t size = sizeof(int32_t) * MAX_WORD_FONTS + numWords;
     if (file.write(wordFontData.get(), size) != size) {

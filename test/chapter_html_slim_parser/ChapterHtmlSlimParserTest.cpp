@@ -5,7 +5,10 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iterator>
+#include <limits>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -1784,4 +1787,41 @@ TEST(TextDecorationPosition, UnderlineStaysBelowBaseline) {
     line->render(renderer, 0, 0, 20);
     EXPECT_EQ(renderer.lastLineY, 34);
   });
+}
+
+namespace {
+Page fontStoragePage() {
+  Page page;
+  BlockStyle style;
+  style.fontId = -17;
+  auto text = std::make_unique<TextBlock>(std::vector<std::string>{"a", "b", "c"}, std::vector<int16_t>{0, 8, 16},
+                                          std::vector<EpdFontFamily::Style>(3, EpdFontFamily::REGULAR),
+                                          std::vector<uint8_t>{}, std::vector<uint16_t>{}, style);
+  const uint8_t slots[] = {0, 1, static_cast<uint8_t>(3 | TextBlock::SMALL_CAPS_SLOT_FLAG)};
+  const int32_t fonts[TextBlock::MAX_WORD_FONTS] = {-21, 22, -23};
+  EXPECT_TRUE(text->setWordFonts(slots, fonts));
+  page.elements.push_back(std::make_unique<PageLine>(std::move(text), 1, 2));
+  page.elements.push_back(std::make_unique<PageHorizontalRule>(120, 1, 2, 3));
+  page.elements.push_back(std::make_unique<PageDropCap>(-17, 512, EpdFontFamily::BOLD, "A", 2, 3));
+  const CssBorderSide sides[4] = {{1, CssBorderStyle::Solid}, {}, {}, {2, CssBorderStyle::Dashed}};
+  page.elements.push_back(std::make_unique<PageBorderBox>(120, 80, sides, true, 2, 3));
+  return page;
+}
+}  // namespace
+TEST(PageStorage, EveryShortWriteFailsSerialization) {
+  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-page-write-test.bin").string();
+  Page page = fontStoragePage();
+  HalFile file;
+  ASSERT_TRUE(file.open(path.c_str(), "wb"));
+  ASSERT_TRUE(page.serialize(file));
+  const size_t size = file.position();
+  file.close();
+  for (size_t budget = 0; budget < size; ++budget) {
+    ASSERT_TRUE(file.open(path.c_str(), "wb"));
+    HalFile::writeBudget = budget;
+    EXPECT_FALSE(page.serialize(file)) << budget;
+    file.close();
+  }
+  HalFile::writeBudget = std::numeric_limits<size_t>::max();
+  std::filesystem::remove(path);
 }
