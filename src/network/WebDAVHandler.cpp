@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include "ClippingStore.h"
+#include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -111,7 +112,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   } else if (raw.status == RAW_ABORTED) {
     if (_putFile) _putFile.close();
     String tempPath = _putPath + ".davtmp";
-    Storage.remove(tempPath.c_str());
+    if (!isProtectedPath(_putPath)) Storage.remove(tempPath.c_str());
     _putOk = false;
   }
 }
@@ -177,6 +178,11 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   LOG_DBG("DAV", "PROPFIND %s depth=%d", path.c_str(), depth);
 
+  if (isProtectedPath(path)) {
+    s.send(403, "text/plain", "Forbidden");
+    return;
+  }
+
   // Check if path exists
   if (!Storage.exists(path.c_str()) && path != "/") {
     s.send(404, "text/plain", "Not Found");
@@ -228,22 +234,11 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       file.getName(name, sizeof(name));
       String fileName(name);
 
-      // Skip hidden/protected items
-      bool shouldHide = fileName.startsWith(".");
-      if (!shouldHide) {
-        for (const auto* item : HIDDEN_ITEMS) {
-          if (fileName.equals(item)) {
-            shouldHide = true;
-            break;
-          }
-        }
-      }
+      String childPath = path;
+      if (!childPath.endsWith("/")) childPath += "/";
+      childPath += fileName;
 
-      if (!shouldHide) {
-        String childPath = path;
-        if (!childPath.endsWith("/")) childPath += "/";
-        childPath += fileName;
-
+      if (!isProtectedPath(childPath)) {
         if (file.isDirectory()) {
           sendPropEntry(s, childPath, true, 0, FIXED_DATE);
         } else {
@@ -777,6 +772,7 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
+  if (protectedpaths::isSensitivePath(path.c_str())) return true;
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -789,6 +785,7 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
     if (end == -1) end = path.length();
 
     String segment = path.substring(start, end);
+    segment.trim();
 
     if (segment.startsWith(".")) return true;
 

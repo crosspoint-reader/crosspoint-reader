@@ -19,7 +19,10 @@ inline constexpr const char* SENSITIVE_FILES[] = {"/.crosspoint/wifi.json", "/.c
 // CROSSP~1), which no spelling check can map back to the long name.
 inline bool isShortAlias(const char* first, const char* last) {
   const char* tilde = static_cast<const char*>(memchr(first, '~', static_cast<size_t>(last - first)));
-  if (!tilde || tilde + 1 >= last || tilde[1] < '0' || tilde[1] > '9') return false;
+  if (!tilde || tilde + 1 >= last ||
+      !((tilde[1] >= '0' && tilde[1] <= '9') || (tilde[1] >= 'A' && tilde[1] <= 'F') ||
+        (tilde[1] >= 'a' && tilde[1] <= 'f')))
+    return false;
   const char* dot = static_cast<const char*>(memchr(first, '.', static_cast<size_t>(last - first)));
   const size_t base = static_cast<size_t>((dot ? dot : last) - first);
   const size_t ext = dot ? static_cast<size_t>(last - dot - 1) : 0;

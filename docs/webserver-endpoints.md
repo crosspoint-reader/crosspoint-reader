@@ -90,7 +90,10 @@ enabled. `System Volume Information` and `XTCache` are always hidden/protected.
 
 The saved-credential stores (`/.crosspoint/wifi.json`, `opds.json`,
 `koreader.json`) can never be downloaded, uploaded, renamed, moved, deleted or
-written by a plugin over the network, however the path is spelled.
+written by a plugin over the network, however the path is spelled. WebDAV also
+blocks direct and directory listings of protected resources, their temporary
+siblings, and FAT short aliases. Alias-shaped names in the first two path
+components are conservatively blocked even when they identify ordinary files.
 
 ### `GET /download`
 

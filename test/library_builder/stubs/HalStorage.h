@@ -104,6 +104,7 @@ class HalFile {
 
   explicit operator bool() const { return bool(node); }
   bool isOpen() const { return bool(node); }
+  bool rename(const char* destination);
   bool close() {
     const bool failed = !fake::failClosePath.empty() && path == fake::failClosePath;
     if (failed) {
@@ -257,3 +258,9 @@ class HalStorage {
 };
 
 #define Storage HalStorage::getInstance()
+
+inline bool HalFile::rename(const char* destination) {
+  if (!node || !Storage.rename(path.c_str(), destination)) return false;
+  path = destination;
+  return true;
+}
