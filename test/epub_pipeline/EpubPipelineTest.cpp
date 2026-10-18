@@ -93,23 +93,23 @@ const char* const kBionicBooks[] = {"test_long_paragraph_spacing", "test_text_re
 const char* const kFontFamilyBooks[] = {"test_font_families"};
 
 // The families as the reader builds them for a 14 pt built-in body (buildBookFontFamilies), with stand-in IDs: the
-// built-in sans-serif's rungs are 2000 + their size, the accent family's native sizes 0x12345600 | px. Accents also
-// has the book's accent family; All Text has a TTF body, Book Body, and so no room for one.
-BlockFontFamilies publisherFontFamilies(const bool accentFamily) {
+// built-in sans-serif's rungs are 2000 + their size, the accent family's native sizes 0x12345600 | px. Both have the
+// book's accent family: Accents beside the built-in body, All Text beside the book's TTF body, Book Body, in one glyph
+// store (Stage B phase 2; phase 1 had no room for it there). All Text's body font ID is another one, which the shim
+// renderer draws alike, so its layout is Accents'.
+BlockFontFamilies publisherFontFamilies() {
   BlockFontFamilies families;
   families.body = CssParser::fontFamilyHash("Book Body") | CssFontFamily::kSerif;
   FontSizeLadder sans;
   for (const uint16_t pt : {10, 12, 14, 16, 18, 20, 22, 24, 26}) sans.addRung(2000 + pt, pt * 100 / 14);
   families.add(CssFontFamily::kSansSerif, 2014, sans);
-  if (accentFamily) {
-    FontSizeLadder native;
-    native.setNative(0x12345600, (14 * 64 * 150 + 36) / 72, 10, 120);
-    families.add(CssParser::fontFamilyHash("Book Display"), 0x777, native);
-  }
+  FontSizeLadder native;
+  native.setNative(0x12345600, (14 * 64 * 150 + 36) / 72, 10, 120);
+  families.add(CssParser::fontFamilyHash("Book Display"), 0x777, native);
   return families;
 }
-const BlockFontFamilies kAccentsFamilies = publisherFontFamilies(true);
-const BlockFontFamilies kAllTextFamilies = publisherFontFamilies(false);
+const BlockFontFamilies kAccentsFamilies = publisherFontFamilies();
+const BlockFontFamilies kAllTextFamilies = publisherFontFamilies();
 
 // Distinguishes the variants' cache dirs and golden files. The default keeps the
 // historical unsuffixed golden name so its committed layout stays reviewable

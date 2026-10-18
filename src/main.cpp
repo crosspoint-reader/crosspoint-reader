@@ -779,7 +779,7 @@ bool bookFontsPendingForPath(const char* path) {
 
 void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
   if (!path) {
-    sdFontSystem.selectBookFamily({});
+    sdFontSystem.selectBookFamilies({});
     ensureSdFontLoaded();
     return;
   }
@@ -793,7 +793,7 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
                        static_cast<bool (*)(std::string_view)>(FsHelpers::hasMarkdownExtension)(filePath);
   if (isTxtMd) {
     // TXT/MD has no per-book SD font override — use global settings directly.
-    sdFontSystem.selectBookFamily({});
+    sdFontSystem.selectBookFamilies({});
     sdFontSystem.ensureLoaded(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize, onColdFontLoad);
     return;
   }
@@ -816,11 +816,12 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
   } else if (book.fontFamilyOverride >= 0) {
     family = "";  // per-book built-in font override: no SD font needed; unload if one was active
   }
-  // A family BookFonts copied out of the book: its body family, or its accent family beside a built-in reader font.
-  if (sdFontSystem.selectBookFamily(cachePath, SETTINGS.publisherFonts, family[0] == '\0')) {
-    family = sdFontSystem.selectedFamilyName();
-  }
-  sdFontSystem.ensureLoaded(renderer, family, effectiveSize, onColdFontLoad);
+  // The families BookFonts copied out of the book: its body family in place of the reader's font, and its accent
+  // family beside whichever draws the body. They load together, the body's first.
+  sdFontSystem.selectBookFamilies(cachePath, SETTINGS.publisherFonts, family);
+  if (sdFontSystem.bookFamilyName()[0] != '\0') family = sdFontSystem.bookFamilyName();
+  const char* families[] = {family, sdFontSystem.accentFamilyName()};
+  sdFontSystem.ensureLoaded(renderer, families, 2, effectiveSize, onColdFontLoad);
 }
 
 // --- Temporary boot-phase heap-corruption bisect probes -------------------------------
