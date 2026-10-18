@@ -309,7 +309,7 @@ curl -X POST \
 ```
 
 The handler validates the family name, `.cpfont` filename, and `CPFONT` magic
-bytes before accepting the file.
+bytes before accepting the file. Uploads replace an existing font only after the upload completes, closes successfully, and passes the magic-byte check. Failed or canceled uploads preserve the installed font. Font discovery restores a replacement backup if its installed filename is missing.
 
 Successful response:
 

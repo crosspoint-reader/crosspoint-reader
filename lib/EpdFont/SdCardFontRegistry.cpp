@@ -11,6 +11,10 @@
 #include <cstdlib>
 #include <cstring>
 
+namespace {
+constexpr size_t FONT_SCAN_NAME_BYTES = 127 + sizeof(".cpfont.bak");
+}
+
 // --- SdCardFontFamilyInfo helpers ---
 
 const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t style) const {
@@ -243,7 +247,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   std::vector<SdCardFontFileInfo> cpfontFiles;
   std::vector<SdCardFontFileInfo> vectorFiles;
 
-  char nameBuffer[128];
+  char nameBuffer[FONT_SCAN_NAME_BYTES];
   while (true) {
     HalFile entry = dir.openNextFile();
     if (!entry) break;
@@ -259,6 +263,24 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
 
     uint8_t size, style;
+    const size_t nameLength = strlen(nameBuffer);
+    if (nameLength > 4 && strcmp(nameBuffer + nameLength - 4, ".bak") == 0) {
+      const std::string backup = std::string(dirPath) + "/" + nameBuffer;
+      nameBuffer[nameLength - 4] = '\0';
+      bool recognized = parseFilename(nameBuffer, size, style);
+#if CROSSPOINT_VECTOR_FONTS
+      size_t baseLength = 0;
+      recognized = recognized || parseVectorFontName(nameBuffer, baseLength);
+#endif
+      if (!recognized) continue;
+      const std::string destination = std::string(dirPath) + "/" + nameBuffer;
+      if (Storage.exists(destination.c_str())) continue;
+      // Discovery owns recovery when an interrupted upload leaves only the installed font's backup.
+      if (!Storage.rename(backup.c_str(), destination.c_str())) {
+        LOG_ERR("SDREG", "Failed restoring font backup: %s", backup.c_str());
+        continue;
+      }
+    }
     if (parseFilename(nameBuffer, size, style)) {
       // .cpfont: reject duplicate (pointSize, style) — style is always 0 in v4,
       // so two files at the same size would silently shadow each other.
@@ -323,7 +345,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
     return;
   }
 
-  char nameBuffer[128];
+  char nameBuffer[FONT_SCAN_NAME_BYTES];
   while (true) {
     HalFile entry = root.openNextFile();
     if (!entry) break;
@@ -361,6 +383,19 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       entry.getName(nameBuffer, sizeof(nameBuffer));
       entry.close();
       if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
+      const size_t nameLength = strlen(nameBuffer);
+      if (nameLength > 4 && strcmp(nameBuffer + nameLength - 4, ".bak") == 0) {
+        const std::string backup = std::string(rootPath) + "/" + nameBuffer;
+        nameBuffer[nameLength - 4] = '\0';
+        size_t baseLength = 0;
+        if (!parseVectorFontName(nameBuffer, baseLength)) continue;
+        const std::string destination = std::string(rootPath) + "/" + nameBuffer;
+        if (Storage.exists(destination.c_str())) continue;
+        if (!Storage.rename(backup.c_str(), destination.c_str())) {
+          LOG_ERR("SDREG", "Failed restoring font backup: %s", backup.c_str());
+          continue;
+        }
+      }
       size_t baseLen = 0;
       if (!parseVectorFontName(nameBuffer, baseLen)) continue;
 
