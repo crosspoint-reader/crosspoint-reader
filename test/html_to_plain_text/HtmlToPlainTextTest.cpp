@@ -4,10 +4,20 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <utility>
 
 #include "HtmlToPlainText.h"
 
 namespace {
+
+TEST(HtmlToPlainText, ReusesOwnedBufferForLargeFallback) {
+  const std::string text(60 * 1024, 'a');
+  std::string html = "<p>" + text + "</p>";
+  const char* buffer = html.data();
+  const auto output = htmlToPlainText(std::move(html));
+  EXPECT_EQ(output, text);
+  EXPECT_EQ(output.data(), buffer);
+}
 
 TEST(HtmlToPlainText, StripsTagsAndKeepsText) {
   EXPECT_EQ(htmlToPlainText("<b>quixotic</b> <i>adj.</i>"), "quixotic adj.");
