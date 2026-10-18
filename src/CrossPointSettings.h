@@ -99,6 +99,15 @@ class CrossPointSettings {
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { BOOKERLY = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
+  // Publisher Fonts: what of a book's embedded fonts the reader uses. Off and Body Text keep Stage A's stored 0/1;
+  // the mode names follow crosspoint-reader PR #3934 (Justin Mitchell).
+  enum PUBLISHER_FONTS {
+    PUBLISHER_FONTS_OFF = 0,      // nothing from the book
+    PUBLISHER_FONTS_BODY = 1,     // its body family as the book's font
+    PUBLISHER_FONTS_ACCENTS = 2,  // the reader's font for the body, the book's other families where it uses them
+    PUBLISHER_FONTS_ALL = 3,      // Body Text and Accents
+    PUBLISHER_FONTS_COUNT
+  };
   // Font size options, in ASCENDING PIXEL ORDER, which is also the order the settings UI shows
   // them in -- a row's option index IS its stored value everywhere (device selector, web API,
   // settings JSON), so the two cannot be allowed to disagree.
@@ -523,9 +532,9 @@ class CrossPointSettings {
   uint8_t frontlightRestoreOnWake = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
-  // Publisher Fonts: 0 = off, 1 = a book with an embedded TrueType body font is drawn in it (BookFonts). Off by
-  // default: opening such a book installs its family into the single glyph store, and so does the next book.
-  uint8_t publisherFonts = 0;
+  // Publisher Fonts (PUBLISHER_FONTS; BookFonts). Off by default: opening a book in its own font installs its family
+  // into the single glyph store, and so does the next book.
+  uint8_t publisherFonts = PUBLISHER_FONTS_OFF;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Show file extensions in the file browser (0 = hidden, 1 = show)

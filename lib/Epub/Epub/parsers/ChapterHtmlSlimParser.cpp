@@ -589,13 +589,16 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveSub = false;
   effectiveSmallCaps = false;
   effectiveInlineMarginLeft = 0;
+  effectiveFontFamily_ = 0;
   // Inline font-size composes multiplicatively through the stack (em is relative to
   // the parent element); the block's own font-size lives in BlockStyle, so 100 here
   // means "the block size". Tracked in integer percent to match the per-word channel.
   int sizePct = 100;
   // A body-relative size (rem, px, pt) starts over from the body: it is put relative to the
   // block's own size rather than multiplied in, so nested rem or px spans do not compound. A
-  // resolved block keeps only its residual over a ladder font; scaleOf gives the full size back.
+  // resolved block keeps only its residual over a ladder font; scaleOf gives the full size back. (Not over a face
+  // of the book's other families: a block is resolved before its words are laid out, so only a block long enough
+  // to be laid out in parts sees one, and a rem span in it is sized as in a body-size block.)
   // A block whose own size is body-relative ignores the sizes of the elements it sits in, too.
   int blockPct = 100;
   if (currentTextBlock) {
@@ -633,6 +636,7 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasMarginLeft) {
       effectiveInlineMarginLeft = entry.marginLeftPx;
     }
+    if (entry.hasFontFamily) effectiveFontFamily_ = entry.fontFamily;
     if (entry.hasFontSize && entry.depth >= blockSizeFromDepth) {
       sizePct = entry.fontSizeFromRoot ? (entry.fontSizePct * 100 + blockPct / 2) / blockPct
                                        : sizePct * entry.fontSizePct / 100;
@@ -705,14 +709,39 @@ void ChapterHtmlSlimParser::applyCssEmphasisToEntry(StyleStackEntry& entry, cons
 // CSS. Based on crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin), whose
 // pushBlockTextStyleEntry does the same for every block.
 void ChapterHtmlSlimParser::pushBlockStyleEntry(const CssStyle& cssStyle) {
-  if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
-      !cssStyle.hasSmallCaps()) {
-    return;
-  }
   StyleStackEntry entry;
   entry.depth = depth;
+  if (!applyCssFontFamilyToEntry(entry, cssStyle) && !cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() &&
+      !cssStyle.hasTextDecoration() && !cssStyle.hasSmallCaps()) {
+    return;
+  }
   applyCssEmphasisToEntry(entry, cssStyle);
   inlineStyleStack.push_back(entry);
+}
+
+bool ChapterHtmlSlimParser::applyCssFontFamilyToEntry(StyleStackEntry& entry, const CssStyle& cssStyle) const {
+  if (fontFamilies_.count == 0 || !cssStyle.defined.fontFamily) return false;
+  entry.hasFontFamily = true;
+  entry.fontFamily = cssStyle.fontFamily;
+  return true;
+}
+
+void ChapterHtmlSlimParser::noteWordFamily() {
+  if (blockFamilyState_ == 0) {
+    blockFirstFamily_ = effectiveFontFamily_;
+    // The family of the element that opened the block: the innermost one at its depth or above. Text after a
+    // block closed, owned by no element, is its own words'.
+    blockOwnFamily_ = effectiveFontFamily_;
+    if (currentBlockOwnerDepth_ >= 0) {
+      blockOwnFamily_ = 0;
+      for (const StyleStackEntry& entry : inlineStyleStack) {
+        if (entry.hasFontFamily && entry.depth <= currentBlockOwnerDepth_) blockOwnFamily_ = entry.fontFamily;
+      }
+    }
+    blockFamilyState_ = 1;
+  } else if (effectiveFontFamily_ != blockFirstFamily_) {
+    blockFamilyState_ = 2;
+  }
 }
 
 void ChapterHtmlSlimParser::applySupSubDefaultSize(StyleStackEntry& entry) {
@@ -1147,6 +1176,7 @@ bool ChapterHtmlSlimParser::flushPartWordBuffer() {
     if (pendingInlineImage_.active && currentTextBlock->isEmpty()) {
       attachPendingFloatImage(currentTextBlock->getBlockStyle());
     }
+    if (fontFamilies_.count != 0) noteWordFamily();
     currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, effectiveSizePct,
                               partWordVisibleOffset_);
 
@@ -1829,6 +1859,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 
     if (!currentTextBlock->isEmpty()) makePages();
   }
+  blockFamilyState_ = 0;  // the next block's words start over
   applyPendingPageBreak();
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
@@ -3247,9 +3278,11 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     // for their font properties. Their margin-left is an inset (blockInsetStack_), not a per-line
     // indent: taken as one it overwrote the text-indent of the paragraph still open before them.
     const bool spanIndent = cssStyle.hasMarginLeft() && !matches(name, INSET_CONTAINER_TAGS, NUM_INSET_CONTAINER_TAGS);
-    if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
-        cssStyle.hasVerticalAlign() || cssStyle.hasSmallCaps() || spanIndent || cssStyle.hasFontSizeMultiplier() ||
-        isSmallTag || isBigTag) {
+    StyleStackEntry entry;
+    entry.depth = self->depth;  // Track depth for matching pop
+    if (self->applyCssFontFamilyToEntry(entry, cssStyle) || cssStyle.hasFontWeight() || cssStyle.hasFontStyle() ||
+        cssStyle.hasTextDecoration() || cssStyle.hasVerticalAlign() || cssStyle.hasSmallCaps() || spanIndent ||
+        cssStyle.hasFontSizeMultiplier() || isSmallTag || isBigTag) {
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         const bool endsAtDashBreak = bufferEndsWithBreakableDash(self->partWordBuffer, self->partWordBufferIndex);
@@ -3258,8 +3291,6 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
           self->nextWordContinues = true;
         }
       }
-      StyleStackEntry entry;
-      entry.depth = self->depth;  // Track depth for matching pop
       applyCssEmphasisToEntry(entry, cssStyle);
       applyVerticalAlignToEntry(entry, cssStyle);
       if (spanIndent) {
@@ -4274,7 +4305,17 @@ bool ChapterHtmlSlimParser::finalize() {
 void ChapterHtmlSlimParser::resolveBlockFont(BlockStyle& bs) {
   if (bs.fontResolved) return;
   bs.fontResolved = true;
-  if (bs.headingFontId != 0 || bs.fontSizeMultiplier == 1.0f) return;
+  if (bs.headingFontId != 0) return;
+  // A block in another of the book's families: that family's face at the block's size, at its body size included.
+  if (const BlockFontFamilies::Family* family =
+          blockFamilyState_ == 0 ? nullptr
+                                 : fontFamilies_.find(blockFamilyState_ == 1 ? blockFirstFamily_ : blockOwnFamily_)) {
+    const FontSizeLadder::Resolved r = family->ladder.resolve(bs.fontSizeMultiplier * 100.0f);
+    bs.headingFontId = r.fontId != 0 ? r.fontId : family->bodyFontId;
+    bs.fontSizeMultiplier = r.residual;
+    return;
+  }
+  if (bs.fontSizeMultiplier == 1.0f) return;
   const FontSizeLadder::Resolved r = fontSizeLadder_.resolve(bs.fontSizeMultiplier * 100.0f);
   if (r.fontId == 0) {
     // Nearest rung is the body font (or the ladder is empty, e.g. SD fonts):

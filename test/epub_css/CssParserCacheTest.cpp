@@ -1022,9 +1022,12 @@ TEST(CssParserBackground, ABookWithoutPicturesLeavesNoSideFile) {
 TEST(CssParserFonts, FontFamilyIsTheFirstFamilyHashedAndSurvivesTheCache) {
   const std::string css =
       ".end { font-family: \"KubisHandscript\", serif; text-align: center }\n"
-      ".plain { font-family: serif }\n"  // generic: the reader's font
+      ".plain { font-family: serif }\n"  // generic: the reader's font, or the built-in serif
       ".spaced { font-family:  'EB   Garamond' , Georgia }\n"
-      ".only { font-family: Garamond }\n";  // a rule with nothing else is kept
+      ".only { font-family: Garamond }\n"  // a rule with nothing else is kept
+      ".sans { font-family: 'Gill Sans', Helvetica, sans-serif, serif }\n"
+      ".mono { font-family: Courier, monospace, serif }\n"  // the list's first generic has its say
+      ".keyword { font-family: inherit }\n";
   std::string cssPath;
   ASSERT_TRUE(writeTempCssFile(std::vector<uint8_t>(css.begin(), css.end()), cssPath));
   const std::string cacheDir = makeTempDir();
@@ -1034,15 +1037,21 @@ TEST(CssParserFonts, FontFamilyIsTheFirstFamilyHashedAndSurvivesTheCache) {
 
   const CssStyle end = parser.resolveStyle("p", "end");
   ASSERT_TRUE(end.defined.fontFamily);
-  EXPECT_EQ(CssParser::fontFamilyHash("kubishandscript"), end.fontFamily);
+  EXPECT_EQ(CssParser::fontFamilyHash("kubishandscript") | CssFontFamily::kSerif, end.fontFamily);
   EXPECT_EQ(CssTextAlign::Center, end.textAlign);
   const CssStyle plain = parser.resolveStyle("p", "plain");
   ASSERT_TRUE(plain.defined.fontFamily);
-  EXPECT_EQ(0u, plain.fontFamily);
+  EXPECT_EQ(CssFontFamily::kSerif, plain.fontFamily);
+  EXPECT_EQ(0u, CssFontFamily::identity(plain.fontFamily));
   EXPECT_EQ(CssParser::fontFamilyHash("eb garamond"), parser.resolveStyle("p", "spaced").fontFamily);
   EXPECT_EQ(CssParser::fontFamilyHash("Garamond"), parser.resolveStyle("p", "only").fontFamily);
+  EXPECT_EQ(CssParser::fontFamilyHash("gill sans") | CssFontFamily::kSansSerif,
+            parser.resolveStyle("p", "sans").fontFamily);
+  EXPECT_EQ(CssParser::fontFamilyHash("courier"), parser.resolveStyle("p", "mono").fontFamily);
+  EXPECT_EQ(0u, parser.resolveStyle("p", "keyword").fontFamily);
   EXPECT_FALSE(parser.resolveStyle("p", "").defined.fontFamily);
   EXPECT_NE(0u, CssParser::fontFamilyHash(""));  // never 0, which means the reader's font
+  EXPECT_EQ(0u, CssParser::fontFamilyHash("Garamond") & CssFontFamily::kGenericMask);  // the generic's bits
 
   // Inline styles take the same path.
   EXPECT_EQ(CssParser::fontFamilyHash("Garamond"), CssParser::parseInlineStyle("font-family: GARAMOND").fontFamily);

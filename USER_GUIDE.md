@@ -395,7 +395,13 @@ Moving within a tab follows **[Moving through lists](#moving-through-lists)**.
 - **Large Image Placeholder**: Whether to substitute an explicit placeholder for images that are too large to display inline. "ON" / "OFF"
 
 - **Embedded Style**: Use the EPUB's own HTML/CSS styling. "ON" (default) / "OFF"
-- **Publisher Fonts**: "ON" / "OFF" (default). When on, a book that embeds its body font as TrueType is read in that font instead of yours; the font is copied out of the book on its first open (the "Indexing" popup). Books whose fonts are OpenType CFF (`.otf`), WOFF or WOFF2, or encrypted, keep your font, and so does a book you give a font of its own in the reader menu's Font Family. Needs **Embedded Style** on. The reader holds one TrueType family at a time, so moving between two such books, or back to a TrueType font of yours, installs the font again (a few seconds).
+- **Publisher Fonts**: what of a book's own fonts the reader uses. Needs **Embedded Style** on; a book you give a font of its own in the reader menu's Font Family keeps it. The fonts are copied out of the book on its first open (the "Indexing" popup); fonts that are OpenType CFF (`.otf`), WOFF or WOFF2, or encrypted, are not used.
+  - **Off** (default): your font for everything.
+  - **Body Text**: a book that embeds its body font as TrueType is read in that font instead of yours.
+  - **Accents**: your font for the body text, and the book's other fonts where it uses them: a heading, a dedication or a quotation set in a font of its own is drawn in it. The book's most-used such font is the one drawn, and only while your font is a built-in one (Bookerly, Noto Sans); with a font of yours from the card, and for the book's other fonts, a block in them takes the kind of font the book names after it: Noto Sans for sans-serif, Bookerly for serif. A block in plain `serif` or `sans-serif` gets that built-in font too, unless the body text is in that kind already; `monospace` stays your font.
+  - **All Text**: Body Text and Accents together. For now the book's body font is the only one of its own fonts drawn; its other fonts are drawn as Accents draws them beside a font of yours from the card.
+
+  The reader holds one TrueType family at a time, so moving between two books in fonts of their own, or back to a TrueType font of yours, installs the font again (a few seconds).
 - **Hyphenation**: Automatic hyphenation while reading. "ON" / "OFF"
 - **Bionic Reading**: Bold the first half of each word to guide the eye. "ON" / "OFF"
 - **Guide Dots**: Draw a small dot centered in the space between words to guide the eye along the line (idea borrowed from [CrossInk](https://github.com/uxjulia/CrossInk)). "ON" / "OFF"

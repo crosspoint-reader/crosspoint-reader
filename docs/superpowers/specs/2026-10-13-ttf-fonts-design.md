@@ -1067,7 +1067,7 @@ with one font ID (per-word data carries only the style bits).
     fragment; `OpenType.h`'s header names two users, now three; `run.sh` keeps a stale "GSUB feature branch"
     comment; the SDK's `GposKerningTest.cpp` has a few clang-format deviations.
 
-### 11.1 Stage B: more than one font family per book (design, not built)
+### 11.1 Stage B: more than one font family per book (designed; phase 1 built, 11.1.1)
 
 What #3934 calls "Ignore Body Font", and what most books with embedded fonts actually use them for: the body in
 one family, and a few elements set apart in others (a display face for headings and chapter numbers, a script
@@ -1136,6 +1136,91 @@ set and shared scratch 2-3 days; per-word slots 2 days; extraction of several fa
 days; device validation on the X3 and X4 2-3 days. About three weeks in all, and an estimated 8-12 KB of flash on
 top of Stage A's, which the C3's 96.8 % has to find room for (the 20 pt built-in faces' 505 KB, section 12, are the
 obvious source).
+
+**Stage B is delivered in three phases**, each its own PR: (1) per-block families, generic families on the built-in
+faces, the four modes, and one accent family beside a built-in reader font (no store or section format change); (2)
+the multi-family store and the manager's family set; (3) per-word font slots, and several families extracted.
+
+#### 11.1.1 Phase 1, as built (2026-10-18, branch `feat/book-fonts-stage-b`)
+
+- **CSS (`CSS_CACHE_VERSION` 29):** `CssStyle::fontFamily` keeps the list's first family as an identity
+  (`fontFamilyHash`, whose low two bits are now always 0) and, in those two bits, the list's first generic serif (1)
+  or sans-serif (2) (`CssFontFamily`). `font-family: Gill Sans, Helvetica, sans-serif` is "Gill Sans, else
+  sans-serif"; `serif` alone is identity 0 with the serif bit. Monospace, cursive, fantasy and the keywords stay 0,
+  the reader's font.
+- **The probe (`BookFonts::detectFamilies`, `kVersion` 4):** families compare by identity, so Stage A's body family is
+  unchanged (its goldens and tests pass as they were); the body's value keeps the generic most of its text names. The
+  same pass counts blocks (p, div, li, dd, blockquote, pre, h1-h6) by family: a block's text's family when all of it
+  is in one, else its own. The accent family is the embedded family the most blocks are set in, other than the body's,
+  that has a regular face; it is copied like the body family, to `fonts/accent/<style>.ttf`. A book without
+  `@font-face` rules is probed too (its body's generic matters), once, behind the open's popup. `fonts.bin` holds the
+  body's font-family, the accent identity and both names (docs/file-formats.md).
+- **Layout (`BlockFontFamilies`, `ChapterHtmlSlimParser::resolveBlockFont`):** the reader hands the build a table of
+  at most two families: key (an identity or a generic), the family's face at the body size, and its sizes (built-in
+  rungs relative to the body size, or a TTF family's native window). The parser keeps font-family on its style stack
+  while the table has a family, tracks each block's words (all in one family, or several) and resolves the block to
+  its words' family, else to the family of the element that opened it. That family's face at the block's size becomes
+  the block font ID (`headingFontId`), body size included, outside the one-auxiliary-face budget. A block in the body
+  family, in monospace, or in a family neither in the table nor naming a generic it has, keeps the body font. The
+  table rides `Section::BuildParams` by pointer: by value it made every frame that copies the params larger than the
+  compressed instructions reach, about 600 B of flash. It joins the property hash only when it has a family and the
+  book's style is in use, so Off and Body Text keep their variants and their layout (every golden unchanged). No
+  section format change.
+- **Modes (`publisherFonts`, `CrossPointSettings::PUBLISHER_FONTS`):** Off 0, Body Text 1 (Stage A), Accents 2, All
+  Text 3, the labels in 24 languages. `SdCardFontSystem::selectBookFamily(cachePath, mode, accentAllowed)` picks the
+  book family: the body family in Body Text and All Text, else the accent family in Accents and All Text when the
+  reader's font is built in (`accentAllowed`). The reader (`buildBookFontFamilies`) maps serif to Bookerly and
+  sans-serif to Noto Sans at the body's size through the rung APIs, unless the body is in that built-in family or
+  names that generic, and adds the accent family with its native sizes when it is loaded.
+- **What waits for phase 2:** two TrueType families at once. Beside a reader font on the card (Accents; a TTF or a `.cpfont` family: they share the font area), or beside the book's
+  TTF body (All Text), the accent family is not loaded ("Accent font ... left out" in the log), and a block in it
+  takes the generic its CSS names, as a browser does when a font fails to load. So All Text is, for now, Body Text
+  plus the generic mapping.
+- **Cost, `env:default` (C3):** flash +3,572 B against the Stage A head 652ff0c6e (CSS and probe +1,030, layout +710,
+  reader and modes +1,832, of which the labels about 0.5 KB); +3,606 B (5,834,207 B) against master c6b3ecf33 after
+  the rebase (#498 dropped the 20 pt faces). Static RAM +24 B. No MMU page boundary crossed against either base. Heap:
+  the parser's table copy (about 190 B) during a build; the probe's tables during `prepare` grow from 0.7 to about
+  1.3 KB.
+- **X4 test (2026-10-18, serial test API, reader font Bookerly 14 pt):** `/test/families_test.epub` (the corpus book
+  with Ubuntu as Book Body, Inter as Book Display, Noto Sans as Book Script) in each mode. Off: all Bookerly. Body
+  Text: all Ubuntu (`font=book:Book Body`), as Stage A. Accents: body Bookerly; the chapter title, dedication, the
+  paragraph that is one span, the blockquote and the heading set in a span in Inter (`book:Book Display (accents)`,
+  installed in about 5 s); the generic sans-serif heading and the Helvetica paragraph in Noto Sans; the mixed
+  paragraph, `pre`, Georgia and Book Script in Bookerly. All Text: body Ubuntu; Book Display blocks on Noto Sans
+  through their sans-serif fallback; the span heading (Book Display without a fallback) in Ubuntu. Accents with
+  Bitter (`.cpfont`) as the reader font: "Accent font Book Display left out", Book Display blocks and the sans heading
+  in Noto Sans, the body in Bitter. All as the goldens say. Heap in the book: Off 68.5-69.5 KB free, Body Text
+  56 KB (largest block 23.5-36.9 KB), Accents with the accent family loaded 53-55 KB (27.6-36.9 KB); at Home after
+  each mode 76.4-76.6 KB, unchanged across the switches (master, same book: 70.5 KB in it, 77.2 KB at Home). Found
+  on the way: the repository's Inter-Bold.ttf has no bold bit in `head.macStyle` (its weight, 700, is only in OS/2),
+  so the registry filed it as a second regular and the accent family installed one style: its headings drew regular.
+  A book font with the same flaw lost its bold the same way. Fixed on the branch: `ttf::assignStyles` lets a file of
+  weight 600 or more that declares regular (italic) serve bold (bold italic), unless it serves its own style.
+- **Tests:** `FontFamilyLayoutTest`, the `BookFontsTest` accent cases, the generic cases of
+  `CssParserFonts`, and the corpus book `test_font_families.epub` (generator `test/epubs/make_test_font_families.py`,
+  which with `--fonts` also writes the device copy with Ubuntu, Inter and Noto Sans faces) with goldens for the
+  default (Off, Body Text), `_accents` and `_alltext`.
+
+**For phase 2, from what phase 1's code showed:**
+- `SdCardFontManager` assumes one TTF family throughout: one `TtfFont`, one native window (`ttfNativeBase_`), one
+  `loadedFamilyName_`, and `getFontId(name, pt)`, `ttfNativeSizes(id)` and `setTtfBodySize` answer for it alone. A
+  family set needs a window per family (`pickNativeBase` per identity, already salted against collisions), the resolver
+  dispatching on the window an ID falls in, and a body face per family. `resolveSdCardFontId(name, pt)` can stay as is:
+  the reader asks by name.
+- `SdCardFontSystem` keeps one `bookFamily_` with a role (body or accent); phase 2 needs both at once, and
+  `ensureLoaded` a list of families to load. `buildBookFontFamilies` then adds the accent entry beside a TTF body or
+  reader font unchanged; `BlockFontFamilies::kMaxFamilies` goes from 2 to 3 (both generics and the accent beside a TTF
+  reader font). Keep it a pointer in `BuildParams`.
+- A `.cpfont` reader font occupies the same font area (`FlashFontPartition`, 4.1), so a store of several TTF
+  families does not by itself put an accent family beside it: that needs the `.cpfont` read from SD while the store
+  holds the accent, or the accent in SD mode (2c-4). Phase 1 leaves the accent out beside any font on the card.
+- Phase 3 (per word): the parser already knows each word's family (`effectiveFontFamily_`, `noteWordFamily`), so a
+  per-word slot is `BlockFontFamilies::find` per word into #3934's per-block table; and the probe's block tally holds
+  every family, so a second accent family is a change to `accent()` alone.
+- **A Stage A edge, not fixed here:** a book family is keyed by its declared name (`book:<name>`). Two books whose
+  families share a name, opened reader to reader without the font being unloaded in between, keep the first book's
+  TTF family: `SdCardFontSystem::ensureLoaded` matches the loaded family by name and only changes its size. Key book
+  families by book (cache path or identity) when the manager learns several families.
 
 ## 12. Side findings (separate from this work)
 

@@ -805,11 +805,9 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
   const uint8_t effectiveSize =
       (book.fontSizeOverride >= 0) ? static_cast<uint8_t>(book.fontSizeOverride) : SETTINGS.fontPointSize;
 
-  // Publisher Fonts: the book's embedded body family, when BookFonts found one. Not examined yet: what is loaded
-  // stays, until the reader has examined the book and asks again.
+  // Publisher Fonts: not examined yet, what is loaded stays, until the reader has examined the book and asks again.
   const std::string cachePath = publisherFontsCache(path, book);
   if (waitForBookFonts && !cachePath.empty() && BookFonts::read(cachePath) == BookFonts::State::Pending) return;
-  const bool bookFamily = sdFontSystem.selectBookFamily(cachePath);
 
   // No family override: the global SD font (if any), at the effective size.
   const char* family = SETTINGS.sdFontFamilyName;
@@ -817,8 +815,10 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
     family = book.sdFontFamilyOverride.c_str();  // per-book SD font override
   } else if (book.fontFamilyOverride >= 0) {
     family = "";  // per-book built-in font override: no SD font needed; unload if one was active
-  } else if (bookFamily) {
-    family = sdFontSystem.bookFamilyName();
+  }
+  // A family BookFonts copied out of the book: its body family, or its accent family beside a built-in reader font.
+  if (sdFontSystem.selectBookFamily(cachePath, SETTINGS.publisherFonts, family[0] == '\0')) {
+    family = sdFontSystem.selectedFamilyName();
   }
   sdFontSystem.ensureLoaded(renderer, family, effectiveSize, onColdFontLoad);
 }

@@ -451,18 +451,25 @@ bool nextDeclaration(std::string_view& rest, std::string_view& name, std::string
   return false;
 }
 
-// The first family of a font-family list (normalized text), hashed; 0 for a generic family or a
-// keyword, which leave the text in the reader's font.
-// Ported from crosspoint-reader PR #3934 (Justin Mitchell, @itsthisjustin).
-uint32_t firstFontFamily(const std::string_view value) {
-  const std::string_view name = unquoteCss(value.substr(0, value.find(',')));
+// A font-family list (normalized text) as CssStyle::fontFamily keeps it: the first family hashed, 0 when it is a
+// generic family or a keyword, which leave the text in the reader's font; with the list's first generic serif or
+// sans-serif in the low bits (CssFontFamily). Ported from crosspoint-reader PR #3934 (Justin Mitchell,
+// @itsthisjustin); the generic fallback is ours.
+uint32_t firstFontFamily(std::string_view value) {
   constexpr std::string_view GENERIC[] = {"serif",   "sans-serif", "monospace", "cursive",  "fantasy",
                                           "inherit", "initial",    "unset",     "system-ui"};
-  if (name.empty()) return 0;
-  for (const std::string_view generic : GENERIC) {
-    if (name == generic) return 0;
+  constexpr size_t kNotGeneric = sizeof(GENERIC) / sizeof(GENERIC[0]);
+  uint32_t identity = 0;
+  for (bool first = true;; first = false) {
+    const size_t comma = value.find(',');
+    const std::string_view name = unquoteCss(value.substr(0, comma));
+    size_t generic = 0;
+    while (generic < kNotGeneric && name != GENERIC[generic]) ++generic;
+    if (generic < 2) return identity | static_cast<uint32_t>(generic + 1);  // CssFontFamily::kSerif, kSansSerif
+    if (first && generic == kNotGeneric && !name.empty()) identity = CssParser::fontFamilyHash(name);
+    if (generic < kNotGeneric || comma == std::string_view::npos) return identity;
+    value.remove_prefix(comma + 1);
   }
-  return CssParser::fontFamilyHash(name);
 }
 
 }  // anonymous namespace
@@ -2822,7 +2829,8 @@ uint32_t CssParser::fontFamilyHash(const std::string_view name) {
     }
     h = (h ^ static_cast<uint8_t>(std::tolower(static_cast<unsigned char>(c)))) * 16777619u;
   }
-  return h != 0 ? h : 1;
+  h = CssFontFamily::identity(h);  // the low bits carry a generic family (CssFontFamily)
+  return h != 0 ? h : CssFontFamily::kGenericMask + 1;
 }
 
 void CssParser::parseFontFace(const std::string_view declarations) {

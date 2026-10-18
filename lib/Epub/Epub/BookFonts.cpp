@@ -25,6 +25,7 @@ namespace BookFonts {
 namespace {
 
 constexpr char kFontsDir[] = "/fonts";
+constexpr char kAccentDir[] = "/fonts/accent";
 constexpr char kStateFile[] = "/fonts.bin";  // beside fonts/, which prepare() empties
 // The state file: kVersion, then a code -- None, Family (then the name, to the end of the file), or kFailed + n
 // for n failed attempts so far. At kMaxAttempts the book is given up on, as None.
@@ -48,6 +49,10 @@ constexpr size_t kAdobeBytes = 1024;
 // family first (this parser merges a book's sheets, and a marketing page's `body` rule then names a family no
 // chapter uses) and centred or right-aligned text passed over. Headings, tables and hidden text left out
 // changed one book.
+//
+// The same pass counts the blocks each family is set in, for the accent family: what #3934 (Justin Mitchell) draws
+// in its "Ignore Body Font" mode, the book's families other than the body's, here one family by blocks, as the
+// reader lays a block out in one family (ChapterHtmlSlimParser::resolveBlockFont).
 class BodyFontProbe {
  public:
   explicit BodyFontProbe(CssParser& css) : css_(css) {}
@@ -63,11 +68,39 @@ class BodyFontProbe {
     for (const Usage& u : usage_) total += u.bytes;
     return total;
   }
-  // The family with the most text; 0 (the reader's font) without any.
+  // The family with the most text (by identity: a family named with and without a generic fallback is one), with
+  // the generic fallback most of that text names; 0 (the reader's font) without any.
   uint32_t family() const {
-    return std::max_element(usage_.begin(), usage_.end(),
-                            [](const Usage& a, const Usage& b) { return a.bytes < b.bytes; })
-        ->family;
+    const Usage* best = &usage_[0];
+    uint32_t bestBytes = 0;
+    for (const Usage& u : usage_) {
+      const uint32_t identity = CssFontFamily::identity(u.family);
+      uint32_t bytes = 0;
+      for (const Usage& v : usage_) {
+        if (CssFontFamily::identity(v.family) == identity) bytes += v.bytes;
+      }
+      if (bytes > bestBytes ||
+          (bytes == bestBytes && identity == CssFontFamily::identity(best->family) && u.bytes > best->bytes)) {
+        best = &u;
+        bestBytes = bytes;
+      }
+    }
+    return best->family;
+  }
+  // The accent family (Publisher Fonts' Accents): of the families blocks are set in, other than `body`'s and the
+  // reader's, the one the most blocks are set in that `usable` takes; its identity, or 0 for none.
+  template <typename Usable>
+  uint32_t accent(const uint32_t body, Usable usable) const {
+    uint32_t best = 0;
+    uint32_t bestBlocks = 0;
+    for (const Usage& u : blocks_) {
+      if (u.bytes <= bestBlocks || u.family == 0 || u.family == CssFontFamily::identity(body) || !usable(u.family)) {
+        continue;
+      }
+      best = u.family;
+      bestBlocks = u.bytes;
+    }
+    return best;
   }
 
   static void onStart(void* ctx, const char* name, const char** atts) {
@@ -98,16 +131,28 @@ class BodyFontProbe {
       frame.take(CssParser::parseInlineStyle(self.inline_));
     }
     frame.inBody = frame.inBody || strcasecmp(name, "body") == 0;
-    if (strcasecmp(name, "p") == 0 || strcasecmp(name, "div") == 0 || strcasecmp(name, "li") == 0 ||
-        strcasecmp(name, "dd") == 0) {
+    const bool paragraph = strcasecmp(name, "p") == 0 || strcasecmp(name, "div") == 0 || strcasecmp(name, "li") == 0 ||
+                           strcasecmp(name, "dd") == 0;
+    if (paragraph) {
       frame.paragraphFamily = frame.family;
       frame.inParagraph = true;
+    }
+    // A block, which the reader lays out in one family: its text's when all of it is in one, else its own.
+    if (paragraph || strcasecmp(name, "blockquote") == 0 || strcasecmp(name, "pre") == 0 ||
+        ((name[0] | 0x20) == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0')) {
+      frame.block = static_cast<int8_t>(index);
+      frame.textState = 0;
     }
   }
 
   static void onEnd(void* ctx, const char*) {
     auto& self = *static_cast<BodyFontProbe*>(ctx);
-    if (self.depth_ > 0) --self.depth_;
+    if (self.depth_ == 0) return;
+    const size_t index = --self.depth_;
+    if (index >= kMaxDepth) return;
+    const Frame& frame = self.frames_[index];
+    if (frame.block != static_cast<int8_t>(index) || frame.textState == 0) return;
+    count(self.blocks_, CssFontFamily::identity(frame.textState == 1 ? frame.textFamily : frame.family), 1);
   }
 
   static void onText(void* ctx, const char* text, const int len) {
@@ -116,13 +161,14 @@ class BodyFontProbe {
     const Frame& frame = self.frames_[self.depth_ - 1];
     const auto bytes = static_cast<uint32_t>(VisibleText::visibleBytes(text, len));
     if (!frame.inBody || bytes == 0) return;
-    const uint32_t family = frame.inParagraph ? frame.paragraphFamily : frame.family;
-    for (Usage& u : self.usage_) {
-      if (u.bytes == 0 || u.family == family) {
-        u.family = family;
-        u.bytes += bytes;
-        return;
-      }
+    count(self.usage_, frame.inParagraph ? frame.paragraphFamily : frame.family, bytes);
+    if (frame.block < 0) return;
+    Frame& block = self.frames_[frame.block];
+    if (block.textState == 0) {
+      block.textFamily = frame.family;
+      block.textState = 1;
+    } else if (block.textFamily != frame.family) {
+      block.textState = 2;
     }
   }
 
@@ -134,20 +180,36 @@ class BodyFontProbe {
 
  private:
   static constexpr size_t kMaxDepth = 24;
-  static constexpr size_t kMaxFamilies = CssParser::MAX_FONT_FACES + 1;  // every face's family, and none
+  // Every face's family, and none; a family named with and without a generic fallback counts twice.
+  static constexpr size_t kMaxFamilies = CssParser::MAX_FONT_FACES + 4;
   struct Frame {
     uint32_t family = 0;           // font-family in effect, inherited
     uint32_t paragraphFamily = 0;  // the family of the paragraph the element is in
+    uint32_t textFamily = 0;       // a block's: the family of its text so far
     bool inBody = false;
     bool inParagraph = false;
+    int8_t block = -1;      // the frame of the block the element is in
+    uint8_t textState = 0;  // a block's: 0 no text yet, 1 all of it in textFamily, 2 in several families
     void take(const CssStyle& style) {
       if (style.defined.fontFamily) family = style.fontFamily;
     }
   };
   struct Usage {
     uint32_t family = 0;
-    uint32_t bytes = 0;
+    uint32_t bytes = 0;  // or blocks
   };
+  using Usages = std::array<Usage, kMaxFamilies>;
+
+  // Adds `n` to `family`'s count; a family past the table's room is not counted.
+  static void count(Usages& usages, const uint32_t family, const uint32_t n) {
+    for (Usage& u : usages) {
+      if (u.bytes == 0 || u.family == family) {
+        u.family = family;
+        u.bytes += n;
+        return;
+      }
+    }
+  }
 
   // Past kProbeChapterBytes of the chapter: stops the parser.
   bool stopAtLimit() const {
@@ -159,7 +221,8 @@ class BodyFontProbe {
   CssParser& css_;
   SaxParser* parser_ = nullptr;
   std::array<Frame, kMaxDepth> frames_{};
-  std::array<Usage, kMaxFamilies> usage_{};
+  Usages usage_{};   // text bytes by family, an inline accent's counting for its paragraph's
+  Usages blocks_{};  // blocks by family identity
   size_t depth_ = 0;
   // resolveStyle()'s arguments, reused so an element costs no allocation once they have grown.
   std::string tag_, class_, id_, inline_;
@@ -297,21 +360,33 @@ void pickFaces(std::string_view records, const uint32_t family, CssParser::FontF
   }
 }
 
-// The state file's code, and for a Family its name; kNoCode when there is no file of this kVersion.
+// The state file's code, and a family's name (see read()); kNoCode when there is no file of this kVersion.
 constexpr uint8_t kNoCode = 0xFF;
-uint8_t readCode(const std::string& cachePath, std::string* name) {
+constexpr size_t kHeaderBytes = 2 + 2 * sizeof(uint32_t);  // version, code, the body and accent families
+uint8_t readCode(const std::string& cachePath, std::string* name, Families* families, const bool body) {
   const std::string path = cachePath + kStateFile;
   std::string bytes;
   // Checked first: an unexamined book has none, and a failed open logs.
-  if (!Storage.exists(path.c_str()) || !Storage.readFileToString("BKF", path, 2 + 255, bytes) || bytes.size() < 2 ||
-      bytes[0] != static_cast<char>(kVersion)) {
+  if (!Storage.exists(path.c_str()) || !Storage.readFileToString("BKF", path, kHeaderBytes + 2 * 255 + 1, bytes) ||
+      bytes.size() < kHeaderBytes || bytes[0] != static_cast<char>(kVersion)) {
     return kNoCode;
   }
   const auto code = static_cast<uint8_t>(bytes[1]);
-  if (code == kCodeFamily) {
-    if (bytes.size() == 2) return kNoCode;
-    bytes.erase(0, 2);
-    if (name) *name = std::move(bytes);
+  if (families) {
+    std::memcpy(&families->body, &bytes[2], sizeof(uint32_t));
+    std::memcpy(&families->accent, &bytes[2 + sizeof(uint32_t)], sizeof(uint32_t));
+  }
+  // The names: the body family's, then '\0' and the accent family's (c_str() ends either).
+  bytes.erase(0, kHeaderBytes);
+  size_t length = strlen(bytes.c_str());
+  if (code == kCodeFamily && length == 0) return kNoCode;
+  if (name) {
+    if (!body || code != kCodeFamily) {
+      bytes.erase(0, std::min(length + 1, bytes.size()));
+      length = strlen(bytes.c_str());
+    }
+    bytes.resize(length);
+    *name = std::move(bytes);
   }
   return code;
 }
@@ -322,9 +397,14 @@ State stateOf(const uint8_t code) {
   return State::Pending;
 }
 
-State writeState(const std::string& cachePath, const uint8_t code, const std::string_view name) {
-  std::string bytes{static_cast<char>(kVersion), static_cast<char>(code)};
-  if (code == kCodeFamily) bytes.append(name.data(), std::min<size_t>(name.size(), 255));
+State writeState(const std::string& cachePath, const uint8_t code, const uint32_t body, const uint32_t accent,
+                 const std::string_view names) {
+  std::string bytes(kHeaderBytes, '\0');
+  bytes[0] = static_cast<char>(kVersion);
+  bytes[1] = static_cast<char>(code);
+  std::memcpy(&bytes[2], &body, sizeof(body));
+  std::memcpy(&bytes[2 + sizeof(body)], &accent, sizeof(accent));
+  bytes.append(names);
   const std::string path = cachePath + kStateFile;
   HalFile file;
   if (!Storage.openFileForWrite("BKF", path, file)) return State::Pending;
@@ -336,38 +416,52 @@ State writeState(const std::string& cachePath, const uint8_t code, const std::st
   return stateOf(code);
 }
 
-// Finds the body family and copies its faces out of the book; the state file's code for what came of it
-// (kCodeFailed for a failed read), and for a Family `*name`, the name it declares (into `records`).
-uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, std::string_view& name) {
-  if (!CssParser::loadFontFaces(epub.getCachePath(), records)) return kCodeNone;
+// Finds the body and accent families and copies their faces out of the book; the state file's code for what came
+// of it (kCodeFailed for a failed read). `found` gets the families, `names` their names as the book declares them
+// (the body's for a Family, then '\0' and the accent's when it was copied), into `records`.
+uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, Families& found, std::string& names) {
+  // A book without faces is probed too: Accents needs its body's generic family (CssFontFamily).
+  if (!CssParser::loadFontFaces(epub.getCachePath(), records)) records.clear();
   bool failed = false;
-  const uint32_t body = detectBodyFamily(epub, scratch, &failed);
+  const Found families = detectFamilies(epub, scratch, &failed, records);
   if (failed) return kCodeFailed;
-  CssParser::FontFace picked[4];
-  pickFaces(records, body, picked);
-  if (picked[0].name.empty()) {
-    LOG_INF("BKF", "Body font not embedded");
-    return kCodeNone;
-  }
-
-  const std::string dir = familyDir(epub.getCachePath());
-  Storage.mkdir(dir.c_str());
-  std::string dest = dir + "/0.ttf";  // the style's digit goes in place of the 0
+  found.body = families.body;
   Keys keys;
-  for (uint8_t style = 0; style < 4; ++style) {
-    if (picked[style].name.empty()) continue;
-    dest[dest.size() - 5] = static_cast<char>('0' + style);
-    const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(std::string(picked[style].href)));
-    const Copy copy = copyFace(epub, href, dest, keys, scratch);
-    // A style refused falls back to regular; regular refused, the book keeps the reader's font.
-    if (copy == Copy::Failed || (style == 0 && copy == Copy::Refused)) {
-      Storage.removeDir(dir.c_str());
-      return copy == Copy::Failed ? kCodeFailed : kCodeNone;
+  uint8_t code = kCodeNone;
+  // The body family to fonts/, the accent family to fonts/accent/.
+  for (const bool accent : {false, true}) {
+    CssParser::FontFace picked[4];
+    pickFaces(records, accent ? families.accent : CssFontFamily::identity(families.body), picked);
+    if (picked[0].name.empty()) continue;  // not embedded, or no regular face
+    const std::string dir = familyDir(epub.getCachePath(), accent);
+    Storage.mkdir(dir.c_str());
+    std::string dest = dir + "/0.ttf";  // the style's digit goes in place of the 0
+    Copy copy = Copy::Done;
+    for (uint8_t style = 0; style < 4 && copy != Copy::Failed; ++style) {
+      if (picked[style].name.empty()) continue;
+      dest[dest.size() - 5] = static_cast<char>('0' + style);
+      const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(std::string(picked[style].href)));
+      copy = copyFace(epub, href, dest, keys, scratch);
+      // A style refused falls back to regular; regular refused, the family keeps the reader's font.
+      if (copy == Copy::Refused && style != 0) copy = Copy::Done;
+      if (copy == Copy::Refused) break;
     }
+    if (copy != Copy::Done) {
+      Storage.removeDir(dir.c_str());
+      if (copy == Copy::Failed) return kCodeFailed;
+      continue;
+    }
+    LOG_INF("BKF", "%s font %.*s", accent ? "Accent" : "Body", static_cast<int>(picked[0].name.size()),
+            picked[0].name.data());
+    if (accent) {
+      found.accent = families.accent;
+      names.push_back('\0');
+    } else {
+      code = kCodeFamily;
+    }
+    names.append(picked[0].name);
   }
-  name = picked[0].name;
-  LOG_INF("BKF", "Body font %.*s", static_cast<int>(name.size()), name.data());
-  return kCodeFamily;
+  return code;
 }
 
 int hexValue(const char c) {
@@ -408,20 +502,24 @@ bool adobeKey(const std::string_view uuid, uint8_t (&key)[16]) {
   return bytes == sizeof(key) && high < 0;
 }
 
-State read(const std::string& cachePath, std::string* name) { return stateOf(readCode(cachePath, name)); }
+State read(const std::string& cachePath, std::string* name, Families* families, const bool body) {
+  return stateOf(readCode(cachePath, name, families, body));
+}
 
-std::string familyDir(const std::string& cachePath) { return cachePath + kFontsDir; }
+std::string familyDir(const std::string& cachePath, const bool accent) {
+  return cachePath + (accent ? kAccentDir : kFontsDir);
+}
 
-uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed) {
+Found detectFamilies(const Epub& epub, BuildArena* scratch, bool* failed, const std::string_view records) {
   *failed = false;
   CssParser* css = epub.getCssParser();
-  if (!css) return 0;
-  // ~0.7 KB: the frames and the usage table. Not on the stack, which a section build shares.
+  if (!css) return {};
+  // ~1.3 KB: the frames and the two tables. Not on the stack, which a section build shares.
   auto probe = makeUniqueNoThrow<BodyFontProbe>(*css);
   if (!probe) {
     LOG_ERR("BKF", "OOM: probe");
     *failed = true;
-    return 0;
+    return {};
   }
   const ParserState state(scratch);
   css->resetResolveStats();
@@ -449,7 +547,15 @@ uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed) {
     *failed = true;
   }
   css->clearCaches(/*evictEverything=*/true);  // the resolver's caches go back to the heap
-  return probe->family();
+  Found found;
+  found.body = probe->family();
+  // The accent needs a regular face to be drawn (the registry's rule for a family).
+  found.accent = probe->accent(found.body, [records](const uint32_t family) {
+    CssParser::FontFace faces[4];
+    pickFaces(records, family, faces);
+    return !faces[0].name.empty();
+  });
+  return found;
 }
 
 // Copying a book's faces into its own cache, for the reader to load from there, follows CrossInk (uxjulia/CrossInk)
@@ -458,14 +564,16 @@ State prepare(const Epub& epub, BuildArena* scratch) {
   const std::string& cachePath = epub.getCachePath();
   // The CSS was not loaded, or did not compile: nothing to decide from yet.
   if (!epub.getCssParser() || !epub.getCssParser()->hasCache()) return State::Pending;
-  const uint8_t last = readCode(cachePath, nullptr);
+  const uint8_t last = readCode(cachePath, nullptr, nullptr, true);
   const uint8_t attempts = last != kNoCode && last >= kCodeFailed ? static_cast<uint8_t>(last - kCodeFailed) : 0;
   Storage.removeDir((cachePath + kFontsDir).c_str());  // whatever an earlier attempt left
 
   std::string records;
-  std::string_view name;
-  const uint8_t code = examine(epub, scratch, records, name);
-  return writeState(cachePath, code == kCodeFailed ? static_cast<uint8_t>(kCodeFailed + attempts + 1) : code, name);
+  Families found;
+  std::string names;
+  const uint8_t code = examine(epub, scratch, records, found, names);
+  return writeState(cachePath, code == kCodeFailed ? static_cast<uint8_t>(kCodeFailed + attempts + 1) : code,
+                    found.body, found.accent, names);
 }
 
 }  // namespace BookFonts
