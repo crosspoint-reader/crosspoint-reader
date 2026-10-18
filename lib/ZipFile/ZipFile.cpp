@@ -492,13 +492,14 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
 
     size_t remaining = inflatedDataSize;
     while (remaining > 0) {
-      const size_t dataRead = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
-      if (dataRead == 0) {
+      const int readResult = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
+      if (readResult <= 0) {
         LOG_ERR("ZIP", "Could not read more bytes");
         free(buffer);
         return false;
       }
 
+      const size_t dataRead = static_cast<size_t>(readResult);
       if (out.write(buffer, dataRead) != dataRead) {
         free(buffer);
         if (allowEarlyStop) return true;  // sink has what it needs
