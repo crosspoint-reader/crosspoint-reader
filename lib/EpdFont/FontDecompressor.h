@@ -27,19 +27,19 @@ class FontDecompressor {
   // fontconvert.py mirrors this constant and refuses to generate a font that would overflow it,
   // so the next oversized glyph is a build error rather than an invisible blank; the host test
   // checks the shipped fonts against it from the other side.
-  // 640, raised from 576 to admit the 20 pt reader faces. The binding glyph is U+01C4 (DZ
-  // digraph) in bookerly_20_bolditalic at 60x41, which packs to 615 bytes; 640 is the next
-  // multiple of 64 above it.
+  // 576 again since the 20 pt faces were dropped. They had raised it to 640 for U+01C4 (DZ
+  // digraph) in bookerly_20_bolditalic, 60x41 -> 615 bytes; with 18 pt the largest real face, the
+  // binding glyph is that digraph in bookerly_18_bolditalic again, 54x38 -> 513 bytes (measured
+  // over every shipped glyph, 2026-10-18), and 576 is the next multiple of 64 above it. Synthesised
+  // sizes do not move it: they fetch the 18 pt master's glyph and resample after the fetch.
   //
   // The cap is set by the widest glyph in the whole coverage, not by anything a reader meets --
-  // that digraph appears in Serbo-Croatian and essentially nowhere else, and at 18 pt it was the
-  // blocker too. Costs FALLBACK_CACHE_SLOTS x 64 = 256 B of .bss, which buys a larger reader
-  // font for people who cannot read 18 pt.
+  // that digraph appears in Serbo-Croatian and essentially nowhere else.
   //
   // Measured, not guessed: an earlier attempt at this constant was set from a 22 pt probe and was
   // wrong for the size that actually shipped. bench/font_main.cpp checks the binding glyph on
   // hardware, because an undersized buffer does not error -- the glyph renders BLANK.
-  static constexpr uint16_t HOT_GLYPH_BUF_SIZE = 640;
+  static constexpr uint16_t HOT_GLYPH_BUF_SIZE = 576;
 
   FontDecompressor() = default;
   ~FontDecompressor();
