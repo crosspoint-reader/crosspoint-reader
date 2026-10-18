@@ -6,25 +6,36 @@
 /// On-flash format of the TTF glyph store in the `spiffs` partition (magic "CPTT").
 ///
 ///   0            header sector: Header, written once per install
-///   4 KB         state sector: the size table, then the wipe word; a wipe erases it last
+///   4 KB         state sector: the face table, then the wipe word; a wipe erases it last
 ///   64 KB        style blocks, each starting on a 64 KB page so one maps alone (flash mode: the whole
-///                TTF; SD mode: the tables copied out of it)
+///                TTF; SD mode: the tables copied out of it), every family's styles in the set's order
 ///   indexOffset  glyph index: Slot {key, the record's dataOffset, or kNoGlyph}, open addressing
-///   pairOffset   kerning pair index: Slot {left << 16 | right, style << 16 | font units}
+///   pairOffset   kerning pair index: Slot {left << 16 | right, pairStyle(family, style) << 16 | font units}
 ///   logOffset    append-only glyph records: [u32 key][EpdGlyph][2-bit bitmap], each 4-byte aligned
 ///
 /// Every byte is programmed at most once between erases. Erased flash reads 0xFF, so "erased" doubles as
 /// "empty". A power cut can only leave bytes with more 1 bits than were written (NorFlash.h); every marker
 /// that must not appear by accident is therefore one that only a complete write produces.
+///
+/// The store holds a family set (spec 11.1): one family, or a book's body family and its accent family. A family is
+/// its index in the set. The set's identity covers their order, so an index names the same family for as long as
+/// the store stays installed.
 namespace glyphstore {
 
 constexpr uint32_t kMagic = 0x54545043;  // "CPTT"
-constexpr uint16_t kFormatVersion = 1;
+/// 1: one family, and a size table of ppems.
+/// 2: a family set (Stage B): the size table became a face table (faceOf()), a pair slot carries the family beside
+/// the style, and the header has eight style blocks. A version-1 store reads as not installed and is installed over.
+constexpr uint16_t kFormatVersion = 2;
 constexpr uint8_t kModeFlash = 0;  ///< every style's whole TTF is in the partition
 constexpr uint8_t kModeSd = 1;     ///< the tables are in the partition; outlines are read from the SD card
-constexpr uint8_t kMaxStyles = 4;
+/// Style blocks of every family together: two families of four, or a body of four and four one-style accent
+/// families. A family has at least its regular style, so a set has at most this many families.
+constexpr uint8_t kMaxStyles = 8;
 constexpr uint8_t kMaxTables = 8;
-constexpr uint8_t kSizeEntries = 32;  ///< the 9 ladder rungs plus body sizes
+/// Faces (a family at one size) claimed since the last wipe, every family's: a book's body takes 5-10 sizes and an
+/// accent family 2-4.
+constexpr uint8_t kFaceEntries = 32;
 constexpr uint32_t kIdentityBytes = 16;
 
 constexpr uint32_t kSectorBytes = 4096;
@@ -53,16 +64,25 @@ constexpr uint32_t kSparePages = 2;
 constexpr uint32_t kExpectedRecordFlash = 100;
 constexpr uint32_t kExpectedRecordSd = 250;
 
-/// Glyph key: code point (21 bits), style (2), size-table index (5). Bits 28-31 stay zero, so a key is
-/// never the erased value.
-constexpr uint32_t makeKey(const uint32_t codepoint, const uint8_t style, const uint8_t sizeIndex) {
+/// Glyph key: code point (21 bits), style (2), face-table index (5), which says the family and the size. Bits
+/// 28-31 stay zero, so a key is never the erased value.
+constexpr uint32_t makeKey(const uint32_t codepoint, const uint8_t style, const uint8_t faceIndex) {
   return (codepoint & 0x1FFFFFu) | (static_cast<uint32_t>(style & 0x3u) << 21) |
-         (static_cast<uint32_t>(sizeIndex & 0x1Fu) << 23);
+         (static_cast<uint32_t>(faceIndex & 0x1Fu) << 23);
 }
 constexpr bool isGlyphKey(const uint32_t key) { return (key >> 28) == 0; }
-constexpr uint8_t keySizeIndex(const uint32_t key) { return static_cast<uint8_t>((key >> 23) & 0x1Fu); }
+constexpr uint8_t keyFaceIndex(const uint32_t key) { return static_cast<uint8_t>((key >> 23) & 0x1Fu); }
+/// A face-table entry's face: the family in the top byte, the pixels per em (26.6, under 2^14 at 120 px) below it.
+/// A family is below kMaxStyles, so a face never reads as erased.
+constexpr uint32_t faceOf(const uint8_t family, const uint32_t ppem26_6) {
+  return (static_cast<uint32_t>(family) << 24) | (ppem26_6 & 0xFFFFFFu);
+}
 constexpr uint32_t pairKey(const uint16_t left, const uint16_t right) {
   return (static_cast<uint32_t>(left) << 16) | right;
+}
+/// A pair slot's value holds this in its high half: kerning is a family's and a style's, the same at every size.
+constexpr uint32_t pairStyle(const uint8_t family, const uint8_t style) {
+  return (static_cast<uint32_t>(family) << 2) | (style & 0x3u);
 }
 
 /// Home slot of `key` in a table of `slots`: Fibonacci hashing, then a multiply-shift into the range. For
@@ -118,24 +138,24 @@ struct Header {
   uint32_t magic;
   uint16_t version;
   uint16_t headerBytes;              ///< sizeof(Header) when written
-  uint8_t identity[kIdentityBytes];  ///< the family identity, compared at open
+  uint8_t identity[kIdentityBytes];  ///< the family set's identity, compared at open
   Geometry geometry;
   StyleInfo styles[kMaxStyles];
   uint32_t check;  ///< FNV-1a over every byte before it: a torn header write fails it
 };
 static_assert(sizeof(Header) <= kSectorBytes, "the header fits its sector");
 
-/// A size-table entry. In use once `claimed` reads zero. The ppem is written first and `claimed` last, so
+/// A face-table entry. In use once `claimed` reads zero. The face is written first and `claimed` last, so
 /// an entry cut short reads as neither free nor in use, and is never claimed again.
-struct SizeEntry {
-  uint32_t ppem26_6;
+struct FaceEntry {
+  uint32_t face;  ///< faceOf(family, ppem)
   uint32_t claimed;
 };
-static_assert(sizeof(SizeEntry) == 8, "a size entry is 8 bytes");
+static_assert(sizeof(FaceEntry) == 8, "a face entry is 8 bytes");
 
-constexpr uint32_t kSizeTableOffset = kStateSectorOffset;
-constexpr uint32_t kWipeWordOffset = kSizeTableOffset + kSizeEntries * sizeof(SizeEntry);
-static_assert(kSizeEntries <= 32, "claimed sizes are tracked in a 32-bit mask");
+constexpr uint32_t kFaceTableOffset = kStateSectorOffset;
+constexpr uint32_t kWipeWordOffset = kFaceTableOffset + kFaceEntries * sizeof(FaceEntry);
+static_assert(kFaceEntries <= 32, "claimed faces are tracked in a 32-bit mask");
 
 inline uint32_t fnv1a(const void* data, const size_t len, uint32_t hash = 2166136261u) {
   const auto* bytes = static_cast<const uint8_t*>(data);
@@ -146,8 +166,8 @@ inline uint32_t fnv1a(const void* data, const size_t len, uint32_t hash = 216613
   return hash;
 }
 
-/// What the caller knows before an install: the mode, and per style the bytes to copy (flash mode: the
-/// TTF file; SD mode: the copied tables, summed).
+/// What the caller knows before an install: the mode, and per style block the bytes to copy (flash mode: the
+/// TTF file; SD mode: the copied tables, summed), every family's styles in the set's order.
 struct PlanInput {
   uint8_t mode;
   uint8_t styleCount;

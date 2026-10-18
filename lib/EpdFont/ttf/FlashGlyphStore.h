@@ -45,8 +45,8 @@ class GlyphBatch {
 
 /// The persistent TTF glyph store in the `spiffs` partition:
 /// - a write-once hash index and an append-only log of rendered glyphs;
-/// - a kerning pair index, and a size table that gives each pixel size a small index for the glyph keys;
-/// - the font's own bytes, in style blocks.
+/// - a kerning pair index, and a face table that gives each family's pixel sizes a small index for the glyph keys;
+/// - the fonts' own bytes, in style blocks: a family set's (spec 11.1), one family or several, all in one store.
 ///
 /// Rules it keeps:
 /// - Every byte is programmed at most once between erases.
@@ -72,7 +72,7 @@ class FlashGlyphStore {
   enum class Lookup : uint8_t { NotStored, NoGlyph, Found };
   /// What commit() and markNoGlyph() did:
   /// - Stored: everything is findable.
-  /// - Refused: nothing was written. A key was not a glyph key or used a size index not claimed since the
+  /// - Refused: nothing was written. A key was not a glyph key or used a face index not claimed since the
   ///   last wipe, or the store is not open. Wipe pending does not change.
   /// - Full, WriteFailed: the store is full, or a write failed. Part of a batch may have been stored
   ///   (find() tells). Wipe is now pending, and later writes are refused with Full until wipe().
@@ -111,7 +111,7 @@ class FlashGlyphStore {
   const uint8_t* mapStyle(uint8_t style);
   /// A style's header record (SD mode: its table map). False when not open.
   bool styleInfo(uint8_t style, glyphstore::StyleInfo& out) const;
-  /// Bumped by every wipe(). A face that holds a size index re-claims it with sizeIndex() when this changed.
+  /// Bumped by every wipe(). A face that holds a face index re-claims it with faceIndex() when this changed.
   uint32_t generation() const { return generation_; }
 
   // --- Glyphs ---
@@ -122,32 +122,33 @@ class FlashGlyphStore {
   /// Records that the font has no glyph for this key: a slot with no record.
   Commit markNoGlyph(uint32_t key);
 
-  // --- Sizes ---
+  // --- Faces ---
 
-  /// The size-table index for a pixels-per-em (26.6), claiming a free entry (a flash write) on first use.
-  /// False when all entries are taken, on a write error, or for a new size while wipe is pending. Taking the last
-  /// entry makes the wipe pending but stops nothing else: the claimed sizes go on storing their glyphs until the wipe.
-  /// A wipe empties the table: indices claimed before it are void, and commits under them are refused until
-  /// they are claimed again.
-  bool sizeIndex(uint32_t ppem26_6, uint8_t* index);
+  /// The face-table index for `family` (its index in the set) at a pixels-per-em (26.6), claiming a free entry (a
+  /// flash write) on first use. Every family's faces share the table. False when all entries are taken, on a write
+  /// error, or for a new face while wipe is pending. Taking the last entry makes the wipe pending but stops nothing
+  /// else: the claimed faces go on storing their glyphs until the wipe. A wipe empties the table: indices claimed
+  /// before it are void, and commits under them are refused until they are claimed again.
+  bool faceIndex(uint8_t family, uint32_t ppem26_6, uint8_t* index);
 
   // --- Kerning pairs ---
 
-  bool findPair(uint16_t left, uint16_t right, uint8_t style, int16_t* fontUnits) const;
+  /// A pair's kerning in font units, for one style of one family of the set.
+  bool findPair(uint16_t left, uint16_t right, uint8_t family, uint8_t style, int16_t* fontUnits) const;
   /// Stores a pair's kerning in font units. False when it was not stored: the pair index is full (pairs then
   /// come from the GPOS reader every time; never a reason to wipe), writes are stopped, or a write failed (which
   /// stops them).
-  bool storePair(uint16_t left, uint16_t right, uint8_t style, int16_t fontUnits);
+  bool storePair(uint16_t left, uint16_t right, uint8_t family, uint8_t style, int16_t fontUnits);
 
   // --- A full store, and the wipe ---
 
   bool wipePending() const { return wipePending_; }
   /// Nothing is written until the next wipe: the log or the index filled, a write failed, or the store opened
-  /// with a wipe pending. A full size table alone does not stop writes.
+  /// with a wipe pending. A full face table alone does not stop writes.
   bool writesStopped() const { return writesStopped_; }
   /// Records wipe pending in flash, then erases the index, the pair index and the log (only sectors that hold
-  /// data) and last the state sector (size table and wipe word). A cut anywhere leaves wipe pending, and the
-  /// next wipe() finishes the job. Call it only where no pointer into the log and no size index is in use:
+  /// data) and last the state sector (face table and wipe word). A cut anywhere leaves wipe pending, and the
+  /// next wipe() finishes the job. Call it only where no pointer into the log and no face index is in use:
   /// at book open, or before a section build. False: not done; it stays pending.
   bool wipe();
 
@@ -171,8 +172,8 @@ class FlashGlyphStore {
   Insert insert(uint32_t tableOffset, const uint8_t* table, uint32_t slots, uint32_t key, uint32_t value);
   Commit insertGlyphSlot(uint32_t key, uint32_t value);
   Commit writeBatch(GlyphBatch& batch);
-  bool sizeClaimed(uint32_t key) const { return (claimedSizes_ >> glyphstore::keySizeIndex(key)) & 1u; }
-  bool readSizeEntry(uint8_t i, glyphstore::SizeEntry& entry) const;
+  bool faceClaimed(uint32_t key) const { return (claimedFaces_ >> glyphstore::keyFaceIndex(key)) & 1u; }
+  bool readFaceEntry(uint8_t i, glyphstore::FaceEntry& entry) const;
   bool eraseWritten(uint32_t offset, uint32_t len);
   bool isBlank(uint32_t sector) const;
   void stopWrites();
@@ -191,7 +192,7 @@ class FlashGlyphStore {
   uint32_t logUsed_ = 0;
   uint32_t usedSlots_ = 0;
   uint32_t usedPairs_ = 0;
-  uint32_t claimedSizes_ = 0;  // bit i: size entry i is claimed
+  uint32_t claimedFaces_ = 0;  // bit i: face entry i is claimed
   uint32_t generation_ = 0;
   bool open_ = false;
   bool wipePending_ = false;

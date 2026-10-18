@@ -153,4 +153,15 @@ void familyIdentity(const FileStamp (&styles)[4], uint8_t out[glyphstore::kIdent
   }
 }
 
+void setIdentity(const uint8_t (*families)[glyphstore::kIdentityBytes], const uint8_t count,
+                 uint8_t out[glyphstore::kIdentityBytes]) {
+  for (uint32_t lane = 0; lane < glyphstore::kIdentityBytes / 4; ++lane) {
+    uint32_t hash = glyphstore::fnv1a(&count, 1, 2166136261u ^ (lane * 0x9E3779B9u));
+    for (uint8_t family = 0; family < count; ++family) {
+      hash = glyphstore::fnv1a(families[family], glyphstore::kIdentityBytes, hash);
+    }
+    putLe(out + 4 * lane, hash, 4);
+  }
+}
+
 }  // namespace ttf

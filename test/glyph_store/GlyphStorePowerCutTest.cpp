@@ -16,28 +16,39 @@ namespace {
 constexpr uint32_t kBodyPpem = 29 << 6;
 constexpr uint32_t kHeadingPpem = 35 << 6;
 
-// The size indices a session claimed; a torn claim makes the next one land elsewhere, so keys are built
-// from what sizeIndex() returned, not assumed.
+// The face indices a session claimed; a torn claim makes the next one land elsewhere, so keys are built
+// from what faceIndex() returned, not assumed. The accent is a second family of the set at the body's size.
 struct Sizes {
   uint8_t body = 0xFF;
   uint8_t heading = 0xFF;
+  uint8_t accent = 0xFF;
 };
+
+enum class Face : uint8_t { Body, Heading, Accent };
 
 struct GlyphSpec {
   uint32_t codepoint;
   uint8_t style;
-  bool heading;
+  Face face;
   uint8_t width;
   uint8_t height;
 
-  uint32_t key(const Sizes& sizes) const { return makeKey(codepoint, style, heading ? sizes.heading : sizes.body); }
+  uint32_t key(const Sizes& sizes) const {
+    return makeKey(codepoint, style,
+                   face == Face::Heading  ? sizes.heading
+                   : face == Face::Accent ? sizes.accent
+                                          : sizes.body);
+  }
 };
 
 // 'B' is 16 x 24 so that a record lands at an offset whose slot value, cut short, would once have read as the
-// "no glyph" marker.
-const GlyphSpec kBatchA[] = {{'A', 0, false, 9, 12}, {'B', 0, false, 16, 24}, {' ', 0, false, 0, 0}};
-const GlyphSpec kBatchB[] = {{'C', 0, false, 11, 13}, {'d', 1, false, 8, 12}, {0x4E2D, 0, true, 24, 26}};
-const GlyphSpec kAfter[] = {{'E', 0, false, 9, 13}, {'F', 0, false, 9, 12}};
+// "no glyph" marker. The accent's 'C' is the body's codepoint and style in another family.
+const GlyphSpec kBatchA[] = {{'A', 0, Face::Body, 9, 12}, {'B', 0, Face::Body, 16, 24}, {' ', 0, Face::Body, 0, 0}};
+const GlyphSpec kBatchB[] = {{'C', 0, Face::Body, 11, 13},
+                             {'d', 1, Face::Body, 8, 12},
+                             {0x4E2D, 0, Face::Heading, 24, 26},
+                             {'C', 0, Face::Accent, 12, 14}};
+const GlyphSpec kAfter[] = {{'E', 0, Face::Body, 9, 13}, {'F', 0, Face::Accent, 9, 12}};
 constexpr uint32_t kNoGlyphCodepoint = 0x2603;
 
 // What each step of a session reported.
@@ -48,6 +59,7 @@ struct Outcome {
   bool noGlyph = false;
   bool batchB = false;
   bool pair = false;
+  bool accentPair = false;
 };
 
 Layout sweepLayout() {
@@ -57,7 +69,8 @@ Layout sweepLayout() {
 }
 
 bool claim(FlashGlyphStore& store, Sizes& sizes) {
-  return store.sizeIndex(kBodyPpem, &sizes.body) && store.sizeIndex(kHeadingPpem, &sizes.heading);
+  return store.faceIndex(0, kBodyPpem, &sizes.body) && store.faceIndex(0, kHeadingPpem, &sizes.heading) &&
+         store.faceIndex(1, kBodyPpem, &sizes.accent);
 }
 
 bool commitAll(FlashGlyphStore& store, const GlyphSpec* glyphs, const size_t count, const Sizes& sizes) {
@@ -78,7 +91,8 @@ Outcome runSession(SimNorFlash& flash) {
   out.batchA = commitAll(store, kBatchA, std::size(kBatchA), out.sizes);
   out.noGlyph = store.markNoGlyph(makeKey(kNoGlyphCodepoint, 0, out.sizes.body)) == Commit::Stored;
   out.batchB = commitAll(store, kBatchB, std::size(kBatchB), out.sizes);
-  out.pair = store.storePair('A', 'V', 0, -74);
+  out.pair = store.storePair('A', 'V', 0, 0, -74);
+  out.accentPair = store.storePair('A', 'V', 1, 0, -31);
   return out;
 }
 
@@ -112,6 +126,10 @@ void checkAfterReboot(SimNorFlash& flash, const Outcome& out, const std::string&
   if (out.sizes.heading != 0xFF) {
     EXPECT_EQ(out.sizes.heading, sizes.heading) << where;
   }
+  if (out.sizes.accent != 0xFF) {
+    EXPECT_EQ(out.sizes.accent, sizes.accent) << where;
+  }
+  EXPECT_NE(sizes.body, sizes.accent) << where;  // one size, two families: two faces
   checkGlyphs(store, kBatchA, std::size(kBatchA), sizes, out.batchA, where);
   checkGlyphs(store, kBatchB, std::size(kBatchB), sizes, out.batchB, where);
   const Lookup noGlyph = store.find(makeKey(kNoGlyphCodepoint, 0, sizes.body), nullptr);
@@ -121,10 +139,15 @@ void checkAfterReboot(SimNorFlash& flash, const Outcome& out, const std::string&
     EXPECT_NE(Lookup::Found, noGlyph) << where;
   }
   int16_t kern = 0;
-  if (store.findPair('A', 'V', 0, &kern)) {
+  if (store.findPair('A', 'V', 0, 0, &kern)) {
     EXPECT_EQ(-74, kern) << where;
   } else {
     EXPECT_FALSE(out.pair) << where;
+  }
+  if (store.findPair('A', 'V', 1, 0, &kern)) {
+    EXPECT_EQ(-31, kern) << where;
+  } else {
+    EXPECT_FALSE(out.accentPair) << where;
   }
   // No glyph of the session reads as "the font has none" unless it was marked so.
   for (const GlyphSpec& g : kBatchA) EXPECT_NE(Lookup::NoGlyph, store.find(g.key(sizes), nullptr)) << where;
@@ -143,7 +166,7 @@ void checkAfterReboot(SimNorFlash& flash, const Outcome& out, const std::string&
 // 200 more glyphs, 12.8 KB of log over several sectors, so a cut can leave a wipe half done.
 constexpr uint32_t kManyFirst = 0x4E00;
 constexpr uint32_t kMany = 200;
-constexpr Sizes kPopulateSizes{0, 1};  // what claim() returns on a fresh store
+constexpr Sizes kPopulateSizes{0, 1, 2};  // what claim() returns on a fresh store
 
 bool commitMany(FlashGlyphStore& store) {
   alignas(4) uint8_t buffer[4096];
@@ -165,8 +188,10 @@ void populate(SimNorFlash& flash, const bool pending) {
   ASSERT_TRUE(claim(store, sizes));
   ASSERT_EQ(kPopulateSizes.body, sizes.body);
   ASSERT_EQ(kPopulateSizes.heading, sizes.heading);
+  ASSERT_EQ(kPopulateSizes.accent, sizes.accent);
   ASSERT_TRUE(commitAll(store, kBatchA, std::size(kBatchA), sizes));
-  ASSERT_TRUE(store.storePair('A', 'V', 0, -74));
+  ASSERT_TRUE(store.storePair('A', 'V', 0, 0, -74));
+  ASSERT_TRUE(store.storePair('A', 'V', 1, 0, -31));
   ASSERT_TRUE(commitMany(store));
   if (pending) fillSizeTable(store);
 }
@@ -209,7 +234,8 @@ void sweepWipe(const bool pending) {
         for (const GlyphSpec& g : kBatchA) {
           EXPECT_EQ(Lookup::NotStored, store.find(g.key(kPopulateSizes), nullptr)) << where;
         }
-        EXPECT_FALSE(store.findPair('A', 'V', 0, nullptr)) << where;
+        EXPECT_FALSE(store.findPair('A', 'V', 0, 0, nullptr)) << where;
+        EXPECT_FALSE(store.findPair('A', 'V', 1, 0, nullptr)) << where;
       } else {
         // Not pending, so nothing will finish it: the wipe must not have begun, or must have completed.
         uint32_t intact = 0;
@@ -237,7 +263,7 @@ void sweepWipe(const bool pending) {
 TEST(GlyphStorePowerCut, EveryCutDuringASessionLeavesAConsistentStore) {
   SimNorFlash dry(kFlashBytes);
   const Outcome all = runSession(dry);
-  ASSERT_TRUE(all.installed && all.batchA && all.noGlyph && all.batchB && all.pair);
+  ASSERT_TRUE(all.installed && all.batchA && all.noGlyph && all.batchB && all.pair && all.accentPair);
   const uint64_t steps = dry.steps();
   for (const bool partial : {false, true}) {
     for (uint64_t cut = 0; cut < steps; ++cut) {

@@ -290,7 +290,7 @@ bool TtfFont::claimSize(Size& size) {
   if (size.claimTried && size.generation == store_.generation()) return size.indexValid;
   size.claimTried = true;
   size.generation = store_.generation();
-  size.indexValid = store_.sizeIndex(size.ppem, &size.index);
+  size.indexValid = store_.faceIndex(0, size.ppem, &size.index);
   return size.indexValid;
 }
 
@@ -414,7 +414,7 @@ int8_t TtfFont::kerning(const Size& size, const uint8_t style, const uint32_t le
   const bool storable = left <= 0xFFFF && right <= 0xFFFF;
   int16_t units = 0;
   if (!storable || !store_.isOpen() ||
-      !store_.findPair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), style, &units)) {
+      !store_.findPair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), 0, style, &units)) {
     if (s.knownUncovered(left)) return 0;  // without touching the font: no remap of another style
     checkLock();
     FontBytes bytes;
@@ -433,7 +433,7 @@ int8_t TtfFont::kerning(const Size& size, const uint8_t style, const uint32_t le
       return 0;
     }
     if (storable && !ringMode_) {
-      store_.storePair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), style, units);
+      store_.storePair(static_cast<uint16_t>(left), static_cast<uint16_t>(right), 0, style, units);
     }
   }
   // Font units to 4.4 pixels at this size, rounded, clamped like the converter's kern matrix.

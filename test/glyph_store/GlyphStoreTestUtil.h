@@ -60,7 +60,7 @@ inline bool install(FlashGlyphStore& store, const glyphstore::Layout& layout, co
 inline bool claimTestSizes(FlashGlyphStore& store) {
   for (uint8_t size = 0; size < kTestSizes; ++size) {
     uint8_t index = 0xFF;
-    if (!store.sizeIndex(testPpem(size), &index) || index != size) return false;
+    if (!store.faceIndex(0, testPpem(size), &index) || index != size) return false;
   }
   return true;
 }
@@ -74,8 +74,8 @@ inline bool installAndOpen(FlashGlyphStore& store, const glyphstore::Layout& lay
 /// Claims sizes until the table is full; the store is then full, with wipe pending.
 inline void fillSizeTable(FlashGlyphStore& store) {
   uint8_t index = 0;
-  for (uint32_t i = 0; i < glyphstore::kSizeEntries; ++i) store.sizeIndex((100 + i) << 6, &index);
-  ASSERT_FALSE(store.sizeIndex(99 << 6, &index));
+  for (uint32_t i = 0; i < glyphstore::kFaceEntries; ++i) store.faceIndex(0, (100 + i) << 6, &index);
+  ASSERT_FALSE(store.faceIndex(0, 99 << 6, &index));
   ASSERT_TRUE(store.wipePending());
 }
 

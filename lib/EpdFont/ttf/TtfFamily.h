@@ -88,6 +88,12 @@ struct FileStamp {
 /// kRenderVersion, in four lanes with different seeds. Any change to a file gives a new identity.
 void familyIdentity(const FileStamp (&styles)[4], uint8_t out[glyphstore::kIdentityBytes]);
 
+/// A family set's identity, the glyph store's (spec 11.1): FNV-1a over the families' identities in the set's
+/// order, in four lanes as familyIdentity(). Another family, another order or another count gives another identity,
+/// and the store is installed again.
+void setIdentity(const uint8_t (*families)[glyphstore::kIdentityBytes], uint8_t count,
+                 uint8_t out[glyphstore::kIdentityBytes]);
+
 /// The identity folded to 32 bits, to seed the family's font IDs.
 inline uint32_t identityHash(const uint8_t identity[glyphstore::kIdentityBytes]) {
   return glyphstore::fnv1a(identity, glyphstore::kIdentityBytes);

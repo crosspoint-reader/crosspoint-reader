@@ -18,9 +18,9 @@ class GlyphStoreSizes : public StoreTest {
     ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   }
 
-  int claim(const uint32_t ppem26_6) {
+  int claim(const uint32_t ppem26_6, const uint8_t family = 0) {
     uint8_t index = 0;
-    return store.sizeIndex(ppem26_6, &index) ? index : -1;
+    return store.faceIndex(family, ppem26_6, &index) ? index : -1;
   }
 };
 
@@ -48,7 +48,7 @@ TEST_F(GlyphStoreSizes, TheFirstSizeGetsIndexZeroAndKeepsIt) {
 }
 
 TEST_F(GlyphStoreSizes, WhenEverySizeIsTakenTheStoreIsFull) {
-  for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  for (uint32_t i = 0; i < kFaceEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
   EXPECT_EQ(-1, claim(99 << 6));
   EXPECT_TRUE(store.wipePending());
   EXPECT_EQ(3, claim(23 << 6));  // known sizes are still answered
@@ -56,16 +56,16 @@ TEST_F(GlyphStoreSizes, WhenEverySizeIsTakenTheStoreIsFull) {
 
 TEST_F(GlyphStoreSizes, ClaimingTheLastFreeSizeMakesTheWipePending) {
   // Otherwise a table filled exactly at the end of one book refuses the next book's body size until a book after it.
-  for (uint32_t i = 0; i + 1 < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  for (uint32_t i = 0; i + 1 < kFaceEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
   EXPECT_FALSE(store.wipePending());
-  EXPECT_EQ(static_cast<int>(kSizeEntries - 1), claim(99 << 6));
+  EXPECT_EQ(static_cast<int>(kFaceEntries - 1), claim(99 << 6));
   EXPECT_TRUE(store.wipePending());
   EXPECT_FALSE(store.writesStopped());
   EXPECT_EQ(3, claim(23 << 6));  // claimed sizes are still answered
 }
 
 TEST_F(GlyphStoreSizes, AFullSizeTableStopsOnlyNewSizes) {
-  for (uint32_t i = 0; i < kSizeEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
+  for (uint32_t i = 0; i < kFaceEntries; ++i) ASSERT_EQ(static_cast<int>(i), claim((20 + i) << 6));
   EXPECT_EQ(-1, claim(99 << 6));
   ASSERT_TRUE(store.wipePending());
   EXPECT_FALSE(store.writesStopped());
@@ -76,12 +76,49 @@ TEST_F(GlyphStoreSizes, AFullSizeTableStopsOnlyNewSizes) {
   EXPECT_EQ(Commit::Stored, store.commit(batch));
   EXPECT_EQ(Lookup::Found, store.find(makeKey('A', 0, 5), nullptr));
   EXPECT_EQ(Commit::Stored, store.markNoGlyph(makeKey(0x2603, 0, 5)));
-  EXPECT_TRUE(store.storePair('A', 'V', 0, -74));
+  EXPECT_TRUE(store.storePair('A', 'V', 0, 0, -74));
   // The next session wipes first.
   store.close();
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   EXPECT_TRUE(store.wipePending());
   EXPECT_TRUE(store.writesStopped());
+}
+
+TEST_F(GlyphStoreSizes, EachFamilyOfTheSetHasItsOwnFaces) {
+  EXPECT_EQ(0, claim(29 << 6));
+  EXPECT_EQ(1, claim(29 << 6, 1));  // the same size in the accent family is another face
+  EXPECT_EQ(2, claim(35 << 6, 1));
+  EXPECT_EQ(0, claim(29 << 6));
+  store.close();
+  ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
+  EXPECT_EQ(1, claim(29 << 6, 1));
+  EXPECT_EQ(2, claim(35 << 6, 1));
+  EXPECT_EQ(3, claim(35 << 6));
+  EXPECT_EQ(-1, claim(29 << 6, kMaxStyles));  // no set has that many families
+}
+
+TEST_F(GlyphStoreSizes, TheFamiliesShareTheTable) {
+  // A wipe at the next book open frees it, as for one family.
+  for (uint32_t i = 0; i < kFaceEntries; ++i) {
+    ASSERT_EQ(static_cast<int>(i), claim((20 + i / 2) << 6, static_cast<uint8_t>(i % 2)));
+  }
+  EXPECT_TRUE(store.wipePending());
+  EXPECT_EQ(-1, claim(99 << 6, 1));
+  EXPECT_EQ(5, claim(22 << 6, 1));  // claimed faces are still answered
+}
+
+TEST_F(GlyphStoreSizes, TwoFamiliesGlyphsAreApart) {
+  const int body = claim(29 << 6);
+  const int accent = claim(29 << 6, 1);
+  ASSERT_GE(body, 0);
+  ASSERT_GE(accent, 0);
+  alignas(4) uint8_t buffer[512];
+  GlyphBatch batch(buffer, sizeof buffer);
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, static_cast<uint8_t>(body)), 9, 12));
+  ASSERT_TRUE(stage(batch, makeKey('A', 0, static_cast<uint8_t>(accent)), 11, 13));
+  ASSERT_EQ(Commit::Stored, store.commit(batch));
+  EXPECT_TRUE(storedIntact(store, makeKey('A', 0, static_cast<uint8_t>(body)), 9, 12));
+  EXPECT_TRUE(storedIntact(store, makeKey('A', 0, static_cast<uint8_t>(accent)), 11, 13));
 }
 
 TEST_F(GlyphStoreSizes, ASizeEntryCutShortIsNeverReused) {
@@ -95,50 +132,67 @@ TEST_F(GlyphStoreSizes, ASizeEntryCutShortIsNeverReused) {
 TEST_F(GlyphStoreSizes, AnEntryWhoseClaimLandedWithoutItsPpemIsNeverReused) {
   // On a real chip the bits of an 8-byte write can land in any order.
   const uint32_t claimed = 0;
-  ASSERT_TRUE(flash.program(kSizeTableOffset + 4, &claimed, sizeof claimed));
+  ASSERT_TRUE(flash.program(kFaceTableOffset + 4, &claimed, sizeof claimed));
   store.close();
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   EXPECT_EQ(1, claim(29 << 6));
 }
 
 TEST_F(GlyphStorePairs, PairsAreStoredPerStyle) {
-  ASSERT_TRUE(store.storePair('A', 'V', 0, -74));
-  ASSERT_TRUE(store.storePair('A', 'V', 1, -60));
+  ASSERT_TRUE(store.storePair('A', 'V', 0, 0, -74));
+  ASSERT_TRUE(store.storePair('A', 'V', 0, 1, -60));
   int16_t kern = 0;
-  ASSERT_TRUE(store.findPair('A', 'V', 0, &kern));
+  ASSERT_TRUE(store.findPair('A', 'V', 0, 0, &kern));
   EXPECT_EQ(-74, kern);
-  ASSERT_TRUE(store.findPair('A', 'V', 1, &kern));
+  ASSERT_TRUE(store.findPair('A', 'V', 0, 1, &kern));
   EXPECT_EQ(-60, kern);
-  EXPECT_FALSE(store.findPair('A', 'V', 2, &kern));
-  EXPECT_FALSE(store.findPair('V', 'A', 0, &kern));
+  EXPECT_FALSE(store.findPair('A', 'V', 0, 2, &kern));
+  EXPECT_FALSE(store.findPair('V', 'A', 0, 0, &kern));
   EXPECT_EQ(2u, store.usedPairSlots());
+}
+
+TEST_F(GlyphStorePairs, PairsAreStoredPerFamily) {
+  ASSERT_TRUE(store.storePair('A', 'V', 0, 0, -74));
+  ASSERT_TRUE(store.storePair('A', 'V', 1, 0, -31));
+  ASSERT_TRUE(store.storePair('A', 'V', 1, 1, -40));
+  int16_t kern = 0;
+  ASSERT_TRUE(store.findPair('A', 'V', 0, 0, &kern));
+  EXPECT_EQ(-74, kern);
+  ASSERT_TRUE(store.findPair('A', 'V', 1, 0, &kern));
+  EXPECT_EQ(-31, kern);
+  ASSERT_TRUE(store.findPair('A', 'V', 1, 1, &kern));
+  EXPECT_EQ(-40, kern);
+  EXPECT_FALSE(store.findPair('A', 'V', 2, 0, &kern));
+  EXPECT_FALSE(store.findPair('A', 'V', 0, 1, &kern));
+  EXPECT_EQ(3u, store.usedPairSlots());
 }
 
 TEST_F(GlyphStorePairs, ZeroIsAStoredAnswer) {
   // "No kerning" is worth storing as well: the GPOS reader is not asked again.
-  ASSERT_TRUE(store.storePair('o', 'o', 0, 0));
+  ASSERT_TRUE(store.storePair('o', 'o', 0, 0, 0));
   int16_t kern = 99;
-  ASSERT_TRUE(store.findPair('o', 'o', 0, &kern));
+  ASSERT_TRUE(store.findPair('o', 'o', 0, 0, &kern));
   EXPECT_EQ(0, kern);
 }
 
 TEST_F(GlyphStorePairs, PairsSurviveAReopen) {
   for (uint16_t right = 'a'; right <= 'z'; ++right) {
-    ASSERT_TRUE(store.storePair('T', right, 0, static_cast<int16_t>('a' - right)));
+    ASSERT_TRUE(store.storePair('T', right, 0, 0, static_cast<int16_t>('a' - right)));
   }
   store.close();
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   EXPECT_EQ(26u, store.usedPairSlots());
   for (uint16_t right = 'a'; right <= 'z'; ++right) {
     int16_t kern = 1;
-    ASSERT_TRUE(store.findPair('T', right, 0, &kern));
+    ASSERT_TRUE(store.findPair('T', right, 0, 0, &kern));
     EXPECT_EQ('a' - right, kern);
   }
 }
 
 TEST_F(GlyphStorePairs, ImpossiblePairsAreRefused) {
-  EXPECT_FALSE(store.storePair(0xFFFF, 0xFFFF, 0, 1));  // would read as an erased slot
-  EXPECT_FALSE(store.storePair('A', 'V', 4, 1));        // styles are 0-3
+  EXPECT_FALSE(store.storePair(0xFFFF, 0xFFFF, 0, 0, 1));     // would read as an erased slot
+  EXPECT_FALSE(store.storePair('A', 'V', 0, 4, 1));           // styles are 0-3
+  EXPECT_FALSE(store.storePair('A', 'V', kMaxStyles, 0, 1));  // no set has that many families
   EXPECT_EQ(0u, store.usedPairSlots());
 }
 
@@ -147,7 +201,7 @@ TEST_F(GlyphStorePairs, PairsAreNotStoredWhileWritesAreStopped) {
   store.close();  // a store that opens with wipe pending writes nothing until the wipe
   ASSERT_EQ(OpenResult::Ready, store.open(kIdentityA));
   ASSERT_TRUE(store.writesStopped());
-  EXPECT_FALSE(store.storePair('A', 'V', 0, -74));
+  EXPECT_FALSE(store.storePair('A', 'V', 0, 0, -74));
   EXPECT_EQ(0u, store.usedPairSlots());
 }
 
@@ -155,7 +209,7 @@ TEST_F(GlyphStorePairs, AFullPairIndexStopsStoringButNeverWipes) {
   store.close();
   ASSERT_TRUE(installAndOpen(store, smallLayout(1024, 200)));
   uint32_t stored = 0;
-  for (uint16_t right = 0x100; right < 0x300 && store.storePair(0x41, right, 0, -1); ++right) ++stored;
+  for (uint16_t right = 0x100; right < 0x300 && store.storePair(0x41, right, 0, 0, -1); ++right) ++stored;
   EXPECT_EQ(140u, stored);
   EXPECT_FALSE(store.wipePending());
   alignas(4) uint8_t buffer[256];
@@ -168,14 +222,14 @@ TEST_F(GlyphStoreWipe, WipeEmptiesTheStoreAndKeepsTheFamily) {
   ASSERT_TRUE(stage(batch, makeKey('A', 0, 0), 9, 12));
   ASSERT_EQ(Commit::Stored, store.commit(batch));
   ASSERT_EQ(Commit::Stored, store.markNoGlyph(makeKey(0x2603, 0, 0)));
-  ASSERT_TRUE(store.storePair('A', 'V', 0, -74));
+  ASSERT_TRUE(store.storePair('A', 'V', 0, 0, -74));
   fillSizeTable(store);
   ASSERT_TRUE(store.wipe());
   for (int pass = 0; pass < 2; ++pass) {  // as wiped, then again after a reopen
     EXPECT_FALSE(store.wipePending()) << pass;
     EXPECT_EQ(Lookup::NotStored, store.find(makeKey('A', 0, 0), nullptr)) << pass;
     EXPECT_EQ(Lookup::NotStored, store.find(makeKey(0x2603, 0, 0), nullptr)) << pass;
-    EXPECT_FALSE(store.findPair('A', 'V', 0, nullptr)) << pass;
+    EXPECT_FALSE(store.findPair('A', 'V', 0, 0, nullptr)) << pass;
     EXPECT_EQ(0u, store.logUsed()) << pass;
     EXPECT_EQ(0u, store.usedSlots()) << pass;
     EXPECT_EQ(0u, store.usedPairSlots()) << pass;
@@ -198,7 +252,7 @@ TEST_F(GlyphStoreWipe, AWipeVoidsTheSizeIndicesClaimedBeforeIt) {
   ASSERT_TRUE(stage(batch, makeKey('A', 0, 2), 9, 12));
   EXPECT_EQ(Commit::Refused, store.commit(batch));  // size index 2 is not claimed any more
   uint8_t index = 0xFF;
-  ASSERT_TRUE(store.sizeIndex(54 << 6, &index));  // another size takes entry 0 now
+  ASSERT_TRUE(store.faceIndex(0, 54 << 6, &index));  // another size takes entry 0 now
   EXPECT_EQ(0, index);
   ASSERT_TRUE(stage(batch, makeKey('A', 0, 2), 9, 12));
   EXPECT_EQ(Commit::Refused, store.commit(batch));

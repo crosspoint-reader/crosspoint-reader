@@ -158,6 +158,22 @@ TEST(TtfFamily, TheIdentityIsSixteenIndependentBytes) {
   EXPECT_EQ(glyphstore::fnv1a(identity.data(), identity.size()), ttf::identityHash(identity.data()));
 }
 
+TEST(TtfFamily, ASetsIdentityChangesWithItsFamiliesAndTheirOrder) {
+  const uint8_t families[3][glyphstore::kIdentityBytes] = {{'b', 'o', 'd', 'y'}, {'a', 'c', 'c'}, {'o', 't', 'h'}};
+  const uint8_t swapped[2][glyphstore::kIdentityBytes] = {{'a', 'c', 'c'}, {'b', 'o', 'd', 'y'}};
+  const auto identityOfSet = [](const uint8_t (*set)[glyphstore::kIdentityBytes], const uint8_t count) {
+    std::array<uint8_t, glyphstore::kIdentityBytes> out{};
+    ttf::setIdentity(set, count, out.data());
+    return out;
+  };
+  const auto pair = identityOfSet(families, 2);
+  EXPECT_EQ(pair, identityOfSet(families, 2));
+  EXPECT_NE(pair, identityOfSet(families, 1));  // the body alone
+  EXPECT_NE(pair, identityOfSet(families, 3));  // another accent family beside it
+  EXPECT_NE(pair, identityOfSet(swapped, 2));   // a family's index is part of every key it stored
+  EXPECT_NE(identityOfSet(families, 1), identityOfSet(families + 1, 1));
+}
+
 TEST(TtfFamily, TtfFileNamesAreRecognisedInAnyCase) {
   EXPECT_TRUE(ttf::isTtfFileName("Literata-Regular.ttf"));
   EXPECT_TRUE(ttf::isTtfFileName("LITERATA.TTF"));
