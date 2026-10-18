@@ -3,6 +3,8 @@
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HeapFit.h>
+#include <Logging.h>
 #include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -140,13 +142,39 @@ void DictionaryWordSelectActivity::extractWords() {
   // large. Cutting a token at an em dash adds a piece here and there, hence the small slack.
   size_t wordEstimate = 0;
   const size_t tokenCount = countPageTokens(wordEstimate);
+  const size_t fragmentCapacity = tokenCount + tokenCount / 16 + 4;
+  const size_t wordCapacity = wordEstimate + wordEstimate / 16 + 4;
   drawStyles.clear();
   drawStyles.reserve(4);
   fragments.clear();
-  fragments.reserve(tokenCount + tokenCount / 16 + 4);
   words.clear();
-  words.reserve(wordEstimate + wordEstimate / 16 + 4);
   rowCount = 0;
+  // Each array is one contiguous block, and a failed reserve aborts the device. A CJK page is one
+  // token per character -- 600 and more on a dense page -- and a CJK font leaves the reader's heap
+  // in small blocks (X3: 15-21 KB free, no block over 4-7 KB), so there the arrays need not fit.
+  // Then nothing is selectable and the popup says why; Back returns to the page.
+  if (!heapHasBlockFor(fragmentCapacity * sizeof(Fragment)) || !heapHasBlockFor(wordCapacity * sizeof(Word))) {
+    LOG_ERR("DICT", "No block for %u fragments / %u words: word selection refused", static_cast<unsigned>(tokenCount),
+            static_cast<unsigned>(wordEstimate));
+    wordsExtracted = true;
+    popup = Popup::Error;
+    popupMsg = StrId::STR_DICT_LOW_MEMORY;
+    popupTime = millis();
+    return;
+  }
+  fragments.reserve(fragmentCapacity);
+  if (!heapHasBlockFor(wordCapacity * sizeof(Word))) {
+    // The fragments took the block the words were counted against.
+    std::vector<Fragment>().swap(fragments);
+    LOG_ERR("DICT", "No block for %u words after the fragments: word selection refused",
+            static_cast<unsigned>(wordEstimate));
+    wordsExtracted = true;
+    popup = Popup::Error;
+    popupMsg = StrId::STR_DICT_LOW_MEMORY;
+    popupTime = millis();
+    return;
+  }
+  words.reserve(wordCapacity);
 
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageLine) continue;
