@@ -91,7 +91,7 @@ fonts need.
 | Magic | Written by | Version | Contents |
 |---|---|---|---|
 | `CPFC` | `FlashFontPartition` | none | A `.cpfont` family copied from the card, mapped in place. See [contributing/font-cache-structures.md](contributing/font-cache-structures.md) |
-| `CPTT` | `FlashGlyphStore` | `glyphstore::kFormatVersion` (2) | The TTF glyph store: [below](#the-ttf-glyph-store-cptt) |
+| `CPTT` | `FlashGlyphStore` | `glyphstore::kFormatVersion` (3) | The TTF glyph store: [below](#the-ttf-glyph-store-cptt) |
 
 ## `book.bin`
 
@@ -514,13 +514,20 @@ produces; a power cut leaves at worst bytes nothing references.
 
 | Offset | Size | Contents |
 |---|---|---|
-| 0 | 4 KB sector | `Header`, written last at install: `u32` magic `CPTT`, `u16` version, `u16` header bytes, the set's 16-byte identity, the `Geometry` (mode, style count, the regions' offsets and sizes), 8 `StyleInfo` (a style block's offset and size; in SD mode also its file and table map), then `u32` FNV-1a over all of it |
+| 0 | 4 KB sector | `Header`, written last at install: `u32` magic `CPTT`, `u16` version, `u16` header bytes, the set's 16-byte identity, the `Geometry` (style count, the regions' offsets and sizes), 8 `StyleInfo` (a style block's offset, size and mode; in SD mode also its file and outlines, below), then `u32` FNV-1a over all of it |
 | 4 KB | 4 KB sector | The state: 32 face entries `{u32 face, u32 claimed}`, then the `u32` wipe word |
-| 64 KB | 64 KB pages | The style blocks, each family's styles in the set's order, each on its own page so one maps alone |
+| 64 KB | 64 KB pages | The style blocks, each family's styles in the set's order, each on its own page so one maps alone; the SD-mode blocks after every flash-mode one |
 | `indexOffset` | whole pages | Glyph index: 8-byte slots `{u32 key, u32 value}`, open addressing, at most 128 probes |
 | `pairOffset` | 64 KB | Kerning pairs: `{u32 left << 16 \| right, u32 pairStyle << 16 \| i16 font units}` |
 | `logOffset` | whole pages | Glyph records, append only: `u32 key`, the 16-byte `EpdGlyph`, the 2-bit bitmap, padded to 4 bytes |
 
+- **A style block's mode.** Flash mode: the style's whole TTF file. SD mode (a family too large for flash mode, or
+  beside others that fill the font area): a font of its own made of the file's tables but `glyf` (`cmap`, `head`,
+  `hhea`, `hmtx`, `loca`, `maxp`, `OS/2`, `GPOS`, `GSUB`, `kern`, whichever it has), each 4-byte aligned behind a
+  table directory whose `glyf` record points past the block (`SdOutlines::fontOffset`); the outlines are read from
+  the file on the card there (`SdOutlines::fileOffset`, `length`). An SD-mode `StyleInfo` also holds the file's
+  stamp (`FileSource::stamp`: FNV-1a over its path and modification time) and size; a file that no longer matches
+  them installs the set again. Flash-mode blocks map one at a time, the SD-mode ones together.
 - **A face** is a family at one size: `face = family << 24 | ppem` (26.6 pixels per em; the family is its index in
   the set). An entry is in use once `claimed` reads 0. A glyph key is `codepoint | style << 21 | faceIndex << 23`,
   bits 28-31 zero, so a key never reads as erased. The 32 entries are every family's; taking the last one, or asking
@@ -533,5 +540,6 @@ produces; a power cut leaves at worst bytes nothing references.
   FNV-1a over each style file's name, size and modification time and the engine's render version
   (`ttf::familyIdentity`). A store of another identity, or one whose header fails its check, is installed again.
 
-Version 1 held one family: four style blocks, and a size table of bare ppems with pairs keyed by style alone. A
-version-1 header reads as not installed, so the first load installs the set over it.
+Version 1 held one family: four style blocks, and a size table of bare ppems with pairs keyed by style alone.
+Version 2 had the mode in the `Geometry`, the store's, and a table map in each `StyleInfo` (1,240 B headers).
+An older header reads as not installed, so the first load installs the set over it.

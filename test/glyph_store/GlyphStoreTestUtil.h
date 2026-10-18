@@ -29,7 +29,6 @@ inline glyphstore::Layout smallLayout(const uint32_t indexSlots = 1024, const ui
                                       const uint32_t logBytes = 65536) {
   glyphstore::Layout layout{};
   glyphstore::Geometry& g = layout.geometry;
-  g.mode = glyphstore::kModeFlash;
   g.styleCount = 1;
   layout.styleOffset[0] = 65536;
   layout.styleSize[0] = 4096;

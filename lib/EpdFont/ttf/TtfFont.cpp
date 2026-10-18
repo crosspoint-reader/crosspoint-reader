@@ -153,7 +153,6 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
                          const std::function<void()>& onBusy) {
   store_.close();  // the plan needs the free mapping pages with nothing of the store mapped
   glyphstore::PlanInput in{};
-  in.mode = glyphstore::kModeFlash;
   for (uint8_t f = 0; f < count; ++f) {
     for (const ttf::FileSource& file : families[f]) {
       if (file.size == 0) continue;

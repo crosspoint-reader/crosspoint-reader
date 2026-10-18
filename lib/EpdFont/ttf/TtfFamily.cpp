@@ -80,7 +80,6 @@ bool fitsFlashMode(const uint32_t* styleBytes, const uint8_t count, const uint32
                    const uint32_t freeMapPages) {
   if (count == 0 || count > glyphstore::kMaxStyles) return false;
   glyphstore::PlanInput in{};
-  in.mode = glyphstore::kModeFlash;
   in.styleCount = count;
   for (uint8_t s = 0; s < count; ++s) in.styleBytes[s] = styleBytes[s];
   in.usableBytes = usableBytes;

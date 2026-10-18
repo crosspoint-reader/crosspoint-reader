@@ -108,7 +108,7 @@ void setup() {
                 static_cast<unsigned>(kReaderMapPages), static_cast<unsigned>(esp_get_free_heap_size()));
 
   PlanInput in{};
-  in.mode = kModeFlash;
+  in.styleMode[0] = in.styleMode[1] = kModeFlash;
   in.styleCount = 2;
   in.styleBytes[0] = in.styleBytes[1] = kStyleBytes;
   in.usableBytes = flash.size();

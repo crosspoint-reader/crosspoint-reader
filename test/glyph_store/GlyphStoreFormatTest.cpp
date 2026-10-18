@@ -14,9 +14,11 @@ constexpr uint32_t kX3UsableBytes = 3538944 - 65536;  // the X3's spiffs partiti
 
 PlanInput input(const uint8_t mode, const uint8_t styles, const uint32_t styleBytes, const uint32_t freePages = 32) {
   PlanInput in{};
-  in.mode = mode;
   in.styleCount = styles;
-  for (uint8_t s = 0; s < styles && s < kMaxStyles; ++s) in.styleBytes[s] = styleBytes;
+  for (uint8_t s = 0; s < styles && s < kMaxStyles; ++s) {
+    in.styleMode[s] = mode;
+    in.styleBytes[s] = styleBytes;
+  }
   in.usableBytes = kX3UsableBytes;
   in.freeMapPages = freePages;
   return in;
@@ -75,9 +77,10 @@ TEST(GlyphStoreFormat, HomeSlotStaysInRangeForAnySlotCount) {
 
 TEST(GlyphStoreFormat, HeaderLayoutIsStable) {
   // Bump kFormatVersion when any of these change.
-  EXPECT_EQ(2u, kFormatVersion);
-  EXPECT_EQ(1240u, sizeof(Header));
-  EXPECT_EQ(1236u, offsetof(Header, check));
+  EXPECT_EQ(3u, kFormatVersion);
+  EXPECT_EQ(312u, sizeof(Header));
+  EXPECT_EQ(308u, offsetof(Header, check));
+  EXPECT_EQ(32u, sizeof(StyleInfo));
   EXPECT_EQ(8u, sizeof(Slot));
   EXPECT_EQ(8u, sizeof(FaceEntry));
 }
@@ -110,7 +113,7 @@ TEST(GlyphStorePlan, CjkSdModeGetsTheLargestLog) {
   Layout layout{};
   ASSERT_TRUE(planLayout(input(kModeSd, 1, 430000), layout));
   const Geometry& g = layout.geometry;
-  EXPECT_EQ(kModeSd, g.mode);
+  EXPECT_EQ(kModeSd, layout.styleMode[0]);
   EXPECT_EQ(8 * 65536u, g.indexOffset);
   EXPECT_EQ(kSlotsPerPage, g.indexSlots);
   EXPECT_EQ(21 * 65536u, g.logSize);
@@ -136,6 +139,52 @@ TEST(GlyphStorePlan, AFamilySetMapsItsLargestStyleNotTheirSum) {
   EXPECT_EQ(41 * 65536u, layout.geometry.indexOffset);
   EXPECT_EQ(9 * 65536u, layout.geometry.logSize);  // the partition, not the budget, is the limit
   EXPECT_EQ(kX3UsableBytes, layout.geometry.logOffset + layout.geometry.logSize);
+}
+
+TEST(GlyphStorePlan, AMixedSetMapsItsLargestFlashStyleAndEverySdModeBlock) {
+  // A Bookerly-sized body in flash mode (four styles of 7 pages) and three accent families in SD mode (tables of
+  // 3, 3 and 2 pages): the flash-mode styles map one at a time, the SD-mode blocks together.
+  PlanInput in = input(kModeFlash, 7, 450048, 32);
+  for (const uint8_t s : {4, 5, 6}) in.styleMode[s] = kModeSd;
+  in.styleBytes[4] = in.styleBytes[5] = 176176;
+  in.styleBytes[6] = 100000;
+  Layout layout{};
+  ASSERT_TRUE(planLayout(in, layout));
+  EXPECT_EQ(kModeFlash, layout.styleMode[3]);
+  EXPECT_EQ(kModeSd, layout.styleMode[4]);
+  EXPECT_EQ(65536u + 4 * 7 * 65536u, layout.styleOffset[4]);
+  EXPECT_EQ(layout.styleOffset[4] + 3 * 65536u, layout.styleOffset[5]);
+  EXPECT_EQ(layout.styleOffset[5] + 3 * 65536u, layout.styleOffset[6]);
+  // The budget leaves 32 - 7 - 8 - 2 = 15 pages for the index, the pairs and the log (the partition 16): 2 + 1 + 12.
+  EXPECT_EQ(2 * kSlotsPerPage, layout.geometry.indexSlots);
+  EXPECT_EQ(12 * 65536u, layout.geometry.logSize);
+}
+
+TEST(GlyphStorePlan, AnSdModeBlockBeforeAFlashModeBlockIsRefused) {
+  PlanInput in = input(kModeFlash, 2, 100000);
+  in.styleMode[0] = kModeSd;
+  Layout layout{};
+  EXPECT_FALSE(planLayout(in, layout));
+  in.styleMode[0] = kModeFlash;
+  in.styleMode[1] = kModeSd;
+  EXPECT_TRUE(planLayout(in, layout));
+}
+
+TEST(GlyphStorePlan, TheIndexExpectsTheBodysRecords) {
+  // A body in SD mode is a font too large for flash mode, a CJK font in practice: its records are about 250 B, so
+  // the same log needs fewer index slots than a Latin body's 100 B records.
+  PlanInput latin = input(kModeFlash, 2, 100000);
+  latin.styleMode[1] = kModeSd;
+  PlanInput cjk = input(kModeSd, 2, 100000);
+  Layout a{};
+  Layout b{};
+  ASSERT_TRUE(planLayout(latin, a));
+  ASSERT_TRUE(planLayout(cjk, b));
+  EXPECT_GE(uint64_t{a.geometry.indexSlots} * kIndexLoadPercent / 100,
+            uint64_t{a.geometry.logSize} / kExpectedRecordFlash);
+  EXPECT_GE(uint64_t{b.geometry.indexSlots} * kIndexLoadPercent / 100,
+            uint64_t{b.geometry.logSize} / kExpectedRecordSd);
+  EXPECT_LT(b.geometry.indexSlots, a.geometry.indexSlots);
 }
 
 TEST(GlyphStorePlan, EightStyleBlocksAreTheMost) {
