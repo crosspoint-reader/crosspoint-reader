@@ -9,9 +9,14 @@ inline bool failNextWrite = false;
 inline bool failNextClose = false;
 }  // namespace HalFileTest
 
+constexpr int O_WRITE = 1;
+constexpr int O_CREAT = 2;
+constexpr int O_TRUNC = 4;
+
 class HalFile {
  public:
   HalFile() = default;
+  explicit HalFile(const char* path) { open(path, "wb"); }
   ~HalFile() { close(); }
   HalFile(const HalFile&) = delete;
   HalFile& operator=(const HalFile&) = delete;
@@ -74,9 +79,14 @@ class HalStorage {
     return instance;
   }
   int readOpens = 0;
+  std::string dictionaryTempPath;
+  std::string resolvePath(const std::string& path) const {
+    return path == "/.crosspoint/dicthtml.tmp" && !dictionaryTempPath.empty() ? dictionaryTempPath : path;
+  }
+  HalFile open(const char* path, int) { return HalFile(resolvePath(path).c_str()); }
   bool openFileForRead(const char*, const std::string& path, HalFile& file) {
     readOpens++;
-    return file.open(path.c_str(), "rb");
+    return file.open(resolvePath(path).c_str(), "rb");
   }
   bool openFileForWrite(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "wb"); }
   bool exists(const char* path) const {
@@ -85,7 +95,7 @@ class HalStorage {
     std::fclose(file);
     return true;
   }
-  bool remove(const std::string& path) { return std::remove(path.c_str()) == 0; }
+  bool remove(const std::string& path) { return std::remove(resolvePath(path).c_str()) == 0; }
   bool rename(const char* from, const char* to) { return std::rename(from, to) == 0; }
 };
 
