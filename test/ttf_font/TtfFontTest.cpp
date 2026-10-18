@@ -1,9 +1,13 @@
-// TtfFont: a TrueType family installed into the glyph store, its glyphs rendered once and then read from flash.
+// TtfFont: a TrueType family installed into the glyph store, its glyphs rendered once and then read from flash; and
+// TtfFontSet, families installed together into one store.
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "EpdFontFamily.h"
@@ -71,6 +75,14 @@ void expectDrawnAs(const Reference& ref, const TtfFont& font, const uint8_t styl
 int yields = 0;
 int lockChecks = 0;
 
+/// A set of one family, loaded, held as that family: what each boot of the tests below sees.
+struct Loaded {
+  std::unique_ptr<TtfFontSet> set;
+  TtfFont* operator->() const { return set->font(0); }
+  TtfFont& operator*() const { return *set->font(0); }
+  bool operator==(std::nullptr_t) const { return set == nullptr; }
+};
+
 class TtfFontTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -86,15 +98,15 @@ class TtfFontTest : public ::testing::Test {
     EXPECT_EQ(0u, flash.reprograms());
   }
 
-  /// A TtfFont over the test's flash, loaded and set to `points`: what each boot sees. Null when it fails.
-  std::unique_ptr<TtfFont> open(const uint8_t* identity = kIdentityA, const uint8_t points = 14) {
-    auto font = std::make_unique<TtfFont>(flash);
+  /// The family over the test's flash, loaded and set to `points`: what each boot sees. Null when it fails.
+  Loaded open(const uint8_t* identity = kIdentityA, const uint8_t points = 14) {
+    Loaded font{std::make_unique<TtfFontSet>(flash)};
     ttf::FileSource sources[4];
     for (int s = 0; s < 4; ++s) {
       if (!files[s].bytes.empty()) sources[s] = files[s].source();
     }
-    if (!font->load(sources, identity, [this] { ++busy; })) return nullptr;
-    if (points != 0 && !font->setBodySize(points)) return nullptr;
+    if (!font.set->load(&sources, 1, identity, [this] { ++busy; })) return {};
+    if (points != 0 && !font->setBodySize(points)) return {};
     return font;
   }
 
@@ -158,10 +170,10 @@ TEST_F(TtfFontTest, AFamilyWithoutARegularStyleIsRefused) {
 
 TEST_F(TtfFontTest, AFamilyTooLargeForThePartitionIsRefusedBeforeAnyErase) {
   SimNorFlash small{1024 * 1024};
-  TtfFont font(small);
+  TtfFontSet set(small);
   ttf::FileSource sources[4];
   for (int s = 0; s < 4; ++s) sources[s] = files[s].source();
-  EXPECT_FALSE(font.load(sources, kIdentityA, [this] { ++busy; }));
+  EXPECT_FALSE(set.load(&sources, 1, kIdentityA, [this] { ++busy; }));
   EXPECT_EQ(0, busy);
   EXPECT_EQ(0u, small.totalSectorErases());
 }
@@ -330,10 +342,10 @@ TEST_F(TtfFontTest, AWipeAtTheNextBookOpenEndsTheRing) {
   ASSERT_NE(nullptr, font->glyph(kRegular, 'B'));
   ASSERT_TRUE(font->ringMode());
   busy = 0;
-  EXPECT_TRUE(font->wipeIfPending([this] { ++busy; }));
+  EXPECT_TRUE(font.set->wipeIfPending([this] { ++busy; }));
   EXPECT_EQ(1, busy);
   EXPECT_FALSE(font->ringMode());
-  EXPECT_FALSE(font->wipeIfPending());  // nothing pending now
+  EXPECT_FALSE(font.set->wipeIfPending());  // nothing pending now
   const uint32_t renders = font->renders();
   const EpdGlyph* a = font->glyph(kRegular, 'A');  // the wipe emptied the store: rendered and stored again
   EXPECT_EQ(renders + 1, font->renders());
@@ -508,7 +520,7 @@ TEST_F(TtfFontTest, PrefetchRendersAtMostItsLimitAndLookupsRenderTheRest) {
   for (uint32_t cp = '0'; cp <= '9'; ++cp) codepoints.push_back(cp);
   for (uint32_t cp = 0xC0; cp <= 0xD6; ++cp) codepoints.push_back(cp);
   font->prefetch(kRegular, utf8(codepoints).c_str());
-  EXPECT_EQ(TtfFont::kPrefetchGlyphs, font->renders());
+  EXPECT_EQ(TtfFontSet::kPrefetchGlyphs, font->renders());
   for (const uint32_t cp : codepoints) {
     expectDrawnAs(reference(files[kRegular].bytes, cp, 14), *font, kRegular, font->glyph(kRegular, cp));
   }
@@ -670,10 +682,10 @@ TEST_F(TtfFontTest, TheRingStaysWithinItsBudgetAndGoesWithTheNativeSizes) {
     ASSERT_TRUE(font->ownsBitmap(glyph, bitmap)) << c;
     expectDrawnAs(referenceAt(files[kRegular].bytes, static_cast<uint8_t>(c), px(font->maxNativePx())), *font, kRegular,
                   glyph);  // the newest record is always whole
-    EXPECT_LE(font->ringBytes(), TtfFont::kRingBudgetBytes) << c;
+    EXPECT_LE(font.set->ringBytes(), TtfFontSet::kRingBudgetBytes) << c;
   }
   font->dropNativeSizes();  // only where no record is in use: book open
-  EXPECT_EQ(0u, font->ringBytes());
+  EXPECT_EQ(0u, font.set->ringBytes());
 }
 
 TEST_F(TtfFontTest, WhenEveryNativeSizeIsHeldTheNearestServesUntilTheyAreDropped) {
@@ -730,7 +742,7 @@ TEST_F(TtfFontTest, ASizeTheFullTableRefusesIsDrawnFromTheRingWhileTheOthersStor
   EXPECT_FALSE(font->ringMode());
   EXPECT_FALSE(font->ownsBitmap(font->glyph(kRegular, 'Q'), bitmap));  // the body still stores its glyphs
   // The wipe at the next book open frees the table.
-  EXPECT_TRUE(font->wipeIfPending());
+  EXPECT_TRUE(font.set->wipeIfPending());
   EXPECT_FALSE(font->ownsBitmap(nativeGlyph(fonts[kRegular], 'M'), bitmap));
   expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(60)), *font, kRegular, nativeGlyph(fonts[kRegular], 'M'));
 }
@@ -897,4 +909,200 @@ TEST_F(TtfFontTest, ALigatureKernsAsTheGlyphGsubNames) {
   EXPECT_EQ(-47, ttf->kerning(kRegular, 0xFB01, 'x'));
   EXPECT_EQ(-47, ttf->font(kRegular)->getKerning(0xFB01, 'x'));
   EXPECT_EQ(0, ttf->kerning(kRegular, 'i', 'x'));
+}
+
+// --- TtfFontSet: families drawn from one store ------------------------------------------------------------------
+
+namespace {
+
+constexpr uint8_t kIdentitySet[glyphstore::kIdentityBytes] = {'s', 'e', 't'};
+
+// A body family (Bookerly, four styles) and an accent family (Inter, two), as Publisher Fonts loads a reader font
+// and a book's accent family.
+class TtfFontSetTest : public TtfFontTest {
+ protected:
+  void SetUp() override {
+    TtfFontTest::SetUp();
+    accent[kRegular].bytes = readFont("Inter/Inter-Regular.ttf");
+    accent[kBold].bytes = readFont("Inter/Inter-Bold.ttf");
+  }
+
+  /// `count` of the body and the accent family (the accent family first if `accentFirst`), on `chip` or the test's
+  /// flash, each at 14 pt: what each boot sees. Null when it fails.
+  std::unique_ptr<TtfFontSet> openSet(const uint8_t* identity = kIdentitySet, const uint8_t count = 2,
+                                      const bool accentFirst = false, SimNorFlash* chip = nullptr) {
+    auto set = std::make_unique<TtfFontSet>(chip ? *chip : flash);
+    ttf::FileSource sources[2][4];
+    MemoryFile* order[2] = {files, accent};
+    if (accentFirst) std::swap(order[0], order[1]);
+    for (uint8_t f = 0; f < 2; ++f) {
+      for (int s = 0; s < 4; ++s) {
+        if (!order[f][s].bytes.empty()) sources[f][s] = order[f][s].source();
+      }
+    }
+    if (!set->load(sources, count, identity, [this] { ++busy; })) return nullptr;
+    for (uint8_t f = 0; f < count; ++f) {
+      if (!set->font(f)->setBodySize(14)) return nullptr;
+    }
+    return set;
+  }
+
+  MemoryFile accent[4];
+};
+
+}  // namespace
+
+TEST_F(TtfFontSetTest, TheFamiliesAreInstalledTogetherAndTheNextLoadReusesThem) {
+  ASSERT_NE(nullptr, openSet());
+  EXPECT_EQ(1, busy);
+  const uint32_t erases = flash.totalSectorErases();
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(1, busy);  // not installed twice
+  EXPECT_EQ(erases, flash.totalSectorErases());
+  EXPECT_EQ(2, set->familyCount());
+  EXPECT_NE(nullptr, set->font(0)->font(kItalic));
+  EXPECT_NE(nullptr, set->font(1)->font(kBold));
+  EXPECT_EQ(nullptr, set->font(1)->font(kItalic));  // no Inter italic here
+  EXPECT_EQ(nullptr, set->font(2));
+}
+
+TEST_F(TtfFontSetTest, EachFamilyDrawsItsOwnGlyphsAndFindsThemTheNextBoot) {
+  {
+    const auto set = openSet();
+    ASSERT_NE(nullptr, set);
+    for (const uint32_t cp : {uint32_t{'A'}, uint32_t{'g'}, uint32_t{0xE9}}) {
+      expectDrawnAs(reference(files[kRegular].bytes, cp, 14), *set->font(0), kRegular,
+                    set->font(0)->glyph(kRegular, cp));
+      expectDrawnAs(reference(accent[kRegular].bytes, cp, 14), *set->font(1), kRegular,
+                    set->font(1)->glyph(kRegular, cp));
+    }
+    expectDrawnAs(reference(accent[kBold].bytes, 'W', 14), *set->font(1), kBold, set->font(1)->glyph(kBold, 'W'));
+  }
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  expectDrawnAs(reference(files[kRegular].bytes, 'g', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'g'));
+  expectDrawnAs(reference(accent[kRegular].bytes, 'g', 14), *set->font(1), kRegular,
+                set->font(1)->glyph(kRegular, 'g'));
+  EXPECT_EQ(0u, set->font(0)->renders());  // both from the store
+  EXPECT_EQ(0u, set->font(1)->renders());
+}
+
+TEST_F(TtfFontSetTest, TheFamiliesShareOneScratchBlock) {
+  SimNorFlash alone{kFlashBytes};
+  uint32_t largest = 0;
+  for (const bool accentFirst : {false, true}) {
+    const auto one = openSet(accentFirst ? kIdentityB : kIdentityA, 1, accentFirst, &alone);
+    ASSERT_NE(nullptr, one);
+    largest = std::max(largest, one->scratchBytes());
+  }
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(largest, set->scratchBytes());  // sized for the larger family, not for the two
+}
+
+TEST_F(TtfFontSetTest, ASetChangedSinceTheInstallIsInstalledAgain) {
+  ASSERT_NE(nullptr, openSet());
+  // The body alone (a book without an accent family) is another set, though family 0's keys would still match.
+  ttf::FileSource sources[4];
+  for (int s = 0; s < 4; ++s) sources[s] = files[s].source();
+  TtfFontSet body(flash);
+  ASSERT_TRUE(body.load(&sources, 1, kIdentityA, [this] { ++busy; }));
+  EXPECT_EQ(2, busy);
+  ASSERT_TRUE(body.font(0)->setBodySize(14));
+  expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *body.font(0), kRegular, body.font(0)->glyph(kRegular, 'A'));
+  EXPECT_EQ(1u, body.font(0)->renders());  // the install emptied the store
+}
+
+TEST_F(TtfFontSetTest, TheFamiliesInAnotherOrderAreAnotherSet) {
+  {
+    const auto set = openSet();
+    ASSERT_NE(nullptr, set);
+    ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
+  }
+  // The caller's identity says the order (ttf::setIdentity): family 0 is now Inter, and draws as Inter.
+  const auto swapped = openSet(kIdentityB, 2, /*accentFirst=*/true);
+  ASSERT_NE(nullptr, swapped);
+  EXPECT_EQ(2, busy);
+  expectDrawnAs(reference(accent[kRegular].bytes, 'A', 14), *swapped->font(0), kRegular,
+                swapped->font(0)->glyph(kRegular, 'A'));
+}
+
+TEST_F(TtfFontSetTest, KerningIsEachFamilysOwnAndServesTheNextBoot) {
+  SimNorFlash alone{kFlashBytes};
+  int8_t own[2] = {};
+  for (const bool accentFirst : {false, true}) {
+    const auto one = openSet(accentFirst ? kIdentityB : kIdentityA, 1, accentFirst, &alone);
+    ASSERT_NE(nullptr, one);
+    own[accentFirst ? 1 : 0] = one->font(0)->kerning(kRegular, 'A', 'V');
+  }
+  ASSERT_NE(own[0], own[1]);  // the two fonts kern A-V differently
+  {
+    const auto set = openSet();
+    ASSERT_NE(nullptr, set);
+    EXPECT_EQ(own[0], set->font(0)->kerning(kRegular, 'A', 'V'));
+    EXPECT_EQ(own[1], set->font(1)->kerning(kRegular, 'A', 'V'));
+  }
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(own[0], set->font(0)->kerning(kRegular, 'A', 'V'));
+  EXPECT_EQ(own[1], set->font(1)->kerning(kRegular, 'A', 'V'));
+  EXPECT_EQ(0u, set->font(0)->kernLookups() + set->font(1)->kernLookups());  // both from the pair index
+}
+
+TEST_F(TtfFontSetTest, EachFamilyHasItsOwnNativeSizes) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  const EpdFont* body[4] = {};
+  const EpdFont* accented[4] = {};
+  ASSERT_TRUE(set->font(0)->nativeFonts(40, body));
+  ASSERT_TRUE(set->font(1)->nativeFonts(40, accented));
+  expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(40)), *set->font(0), kRegular,
+                nativeGlyph(body[kRegular], 'M'));
+  expectDrawnAs(referenceAt(accent[kRegular].bytes, 'M', px(40)), *set->font(1), kRegular,
+                nativeGlyph(accented[kRegular], 'M'));
+  EXPECT_EQ(1, set->font(0)->nativeSizeCount());
+  EXPECT_EQ(1, set->font(1)->nativeSizeCount());
+}
+
+TEST_F(TtfFontSetTest, PrefetchStoresOnlyItsFamilysGlyphs) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  set->font(1)->prefetch(kRegular, "Hamburgefonts");
+  const uint32_t accentRenders = set->font(1)->renders();
+  EXPECT_GT(accentRenders, 0u);
+  ASSERT_NE(nullptr, set->font(1)->glyph(kRegular, 'H'));
+  EXPECT_EQ(accentRenders, set->font(1)->renders());  // stored by the batch
+  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'H'));
+  EXPECT_EQ(1u, set->font(0)->renders());  // the body family's H was not
+}
+
+TEST_F(TtfFontSetTest, AFailedWriteRingsEveryFamilyAndOneWipeServesThemAgain) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
+  flash.failNextProgram();
+  const EpdGlyph* b = set->font(1)->glyph(kRegular, 'B');
+  EXPECT_TRUE(set->font(0)->ringMode());  // the store is the set's
+  EXPECT_TRUE(set->font(1)->ringMode());
+  expectDrawnAs(reference(accent[kRegular].bytes, 'B', 14), *set->font(1), kRegular, b);
+  expectDrawnAs(reference(files[kRegular].bytes, 'C', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'C'));
+  busy = 0;
+  EXPECT_TRUE(set->wipeIfPending([this] { ++busy; }));
+  EXPECT_EQ(1, busy);
+  EXPECT_FALSE(set->ringMode());
+  for (uint8_t f = 0; f < 2; ++f) {
+    const uint8_t* bitmap = nullptr;
+    EXPECT_FALSE(set->font(f)->ownsBitmap(set->font(f)->glyph(kRegular, 'A'), bitmap)) << int{f};  // stored again
+  }
+  expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'A'));
+  expectDrawnAs(reference(accent[kRegular].bytes, 'A', 14), *set->font(1), kRegular,
+                set->font(1)->glyph(kRegular, 'A'));
+}
+
+TEST_F(TtfFontSetTest, AnAccentFamilyWithoutARegularStyleRefusesTheSetBeforeAnyErase) {
+  accent[kRegular].bytes.clear();
+  EXPECT_EQ(nullptr, openSet());
+  EXPECT_EQ(0, busy);
+  EXPECT_EQ(0u, flash.totalSectorErases());
 }

@@ -17,6 +17,12 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t s
   return nullptr;
 }
 
+uint32_t SdCardFontFamilyInfo::filesKey() const {
+  uint32_t key = glyphstore::fnv1a(name.c_str(), name.size() + 1);
+  for (const auto& f : files) key = glyphstore::fnv1a(f.path.c_str(), f.path.size() + 1, key);
+  return key;
+}
+
 bool SdCardFontFamilyInfo::hasSize(uint8_t size) const {
   for (const auto& f : files) {
     if (f.pointSize == size) return true;

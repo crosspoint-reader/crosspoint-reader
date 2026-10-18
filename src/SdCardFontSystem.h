@@ -34,6 +34,14 @@ class SdCardFontSystem {
   /// partition (genuine first load) — callers use it to show a "loading font" popup.
   void ensureLoaded(GfxRenderer& renderer, const char* familyName, uint8_t pointSize,
                     const std::function<void()>& onColdLoad = {}, FlashCachePolicy policy = FlashCachePolicy::ReadWrite,
+                    BuildArena* arena = nullptr) {
+    ensureLoaded(renderer, &familyName, 1, pointSize, onColdLoad, policy, arena);
+  }
+  /// The same for families drawn together, the body's first ("" or a name not on the card is left out): TrueType
+  /// families share one glyph store (SdCardFontManager::loadTtfFamilies); a .cpfont family first is loaded alone.
+  /// Kept as loaded only while they are the same families from the same files.
+  void ensureLoaded(GfxRenderer& renderer, const char* const* familyNames, uint8_t count, uint8_t pointSize,
+                    const std::function<void()>& onColdLoad = {}, FlashCachePolicy policy = FlashCachePolicy::ReadWrite,
                     BuildArena* arena = nullptr);
 
   /// Load a family only to show it on screen. A family already present in the
@@ -65,25 +73,26 @@ class SdCardFontSystem {
     return manager_.ttfNativeSizes(bodyFontId);
   }
 
-  /// Publisher Fonts in `mode` (CrossPointSettings::PUBLISHER_FONTS) for the book cached at `cachePath`: a family
-  /// BookFonts copied out of it becomes the book family, drawn like a family on the card while that book is open.
-  /// Body Text and All Text take its body family; Accents, and All Text for a book without one, its accent family,
-  /// when `accentAllowed` (the reader's font is built in: the font area holds one family, so an accent family beside
-  /// a reader font on the card waits for a store of several). An empty `cachePath` forgets it. True when there is a
-  /// book family to load (selectedFamilyName).
-  bool selectBookFamily(const std::string& cachePath, uint8_t mode = 0, bool accentAllowed = false);
-  /// The book family's name ("" when none), for ensureLoaded() and resolveFontId(). It starts with "book:",
-  /// which no family directory can, so it never shadows a family on the card.
-  const char* selectedFamilyName() const { return bookFamily_.name.c_str(); }
-  /// The same while it is the book's body family, the reader's font for the book; "" for an accent family.
-  const char* bookFamilyName() const { return bookFamilyIsAccent_ ? "" : selectedFamilyName(); }
+  /// Publisher Fonts in `mode` (CrossPointSettings::PUBLISHER_FONTS) for the book cached at `cachePath`, whose body
+  /// is otherwise drawn in `readerFamily` ("" for a built-in font): the families BookFonts copied out of it become
+  /// the book's, drawn like families on the card while that book is open. Body Text and All Text take its body family
+  /// as the book's font; Accents and All Text add its accent family beside whatever draws the body, a built-in font
+  /// or a TrueType family, which then share the glyph store. Beside a .cpfont family, which has the font area to
+  /// itself, the accent family is left out. An empty `cachePath` forgets them.
+  void selectBookFamilies(const std::string& cachePath, uint8_t mode = 0, const char* readerFamily = "");
+  /// The book's body family's name while it is the reader's font for the book, else "", for ensureLoaded() and
+  /// resolveFontId(). A book family's name starts with "book:", which no family directory can, so it never shadows
+  /// a family on the card.
+  const char* bookFamilyName() const { return bookBody_.name.c_str(); }
+  /// The book's accent family's name while it is selected, else "".
+  const char* accentFamilyName() const { return bookAccent_.name.c_str(); }
   /// The book's body family name when it belongs to the book cached at `cachePath`, else "".
   const char* bookFamilyNameFor(const std::string& cachePath) const {
     return cachePath == bookCachePath_ ? bookFamilyName() : "";
   }
-  /// The book's accent family name, when it is the book family of the book cached at `cachePath`, else "".
+  /// The book's accent family name, when it belongs to the book cached at `cachePath`, else "".
   const char* accentFamilyNameFor(const std::string& cachePath) const {
-    return cachePath == bookCachePath_ && bookFamilyIsAccent_ ? selectedFamilyName() : "";
+    return cachePath == bookCachePath_ ? accentFamilyName() : "";
   }
   /// The families BookFonts found in the book cached at `cachePath`, while it is selected in a mode that lays its
   /// blocks out in them (Accents, All Text); else nullptr.
@@ -94,15 +103,17 @@ class SdCardFontSystem {
   const SdCardFontRegistry& registry() const { return registry_; }
 
  private:
-  // A family on the card, or the book family.
+  // A family on the card, or one of the book's.
   const SdCardFontFamilyInfo* findFamily(const char* name) const;
+  // Reads a book family's directory as a family directory on the card, named "book:<name>"; else empties `family`.
+  void scanBookFamily(SdCardFontFamilyInfo& family, const std::string& name, const std::string& dir);
 
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
-  SdCardFontFamilyInfo bookFamily_;  // empty name: none
-  std::string bookCachePath_;        // the book bookFamily_ was selected for
+  SdCardFontFamilyInfo bookBody_;    // the book's body family; empty name: none
+  SdCardFontFamilyInfo bookAccent_;  // the book's accent family; empty name: none
+  std::string bookCachePath_;        // the book they were selected for
   BookFonts::Families bookFonts_;    // what that book holds
-  uint8_t bookMode_ = 0;             // the mode it was selected in
-  bool bookAccentAllowed_ = false;
-  bool bookFamilyIsAccent_ = false;  // bookFamily_ is the book's accent family, not its body's
+  uint8_t bookMode_ = 0;             // the mode they were selected in
+  bool bookBesideCpfont_ = false;    // the reader's font was a .cpfont family then
 };

@@ -12,7 +12,7 @@ with the direct integration in section 3.
 - **Where everything lives:** section 8, "Branches and files".
 - **A book's embedded fonts (section 11):** Stage A, the book's body family drawn as that book's font, is built on
   branch `feat/book-fonts` (2026-10-17; slimmed and X4-tested 2026-10-18). Stage B, more than one family per book,
-  is designed in 11.1 and not built.
+  is designed in 11.1; phase 1 is merged (11.1.1), phase 2, the store of a family set, is built (11.1.2).
 
 It is working material. When the work merges, lasting parts move to reference docs, open items move
 to `docs/future_work/`, and this file is deleted (see the docs layout convention).
@@ -252,7 +252,8 @@ The state sector holds what changes after the install, so a wipe never rewrites 
 
 - **size table**: 32 write-once entries `{u32 ppem 26.6, u32 claimed}`. An entry is in use once
   `claimed` reads 0. The ppem goes first and `claimed` last, so an entry cut short is neither free nor
-  in use, and is never written again. 32 entries cover the 9 ladder rungs plus body sizes;
+  in use, and is never written again. 32 entries cover the 9 ladder rungs plus body sizes. (Stage B phase 2, 11.1.2:
+  a face table, `{u32 family << 24 | ppem 26.6, u32 claimed}`, shared by a set's families);
 - **wipe-pending word**: write-once, from 0xFFFFFFFF to 0. Anything but erased reads as pending.
 
 **Size indices and wipes.** A wipe empties the size table. A commit refuses keys whose size index was not
@@ -1067,7 +1068,7 @@ with one font ID (per-word data carries only the style bits).
     fragment; `OpenType.h`'s header names two users, now three; `run.sh` keeps a stale "GSUB feature branch"
     comment; the SDK's `GposKerningTest.cpp` has a few clang-format deviations.
 
-### 11.1 Stage B: more than one font family per book (designed; phase 1 built, 11.1.1)
+### 11.1 Stage B: more than one font family per book (designed; phase 1 built, 11.1.1; phase 2 built, 11.1.2)
 
 What #3934 calls "Ignore Body Font", and what most books with embedded fonts actually use them for: the body in
 one family, and a few elements set apart in others (a display face for headings and chapter numbers, a script
@@ -1220,7 +1221,93 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
 - **A Stage A edge, not fixed here:** a book family is keyed by its declared name (`book:<name>`). Two books whose
   families share a name, opened reader to reader without the font being unloaded in between, keep the first book's
   TTF family: `SdCardFontSystem::ensureLoaded` matches the loaded family by name and only changes its size. Key book
-  families by book (cache path or identity) when the manager learns several families.
+  families by book (cache path or identity) when the manager learns several families. (Fixed in phase 2, 11.1.2.)
+
+#### 11.1.2 Phase 2, as built (2026-10-18, branch `feat/book-fonts-stage-b2`)
+
+- **The store (`kFormatVersion` 2, `GlyphStoreFormat.h`, docs/file-formats.md):** the size table is a face table:
+  32 entries `{u32 family << 24 | ppem 26.6, u32 claimed}` (`faceOf`), shared by every family of the set, claimed by
+  `FlashGlyphStore::faceIndex(family, ppem)`; the glyph key's 5-bit index names the face, so the key format, the
+  erased-value guarantee and the log scan are unchanged. A pair slot's value carries `pairStyle(family, style) =
+  family << 2 | style` in its high half (`findPair`/`storePair` take the family). `kMaxStyles` 8 (the header is
+  1,240 B, one sector). A family is its index in the set; family 0's faces and pair styles equal version 1's sizes and
+  styles. A version-1 header reads as not installed, so the first load installs over it, erasing only what holds data.
+  The planner was already right for a set: it counts the largest style block, not their sum.
+- **Set identity (`ttf::setIdentity`):** FNV-1a, four lanes, over the count and the families' identities in the set's
+  order. Another family, order or count installs the set again: a family's index is in every key it stored.
+- **Engine (`TtfFontSet`, `TtfFont.h`):** the set owns what is one per store: the `FlashGlyphStore`, the rasterizer
+  and its one scratch block (planned over every family's styles: the larger family's, not their sum), the ring and its
+  8 KB budget, the prefetch list, the failure log, and install, open and wipe. `load(families, count, identity)` plans
+  one layout over all present styles and copies them as consecutive style blocks, family by family. A `TtfFont` is one
+  family of the set: its styles (face, kerning, ligatures, uncovered-left bits), body size, native sizes and stats,
+  keyed by its index. Flash mode still maps one style block at a time, every family's; a store hit maps nothing.
+  Prefetch was already one family and style per call (one provider per family, size and style, and FontCacheManager
+  records text per font ID and style), so a page that mixes families maps each block once per batch; misses and kerning
+  misses in another family remap as the spec expected (`knownUncovered` spares most kerning remaps).
+  `TtfFontSet::kMaxFamilies` 2.
+- **Manager (`SdCardFontManager::loadTtfFamilies`):** opens every family's style files (a heap struct, `TtfSources`,
+  so two families' handles stay off the frame), loads them as one set, then registers each family's body face at the
+  body size and picks it a native-size window; `pickNativeBase` also steps past another family's window. The resolver
+  dispatches on the window an ID falls in (`ttfFamilyOfNativeId`); `ttfNativeSizes`, `getFontId`, `setTtfBodySize`,
+  `dropTtfNativeSizes` and `unloadAll` answer for every family. A set that cannot load together (planLayout refuses it
+  before any erase, or an accent family that does not read) falls back to the first family alone, logged. The per-family
+  record is `TtfFamily {name, identityHash, fontId, nativeBase}`, two of them in the manager.
+- **The Stage A edge, fixed:** the manager keeps a loaded set only while it was asked for as the same families from
+  the same files (`ttfFamiliesLoaded`, over `SdCardFontFamilyInfo::filesKey`: FNV-1a over the name and the files'
+  paths, and a book family's files live in its book's cache). It remembers what was asked, not what loaded, so a set
+  that fell back to the body alone is not retried at every open of the same book.
+- **`SdCardFontSystem`:** `ensureLoaded(names, count, ...)` takes the families, the body's first; a name not found is
+  left out, and a family beside the first only when both are TrueType. The single-name call is a list of one.
+  `selectBookFamilies(cachePath, mode, readerFamily)` holds the book's body and accent families at once
+  (`bookBody_`, `bookAccent_`; the state file is read twice, once per name); it leaves the accent family out, logged,
+  only when the body is drawn in a `.cpfont` reader font. The book open asks for `{body or reader font, accent}`.
+- **Layout:** `BlockFontFamilies::kMaxFamilies` 3 (both generics and the accent family beside a TTF reader font),
+  still a pointer in `BuildParams`. No section format change. The All Text golden of `test_font_families` now has the
+  accent family and equals the Accents golden (the shim draws the two body fonts alike); Off and Body Text unchanged.
+- **Cost, `env:default` (C3), against master 83d758e4d (#499 merged; tree equal to phase 1's head):** flash +2,940 B
+  (5,837,263 B): the store format +122, `TtfFontSet` +912, the manager's family set +1,482, the reader +424. Static RAM
+  +96 B (the manager's family table 64, the second book family 32). No MMU page boundary crossed: code ends 50.7 KB
+  into its 42nd page, rodata 21.2 KB short of its 47th, 89 pages in all. Heap: one `TtfFont` per extra family (its
+  styles' tables and its faces), no second scratch block; the load's `TtfSources` (about 220 B) only while it runs.
+- **Tests:** the glyph store's face table per family and shared, two families' glyphs apart, pairs per family, a set's
+  layout and the eight-block limit, a version-1 store installed over, the set identity; the power-cut sweeps with an
+  accent face, glyph and pair (session and wipe); `TtfFontSetTest` (Bookerly and Inter in one store: installed once,
+  each family's glyphs, native sizes and kerning as its own file gives them, one scratch block, another set or order
+  installed again, prefetch per family, a failed write rings both until one wipe, an accent family without a regular
+  style refused before any erase); `TtfRegistry` (two books' same-named families told apart); `FontFamilyLayoutTest`
+  (three families). Host suite 2830/2830. The manager itself needs the renderer, so its set is exercised on the device.
+- **X4 test (2026-10-18, serial test API, Bookerly 14 pt):** `/test/families_test.epub` in every mode, with the
+  built-in Bookerly, Bookerly's TTF files as a reader font on the card (BookerlyTT) and Bitter (`.cpfont`).
+  - Off: all Bookerly.
+  - Body Text: all Ubuntu.
+  - Accents with the built-in font: body Bookerly, the Book Display blocks in Inter (Bold headings), the generic sans
+    heading in Noto Sans.
+  - **Accents with BookerlyTT:** body BookerlyTT, Book Display blocks Inter: "2 families installed: 6 styles, log
+    589824 B", about 17 s for the install.
+  - **All Text:** body Ubuntu, Book Display blocks Inter (phase 1: Noto Sans), "2 families installed: 4 styles".
+  - Accents with Bitter: "Accent font Book Display left out: the reader's font is a .cpfont family", as phase 1.
+  - **Two books whose body families share a name** (`families_test2.epub`, Bookerly as "Book Body"), reader to reader:
+    each in its own font, the store installed again at each switch.
+  - Heap in the book, free: Off 67.4-70.0 KB, Body Text 55.9-57.0 KB, Accents 52.6-55.2 KB, All Text 52.3-54.8 KB,
+    Accents beside BookerlyTT 52.8-55.4 KB, All Text with BookerlyTT 54.0-55.3 KB, Accents with Bitter 63.4-65.9 KB
+    (phase 1 alike); at Home 75.8-76.4 KB.
+  - Found on the way, older than Stage B: `ActivityManager::goToReader` loads the next book's fonts before the reader
+    it replaces has exited, so that reader's look-ahead build tick ran against unloaded font IDs ("Font ... not
+    found", 27 lines; the build was dropped at its exit, nothing cached). Any reader-to-reader switch that changes
+    the font does this; the same-name switch now does too, since it now changes the font.
+- **What is left, and phase 3:**
+  - A `.cpfont` reader font still has the font area to itself: the accent family beside it needs the `.cpfont` read
+    from SD while the store holds the accent, or the accent in SD mode (2c-4).
+  - Any change of the set installs every family again, the reader's font included: moving between a book with an
+    accent family and one without, or between two books' accent families, beside a TTF reader font, copies the reader
+    font each time (about 1.8 MB for Bookerly). An install that keeps a matching leading family's blocks (its face
+    entries and log records stay valid if its index does) would spare that; the identity would then be per family.
+  - Per-word font slots (`SECTION_FILE_VERSION` bump): the parser knows each word's family; #3934's per-block table of
+    up to 8 `{fontId, scale}` slots and a slot byte per word.
+  - Several families extracted: the probe's block tally holds every family, so more accent families are `accent()`
+    returning a list, `BookFonts` copying each (`fonts/accent<n>/`), and `TtfFontSet::kMaxFamilies`,
+    `SdCardFontManager::kMaxTtfFamilies` and `BlockFontFamilies::kMaxFamilies` raised; the store already takes eight
+    style blocks and the face table is shared. The fallback would then drop families from the end, one at a time.
 
 ## 12. Side findings (separate from this work)
 

@@ -1,6 +1,8 @@
 // How the font registry lists a TrueType family. Directory scanning needs a card; these are the decisions it uses.
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "SdCardFontRegistry.h"
 
 namespace {
@@ -35,6 +37,27 @@ TEST(TtfRegistry, ACpfontFamilyIsUnchanged) {
   EXPECT_EQ((std::vector<uint8_t>{12, 16}), family.availableSizes());
   ASSERT_NE(nullptr, family.pickClosestSize(15));
   EXPECT_EQ(16, family.pickClosestSize(15)->pointSize);
+}
+
+TEST(TtfRegistry, TwoBooksFamiliesOfOneNameAreToldApartByTheirFiles) {
+  // A book family is named as the book declares it, so the manager knows a loaded family by its files: the same
+  // name from another book's cache is another family, and is loaded rather than kept (the Stage A edge).
+  const auto bookFamily = [](const char* cache) {
+    SdCardFontFamilyInfo family;
+    family.name = "book:Book Body";
+    family.files.push_back({std::string(cache) + "/fonts/0.ttf", 0, 0, 300000});
+    family.files.push_back({std::string(cache) + "/fonts/1.ttf", 0, 1, 270000});
+    return family;
+  };
+  const SdCardFontFamilyInfo first = bookFamily("/.crosspoint/epub_1");
+  EXPECT_EQ(first.filesKey(), bookFamily("/.crosspoint/epub_1").filesKey());
+  EXPECT_NE(first.filesKey(), bookFamily("/.crosspoint/epub_2").filesKey());
+  SdCardFontFamilyInfo renamed = bookFamily("/.crosspoint/epub_1");
+  renamed.name = "book:Book Display";
+  EXPECT_NE(first.filesKey(), renamed.filesKey());
+  SdCardFontFamilyInfo fewer = bookFamily("/.crosspoint/epub_1");
+  fewer.files.pop_back();
+  EXPECT_NE(first.filesKey(), fewer.filesKey());
 }
 
 TEST(TtfRegistry, AFamilyRecordCostsOnlyItsNameAndFiles) {

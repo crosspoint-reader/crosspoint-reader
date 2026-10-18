@@ -83,6 +83,16 @@ CSS pass), `spines/<n>/anchors_<spine>.tmp` (a section's anchor map), `footnotes
 | `/screenshots/*.bmp` | `ScreenshotUtil` | Screenshots |
 | `<dictionary>.qidx`, `.sidx` | `Dictionary` | Lookup indexes beside a dictionary's `.idx` and `.syn`, `SIDECAR_VERSION` (2): [dictionary.md](dictionary.md) |
 
+### In flash: the font area
+
+Not on the card: the `spiffs` partition below the language slot holds one of two things, whichever the reader's
+fonts need.
+
+| Magic | Written by | Version | Contents |
+|---|---|---|---|
+| `CPFC` | `FlashFontPartition` | none | A `.cpfont` family copied from the card, mapped in place. See [contributing/font-cache-structures.md](contributing/font-cache-structures.md) |
+| `CPTT` | `FlashGlyphStore` | `glyphstore::kFormatVersion` (2) | The TTF glyph store: [below](#the-ttf-glyph-store-cptt) |
+
 ## `book.bin`
 
 Written by `BookMetadataCache`. The version byte is `BOOK_CACHE_VERSION` in `lib/Epub/Epub/BookMetadataCache.cpp`; it is bumped when the layout changes, and an older cache is rebuilt on the next open. The pattern below matches version 11.
@@ -490,3 +500,37 @@ files out of order, a total that does not add up). The file is left in place aft
 stash overwrites it. The manifest the list is built from is
 downloaded to `/fonts_manifest.tmp` (`/fonts_manifest_web.tmp` from the web UI) and removed once
 parsed.
+
+## The TTF glyph store (`CPTT`)
+
+`FlashGlyphStore` (`lib/EpdFont/ttf`) keeps the reader's TrueType families in the font area: their files, and
+every glyph drawn from them, so a glyph is rendered once and then read from flash. It holds a family set: one
+family, or several drawn together (the body's, and a book's accent family under Publisher Fonts), installed
+together. The layout is
+`glyphstore::Layout` (`GlyphStoreFormat.h`); the design and its reasons are in the TTF spec, sections 4 and 11.1.
+Every byte is programmed at most once between erases, so each marker below is one that only a complete write
+produces; a power cut leaves at worst bytes nothing references.
+
+| Offset | Size | Contents |
+|---|---|---|
+| 0 | 4 KB sector | `Header`, written last at install: `u32` magic `CPTT`, `u16` version, `u16` header bytes, the set's 16-byte identity, the `Geometry` (mode, style count, the regions' offsets and sizes), 8 `StyleInfo` (a style block's offset and size; in SD mode also its file and table map), then `u32` FNV-1a over all of it |
+| 4 KB | 4 KB sector | The state: 32 face entries `{u32 face, u32 claimed}`, then the `u32` wipe word |
+| 64 KB | 64 KB pages | The style blocks, each family's styles in the set's order, each on its own page so one maps alone |
+| `indexOffset` | whole pages | Glyph index: 8-byte slots `{u32 key, u32 value}`, open addressing, at most 128 probes |
+| `pairOffset` | 64 KB | Kerning pairs: `{u32 left << 16 \| right, u32 pairStyle << 16 \| i16 font units}` |
+| `logOffset` | whole pages | Glyph records, append only: `u32 key`, the 16-byte `EpdGlyph`, the 2-bit bitmap, padded to 4 bytes |
+
+- **A face** is a family at one size: `face = family << 24 | ppem` (26.6 pixels per em; the family is its index in
+  the set). An entry is in use once `claimed` reads 0. A glyph key is `codepoint | style << 21 | faceIndex << 23`,
+  bits 28-31 zero, so a key never reads as erased. The 32 entries are every family's; taking the last one, or asking
+  for a 33rd, makes the wipe pending.
+- **A slot's value** is the record's `dataOffset` (its log offset + 20), or 0: the font has no glyph for that key.
+- **A pair's style** is `family << 2 | style`; the value is the kerning in font units, the same at every size.
+- **The wipe word** reads erased unless a wipe is pending. A wipe erases the index, the pairs and the log (only
+  sectors that hold data), and the state sector last, at the next book open.
+- **The identity** is FNV-1a over the families' identities in the set's order (`ttf::setIdentity`); a family's is
+  FNV-1a over each style file's name, size and modification time and the engine's render version
+  (`ttf::familyIdentity`). A store of another identity, or one whose header fails its check, is installed again.
+
+Version 1 held one family: four style blocks, and a size table of bare ppems with pairs keyed by style alone. A
+version-1 header reads as not installed, so the first load installs the set over it.

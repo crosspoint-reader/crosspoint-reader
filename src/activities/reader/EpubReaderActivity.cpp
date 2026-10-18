@@ -3119,7 +3119,8 @@ static FontSizeLadder buildReaderFontSizeLadder(const int bodyFontId) {
 // Publisher Fonts' Accents and All Text: the book's other families, for the blocks set in them. A generic serif or
 // sans-serif goes to the built-in family of that kind, unless the body is already in it (the reader's own family, or
 // the generic the book's body names: the reader's font stands for that). Monospace stays the reader's font: no
-// monospace face is built in. The book's accent family is in it when it is loaded (the reader's font is built in).
+// monospace face is built in. The book's accent family is in it when it is loaded beside the body: a built-in font,
+// a TrueType reader font, or the book's own body family in All Text (not beside a .cpfont reader font).
 // Deterministic from the book's selection and the body font, as the ladder is from the body font.
 static void buildBookFontFamilies(BlockFontFamilies& families, const std::string& cachePath, const int bodyFontId,
                                   const uint8_t pointSize) {

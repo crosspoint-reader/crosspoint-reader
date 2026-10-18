@@ -10,8 +10,8 @@ in families the book does not have. What the golden variants pin (EpubPipelineTe
   _accents       Accents with a built-in reader font: Book Display is the accent family (its own faces, native
                  sizes), sans-serif and a sans-serif fallback go to the built-in sans; the body family, serif (the
                  body's own generic), monospace and cursive stay the body font
-  _alltext       All Text: Book Body is the body font; the accent family waits for a store of several families
-                 (Stage B phase 2), so only the generic sans-serif is mapped
+  _alltext       All Text: Book Body is the body font, and Book Display the accent family beside it in one glyph
+                 store (Stage B phase 2): the same layout as _accents, the body font ID aside
 
 Per block: a block's words all in one family give the block that family (a heading set in a span, a paragraph that
 is one span), else the family of the element that opened it (a body paragraph with an inline accent).

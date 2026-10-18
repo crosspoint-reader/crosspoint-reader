@@ -13,8 +13,8 @@ class Epub;
 /// `<book cache>/fonts/`, where they load like a `.ttf` family on the card.
 ///
 /// Two families at most: the body text's, and an accent family, the one the most other blocks (headings, a
-/// dedication) are set in. The glyph store holds one TrueType family (TTF spec, section 11.1), so the reader draws
-/// one of them at a time. What is refused, so the book keeps the reader's font: a family that is generic or not
+/// dedication) are set in. The glyph store holds them together, or the accent family beside a TrueType reader font
+/// (TTF spec, section 11.1). What is refused, so the book keeps the reader's font: a family that is generic or not
 /// embedded; CFF outlines (`OTTO`), WOFF, WOFF2 and font collections; fonts encrypted rather than obfuscated; faces
 /// over kMaxFaceBytes.
 namespace BookFonts {

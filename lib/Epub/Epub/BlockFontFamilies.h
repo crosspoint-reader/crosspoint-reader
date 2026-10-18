@@ -14,8 +14,9 @@
 // The idea of per-element font slots for a book's families is crosspoint-reader PR #3934's (Justin Mitchell); here a
 // block takes one family, and a generic serif or sans-serif maps onto a built-in face.
 struct BlockFontFamilies {
-  // The built-in faces for the two generic families, or one generic family and the book's accent family.
-  static constexpr int kMaxFamilies = 2;
+  // The built-in faces for the two generic families and the book's accent family: beside a TrueType reader font
+  // neither generic is the body's own.
+  static constexpr int kMaxFamilies = 3;
 
   struct Family {
     // A family's identity (CssFontFamily::identity), or a generic family (CssFontFamily::kSerif, kSansSerif).

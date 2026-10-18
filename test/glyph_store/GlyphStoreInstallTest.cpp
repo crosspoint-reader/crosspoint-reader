@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <cstring>
 #include <vector>
 
 #include "GlyphStoreTestUtil.h"
@@ -167,6 +168,50 @@ TEST_F(GlyphStoreInstall, FlashModeMapsOneStyleAtATime) {
   EXPECT_EQ(2u, flash.mappings());  // the glyph regions and the one style
   store.close();
   EXPECT_EQ(0u, flash.mappings());
+}
+
+namespace {
+
+// The version-1 header: four style blocks, the identity of one family.
+struct HeaderV1 {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t headerBytes;
+  uint8_t identity[kIdentityBytes];
+  Geometry geometry;
+  StyleInfo styles[4];
+  uint32_t check;
+};
+
+}  // namespace
+
+TEST_F(GlyphStoreInstall, AVersionOneStoreIsInstalledOverAndHoldsNothingOfIt) {
+  // What the firmware before family sets left: a header, a size table entry, and a glyph with its slot.
+  const Layout layout = smallLayout();
+  HeaderV1 old{};
+  old.magic = kMagic;
+  old.version = 1;
+  old.headerBytes = sizeof old;
+  std::memcpy(old.identity, kIdentityA, kIdentityBytes);
+  old.geometry = layout.geometry;
+  old.styles[0].offset = layout.styleOffset[0];
+  old.styles[0].size = layout.styleSize[0];
+  old.check = fnv1a(&old, offsetof(HeaderV1, check));
+  ASSERT_TRUE(flash.program(0, &old, sizeof old));
+  const FaceEntry size{29 << 6, 0};
+  ASSERT_TRUE(flash.program(kFaceTableOffset, &size, sizeof size));
+  const uint32_t key = makeKey('A', 0, 0);
+  writeRawRecord(flash, layout, 0, key, 9, 12);
+  const Slot slot{key, kRecordHeaderBytes};
+  ASSERT_TRUE(flash.program(layout.geometry.indexOffset + homeSlot(key, layout.geometry.indexSlots) * kSlotBytes, &slot,
+                            sizeof slot));
+
+  EXPECT_EQ(OpenResult::NotInstalled, store.open(kIdentityA));
+  ASSERT_TRUE(installAndOpen(store, layout));  // claims faces 0-3 afresh: the old entry was erased
+  EXPECT_GT(flash.eraseCalls(), 0u);
+  EXPECT_EQ(Lookup::NotStored, store.find(key, nullptr));
+  EXPECT_EQ(0u, store.logUsed());
+  EXPECT_EQ(0u, store.usedSlots());
 }
 
 TEST_F(GlyphStoreInstall, AHeaderThatPassesItsCheckButDescribesOverlappingStylesIsNotInstalled) {

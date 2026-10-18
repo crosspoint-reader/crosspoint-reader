@@ -186,7 +186,8 @@ const char* bookSdFontFamily(const int8_t builtinFamilyOverride, const std::stri
 
 const SdCardFontFamilyInfo* SdCardFontSystem::findFamily(const char* name) const {
   if (!name || name[0] == '\0') return nullptr;
-  if (bookFamily_.name == name) return &bookFamily_;
+  if (bookBody_.name == name) return &bookBody_;
+  if (bookAccent_.name == name) return &bookAccent_;
   // Names compared in place: the registry's findFamily() takes a std::string, and this runs while pages are
   // laid out, where building one for a long family name would allocate.
   for (const auto& family : registry_.getFamilies()) {
@@ -195,41 +196,45 @@ const SdCardFontFamilyInfo* SdCardFontSystem::findFamily(const char* name) const
   return nullptr;
 }
 
-bool SdCardFontSystem::selectBookFamily(const std::string& cachePath, const uint8_t mode, const bool accentAllowed) {
+void SdCardFontSystem::scanBookFamily(SdCardFontFamilyInfo& family, const std::string& name, const std::string& dir) {
+  // The same style probe as a family on the card, and only when the font area can take it.
+  if (!name.empty() && registry_.scanFamily(dir.c_str(), family) && family.ttf()) {
+    family.name = "book:" + name;
+    LOG_INF("SDFS", "Book font %s", family.name.c_str());
+    return;
+  }
+  family.name.clear();
+  std::vector<SdCardFontFileInfo>().swap(family.files);
+}
+
+void SdCardFontSystem::selectBookFamilies(const std::string& cachePath, const uint8_t mode, const char* readerFamily) {
+  const SdCardFontFamilyInfo* reader = findFamily(readerFamily);
+  const bool besideCpfont = reader && !reader->ttf();
   // Kept across the book's later opens in the same mode; anything else is read again, since the book may have been
   // examined since.
-  if (!bookFamily_.name.empty() && cachePath == bookCachePath_ && mode == bookMode_ &&
-      accentAllowed == bookAccentAllowed_) {
-    return true;
+  if ((!bookBody_.name.empty() || !bookAccent_.name.empty()) && cachePath == bookCachePath_ && mode == bookMode_ &&
+      besideCpfont == bookBesideCpfont_) {
+    return;
   }
   bookCachePath_ = cachePath;
   bookMode_ = mode;
-  bookAccentAllowed_ = accentAllowed;
-  bookFamily_.name.clear();
+  bookBesideCpfont_ = besideCpfont;
+  scanBookFamily(bookBody_, {}, {});
+  scanBookFamily(bookAccent_, {}, {});
   bookFonts_ = {};  // what read() leaves alone stays "none"
-  // The body family when the mode draws it and the book has one, else the accent family when the store is free.
+  if (cachePath.empty()) return;
+  std::string name;
   const bool body = mode == CrossPointSettings::PUBLISHER_FONTS_BODY || mode == CrossPointSettings::PUBLISHER_FONTS_ALL;
-  bookFamilyIsAccent_ = cachePath.empty() ||
-                        BookFonts::read(cachePath, &bookFamily_.name, &bookFonts_, body) != BookFonts::State::Family ||
-                        !body;
-  if (bookFamilyIsAccent_ && (mode < CrossPointSettings::PUBLISHER_FONTS_ACCENTS || !accentAllowed)) {
-    if (mode >= CrossPointSettings::PUBLISHER_FONTS_ACCENTS && bookFonts_.accent != 0) {
-      LOG_INF("SDFS", "Accent font %s left out: the reader's font is one on the card", bookFamily_.name.c_str());
-    }
-    bookFamily_.name.clear();
+  if (BookFonts::read(cachePath, &name, &bookFonts_, true) == BookFonts::State::Family && body) {
+    scanBookFamily(bookBody_, name, BookFonts::familyDir(cachePath));
   }
-  // Its files are scanned like a family directory on the card: the same style probe, and only when the font area
-  // can take them.
-  if (bookFamily_.name.empty() ||
-      !registry_.scanFamily(BookFonts::familyDir(cachePath, bookFamilyIsAccent_).c_str(), bookFamily_) ||
-      !bookFamily_.ttf()) {
-    bookFamily_.name.clear();
-    std::vector<SdCardFontFileInfo>().swap(bookFamily_.files);
-    return false;
+  if (mode < CrossPointSettings::PUBLISHER_FONTS_ACCENTS || bookFonts_.accent == 0) return;
+  BookFonts::read(cachePath, &name, nullptr, /*body=*/false);
+  if (bookBody_.name.empty() && besideCpfont) {
+    LOG_INF("SDFS", "Accent font %s left out: the reader's font is a .cpfont family", name.c_str());
+    return;
   }
-  bookFamily_.name.insert(0, "book:");
-  LOG_INF("SDFS", "Book font %s%s", bookFamily_.name.c_str(), bookFamilyIsAccent_ ? " (accents)" : "");
-  return true;
+  scanBookFamily(bookAccent_, name, BookFonts::familyDir(cachePath, /*accent=*/true));
 }
 
 const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::string& cachePath) const {
@@ -240,7 +245,7 @@ const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::stri
 
 void SdCardFontSystem::unload(GfxRenderer& renderer) {
   manager_.unloadAll(renderer);
-  selectBookFamily({});  // the reader is closing; its next open selects again
+  selectBookFamilies({});  // the reader is closing; its next open selects again
 }
 
 ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
@@ -289,7 +294,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       SETTINGS.sdFontFamilyName[0] = '\0';
       return;
     }
-    if (family->ttf() && manager_.ttfLoaded()) {
+    if (family->ttf() && manager_.ttfFamiliesLoaded(&family, 1)) {
       manager_.setTtfBodySize(renderer, targetPt);  // drawn natively: a new size, never a reload
       return;
     }
@@ -323,32 +328,34 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   }
 }
 
-void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFamily, const uint8_t pointSize,
-                                    const std::function<void()>& onColdLoad, const FlashCachePolicy policy,
-                                    BuildArena* const arena) {
-  const std::string& currentFamily = manager_.currentFamilyName();
-  const uint8_t targetPt = sizeListFor(wantedFamily).snap(pointSize);
-
-  if (!wantedFamily || wantedFamily[0] == '\0') {
-    if (!currentFamily.empty()) manager_.unloadAll(renderer);
+void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* const* wantedFamilies, const uint8_t count,
+                                    const uint8_t pointSize, const std::function<void()>& onColdLoad,
+                                    const FlashCachePolicy policy, BuildArena* const arena) {
+  // The families found, in the order asked; one beside the first only when both are TrueType (a .cpfont family has
+  // the font area to itself).
+  const SdCardFontFamilyInfo* families[SdCardFontManager::kMaxTtfFamilies] = {};
+  uint8_t found = 0;
+  for (uint8_t i = 0; i < count && found < SdCardFontManager::kMaxTtfFamilies; ++i) {
+    const SdCardFontFamilyInfo* family = findFamily(wantedFamilies[i]);
+    if (family && (found == 0 || (family->ttf() && families[0]->ttf()))) families[found++] = family;
+  }
+  if (found == 0) {
+    if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
     return;
   }
+  const SdCardFontFamilyInfo* family = families[0];
+  const uint8_t targetPt = sizeListFor(family->name.c_str()).snap(pointSize);
 
-  bool familyMatches = (currentFamily == wantedFamily);
-  if (familyMatches) {
-    const auto* family = findFamily(wantedFamily);
-    if (!family) {
-      manager_.unloadAll(renderer);
-      return;
-    }
-    if (family->ttf() && manager_.ttfLoaded()) {
-      // Book open: no glyph record or face of the family is in use, so a full store can be emptied here, and the
-      // last book's sizes go.
-      manager_.dropTtfNativeSizes(renderer);
-      manager_.wipeTtfIfPending(onColdLoad);
-      manager_.setTtfBodySize(renderer, targetPt);
-      return;
-    }
+  if (family->ttf() && manager_.ttfFamiliesLoaded(families, found)) {
+    // The same families from the same files (a book's family of the same name as the last book's is another):
+    // book open, so no glyph record or face of theirs is in use, a full store can be emptied here, and the last
+    // book's sizes go.
+    manager_.dropTtfNativeSizes(renderer);
+    manager_.wipeTtfIfPending(onColdLoad);
+    manager_.setTtfBodySize(renderer, targetPt);
+    return;
+  }
+  if (!family->ttf() && family->name == manager_.currentFamilyName()) {
     const auto* best = family->pickClosestSize(targetPt);
     if (best && best->pointSize == manager_.currentPointSize()) {
       manager_.ensureSizeAlias(renderer, targetPt);  // same face, possibly a new target size
@@ -356,10 +363,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
     }
   }
 
-  if (!currentFamily.empty()) manager_.unloadAll(renderer);
-
-  const auto* family = findFamily(wantedFamily);
-  if (!family) return;
+  if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
 
   // The loader and the resolver used to disagree, and the loader lost. loadFamily() takes the
   // CLOSEST size the family ships, but resolveFontId() only handed the font out on an EXACT
@@ -370,9 +374,9 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
   // Both now agree: the closest face is loaded and the requested size is served from it, scaled,
   // under an alias ID (SdCardFontManager::ensureSizeAlias). The chosen typeface AND the chosen
   // size, which is what the setting promised.
-  if (!manager_.loadFamily(*family, renderer, targetPt, onColdLoad, policy, arena)) {
-    LOG_ERR("SDFS", "Failed to load SD font family: %s", wantedFamily);
-  }
+  const bool loaded = found > 1 ? manager_.loadTtfFamilies(families, found, renderer, targetPt, onColdLoad)
+                                : manager_.loadFamily(*family, renderer, targetPt, onColdLoad, policy, arena);
+  if (!loaded) LOG_ERR("SDFS", "Failed to load SD font family: %s", family->name.c_str());
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, const uint8_t pointSize) const {

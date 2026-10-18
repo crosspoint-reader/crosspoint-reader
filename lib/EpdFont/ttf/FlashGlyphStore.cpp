@@ -199,9 +199,9 @@ FlashGlyphStore::OpenResult FlashGlyphStore::open(const uint8_t identity[kIdenti
   if (!flash_.read(kWipeWordOffset, &wipeWord, sizeof wipeWord)) wipeWord = 0;  // unreadable: assume pending
   wipePending_ = wipeWord != kErased;
   writesStopped_ = wipePending_;  // what filled the store, or failed, last session is not known
-  for (uint8_t i = 0; i < kSizeEntries; ++i) {
-    SizeEntry entry{};
-    if (readSizeEntry(i, entry) && entry.claimed == 0) claimedSizes_ |= 1u << i;
+  for (uint8_t i = 0; i < kFaceEntries; ++i) {
+    FaceEntry entry{};
+    if (readFaceEntry(i, entry) && entry.claimed == 0) claimedFaces_ |= 1u << i;
   }
   logUsed_ = scanLog();
   usedSlots_ = countUsed(index_, g.indexSlots);
@@ -220,7 +220,7 @@ void FlashGlyphStore::close() {
   mappedStyle_ = 0xFF;
   region_ = index_ = pairs_ = log_ = nullptr;
   geometry_ = Geometry{};
-  logUsed_ = usedSlots_ = usedPairs_ = claimedSizes_ = 0;
+  logUsed_ = usedSlots_ = usedPairs_ = claimedFaces_ = 0;
   open_ = false;
   wipePending_ = false;
   writesStopped_ = false;
@@ -437,8 +437,8 @@ FlashGlyphStore::Commit FlashGlyphStore::commit(GlyphBatch& batch) {
 FlashGlyphStore::Commit FlashGlyphStore::writeBatch(GlyphBatch& batch) {
   if (!open_) return Commit::Refused;
   for (uint32_t at = 0; at < batch.used_; at += recordBytes(ramGlyph(batch.buffer_ + at + 4).dataLength)) {
-    if (!sizeClaimed(ramU32(batch.buffer_ + at))) {
-      LOG_ERR("GST", "commit refused: a key uses a size index not claimed since the last wipe");
+    if (!faceClaimed(ramU32(batch.buffer_ + at))) {
+      LOG_ERR("GST", "commit refused: a key uses a face index not claimed since the last wipe");
       return Commit::Refused;
     }
   }
@@ -478,7 +478,7 @@ FlashGlyphStore::Commit FlashGlyphStore::writeBatch(GlyphBatch& batch) {
 }
 
 FlashGlyphStore::Commit FlashGlyphStore::markNoGlyph(const uint32_t key) {
-  if (!open_ || !isGlyphKey(key) || !sizeClaimed(key)) return Commit::Refused;
+  if (!open_ || !isGlyphKey(key) || !faceClaimed(key)) return Commit::Refused;
   if (writesStopped_) return Commit::Full;
   if (usedSlots_ + 1 > limit(geometry_.indexSlots, kIndexLoadPercent)) {
     stopWrites();
@@ -487,49 +487,50 @@ FlashGlyphStore::Commit FlashGlyphStore::markNoGlyph(const uint32_t key) {
   return insertGlyphSlot(key, kNoGlyph);
 }
 
-// --- Sizes ---
+// --- Faces ---
 
-bool FlashGlyphStore::readSizeEntry(const uint8_t i, SizeEntry& entry) const {
-  return flash_.read(kSizeTableOffset + i * static_cast<uint32_t>(sizeof(SizeEntry)), &entry, sizeof entry);
+bool FlashGlyphStore::readFaceEntry(const uint8_t i, FaceEntry& entry) const {
+  return flash_.read(kFaceTableOffset + i * static_cast<uint32_t>(sizeof(FaceEntry)), &entry, sizeof entry);
 }
 
-bool FlashGlyphStore::sizeIndex(const uint32_t ppem26_6, uint8_t* index) {
-  if (!open_ || ppem26_6 == kErased || index == nullptr) return false;
+bool FlashGlyphStore::faceIndex(const uint8_t family, const uint32_t ppem26_6, uint8_t* index) {
+  if (!open_ || family >= kMaxStyles || ppem26_6 > 0xFFFFFFu || index == nullptr) return false;
+  const uint32_t face = faceOf(family, ppem26_6);
   int free = -1;
   uint8_t freeCount = 0;
-  for (uint8_t i = 0; i < kSizeEntries; ++i) {
-    SizeEntry entry{};
-    if (!readSizeEntry(i, entry)) return false;
-    if (entry.ppem26_6 == ppem26_6 && entry.claimed == 0) {
+  for (uint8_t i = 0; i < kFaceEntries; ++i) {
+    FaceEntry entry{};
+    if (!readFaceEntry(i, entry)) return false;
+    if (entry.face == face && entry.claimed == 0) {
       *index = i;
       return true;
     }
     // Free only if wholly erased: an entry cut short is never programmed again.
-    if (entry.ppem26_6 == kErased && entry.claimed == kErased) {
+    if (entry.face == kErased && entry.claimed == kErased) {
       if (free < 0) free = i;
       ++freeCount;
     }
   }
   if (wipePending_) return false;
   if (free < 0) {
-    // Only a new size is refused: the claimed ones go on storing, and the wipe at the next book open frees the
+    // Only a new face is refused: the claimed ones go on storing, and the wipe at the next book open frees the
     // table.
-    LOG_INF("GST", "full: all %u sizes in use; wipe pending", static_cast<unsigned>(kSizeEntries));
+    LOG_INF("GST", "full: all %u faces in use; wipe pending", static_cast<unsigned>(kFaceEntries));
     wipePending_ = true;
     recordWipePending();
     return false;
   }
-  const SizeEntry claim{ppem26_6, 0};  // `claimed` lands last and marks the entry in use
-  if (!flash_.program(kSizeTableOffset + static_cast<uint32_t>(free) * sizeof(SizeEntry), &claim, sizeof claim)) {
-    LOG_ERR("GST", "size table write failed; wipe pending");
+  const FaceEntry claim{face, 0};  // `claimed` lands last and marks the entry in use
+  if (!flash_.program(kFaceTableOffset + static_cast<uint32_t>(free) * sizeof(FaceEntry), &claim, sizeof claim)) {
+    LOG_ERR("GST", "face table write failed; wipe pending");
     stopWrites();
     return false;
   }
-  claimedSizes_ |= 1u << free;
+  claimedFaces_ |= 1u << free;
   *index = static_cast<uint8_t>(free);
   if (freeCount == 1) {
     // That was the last entry: the next book open empties the table, before a new body size needs one.
-    LOG_INF("GST", "the last of %u sizes taken; wipe pending", static_cast<unsigned>(kSizeEntries));
+    LOG_INF("GST", "the last of %u faces taken; wipe pending", static_cast<unsigned>(kFaceEntries));
     wipePending_ = true;
     recordWipePending();
   }
@@ -538,30 +539,31 @@ bool FlashGlyphStore::sizeIndex(const uint32_t ppem26_6, uint8_t* index) {
 
 // --- Kerning pairs ---
 
-bool FlashGlyphStore::findPair(const uint16_t left, const uint16_t right, const uint8_t style,
+bool FlashGlyphStore::findPair(const uint16_t left, const uint16_t right, const uint8_t family, const uint8_t style,
                                int16_t* fontUnits) const {
   const uint32_t key = pairKey(left, right);
   if (!open_ || key == kErased) return false;
+  const uint32_t owner = pairStyle(family, style);
   const uint32_t slots = geometry_.pairSlots;
   uint32_t i = homeSlot(key, slots);
   for (uint32_t probe = 0; probe < kMaxProbe; ++probe, i = nextSlot(i, slots)) {
     const Slot slot = flashSlot(pairs_, i);
     if (slotErased(slot)) return false;
-    // The value's top bits are written as zero, so a value cut short reads as some other style.
-    if (slot.key != key || (slot.value >> 16) != style) continue;
+    // The value's top bits are written as zero, so a value cut short reads as some other family or style.
+    if (slot.key != key || (slot.value >> 16) != owner) continue;
     if (fontUnits) *fontUnits = static_cast<int16_t>(slot.value & 0xFFFF);
     return true;
   }
   return false;
 }
 
-bool FlashGlyphStore::storePair(const uint16_t left, const uint16_t right, const uint8_t style,
+bool FlashGlyphStore::storePair(const uint16_t left, const uint16_t right, const uint8_t family, const uint8_t style,
                                 const int16_t fontUnits) {
   const uint32_t key = pairKey(left, right);
-  if (!open_ || writesStopped_ || key == kErased || style > 3) return false;
+  if (!open_ || writesStopped_ || key == kErased || family >= kMaxStyles || style > 3) return false;
   // A full pair index only stops storing pairs; they come from the GPOS reader instead (never a wipe).
   if (usedPairs_ + 1 > limit(geometry_.pairSlots, kIndexLoadPercent)) return false;
-  const uint32_t value = (static_cast<uint32_t>(style) << 16) | static_cast<uint16_t>(fontUnits);
+  const uint32_t value = (pairStyle(family, style) << 16) | static_cast<uint16_t>(fontUnits);
   switch (insert(geometry_.pairOffset, pairs_, geometry_.pairSlots, key, value)) {
     case Insert::Done:
       ++usedPairs_;
@@ -612,7 +614,7 @@ bool FlashGlyphStore::wipe() {
     LOG_ERR("GST", "wipe: erase failed; wipe stays pending");
     return false;
   }
-  logUsed_ = usedSlots_ = usedPairs_ = claimedSizes_ = 0;
+  logUsed_ = usedSlots_ = usedPairs_ = claimedFaces_ = 0;
   ++generation_;
   wipePending_ = false;
   writesStopped_ = false;

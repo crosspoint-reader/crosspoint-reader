@@ -25,14 +25,31 @@ PlanInput input(const uint8_t mode, const uint8_t styles, const uint32_t styleBy
 }  // namespace
 
 TEST(GlyphStoreFormat, KeysNeverLookErased) {
-  const uint32_t largest = makeKey(0x10FFFF, 3, kSizeEntries - 1);
+  const uint32_t largest = makeKey(0x10FFFF, 3, kFaceEntries - 1);
   EXPECT_TRUE(isGlyphKey(largest));
   EXPECT_NE(kErased, largest);
   EXPECT_FALSE(isGlyphKey(kErased));
   EXPECT_EQ(0x10FFFFu, largest & 0x1FFFFFu);
   EXPECT_EQ(3u, (largest >> 21) & 0x3u);
-  EXPECT_EQ(kSizeEntries - 1, keySizeIndex(largest));
+  EXPECT_EQ(kFaceEntries - 1, keyFaceIndex(largest));
   EXPECT_EQ(0u, largest >> 28);
+}
+
+TEST(GlyphStoreFormat, AFaceIsItsFamilyAndItsSize) {
+  // The largest native size of the last family a set can hold still reads as neither erased nor another face.
+  const uint32_t last = faceOf(kMaxStyles - 1, 120 << 6);
+  EXPECT_NE(kErased, last);
+  EXPECT_EQ(static_cast<uint32_t>(kMaxStyles - 1), last >> 24);
+  EXPECT_EQ(120u << 6, last & 0xFFFFFFu);
+  EXPECT_EQ(29u << 6, faceOf(0, 29 << 6));  // the first family's faces are its sizes
+  EXPECT_NE(faceOf(0, 29 << 6), faceOf(1, 29 << 6));
+}
+
+TEST(GlyphStoreFormat, APairStyleIsItsFamilyAndItsStyle) {
+  EXPECT_EQ(3u, pairStyle(0, 3));  // the first family's pairs are its styles
+  EXPECT_EQ(4u, pairStyle(1, 0));
+  EXPECT_NE(pairStyle(0, 1), pairStyle(1, 1));
+  EXPECT_LE(pairStyle(kMaxStyles - 1, 3), 0xFFFFu);  // the high half of a pair slot's value
 }
 
 TEST(GlyphStoreFormat, NoGlyphIsAValueOnlyACompleteWriteProduces) {
@@ -58,10 +75,11 @@ TEST(GlyphStoreFormat, HomeSlotStaysInRangeForAnySlotCount) {
 
 TEST(GlyphStoreFormat, HeaderLayoutIsStable) {
   // Bump kFormatVersion when any of these change.
-  EXPECT_EQ(648u, sizeof(Header));
-  EXPECT_EQ(644u, offsetof(Header, check));
+  EXPECT_EQ(2u, kFormatVersion);
+  EXPECT_EQ(1240u, sizeof(Header));
+  EXPECT_EQ(1236u, offsetof(Header, check));
   EXPECT_EQ(8u, sizeof(Slot));
-  EXPECT_EQ(8u, sizeof(SizeEntry));
+  EXPECT_EQ(8u, sizeof(FaceEntry));
 }
 
 TEST(GlyphStoreFormat, ARecordIsItsHeaderAndBitmapRoundedToFourBytes) {
@@ -106,6 +124,26 @@ TEST(GlyphStorePlan, LargeStylesShrinkTheLog) {
   EXPECT_EQ(2 * kSlotsPerPage, layout.geometry.indexSlots);
 }
 
+TEST(GlyphStorePlan, AFamilySetMapsItsLargestStyleNotTheirSum) {
+  // A Bookerly-sized body (four styles of 7 pages) and an Inter-sized accent family (two of 6 pages), in the set's
+  // order. Flash mode maps one style block at a time, so the budget counts 7 pages, not 40.
+  PlanInput in = input(kModeFlash, 6, 450048, 24);
+  in.styleBytes[4] = in.styleBytes[5] = 342000;
+  Layout layout{};
+  ASSERT_TRUE(planLayout(in, layout));
+  EXPECT_EQ(65536u + 4 * 7 * 65536u, layout.styleOffset[4]);
+  EXPECT_EQ(layout.styleOffset[4] + 6 * 65536u, layout.styleOffset[5]);
+  EXPECT_EQ(41 * 65536u, layout.geometry.indexOffset);
+  EXPECT_EQ(9 * 65536u, layout.geometry.logSize);  // the partition, not the budget, is the limit
+  EXPECT_EQ(kX3UsableBytes, layout.geometry.logOffset + layout.geometry.logSize);
+}
+
+TEST(GlyphStorePlan, EightStyleBlocksAreTheMost) {
+  Layout layout{};
+  EXPECT_TRUE(planLayout(input(kModeFlash, kMaxStyles, 200000), layout));
+  EXPECT_FALSE(planLayout(input(kModeFlash, kMaxStyles + 1, 200000), layout));
+}
+
 TEST(GlyphStorePlan, StylesThatDoNotFitAreRefused) {
   Layout layout{};
   EXPECT_FALSE(planLayout(input(kModeFlash, 4, 900000), layout));
@@ -130,7 +168,7 @@ TEST(GlyphStorePlan, TheIndexHoldsWhatTheLogHolds) {
 TEST(GlyphStorePlan, BadInputIsRefused) {
   Layout layout{};
   EXPECT_FALSE(planLayout(input(kModeFlash, 0, 1000), layout));
-  EXPECT_FALSE(planLayout(input(kModeFlash, 5, 1000), layout));
+  EXPECT_FALSE(planLayout(input(kModeFlash, kMaxStyles + 1, 1000), layout));
   EXPECT_FALSE(planLayout(input(2, 1, 1000), layout));
   PlanInput empty = input(kModeFlash, 2, 1000);
   empty.styleBytes[1] = 0;

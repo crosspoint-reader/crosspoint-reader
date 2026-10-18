@@ -172,6 +172,28 @@ TEST_F(FontFamilyLayoutFixture, TheBodyFamilyAndFamiliesTheBookLacksKeepTheBodyF
   EXPECT_EQ(kSansBody, helvetica->fontId);  // not in the book: its list's generic
 }
 
+TEST_F(FontFamilyLayoutFixture, BesideATrueTypeReaderFontBothGenericsAndTheAccentFamilyServe) {
+  // A book whose body names no generic, beside a TrueType reader font: neither built-in family is the body's, so
+  // serif and sans-serif both map onto theirs, and the accent family loads beside the reader font (Stage B phase 2).
+  BlockFontFamilies families = accents();
+  families.body = CssParser::fontFamilyHash("Book Body");
+  FontSizeLadder serif;
+  for (const uint16_t pt : {10, 12, 14, 16, 18, 20, 22, 24, 26}) serif.addRung(1000 + pt, pt * 100 / 14);
+  families.add(CssFontFamily::kSerif, 1014, serif);
+  ASSERT_EQ(3, families.count);
+  const auto lines = layout(
+      "<p class='georgia'>Georgia words</p><p class='helvetica'>Helvetica words</p>"
+      "<p class='dedication'>For someone</p>",
+      &families);
+  const Line* georgia = find(lines, "Georgia words");
+  const Line* helvetica = find(lines, "Helvetica words");
+  const Line* dedication = find(lines, "For someone");
+  ASSERT_TRUE(georgia && helvetica && dedication);
+  EXPECT_EQ(1014, georgia->fontId);
+  EXPECT_EQ(kSansBody, helvetica->fontId);
+  EXPECT_EQ(kAccentBody, dedication->fontId);
+}
+
 TEST_F(FontFamilyLayoutFixture, ABlockTakesItsWordsFamilyWhenAllAreInOne) {
   const BlockFontFamilies families = accents();
   const auto lines = layout(
