@@ -10,6 +10,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
@@ -555,11 +556,12 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
   if (messageVisible && millis() - messageTime >= MESSAGE_DURATION_MS) {
-    RenderLock lock;
-    messageVisible = false;
-    requestUpdate();
+    RenderLock lock(RenderLock::Mode::Try);
+    if (lock.ownsLock()) {
+      messageVisible = false;
+      requestUpdate();
+    }
   }
-  auto& currentPage = content.currentPage;
   const int totalPages = content.totalPages;
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (lookup && lookup->depth > 0)
@@ -579,7 +581,8 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  RenderLock lock;
+  // Page navigation must keep polling input while the render task refreshes the display.
+  auto currentPage = std::atomic_ref(content.currentPage);
   // Same tap zones as the reader page turns: left third = previous page,
   // the rest = next. Back is the usual left-edge swipe.
   int tx = 0;
@@ -601,17 +604,17 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this] {
-    if (content.currentPage + 1 < content.totalPages) {
-      content.currentPage++;
+  buttonNavigator.onNext([this, &currentPage] {
+    if (currentPage + 1 < content.totalPages) {
+      currentPage++;
       content.selection.valid = false;
       requestUpdate();
     }
   });
 
-  buttonNavigator.onPrevious([this] {
-    if (content.currentPage > 0) {
-      content.currentPage--;
+  buttonNavigator.onPrevious([this, &currentPage] {
+    if (currentPage > 0) {
+      currentPage--;
       content.selection.valid = false;
       requestUpdate();
     }
@@ -622,11 +625,11 @@ void DictionaryDefinitionActivity::loop() {
 // otherwise the wrapped line spans (copied into a stack buffer for NUL
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
-void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) const {
+void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY,
+                                            const int currentPage) const {
   const auto& pages = content.pages;
   const auto& lines = content.lines;
   const auto& definition = content.text;
-  const int currentPage = content.currentPage;
   const int linesPerPage = content.linesPerPage;
   if (!pages.empty()) {
     pages[currentPage]->render(renderer, fontId, x, startY);
@@ -647,7 +650,7 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
 }
 
 void DictionaryDefinitionActivity::render(RenderLock&&) {
-  const int currentPage = content.currentPage;
+  const int currentPage = std::atomic_ref(content.currentPage).load();
   const int totalPages = content.totalPages;
   renderer.clearScreen();
 
@@ -675,9 +678,9 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const BodyArea body = bodyArea();
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  drawBody(fontId, body.x, body.y);  // scan pass: records codepoints only
+  drawBody(fontId, body.x, body.y, currentPage);  // scan pass: records codepoints only
   scope.endScanAndPrewarm();
-  drawBody(fontId, body.x, body.y);
+  drawBody(fontId, body.x, body.y, currentPage);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), lookup ? tr(STR_LOOKUP) : "", (currentPage > 0 ? "<" : ""),
                                             (currentPage + 1 < totalPages ? ">" : ""));

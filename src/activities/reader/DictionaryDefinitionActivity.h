@@ -94,7 +94,7 @@ class DictionaryDefinitionActivity final : public Activity {
   bool wrapText(Definition& next);
   bool reserveLines(Definition& next, size_t count);
   int measureSpan(int fontId, const char* text, size_t len) const;
-  void drawBody(int fontId, int x, int startY) const;
+  void drawBody(int fontId, int x, int startY, int currentPage) const;
   void startSelection(int x = -1, int y = -1);
   bool buildPlainSelectionPages();
   void navigateDefinition(bool back);
