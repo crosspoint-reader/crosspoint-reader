@@ -90,6 +90,16 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 64
+
+Version 64 preserves the binary layout but rebuilds completed and partial
+sections for corrected explicit font-weight/font-style inheritance. Versions
+61-63 were used by GIF/table development builds. CSS cache version 19 stores
+`inherit` as value 2 in the existing font-style and font-weight bytes; the
+winning declaration is resolved against the parent before applying the element's
+style. Older CSS caches are rebuilt. Book metadata and reading progress are
+unchanged.
+
 ### Version 60
 
 The serialized layout is unchanged. Text that runs straight into a block or

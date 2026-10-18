@@ -591,6 +591,120 @@ TEST_F(ChapterBlockDecorationTest, BlockEmphasisIsInheritedOverriddenAndRestored
   }
 }
 
+TEST_F(ChapterBlockDecorationTest, ExplicitFontInheritancePreservesInlineAndBlockEmphasis) {
+  open("body", "font-weight:normal;font-style:normal");
+  open("div", "font-weight:bold;font-style:italic");
+  open("p", "font-weight:inherit;font-style:inherit");
+  text("Block ");
+  open("small", "font-weight:inherit;font-style:inherit");
+  text("Small ");
+  close("small");
+  open("span", "font-weight:normal;font-style:normal");
+  text("Normal ");
+  open("span", "font-weight:inherit;font-style:inherit");
+  text("Nested ");
+  close("span");
+  close("span");
+  text("Restored");
+  close("p");
+  close("div");
+  open("p", "font-weight:inherit;font-style:inherit");
+  text("Outside");
+  close("p");
+  close("body");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  std::vector<std::pair<std::string, uint8_t>> actual;
+  for (const auto* element : lines) {
+    const auto& block = *static_cast<const PageLine*>(element)->getBlock();
+    for (uint16_t i = 0; i < block.wordCount(); ++i) actual.emplace_back(block.wordText(i), block.wordStyle(i));
+  }
+  const uint8_t emphasis = EpdFontFamily::BOLD | EpdFontFamily::ITALIC;
+  const std::vector<std::pair<std::string, uint8_t>> expected = {
+      {"Block", emphasis}, {"Small", emphasis}, {"Normal", 0}, {"Nested", 0}, {"Restored", emphasis}, {"Outside", 0}};
+  EXPECT_EQ(actual, expected);
+}
+
+TEST_F(ChapterBlockDecorationTest, InheritReplacesEarlierDeclarationsAndAllowsLaterOverrides) {
+  open("body", "font-weight:normal;font-style:normal");
+  open("div", "font-weight:bold;font-style:italic");
+  open("p", "font-weight:normal;font-style:normal;font-weight:inherit;font-style:inherit");
+  text("Inherited");
+  close("p");
+  open("p", "font-weight:inherit;font-style:inherit;font-weight:normal;font-style:normal");
+  text("Normal");
+  close("p");
+  close("div");
+  open("p", "font-weight:bold;font-style:italic;font-weight:inherit;font-style:inherit");
+  text("ParentNormal");
+  close("p");
+  close("body");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 3u);
+  for (size_t i = 0; i < lines.size(); ++i) {
+    const auto& block = *static_cast<const PageLine*>(lines[i])->getBlock();
+    EXPECT_EQ(block.wordStyle(0), i == 0 ? EpdFontFamily::BOLD | EpdFontFamily::ITALIC : 0);
+  }
+}
+
+TEST_F(ChapterBlockDecorationTest, InheritUsesSemanticParentEmphasisAndRestoresSiblingStyle) {
+  open("p", nullptr);
+  open("b", nullptr);
+  open("i", nullptr);
+  open("span", "font-weight:inherit;font-style:inherit");
+  text("Inherited");
+  close("span");
+  close("i");
+  close("b");
+  text(" Outside");
+  close("p");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 1u);
+  const auto& block = *static_cast<const PageLine*>(lines[0])->getBlock();
+  ASSERT_EQ(block.wordCount(), 2u);
+  EXPECT_EQ(block.wordStyle(0), EpdFontFamily::BOLD | EpdFontFamily::ITALIC);
+  EXPECT_EQ(block.wordStyle(1), EpdFontFamily::REGULAR);
+}
+
+TEST_F(ChapterBlockDecorationTest, FontInheritanceUsesWinningCssRuleBeforeInlineOverride) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-font-inheritance.css";
+  {
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    const std::string css =
+        "p{font-weight:bold;font-style:italic}"
+        ".inherited{font-weight:normal;font-style:normal}"
+        "#inherited{font-weight:inherit;font-style:inherit}";
+    ASSERT_EQ(output.write(css.data(), css.size()), css.size());
+  }
+  {
+    HalFile input;
+    ASSERT_TRUE(input.open(path.c_str(), "rb"));
+    ASSERT_EQ(cssParser.loadFromStream(input), CssParser::ParseResult::Complete);
+  }
+  std::filesystem::remove(path);
+  open("body", "font-weight:normal;font-style:normal");
+  const XML_Char* inherited[] = {"id", "inherited", "class", "inherited", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "p", inherited);
+  text("Normal");
+  close("p");
+  open("div", "font-weight:bold;font-style:italic");
+  ChapterHtmlSlimParser::startElement(&parser, "p", inherited);
+  text("Emphasis");
+  close("p");
+  const XML_Char* overridden[] = {"id", "inherited", "style", "font-weight:normal;font-style:normal", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "p", overridden);
+  text("Override");
+  close("p");
+  close("div");
+  close("body");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 3u);
+  for (size_t i = 0; i < lines.size(); ++i) {
+    const auto& block = *static_cast<const PageLine*>(lines[i])->getBlock();
+    EXPECT_EQ(block.wordStyle(0), i == 1 ? EpdFontFamily::BOLD | EpdFontFamily::ITALIC : 0);
+  }
+}
+
 TEST_F(ChapterBlockDecorationTest, PreElementPreservesNewlinesWithoutLeakingToFollowingParagraph) {
   open("pre", nullptr);
   text("one\ntwo");

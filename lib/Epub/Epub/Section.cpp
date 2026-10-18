@@ -69,7 +69,9 @@ namespace {
 // v58: Rebuild sections for corrected rendering layout and footnote placement.
 // v59: Preserve stored CSS styles during low-heap layout.
 // v60: Text running into a block or heading start stays in its own paragraph.
-constexpr uint8_t SECTION_FILE_VERSION = 60;
+// Versions 61-63 were used by GIF/table development builds.
+// v64: Explicit font inheritance preserves parent emphasis and changes text layout.
+constexpr uint8_t SECTION_FILE_VERSION = 64;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
