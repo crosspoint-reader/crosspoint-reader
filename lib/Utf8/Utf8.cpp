@@ -39,7 +39,7 @@ uint32_t utf8DecomposedBase(const uint32_t cp) {
   return 0;
 }
 
-std::string utf8ComposeNfc(const std::string& in) {
+std::string utf8ComposeNfc(const std::string& in, bool (*onAbsorbed)(uint32_t, void*), void* context) {
   // Fast path: NFC composition can only change text that contains a combining
   // diacritical mark U+0300-036F (UTF-8 lead byte 0xCC or 0xCD) or conjoining
   // Hangul jamo (lead byte 0xE1 for U+1000-1FFF). Plain ASCII and
@@ -61,11 +61,14 @@ std::string utf8ComposeNfc(const std::string& in) {
   const unsigned char* p = reinterpret_cast<const unsigned char*>(in.c_str());
   uint32_t base = 0;
   bool haveBase = false;
+  uint32_t sourceOffset = 0;
   while (*p) {
     const uint32_t cp = utf8NextCodepoint(&p);
     if (cp == 0) break;
+    const uint32_t currentOffset = sourceOffset++;
     const uint32_t composed = haveBase ? utf8ComposePair(base, cp) : 0;
     if (composed) {
+      if (onAbsorbed && !onAbsorbed(currentOffset, context)) return {};
       base = composed;  // keep accumulating marks or trailing jamo
       continue;
     }
@@ -179,21 +182,9 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
 }
 
 void utf8AppendCodepoint(uint32_t cp, std::string& out) {
-  if (cp < 0x80) {
-    out += static_cast<char>(cp);
-  } else if (cp < 0x800) {
-    out += static_cast<char>(0xC0 | (cp >> 6));
-    out += static_cast<char>(0x80 | (cp & 0x3F));
-  } else if (cp < 0x10000) {
-    out += static_cast<char>(0xE0 | (cp >> 12));
-    out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    out += static_cast<char>(0x80 | (cp & 0x3F));
-  } else {
-    out += static_cast<char>(0xF0 | (cp >> 18));
-    out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-    out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    out += static_cast<char>(0x80 | (cp & 0x3F));
-  }
+  char bytes[4];
+  const char* end = utf8AppendCodepoint(bytes, cp);
+  out.append(bytes, static_cast<size_t>(end - bytes));
 }
 
 int utf8SafeTruncateBuffer(const char* buf, int len) {

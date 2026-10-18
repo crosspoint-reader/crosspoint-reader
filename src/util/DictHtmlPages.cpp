@@ -276,6 +276,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
       LOG_ERR("DHTML", "OOM: ChapterHtmlSlimParser");
     } else {
       parser->setTextSpacing(SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing);
+      parser->setParagraphIndentSpaces(SETTINGS.paragraphIndentSpaces);
       ok = parser->parseAndBuildPages();  // closes the file on both outcomes
     }
   }
@@ -285,6 +286,11 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     LOG_ERR("DHTML", "Styled definition exceeded page heap budget");
   }
   if (!ok || resourceLimitHit || pagesOut.empty()) {
+    if (!ok) {
+      LOG_ERR("DHTML", "Definition parse/layout failed");
+    } else if (!resourceLimitHit && pagesOut.empty()) {
+      LOG_ERR("DHTML", "Definition produced no styled pages");
+    }
     pagesOut.clear();
     return false;
   }

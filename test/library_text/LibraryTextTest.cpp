@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <utility>
 
 #include "LibraryText.h"
 
@@ -95,22 +96,32 @@ TEST(LibraryFold, PreservesHebrewLettersAndDropsNiqqud) {
 }
 
 TEST(LibraryFold, GroupInitialUsesUnicodeLettersAndBucketsNumbers) {
-  EXPECT_EQ(library::foldedGroupInitial(fold("Alpha", true)), static_cast<uint32_t>('a'));
-  EXPECT_EQ(library::foldedGroupInitial(fold("\u05E9\u05DC\u05D5\u05DD", true)), 0x05E9u);
-  EXPECT_EQ(library::foldedGroupInitial(fold("\u041A\u043D\u0438\u0433\u0430", true)), 0x041Au);
-  EXPECT_EQ(library::foldedGroupInitial(fold("\u4E66", true)), 0x4E66u);
-  EXPECT_EQ(library::foldedGroupInitial(fold("2085", true)), 0u);
-  EXPECT_EQ(library::foldedGroupInitial(fold("\u0662\u0660\u0668\u0665", true)), 0u);
-  EXPECT_EQ(library::foldedGroupInitial(fold("!!!", true)), 0u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("Alpha")), static_cast<uint32_t>('a'));
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u05E9\u05DC\u05D5\u05DD")), 0x05E9u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u041A\u043D\u0438\u0433\u0430")), 0x041Au);
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u4E66")), 0x4E66u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("2085")), 0u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u0662\u0660\u0668\u0665")), 0u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("!!!")), 0u);
 }
 
-TEST(LibraryFold, ArticleStrippingOnlyWhenAsked) {
-  EXPECT_EQ(fold("The Iliad"), "the iliad");
-  EXPECT_EQ(fold("The Iliad", true), "iliad");
-  EXPECT_EQ(fold("Les Mis\xC3\xA9rables", true), "miserables");
-  EXPECT_EQ(fold("L\xE2\x80\x99\xC3\x89n\xC3\xA9ide", true), "eneide");
-  // A title that IS an article-like word must not vanish.
-  EXPECT_EQ(fold("The", true), "the");
+TEST(LibraryFold, LeadingWordsArePreservedForSortingAndSearch) {
+  for (const auto& [title, expected] : {
+           std::pair{"The Iliad", "the iliad"},
+           std::pair{"A Tale of Two Cities", "a tale of two cities"},
+           std::pair{"An Ideal Husband", "an ideal husband"},
+           std::pair{"I Am Number Four", "i am number four"},
+           std::pair{"I, Robot", "i robot"},
+           std::pair{"O Pioneers!", "o pioneers"},
+           std::pair{"Die Trying", "die trying"},
+           std::pair{"Les Misérables", "les miserables"},
+           std::pair{"L’Énéide", "l'eneide"},
+           std::pair{"The", "the"},
+       }) {
+    const std::string folded = fold(title);
+    EXPECT_EQ(folded, expected) << title;
+    EXPECT_EQ(library::foldedGroupInitial(folded), static_cast<uint32_t>(expected[0])) << title;
+  }
 }
 
 TEST(LibraryAuthorKey, OrderAndPunctuationDoNotMatter) {

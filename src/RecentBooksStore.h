@@ -61,8 +61,6 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
 
   // Get the count of recent books
   int getCount() const { return static_cast<int>(recentBooks.size()); }
-
-  RecentBook getDataFromBook(std::string path) const;
 };
 
 // Helper macro to access recent books store

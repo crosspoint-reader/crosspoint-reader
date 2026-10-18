@@ -29,6 +29,14 @@ class SdCardFontManager {
   // or loading failed.
   int loadFamilyExtraSize(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t pointSize);
 
+  // Additively load the family's .cpfont at exactly `pointSize`, registered under `fontId`
+  // (a sized variant of the reader font). Returns false when the size is not installed or
+  // loading failed.
+  bool loadFamilyVariant(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t pointSize, int fontId);
+
+  // Unload and unregister one font loaded by loadFamilyVariant.
+  void unloadFont(GfxRenderer& renderer, int fontId);
+
   // Unload everything, unregister from renderer.
   void unloadAll(GfxRenderer& renderer);
 
@@ -53,7 +61,7 @@ class SdCardFontManager {
 
   // Load+register a single .cpfont file and append it to loaded_.
   // Returns the font id, or 0 on failure (allocation, read, or id collision).
-  int loadFile(const SdCardFontFileInfo& file, const char* familyName, GfxRenderer& renderer);
+  int loadFile(const SdCardFontFileInfo& file, const char* familyName, GfxRenderer& renderer, int fontIdOverride = 0);
 
   std::string loadedFamilyName_;
   uint8_t loadedPointSize_ = 0;

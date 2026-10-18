@@ -1,0 +1,25 @@
+Subject: [PATCH 2/2] SdFatConfig: allow USE_SEPARATE_FAT_CACHE to be overridden
+
+USE_SEPARATE_FAT_CACHE is chosen by architecture (1 on ARM, 0
+elsewhere) with no #ifndef guard, so a -D build flag is redefined back
+to the default. Wrap it like the other overridable options so builds
+can enable the separate FAT cache on ESP32. Builds that do not set the
+flag keep the architecture default.
+
+---
+--- a/src/SdFatConfig.h
++++ b/src/SdFatConfig.h
+@@ -408,11 +408,13 @@
+  * for FAT16/FAT32 table entries.  This improves performance for large
+  * writes that are not a multiple of 512 bytes.
+  */
++#ifndef USE_SEPARATE_FAT_CACHE
+ #ifdef __arm__
+ #define USE_SEPARATE_FAT_CACHE 1
+ #else  // __arm__
+ #define USE_SEPARATE_FAT_CACHE 0
+ #endif  // __arm__
++#endif  // USE_SEPARATE_FAT_CACHE
+ //------------------------------------------------------------------------------
+ /**
+  * Set USE_EXFAT_BITMAP_CACHE nonzero to use a second 512 byte cache

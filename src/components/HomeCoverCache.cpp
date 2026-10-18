@@ -37,35 +37,40 @@ void HomeCoverCache::prepare() {
   }
 }
 
-void HomeCoverCache::readSize(const std::string& path, int& width, int& height) {
-  width = height = 0;
-  if (!path.empty() && Storage.exists(path.c_str()) && Storage.openFileForRead("HOME", path, coverFile)) {
-    if (coverBitmap.parseHeaders() == BmpReaderError::Ok) {
-      width = coverBitmap.getWidth();
-      height = coverBitmap.getHeight();
-    }
-    coverFile.close();
-  }
-}
-
 bool HomeCoverCache::paint(fui::Rect rect, size_t index, const std::string& path) {
   if (index >= cachedCovers.size()) return false;
   auto& cached = cachedCovers[index];
+  uint8_t* const cacheData = coverCache.get();
   if (coverCache && cached.valid && cached.rect.x == rect.x && cached.rect.y == rect.y &&
       cached.rect.width == rect.width && cached.rect.height == rect.height &&
-      renderer.copyBufferToRegion(rect.x, rect.y, rect.width, rect.height, coverCache.get() + cached.offset,
-                                  cached.bytes)) {
+      renderer.copyBufferToRegion(rect.x, rect.y, rect.width, rect.height, cacheData + cached.offset, cached.bytes)) {
     return true;
   }
   cached.valid = false;
   bool drawn = false;
   if (!path.empty() && Storage.openFileForRead("HOME", path, coverFile)) {
     if (coverBitmap.parseHeaders() == BmpReaderError::Ok && coverBitmap.getWidth() > 0 && coverBitmap.getHeight() > 0) {
-      drawn = GUI.drawCoverThumbFill(renderer, coverBitmap, Rect{rect.x, rect.y, rect.width, rect.height});
+      // The art nudges a few px right of center; the spine below hugs its
+      // left edge either way.
+      constexpr int ART_SHIFT = 3;
+      drawn = GUI.drawCoverThumbFill(renderer, coverBitmap, Rect{rect.x, rect.y, rect.width, rect.height}, ART_SHIFT);
+      if (drawn) {
+        renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+        // False spine glued to the art's left edge (centered art means that
+        // edge moves with each cover's fit margin): a dark band with a
+        // dithered crease makes every cover read as a bound book. Drawn here
+        // so the PSRAM snapshot below captures it.
+        const int artLeft = std::max<int>(rect.x, rect.x + (rect.width - coverBitmap.getWidth()) / 2 + ART_SHIFT);
+        renderer.fillRect(artLeft, rect.y, 3, rect.height);
+        renderer.fillRectDither(artLeft + 3, rect.y, 2, rect.height, Color::LightGray);
+      }
     }
     coverFile.close();
   }
-  if (!drawn) GUI.drawCoverPlaceholder(renderer, Rect{rect.x, rect.y, rect.width, rect.height});
+  if (!drawn) {
+    GUI.drawCoverPlaceholder(renderer, Rect{rect.x, rect.y, rect.width, rect.height});
+    renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+  }
   if (coverCache) {
     const size_t needed = renderer.getRegionByteSize(rect.x, rect.y, rect.width, rect.height);
     if (needed > cached.bytes && needed <= coverCacheCapacity - coverCacheUsed) {
@@ -75,8 +80,8 @@ bool HomeCoverCache::paint(fui::Rect rect, size_t index, const std::string& path
     }
     if (needed > 0 && needed <= cached.bytes) {
       cached.rect = rect;
-      cached.valid = renderer.copyRegionToBuffer(rect.x, rect.y, rect.width, rect.height,
-                                                 coverCache.get() + cached.offset, cached.bytes);
+      cached.valid =
+          renderer.copyRegionToBuffer(rect.x, rect.y, rect.width, rect.height, cacheData + cached.offset, cached.bytes);
     }
   }
   return true;  // The cover slot is painted, including fallback art.

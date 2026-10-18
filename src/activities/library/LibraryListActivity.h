@@ -42,6 +42,10 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onRowLongPress(int index) override;
+#if FREEINK_CAP_TOUCH
+  bool canSwipeDelete(int index) const override { return !groupsCollapsed && index >= 0 && index < listCount(); }
+  void swipeDelete(int index) override;
+#endif
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;
@@ -62,6 +66,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // The screen's own actions, after the base's ACTION_ROW / ACTION_TAB.
   static constexpr freeink::ui::ActionId ACTION_SEARCH = ACTION_TAB_USER;
   static constexpr freeink::ui::ActionId ACTION_REBUILD = ACTION_SEARCH + 1;
+  static constexpr freeink::ui::ActionId ACTION_BACK = ACTION_REBUILD + 1;
 
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the
@@ -92,8 +97,11 @@ class LibraryListActivity final : public UiTabListActivity {
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
+  // Staged back-out shared by Button::Back and the header back arrow.
+  void handleBackAction();
   static void searchActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void rebuildActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void backActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   // Data
   void applyFilter();

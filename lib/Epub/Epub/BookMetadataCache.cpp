@@ -7,6 +7,8 @@
 #include <ZipFile.h>
 
 #include <deque>
+#include <mutex>
+#include <optional>
 
 #include "FsHelpers.h"
 
@@ -18,6 +20,8 @@ constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
 // Buffer size for the buildBookBin streams. 3 buffers x 4KB, transient (freed on
 // return); 4KB = 8 SD sectors per transfer, enough to stop the sector-cache thrash.
 constexpr size_t BUILD_IO_BUFFER_SIZE = 4096;
+// The render task and the main loop both ask for sizes.
+std::mutex sizeWindowLock;
 
 // Entry (de)serializers, templated so they run over HalFile and the Buffered*
 // wrappers alike (two instantiations each -- a few hundred bytes of flash, in
@@ -245,57 +249,61 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     }
   }
 
+  const bool isZip = !FsHelpers::hasTxtExtension(epubPath) && !FsHelpers::hasMarkdownExtension(epubPath);
   ZipFile zip(epubPath);
-  // Pre-open zip file to speed up size calculations
-  if (!zip.open()) {
-    LOG_ERR("BMC", "Could not open EPUB zip for size calculations");
-    // Explicit close() required: member variables persist beyond function scope
-    bookFile.close();
-    spineFile.close();
-    tocFile.close();
-    return false;
-  }
-  // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
-  // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
-  // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
-  // Instead, for large books we use a one-pass batch lookup that scans the ZIP
-  // central directory once and matches against spine targets using hash comparison.
-  // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
-  // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
-
-  std::deque<uint32_t> spineSizes;
-  bool useBatchSizes = false;
-
-  if (spineCount >= LARGE_SPINE_THRESHOLD) {
-    LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
-
-    std::deque<ZipFile::SizeTarget> targets;
-    targets.resize(spineCount);
-
-    spineIn.seek(0);
-    for (int i = 0; i < spineCount; i++) {
-      auto entry = readSpineEntryFrom(spineIn);
-      std::string path = FsHelpers::normalisePath(entry.href);
-
-      ZipFile::SizeTarget t;
-      t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
-      t.len = static_cast<uint16_t>(path.size());
-      t.index = static_cast<uint16_t>(i);
-      targets[i] = t;
+  std::optional<std::deque<uint32_t>> spineSizes;
+  size_t rawSize = 0;
+  if (isZip) {
+    // Pre-open zip file to speed up size calculations
+    if (!zip.open()) {
+      LOG_ERR("BMC", "Could not open EPUB zip for size calculations");
+      // Explicit close() required: member variables persist beyond function scope
+      bookFile.close();
+      spineFile.close();
+      tocFile.close();
+      return false;
     }
+    // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
+    // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
+    // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
+    // Instead, for large books we use a batch lookup that scans the ZIP central
+    // directory once per chunk and matches against spine targets using hash comparison.
+    // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
+    // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
 
-    std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
-      return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
-    });
+    if (spineCount >= LARGE_SPINE_THRESHOLD) {
+      LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
 
-    spineSizes.resize(spineCount, 0);
-    int matched = zip.fillUncompressedSizes(targets, spineSizes);
-    LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
+      std::deque<ZipFile::SizeTarget> targets;
+      spineSizes.emplace(spineCount, 0);
+      int matched = 0;
 
-    targets.clear();
-    targets.shrink_to_fit();
+      spineIn.seek(0);
+      for (int i = 0; i < spineCount; i++) {
+        auto entry = readSpineEntryFrom(spineIn);
+        std::string path = FsHelpers::normalisePath(entry.href);
 
-    useBatchSizes = true;
+        ZipFile::SizeTarget t;
+        t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
+        t.len = static_cast<uint16_t>(path.size());
+        t.index = static_cast<uint16_t>(i);
+        targets.push_back(t);
+        // Targets take 16 B per spine item, so look sizes up 2,048 items at a time.
+        if (targets.size() < 2048 && i + 1 < spineCount) continue;
+
+        std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+          return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+        });
+        matched += zip.fillUncompressedSizes(targets, *spineSizes);
+        targets.clear();
+      }
+      LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
+    }
+  } else {
+    HalFile rawFile;
+    if (Storage.openFileForRead("BMC", epubPath, rawFile)) {
+      rawSize = rawFile.size();
+    }
   }
 
   uint32_t cumSize = 0;
@@ -303,42 +311,33 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   int lastSpineTocIndex = -1;
   for (int i = 0; i < spineCount; i++) {
     auto spineEntry = readSpineEntryFrom(spineIn);
-
     spineEntry.tocIndex = spineToTocIndex[i];
-
-    // Not a huge deal if we don't fine a TOC entry for the spine entry, this is expected behaviour for EPUBs
-    // Logging here is for debugging
     if (spineEntry.tocIndex == -1) {
-      LOG_DBG("BMC", "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
-              spineEntry.href.c_str());
+      if (isZip) {
+        LOG_DBG("BMC", "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
+                spineEntry.href.c_str());
+      }
       spineEntry.tocIndex = lastSpineTocIndex;
     }
     lastSpineTocIndex = spineEntry.tocIndex;
 
-    size_t itemSize = 0;
-    if (useBatchSizes) {
-      itemSize = spineSizes[i];
+    size_t itemSize = rawSize;
+    if (isZip) {
+      itemSize = spineSizes ? (*spineSizes)[i] : 0;
       if (itemSize == 0) {
         const std::string path = FsHelpers::normalisePath(spineEntry.href);
         if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
           LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
         }
       }
-    } else {
-      const std::string path = FsHelpers::normalisePath(spineEntry.href);
-      if (!zip.getInflatedFileSize(path.c_str(), &itemSize)) {
-        LOG_ERR("BMC", "Warning: Could not get size for spine item: %s", path.c_str());
-      }
     }
 
     cumSize += itemSize;
     spineEntry.cumulativeSize = cumSize;
-
-    // Write out spine data to book.bin
     writeSpineEntryTo(bookOut, spineEntry);
   }
-  // Close opened zip file
-  zip.close();
+  spineSizes.reset();
+  if (isZip) zip.close();
 
   // Loop through toc entries from toc file writing to book.bin
   tocIn.seek(0);
@@ -481,16 +480,16 @@ bool BookMetadataCache::load() {
   serialization::readString(bookFile, coreMetadata.coverItemHref);
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
 
-  // Cache cumulative spine sizes in RAM. The progress bar (every render) and percent
-  // jumps otherwise pay 2 seeks + a heap-allocating SpineEntry read per access. Spine
-  // entries are stored contiguously in index order immediately after the LUTs, so read
-  // them in a single sequential pass.
-  cumulativeSizes.clear();
-  cumulativeSizes.reserve(spineCount);
+  // Spine entries follow the LUTs in index order; keep every SIZE_WINDOW-th cumulative size.
+  windowStarts.clear();
+  bookSize = 0;
+  windowFirst = -1;
+  windowStarts.reserve((spineCount + SIZE_WINDOW - 1) / SIZE_WINDOW);
   const uint32_t lutSize = (static_cast<uint32_t>(spineCount) + tocCount) * sizeof(uint32_t);
   bookFile.seek(lutOffset + lutSize);
   for (uint16_t i = 0; i < spineCount; i++) {
-    cumulativeSizes.push_back(readSpineEntry(bookFile).cumulativeSize);
+    if (i % SIZE_WINDOW == 0) windowStarts.push_back(bookSize);
+    bookSize = readSpineEntry(bookFile).cumulativeSize;
   }
 
   loaded = true;
@@ -499,10 +498,51 @@ bool BookMetadataCache::load() {
 }
 
 uint32_t BookMetadataCache::getCumulativeSize(const int index) const {
-  if (index < 0 || index >= static_cast<int>(cumulativeSizes.size())) {
+  if (!loaded || index < 0 || index >= spineCount) {
     return 0;
   }
-  return cumulativeSizes[index];
+  // Window edges come from RAM, so a page at a window's first item does not read the one before.
+  if (index == spineCount - 1) return bookSize;
+  const int first = index / SIZE_WINDOW * SIZE_WINDOW;
+  if (index - first == SIZE_WINDOW - 1) return windowStarts[index / SIZE_WINDOW + 1];
+  std::lock_guard<std::mutex> lock(sizeWindowLock);
+  // A failed read answers the total before the window.
+  if (windowFirst != first && !fillWindow(first)) return windowStarts[index / SIZE_WINDOW];
+  return window[index - first];
+}
+
+bool BookMetadataCache::fillWindow(const int first) const {
+  windowFirst = -1;
+  // Own handle: getSpineEntry() moves bookFile.
+  HalFile file;
+  uint32_t pos = 0;
+  const auto u32 = [&file](uint32_t& v) { return file.read(&v, sizeof(v)) == static_cast<int>(sizeof(v)); };
+  bool ok = Storage.openFileForRead("BMC", cachePath + bookBinFile, file) &&
+            file.seek(lutOffset + sizeof(uint32_t) * first) && u32(pos) && file.seek(pos);
+  // Spine entry: href length, href, cumulative size, TOC index.
+  for (int i = 0; ok && i < SIZE_WINDOW && first + i < spineCount; i++) {
+    uint32_t hrefLen = 0;
+    ok = u32(hrefLen) && file.seek(file.position() + hrefLen) && u32(window[i]) &&
+         file.seek(file.position() + sizeof(int16_t));
+  }
+  if (ok) windowFirst = first;
+  return ok;
+}
+
+int BookMetadataCache::getSpineIndexForSize(const uint32_t size) const {
+  if (!loaded || spineCount == 0 || size > bookSize) return -1;
+  // windowStarts[w] is the total through item w * SIZE_WINDOW - 1, so the answer lies in the window
+  // before the first start that reaches `size`. Its last total comes from RAM and always reaches it.
+  const auto next = std::lower_bound(windowStarts.begin() + 1, windowStarts.end(), size);
+  const int first = static_cast<int>(next - windowStarts.begin() - 1) * SIZE_WINDOW;
+  const int last = std::min<int>(spineCount, first + SIZE_WINDOW) - 1;
+  std::lock_guard<std::mutex> lock(sizeWindowLock);
+  // One refill attempt; on failure every total in the window falls back below `size`, as before.
+  if (windowFirst != first && !fillWindow(first)) return last;
+  for (int i = first; i < last; i++) {
+    if (window[i - first] >= size) return i;
+  }
+  return last;
 }
 
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {

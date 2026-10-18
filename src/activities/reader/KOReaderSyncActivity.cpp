@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <TrustedTime.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -20,9 +21,11 @@
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "clippings/ClippingSync.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"  // list icons for the compare rows
 #include "fontIds.h"
+#include "network/WifiPowerSaveGuard.h"
 
 namespace fui = freeink::ui;
 
@@ -138,6 +141,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 }
 
 void KOReaderSyncActivity::performSync() {
+  WifiPowerSaveGuard psGuard;
   const DocumentMatchMethod primaryMethod = KOREADER_STORE.getMatchMethod();
   documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod);
   if (documentHash.empty()) {
@@ -152,6 +156,23 @@ void KOReaderSyncActivity::performSync() {
   const std::string primaryHash = documentHash;
 
   LOG_DBG("KOSync", "Document hash (%s): %s", matchMethodName(primaryMethod), documentHash.c_str());
+
+  if (KOREADER_STORE.getSyncClippings()) {
+    {
+      RenderLock lock(*this);
+      statusMessage = tr(STR_SYNCING_CLIPPINGS);
+    }
+    requestUpdateAndWait();
+    if (!clippingSync::run(epubPath, documentHash)) {
+      {
+        RenderLock lock(*this);
+        state = SYNC_FAILED;
+        statusMessage = tr(STR_CLIPPING_SYNC_FAILED);
+      }
+      requestUpdate(true);
+      return;
+    }
+  }
 
   {
     RenderLock lock(*this);
@@ -313,10 +334,9 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
 
-  // Rich CrossPoint position for the default CrossPoint sync server (lossless
-  // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
-  // before serializing the extension.
-  if (KOREADER_STORE.usesCrossPointSyncServer()) {
+  // Rich position for server profiles that explicitly support the CrossPoint extension.
+  // The HTTP client enforces the same boundary before serializing the extension.
+  if (KOREADER_STORE.supportsRichProgress()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f
@@ -345,9 +365,25 @@ void KOReaderSyncActivity::performUpload() {
     if (epub) {
       meta.title = epub->getTitle();
       meta.authors = epub->getAuthor();
+      if (KOREADER_STORE.supportsExtendedMetadata()) {
+        Epub::SyncMetadata syncMetadata;
+        if (epub->loadSyncMetadata(syncMetadata)) {
+          meta.isbn = std::move(syncMetadata.isbn);
+          meta.asin = std::move(syncMetadata.asin);
+          meta.series = std::move(syncMetadata.series);
+          meta.seriesIndex = syncMetadata.seriesIndex;
+        } else {
+          LOG_DBG("KOSync", "Could not read extended EPUB metadata; sending core metadata only");
+        }
+      }
     } else {
       LOG_ERR("KOSync", "Epub unavailable for metadata; sending filename only");
     }
+    // Plugin sidecar fields ("<book>.meta.json", written at download time via
+    // the catalog sidecar mechanism or /api/plugin-fs) ride along so a custom
+    // sync server can route progress by a service book id.
+    // A missing sidecar (the common case) leaves extraJson empty.
+    Storage.readFileToString("KOSync", epubPath + ".meta.json", 2 * 1024, meta.extraJson);
     progress.metadata = std::move(meta);
   }
 
@@ -355,7 +391,12 @@ void KOReaderSyncActivity::performUpload() {
   // (consistent with the release-before-sync pattern in performSync); nothing below needs it.
   epub.reset();
 
-  const auto result = KOReaderSyncClient::updateProgress(progress);
+  KOReaderSyncClient::Error result;
+  {
+    // Restore power-save before esp_wifi_stop below; set_ps on a stopped radio fails.
+    WifiPowerSaveGuard psGuard;
+    result = KOReaderSyncClient::updateProgress(progress);
+  }
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
   esp_wifi_stop();

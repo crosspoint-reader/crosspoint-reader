@@ -3,7 +3,6 @@
 #include <Utf8.h>
 
 #include <algorithm>
-#include <cstring>
 
 namespace library {
 
@@ -143,12 +142,6 @@ bool isUnicodeLetter(const uint32_t cp) {
   return inRanges(cp, LETTER_RANGES, sizeof(LETTER_RANGES) / sizeof(LETTER_RANGES[0]));
 }
 
-// Articles stripped from the head of sort and search keys. Display text never
-// goes through this.
-constexpr const char* ARTICLES[] = {"the ", "a ",   "an ", "le ",  "la ",  "les ", "l'",   "un ",
-                                    "une ", "de ",  "du ", "des ", "der ", "die ", "das ", "el ",
-                                    "los ", "las ", "il ", "lo ",  "gli ", "i ",   "o ",   "os "};
-
 // Views into `folded`, not copies: the caller keeps that string alive for as
 // long as the tokens, and a std::string per token costs an allocation each plus
 // 24 bytes of stack apiece -- 288 B for the twelve, over the 256 B this repo
@@ -173,7 +166,7 @@ bool isSingleCodepoint(const std::string_view text) {
 
 }  // namespace
 
-std::string fold(const std::string_view text, const bool stripArticle) {
+std::string fold(const std::string_view text) {
   std::string out;
   out.reserve(text.size());
 
@@ -226,15 +219,6 @@ std::string fold(const std::string_view text, const bool stripArticle) {
     if (!out.empty()) pendingSpace = true;
   }
 
-  if (stripArticle) {
-    for (const char* article : ARTICLES) {
-      const size_t len = strlen(article);
-      if (out.size() > len && out.compare(0, len, article) == 0) {
-        out.erase(0, len);
-        break;
-      }
-    }
-  }
   return out;
 }
 

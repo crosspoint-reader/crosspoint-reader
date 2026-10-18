@@ -49,7 +49,7 @@ class UiTabListActivity : public UiListActivity {
   int ringPos() const;
   // ACTION_ROW lands as ring = row + 1, then activateIndex(row).
   void onRowAction(const freeink::ui::ActionEvent& event) override;
-  // Release walks the ring; continuous hold steps the tab.
+  // Press walks the ring; continuous hold steps the tab.
   void navigateButtons() override;
   // Move to a ring position: tab bar rewinds the viewport, a row pulls the
   // viewport to itself.
@@ -67,6 +67,7 @@ class UiTabListActivity : public UiListActivity {
   // Per-tab selection/viewport state, sized in onEnter. Protected so subclass
   // tab-switch code can seed the target tab's ring/viewport.
   std::vector<freeink::ui::ListNav> tabNavs;
+  bool navigationStartedOnTabs = false;
 
   // When > 0, each tab pill is capped at its label width plus this padding
   // per side, centered in its unchanged equal-width slot. With few tabs the

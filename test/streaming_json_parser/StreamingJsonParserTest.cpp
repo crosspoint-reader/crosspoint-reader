@@ -1,10 +1,9 @@
+#include <StreamingJsonParser.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
 #include <string>
 #include <vector>
-
-#include "lib/JsonParser/StreamingJsonParser.h"
 
 namespace {
 
@@ -150,13 +149,66 @@ TEST(StreamingJsonParser, StringEscapes) {
   EXPECT_EQ(events[2].value, std::string("a\"b\\c/d\ne\tf"));
 }
 
-TEST(StreamingJsonParser, UnicodeEscapePassthrough) {
+TEST(StreamingJsonParser, UnicodeEscapeDecodedAscii) {
   auto events = parse(R"({"u": "\u0041\u0042"})");
 
   ASSERT_EQ(events.size(), 4u);
   EXPECT_EQ(events[2].type, EventType::STRING);
-  // \uXXXX passed through as literal \u followed by the hex digits
-  EXPECT_EQ(events[2].value, "\\u0041\\u0042");
+  // \uXXXX is decoded to UTF-8; ASCII code points stay one byte each.
+  EXPECT_EQ(events[2].value, "AB");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeDecodedMultibyte) {
+  auto events = parse(R"({"u": "\u00e9"})");
+
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[2].type, EventType::STRING);
+  EXPECT_EQ(events[2].value, "\xc3\xa9");  // U+00E9 e-acute as 2-byte UTF-8
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeSurrogatePair) {
+  // U+1F600 encoded as a UTF-16 surrogate pair.
+  auto events = parse(R"({"u": "\ud83d\ude00"})");
+
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[2].type, EventType::STRING);
+  EXPECT_EQ(events[2].value, "\xf0\x9f\x98\x80");
+}
+
+TEST(StreamingJsonParser, UnicodeEscapeChunkedAcrossFeeds) {
+  // The escape's hex digits are split across feed() calls; member state must
+  // carry the partial value.
+  const char* json = R"({"u": "\u00e9"})";
+  auto reference = parse(json);
+  const char* u = strstr(json, "\\u");
+  ASSERT_NE(u, nullptr);
+  size_t splitAt = static_cast<size_t>(u - json) + 3;  // mid-escape
+
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  parser.feed(json, splitAt);
+  parser.feed(json + splitAt, strlen(json) - splitAt);
+
+  ASSERT_EQ(ctx.events.size(), reference.size());
+  for (size_t i = 0; i < reference.size(); ++i) EXPECT_EQ(ctx.events[i].value, reference[i].value);
+}
+
+TEST(StreamingJsonParser, MalformedUnicodeEscapeErrors) {
+  // A \u escape needs four hex digits (RFC 8259); a non-hex digit is an error.
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  const char* json = R"({"u": "\u12GZ"})";
+  parser.feed(json, strlen(json));
+  EXPECT_TRUE(parser.hasError());
+}
+
+TEST(StreamingJsonParser, TruncatedUnicodeEscapeErrors) {
+  // A closing quote before the fourth hex digit is malformed.
+  TestContext ctx;
+  StreamingJsonParser parser(makeCallbacks(&ctx));
+  const char* json = R"({"u": "\u12"})";
+  parser.feed(json, strlen(json));
+  EXPECT_TRUE(parser.hasError());
 }
 
 TEST(StreamingJsonParser, Numbers) {

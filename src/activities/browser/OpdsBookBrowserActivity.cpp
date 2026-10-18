@@ -6,258 +6,260 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LcpLicense.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
-#include <OpdsStream.h>
-#include <WiFi.h>
+#include <Memory.h>
+#include <OpdsFeedParser.h>
+#include <OpdsPublicationDoc.h>
+#include <OpdsSearchTemplate.h>
+#include <StreamingJsonParser.h>
+#include <Util.h>
+#include <WolfsslCrypto.h>
 
+#include <iterator>
+
+#include "BookKey.h"
 #include "CrossPointSettings.h"
+#include "LcpPassphraseStore.h"
 #include "MappedInputManager.h"
-#include "SilentRestart.h"
-#include "activities/network/WifiSelectionActivity.h"
+#include "OpdsTokenStore.h"
+#include "activities/util/DetailsActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
-#include "components/UIScale.h"
 #include "components/UITheme.h"
-#include "components/icons/search32.h"
-#include "fontIds.h"
+#include "components/icons/opdsIcons.h"
 #include "network/HttpDownloader.h"
+#include "network/LcpDevice.h"
 #include "util/BookCacheUtils.h"
+#include "util/OpdsFeedError.h"
 #include "util/OpdsFilename.h"
-#include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace fui = freeink::ui;
 
 namespace {
-constexpr fui::ActionId ACTION_ROW = 1;
-constexpr fui::ActionId ACTION_SEARCH = 2;
-constexpr fui::ActionId ACTION_CANCEL = 3;
-constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
-constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
+// ACTION_PAGE values: which pagination link a tab follows.
+constexpr int16_t PAGE_FIRST = 0;
+constexpr int16_t PAGE_PREV = 1;
+constexpr int16_t PAGE_NEXT = 2;
+constexpr int16_t PAGE_LAST = 3;
 
+// Accept-Language from the reader's UI language, so servers that localize the
+// catalog (e.g. Lirtuel) return it translated. Primary subtag plus an English
+// fallback; derived from the exposed LANGUAGE_CODES table (e.g. "FR" -> "fr").
+std::string uiAcceptLanguage() {
+  const char* code = LANGUAGE_CODES[static_cast<int>(SETTINGS.language)];
+  std::string lang;
+  for (const char* p = code; *p && *p != '_'; ++p) {
+    lang += (*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p;
+  }
+  if (lang.empty() || lang == "en") return "en";
+  return lang + ",en;q=0.8";
+}
+
+// Tells a dead server from a catalog that wants a password; both are a bare
+// "failed" to the fetch itself. Read right after a failed fetch.
+StrId feedFailureMessage() {
+  switch (classifyFeedFailure(HttpDownloader::lastStatus(), HttpDownloader::lastAnswerRedirected())) {
+    case OpdsFeedError::Unreachable:
+      return StrId::STR_FEED_UNREACHABLE;
+    case OpdsFeedError::Unauthorized:
+      return StrId::STR_FEED_UNAUTHORIZED;
+    case OpdsFeedError::Redirected:
+      return StrId::STR_FEED_REDIRECTED;
+    case OpdsFeedError::ServerError:
+      return StrId::STR_FEED_SERVER_ERROR;
+    case OpdsFeedError::Other:
+      break;
+  }
+  return StrId::STR_FETCH_FEED_FAILED;
+}
 }  // namespace
 
 OpdsBookBrowserActivity::OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  OpdsServer server)
-    : Activity("OpdsBookBrowser", renderer, mappedInput),
-      UiAppHost(renderer),
-      buttonNavigator(),
-      server(std::move(server)) {}
+    : CatalogActivity("OpdsBookBrowser", renderer, mappedInput), server(std::move(server)) {}
 
 void OpdsBookBrowserActivity::onEnter() {
-  Activity::onEnter();
+  CatalogActivity::onEnter();
+  app.on(ACTION_PAGE, &OpdsBookBrowserActivity::onPageEvent, this);
 
-  state = BrowserState::CHECK_WIFI;
-  entries.clear();
-  navigationHistory.clear();
-  searchTemplate = "";
-  currentPath = "";
-  selectorIndex = 0;
-  errorMessage.clear();
+  // Configure the OPDS client for this server, restore any persisted token, and
+  // reset the per-session auth latches. Accept-Language localizes the catalog
+  // (both request header and language-map title resolution).
+  opdsClient.setServer(server.url, server.username, server.password, server.activeCustomHeaders());
+  {
+    const OpdsTokens t = OPDS_TOKENS.get(tokenKey());
+    opdsClient.setTokens(t.accessToken, t.refreshToken, t.refreshUrl);
+  }
+  opdsClient.resetAuthState();
+  opdsClient.setAcceptLanguage(uiAcceptLanguage());
+  opdsClient.onStatus(&OpdsBookBrowserActivity::onClientStatus, this);
+
+  state = State::CHECK_WIFI;
   statusMessage = tr(STR_CHECKING_WIFI);
-
-  listNav.reset();
-  resetUi();
-  app.on(ACTION_ROW, &OpdsBookBrowserActivity::onRowEvent, this);
-  app.on(ACTION_SEARCH, &OpdsBookBrowserActivity::onSearchEvent, this);
-  app.on(ACTION_CANCEL, &OpdsBookBrowserActivity::onCancelEvent, this);
-  app.setScreen(&OpdsBookBrowserActivity::rootScreen, this);
-  requestUpdate();
-
   checkAndConnectWifi();
 }
 
 void OpdsBookBrowserActivity::onExit() {
-  Activity::onExit();
-  entries.clear();
+  releaseEntries();
   navigationHistory.clear();
-
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
+  if (!detailCoverPath.empty()) {
+    if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
+    detailCoverPath.clear();
   }
+  CatalogActivity::onExit();
 }
 
-void OpdsBookBrowserActivity::activateSelected() {
-  if (entries.empty() || selectorIndex < 0 || selectorIndex >= static_cast<int>(entries.size())) return;
-  const auto& entry = entries[selectorIndex];
-  entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
+void OpdsBookBrowserActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  const auto& entry = entries[index];
+  entry.type == OpdsEntryType::BOOK ? openPublicationDetail(entry) : navigateToEntry(entry);
 }
 
-void OpdsBookBrowserActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
-  auto* self = static_cast<OpdsBookBrowserActivity*>(user);
-  if (self->state != BrowserState::BROWSING) return;
-  if (event.value < 0 || event.value >= static_cast<int16_t>(self->entries.size())) return;
-  self->selectorIndex = event.value;
-  // The tapped row leaves the screen either way (new feed or download view);
-  // a lingering tap flash would gray an unrelated row on the next list.
-  self->app.clearTapFlash();
-  self->activateSelected();
-}
-
-void OpdsBookBrowserActivity::onSearchEvent(const fui::ActionEvent&, void* user) {
-  auto* self = static_cast<OpdsBookBrowserActivity*>(user);
-  if (self->state != BrowserState::BROWSING) return;
-  self->app.clearTapFlash();
-  self->launchSearch();
-}
-
-void OpdsBookBrowserActivity::onCancelEvent(const fui::ActionEvent&, void* user) {
-  auto* self = static_cast<OpdsBookBrowserActivity*>(user);
-  if (self->state != BrowserState::DOWNLOADING) return;
-  self->app.clearTapFlash();
-  self->cancelDownload = true;
-}
-
-void OpdsBookBrowserActivity::loop() {
-  if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
-    return;
-  }
-
-  if (state == BrowserState::ERROR) {
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(tx, ty)) {
-      if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
-        state = BrowserState::LOADING;
-        statusMessage = tr(STR_LOADING);
-        requestUpdate();
-        fetchFeed(currentPath);
-      } else {
-        launchWifiSelection();
-      }
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      navigateBack();
-    }
-    return;
-  }
-
-  if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state == BrowserState::CHECK_WIFI ? onGoHome() : navigateBack();
-    }
-    return;
-  }
-
-  if (state == BrowserState::DOWNLOADING) return;
-
-  if (state == BrowserState::BROWSING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      activateSelected();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      navigateBack();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
-    }
-
-    // Touch goes through the FreeInkApp: render() registered every tap target
-    // (rows, header search button); route the snapshot and let the registered
-    // handlers dispatch.
-    const auto route = routeTouch(mappedInput);
-    if (route.routed) {
-      // No pressed-state repaint: the render it triggers would drop a slow
-      // tap's release inside the uiReady window (tap-to-activate needed two
-      // taps), and it costs a second e-ink refresh per tap.
-      if (app.invalidated()) requestUpdate();
-      if (route) return;  // dispatched to onRowEvent/onSearchEvent
-      if (state != BrowserState::BROWSING) return;
-    }
-
-    if (!entries.empty()) {
-      // Swipes scroll the viewport; the selection stays put (it may scroll
-      // off-screen) and button navigation pulls the view back to it.
-      const auto swipe = mappedInput.wasSwipe();
-      if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
-        const int delta = swipe == MappedInputManager::SwipeDir::Up ? listNav.visibleRows : -listNav.visibleRows;
-        if (listNav.scrollBy(delta, static_cast<int>(entries.size()))) requestUpdate();
-        return;
-      }
-
-      const auto moveSelection = [this](const int index) {
-        selectorIndex = index;
-        listNav.selected = index;
-        listNav.follow(static_cast<int>(entries.size()));
-        requestUpdate();
-      };
-      buttonNavigator.onNextRelease(
-          [this, &moveSelection] { moveSelection(ButtonNavigator::nextIndex(selectorIndex, entries.size())); });
-      buttonNavigator.onPreviousRelease(
-          [this, &moveSelection] { moveSelection(ButtonNavigator::previousIndex(selectorIndex, entries.size())); });
-      buttonNavigator.onNextContinuous([this, &moveSelection] {
-        moveSelection(ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), listNav.visibleRows));
-      });
-      buttonNavigator.onPreviousContinuous([this, &moveSelection] {
-        moveSelection(ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), listNav.visibleRows));
-      });
-    }
-  }
-}
-
-bool OpdsBookBrowserActivity::preventAutoSleep() {
-  switch (state) {
-    case BrowserState::CHECK_WIFI:
-    case BrowserState::WIFI_SELECTION:
-    case BrowserState::LOADING:
-    case BrowserState::DOWNLOADING:
-    case BrowserState::SEARCH_INPUT:
+bool OpdsBookBrowserActivity::handleCustomInput() {
+  if (state == State::BROWSING &&
+      (!pageNextHref.empty() || !pagePrevHref.empty() || !pageFirstHref.empty() || !pageLastHref.empty())) {
+    // On a paginated feed the side buttons belong to feed pages exclusively.
+    // NavNext/NavPrevious resolve to the side buttons too, so every side
+    // press/hold pass is swallowed here or the shared list nav would also
+    // step the selection under the same physical button.
+    if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
+      if (!pageNextHref.empty()) followPageLink(pageNextHref);
       return true;
-    case BrowserState::BROWSING:
-    case BrowserState::ERROR:
-      return false;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
+      if (!pagePrevHref.empty()) followPageLink(pagePrevHref);
+      return true;
+    }
+    if (mappedInput.isPressed(MappedInputManager::Button::PageForward) ||
+        mappedInput.isPressed(MappedInputManager::Button::PageBack)) {
+      return true;
+    }
   }
-  return false;
+  return CatalogActivity::handleCustomInput();
 }
 
-void OpdsBookBrowserActivity::rootScreen(UiScreen& screen, void* user) {
+void OpdsBookBrowserActivity::onPageEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(user);
-  switch (self->state) {
-    case BrowserState::BROWSING:
-      self->buildBrowsingScreen(screen);
+  if (self->state != State::BROWSING) return;
+  self->app.clearTapFlash();
+  const std::string* href = nullptr;
+  switch (event.value) {
+    case PAGE_FIRST:
+      href = &self->pageFirstHref;
       break;
-    case BrowserState::DOWNLOADING:
-      self->buildDownloadScreen(screen);
+    case PAGE_PREV:
+      href = &self->pagePrevHref;
+      break;
+    case PAGE_NEXT:
+      href = &self->pageNextHref;
+      break;
+    case PAGE_LAST:
+      href = &self->pageLastHref;
       break;
     default:
-      self->buildStatusScreen(screen);
-      break;
+      return;
   }
+  if (href && !href->empty()) self->followPageLink(*href);
 }
 
-// Shared chrome for every state: reserve the firmware's button-hint band and
-// draw the themed header (padding, centering, and rule come from the theme).
-void OpdsBookBrowserActivity::screenHeader(UiScreen& screen, const bool withSearch) {
-  screen.takeBottom(static_cast<int16_t>(UITheme::getInstance().getMetrics().buttonHintsHeight));
-  // Same top offset as every GUI.drawHeader caller, so the band lines up with
-  // the rest of the firmware's screens.
-  screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().topPadding));
-  fui::HeaderProps header;
-  header.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  header.borderEdges = fui::EdgeBottom;
-  if (withSearch && !searchTemplate.empty()) {
-    header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
-    header.trailingAction = ACTION_SEARCH;
-    // Optically align the icon with the title glyphs: text hangs low in its
-    // line cell by the font's internal leading; drop the button to match.
-    const int titleFontId = uiScaleSpec().titleFontId;
-    header.actionOffsetY =
-        static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+// Follow a pagination link. isPaginationHref() keeps the search-term header
+// across page turns; navigateToEntry() does the history push and fetch.
+void OpdsBookBrowserActivity::followPageLink(const std::string& href) {
+  OpdsEntry entry;
+  entry.type = OpdsEntryType::NAVIGATION;
+  entry.href = href;
+  navigateToEntry(entry);
+}
+
+void OpdsBookBrowserActivity::setSearchQuery(const std::string& query) {
+  searchQuery = query;
+  headerSearchTitle = query.empty() ? std::string() : "“" + query + "”";
+}
+
+// An active search replaces the server name with the quoted query, like the
+// library view, so the reader can see what produced the current list. With
+// no search, a navigated feed's own title beats the server name.
+const char* OpdsBookBrowserActivity::browserTitle() const {
+  return !headerSearchTitle.empty() ? headerSearchTitle.c_str()
+         : !feedTitle.empty()       ? feedTitle.c_str()
+         : server.name.empty()      ? tr(STR_OPDS_BROWSER)
+                                    : server.name.c_str();
+}
+
+void OpdsBookBrowserActivity::buildScreen(UiScreen& screen) {
+  screenHeader(screen, browserTitle());
+  if (buildStatusScreen(screen, /*boldError=*/false, /*showDownloadTotal=*/true)) return;
+  buildBrowsingScreen(screen);
+}
+
+// Bottom pagination bar: arrow-icon tabs following the feed's first/prev/next/
+// last links. Prev and Next always show when the feed is paginated (the
+// unavailable direction is disabled); First/Last appear only when advertised.
+void OpdsBookBrowserActivity::buildPaginationBar(UiScreen& screen) {
+  // Backward arrows on the left, forward arrows on the right, "Page N of M"
+  // between them when the feed reports its pagination.
+  fui::TabItem left[2], right[2];
+  int lc = 0, rc = 0;
+  const auto addTab = [](fui::TabItem* tabs, int& count, const freeink::Icon& icon, const int16_t value,
+                         const std::string& href) {
+    tabs[count].icon = fui::bitmapFromIcon(icon);
+    tabs[count].value = value;
+    tabs[count].enabled = !href.empty();
+    ++count;
+  };
+  if (!pageFirstHref.empty()) addTab(left, lc, icon_page_first_32, PAGE_FIRST, pageFirstHref);
+  addTab(left, lc, icon_page_prev_32, PAGE_PREV, pagePrevHref);
+  addTab(right, rc, icon_page_next_32, PAGE_NEXT, pageNextHref);
+  if (!pageLastHref.empty()) addTab(right, rc, icon_page_last_32, PAGE_LAST, pageLastHref);
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const fui::Rect band = screen.takeBottom(static_cast<int16_t>(metrics.tabBarHeight));
+  // Full-width band with a top rule, matching the tab chrome elsewhere.
+  const fui::Rect frameRect = screen.frame().screen();
+  const fui::Rect barRect{frameRect.x, band.y, frameRect.width, band.height};
+  screen.target().fill(fui::Rect{barRect.x, barRect.y, barRect.width, 1}, fui::Paint::solid(fui::Color::Black));
+
+  const auto side = static_cast<int16_t>(metrics.contentSidePadding);
+  const int16_t zoneW = static_cast<int16_t>((barRect.width - 2 * side) / 3);
+  const int16_t slotY = static_cast<int16_t>(barRect.y + 1);
+  const int16_t slotH = static_cast<int16_t>(barRect.height - 1);
+  fui::TabBarProps props;
+  props.action = ACTION_PAGE;
+  props.inputMask = fui::InputTouch;
+  props.iconSize = 32;
+  props.tabs = left;
+  props.count = static_cast<uint16_t>(lc);
+  fui::tabBar(screen.frame(), fui::Rect{static_cast<int16_t>(barRect.x + side), slotY, zoneW, slotH}, props);
+  props.tabs = right;
+  props.count = static_cast<uint16_t>(rc);
+  fui::tabBar(screen.frame(), fui::Rect{static_cast<int16_t>(barRect.right() - side - zoneW), slotY, zoneW, slotH},
+              props);
+
+  if (pageCurrent > 0 && pageTotal > 0) {
+    char pageText[32];
+    snprintf(pageText, sizeof(pageText), "%d/%d", pageCurrent, pageTotal);
+    fui::TextStyle centered = screen.theme().smallText;
+    centered.align = fui::TextAlign::Center;
+    const int16_t lh = screen.target().lineHeight(centered.font);
+    screen.target().text(fui::Rect{static_cast<int16_t>(barRect.x + side + zoneW),
+                                   static_cast<int16_t>(slotY + (slotH - lh) / 2), zoneW, lh},
+                         pageText, centered);
   }
-  screen.header(header);
-  // Same breathing room between header and content as the legacy screens.
-  screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().verticalSpacing));
 }
 
 void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
-  screenHeader(screen, true);
+  // Reserve the pagination band before the list claims the remaining height.
+  if (!pageNextHref.empty() || !pagePrevHref.empty() || !pageFirstHref.empty() || !pageLastHref.empty()) {
+    buildPaginationBar(screen);
+  }
 
   if (entries.empty()) {
     screen.centeredText(tr(STR_NO_ENTRIES), screen.theme().bodyText);
     return;
   }
 
-  // Transient per-render: sized once via reserve, points into `entries`
-  // strings, freed on scope exit.
   // rowItems is built whenever entries changes (see rebuildRowItems(), called
   // from fetchFeed()/releaseEntries()) and reused here on every repaint.
   fui::ListProps props;
@@ -266,85 +268,27 @@ void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the nav chevron and the row edge
-  listNav.selected = selectorIndex;
-  props.partialTrailingRow = true;
-  screen.syncListViewport(listNav, props, static_cast<int>(entries.size()));
+  syncListViewport(screen, props);
   screen.list(props);
 }
 
-void OpdsBookBrowserActivity::buildDownloadScreen(UiScreen& screen) {
-  screenHeader(screen, false);
-
-  // Centered block: status line, book title, progress bar, cancel button.
-  const auto& theme = screen.theme();
-  fui::TextStyle centered = theme.bodyText;
-  centered.align = fui::TextAlign::Center;
-  const int16_t lh = screen.target().lineHeight(centered.font);
-  const int16_t gap = theme.spaceMd;
-  const int16_t barH = 16;
-  const int16_t btnH = theme.rowHeight;
-  const int16_t blockH = static_cast<int16_t>(lh * 2 + barH + btnH + gap * 3);
-  const fui::Rect body = screen.body();
-  if (body.height > blockH) screen.spacer(static_cast<int16_t>((body.height - blockH) / 2));
-
-  screen.target().text(screen.takeTop(lh, gap), tr(STR_DOWNLOADING), centered);
-  screen.target().text(screen.takeTop(lh, gap), statusMessage.c_str(), centered);
-
-  const fui::Rect bar = screen.takeTop(barH, gap).inset(fui::Insets{0, 50, 0, 50});
-  if (downloadTotal > 0) {
-    fui::ProgressBarProps progress;
-    progress.value = static_cast<int32_t>(downloadProgress);
-    progress.max = static_cast<int32_t>(downloadTotal);
-    progress.border = fui::Paint::solid(fui::Color::Black);
-    progress.borderWidth = 1;
-    fui::progressBar(screen.frame(), bar, progress);
-  }
-
-  const fui::Rect btnArea = screen.takeTop(btnH);
-  const int16_t btnW = static_cast<int16_t>(btnArea.width / 3);
-  fui::ButtonProps cancel;
-  cancel.label = tr(STR_CANCEL);
-  cancel.action = ACTION_CANCEL;
-  screen.button(cancel, fui::Rect{static_cast<int16_t>(btnArea.x + (btnArea.width - btnW) / 2), btnArea.y, btnW, btnH});
-}
-
-void OpdsBookBrowserActivity::buildStatusScreen(UiScreen& screen) {
-  screenHeader(screen, false);
-
-  fui::TextStyle centered = screen.theme().bodyText;
-  centered.align = fui::TextAlign::Center;
-  if (state == BrowserState::ERROR) {
-    const int16_t lh = screen.target().lineHeight(centered.font);
-    const int16_t gap = screen.theme().spaceMd;
-    const bool showTapHint = mappedInput.hasTouch();
-    const int16_t blockH = static_cast<int16_t>(lh * (showTapHint ? 3 : 2) + gap * (showTapHint ? 2 : 1));
-    const fui::Rect body = screen.body();
-    if (body.height > blockH) screen.spacer(static_cast<int16_t>((body.height - blockH) / 2));
-    screen.target().text(screen.takeTop(lh, gap), tr(STR_ERROR_MSG), centered);
-    screen.target().text(screen.takeTop(lh, gap), errorMessage.c_str(), centered);
-    if (showTapHint) screen.target().text(screen.takeTop(lh), tr(STR_TAP_TO_RETRY), centered);
-    return;
-  }
-  // CHECK_WIFI / LOADING (and the brief child-activity handoff states).
-  screen.centeredText(statusMessage.c_str(), centered);
-}
-
-void OpdsBookBrowserActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
+void OpdsBookBrowserActivity::drawFooter() {
   MappedInputManager::Labels labels;
   switch (state) {
-    case BrowserState::BROWSING: {
-      const char* confirmLabel =
-          (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
-      const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
+    case State::BROWSING: {
+      const char* confirmLabel = tr(STR_OPEN);
+      if (!entries.empty() && nav.selected >= 0 && nav.selected < static_cast<int>(entries.size()) &&
+          entries[nav.selected].type == OpdsEntryType::BOOK) {
+        confirmLabel = entries[nav.selected].purchase ? tr(STR_OPDS_BUY) : tr(STR_DOWNLOAD);
+      }
+      const char* searchLabel = (hasSearch() && nav.selected == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
       labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
       break;
     }
-    case BrowserState::DOWNLOADING:
+    case State::DOWNLOADING:
       labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
       break;
-    case BrowserState::ERROR:
+    case State::ERROR:
       labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
       break;
     default:
@@ -352,62 +296,116 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       break;
   }
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
 
-  renderUi();
-  renderer.displayBuffer();
+void OpdsBookBrowserActivity::startBrowse() {
+  releaseEntries();  // harmless when already empty
+  nav.reset();
+  beginLoading();
+  fetchFeed(currentPath);
+}
+
+void OpdsBookBrowserActivity::downloadFinished(bool) {
+  // Reload the released catalog (entries were freed for the TLS session).
+  startBrowse();
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   if (server.url.empty()) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_NO_SERVER_URL);
-    requestUpdate();
+    fail(StrId::STR_NO_SERVER_URL);
     return;
   }
 
-  std::string url = UrlUtils::buildUrl(server.url, path);
-  LOG_DBG("OPDS", "Fetching: %s", url.c_str());
-  OpdsParser parser;
-  {
-    OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
-      state = BrowserState::ERROR;
-      errorMessage = tr(STR_FETCH_FEED_FAILED);
-      requestUpdate();
-      return;
+  const std::string url = UrlUtils::buildUrl(server.url, path);
+  OpdsFeedParser parser;
+  const auto status = opdsClient.fetchFeed(url, parser);
+  // The token state may have changed (renewed, or cleared on failure); persist
+  // only when an auth handshake actually ran.
+  if (opdsClient.tokensDirty()) persistTokens();
+  if (status != freeink::opds::OpdsClient::FetchStatus::Ok) {
+    switch (status) {
+      case freeink::opds::OpdsClient::FetchStatus::CredentialsMissing:
+        fail(StrId::STR_SET_CREDENTIALS_FIRST);
+        break;
+      case freeink::opds::OpdsClient::FetchStatus::AuthFailed:
+        fail(StrId::STR_OPDS_AUTH_FAILED);
+        break;
+      case freeink::opds::OpdsClient::FetchStatus::ParseFailed:
+        fail(StrId::STR_PARSE_FEED_FAILED);
+        break;
+      default:
+        fail(feedFailureMessage());
+        break;
     }
-  }
-
-  if (!parser) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_PARSE_FEED_FAILED);
-    requestUpdate();
     return;
   }
 
   searchTemplate = parser.getSearchTemplate();
+  searchDescriptionUrl = parser.getSearchDescriptionUrl();
+  searchTemplateBase = "";  // feed-inline template resolves against the feed URL
+  feedTitle = parser.getFeedTitle();
+
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
+  pageNextHref = nextUrl;
+  pagePrevHref = prevUrl;
+  // First/Last rows only when they reach further than Previous/Next.
+  pageFirstHref = (!parser.getFirstPageUrl().empty() && !prevUrl.empty() && parser.getFirstPageUrl() != prevUrl)
+                      ? parser.getFirstPageUrl()
+                      : "";
+  pageLastHref = (!parser.getLastPageUrl().empty() && !nextUrl.empty() && parser.getLastPageUrl() != nextUrl)
+                     ? parser.getLastPageUrl()
+                     : "";
+  pageCurrent = parser.currentPage();
+  pageTotal = parser.pageCount();
   const bool feedTruncated = parser.truncated();
-  // Reset the selection before the swap: the render task reads
-  // entries[selectorIndex] under only an empty() guard, and the new feed can
-  // be shorter than the old selection.
-  selectorIndex = 0;
-  listNav.reset();
-  entries = std::move(parser).getEntries();
+  // Reset the selection before the swap: the render task reads the selected
+  // entry under only an empty() guard, and the new feed can be shorter than
+  // the old selection.
+  nav.reset();
+  entries = parser.takeEntries();
 
-  entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
-  if (!prevUrl.empty()) {
-    entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl, ""});
-  }
-  if (!nextUrl.empty()) {
-    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
+  // Pagination is a bottom tab bar (buildPaginationBar), not list rows.
+  auto facetRows = parser.takeFacetEntries();
+  entries.reserve(entries.size() + facetRows.size());
+  // Facet groups (sort orders, filters) come after the catalog content, each
+  // under its own section heading.
+  entries.insert(entries.end(), std::make_move_iterator(facetRows.begin()), std::make_move_iterator(facetRows.end()));
+
+  // Standard OPDS user collections (loans, reading list, history), advertised
+  // as feed-level links, become navigation rows under a "My Account" heading
+  // so they are reachable without pasting a URL. Authentication kicks in when
+  // one is opened. Only surfaced on the catalog root (no navigation history),
+  // since the same links repeat on every feed.
+  if (navigationHistory.empty()) {
+    struct UserLink {
+      const std::string& href;
+      const char* label;  // tr()'d value; runtime StrId can't go through the macro
+    };
+    const UserLink userLinks[] = {
+        {parser.getShelfUrl(), tr(STR_OPDS_SHELF)},
+        {parser.getWishlistUrl(), tr(STR_OPDS_WISHLIST)},
+        {parser.getHistoryUrl(), tr(STR_OPDS_HISTORY)},
+    };
+    bool firstUserLink = true;
+    for (const auto& link : userLinks) {
+      if (link.href.empty() || entries.size() >= OpdsLimits::MAX_ENTRIES) continue;
+      OpdsEntry entry;
+      entry.type = OpdsEntryType::NAVIGATION;
+      entry.title = link.label;
+      entry.href = link.href;
+      if (firstUserLink) {
+        entry.heading = tr(STR_OPDS_MY_ACCOUNT);
+        firstUserLink = false;
+      }
+      entries.push_back(std::move(entry));
+    }
   }
   if (feedTruncated) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
-  state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
+  state = entries.empty() ? State::ERROR : State::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   rebuildRowItems();
   requestUpdate();
@@ -421,9 +419,14 @@ void OpdsBookBrowserActivity::rebuildRowItems() {
   rowItems.reserve(entries.size());
   for (const auto& entry : entries) {
     fui::ListItem item;
-    item.label = entry.title.c_str();
+    // A group's "see all" self link carries no title of its own; the UI
+    // supplies the label (the group name is the section heading above it).
+    item.label = entry.id == OPDS_SEE_ALL_ID ? tr(STR_OPDS_SEE_ALL) : entry.title.c_str();
+    if (!entry.heading.empty()) item.sectionHeading = entry.heading.c_str();
     if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) item.subtitle = entry.author.c_str();
-    if (entry.type == OpdsEntryType::NAVIGATION) item.value = ">";
+    if (entry.type == OpdsEntryType::NAVIGATION) item.value = entry.detail.empty() ? ">" : entry.detail.c_str();
+    // Purchases show their price in the value column.
+    if (entry.type == OpdsEntryType::BOOK && entry.purchase && !entry.detail.empty()) item.value = entry.detail.c_str();
     item.actionValue = static_cast<int16_t>(rowItems.size());
     rowItems.push_back(item);
   }
@@ -439,44 +442,35 @@ void OpdsBookBrowserActivity::releaseEntries() {
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
+  searchQueryHistory.push_back(searchQuery);
+  // Following a results page (first/previous/next/last) stays within the
+  // same search; any other navigation leaves it.
+  if (!isPaginationHref(entry.href)) setSearchQuery("");
   // Resolve to a full URL so sub-sub-navigation retains parent path context
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   currentPath = UrlUtils::buildUrl(feedUrl, entry.href);
 
-  state = BrowserState::LOADING;
-  statusMessage = tr(STR_LOADING);
-  releaseEntries();
-  selectorIndex = 0;
-  requestUpdate(true);
-  fetchFeed(currentPath);
+  startBrowse();
 }
 
 void OpdsBookBrowserActivity::navigateBack() {
   if (navigationHistory.empty()) {
     onGoHome();
-  } else {
-    currentPath = navigationHistory.back();
-    navigationHistory.pop_back();
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    releaseEntries();
-    selectorIndex = 0;
-    requestUpdate();
-    fetchFeed(currentPath);
+    return;
   }
+  currentPath = navigationHistory.back();
+  navigationHistory.pop_back();
+  if (!searchQueryHistory.empty()) {
+    setSearchQuery(searchQueryHistory.back());
+    searchQueryHistory.pop_back();
+  }
+  startBrowse();
 }
 
-void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
-  state = BrowserState::DOWNLOADING;
-  statusMessage = book.title;
-  downloadProgress = downloadTotal = 0;
-  cancelDownload = false;
-  goHomeAfterCancel = false;
-  requestUpdate(true);
+void OpdsBookBrowserActivity::onBackButton() { navigateBack(); }
 
-  // Build full download URL relative to the current feed, not the root server URL
-  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
-  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
+// SD destination from the configured download folder + filename format.
+std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) const {
   // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
   // no std::string copy. exists()/mkdir() take const char*.
   const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
@@ -488,15 +482,64 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
     haveFolder = false;
   }
-
-  // downloadToFile() needs a std::string, and titles are unbounded (a fixed
-  // char[] would truncate). Cold path (a multi-second download follows), so one
-  // reserve'd, in-place-appended owning string is the right call.
+  // Titles are unbounded (a fixed char[] would truncate). Cold path (a
+  // multi-second download follows), so one reserve'd owning string is right.
   std::string filename;
   filename.reserve(96);
   if (haveFolder) filename += folder;
   filename += '/';
   filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  return filename;
+}
+
+// A purchase link (or any misbehaving endpoint) can answer 200 with an HTML
+// page; a real EPUB is a ZIP container. Check the magic before accepting the
+// file, then register it with the caches. False = rejected (fail() called).
+bool OpdsBookBrowserActivity::verifyAndRegisterEpub(const std::string& filename) {
+  uint8_t magic[4] = {0};
+  {
+    HalFile check;
+    if (Storage.openFileForRead("OPDS", filename.c_str(), check)) {
+      check.read(magic, sizeof(magic));
+    }
+    if (check.isOpen()) check.close();  // close before any remove() on the same path
+  }
+  if (!(magic[0] == 'P' && magic[1] == 'K' && magic[2] == 3 && magic[3] == 4)) {
+    LOG_ERR("OPDS", "Downloaded file is not an EPUB (magic %02x%02x%02x%02x)", magic[0], magic[1], magic[2], magic[3]);
+    Storage.remove(filename.c_str());
+    fail(StrId::STR_OPDS_NOT_A_BOOK);
+    return false;
+  }
+  clearBookCache(filename);
+  library::markLibraryIndexDirty();
+  return true;
+}
+
+void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
+  if (book.lcpLicense) {
+    downloadLcpBook(book);
+    return;
+  }
+  beginDownload(book.title);
+
+  // Build full download URL relative to the current feed, not the root server URL
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
+
+  // Indirect acquisition (OPDS 2.0 5.3): the link points at a publication
+  // document, not the EPUB. The client fetches it and resolves the real
+  // download link. Library loans behind this are usually LCP-encrypted, which
+  // the reader can't open; the post-download EPUB check reports that cleanly.
+  if (book.indirect) {
+    std::string resolved;
+    bool resolvedEpub = false;
+    if (!opdsClient.resolveIndirect(downloadUrl, resolved, resolvedEpub)) {
+      fail(StrId::STR_OPDS_NOT_A_BOOK);
+      return;
+    }
+    downloadUrl = resolved;
+  }
+  const std::string filename = downloadDestination(book);
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   // The selected book data is now copied into the download URL, filename, and
@@ -504,162 +547,482 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // the current feed when the transfer finishes.
   releaseEntries();
 
-  // Rebuildable SD-font caches can hold tens of KB the TLS session needs for
-  // a multi-MB book; release them up front (they repopulate on demand) and
-  // refuse to start below the floor — a doomed transfer otherwise dies
-  // mid-stream with MEMORY_E, or abort()s on an interior allocation.
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    fcm->releaseSdFontCaches();
-  }
-  LOG_DBG("OPDS", "Download heap: %u free, %u max block", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-  if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
-      ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
-    LOG_ERR("OPDS", "Low heap for download (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_DOWNLOAD_FAILED);
-    requestUpdate();
-    return;
-  }
+  const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
+  std::vector<HttpDownloader::Header> headers = dlAuth.headers;
+  if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
+  // downloadFile() (CatalogActivity) releases font caches, checks the TLS heap
+  // floor, and pumps cancel input during the transfer.
+  const auto result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
 
-  int lastRenderedPercent = -1;
-  unsigned long lastProgressUpdateMs = 0;
-  const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
-      [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
-        downloadProgress = downloaded;
-        downloadTotal = total;
-        // The activity loop is blocked for the whole download; pump input here
-        // so the Cancel button or a Back press can abort mid-transfer.
-        mappedInput.update(true);
-        if (mappedInput.wasReleased(MappedInputManager::Button::Back)) cancelDownload = true;
-        // Home cancels immediately; other configured actions are deferred to
-        // the next main-loop pass by the transfer input pump.
-        if (mappedInput.wasHomeGesture()) {
-          cancelDownload = true;
-          goHomeAfterCancel = true;
-        }
-        routeTouch(mappedInput);
-        const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
-        const unsigned long now = millis();
-        if (percent >= 100 || lastRenderedPercent < 0 ||
-            percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
-            now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
-          lastRenderedPercent = percent;
-          lastProgressUpdateMs = now;
-          requestUpdate(true);
-        }
-      },
-      &cancelDownload, server.username, server.password);
-
-  if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
-    library::markLibraryIndexDirty();
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    fetchFeed(currentPath);
-    return;
-  } else if (result == HttpDownloader::ABORTED) {
-    // The partial file is already removed. Reload the released catalog unless
-    // the cancel came from the home gesture.
-    LOG_INF("OPDS", "Download cancelled");
-    if (goHomeAfterCancel) {
-      onGoHome();
-      return;
-    }
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    fetchFeed(currentPath);
-    return;
-  } else {
-    LOG_ERR("OPDS", "Download failed: %d", static_cast<int>(result));
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_DOWNLOAD_FAILED);
-  }
-  requestUpdate();
+  if (result == HttpDownloader::OK && !verifyAndRegisterEpub(filename)) return;
+  finishDownload(result);
 }
 
-void OpdsBookBrowserActivity::launchSearch() {
-  state = BrowserState::SEARCH_INPUT;
-  requestUpdate();
+// LCP acquisition: the href is a small license document (.lcpl), not the
+// book. Fetch it with the catalog's credentials, have the fulfillment
+// service embed it into the encrypted EPUB, then ask for the passphrase and
+// store the unwrapped content key as the book's device-wrapped .key sidecar.
+// From there the standard protected-read path opens it; the reader itself
+// carries no LCP knowledge.
+void OpdsBookBrowserActivity::downloadLcpBook(const OpdsEntry& book) {
+  beginDownload(book.title);
 
-  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  const std::string licenseUrl = UrlUtils::buildUrl(feedUrl, book.href);
+
+  // The license fetch uses the catalog's own credentials; the fulfillment
+  // service only ever sees the license document itself.
+  std::string licenseText;
+  {
+    int status = 0;
+    HttpDownloader::FetchOptions options;
+    const freeink::opds::HttpAuth auth = opdsClient.downloadAuth();
+    options.username = auth.username;
+    options.password = auth.password;
+    options.bearer = auth.bearer;
+    options.headers = auth.headers;
+    options.statusOut = &status;
+    constexpr size_t MAX_LICENSE_BYTES = 256 * 1024;
+    const bool ok = HttpDownloader::fetchUrl(
+        licenseUrl,
+        [&licenseText](const uint8_t* data, size_t len) {
+          if (licenseText.size() + len > MAX_LICENSE_BYTES) return false;
+          licenseText.append(reinterpret_cast<const char*>(data), len);
+          return true;
+        },
+        options);
+    if (!ok || licenseText.empty()) {
+      LOG_ERR("OPDS", "LCP license fetch failed (status %d)", status);
+      fail(StrId::STR_FETCH_FEED_FAILED);
+      return;
+    }
+  }
+
+  freeink::content::LcpLicense license;
+  if (!freeink::content::parseLcpLicense(licenseText.data(), licenseText.size(), &license)) {
+    fail(StrId::STR_OPDS_NOT_A_BOOK);
+    return;
+  }
+  // No profile gate here: key derivation is entirely server-side (the
+  // /unlock endpoint answers 422 for profiles it cannot serve), so this
+  // firmware works unchanged when the service gains the production profile.
+
+  const std::string filename = downloadDestination(book);
+  LOG_DBG("OPDS", "LCP fulfill: %s -> %s", licenseUrl.c_str(), filename.c_str());
+
+  // Reclaim the catalog while TLS owns its record buffers, as for a plain
+  // download; downloadFile() gates the heap and pumps cancel input.
+  releaseEntries();
+  const auto result = downloadFile(freeink::content::LCP_FULFILL_URL, filename, "", "", {}, &licenseText,
+                                   "application/vnd.readium.lcp.license.v1.0+json");
+  if (result != HttpDownloader::OK) {
+    finishDownload(result);
+    return;
+  }
+  if (!verifyAndRegisterEpub(filename)) return;
+
+  pendingLcpLicense = std::move(license);
+  pendingLcpLicenseText = std::move(licenseText);
+  pendingLcpPath = filename;
+  startLcpUnlock();
+}
+
+// One /unlock round trip with an already-derived user-key hash. Terminal
+// failures (unsupported profile, network, key store) call fail() themselves.
+OpdsBookBrowserActivity::LcpUnlock OpdsBookBrowserActivity::requestLcpUnlock(const std::string& userKeyHex) {
+  statusMessage = tr(STR_LOADING);
+  requestUpdate(true);
+
+  std::string deviceId;
+  bool notEnrollable = false;
+  if (!lcpdevice::ensureEnrolled(deviceId, notEnrollable)) {
+    fail(notEnrollable ? StrId::STR_LCP_OFFICIAL_BUILD : StrId::STR_DOWNLOAD_FAILED);
+    return LcpUnlock::Failed;
+  }
+
+  // Up to two attempts: a 401 means the registry no longer knows this device
+  // (revoked or reset), so re-enroll fresh once and retry.
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    std::string request;
+    request.reserve(pendingLcpLicenseText.size() + 160);
+    request += "{\"device_id\":\"";
+    request += deviceId;
+    request += "\",\"user_key\":\"";
+    request += userKeyHex;
+    request += "\",\"license\":";
+    request += pendingLcpLicenseText;  // verbatim: it parsed as JSON at download time
+    request += '}';
+
+    std::string response;
+    int status = 0;
+    const bool ok = HttpDownloader::postForm(freeink::content::LCP_UNLOCK_URL, request, response, &status);
+    if (status == 401 && attempt == 0) {
+      lcpdevice::forget();
+      if (!lcpdevice::ensureEnrolled(deviceId, notEnrollable)) break;
+      continue;
+    }
+    if (status == 403) return LcpUnlock::WrongPassphrase;
+    if (status == 422) {
+      fail(StrId::STR_LCP_UNSUPPORTED);
+      return LcpUnlock::Failed;
+    }
+    LcpWrappedKey wrapped;
+    int64_t expiresAt = 0;
+    uint8_t contentKey[32];
+    if (!ok || !parseUnlockResponse(response, &wrapped, &expiresAt) ||
+        !lcpdevice::unwrapContentKey(wrapped.epk, wrapped.iv, wrapped.ct, wrapped.tag, contentKey)) {
+      LOG_ERR("OPDS", "LCP unlock failed (status %d)", status);
+      break;
+    }
+    if (!bookkey::write(pendingLcpPath, contentKey, sizeof(contentKey), expiresAt)) break;
+    return LcpUnlock::Ok;
+  }
+  fail(StrId::STR_DOWNLOAD_FAILED);
+  return LcpUnlock::Failed;
+}
+
+// Entry point after fulfillment: a hash saved for this provider skips the
+// prompt entirely; only a stale one (403) falls through to the keyboard.
+void OpdsBookBrowserActivity::startLcpUnlock() {
+  if (!pendingLcpLicense.provider.empty()) {
+    const std::string saved = LCP_PASSPHRASES.get(pendingLcpLicense.provider);
+    if (!saved.empty()) {
+      switch (requestLcpUnlock(saved)) {
+        case LcpUnlock::Ok:
+          downloadFinished(false);
+          return;
+        case LcpUnlock::Failed:
+          return;
+        case LcpUnlock::WrongPassphrase:
+          break;  // the library changed the passphrase: ask the reader
+      }
+    }
+  }
+  promptLcpPassphrase(/*retry=*/false);
+}
+
+void OpdsBookBrowserActivity::promptLcpPassphrase(const bool retry) {
+  state = State::AUTH;
+  statusMessage = tr(STR_LCP_PASSPHRASE);
+  requestUpdate();
+  // The license's hint is the prompt the provider wrote for this passphrase.
+  const char* title = retry                             ? tr(STR_LCP_WRONG_PASSPHRASE)
+                      : !pendingLcpLicense.hint.empty() ? pendingLcpLicense.hint.c_str()
+                                                        : tr(STR_LCP_PASSPHRASE);
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, title);
+  if (!keyboard) {
+    fail(StrId::STR_MEMORY_ERROR);
+    return;
+  }
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-    state = BrowserState::BROWSING;
-    if (!result.isCancelled) {
-      performSearch(std::get<KeyboardResult>(result.data).text);
-    } else {
-      requestUpdate();
+    if (result.isCancelled) {
+      // Keep the book: without its key the reader shows the DRM message, and
+      // re-downloading the title re-offers the passphrase prompt.
+      downloadFinished(false);
+      return;
+    }
+    const std::string pass = std::get<KeyboardResult>(result.data).text;
+    // The device only hashes the passphrase; profile key derivation (and the
+    // production profile's confidential transform, once certified) lives in
+    // the LCP service. The hash travels over TLS to our own endpoint — the
+    // same material LCP license servers receive at provisioning time.
+    freeink::content::WolfsslCrypto crypto;
+    uint8_t userKey[32];
+    freeink::content::lcpUserKey(crypto, pass.data(), pass.size(), userKey);
+    char userKeyHex[65];
+    for (int i = 0; i < 32; i++) snprintf(userKeyHex + i * 2, 3, "%02x", userKey[i]);
+
+    switch (requestLcpUnlock(userKeyHex)) {
+      case LcpUnlock::Ok:
+        // Remember the working hash per provider so the next borrow from
+        // this library skips the prompt. Best-effort: on failure the reader
+        // just types it again next time.
+        if (!pendingLcpLicense.provider.empty()) LCP_PASSPHRASES.put(pendingLcpLicense.provider, userKeyHex);
+        downloadFinished(false);
+        return;
+      case LcpUnlock::WrongPassphrase:
+        promptLcpPassphrase(/*retry=*/true);
+        return;
+      case LcpUnlock::Failed:
+        return;
     }
   });
 }
 
+// {content_key: {epk, iv, ct, tag}, expires: <epoch seconds>} from /unlock;
+// the key stays wrapped here and is opened by lcpdevice::unwrapContentKey.
+bool OpdsBookBrowserActivity::parseUnlockResponse(const std::string& response, LcpWrappedKey* wrapped,
+                                                  int64_t* expiresAt) {
+  struct Ctx {
+    char pending[16] = {0};
+    LcpWrappedKey* out = nullptr;
+    int64_t expires = 0;
+  } ctx;
+  ctx.out = wrapped;
+  JsonCallbacks callbacks = {};
+  callbacks.ctx = &ctx;
+  callbacks.onKey = [](void* ud, const char* key, size_t len) {
+    auto& c = *static_cast<Ctx*>(ud);
+    const size_t n = len < sizeof(c.pending) - 1 ? len : sizeof(c.pending) - 1;
+    memcpy(c.pending, key, n);
+    c.pending[n] = '\0';
+  };
+  callbacks.onString = [](void* ud, const char* value, size_t len) {
+    const auto& c = *static_cast<const Ctx*>(ud);
+    const size_t n = len < 128 ? len : 128;
+    if (strcmp(c.pending, "epk") == 0) c.out->epk.assign(value, n);
+    if (strcmp(c.pending, "iv") == 0) c.out->iv.assign(value, n);
+    if (strcmp(c.pending, "ct") == 0) c.out->ct.assign(value, n);
+    if (strcmp(c.pending, "tag") == 0) c.out->tag.assign(value, n);
+  };
+  callbacks.onNumber = [](void* ud, const char* value, size_t) {
+    auto& c = *static_cast<Ctx*>(ud);
+    if (strcmp(c.pending, "expires") == 0) c.expires = strtoll(value, nullptr, 10);
+  };
+  callbacks.onBool = [](void*, bool) {};
+  callbacks.onNull = [](void*) {};
+  callbacks.onObjectStart = [](void*) {};
+  callbacks.onObjectEnd = [](void*) {};
+  callbacks.onArrayStart = [](void*) {};
+  callbacks.onArrayEnd = [](void*) {};
+  StreamingJsonParser parser(callbacks);
+  parser.feed(response.data(), response.size());
+  if (parser.hasError() || wrapped->epk.empty() || wrapped->iv.empty() || wrapped->ct.empty() || wrapped->tag.empty()) {
+    return false;
+  }
+  *expiresAt = ctx.expires > 0 ? ctx.expires : 0;
+  return true;
+}
+
+// Open the publication detail page: fetch the publication's self-document for
+// full metadata + availability, then show it with an acquire button. The
+// catalog list and SD font caches are released first (rebuilt on Back) to keep
+// the most heap free for the TLS fetch, exactly like a download.
+void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
+  detailBook = entry;
+  OpdsPublication publication;
+
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  const bool haveSelf = !entry.selfHref.empty();
+  const std::string docUrl = UrlUtils::buildUrl(feedUrl, haveSelf ? entry.selfHref : entry.href);
+
+  beginLoading();
+
+  releaseEntries();
+  if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+
+  if (haveSelf) {
+    opdsClient.fetchPublication(docUrl, publication);
+  }
+
+  if (!publication.valid) {
+    // No self link, or the fetch/parse failed: show what the list row had.
+    publication = {};
+    publication.title = detailBook.title;
+    publication.author = detailBook.author;
+    if (!detailBook.href.empty()) publication.acquisitionHref = UrlUtils::buildUrl(feedUrl, detailBook.href);
+    publication.indirect = detailBook.indirect;
+    publication.purchase = detailBook.purchase;
+    if (detailBook.purchase) publication.price = detailBook.detail;
+    publication.valid = !detailBook.title.empty();
+  }
+  // Feed-inline fallbacks: without a publication self document (OPDS 1.x, or
+  // OPDS 2.0 servers like Mayberry that inline everything) the feed entry is
+  // the only source for the description and cover. Also fills gaps when a
+  // document exists but omits one of them.
+  if (publication.description.empty()) publication.description = detailBook.description;
+  if (publication.coverHref.empty() && !detailBook.coverHref.empty()) {
+    publication.coverHref = UrlUtils::buildUrl(feedUrl, detailBook.coverHref);
+  }
+
+  // Resolve the acquisition to an absolute URL against the document it came
+  // from; downloadBook() resolves against the feed, so an absolute URL is used
+  // verbatim.
+  if (!publication.acquisitionHref.empty()) {
+    detailBook.href = UrlUtils::buildUrl(docUrl, publication.acquisitionHref);
+    detailBook.indirect = publication.indirect;
+    detailBook.purchase = publication.purchase;
+  }
+
+  // Fetch the cover art (best-effort) while entries and font caches are still
+  // released, so the TLS transfer has maximum heap. Resolved against the
+  // document the cover href came from.
+  loadDetailCover(haveSelf ? docUrl : feedUrl, publication.coverHref);
+
+  DetailsSpec spec;
+  spec.header = browserTitle();
+  spec.title = std::move(publication.title);
+  spec.author = std::move(publication.author);
+  spec.showCover = true;
+  spec.coverPath = detailCoverPath;
+  fillDetailInfo(publication, spec);
+  spec.descriptionHeading = tr(STR_OPDS_ABOUT_BOOK);
+  spec.description = std::move(publication.description);
+  spec.descriptionHtml = true;  // publication documents may carry markup; plain text parses as-is
+  spec.actionLabel = acquireLabel(publication.availability);
+
+  auto details = makeUniqueNoThrow<DetailsActivity>(renderer, mappedInput, std::move(spec));
+  if (!details) {
+    LOG_ERR("OPDS", "OOM: publication details");
+    startBrowse();
+    return;
+  }
+  startActivityForResult(std::move(details), [this](const ActivityResult& result) {
+    if (!detailCoverPath.empty()) {
+      if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
+      detailCoverPath.clear();
+    }
+    if (result.isCancelled) {
+      startBrowse();  // entries were released for heap; rebuild the catalog we came from
+    } else {
+      downloadBook(detailBook);
+    }
+  });
+}
+
+// Downloads the publication's cover art to an SD temp file for the detail page.
+// A cover is optional chrome: any failure just leaves the placeholder, never
+// blocks the page.
+void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl, const std::string& coverHref) {
+  if (!detailCoverPath.empty()) {
+    if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
+    detailCoverPath.clear();
+  }
+  if (coverHref.empty()) return;
+
+  const std::string url = UrlUtils::buildUrl(docUrl, coverHref);
+  // The decoder factory picks JPEG vs PNG by file extension; name the temp to
+  // match. Default to JPEG (the common case, and content-negotiated URLs with
+  // no extension).
+  std::string lower;
+  lower.reserve(url.size());
+  for (const char c : url) lower += static_cast<char>((c >= 'A' && c <= 'Z') ? c + 32 : c);
+  const bool isPng = lower.find(".png") != std::string::npos;
+  std::string tmp = "/.crosspoint/opds_cover";
+  tmp += isPng ? ".png" : ".jpg";
+
+  if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP) {
+    LOG_INF("OPDS", "Skipping cover: low heap");
+    return;
+  }
+  const freeink::opds::HttpAuth auth = opdsClient.downloadAuth();
+  std::vector<HttpDownloader::Header> headers = auth.headers;
+  if (!auth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + auth.bearer});
+  const auto result = HttpDownloader::downloadToFile(url, tmp, nullptr, nullptr, auth.username, auth.password, headers);
+  if (result != HttpDownloader::OK) {
+    LOG_ERR("OPDS", "Cover download failed: %d", static_cast<int>(result));
+    if (Storage.exists(tmp.c_str())) Storage.remove(tmp.c_str());
+    return;
+  }
+  detailCoverPath = std::move(tmp);
+}
+
+// Formats the availability and metadata lines of the details page.
+void OpdsBookBrowserActivity::fillDetailInfo(const OpdsPublication& publication, DetailsSpec& spec) {
+  const OpdsAvailability& av = publication.availability;
+  if (av.present()) {
+    const char* stateStr = av.state == "available"     ? tr(STR_OPDS_AVAILABLE)
+                           : av.state == "ready"       ? tr(STR_OPDS_READY)
+                           : av.state == "reserved"    ? tr(STR_OPDS_RESERVED)
+                           : av.state == "unavailable" ? tr(STR_OPDS_UNAVAILABLE)
+                                                       : nullptr;
+    if (stateStr) spec.status = stateStr;
+    if (av.copiesTotal >= 0) {
+      char b[64];
+      snprintf(b, sizeof(b), tr(STR_OPDS_COPIES), av.copiesAvailable < 0 ? 0 : av.copiesAvailable, av.copiesTotal);
+      spec.copies = b;
+    }
+    // The reader's own queue position is more useful than the raw holds count.
+    if (av.holdsPosition >= 0) {
+      char b[48];
+      snprintf(b, sizeof(b), tr(STR_OPDS_HOLD_POSITION), av.holdsPosition);
+      spec.holds = b;
+    } else if (av.holdsTotal >= 0) {
+      char b[48];
+      snprintf(b, sizeof(b), tr(STR_OPDS_HOLDS), av.holdsTotal);
+      spec.holds = b;
+    }
+  }
+
+  if (!publication.purchase && !publication.price.empty()) {
+    spec.metadata = publication.price;
+  } else if (!publication.publisher.empty()) {
+    spec.metadata = publication.publisher;
+  }
+}
+
+const char* OpdsBookBrowserActivity::acquireLabel(const OpdsAvailability& av) const {
+  if (detailBook.purchase) return tr(STR_OPDS_BUY);
+  if (!detailBook.indirect) return tr(STR_DOWNLOAD);
+  // Borrowable (library loan): offer to place a hold when no copy is free.
+  const bool noCopies = av.state == "unavailable" || (av.copiesAvailable == 0 && av.copiesTotal > 0);
+  return noCopies ? tr(STR_OPDS_PLACE_HOLD) : tr(STR_OPDS_BORROW);
+}
+
+// Login can take several seconds (TLS handshakes across the catalog and its
+// SSO); reflect the client's phase in the status line so the screen isn't
+// frozen on the previous message.
+void OpdsBookBrowserActivity::onClientStatus(void* ctx, const freeink::opds::ClientPhase phase) {
+  auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
+  self->statusMessage = phase == freeink::opds::ClientPhase::SigningIn ? tr(STR_OPDS_SIGNING_IN) : tr(STR_LOADING);
+  self->requestUpdate(true);
+}
+
+bool OpdsBookBrowserActivity::persistTokens() {
+  OpdsTokens tokens;
+  tokens.accessToken = opdsClient.accessToken();
+  tokens.refreshToken = opdsClient.refreshToken();
+  tokens.refreshUrl = opdsClient.refreshUrl();
+  const bool persisted = OPDS_TOKENS.put(tokenKey(), tokens);
+  if (!persisted) {
+    // Best-effort cache: on failure the reader just re-authenticates next
+    // session. Report it so the caller can detect it, rather than swallowing it.
+    LOG_ERR("OPDS", "Failed to persist OPDS tokens for %s", server.url.c_str());
+  }
+  return persisted;
+}
+
+// Resolves the search template lazily: OPDS 1.x servers such as calibre-web,
+// COPS and Kavita publish it in a separate OpenSearch description document
+// instead of inlining it in the feed.
+bool OpdsBookBrowserActivity::ensureSearchTemplate() {
+  if (!searchTemplate.empty()) return true;
+  if (searchDescriptionUrl.empty()) return false;
+
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  const std::string descUrl = UrlUtils::buildUrl(feedUrl, searchDescriptionUrl);
+  std::string tmpl;
+  if (!opdsClient.fetchSearchTemplate(descUrl, tmpl)) return false;
+  searchTemplate = std::move(tmpl);
+  searchTemplateBase = descUrl;  // relative templates resolve against the description doc
+  return true;
+}
+
 void OpdsBookBrowserActivity::performSearch(const std::string& query) {
-  if (query.empty() || searchTemplate.empty()) {
-    state = BrowserState::BROWSING;
+  if (query.empty()) {
+    state = State::BROWSING;
     requestUpdate();
     return;
   }
 
-  auto urlEncode = [](const std::string& s) {
-    std::string out;
-    out.reserve(s.size() * 3);
-    for (unsigned char c : s) {
-      if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
-        out += static_cast<char>(c);
-      else {
-        char buf[4];
-        snprintf(buf, sizeof(buf), "%%%02X", c);
-        out += buf;
-      }
-    }
-    return out;
-  };
+  beginLoading();
 
-  std::string url = searchTemplate;
-  const std::string placeholder = "{searchTerms}";
-  const size_t pos = url.find(placeholder);
-  if (pos != std::string::npos) url.replace(pos, placeholder.length(), urlEncode(query));
+  if (!ensureSearchTemplate()) {
+    fail(StrId::STR_FETCH_FEED_FAILED);
+    return;
+  }
+
+  // Expand the template first: buildUrl percent-encodes braces, so a raw
+  // template must never pass through URL resolution.
+  const std::string expanded = expandOpdsSearchTemplate(searchTemplate, opdsPercentEncode(query));
+  const std::string base =
+      searchTemplateBase.empty() ? UrlUtils::buildUrl(server.url, currentPath) : searchTemplateBase;
+  const std::string url = UrlUtils::buildUrl(base, expanded);
 
   navigationHistory.push_back(currentPath);
+  searchQueryHistory.push_back(searchQuery);
+  setSearchQuery(query);
   currentPath = url;
 
-  state = BrowserState::LOADING;
-  statusMessage = tr(STR_LOADING);
-  releaseEntries();
-  selectorIndex = 0;
-  requestUpdate(true);
-  fetchFeed(url);
-}
-
-void OpdsBookBrowserActivity::checkAndConnectWifi() {
-  if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    requestUpdate();
-    fetchFeed(currentPath);
-    return;
-  }
-  launchWifiSelection();
-}
-
-void OpdsBookBrowserActivity::launchWifiSelection() {
-  state = BrowserState::WIFI_SELECTION;
-  requestUpdate();
-
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
-                         [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
-}
-
-void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
-  if (connected) {
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    requestUpdate(true);
-    fetchFeed(currentPath);
-  } else {
-    // Leave WiFi up; onExit's silent reboot handles teardown without fragmenting.
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_WIFI_CONN_FAILED);
-    requestUpdate();
-  }
+  startBrowse();
 }

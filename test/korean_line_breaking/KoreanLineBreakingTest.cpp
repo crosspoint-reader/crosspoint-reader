@@ -1,0 +1,233 @@
+#include <Epub/ParsedText.h>
+#include <Epub/blocks/TextBlock.h>
+#include <Epub/hyphenation/Hyphenator.h>
+#include <GfxRenderer.h>
+#include <gtest/gtest.h>
+
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+struct Line {
+  std::vector<std::string> words;
+  std::vector<int16_t> xpos;
+};
+
+// Fixture metrics (stub renderer): every glyph is 8 px wide and a space is 4 px.
+std::vector<Line> layout(const std::vector<const char*>& words, const bool hyphenation, const uint16_t width) {
+  GfxRenderer renderer;
+  BlockStyle style;
+  style.alignment = CssTextAlign::Justify;
+  style.textIndentDefined = true;
+  ParsedText text(hyphenation, false, style, 0);
+  for (const char* word : words) text.addWord(word, EpdFontFamily::REGULAR);
+  std::vector<Line> lines;
+  text.layoutAndExtractLines(renderer, 0, width, [&](std::unique_ptr<TextBlock> block, auto) {
+    auto& line = lines.emplace_back();
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      line.words.emplace_back(block->wordText(i));
+      line.xpos.push_back(block->wordXpos(i));
+    }
+  });
+  return lines;
+}
+
+std::vector<std::vector<std::string>> wordsOf(const std::vector<Line>& lines) {
+  std::vector<std::vector<std::string>> result;
+  result.reserve(lines.size());
+  for (const auto& line : lines) result.push_back(line.words);
+  return result;
+}
+
+}  // namespace
+
+TEST(KoreanLineBreaking, HyphenationOffWrapsAtSpacesOnly) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가나 다라마바 needs 52 px; with hyphenation off the Hangul word moves down whole.
+  const auto lines = layout({"가나", "다라마바", "사"}, false, 50);
+  const std::vector<std::vector<std::string>> expected{{"가나"}, {"다라마바", "사"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenSyllablesWithoutHyphen) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가나 + space leaves 30 px: the widest syllable prefix that fits is 다라마 (24 px).
+  const auto lines = layout({"가나", "다라마바사아", "자"}, true, 50);
+  const std::vector<std::vector<std::string>> expected{{"가나", "다라마"}, {"바사아", "자"}};
+  ASSERT_EQ(wordsOf(lines), expected);
+  // 16 + 4 + 24 = 44 px leaves 6 px, all of it on the one word space.
+  EXPECT_EQ(lines[0].xpos, (std::vector<int16_t>{0, 26}));
+}
+
+TEST(KoreanLineBreaking, HyphenationOnKeepsTrailingPunctuationWithSyllable) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가나다 + space leaves 36 px. 라마바사 (32 px) would fit, but 사. stays together, so 라마바 is used.
+  const auto lines = layout({"가나다", "라마바사.", "자"}, true, 64);
+  const std::vector<std::vector<std::string>> expected{{"가나다", "라마바"}, {"사.", "자"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsShortWords) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가나다 + space leaves 22 px, so the three-syllable word splits after 라마 (16 px).
+  const auto lines = layout({"가나다", "라마바", "자"}, true, 50);
+  const std::vector<std::vector<std::string>> expected{{"가나다", "라마"}, {"바", "자"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsWhereHangulMeetsOtherScriptsOrBrackets) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가 + space leaves 52 px. 소신(ab) (48 px) fits; the split may fall before "(" or after ")",
+  // never inside the brackets.
+  const auto lines = layout({"가", "소신(ab)이"}, true, 64);
+  const std::vector<std::vector<std::string>> expected{{"가", "소신(ab)"}, {"이"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenDigitAndHangul) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가나다 + space leaves 22 px: 12 (16 px) fits, 12월 (24 px) does not.
+  const auto lines = layout({"가나다", "12월부터", "자"}, true, 50);
+  const std::vector<std::vector<std::string>> expected{{"가나다", "12"}, {"월부터", "자"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
+
+TEST(ClippingAnchors, SourceCoverageSurvivesWrappingAndHyphenation) {
+  Hyphenator::setPreferredLanguage("ko");
+  GfxRenderer renderer;
+  for (const int width : {50, 180}) {
+    for (const bool hyphenation : {false, true}) {
+      BlockStyle style;
+      style.textIndentDefined = true;
+      ParsedText text(hyphenation, false, style, 0);
+      text.addWord("가나", EpdFontFamily::REGULAR, false, false, 100);
+      text.addWord("다라마바사아", EpdFontFamily::REGULAR, false, false, 103);
+      text.addWord("자", EpdFontFamily::REGULAR, false, false, 110);
+      unsigned coverage[11] = {};
+      text.layoutAndExtractLines(renderer, 0, width, [&](std::unique_ptr<TextBlock> block, auto) {
+        ASSERT_TRUE(block->valid());
+        for (uint16_t i = 0; i < block->wordCount(); ++i) {
+          const auto range = block->wordSourceRange(i);
+          ASSERT_GE(range.start, 100u);
+          ASSERT_LE(range.end, 111u);
+          ASSERT_LT(range.start, range.end);
+          for (uint32_t offset = range.start; offset < range.end; ++offset) ++coverage[offset - 100];
+        }
+      });
+      for (unsigned i = 0; i < 11; ++i) {
+        EXPECT_EQ(coverage[i], i == 2 || i == 9 ? 0u : 1u) << "width=" << width << " offset=" << i;
+      }
+    }
+  }
+}
+
+TEST(ClippingAnchors, NfcSourceCoverageSurvivesSplitsAndPartialExtraction) {
+  Hyphenator::setPreferredLanguage("ko");
+  GfxRenderer renderer;
+  for (const bool focus : {false, true}) {
+    BlockStyle style;
+    style.textIndentDefined = true;
+    ParsedText text(true, focus, style, 0);
+    // Latin composition, focus punctuation, CJK tokenization, and Hangul L+V+T.
+    text.addWord("Cafe\xCC\x81!中\xE1\x84\x92\xE1\x85\xA1\xE1\x86\xAB國", EpdFontFamily::REGULAR, false, false, 100);
+    text.addWord("끝", EpdFontFamily::REGULAR, false, false, 112);
+    unsigned coverage[13] = {};
+    auto inspect = [&](std::unique_ptr<TextBlock> block, auto) {
+      ASSERT_TRUE(block->valid());
+      for (uint16_t i = 0; i < block->wordCount(); ++i) {
+        const auto range = block->wordSourceRange(i);
+        ASSERT_GE(range.start, 100u);
+        ASSERT_LE(range.end, 113u);
+        ASSERT_LT(range.start, range.end);
+        for (uint32_t offset = range.start; offset < range.end; ++offset) ++coverage[offset - 100];
+      }
+    };
+    text.layoutAndExtractLines(renderer, 0, 32, inspect, false);
+    text.layoutAndExtractLines(renderer, 0, 32, inspect);
+    for (unsigned i = 0; i < 13; ++i) EXPECT_EQ(coverage[i], i == 11 ? 0u : 1u) << "offset=" << i;
+  }
+}
+
+TEST(ClippingAnchors, NfcFocusSegmentsKeepOriginalOffsets) {
+  GfxRenderer renderer;
+  ParsedText text(false, true);
+  text.addWord("Cafe\xCC\x81!a\xCC\x82\xCC\x81", EpdFontFamily::REGULAR, false, false, 100);
+  const uint32_t starts[] = {100, 105, 106};
+  const uint32_t ends[] = {105, 106, 109};
+  unsigned words = 0;
+  text.layoutAndExtractLines(renderer, 0, 200, [&](std::unique_ptr<TextBlock> block, auto) {
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      ASSERT_LT(words, 3u);
+      EXPECT_EQ(block->wordSourceRange(i).start, starts[words]);
+      EXPECT_EQ(block->wordSourceRange(i).end, ends[words]);
+      ++words;
+    }
+  });
+  EXPECT_EQ(words, 3u);
+}
+
+TEST(ClippingAnchors, NfcHyphenationMarksSurviveCacheRoundTrip) {
+  Hyphenator::setPreferredLanguage("en");
+  GfxRenderer renderer;
+  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-nfc-hyphens.bin").string();
+  for (const bool focus : {false, true}) {
+    BlockStyle style;
+    style.textIndentDefined = true;
+    ParsedText text(true, focus, style, 0);
+    text.addWord("cafe\xCC\x81teria", EpdFontFamily::REGULAR, false, false, 100);
+    uint32_t previousEnd = 100;
+    unsigned hyphens = 0;
+    text.layoutAndExtractLines(renderer, 0, 40, [&](std::unique_ptr<TextBlock> block, auto) {
+      {
+        HalFile file;
+        ASSERT_TRUE(file.open(path.c_str(), "wb"));
+        ASSERT_TRUE(block->serialize(file));
+      }
+      HalFile file;
+      ASSERT_TRUE(file.open(path.c_str(), "rb"));
+      auto restored = TextBlock::deserialize(file);
+      ASSERT_NE(restored, nullptr);
+      for (uint16_t i = 0; i < restored->wordCount(); ++i) {
+        const auto range = restored->wordSourceRange(i);
+        EXPECT_EQ(range.start, previousEnd);
+        previousEnd = range.end;
+        EXPECT_EQ(restored->wordStyle(i), block->wordStyle(i));
+        EXPECT_EQ(restored->wordHasDiscretionaryHyphen(i), block->wordHasDiscretionaryHyphen(i));
+        if (restored->wordHasDiscretionaryHyphen(i)) ++hyphens;
+      }
+    });
+    EXPECT_EQ(previousEnd, 110u);
+    EXPECT_GT(hyphens, 0u);
+  }
+  std::filesystem::remove(path);
+}
+
+TEST(ClippingAnchors, DenseNfdHangulSurvivesChunkRetirement) {
+  Hyphenator::setPreferredLanguage("ko");
+  GfxRenderer renderer;
+  ParsedText text(true);
+  std::string word;
+  for (int i = 0; i < 22; ++i) word += "\xE1\x84\x92\xE1\x85\xA1\xE1\x86\xAB";
+  for (uint32_t i = 0; i < 6; ++i) text.addWord(word, EpdFontFamily::REGULAR, false, false, 100 + i * 67);
+  uint32_t covered = 0;
+  auto inspect = [&](std::unique_ptr<TextBlock> block, auto) {
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      const auto range = block->wordSourceRange(i);
+      if (range.start >= 100000) {
+        EXPECT_EQ(range.start, 100000u);
+        EXPECT_EQ(range.end, 100005u);
+      } else {
+        EXPECT_EQ((range.start - 100) % 67 % 3, 0u);
+        EXPECT_EQ((range.end - 100) % 67 % 3, 0u);
+      }
+      covered += range.end - range.start;
+    }
+  };
+  text.layoutAndExtractLines(renderer, 0, 80, inspect, false);
+  text.addWord("Cafe\xCC\x81", EpdFontFamily::REGULAR, false, false, 100000);
+  text.layoutAndExtractLines(renderer, 0, 80, inspect);
+  EXPECT_EQ(covered, 6u * 66 + 5);
+}
