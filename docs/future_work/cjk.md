@@ -157,13 +157,11 @@ Already decided:
 
 ## UI text in CJK
 
-**Open.** The built-in UI faces cover Latin, Cyrillic, Vietnamese and some symbol ranges, but no CJK (the `builtin` preset in `fontconvert_sdcard.py`). So these draw as boxes:
-- CJK book titles and authors (Home, Library, the finished-book screen);
-- TOC entries;
-- chapter titles in the status bar;
-- file names.
+**Open.** The built-in UI faces cover Latin, Cyrillic, Vietnamese and some symbol ranges, but no CJK (the `builtin` preset in `fontconvert_sdcard.py`). `GlyphFallback` only stands in Latin look-alikes, so CJK UI text draws nothing at all, not even boxes. X3 on 2026-10-18 with 紅樓夢:
+- the Home card shows no title and no author, just the progress line;
+- the Library grid shows a blank generated cover with no caption under it.
 
-`GlyphFallback` only stands in Latin look-alikes.
+TOC entries, chapter titles in the status bar, file names and the finished-book screen use the same faces.
 
 **Why it matters.** Even with a CJK reading font, a CJK reader cannot find or navigate their books.
 
