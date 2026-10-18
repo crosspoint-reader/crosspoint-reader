@@ -341,6 +341,50 @@ def load_translations(
 
 
 # ---------------------------------------------------------------------------
+# UI font coverage
+# ---------------------------------------------------------------------------
+
+
+def find_uncovered_characters(
+    translations_dir: str,
+    language_codes: List[str],
+    language_names: List[str],
+    string_keys: List[str],
+    translations: Dict[str, List[str]],
+) -> List[str]:
+    """
+    The characters each language uses that no UI font can draw, one line per
+    language that has any. A missing glyph draws NOTHING, so such a label has a
+    silent hole in it. Covered means: every UI face has the character, or, for a
+    CJK language, its CJK UI face has it at every size (build_cjk_ui_fonts.py).
+    """
+    repo_root = Path(translations_dir).resolve().parents[2]
+    scripts_dir = repo_root / "lib" / "EpdFont" / "scripts"
+    fonts_dir = repo_root / "lib" / "EpdFont" / "builtinFonts"
+    sys.path.insert(0, str(scripts_dir))
+    import ui_font_coverage as coverage
+
+    ui_covered = coverage.ui_face_coverage(fonts_dir)
+    cjk_sizes = coverage.cjk_ui_font_sizes(scripts_dir)
+    problems = []
+    for idx, code in enumerate(language_codes):
+        covered = ui_covered
+        if code.upper() in coverage.CJK_UI_LANGUAGES:
+            cjk = None
+            for points in cjk_sizes:
+                face = coverage.header_codepoints(fonts_dir, coverage.cjk_face_name(code.upper(), points))
+                cjk = face if cjk is None else cjk & face
+            covered = covered | cjk
+        used = coverage.drawable(language_names[idx])
+        for key in string_keys:
+            used |= coverage.drawable(translations[key][idx])
+        missing = sorted(used - covered)
+        if missing:
+            problems.append(f"{code}: " + " ".join(f"{chr(cp)} (U+{cp:04X})" for cp in missing))
+    return problems
+
+
+# ---------------------------------------------------------------------------
 # Unused-string detection
 # ---------------------------------------------------------------------------
 
@@ -1066,6 +1110,21 @@ def main(
             )
             for key in missing_keys:
                 print(f"    - {key}")
+            print()
+            sys.exit(1)
+
+        # --- Characters no UI font has ---
+        uncovered = find_uncovered_characters(
+            translations_dir, languages, language_names, string_keys, translations
+        )
+        if uncovered:
+            print()
+            print("  CRITICAL: translation(s) use characters no UI font can draw:")
+            for line in uncovered:
+                print(f"    - {line}")
+            print("  A Chinese, Japanese or Korean translation: regenerate its UI faces with")
+            print("  lib/EpdFont/scripts/build_cjk_ui_fonts.py. Any other: use characters the")
+            print("  file already uses, or add the range to the UI faces.")
             print()
             sys.exit(1)
 
