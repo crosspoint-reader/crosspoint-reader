@@ -784,7 +784,7 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
     return;
   }
   // Writing a not-yet-cached SD font into the flash partition stalls the open for a
-  // moment; advertise it. Callers (goToReader/replaceWithReader) already hold a
+  // moment; advertise it. Callers (ReaderActivity::onEnter and the reader) already hold a
   // RenderLock, so the lambda must not take one. Fires only on a genuine first load.
   const auto onColdFontLoad = [] { GUI.drawPopup(renderer, tr(STR_LOADING_FONT)); };
 
