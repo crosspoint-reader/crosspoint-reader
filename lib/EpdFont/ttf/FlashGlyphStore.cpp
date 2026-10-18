@@ -106,7 +106,7 @@ bool validHeader(const Header& h, const uint32_t flashSize) {
 // --- Install ---
 
 bool FlashGlyphStore::beginInstall(const Layout& layout, const uint8_t identity[kIdentityBytes],
-                                   const StyleInfo* sdInfo) {
+                                   const StyleInfo* sdInfo, const uint8_t keepStyles) {
   close();
   const Geometry& g = layout.geometry;
   if (!validGeometry(g, flash_.size()) || (g.mode == kModeSd && !sdInfo)) {
@@ -136,6 +136,7 @@ bool FlashGlyphStore::beginInstall(const Layout& layout, const uint8_t identity[
   // The header sector goes first: from here until finishInstall() the store reads as not installed.
   bool erased = eraseWritten(0, kFirstRegionOffset);
   for (uint8_t s = 0; erased && s < g.styleCount; ++s) {
+    if ((keepStyles & (1u << s)) != 0) continue;
     erased = eraseWritten(layout.styleOffset[s], alignUp(layout.styleSize[s], kSectorBytes));
   }
   erased = erased && eraseWritten(g.indexOffset, tableBytes(g.indexSlots)) &&
