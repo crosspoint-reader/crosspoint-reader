@@ -532,6 +532,11 @@ void appendSetting(std::string& line, const SettingInfo& s) {
 
 // GET and GET:* both go through SettingsByKey::visitKeyed(), one walk with the web settings API.
 void replyGetRow(const SettingInfo& s, void* /*ctx*/) {
+  if (!SettingsByKey::optionsKnown(s)) {
+    // The family the setting names is not among the listed ones: its index and label would be wrong.
+    reply("GET_ERROR:font families not loaded on this screen ", s.key);
+    return;
+  }
   std::string line = "GET:";
   appendSetting(line, s);
   reply(line);
@@ -554,6 +559,12 @@ struct SetRequest {
 void writeSetRow(const SettingInfo& s, void* ctx) {
   auto& request = *static_cast<SetRequest*>(ctx);
   SettingsByKey::WriteResult result = SettingsByKey::WriteResult::NotWritable;
+  if (!SettingsByKey::optionsKnown(s)) {
+    // On the boot straight into USB Transfer the card's font families are not listed: a name would
+    // be refused as a bad value, and an index would store whatever it means among the built-ins.
+    request.error = "SET_ERROR:font families not loaded on this screen ";
+    return;
+  }
   if (s.type == SettingType::STRING) {
     result = SettingsByKey::writeString(s, std::string(request.value));
   } else {

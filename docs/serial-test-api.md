@@ -331,6 +331,7 @@ SET_OK:<key>=<value>[ label=<option>]        the value as stored afterwards
 GET_ERROR:unknown key <key>
 SET_ERROR:unknown key <key> | out of range <value> | bad value <value>
 SET_ERROR:not writable <key> | expected <key>=<value>
+GET_ERROR / SET_ERROR:font families not loaded on this screen <key>   (boot straight into USB Transfer)
 ```
 
 - Numbers: an on/off setting is `0` or `1` (any non-zero sets it on); a choice is its option
@@ -444,6 +445,11 @@ same port (`tools/serial_transfer.py`, compatible with MicroReader's tools). Whi
 - `tools/serial_transfer.py` opens the port with DTR/RTS deasserted, which resets an ESP32-C3. The
   screen arms the restart to come straight back to itself, so the tool's reset lands on the
   transfer screen again after about 2 s. `tools/devctl.py` does not reset the device.
+- That arm survives any reset short of a power loss while the screen is up: a flash, or a reset of
+  the board, lands on the transfer screen again, not on Home. Check `CMD:STATE` after flashing.
+- A boot straight back into it skips SD-font discovery (the screen uses built-in UI fonts). The card's
+  font families are not listed then, so `GET` and `SET` of `fontFamily` and `txtFontFamily` answer
+  `font families not loaded on this screen`; leave the screen first.
 - Run one tool at a time. A typical sequence: `devctl.py cmd:ACT:USB_TRANSFER`, then
   `serial_transfer.py ls /test` (or `put`, `get`, ...), then `devctl.py cmd:BTN:BACK`.
 

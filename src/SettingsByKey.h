@@ -20,6 +20,9 @@ bool readNumber(const SettingInfo& s, int& out);
 // How many options an ENUM row offers, and the label of one. The font-family rows count and name
 // the families found on the card at run time, which their static rows leave empty.
 uint8_t optionCount(const SettingInfo& s);
+// The row's option list is complete. False for the font family rows before SD-font discovery
+// (fontFamilyOptionsKnown()): a write then could store a family other than the one meant.
+bool optionsKnown(const SettingInfo& s);
 std::string optionLabel(const SettingInfo& s, uint8_t index);
 
 enum class WriteResult : uint8_t { Applied, OutOfRange, NotWritable };

@@ -50,6 +50,10 @@ void txtFontFamilyDynamicSetter(void* ctx, uint8_t value);
 // (BUILTIN_FONT_COUNT + number of discovered SD families). Used by the
 // settings UI / web layer to enrich enumLabels and to bound cycling.
 uint8_t fontFamilyOptionCount();
+// False until SD-font discovery has run: then only the built-in families are listed, and an index
+// or name means something else than it does once the card's families are known. The boot straight
+// into USB Transfer skips discovery (that screen uses built-in UI fonts and reboots on exit).
+bool fontFamilyOptionsKnown();
 
 // Returns the localized label for option index `i`. For built-in indices
 // (< BUILTIN_FONT_COUNT) this returns the I18N string; for SD indices it
