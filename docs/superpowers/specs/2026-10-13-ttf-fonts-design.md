@@ -11,8 +11,8 @@ with the direct integration in section 3.
   planned yet.
 - **Where everything lives:** section 8, "Branches and files".
 - **A book's embedded fonts (section 11):** Stage A, the book's body family drawn as that book's font, is built on
-  branch `feat/book-fonts` (2026-10-17, not device-tested yet). Stage B, more than one family per book, is designed
-  in 11.1 and not built.
+  branch `feat/book-fonts` (2026-10-17; slimmed and X4-tested 2026-10-18). Stage B, more than one family per book,
+  is designed in 11.1 and not built.
 
 It is working material. When the work merges, lasting parts move to reference docs, open items move
 to `docs/future_work/`, and this file is deleted (see the docs layout convention).
@@ -956,36 +956,46 @@ with one font ID (per-word data carries only the style bits).
     - embedded fonts are usually subsets, so they install in a second or two;
     - switching between two such books reinstalls the store each time, because it holds one family (4.1).
   - **An option to ignore embedded fonts is needed** either way.
-  - **Stage A, as built (2026-10-17, branch `feat/book-fonts`; follows crosspoint-reader PR #3934 on our engine):**
-    - **The setting:** Reader → Publisher Fonts, Off (default) or Body Text. It applies to a book whose own style is
+  - **Stage A, as built (2026-10-17, slimmed 2026-10-18, branch `feat/book-fonts`; follows crosspoint-reader PR
+    #3934 on our engine):**
+    - **The setting:** Reader → Publisher Fonts, on or off (off by default). It applies to a book whose own style is
       in use and that has no font family chosen for it, so the reader menu's per-book Font Family is the per-book
-      way out. Off by default because of the store switching below. A per-book on/off of its own would add a field
-      to the 13-argument override path (`RecentBook`, `QuickOverridesActivity`, `applyBookReaderOverrides`): not
-      cheap, so not built.
-    - **CSS (`CssParser`, `CSS_CACHE_VERSION` 23):** `font-family` keeps its first family as a case-insensitive
-      hash (`fontFamilyHash`); a generic family is 0. It rides in the rule payload and the arena-resident record
-      (mask bit 31). `@font-face` rules go to a side file, `css_fonts.bin`: name, weight, italic, and the
-      `src` url ranked TrueType, then OpenType, then anything else, never WOFF2, SVG, EOT, `data:` or remote.
-    - **Which family (`BookFonts::detectBodyFamily`):** html/body's `font-family` when one is declared, else the
-      family with the most ordinary paragraph text (p, div, li, dd; not headings, tables, blockquotes, figures,
-      hidden, centred or right-aligned text) in the first 64 KB of up to 6 chapters from the text start, stopping
-      at 16 KB of text. From #3934's `BodyFontProbe` (Julia Nguyen's fix), asked once per book instead of per
-      chapter: the book has one font.
+      way out. Off by default because of the store switching below. A toggle while the body font is all it covers
+      (stored 0/1, so Stage B's modes can widen it to an enum with 1 still the body). A per-book on/off of its own
+      would add a field to the 13-argument override path (`RecentBook`, `QuickOverridesActivity`,
+      `applyBookReaderOverrides`): not cheap, so not built.
+    - **CSS (`CssParser`, `CSS_CACHE_VERSION` 28):** `font-family` keeps its first family as a case-insensitive
+      hash (`fontFamilyHash`); a generic family is 0. It rides in the rule payload, the arena-resident record (bit 3
+      of the extra byte, the hash after the multipliers) and the cascade's ranks. `@font-face` rules go to a side
+      file, `css_fonts.bin`: name, weight, italic, and the `src` url ranked TrueType, then OpenType, then anything
+      else, never WOFF2, SVG, EOT, `data:` or remote.
+    - **Which family (`BookFonts::detectBodyFamily`):** the family most of the text is set in, an inline accent's
+      text counting for its paragraph's (p, div, li, dd), the style attribute applying, over the first 64 KB of up
+      to 6 chapters from the text start, stopping at 16 KB of text. From #3934's `BodyFontProbe` (Julia Nguyen's
+      fix), asked once per book instead of per chapter: the book has one font. Measured on 921 real books with
+      `@font-face` rules (a local library) against the family each draws most of its text in, every chapter styled
+      by the sheets it links: right for 839, a wrong family for 27, a spurious one for 2, missed 53. #3934's further
+      rules (html's or body's family first; centred and right-aligned text, headings, tables and hidden text left
+      out) scored 807 / 43 / 7 / 64: our parser merges a book's sheets, so a marketing page's `body` rule
+      (BICMedia's `marketing.css`, Noto Sans) named a family no chapter uses. A CSS-only rule (the book's one text
+      family, or the one html, body or p name) scored 748 / 10 / 19 / 144: not a replacement.
     - **Extraction (`BookFonts::prepare`):** the body family's faces nearest weight 400 and 700, roman and italic,
-      go to `<book cache>/fonts/<family>/<style>-<file>.ttf` through `Epub::extractItemToFile`, then a state file
-      (`fonts/state.bin`, docs/file-formats.md). Runs once per book, behind the open's "Indexing" popup, with the
-      inflate ring and the SAX state in the lent secondary framebuffer. A read failure is retried at the next two
-      opens, then the book keeps the reader's font.
-    - **Obfuscation:** a face whose first bytes are no font signature is tried with the IDPF key (SHA-1 of the
+      go to `<book cache>/fonts/<style>.ttf` through `Epub::extractItemToFile` (the registry reads each face's
+      style from the font, not its name), then a state file (`fonts.bin`, `BookFonts::kVersion` 3,
+      docs/file-formats.md). Runs once per book, behind the open's "Indexing" popup, with the inflate ring and the
+      SAX state in the lent secondary framebuffer. A read failure is retried at the next two opens, then the book
+      keeps the reader's font.
+    - **Obfuscation:** a face whose first bytes are no TrueType signature is tried with the IDPF key (SHA-1 of the
       unique identifier, white space removed; the first 1,040 bytes) and Adobe's (the urn:uuid's 16 bytes; 1,024),
-      undone in place, the same algorithms as `epub-fonts.js`. The key whose XOR gives a signature back is the one,
-      so `META-INF/encryption.xml` is not read; real encryption gives none and is refused. SHA-1 is wolfCrypt's
-      `wc_ShaHash`, already linked for TLS (0 B of flash for the hash itself).
-    - **Refused, the book keeps the reader's font:** a generic or non-embedded body family; CFF (`OTTO`), WOFF,
-      WOFF2, collections; encrypted fonts; a face over 2 MB; no regular face; a family the font area cannot take in
-      flash mode (the registry's own check). WOFF1 is not unpacked: TrueType-flavoured WOFF in EPUBs is rare, and
-      a converter (table directory rewrite plus per-table inflate from a temporary file) was estimated at about
-      1.5 KB of flash.
+      undone in place, the same algorithms as `epub-fonts.js`. The key whose XOR gives the signature back is the
+      one, so `META-INF/encryption.xml` is not read; real encryption gives none and is refused. SHA-1 is wolfCrypt's
+      `wc_ShaHash`, already linked for TLS (0 B of flash for the hash itself). In the 921 books, 56 name Adobe's
+      algorithm and 33 IDPF's.
+    - **Refused, the book keeps the reader's font:** a generic or non-embedded body family; anything but TrueType
+      outlines (CFF `OTTO`, WOFF, WOFF2, collections; the refusal logs the signature); encrypted fonts; a face over
+      2 MB; no regular face; a family the font area cannot take in flash mode (the registry's own check). WOFF1 is
+      not unpacked: TrueType-flavoured WOFF in EPUBs is rare, and a converter (table directory rewrite plus
+      per-table inflate from a temporary file) was estimated at about 1.5 KB of flash.
     - **Loading:** the directory is scanned by `SdCardFontRegistry::scanFamily`, the code that lists a `.ttf`
       directory on the card, and becomes the book family `book:<name>` in `SdCardFontSystem` (a `:` no directory
       name has). It loads through `SdCardFontManager::loadFamily` like any TTF family: native sizes, kerning,
@@ -998,17 +1008,23 @@ with one font ID (per-word data carries only the style bits).
       (an erase of the sectors that hold data, then the copy: about 5 s per MB on the X3, 1-2 s for a usual subset);
       the next book in another family, or a book in the reader's TTF family, installs again and renders its glyphs
       again (about 1.3 ms each on first contact). A built-in reader font costs nothing to switch back to.
-    - **Cost, `env:default` (C3):** flash +12.4 KB, static RAM +64 B: 6,299,587 -> 6,312,301 B against master
-      with `Epub`'s constructor out of line, a commit of the branch that is not about fonts (-3.8 KB on master
-      alone; master itself is 6,303,393 B). As first built it was +16.0 KB; the slimming took the face list from a
-      vector of strings to records (-1.5 KB), the font keys from `ContentOpfParser` instead of a parser of their
-      own (-1.2 KB, its constructor out of line), the state file to one read and one write (-0.2 KB), and the
-      wiring off temporary `Epub`s (-0.2 KB). About 2.6 KB is the CSS side, 5.4 KB `BookFonts` and 0.6 KB of
-      `std::string` helpers GCC clones into its file, 2 KB the reader wiring, 0.45 KB the two strings in 24
-      languages, the rest log text. MMU pages unchanged (41 code + 55 rodata); the code segment ends 12.0 KB short
-      of filling its 41st page (master: 19.4 KB). No resident heap beyond the TTF family's own; `prepare` holds
-      the face records (the side file, usually well under 1 KB), the probe's 0.9 KB, the package parser's 1 KB
-      while it reads the keys, and the CSS index while it runs.
+    - **X4 test (2026-10-18, serial test API):** `/test/bookfont_ttf.epub`, `_idpf` and `_adobe` open in
+      `book:Book Body` (Ubuntu letterforms in the screenshots), each examined once behind the popup in about 2 s;
+      `_cff` is refused (`not TrueType (4f54544f)`) and stays in Bookerly; a second open trusts `fonts.bin` and
+      examines nothing; a book without `@font-face` afterwards is in Bookerly again, its heap back (66.6 KB free,
+      65.2 KB before the font books). With a book family loaded, the first look-ahead build fell back from
+      Background-C for low heap (30 KB free, 21 KB contiguous) and rebuilt incrementally.
+    - **Cost, `env:default` (C3), against master 3afcd0d11 (6,321,493 B):** flash +10.4 KB (6,331,933 B), static
+      RAM +72 B. Rebased onto that master it was +12.5 KB; the slimming of 2026-10-18 took 2.1 KB: the setting as a
+      toggle (-0.3 KB), the probe's simpler rule (-0.4 KB), the faces by style number and "TrueType or not" instead
+      of a classification (-1.1 KB), smaller pieces (-0.3 KB). By symbol: the CSS side 2.8 KB, `BookFonts`' copy,
+      keys and state 2.5 KB, the probe 1.9 KB, the reader wiring 1.4 KB, `std::string` helpers GCC clones into the
+      new files 0.6 KB, `ContentOpfParser`'s identifiers 0.4 KB, the setting and its name in 24 languages 0.3 KB.
+      **MMU pages: 97 (42 code + 55 rodata) against master's 96 (41 + 55):** master's code ended 4.2 KB short of
+      its 41st page and the feature adds 9.6 KB of code, so the map window for the font area has one page fewer.
+      Getting the page back would take another 5.5 KB of code. No resident heap beyond the TTF family's own;
+      `prepare` holds the face records (the side file, usually well under 1 KB), the probe's 0.7 KB, the package
+      parser's 1 KB while it reads the keys, and the CSS index while it runs.
 - **More than one font family in a book** (a sans heading, a monospace code block): designed in 11.1 (Stage B).
 - **From 2c-2 (2026-10-15):**
   - **Inline sizes:** a `<small>` or `<sup>` inside a paragraph is still the block's face scaled. Native per-word
@@ -1072,7 +1088,8 @@ for a dedication, a monospace for code).
 
 **The store: one store, a face table instead of a size table.** A second store is not an option on the C3: the
 index and the log stay mapped while a family is loaded (2 + 17 pages in the 32-page example of 4.1), and two of
-them would not fit the about 31 free MMU pages beside the app's 96 (memory note on the C3 MMU window). One store,
+them would not fit the about 31 free MMU pages beside the app's 96 (97 with Stage A; memory note on the C3 MMU
+window). One store,
 then, holding a family set:
 - **Glyph key unchanged.** Code point 21 bits, style 2, index 5; bits 28-31 stay zero, so the erased value and the
   log scan's plausibility check stay as they are. The 5-bit index stops meaning "size" and means "face": a
@@ -1101,9 +1118,10 @@ then, holding a family set:
 - `SdCardFontManager` holds a family set instead of one family, the body (the reader's or the book's) and the
   accent families; `ttfNativeSizes` per family.
 
-**Modes, against #3934's.** Publisher Fonts gains two values; their stored numbers keep Stage A's:
-- Off: nothing from the book (#3934 Off).
-- Body Text (Stage A): the book's body family as the book's font; other families stay the body's.
+**Modes, against #3934's.** Publisher Fonts, Stage A's on/off toggle, becomes an enum of four; the stored numbers
+keep Stage A's:
+- Off (0): nothing from the book (#3934 Off).
+- Body Text (1, Stage A's "on"): the book's body family as the book's font; other families stay the body's.
 - Accents (#3934's default "Ignore Body Font"): the reader's font for the body, the book's other families where
   the book uses them. With a built-in reader font the store holds only the accent families, so one accent family
   needs no multi-family store at all: a first step that also needs the manager to load a TTF family that is not
