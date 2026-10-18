@@ -582,6 +582,8 @@ Fold version 4 preserves leading articles in title sort and search keys.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
+Library fold version 6 compares full staged titles when title prefixes tie. The record layout is unchanged.
+
 ### Records are exactly 128 bytes
 
 A fixed stride is what lets the reader seek straight to record *n* without an

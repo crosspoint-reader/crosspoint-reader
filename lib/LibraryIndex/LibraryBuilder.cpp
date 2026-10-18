@@ -1347,14 +1347,60 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
         memcpy(keys[i].key, r.fold, std::min<size_t>(r.foldLen, sizeof(keys[i].key)));
         keys[i].ordinal = i;
       }
-      if (!stage.close()) {
-        LOG_ERR("LIBIDX", "title sort: stage close failed");
+      delay(1);
+      std::sort(keys.get(), keys.get() + st.books, sortKeyLess);
+      const auto failTitleSort = [&] {
+        LOG_ERR("LIBIDX", "title sort: full title read failed");
+        stage.close();
         Storage.remove(STAGE_PATH);
         Storage.remove(folderStagePath.c_str());
         return false;
+      };
+      const auto readTitle = [&](uint16_t ordinal, std::string& title) {
+        const uint64_t base = static_cast<uint64_t>(ordinal) * STAGE_STRIDE;
+        uint8_t len = 0;
+        if (!stage.seekSet(base + offsetof(StagedEntry, titleLen)) || stage.read(&len, sizeof(len)) != sizeof(len))
+          return false;
+        uint64_t position = base + offsetof(StagedEntry, title);
+        const bool fallback = len == 0;
+        if (fallback) {
+          if (!stage.seekSet(base + offsetof(StagedEntry, record) + offsetof(ClixRecord, nameLen)) ||
+              stage.read(&len, sizeof(len)) != sizeof(len))
+            return false;
+          position = base + offsetof(StagedEntry, name);
+        }
+        char text[STAGE_NAME_BYTES];
+        if (len > sizeof(text) || !stage.seekSet(position) || stage.read(text, len) != len) return false;
+        title = fold(fallback ? stemOf(std::string(text, len)) : std::string(text, len));
+        return true;
+      };
+      std::string firstTitle, secondTitle;
+      // Refine equal prefixes with checked disk reads; order[] is already available as merge scratch.
+      for (size_t begin = 0; begin < st.books;) {
+        size_t end = begin + 1;
+        while (end < st.books && memcmp(keys[begin].key, keys[end].key, sizeof(keys[begin].key)) == 0) ++end;
+        for (size_t width = 1; width < end - begin; width *= 2) {
+          for (size_t left = begin; left < end; left += width * 2) {
+            const size_t middle = std::min(left + width, end);
+            const size_t right = std::min(left + width * 2, end);
+            size_t a = left, b = middle;
+            for (size_t out = left; out < right; ++out) {
+              serviceBuilder(serviceUnits);
+              bool takeFirst = b == right;
+              if (a < middle && b < right) {
+                if (!readTitle(keys[a].ordinal, firstTitle) || !readTitle(keys[b].ordinal, secondTitle))
+                  return failTitleSort();
+                takeFirst =
+                    firstTitle < secondTitle || (firstTitle == secondTitle && keys[a].ordinal < keys[b].ordinal);
+              }
+              order[out] = takeFirst ? keys[a++].ordinal : keys[b++].ordinal;
+            }
+          }
+          for (size_t i = begin; i < end; ++i) keys[i].ordinal = order[i];
+        }
+        begin = end;
       }
-      delay(1);
-      std::sort(keys.get(), keys.get() + st.books, sortKeyLess);
+      if (!stage.close()) return failTitleSort();
       delay(1);
       for (uint16_t i = 0; i < st.books; i++) {
         serviceBuilder(serviceUnits);

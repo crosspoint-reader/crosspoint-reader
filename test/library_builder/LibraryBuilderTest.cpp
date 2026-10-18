@@ -421,3 +421,19 @@ TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(index.bookCount(), 513);
 }
+
+TEST_F(LibraryBuilderTest, FullTitlesResolvePrefixTies) {
+  for (size_t prefix : {12U, 110U}) {
+    fake::reset();
+    bookMetadata.clear();
+    fake::add("/a.epub");
+    fake::add("/b.epub");
+    bookMetadata["/a.epub"] = {std::string(prefix, 'x') + " Z", "Author"};
+    bookMetadata["/b.epub"] = {std::string(prefix, 'x') + " A", "Author"};
+    initial();
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(INDEX));
+    EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), "/b.epub");
+    EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 1), "/a.epub");
+  }
+}
