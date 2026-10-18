@@ -130,25 +130,10 @@ static bool allowedFile(const std::string& file) {
   return false;
 }
 
-// An existing primary is authoritative, including an explicitly cleared token.
-// Only the gap between the two renames may restore the previous file.
-static bool recoverTokenFile(const std::string& file, const std::string& backup) {
-  if (!Storage.exists(backup.c_str())) return true;
-  if (Storage.exists(file.c_str())) {
-    if (Storage.remove(backup.c_str())) return true;
-    LOG_ERR("PHTP", "token backup cleanup failed");
-    return true;
-  }
-  if (Storage.rename(backup.c_str(), file.c_str())) return true;
-  LOG_ERR("PHTP", "token recovery failed");
-  return false;
-}
-
 bool loadTokenFromFile(const std::string& file, const std::string& path, std::string& out) {
   out.clear();
   if (file.empty()) return true;  // token-less plugin
   if (!allowedFile(file)) return false;
-  if (!recoverTokenFile(file, file + ".bak")) return false;
   std::string raw;
   if (!Storage.readFileToString("PHTP", file, MAX_TOKEN_FILE_SIZE, raw)) return false;
   JsonDocument doc;
@@ -168,48 +153,13 @@ bool saveTokenToFile(const std::string& file, const std::string& path, const std
   JsonVariant node = doc.to<JsonObject>();
   for (size_t i = 0; i + 1 < segs.size(); i++) node = node[segs[i]].to<JsonObject>();
   node[segs.back()] = value;
-  std::string out;
+  String out;
   serializeJson(doc, out);
-  if (out.size() > MAX_TOKEN_FILE_SIZE) {
-    LOG_ERR("PHTP", "token exceeds file limit");
+  if (doc.overflowed() || out.length() > MAX_TOKEN_FILE_SIZE || out.length() != measureJson(doc)) {
+    LOG_ERR("PHTP", "Invalid or oversized token JSON");
     return false;
   }
-  const std::string stage = file + ".new";
-  const std::string backup = file + ".bak";
-  if (!recoverTokenFile(file, backup) || Storage.exists(backup.c_str())) return false;
-  bool written = false;
-  {
-    HalFile f;
-    if (!Storage.openFileForWrite("PHTP", stage, f)) return false;
-    written = f.write(out.data(), out.size()) == out.size();
-    written = f.close() && written;
-  }
-  {
-    std::string stored;
-    if (!written || !Storage.readFileToString("PHTP", stage, MAX_TOKEN_FILE_SIZE, stored) || stored != out) {
-      LOG_ERR("PHTP", "token staging failed");
-      Storage.remove(stage.c_str());
-      return false;
-    }
-  }
-  const bool hadToken = Storage.exists(file.c_str());
-  if (hadToken && !Storage.rename(file.c_str(), backup.c_str())) {
-    LOG_ERR("PHTP", "token backup failed");
-    Storage.remove(stage.c_str());
-    return false;
-  }
-  if (!Storage.rename(stage.c_str(), file.c_str())) {
-    LOG_ERR("PHTP", "token replacement failed");
-    if (hadToken && !Storage.rename(backup.c_str(), file.c_str())) {
-      LOG_ERR("PHTP", "token restore deferred until next access");
-    }
-    Storage.remove(stage.c_str());
-    return false;
-  }
-  if (hadToken && !Storage.remove(backup.c_str())) {
-    LOG_ERR("PHTP", "token backup cleanup deferred until next access");
-  }
-  return true;
+  return Storage.writeFile(file.c_str(), out);
 }
 
 void loadConfigFile(const std::string& file, Headers& out) {

@@ -38,6 +38,7 @@ class ClipSelectionActivity final : public Activity {
     uint8_t pageOffset = 0;
     int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
+    int fontId = 0;  // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;

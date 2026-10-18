@@ -672,6 +672,60 @@ body.web-ui  {
   background: var(--accent-color-10);
 }
 
+.web-ui .web-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--font-color);
+}
+
+.web-ui .web-dialog::backdrop {
+  background: rgb(0 0 0 / 50%);
+  backdrop-filter: blur(8px);
+}
+
+.web-ui .web-dialog h2 {
+  margin: 0 0 12px;
+  color: var(--title-color);
+  font-size: 1.2em;
+}
+
+.web-ui .web-dialog p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.web-ui .web-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.web-ui .web-dialog-actions button {
+  min-width: 72px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  cursor: pointer;
+}
+
+.web-ui .web-dialog-actions button:hover {
+  background: var(--button-hover);
+}
+
+.web-ui .web-dialog-actions #webDialogCancel {
+  background: var(--card-bg);
+  color: var(--font-color);
+  border: 1px solid var(--border-color);
+}
+
 .web-ui .file-table th  {
   color: var(--label-color);
   font-size: 12px;
@@ -706,6 +760,7 @@ body.web-ui  {
 @media (max-width: 600px)  {
   .web-ui .modal  {
     padding: 16px;
+    margin: 0 1.5rem;
   }
   .web-ui .modal h3  {
     font-size: 20px;
@@ -713,6 +768,14 @@ body.web-ui  {
   .web-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
   .web-ui select, .web-ui textarea  {
     font-size: 16px;
+  }
+  .web-ui .web-dialog {
+    width: auto;
+    margin-right: 1.5rem;
+    margin-left: 1.5rem;
+  }
+  .web-ui .web-dialog-actions {
+    flex-direction: column-reverse;
   }
 }
 

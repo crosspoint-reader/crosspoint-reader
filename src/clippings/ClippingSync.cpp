@@ -32,6 +32,9 @@ bool request(freeink::SecureHttpClient& http, const std::string& url, char* buff
     LOG_ERR("CLIP", "Invalid sync URL");
     return false;
   }
+  for (const auto& header : KOREADER_STORE.getCustomHeaders()) {
+    if (!header.name.empty()) http.addHeader(header.name, header.value);
+  }
   http.addHeader("x-auth-user", KOREADER_STORE.getUsername());
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password());
   http.addHeader("Content-Type", "application/json");

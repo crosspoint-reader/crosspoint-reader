@@ -75,7 +75,7 @@
         document.getElementById('version').textContent = data.version || 'N/A';
         document.getElementById('serial').textContent = data.serial;
         document.getElementById('ip-address').textContent = data.ip || 'N/A';
-        document.getElementById('free-heap').textContent = data.freeHeap
+        document.getElementById('free-heap').textContent = Number.isFinite(data.freeHeap)
           ? data.freeHeap.toLocaleString() + ' bytes'
           : 'N/A';
       } catch (error) {
@@ -84,7 +84,7 @@
     }
 
     // Fetch status on page load
-    window.onload = fetchStatus;
+    fetchStatus();
   </script>
   </body>
 </html>
