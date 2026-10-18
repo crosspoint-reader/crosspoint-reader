@@ -245,6 +245,11 @@ class ChapterHtmlSlimParser final : public Print {
   uint32_t blockFirstFamily_ = 0;
   uint32_t blockOwnFamily_ = 0;
   uint8_t blockFamilyState_ = 0;
+  // A word in another family than its block's has the font slot of its family (BlockFontFamilies::slotOf), whose
+  // face resolveBlockFont puts at the block's size: the block's size before it was resolved, and its own slot, kept
+  // for the words a block laid out in parts takes after its first part. 0: currentTextBlock is not resolved yet.
+  float wordFontsSize_ = 0;
+  uint8_t blockFontSlot_ = 0;
   // EPUBs often set their running prose to a nominal CSS size such as 10pt,
   // 87%, or 0.875em. The reader's selected font size is our body size. Root
   // (html/body) sizes are normalized as inherited context; the main-text
@@ -978,8 +983,15 @@ class ChapterHtmlSlimParser final : public Print {
   // idempotent via bs.fontResolved. Must run before the block's first layout so measured
   // widths, line heights and rendering all use the same (fontId, scale) pair. A block in one
   // of the book's other families (fontFamilies_) takes that family's face at its size instead,
-  // outside the budget: the body font scaled would not be its family.
+  // outside the budget: the body font scaled would not be its family. Its words in other families get their faces
+  // at the block's size in their font slots (resolveWordFont).
   void resolveBlockFont(BlockStyle& bs);
+  // The face text in `family` (nullptr: the body's) is set in at `size`, a multiple of the body size: fontId 0 is the
+  // body font, with the size left over as the residual. What resolveBlockFont does for a block, and for each family of
+  // its words.
+  FontSizeLadder::Resolved resolveFamilyFont(const BlockFontFamilies::Family* family, float size);
+  // Puts the face of font slot `slot` at the block's size into currentTextBlock (see wordFontsSize_).
+  void resolveWordFont(uint8_t slot);
   // Effective fontId for a block: its heading font when set, else the body fontId.
   int effectiveFontId(const BlockStyle& bs) const { return bs.headingFontId != 0 ? bs.headingFontId : fontId; }
   // Line height for a block, honoring the taller heading font (residual multiplier on top)

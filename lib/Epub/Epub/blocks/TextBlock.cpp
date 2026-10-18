@@ -21,20 +21,25 @@ uint8_t packStyle(const EpdFontFamily::Style style, const bool continues) {
 }
 }  // namespace
 
-TextBlock::ArenaOffsets TextBlock::arenaOffsets(const uint16_t wordCount, const bool hasSizes) {
-  // Layout documented in TextBlock.h: 16-bit arrays first (textOff, xpos), then
-  // 8-bit arrays (styles, optional sizes), then the text blob. textOff sits at 0.
+TextBlock::ArenaOffsets TextBlock::arenaOffsets(const uint16_t wordCount, const bool hasSizes,
+                                                const uint8_t fontCount) {
+  // Layout documented in TextBlock.h: the word fonts (4-byte fields) first, then the 16-bit
+  // arrays (textOff, xpos), then the 8-bit arrays (styles, optional sizes and font slots), then
+  // the text blob. Without word fonts textOff sits at 0.
   const size_t wc = wordCount;
   ArenaOffsets o{};
-  o.xpos = wc * sizeof(uint16_t);
+  o.textOff = fontCount * sizeof(WordFont);
+  o.xpos = o.textOff + wc * sizeof(uint16_t);
   o.styles = o.xpos + wc * sizeof(int16_t);
   o.sizes = o.styles + wc * sizeof(uint8_t);  // only meaningful when hasSizes
-  o.text = o.sizes + (hasSizes ? wc * sizeof(uint8_t) : 0);
+  o.fontSlots = o.sizes + (hasSizes ? wc * sizeof(uint8_t) : 0);
+  o.text = o.fontSlots + (fontCount != 0 ? wc * sizeof(uint8_t) : 0);
   return o;
 }
 
-size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasSizes, const uint16_t textBytes) {
-  return arenaOffsets(wordCount, hasSizes).text + textBytes;
+size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasSizes, const uint8_t fontCount,
+                            const uint16_t textBytes) {
+  return arenaOffsets(wordCount, hasSizes, fontCount).text + textBytes;
 }
 
 bool TextBlock::allocArena(const size_t size, BuildArena* scratch) {
@@ -56,8 +61,8 @@ bool TextBlock::allocArena(const size_t size, BuildArena* scratch) {
 
 void TextBlock::bindArenaPointers() {
   const uint8_t* base = arena;
-  const ArenaOffsets o = arenaOffsets(numWords, sizesPresent);
-  textOffArr = reinterpret_cast<const uint16_t*>(base);
+  const ArenaOffsets o = arenaOffsets(numWords, sizesPresent, wordFontCount);
+  textOffArr = reinterpret_cast<const uint16_t*>(base + o.textOff);
   xposArr = reinterpret_cast<const int16_t*>(base + o.xpos);
   stylesArr = base + o.styles;
   sizesArr = sizesPresent ? base + o.sizes : nullptr;
@@ -105,7 +110,7 @@ TextBlock::TextBlock(std::vector<std::string> words, std::vector<int16_t> word_x
   }
   textBytes = static_cast<uint16_t>(totalText);
 
-  const size_t size = arenaSize(numWords, sizesPresent, textBytes);
+  const size_t size = arenaSize(numWords, sizesPresent, 0, textBytes);
   if (!allocArena(size, nullptr)) {
     LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
     numWords = 0;
@@ -118,7 +123,7 @@ TextBlock::TextBlock(std::vector<std::string> words, std::vector<int16_t> word_x
   // Pass 2: fill through mutable pointers derived from the same layout offsets
   // that bindArenaPointers() uses for the const views (bound below for reads).
   uint8_t* base = arena;
-  const ArenaOffsets o = arenaOffsets(numWords, sizesPresent);
+  const ArenaOffsets o = arenaOffsets(numWords, sizesPresent, 0);
   auto* textOff = reinterpret_cast<uint16_t*>(base);
   auto* xpos = reinterpret_cast<int16_t*>(base + o.xpos);
   uint8_t* styles = base + o.styles;
@@ -172,14 +177,26 @@ TextBlock::TextBlock(const WordRange& range, const std::vector<int16_t>& word_xp
   // produce byte-identical arenas (and therefore identical section-cache bytes).
   bool anyNon100 = false;
   if (hasSizeSrc) {
-    const std::vector<uint8_t>& sizeSrc = *range.sizes;
-    for (size_t i = 0; i < count && !anyNon100; i++) anyNon100 = sizeSrc[first + i] != 100;
+    const std::vector<WordSize>& sizeSrc = *range.sizes;
+    for (size_t i = 0; i < count && !anyNon100; i++) anyNon100 = sizeSrc[first + i].pct != 100;
   }
   sizesPresent = anyNon100;
 
   numWords = static_cast<uint16_t>(count);
   if (numWords == 0) {
     return;  // valid empty block, no arena
+  }
+
+  // The line's word fonts: the fonts of the range's table its words use, in the order they first
+  // appear; a line whose words are all in the block's font has none, and its arena is as before.
+  uint8_t lineSlot[kMaxWordFonts] = {};  // the range's slot -> the line's, 1-based; 0: the block's font
+  uint8_t tableSlot[kMaxWordFonts];      // the line's slot -> the range's
+  const bool hasFonts = hasSizeSrc && range.fontTable != nullptr;
+  for (size_t i = 0; hasFonts && i < count; i++) {
+    const uint8_t slot = (*range.sizes)[first + i].fontSlot % kMaxWordFonts;
+    if (range.fontTable[slot].fontId == 0 || lineSlot[slot] != 0) continue;
+    tableSlot[wordFontCount] = slot;
+    lineSlot[slot] = ++wordFontCount;
   }
 
   // Pass 1: total text size, one NUL per word, soft hyphens excluded — they are stripped
@@ -198,25 +215,27 @@ TextBlock::TextBlock(const WordRange& range, const std::vector<int16_t>& word_xp
     LOG_ERR("TXB", "Construction failed: text size %u exceeds arena limit", static_cast<uint32_t>(totalText));
     numWords = 0;
     sizesPresent = false;
+    wordFontCount = 0;
     isValid = false;
     return;
   }
   textBytes = static_cast<uint16_t>(totalText);
 
-  const size_t size = arenaSize(numWords, sizesPresent, textBytes);
+  const size_t size = arenaSize(numWords, sizesPresent, wordFontCount, textBytes);
   if (!allocArena(size, scratch)) {
     LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
     numWords = 0;
     textBytes = 0;
     sizesPresent = false;
+    wordFontCount = 0;
     isValid = false;
     return;
   }
 
   // Pass 2: fill straight from the caller's arrays — no intermediate per-line vectors.
   uint8_t* base = arena;
-  const ArenaOffsets o = arenaOffsets(numWords, sizesPresent);
-  auto* textOff = reinterpret_cast<uint16_t*>(base);
+  const ArenaOffsets o = arenaOffsets(numWords, sizesPresent, wordFontCount);
+  auto* textOff = reinterpret_cast<uint16_t*>(base + o.textOff);
   auto* xpos = reinterpret_cast<int16_t*>(base + o.xpos);
   uint8_t* styles = base + o.styles;
   char* text = reinterpret_cast<char*>(base + o.text);
@@ -241,8 +260,14 @@ TextBlock::TextBlock(const WordRange& range, const std::vector<int16_t>& word_xp
   }
   if (sizesPresent) {
     uint8_t* sizes = base + o.sizes;
-    const std::vector<uint8_t>& sizeSrc = *range.sizes;
-    for (uint16_t i = 0; i < numWords; i++) sizes[i] = sizeSrc[first + i];
+    const std::vector<WordSize>& sizeSrc = *range.sizes;
+    for (uint16_t i = 0; i < numWords; i++) sizes[i] = sizeSrc[first + i].pct;
+  }
+  if (wordFontCount != 0) {
+    auto* fonts = reinterpret_cast<WordFont*>(base);
+    for (uint8_t f = 0; f < wordFontCount; f++) fonts[f] = range.fontTable[tableSlot[f]];
+    uint8_t* slots = base + o.fontSlots;
+    for (uint16_t i = 0; i < numWords; i++) slots[i] = lineSlot[(*range.sizes)[first + i].fontSlot % kMaxWordFonts];
   }
   bindArenaPointers();
 }
@@ -274,8 +299,10 @@ TextBlock::WordBox TextBlock::wordBox(const GfxRenderer& renderer, const uint16_
 
   const char* word = wordText(i);
   const EpdFontFamily::Style style = wordStyle(i);
+  const int font = wordFontId(i, effFontId);
   const float scale = wordScale(i);
-  const int ascender = (scale == blockScale) ? blockAscender : renderer.getFontAscenderSizeScaled(effFontId, scale);
+  const int ascender =
+      (font == effFontId && scale == blockScale) ? blockAscender : renderer.getFontAscenderSizeScaled(font, scale);
 
   int wordY = y + (lineAscender - ascender);
   if ((style & EpdFontFamily::SUP) != 0) {
@@ -284,7 +311,7 @@ TextBlock::WordBox TextBlock::wordBox(const GfxRenderer& renderer, const uint16_
     wordY += blockAscender / 4;
   }
 
-  box.fontId = effFontId;
+  box.fontId = font;
   box.style = style;
   box.scale = scale;
   box.x = static_cast<int16_t>(xposArr[i] + x);
@@ -292,10 +319,10 @@ TextBlock::WordBox TextBlock::wordBox(const GfxRenderer& renderer, const uint16_
   // Scaled measurement, not getTextAdvanceX: a book with publisher font sizes
   // gives words a per-word scale, and an unscaled width drifts wider or
   // narrower than the glyphs actually drawn.
-  box.width = static_cast<int16_t>((scale == 1.0f) ? renderer.getTextWidth(effFontId, word, style)
-                                                   : renderer.getTextWidthScaled(effFontId, word, style, scale));
-  box.height = static_cast<int16_t>((scale == 1.0f) ? renderer.getLineHeight(effFontId)
-                                                    : renderer.getLineHeightScaled(effFontId, scale));
+  box.width = static_cast<int16_t>((scale == 1.0f) ? renderer.getTextWidth(font, word, style)
+                                                   : renderer.getTextWidthScaled(font, word, style, scale));
+  box.height =
+      static_cast<int16_t>((scale == 1.0f) ? renderer.getLineHeight(font) : renderer.getLineHeightScaled(font, scale));
   return box;
 }
 
@@ -328,24 +355,32 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   int prevWordEndX = 0;  // right edge of the previous word; valid once i > 0
   // Cache per-word ascender calculations (typically 2-3 unique scales per block).
   // Avoids the per-word function call overhead on ESP32-C3 for typical books where
-  // per-word font sizing is rare or uniform.
-  std::vector<std::pair<float, int>> ascenderCache;
-  auto getOrCacheAscender = [&](float s) -> int {
-    if (s == blockScale) return blockAscender;
-    for (const auto& [cachedScale, cachedAscender] : ascenderCache) {
-      if (cachedScale == s) return cachedAscender;
+  // per-word font sizing is rare or uniform. A word in a font of its own (WordFont)
+  // has its font's ascender.
+  struct CachedAscender {
+    int fontId;
+    float scale;
+    int ascender;
+  };
+  std::vector<CachedAscender> ascenderCache;
+  auto getOrCacheAscender = [&](const int font, const float s) -> int {
+    if (font == effFontId && s == blockScale) return blockAscender;
+    for (const CachedAscender& cached : ascenderCache) {
+      if (cached.fontId == font && cached.scale == s) return cached.ascender;
     }
-    const int ascender = renderer.getFontAscenderSizeScaled(effFontId, s);
-    ascenderCache.emplace_back(s, ascender);
+    const int ascender = renderer.getFontAscenderSizeScaled(font, s);
+    ascenderCache.push_back({font, s, ascender});
     return ascender;
   };
   for (uint16_t i = 0; i < numWords; i++) {
     const char* word = wordText(i);
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
+    const int font = wordFontId(i, effFontId);
     const float scale = wordScale(i);
-    const int ascender = getOrCacheAscender(scale);
-    // Baseline alignment: shift smaller words down so all baselines meet at y + lineAscender.
+    const int ascender = getOrCacheAscender(font, scale);
+    // Baseline alignment: shift smaller words down so all baselines meet at y + lineAscender. A word in
+    // another family meets it too: the line keeps its block font's baseline, whatever the word's ascender.
     int wordY = y + (lineAscender - ascender);
     // SUP/SUB shift the baseline only — the glyph shrink comes from the word's own size
     // percentage (parser default 50%, or the publisher's CSS). Offsets are anchored to the
@@ -359,17 +394,17 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       wordY += blockAscender / 4;
     }
     if (scale == 1.0f) {
-      renderer.drawText(effFontId, wordX, wordY, word, true, currentStyle);
+      renderer.drawText(font, wordX, wordY, word, true, currentStyle);
     } else {
-      renderer.drawTextScaled(effFontId, wordX, wordY, word, true, currentStyle, scale);
+      renderer.drawTextScaled(font, wordX, wordY, word, true, currentStyle, scale);
     }
 
     const bool hasDecoration =
         !scanning && (currentStyle & (EpdFontFamily::UNDERLINE | EpdFontFamily::STRIKETHROUGH)) != 0;
     int lineWidth = 0;
     if (guideDots || hasDecoration) {
-      lineWidth = (scale == 1.0f) ? renderer.getTextWidth(effFontId, word, currentStyle)
-                                  : renderer.getTextWidthScaled(effFontId, word, currentStyle, scale);
+      lineWidth = (scale == 1.0f) ? renderer.getTextWidth(font, word, currentStyle)
+                                  : renderer.getTextWidthScaled(font, word, currentStyle, scale);
     }
 
     if (guideDots) {
@@ -410,12 +445,14 @@ bool TextBlock::serialize(FsFile& file) const {
 
   // Word data: scalars, then the arena verbatim -- its in-memory layout is
   // exactly the on-disk layout (see TextBlock.h), so one write covers all
-  // per-word arrays and the text blob.
+  // per-word arrays and the text blob. The flags byte holds the sizes in bit 0
+  // and the word-font count in bits 4-7: a line without word fonts writes the
+  // 0 or 1 it always did.
   serialization::writePod(file, numWords);
-  serialization::writePod(file, static_cast<uint8_t>(sizesPresent ? 1 : 0));
+  serialization::writePod(file, static_cast<uint8_t>((sizesPresent ? 1 : 0) | wordFontCount << 4));
   serialization::writePod(file, textBytes);
   if (numWords > 0) {
-    const size_t size = arenaSize(numWords, sizesPresent, textBytes);
+    const size_t size = arenaSize(numWords, sizesPresent, wordFontCount, textBytes);
     if (file.write(arena, size) != size) {
       LOG_ERR("TXB", "Serialization failed: arena write (%u bytes)", static_cast<uint32_t>(size));
       return false;
@@ -437,10 +474,10 @@ bool TextBlock::serialize(FsFile& file) const {
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file, BuildArena* scratch) {
   uint16_t wc = 0;
-  uint8_t hasSizes = 0;
+  uint8_t flags = 0;
   uint16_t textBytes = 0;
   if (file.read(reinterpret_cast<uint8_t*>(&wc), sizeof(wc)) != static_cast<int>(sizeof(wc)) ||
-      file.read(&hasSizes, sizeof(hasSizes)) != static_cast<int>(sizeof(hasSizes)) ||
+      file.read(&flags, sizeof(flags)) != static_cast<int>(sizeof(flags)) ||
       file.read(reinterpret_cast<uint8_t*>(&textBytes), sizeof(textBytes)) != static_cast<int>(sizeof(textBytes))) {
     LOG_ERR("TXB", "Deserialization failed: incomplete arena header");
     return nullptr;
@@ -448,8 +485,9 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file, BuildArena* scra
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
-  if (wc > 10000) {
-    LOG_ERR("TXB", "Deserialization failed: word count %u exceeds maximum", wc);
+  const uint8_t fontCount = flags >> 4;
+  if (wc > 10000 || (flags & 0x0E) != 0 || fontCount > kMaxWordFonts || (fontCount != 0 && wc == 0)) {
+    LOG_ERR("TXB", "Deserialization failed: word count %u or flags 0x%02x out of range", wc, flags);
     return nullptr;
   }
   if ((wc == 0 && textBytes != 0) || (wc > 0 && textBytes < wc)) {
@@ -464,10 +502,11 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file, BuildArena* scra
   }
   block->numWords = wc;
   block->textBytes = textBytes;
-  block->sizesPresent = hasSizes != 0;
+  block->sizesPresent = (flags & 1) != 0;
+  block->wordFontCount = fontCount;
 
   if (wc > 0) {
-    const size_t size = arenaSize(wc, block->sizesPresent, textBytes);
+    const size_t size = arenaSize(wc, block->sizesPresent, fontCount, textBytes);
     if (!block->allocArena(size, scratch)) {
       LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
       return nullptr;
@@ -492,6 +531,15 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file, BuildArena* scra
         LOG_ERR("TXB", "Deserialization failed: corrupt word offset %u", i);
         return nullptr;
       }
+    }
+    // Every word font names a font, and every slot one of them.
+    bool fontsValid = true;
+    for (uint8_t f = 0; f < fontCount; f++) fontsValid = fontsValid && block->wordFontsArr()[f].fontId != 0;
+    for (uint16_t i = 0; fontCount != 0 && i < wc; i++)
+      fontsValid = fontsValid && block->fontSlotsArr()[i] <= fontCount;
+    if (!fontsValid) {
+      LOG_ERR("TXB", "Deserialization failed: corrupt word fonts");
+      return nullptr;
     }
   }
 

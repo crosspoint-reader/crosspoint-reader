@@ -31,7 +31,11 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 93;  // v93: 20 pt is the 18 pt faces scaled, so the
+constexpr uint8_t SECTION_FILE_VERSION = 94;  // v94: a word in another of the book's families
+                                              // than its block's is laid out in that family's
+                                              // face (a line's word fonts, TextBlock::WordFont);
+                                              // v93 lines hold it in the block's font
+                                              // v93: 20 pt is the 18 pt faces scaled, so the
                                               // 20-26 pt font IDs changed; a v92 heading still
                                               // names the old ones and would draw nothing
                                               // v92: CJK text breaks between characters, with kinsoku

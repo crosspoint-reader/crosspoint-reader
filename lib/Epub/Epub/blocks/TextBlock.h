@@ -26,13 +26,15 @@ class BuildArena;  // lib/Memory -- optional page-scoped storage for the arena b
 // structure but carries focus-reading annotations; adapted here to carry this
 // fork's optional per-word inline font-size array instead.
 //
-// Arena layout, in order (2-byte alignment holds by construction: the two 16-bit
-// arrays come first and the arena base is allocator-aligned; RISC-V faults on
-// unaligned multi-byte access):
+// Arena layout, in order (alignment holds by construction: the 4-byte word fonts come
+// first, then the two 16-bit arrays, and the arena base is allocator-aligned; RISC-V
+// faults on unaligned multi-byte access):
+//   WordFont fonts[fontCount]     present only on a line with words in fonts of their own
 //   uint16_t textOff[wordCount]   byte offset of word i's text within text[]
 //   int16_t  xpos[wordCount]
 //   uint8_t  styles[wordCount]    low 7 bits EpdFontFamily::Style, bit 7 = continues
 //   uint8_t  sizes[wordCount]     present only when sizesPresent
+//   uint8_t  fontSlots[wordCount] present with fonts: 0 the block's font, n fonts[n - 1]
 //   char     text[textBytes]      all words back to back, each NUL-terminated
 //
 // Each word is stored NUL-terminated so render() can hand `text + textOff[i]`
@@ -41,7 +43,8 @@ class BuildArena;  // lib/Memory -- optional page-scoped storage for the arena b
 // Per-word sizes are the inline CSS font-size percent of the block size. The
 // array is omitted from the arena entirely when every word is at 100% (the
 // overwhelmingly common case), so ordinary lines pay zero per-word RAM or
-// section-cache cost.
+// section-cache cost. The word fonts likewise: only a line that mixes font
+// families (Publisher Fonts, see WordFont) carries them.
 // The slice of BlockStyle a laid-out line still needs once it is resident.
 //
 // A TextBlock is the *product* of layout: the parser has already consumed the
@@ -84,12 +87,32 @@ inline constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 inline constexpr size_t SOFT_HYPHEN_BYTES = 2;
 
 class TextBlock final : public Block {
+ public:
+  // A font a word is set in other than its block's: a word in another of the book's families (Publisher Fonts' Accents
+  // and All Text: an inline span in the accent family, an inline <code> in the book's code family) is measured and
+  // drawn in that family's face at the block's size, with its own residual scale in place of the block's
+  // fontSizeMultiplier (the word's size percent still applies on top). A line holds the fonts its words use, at most
+  // one per family the reader hands the build, and a slot byte per word. Per-word font slots follow
+  // crosspoint-reader PR #3934 (Justin Mitchell): its MAX_WORD_FONTS table and slot per word.
+  struct WordFont {
+    int32_t fontId = 0;  // a full 32-bit font ID; 0: the block's own font
+    float scale = 1.0f;
+  };
+  static constexpr uint8_t kMaxWordFonts = 8;
+  // A word's size as layout keeps it: its inline font-size percent of the block's size, and its font slot, an index
+  // into WordRange::fontTable (0, the default, is the block's font until a family says otherwise).
+  struct WordSize {
+    uint8_t pct = 100;
+    uint8_t fontSlot = 0;
+  };
+
  private:
   RenderStyle renderStyle;
   uint16_t numWords = 0;
   uint16_t textBytes = 0;  // total size of the text region, including one NUL per word
   bool sizesPresent = false;
   bool isValid = true;
+  uint8_t wordFontCount = 0;  // the line's word fonts (see WordFont); 0 on a line in the block's font alone
   // The ONLY allocation. Heap by default (nothrow, so OOM yields an invalid block instead of
   // abort() -- bare new is not nothrow with -fno-exceptions). A section build that lends a
   // scratch region (the borrowed secondary framebuffer) hands it in through the range
@@ -112,9 +135,13 @@ class TextBlock final : public Block {
   // truth for the layout, shared by the fill path, bindArenaPointers() and
   // arenaSize() so the in-RAM and on-disk layouts can never drift apart.
   struct ArenaOffsets {
-    size_t xpos, styles, sizes, text;
+    size_t textOff, xpos, styles, sizes, fontSlots, text;
   };
-  static ArenaOffsets arenaOffsets(uint16_t wordCount, bool hasSizes);
+  static ArenaOffsets arenaOffsets(uint16_t wordCount, bool hasSizes, uint8_t fontCount);
+  // The word fonts and the slots, addressed from the arena rather than held: a pointer each on every line of a
+  // resident page would cost more than the rare line that has them saves. Only when wordFontCount != 0.
+  const WordFont* wordFontsArr() const { return reinterpret_cast<const WordFont*>(arena); }
+  const uint8_t* fontSlotsArr() const { return reinterpret_cast<const uint8_t*>(textArr) - numWords; }
 
   // Process-wide render option (see setGuideDots): set by the reader activity
   // from settings before pages render. Not per-block state -- blocks are cached
@@ -122,12 +149,20 @@ class TextBlock final : public Block {
   static bool guideDotsEnabled;
 
   TextBlock() = default;  // deserialize() fills the fields directly
-  static size_t arenaSize(uint16_t wordCount, bool hasSizes, uint16_t textBytes);
+  static size_t arenaSize(uint16_t wordCount, bool hasSizes, uint8_t fontCount, uint16_t textBytes);
   void bindArenaPointers();
 
-  // Effective render scale of word i: block multiplier x the word's size percent.
+  // Effective render scale of word i: its font's scale (a word font's own, else the block multiplier) x the word's
+  // size percent.
   float wordScale(const uint16_t i) const {
-    return sizesPresent ? renderStyle.fontSizeMultiplier * (sizesArr[i] / 100.0f) : renderStyle.fontSizeMultiplier;
+    const WordFont* font = wordFont(i);
+    const float base = font ? font->scale : renderStyle.fontSizeMultiplier;
+    return sizesPresent ? base * (sizesArr[i] / 100.0f) : base;
+  }
+  // The font word i is drawn in: its word font's, else the block's (`blockFontId`).
+  int wordFontId(const uint16_t i, const int blockFontId) const {
+    const WordFont* font = wordFont(i);
+    return font ? font->fontId : blockFontId;
   }
 
  public:
@@ -152,10 +187,13 @@ class TextBlock final : public Block {
   struct WordRange {
     const std::vector<std::string>* words = nullptr;
     const std::vector<EpdFontFamily::Style>* styles = nullptr;
-    const std::vector<uint8_t>* sizes = nullptr;  // may be null/empty => uniform 100%
+    const std::vector<WordSize>* sizes = nullptr;  // may be null/empty => uniform 100%, the block's font
     // Layout's per-word boundaries, indexed like `words`; only `continues` is kept (style bit 7).
     // May be null, meaning every word is space-separated.
     const std::vector<TokenBoundary::Boundary>* boundaries = nullptr;
+    // What the sizes' font slots stand for: kMaxWordFonts entries, a fontId of 0 the block's font. Null: every word
+    // in the block's font.
+    const WordFont* fontTable = nullptr;
     size_t first = 0;
     size_t count = 0;
   };
@@ -203,6 +241,12 @@ class TextBlock final : public Block {
   std::vector<uint8_t> getWordSizes() const {
     return sizesPresent ? std::vector<uint8_t>(sizesArr, sizesArr + numWords) : std::vector<uint8_t>{};
   }
+  // Word i's font of its own (see WordFont); nullptr when it is in the block's font.
+  const WordFont* wordFont(const uint16_t i) const {
+    if (wordFontCount == 0) return nullptr;
+    const uint8_t slot = fontSlotsArr()[i];
+    return slot == 0 ? nullptr : &wordFontsArr()[slot - 1];
+  }
   // Largest per-word size percent on this line (100 when uniform). The line's
   // vertical advance scales with this so an enlarged inline word doesn't collide
   // with the next line.
@@ -210,10 +254,11 @@ class TextBlock final : public Block {
 
   // Screen box of one word, in the same coordinate space render(fontId, x, y)
   // draws it in. Shares render()'s geometry rather than restating it: the
-  // effective font (a heading block draws with headingFontId), the per-word
-  // scale, the baseline alignment that shifts smaller words down, and the
-  // SUP/SUB offsets all have to agree, or a caller drawing over a word lands
-  // beside it. Used by the dictionary's word-selection overlay.
+  // effective font (a heading block draws with headingFontId, a word in another
+  // family with its word font), the per-word scale, the baseline alignment that
+  // shifts smaller words down, and the SUP/SUB offsets all have to agree, or a
+  // caller drawing over a word lands beside it. Used by the dictionary's
+  // word-selection overlay.
   struct WordBox {
     int16_t x = 0;
     int16_t y = 0;
