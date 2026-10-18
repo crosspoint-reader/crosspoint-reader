@@ -2911,7 +2911,6 @@ void CssParser::saveFontFaces() const {
   out.write(CSS_CACHE_VERSION);
   out.write(reinterpret_cast<const uint8_t*>(fontFaces_.data()), fontFaces_.size());
   out.close();
-  LOG_DBG("CSS", "Recorded %u @font-face rule(s)", fontFaceCount_);
 }
 
 bool CssParser::loadFontFaces(const std::string& cachePath, std::string& records) {

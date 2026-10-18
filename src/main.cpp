@@ -822,18 +822,16 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
   if (waitForBookFonts && !cachePath.empty() && BookFonts::read(cachePath) == BookFonts::State::Pending) return;
   const bool bookFamily = sdFontSystem.selectBookFamily(cachePath);
 
+  // No family override: the global SD font (if any), at the effective size.
+  const char* family = SETTINGS.sdFontFamilyName;
   if (!book.sdFontFamilyOverride.empty()) {
-    // Per-book SD font override: load that family at the effective size.
-    sdFontSystem.ensureLoaded(renderer, book.sdFontFamilyOverride.c_str(), effectiveSize, onColdFontLoad);
+    family = book.sdFontFamilyOverride.c_str();  // per-book SD font override
   } else if (book.fontFamilyOverride >= 0) {
-    // Per-book built-in font override: no SD font needed; unload if one was active.
-    sdFontSystem.ensureLoaded(renderer, "", effectiveSize, onColdFontLoad);
+    family = "";  // per-book built-in font override: no SD font needed; unload if one was active
   } else if (bookFamily) {
-    sdFontSystem.ensureLoaded(renderer, sdFontSystem.bookFamilyName(), effectiveSize, onColdFontLoad);
-  } else {
-    // No family override: use global SD font (if any) at the effective size.
-    sdFontSystem.ensureLoaded(renderer, SETTINGS.sdFontFamilyName, effectiveSize, onColdFontLoad);
+    family = sdFontSystem.bookFamilyName();
   }
+  sdFontSystem.ensureLoaded(renderer, family, effectiveSize, onColdFontLoad);
 }
 
 // --- Temporary boot-phase heap-corruption bisect probes -------------------------------

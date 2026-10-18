@@ -59,7 +59,7 @@ uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed);
 
 /// The IDPF obfuscation key (EPUB OCF): the SHA-1 of the package's unique identifier with its XML white space
 /// removed.
-bool idpfKey(std::string_view uniqueIdentifier, uint8_t (&key)[20]);
+bool idpfKey(std::string uniqueIdentifier, uint8_t (&key)[20]);
 /// Adobe's: the 16 bytes of the book's `urn:uuid:` identifier. False when it is not one.
 bool adobeKey(std::string_view uuid, uint8_t (&key)[16]);
 

@@ -217,16 +217,12 @@ bool loadKeys(const Epub& epub, BuildArena* scratch, Keys& keys) {
   // rather than in prepare()'s frame, under the probe and the copies. It holds the paths by reference.
   const std::string none;
   auto opf = makeUniqueNoThrow<ContentOpfParser>(none, none, opfSize, nullptr);
-  if (!opf) {
-    LOG_ERR("BKF", "OOM: package parser");
+  if (opf && state.get()) opf->setParserState(state.get());
+  if (!opf || !opf->setup() || !epub.readItemContentsToStream(opfPath, *opf, 1024, opf->metadataRead(), scratch)) {
+    LOG_ERR("BKF", "Cannot read %s", opfPath.c_str());  // or no heap for the parser
     return false;
   }
-  if (state.get()) opf->setParserState(state.get());
-  if (!opf->setup() || !epub.readItemContentsToStream(opfPath, *opf, 1024, opf->metadataRead(), scratch)) {
-    LOG_ERR("BKF", "Cannot read %s", opfPath.c_str());
-    return false;
-  }
-  keys.hasIdpf = idpfKey(opf->uniqueIdentifier, keys.idpf);
+  keys.hasIdpf = idpfKey(std::move(opf->uniqueIdentifier), keys.idpf);
   keys.hasAdobe = adobeKey(opf->uuidIdentifier, keys.adobe);
   return true;
 }
@@ -386,14 +382,12 @@ int hexValue(const char c) {
 
 // The keys and the obfuscation follow our web Font Manager's extraction (src/network/html/js/epub-fonts.js),
 // which decodes the same two algorithms in the browser.
-bool idpfKey(const std::string_view uniqueIdentifier, uint8_t (&key)[20]) {
-  std::string stripped;
-  stripped.reserve(uniqueIdentifier.size());
+bool idpfKey(std::string uniqueIdentifier, uint8_t (&key)[20]) {
+  size_t n = 0;  // the white space is squeezed out in place
   for (const char c : uniqueIdentifier) {
-    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') stripped += c;
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') uniqueIdentifier[n++] = c;
   }
-  return !stripped.empty() &&
-         wc_ShaHash(reinterpret_cast<const byte*>(stripped.data()), static_cast<word32>(stripped.size()), key) == 0;
+  return n != 0 && wc_ShaHash(reinterpret_cast<const byte*>(uniqueIdentifier.data()), static_cast<word32>(n), key) == 0;
 }
 
 bool adobeKey(const std::string_view uuid, uint8_t (&key)[16]) {
