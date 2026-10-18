@@ -582,6 +582,8 @@ Fold version 4 preserves leading articles in title sort and search keys.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
+Library fold version 5 keeps full author identities separate when their stored prefixes collide. The record layout is unchanged.
+
 ### Records are exactly 128 bytes
 
 A fixed stride is what lets the reader seek straight to record *n* without an
@@ -589,9 +591,13 @@ offset table, and read a screenful in one 4 KB block. `static_assert` enforces i
 
 Each record carries `fold[96]`, the title normalised for search and sorting —
 accents stripped, case dropped, leading articles preserved — and `authorKey[12]`,
-the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
-one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
-surname, derived separately from the display name.
+the prefix of the author's words folded and sorted. The spelling vote compares
+complete staged identities, so "Victor Hugo" and "Hugo Victor" group as one person
+while distinct people sharing a prefix stay separate. The shelf orders by surname,
+derived separately from the display name.
+
+The spelling vote keeps at most 16 distinct spellings per stored prefix. A full
+identity absent from that sample keeps its source spelling.
 
 The byte before the folded title records metadata extraction status: not
 attempted, extracted, or failed. The final four bytes contain the packed FAT
@@ -610,7 +616,7 @@ Per record, at `nameStart + nameOff`:
 ```text
 [u64 pathHash]    FNV-1a fingerprint of the complete path
 [nameLen bytes]  filename, without the directory
-[u8][author]     display author, one spelling chosen per authorKey across the library
+[u8][author]     display author, spelling voted within its complete identity when sampled
 [u8][title]      the book's own title, or length 0 if it never gave one
 [u8][source]     cleaned author spelling before the library-wide spelling vote
 ```

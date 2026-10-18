@@ -421,3 +421,58 @@ TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(index.bookCount(), 513);
 }
+
+TEST_F(LibraryBuilderTest, SharedAuthorPrefixDoesNotMergeDifferentPeople) {
+  bookMetadata["/a.epub"] = {"A", "Christopher Isherwood"};
+  bookMetadata["/b.epub"] = {"B", "Christopher Paolini"};
+  initial();
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  for (uint16_t ordinal = 0; ordinal < 2; ++ordinal) {
+    ClixRecord record{};
+    ASSERT_TRUE(index.readRecord(ordinal, record));
+    std::string author, path;
+    ASSERT_TRUE(index.readAuthor(record, author));
+    ASSERT_TRUE(index.readPath(record, path));
+    EXPECT_EQ(author, bookMetadata[path].author);
+  }
+}
+
+TEST_F(LibraryBuilderTest, SharedAuthorPrefixStillReconcilesAliasesOfOnePerson) {
+  fake::add("/c.epub");
+  bookMetadata["/a.epub"] = {"A", "Christopher Isherwood"};
+  bookMetadata["/b.epub"] = {"B", "Isherwood Christopher"};
+  bookMetadata["/c.epub"] = {"C", "Christopher Paolini"};
+  initial();
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  for (uint16_t ordinal = 0; ordinal < 3; ++ordinal) {
+    ClixRecord record{};
+    ASSERT_TRUE(index.readRecord(ordinal, record));
+    std::string author, path;
+    ASSERT_TRUE(index.readAuthor(record, author));
+    ASSERT_TRUE(index.readPath(record, path));
+    EXPECT_EQ(author, path == "/c.epub" ? "Christopher Paolini" : "Christopher Isherwood");
+  }
+}
+
+TEST_F(LibraryBuilderTest, AuthorsBeyondSpellingCapKeepTheirOwnIdentity) {
+  fake::reset();
+  bookMetadata.clear();
+  for (unsigned i = 0; i < 18; ++i) {
+    const std::string path = "/book" + numbered("", i) + ".epub";
+    fake::add(path);
+    bookMetadata[path] = {numbered("Book ", i), "Christopher Zulu" + std::string(1, 'a' + i)};
+  }
+  initial();
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  for (uint16_t ordinal = 0; ordinal < 18; ++ordinal) {
+    ClixRecord record{};
+    ASSERT_TRUE(index.readRecord(ordinal, record));
+    std::string author, path;
+    ASSERT_TRUE(index.readAuthor(record, author));
+    ASSERT_TRUE(index.readPath(record, path));
+    EXPECT_EQ(author, bookMetadata[path].author);
+  }
+}

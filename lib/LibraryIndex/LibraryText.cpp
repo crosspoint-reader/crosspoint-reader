@@ -329,14 +329,6 @@ std::string authorKey(const std::string_view author) {
     if (!key.empty()) key.push_back(' ');
     key.append(tokens[i]);
   }
-  // Truncate on bytes, not on a token boundary. Sorting puts a short forename
-  // first, so a whole-token cut would reduce "Wollstonecraft, Mary" to the key
-  // "alex" and merge every Alex in the library; the byte cut keeps
-  // "mary wollsto", which stays a prefix of the full key and discriminates.
-  if (key.size() > AUTHOR_KEY_MAX_BYTES) {
-    key.resize(static_cast<size_t>(utf8SafeTruncateBuffer(key.data(), AUTHOR_KEY_MAX_BYTES)));
-  }
-  while (!key.empty() && key.back() == ' ') key.pop_back();
   return key;
 }
 
