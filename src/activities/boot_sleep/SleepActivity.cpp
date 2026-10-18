@@ -482,7 +482,10 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
   if (!location.valid) return false;
 
   auto dir = Storage.open(dirPaths[location.directoryIndex]);
-  if (!dir || !dir.isDirectory()) return false;
+  if (!dir || !dir.isDirectory()) {
+    LOG_ERR("SLP", "Failed to open selected sleep image directory: %s", dirPaths[location.directoryIndex]);
+    return false;
+  }
   for (uint16_t index = 0; index <= location.localIndex; ++index) {
     if (!findNextValidSleepImage(dir, recentKind, name.get())) return false;
   }
