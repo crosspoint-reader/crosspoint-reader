@@ -68,9 +68,10 @@ namespace {
 // v57: Includes explicit hyphen/dash line breaks and invalidates both v56 layouts.
 // v58: Rebuild sections for corrected rendering layout and footnote placement.
 // v59: Preserve stored CSS styles during low-heap layout.
-// v60/61 were used by GIF/table builds with the earlier rendering format.
-// v62: Rebuild current rendering layouts to include supported static GIF images.
-constexpr uint8_t SECTION_FILE_VERSION = 62;
+// v60: Text running into a block or heading start stays in its own paragraph.
+// Earlier GIF/table development builds also used versions 60 through 62.
+// v63: Rebuild for corrected paragraph boundaries and supported static GIF images.
+constexpr uint8_t SECTION_FILE_VERSION = 63;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

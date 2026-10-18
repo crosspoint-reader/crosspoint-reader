@@ -90,14 +90,22 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 62
+### Version 63
 
-Version 62 retains the version 59 rendering format and rebuilds completed and
+Version 63 retains the version 60 rendering format and rebuilds completed and
 partial sections to include previously omitted GIFs and their alternative text.
-Versions 60 and 61 were used by earlier GIF/table builds with an incompatible
-rendering format and are not accepted. The partial-build sentinel remains
-derived from the final section version. Book metadata and saved progress are
-kept, but pagination can change as GIFs become visible.
+Earlier GIF/table development builds used versions 60 through 62; their caches
+also rebuild to preserve both the current rendering format and corrected
+paragraph boundaries. The partial-build sentinel remains derived from the final
+section version. Book metadata and saved progress are kept, but pagination can
+change as GIFs become visible.
+
+### Version 60
+
+The serialized layout is unchanged. Text that runs straight into a block or
+heading start (`text<div>…`) now stays in its own paragraph instead of being
+joined to the first word of the new block. Older completed and partial section
+caches rebuild automatically; book metadata and reading progress are kept.
 
 ### Version 59
 
@@ -316,7 +324,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 62
+#define EXPECTED_VERSION 63
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
