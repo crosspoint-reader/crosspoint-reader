@@ -1,0 +1,420 @@
+diff --git a/libs/network/Opds/include/OpdsClient.h b/libs/network/Opds/include/OpdsClient.h
+index b04601f..9b7503a 100644
+--- a/libs/network/Opds/include/OpdsClient.h
++++ b/libs/network/Opds/include/OpdsClient.h
+@@ -32,6 +32,7 @@ class OpdsClient {
+     AuthFailed,           // login attempted but failed
+     CredentialsMissing,   // server needs login but none is configured
+     ParseFailed,          // response was not a usable feed
++    ExternalAuthRequired,  // external catalog requested credentials
+     FetchFailed,          // transport error / non-auth HTTP failure
+   };
+ 
+@@ -82,8 +83,8 @@ class OpdsClient {
+   // caller skip an SD write on the common already-authorized path.
+   bool tokensDirty() const { return authDirty; }
+   // Auth block for an app-side request (e.g. the file download) that must carry
+-  // the same credentials the client negotiated.
+-  HttpAuth downloadAuth() const;
++  // the same credentials the client negotiated, only on the saved server origin.
++  HttpAuth downloadAuth(const std::string& url) const;
+ 
+  private:
+   OpdsTransport& http;
+@@ -103,7 +104,8 @@ class OpdsClient {
+   ClientStatusFn statusFn = nullptr;
+   void* statusCtx = nullptr;
+ 
+-  HttpAuth currentAuth() const;
++  bool sameServerOrigin(const std::string& url) const;
++  HttpAuth currentAuth(const std::string& url) const;
+   void notify(ClientPhase phase) const {
+     if (statusFn) statusFn(statusCtx, phase);
+   }
+diff --git a/libs/network/Opds/include/OpdsImplicitAuth.h b/libs/network/Opds/include/OpdsImplicitAuth.h
+index 3a73b14..ef4232a 100644
+--- a/libs/network/Opds/include/OpdsImplicitAuth.h
++++ b/libs/network/Opds/include/OpdsImplicitAuth.h
+@@ -5,10 +5,10 @@
+  * Drive an OPDS OAuth implicit-grant login without a browser. Follows the
+  * authentication document's "authenticate" URL, fills the first HTML login
+  * form encountered with the stored credentials (carrying session cookies
+- * across redirect hops, including federated SSO on another host), and
++ * across same-origin redirect hops), and
+  * captures the access token from the opds://authorize callback redirect.
+  *
+- * Verified against Cantook/De Marque catalogs (Lirtuel + Samarcande SSO).
++ * Redirects and form actions on another origin are rejected before sending credentials.
+  * Only available on wolfSSL builds; returns false elsewhere.
+  */
+ bool opdsImplicitAuthenticate(const std::string& authenticateUrl, const std::string& username,
+diff --git a/libs/network/Opds/src/OpdsClient.cpp b/libs/network/Opds/src/OpdsClient.cpp
+index cdff709..4fd4e10 100644
+--- a/libs/network/Opds/src/OpdsClient.cpp
++++ b/libs/network/Opds/src/OpdsClient.cpp
+@@ -1,6 +1,7 @@
+ #include "OpdsClient.h"
+ 
+ #include <utility>
++#include <HttpOrigin.h>
+ 
+ #include "OpdsAuthDoc.h"
+ #include "OpdsImplicitAuth.h"
+@@ -32,7 +33,7 @@ std::string primarySubtag(const std::string& acceptLang) {
+ }  // namespace
+ 
+ void OpdsClient::setServer(std::string url, std::string user, std::string pass, std::vector<HttpHeader> headers) {
+-  serverUrl = std::move(url);
++  serverUrl = url.find("://") == std::string::npos ? "http://" + url : std::move(url);
+   username = std::move(user);
+   password = std::move(pass);
+   customHeaders = std::move(headers);
+@@ -49,8 +50,14 @@ void OpdsClient::resetAuthState() {
+   credentialsMissingFlag = false;
+ }
+ 
+-HttpAuth OpdsClient::currentAuth() const {
++bool OpdsClient::sameServerOrigin(const std::string& url) const {
++  const std::string origin = freeink::httpOrigin(url);
++  return !origin.empty() && origin == freeink::httpOrigin(serverUrl);
++}
++
++HttpAuth OpdsClient::currentAuth(const std::string& url) const {
+   HttpAuth a;
++  if (!sameServerOrigin(url)) return a;
+   if (basicAuthLatched) {
+     a.username = username;
+     a.password = password;
+@@ -60,7 +67,7 @@ HttpAuth OpdsClient::currentAuth() const {
+   return a;
+ }
+ 
+-HttpAuth OpdsClient::downloadAuth() const { return currentAuth(); }
++HttpAuth OpdsClient::downloadAuth(const std::string& url) const { return currentAuth(url); }
+ 
+ OpdsClient::FetchStatus OpdsClient::fetchFeed(const std::string& url, OpdsFeedParser& parser) {
+   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
+@@ -69,7 +76,7 @@ OpdsClient::FetchStatus OpdsClient::fetchFeed(const std::string& url, OpdsFeedPa
+   authDirty = false;
+   for (int authAttempt = 0;; ++authAttempt) {
+     const HttpResult res =
+-        http.get(url, currentAuth(), FEED_ACCEPT, orNull(acceptLang), false,
++        http.get(url, currentAuth(url), FEED_ACCEPT, orNull(acceptLang), false,
+                  [&parser](const uint8_t* data, const size_t len) {
+                    parser.write(data, len);
+                    return !parser.error();  // abort the transfer on a parse error
+@@ -77,6 +84,10 @@ OpdsClient::FetchStatus OpdsClient::fetchFeed(const std::string& url, OpdsFeedPa
+     parser.flush();
+ 
+     if (!res.ok && res.status == 401) {
++      if (!sameServerOrigin(url)) {
++        LOG_ERR("OPDS", "External catalog requested credentials");
++        return FetchStatus::ExternalAuthRequired;
++      }
+       // The 401 body is an authentication document describing the server's
+       // flows. Try to renew an expired access token first (cheap); fall back to
+       // a full login (several seconds of TLS handshakes across the SSO).
+@@ -113,7 +124,7 @@ OpdsClient::FetchStatus OpdsClient::fetchFeed(const std::string& url, OpdsFeedPa
+ bool OpdsClient::fetchPublication(const std::string& docUrl, OpdsPublication& out) {
+   std::string doc;
+   doc.reserve(4096);
+-  http.get(docUrl, currentAuth(), PUB_ACCEPT, orNull(acceptLang), false,
++  http.get(docUrl, currentAuth(docUrl), PUB_ACCEPT, orNull(acceptLang), false,
+            [&doc](const uint8_t* data, const size_t len) {
+              const size_t room = doc.size() < MAX_PUB_DOC_BYTES ? MAX_PUB_DOC_BYTES - doc.size() : 0;
+              doc.append(reinterpret_cast<const char*>(data), len < room ? len : room);
+@@ -126,7 +137,7 @@ bool OpdsClient::fetchPublication(const std::string& docUrl, OpdsPublication& ou
+ bool OpdsClient::resolveIndirect(const std::string& docUrl, std::string& outDownloadUrl, bool& outIsEpub) {
+   std::string doc;
+   doc.reserve(4096);
+-  const bool fetched = http.get(docUrl, currentAuth(), nullptr, nullptr, false,
++  const bool fetched = http.get(docUrl, currentAuth(docUrl), nullptr, nullptr, false,
+                                 [&doc](const uint8_t* data, const size_t len) {
+                                   const size_t room = doc.size() < MAX_PUB_DOC_BYTES ? MAX_PUB_DOC_BYTES - doc.size() : 0;
+                                   doc.append(reinterpret_cast<const char*>(data), len < room ? len : room);
+@@ -146,7 +157,7 @@ bool OpdsClient::resolveIndirect(const std::string& docUrl, std::string& outDown
+ bool OpdsClient::fetchSearchTemplate(const std::string& descUrl, std::string& outTemplate) {
+   LOG_DBG("OPDS", "Fetching OpenSearch description: %s", descUrl.c_str());
+   OpenSearchDescParser parser;
+-  const bool fetched = http.get(descUrl, currentAuth(), nullptr, nullptr, false,
++  const bool fetched = http.get(descUrl, currentAuth(descUrl), nullptr, nullptr, false,
+                                 [&parser](const uint8_t* data, const size_t len) {
+                                   parser.write(data, len);
+                                   return !parser.error();
+@@ -167,8 +178,12 @@ bool OpdsClient::fetchSearchTemplate(const std::string& descUrl, std::string& ou
+ //  - basic: latched so subsequent requests send the stored credentials.
+ //  - oauth/password: POST the stored credentials to the "authenticate" link and
+ //    keep the returned access token as a Bearer header.
+-//  - oauth/implicit: an HTML login (possibly a federated SSO) driven headlessly.
++//  - oauth/implicit: an HTML login on the saved server origin.
+ bool OpdsClient::authenticate(const std::string& resourceUrl) {
++  if (!sameServerOrigin(resourceUrl)) {
++    LOG_ERR("OPDS", "Refusing authentication outside the saved server origin");
++    return false;
++  }
+   std::string body;
+   body.reserve(1024);
+   // No credentials on the probe, but an auth proxy still needs its headers.
+@@ -197,6 +212,10 @@ bool OpdsClient::authenticate(const std::string& resourceUrl) {
+ 
+   if (doc.hasOauthPassword && !doc.tokenUrl.empty()) {
+     const std::string tokenUrl = http.resolveUrl(resourceUrl, doc.tokenUrl);
++    if (!sameServerOrigin(tokenUrl)) {
++      LOG_ERR("OPDS", "Refusing an external password endpoint");
++      return false;
++    }
+     const std::string form =
+         "grant_type=password&username=" + opdsPercentEncode(username) + "&password=" + opdsPercentEncode(password);
+     std::string response;
+@@ -221,11 +240,14 @@ bool OpdsClient::authenticate(const std::string& resourceUrl) {
+     return false;
+   }
+ 
+-  // Implicit grant: the server's login is an HTML form (possibly a federated
+-  // SSO on another host). Drive it headlessly with the stored credentials and
++  // Implicit grant: drive same-origin HTML forms with the stored credentials and
+   // capture the opds://authorize callback token.
+   if (doc.hasOauthImplicit && !doc.implicitUrl.empty()) {
+     const std::string implicitUrl = http.resolveUrl(resourceUrl, doc.implicitUrl);
++    if (!sameServerOrigin(implicitUrl)) {
++      LOG_ERR("OPDS", "Refusing an external login endpoint");
++      return false;
++    }
+     std::string token;
+     if (opdsImplicitAuthenticate(implicitUrl, username, password, token)) {
+       bearerToken = std::move(token);
+@@ -253,6 +275,10 @@ bool OpdsClient::authenticate(const std::string& resourceUrl) {
+ }
+ 
+ bool OpdsClient::tryRefreshToken() {
++  if (!sameServerOrigin(tokenRefreshUrl)) {
++    LOG_ERR("OPDS", "Refusing an external token refresh endpoint");
++    return false;
++  }
+   const std::string form = "grant_type=refresh_token&refresh_token=" + opdsPercentEncode(refreshTokenValue);
+   std::string response;
+   int tokenStatus = 0;
+diff --git a/libs/network/Opds/src/OpdsImplicitAuth.cpp b/libs/network/Opds/src/OpdsImplicitAuth.cpp
+index e59014c..461cbf1 100644
+--- a/libs/network/Opds/src/OpdsImplicitAuth.cpp
++++ b/libs/network/Opds/src/OpdsImplicitAuth.cpp
+@@ -7,6 +7,7 @@
+ #include <Arduino.h>
+ #include <OpdsLoginForm.h>
+ #include <SecureHttpClient.h>
++#include <HttpOrigin.h>
+ 
+ namespace {
+ 
+@@ -56,6 +57,11 @@ std::string hostOf(const std::string& url) {
+ 
+ bool opdsImplicitAuthenticate(const std::string& authenticateUrl, const std::string& username,
+                               const std::string& password, std::string& outToken) {
++  const std::string authOrigin = freeink::httpOrigin(authenticateUrl);
++  if (authOrigin.empty()) {
++    LOG_ERR("OPDS", "Implicit auth: invalid authentication origin");
++    return false;
++  }
+   OpdsCookieJar jar;
+   std::string url = authenticateUrl;
+   ensureImplicitAuthParams(url);
+@@ -64,6 +70,10 @@ bool opdsImplicitAuthenticate(const std::string& authenticateUrl, const std::str
+   bool passwordSubmitted = false;
+ 
+   for (int step = 0; step < MAX_STEPS; ++step) {
++    if (freeink::httpOrigin(url) != authOrigin) {
++      LOG_ERR("OPDS", "Implicit auth: refusing an external login step");
++      return false;
++    }
+     freeink::SecureHttpClient http;
+     http.setTimeout(AUTH_TIMEOUT_MS);
+     http.setInsecure();
+diff --git a/libs/network/SecureNet/include/HttpOrigin.h b/libs/network/SecureNet/include/HttpOrigin.h
+new file mode 100644
+index 0000000..742d2a7
+--- /dev/null
++++ b/libs/network/SecureNet/include/HttpOrigin.h
+@@ -0,0 +1,62 @@
++#pragma once
++
++#include <charconv>
++#include <cstdint>
++#include <string>
++#include <string_view>
++
++namespace freeink {
++
++struct HttpOrigin {
++  std::string scheme;
++  std::string host;
++  uint16_t port = 0;
++  size_t pathOffset = 0;
++};
++
++// The origin parser and transport must agree on the host receiving credentials.
++inline bool parseHttpOrigin(const std::string& url, HttpOrigin& origin) {
++  for (unsigned char c : url) {
++    if (c <= ' ' || c == 127) return false;
++  }
++  const size_t schemeEnd = url.find("://");
++  if (schemeEnd == std::string::npos) return false;
++  origin.scheme = url.substr(0, schemeEnd);
++  for (char& c : origin.scheme) {
++    if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
++  }
++  if (origin.scheme != "http" && origin.scheme != "https") return false;
++  const size_t start = schemeEnd + 3;
++  const size_t end = url.find_first_of("/?#", start);
++  origin.pathOffset = end == std::string::npos ? url.size() : end;
++  const std::string_view authority(url.data() + start, origin.pathOffset - start);
++  const size_t colon = authority.find(':');
++  const std::string_view host = authority.substr(0, colon);
++  if (host.empty()) return false;
++  for (unsigned char c : host) {
++    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' ||
++          c == '_'))
++      return false;
++  }
++  origin.host.assign(host);
++  for (char& c : origin.host) {
++    if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
++  }
++  unsigned port = origin.scheme == "https" ? 443 : 80;
++  if (colon != std::string_view::npos) {
++    const auto value = authority.substr(colon + 1);
++    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), port);
++    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || port == 0 || port > 65535)
++      return false;
++  }
++  origin.port = static_cast<uint16_t>(port);
++  return true;
++}
++
++inline std::string httpOrigin(const std::string& url) {
++  HttpOrigin origin;
++  if (!parseHttpOrigin(url, origin)) return {};
++  return origin.scheme + "://" + origin.host + ":" + std::to_string(origin.port);
++}
++
++}  // namespace freeink
+diff --git a/libs/network/SecureNet/include/ResumableFetch.h b/libs/network/SecureNet/include/ResumableFetch.h
+index 29211d3..62294f0 100644
+--- a/libs/network/SecureNet/include/ResumableFetch.h
++++ b/libs/network/SecureNet/include/ResumableFetch.h
+@@ -52,24 +52,7 @@ struct FetchResult {
+ 
+ // scheme://host:port, lowercased, with the scheme's default port made explicit
+ // and any userinfo dropped: the unit credentials are scoped to.
+-inline std::string fetchOrigin(const std::string& url) {
+-  const size_t schemeEnd = url.find("://");
+-  if (schemeEnd == std::string::npos) return {};
+-  std::string scheme = url.substr(0, schemeEnd);
+-  const size_t hostStart = schemeEnd + 3;
+-  const size_t hostEnd = url.find_first_of("/?#", hostStart);
+-  std::string authority = url.substr(hostStart, hostEnd == std::string::npos ? std::string::npos : hostEnd - hostStart);
+-  const size_t at = authority.rfind('@');
+-  if (at != std::string::npos) authority.erase(0, at + 1);
+-  for (auto* part : {&scheme, &authority}) {
+-    for (char& c : *part) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+-  }
+-  const size_t bracket = authority.rfind(']');  // IPv6 literal: its colons are not a port
+-  if (authority.find(':', bracket == std::string::npos ? 0 : bracket) == std::string::npos) {
+-    authority += scheme == "https" ? ":443" : ":80";
+-  }
+-  return scheme + "://" + authority;
+-}
++inline std::string fetchOrigin(const std::string& url) { return httpOrigin(url); }
+ 
+ // A resumable response must identify both its byte interval and resource size.
+ inline bool parseFetchContentRange(std::string_view value, size_t& first, size_t& last, size_t& total) {
+@@ -91,7 +74,7 @@ inline bool parseFetchContentRange(std::string_view value, size_t& first, size_t
+ 
+ // GETs url into sink. configure runs on each attempt's client after begin():
+ // user agent, timeout, trust, and (only while sameOrigin) credentials and other
+-// caller headers. sameOrigin is false once a redirect leaves the starting URL's
++// caller headers. sameOrigin is false when a redirect leaves the starting URL's
+ // scheme, host, or port, including an https->http step-down, so a caller's
+ // Authorization never reaches a different server or crosses in clear text.
+ // Non-2xx bodies never reach the sink.
+diff --git a/libs/network/SecureNet/include/SecureHttpClient.h b/libs/network/SecureNet/include/SecureHttpClient.h
+index aac21ef..96c4449 100644
+--- a/libs/network/SecureNet/include/SecureHttpClient.h
++++ b/libs/network/SecureNet/include/SecureHttpClient.h
+@@ -46,6 +46,7 @@
+ #include <vector>
+ 
+ #include "SecureClient.h"
++#include "HttpOrigin.h"
+ 
+ namespace freeink {
+ 
+@@ -376,27 +377,16 @@ class SecureHttpClient {
+ 
+   static bool parseUrl(const std::string& url, std::string& scheme, std::string& host, std::string& path,
+                        uint16_t& port) {
+-    const size_t schemeEnd = url.find("://");
+-    if (schemeEnd == std::string::npos) return false;
+-    // URL schemes are case-insensitive (RFC 3986 §3.1): "HTTPS://..." from a
+-    // server's Location header or user input must parse like "https://...".
+-    scheme = url.substr(0, schemeEnd);
+-    std::transform(scheme.begin(), scheme.end(), scheme.begin(),
+-                   [](unsigned char c) { return static_cast<char>(tolower(c)); });
+-    const size_t hostStart = schemeEnd + 3;
+-    const size_t pathStart = url.find('/', hostStart);
+-    const std::string hostPort =
+-        pathStart == std::string::npos ? url.substr(hostStart) : url.substr(hostStart, pathStart - hostStart);
+-    path = pathStart == std::string::npos ? "/" : url.substr(pathStart);
+-    const size_t portSep = hostPort.rfind(':');
+-    if (portSep != std::string::npos) {
+-      host = hostPort.substr(0, portSep);
+-      port = static_cast<uint16_t>(atoi(hostPort.substr(portSep + 1).c_str()));
+-    } else {
+-      host = hostPort;
+-      port = scheme == "https" ? 443 : 80;
+-    }
+-    return !host.empty() && (scheme == "http" || scheme == "https");
++    HttpOrigin origin;
++    if (!parseHttpOrigin(url, origin)) return false;
++    scheme = std::move(origin.scheme);
++    host = std::move(origin.host);
++    port = origin.port;
++    path = url.substr(origin.pathOffset);
++    const size_t fragment = path.find('#');
++    if (fragment != std::string::npos) path.resize(fragment);
++    if (path.empty() || path[0] != '/') path.insert(0, "/");
++    return true;
+   }
+ 
+   std::string hostHeader() const {
+diff --git a/libs/network/SecureNet/test/host/test_resumable_fetch.cpp b/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
+index b7809fb..f33b5db 100644
+--- a/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
++++ b/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
+@@ -146,13 +146,24 @@ int main() {
+   r = get("http://a/f", sink());
+   assert(r.complete && sentAuth(0) && sentAuth(1));
+ 
+-  // Origin equality: default ports, case, and userinfo don't matter; scheme,
++  // Origin equality: default ports and case do not matter; scheme,
+   // host, and port do (an https->http step-down is a different origin).
+   assert(freeink::fetchOrigin("HTTPS://Host.Example/x") == freeink::fetchOrigin("https://host.example:443/y"));
+-  assert(freeink::fetchOrigin("http://user:pw@a:80/") == freeink::fetchOrigin("http://a"));
++  assert(freeink::fetchOrigin("http://user:pw@a:80/").empty());
+   assert(freeink::fetchOrigin("https://a/") != freeink::fetchOrigin("http://a/"));
+   assert(freeink::fetchOrigin("https://a/") != freeink::fetchOrigin("https://a:8443/"));
+-  assert(freeink::fetchOrigin("http://[::1]/") == "http://[::1]:80");
++  assert(freeink::fetchOrigin("http://[::1]/").empty());
++
++  // Invalid authority forms cannot disagree with the credential-origin comparison.
++  for (const char* bad : {"http://evil:80@a/", "http://a:0/", "http://a:65536/", "http://a:80junk/", "http://a\\evil/",
++                          "http://a/\r\nInjected:yes"}) {
++    reset({"HTTP/1.1 302 Found\r\nLocation: http://evil:80@a/g\r\nContent-Length: 0\r\n\r\n"});
++    r = get(bad, sink());
++    assert(!r.complete && r.status == -1 && FakeNet::requests().empty());
++  }
++  reset({"HTTP/1.1 302 Found\r\nLocation: http://evil:80@a/g\r\nContent-Length: 0\r\n\r\n"});
++  r = get("http://a/f", sink());
++  assert(!r.complete && r.status == -1 && FakeNet::requests().size() == 1);
+ 
+   // Error bodies never reach the sink, and an http error is not retried.
+   reset({"HTTP/1.1 404 Not Found\r\nContent-Length: 4\r\n\r\nnope", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"});

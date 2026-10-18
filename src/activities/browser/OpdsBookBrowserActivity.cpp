@@ -324,6 +324,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   if (opdsClient.tokensDirty()) persistTokens();
   if (status != freeink::opds::OpdsClient::FetchStatus::Ok) {
     switch (status) {
+      case freeink::opds::OpdsClient::FetchStatus::ExternalAuthRequired:
+        fail(StrId::STR_FEED_EXTERNAL_AUTH);
+        break;
       case freeink::opds::OpdsClient::FetchStatus::CredentialsMissing:
         fail(StrId::STR_SET_CREDENTIALS_FIRST);
         break;
@@ -547,7 +550,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // the current feed when the transfer finishes.
   releaseEntries();
 
-  const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
+  const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth(downloadUrl);
   std::vector<HttpDownloader::Header> headers = dlAuth.headers;
   if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
   // downloadFile() (CatalogActivity) releases font caches, checks the TLS heap
@@ -576,7 +579,7 @@ void OpdsBookBrowserActivity::downloadLcpBook(const OpdsEntry& book) {
   {
     int status = 0;
     HttpDownloader::FetchOptions options;
-    const freeink::opds::HttpAuth auth = opdsClient.downloadAuth();
+    const freeink::opds::HttpAuth auth = opdsClient.downloadAuth(licenseUrl);
     options.username = auth.username;
     options.password = auth.password;
     options.bearer = auth.bearer;
@@ -905,7 +908,7 @@ void OpdsBookBrowserActivity::loadDetailCover(const std::string& docUrl, const s
     LOG_INF("OPDS", "Skipping cover: low heap");
     return;
   }
-  const freeink::opds::HttpAuth auth = opdsClient.downloadAuth();
+  const freeink::opds::HttpAuth auth = opdsClient.downloadAuth(url);
   std::vector<HttpDownloader::Header> headers = auth.headers;
   if (!auth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + auth.bearer});
   const auto result = HttpDownloader::downloadToFile(url, tmp, nullptr, nullptr, auth.username, auth.password, headers);

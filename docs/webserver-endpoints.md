@@ -678,3 +678,14 @@ poll promptly after completion).
 Headless executor page: loads every plugin with its UI hidden so registered
 actions run. Keep it open (browser tab or embedded webview) while jobs are
 queued; jobs enqueued with no page open stay pending until one opens.
+
+### OPDS credential origins
+
+Saved OPDS passwords, bearer tokens, and custom headers are sent only to the saved
+server's scheme, host, and effective port. Public external feeds, publications,
+and downloads remain accessible without those credentials. An external feed that
+requests login must be configured as its own server.
+
+Password, token refresh, and implicit login endpoints must use the saved server
+origin. Implicit-login redirects and form actions also stay on that origin;
+federated sign-in through another origin is refused before sending credentials.

@@ -75,6 +75,13 @@ upload protocol.
 For Calibre OPDS browsing, add `/opds` to the catalog URL when configuring an
 OPDS server.
 
+The native OPDS browser keeps each saved server's username, password, and all
+custom headers on that server's origin (scheme, host, and effective port).
+Absolute links to another origin are requested without those credentials. Add
+the destination URL as a separate server if it needs authentication. HTTP and
+HTTPS are different origins. URL userinfo and IPv6 literal authorities are
+rejected by the current transport.
+
 ## Web Interface
 
 The browser UI has four primary pages.

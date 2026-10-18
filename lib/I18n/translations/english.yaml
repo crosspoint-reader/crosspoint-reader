@@ -645,3 +645,5 @@ STR_BT_CONNECTED_TO: "Connected to %s"
 STR_BT_LOW_MEMORY: "Bluetooth: not enough memory"
 STR_BT_HOLD: "hold"
 STR_BT_MAPPING_CLEARED: "Mapping cleared"
+
+STR_FEED_EXTERNAL_AUTH: "Credentials stay with the saved server. Add this URL as a separate server."
