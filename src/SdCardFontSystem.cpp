@@ -32,12 +32,12 @@ void ttfYield() {
   vTaskDelay(1);
 }
 
-// Lists a TTF family only when flash mode can install it; larger families wait for SD mode (Stage 2c-4).
-bool ttfFamilyFits(const uint32_t* styleBytes, const uint8_t count) {
+// Lists a TTF family only when the glyph store can install it, in flash mode or, larger, in SD mode.
+bool ttfFamilyFits(const uint32_t* fileBytes, const uint32_t* sdBytes, const uint8_t count) {
   // While the store is open its mappings hide the budget an install would get: the load decides then.
   if (EspNorFlash::liveMappings() != 0) return true;
   EspNorFlash flash;
-  return flash.begin() && ttf::fitsFlashMode(styleBytes, count, flash.size(), flash.freeMapPages());
+  return flash.begin() && ttf::fitsStore(fileBytes, sdBytes, count, flash.size(), flash.freeMapPages());
 }
 
 }  // namespace

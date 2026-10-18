@@ -343,16 +343,34 @@ TEST(TtfFamily, TheBundledFilesCarryTheirWeights) {
   EXPECT_EQ(700, ttf::probeFile(bold.source()).weight);
 }
 
-TEST(TtfFamily, AFamilyFitsFlashModeOnlyWithinThePartitionAndTheMappingBudget) {
+TEST(TtfFamily, AFamilyFitsTheStoreInFlashModeElseInSdMode) {
   constexpr uint32_t kX3FontArea = 3538944 - 65536;
   const uint32_t bookerly[4] = {450048, 452000, 460000, 455000};
-  EXPECT_TRUE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 32));
-  const uint32_t cjk[1] = {10u * 1024 * 1024};  // one CJK style is larger than the partition
-  EXPECT_FALSE(ttf::fitsFlashMode(cjk, 1, kX3FontArea, 32));
-  const uint32_t wide[4] = {1000000, 1000000, 1000000, 1000000};  // 4 MB of styles
-  EXPECT_FALSE(ttf::fitsFlashMode(wide, 4, kX3FontArea, 32));
-  EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 12));  // too few mapping pages for a style and a log
-  EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 0, kX3FontArea, 32));
+  const uint32_t bookerlyTables[4] = {176356, 178372, 170664, 184176};
+  EXPECT_TRUE(ttf::fitsStore(bookerly, bookerlyTables, 4, kX3FontArea, 32));
+  // One CJK style is larger than the partition; its tables are not (DroidSansFallbackFull: 4 MB, 357 KB of tables).
+  const uint32_t cjk[1] = {10u * 1024 * 1024};
+  const uint32_t cjkTables[1] = {356752};
+  EXPECT_TRUE(ttf::fitsStore(cjk, cjkTables, 1, kX3FontArea, 32));
+  const uint32_t noTables[1] = {0};  // a file whose SD-mode block cannot be made
+  EXPECT_FALSE(ttf::fitsStore(cjk, noTables, 1, kX3FontArea, 32));
+  // Four styles of 1 MB with 450 KB of tables each: too large whole, and their tables, mapped together, pass the
+  // mapping budget.
+  const uint32_t wide[4] = {1000000, 1000000, 1000000, 1000000};
+  const uint32_t wideTables[4] = {450000, 450000, 450000, 450000};
+  EXPECT_FALSE(ttf::fitsStore(wide, wideTables, 4, kX3FontArea, 32));
+  EXPECT_FALSE(ttf::fitsStore(bookerly, bookerlyTables, 4, kX3FontArea, 12));  // too few mapping pages either way
+  EXPECT_FALSE(ttf::fitsStore(bookerly, bookerlyTables, 0, kX3FontArea, 32));
+}
+
+TEST(TtfFamily, TheProbeSaysWhatTheSdModeBlockTakes) {
+  for (const char* name : {"Bookerly/Bookerly-Regular.ttf", "Inter/Inter-Bold.ttf", "NotoSans/NotoSans-Italic.ttf",
+                           "Ubuntu/Ubuntu-Regular.ttf"}) {
+    MemoryFile file{readFont(name)};
+    ttf::SdBlock block;
+    ASSERT_TRUE(block.plan(file.source())) << name;
+    EXPECT_EQ(block.bytes(), ttf::probeFile(file.source()).sdBytes) << name;
+  }
 }
 
 // --- SD mode's style block ---

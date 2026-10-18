@@ -44,6 +44,8 @@ struct FileProbe {
   uint16_t weight = 400;
   /// It has an fvar table: a variable font, drawn as its default instance only (spec 5.6).
   bool variable = false;
+  /// What its SD-mode block would take (SdBlock::bytes()).
+  uint32_t sdBytes = 0;
 };
 FileProbe probeFile(const FileSource& file);
 /// probeFile(file).style.
@@ -98,10 +100,12 @@ class SdBlock {
   uint32_t bytes_ = 0;
 };
 
-/// True when flash mode can install a family with these style file sizes: every style copied into a font area of
-/// `usableBytes`, with the largest style, the index and a minimal log mapped within `freeMapPages`
-/// (glyphstore::planLayout). Larger families need SD mode (Stage 2c-4).
-bool fitsFlashMode(const uint32_t* styleBytes, uint8_t count, uint32_t usableBytes, uint32_t freeMapPages);
+/// True when the glyph store can install a family with these styles: in flash mode, every style's file
+/// (`fileBytes`) copied into a font area of `usableBytes`, with the largest style, the index and a minimal log mapped
+/// within `freeMapPages`; else in SD mode, every style's tables (`sdBytes`, FileProbe::sdBytes) copied and mapped
+/// together (glyphstore::planLayout).
+bool fitsStore(const uint32_t* fileBytes, const uint32_t* sdBytes, uint8_t count, uint32_t usableBytes,
+               uint32_t freeMapPages);
 
 /// Bump whenever the engine's output changes for the same font (the rasterizer, the 150 dpi sizing, the 2-bit
 /// thresholds): the identity changes with it, so every installed store is rebuilt.

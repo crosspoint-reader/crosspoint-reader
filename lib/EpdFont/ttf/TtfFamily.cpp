@@ -24,6 +24,16 @@ constexpr uint32_t kAllRequired = (1u << (sizeof kRequired / sizeof kRequired[0]
 // The tables an SD-mode block copies: every one the engine reads (parseFace(), the layout readers) but glyf.
 constexpr uint32_t kCopiedInSdMode[] = {tag("cmap"), tag("head"), tag("hhea"), tag("hmtx"), tag("loca"),
                                         tag("maxp"), tag("OS/2"), tag("GPOS"), tag("GSUB"), tag("kern")};
+bool copiedInSdMode(const uint32_t tableTag) {
+  for (const uint32_t copied : kCopiedInSdMode) {
+    if (tableTag == copied) return true;
+  }
+  return false;
+}
+// An SD-mode block's bytes: the sfnt header, a record per copied table and one for glyf, then the tables.
+constexpr uint64_t sdBlockBytes(const uint32_t copied, const uint64_t tableBytes) {
+  return 12 + 16 * (copied + 1) + tableBytes;
+}
 constexpr uint16_t kMaxDirectory = 256;  // real fonts have under 40 tables; this bounds a hostile directory's reads
 constexpr uint32_t kHeadBytes = 54;
 constexpr uint32_t kHeadMagic = 0x5F0F3CF5;
@@ -115,16 +125,22 @@ bool assignStyles(const FileProbe* files, const size_t count, int (&out)[4]) {
 
 int probeStyle(const FileSource& file) { return probeFile(file).style; }
 
-bool fitsFlashMode(const uint32_t* styleBytes, const uint8_t count, const uint32_t usableBytes,
-                   const uint32_t freeMapPages) {
+bool fitsStore(const uint32_t* fileBytes, const uint32_t* sdBytes, const uint8_t count, const uint32_t usableBytes,
+               const uint32_t freeMapPages) {
   if (count == 0 || count > glyphstore::kMaxStyles) return false;
   glyphstore::PlanInput in{};
   in.styleCount = count;
-  for (uint8_t s = 0; s < count; ++s) in.styleBytes[s] = styleBytes[s];
   in.usableBytes = usableBytes;
   in.freeMapPages = freeMapPages;
   glyphstore::Layout layout{};
-  return glyphstore::planLayout(in, layout);
+  for (const uint8_t mode : {glyphstore::kModeFlash, glyphstore::kModeSd}) {
+    for (uint8_t s = 0; s < count; ++s) {
+      in.styleMode[s] = mode;
+      in.styleBytes[s] = mode == glyphstore::kModeFlash ? fileBytes[s] : sdBytes[s];
+    }
+    if (glyphstore::planLayout(in, layout)) return true;
+  }
+  return false;
 }
 
 FileProbe probeFile(const FileSource& file) {
@@ -135,11 +151,17 @@ FileProbe probeFile(const FileSource& file) {
     uint32_t headOffset = 0;
     uint32_t os2Offset = 0;
     bool hasOs2Weight = false;
+    uint32_t sdTables = 0;
+    uint64_t sdTableBytes = 0;
   } scan{file};
   uint32_t version = 0;
   const auto visit = [](void* ctx, const Record& record) {
     Scan& scan = *static_cast<Scan*>(ctx);
     if (record.tag == tag("fvar")) scan.probe.variable = true;
+    if (copiedInSdMode(record.tag)) {
+      ++scan.sdTables;
+      scan.sdTableBytes += glyphstore::align4(record.length);
+    }
     if (record.tag == tag("OS/2") && inFile(scan.file, record.offset, record.length) && record.length >= 6) {
       scan.os2Offset = record.offset;
       scan.hasOs2Weight = true;
@@ -158,6 +180,9 @@ FileProbe probeFile(const FileSource& file) {
   if (!forEachTable(file, &version, visit, &scan) || scan.found != kAllRequired) return {};
   FileProbe& probe = scan.probe;
   const uint32_t headOffset = scan.headOffset;
+  // As SdBlock::plan() lays it out; a tag listed twice (a broken directory) is counted twice, which only overstates.
+  const uint64_t sdBytes = sdBlockBytes(scan.sdTables, scan.sdTableBytes);
+  probe.sdBytes = sdBytes < UINT32_MAX ? static_cast<uint32_t>(sdBytes) : UINT32_MAX;
 
   uint8_t head[kHeadBytes];
   if (!file.read(file.ctx, headOffset, head, sizeof head) || be32(head + 12) != kHeadMagic) return {};
@@ -180,7 +205,7 @@ bool SdBlock::plan(const FileSource& file) {
   glyf_ = {};
   const auto visit = [](void* ctx, const Record& record) { return static_cast<SdBlock*>(ctx)->addTable(&record); };
   if (!forEachTable(file, &version_, visit, this)) return false;
-  // The directory, then the tables, each 4-byte aligned; glyf at the end, past them all.
+  // The directory, then the tables, each 4-byte aligned; glyf at the end, past them all (sdBlockBytes()).
   uint64_t end = 12 + 16u * count_;
   int glyf = -1;
   for (uint8_t i = 0; i < count_; ++i) {
@@ -202,9 +227,7 @@ bool SdBlock::plan(const FileSource& file) {
 // A directory record (a Record): kept when SD mode copies its table, or it is glyf.
 bool SdBlock::addTable(const void* record) {
   const Record& table = *static_cast<const Record*>(record);
-  bool wanted = table.tag == tag("glyf");
-  for (const uint32_t copied : kCopiedInSdMode) wanted = wanted || table.tag == copied;
-  if (!wanted) return true;
+  if (table.tag != tag("glyf") && !copiedInSdMode(table.tag)) return true;
   for (uint8_t i = 0; i < count_; ++i) {
     if (tables_[i].tag == table.tag) return true;  // the first record of a tag is the one parseFace() reads
   }
