@@ -6412,7 +6412,8 @@ void EpubReaderActivity::renderStatusBar() const {
   const SyncIndicator syncIndicator = SyncIndicator::None;
 #endif
   GUI.drawStatusBar(renderer, bookProgress, chapter.page, chapter.total, title, 0, isStarred, printedPageLabel,
-                    /*fillMargin=*/true, /*pageCountApproximate=*/chapter.approximate, syncIndicator);
+                    /*fillMargin=*/true, /*pageCountApproximate=*/chapter.approximate, syncIndicator,
+                    /*lowMemory=*/memoryDegradedPage(currentSpineIndex, section->currentPage));
 
 #if DEBUG_BACKGROUND_WORK
   renderBackgroundDebugOverlay();
