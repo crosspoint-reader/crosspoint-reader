@@ -21,8 +21,10 @@ word in another family than its block's has that family's face at the block's si
 spans and the inline <code> of the mixed body paragraph do.
 
 With --fonts DIR the book embeds TrueType faces for the device test (Ubuntu as Book Body, Inter as Book Display,
-Noto Sans Italic as Book Script, Ubuntu Bold as Book Code, all from lib/EpdFont/builtinFonts/source) and is written
-to --out; the corpus copy embeds none, the layout does not read them.
+Noto Sans as Book Script, Inter Bold as Book Code, all from lib/EpdFont/builtinFonts/source) and is written to
+--out; the corpus copy embeds none, the layout does not read them. A one-face family's file must declare itself
+regular (the card's family scan takes a file's style from the file): Inter-Bold.ttf does, NotoSans-Italic.ttf and
+Ubuntu-Bold.ttf do not.
 
 Regenerate with:  python test/epubs/make_test_font_families.py
 then refresh goldens: UPDATE_GOLDENS=1 ctest --test-dir <build> -R EpubPipeline
@@ -51,8 +53,8 @@ FACES = [
     ("Book Body", "bold", "Ubuntu/Ubuntu-Bold.ttf", "body-bold.ttf"),
     ("Book Display", "normal", "Inter/Inter-Regular.ttf", "display.ttf"),
     ("Book Display", "bold", "Inter/Inter-Bold.ttf", "display-bold.ttf"),
-    ("Book Script", "normal", "NotoSans/NotoSans-Italic.ttf", "script.ttf"),
-    ("Book Code", "normal", "Ubuntu/Ubuntu-Bold.ttf", "code.ttf"),
+    ("Book Script", "normal", "NotoSans/NotoSans-Regular.ttf", "script.ttf"),
+    ("Book Code", "normal", "Inter/Inter-Bold.ttf", "code.ttf"),
 ]
 
 CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
