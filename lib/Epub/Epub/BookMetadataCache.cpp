@@ -2,6 +2,7 @@
 
 #include <BufferedFile.h>
 #include <Logging.h>
+#include <MemoryManager.h>
 #include <Serialization.h>
 #include <Utf8.h>
 #include <ZipFile.h>
@@ -22,6 +23,13 @@ constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
 constexpr size_t BUILD_IO_BUFFER_SIZE = 4096;
 // The render task and the main loop both ask for sizes.
 std::mutex sizeWindowLock;
+
+template <typename F>
+bool readCacheString(F& file, std::string& value) {
+  const size_t largest = freeink::MemoryManager::instance().largestFreeBlock();
+  const size_t limit = largest == 0 ? 0 : std::min<size_t>(file.available(), largest - 1);
+  return serialization::tryReadString(file, value, limit);
+}
 
 // Entry (de)serializers, templated so they run over HalFile and the Buffered*
 // wrappers alike (two instantiations each -- a few hundred bytes of flash, in
@@ -47,23 +55,16 @@ uint32_t writeTocEntryTo(F& file, const BookMetadataCache::TocEntry& entry) {
 }
 
 template <typename F>
-BookMetadataCache::SpineEntry readSpineEntryFrom(F& file) {
-  BookMetadataCache::SpineEntry entry;
-  serialization::readString(file, entry.href);
-  serialization::readPod(file, entry.cumulativeSize);
-  serialization::readPod(file, entry.tocIndex);
-  return entry;
+bool readSpineEntryFrom(F& file, BookMetadataCache::SpineEntry& entry) {
+  return readCacheString(file, entry.href) && serialization::tryReadPod(file, entry.cumulativeSize) &&
+         serialization::tryReadPod(file, entry.tocIndex);
 }
 
 template <typename F>
-BookMetadataCache::TocEntry readTocEntryFrom(F& file) {
-  BookMetadataCache::TocEntry entry;
-  serialization::readString(file, entry.title);
-  serialization::readString(file, entry.href);
-  serialization::readString(file, entry.anchor);
-  serialization::readPod(file, entry.level);
-  serialization::readPod(file, entry.spineIndex);
-  return entry;
+bool readTocEntryFrom(F& file, BookMetadataCache::TocEntry& entry) {
+  return readCacheString(file, entry.title) && readCacheString(file, entry.href) &&
+         readCacheString(file, entry.anchor) && serialization::tryReadPod(file, entry.level) &&
+         serialization::tryReadPod(file, entry.spineIndex);
 }
 }  // namespace
 
@@ -71,6 +72,7 @@ BookMetadataCache::TocEntry readTocEntryFrom(F& file) {
 
 bool BookMetadataCache::beginWrite() {
   buildMode = true;
+  buildFailed = false;
   spineCount = 0;
   tocCount = 0;
   LOG_DBG("BMC", "Entering write mode");
@@ -93,11 +95,11 @@ bool BookMetadataCache::endContentOpfPass() {
   const bool flushed = !passOut || passOut->flush();
   passOut.reset();
   // Explicit close() required: member variable persists beyond function scope
-  spineFile.close();
-  if (!flushed) {
+  const bool closed = spineFile.close();
+  if (!flushed || !closed || buildFailed) {
     LOG_ERR("BMC", "Failed writing spine tmp file");
   }
-  return flushed;
+  return flushed && closed && !buildFailed;
 }
 
 bool BookMetadataCache::beginTocPass() {
@@ -117,7 +119,12 @@ bool BookMetadataCache::beginTocPass() {
     spineHrefIndex.resize(spineCount);
     spineFile.seek(0);
     for (int i = 0; i < spineCount; i++) {
-      auto entry = readSpineEntry(spineFile);
+      SpineEntry entry;
+      if (!readSpineEntry(spineFile, entry)) {
+        buildFailed = true;
+        endTocPass();
+        return false;
+      }
       SpineHrefIndexEntry idx;
       idx.hrefHash = fnvHash64(entry.href);
       idx.hrefLen = static_cast<uint16_t>(entry.href.size());
@@ -147,14 +154,14 @@ bool BookMetadataCache::endTocPass() {
     LOG_ERR("BMC", "Failed writing toc tmp file");
   }
   // Explicit close() required: member variables persist beyond function scope
-  tocFile.close();
-  spineFile.close();
+  const bool tocClosed = tocFile.close();
+  const bool spineClosed = spineFile.close();
 
   spineHrefIndex.clear();
   spineHrefIndex.shrink_to_fit();
   useSpineHrefIndex = false;
 
-  return flushed;
+  return flushed && tocClosed && spineClosed && !buildFailed;
 }
 
 bool BookMetadataCache::endWrite() {
@@ -164,6 +171,7 @@ bool BookMetadataCache::endWrite() {
   }
 
   buildMode = false;
+  if (buildFailed) return false;
   LOG_DBG("BMC", "Wrote %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
@@ -194,6 +202,15 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   serialization::BufferedFileWriter bookOut(bookFile, BUILD_IO_BUFFER_SIZE);
   serialization::BufferedFileReader spineIn(spineFile, BUILD_IO_BUFFER_SIZE);
   serialization::BufferedFileReader tocIn(tocFile, BUILD_IO_BUFFER_SIZE);
+  const auto failRead = [&] {
+    LOG_ERR("BMC", "Invalid temporary metadata cache");
+    bookOut.flush();
+    bookFile.close();
+    spineFile.close();
+    tocFile.close();
+    Storage.remove((cachePath + bookBinFile).c_str());
+    return false;
+  };
 
   constexpr uint32_t headerASize =
       sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
@@ -219,7 +236,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   spineIn.seek(0);
   for (int i = 0; i < spineCount; i++) {
     const uint32_t pos = spineIn.position();
-    readSpineEntryFrom(spineIn);
+    SpineEntry entry;
+    if (!readSpineEntryFrom(spineIn, entry)) return failRead();
     serialization::writePod(bookOut, pos + lutOffset + lutSize);
   }
   // Total size of the spine tmp file: entries land in book.bin after the toc LUT
@@ -230,7 +248,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   tocIn.seek(0);
   for (int i = 0; i < tocCount; i++) {
     const uint32_t pos = tocIn.position();
-    readTocEntryFrom(tocIn);
+    TocEntry entry;
+    if (!readTocEntryFrom(tocIn, entry)) return failRead();
     serialization::writePod(bookOut, pos + lutOffset + lutSize + spineBytes);
   }
 
@@ -241,7 +260,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   std::deque<int16_t> spineToTocIndex(spineCount, -1);
   tocIn.seek(0);
   for (int j = 0; j < tocCount; j++) {
-    auto tocEntry = readTocEntryFrom(tocIn);
+    TocEntry tocEntry;
+    if (!readTocEntryFrom(tocIn, tocEntry)) return failRead();
     if (tocEntry.spineIndex >= 0 && tocEntry.spineIndex < spineCount) {
       if (spineToTocIndex[tocEntry.spineIndex] == -1) {
         spineToTocIndex[tocEntry.spineIndex] = static_cast<int16_t>(j);
@@ -280,7 +300,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
       spineIn.seek(0);
       for (int i = 0; i < spineCount; i++) {
-        auto entry = readSpineEntryFrom(spineIn);
+        SpineEntry entry;
+        if (!readSpineEntryFrom(spineIn, entry)) return failRead();
         std::string path = FsHelpers::normalisePath(entry.href);
 
         ZipFile::SizeTarget t;
@@ -310,7 +331,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   spineIn.seek(0);
   int lastSpineTocIndex = -1;
   for (int i = 0; i < spineCount; i++) {
-    auto spineEntry = readSpineEntryFrom(spineIn);
+    SpineEntry spineEntry;
+    if (!readSpineEntryFrom(spineIn, spineEntry)) return failRead();
     spineEntry.tocIndex = spineToTocIndex[i];
     if (spineEntry.tocIndex == -1) {
       if (isZip) {
@@ -342,7 +364,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // Loop through toc entries from toc file writing to book.bin
   tocIn.seek(0);
   for (int i = 0; i < tocCount; i++) {
-    auto tocEntry = readTocEntryFrom(tocIn);
+    TocEntry tocEntry;
+    if (!readTocEntryFrom(tocIn, tocEntry)) return failRead();
     writeTocEntryTo(bookOut, tocEntry);
   }
 
@@ -432,7 +455,11 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   } else {
     spineFile.seek(0);
     for (int i = 0; i < spineCount; i++) {
-      auto spineEntry = readSpineEntry(spineFile);
+      SpineEntry spineEntry;
+      if (!readSpineEntry(spineFile, spineEntry)) {
+        buildFailed = true;
+        return;
+      }
       if (spineEntry.href == href) {
         spineIndex = static_cast<int16_t>(i);
         break;
@@ -457,41 +484,63 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 /* ============= READING / LOADING FUNCTIONS ================ */
 
 bool BookMetadataCache::load() {
-  if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
-    return false;
-  }
-
-  uint8_t version;
-  serialization::readPod(bookFile, version);
-  if (version != BOOK_CACHE_VERSION) {
-    LOG_DBG("BMC", "Cache version mismatch: expected %d, got %d", BOOK_CACHE_VERSION, version);
-    // Explicit close() required: member variable persists beyond function scope
-    bookFile.close();
-    return false;
-  }
-
-  serialization::readPod(bookFile, lutOffset);
-  serialization::readPod(bookFile, spineCount);
-  serialization::readPod(bookFile, tocCount);
-
-  serialization::readString(bookFile, coreMetadata.title);
-  serialization::readString(bookFile, coreMetadata.author);
-  serialization::readString(bookFile, coreMetadata.language);
-  serialization::readString(bookFile, coreMetadata.coverItemHref);
-  serialization::readString(bookFile, coreMetadata.textReferenceHref);
-
-  // Spine entries follow the LUTs in index order; keep every SIZE_WINDOW-th cumulative size.
+  loaded = false;
+  spineCount = tocCount = 0;
   windowStarts.clear();
   bookSize = 0;
   windowFirst = -1;
+  coreMetadata = {};
+  if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) return false;
+  const auto fail = [this] {
+    LOG_ERR("BMC", "Invalid metadata cache");
+    bookFile.close();
+    windowStarts.clear();
+    bookSize = 0;
+    windowFirst = -1;
+    spineCount = tocCount = 0;
+    coreMetadata = {};
+    return false;
+  };
+  uint8_t version = 0;
+  if (!serialization::tryReadPod(bookFile, version) || version != BOOK_CACHE_VERSION ||
+      !serialization::tryReadPod(bookFile, lutOffset) || !serialization::tryReadPod(bookFile, spineCount) ||
+      !serialization::tryReadPod(bookFile, tocCount) || !readCacheString(bookFile, coreMetadata.title) ||
+      !readCacheString(bookFile, coreMetadata.author) || !readCacheString(bookFile, coreMetadata.language) ||
+      !readCacheString(bookFile, coreMetadata.coverItemHref) ||
+      !readCacheString(bookFile, coreMetadata.textReferenceHref))
+    return fail();
+  const size_t size = bookFile.size();
+  const size_t lutSize = (static_cast<size_t>(spineCount) + tocCount) * sizeof(uint32_t);
+  const size_t minimumEntries = static_cast<size_t>(spineCount) * 10 + static_cast<size_t>(tocCount) * 15;
+  if (bookFile.position() != lutOffset || lutOffset > size || lutSize > size - lutOffset ||
+      minimumEntries > size - lutOffset - lutSize)
+    return fail();
   windowStarts.reserve((spineCount + SIZE_WINDOW - 1) / SIZE_WINDOW);
-  const uint32_t lutSize = (static_cast<uint32_t>(spineCount) + tocCount) * sizeof(uint32_t);
-  bookFile.seek(lutOffset + lutSize);
-  for (uint16_t i = 0; i < spineCount; i++) {
-    if (i % SIZE_WINDOW == 0) windowStarts.push_back(bookSize);
-    bookSize = readSpineEntry(bookFile).cumulativeSize;
+  HalFile lookupFile;
+  if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, lookupFile) || !lookupFile.seek(lutOffset) ||
+      !bookFile.seek(lutOffset + lutSize))
+    return fail();
+  // Separate buffered cursors validate lookup positions without a seek per entry.
+  serialization::BufferedFileReader lookups(lookupFile, 1024);
+  serialization::BufferedFileReader entries(bookFile, 1024);
+  uint32_t previousSize = 0;
+  for (uint32_t i = 0; i < static_cast<uint32_t>(spineCount) + tocCount; ++i) {
+    uint32_t position = 0;
+    if (!serialization::tryReadPod(lookups, position) || position != entries.position()) return fail();
+    if (i < spineCount) {
+      SpineEntry entry;
+      if (!readSpineEntryFrom(entries, entry) || entry.cumulativeSize < previousSize || entry.tocIndex < -1 ||
+          entry.tocIndex >= static_cast<int>(tocCount))
+        return fail();
+      if (i % SIZE_WINDOW == 0) windowStarts.push_back(previousSize);
+      previousSize = bookSize = entry.cumulativeSize;
+    } else {
+      TocEntry entry;
+      if (!readTocEntryFrom(entries, entry) || entry.spineIndex < -1 ||
+          entry.spineIndex >= static_cast<int>(spineCount))
+        return fail();
+    }
   }
-
   loaded = true;
   LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
   return true;
@@ -556,12 +605,15 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
     return {};
   }
 
-  // Seek to spine LUT item, read from LUT and get out data
-  bookFile.seek(lutOffset + sizeof(uint32_t) * index);
-  uint32_t spineEntryPos;
-  serialization::readPod(bookFile, spineEntryPos);
-  bookFile.seek(spineEntryPos);
-  return readSpineEntry(bookFile);
+  uint32_t position = 0;
+  SpineEntry entry;
+  if (!bookFile.seek(lutOffset + sizeof(uint32_t) * index) || !serialization::tryReadPod(bookFile, position) ||
+      !bookFile.seek(position) || !readSpineEntry(bookFile, entry)) {
+    loaded = false;
+    LOG_ERR("BMC", "Failed reading spine entry %d", index);
+    return {};
+  }
+  return entry;
 }
 
 BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
@@ -575,16 +627,19 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
     return {};
   }
 
-  // Seek to TOC LUT item, read from LUT and get out data
-  bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index);
-  uint32_t tocEntryPos;
-  serialization::readPod(bookFile, tocEntryPos);
-  bookFile.seek(tocEntryPos);
-  return readTocEntry(bookFile);
+  uint32_t position = 0;
+  TocEntry entry;
+  if (!bookFile.seek(lutOffset + sizeof(uint32_t) * (spineCount + index)) ||
+      !serialization::tryReadPod(bookFile, position) || !bookFile.seek(position) || !readTocEntry(bookFile, entry)) {
+    loaded = false;
+    LOG_ERR("BMC", "Failed reading TOC entry %d", index);
+    return {};
+  }
+  return entry;
 }
 
-BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(HalFile& file) const {
-  return readSpineEntryFrom(file);
+bool BookMetadataCache::readSpineEntry(HalFile& file, SpineEntry& entry) const {
+  return readSpineEntryFrom(file, entry);
 }
 
-BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(HalFile& file) const { return readTocEntryFrom(file); }
+bool BookMetadataCache::readTocEntry(HalFile& file, TocEntry& entry) const { return readTocEntryFrom(file, entry); }

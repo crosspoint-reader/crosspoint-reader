@@ -150,3 +150,56 @@ TEST(BookMetadataCacheSizes, SpineIndexForSizeMatchesLinearScan) {
     }
   }
 }
+
+TEST(BookMetadataCacheValidation, RejectsTruncatedDataAndInvalidLookupPositions) {
+  for (const int corruption : {0, 1, 2}) {
+    buildBook(cacheDir(), 3);
+    const std::string path = cacheDir() + "/book.bin";
+    if (corruption < 2) {
+      std::filesystem::resize_file(path, corruption == 0 ? 1 : std::filesystem::file_size(path) - 1);
+    } else {
+      std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+      uint32_t lookup = 0;
+      file.seekg(1);
+      file.read(reinterpret_cast<char*>(&lookup), sizeof(lookup));
+      file.seekp(lookup);
+      const uint32_t outside = UINT32_MAX;
+      file.write(reinterpret_cast<const char*>(&outside), sizeof(outside));
+    }
+    BookMetadataCache cache(cacheDir());
+    EXPECT_FALSE(cache.load()) << corruption;
+    EXPECT_EQ(cache.getSpineCount(), 0);
+  }
+}
+
+TEST(BookMetadataCacheValidation, MissingCacheLeavesAnEmptyState) {
+  std::filesystem::remove_all(cacheDir());
+  BookMetadataCache cache(cacheDir());
+  EXPECT_FALSE(cache.load());
+  EXPECT_EQ(cache.getSpineCount(), 0);
+}
+
+TEST(BookMetadataCacheValidation, LongWriterGeneratedStringsRemainReadable) {
+  const std::string dir = cacheDir();
+  std::filesystem::remove_all(dir);
+  std::filesystem::create_directories(dir);
+  const std::string href = std::string(4097, 'h') + ".xhtml";
+  const std::string title(4097, 'T');
+  zipEntrySizes[href] = 123;
+  BookMetadataCache writer(dir);
+  ASSERT_TRUE(writer.beginWrite() && writer.beginContentOpfPass());
+  writer.createSpineEntry(href);
+  ASSERT_TRUE(writer.endContentOpfPass() && writer.beginTocPass());
+  writer.createTocEntry(title, href, "anchor", 1);
+  ASSERT_TRUE(writer.endTocPass() && writer.endWrite());
+  BookMetadataCache::BookMetadata metadata;
+  metadata.title = title;
+  ASSERT_TRUE(writer.buildBookBin("book.epub", metadata));
+  ASSERT_TRUE(writer.cleanupTmpFiles());
+  BookMetadataCache reader(dir);
+  ASSERT_TRUE(reader.load());
+  EXPECT_EQ(reader.coreMetadata.title, title);
+  EXPECT_EQ(reader.getSpineEntry(0).href, href);
+  EXPECT_EQ(reader.getTocEntry(0).title, title);
+  EXPECT_EQ(reader.getCumulativeSize(0), 123u);
+}

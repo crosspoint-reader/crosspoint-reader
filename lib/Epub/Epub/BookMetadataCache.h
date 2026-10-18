@@ -52,6 +52,7 @@ class BookMetadataCache {
   uint16_t tocCount;
   bool loaded;
   bool buildMode;
+  bool buildFailed = false;
 
   HalFile bookFile;
   // Temp file handles during build
@@ -94,8 +95,8 @@ class BookMetadataCache {
 
   uint32_t writeSpineEntry(HalFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(HalFile& file, const TocEntry& entry) const;
-  SpineEntry readSpineEntry(HalFile& file) const;
-  TocEntry readTocEntry(HalFile& file) const;
+  bool readSpineEntry(HalFile& file, SpineEntry& entry) const;
+  bool readTocEntry(HalFile& file, TocEntry& entry) const;
 
  public:
   BookMetadata coreMetadata;
