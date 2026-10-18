@@ -10,9 +10,29 @@
 namespace PluginLocations {
 inline constexpr const char* ROOTS[] = {"/.crosspoint/plugins", "/plugins", "/.plugins"};
 inline constexpr size_t ROOT_COUNT = sizeof(ROOTS) / sizeof(ROOTS[0]);
+inline constexpr const char* INSTALL_MARKER = ".installing";
+
+inline bool isPluginRoot(const std::string& dir) {
+  for (size_t i = 0; i < ROOT_COUNT; i++) {
+    if (dir == ROOTS[i]) return true;
+  }
+  return false;
+}
+
+// A bundle targeting one direct child of a plugin root may update an existing
+// same-named plugin in place instead of creating a duplicate in another root.
+// Nested and non-plugin bundle destinations keep their configured behavior.
+inline bool shouldReuseInstalledBundleDir(const std::string& destDir, const std::string& subdir) {
+  return !subdir.empty() && subdir.find('/') == std::string::npos && isPluginRoot(destDir);
+}
 
 enum class DeviceKind { None, Catalog, Background };
 enum class PickerAction { None, Catalog, Readme };
+
+constexpr bool isDiscoverableEntry(const bool quarantined, const bool hasPluginJs, const bool hasDevice,
+                                   const bool hasManifest) {
+  return !quarantined && (hasPluginJs || hasDevice || hasManifest);
+}
 
 constexpr DeviceKind classifyDeviceManifest(const bool hasBrowseUrl, const bool hasEvents) {
   if (hasBrowseUrl) return DeviceKind::Catalog;
@@ -66,12 +86,19 @@ struct Entry {
   bool hasManifest = false;  // web UI card metadata (manifest.json)
 };
 
-// Scans every root. The earliest root containing a folder name claims it —
-// matching findPluginDir, which serves that folder's files — and folders with
-// none of the marker files are omitted. This is the single definition of
-// "what is a plugin"; callers filter by the markers they need.
+// Returns installed plugins only while the global Plugin System is enabled.
+// The physical scan still uses root priority and direct child folders only.
 std::vector<Entry> scanPlugins();
 
-// Directory of the named plugin ("<root>/<name>"), or "" when absent.
+// Raw on-disk probes used only for migration/bootstrap UI. These ignore the
+// global Plugin System switch and installation quarantine so recovery can still
+// detect pre-existing or interrupted plugin directories.
+std::vector<Entry> scanPluginsOnDisk();
+bool anyPluginInstalledOnDisk();
+std::string findPluginDirOnDisk(const char* name);
+bool isPluginQuarantined(const std::string& dir);
+
+// Directory of the named plugin ("<root>/<name>"), or "" when absent,
+// globally disabled, or quarantined by an in-progress installation.
 std::string findPluginDir(const char* name);
 }  // namespace PluginLocations

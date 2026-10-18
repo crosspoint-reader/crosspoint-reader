@@ -37,8 +37,6 @@ home rather than restoring `.skills/` or duplicating the root policy.
 - `review-embedded`
 - `review-i18n-docs`
 
-The handoff skill owns the workflow and completion criteria. The main agent
-collects all initial results, verifies findings, and fixes accepted findings as
-one batch. At most one targeted follow-up round is allowed. The final build
-follows accepted fixes. Human acceptance concerns the actual behavior, design,
-and maintenance responsibility, and is recorded once per logical change.
+The [handoff skill](skills/firmware-handoff/SKILL.md) owns the workflow and
+completion criteria. Each reviewer task carries the inspection-only scope;
+the main agent owns test execution, builds, and diagnostic code.

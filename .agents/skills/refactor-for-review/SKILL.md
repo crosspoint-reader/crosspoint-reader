@@ -15,9 +15,9 @@ next change easier is the win, not lines added.
 - A commit/PR does one thing. A bug fix is not also a rename is not also a
   reformat. If you spot an unrelated improvement mid-change, leave it or capture
   it separately; do not fold it in.
-- When the working tree has bundled two changes, separate them with the
-  copy-affected-files-aside, reset, re-apply one concern, restore the rest
-  pattern, not by committing the tangle.
+- When the working tree contains multiple concerns, keep unrelated user work
+  intact and stage only the authorized files or hunks. Do not reset the working
+  tree to separate changes.
 - Keep unrelated refactoring separate from behavior changes. A small structural
   change needed for the requested fix may stay with it; explain why it is needed.
   A change described as a pure refactor must preserve behavior.

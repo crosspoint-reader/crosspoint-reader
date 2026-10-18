@@ -90,15 +90,19 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   coverCache.prepare();
   const auto& theme = screen.theme();
   const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, true);
-  screen.setContentMarginFromScreen(fui::Insets{
-      static_cast<int16_t>(safe.y), static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
-      static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height), static_cast<int16_t>(safe.x)});
+  // Sides clear the rounded corners like the header, so the grid lines up under it.
+  const int corner = BoardConfig::ACTIVE.cornerRadius;
+  const auto left = static_cast<int16_t>(std::max(safe.x, corner));
+  const auto right = static_cast<int16_t>(std::max(renderer.getScreenWidth() - safe.x - safe.width, corner));
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(safe.y), right,
+                                                static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height),
+                                                left});
   // Horizontal inset sized so the outer cover columns (content x plus the
   // grid's cell inset) sit on the theme's side-padding line: the heading and
   // tabs then align with the clock and battery, which tuck a few px further
   // in (headerStatusInset's optical bias).
   const int16_t hInset = std::max<int16_t>(
-      0, static_cast<int16_t>(UITheme::getInstance().getMetrics().headerSidePadding - COVER_CELL_INSET - safe.x));
+      0, static_cast<int16_t>(UITheme::getInstance().getMetrics().headerSidePadding - COVER_CELL_INSET - left));
   // Drop the status band, hero, and grid down: touch boards get a full step
   // (no button-hint band to fit), button boards a modest nudge. The tabs stay
   // put (bottom-anchored below).
@@ -111,9 +115,22 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight, theme.spaceSm);
   // Button boards run tighter above the tabs to make room for the top step.
   const int16_t tabGap = BoardConfig::hasTouch() ? theme.spaceSm : static_cast<int16_t>(4);
+  const auto& board = BoardConfig::ACTIVE;
   auto tabRect = screen.takeBottom(UITheme::getInstance().getMetrics().coverGridTabBarHeight, tabGap);
+  // The board's tab height sits at the bottom of the theme's slot, then its
+  // offset lower; the slot itself is unchanged, so the grid keeps its size.
+  const auto tabHeight = static_cast<int16_t>(tabRect.height * board.tabBarHeightPct / 100);
+  tabRect.y = static_cast<int16_t>(tabRect.y + tabRect.height - tabHeight + board.tabBarOffsetY);
+  tabRect.height = tabHeight;
+  // The board's share of the row the tabs spread across, centered.
+  const auto fitTabWidth = [&board](fui::Rect rect) {
+    const auto width = static_cast<int16_t>(rect.width * board.tabBarWidthPct / 100);
+    rect.x = static_cast<int16_t>(rect.x + (rect.width - width) / 2);
+    rect.width = width;
+    return rect;
+  };
   if (books->empty()) {
-    drawTabs(screen, tabRect.inset(fui::Insets{0, COVER_CELL_INSET, 0, COVER_CELL_INSET}));
+    drawTabs(screen, fitTabWidth(tabRect.inset(fui::Insets{0, COVER_CELL_INSET, 0, COVER_CELL_INSET})));
     drawEmpty(screen);
     drawHeaderBand();
     return;
@@ -133,7 +150,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   drawGrid(screen);
   tabRect.x = gridBounds.x + grid.cellInset.left;
   tabRect.width = gridBounds.width - grid.cellInset.left - grid.cellInset.right;
-  drawTabs(screen, tabRect);
+  drawTabs(screen, fitTabWidth(tabRect));
   drawHeaderBand();
 }
 
@@ -290,8 +307,8 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
     self.renderer.drawIcon(ICONS[icon], iconRect.x, iconRect.y, iconRect.width);
     return true;
   };
-  tabs.tabStyles.normal.background = fui::Paint::solid(fui::Color::White);
-  tabs.tabStyles.selected.background = fui::Paint::solid(fui::Color::White);
+  // No pill fill; the underline marks the selected tab.
+  tabs.tabStyles.explicitlySet = true;
   tabs.selectedUnderline = 2;
   tabs.distributedSlotWidth = 0;
   fui::tabBar(screen.frame(), rect, tabs);

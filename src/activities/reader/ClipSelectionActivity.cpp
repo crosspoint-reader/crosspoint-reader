@@ -26,7 +26,6 @@ using Input = WordSelectionInput;
 
 namespace {
 
-constexpr size_t FONT_PREWARM_TEXT_MAX = 2048;
 constexpr int TOUCH_DRAG_MOVEMENT_PX = 4;
 constexpr unsigned long TOUCH_PAGE_ADVANCE_HOLD_MS = 1000;
 constexpr int TOUCH_PAGE_END_DWELL_SLOP_PX = 8;
@@ -95,10 +94,6 @@ bool ClipSelectionActivity::extractWords() {
   }
   rowCount = 0;
   const bool needsFontPrewarm = renderer.isSdCardFont(fontId);
-  auto pageText = needsFontPrewarm ? makeUniqueNoThrow<char[]>(FONT_PREWARM_TEXT_MAX) : nullptr;
-  size_t pageTextLength = 0;
-  if (needsFontPrewarm && !pageText) LOG_DBG("CLIP", "Skipping SD font prewarm: OOM");
-  uint8_t styleMask = 0;
   bool paragraphStartPending = false;
 
   for (size_t pageOffset = 0; pageOffset < pages.size(); ++pageOffset) {
@@ -109,19 +104,33 @@ bool ClipSelectionActivity::extractWords() {
       const auto& block = line.getBlock();
       if (!block || !block->valid()) continue;
 
+      if (needsFontPrewarm && block->wordCount() != 0) {
+        uint8_t styleMask = 0;
+        for (uint16_t i = 0; i < block->wordCount(); ++i) {
+          styleMask |= static_cast<uint8_t>(1U << (static_cast<uint8_t>(block->wordStyle(i)) & 0x03));
+        }
+        // Borrow the line's packed words to prepare advances before measuring, without copying or truncating text.
+        const char* text = block->wordText(0);
+        const uint16_t lastWord = block->wordCount() - 1;
+        const size_t textLength = block->wordText(lastWord) + block->wordTextLen(lastWord) + 1 - text;
+        renderer.ensureSdCardFontReady(fontId, &text, &textLength, 1, false, false, styleMask);
+      }
+
       const size_t lineStart = wordCount;
       const bool isRtl = block->getBlockStyle().isRtl;
       const int8_t characterSpacing = block->getBlockStyle().characterSpacing;
       const size_t remaining = MAX_SELECTABLE_WORDS - lineStart;
       size_t rtlWordCount = 0;
-      const int rubyShift = block->getRubyShift(renderer.getFontAscenderSize(fontId));
+      const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
+      const int rubyShift = block->getRubyShift(renderer.getFontAscenderSize(lineFont));
       for (uint16_t i = 0; i < block->wordCount(); ++i) {
         if (block->wordStartsParagraph(i)) paragraphStartPending = true;
         const char* text = block->wordText(i);
         if (!clippingText::hasVisibleText(text)) continue;
 
         const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-        int width = renderer.getTextAdvanceX(fontId, text, style, characterSpacing);
+        const int wordFont = TextBlock::renderFontId(renderer, block->wordFontId(i, fontId), fontId);
+        int width = renderer.getTextAdvanceX(wordFont, text, style, characterSpacing);
         if (width <= 0) continue;
         if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
           width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i)));
@@ -132,9 +141,10 @@ bool ClipSelectionActivity::extractWords() {
         WordBox& word = isRtl ? words[lineStart + (rtlWordCount < remaining ? rtlWordCount : rtlWordCount % remaining)]
                               : words[wordCount++];
         word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
-        word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift);
+        word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(lineHeight);
+        word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
+        word.fontId = wordFont;
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
@@ -146,13 +156,6 @@ bool ClipSelectionActivity::extractWords() {
         word.paragraphStart = false;
         word.isRtl = isRtl;
         word.discretionaryHyphen = block->wordHasDiscretionaryHyphen(i);
-        if (pageText) {
-          for (const char* p = text; *p != '\0' && pageTextLength + 1 < FONT_PREWARM_TEXT_MAX; ++p) {
-            pageText[pageTextLength++] = *p;
-          }
-          if (pageTextLength + 1 < FONT_PREWARM_TEXT_MAX) pageText[pageTextLength++] = ' ';
-        }
-        styleMask |= static_cast<uint8_t>(1U << (static_cast<uint8_t>(style) & 0x03));
         if (isRtl) ++rtlWordCount;
       }
       if (isRtl) {
@@ -180,12 +183,6 @@ bool ClipSelectionActivity::extractWords() {
       }
     }
     if (wordCount == MAX_SELECTABLE_WORDS) break;
-  }
-
-  if (styleMask == 0) styleMask = 0x01;
-  if (pageText) {
-    pageText[pageTextLength] = '\0';
-    renderer.ensureSdCardFontReady(fontId, pageText.get(), styleMask);
   }
 
   return true;
@@ -652,7 +649,8 @@ int ClipSelectionActivity::textXOffset() const {
 void ClipSelectionActivity::prewarmWord(const int index) const {
   if (index >= 0 && index < static_cast<int>(wordCount) && words[index].text) {
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, words[index].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
+        words[index].fontId, words[index].text,
+        static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
   }
 }
 
@@ -692,7 +690,7 @@ void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, co
     clearGapBetween(word, words[index + 1], offsetX, offset);
   }
 
-  renderer.drawText(fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
+  renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
                     BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
 }
 
@@ -712,7 +710,7 @@ void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSe
   }
 
   renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-  renderer.drawText(fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
+  renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
                     BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
 }
 
@@ -809,7 +807,7 @@ void ClipSelectionActivity::drawSelection() const {
     if (word.pageOffset != currentPageOffset) continue;
     if (previous) ditherGapBetween(*previous, word, offsetX, offset);
     renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-    renderer.drawText(fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
+    renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
                       BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
     previous = &word;
   }

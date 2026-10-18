@@ -3,6 +3,7 @@
 #include <HalGPIO.h>
 
 #include "util/HomeButtonInput.h"
+#include "util/RemoteButtonInput.h"
 
 class GfxRenderer;
 namespace freeink {
@@ -50,6 +51,8 @@ class MappedInputManager {
   // expires. The main loop supplies that one-frame event here.
   void setPowerConfirmClickFrame(const bool clicked) { powerConfirmClickFrame = clicked; }
 #endif
+  bool injectRemoteClick(RemoteButton button);
+  bool hasRemoteClick() const { return remoteInput.button != RemoteButton::None; }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   // One-shot threshold event while the button is down; consumes its release.
@@ -87,7 +90,7 @@ class MappedInputManager {
   // Horizontal variant for side-by-side button pairs (confirmation prompts).
   RowTouch colTouch(int& col, int left, int colStep, int colCount, int yStart, int yEnd, int colWidth = 0) const;
 
-  SwipeDir wasSwipe() const;
+  SwipeDir wasSwipe(int* startX = nullptr, int* startY = nullptr) const;
   // Back = left-to-right swipe anchored at the left edge. Public so swipe-mode
   // page turns (reader) can exclude it from a plain SwipeDir::Right.
   bool wasBackGesture() const;
@@ -149,6 +152,7 @@ class MappedInputManager {
   void rememberTouchHeldTime() const;
   void suppressNextRelease(Button button) const;
 
+  mutable RemoteButtonInput remoteInput;
   mutable HomeButtonInput homeButtonInput;
   mutable HomeButtonAction homeAction = HomeButtonAction::Ignore;
   mutable HomeButtonAction deferredHomeAction = HomeButtonAction::Ignore;
