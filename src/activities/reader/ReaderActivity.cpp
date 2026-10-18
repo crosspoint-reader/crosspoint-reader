@@ -856,6 +856,14 @@ void ReaderActivity::onEnter() {
   // setup() (WakeTrace::armResume) rather than read from APP_STATE here — see armResume().
   WakeTrace::begin();
 
+  // The book's font, loaded here rather than by goToReader(): the activity this one replaces has exited by now. A
+  // reader replaced by another kept running its loop until the switch, and its look-ahead build then laid out and
+  // drew with font IDs the new book's load had already removed ("Font ... not found").
+  {
+    RenderLock lock;  // a font install draws its popup under it (ensureSdFontLoadedForPath)
+    ensureSdFontLoadedForPath(initialBookPath.c_str());
+  }
+
   if (initialBookPath.empty()) {
     goToLibrary();  // Start from root when entering via Browse
     return;
@@ -905,7 +913,7 @@ void ReaderActivity::onEnter() {
     // file-existence checks (no parsing), so this is cheap.
     const bool firstOpenIndexing = Epub(initialBookPath, "/.crosspoint").needsFirstOpenIndexing();
     // Publisher Fonts: the book's embedded fonts are examined once, here, with the same popup and lent buffer.
-    // goToReader() left the loaded font alone until then (ensureSdFontLoadedForPath).
+    // onEnter() left the loaded font alone until then (ensureSdFontLoadedForPath).
     const bool bookFontsPending = bookFontsPendingForPath(initialBookPath.c_str());
     if (firstOpenIndexing || bookFontsPending) {
       RenderLock lock;
@@ -971,7 +979,7 @@ void ReaderActivity::onEnter() {
       return;
     }
     if (bookFontsPending) {
-      RenderLock lock;  // what goToReader holds for the same call; a font install draws its popup
+      RenderLock lock;  // as at the start of onEnter(): a font install draws its popup
       ensureSdFontLoadedForPath(initialBookPath.c_str(), /*waitForBookFonts=*/false);
     }
     // Stamped after every load path above (warm cache, first-open index build, and the

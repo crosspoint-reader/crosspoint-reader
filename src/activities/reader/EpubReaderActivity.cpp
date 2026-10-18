@@ -2911,8 +2911,8 @@ void EpubReaderActivity::applyBookReaderOverrides(
 
   RenderLock lock(*this);
 
-  // The SD font was only ever (re)loaded on BOOK OPEN: ensureSdFontLoadedForPath() is called from
-  // ActivityManager's goToReader/replaceWithReader and nowhere else. Changing the font or the size
+  // The SD font was only ever (re)loaded on BOOK OPEN: ensureSdFontLoadedForPath() was called from
+  // ReaderActivity::onEnter() and nowhere else. Changing the font or the size
   // from the reader menu therefore left the previously loaded face in place, and because
   // resolveFontId() demanded an exact point-size match, a size change fell back to the built-in
   // family until the book was closed and reopened. Both symptoms, one missing call. The resolver
