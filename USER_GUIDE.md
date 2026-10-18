@@ -302,7 +302,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 #### 3.6.3 Controls
 
-- **Home Button Gestures** (boards with a Home key, such as the X4 Pro): Assign an action to each of **Tap**, **Double Tap** and **Long Press** on the Home key. The defaults are Home, Toggle Frontlight and Reader Menu. The actions are Home, Ignore, Page Turn, Refresh Screen, Links and footnotes, Confirm, CrossPoint Sync, Bookmark, Dictionary, Reader Menu, Toggle Frontlight and Create Clipping. On these boards this replaces **Long-press Menu**, which is not shown.
+- **Home Button Gestures** (boards with a Home key, such as the X4 Pro): Assign an action to each of **Tap**, **Double Tap** and **Long Press** on the Home key. The defaults are Tap: Home, Double Tap: Toggle Frontlight, and Long Press: Reader Menu. The actions are Home, Ignore, Page Turn, Refresh Screen, Links and footnotes, Confirm, CrossPoint Sync, Bookmark, Dictionary, Reader Menu, Toggle Frontlight and Create Clipping. On these boards, use this instead of **Long-press Menu**, which is not shown in the device Settings.
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
@@ -544,7 +544,7 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 
 ##### Syncing While Reading
 
-Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **CrossPoint Sync** and hold Confirm to launch sync directly.
+Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **CrossPoint Sync** and hold Confirm to launch sync directly; on boards with a Home key, set a **Home Button Gestures** gesture to **CrossPoint Sync** instead.
 
 - **Sync Clippings** is off by default. Enable it only for a compatible CrossPoint Sync server; manual **Sync Progress** then uploads and downloads this book’s clippings too. Leave it off for ordinary KOSync servers.
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
@@ -667,7 +667,7 @@ See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and w
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — including bookmarks, KOReader Sync, dictionary lookup, or clipping selection. A short press always opens the Reader Menu.
+* **Long-press Confirm (configurable, boards without a Home key):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — including bookmarks, KOReader Sync, dictionary lookup, or clipping selection. A short press always opens the Reader Menu. On boards with a Home key, use **Home Button Gestures** instead.
 
 ### Supported Languages
 
