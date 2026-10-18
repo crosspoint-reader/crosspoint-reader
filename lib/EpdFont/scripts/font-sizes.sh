@@ -10,14 +10,19 @@
 # name from builtinFonts/all.h, main.cpp and CrossPointSettings.cpp.
 
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
-BOOKERLY_FONT_SIZES=(10 12 14 16 18 20)
-NOTOSANS_FONT_SIZES=(10 12 14 16 18 20)
+BOOKERLY_FONT_SIZES=(10 12 14 16 18)
+NOTOSANS_FONT_SIZES=(10 12 14 16 18)
 
 # Sizes with no face of their own: rendered by SCALING the master below. They still need a font
 # ID, because the renderer keys everything on it -- the section cache included, which is what makes
 # a scaled size cache separately from its master without any extra plumbing.
-SYNTH_FONT_SIZES=(22 24 26)
-SYNTH_FONT_MASTER=20
+#
+# The master is the largest size above, and must stay so: CrossPointSettings::BUILTIN_FACE_MAX_POINTS
+# mirrors it, and main.cpp registers every rung above it as that size's faces scaled. 20 pt had
+# faces of its own until they were dropped for flash (eight faces, 505,656 B of the image); 18 pt
+# is the master since, at x1.11 for 20 pt up to x1.44 for 26 pt.
+SYNTH_FONT_SIZES=(20 22 24 26)
+SYNTH_FONT_MASTER=18
 
 UI_FONT_STYLES=("Regular" "Bold")
 UI_FONT_SIZES=(10 12 14)

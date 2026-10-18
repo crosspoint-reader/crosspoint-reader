@@ -12,7 +12,7 @@
 
 #include "EpdFontData.h"
 
-// 24 faces: bookerly_10_bold, bookerly_10_bolditalic, bookerly_10_italic, bookerly_10_regular, bookerly_12_bold, bookerly_12_bolditalic, bookerly_12_italic, bookerly_12_regular, bookerly_14_bold, bookerly_14_bolditalic, bookerly_14_italic, bookerly_14_regular, bookerly_16_bold, bookerly_16_bolditalic, bookerly_16_italic, bookerly_16_regular, bookerly_18_bold, bookerly_18_bolditalic, bookerly_18_italic, bookerly_18_regular, bookerly_20_bold, bookerly_20_bolditalic, bookerly_20_italic, bookerly_20_regular
+// 20 faces: bookerly_10_bold, bookerly_10_bolditalic, bookerly_10_italic, bookerly_10_regular, bookerly_12_bold, bookerly_12_bolditalic, bookerly_12_italic, bookerly_12_regular, bookerly_14_bold, bookerly_14_bolditalic, bookerly_14_italic, bookerly_14_regular, bookerly_16_bold, bookerly_16_bolditalic, bookerly_16_italic, bookerly_16_regular, bookerly_18_bold, bookerly_18_bolditalic, bookerly_18_italic, bookerly_18_regular
 inline constexpr EpdUnicodeInterval epdSharedFontIntervals_428f867c6270[] = {
     { 0x0, 0x0, 0x0 },
     { 0x8, 0x9, 0x1 },
@@ -185,7 +185,7 @@ inline constexpr EpdUnicodeInterval epdSharedFontIntervals_c4d7ea5ccdb0[] = {
     { 0x2295, 0x2298, 0x403 },
 };
 
-// 11 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_20_bold, notosans_20_regular, notosans_8_regular
+// 9 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_8_regular
 inline constexpr EpdUnicodeInterval epdSharedFontIntervals_cb6738f1a23b[] = {
     { 0x0, 0x0, 0x0 },
     { 0xD, 0xD, 0x1 },
@@ -239,7 +239,7 @@ inline constexpr EpdUnicodeInterval epdSharedFontIntervals_cfc34526fa91[] = {
     { 0xFFFD, 0xFFFD, 0x4A4 },
 };
 
-// 10 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic, notosans_20_bolditalic, notosans_20_italic
+// 8 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic
 inline constexpr EpdUnicodeInterval epdSharedFontIntervals_fe01a1bffeae[] = {
     { 0x0, 0x0, 0x0 },
     { 0xD, 0xD, 0x1 },
@@ -347,7 +347,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_0e958f899a65[] = {
       2,   5,   2,   2,   5,  32,  33,  91,  92,  26,
 };
 
-// 6 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic, bookerly_20_bolditalic
+// 5 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_2aaac0592e24[] = {
       1,   2,   3,   4,   3,   5,   6,   6,   7,   8,   9,  10,  11,  12,  13,  14,
      14,  15,  16,  17,  18,  19,  10,  20,  21,  22,  23,  24,  25,  26,  27,  28,
@@ -393,7 +393,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_2aaac0592e24[] = {
     155, 155, 156,   3,   3,   3,  54,  38,  41,  44,  41,  44,  48,  48,
 };
 
-// 10 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic, notosans_20_bolditalic, notosans_20_italic
+// 8 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_3885e5cefde2[] = {
       1,   2,   3,   2,   4,   5,   6,   5,   7,   8,   9,  10,  11,  12,  13,  14,
      10,  15,  10,  16,  17,  18,  19,  19,  13,  20,  21,   4,  22,  23,  24,  25,
@@ -427,7 +427,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_3885e5cefde2[] = {
       2,   5,  32,  33,  88,  89,  26,
 };
 
-// 5 faces: notosans_10_bold, notosans_12_bold, notosans_16_bold, notosans_18_bold, notosans_20_bold
+// 4 faces: notosans_10_bold, notosans_12_bold, notosans_16_bold, notosans_18_bold
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_a3a12d00c4f6[] = {
       1,   2,   1,   3,   4,   5,   4,   6,   7,   8,   9,  10,  11,  12,   9,  13,
      10,  14,  10,  15,  16,  17,  18,  18,   9,  19,  20,   3,  21,  22,  23,  24,
@@ -461,7 +461,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_a3a12d00c4f6[] = {
      19,  27,   5,   5,   5,   1,   1,   4,   1,   1,   4,  30,  31,  25,
 };
 
-// 6 faces: notosans_10_regular, notosans_12_regular, notosans_16_regular, notosans_18_regular, notosans_20_regular, notosans_8_regular
+// 5 faces: notosans_10_regular, notosans_12_regular, notosans_16_regular, notosans_18_regular, notosans_8_regular
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_a3cd3940db95[] = {
       1,   2,   1,   3,   4,   5,   4,   6,   7,   8,   9,  10,  11,  12,   9,  13,
      10,  14,  10,  15,  16,  17,  18,  18,   9,  19,  20,   3,  21,  22,  23,  24,
@@ -495,7 +495,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_a3cd3940db95[] = {
      19,  27,   5,   5,   5,   1,   1,   4,   1,   1,   4,  30,  31,  25,
 };
 
-// 6 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular, bookerly_20_regular
+// 5 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_a8fe550fccd6[] = {
       1,   1,   2,   3,   4,   5,   4,   6,   7,   7,   8,   9,  10,  11,  12,  13,
      14,  15,  16,  16,  17,  18,  19,  20,  21,  12,  22,  23,  24,  25,  26,  27,
@@ -542,7 +542,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_a8fe550fccd6[] = {
      42,  45,  49,  49,
 };
 
-// 6 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold, bookerly_20_bold
+// 5 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_b32b5b808bad[] = {
       1,   1,   2,   3,   4,   5,   4,   6,   7,   7,   8,   9,  10,  11,  12,  13,
      14,  15,  16,  16,  17,  18,  19,  20,  21,  12,  22,  23,  24,  25,  26,  27,
@@ -589,7 +589,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_b32b5b808bad[] = {
      42,  45,  49,  49,
 };
 
-// 6 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic, bookerly_20_italic
+// 5 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic
 inline constexpr uint8_t epdSharedFontKernLeftClassIds_e43218f60321[] = {
       1,   2,   3,   4,   3,   5,   6,   7,   8,   9,  10,  11,  12,  13,  13,  14,
      15,  16,  17,  18,   9,  19,  20,  21,  22,  23,  24,  25,  25,  26,  27,  28,
@@ -685,7 +685,7 @@ inline constexpr uint8_t epdSharedFontKernLeftClassIds_ebf4b0fab932[] = {
      51, 134,  45,  29,  26, 135,  25,   8,  20,  24,   8,  91,  20,  20,  20,  20,
 };
 
-// 10 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic, notosans_20_bolditalic, notosans_20_italic
+// 8 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic
 inline constexpr uint16_t epdSharedFontKernLeftCodepoints_098307c85e24[] = {
     0x0020, 0x0022, 0x0026, 0x0027, 0x0028, 0x002C, 0x002D, 0x002E, 0x0041, 0x0042, 0x0043, 0x0044,
     0x0045, 0x0046, 0x004B, 0x004C, 0x004F, 0x0050, 0x0051, 0x0052, 0x0054, 0x0055, 0x0056, 0x0057,
@@ -729,7 +729,7 @@ inline constexpr uint16_t epdSharedFontKernLeftCodepoints_098307c85e24[] = {
     0x207D, 0x208D, 0xFB00,
 };
 
-// 6 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic, bookerly_20_bolditalic
+// 5 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic
 inline constexpr uint16_t epdSharedFontKernLeftCodepoints_1c1b7d023a61[] = {
     0x0028, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x0041, 0x0042, 0x0043, 0x0044,
     0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F, 0x0050,
@@ -789,7 +789,7 @@ inline constexpr uint16_t epdSharedFontKernLeftCodepoints_1c1b7d023a61[] = {
     0x2025, 0x2026, 0x203A, 0xFB00, 0xFB01, 0xFB02, 0xFB03, 0xFB04, 0xFB05, 0xFB06,
 };
 
-// 6 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold, bookerly_20_bold
+// 5 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold
 inline constexpr uint16_t epdSharedFontKernLeftCodepoints_2ca5692b9b5f[] = {
     0x0022, 0x0027, 0x0028, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x0040, 0x0041,
     0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D,
@@ -850,7 +850,7 @@ inline constexpr uint16_t epdSharedFontKernLeftCodepoints_2ca5692b9b5f[] = {
     0xFB03, 0xFB04, 0xFB05, 0xFB06,
 };
 
-// 11 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_20_bold, notosans_20_regular, notosans_8_regular
+// 9 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_8_regular
 inline constexpr uint16_t epdSharedFontKernLeftCodepoints_63dda1171fed[] = {
     0x0022, 0x0026, 0x0027, 0x0028, 0x002C, 0x002D, 0x002E, 0x003A, 0x0041, 0x0042, 0x0043, 0x0044,
     0x0045, 0x0046, 0x004B, 0x004C, 0x004F, 0x0050, 0x0051, 0x0052, 0x0054, 0x0055, 0x0056, 0x0057,
@@ -938,7 +938,7 @@ inline constexpr uint16_t epdSharedFontKernLeftCodepoints_7531f75e2b15[] = {
     0x201E, 0x2039, 0x203A, 0x207D, 0x208D, 0xFB00,
 };
 
-// 6 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular, bookerly_20_regular
+// 5 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular
 inline constexpr uint16_t epdSharedFontKernLeftCodepoints_85f134c3ae36[] = {
     0x0022, 0x0027, 0x0028, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x0040, 0x0041,
     0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D,
@@ -999,7 +999,7 @@ inline constexpr uint16_t epdSharedFontKernLeftCodepoints_85f134c3ae36[] = {
     0xFB03, 0xFB04, 0xFB05, 0xFB06,
 };
 
-// 6 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic, bookerly_20_italic
+// 5 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic
 inline constexpr uint16_t epdSharedFontKernLeftCodepoints_b1c8e3fab457[] = {
     0x0028, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046,
     0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F, 0x0050, 0x0051, 0x0052,
@@ -1287,7 +1287,7 @@ inline constexpr uint8_t epdSharedFontKernRightClassIds_4d2f92870f34[] = {
     122,  42,  21,  23,  23,  23,  23,
 };
 
-// 10 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic, notosans_20_bolditalic, notosans_20_italic
+// 8 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic
 inline constexpr uint8_t epdSharedFontKernRightClassIds_57a15f8a255d[] = {
       1,   2,   3,   2,   4,   5,   6,   5,   7,   7,   8,   9,  10,  10,  11,  12,
      10,  10,  13,  14,  15,  16,  16,  17,  18,  19,   4,  20,  21,  21,  21,  22,
@@ -1321,7 +1321,7 @@ inline constexpr uint8_t epdSharedFontKernRightClassIds_57a15f8a255d[] = {
       5,   5,  30,  31,  81,  82,  22,
 };
 
-// 6 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold, bookerly_20_bold
+// 5 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold
 inline constexpr uint8_t epdSharedFontKernRightClassIds_5dea3a3f70bd[] = {
       1,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  12,  12,
      12,  13,  12,  12,  14,  12,  12,  15,  12,  13,  12,  13,  12,  16,  17,  18,
@@ -1368,7 +1368,7 @@ inline constexpr uint8_t epdSharedFontKernRightClassIds_5dea3a3f70bd[] = {
      44,  10,  10,  28,  28,  28,  28,  28,  28,  35,
 };
 
-// 6 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular, bookerly_20_regular
+// 5 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular
 inline constexpr uint8_t epdSharedFontKernRightClassIds_646802a215db[] = {
       1,   2,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  13,
      13,  13,  14,  13,  13,  15,  13,  13,  16,  13,  14,  13,  14,  13,  17,  18,
@@ -1466,7 +1466,7 @@ inline constexpr uint8_t epdSharedFontKernRightClassIds_71c7f36385e0[] = {
      30,  10,  26,  29,  10, 129,  46,  24,  26,  26,  26,  26,
 };
 
-// 6 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic, bookerly_20_bolditalic
+// 5 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic
 inline constexpr uint8_t epdSharedFontKernRightClassIds_750bb161ac92[] = {
       1,   2,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  13,
      15,  15,  14,  15,  15,  16,  15,  15,  17,  15,  14,  13,  14,  13,  18,  19,
@@ -1513,7 +1513,7 @@ inline constexpr uint8_t epdSharedFontKernRightClassIds_750bb161ac92[] = {
      45,   1,  11,  11,   1,  29,  29,  29,  29,  29,  29,  35,
 };
 
-// 6 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic, bookerly_20_italic
+// 5 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic
 inline constexpr uint8_t epdSharedFontKernRightClassIds_a11c7447707c[] = {
       1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  12,  14,  14,
      13,  14,  14,  15,  14,  14,  16,  14,  13,  12,  13,  12,  17,  18,  19,  20,
@@ -1594,7 +1594,7 @@ inline constexpr uint8_t epdSharedFontKernRightClassIds_bec07b71b0c8[] = {
      82,   2,   5,   5,  30,  31,  83,  84,  22,
 };
 
-// 11 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_20_bold, notosans_20_regular, notosans_8_regular
+// 9 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_8_regular
 inline constexpr uint8_t epdSharedFontKernRightClassIds_d41c1eb3459f[] = {
       1,   2,   3,   2,   4,   5,   6,   5,   7,   7,   8,   9,  10,  10,  11,  12,
      10,  10,  13,  14,  15,  15,  16,  17,  18,   4,  19,  20,  21,  21,  21,  22,
@@ -1773,7 +1773,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_108cfbcb7b27[] = {
     0x2026, 0x2039, 0x203A, 0xFB00, 0xFB01, 0xFB02, 0xFB03, 0xFB04,
 };
 
-// 6 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular, bookerly_20_regular
+// 5 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular
 inline constexpr uint16_t epdSharedFontKernRightCodepoints_5f9791ee0f72[] = {
     0x0021, 0x0022, 0x0027, 0x0029, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x003F,
     0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C,
@@ -1835,7 +1835,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_5f9791ee0f72[] = {
     0xFB06,
 };
 
-// 10 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic, notosans_20_bolditalic, notosans_20_italic
+// 8 faces: notosans_10_bolditalic, notosans_10_italic, notosans_12_bolditalic, notosans_12_italic, notosans_16_bolditalic, notosans_16_italic, notosans_18_bolditalic, notosans_18_italic
 inline constexpr uint16_t epdSharedFontKernRightCodepoints_6389aea175cb[] = {
     0x0021, 0x0022, 0x0026, 0x0027, 0x0029, 0x002C, 0x002D, 0x002E, 0x003A, 0x003B, 0x003F, 0x0041,
     0x0043, 0x0047, 0x0049, 0x004A, 0x004F, 0x0051, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057, 0x0058,
@@ -1879,7 +1879,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_6389aea175cb[] = {
     0x207E, 0x208E, 0xFB00,
 };
 
-// 6 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic, bookerly_20_italic
+// 5 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic
 inline constexpr uint16_t epdSharedFontKernRightCodepoints_8f63eb911272[] = {
     0x0021, 0x0029, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x003F, 0x0041, 0x0042,
     0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E,
@@ -1940,7 +1940,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_8f63eb911272[] = {
     0x2049, 0xFB00, 0xFB01, 0xFB02, 0xFB03, 0xFB04, 0xFB05, 0xFB06,
 };
 
-// 6 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic, bookerly_20_bolditalic
+// 5 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic
 inline constexpr uint16_t epdSharedFontKernRightCodepoints_9d882a3d450b[] = {
     0x0021, 0x0022, 0x0027, 0x0029, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x003F,
     0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C,
@@ -2111,7 +2111,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_c9ab5b5ed136[] = {
     0x2039, 0x203A, 0x207E, 0x208E, 0xFB00,
 };
 
-// 11 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_20_bold, notosans_20_regular, notosans_8_regular
+// 9 faces: notosans_10_bold, notosans_10_regular, notosans_12_bold, notosans_12_regular, notosans_16_bold, notosans_16_regular, notosans_18_bold, notosans_18_regular, notosans_8_regular
 inline constexpr uint16_t epdSharedFontKernRightCodepoints_dbaff3525670[] = {
     0x0021, 0x0022, 0x0026, 0x0027, 0x0029, 0x002C, 0x002D, 0x002E, 0x003A, 0x003B, 0x003F, 0x0041,
     0x0043, 0x0047, 0x0049, 0x004A, 0x004F, 0x0051, 0x0054, 0x0055, 0x0056, 0x0057, 0x0058, 0x0059,
@@ -2155,7 +2155,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_dbaff3525670[] = {
     0x203A, 0xFB00, 0xFB01, 0xFB02, 0xFB03, 0xFB04,
 };
 
-// 6 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold, bookerly_20_bold
+// 5 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold
 inline constexpr uint16_t epdSharedFontKernRightCodepoints_ed08579fd527[] = {
     0x0022, 0x0027, 0x0029, 0x002A, 0x002C, 0x002D, 0x002E, 0x002F, 0x003A, 0x003B, 0x003F, 0x0041,
     0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D,
@@ -2216,7 +2216,7 @@ inline constexpr uint16_t epdSharedFontKernRightCodepoints_ed08579fd527[] = {
     0x203A, 0x2047, 0x2048, 0xFB00, 0xFB01, 0xFB02, 0xFB03, 0xFB04, 0xFB05, 0xFB06,
 };
 
-// 6 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic, bookerly_20_bolditalic
+// 5 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic
 inline constexpr uint16_t epdSharedFontKernRowOffsets_09006d26f705[] = {
         0,    25,    29,    81,    83,   139,   143,   174,   199,   210,   230,   241,   269,   279,   304,   328,
       356,   368,   384,   413,   446,   472,   499,   510,   543,   574,   615,   656,   686,   729,   737,   750,
@@ -2243,7 +2243,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_0df65bff107c[] = {
      2624,  2626,  2627,  2645,  2646,  2647,  2648,  2653,
 };
 
-// 6 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular, bookerly_20_regular
+// 5 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular
 inline constexpr uint16_t epdSharedFontKernRowOffsets_1731f3726a73[] = {
         0,     5,    32,    48,    91,   111,   169,   173,   176,   203,   218,   238,   258,   259,   291,   297,
       311,   343,   371,   383,   399,   428,   462,   489,   511,   525,   562,   593,   644,   664,   716,   724,
@@ -2257,7 +2257,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_1731f3726a73[] = {
      2445,  2448,  2450,  2477,  2524,  2577,
 };
 
-// 6 faces: notosans_10_regular, notosans_12_regular, notosans_16_regular, notosans_18_regular, notosans_20_regular, notosans_8_regular
+// 5 faces: notosans_10_regular, notosans_12_regular, notosans_16_regular, notosans_18_regular, notosans_8_regular
 inline constexpr uint16_t epdSharedFontKernRowOffsets_27736f853c8b[] = {
         0,    29,    32,    37,    54,    61,    66,    72,    73,    75,    82,    83,    87,    93,   100,   101,
       117,   119,   130,   143,   145,   146,   147,   150,   151,   154,   159,   162,   163,   167,   173,   182,
@@ -2267,7 +2267,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_27736f853c8b[] = {
       616,   619,   624,   626,   638,   640,   643,   646,
 };
 
-// 6 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic, bookerly_20_italic
+// 5 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic
 inline constexpr uint16_t epdSharedFontKernRowOffsets_4a0464901ce7[] = {
         0,    27,    31,    82,    86,   131,   165,   186,   197,   215,   225,   247,   257,   280,   298,   322,
       333,   344,   364,   394,   421,   448,   460,   485,   508,   540,   560,   599,   606,   617,   652,   656,
@@ -2281,7 +2281,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_4a0464901ce7[] = {
      2182,  2233,
 };
 
-// 5 faces: notosans_10_bold, notosans_12_bold, notosans_16_bold, notosans_18_bold, notosans_20_bold
+// 4 faces: notosans_10_bold, notosans_12_bold, notosans_16_bold, notosans_18_bold
 inline constexpr uint16_t epdSharedFontKernRowOffsets_50d8fec22a76[] = {
         0,    29,    32,    37,    54,    61,    66,    72,    73,    75,    82,    83,    87,    93,   100,   101,
       117,   119,   130,   143,   145,   146,   147,   150,   151,   154,   159,   162,   163,   167,   173,   182,
@@ -2291,7 +2291,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_50d8fec22a76[] = {
       616,   632,   635,   640,   642,   654,   656,   659,   662,
 };
 
-// 6 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold, bookerly_20_bold
+// 5 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold
 inline constexpr uint16_t epdSharedFontKernRowOffsets_abe0145488a5[] = {
         0,     6,    36,    58,   102,   126,   190,   194,   196,   221,   239,   263,   283,   284,   321,   330,
       345,   387,   424,   436,   450,   492,   531,   558,   580,   595,   636,   679,   735,   762,   821,   826,
@@ -2305,7 +2305,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_abe0145488a5[] = {
      2668,  2723,  2780,  2824,
 };
 
-// 5 faces: notosans_10_italic, notosans_12_italic, notosans_16_italic, notosans_18_italic, notosans_20_italic
+// 4 faces: notosans_10_italic, notosans_12_italic, notosans_16_italic, notosans_18_italic
 inline constexpr uint16_t epdSharedFontKernRowOffsets_c594d46a4de1[] = {
         0,     2,    31,    34,    48,    63,    75,    81,    82,    85,    93,    94,    97,    99,   106,   112,
       113,   129,   131,   143,   157,   160,   161,   162,   165,   166,   168,   169,   174,   176,   179,   182,
@@ -2315,7 +2315,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_c594d46a4de1[] = {
       686,   690,   697,   704,   706,   721,   723,   726,   727,   728,
 };
 
-// 5 faces: notosans_10_bolditalic, notosans_12_bolditalic, notosans_16_bolditalic, notosans_18_bolditalic, notosans_20_bolditalic
+// 4 faces: notosans_10_bolditalic, notosans_12_bolditalic, notosans_16_bolditalic, notosans_18_bolditalic
 inline constexpr uint16_t epdSharedFontKernRowOffsets_eb202e90cbe4[] = {
         0,     2,    31,    34,    48,    63,    75,    81,    82,    85,    93,    94,    97,    99,   106,   112,
       113,   129,   131,   143,   157,   160,   161,   162,   165,   166,   168,   169,   174,   176,   179,   182,
@@ -2338,7 +2338,7 @@ inline constexpr uint16_t epdSharedFontKernRowOffsets_f0589e1fecd9[] = {
      2410,  2415,
 };
 
-// 6 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold, bookerly_20_bold
+// 5 faces: bookerly_10_bold, bookerly_12_bold, bookerly_14_bold, bookerly_16_bold, bookerly_18_bold
 inline constexpr uint8_t epdSharedFontKernSparseCols_2b2bebcc7b54[] = {
      10,  28,  35,  62,  71,  83,  12,  13,  24,  26,  31,  37,  39,  46,  48,  49,
      50,  52,  53,  54,  55,  57,  58,  59,  60,  61,  64,  78,  80,  93,  97, 103,
@@ -2689,7 +2689,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_2e000e721103[] = {
     100, 101, 108, 124, 125, 123, 124,  93,  10,  12,  13,  40, 115,
 };
 
-// 6 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular, bookerly_20_regular
+// 5 faces: bookerly_10_regular, bookerly_12_regular, bookerly_14_regular, bookerly_16_regular, bookerly_18_regular
 inline constexpr uint8_t epdSharedFontKernSparseCols_5dbbf371a83f[] = {
      11,  29,  36,  67,  80,  13,  14,  25,  27,  32,  38,  40,  47,  49,  50,  51,
      53,  54,  55,  57,  58,  59,  61,  70,  75,  77,  90,  94, 100, 107, 108, 109,
@@ -2855,7 +2855,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_5dbbf371a83f[] = {
     116,
 };
 
-// 6 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic, bookerly_20_bolditalic
+// 5 faces: bookerly_10_bolditalic, bookerly_12_bolditalic, bookerly_14_bolditalic, bookerly_16_bolditalic, bookerly_18_bolditalic
 inline constexpr uint8_t epdSharedFontKernSparseCols_703207c100a9[] = {
      13,  15,  26,  27,  28,  30,  32,  39,  48,  51,  52,  53,  54,  56,  67,  69,
      74,  84,  87,  92,  95, 100, 104, 105, 107,  11,  46,  72, 115,  11,  12,  13,
@@ -3042,7 +3042,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_703207c100a9[] = {
      97,  98, 102, 104, 106, 107, 109, 111, 112, 113, 115, 120, 121,
 };
 
-// 6 faces: notosans_10_regular, notosans_12_regular, notosans_16_regular, notosans_18_regular, notosans_20_regular, notosans_8_regular
+// 5 faces: notosans_10_regular, notosans_12_regular, notosans_16_regular, notosans_18_regular, notosans_8_regular
 inline constexpr uint8_t epdSharedFontKernSparseCols_957194106b27[] = {
       8,  12,  14,  16,  18,  20,  22,  24,  25,  30,  32,  33,  37,  38,  39,  40,
      41,  43,  46,  49,  52,  53,  54,  55,  58,  60,  67,  72,  73,  12,  14,  16,
@@ -3087,7 +3087,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_957194106b27[] = {
      33,  66,  68,   1,  51,  55,
 };
 
-// 6 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic, bookerly_20_italic
+// 5 faces: bookerly_10_italic, bookerly_12_italic, bookerly_14_italic, bookerly_16_italic, bookerly_18_italic
 inline constexpr uint8_t epdSharedFontKernSparseCols_c5ff819ba5fb[] = {
      12,  14,  21,  25,  26,  27,  28,  30,  38,  46,  49,  50,  51,  52,  55,  59,
      66,  68,  70,  73,  82,  85,  90,  97, 101, 102, 106,  10,  44,  71, 110,  10,
@@ -3386,7 +3386,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_e0154e7317f2[] = {
      82,  83,  93,  94,  95, 117, 118, 116, 117,  87,   7,   9,  10,  36, 108,
 };
 
-// 5 faces: notosans_10_italic, notosans_12_italic, notosans_16_italic, notosans_18_italic, notosans_20_italic
+// 4 faces: notosans_10_italic, notosans_12_italic, notosans_16_italic, notosans_18_italic
 inline constexpr uint8_t epdSharedFontKernSparseCols_e57b62ea2344[] = {
      69,  70,   8,  13,  15,  17,  19,  20,  22,  24,  25,  33,  34,  36,  38,  39,
      40,  41,  42,  43,  45,  49,  54,  55,  60,  62,  67,  68,  70,  76,  77,  13,
@@ -3436,7 +3436,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_e57b62ea2344[] = {
      78,   4,  68,  34,  64,  72,  80,  81,
 };
 
-// 5 faces: notosans_10_bolditalic, notosans_12_bolditalic, notosans_16_bolditalic, notosans_18_bolditalic, notosans_20_bolditalic
+// 4 faces: notosans_10_bolditalic, notosans_12_bolditalic, notosans_16_bolditalic, notosans_18_bolditalic
 inline constexpr uint8_t epdSharedFontKernSparseCols_e7f09dcecc0a[] = {
      69,  70,   8,  13,  15,  17,  19,  20,  22,  24,  25,  33,  34,  36,  38,  39,
      40,  41,  42,  43,  45,  49,  54,  55,  60,  62,  67,  68,  70,  76,  77,  13,
@@ -3486,7 +3486,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_e7f09dcecc0a[] = {
      69,  70,  75,  76,  77,  78,   4,  68,  34,  64,  72,  80,  81,
 };
 
-// 5 faces: notosans_10_bold, notosans_12_bold, notosans_16_bold, notosans_18_bold, notosans_20_bold
+// 4 faces: notosans_10_bold, notosans_12_bold, notosans_16_bold, notosans_18_bold
 inline constexpr uint8_t epdSharedFontKernSparseCols_f5cf594115ef[] = {
       8,  12,  14,  16,  18,  20,  22,  24,  25,  30,  32,  33,  37,  38,  39,  40,
      41,  43,  46,  49,  52,  53,  54,  55,  58,  60,  67,  72,  73,  12,  14,  16,
@@ -3532,7 +3532,7 @@ inline constexpr uint8_t epdSharedFontKernSparseCols_f5cf594115ef[] = {
      33,  66,  68,   1,  51,  55,
 };
 
-// 49 faces: bookerly_10_bold, bookerly_10_bolditalic, bookerly_10_italic, bookerly_10_regular, bookerly_12_bold, bookerly_12_bolditalic, bookerly_12_italic, bookerly_12_regular, bookerly_14_bold, bookerly_14_bolditalic, bookerly_14_italic, bookerly_14_regular, bookerly_16_bold, bookerly_16_bolditalic, bookerly_16_italic, bookerly_16_regular, bookerly_18_bold, bookerly_18_bolditalic, bookerly_18_italic, bookerly_18_regular, bookerly_20_bold, bookerly_20_bolditalic, bookerly_20_italic, bookerly_20_regular, notosans_10_bold, notosans_10_bolditalic, notosans_10_italic, notosans_10_regular, notosans_12_bold, notosans_12_bolditalic, notosans_12_italic, notosans_12_regular, notosans_14_bold, notosans_14_bolditalic, notosans_14_italic, notosans_14_regular, notosans_16_bold, notosans_16_bolditalic, notosans_16_italic, notosans_16_regular, notosans_18_bold, notosans_18_bolditalic, notosans_18_italic, notosans_18_regular, notosans_20_bold, notosans_20_bolditalic, notosans_20_italic, notosans_20_regular, notosans_8_regular
+// 41 faces: bookerly_10_bold, bookerly_10_bolditalic, bookerly_10_italic, bookerly_10_regular, bookerly_12_bold, bookerly_12_bolditalic, bookerly_12_italic, bookerly_12_regular, bookerly_14_bold, bookerly_14_bolditalic, bookerly_14_italic, bookerly_14_regular, bookerly_16_bold, bookerly_16_bolditalic, bookerly_16_italic, bookerly_16_regular, bookerly_18_bold, bookerly_18_bolditalic, bookerly_18_italic, bookerly_18_regular, notosans_10_bold, notosans_10_bolditalic, notosans_10_italic, notosans_10_regular, notosans_12_bold, notosans_12_bolditalic, notosans_12_italic, notosans_12_regular, notosans_14_bold, notosans_14_bolditalic, notosans_14_italic, notosans_14_regular, notosans_16_bold, notosans_16_bolditalic, notosans_16_italic, notosans_16_regular, notosans_18_bold, notosans_18_bolditalic, notosans_18_italic, notosans_18_regular, notosans_8_regular
 inline constexpr EpdLigaturePair epdSharedFontLigaturePairs_607bf6e70845[] = {
     { 0x00660066, 0xFB00 }, // f f -> U+FB00
     { 0x00660069, 0xFB01 }, // f i -> U+FB01

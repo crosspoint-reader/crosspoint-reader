@@ -31,7 +31,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 92;  // v92: CJK text breaks between characters, with kinsoku
+constexpr uint8_t SECTION_FILE_VERSION = 93;  // v93: 20 pt is the 18 pt faces scaled, so the
+                                              // 20-26 pt font IDs changed; a v92 heading still
+                                              // names the old ones and would draw nothing
+                                              // v92: CJK text breaks between characters, with kinsoku
                                               // v91: rem/px/pt font sizes are relative to the
                                               // body (v90 compounded nested ones), and CSS
                                               // specificity, compound, descendant/child

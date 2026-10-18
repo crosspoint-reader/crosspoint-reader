@@ -115,10 +115,10 @@ class CrossPointSettings {
   // and the labels a reader sees have been point sizes since the UI stopped guessing at names.
   // Only the VALUES are persisted, never the identifiers, so the rename cost nothing.
   //
-  // PT_22/24/26 have no faces of their own: they render the 20 pt master scaled (see
-  // GfxRenderer::insertScaledFont). In every other respect they are ordinary rungs -- selectable
-  // as the default size, available as a per-book override, and cached separately because each
-  // carries its own font ID.
+  // PT_20/22/24/26 have no faces of their own: they render the 18 pt master scaled (see
+  // BUILTIN_FACE_MAX_POINTS and GfxRenderer::insertScaledFont). In every other respect they are
+  // ordinary rungs -- selectable as the default size, available as a per-book override, and
+  // cached separately because each carries its own font ID.
   enum FONT_SIZE {
     PT_10 = 0,
     PT_12 = 1,
@@ -205,17 +205,29 @@ class CrossPointSettings {
   /// and fontPointSizeFromStored() reads those files by these values. Never renumber or insert a
   /// rung in the middle -- an old file's "1" would then name a different size.
   ///
-  /// Adding a size at the TOP is: append a rung here, add the case to getBuiltinReaderFontId(),
-  /// generate the faces, register them in main.cpp.
+  /// Adding a size at the TOP is: append a rung here, add the case to getBuiltinReaderFontId(), and
+  /// add it to SYNTH_FONT_SIZES in lib/EpdFont/scripts/font-sizes.sh for its font ID. main.cpp
+  /// registers every rung above BUILTIN_FACE_MAX_POINTS as the master scaled, so it needs nothing.
   struct ReaderFontRung {
     FONT_SIZE size;
-    uint8_t points;  ///< the point size its faces are generated at
+    uint8_t points;  ///< the point size it renders at
   };
   static constexpr ReaderFontRung FONT_SIZE_RUNGS[] = {
       {PT_10, 10}, {PT_12, 12}, {PT_14, 14}, {PT_16, 16}, {PT_18, 18},
       {PT_20, 20}, {PT_22, 22}, {PT_24, 24}, {PT_26, 26},
   };
   static constexpr int FONT_SIZE_RUNG_COUNT = static_cast<int>(sizeof(FONT_SIZE_RUNGS) / sizeof(FONT_SIZE_RUNGS[0]));
+
+  /// The largest rung with faces of its own (font-sizes.sh's SYNTH_FONT_MASTER, which must agree).
+  /// Every rung above it has none and draws this size's faces enlarged, at builtinFaceScale(), so
+  /// its faces are the master. 20 pt had faces until they were dropped for the flash they took.
+  static constexpr uint8_t BUILTIN_FACE_MAX_POINTS = 18;
+
+  /// The scale a built-in rung draws its faces at: exactly 1 for a rung with faces of its own, its
+  /// size over the master's above that -- 20 pt is the 18 pt faces at x1.11.
+  static constexpr float builtinFaceScale(const uint8_t points) {
+    return points > BUILTIN_FACE_MAX_POINTS ? static_cast<float>(points) / BUILTIN_FACE_MAX_POINTS : 1.0f;
+  }
 
   /// The point size a FONT_SIZE renders at, or 0 if it names no rung.
   static constexpr uint8_t fontSizePoints(const uint8_t size) {
@@ -939,6 +951,9 @@ static_assert(CrossPointSettings::FONT_SIZE_RUNG_COUNT == static_cast<int>(Cross
                   CrossPointSettings::ladderCoversEveryFontSize(),
               "every FONT_SIZE must appear exactly once in FONT_SIZE_RUNGS; a FONT_SIZE without a rung has no "
               "point size, and builtinRungForPoints() could never choose it");
+static_assert(CrossPointSettings::fontSizePoints(CrossPointSettings::builtinRungForPoints(
+                  CrossPointSettings::BUILTIN_FACE_MAX_POINTS)) == CrossPointSettings::BUILTIN_FACE_MAX_POINTS,
+              "the scaling master must be a rung of its own; the sizes above it are drawn from its faces");
 
 // Helper macro to access settings
 #define SETTINGS CrossPointSettings::getInstance()

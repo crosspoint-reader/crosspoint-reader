@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ReaderFontSizes.h"
+#include "fontIds.h"
 
 namespace {
 
@@ -200,3 +201,29 @@ TEST(ReaderSizeListNative, TheSmallSizesSnapAndStepToEight) {
 }
 
 TEST(ReaderSizeListNative, BuiltInFamiliesStillStartAtTheLadder) { EXPECT_EQ(10, ReaderSizeList::builtin().snap(8)); }
+
+// 20 pt has no faces of its own: it is the 18 pt faces drawn at x1.11, the way 22-26 pt are the same
+// faces drawn larger (main.cpp registers every rung above the master like that). A stored 20 pt must
+// still name a rung and an ID of its own, so it keeps reading at 20 pt and caches apart from 18 pt.
+TEST(BuiltinReaderFaces, TwentyPointIsTheEighteenPointFacesScaled) {
+  EXPECT_EQ(S::PT_20, S::builtinRungForPoints(20));
+  EXPECT_EQ(20, int{S::fontSizePoints(S::PT_20)});
+  ASSERT_EQ(18, int{S::BUILTIN_FACE_MAX_POINTS});
+  EXPECT_FLOAT_EQ(20.0f / 18.0f, S::builtinFaceScale(20));
+  EXPECT_NE(BOOKERLY_20_FONT_ID, BOOKERLY_18_FONT_ID);
+  EXPECT_NE(NOTOSANS_20_FONT_ID, NOTOSANS_18_FONT_ID);
+}
+
+// The master and every rung below it draw their own faces at their own size; every rung above it is
+// the master enlarged, never reduced and never drawn at x1.
+TEST(BuiltinReaderFaces, OnlyTheRungsAboveTheMasterAreScaled) {
+  for (const auto& rung : S::FONT_SIZE_RUNGS) {
+    const float scale = S::builtinFaceScale(rung.points);
+    if (rung.points <= S::BUILTIN_FACE_MAX_POINTS) {
+      EXPECT_EQ(1.0f, scale) << int{rung.points} << "pt";
+    } else {
+      EXPECT_GT(scale, 1.0f) << int{rung.points} << "pt";
+      EXPECT_FLOAT_EQ(static_cast<float>(rung.points) / S::BUILTIN_FACE_MAX_POINTS, scale) << int{rung.points} << "pt";
+    }
+  }
+}

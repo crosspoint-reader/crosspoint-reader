@@ -274,9 +274,9 @@ int CrossPointSettings::getBuiltinReaderFontId(uint8_t family, FONT_SIZE size) {
           return BOOKERLY_16_FONT_ID;
         case PT_18:
           return BOOKERLY_18_FONT_ID;
+        // Synthesised from the 18 pt master; the scale lives on the ID (see main.cpp).
         case PT_20:
           return BOOKERLY_20_FONT_ID;
-        // Synthesised from the 20 pt master; the scale lives on the ID (see main.cpp).
         case PT_22:
           return BOOKERLY_22_FONT_ID;
         case PT_24:

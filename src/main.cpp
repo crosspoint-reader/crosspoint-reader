@@ -120,14 +120,6 @@ EpdFont bookerly18ItalicFont(&bookerly_18_italic);
 EpdFont bookerly18BoldItalicFont(&bookerly_18_bolditalic);
 EpdFontFamily bookerly18FontFamily(&bookerly18RegularFont, &bookerly18BoldFont, &bookerly18ItalicFont,
                                    &bookerly18BoldItalicFont);
-// The accessibility rung. Jumps from 18 to 24 rather than continuing in twos: the point is to be
-// readable by someone who cannot read 18 pt at all, and each extra rung costs flash in eight faces.
-EpdFont bookerly20RegularFont(&bookerly_20_regular);
-EpdFont bookerly20BoldFont(&bookerly_20_bold);
-EpdFont bookerly20ItalicFont(&bookerly_20_italic);
-EpdFont bookerly20BoldItalicFont(&bookerly_20_bolditalic);
-EpdFontFamily bookerly20FontFamily(&bookerly20RegularFont, &bookerly20BoldFont, &bookerly20ItalicFont,
-                                   &bookerly20BoldItalicFont);
 
 EpdFont notosans10RegularFont(&notosans_10_regular);
 EpdFont notosans10BoldFont(&notosans_10_bold);
@@ -159,12 +151,6 @@ EpdFont notosans18ItalicFont(&notosans_18_italic);
 EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
 EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
                                    &notosans18BoldItalicFont);
-EpdFont notosans20RegularFont(&notosans_20_regular);
-EpdFont notosans20BoldFont(&notosans_20_bold);
-EpdFont notosans20ItalicFont(&notosans_20_italic);
-EpdFont notosans20BoldItalicFont(&notosans_20_bolditalic);
-EpdFontFamily notosans20FontFamily(&notosans20RegularFont, &notosans20BoldFont, &notosans20ItalicFont,
-                                   &notosans20BoldItalicFont);
 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
@@ -729,23 +715,26 @@ void setupDisplayAndFonts(bool seamless = false, bool skipSdFontDiscovery = fals
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
   renderer.insertFont(BOOKERLY_18_FONT_ID, bookerly18FontFamily);
-  renderer.insertFont(BOOKERLY_20_FONT_ID, bookerly20FontFamily);
-  // 22/24/26 pt have no faces: they render the 20 pt master scaled. Real faces for all three
-  // would cost ~1.9 MB the app partition does not have. See insertScaledFont() for why the scale
-  // belongs to the font ID rather than being threaded through the reader.
-  renderer.insertScaledFont(BOOKERLY_22_FONT_ID, bookerly20FontFamily, 22.0f / 20.0f);
-  renderer.insertScaledFont(BOOKERLY_24_FONT_ID, bookerly20FontFamily, 24.0f / 20.0f);
-  renderer.insertScaledFont(BOOKERLY_26_FONT_ID, bookerly20FontFamily, 26.0f / 20.0f);
 
   renderer.insertFont(NOTOSANS_10_FONT_ID, notosans10FontFamily);
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
-  renderer.insertFont(NOTOSANS_20_FONT_ID, notosans20FontFamily);
-  renderer.insertScaledFont(NOTOSANS_22_FONT_ID, notosans20FontFamily, 22.0f / 20.0f);
-  renderer.insertScaledFont(NOTOSANS_24_FONT_ID, notosans20FontFamily, 24.0f / 20.0f);
-  renderer.insertScaledFont(NOTOSANS_26_FONT_ID, notosans20FontFamily, 26.0f / 20.0f);
+
+  // 20/22/24/26 pt have no faces: they render the 18 pt master scaled, x1.11 to x1.44. Real faces
+  // cost about half a megabyte per size (20 pt's eight were 505,656 B) that the app partition does
+  // not have. See insertScaledFont() for why the scale belongs to the font ID rather than being
+  // threaded through the reader.
+  static_assert(CrossPointSettings::BUILTIN_FACE_MAX_POINTS == 18, "the masters below are the 18 pt families");
+  for (const auto& rung : CrossPointSettings::FONT_SIZE_RUNGS) {
+    if (rung.points <= CrossPointSettings::BUILTIN_FACE_MAX_POINTS) continue;
+    const float scale = CrossPointSettings::builtinFaceScale(rung.points);
+    renderer.insertScaledFont(CrossPointSettings::getBuiltinReaderFontId(CrossPointSettings::BOOKERLY, rung.size),
+                              bookerly18FontFamily, scale);
+    renderer.insertScaledFont(CrossPointSettings::getBuiltinReaderFontId(CrossPointSettings::NOTOSANS, rung.size),
+                              notosans18FontFamily, scale);
+  }
   // The three UI slots are bound by the font ladder rather than registered here, so the first
   // bind and every later rebind run the same code path.
   applyUiFontScale();
