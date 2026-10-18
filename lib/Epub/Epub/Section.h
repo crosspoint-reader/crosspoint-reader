@@ -1,4 +1,5 @@
 #pragma once
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,10 +34,12 @@ class Section {
   };
   // Held only while an incremental build is in progress (see startBuild). Carries the
   // live parser plus the strings it references (the parser stores them by reference)
-  // and the in-RAM page-offset table.
+  // and the in-RAM page-offset table. The table is a deque so it grows in small chunks: a vector
+  // doubling past 1024 pages needs 24 KB contiguous, and a failed allocation aborts. The deque
+  // (like the parser's anchor list) takes one ~0.5 KB node as soon as the build starts.
   struct BuildContext {
     std::unique_ptr<ChapterHtmlSlimParser> parser;
-    std::vector<PageLutEntry> lut;
+    std::deque<PageLutEntry> lut;
     std::string parsePath;
     std::string contentBase;
     std::string imageBasePath;
