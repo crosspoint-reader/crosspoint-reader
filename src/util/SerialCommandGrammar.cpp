@@ -92,14 +92,18 @@ bool parseInt(const std::string_view text, int& out) {
     i = 1;
   }
   if (i >= text.size()) return false;
-  long value = 0;
+  // Checked before the step, not after it: `long` is 32 bits on the device, so value * 10 + digit
+  // could wrap back into range first ("9999999999" became 1410065407 and was accepted).
+  constexpr uint32_t kMax = 0x7fffffffu;
+  uint32_t value = 0;
   for (; i < text.size(); ++i) {
     const char c = text[i];
     if (c < '0' || c > '9') return false;
-    value = value * 10 + (c - '0');
-    if (value > 0x7fffffffL) return false;
+    const uint32_t digit = static_cast<uint32_t>(c - '0');
+    if (value > (kMax - digit) / 10) return false;
+    value = value * 10 + digit;
   }
-  out = static_cast<int>(negative ? -value : value);
+  out = negative ? -static_cast<int>(value) : static_cast<int>(value);
   return true;
 }
 

@@ -133,6 +133,16 @@ TEST(SerialCommandGrammar, IntegersAndLists) {
   EXPECT_FALSE(SerialCommandGrammar::parseInt("-", value));
   EXPECT_FALSE(SerialCommandGrammar::parseInt("12a", value));
   EXPECT_FALSE(SerialCommandGrammar::parseInt("99999999999", value));
+  // The limits, and numbers whose last step overflows 32 bits: on the device `long` was 32 bits
+  // and they wrapped back into range before the range check (the host's 64-bit long hid that).
+  EXPECT_TRUE(SerialCommandGrammar::parseInt("2147483647", value));
+  EXPECT_EQ(value, 2147483647);
+  EXPECT_TRUE(SerialCommandGrammar::parseInt("-2147483647", value));
+  EXPECT_EQ(value, -2147483647);
+  EXPECT_FALSE(SerialCommandGrammar::parseInt("2147483648", value));
+  EXPECT_FALSE(SerialCommandGrammar::parseInt("9999999999", value));
+  EXPECT_FALSE(SerialCommandGrammar::parseInt("4294967296", value));
+  EXPECT_FALSE(SerialCommandGrammar::parseInt("999999999999", value));
 
   int xy[2] = {};
   ASSERT_TRUE(SerialCommandGrammar::parseIntList("120,640", xy, 2));
