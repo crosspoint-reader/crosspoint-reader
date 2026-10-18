@@ -121,7 +121,7 @@ std::optional<int> parsePrintedPageLabel(const std::string& label) {
 constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 
 // Pre-render of the next page within the current chapter only runs when heap is healthy.
-// 44 KB, derived from what the pass actually consumes rather than from what happens to be
+// 34 KB, derived from what the pass actually consumes rather than from what happens to be
 // free — this floor was set the other way twice and was wrong both times:
 //   2026-06-11 (X3): 64 KB silently disabled Background A whenever steady free dipped to
 //     ~65 KB (e.g. right after a cache rebuild), which also starved Background B behind it.
@@ -136,10 +136,22 @@ constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 //   deepest transient      peakTemp, up to 8467 B on this font, inside prewarm decompress
 //   => ~23 KB of headroom below the entry point, nothing retained afterwards (the Page dies
 //      with the pass; only framebuffer pixels survive).
-// 44 KB therefore troughs at ~21 KB worst case, above the ~16 KB the sliced section build
-// reserves, and leaves X3 (which enters at 53-55 KB) ~10 KB of margin instead of ~2. The
+// 44 KB therefore troughed at ~21 KB worst case, above the ~16 KB the sliced section build
+// reserves, and left X3 (which enters at 53-55 KB) ~10 KB of margin instead of ~2. The
 // transient is also held under RenderLock, so no other reader work can allocate into the dip.
-constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 44 * 1024;
+//
+// 2026-10-18 (X4): a TrueType reader font beside a book's three accent families reads at
+// 43-45 KB free, so 44 KB refused the pass on most pages. The pass's own measure of its cost
+// (the heap's low point while it runs, "cost" in its log line), floor lowered to 20 KB for the
+// run, 19 passes:
+//   four TrueType families, a test book's pages      2664-6704 B
+//   one TrueType family, dense prose (The Anarchy)    4208-4692 B
+//   built-in Bookerly, the same prose                6692-8520 B
+// A TrueType face prewarms nothing into the decompressor's page slots (its glyphs are read from
+// the mapped glyph store), and the page itself costs far less than 2026-08-02's 10.5 KB. The
+// trough rule stays (21 KB, as above); the cost allowance is the largest measured, 8.5 KB, plus
+// half again: 21 + 13 = 34 KB. With four families that troughs at ~30 KB or more.
+constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 34 * 1024;
 
 // Background B (next-section pre-build) builds ONLY inside the borrowed secondary framebuffer.
 // It used to carry a second, heap-backed admission path (BG_BUILD_PARSE_MIN_FREE / EXTRACT_BASE /
