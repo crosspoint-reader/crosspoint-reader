@@ -1,9 +1,9 @@
 """Which characters the UI fonts can draw, read back from the generated font headers.
 
 Shared by build_cjk_ui_fonts.py, which decides what goes into the CJK UI faces, and
-scripts/gen_i18n.py, which refuses a translation that uses a character no UI font has: a
-missing glyph draws NOTHING (EpdFont::getGlyph falls back to U+FFFD, which the UI faces do
-not carry), so an uncovered character is a silent gap in a label, not a visible box.
+scripts/gen_i18n.py, which refuses a translation that uses a character no UI font has. A
+missing glyph draws nothing in the Inter faces, which have no U+FFFD, and a replacement box in
+Noto Sans 8, which has one: either way the label is wrong.
 
 The answer comes from the headers that are actually compiled, never from the source fonts:
 fontconvert.py drops every requested codepoint the font has no glyph for, so only the
@@ -41,6 +41,9 @@ CJK_UI_LANGUAGES = {
 # (CjkUiFonts::STAND_IN), so a book title the faces do not cover shows boxes where its characters
 # are, instead of the few it happens to share with a translation standing alone as if they were it.
 CJK_UI_STAND_IN = 0x25A1
+# IDEOGRAPHIC SPACE, also in every CJK UI face: no UI face has it, and a space without a glyph has
+# no advance, so the words either side of one in a CJK title would run together.
+CJK_UI_IDEOGRAPHIC_SPACE = 0x3000
 
 
 def cjk_face_name(lang_code: str, points: int) -> str:
@@ -98,6 +101,6 @@ def ui_face_coverage(fonts_dir: Path) -> set:
 
 
 def drawable(text: str) -> set:
-    """The codepoints of `text` that need a glyph: everything but spaces and control characters,
-    which the renderer advances over or skips."""
-    return set(ord(ch) for ch in text if ord(ch) > 0x20 and not ch.isspace())
+    """The codepoints of `text` that need a glyph: everything but control characters. A space needs
+    one too, for its advance."""
+    return set(ord(ch) for ch in text if ord(ch) >= 0x20)

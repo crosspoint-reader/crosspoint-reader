@@ -42,9 +42,10 @@ FallbackFaceProvider providers[SIZE_COUNT];
 // its characters are, instead of the one or two it shares with a translation standing alone.
 constexpr uint32_t STAND_IN = 0x25A1;
 
-// The characters the CJK faces answer for, the ideographic space excepted: a box is no stand-in
-// for a space.
-bool isCjkCharacter(const uint32_t cp) { return utf8IsCjkBreakable(cp) && cp != 0x3000; }
+// The characters the CJK faces answer for. Not the ideographic space, which every face carries
+// anyway (a box is no stand-in for a space), and not the Hangul fillers, which are default-ignorable
+// and must never draw ink.
+bool isCjkCharacter(const uint32_t cp) { return utf8IsCjkBreakable(cp) && cp != 0x3000 && !utf8IsDefaultIgnorable(cp); }
 
 // The UI faces main.cpp attaches: notosans_8 and Inter 10/12/14 in regular and bold.
 constexpr size_t MAX_ATTACHED = 7;

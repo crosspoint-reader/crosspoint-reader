@@ -1076,6 +1076,10 @@ def main(
     out = Path(output_dir)
     targets = [out / "I18nKeys.h", out / "I18nStrings.h", out / "I18nStrings.cpp"]
     sources = list(Path(translations_dir).glob("*.yaml"))
+    # The glyph check reads the UI font headers: a regenerated face can drop a character.
+    font_root = Path(translations_dir).resolve().parents[2] / "lib" / "EpdFont"
+    sources += list((font_root / "builtinFonts").glob("*.h"))
+    sources.append(font_root / "scripts" / "ui_font_coverage.py")
     if not force and all(t.exists() for t in targets):
         oldest_target = min(t.stat().st_mtime for t in targets)
         newest_source = max(s.stat().st_mtime for s in sources)

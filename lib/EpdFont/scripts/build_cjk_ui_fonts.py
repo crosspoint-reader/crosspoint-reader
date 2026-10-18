@@ -5,7 +5,7 @@ The Inter UI faces carry Latin, Cyrillic and Vietnamese. A Chinese, Japanese or 
 needs a few hundred more characters per language, out of tens of thousands -- the translation
 decides which. So each CJK translation gets its own 1-bit subset face per size, holding exactly
 the characters it uses that the UI faces do not, plus the box that stands in for every CJK
-character it lacks (CJK_UI_STAND_IN), cut from the Noto Sans CJK region of that language (the
+character it lacks (CJK_UI_STAND_IN) and the ideographic space, cut from the Noto Sans CJK region of that language (the
 region picks the glyph forms, which differ for many shared Han characters). src/CjkUiFonts.cpp
 attaches them behind the UI faces as fallback glyphs.
 
@@ -38,6 +38,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from gen_i18n import parse_yaml_file  # noqa: E402
 from ui_font_coverage import (  # noqa: E402
+    CJK_UI_IDEOGRAPHIC_SPACE,
     CJK_UI_LANGUAGES,
     CJK_UI_STAND_IN,
     cjk_face_name,
@@ -79,7 +80,7 @@ def main():
     ui_covered = ui_face_coverage(FONTS_DIR)
     generated = []
     for lang_code, (_, region_path) in CJK_UI_LANGUAGES.items():
-        needed = (translation_characters(lang_code) | {CJK_UI_STAND_IN}) - ui_covered
+        needed = (translation_characters(lang_code) | {CJK_UI_STAND_IN, CJK_UI_IDEOGRAPHIC_SPACE}) - ui_covered
         font = source_font(region_path)
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as f:
             f.write("".join(chr(cp) for cp in sorted(needed)))

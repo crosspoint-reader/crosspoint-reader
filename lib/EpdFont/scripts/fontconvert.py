@@ -25,7 +25,7 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
-parser.add_argument("--codepoints-file", dest="codepoints_file", action="store", help="Generate ONLY the characters in this UTF-8 text file (each distinct character once; whitespace and control characters are ignored), instead of the default intervals and --additional-intervals. No kerning or ligatures: for the CJK UI faces, which serve the characters a translation uses as fallback glyphs of the Inter UI faces (see scripts/build_cjk_ui_fonts.py).")
+parser.add_argument("--codepoints-file", dest="codepoints_file", action="store", help="Generate ONLY the characters in this UTF-8 text file (each distinct character once; control characters are ignored), instead of the default intervals and --additional-intervals. No kerning or ligatures: for the CJK UI faces, which serve the characters a translation uses as fallback glyphs of the Inter UI faces (see scripts/build_cjk_ui_fonts.py).")
 parser.add_argument("--threshold", dest="threshold", type=float, default=0.4, help="Coverage threshold (0-1) for 1-bit black/white quantisation: pixels with greyscale coverage >= threshold become black. Lower = bolder stems. Default 0.4. Ignored for --2bit.")
 args = parser.parse_args()
 
@@ -295,7 +295,7 @@ if args.codepoints_file:
     # A CJK translation uses a few hundred scattered characters out of tens of thousands, and
     # every one costs flash at every size, so nothing is added on top.
     with open(args.codepoints_file, encoding="utf-8") as f:
-        subset = sorted(set(ord(ch) for ch in f.read() if ord(ch) > 0x20 and not ch.isspace()))
+        subset = sorted(set(ord(ch) for ch in f.read() if ord(ch) >= 0x20))
     intervals = []
     add_ints = []
     for cp in subset:

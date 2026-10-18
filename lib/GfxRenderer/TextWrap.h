@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -22,71 +23,60 @@ std::vector<std::string> wrapLines(const char* text, const int maxWidth, const i
 
   if (!text || maxWidth <= 0 || maxLines <= 0) return lines;
 
-  // The pieces a line may end after: the space-separated words, each split further at the
-  // breaker's offsets. A piece split off that way joins its predecessor without a space.
-  struct Piece {
-    std::string text;
-    bool spaceBefore;
-  };
-  std::vector<Piece> pieces;
-  {
-    const std::string all = text;
-    size_t start = 0;
-    while (true) {
-      const size_t spacePos = all.find(' ', start);
-      const std::string word = all.substr(start, spacePos == std::string::npos ? std::string::npos : spacePos - start);
-      size_t from = 0;
-      if (breaker) {
-        for (const size_t offset : breaker(word)) {
-          pieces.push_back({word.substr(from, offset - from), !pieces.empty() && from == 0});
-          from = offset;
-        }
-      }
-      pieces.push_back({word.substr(from), !pieces.empty() && from == 0});
-      if (spacePos == std::string::npos) break;
-      start = spacePos + 1;
-    }
-  }
-
+  // One word at a time, and only as far as the lines go: text can be a 2 KB book summary, and
+  // splitting all of it up front cost a piece per CJK character, tens of KB of heap at once.
+  const size_t length = std::strlen(text);
+  size_t next = 0;  // where the next word starts
   std::string currentLine;
 
-  for (size_t i = 0; i < pieces.size(); ++i) {
-    if (static_cast<int>(lines.size()) == maxLines - 1) {
-      // Last available line: combine any word already started on this line with
-      // the rest of the text, then let truncate fit it with an ellipsis.
-      std::string lastContent = currentLine;
-      for (size_t j = i; j < pieces.size(); ++j) {
-        if (pieces[j].spaceBefore && (j > i || !lastContent.empty())) lastContent += ' ';
-        lastContent += pieces[j].text;
-      }
-      lines.push_back(truncate(lastContent));
-      return lines;
-    }
+  while (next < length) {
+    const char* space = static_cast<const char*>(std::memchr(text + next, ' ', length - next));
+    const size_t wordStart = next;
+    const std::string wordText(text + wordStart, (space ? static_cast<size_t>(space - text) : length) - wordStart);
+    next = space ? static_cast<size_t>(space - text) + 1 : length;
 
-    const std::string& word = pieces[i].text;
-    std::string testLine = currentLine.empty() ? word : currentLine + (pieces[i].spaceBefore ? " " : "") + word;
-
-    if (width(testLine) <= maxWidth) {
-      currentLine = testLine;
-    } else {
-      if (!currentLine.empty()) {
-        lines.push_back(currentLine);
-        // If the carried-over word itself exceeds maxWidth, truncate it and
-        // push it as a complete line immediately — storing it in currentLine
-        // would allow a subsequent short word to be appended after the ellipsis.
-        if (width(word) > maxWidth) {
-          lines.push_back(truncate(word));
-          currentLine.clear();
-          if (static_cast<int>(lines.size()) >= maxLines) return lines;
-        } else {
-          currentLine = word;
-        }
-      } else {
-        // Single word wider than maxWidth: truncate and stop to avoid complicated
-        // splitting rules (different between languages). Results in an aesthetically
-        // pleasing end.
-        lines.push_back(truncate(word));
+    // The word's pieces: split at the breaker's offsets, they join without a space.
+    const std::vector<size_t> breaks = breaker ? breaker(wordText) : std::vector<size_t>{};
+    size_t from = 0;
+    for (size_t b = 0; b <= breaks.size(); ++b) {
+      const bool firstPiece = from == 0;
+      if (static_cast<int>(lines.size()) == maxLines - 1) {
+        // Last available line: combine any word already started on this line with
+        // the rest of the text as written, then let truncate fit it with an ellipsis.
+        std::string lastContent = currentLine;
+        if (!lastContent.empty() && firstPiece) lastContent += ' ';
+        lastContent.append(text + wordStart + from);
+        lines.push_back(truncate(lastContent));
         return lines;
+      }
+
+      const size_t to = b < breaks.size() ? breaks[b] : wordText.size();
+      const std::string piece = wordText.substr(from, to - from);
+      from = to;
+      std::string testLine = currentLine.empty() ? piece : currentLine + (firstPiece ? " " : "") + piece;
+
+      if (width(testLine) <= maxWidth) {
+        currentLine = testLine;
+      } else {
+        if (!currentLine.empty()) {
+          lines.push_back(currentLine);
+          // If the carried-over piece itself exceeds maxWidth, truncate it and
+          // push it as a complete line immediately — storing it in currentLine
+          // would allow a subsequent short word to be appended after the ellipsis.
+          if (width(piece) > maxWidth) {
+            lines.push_back(truncate(piece));
+            currentLine.clear();
+            if (static_cast<int>(lines.size()) >= maxLines) return lines;
+          } else {
+            currentLine = piece;
+          }
+        } else {
+          // Single word wider than maxWidth: truncate and stop to avoid complicated
+          // splitting rules (different between languages). Results in an aesthetically
+          // pleasing end.
+          lines.push_back(truncate(piece));
+          return lines;
+        }
       }
     }
   }
