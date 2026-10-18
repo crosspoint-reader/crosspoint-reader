@@ -144,9 +144,9 @@ constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 44 * 1024;
 // A page arena at least this large is freed once its page is on the panel (releasePageGlyphArena).
 // An SD font's arena holds the page's distinct glyph bitmaps, copied from the card: 3-10 KB on a
 // Latin page, which stays, but 25-31 KB on a dense CJK page (X3, NotoSansCJK 14pt), which otherwise
-// stays for as long as the page is read and keeps the heap under the pre-render floor above. The
-// next page's render or pre-render rebuilds its own arena anyway; only a redraw of the same page
-// (after a menu) reads its glyphs from the card again (~130 ms on such a page).
+// stays for as long as the page is read and keeps the heap under the pre-render floor above. Every
+// prewarm scope clears the cache before it prewarms (FontCacheManager), so a render, pre-render or
+// redraw reads its glyphs from the card either way: the release adds no card reads to those.
 constexpr size_t PAGE_ARENA_RELEASE_MIN_BYTES = 12 * 1024;
 
 // A pre-render after a release does not replace a resident arena (the floor above assumes it
@@ -6136,10 +6136,12 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
       LOG_DBG("ERS", "AA replay aborted mid-pass: page preempted by navigation");
     }
     // timings not otherwise recorded for the pre-rendered path
+    // The replay re-warmed the page's glyphs; the page is complete now, and the next pre-render
+    // scheduled after this call rebuilds its own. Only here: a skipped replay warmed nothing, and a
+    // release that frees nothing would reset the pre-render floor (preRenderMinFreeHeap) to its
+    // base although the pre-render's own arena was freed and the next one allocates a whole arena.
+    releasePageGlyphArena("the AA replay");
   }
-  // The replay re-warmed the page's glyphs; the page is complete now, and the next pre-render
-  // scheduled after this call rebuilds its own.
-  releasePageGlyphArena("the AA replay");
   checkHeapIntegrity("after_bufferdisplay_aa");
 }
 
