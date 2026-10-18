@@ -73,9 +73,10 @@ class SdCardFont {
   int buildAdvanceTable(const char* utf8Text, uint8_t styleMask = 0x0F, const char* extraText = nullptr);
   // Packed variant: each segment holds consecutive NUL-terminated words
   // (paragraph word-arena chunks), scanned without per-word string objects.
+  // includeSmallCaps also prepares uppercase codepoints for small caps, retaining the originals.
   int buildAdvanceTablePacked(const char* const* segments, const size_t* segmentLens, size_t segmentCount,
                               bool includeSpace, bool includeHyphen, uint8_t styleMask = 0x0F,
-                              const char* extraText = nullptr);
+                              const char* extraText = nullptr, bool includeSmallCaps = false);
 
   // Look up advanceX for a codepoint from the advance table.
   // Returns the 12.4 fixed-point advance, or 0 if not found.

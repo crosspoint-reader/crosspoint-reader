@@ -64,10 +64,13 @@ namespace {
 // v53: Persist per-word source ranges alongside the redaction layout changes.
 // v54: Source ranges retain codepoints absorbed by NFC composition.
 // v55: Persist the first logical word of each paragraph for clipping separators.
-// v56: Split hyphen and dash tokens (e.g "foo—bar" into "foo—" and "bar") in standard reading mode
-// v57-59 were used by external-hyphenation/table-grid builds with different formats.
-// v60: Rebuild layouts to include supported static GIF images.
-constexpr uint8_t SECTION_FILE_VERSION = 60;
+// v56: Rendering layout (fonts per word, drop caps, border boxes).
+// v57: Includes explicit hyphen/dash line breaks and invalidates both v56 layouts.
+// v58: Rebuild sections for corrected rendering layout and footnote placement.
+// v59: Preserve stored CSS styles during low-heap layout.
+// v60/61 were used by GIF/table builds with the earlier rendering format.
+// v62: Rebuild current rendering layouts to include supported static GIF images.
+constexpr uint8_t SECTION_FILE_VERSION = 62;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
