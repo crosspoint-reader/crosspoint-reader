@@ -3119,8 +3119,9 @@ static FontSizeLadder buildReaderFontSizeLadder(const int bodyFontId) {
 // Publisher Fonts' Accents and All Text: the book's other families, for the blocks set in them. A generic serif or
 // sans-serif goes to the built-in family of that kind, unless the body is already in it (the reader's own family, or
 // the generic the book's body names: the reader's font stands for that). Monospace stays the reader's font: no
-// monospace face is built in. The book's accent family is in it when it is loaded beside the body: a built-in font,
-// a TrueType reader font, or the book's own body family in All Text (not beside a .cpfont reader font).
+// monospace face is built in. Each of the book's accent families is in it when it is loaded beside the body: a
+// built-in font, a TrueType reader font, or the book's own body family in All Text (not beside a .cpfont reader
+// font); one the glyph store had no room for is not.
 // Deterministic from the book's selection and the body font, as the ladder is from the body font.
 static void buildBookFontFamilies(BlockFontFamilies& families, const std::string& cachePath, const int bodyFontId,
                                   const uint8_t pointSize) {
@@ -3144,12 +3145,14 @@ static void buildBookFontFamilies(BlockFontFamilies& families, const std::string
     if ((book->body & CssFontFamily::kGenericMask) == family + 1u || familyBody[family] == bodyFontId) continue;
     families.add(family + 1u, familyBody[family], builtinFontSizeLadder(family, bodyPt));
   }
-  const char* accent = sdFontSystem.accentFamilyNameFor(cachePath);
-  const int accentId = accent[0] != '\0' ? resolveSdCardFontId(accent, pointSize) : 0;
-  if (const auto native = accentId != 0 ? sdFontSystem.ttfNativeSizes(accentId) : std::nullopt) {
-    FontSizeLadder ladder;
-    ladder.setNative(native->base, native->bodyPpem, native->minPx, native->maxPx);
-    families.add(book->accent, accentId, ladder);
+  for (uint8_t n = 0; n < BookFonts::kMaxAccents; ++n) {
+    const char* accent = sdFontSystem.accentFamilyNameFor(cachePath, n);
+    const int accentId = accent[0] != '\0' ? resolveSdCardFontId(accent, pointSize) : 0;
+    if (const auto native = accentId != 0 ? sdFontSystem.ttfNativeSizes(accentId) : std::nullopt) {
+      FontSizeLadder ladder;
+      ladder.setNative(native->base, native->bodyPpem, native->minPx, native->maxPx);
+      families.add(book->accents[n], accentId, ladder);
+    }
   }
 }
 
@@ -6919,9 +6922,12 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   p.inlineFootnotePreviews = effectiveInlineFootnotePreviews;
   p.imageRendering = effectiveImageRendering;
   p.fontSizeLadder = buildReaderFontSizeLadder(effectiveFontId);
-  BlockFontFamilies fontFamilies;
-  buildBookFontFamilies(fontFamilies, epub->getCachePath(), effectiveFontId, effectiveFontSize);
-  p.fontFamilies = &fontFamilies;
+  // On the heap: about 0.5 KB with the book's accent families, too much for this frame under a section build.
+  const auto fontFamilies = makeUniqueNoThrow<BlockFontFamilies>();
+  if (fontFamilies) {
+    buildBookFontFamilies(*fontFamilies, epub->getCachePath(), effectiveFontId, effectiveFontSize);
+    p.fontFamilies = fontFamilies.get();
+  }
   if (!section->loadSectionFile(p)) {
     LOG_DBG("SLP", "EPUB: section cache not found for spine %d, rebuilding", spineIndex);
     if (!section->createSectionFile(p, nullptr, /*skipEviction=*/false)) {

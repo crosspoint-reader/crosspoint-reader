@@ -338,6 +338,8 @@ uint32_t fnv1a(const uint8_t* data, size_t length) {
 
 uint32_t Section::calculatePropertyHash(const BuildParams& p) {
   uint8_t buffer[96];
+  static_assert(sizeof(buffer) >= 21 + sizeof(uint32_t) + BlockFontFamilies::kMaxFamilies * 3 * sizeof(int32_t),
+                "the settings (21 B) and every family fit");
   size_t offset = 0;
 
   auto append = [&](const void* ptr, size_t size) {

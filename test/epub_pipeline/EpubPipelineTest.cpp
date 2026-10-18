@@ -93,19 +93,27 @@ const char* const kBionicBooks[] = {"test_long_paragraph_spacing", "test_text_re
 const char* const kFontFamilyBooks[] = {"test_font_families"};
 
 // The families as the reader builds them for a 14 pt built-in body (buildBookFontFamilies), with stand-in IDs: the
-// built-in sans-serif's rungs are 2000 + their size, the accent family's native sizes 0x12345600 | px. Both have the
-// book's accent family: Accents beside the built-in body, All Text beside the book's TTF body, Book Body, in one glyph
-// store (Stage B phase 2; phase 1 had no room for it there). All Text's body font ID is another one, which the shim
-// renderer draws alike, so its layout is Accents'.
+// built-in sans-serif's rungs are 2000 + their size, the accent families' native sizes 0x12345600, 0x23456700 and
+// 0x34567800 | px. Both have the book's three accent families (Stage B phase 3): Accents beside the built-in body, All
+// Text beside the book's TTF body, Book Body, in one glyph store. All Text's body font ID is another one, which the
+// shim renderer draws alike, so its layout is Accents'.
 BlockFontFamilies publisherFontFamilies() {
   BlockFontFamilies families;
   families.body = CssParser::fontFamilyHash("Book Body") | CssFontFamily::kSerif;
   FontSizeLadder sans;
   for (const uint16_t pt : {10, 12, 14, 16, 18, 20, 22, 24, 26}) sans.addRung(2000 + pt, pt * 100 / 14);
   families.add(CssFontFamily::kSansSerif, 2014, sans);
-  FontSizeLadder native;
-  native.setNative(0x12345600, (14 * 64 * 150 + 36) / 72, 10, 120);
-  families.add(CssParser::fontFamilyHash("Book Display"), 0x777, native);
+  const struct {
+    const char* name;
+    int32_t base;
+    int32_t bodyFontId;
+  } accents[] = {
+      {"Book Display", 0x12345600, 0x777}, {"Book Script", 0x23456700, 0x888}, {"Book Code", 0x34567800, 0x999}};
+  for (const auto& accent : accents) {
+    FontSizeLadder native;
+    native.setNative(accent.base, (14 * 64 * 150 + 36) / 72, 10, 120);
+    families.add(CssParser::fontFamilyHash(accent.name), accent.bodyFontId, native);
+  }
   return families;
 }
 const BlockFontFamilies kAccentsFamilies = publisherFontFamilies();

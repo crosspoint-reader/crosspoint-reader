@@ -15,9 +15,9 @@
 // block takes one family, a word in another family than its block's that family's face through a font slot of its
 // own (TextBlock::WordFont), and a generic serif or sans-serif maps onto a built-in face.
 struct BlockFontFamilies {
-  // The built-in faces for the two generic families and the book's accent family: beside a TrueType reader font
-  // neither generic is the body's own.
-  static constexpr int kMaxFamilies = 3;
+  // The built-in faces for the two generic families and the book's accent families (BookFonts::kMaxAccents): beside
+  // a TrueType reader font neither generic is the body's own.
+  static constexpr int kMaxFamilies = 5;
 
   struct Family {
     // A family's identity (CssFontFamily::identity), or a generic family (CssFontFamily::kSerif, kSansSerif).

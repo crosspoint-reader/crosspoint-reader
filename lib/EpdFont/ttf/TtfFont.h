@@ -180,7 +180,7 @@ class TtfFont {
 };
 
 /// The TrueType families drawn together from one glyph store (spec 11.1): the reader's body family, and a book's
-/// accent family beside it. Their styles are installed together, the set's identity (ttf::setIdentity) telling the
+/// accent families beside it. Their styles are installed together, the set's identity (ttf::setIdentity) telling the
 /// store which set it holds, and their glyphs share its log, index and face table. Only one renders at a time
 /// (RenderLock), so they share one scratch block, sized for the largest of their styles, one ring and one prefetch
 /// list: an accent family costs its faces and tables, never a second block.
@@ -188,8 +188,9 @@ class TtfFont {
 /// Not thread-safe: every call runs under RenderLock (spec 3.4).
 class TtfFontSet {
  public:
-  /// The body's family and one accent family (Publisher Fonts). The store takes up to glyphstore::kMaxStyles.
-  static constexpr uint8_t kMaxFamilies = 2;
+  /// The body's family and three accent families (Publisher Fonts): the store's eight style blocks hold a body of
+  /// four styles and three one-style families, and its face table (32 faces) the body's sizes and a few of each.
+  static constexpr uint8_t kMaxFamilies = 4;
   static constexpr uint8_t kRingSlots = 8;
   /// The ring's bitmaps together, at most: a native size's glyphs are large, and the ring is held until a wipe.
   static constexpr uint32_t kRingBudgetBytes = 8192;
