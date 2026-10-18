@@ -1526,6 +1526,39 @@ TEST_F(TtfFontSetTest, WithoutItsMissMemoryTheSetDrawsWhatIsStoredAndAMissWaits)
   EXPECT_TRUE(set->restoreMissMemory());  // nothing left to do
 }
 
+TEST_F(TtfFontSetTest, ASetLoadedAgainWithoutAnInstallOpensTheStoreAsItIsOrNotAtAll) {
+  // The ladder's heavier step unloads the set for a decode and loads the same one again: cheap, as the store holds
+  // it; and never an install, which would erase the store under the page being drawn.
+  {
+    const auto set = openSet();
+    ASSERT_NE(nullptr, set);
+    ASSERT_NE(nullptr, set->font(1)->glyph(kRegular, 'A'));
+  }
+  ttf::FileSource sources[2][4];
+  for (int s = 0; s < 4; ++s) {
+    if (!files[s].bytes.empty()) sources[0][s] = files[s].source();
+    if (!accent[s].bytes.empty()) sources[1][s] = accent[s].source();
+  }
+  const uint32_t erases = flash.totalSectorErases();
+  {
+    TtfFontSet again(flash);
+    ASSERT_TRUE(again.load(sources, 2, kIdentitySet, [this] { ++busy; }, TtfFontSet::Install::Never));
+    ASSERT_TRUE(again.font(1)->setBodySize(14));
+    expectDrawnAs(reference(accent[kRegular].bytes, 'A', 14), *again.font(1), kRegular,
+                  again.font(1)->glyph(kRegular, 'A'));
+    EXPECT_EQ(0u, again.font(1)->renders());  // from the store
+  }
+  // Another set, here the body alone, is refused, and the store keeps what it holds.
+  {
+    TtfFontSet other(flash);
+    EXPECT_FALSE(other.load(sources, 1, kIdentityA, [this] { ++busy; }, TtfFontSet::Install::Never));
+  }
+  EXPECT_EQ(1, busy);
+  EXPECT_EQ(erases, flash.totalSectorErases());
+  TtfFontSet same(flash);
+  EXPECT_TRUE(same.load(sources, 2, kIdentitySet, {}, TtfFontSet::Install::Never));
+}
+
 TEST_F(TtfFontSetTest, AnSdModeSetGivesUpItsPageCacheAndTheRingAndGetsThemBack) {
   SimNorFlash chip{kSdOnlyBytes};
   const auto set = openFamilies(chip, {files}, busy);

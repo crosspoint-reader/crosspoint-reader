@@ -206,6 +206,10 @@ class TtfFontSet {
 
   /// One family's files by style (size 0: the family has no such style).
   using Files = ttf::FileSource[4];
+  /// Whether load() may install the set. Never opens only a store that holds the set already, as a set loaded again
+  /// after the reader's memory ladder freed it does: no erase, no copy and no pending wipe, nothing in the way of
+  /// the page it is drawing.
+  enum class Install : uint8_t { IfNeeded, Never };
 
   explicit TtfFontSet(NorFlash& flash);
   TtfFontSet(const TtfFontSet&) = delete;
@@ -216,10 +220,11 @@ class TtfFontSet {
   /// calls `onBusy`, then copies every family's styles. Flash mode while the whole set fits; past that the families
   /// go to SD mode from the last (the least used accent) on, the body last of all. Finishes a pending wipe, behind
   /// `onBusy` too. False when the set cannot be drawn: a family without a regular style or with one the engine
-  /// cannot read, more than the partition holds in SD mode, or out of memory. An SD-mode style reads its outlines
-  /// through its FileSource for as long as the set is loaded: those files must stay open until then.
+  /// cannot read, more than the partition holds in SD mode, or out of memory; with Install::Never, also a set the
+  /// store does not hold as it is. An SD-mode style reads its outlines through its FileSource for as long as the set
+  /// is loaded: those files must stay open until then.
   bool load(const Files* families, uint8_t count, const uint8_t identity[glyphstore::kIdentityBytes],
-            const std::function<void()>& onBusy = {});
+            const std::function<void()>& onBusy = {}, Install install = Install::IfNeeded);
   uint8_t familyCount() const { return count_; }
   /// The set's family `family`, in load()'s order; nullptr past familyCount().
   TtfFont* font(uint8_t family) const { return family < count_ ? fonts_[family].get() : nullptr; }

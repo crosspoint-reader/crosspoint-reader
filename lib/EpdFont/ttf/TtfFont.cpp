@@ -87,7 +87,7 @@ void TtfFont::setHooks(const Hooks& newHooks) { hooks = newHooks; }
 TtfFontSet::TtfFontSet(NorFlash& flash) : flash_(flash), store_(flash) {}
 
 bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t identity[kIdentityBytes],
-                      const std::function<void()>& onBusy) {
+                      const std::function<void()>& onBusy, const Install mode) {
   count_ = 0;
   if (count == 0 || count > kMaxFamilies) return false;
   for (uint8_t f = 0; f < count; ++f) {
@@ -104,6 +104,10 @@ bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t 
   bool installed = false;
   OpenResult opened = store_.open(identity);
   if (opened == OpenResult::NotInstalled || opened == OpenResult::OtherFamily || opened == OpenResult::MapFailed) {
+    if (mode == Install::Never) {
+      LOG_INF("TTF", "the store does not hold the set (%u); not installed here", static_cast<unsigned>(opened));
+      return false;
+    }
     if (!install(families, count, identity, onBusy)) return false;
     installed = true;
     opened = store_.open(identity);
@@ -115,7 +119,8 @@ bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t 
 
   ttf::ScratchPlan plan;
   TtfFont::StylesResult styles = openStyles(families, count, &plan);
-  if ((styles == TtfFont::StylesResult::MapFailed || styles == TtfFont::StylesResult::Changed) && !installed) {
+  if ((styles == TtfFont::StylesResult::MapFailed || styles == TtfFont::StylesResult::Changed) && !installed &&
+      mode == Install::IfNeeded) {
     // The regions opened but a style no longer maps, as the mapping budget shrank since the install (a firmware
     // update), or an SD-mode style's file is not the one installed. Install again, with a plan for today's budget
     // and today's files (spec 6.2); a fresh install that still cannot open its styles is refused below rather than
@@ -146,7 +151,7 @@ bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t 
     count_ = 0;
     return false;
   }
-  if (store_.wipePending()) wipeIfPending(onBusy);
+  if (store_.wipePending() && mode == Install::IfNeeded) wipeIfPending(onBusy);
   LOG_INF("TTF", "%u famil%s loaded: %u B scratch, %u B SD pages, %u B per native size, log %lu of %lu B used", count,
           count == 1 ? "y" : "ies", static_cast<unsigned>(rasterizer_.scratchBytes()),
           static_cast<unsigned>(sdPages_ ? sizeof(ttf::SdPageCache) : 0), static_cast<unsigned>(sizeof(TtfFont::Size)),

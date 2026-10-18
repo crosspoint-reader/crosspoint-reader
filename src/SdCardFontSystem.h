@@ -73,6 +73,17 @@ class SdCardFontSystem {
     return manager_.ttfNativeSizes(bodyFontId);
   }
 
+  /// What the loaded TrueType families give up while an image decodes (the reader's memory ladder, see
+  /// ImageMemoryLadder): their miss-only memory, or all of it until resumeTtf(). SdCardFontManager has the rules.
+  bool ttfLoaded() const { return manager_.ttfLoaded(); }
+  uint32_t releaseTtfMissMemory() { return manager_.releaseTtfMissMemory(); }
+  bool restoreTtfMissMemory() { return manager_.restoreTtfMissMemory(); }
+  bool ttfMissMemoryReleased() const { return manager_.ttfMissMemoryReleased(); }
+  bool suspendTtf(GfxRenderer& renderer) { return manager_.suspendTtf(renderer); }
+  /// The suspended families loaded again, found by name, under the same font IDs. False, none loaded, when they
+  /// cannot be.
+  bool resumeTtf(GfxRenderer& renderer);
+
   /// Publisher Fonts in `mode` (CrossPointSettings::PUBLISHER_FONTS) for the book cached at `cachePath`, whose body
   /// is otherwise drawn in `readerFamily` ("" for a built-in font): the families BookFonts copied out of it become
   /// the book's, drawn like families on the card while that book is open. Body Text and All Text take its body family

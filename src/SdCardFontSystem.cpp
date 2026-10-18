@@ -247,6 +247,19 @@ const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::stri
              : nullptr;
 }
 
+bool SdCardFontSystem::resumeTtf(GfxRenderer& renderer) {
+  if (!manager_.ttfSuspended()) return manager_.ttfLoaded();
+  const SdCardFontFamilyInfo* families[SdCardFontManager::kMaxTtfFamilies] = {};
+  for (uint8_t f = 0; f < manager_.ttfFamilyCount(); ++f) {
+    families[f] = findFamily(manager_.ttfFamilyName(f).c_str());
+    if (!families[f]) {
+      manager_.unloadAll(renderer);  // gone since: the reader loads what is there
+      return false;
+    }
+  }
+  return manager_.resumeTtf(families, renderer);
+}
+
 void SdCardFontSystem::unload(GfxRenderer& renderer) {
   manager_.unloadAll(renderer);
   selectBookFamilies({});  // the reader is closing; its next open selects again
