@@ -407,9 +407,17 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             while (it != self->itemIndex.end() && it->idHash == targetHash) {
               self->tempItemStore.seek(it->fileOffset);
               std::string itemId;
-              serialization::readString(self->tempItemStore, itemId);
+              if (!serialization::tryReadString(self->tempItemStore, itemId, self->tempItemStore.available())) {
+                LOG_ERR("COF", "Invalid temporary manifest cache");
+                XML_StopParser(self->parser, XML_FALSE);
+                return;
+              }
               if (itemId == idref) {
-                serialization::readString(self->tempItemStore, href);
+                if (!serialization::tryReadString(self->tempItemStore, href, self->tempItemStore.available())) {
+                  LOG_ERR("COF", "Invalid temporary manifest cache");
+                  XML_StopParser(self->parser, XML_FALSE);
+                  return;
+                }
                 found = true;
                 break;
               }
@@ -421,8 +429,16 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             self->tempItemStore.seek(0);
             std::string itemId;
             while (self->tempItemStore.available()) {
-              serialization::readString(self->tempItemStore, itemId);
-              serialization::readString(self->tempItemStore, href);
+              if (!serialization::tryReadString(self->tempItemStore, itemId, self->tempItemStore.available())) {
+                LOG_ERR("COF", "Invalid temporary manifest cache");
+                XML_StopParser(self->parser, XML_FALSE);
+                return;
+              }
+              if (!serialization::tryReadString(self->tempItemStore, href, self->tempItemStore.available())) {
+                LOG_ERR("COF", "Invalid temporary manifest cache");
+                XML_StopParser(self->parser, XML_FALSE);
+                return;
+              }
               if (itemId == idref) {
                 found = true;
                 break;

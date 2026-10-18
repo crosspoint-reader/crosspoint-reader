@@ -1,8 +1,10 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 class BookMetadataCache {
  public:
-  void createSpineEntry(const std::string&) {}
+  std::vector<std::string> spineHrefs;
+  void createSpineEntry(const std::string& href) { spineHrefs.push_back(href); }
 };

@@ -2,9 +2,14 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <string>
+
+inline std::string opfTestBytes;
+inline bool opfFailReads = false;
 
 class HalFile {
  public:
@@ -18,8 +23,21 @@ class HalFile {
     return true;
   }
   size_t position() const { return position_; }
-  int available() const { return 0; }
+  int available() const { return static_cast<int>(opfTestBytes.size() - position_); }
+  size_t read(void* bytes, size_t size) {
+    if (opfFailReads) return 0;
+    size = std::min(size, opfTestBytes.size() - position_);
+    std::memcpy(bytes, opfTestBytes.data() + position_, size);
+    position_ += size;
+    return size;
+  }
+  size_t write(const void* bytes, size_t size) {
+    opfTestBytes.replace(position_, size, static_cast<const char*>(bytes), size);
+    position_ += size;
+    return size;
+  }
   void markOpen() {
+    position_ = 0;
     initialized_ = true;
     open_ = true;
   }
@@ -36,6 +54,7 @@ struct TestStorage {
 
   bool openFileForWrite(const char*, const std::string&, HalFile& file) {
     writeOpens++;
+    opfTestBytes.clear();
     file.markOpen();
     return true;
   }

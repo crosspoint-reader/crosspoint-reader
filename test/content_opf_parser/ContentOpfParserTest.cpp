@@ -267,3 +267,29 @@ TEST(ContentOpfParserCover, ReadingParserStillOpensManifestCache) {
   EXPECT_EQ(Storage.writeOpens, 1);
   EXPECT_EQ(Storage.readOpens, 1);
 }
+
+TEST(ContentOpfParserCache, LongManifestStringsRoundTripThroughTheWriter) {
+  const std::string id(4097, 'A');
+  const std::string href = std::string(4097, 'b') + ".xhtml";
+  const std::string xml = "<package><manifest><item id=\"" + id + "\" href=\"" + href +
+                          "\"/></manifest><spine><itemref idref=\"" + id + "\"/></spine></package>";
+  BookMetadataCache cache;
+  ContentOpfParser parser("", "", xml.size(), &cache);
+  parse(parser, xml);
+  ASSERT_EQ(cache.spineHrefs.size(), 1u);
+  EXPECT_EQ(cache.spineHrefs[0], href);
+}
+
+TEST(ContentOpfParserCache, AFailedTemporaryReadAbortsParsing) {
+  const std::string xml =
+      "<package><manifest><item id=\"a\" href=\"book.xhtml\"/></manifest>"
+      "<spine><itemref idref=\"a\"/></spine></package>";
+  BookMetadataCache cache;
+  ContentOpfParser parser("", "", xml.size(), &cache);
+  ASSERT_TRUE(parser.setup());
+  opfFailReads = true;
+  const size_t written = parser.write(reinterpret_cast<const uint8_t*>(xml.data()), xml.size());
+  opfFailReads = false;
+  EXPECT_EQ(written, 0u);
+  EXPECT_TRUE(cache.spineHrefs.empty());
+}
