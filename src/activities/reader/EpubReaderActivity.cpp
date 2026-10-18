@@ -2106,7 +2106,13 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
                 static_cast<unsigned long>(esp_get_free_heap_size()));
         break;
     }
-    page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale);
+    if (SerialTestApi::takeDecodeRefusal()) {
+      // A test build's CMD:HEAP:REFUSE: the step's decode fails as one the heap refused would.
+      image_scratch::noteHeapShort();
+      LOG_INF("ERS", "Memory ladder: decode refused (CMD:HEAP:REFUSE)");
+    } else {
+      page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale);
+    }
     // What the step freed comes back at once, while the decode's buffers are just freed and the heap least broken up.
     switch (in.step) {
       case Step::Plain:

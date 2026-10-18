@@ -14,6 +14,7 @@
 
 #include "CrossPointSettings.h"
 #include "SdCardFontGlobals.h"
+#include "SerialTestApi.h"
 #include "activities/RenderLock.h"
 
 static_assert(CrossPointSettings::FONT_SIZE_RUNGS[CrossPointSettings::FONT_SIZE_RUNG_COUNT - 1].points <=
@@ -274,6 +275,12 @@ const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::stri
 
 bool SdCardFontSystem::resumeTtf(GfxRenderer& renderer) {
   if (!manager_.ttfSuspended()) return manager_.ttfLoaded();
+  if (SerialTestApi::takeReloadRefusal()) {
+    // A test build's CMD:HEAP:REFUSE: the set does not come back, as when the heap is too short for it.
+    LOG_INF("SDFS", "TTF set reload refused (CMD:HEAP:REFUSE)");
+    manager_.unloadAll(renderer);
+    return false;
+  }
   const SdCardFontFamilyInfo* families[SdCardFontManager::kMaxTtfFamilies] = {};
   for (uint8_t f = 0; f < manager_.ttfFamilyCount(); ++f) {
     families[f] = findFamily(manager_.ttfFamilyName(f).c_str());
