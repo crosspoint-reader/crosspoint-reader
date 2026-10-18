@@ -7,6 +7,10 @@
 #include <cstring>
 #include <string>
 
+namespace image_scratch {
+void noteHeapShort();  // ImageBlock.h: a cache band the heap refused is a decode short of memory
+}  // namespace image_scratch
+
 // Streaming cache writer for 2-bit pixels (4 levels) during decode.
 // Packs 4 pixels per byte, MSB first.
 //
@@ -158,6 +162,7 @@ struct PixelCache {
     buffer = static_cast<uint8_t*>(malloc(bufSize));
     if (!buffer) {
       LOG_ERR("IMG", "OOM cache band: %u bytes", (unsigned)bufSize);
+      image_scratch::noteHeapShort();
       return false;
     }
     memset(buffer, FILL_BYTE, bufSize);

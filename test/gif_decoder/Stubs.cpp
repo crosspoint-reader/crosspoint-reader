@@ -19,3 +19,8 @@ EspClass ESP;
 
 // WDT reset — called from decodeToFramebuffer() only, not from the test path.
 extern "C" void esp_task_wdt_reset() {}
+
+// ImageBlock.cpp's (the reader's memory ladder counts decodes short of memory); not linked here.
+namespace image_scratch {
+void noteHeapShort() {}
+}  // namespace image_scratch
