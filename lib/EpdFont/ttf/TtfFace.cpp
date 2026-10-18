@@ -104,6 +104,10 @@ uint32_t format4Glyph(FontBytes& bytes, const Face& face, const uint32_t codepoi
   const uint32_t starts = ends + segX2 + 2;  // past the reserved pad
   const uint32_t deltas = starts + segX2;
   const uint32_t rangeOffsets = deltas + segX2;
+  // Every read stays inside the cmap table, as format 12's do: in SD mode a stray offset past the copied tables
+  // would read the card. FreeType's validator refuses a subtable whose arrays run past the table; here such a
+  // subtable, or a glyph array entry past it, maps nothing.
+  if (static_cast<uint64_t>(rangeOffsets) + segX2 > face.cmapEnd) return 0;
   uint32_t lo = 0;
   uint32_t hi = segX2 / 2;
   while (lo < hi) {
@@ -119,7 +123,9 @@ uint32_t format4Glyph(FontBytes& bytes, const Face& face, const uint32_t codepoi
       const uint16_t rangeOffset = bytes.u16(rangePos);
       if (rangeOffset == 0xFFFF) return 0;  // FreeType reads this broken marker as "no glyph"
       if (rangeOffset == 0) return static_cast<uint32_t>(static_cast<int32_t>(codepoint) + delta) & 0xFFFF;
-      const uint16_t glyph = bytes.u16(rangePos + rangeOffset + 2 * (codepoint - start));
+      const uint64_t glyphAt = uint64_t{rangePos} + rangeOffset + 2 * (codepoint - start);
+      if (glyphAt + 2 > face.cmapEnd) return 0;
+      const uint16_t glyph = bytes.u16(static_cast<uint32_t>(glyphAt));
       return glyph == 0 ? 0 : static_cast<uint32_t>(glyph + delta) & 0xFFFF;
     }
   }
