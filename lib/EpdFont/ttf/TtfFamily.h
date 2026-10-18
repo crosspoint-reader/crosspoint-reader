@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "FontBytes.h"
 #include "GlyphStoreFormat.h"
 
 /// What the registry and the manager need to know about a TrueType family before loading it: which style a
@@ -19,24 +20,16 @@ inline uint8_t nativeIdPixels(const int fontId) { return static_cast<uint8_t>(fo
 /// A window base from `hash`: its bits 8-30. 0 (no window) when they are all clear.
 inline int32_t nativeBaseFrom(const uint32_t hash) { return static_cast<int32_t>(hash & 0x7FFFFF00u); }
 
-/// A font file read in pieces (on the SD card), not mapped.
-struct FileSource {
-  uint32_t size = 0;
-  /// Copies `len` bytes at `offset` to `dst`. False on an I/O error.
-  bool (*read)(void* ctx, uint32_t offset, void* dst, uint32_t len) = nullptr;
-  void* ctx = nullptr;
-};
-
-/// A FileSource over an open file with seekSet() and read() (HalFile on the device), `size` bytes long. The file
-/// must outlive the source.
+/// A FileSource over an open file with seekSet() and read() (HalFile on the device), `size` bytes long, with the
+/// card's `stamp` of it (FileSource::stamp). The file must outlive the source.
 template <typename File>
-FileSource fileSource(File& file, const uint32_t size) {
+FileSource fileSource(File& file, const uint32_t size, const uint32_t stamp = 0) {
   return {size,
           [](void* ctx, const uint32_t offset, void* dst, const uint32_t len) {
             auto* f = static_cast<File*>(ctx);
             return f->seekSet(offset) && f->read(dst, len) == static_cast<int>(len);
           },
-          &file};
+          &file, stamp};
 }
 
 /// True for a name ending in ".ttf", in any case. In-progress copies ("x.ttf.tmp") do not count.

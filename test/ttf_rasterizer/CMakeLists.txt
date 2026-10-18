@@ -18,6 +18,7 @@ add_executable(TtfRasterizerTest
   TtfVsFreeTypeTest.cpp
   TtfCorruptFontTest.cpp
   FreeTypeReference.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/FontBytes.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfRasterizer.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c
