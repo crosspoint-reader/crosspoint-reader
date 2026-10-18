@@ -32,6 +32,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
@@ -140,6 +141,21 @@ constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 // reserves, and leaves X3 (which enters at 53-55 KB) ~10 KB of margin instead of ~2. The
 // transient is also held under RenderLock, so no other reader work can allocate into the dip.
 constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 44 * 1024;
+
+// A page arena at least this large is freed once its page is on the panel (releasePageGlyphArena).
+// An SD font's arena holds the page's distinct glyph bitmaps, copied from the card: 3-10 KB on a
+// Latin page, which stays, but 25-31 KB on a dense CJK page (X3, NotoSansCJK 14pt), which otherwise
+// stays for as long as the page is read and keeps the heap under the pre-render floor above. Every
+// prewarm scope clears the cache before it prewarms (FontCacheManager), so a render, pre-render or
+// redraw reads its glyphs from the card either way: the release adds no card reads to those.
+constexpr size_t PAGE_ARENA_RELEASE_MIN_BYTES = 12 * 1024;
+
+// A pre-render after a release does not replace a resident arena (the floor above assumes it
+// does, "net ~neutral"): it allocates the next page's whole arena on top. Measured on X3: a
+// pre-render costs ~18 KB plus that arena (Hong Lou Meng 44-47 KB, Soseki 30 KB, with 29 KB and
+// 12.6 KB arenas). The floor then has to leave the 16 KB trough the comment above keeps.
+constexpr uint32_t PRE_RENDER_BASE_COST_BYTES = 18 * 1024;
+constexpr uint32_t PRE_RENDER_TROUGH_BYTES = 16 * 1024;
 
 // Background B (next-section pre-build) builds ONLY inside the borrowed secondary framebuffer.
 // It used to carry a second, heap-backed admission path (BG_BUILD_PARSE_MIN_FREE / EXTRACT_BASE /
@@ -1292,6 +1308,9 @@ void EpubReaderActivity::runDeferredGrayscalePass() {
   LOG_DBG("ERS", "Deferred AA%s: planes=%lums gray=%lums restore=%lums", gt.aborted ? " ABORTED" : "", gt.planesMs,
           gt.displayMs, gt.restoreMs);
   checkHeapIntegrity("after_deferred_aa");
+  // The page is on the panel with its grey levels: nothing reads its glyphs until the next render,
+  // which prewarms them again. Freed before the pre-render below is requested, so it can start.
+  releasePageGlyphArena("the AA pass");
   // The AA cleanup just reseeded frameBuffer from frameBufferActive (the current page),
   // so the buffer state is now correct for a pre-render. On X3, render() holds off the
   // PreRender pass while a deferred AA is owed (see the guard there); kick it now so a
@@ -1301,6 +1320,48 @@ void EpubReaderActivity::runDeferredGrayscalePass() {
   // unchanged.
   if (usesDeferredAa() && pendingPreRender) {
     requestUpdate();
+  }
+}
+
+uint32_t EpubReaderActivity::preRenderMinFreeHeap(const bool inkOnly) const {
+  if (releasedPageArenaBytes_ == 0) return PRE_RENDER_MIN_FREE_HEAP_BYTES;
+  // An ink-only pre-render keeps half the 2-bit bytes the last page's arena held.
+  const uint32_t arena = inkOnly ? releasedPageArenaBytes_ / 2 : releasedPageArenaBytes_;
+  return std::max<uint32_t>(PRE_RENDER_MIN_FREE_HEAP_BYTES,
+                            PRE_RENDER_BASE_COST_BYTES + PRE_RENDER_TROUGH_BYTES + arena);
+}
+
+bool EpubReaderActivity::inkOnlyPrerenderAvailable() const {
+  if (renderer.supportsGrayFrame()) return false;
+  const int fontId = getEffectiveReaderFontId();
+  const auto it = renderer.getSdCardFonts().find(fontId);
+  return it != renderer.getSdCardFonts().end() && it->second && it->second->hasTwoBitBitmaps() &&
+         renderer.fontBaseScale(fontId) == 1.0f;
+}
+
+bool EpubReaderActivity::pageDrawsUnscaled(const Page& page) {
+  constexpr uint8_t scaledStyles = EpdFontFamily::SUP | EpdFontFamily::SUB | EpdFontFamily::SMALL_CAPS;
+  for (const auto& element : page.elements) {
+    if (element->getTag() != TAG_PageLine) return false;  // tables, images: not worth proving
+    const TextBlock* block = static_cast<const PageLine*>(element.get())->getBlock();
+    if (!block || !block->valid()) continue;
+    const RenderStyle& style = block->getRenderStyle();
+    if (style.fontSizeMultiplier != 1.0f || style.headingFontId != 0 || block->hasWordSizes()) return false;
+    for (uint16_t i = 0; i < block->wordCount(); i++) {
+      if (block->wordStyle(i) & scaledStyles) return false;
+    }
+  }
+  return true;
+}
+
+void EpubReaderActivity::releasePageGlyphArena(const char* after) {
+  FontCacheManager* fontCache = renderer.getFontCacheManager();
+  if (!fontCache) return;
+  const size_t freed = fontCache->releaseLargeSdPageArenas(PAGE_ARENA_RELEASE_MIN_BYTES);
+  // The latest page's: the next page is likely to need an arena of about the same size.
+  releasedPageArenaBytes_ = static_cast<uint32_t>(freed);
+  if (freed > 0) {
+    LOG_DBG("ERS", "Released the %u B page glyph arena after %s", static_cast<unsigned>(freed), after);
   }
 }
 
@@ -1582,10 +1643,11 @@ void EpubReaderActivity::stepBackgroundSectionBuild() {
       !preRenderedPage.ready && !backgroundBuildThrough_ && section->currentPage + 1 < section->pageCount &&
       lastRenderedSpineIndex_ == currentSpineIndex && lastRenderedPageIndex_ == section->currentPage &&
       (preRenderRearmSpine_ != currentSpineIndex || preRenderRearmPage_ != section->currentPage);
-  if (preRenderWanted && preRenderFree < PRE_RENDER_MIN_FREE_HEAP_BYTES) {
-    HEAP_GATE("preRenderArm", false, preRenderFree, PRE_RENDER_MIN_FREE_HEAP_BYTES, 0, 0);
+  const uint32_t preRenderFloor = preRenderWanted ? preRenderMinFreeHeap(inkOnlyPrerenderAvailable()) : 0;
+  if (preRenderWanted && preRenderFree < preRenderFloor) {
+    HEAP_GATE("preRenderArm", false, preRenderFree, preRenderFloor, 0, 0);
   }
-  if (preRenderWanted && preRenderFree >= PRE_RENDER_MIN_FREE_HEAP_BYTES) {
+  if (preRenderWanted && preRenderFree >= preRenderFloor) {
     preRenderRearmSpine_ = currentSpineIndex;
     preRenderRearmPage_ = section->currentPage;
     pendingPreRender = true;
@@ -3917,9 +3979,11 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     return;
   }
   const uint32_t freeHeap = esp_get_free_heap_size();
-  if (freeHeap < PRE_RENDER_MIN_FREE_HEAP_BYTES) {
+  // Optimistic for a page that turns out to draw scaled text: checked again once it is loaded.
+  const uint32_t preRenderFloor = preRenderMinFreeHeap(inkOnlyPrerenderAvailable());
+  if (freeHeap < preRenderFloor) {
     LOG_DBG("ERS", "PreRender skipped: free=%lu < floor=%lu", static_cast<unsigned long>(freeHeap),
-            static_cast<unsigned long>(PRE_RENDER_MIN_FREE_HEAP_BYTES));
+            static_cast<unsigned long>(preRenderFloor));
     return;
   }
 #if DEBUG_BACKGROUND_WORK
@@ -3957,17 +4021,23 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
              !p->hasUncachedImages(/*forceLoadLargeImages=*/true, /*monochromeOutput=*/true,
                                    /*alsoWarmGrayscale=*/getEffectiveTextAntiAliasing() && !secondaryBufferDegraded_)));
   const bool skippedForImages = p && !drawn;
+  const bool inkOnly = drawn && inkOnlyPrerenderAvailable() && pageDrawsUnscaled(*p);
+  // The floor above assumed ink masks where they were possible; a page that needs its 2-bit glyphs
+  // costs twice that arena, and has to fit on its own terms.
+  const bool fullArenaFits = inkOnly || freeHeap >= preRenderMinFreeHeap(false);
   uint16_t glyphsDropped = 0;
   uint16_t imagesMissed = 0;
   const unsigned long preRenderStart = millis();
-  if (drawn) {
+  if (drawn && fullArenaFits) {
     section->currentPage = nextPage;
     {
       // Belt and braces for the check above: a cache that exists can still fail to replay, and
       // the draw would then fall through to the decode this pass must never run.
       ImageBlock::PlaceholderOnlyScope cacheOnly;
+      renderer.getFontCacheManager()->setInkOnlyPrewarm(inkOnly);
       glyphsDropped =
           renderPageContentOnly(*p, layout.marginTop, layout.marginRight, layout.marginBottom, layout.marginLeft);
+      renderer.getFontCacheManager()->setInkOnlyPrewarm(false);
       imagesMissed = cacheOnly.placeholdersDrawn();
     }
     section->currentPage = savedPage;
@@ -3980,7 +4050,14 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     lowest = static_cast<uint32_t>(esp_get_minimum_free_heap_size());
     heap_caps_monitor_local_minimum_free_size_stop();
   }
-  if (drawn) {
+  if (drawn && !fullArenaFits) {
+    LOG_DBG("ERS",
+            "PreRender skipped: page %d is not plain unscaled text, and its 2-bit arena would not fit (free=%lu < %lu)",
+            nextPage, static_cast<unsigned long>(freeHeap), static_cast<unsigned long>(preRenderMinFreeHeap(false)));
+    // Loading it again would find the same: no re-arm for the page on screen.
+    preRenderRearmSpine_ = currentSpineIndex;
+    preRenderRearmPage_ = savedPage;
+  } else if (drawn) {
     // An incomplete draw keeps `ready` (the framebuffer does hold that page now; the sleep
     // overlay and screenshots restore the current one from it) but is never shown: the turn
     // renders afresh, without this pass's Page in the heap.
@@ -4002,6 +4079,20 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     }
   } else if (skippedForImages) {
     LOG_DBG("ERS", "PreRender skipped: page %d has images that would need a decode (or a single-push panel)", nextPage);
+  }
+  // The next page waits in the framebuffer; displayPreRenderedPage() re-warms its glyphs before
+  // the AA replay, so the arena need not wait with it.
+  if (drawn && fullArenaFits && inkOnly) {
+    // Ink masks must not outlive the pass, whatever their size: the next draw may need the grey
+    // levels. Recorded as the 2-bit arena they stand for, which is what the floor reasons in.
+    FontCacheManager* fontCache = renderer.getFontCacheManager();
+    const size_t freed = fontCache->releaseLargeSdPageArenas(1);
+    fontCache->clearCache();
+    // Nothing freed (every glyph came through the miss ring) says nothing about the next page.
+    if (freed > 0) releasedPageArenaBytes_ = static_cast<uint32_t>(freed * 2);
+    LOG_DBG("ERS", "Released the %u B ink-only page glyph arena after the pre-render", static_cast<unsigned>(freed));
+  } else if (drawn && fullArenaFits) {
+    releasePageGlyphArena("the pre-render");
   }
   checkHeapIntegrity("after_prerender");
 }
@@ -5732,6 +5823,10 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
     }
   }
 
+  // Without a deferred AA pass owed, the page is complete here (inline AA ran above, or none was
+  // wanted). Freed before the pre-render is scheduled, so it can start.
+  if (!pendingGrayscale_.active) releasePageGlyphArena("the page render");
+
   // Schedule the pre-render BEFORE releasing the lock so the loop task can
   // execute it during the waveform wait (~2-4s on X3). frameBuffer is already
   // swapped — the loop task writes into the new (inactive) buffer while the
@@ -6092,6 +6187,11 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
       LOG_DBG("ERS", "AA replay aborted mid-pass: page preempted by navigation");
     }
     // timings not otherwise recorded for the pre-rendered path
+    // The replay re-warmed the page's glyphs; the page is complete now, and the next pre-render
+    // scheduled after this call rebuilds its own. Only here: a skipped replay warmed nothing, and a
+    // release that frees nothing would reset the pre-render floor (preRenderMinFreeHeap) to its
+    // base although the pre-render's own arena was freed and the next one allocates a whole arena.
+    releasePageGlyphArena("the AA replay");
   }
   checkHeapIntegrity("after_bufferdisplay_aa");
 }

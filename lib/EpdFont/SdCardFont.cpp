@@ -77,6 +77,8 @@ void SdCardFont::freeStyleMiniData(PerStyle& s) {
   s.miniGlyphs = nullptr;
   freeArray(s.miniBitmap);
   s.miniBitmap = nullptr;
+  s.miniBitmapBytes = 0;
+  s.miniInkOnly = false;
   s.miniIntervalCount = 0;
   s.miniGlyphCount = 0;
   s.miniMode = PerStyle::MiniMode::NONE;
@@ -1269,9 +1271,28 @@ bool SdCardFont::allCpsCovered(const PerStyle& s, const uint32_t* codepoints, ui
   return true;
 }
 
+// Packs a run of 2-bit glyph bytes (4 pixels each, first pixel in the top bits) into the glyph's ink
+// mask (8 pixels a byte, first pixel in the top bit): a pixel is ink when its level is not 0, the
+// rule GfxRenderer's black-and-white pass draws by (draw mask 0x0E, raw {1,2,3}). Writes
+// (inBytes + 1) / 2 bytes. `out` may be `in`: byte j is written after bytes 2j and 2j + 1 are read.
+static void packInkMask(const uint8_t* in, const uint32_t inBytes, uint8_t* out) {
+  const auto nibble = [](const uint8_t b) -> uint8_t {
+    return static_cast<uint8_t>(((b & 0xC0) ? 8 : 0) | ((b & 0x30) ? 4 : 0) | ((b & 0x0C) ? 2 : 0) |
+                                ((b & 0x03) ? 1 : 0));
+  };
+  for (uint32_t j = 0; 2 * j < inBytes; j++) {
+    const uint8_t hi = nibble(in[2 * j]);
+    const uint8_t lo = 2 * j + 1 < inBytes ? nibble(in[2 * j + 1]) : 0;
+    out[j] = static_cast<uint8_t>((hi << 4) | lo);
+  }
+}
+
 int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly,
                              bool loadKernLigatureData) {
   auto& s = styles_[styleIdx];
+  // Ink masks for a black-and-white-only draw (setInkOnlyPrewarm). Mmap bitmaps need no arena to
+  // shrink; a 1-bit font is its own ink mask.
+  const bool ink = inkOnlyPrewarm_ && !metadataOnly && s.header.is2Bit && !mmapDataBase_;
 
   // ---- Mmap metadata fast-path ----
   // For mmap fonts, fullIntervals and the glyph array are directly pointer-
@@ -1311,8 +1332,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   // first paragraph has populated the metadata cache.
   if (s.miniMode != PerStyle::MiniMode::NONE && allCpsCovered(s, codepoints, cpCount)) {
     // For metadata-only calls, METADATA or FULL cache both satisfy layout queries.
-    // For full (bitmap) calls, only FULL satisfies — METADATA lacks bitmap data.
-    if (metadataOnly || s.miniMode == PerStyle::MiniMode::FULL) {
+    // For full (bitmap) calls, only FULL satisfies — METADATA lacks bitmap data — and only at the
+    // depth asked for: ink masks lack the grey levels, 2-bit glyphs the halving.
+    if (metadataOnly || (s.miniMode == PerStyle::MiniMode::FULL && s.miniInkOnly == ink)) {
       // Ensure ligature metadata is wired if requested but not yet wired.
       if (loadKernLigatureData && !s.ligLoaded) {
         loadStyleKernLigatureData(s, /*ligatureOnly=*/true);
@@ -1638,9 +1660,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   bool bitmapsFromMmap = false;
 
   if (!metadataOnly) {
-    // Compute total bitmap size
+    // Compute total bitmap size: an ink-only prewarm keeps each 2-bit glyph's 1-bit ink mask.
     for (uint32_t i = 0; i < validCount; i++) {
-      totalBitmapSize += s.miniGlyphs[i].dataLength;
+      totalBitmapSize += ink ? (s.miniGlyphs[i].dataLength + 1u) / 2u : s.miniGlyphs[i].dataLength;
     }
 
     // Flash-mmap fast path: the whole .cpfont is already mapped, and glyph
@@ -1678,6 +1700,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
         // heap. Let the caller retry with fewer glyphs instead of losing the whole style.
         return PREWARM_ARENA_TOO_LARGE;
       }
+      s.miniBitmapBytes = arena_ ? 0 : totalBitmapSize;
 
       // Allocate a fresh readOrder covering all validCount glyphs, sorted by
       // bitmap file offset for sequential I/O.
@@ -1709,7 +1732,21 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
           file.seekSet(fileOff);
           seekCount++;
         }
-        if (file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) != static_cast<int>(glyph.dataLength)) {
+        bool readOk = true;
+        uint32_t storedBytes = glyph.dataLength;
+        if (ink) {
+          // Even-sized chunks, so each pair of 2-bit bytes lands in one mask byte.
+          uint8_t chunk[64];
+          for (uint32_t done = 0; readOk && done < glyph.dataLength; done += sizeof(chunk)) {
+            const uint32_t n = std::min<uint32_t>(sizeof(chunk), glyph.dataLength - done);
+            readOk = file.read(chunk, n) == static_cast<int>(n);
+            if (readOk) packInkMask(chunk, n, s.miniBitmap + miniBitmapOffset + done / 2);
+          }
+          storedBytes = (glyph.dataLength + 1u) / 2u;
+        } else {
+          readOk = file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) == static_cast<int>(glyph.dataLength);
+        }
+        if (!readOk) {
           LOG_ERR("SDCF", "Prewarm: short bitmap read (style %u)", styleIdx);
           file.close();
           freeArray(bitmapOrder);
@@ -1720,7 +1757,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
         lastBitmapEnd = fileOff + glyph.dataLength;
 
         glyph.dataOffset = miniBitmapOffset;
-        miniBitmapOffset += glyph.dataLength;
+        glyph.dataLength = static_cast<uint16_t>(storedBytes);
+        miniBitmapOffset += storedBytes;
       }
       freeArray(bitmapOrder);
     }
@@ -1781,7 +1819,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   s.miniData.advanceY = s.header.advanceY;
   s.miniData.ascender = s.header.ascender;
   s.miniData.descender = s.header.descender;
-  s.miniData.is2Bit = s.header.is2Bit;
+  s.miniInkOnly = ink;
+  s.miniData.is2Bit = s.header.is2Bit && !ink;
   if (kernLigOk) {
     // Full prewarm: wire mini kern matrix + class tables + ligatures.
     applyKernLigaturePointers(s, s.miniData);
@@ -1816,6 +1855,21 @@ void SdCardFont::clearCache() {
     styles_[i].reportedMissCount = 0;
     applyGlyphMissCallback(i);
   }
+}
+
+size_t SdCardFont::pageArenaBytes() const {
+  size_t bytes = 0;
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (styles_[i].present) bytes += styles_[i].miniBitmapBytes;
+  }
+  return bytes;
+}
+
+size_t SdCardFont::releasePageArenaIfAtLeast(const size_t minBytes) {
+  const size_t bytes = pageArenaBytes();
+  if (bytes == 0 || bytes < minBytes) return 0;
+  clearCache();
+  return bytes;
 }
 
 void SdCardFont::clearAccumulation() {
@@ -1877,13 +1931,17 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
     s.onDemandMissLogged++;
   }
 
-  // Check overflow cache first (matching both codepoint and style).
+  // Under an ink-only page the font data says 1-bit, so the miss must be an ink mask too.
+  const bool ink = s.miniInkOnly && s.epdFont.data == &s.miniData;
+
+  // Check overflow cache first (matching codepoint, style and depth).
   // Probe all slots: the ring may be sparse after failed insertions.
   for (uint32_t i = 0; i < OVERFLOW_CAPACITY; i++) {
     if (!self->overflow_[i].occupied) {
       continue;
     }
-    if (self->overflow_[i].codepoint == codepoint && self->overflow_[i].styleIdx == styleIdx) {
+    if (self->overflow_[i].codepoint == codepoint && self->overflow_[i].styleIdx == styleIdx &&
+        self->overflow_[i].inkOnly == ink) {
       return &self->overflow_[i].glyph;
     }
   }
@@ -1943,6 +2001,11 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
 
   file.close();
 
+  if (ink && tempBitmap) {
+    packInkMask(tempBitmap, tempGlyph.dataLength, tempBitmap);  // in place: the mask is the front half
+    tempGlyph.dataLength = static_cast<uint16_t>((tempGlyph.dataLength + 1u) / 2u);
+  }
+
   // All reads succeeded — commit to slot (evict old entry when overwriting an occupied slot).
   if (overwriteOccupied) {
     LOG_DBG("SDCF", "Overflow: evicting U+%04X style %u from slot %u", self->overflow_[slot].codepoint,
@@ -1955,6 +2018,7 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   self->overflow_[slot].bitmap = tempBitmap;
   self->overflow_[slot].codepoint = codepoint;
   self->overflow_[slot].styleIdx = styleIdx;
+  self->overflow_[slot].inkOnly = ink;
   self->overflow_[slot].occupied = true;
 
   LOG_DBG("SDCF", "Overflow: loaded U+%04X style %u on demand (slot %u/%u)", codepoint, styleIdx, slot,

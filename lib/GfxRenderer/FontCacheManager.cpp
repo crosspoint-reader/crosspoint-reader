@@ -56,6 +56,20 @@ void FontCacheManager::clearCache() {
   }
 }
 
+size_t FontCacheManager::releaseLargeSdPageArenas(const size_t minBytes) {
+  size_t released = 0;
+  for (auto& [id, font] : sdCardFonts_) {
+    if (font) released += font->releasePageArenaIfAtLeast(minBytes);
+  }
+  return released;
+}
+
+void FontCacheManager::setInkOnlyPrewarm(const bool on) {
+  for (auto& [id, font] : sdCardFonts_) {
+    if (font) font->setInkOnlyPrewarm(on);
+  }
+}
+
 const EpdFontFamily* FontCacheManager::findFamily(const int fontId) const {
   if (lookup_) return lookup_(lookupCtx_, fontId);
   const auto it = fontMap_.find(fontId);

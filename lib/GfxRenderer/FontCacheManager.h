@@ -26,6 +26,11 @@ class FontCacheManager {
   }
 
   void clearCache();
+  // Frees the page arena of every SD font whose arena holds at least `minBytes` of heap
+  // (SdCardFont::releasePageArenaIfAtLeast). Returns the bytes freed.
+  size_t releaseLargeSdPageArenas(size_t minBytes);
+  // SdCardFont::setInkOnlyPrewarm() on every SD font: the next prewarms keep 1-bit ink masks.
+  void setInkOnlyPrewarm(bool on);
   // Prewarm one font's glyphs for the given text. Appends into existing page slots
   // WITHOUT clearing them (multi-font pages call this once per font); clear once via
   // clearCache() before a batch — endScanAndPrewarm() does exactly that.

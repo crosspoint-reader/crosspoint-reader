@@ -51,6 +51,16 @@ class SdCardFont {
   // loadPreviewFont); the reader never does.
   void useArena(BuildArena* arena) { arena_ = arena; }
 
+  // Ink-only prewarm, for a draw that is black and white only (the reader's pre-render): a 2-bit
+  // glyph's black-and-white image is its ink mask, every non-zero level drawing black (the BW draw
+  // mask), so prewarm() then keeps that 1-bit mask -- half the bytes -- and marks the page's font
+  // data 1-bit. Glyph misses are packed the same way while that data is in use. Ignored for 1-bit
+  // fonts and for bitmaps served from the flash mmap. Clear the flag and the cache before a draw
+  // that needs the grey levels.
+  void setInkOnlyPrewarm(bool on) { inkOnlyPrewarm_ = on; }
+  // The regular style's bitmaps are 2-bit: what setInkOnlyPrewarm() can halve.
+  bool hasTwoBitBitmaps() const { return styles_[0].present && styles_[0].header.is2Bit; }
+
   // Pre-read glyphs needed for the given UTF-8 text from SD card.
   // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
   // Default 0x0F = all present styles.
@@ -63,6 +73,11 @@ class SdCardFont {
 
   // Free mini data for all styles, restore stub EpdFontData.
   void clearCache();
+  // Heap bytes the page arenas hold: the glyph bitmaps prewarm() copied from the card for the page.
+  size_t pageArenaBytes() const;
+  // clearCache() when the page arenas hold at least `minBytes` of heap. Returns the bytes freed, or 0.
+  // The next prewarm() rebuilds them from the card, as every page render does anyway.
+  size_t releasePageArenaIfAtLeast(size_t minBytes);
 
   // Soft cache reset: drop the cumulative metadata-only prewarm cache built
   // up by repeated layout-time ensureFontReady() calls. Bitmap-mode
@@ -175,6 +190,11 @@ class SdCardFont {
     // retry. Rounded rather than floored: the retry multiplies it back out, and a floored
     // figure yields a glyph count whose arena still does not fit.
     uint32_t measuredBytesPerGlyph = 0;
+    // Heap bytes miniBitmap holds: 0 when the bitmaps are served from the flash mmap or live in a
+    // caller's arena (useArena), neither of which a release would give back to the heap.
+    uint32_t miniBitmapBytes = 0;
+    // The mini bitmaps are ink masks (setInkOnlyPrewarm): miniData says 1-bit, and misses pack too.
+    bool miniInkOnly = false;
     uint32_t miniIntervalCount = 0;
     uint32_t miniGlyphCount = 0;
 
@@ -252,6 +272,8 @@ class SdCardFont {
     uint8_t* bitmap = nullptr;
     uint32_t codepoint = 0;
     uint8_t styleIdx = 0;
+    // An ink mask (loaded under an ink-only page): served only to a draw of the same depth.
+    bool inkOnly = false;
     bool occupied = false;
   };
   OverflowEntry overflow_[OVERFLOW_CAPACITY] = {};
@@ -275,6 +297,7 @@ class SdCardFont {
 
   // See useArena(). Null: every allocation below is the plain heap call it replaced.
   BuildArena* arena_ = nullptr;
+  bool inkOnlyPrewarm_ = false;
   template <typename T>
   T* allocArray(size_t count);
   template <typename T>

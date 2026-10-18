@@ -59,7 +59,8 @@ void putU32(std::vector<uint8_t>& b, const size_t at, const uint32_t v) {
 // A one-style v4 .cpfont: glyphs A-D and U+FFFD, each with `bitmapBytes` of a distinct byte pattern.
 // With `kerning`, A and B are left classes 1 and 2, B and C right classes 1 and 2, and the 2x2
 // matrix holds {-3, 1, 2, -1}, so prewarm builds a mini kern matrix through the SD chunk path.
-std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning) {
+std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning, const bool twoBit = false,
+                               const uint8_t side = 8) {
   const uint16_t kernLeft = kerning ? 2 : 0;
   const uint16_t kernRight = kerning ? 2 : 0;
   const uint8_t leftClasses = kerning ? 2 : 0;
@@ -75,9 +76,9 @@ std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning) {
 
   const char magic[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
   std::copy(magic, magic + 8, b.begin());
-  putU16(b, 8, 4);   // version
-  putU16(b, 10, 0);  // 1-bit
-  b[12] = 1;         // one style
+  putU16(b, 8, 4);                // version
+  putU16(b, 10, twoBit ? 1 : 0);  // bit 0: 2-bit bitmaps
+  b[12] = 1;                      // one style
 
   const size_t toc = HEADER;
   b[toc] = 0;  // style id
@@ -102,8 +103,8 @@ std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning) {
 
   for (uint32_t g = 0; g < GLYPHS; g++) {
     const size_t at = glyphsAt + g * sizeof(EpdGlyph);
-    b[at] = 8;                            // width
-    b[at + 1] = 8;                        // height
+    b[at] = side;                         // width
+    b[at + 1] = side;                     // height
     putU16(b, at + 2, 10 << 4);           // advanceX, 12.4 fixed point
     putU16(b, at + 6, 8);                 // top
     putU16(b, at + 8, bitmapBytes);       // dataLength
@@ -322,3 +323,197 @@ TEST(SdFontArena, ZeroSizeRingGlyphIsOwnedWithNoBitmap) {
 }
 
 }  // namespace
+
+// The reader frees a large page arena once the page is on the panel (EpubReaderActivity): a CJK
+// page's 25-31 KB of bitmaps would otherwise stay on the heap for as long as the page is read,
+// although the next render rebuilds the arena from the card anyway. pageArenaBytes() is the
+// heap the arena holds; releasePageArenaIfAtLeast() frees it only past a threshold, so a small
+// Latin arena stays.
+TEST(SdFontArena, PageArenaBytesAreTheHeapBitmapBytes) {
+  constexpr uint16_t kBitmap = 300;
+  const std::string path = writeTemp(buildFont(kBitmap, /*kerning=*/false));
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  EXPECT_EQ(0u, font.pageArenaBytes());
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(GLYPHS * kBitmap, font.pageArenaBytes()) << "A-D and U+FFFD";
+  font.clearCache();
+  EXPECT_EQ(0u, font.pageArenaBytes());
+}
+
+TEST(SdFontArena, ASmallArenaIsKept) {
+  constexpr uint16_t kBitmap = 300;
+  const std::string path = writeTemp(buildFont(kBitmap, /*kerning=*/false));
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(0u, font.releasePageArenaIfAtLeast(GLYPHS * kBitmap + 1));
+  EXPECT_EQ(GLYPHS * kBitmap, font.pageArenaBytes());
+}
+
+TEST(SdFontArena, ALargeArenaIsReleasedAndTheNextPrewarmRebuildsIt) {
+  constexpr uint16_t kBitmap = 300;
+  const std::string path = writeTemp(buildFont(kBitmap, /*kerning=*/false));
+  SdCardFont reference;
+  ASSERT_TRUE(reference.load(path.c_str()));
+  ASSERT_EQ(0, reference.prewarm("ABCD", 0x01));
+
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(GLYPHS * kBitmap, font.releasePageArenaIfAtLeast(GLYPHS * kBitmap));
+  EXPECT_EQ(0u, font.pageArenaBytes());
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  expectSameGlyphs(*reference.getEpdFont(0)->data, *font.getEpdFont(0)->data);
+}
+
+TEST(SdFontArena, AnArenaModeLoadHoldsNoHeapArena) {
+  const std::string path = writeTemp(buildFont(300, /*kerning=*/false));
+  BuildArena arena(64 * 1024);
+  ASSERT_TRUE(arena.valid());
+  SdCardFont font;
+  font.useArena(&arena);
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(0u, font.pageArenaBytes()) << "the bitmaps are in the caller's arena, not on the heap";
+  EXPECT_EQ(0u, font.releasePageArenaIfAtLeast(1));
+}
+
+// The pre-render draws black and white only, and a 2-bit glyph's black-and-white image is its ink
+// mask: the BW pass draws every non-zero level (GfxRenderer's BW draw mask, raw {1,2,3}). An
+// ink-only prewarm keeps just that mask, half the bytes, so a dense CJK page's arena fits the
+// pre-render's heap. 8x8 2-bit glyphs are 16 bytes; their masks are 8.
+namespace {
+
+uint8_t level2Bit(const uint8_t* bitmap, const uint32_t pixel) {
+  return (bitmap[pixel / 4] >> (6 - 2 * (pixel % 4))) & 3;
+}
+bool ink1Bit(const uint8_t* bitmap, const uint32_t pixel) { return ((bitmap[pixel / 8] >> (7 - pixel % 8)) & 1) != 0; }
+
+void expectInkMaskOf(const uint8_t* full, const uint8_t* ink, const uint32_t pixels, const uint32_t g) {
+  for (uint32_t p = 0; p < pixels; p++) {
+    ASSERT_EQ(level2Bit(full, p) != 0, ink1Bit(ink, p)) << "glyph " << g << " pixel " << p;
+  }
+}
+
+}  // namespace
+
+TEST(SdFontArena, AnInkOnlyPrewarmKeepsEachGlyphsInkMaskInHalfTheBytes) {
+  const std::string path = writeTemp(buildFont(16, /*kerning=*/false, /*twoBit=*/true));
+  SdCardFont full;
+  ASSERT_TRUE(full.load(path.c_str()));
+  ASSERT_EQ(0, full.prewarm("ABCD", 0x01));
+  SdCardFont ink;
+  ASSERT_TRUE(ink.load(path.c_str()));
+  ink.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, ink.prewarm("ABCD", 0x01));
+
+  const EpdFontData& f = *full.getEpdFont(0)->data;
+  const EpdFontData& i = *ink.getEpdFont(0)->data;
+  EXPECT_TRUE(f.is2Bit);
+  EXPECT_FALSE(i.is2Bit) << "the renderer must read the arena as 1-bit";
+  EXPECT_EQ(full.pageArenaBytes() / 2, ink.pageArenaBytes());
+  ASSERT_EQ(f.intervalCount, i.intervalCount);
+  const uint32_t n = glyphCount(f);
+  for (uint32_t g = 0; g < n; g++) {
+    ASSERT_EQ(glyphDataBytes(f.glyph[g].width, f.glyph[g].height, false), i.glyph[g].dataLength) << "glyph " << g;
+    expectInkMaskOf(f.bitmap + f.glyph[g].dataOffset, i.bitmap + i.glyph[g].dataOffset,
+                    f.glyph[g].width * f.glyph[g].height, g);
+  }
+}
+
+TEST(SdFontArena, AnInkOnlyPrewarmOfA1BitFontChangesNothing) {
+  const std::string path = writeTemp(buildFont(8, /*kerning=*/false));
+  SdCardFont plain;
+  ASSERT_TRUE(plain.load(path.c_str()));
+  ASSERT_EQ(0, plain.prewarm("ABCD", 0x01));
+  SdCardFont ink;
+  ASSERT_TRUE(ink.load(path.c_str()));
+  ink.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, ink.prewarm("ABCD", 0x01));
+  expectSameGlyphs(*plain.getEpdFont(0)->data, *ink.getEpdFont(0)->data);
+  EXPECT_FALSE(ink.getEpdFont(0)->data->is2Bit);
+}
+
+// A glyph the prewarm did not load comes through the miss ring. Under an ink-only page it has to
+// be an ink mask as well, since the page's font data says 1-bit; and a ring entry of one depth
+// must never serve a draw of the other.
+TEST(SdFontArena, InkOnlyMissesAreInkMasksAndNeverServeAFullDraw) {
+  const std::string path = writeTemp(buildFont(16, /*kerning=*/false, /*twoBit=*/true));
+  SdCardFont reference;
+  ASSERT_TRUE(reference.load(path.c_str()));
+  ASSERT_EQ(0, reference.prewarm("ABCD", 0x01));
+  const EpdFontData& r = *reference.getEpdFont(0)->data;
+
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  font.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, font.prewarm("A", 0x01));  // C comes from the ring
+  const EpdFontData& inkData = *font.getEpdFont(0)->data;
+  ASSERT_FALSE(inkData.is2Bit);
+  const EpdGlyph* glyph = inkData.provider->missGlyph('C');
+  ASSERT_NE(nullptr, glyph);
+  const uint8_t* bitmap = nullptr;
+  ASSERT_TRUE(inkData.provider->ownsBitmap(glyph, bitmap));
+  ASSERT_NE(nullptr, bitmap);
+  EXPECT_EQ(8u, glyph->dataLength);
+  expectInkMaskOf(r.bitmap + r.glyph[2].dataOffset, bitmap, 64, 2);
+
+  // The next page renders in full: the ring, which still holds C's ink mask, must not hand it over.
+  font.setInkOnlyPrewarm(false);
+  ASSERT_EQ(0, font.prewarm("A", 0x01));
+  const EpdFontData& fullData = *font.getEpdFont(0)->data;
+  ASSERT_TRUE(fullData.is2Bit);
+  glyph = fullData.provider->missGlyph('C');
+  ASSERT_NE(nullptr, glyph);
+  ASSERT_TRUE(fullData.provider->ownsBitmap(glyph, bitmap));
+  EXPECT_EQ(16u, glyph->dataLength);
+  EXPECT_EQ(0, std::memcmp(r.bitmap + r.glyph[2].dataOffset, bitmap, 16));
+}
+
+// The coverage fast path keeps a page's data when it already holds the codepoints. It must not keep
+// ink masks for a draw that needs the grey levels, nor 2-bit glyphs a pre-render wants halved.
+TEST(SdFontArena, APrewarmOfTheOtherDepthRebuildsTheSameGlyphs) {
+  const std::string path = writeTemp(buildFont(16, /*kerning=*/false, /*twoBit=*/true));
+  SdCardFont reference;
+  ASSERT_TRUE(reference.load(path.c_str()));
+  ASSERT_EQ(0, reference.prewarm("ABCD", 0x01));
+
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  font.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  font.setInkOnlyPrewarm(false);
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  ASSERT_TRUE(font.getEpdFont(0)->data->is2Bit) << "ink masks served to a 2-bit draw";
+  expectSameGlyphs(*reference.getEpdFont(0)->data, *font.getEpdFont(0)->data);
+
+  font.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_FALSE(font.getEpdFont(0)->data->is2Bit) << "2-bit glyphs kept for an ink-only draw";
+  EXPECT_EQ(reference.pageArenaBytes() / 2, font.pageArenaBytes());
+}
+
+// A CJK glyph at 14pt is ~180 bytes: more than one 64-byte read chunk, and often an odd byte count,
+// whose last byte packs into half a mask byte. 23x23 2-bit is 133 bytes, read as 64 + 64 + 5.
+TEST(SdFontArena, AGlyphLongerThanAChunkWithAnOddByteCountPacksWhole) {
+  constexpr uint8_t kSide = 23;
+  constexpr uint16_t kBytes = (kSide * kSide + 3) / 4;
+  static_assert(kBytes == 133, "the case this test is about");
+  const std::string path = writeTemp(buildFont(kBytes, /*kerning=*/false, /*twoBit=*/true, kSide));
+  SdCardFont full;
+  ASSERT_TRUE(full.load(path.c_str()));
+  ASSERT_EQ(0, full.prewarm("AB", 0x01));
+  SdCardFont ink;
+  ASSERT_TRUE(ink.load(path.c_str()));
+  ink.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, ink.prewarm("AB", 0x01));
+  const EpdFontData& f = *full.getEpdFont(0)->data;
+  const EpdFontData& i = *ink.getEpdFont(0)->data;
+  const uint32_t n = glyphCount(f);
+  for (uint32_t g = 0; g < n; g++) {
+    if (f.glyph[g].dataLength == 0) continue;
+    ASSERT_EQ(glyphDataBytes(kSide, kSide, false), i.glyph[g].dataLength) << "glyph " << g;
+    expectInkMaskOf(f.bitmap + f.glyph[g].dataOffset, i.bitmap + i.glyph[g].dataOffset, kSide * kSide, g);
+  }
+}
