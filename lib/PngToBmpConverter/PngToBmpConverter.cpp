@@ -433,6 +433,16 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   uint8_t filter = ihdrRest[3];
   uint8_t interlace = ihdrRest[4];
 
+  const bool validDepth = colorType == PNG_COLOR_GRAYSCALE
+                              ? (bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16)
+                          : colorType == PNG_COLOR_PALETTE
+                              ? (bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8)
+                              : (bitDepth == 8 || bitDepth == 16);
+  if (!validDepth) {
+    LOG_ERR("PNG", "Unsupported bit depth %u for color type %u", bitDepth, colorType);
+    return false;
+  }
+
   // Skip IHDR CRC
   pngFile.seekCur(4);
 
