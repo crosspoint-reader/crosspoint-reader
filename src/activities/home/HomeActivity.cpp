@@ -307,7 +307,7 @@ void HomeActivity::loop() {
 
   auto activateSelection = [this] {
     if (selectorIndex < recentBooks.size()) {
-      onSelectBook(recentBooks[selectorIndex].path);
+      onRecentBookSelected(recentBooks[selectorIndex].path);
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
@@ -362,7 +362,7 @@ void HomeActivity::loop() {
   // book directly (recentBooks is most-recent-first and already pruned of
   // files missing from the SD card).
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && hasContinueReading && !recentBooks.empty()) {
-    onSelectBook(recentBooks[0].path);
+    onRecentBookSelected(recentBooks[0].path);
     return;
   }
 
@@ -565,7 +565,7 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onRecentBookSelected(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
