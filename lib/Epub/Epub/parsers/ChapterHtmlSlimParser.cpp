@@ -1385,7 +1385,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (matches(name, HEADER_TAGS, std::size(HEADER_TAGS))) {
-    // Text running straight into a block ("pride<h3>…") is still in the part-word
+    // Text running straight into a block ("text<h3>…") is still in the part-word
     // buffer; flush it into the block it belongs to before that block is replaced.
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
@@ -1427,7 +1427,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       brStyle.fromBrElement = true;
       self->startNewTextBlock(brStyle);
     } else {
-      // Same as <br/> above: "pride<div>…" must not carry "pride" into the new block.
+      // Flush pending text before the new block, as the header and <br/> branches do.
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }

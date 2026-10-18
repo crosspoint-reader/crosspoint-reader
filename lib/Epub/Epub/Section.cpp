@@ -66,7 +66,8 @@ namespace {
 // v55: Persist the first logical word of each paragraph for clipping separators.
 // v56: Split hyphen and dash tokens (e.g "foo—bar" into "foo—" and "bar") in standard reading mode
 // v57: Preserve stored CSS styles during low-heap layout.
-constexpr uint8_t SECTION_FILE_VERSION = 57;
+// v58: Text running into a block or heading start stays in its own paragraph.
+constexpr uint8_t SECTION_FILE_VERSION = 58;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
