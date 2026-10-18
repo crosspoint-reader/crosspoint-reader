@@ -15,6 +15,7 @@ class BuildArena;
 class SdCardFont;
 class NorFlash;
 class TtfFont;
+class TtfFontSet;
 struct SdCardFontFamilyInfo;
 
 // Whether a load may populate the flash font partition on a cache miss.
@@ -125,10 +126,11 @@ class SdCardFontManager {
   // serves the target size itself.
   int aliasFontId_ = 0;
   uint8_t aliasPointSize_ = 0;
-  // The loaded TTF family, if any: its font area (EspNorFlash) and the font drawn from it. The
-  // font is destroyed first, so the store is closed before the flash goes.
+  // The loaded TTF family, if any: its font area (EspNorFlash), and the set of one it is drawn from. The
+  // set is destroyed first, so the store is closed before the flash goes.
   std::unique_ptr<NorFlash> ttfFlash_;
-  std::unique_ptr<TtfFont> ttf_;
+  std::unique_ptr<TtfFontSet> ttfSet_;
+  TtfFont* ttf_ = nullptr;  // the set's family
   uint32_t ttfIdentityHash_ = 0;
   int ttfFontId_ = 0;
   int32_t ttfNativeBase_ = 0;  // the native sizes' ID window; 0: none

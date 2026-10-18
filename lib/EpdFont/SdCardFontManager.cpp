@@ -26,7 +26,8 @@ SdCardFontManager::~SdCardFontManager() {
       delete lf.font;
     }
     loaded_.clear();
-    ttf_.reset();
+    ttf_ = nullptr;
+    ttfSet_.reset();
     ttfFlash_.reset();
   }
 }
@@ -147,6 +148,8 @@ bool SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRen
   }
   uint8_t identity[glyphstore::kIdentityBytes];
   ttf::familyIdentity(stamps, identity);
+  uint8_t setIdentity[glyphstore::kIdentityBytes];
+  ttf::setIdentity(&identity, 1, setIdentity);
 
   // Held while the family is loaded: the font area (a few words), and the font with its scratch block.
   auto flash = makeUniqueNoThrow<EspNorFlash>();
@@ -154,12 +157,12 @@ bool SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRen
     LOG_ERR("SDMGR", "No font partition for TTF family %s", family.name.c_str());
     return false;
   }
-  auto font = makeUniqueNoThrow<TtfFont>(*flash);
-  if (!font) {
-    LOG_ERR("SDMGR", "OOM allocating TtfFont for %s", family.name.c_str());
+  auto set = makeUniqueNoThrow<TtfFontSet>(*flash);
+  if (!set) {
+    LOG_ERR("SDMGR", "OOM allocating TtfFontSet for %s", family.name.c_str());
     return false;
   }
-  if (!font->load(sources, identity, onColdLoad) || !font->setBodySize(targetPtSize)) {
+  if (!set->load(&sources, 1, setIdentity, onColdLoad) || !set->font(0)->setBodySize(targetPtSize)) {
     LOG_ERR("SDMGR", "TTF family %s cannot be drawn at %u pt", family.name.c_str(), targetPtSize);
     return false;
   }
@@ -170,7 +173,8 @@ bool SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRen
     return false;
   }
   ttfFlash_ = std::move(flash);
-  ttf_ = std::move(font);
+  ttfSet_ = std::move(set);
+  ttf_ = ttfSet_->font(0);
   ttfIdentityHash_ = identityHash;
   registerTtfFace(renderer, fontId);
   ttfNativeBase_ = pickNativeBase(renderer, identityHash, family.name.c_str());
@@ -280,7 +284,7 @@ bool SdCardFontManager::setTtfBodySize(GfxRenderer& renderer, const uint8_t poin
 }
 
 void SdCardFontManager::wipeTtfIfPending(const std::function<void()>& onBusy) {
-  if (ttf_) ttf_->wipeIfPending(onBusy);
+  if (ttfSet_) ttfSet_->wipeIfPending(onBusy);
 }
 
 bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize,
@@ -438,7 +442,8 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
             "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store, %lu kerning pairs worked out",
             loadedFamilyName_.c_str(), static_cast<unsigned long>(ttf_->renders()),
             static_cast<unsigned long>(ttf_->storeHits()), static_cast<unsigned long>(ttf_->kernLookups()));
-    ttf_.reset();  // closes the store before its flash goes
+    ttf_ = nullptr;
+    ttfSet_.reset();  // closes the store before its flash goes
     ttfFlash_.reset();
     ttfFontId_ = 0;
   }
