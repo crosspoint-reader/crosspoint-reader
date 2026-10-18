@@ -952,6 +952,7 @@ bool EpubReaderActivity::handleInput() {
     } else {
       openReaderMenu();
     }
+    return true;
   }
 
   if (footnoteDepth > 0 && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
@@ -1336,6 +1337,11 @@ bool EpubReaderActivity::launchKOReaderSync() {
   if (!KOREADER_STORE.hasCredentials()) return false;
 
   RenderLock renderLock;
+  // The requested page is still being built: it has not been shown or saved, so it must not be synced.
+  if (renderWaitsForBuild) {
+    LOG_DBG("KOSync", "Page still being built; sync skipped");
+    return false;
+  }
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
