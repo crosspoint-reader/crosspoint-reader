@@ -20,16 +20,17 @@
 // firmware version and not across one: adding or removing a rung changes which face
 // a heading resolves to for an unchanged body fontId, so the hash still matches a
 // cache laid out by the old ladder. Changing the shipped rungs is therefore a cache
-// format change and MUST bump SECTION_FILE_VERSION -- adding 20/22/24/26 pt did.
-// Some rungs have no face of their own: 22/24/26 pt render the 20 pt master scaled (see
+// format change and MUST bump SECTION_FILE_VERSION -- adding 20/22/24/26 pt did, and so did
+// turning 20 pt from a real face into a scaled one, which changed every one of those rungs' IDs.
+// Some rungs have no face of their own: 20/22/24/26 pt render the 18 pt master scaled (see
 // GfxRenderer::insertScaledFont). This struct does not need to know which, and that is worth
 // stating because an earlier note here said the opposite.
 //
 // The worry was double resampling: resolve() landing on a synthesised rung and then applying a
 // residual on top, scaling an already-scaled glyph. That would be real if the scale lived in the
 // glyph data. It lives on the FONT ID instead, and GfxRenderer compounds it with whatever residual
-// the caller passes -- drawTextScaled(id24, ..., 1.1f) is ONE resample of the 20 pt master at
-// 1.2 x 1.1, never a resample of a resample. So a synthesised rung is as good a source as a real
+// the caller passes -- drawTextScaled(id24, ..., 1.1f) is ONE resample of the 18 pt master at
+// 1.33 x 1.1, never a resample of a resample. So a synthesised rung is as good a source as a real
 // one, resolve() can treat every rung alike, and no per-rung flag is needed.
 //
 // What does still hold: the rung's sizePct is the rung's nominal size, so the residual resolve()

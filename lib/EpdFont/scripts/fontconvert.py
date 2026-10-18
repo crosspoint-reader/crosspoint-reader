@@ -33,7 +33,7 @@ GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "
 # Must match FontDecompressor::HOT_GLYPH_BUF_SIZE. A glyph that packs larger than this cannot be
 # served by the device's per-glyph fallback cache and renders blank whenever the page prewarm
 # misses it, so the check below refuses to generate one.
-HOT_GLYPH_BUF_SIZE = 640
+HOT_GLYPH_BUF_SIZE = 576
 
 font_stack = [freetype.Face(f) for f in args.fontstack]
 is2Bit = args.is2Bit

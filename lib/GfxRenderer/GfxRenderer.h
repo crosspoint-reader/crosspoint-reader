@@ -149,16 +149,16 @@ class GfxRenderer {
   static constexpr uint8_t SCALED_GLYPH_MAX_ENTRIES = 80;
   static constexpr uint16_t SCALED_GLYPH_ARENA_BYTES = 3584;
   // What the arena has to hold once a BODY size is synthesised (see insertScaledFont): every
-  // glyph on the page goes through the resampler, at the 20 pt master's glyph size times the
-  // base scale. Measured over a realistic 62-glyph page: 7,820 B at 26 pt Bookerly, 6,659 B at
-  // 24 pt -- 1.9-2.2x the arena above, which was sized for CSS-scaled body text with ~40 B
-  // masks. Overflowing it resets the cache mid-page, so the working set resamples two or three
-  // times per page instead of once, and at ~1 ms per glyph at these sizes that is 60-120 ms a
-  // page turn on exactly the sizes added for readers who need them most.
+  // glyph on the page goes through the resampler, at the master's glyph size times the base
+  // scale -- i.e. at the target size, whichever master it comes from. Measured over a realistic
+  // 62-glyph page: 7,820 B at 26 pt Bookerly, 6,659 B at 24 pt -- 1.9-2.2x the arena above, which was sized for
+  // CSS-scaled body text with ~40 B masks. Overflowing it resets the cache mid-page, so the working set resamples two
+  // or three times per page instead of once, and at ~1 ms per glyph at these sizes that is 60-120 ms a page turn on
+  // exactly the sizes added for readers who need them most.
   //
   // Chosen only when the body text itself is a synthesised size (ensureScaledGlyphCache's
   // bodyFontId), so a reader at a real size keeps the smaller block. It used to follow "is any
-  // scaled font registered" -- which main.cpp always does for 22/24/26 pt, so every reader paid
+  // scaled font registered" -- which main.cpp always does for 20-26 pt, so every reader paid
   // the +4,608 B, permanently, whatever size they read at.
   static constexpr uint16_t SCALED_GLYPH_ARENA_BYTES_SYNTH = 8192;
   mutable uint16_t scaledGlyphArenaBytes_ = SCALED_GLYPH_ARENA_BYTES;  // actual size once allocated
@@ -258,9 +258,9 @@ class GfxRenderer {
 
   /// Registers a font ID that has NO faces of its own: it renders `font` scaled by `scale`.
   ///
-  /// This is how the reader offers sizes above its largest real face — 22/24/26 pt come off the
-  /// 20 pt master at x1.10, x1.20 and x1.30. Shipping them as real faces costs ~1.9 MB the app
-  /// partition does not have; scaling costs nothing but the resample, which measures ~1.4 us per
+  /// This is how the reader offers sizes above its largest real face — 20/22/24/26 pt come off the
+  /// 18 pt master at x1.11, x1.22, x1.33 and x1.44. Shipping them as real faces costs more flash
+  /// than the app partition has; scaling costs nothing but the resample, which measures ~1.4 us per
   /// glyph and is cached per distinct glyph per page (see ScaledGlyphEntry).
   ///
   /// Why the scale lives HERE rather than being passed by the reader: a distinct font ID is

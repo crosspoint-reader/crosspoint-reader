@@ -5,7 +5,7 @@
 /// Settings > System > Font Scaling Test.
 ///
 /// The reader's size ladder in one column per family, every rung marked as a real pre-rendered
-/// face or as one rendered by scaling the 20 pt master.
+/// face or as one rendered by scaling the 18 pt master.
 ///
 /// It exists because the measurements could not answer the question. bench/font_main.cpp put the
 /// mean absolute coverage error of an area-weighted resample at 6-8% across the ratios the ladder
@@ -24,8 +24,8 @@
 /// It once carried per-style and running-text pages comparing a real face against the same size
 /// scaled from a smaller one. Those answered a question that is now closed — whether to synthesise
 /// sizes at all, and from which master — and kept as decoration they would have implied the reader
-/// still renders 20 pt by scaling 18 pt, or produces some size by reduction, neither of which is
-/// true. What remains is the ladder, which is what a reader meets.
+/// produces some size by reduction, which it does not. What remains is the ladder, which is what a
+/// reader meets: 18 pt real beside 20 pt scaled from it is the comparison that question needed.
 class FontScalingTestActivity final : public Activity {
  public:
   explicit FontScalingTestActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
