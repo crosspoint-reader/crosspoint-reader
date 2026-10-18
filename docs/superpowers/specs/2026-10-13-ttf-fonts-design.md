@@ -903,7 +903,38 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   file rewritten in place at the same size and time installed again; an accent kept whole when nothing with more on
   the card fits; an optional table outside the file left out of the block; a cut-short format-4 subtable passed over
   for the next. Host suite 2883/2883.
-- **X4 test:** see below.
+- **X4 test (2026-10-18, serial test API, 14 pt; files uploaded over USB serial, so every file is dated 1980):**
+  - **Discovery:** DroidSansFallbackFull (4 MB, one style) is listed, "Found TTF family: DroidSansFallback (1
+    files)"; too large for flash mode, it was not listed before.
+  - **A CJK body in SD mode** (`test_cjk_zh_honglou.epub` in DroidSansFallback): "1 family installed: 1 styles
+    (0 kept, 1 in SD mode), log 1769472 B" in about 6.9 s behind the popup, erasing the previous store included;
+    14,528 B scratch (the 8 KB pool) and 4,204 B of SD pages. The first chapter (6 pages, 503 distinct glyphs) built
+    in 3.8 s and read 1,261 SD pages (2.5 a glyph): about 7.5 ms a new glyph, render, card and flash writes in all.
+    The text is DroidSansFallback, the heading at its own native size; the ASCII quotes, which DroidSansFallback
+    lacks (no Latin), draw as missing. Page turns took 1.1-1.3 s to idle, the panel's time, every glyph from the
+    store. After a reboot the family opened in about 60 ms (the directory check included) and the book in 1.2 s:
+    "0 glyphs rendered, 4912 read from the store", 0 SD pages read. Heap in the book 48.5-50.0 KB free (largest
+    36.9-43.0 KB).
+  - **BookerlyTT and `families_test.epub` in Accents:** "4 families installed: 8 styles (0 kept, 4 in SD mode), log
+    589824 B" in about 11.8 s: Bookerly whole, Book Display (Inter, two styles), Book Script (Noto Sans Italic) and
+    Book Code (Ubuntu Bold) on the card. Phase 3 left Book Script and Book Code out. In the screenshots every family
+    draws where the goldens say: the Inter title, headings and span paragraph; the Book Script paragraph, heading and
+    inline "second accent"; the Ubuntu Bold inline code and code block; the body in BookerlyTT. The first chapter
+    built in 2.3 s; the session read 124 SD pages. Heap in the book 41.1-43.4 KB free (largest 30.7 KB), against
+    52.1-54.1 KB (18.4) for phase 3's BookerlyTT with one accent: two more families' faces and tables, and the
+    4.2 KB of SD pages.
+  - **Kept blocks:** to Off, "1 family installed: 4 styles (4 kept, 0 in SD mode)" in 6.0 s (heap 56.1-56.6 KB,
+    largest 42.9 KB); back to Accents, "4 families installed: 8 styles (4 kept, 4 in SD mode)" in 6.2 s (phase 3:
+    13.8 s with nothing kept). With the section cached and the store new, the first page drew its misses (36 SD
+    pages) in a 74 ms prewarm, the page in 0.9 s.
+  - **Accents beside the built-in Bookerly:** the three accent families fit whole, "3 families installed: 4 styles
+    (0 kept, 0 in SD mode)", as before SD mode: 53.2 KB free (43.0). Body Text 55.5-56.0 KB (22.5), as phase 3.
+  - Home 76.5 KB after every mode. No errors from the store, the engine or the flash; the Background-C fall-back for
+    low heap in Off and Body Text is phase 2's (11.1.2).
+- **Left open:** previews of a family not installed (7.6); tricky fonts and the S3's internal-RAM scratch (8.1);
+  `BookFonts::kMaxFaceBytes`; the install reads each SD-mode file's directory up to three times (planning, the kept
+  check, the copy), a few small reads each; the forward-read order holds within a prefetch batch, not across them
+  (the CJK chapter read 2.5 pages a glyph).
 
 ## 9. Testing
 
