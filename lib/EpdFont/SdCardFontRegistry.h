@@ -24,6 +24,9 @@ struct SdCardFontFamilyInfo {
   // Derived, not stored: a TTF file is listed with pointSize 0, which no .cpfont name can give, and a field
   // here would cost the registry's 128 reserved records heap for good.
   bool ttf() const { return !files.empty() && files.front().pointSize == 0; }
+  // Which family this is: FNV-1a over its name and its files' paths. A book's family is named as the book declares
+  // it, so two books' families can share a name; their files, in each book's cache, tell them apart.
+  uint32_t filesKey() const;
 
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   bool hasSize(uint8_t size) const;

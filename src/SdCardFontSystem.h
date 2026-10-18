@@ -34,6 +34,14 @@ class SdCardFontSystem {
   /// partition (genuine first load) — callers use it to show a "loading font" popup.
   void ensureLoaded(GfxRenderer& renderer, const char* familyName, uint8_t pointSize,
                     const std::function<void()>& onColdLoad = {}, FlashCachePolicy policy = FlashCachePolicy::ReadWrite,
+                    BuildArena* arena = nullptr) {
+    ensureLoaded(renderer, &familyName, 1, pointSize, onColdLoad, policy, arena);
+  }
+  /// The same for families drawn together, the body's first ("" or a name not on the card is left out): TrueType
+  /// families share one glyph store (SdCardFontManager::loadTtfFamilies); a .cpfont family first is loaded alone.
+  /// Kept as loaded only while they are the same families from the same files.
+  void ensureLoaded(GfxRenderer& renderer, const char* const* familyNames, uint8_t count, uint8_t pointSize,
+                    const std::function<void()>& onColdLoad = {}, FlashCachePolicy policy = FlashCachePolicy::ReadWrite,
                     BuildArena* arena = nullptr);
 
   /// Load a family only to show it on screen. A family already present in the

@@ -289,7 +289,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       SETTINGS.sdFontFamilyName[0] = '\0';
       return;
     }
-    if (family->ttf() && manager_.ttfLoaded()) {
+    if (family->ttf() && manager_.ttfFamiliesLoaded(&family, 1)) {
       manager_.setTtfBodySize(renderer, targetPt);  // drawn natively: a new size, never a reload
       return;
     }
@@ -323,32 +323,34 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   }
 }
 
-void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFamily, const uint8_t pointSize,
-                                    const std::function<void()>& onColdLoad, const FlashCachePolicy policy,
-                                    BuildArena* const arena) {
-  const std::string& currentFamily = manager_.currentFamilyName();
-  const uint8_t targetPt = sizeListFor(wantedFamily).snap(pointSize);
-
-  if (!wantedFamily || wantedFamily[0] == '\0') {
-    if (!currentFamily.empty()) manager_.unloadAll(renderer);
+void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* const* wantedFamilies, const uint8_t count,
+                                    const uint8_t pointSize, const std::function<void()>& onColdLoad,
+                                    const FlashCachePolicy policy, BuildArena* const arena) {
+  // The families found, in the order asked; one beside the first only when both are TrueType (a .cpfont family has
+  // the font area to itself).
+  const SdCardFontFamilyInfo* families[SdCardFontManager::kMaxTtfFamilies] = {};
+  uint8_t found = 0;
+  for (uint8_t i = 0; i < count && found < SdCardFontManager::kMaxTtfFamilies; ++i) {
+    const SdCardFontFamilyInfo* family = findFamily(wantedFamilies[i]);
+    if (family && (found == 0 || (family->ttf() && families[0]->ttf()))) families[found++] = family;
+  }
+  if (found == 0) {
+    if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
     return;
   }
+  const SdCardFontFamilyInfo* family = families[0];
+  const uint8_t targetPt = sizeListFor(family->name.c_str()).snap(pointSize);
 
-  bool familyMatches = (currentFamily == wantedFamily);
-  if (familyMatches) {
-    const auto* family = findFamily(wantedFamily);
-    if (!family) {
-      manager_.unloadAll(renderer);
-      return;
-    }
-    if (family->ttf() && manager_.ttfLoaded()) {
-      // Book open: no glyph record or face of the family is in use, so a full store can be emptied here, and the
-      // last book's sizes go.
-      manager_.dropTtfNativeSizes(renderer);
-      manager_.wipeTtfIfPending(onColdLoad);
-      manager_.setTtfBodySize(renderer, targetPt);
-      return;
-    }
+  if (family->ttf() && manager_.ttfFamiliesLoaded(families, found)) {
+    // The same families from the same files (a book's family of the same name as the last book's is another):
+    // book open, so no glyph record or face of theirs is in use, a full store can be emptied here, and the last
+    // book's sizes go.
+    manager_.dropTtfNativeSizes(renderer);
+    manager_.wipeTtfIfPending(onColdLoad);
+    manager_.setTtfBodySize(renderer, targetPt);
+    return;
+  }
+  if (!family->ttf() && family->name == manager_.currentFamilyName()) {
     const auto* best = family->pickClosestSize(targetPt);
     if (best && best->pointSize == manager_.currentPointSize()) {
       manager_.ensureSizeAlias(renderer, targetPt);  // same face, possibly a new target size
@@ -356,10 +358,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
     }
   }
 
-  if (!currentFamily.empty()) manager_.unloadAll(renderer);
-
-  const auto* family = findFamily(wantedFamily);
-  if (!family) return;
+  if (!manager_.currentFamilyName().empty()) manager_.unloadAll(renderer);
 
   // The loader and the resolver used to disagree, and the loader lost. loadFamily() takes the
   // CLOSEST size the family ships, but resolveFontId() only handed the font out on an EXACT
@@ -370,9 +369,9 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, const char* wantedFam
   // Both now agree: the closest face is loaded and the requested size is served from it, scaled,
   // under an alias ID (SdCardFontManager::ensureSizeAlias). The chosen typeface AND the chosen
   // size, which is what the setting promised.
-  if (!manager_.loadFamily(*family, renderer, targetPt, onColdLoad, policy, arena)) {
-    LOG_ERR("SDFS", "Failed to load SD font family: %s", wantedFamily);
-  }
+  const bool loaded = found > 1 ? manager_.loadTtfFamilies(families, found, renderer, targetPt, onColdLoad)
+                                : manager_.loadFamily(*family, renderer, targetPt, onColdLoad, policy, arena);
+  if (!loaded) LOG_ERR("SDFS", "Failed to load SD font family: %s", family->name.c_str());
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, const uint8_t pointSize) const {
