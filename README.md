@@ -33,7 +33,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 - **Library workflow**: indexed title/author search, recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
 
 - **Wireless workflows**:
-  
+
   - File transfer web UI
   - EPUB Optimizer
   - Web settings UI/API (edit many device settings from browser)
@@ -42,7 +42,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
   - AP mode (hotspot) and STA mode (join existing Wi-Fi), both with QR helpers
   - Calibre wireless connect flow
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
-  - OTA update checks and installs from GitHub releases
+  - OTA update checks and installs from GitHub releases ([security boundaries](docs/ota-security.md))
 
 - **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
@@ -73,9 +73,9 @@ https://crosspointreader.com/#unlock-tool before you can flash CrossPoint.
 USB port or browser before assuming the device is locked. Only reach for the unlocker if the device still doesn't appear.
 
 > ### ⚠️ WARNING: READ THIS BEFORE USING THE UNLOCKER ⚠️
-> 
+>
 > **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
-> 
+>
 > Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
 > stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
 > the firmware you flashed doesn't support OTA, **there is no way out**.

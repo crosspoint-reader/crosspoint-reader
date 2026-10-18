@@ -1,0 +1,151 @@
+diff --git a/libs/network/SecureNet/include/ResumableFetch.h b/libs/network/SecureNet/include/ResumableFetch.h
+index 29211d3..4bd113f 100644
+--- a/libs/network/SecureNet/include/ResumableFetch.h
++++ b/libs/network/SecureNet/include/ResumableFetch.h
+@@ -29,6 +29,8 @@ struct FetchOptions {
+   // already content-encrypted, this skips a second TLS session and its record
+   // buffer on low-heap boards; only the URL token loses transport security.
+   bool redirectToHttp = false;
++  // Firmware transfers must never follow a plaintext hop.
++  bool requireHttps = false;
+ };
+ 
+ struct FetchSink {
+@@ -111,6 +113,10 @@ inline FetchResult fetchResumable(const std::string& startUrl, const FetchOption
+   int stalled = 0;
+   for (int attempt = 0; attempt < kMaxAttempts && stalled < kMaxStalled; ++attempt) {
+     SecureHttpClient http;
++    if (options.requireHttps && fetchOrigin(url).rfind("https://", 0) != 0) {
++      result.status = -1;
++      return result;
++    }
+     if (!http.begin(url)) {
+       result.status = -1;
+       return result;
+diff --git a/libs/network/SecureNet/src/SecureClient.cpp b/libs/network/SecureNet/src/SecureClient.cpp
+index 1b5aaf6..1062914 100644
+--- a/libs/network/SecureNet/src/SecureClient.cpp
++++ b/libs/network/SecureNet/src/SecureClient.cpp
+@@ -19,7 +19,10 @@ bool SecureClient::tls13Available() {
+ 
+ SecureClient::~SecureClient() { stop(); }
+ 
+-void SecureClient::setCACert(const char* rootCA) { _rootCA = rootCA; }
++void SecureClient::setCACert(const char* rootCA) {
++  _rootCA = rootCA;
++  _insecure = false;
++}
+ void SecureClient::setInsecure() { _insecure = true; }
+ 
+ #if defined(FREEINK_NET_WOLFSSL)
+@@ -89,9 +92,14 @@ int SecureClient::connectWithMethod(const char* host, uint16_t port, void* metho
+ 
+   if (_insecure) {
+     wolfSSL_CTX_set_verify(ctx, WOLFSSL_VERIFY_NONE, nullptr);
+-  } else if (_rootCA) {
+-    wolfSSL_CTX_load_verify_buffer(ctx, reinterpret_cast<const unsigned char*>(_rootCA),
+-                                   strlen(_rootCA), WOLFSSL_FILETYPE_PEM);
++  } else {
++    wolfSSL_CTX_set_verify(ctx, WOLFSSL_VERIFY_PEER, nullptr);
++    if (!_rootCA || wolfSSL_CTX_load_verify_buffer(ctx, reinterpret_cast<const unsigned char*>(_rootCA),
++                                                   strlen(_rootCA), WOLFSSL_FILETYPE_PEM) != WOLFSSL_SUCCESS) {
++      if (Serial) Serial.println("[SecureClient] trusted CA load failed");
++      stop();
++      return 0;
++    }
+   }
+   wolfSSL_SetIORecv(ctx, wcRecv);
+   wolfSSL_SetIOSend(ctx, wcSend);
+@@ -103,6 +111,11 @@ int SecureClient::connectWithMethod(const char* host, uint16_t port, void* metho
+     return 0;
+   }
+   _ssl = ssl;
++  if (!_insecure && wolfSSL_check_domain_name(ssl, host) != WOLFSSL_SUCCESS) {
++    if (Serial) Serial.println("[SecureClient] hostname verification setup failed");
++    stop();
++    return 0;
++  }
+   wolfSSL_SetIOReadCtx(ssl, &_transport);
+   wolfSSL_SetIOWriteCtx(ssl, &_transport);
+   wolfSSL_UseSNI(ssl, WOLFSSL_SNI_HOST_NAME, host, strlen(host));
+diff --git a/libs/network/SecureNet/test/host/stubs/Arduino.h b/libs/network/SecureNet/test/host/stubs/Arduino.h
+index bafcf7e..6a87bcf 100644
+--- a/libs/network/SecureNet/test/host/stubs/Arduino.h
++++ b/libs/network/SecureNet/test/host/stubs/Arduino.h
+@@ -22,4 +22,19 @@ class String {
+   std::string s_;
+ };
+ 
+-class IPAddress {};
++class IPAddress {
++ public:
++  uint8_t operator[](size_t) const { return 127; }
++};
++struct FakeSerial {
++  explicit operator bool() const { return false; }
++  template <class... T>
++  void printf(const char*, T...) {}
++  void println(const char*) {}
++};
++inline FakeSerial Serial;
++struct FakeESP {
++  unsigned getFreeHeap() const { return 100000; }
++  unsigned getMaxAllocHeap() const { return 100000; }
++};
++inline FakeESP ESP;
+diff --git a/libs/network/SecureNet/test/host/stubs/Client.h b/libs/network/SecureNet/test/host/stubs/Client.h
+index 5d0bdd9..d87c714 100644
+--- a/libs/network/SecureNet/test/host/stubs/Client.h
++++ b/libs/network/SecureNet/test/host/stubs/Client.h
+@@ -16,5 +16,9 @@ class Client {
+   virtual void stop() = 0;
+   virtual uint8_t connected() = 0;
+   virtual operator bool() = 0;
+-  void setTimeout(unsigned long) {}
++  void setTimeout(unsigned long ms) { timeout_ = ms; }
++  unsigned long getTimeout() const { return timeout_; }
++
++ private:
++  unsigned long timeout_ = 1000;
+ };
+diff --git a/libs/network/SecureNet/test/host/test_resumable_fetch.cpp b/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
+index b7809fb..216571d 100644
+--- a/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
++++ b/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
+@@ -214,5 +214,36 @@ int main() {
+   r = get("http://a/f", sink());
+   assert(!r.complete && r.bytes == 5);
+ 
++  // OTA refuses plaintext before connecting, including redirects and explicit downgrade options.
++  FetchOptions verified;
++  verified.requireHttps = true;
++  reset({"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"});
++  r = get("http://a/f", sink(), verified);
++  assert(!r.complete && r.status == -1 && FakeNet::requests().empty() && body.empty());
++  for (bool downgrade : {false, true}) {
++    verified.redirectToHttp = downgrade;
++    reset({"HTTP/1.1 302 Found\r\nLocation: http://b/g\r\nContent-Length: 0\r\n\r\n"});
++    r = get("https://a/f", sink(), verified);
++    assert(!r.complete && r.status == -1 && FakeNet::requests().size() == 1 && body.empty());
++  }
++  for (const char* url : {"HTTPS://a/f", "HtTpS://a/f"}) {
++    verified.redirectToHttp = false;
++    reset({"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"});
++    r = get(url, sink(), verified);
++    assert(r.complete && body == "ok");
++  }
++  reset({"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"});
++  r = get("HTTP://a/f", sink(), verified);
++  assert(!r.complete && r.status == -1 && FakeNet::requests().empty());
++  verified.redirectToHttp = false;
++  reset({"HTTP/1.1 302 Found\r\nLocation: HTTPS://b/g\r\nContent-Length: 0\r\n\r\n",
++         "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"});
++  r = get("https://a/f", sink(), verified);
++  assert(r.complete && body == "ok" && sentAuth(0) && !sentAuth(1));
++  reset({"HTTP/1.1 302 Found\r\nLocation: https://a:443/other\r\nContent-Length: 0\r\n\r\n",
++         "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"});
++  r = get("https://a/f", sink(), verified);
++  assert(r.complete && sentAuth(0) && sentAuth(1) && FakeNet::hosts()[1] == "a");
++
+   puts("resumable fetch ok");
+ }

@@ -46,16 +46,19 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
                                            const std::string& password,
                                            const std::vector<HttpDownloader::Header>& headers,
                                            const freeink::FetchSink& sink, const bool* cancelFlag = nullptr,
-                                           size_t* bytesOut = nullptr, const bool downgradeRedirectsToHttp = false) {
+                                           size_t* bytesOut = nullptr, const bool downgradeRedirectsToHttp = false,
+                                           const char* rootCA = nullptr) {
   WifiPowerSaveGuard psGuard;
   freeink::FetchOptions options;
   options.redirectToHttp = downgradeRedirectsToHttp;
+  options.requireHttps = rootCA != nullptr;
   bool answeredBySameOrigin = true;
   const freeink::FetchResult result = freeink::fetchResumable(
       url, options,
       [&](freeink::SecureHttpClient& http, const bool sameOrigin) {
         answeredBySameOrigin = sameOrigin;
         applyCommonClientSetup(http);
+        if (rootCA) http.setCACert(rootCA);
         // Credentials and caller headers stay with the starting origin; a
         // redirect elsewhere (or to plain http) gets neither.
         if (sameOrigin) {
@@ -102,11 +105,11 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
-                              const std::string& password, const std::vector<Header>& headers) {
+                              const std::string& password, const std::vector<Header>& headers, const char* rootCA) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   freeink::FetchSink sink;
   sink.write = onData;
-  return runGetSecure(url, username, password, headers, sink) == OK;
+  return runGetSecure(url, username, password, headers, sink, nullptr, nullptr, false, rootCA) == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const FetchOptions& options) {

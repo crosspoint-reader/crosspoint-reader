@@ -1,0 +1,5 @@
+set(SECURE_NET ${REPO_ROOT}/freeink-sdk/libs/network/SecureNet)
+add_executable(SecureNetFetchTest ${SECURE_NET}/test/host/test_resumable_fetch.cpp)
+target_include_directories(SecureNetFetchTest PRIVATE ${SECURE_NET}/test/host/stubs ${SECURE_NET}/include)
+target_compile_options(SecureNetFetchTest PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME SecureNetFetch COMMAND SecureNetFetchTest)

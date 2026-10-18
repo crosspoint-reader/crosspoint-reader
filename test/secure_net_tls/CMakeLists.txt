@@ -1,0 +1,6 @@
+set(SECURE_NET ${REPO_ROOT}/freeink-sdk/libs/network/SecureNet)
+add_executable(SecureNetTlsTest SecureNetTlsTest.cpp ${SECURE_NET}/src/SecureClient.cpp)
+target_include_directories(SecureNetTlsTest PRIVATE stubs ${SECURE_NET}/test/host/stubs ${SECURE_NET}/include)
+target_compile_definitions(SecureNetTlsTest PRIVATE FREEINK_NET_WOLFSSL=1)
+target_compile_options(SecureNetTlsTest PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME SecureNetTls COMMAND SecureNetTlsTest)

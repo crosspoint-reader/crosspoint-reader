@@ -1,0 +1,39 @@
+diff --git a/libs/network/SecureNet/test/host/test_resumable_fetch.cpp b/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
+--- a/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
++++ b/libs/network/SecureNet/test/host/test_resumable_fetch.cpp
+@@ -4,23 +4,22 @@
+ #include <cassert>
+ #include <cstdio>
+ 
+-// SecureClient is only reached for https, which these tests avoid (the
+-// redirect test proves an https target was stepped down to http).
++// TLS verification setup is tested separately; route HTTPS through the same scripted transport here.
+ namespace freeink {
+-SecureClient::~SecureClient() = default;
++SecureClient::~SecureClient() { stop(); }
+ void SecureClient::setCACert(const char*) {}
+ void SecureClient::setInsecure() {}
+-int SecureClient::connect(IPAddress, uint16_t) { return 0; }
+-int SecureClient::connect(const char*, uint16_t) { return 0; }
+-size_t SecureClient::write(uint8_t) { return 0; }
+-size_t SecureClient::write(const uint8_t*, size_t) { return 0; }
+-int SecureClient::available() { return 0; }
+-int SecureClient::read() { return -1; }
+-int SecureClient::read(uint8_t*, size_t) { return -1; }
+-int SecureClient::peek() { return -1; }
++int SecureClient::connect(IPAddress ip, uint16_t port) { return _transport.connect(ip, port); }
++int SecureClient::connect(const char* host, uint16_t port) { return _transport.connect(host, port); }
++size_t SecureClient::write(uint8_t b) { return _transport.write(b); }
++size_t SecureClient::write(const uint8_t* b, size_t n) { return _transport.write(b, n); }
++int SecureClient::available() { return _transport.available(); }
++int SecureClient::read() { return _transport.read(); }
++int SecureClient::read(uint8_t* b, size_t n) { return _transport.read(b, n); }
++int SecureClient::peek() { return _transport.peek(); }
+ void SecureClient::flush() {}
+-void SecureClient::stop() {}
+-uint8_t SecureClient::connected() { return 0; }
++void SecureClient::stop() { _transport.stop(); }
++uint8_t SecureClient::connected() { return _transport.connected(); }
+ bool SecureClient::tls13Available() { return false; }
+ }  // namespace freeink
+ 

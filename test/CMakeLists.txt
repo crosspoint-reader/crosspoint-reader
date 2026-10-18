@@ -38,6 +38,14 @@ target_compile_options(crosspoint_test_common INTERFACE
 enable_testing()
 include(GoogleTest)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/patch_secure_net.py ${REPO_ROOT}
+  RESULT_VARIABLE secure_net_patch_result)
+if(NOT secure_net_patch_result EQUAL 0)
+  message(FATAL_ERROR "Unable to apply SecureNet security patch")
+endif()
+
+
 add_subdirectory(streaming_json_parser)
 add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
@@ -88,7 +96,6 @@ add_subdirectory(plugin_manifest_classification)
 add_subdirectory(plugin_picker_layout)
 add_subdirectory(protected_paths)
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
 add_test(NAME RemoteButtonInputIntegration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_remote_button_input.py)
 add_test(NAME BleLearning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ble_learning.py)
@@ -102,3 +109,8 @@ add_test(NAME selection_buttons COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SO
 add_test(NAME list_viewport COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_list_viewport.py)
 add_test(NAME clipping_highlight_planes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_clipping_highlight_planes.py)
 add_test(NAME clipping_selection_text COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_clipping_selection_text.py)
+
+add_subdirectory(secure_net)
+add_test(NAME SecureNetPatch COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_secure_net_patch.py)
+add_subdirectory(secure_net_tls)
+add_test(NAME OtaSecurity COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ota_security.py)

@@ -9,8 +9,8 @@
 
 /**
  * HTTP client utility for fetching content and downloading files. Built on
- * esp_http_client: https is verified against the CA bundle, plain http is
- * used for local servers (transport is chosen from the URL scheme).
+ * SecureNet/wolfSSL. Generic downloads retain compatibility with self-hosted
+ * catalogs; callers supplying rootCA require authenticated HTTPS on every hop.
  */
 class HttpDownloader {
  public:
@@ -62,7 +62,8 @@ class HttpDownloader {
    * Stream the response body to onData as it arrives, without buffering it.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "", const std::vector<Header>& headers = {});
+                       const std::string& password = "", const std::vector<Header>& headers = {},
+                       const char* rootCA = nullptr);
 
   /**
    * Authentication and response inspection options for fetchUrl/postForm.

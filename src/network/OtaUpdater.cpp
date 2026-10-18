@@ -8,21 +8,38 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <ReleaseJsonParser.h>
+#include <TrustedTime.h>
 #include <esp_ota_ops.h>
 // clang-format on
 
 #include <algorithm>
 #include <cstring>
+#include <ctime>
 #include <string>
 
 #include "FirmwareBoardTag.h"
 #include "FirmwareFlasher.h"
+#include "OtaTrustRoots.h"
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+
+bool prepareOtaClock() {
+  if (!trustedtime::syncNow(5000)) {
+    LOG_ERR("OTA", "Clock sync failed before certificate verification");
+    return false;
+  }
+  const int64_t floor = trustedtime::trustedNow();
+  if (floor == 0 || static_cast<int64_t>(time(nullptr)) < floor) {
+    LOG_ERR("OTA", "Clock is invalid or behind the trusted floor");
+    return false;
+  }
+  return true;
+}
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
+  if (!prepareOtaClock()) return HTTP_ERROR;
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
   // Stream the ~32KB release JSON straight into the parser as it arrives.
@@ -48,20 +65,23 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   }
   char assetName[48] = {};
   bool assetNameSet = false;
-  const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&](const uint8_t* data, size_t len) {
-    size_t offset = 0;
-    while (!assetNameSet && offset < len) {
-      releaseParser.feed(reinterpret_cast<const char*>(data + offset), 1);
-      offset++;
-      if (releaseParser.foundTag()) {
-        snprintf(assetName, sizeof(assetName), "crosspoint-%s%s.bin", releaseParser.getTagName(), assetSuffix);
-        releaseParser.setFirmwareAssetName(assetName);
-        assetNameSet = true;
-      }
-    }
-    if (offset < len) releaseParser.feed(reinterpret_cast<const char*>(data + offset), len - offset);
-    return true;
-  });
+  const bool ok = HttpDownloader::fetchUrl(
+      latestReleaseUrl,
+      [&](const uint8_t* data, size_t len) {
+        size_t offset = 0;
+        while (!assetNameSet && offset < len) {
+          releaseParser.feed(reinterpret_cast<const char*>(data + offset), 1);
+          offset++;
+          if (releaseParser.foundTag()) {
+            snprintf(assetName, sizeof(assetName), "crosspoint-%s%s.bin", releaseParser.getTagName(), assetSuffix);
+            releaseParser.setFirmwareAssetName(assetName);
+            assetNameSet = true;
+          }
+        }
+        if (offset < len) releaseParser.feed(reinterpret_cast<const char*>(data + offset), len - offset);
+        return true;
+      },
+      "", "", {}, OTA_TRUST_ROOTS);
   if (!ok) {
     LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
@@ -140,6 +160,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
+  if (!prepareOtaClock()) return HTTP_ERROR;
 
   // esp_https_ota is hardwired to esp-tls/mbedTLS, whose precompiled build on this
   // package can't negotiate TLS 1.3 (see SecureClient.h). Drive the OTA partition
@@ -174,45 +195,48 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   // the inactive OTA slot, but esp_ota_abort() below means it never becomes
   // the boot target.
   board_tag::Scanner tagScanner;
-  const bool fetchOk = HttpDownloader::fetchUrl(otaUrl, [&](const uint8_t* data, size_t len) {
-    if (hdrLen < sizeof(hdr)) {
-      const size_t take = std::min(len, sizeof(hdr) - hdrLen);
-      std::memcpy(hdr + hdrLen, data, take);
-      hdrLen += take;
-      if (hdrLen == sizeof(hdr)) {
-        uint16_t imageChip;
-        std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
-        const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
-        if (deviceChip != 0xFFFF && imageChip != deviceChip) {
-          LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
-          wrongChip = true;
+  const bool fetchOk = HttpDownloader::fetchUrl(
+      otaUrl,
+      [&](const uint8_t* data, size_t len) {
+        if (hdrLen < sizeof(hdr)) {
+          const size_t take = std::min(len, sizeof(hdr) - hdrLen);
+          std::memcpy(hdr + hdrLen, data, take);
+          hdrLen += take;
+          if (hdrLen == sizeof(hdr)) {
+            uint16_t imageChip;
+            std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
+            const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
+            if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+              LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+              wrongChip = true;
+              return false;  // abort the transfer
+            }
+          }
+        }
+        tagScanner.feed(data, len);
+        if (tagScanner.mismatch()) {
+          LOG_ERR("OTA", "wrong board: image=%s device=%.*s", tagScanner.foundName(),
+                  static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
           return false;  // abort the transfer
         }
-      }
-    }
-    tagScanner.feed(data, len);
-    if (tagScanner.mismatch()) {
-      LOG_ERR("OTA", "wrong board: image=%s device=%.*s", tagScanner.foundName(),
-              static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
-      return false;  // abort the transfer
-    }
-    if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
-      flashOk = false;
-      return false;  // abort the transfer
-    }
-    processedSize += len;
-    // Fire the callback only on whole-percent change. Per-chunk updates wake the
-    // render task, whose framebuffer work contends with TLS on the internal arena,
-    // and e-ink can't repaint faster than a percent tick anyway.
-    if (onProgress && totalSize > 0) {
-      const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
-      if (pct != lastReportedPct) {
-        lastReportedPct = pct;
-        onProgress(ctx);
-      }
-    }
-    return true;
-  });
+        if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
+          flashOk = false;
+          return false;  // abort the transfer
+        }
+        processedSize += len;
+        // Fire the callback only on whole-percent change. Per-chunk updates wake the
+        // render task, whose framebuffer work contends with TLS on the internal arena,
+        // and e-ink can't repaint faster than a percent tick anyway.
+        if (onProgress && totalSize > 0) {
+          const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
+          if (pct != lastReportedPct) {
+            lastReportedPct = pct;
+            onProgress(ctx);
+          }
+        }
+        return true;
+      },
+      "", "", {}, OTA_TRUST_ROOTS);
 
   if (wrongChip || tagScanner.mismatch()) {
     LOG_ERR("OTA", "Firmware install aborted: wrong device");
