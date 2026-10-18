@@ -26,7 +26,7 @@ constexpr size_t kMaxFaceBytes = 2 * 1024 * 1024;
 /// prepare() reads at most this much of each chapter, and at most kProbeChapters chapters from the text start.
 constexpr size_t kProbeChapterBytes = 64 * 1024;
 constexpr int kProbeChapters = 6;
-/// prepare() stops reading chapters once it has seen this much ordinary paragraph text.
+/// prepare() stops reading chapters once it has seen this much text.
 constexpr uint32_t kProbeEnoughText = 16 * 1024;
 
 enum class State : uint8_t {
@@ -50,10 +50,9 @@ State prepare(const Epub& epub, BuildArena* scratch);
 
 // --- Exposed for tests ---
 
-/// The body family: the font-family html or body declares, else the family of the most ordinary paragraph
-/// text (not headings, centred or right-aligned text, tables, notes, figures, hidden text) in the first
-/// kProbeChapterBytes of up to kProbeChapters chapters from the text start. 0 for the reader's font.
-/// `*failed` is set when a chapter could not be read.
+/// The body family: the family most of the text is set in, an inline accent's text counting for its paragraph's,
+/// over the first kProbeChapterBytes of up to kProbeChapters chapters from the text start (fewer once
+/// kProbeEnoughText has been seen). 0 for the reader's font. `*failed` is set when a chapter could not be read.
 uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed);
 
 /// The IDPF obfuscation key (EPUB OCF): the SHA-1 of the package's unique identifier with its XML white space

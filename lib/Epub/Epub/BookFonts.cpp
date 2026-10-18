@@ -41,9 +41,13 @@ constexpr size_t kAdobeBytes = 1024;
 // ---- Which family the body text is set in ----------------------------------------------------------------
 //
 // Based on crosspoint-reader PR #3934's BodyFontProbe (Julia Nguyen, "fix: preserve reader fonts in
-// accents-only mode"), reworked for this CSS resolver (tag, class and id; no ancestor selectors) and for one
-// answer per book over several chapters. Text in div, li and dd paragraphs counts like p, alignment is
-// judged where the text is, and a frame cap of 24 rather than 16.
+// accents-only mode"), reworked for one answer per book over several chapters: the family most of the text is
+// set in, an inline accent's text counting for the paragraph (p, div, li, dd) around it. Measured on 921 real
+// books with @font-face rules, against the family each draws most of its text in with every chapter styled by
+// the sheets it links: right for 839. #3934's further rules made it worse here, at 807: html's or body's
+// family first (this parser merges a book's sheets, and a marketing page's `body` rule then names a family no
+// chapter uses) and centred or right-aligned text passed over. Headings, tables and hidden text left out
+// changed one book.
 class BodyFontProbe {
  public:
   explicit BodyFontProbe(CssParser& css) : css_(css) {}
@@ -54,32 +58,26 @@ class BodyFontProbe {
     depth_ = 0;
   }
 
-  // html or body's font-family; 0 when neither declares one (or declares a generic family).
-  uint32_t rootFamily() const { return rootFamily_; }
   uint32_t textBytes() const {
     uint32_t total = 0;
     for (const Usage& u : usage_) total += u.bytes;
     return total;
   }
+  // The family with the most text; 0 (the reader's font) without any.
   uint32_t family() const {
-    if (rootFamily_ != 0) return rootFamily_;
-    const auto best = std::max_element(usage_.begin(), usage_.end(),
-                                       [](const Usage& a, const Usage& b) { return a.bytes < b.bytes; });
-    return best->family;
+    return std::max_element(usage_.begin(), usage_.end(),
+                            [](const Usage& a, const Usage& b) { return a.bytes < b.bytes; })
+        ->family;
   }
 
   static void onStart(void* ctx, const char* name, const char** atts) {
     auto& self = *static_cast<BodyFontProbe*>(ctx);
-    if (self.parser_->byteOffset() >= kProbeChapterBytes) {
-      self.parser_->stop();
-      return;
-    }
+    if (self.stopAtLimit()) return;
     const size_t index = self.depth_++;
     if (index >= kMaxDepth) return;
     const char* classes = "";
     const char* id = "";
     const char* inlineStyle = nullptr;
-    bool hidden = false;
     for (size_t i = 0; atts && atts[i] && atts[i + 1]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
         classes = atts[i + 1];
@@ -87,28 +85,23 @@ class BodyFontProbe {
         id = atts[i + 1];
       } else if (strcmp(atts[i], "style") == 0) {
         inlineStyle = atts[i + 1];
-      } else if (strcmp(atts[i], "hidden") == 0) {
-        hidden = true;
       }
     }
     Frame& frame = self.frames_[index];
     frame = index == 0 ? Frame{} : self.frames_[index - 1];
-    const bool body = strcasecmp(name, "body") == 0;
-    const bool root = body || strcasecmp(name, "html") == 0;
-    bool none = false;  // display: none, the inline style having the last word
     self.tag_.assign(name);
     self.class_.assign(classes);
     self.id_.assign(self.css_.hasIdSelectors() ? id : "");
-    self.apply(frame, self.css_.resolveStyle(self.tag_, self.class_, self.id_), root, none);
-    if (inlineStyle) {
+    frame.take(self.css_.resolveStyle(self.tag_, self.class_, self.id_));
+    if (inlineStyle) {  // the style attribute has the last word
       self.inline_.assign(inlineStyle);
-      self.apply(frame, CssParser::parseInlineStyle(self.inline_), root, none);
+      frame.take(CssParser::parseInlineStyle(self.inline_));
     }
-    frame.inBody = frame.inBody || body;
-    frame.ignored = frame.ignored || hidden || none || isSetApart(name);
-    if (isParagraph(name)) {
+    frame.inBody = frame.inBody || strcasecmp(name, "body") == 0;
+    if (strcasecmp(name, "p") == 0 || strcasecmp(name, "div") == 0 || strcasecmp(name, "li") == 0 ||
+        strcasecmp(name, "dd") == 0) {
+      frame.paragraphFamily = frame.family;
       frame.inParagraph = true;
-      frame.paragraphFamily = frame.family;  // an inline accent inside does not change the paragraph's
     }
   }
 
@@ -119,29 +112,22 @@ class BodyFontProbe {
 
   static void onText(void* ctx, const char* text, const int len) {
     auto& self = *static_cast<BodyFontProbe*>(ctx);
-    if (self.parser_->byteOffset() >= kProbeChapterBytes) {
-      self.parser_->stop();
-      return;
-    }
-    if (self.depth_ == 0 || self.depth_ > kMaxDepth) return;
+    if (self.stopAtLimit() || self.depth_ == 0 || self.depth_ > kMaxDepth) return;
     const Frame& frame = self.frames_[self.depth_ - 1];
-    // A centred or right-aligned paragraph is a title, a date, a signature: typography, not body text.
-    if (!frame.inBody || !frame.inParagraph || frame.ignored || frame.alignment == CssTextAlign::Center ||
-        frame.alignment == CssTextAlign::Right) {
-      return;
-    }
     const auto bytes = static_cast<uint32_t>(VisibleText::visibleBytes(text, len));
-    if (bytes == 0) return;
+    if (!frame.inBody || bytes == 0) return;
+    const uint32_t family = frame.inParagraph ? frame.paragraphFamily : frame.family;
     for (Usage& u : self.usage_) {
-      if (u.bytes == 0 || u.family == frame.paragraphFamily) {
-        u.family = frame.paragraphFamily;
+      if (u.bytes == 0 || u.family == family) {
+        u.family = family;
         u.bytes += bytes;
         return;
       }
     }
   }
 
-  // An entity the parser passes through (&nbsp; and the like) is one character of text.
+  // An entity the parser passes through (&nbsp; and the like) is one character of text. Without this handler
+  // such an entity, undeclared in an XHTML file, would end the parse.
   static void onDefault(void* ctx, const char* text, const int len) {
     if (len >= 3 && text[0] == '&' && text[len - 1] == ';') onText(ctx, "x", 1);
   }
@@ -152,39 +138,22 @@ class BodyFontProbe {
   struct Frame {
     uint32_t family = 0;           // font-family in effect, inherited
     uint32_t paragraphFamily = 0;  // the family of the paragraph the element is in
-    CssTextAlign alignment = CssTextAlign::Justify;
     bool inBody = false;
     bool inParagraph = false;
-    bool ignored = false;
+    void take(const CssStyle& style) {
+      if (style.defined.fontFamily) family = style.fontFamily;
+    }
   };
   struct Usage {
     uint32_t family = 0;
     uint32_t bytes = 0;
   };
 
-  // What the probe takes from a style, in cascade order: the stylesheet's, then the style attribute's.
-  void apply(Frame& frame, const CssStyle& style, const bool root, bool& none) {
-    if (style.defined.fontFamily) {
-      frame.family = style.fontFamily;
-      if (root) rootFamily_ = style.fontFamily;
-    }
-    if (style.hasTextAlign()) frame.alignment = style.textAlign;
-    if (style.hasDisplay()) none = style.display == CssDisplay::None;
-    frame.ignored = frame.ignored || style.isElementHidden();
-  }
-
-  static bool isParagraph(const char* name) {
-    return strcasecmp(name, "p") == 0 || strcasecmp(name, "div") == 0 || strcasecmp(name, "li") == 0 ||
-           strcasecmp(name, "dd") == 0;
-  }
-  // Text whose font is the publisher's typography rather than the body's.
-  static bool isSetApart(const char* name) {
-    static constexpr const char* kTags[] = {"h1",  "h2",    "h3",     "h4",         "h5",         "h6",  "table",
-                                            "nav", "aside", "figure", "figcaption", "blockquote", "pre", "rt"};
-    for (const char* tag : kTags) {
-      if (strcasecmp(name, tag) == 0) return true;
-    }
-    return VisibleText::isNonVisibleTag(name);
+  // Past kProbeChapterBytes of the chapter: stops the parser.
+  bool stopAtLimit() const {
+    if (parser_->byteOffset() < kProbeChapterBytes) return false;
+    parser_->stop();
+    return true;
   }
 
   CssParser& css_;
@@ -192,30 +161,9 @@ class BodyFontProbe {
   std::array<Frame, kMaxDepth> frames_{};
   std::array<Usage, kMaxFamilies> usage_{};
   size_t depth_ = 0;
-  uint32_t rootFamily_ = 0;
   // resolveStyle()'s arguments, reused so an element costs no allocation once they have grown.
   std::string tag_, class_, id_, inline_;
 };
-
-// One SAX pass over an item of the book, its parser state in `scratch` when there is room. False when the item
-// could not be read (or the parser not set up); a malformed document reports what it parsed and counts as read.
-template <typename Handler>
-bool parseItem(const Epub& epub, const std::string& href, Handler& handler, void (*onDefault)(void*, const char*, int),
-               const bool htmlVoidTagRepair, void* state, BuildArena* scratch) {
-  SaxParser parser;
-  if (state) parser.setExternalState(state, SaxParser::stateBytes());
-  if (!parser.init(&handler, &Handler::onStart, &Handler::onEnd, &Handler::onText, onDefault, htmlVoidTagRepair)) {
-    LOG_ERR("BKF", "No memory for the parser");
-    return false;
-  }
-  handler.beginParser(parser);
-  SaxFeedSink sink(parser);
-  if (!epub.readItemContentsToStream(href, sink, 1024, sink.stopFlag(), scratch)) {
-    LOG_ERR("BKF", "Cannot read %s", href.c_str());
-    return false;
-  }
-  return true;
-}
 
 // A block of `scratch` holding one parser state for the passes, released when it goes.
 class ParserState {
@@ -540,7 +488,7 @@ uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed) {
   *failed = false;
   CssParser* css = epub.getCssParser();
   if (!css) return 0;
-  // ~0.9 KB: the frames and the usage table. Not on the stack, which a section build shares.
+  // ~0.7 KB: the frames and the usage table. Not on the stack, which a section build shares.
   auto probe = makeUniqueNoThrow<BodyFontProbe>(*css);
   if (!probe) {
     LOG_ERR("BKF", "OOM: probe");
@@ -551,12 +499,20 @@ uint32_t detectBodyFamily(const Epub& epub, BuildArena* scratch, bool* failed) {
   css->resetResolveStats();
   const int count = epub.getSpineItemsCount();
   const int first = std::max(0, epub.getSpineIndexForTextReference());
-  for (int i = first; i < count && i < first + kProbeChapters; ++i) {
-    if (!parseItem(epub, epub.getSpineItem(i).href, *probe, &BodyFontProbe::onDefault, true, state.get(), scratch)) {
+  for (int i = first; i < count && i < first + kProbeChapters && probe->textBytes() < kProbeEnoughText; ++i) {
+    // One SAX pass over the chapter, the parser state in `scratch` when there is room. A malformed document
+    // reports what it parsed and counts as read.
+    SaxParser parser;
+    if (state.get()) parser.setExternalState(state.get(), SaxParser::stateBytes());
+    SaxFeedSink sink(parser);
+    const bool ready = parser.init(probe.get(), &BodyFontProbe::onStart, &BodyFontProbe::onEnd, &BodyFontProbe::onText,
+                                   &BodyFontProbe::onDefault, /*htmlVoidTagRepair=*/true);
+    if (ready) probe->beginParser(parser);
+    if (!ready || !epub.readItemContentsToStream(epub.getSpineItem(i).href, sink, 1024, sink.stopFlag(), scratch)) {
+      LOG_ERR("BKF", "Cannot read chapter %d", i);
       *failed = true;
       break;
     }
-    if (probe->rootFamily() != 0 || probe->textBytes() >= kProbeEnoughText) break;
   }
   // Short of heap, the resolver skips the rules it would read from the card: the families found would be
   // wrong, so this counts as a failed attempt rather than an answer.

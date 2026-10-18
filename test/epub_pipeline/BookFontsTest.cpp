@@ -166,20 +166,18 @@ TEST_F(BookFontsTest, ParagraphBodyFontDoesNotComeFromALeadingDateOrHeading) {
   EXPECT_EQ(family("EBGaramond"), detect(*epub));
 }
 
-TEST_F(BookFontsTest, AnExplicitRootFontTakesPriorityOverParagraphUsage) {
+TEST_F(BookFontsTest, TheFamilyWithTheMostTextWinsOverTheBodysOwn) {
+  // The body names one family, the paragraphs set most of the text in another: the text's family is the body
+  // font. (A book's sheets are merged, so a `body` rule can come from a page no chapter is styled by.)
   const auto epub =
       book(kProbeCss, {"<body style='font-family: EBGaramond'><p>Body</p>"
                        "<p class='block'>A much longer paragraph in an intentionally different font.</p></body>"});
-  EXPECT_EQ(family("EBGaramond"), detect(*epub));
+  EXPECT_EQ(family("Roboto"), detect(*epub));
 }
 
-TEST_F(BookFontsTest, HiddenAndDecorativeTextDoesNotChooseTheBodyFont) {
-  const std::string decoration(512, 'X');
-  const auto epub =
-      book(kProbeCss, {"<body><p class='date' hidden='hidden'>" + decoration + "</p><blockquote><p class='block'>" +
-                       decoration + "</p></blockquote><p class='date' style='text-align: center'>" + decoration +
-                       "</p><table><tr><td><p class='block'>" + decoration +
-                       "</p></td></tr></table><p class='noindent'>Ordinary prose</p></body>"});
+TEST_F(BookFontsTest, TheBodysFamilyCountsForTheTextThatInheritsIt) {
+  const auto epub = book(kProbeCss, {"<body class='indent'><h1 class='date'>Title</h1><p>Narrative prose that "
+                                     "inherits the body's family.</p><p class='block'>Short aside</p></body>"});
   EXPECT_EQ(family("EBGaramond"), detect(*epub));
 }
 
