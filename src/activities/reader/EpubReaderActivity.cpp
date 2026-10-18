@@ -462,6 +462,12 @@ bool EpubReaderActivity::buildReachedRenderTarget() const {
   return section->currentPage < static_cast<int>(section->pageCount);
 }
 
+void EpubReaderActivity::clearSectionTarget() {
+  sectionTargetAnchor.clear();
+  sectionTargetOffset.reset();
+  clearDeferredReposition();
+}
+
 void EpubReaderActivity::waitForChapterBuild() {
   renderWaitsForBuild = true;
   if (buildPopup == BuildPopup::None) {
@@ -482,9 +488,16 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
 void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
                                             const ClipSelectionActivity::Mode mode) {
-  if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount) return;
-
-  const int pageNumber = section->currentPage;
+  int pageNumber;
+  {
+    RenderLock lock;
+    // While a requested page is still being built, the screen shows another page.
+    if (!section || !epub || renderWaitsForBuild || section->currentPage < 0 ||
+        section->currentPage >= section->pageCount) {
+      return;
+    }
+    pageNumber = section->currentPage;
+  }
   const uint16_t pageCount = section->pageCount;
   const uint16_t spineIndex = static_cast<uint16_t>(currentSpineIndex);
   std::vector<std::unique_ptr<Page>> pages;
@@ -555,9 +568,10 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
       currentPageVisibleOffset = section->getVisibleTextOffsetForPage(endPage);
     }
     if (clipping.action == ClippingResult::Action::Bookmark) {
-      addBookmark();
-      showBookmarkMessage = true;
-      bookmarkMessageTime = millis();
+      if (addBookmark()) {
+        showBookmarkMessage = true;
+        bookmarkMessageTime = millis();
+      }
       requestUpdate();
       return;
     }
@@ -866,9 +880,10 @@ bool EpubReaderActivity::handleInput() {
   if (confirmLongPressed) {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
-        addBookmark();
-        showBookmarkMessage = true;
-        bookmarkMessageTime = millis();
+        if (addBookmark()) {
+          showBookmarkMessage = true;
+          bookmarkMessageTime = millis();
+        }
         requestUpdate();
         break;
       case CrossPointSettings::LP_MENU_KOSYNC:
@@ -899,8 +914,7 @@ bool EpubReaderActivity::handleInput() {
   if (!endOfBookMenuOpen) {
     switch (mappedInput.homeButtonAction()) {
       case HomeButtonAction::Bookmark:
-        if (!showBookmarkMessage) {
-          addBookmark();
+        if (!showBookmarkMessage && addBookmark()) {
           showBookmarkMessage = true;
           bookmarkMessageTime = millis();
           requestUpdate();
@@ -1103,6 +1117,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
                           ? section->getPageForVisibleTextOffset(sync.visibleTextOffset)
                           : std::nullopt;
     if (page) {
+      clearSectionTarget();
       section->currentPage = *page;
     } else {
       currentSpineIndex = sync.spineIndex;
@@ -1136,10 +1151,10 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = targetPage;
     section.reset();
-  } else if (section && section->currentPage != targetPage) {
-    const int clampedTargetPage = std::max(0, targetPage);
-    section->currentPage = clampedTargetPage;
-  } else if (!section) {
+  } else if (section) {
+    clearSectionTarget();
+    section->currentPage = std::max(0, targetPage);
+  } else {
     nextPageNumber = targetPage;
   }
   requestUpdate();
@@ -1445,6 +1460,9 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
   bleturner::acknowledgeLinkNote();
   {
     RenderLock lock;
+    // A jump to a link or a remembered position is still being built. The page on screen is not the
+    // one a turn would move from, so turns are ignored until the jump lands.
+    if (sectionTargetPending()) return false;
     clearDeferredReposition();
   }
   if (isForwardTurn) {
@@ -1493,6 +1511,8 @@ bool EpubReaderActivity::skipPages(int amount) {
     return true;
   } else {
     if (section->currentPage > 0) {
+      RenderLock lock;
+      clearSectionTarget();
       section->currentPage = 0;
       return true;
     } else if (currentSpineIndex > 0) {
@@ -3188,9 +3208,10 @@ void EpubReaderActivity::activateMoreRow(int row) {
   if (action == MA::TOGGLE_BOOKMARK) {
     // No child activity here to trigger the re-render the list menu relies on:
     // show the same confirmation popup the long-press path does.
-    addBookmark();
-    showBookmarkMessage = true;
-    bookmarkMessageTime = millis();
+    if (addBookmark()) {
+      showBookmarkMessage = true;
+      bookmarkMessageTime = millis();
+    }
     requestUpdate();
     return;
   }
@@ -3319,16 +3340,18 @@ void EpubReaderActivity::loadCachedBookmarks() {
   updateBookmarkFlag();
 }
 
-void EpubReaderActivity::addBookmark() {
-  if (!section || !epub) return;
-  LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
+bool EpubReaderActivity::addBookmark() {
+  if (!section || !epub) return false;
   int currentPage;
   int pageCount;
   {
     RenderLock lock;
+    // While a requested page is still being built, the screen shows another page.
+    if (renderWaitsForBuild) return false;
     pageCount = section->estimatedTotalPages();
     currentPage = section->currentPage;
   }
+  LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, currentPage);
 
   SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
   const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, currentPage, pageCount);
@@ -3373,6 +3396,7 @@ void EpubReaderActivity::addBookmark() {
     LOG_ERR("ERS", "Failed to save bookmarks");
   }
   requestUpdate();
+  return true;
 }
 
 void EpubReaderActivity::updateBookmarkFlag() {

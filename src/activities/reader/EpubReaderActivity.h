@@ -156,6 +156,10 @@ class EpubReaderActivity final : public ReaderActivity {
   // opens so a later navigation cannot inherit it, and placed once the build reaches it.
   std::string sectionTargetAnchor;
   std::optional<uint32_t> sectionTargetOffset;
+  bool sectionTargetPending() const { return !sectionTargetAnchor.empty() || sectionTargetOffset.has_value(); }
+  // An explicit new position (chapter start, a sync or clipping result) replaces a jump still being built
+  // and the remembered position a re-pagination would return to.
+  void clearSectionTarget();
   // A build step on the loop task failed and dropped the section; renderBook() shows the index
   // error once instead of rebuilding straight away.
   bool backgroundBuildFailed = false;
@@ -225,7 +229,8 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
-  void addBookmark();
+  // False when nothing was toggled: no section, or the page to bookmark is still being built.
+  bool addBookmark();
   void updateBookmarkFlag();
 
   void navigateToHref(const std::string& href, bool savePosition = false);
