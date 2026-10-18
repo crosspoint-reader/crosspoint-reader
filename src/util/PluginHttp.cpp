@@ -159,7 +159,11 @@ bool saveTokenToFile(const std::string& file, const std::string& path, const std
     LOG_ERR("PHTP", "Invalid or oversized token JSON");
     return false;
   }
-  return Storage.writeFile(file.c_str(), out);
+  if (!Storage.writeFile(file.c_str(), out)) {
+    LOG_ERR("PHTP", "Failed to save token file");
+    return false;
+  }
+  return true;
 }
 
 void loadConfigFile(const std::string& file, Headers& out) {
