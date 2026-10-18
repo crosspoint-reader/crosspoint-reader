@@ -359,11 +359,13 @@ inline void buildSettings(const RowSink& emit) {
   // Formatting settings
   emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
                            StrId::STR_CAT_READER));
-  // A book's embedded body font (BookFonts). A toggle while the body font is all it covers; a mode for a book's other
-  // embedded families would widen it to an enum, 1 staying "body". The setting follows crosspoint-reader PR #3934
-  // (Justin Mitchell), reworked for the TTF engine.
-  emit(SettingInfo::Toggle(StrId::STR_PUBLISHER_FONTS, &CrossPointSettings::publisherFonts, "publisherFonts",
-                           StrId::STR_CAT_READER));
+  // A book's embedded fonts (BookFonts), in the order of CrossPointSettings::PUBLISHER_FONTS: Stage A's toggle stored
+  // 0/1, which stay Off and Body Text. The setting follows crosspoint-reader PR #3934 (Justin Mitchell), reworked for
+  // the TTF engine.
+  emit(SettingInfo::Enum(StrId::STR_PUBLISHER_FONTS, &CrossPointSettings::publisherFonts,
+                         {StrId::STR_OVERLAY_OFF, StrId::STR_PUBLISHER_FONTS_BODY, StrId::STR_PUBLISHER_FONTS_ACCENTS,
+                          StrId::STR_PUBLISHER_FONTS_ALL},
+                         "publisherFonts", StrId::STR_CAT_READER));
   emit(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled",
                            StrId::STR_CAT_READER));
   emit(SettingInfo::Toggle(StrId::STR_FONT_SIZE_NORMALIZATION, &CrossPointSettings::fontSizeNormalization,

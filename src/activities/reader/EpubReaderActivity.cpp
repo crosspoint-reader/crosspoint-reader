@@ -77,6 +77,8 @@
 // Defined further down (near the other font helpers); declared here because
 // buildRenderParams() above it needs the ladder.
 static FontSizeLadder buildReaderFontSizeLadder(int bodyFontId);
+static void buildBookFontFamilies(BlockFontFamilies& families, const std::string& cachePath, int bodyFontId,
+                                  uint8_t pointSize);
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -1323,6 +1325,12 @@ Section::BuildParams EpubReaderActivity::makeSectionBuildParams() const {
   p.inlineFootnotePreviews = getEffectiveInlineFootnotePreviews();
   p.imageRendering = lastRenderStats.imageRendering;
   p.fontSizeLadder = buildReaderFontSizeLadder(p.fontId);
+  if (epub) {
+    buildBookFontFamilies(
+        bookFontFamilies_, epub->getCachePath(), p.fontId,
+        bookFontSizeOverride >= 0 ? static_cast<uint8_t>(bookFontSizeOverride) : SETTINGS.fontPointSize);
+    p.fontFamilies = &bookFontFamilies_;
+  }
   return p;
 }
 
@@ -3060,6 +3068,16 @@ int EpubReaderActivity::resolveReaderFont(std::string* familyOut) const {
   return CrossPointSettings::getBuiltinReaderFontIdForPoints(SETTINGS.fontFamily, pointSize);
 }
 
+// Every size of a built-in family, as percents of a body at bodyPt.
+static FontSizeLadder builtinFontSizeLadder(const uint8_t family, const uint8_t bodyPt) {
+  FontSizeLadder ladder;
+  for (const auto& rung : CrossPointSettings::FONT_SIZE_RUNGS) {
+    ladder.addRung(CrossPointSettings::getBuiltinReaderFontId(family, rung.size),
+                   static_cast<uint16_t>(rung.points * 100 / bodyPt));
+  }
+  return ladder;
+}
+
 // Sibling-size ladder for a built-in body font: every size of the same family, with its
 // point size expressed as a percent of the body's. Deterministic from the fontId ALONE —
 // the section-cache property hash deliberately excludes the ladder on that basis, so any
@@ -3092,15 +3110,46 @@ static FontSizeLadder buildReaderFontSizeLadder(const int bodyFontId) {
   for (const uint8_t family : kFamilies) {
     for (int i = 0; i < rungCount; ++i) {
       if (CrossPointSettings::getBuiltinReaderFontId(family, rungs[i].size) != bodyFontId) continue;
-      const uint8_t bodyPt = rungs[i].points;
-      for (int j = 0; j < rungCount; ++j) {
-        ladder.addRung(CrossPointSettings::getBuiltinReaderFontId(family, rungs[j].size),
-                       static_cast<uint16_t>(rungs[j].points * 100 / bodyPt));
-      }
-      return ladder;
+      return builtinFontSizeLadder(family, rungs[i].points);
     }
   }
   return ladder;  // SD font or unknown id: empty ladder = scale-only fallback
+}
+
+// Publisher Fonts' Accents and All Text: the book's other families, for the blocks set in them. A generic serif or
+// sans-serif goes to the built-in family of that kind, unless the body is already in it (the reader's own family, or
+// the generic the book's body names: the reader's font stands for that). Monospace stays the reader's font: no
+// monospace face is built in. The book's accent family is in it when it is loaded (the reader's font is built in).
+// Deterministic from the book's selection and the body font, as the ladder is from the body font.
+static void buildBookFontFamilies(BlockFontFamilies& families, const std::string& cachePath, const int bodyFontId,
+                                  const uint8_t pointSize) {
+  families = {};
+  const BookFonts::Families* book = sdFontSystem.bookFontFamiliesFor(cachePath);
+  if (!book) return;
+  families.body = book->body;
+  // The built-in families in CssFontFamily's order: kSerif (1) is Bookerly, kSansSerif (2) Noto Sans.
+  static_assert(CrossPointSettings::BOOKERLY + 1 == CssFontFamily::kSerif &&
+                    CrossPointSettings::NOTOSANS + 1 == CssFontFamily::kSansSerif,
+                "the generic families index the built-in ones");
+  // A built-in body is drawn at the rung a stored size snaps to; another family's sizes are relative to its own.
+  const auto rung = CrossPointSettings::builtinRungForPoints(pointSize);
+  int familyBody[CrossPointSettings::BUILTIN_FONT_COUNT];
+  uint8_t bodyPt = pointSize;
+  for (uint8_t family = 0; family < CrossPointSettings::BUILTIN_FONT_COUNT; ++family) {
+    familyBody[family] = CrossPointSettings::getBuiltinReaderFontId(family, rung);
+    if (familyBody[family] == bodyFontId) bodyPt = CrossPointSettings::fontSizePoints(rung);
+  }
+  for (uint8_t family = 0; family < CrossPointSettings::BUILTIN_FONT_COUNT; ++family) {
+    if ((book->body & CssFontFamily::kGenericMask) == family + 1u || familyBody[family] == bodyFontId) continue;
+    families.add(family + 1u, familyBody[family], builtinFontSizeLadder(family, bodyPt));
+  }
+  const char* accent = sdFontSystem.accentFamilyNameFor(cachePath);
+  const int accentId = accent[0] != '\0' ? resolveSdCardFontId(accent, pointSize) : 0;
+  if (const auto native = accentId != 0 ? sdFontSystem.ttfNativeSizes(accentId) : std::nullopt) {
+    FontSizeLadder ladder;
+    ladder.setNative(native->base, native->bodyPpem, native->minPx, native->maxPx);
+    families.add(book->accent, accentId, ladder);
+  }
 }
 
 std::optional<int> EpubReaderActivity::NavigationTarget::relaidOutRestorePage(const Section& sec,
@@ -6869,6 +6918,9 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   p.inlineFootnotePreviews = effectiveInlineFootnotePreviews;
   p.imageRendering = effectiveImageRendering;
   p.fontSizeLadder = buildReaderFontSizeLadder(effectiveFontId);
+  BlockFontFamilies fontFamilies;
+  buildBookFontFamilies(fontFamilies, epub->getCachePath(), effectiveFontId, effectiveFontSize);
+  p.fontFamilies = &fontFamilies;
   if (!section->loadSectionFile(p)) {
     LOG_DBG("SLP", "EPUB: section cache not found for spine %d, rebuilding", spineIndex);
     if (!section->createSectionFile(p, nullptr, /*skipEviction=*/false)) {

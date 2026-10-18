@@ -877,6 +877,9 @@ class EpubReaderActivity final : public Activity {
   // Render params for a section build of `spineIndex`, identical to what buildSection()
   // passes to createSectionFile — B must build the exact variant the foreground will load.
   Section::BuildParams makeSectionBuildParams() const;
+  // The book's other font families, which makeSectionBuildParams() fills and points the params at: a build keeps
+  // its params across slices, so the table lives as long as the reader.
+  mutable BlockFontFamilies bookFontFamilies_;
   // Drop all Background-B state (aborting a partial build and deleting its partial cache
   // file via ~Section). Resets the overlay percent.
   void resetBackgroundBuild();

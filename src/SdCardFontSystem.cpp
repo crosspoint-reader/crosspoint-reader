@@ -195,22 +195,47 @@ const SdCardFontFamilyInfo* SdCardFontSystem::findFamily(const char* name) const
   return nullptr;
 }
 
-bool SdCardFontSystem::selectBookFamily(const std::string& cachePath) {
-  // Kept across the book's later opens; anything else is read again, since the book may have been examined since.
-  if (!bookFamily_.name.empty() && cachePath == bookCachePath_) return true;
+bool SdCardFontSystem::selectBookFamily(const std::string& cachePath, const uint8_t mode, const bool accentAllowed) {
+  // Kept across the book's later opens in the same mode; anything else is read again, since the book may have been
+  // examined since.
+  if (!bookFamily_.name.empty() && cachePath == bookCachePath_ && mode == bookMode_ &&
+      accentAllowed == bookAccentAllowed_) {
+    return true;
+  }
   bookCachePath_ = cachePath;
+  bookMode_ = mode;
+  bookAccentAllowed_ = accentAllowed;
   bookFamily_.name.clear();
+  bookFonts_ = {};  // what read() leaves alone stays "none"
+  // The body family when the mode draws it and the book has one, else the accent family when the store is free.
+  const bool body = mode == CrossPointSettings::PUBLISHER_FONTS_BODY || mode == CrossPointSettings::PUBLISHER_FONTS_ALL;
+  bookFamilyIsAccent_ = cachePath.empty() ||
+                        BookFonts::read(cachePath, &bookFamily_.name, &bookFonts_, body) != BookFonts::State::Family ||
+                        !body;
+  if (bookFamilyIsAccent_ && (mode < CrossPointSettings::PUBLISHER_FONTS_ACCENTS || !accentAllowed)) {
+    if (mode >= CrossPointSettings::PUBLISHER_FONTS_ACCENTS && bookFonts_.accent != 0) {
+      LOG_INF("SDFS", "Accent font %s left out: the reader's font is one on the card", bookFamily_.name.c_str());
+    }
+    bookFamily_.name.clear();
+  }
   // Its files are scanned like a family directory on the card: the same style probe, and only when the font area
   // can take them.
-  if (cachePath.empty() || BookFonts::read(cachePath, &bookFamily_.name) != BookFonts::State::Family ||
-      !registry_.scanFamily(BookFonts::familyDir(cachePath).c_str(), bookFamily_) || !bookFamily_.ttf()) {
+  if (bookFamily_.name.empty() ||
+      !registry_.scanFamily(BookFonts::familyDir(cachePath, bookFamilyIsAccent_).c_str(), bookFamily_) ||
+      !bookFamily_.ttf()) {
     bookFamily_.name.clear();
     std::vector<SdCardFontFileInfo>().swap(bookFamily_.files);
     return false;
   }
   bookFamily_.name.insert(0, "book:");
-  LOG_INF("SDFS", "Book font %s", bookFamily_.name.c_str());
+  LOG_INF("SDFS", "Book font %s%s", bookFamily_.name.c_str(), bookFamilyIsAccent_ ? " (accents)" : "");
   return true;
+}
+
+const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::string& cachePath) const {
+  return !cachePath.empty() && cachePath == bookCachePath_ && bookMode_ >= CrossPointSettings::PUBLISHER_FONTS_ACCENTS
+             ? &bookFonts_
+             : nullptr;
 }
 
 void SdCardFontSystem::unload(GfxRenderer& renderer) {
