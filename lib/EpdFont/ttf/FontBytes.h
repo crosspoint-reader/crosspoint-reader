@@ -39,8 +39,8 @@ class SdPageCache {
   static constexpr uint32_t kPageBytes = 512;
   static constexpr uint8_t kPages = 8;
 
-  SdPageCache();
-  /// Copies `len` bytes at `offset` of `file` to `dst`. False on a read error, or a range past the file.
+  /// Copies `len` bytes at `offset` of `file` to `dst`. False on a read error, or a range past the file. Pages are
+  /// told apart by the file's ctx, so one without a ctx is not read.
   bool read(const FileSource& file, uint32_t offset, uint32_t len, void* dst);
   /// Pages read from the card since the cache was made.
   uint32_t misses() const { return misses_; }
@@ -48,11 +48,9 @@ class SdPageCache {
  private:
   const uint8_t* page(const FileSource& file, uint32_t index);
 
-  static constexpr uint32_t kEmpty = 0xFFFFFFFF;  // no file has a page there
-
-  uint8_t data_[kPages][kPageBytes];
-  const void* owner_[kPages] = {};  // the file's ctx
-  uint32_t index_[kPages];          // the page's file offset / kPageBytes, or kEmpty
+  uint8_t data_[kPages][kPageBytes] = {};
+  const void* owner_[kPages] = {};  // the file's ctx; null: an empty page
+  uint32_t index_[kPages] = {};     // the page's file offset / kPageBytes
   uint32_t used_[kPages] = {};      // the clock at the last hit: the smallest goes first
   uint32_t clock_ = 0;
   uint32_t misses_ = 0;

@@ -58,6 +58,46 @@ int probeStyle(const FileSource& file);
 /// missing style falls back to regular). `out[style]` is that file's index, or -1. False when no file can be drawn.
 bool assignStyles(const FileProbe* files, size_t count, int (&out)[4]);
 
+/// SD mode (spec 4.1): what a style's block holds. A font of its own, made of the file's tables the engine reads but
+/// glyf (cmap, head, hhea, hmtx, loca, maxp, OS/2, GPOS, GSUB, kern, whichever it has), each 4-byte aligned, in file
+/// order, behind a table directory whose glyf record points past the block: FontBytes reads the outlines there from
+/// the file on the card. The block is never held in memory: source() serves any range of it, the directory made here
+/// and the tables read from the file, so an install copies it, and compares it with what flash holds, as it does a
+/// whole file in flash mode.
+class SdBlock {
+ public:
+  /// Reads `file`'s table directory. False when it is no TrueType file with outlines, a table it would copy lies
+  /// outside the file, or a read fails. `file` must outlive the block.
+  bool plan(const FileSource& file);
+  /// The block's bytes: its directory and tables.
+  uint32_t bytes() const { return bytes_; }
+  /// glyf: where it is in the file, and where the block's directory puts it.
+  glyphstore::SdOutlines outlines() const { return {glyf_.fileOffset, bytes_, glyf_.length}; }
+  /// The block as a file, bytes() long. Valid while the block and its file are.
+  FileSource source() { return {bytes_, &SdBlock::readSource, this}; }
+
+ private:
+  static constexpr uint8_t kMaxTables = 11;  // the ten tables the engine reads, and glyf
+  struct Table {
+    uint32_t tag;
+    uint32_t checksum;
+    uint32_t fileOffset;
+    uint32_t length;
+    uint32_t blockOffset;  // glyf: past the block
+  };
+  bool addTable(const void* record);
+  uint32_t directoryWord(uint32_t index) const;
+  bool read(uint32_t offset, uint8_t* dst, uint32_t len) const;
+  static bool readSource(void* ctx, uint32_t offset, void* dst, uint32_t len);
+
+  FileSource file_;
+  uint32_t version_ = 0;
+  Table tables_[kMaxTables] = {};  // in file order, glyf among them
+  Table glyf_{};
+  uint8_t count_ = 0;
+  uint32_t bytes_ = 0;
+};
+
 /// True when flash mode can install a family with these style file sizes: every style copied into a font area of
 /// `usableBytes`, with the largest style, the index and a minimal log mapped within `freeMapPages`
 /// (glyphstore::planLayout). Larger families need SD mode (Stage 2c-4).

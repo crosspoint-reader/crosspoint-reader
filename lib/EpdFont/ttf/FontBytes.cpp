@@ -2,10 +2,6 @@
 
 namespace ttf {
 
-SdPageCache::SdPageCache() {
-  for (uint32_t& index : index_) index = kEmpty;
-}
-
 const uint8_t* SdPageCache::page(const FileSource& file, const uint32_t index) {
   // An outline is read a few bytes at a time, almost always from the page the last read came from.
   if (owner_[last_] == file.ctx && index_[last_] == index) return data_[last_];
@@ -21,7 +17,7 @@ const uint8_t* SdPageCache::page(const FileSource& file, const uint32_t index) {
   const uint32_t start = index * kPageBytes;
   if (start >= file.size || !file.read) return nullptr;
   const uint32_t bytes = file.size - start < kPageBytes ? file.size - start : kPageBytes;
-  index_[slot] = kEmpty;  // a failed read leaves the page empty
+  owner_[slot] = nullptr;  // a failed read leaves the page empty
   if (!file.read(file.ctx, start, data_[slot], bytes)) return nullptr;
   ++misses_;
   owner_[slot] = file.ctx;
@@ -32,7 +28,7 @@ const uint8_t* SdPageCache::page(const FileSource& file, const uint32_t index) {
 }
 
 bool SdPageCache::read(const FileSource& file, uint32_t offset, uint32_t len, void* dst) {
-  if (offset > file.size || len > file.size - offset) return false;
+  if (file.ctx == nullptr || offset > file.size || len > file.size - offset) return false;
   auto* out = static_cast<uint8_t*>(dst);
   while (len > 0) {
     const uint8_t* page = this->page(file, offset / kPageBytes);
