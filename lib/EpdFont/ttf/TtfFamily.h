@@ -95,14 +95,14 @@ class SdBlock {
   bool read(uint32_t offset, uint8_t* dst, uint32_t len) const;
   static bool readSource(void* ctx, uint32_t offset, void* dst, uint32_t len);
 
-  // Set by plan(); no initializers, so making a block costs no code beyond what plan() does.
+  // Set by plan(); empty until then, so a block asked before it (or after it failed) holds nothing.
   FileSource file_;
-  uint32_t version_;
-  Table tables_[kMaxTables];  // in file order, glyf among them
-  Table glyf_;
-  uint16_t seen_;  // the tags met in the directory
-  uint8_t count_;
-  uint32_t bytes_;
+  uint32_t version_ = 0;
+  Table tables_[kMaxTables] = {};  // in file order, glyf among them
+  Table glyf_ = {};
+  uint16_t seen_ = 0;  // the tags met in the directory
+  uint8_t count_ = 0;
+  uint32_t bytes_ = 0;
 };
 
 /// True when the glyph store can install a family with these styles: in flash mode, every style's file
