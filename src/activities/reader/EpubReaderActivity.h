@@ -25,6 +25,8 @@ class EpubReaderActivity final : public ReaderActivity {
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  // Where the next section open lands. renderBook() consumes these when it opens the section
+  // (the anchor and text offset into sectionTargetAnchor / sectionTargetOffset).
   std::optional<uint16_t> pendingPageJump;
   std::string pendingAnchor;
   int cachedSpineIndex = 0;
@@ -134,6 +136,29 @@ class EpubReaderActivity final : public ReaderActivity {
   bool backgroundBuildWanted() const;
   bool buildTickHeapGate();
   bool buildHeapPaused = false;
+  // One bounded build step on the loop task, after this frame's input has been handled. Lays out
+  // up to BACKGROUND_BUILD_PAGES_PER_TICK pages and hands the loop back as soon as a button is
+  // down, so a short press is seen and acted on before more pages are built.
+  void backgroundBuildTick();
+  static bool buttonContactClosed();
+  // The input part of loop(). True when this frame acted on input or a timer (a render, a child
+  // screen or a navigation is on its way), so background work must not run before it.
+  bool handleInput();
+  // The pages built so far cannot show the page renderBook() was asked for (a page past the
+  // build, or an anchor / text offset the build has not reached). renderBook() left the last
+  // painted page and its saved progress alone; backgroundBuildTick() requests the render once
+  // buildReachedRenderTarget() holds. Set and cleared by the render task, cleared by the tick,
+  // both under the render lock; the automatic page turn reads it lock-free.
+  std::atomic<bool> renderWaitsForBuild{false};
+  bool buildReachedRenderTarget() const;
+  void waitForChapterBuild();
+  // Content target of the open section: the pending anchor or text offset, taken when the section
+  // opens so a later navigation cannot inherit it, and placed once the build reaches it.
+  std::string sectionTargetAnchor;
+  std::optional<uint32_t> sectionTargetOffset;
+  // A build step on the loop task failed and dropped the section; renderBook() shows the index
+  // error once instead of rebuilding straight away.
+  bool backgroundBuildFailed = false;
   // Bluetooth page turner: every chapter build stops the radio until the chapter is built and its
   // page is shown. False: the radio still holds or is taking the heap, and the build must not run.
   std::atomic<bool> radioReleasedForBuild{false};
@@ -144,13 +169,16 @@ class EpubReaderActivity final : public ReaderActivity {
   // "Connecting Bluetooth…" or "Bluetooth failed" in place of the status bar title.
   mutable LinkNoteTitle linkNoteTitle;
   static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
-  static constexpr int BUILD_WINDOW_AHEAD = 5;
   static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
   static constexpr int BUILD_POPUP_PAGE_THRESHOLD = 20;
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
   static constexpr unsigned long BUILD_POPUP_DEADLINE_MS = 1000;
-  bool buildPopupPending = false;
-  void showBuildPopup(GfxRenderer& renderer, int& pagesUntilFullRefresh);
+  // The "Indexing" popup over the page while the reader waits for a chapter build: Armed is drawn
+  // once the wait has lasted BUILD_POPUP_DEADLINE_MS; Shown stays until the next page is painted.
+  enum class BuildPopup { None, Armed, Shown };
+  BuildPopup buildPopup = BuildPopup::None;
+  unsigned long buildWaitStartMs = 0;
+  void showBuildPopup();
   bool applyDeferredReposition();
   void clearDeferredReposition();
   void rememberCurrentContentOffset();
