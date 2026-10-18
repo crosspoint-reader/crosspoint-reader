@@ -302,7 +302,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 #### 3.6.3 Controls
 
-- **Home Button Gestures** (boards with a Home key, such as the X4 Pro): Assign an action to each of **Tap**, **Double Tap** and **Long Press** on the Home key. The defaults are Tap: Home, Double Tap: Toggle Frontlight, and Long Press: Reader Menu. The actions are Home, Ignore, Page Turn, Refresh Screen, Links and footnotes, Confirm, CrossPoint Sync, Bookmark, Dictionary, Reader Menu, Toggle Frontlight and Create Clipping. On these boards, use this instead of **Long-press Menu**, which is not shown in the device Settings.
+- **Home Button Gestures** (boards with a Home key, such as the X4 Pro): Assign an action to each of **Tap**, **Double Tap** and **Long Press** on the Home key. The defaults are Tap: Home, Double Tap: Toggle Frontlight, and Long Press: Reader Menu. The actions are Home, Ignore, Page Turn, Refresh Screen, Links and footnotes, Confirm, CrossPoint Sync, Bookmark, Dictionary, Reader Menu, Toggle Frontlight and Create Clipping. On these boards, use this instead of **Long-press Menu**, which these boards do not show.
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
@@ -312,7 +312,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
   - "Page Scroll" - Long-pressing scrolls a page up/down
-- **Long-press Menu** (boards without a Home key): Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
+- **Long-press Menu** (boards without a touchscreen): Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
   - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
   - "CrossPoint Sync" - Hold Confirm (~1 second) to launch KOReader sync directly.
   - "Dictionary" - Hold Confirm (~0.4 second) to start dictionary word selection on the current page (see [docs/dictionary.md](docs/dictionary.md)).
@@ -667,7 +667,7 @@ See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and w
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable, boards without a Home key):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — including bookmarks, KOReader Sync, dictionary lookup, or clipping selection. A short press always opens the Reader Menu. On boards with a Home key, use **Home Button Gestures** instead.
+* **Long-press Confirm (configurable, boards without a touchscreen):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — including bookmarks, KOReader Sync, dictionary lookup, or clipping selection. A short press always opens the Reader Menu. On boards with a Home key, use **Home Button Gestures** instead.
 
 ### Supported Languages
 

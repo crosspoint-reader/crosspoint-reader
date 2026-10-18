@@ -31,7 +31,7 @@ The Dictionary setting only appears when at least one usable dictionary folder e
 Ways to start a lookup while reading:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
-- On boards without a Home key: set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
+- On boards without a touchscreen: set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
 - On boards with a Home key, such as the X4 Pro: that setting is not shown. Instead, set any gesture in **Settings → Controls → Home Button Gestures** (Tap, Double Tap or Long Press) to "Dictionary", then use that gesture on the reading page.
 - On touchscreen devices: long-press a word and tap **Look Up** (see below).
 
