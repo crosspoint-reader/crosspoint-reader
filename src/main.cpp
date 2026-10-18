@@ -3,6 +3,7 @@
 #include <CooperativeAbort.h>
 #include <Epub.h>
 #include <Epub/BookFonts.h>
+#include <Epub/CjkLineBreak.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
@@ -736,6 +737,9 @@ void setupDisplayAndFonts(bool seamless = false, bool skipSdFontDiscovery = fals
     renderer.insertScaledFont(CrossPointSettings::getBuiltinReaderFontId(CrossPointSettings::NOTOSANS, rung.size),
                               notosans18FontFamily, scale);
   }
+  // Chinese and Japanese write no spaces: wrapped UI text breaks between their characters by the
+  // reader's CJK rules, kinsoku included.
+  renderer.setWordBreaker(&CjkLineBreak::breakByteOffsets);
   // The three UI slots are bound by the font ladder rather than registered here, so the first
   // bind and every later rebind run the same code path.
   applyUiFontScale();

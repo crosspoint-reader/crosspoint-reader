@@ -16,6 +16,7 @@ class SdCardFont;
 
 #include "Bitmap.h"
 #include "FontLookup.h"
+#include "TextWrap.h"
 
 // Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
 // 0 = transparent, 1-16 = gray levels (white to black)
@@ -32,6 +33,11 @@ class GfxRenderer {
     PortraitInverted,          // 480x800 logical coordinates, inverted
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
+
+  /// Where wrappedText() may break a space-less word (textWrap::WordBreaker). main.cpp installs
+  /// CjkLineBreak::breakByteOffsets: the CJK line-break rules live with the reader's layout, which
+  /// this library does not depend on.
+  using WordBreaker = textWrap::WordBreaker;
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
@@ -99,6 +105,9 @@ class GfxRenderer {
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
+
+  // Where a space-less word may break, for wrappedText(); see setWordBreaker().
+  WordBreaker wordBreaker_ = nullptr;
 
   // --- Scaled-glyph mask cache ----------------------------------------------
   // Text drawn at a scale != 1.0 — i.e. every word of any book whose stylesheet
@@ -293,6 +302,8 @@ class GfxRenderer {
   float fontBaseScale(int fontId) const { return resolvedBaseScale(fontMap, fontBaseScales, fontId, fontResolver_); }
   // The manager prewarms through this renderer's font lookup, so it reaches the faces the resolver makes.
   void setFontCacheManager(FontCacheManager* m);
+  /// Installs the word breaker wrappedText() splits space-less words with (see WordBreaker).
+  void setWordBreaker(WordBreaker breaker) { wordBreaker_ = breaker; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
   // Drop every rebuildable font cache (glyph metadata, bitmaps, kern) while leaving
   // the fonts loaded and usable — everything faults back in on demand. Lets callers
@@ -647,8 +658,9 @@ class GfxRenderer {
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Word-wrap \p text into at most \p maxLines lines, each no wider than
-  /// \p maxWidth pixels. Overflowing words and excess lines are UTF-8-safely
-  /// truncated with an ellipsis (U+2026).
+  /// \p maxWidth pixels, breaking at spaces and at the word breaker's offsets.
+  /// Overflowing words and excess lines are UTF-8-safely truncated with an
+  /// ellipsis (U+2026).
   std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
                                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
