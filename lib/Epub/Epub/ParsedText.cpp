@@ -13,6 +13,7 @@
 #include <set>
 #include <vector>
 
+#include "CjkLineBreak.h"
 #include "Epub/VisibleText.h"
 #include "hyphenation/HyphenationCommon.h"
 #include "hyphenation/Hyphenator.h"
@@ -194,6 +195,48 @@ static std::vector<TokenSpan> tokenizeBionicWord(const std::string& word) {
 
 }  // namespace
 
+bool ParsedText::reserveWords(const size_t additional) {
+  const size_t requiredSize = words.size() + additional;
+  if (words.capacity() >= requiredSize && wordStyles.capacity() >= requiredSize &&
+      wordBoundaries.capacity() >= requiredSize && wordSizes.capacity() >= requiredSize &&
+      wordVisibleOffsets.capacity() >= requiredSize) {
+    return true;
+  }
+  size_t newCapacity = std::max<size_t>(16, words.capacity());
+  while (newCapacity < requiredSize) {
+    newCapacity *= 2;
+  }
+  // The five reserves below are unchecked heap growth (abort() on failure under
+  // -fno-exceptions). Require the largest free block to hold all five, plus a header
+  // each -- conservative, since they need not share a block, but this only bites when the
+  // heap is nearly gone, and then a partial-cache abort beats a crash.
+  {
+    constexpr size_t ALLOC_HEADER_SLACK = 16;
+    const size_t needed = newCapacity * (sizeof(std::string) + sizeof(EpdFontFamily::Style) + sizeof(uint8_t) +
+                                         sizeof(uint32_t) + sizeof(TokenBoundary::Boundary)) +
+                          5 * ALLOC_HEADER_SLACK;
+    if (ESP.getMaxAllocHeap() < needed) {
+      wordGrowthRefused_ = true;
+      return false;
+    }
+  }
+  words.reserve(newCapacity);
+  wordStyles.reserve(newCapacity);
+  wordBoundaries.reserve(newCapacity);
+  wordSizes.reserve(newCapacity);
+  wordVisibleOffsets.reserve(newCapacity);
+  return true;
+}
+
+void ParsedText::pushToken(std::string token, const EpdFontFamily::Style style, const TokenBoundary::Boundary boundary,
+                           const uint8_t sizePct, const uint32_t visibleOffset) {
+  words.push_back(std::move(token));
+  wordStyles.push_back(style);
+  wordBoundaries.push_back(boundary);
+  wordSizes.push_back(sizePct);
+  wordVisibleOffsets.push_back(visibleOffset);
+}
+
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious, const uint8_t sizePct, const uint32_t visibleOffset) {
   if (word.empty()) return;
@@ -201,44 +244,49 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   word = utf8NfcNorm(std::move(word));
 
-  const size_t requiredSize = words.size() + 1;
-  if (words.capacity() < requiredSize || wordStyles.capacity() < requiredSize ||
-      wordBoundaries.capacity() < requiredSize || wordSizes.capacity() < requiredSize ||
-      wordVisibleOffsets.capacity() < requiredSize) {
-    size_t newCapacity = std::max<size_t>(16, words.capacity());
-    while (newCapacity < requiredSize) {
-      newCapacity *= 2;
-    }
-    // The five reserves below are unchecked heap growth (abort() on failure under
-    // -fno-exceptions). Require the largest free block to hold all five, plus a header
-    // each -- conservative, since they need not share a block, but this only bites when the
-    // heap is nearly gone, and then a partial-cache abort beats a crash.
-    {
-      constexpr size_t ALLOC_HEADER_SLACK = 16;
-      const size_t needed = newCapacity * (sizeof(std::string) + sizeof(EpdFontFamily::Style) + sizeof(uint8_t) +
-                                           sizeof(uint32_t) + sizeof(TokenBoundary::Boundary)) +
-                            5 * ALLOC_HEADER_SLACK;
-      if (ESP.getMaxAllocHeap() < needed) {
-        wordGrowthRefused_ = true;
-        return;
-      }
-    }
-    words.reserve(newCapacity);
-    wordStyles.reserve(newCapacity);
-    wordBoundaries.reserve(newCapacity);
-    wordSizes.reserve(newCapacity);
-    wordVisibleOffsets.reserve(newCapacity);
-  }
+  // Chinese and Japanese are written without spaces: a word with CJK characters becomes one token
+  // per break the CJK rules allow, so a line can end between its characters. Kinsoku pairs such as
+  // 字。 share a token. Latin words get no offsets and stay whole. Our implementation of
+  // crosspoint-reader PR #2288 ("feat: Support for Korean line breaks and glyph spacing", Justin
+  // Mitchell, 22f35750).
+  const std::vector<size_t> cjkBreaks = CjkLineBreak::breakByteOffsets(word);
+  if (!reserveWords(cjkBreaks.size() + 1)) return;
 
-  words.push_back(std::move(word));
   EpdFontFamily::Style combinedStyle = fontStyle;
   if (underline) {
     combinedStyle = static_cast<EpdFontFamily::Style>(combinedStyle | EpdFontFamily::UNDERLINE);
   }
-  wordStyles.push_back(combinedStyle);
-  wordBoundaries.push_back(TokenBoundary::Boundary{attachToPrevious, false});
-  wordSizes.push_back(std::min(std::max(sizePct, MIN_WORD_SIZE_PCT), MAX_WORD_SIZE_PCT));
-  wordVisibleOffsets.push_back(visibleOffset);
+  const uint8_t size = std::min(std::max(sizePct, MIN_WORD_SIZE_PCT), MAX_WORD_SIZE_PCT);
+
+  // Glued to the previous token in the source (no whitespace between them): where the CJK rules
+  // allow a break there, the two meet at a breakable zero-width gap. Where the source had
+  // whitespace, the space is content and stays. From crosspoint-reader PR #2768 ("fix: restore
+  // spaces between CJK words", Uri Tauber, 9163149a). A glued Latin "foo—" + "bar" stays glued: the gap needs
+  // a CJK character on one side, since the dash rule of upstream PR #3883 is not ported.
+  TokenBoundary::Boundary boundary{attachToPrevious, false};
+  // A glued " " is the parser's no-break space (U+00A0 / U+202F): no break on either side of it.
+  if (attachToPrevious && !words.empty() && words.back() != " " && word != " ") {
+    const uint32_t left = lastCodepoint(words.back());
+    const uint32_t right = firstCodepoint(word);
+    if ((utf8IsCjkBreakable(left) || utf8IsCjkBreakable(right)) && CjkLineBreak::isGapBetween(left, right)) {
+      boundary = TokenBoundary::Boundary{false, true};
+    }
+  }
+
+  if (cjkBreaks.empty()) {
+    pushToken(std::move(word), combinedStyle, boundary, size, visibleOffset);
+    return;
+  }
+  size_t start = 0;
+  uint32_t offset = visibleOffset;
+  for (size_t i = 0; i <= cjkBreaks.size(); ++i) {
+    const size_t end = i < cjkBreaks.size() ? cjkBreaks[i] : word.size();
+    pushToken(word.substr(start, end - start), combinedStyle, boundary, size, offset);
+    // The next token starts where this one's visible bytes end (KOSync positions).
+    offset += static_cast<uint32_t>(VisibleText::visibleBytes(word.data() + start, static_cast<int>(end - start)));
+    boundary = TokenBoundary::Boundary{false, true};
+    start = end;
+  }
 }
 
 bool ParsedText::foldUniformWordSizes() {
@@ -1131,8 +1179,13 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   const auto style = wordStyles[wordIndex];
   const float scale = wordScale(wordIndex);
 
-  // Collect candidate breakpoints (byte offsets and hyphen requirements).
-  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  // Collect candidate breakpoints (byte offsets and hyphen requirements). A Hangul word may split
+  // between syllables at a line end, without a hyphen; those breaks come first, so they win a width
+  // tie. From crosspoint-reader PR #3700 ("fix: justify Korean text by word spaces only", Sung-jin
+  // Brian Hong).
+  std::vector<Hyphenator::BreakInfo> breakInfos = CjkLineBreak::hangulLineEndBreaks(word);
+  const std::vector<Hyphenator::BreakInfo> hyphenatorBreaks = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  breakInfos.insert(breakInfos.end(), hyphenatorBreaks.begin(), hyphenatorBreaks.end());
   if (breakInfos.empty()) {
     return false;
   }

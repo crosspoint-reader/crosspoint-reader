@@ -102,6 +102,21 @@ class ChapterHtmlSlimParser final : public Print {
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
+  // The tokens partWordBuffer's CJK run will become: its CJK codepoints, plus one for each run of
+  // non-CJK characters after the first CJK codepoint. consumeText flushes the run at
+  // kCjkRunCodepoints of them.
+  int partWordCjkCodepoints_ = 0;
+  // The last codepoint added to partWordBuffer was CJK, so a non-CJK character after it starts a
+  // run that counts toward partWordCjkCodepoints_.
+  bool partWordLastWasCjk_ = false;
+  // The last codepoint of the last word flushed, kept across whitespace (set by flushPartWordBuffer).
+  uint32_t lastTextCodepoint_ = 0;
+  // A whitespace run with a line break in it followed unspaced CJK text or a quotation mark
+  // (lastTextCodepoint_). If the next word starts with unspaced CJK, or with a quote after unspaced
+  // CJK (flushPartWordBuffer decides), the run vanishes instead of becoming a space (CSS Text 3
+  // segment-break rule; in CJK text the quotes are CJK punctuation): hard-wrapped Chinese and
+  // Japanese sources break lines mid-sentence.
+  bool cjkSegmentBreakPending_ = false;
   // KOReader sync content offsets (docs/contributing/koreader-synchronization.md).
   // visibleTextOffset_ counts VisibleText.h's visible bytes of the source text the SAX parser has
   // delivered: inside <body>, outside head/script/style, before any layout decision. The mappers
@@ -661,6 +676,12 @@ class ChapterHtmlSlimParser final : public Print {
   // if caches were actually released, i.e. it is worth re-testing the gate.
   bool recoverHeapForImageHeader();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  // The text before this point and the text after it are not in one inline formatting context, so
+  // a line break between them stays a space (cjkSegmentBreakPending_).
+  void endCjkSegment() {
+    cjkSegmentBreakPending_ = false;
+    lastTextCodepoint_ = 0;
+  }
   void clearSpentBlockHeadingStyle();
   // Depth of the header/block element whose start tag set up the current text block, or -1 once
   // that element has closed. A <br> inside it splits the element into more blocks, which keep its

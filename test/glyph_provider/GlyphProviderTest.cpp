@@ -133,6 +133,33 @@ TEST(GlyphProvider, KerningUsesTablesWhenTheFontHasThem) {
   EXPECT_TRUE(provider.kernAsked.empty());
 }
 
+// CJK text is set on a grid: no pair touching a CJK character kerns, whatever the font's tables or
+// provider say, and the provider is never asked (a TTF family would fill its pair store with zeros).
+TEST(GlyphProvider, NoPairTouchingCjkKerns) {
+  static const EpdKernClassEntry kLeft[] = {{0x6F22, 1}};   // 漢
+  static const EpdKernClassEntry kRight[] = {{0x5B57, 1}};  // 字
+  static const int8_t kMatrix[] = {-5};
+  FakeProvider provider;
+  provider.kernValue = -3;
+  const EpdFontData providerData = providerOnly(&provider);
+  const EpdFont providerFont(&providerData);
+  EXPECT_EQ(0, providerFont.getKerning(0x6F22, 0x5B57));
+  EXPECT_EQ(0, providerFont.getKerning('A', 0x3002));  // A。
+  EXPECT_TRUE(provider.kernAsked.empty());
+  EXPECT_EQ(-3, providerFont.getKerning('A', 'V'));  // Latin pairs still ask
+
+  EpdFontData tableData = providerOnly(nullptr);
+  tableData.kernLeftClasses = kLeft;
+  tableData.kernRightClasses = kRight;
+  tableData.kernMatrix = kMatrix;
+  tableData.kernLeftEntryCount = 1;
+  tableData.kernRightEntryCount = 1;
+  tableData.kernLeftClassCount = 1;
+  tableData.kernRightClassCount = 1;
+  const EpdFont tableFont(&tableData);
+  EXPECT_EQ(0, tableFont.getKerning(0x6F22, 0x5B57));  // the table has the pair; it is not used
+}
+
 TEST(GlyphProvider, AFontWithoutAProviderBehavesAsBefore) {
   const EpdFontData data{};
   const EpdFont font(&data);

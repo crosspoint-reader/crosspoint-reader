@@ -93,6 +93,8 @@ class DictionaryWordSelectActivity final : public Activity {
   // Longest word handed to the dictionary, joined across fragments. Headwords far shorter
   // than this; the buffer is a stack local, so it stays well inside the task stack budget.
   static constexpr size_t WORD_TEXT_CAPACITY = 128;
+  // Largest block a lookup may need: dictzip's 32 KB inflate window plus its ~3 KB chunk scratch.
+  static constexpr size_t LOOKUP_CONTIGUOUS_BYTES = 36 * 1024;
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
 

@@ -31,7 +31,8 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 91;  // v91: rem/px/pt font sizes are relative to the
+constexpr uint8_t SECTION_FILE_VERSION = 92;  // v92: CJK text breaks between characters, with kinsoku
+                                              // v91: rem/px/pt font sizes are relative to the
                                               // body (v90 compounded nested ones), and CSS
                                               // specificity, compound, descendant/child
                                               // selectors and `inherit` apply
