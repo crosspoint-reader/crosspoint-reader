@@ -545,6 +545,17 @@ void WebDAVHandler::handleMove(WebServer& s) {
   }
 
   bool dstExists = Storage.exists(dstPath.c_str());
+  if (dstExists) {
+    bool same;
+    if (!Storage.areSameFile(srcPath.c_str(), dstPath.c_str(), same)) {
+      s.send(500, "text/plain", "Failed to identify source and destination");
+      return;
+    }
+    if (same) {
+      s.send(204);
+      return;
+    }
+  }
   if (dstExists && !overwrite) {
     s.send(412, "text/plain", "Destination exists and Overwrite is F");
     return;
@@ -601,6 +612,33 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
+  // Check destination parent exists
+  int lastSlash = dstPath.lastIndexOf('/');
+  if (lastSlash > 0) {
+    String parentPath = dstPath.substring(0, lastSlash);
+    if (!parentPath.isEmpty() && !Storage.exists(parentPath.c_str())) {
+      s.send(409, "text/plain", "Destination parent does not exist");
+      return;
+    }
+  }
+
+  bool dstExists = Storage.exists(dstPath.c_str());
+  if (dstExists) {
+    bool same;
+    if (!Storage.areSameFile(srcPath.c_str(), dstPath.c_str(), same)) {
+      s.send(500, "text/plain", "Failed to identify source and destination");
+      return;
+    }
+    if (same) {
+      s.send(204);
+      return;
+    }
+  }
+  if (dstExists && !overwrite) {
+    s.send(412, "text/plain", "Destination exists and Overwrite is F");
+    return;
+  }
+
   HalFile srcFile = Storage.open(srcPath.c_str());
   if (!srcFile) {
     s.send(500, "text/plain", "Failed to open source");
@@ -613,26 +651,9 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
-  // Check destination parent exists
-  int lastSlash = dstPath.lastIndexOf('/');
-  if (lastSlash > 0) {
-    String parentPath = dstPath.substring(0, lastSlash);
-    if (!parentPath.isEmpty() && !Storage.exists(parentPath.c_str())) {
-      srcFile.close();
-      s.send(409, "text/plain", "Destination parent does not exist");
-      return;
-    }
-  }
-
-  bool dstExists = Storage.exists(dstPath.c_str());
-  if (dstExists && !overwrite) {
-    srcFile.close();
-    s.send(412, "text/plain", "Destination exists and Overwrite is F");
+  if (dstExists && !Storage.remove(dstPath.c_str())) {
+    s.send(500, "text/plain", "Failed to remove destination");
     return;
-  }
-
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
   }
 
   HalFile dstFile;

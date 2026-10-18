@@ -198,6 +198,29 @@ bool HalStorage::rename(const char* oldPath, const char* newPath) {
   HAL_STORAGE_WRAPPED_CALL(rename, oldPath, newPath);
 }
 
+bool HalStorage::areSameFile(const char* first, const char* second, bool& same) {
+  StorageLock lock;
+  same = false;
+  const auto identity = [](const char* path, uint32_t& parentCluster, uint32_t& entryIndex) {
+    const std::string name(path);
+    const size_t slash = name.rfind('/');
+    const std::string parent = slash == std::string::npos || slash == 0 ? "/" : name.substr(0, slash);
+    auto directory = SDCard.open(parent.c_str(), O_RDONLY);
+    auto file = SDCard.open(path, O_RDONLY);
+    if (!directory || !directory.isDirectory() || !file) {
+      LOG_ERR("SD", "areSameFile: cannot open %s or its parent", path);
+      return false;
+    }
+    parentCluster = directory.firstCluster();
+    entryIndex = file.dirIndex();
+    return true;
+  };
+  uint32_t firstParent, firstEntry, secondParent, secondEntry;
+  if (!identity(first, firstParent, firstEntry) || !identity(second, secondParent, secondEntry)) return false;
+  same = firstParent == secondParent && firstEntry == secondEntry;
+  return true;
+}
+
 bool HalStorage::replaceFile(const char* tmpPath, const char* path) {
   HAL_STORAGE_WRAPPED_CALL(replaceFile, tmpPath, path);
 }
