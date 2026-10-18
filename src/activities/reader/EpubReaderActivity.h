@@ -160,6 +160,11 @@ class EpubReaderActivity final : public ReaderActivity {
   // An explicit new position (chapter start, a sync or clipping result) replaces a jump still being built
   // and the remembered position a re-pagination would return to.
   void clearSectionTarget();
+  // A dropped section hands its target back to pendingAnchor / pendingOffsetJump for the next open.
+  // A re-layout of the same chapter carries it there too; any new navigation clears it first.
+  void restoreSectionTarget();
+  void clearPendingJump();
+  bool pageDrawPending() const override { return renderWaitsForBuild; }
   // A build step on the loop task failed and dropped the section; renderBook() shows the index
   // error once instead of rebuilding straight away.
   bool backgroundBuildFailed = false;

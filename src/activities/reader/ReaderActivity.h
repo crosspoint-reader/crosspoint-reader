@@ -56,6 +56,8 @@ class ReaderActivity : public Activity {
   virtual void onReturnFromEndOfBook() {}
 
   virtual void renderBook() = 0;
+  // renderBook() returned without drawing the requested page (it is still being prepared).
+  virtual bool pageDrawPending() const { return false; }
   virtual void applyInitialOrientation();
   virtual void onEndOfBookRendered() {}
 

@@ -441,17 +441,13 @@ void EpubReaderActivity::backgroundBuildTick() {
     nextPageNumber = section->currentPage;
     section.reset();
     backgroundBuildFailed = true;
-    if (renderWaitsForBuild) {
-      renderWaitsForBuild = false;
-      requestUpdate();
-    }
+    if (renderWaitsForBuild) requestUpdate();
     return;
   }
   if (section->isBuildComplete() && applyDeferredReposition()) requestUpdate();
-  if (renderWaitsForBuild && buildReachedRenderTarget()) {
-    renderWaitsForBuild = false;
-    requestUpdate();
-  }
+  // renderWaitsForBuild stays set until renderBook() starts drawing, so no page action slips in
+  // between this request and the draw.
+  if (renderWaitsForBuild && buildReachedRenderTarget()) requestUpdate();
 }
 
 bool EpubReaderActivity::buildReachedRenderTarget() const {
@@ -460,6 +456,18 @@ bool EpubReaderActivity::buildReachedRenderTarget() const {
   if (!sectionTargetAnchor.empty()) return section->findAnchor(sectionTargetAnchor).has_value();
   if (sectionTargetOffset.has_value()) return section->buildReachedVisibleTextOffset(*sectionTargetOffset);
   return section->currentPage < static_cast<int>(section->pageCount);
+}
+
+void EpubReaderActivity::clearPendingJump() {
+  pendingAnchor.clear();
+  pendingOffsetJump.reset();
+}
+
+void EpubReaderActivity::restoreSectionTarget() {
+  if (!sectionTargetAnchor.empty()) pendingAnchor = std::move(sectionTargetAnchor);
+  if (sectionTargetOffset.has_value()) pendingOffsetJump = sectionTargetOffset;
+  sectionTargetAnchor.clear();
+  sectionTargetOffset.reset();
 }
 
 void EpubReaderActivity::clearSectionTarget() {
@@ -1101,6 +1109,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   {
     RenderLock lock;
     clearDeferredReposition();
+    clearPendingJump();
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     pendingPercentJump = true;
@@ -1120,6 +1129,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
       clearSectionTarget();
       section->currentPage = *page;
     } else {
+      clearPendingJump();
       currentSpineIndex = sync.spineIndex;
       pendingOffsetJump = sync.visibleTextOffset;
       nextPageNumber = std::max(0, sync.page);
@@ -1146,6 +1156,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
 
   RenderLock lock;
   clearDeferredReposition();
+  clearPendingJump();
 
   if (currentSpineIndex != targetSpineIndex) {
     currentSpineIndex = targetSpineIndex;
@@ -1210,6 +1221,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             const auto& chapterResult = std::get<ChapterResult>(result.data);
             RenderLock lock;
             clearDeferredReposition();
+            clearPendingJump();
             currentSpineIndex = chapterResult.spineIndex;
             pendingAnchor = chapterResult.anchor;
             nextPageNumber = 0;
@@ -1472,6 +1484,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       return true;
     } else if (currentSpineIndex + 1 < epub->getSpineItemsCount()) {
       RenderLock lock;
+      clearPendingJump();
       nextPageNumber = 0;
       currentSpineIndex++;
       section.reset();
@@ -1489,6 +1502,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       return true;
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
+      clearPendingJump();
       nextPageNumber = 0;
       pendingPageJump = std::numeric_limits<uint16_t>::max();
       currentSpineIndex--;
@@ -1505,6 +1519,7 @@ bool EpubReaderActivity::skipPages(int amount) {
   bleturner::acknowledgeLinkNote();
   if (amount > 0) {
     RenderLock lock;
+    clearPendingJump();
     nextPageNumber = 0;
     currentSpineIndex++;
     section.reset();
@@ -1517,6 +1532,7 @@ bool EpubReaderActivity::skipPages(int amount) {
       return true;
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
+      clearPendingJump();
       nextPageNumber = 0;
       currentSpineIndex--;
       section.reset();
@@ -1617,6 +1633,7 @@ bool EpubReaderActivity::isAtEndOfBook() const { return epub && currentSpineInde
 
 void EpubReaderActivity::onReturnFromEndOfBook() {
   if (epub && epub->getSpineItemsCount() > 0) {
+    clearPendingJump();
     currentSpineIndex = epub->getSpineItemsCount() - 1;
     nextPageNumber = 0;
     pendingPageJump = std::numeric_limits<uint16_t>::max();
@@ -1653,6 +1670,8 @@ void EpubReaderActivity::renderBook() {
   };
 
   const auto showBuildError = [this](const char* message = nullptr) {
+    // The section was dropped: a retry after this screen still goes to the requested anchor or offset.
+    restoreSectionTarget();
     buildPopup = BuildPopup::None;
     renderer.clearScreen();
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
@@ -1706,11 +1725,13 @@ void EpubReaderActivity::renderBook() {
     partialRebuildStartFailed = false;
 
     const bool cacheLoaded = section->loadSectionFile(renderSpec);
-    if (cacheLoaded) {
+    const bool cacheComplete = cacheLoaded && !section->isPartial();
+    // A partial cache can be newer than the saved page number (the reader left before the requested
+    // page was drawn), so the remembered text offset stays the target until a complete cache exists.
+    if (cacheComplete) {
       cachedChapterTotalPageCount = 0;
       cachedVisibleTextOffset.reset();
     }
-    const bool cacheComplete = cacheLoaded && !section->isPartial();
     buildPopup = BuildPopup::None;
     sectionTargetAnchor = std::move(pendingAnchor);
     pendingAnchor.clear();
@@ -1759,7 +1780,9 @@ void EpubReaderActivity::renderBook() {
 
         if (section->isPartial() &&
             (anchorJump ? section->getPageForAnchor(sectionTargetAnchor).has_value()
-                        : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+             : sectionTargetOffset.has_value()
+                 ? section->getPageForVisibleTextOffset(*sectionTargetOffset).has_value()
+                 : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
           LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
         } else {
           const size_t spineBytes =
@@ -1862,6 +1885,7 @@ void EpubReaderActivity::renderBook() {
       const auto page = section->findAnchor(sectionTargetAnchor);
       if (page) {
         section->currentPage = *page;
+        clearDeferredReposition();
         LOG_DBG("ERS", "Resolved anchor '%s' to page %d", sectionTargetAnchor.c_str(), *page);
       }
       sectionTargetAnchor.clear();
@@ -2066,6 +2090,15 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
 
 void EpubReaderActivity::rememberCurrentContentOffset() {
   cachedVisibleTextOffset.reset();
+  // A jump still being built: the re-laid-out section continues to its target, not the page index.
+  if (!sectionTargetAnchor.empty()) {
+    pendingAnchor = sectionTargetAnchor;
+    return;
+  }
+  if (sectionTargetOffset.has_value()) {
+    pendingOffsetJump = sectionTargetOffset;
+    return;
+  }
   if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
     cachedVisibleTextOffset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(section->currentPage));
   }
@@ -2821,6 +2854,7 @@ void EpubReaderActivity::handleOverlayInput() {
     if (target != currentSpineIndex) {
       RenderLock lock;
       clearDeferredReposition();
+      clearPendingJump();
       nextPageNumber = 0;
       currentSpineIndex = target;
       section.reset();
@@ -2932,6 +2966,7 @@ void EpubReaderActivity::handleOverlayInput() {
       if (item.spineIndex != -1) {
         RenderLock lock;
         clearDeferredReposition();
+        clearPendingJump();
         currentSpineIndex = item.spineIndex;
         pendingAnchor = item.anchor;
         nextPageNumber = 0;
@@ -3255,6 +3290,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   {
     RenderLock lock;
     clearDeferredReposition();
+    clearPendingJump();
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
@@ -3319,6 +3355,7 @@ void EpubReaderActivity::restoreSavedPosition() {
   {
     RenderLock lock;
     clearDeferredReposition();
+    clearPendingJump();
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
     section.reset();

@@ -262,7 +262,10 @@ void ReaderActivity::render(RenderLock&&) {
   }
 
   renderBook();
-  readerSession.onRenderComplete(millis(), trustedtime::trustedNow(), getProgressBasisPoints());
+  // A page still being prepared was not shown: the session hears about the render that draws it.
+  if (!pageDrawPending()) {
+    readerSession.onRenderComplete(millis(), trustedtime::trustedNow(), getProgressBasisPoints());
+  }
 }
 
 bool ReaderActivity::handleForcedRefresh() {
