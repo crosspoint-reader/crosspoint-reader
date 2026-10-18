@@ -1290,6 +1290,9 @@ static void packInkMask(const uint8_t* in, const uint32_t inBytes, uint8_t* out)
 int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly,
                              bool loadKernLigatureData) {
   auto& s = styles_[styleIdx];
+  // Ink masks for a black-and-white-only draw (setInkOnlyPrewarm). Mmap bitmaps need no arena to
+  // shrink; a 1-bit font is its own ink mask.
+  const bool ink = inkOnlyPrewarm_ && !metadataOnly && s.header.is2Bit && !mmapDataBase_;
 
   // ---- Mmap metadata fast-path ----
   // For mmap fonts, fullIntervals and the glyph array are directly pointer-
@@ -1329,8 +1332,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   // first paragraph has populated the metadata cache.
   if (s.miniMode != PerStyle::MiniMode::NONE && allCpsCovered(s, codepoints, cpCount)) {
     // For metadata-only calls, METADATA or FULL cache both satisfy layout queries.
-    // For full (bitmap) calls, only FULL satisfies — METADATA lacks bitmap data.
-    if (metadataOnly || s.miniMode == PerStyle::MiniMode::FULL) {
+    // For full (bitmap) calls, only FULL satisfies — METADATA lacks bitmap data — and only at the
+    // depth asked for: ink masks lack the grey levels, 2-bit glyphs the halving.
+    if (metadataOnly || (s.miniMode == PerStyle::MiniMode::FULL && s.miniInkOnly == ink)) {
       // Ensure ligature metadata is wired if requested but not yet wired.
       if (loadKernLigatureData && !s.ligLoaded) {
         loadStyleKernLigatureData(s, /*ligatureOnly=*/true);
@@ -1654,8 +1658,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
 
   uint32_t totalBitmapSize = 0;
   bool bitmapsFromMmap = false;
-  // Mmap bitmaps need no arena to shrink; a 1-bit font is its own ink mask.
-  const bool ink = inkOnlyPrewarm_ && !metadataOnly && s.header.is2Bit && !mmapDataBase_;
 
   if (!metadataOnly) {
     // Compute total bitmap size: an ink-only prewarm keeps each 2-bit glyph's 1-bit ink mask.

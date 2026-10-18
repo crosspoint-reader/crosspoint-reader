@@ -32,6 +32,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
@@ -1333,7 +1334,9 @@ uint32_t EpubReaderActivity::preRenderMinFreeHeap(const bool inkOnly) const {
 bool EpubReaderActivity::inkOnlyPrerenderAvailable() const {
   if (renderer.supportsGrayFrame()) return false;
   const int fontId = getEffectiveReaderFontId();
-  return renderer.getSdCardFonts().count(fontId) != 0 && renderer.fontBaseScale(fontId) == 1.0f;
+  const auto it = renderer.getSdCardFonts().find(fontId);
+  return it != renderer.getSdCardFonts().end() && it->second && it->second->hasTwoBitBitmaps() &&
+         renderer.fontBaseScale(fontId) == 1.0f;
 }
 
 bool EpubReaderActivity::pageDrawsUnscaled(const Page& page) {
@@ -1640,7 +1643,7 @@ void EpubReaderActivity::stepBackgroundSectionBuild() {
       !preRenderedPage.ready && !backgroundBuildThrough_ && section->currentPage + 1 < section->pageCount &&
       lastRenderedSpineIndex_ == currentSpineIndex && lastRenderedPageIndex_ == section->currentPage &&
       (preRenderRearmSpine_ != currentSpineIndex || preRenderRearmPage_ != section->currentPage);
-  const uint32_t preRenderFloor = preRenderMinFreeHeap(inkOnlyPrerenderAvailable());
+  const uint32_t preRenderFloor = preRenderWanted ? preRenderMinFreeHeap(inkOnlyPrerenderAvailable()) : 0;
   if (preRenderWanted && preRenderFree < preRenderFloor) {
     HEAP_GATE("preRenderArm", false, preRenderFree, preRenderFloor, 0, 0);
   }
@@ -4048,8 +4051,12 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     heap_caps_monitor_local_minimum_free_size_stop();
   }
   if (drawn && !fullArenaFits) {
-    LOG_DBG("ERS", "PreRender skipped: page %d draws scaled text, and its 2-bit arena would not fit (free=%lu < %lu)",
+    LOG_DBG("ERS",
+            "PreRender skipped: page %d is not plain unscaled text, and its 2-bit arena would not fit (free=%lu < %lu)",
             nextPage, static_cast<unsigned long>(freeHeap), static_cast<unsigned long>(preRenderMinFreeHeap(false)));
+    // Loading it again would find the same: no re-arm for the page on screen.
+    preRenderRearmSpine_ = currentSpineIndex;
+    preRenderRearmPage_ = savedPage;
   } else if (drawn) {
     // An incomplete draw keeps `ready` (the framebuffer does hold that page now; the sleep
     // overlay and screenshots restore the current one from it) but is never shown: the turn
@@ -4081,7 +4088,8 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     FontCacheManager* fontCache = renderer.getFontCacheManager();
     const size_t freed = fontCache->releaseLargeSdPageArenas(1);
     fontCache->clearCache();
-    releasedPageArenaBytes_ = static_cast<uint32_t>(freed * 2);
+    // Nothing freed (every glyph came through the miss ring) says nothing about the next page.
+    if (freed > 0) releasedPageArenaBytes_ = static_cast<uint32_t>(freed * 2);
     LOG_DBG("ERS", "Released the %u B ink-only page glyph arena after the pre-render", static_cast<unsigned>(freed));
   } else if (drawn && fullArenaFits) {
     releasePageGlyphArena("the pre-render");

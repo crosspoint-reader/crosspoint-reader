@@ -59,7 +59,8 @@ void putU32(std::vector<uint8_t>& b, const size_t at, const uint32_t v) {
 // A one-style v4 .cpfont: glyphs A-D and U+FFFD, each with `bitmapBytes` of a distinct byte pattern.
 // With `kerning`, A and B are left classes 1 and 2, B and C right classes 1 and 2, and the 2x2
 // matrix holds {-3, 1, 2, -1}, so prewarm builds a mini kern matrix through the SD chunk path.
-std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning, const bool twoBit = false) {
+std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning, const bool twoBit = false,
+                               const uint8_t side = 8) {
   const uint16_t kernLeft = kerning ? 2 : 0;
   const uint16_t kernRight = kerning ? 2 : 0;
   const uint8_t leftClasses = kerning ? 2 : 0;
@@ -102,8 +103,8 @@ std::vector<uint8_t> buildFont(const uint16_t bitmapBytes, const bool kerning, c
 
   for (uint32_t g = 0; g < GLYPHS; g++) {
     const size_t at = glyphsAt + g * sizeof(EpdGlyph);
-    b[at] = 8;                            // width
-    b[at + 1] = 8;                        // height
+    b[at] = side;                         // width
+    b[at + 1] = side;                     // height
     putU16(b, at + 2, 10 << 4);           // advanceX, 12.4 fixed point
     putU16(b, at + 6, 8);                 // top
     putU16(b, at + 8, bitmapBytes);       // dataLength
@@ -458,9 +459,8 @@ TEST(SdFontArena, InkOnlyMissesAreInkMasksAndNeverServeAFullDraw) {
   EXPECT_EQ(8u, glyph->dataLength);
   expectInkMaskOf(r.bitmap + r.glyph[2].dataOffset, bitmap, 64, 2);
 
-  // The next page renders in full: the ring must not hand it the ink mask.
+  // The next page renders in full: the ring, which still holds C's ink mask, must not hand it over.
   font.setInkOnlyPrewarm(false);
-  font.clearCache();
   ASSERT_EQ(0, font.prewarm("A", 0x01));
   const EpdFontData& fullData = *font.getEpdFont(0)->data;
   ASSERT_TRUE(fullData.is2Bit);
@@ -469,4 +469,51 @@ TEST(SdFontArena, InkOnlyMissesAreInkMasksAndNeverServeAFullDraw) {
   ASSERT_TRUE(fullData.provider->ownsBitmap(glyph, bitmap));
   EXPECT_EQ(16u, glyph->dataLength);
   EXPECT_EQ(0, std::memcmp(r.bitmap + r.glyph[2].dataOffset, bitmap, 16));
+}
+
+// The coverage fast path keeps a page's data when it already holds the codepoints. It must not keep
+// ink masks for a draw that needs the grey levels, nor 2-bit glyphs a pre-render wants halved.
+TEST(SdFontArena, APrewarmOfTheOtherDepthRebuildsTheSameGlyphs) {
+  const std::string path = writeTemp(buildFont(16, /*kerning=*/false, /*twoBit=*/true));
+  SdCardFont reference;
+  ASSERT_TRUE(reference.load(path.c_str()));
+  ASSERT_EQ(0, reference.prewarm("ABCD", 0x01));
+
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  font.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  font.setInkOnlyPrewarm(false);
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  ASSERT_TRUE(font.getEpdFont(0)->data->is2Bit) << "ink masks served to a 2-bit draw";
+  expectSameGlyphs(*reference.getEpdFont(0)->data, *font.getEpdFont(0)->data);
+
+  font.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_FALSE(font.getEpdFont(0)->data->is2Bit) << "2-bit glyphs kept for an ink-only draw";
+  EXPECT_EQ(reference.pageArenaBytes() / 2, font.pageArenaBytes());
+}
+
+// A CJK glyph at 14pt is ~180 bytes: more than one 64-byte read chunk, and often an odd byte count,
+// whose last byte packs into half a mask byte. 23x23 2-bit is 133 bytes, read as 64 + 64 + 5.
+TEST(SdFontArena, AGlyphLongerThanAChunkWithAnOddByteCountPacksWhole) {
+  constexpr uint8_t kSide = 23;
+  constexpr uint16_t kBytes = (kSide * kSide + 3) / 4;
+  static_assert(kBytes == 133, "the case this test is about");
+  const std::string path = writeTemp(buildFont(kBytes, /*kerning=*/false, /*twoBit=*/true, kSide));
+  SdCardFont full;
+  ASSERT_TRUE(full.load(path.c_str()));
+  ASSERT_EQ(0, full.prewarm("AB", 0x01));
+  SdCardFont ink;
+  ASSERT_TRUE(ink.load(path.c_str()));
+  ink.setInkOnlyPrewarm(true);
+  ASSERT_EQ(0, ink.prewarm("AB", 0x01));
+  const EpdFontData& f = *full.getEpdFont(0)->data;
+  const EpdFontData& i = *ink.getEpdFont(0)->data;
+  const uint32_t n = glyphCount(f);
+  for (uint32_t g = 0; g < n; g++) {
+    if (f.glyph[g].dataLength == 0) continue;
+    ASSERT_EQ(glyphDataBytes(kSide, kSide, false), i.glyph[g].dataLength) << "glyph " << g;
+    expectInkMaskOf(f.bitmap + f.glyph[g].dataOffset, i.bitmap + i.glyph[g].dataOffset, kSide * kSide, g);
+  }
 }

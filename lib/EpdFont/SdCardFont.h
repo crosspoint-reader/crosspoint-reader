@@ -58,6 +58,8 @@ class SdCardFont {
   // fonts and for bitmaps served from the flash mmap. Clear the flag and the cache before a draw
   // that needs the grey levels.
   void setInkOnlyPrewarm(bool on) { inkOnlyPrewarm_ = on; }
+  // The regular style's bitmaps are 2-bit: what setInkOnlyPrewarm() can halve.
+  bool hasTwoBitBitmaps() const { return styles_[0].present && styles_[0].header.is2Bit; }
 
   // Pre-read glyphs needed for the given UTF-8 text from SD card.
   // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
