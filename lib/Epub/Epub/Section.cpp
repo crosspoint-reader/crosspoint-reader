@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MemoryManager.h>
 #include <Serialization.h>
 
 #include <algorithm>
@@ -16,6 +17,13 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
+template <typename F>
+bool readAnchorString(F& file, std::string& value) {
+  const size_t largest = freeink::MemoryManager::instance().largestFreeBlock();
+  const size_t limit = largest == 0 ? 0 : std::min<size_t>(file.available(), largest - 1);
+  return serialization::tryReadString(file, value, limit);
+}
+
 // v28: text decoration bits now include line-through in serialized wordStyles.
 // v29: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 // text blob) instead of length-prefixed strings and per-field arrays.
@@ -175,7 +183,11 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
   bool filePartial = false;
   {
     uint8_t version;
-    serialization::readPod(file, version);
+    if (!serialization::tryReadPod(file, version)) {
+      file.close();
+      clearCache();
+      return false;
+    }
     if (version != SECTION_FILE_VERSION && version != SECTION_FILE_PARTIAL_VERSION) {
       // Explicit close() required: member variable persists beyond function scope
       file.close();
@@ -197,19 +209,71 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     bool fileFocusReadingEnabled;
     int8_t fileCharacterSpacing;
     uint8_t fileWordSpacingPercent;
-    serialization::readPod(file, fileFontId);
-    serialization::readPod(file, fileLineCompression);
-    serialization::readPod(file, fileExtraParagraphSpacing);
-    serialization::readPod(file, fileParagraphIndentSpaces);
-    serialization::readPod(file, fileParagraphAlignment);
-    serialization::readPod(file, fileViewportWidth);
-    serialization::readPod(file, fileViewportHeight);
-    serialization::readPod(file, fileHyphenationEnabled);
-    serialization::readPod(file, fileEmbeddedStyle);
-    serialization::readPod(file, fileImageRendering);
-    serialization::readPod(file, fileFocusReadingEnabled);
-    serialization::readPod(file, fileCharacterSpacing);
-    serialization::readPod(file, fileWordSpacingPercent);
+    if (!serialization::tryReadPod(file, fileFontId)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileLineCompression)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileExtraParagraphSpacing)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileParagraphIndentSpaces)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileParagraphAlignment)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileViewportWidth)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileViewportHeight)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileHyphenationEnabled)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileEmbeddedStyle)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileImageRendering)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileFocusReadingEnabled)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileCharacterSpacing)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, fileWordSpacingPercent)) {
+      file.close();
+      clearCache();
+      return false;
+    }
 
     if (spec.fontId != fileFontId || spec.lineCompression != fileLineCompression ||
         spec.extraParagraphSpacing != fileExtraParagraphSpacing ||
@@ -225,17 +289,57 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     }
   }
 
-  serialization::readPod(file, pageCount);
+  if (!serialization::tryReadPod(file, pageCount)) {
+    file.close();
+    clearCache();
+    return false;
+  }
+
+  uint32_t offsets[5];
+  if (file.read(offsets, sizeof(offsets)) != sizeof(offsets)) {
+    file.close();
+    clearCache();
+    return false;
+  }
+  const uint64_t size = file.size();
+  const uint64_t pages = pageCount;
+  const bool validTables = offsets[0] >= HEADER_SIZE && offsets[1] == offsets[0] + pages * 4 &&
+                           offsets[2] >= static_cast<uint64_t>(offsets[1]) + 2 &&
+                           offsets[3] == static_cast<uint64_t>(offsets[2]) + 2 + pages * 2 &&
+                           offsets[4] == static_cast<uint64_t>(offsets[3]) + pages * 2 &&
+                           static_cast<uint64_t>(offsets[4]) + pages * 4 + (filePartial ? 8 : 0) <= size;
+  if (!validTables) {
+    file.close();
+    clearCache();
+    pageCount = 0;
+    return false;
+  }
 
   if (filePartial) {
     // A partial's pageCount is the watermark of a suspended build. Read the watermark
     // trailer (appended after the visible-offset LUT) so estimatedTotalPages can extrapolate.
     uint32_t liLutOffset = 0;
-    file.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
-    serialization::readPod(file, liLutOffset);
+    if (!file.seek(HEADER_SIZE - sizeof(uint32_t) * 2)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, liLutOffset)) {
+      file.close();
+      clearCache();
+      return false;
+    }
     uint32_t visibleLutOffset = 0;
-    file.seek(HEADER_SIZE - sizeof(uint32_t));
-    serialization::readPod(file, visibleLutOffset);
+    if (!file.seek(HEADER_SIZE - sizeof(uint32_t))) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, visibleLutOffset)) {
+      file.close();
+      clearCache();
+      return false;
+    }
     const uint32_t trailerOffset = visibleLutOffset + static_cast<uint32_t>(pageCount) * sizeof(uint32_t);
     const bool trailerValid = pageCount > 0 && liLutOffset >= HEADER_SIZE && visibleLutOffset > liLutOffset &&
                               trailerOffset + 2 * sizeof(uint32_t) <= file.size();
@@ -246,9 +350,21 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
       pageCount = 0;
       return false;
     }
-    file.seek(trailerOffset);
-    serialization::readPod(file, partialBytesConsumed_);
-    serialization::readPod(file, partialTotalBytes_);
+    if (!file.seek(trailerOffset)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, partialBytesConsumed_)) {
+      file.close();
+      clearCache();
+      return false;
+    }
+    if (!serialization::tryReadPod(file, partialTotalBytes_)) {
+      file.close();
+      clearCache();
+      return false;
+    }
     partial_ = true;
     partialPageCount_ = pageCount;
   }
@@ -579,8 +695,11 @@ int Section::getTocIndexForPage(const int page) const {
     if (anchorReader && anchorReader->seek(anchorStart)) {
       for (uint16_t i = 0; i < anchorCount; ++i) {
         uint16_t anchorPage;
-        serialization::readString(*anchorReader, cachedAnchor);
-        serialization::readPod(*anchorReader, anchorPage);
+        if (!readAnchorString(*anchorReader, cachedAnchor) || !serialization::tryReadPod(*anchorReader, anchorPage)) {
+          LOG_ERR("SCT", "Invalid anchor map");
+          anchorReader.reset();
+          break;
+        }
         considerAnchor(cachedAnchor, anchorPage, true);
       }
     }
@@ -982,8 +1101,10 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   for (uint16_t i = 0; i < count; i++) {
     std::string key;
     uint16_t page;
-    serialization::readString(f, key);
-    serialization::readPod(f, page);
+    if (!readAnchorString(f, key) || !serialization::tryReadPod(f, page)) {
+      LOG_ERR("SCT", "Invalid anchor map");
+      return std::nullopt;
+    }
     if (key == anchor) {
       return page;
     }

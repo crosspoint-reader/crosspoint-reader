@@ -1,11 +1,15 @@
 #include <Epub/Page.h>
 #include <GfxRenderer.h>
+#include <MemoryManager.h>
 #include <gtest/gtest.h>
 
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iterator>
+#include <limits>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -1784,4 +1788,118 @@ TEST(TextDecorationPosition, UnderlineStaysBelowBaseline) {
     line->render(renderer, 0, 0, 20);
     EXPECT_EQ(renderer.lastLineY, 34);
   });
+}
+
+namespace {
+Page fontStoragePage() {
+  Page page;
+  BlockStyle style;
+  style.fontId = -17;
+  auto text = std::make_unique<TextBlock>(std::vector<std::string>{"a", "b", "c"}, std::vector<int16_t>{0, 8, 16},
+                                          std::vector<EpdFontFamily::Style>(3, EpdFontFamily::REGULAR),
+                                          std::vector<uint8_t>{}, std::vector<uint16_t>{}, style);
+  const uint8_t slots[] = {0, 1, static_cast<uint8_t>(3 | TextBlock::SMALL_CAPS_SLOT_FLAG)};
+  const int32_t fonts[TextBlock::MAX_WORD_FONTS] = {-21, 22, -23};
+  EXPECT_TRUE(text->setWordFonts(slots, fonts));
+  page.elements.push_back(std::make_unique<PageLine>(std::move(text), 1, 2));
+  page.elements.push_back(std::make_unique<PageHorizontalRule>(120, 1, 2, 3));
+  page.elements.push_back(std::make_unique<PageDropCap>(-17, 512, EpdFontFamily::BOLD, "A", 2, 3));
+  const CssBorderSide sides[4] = {{1, CssBorderStyle::Solid}, {}, {}, {2, CssBorderStyle::Dashed}};
+  page.elements.push_back(std::make_unique<PageBorderBox>(120, 80, sides, true, 2, 3));
+  return page;
+}
+}  // namespace
+TEST(PageStorage, LongRubyRoundTripsAndRejectsLengthsBeyondTheFile) {
+  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-long-ruby.bin").string();
+  const std::vector<std::string> ruby{"", std::string(4097, 'r'), "tail"};
+  BlockStyle style;
+  style.characterSpacing = 3;
+  TextBlock block({"a", "b", "c"}, {0, 8, 16}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR, EpdFontFamily::REGULAR},
+                  {}, {}, style, ruby);
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "wb"));
+    ASSERT_TRUE(block.serialize(file));
+  }
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "rb"));
+    auto cached = TextBlock::deserialize(file);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(cached->getRubyTexts(), ruby);
+    EXPECT_EQ(cached->getBlockStyle().characterSpacing, 3);
+    EXPECT_EQ(file.position(), file.size());
+  }
+  {
+    std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+    const std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    const size_t payload = bytes.find(ruby[1]);
+    ASSERT_NE(payload, std::string::npos);
+    ASSERT_GE(payload, sizeof(uint32_t));
+    file.seekp(static_cast<std::streamoff>(payload - sizeof(uint32_t)));
+    const uint32_t invalidLength = UINT32_MAX;
+    file.write(reinterpret_cast<const char*>(&invalidLength), sizeof(invalidLength));
+  }
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "rb"));
+    EXPECT_EQ(TextBlock::deserialize(file), nullptr);
+  }
+  std::filesystem::remove(path);
+}
+
+TEST(PageStorage, RubyLengthWithinTheFileMustFitTheCurrentHeap) {
+  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-ruby-heap.bin").string();
+  TextBlock block({"a"}, {0}, {EpdFontFamily::REGULAR}, {}, {}, BlockStyle{}, {std::string(1024 * 1024, 'r')});
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "wb"));
+    ASSERT_TRUE(block.serialize(file));
+  }
+  for (const size_t largest : {size_t{0}, size_t{64 * 1024}, size_t{1024 * 1024}, size_t{1024 * 1024 + 1}}) {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "rb"));
+    const size_t previous = freeink::MemoryManager::largestBlock;
+    freeink::MemoryManager::largestBlock = largest;
+    auto cached = TextBlock::deserialize(file);
+    freeink::MemoryManager::largestBlock = previous;
+    EXPECT_EQ(cached != nullptr, largest > 1024 * 1024);
+  }
+  std::filesystem::remove(path);
+}
+
+TEST(PageStorage, FontAndElementFieldsRoundTripAndRejectEveryTruncatedPrefix) {
+  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-page-fonts.bin").string();
+  Page page = fontStoragePage();
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "wb"));
+    ASSERT_TRUE(page.serialize(file));
+  }
+  std::ifstream source(path, std::ios::binary);
+  const std::string bytes{std::istreambuf_iterator<char>(source), std::istreambuf_iterator<char>()};
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "rb"));
+    auto cached = Page::deserialize(file);
+    ASSERT_NE(cached, nullptr);
+    ASSERT_EQ(cached->elements.size(), 4u);
+    const auto* line = static_cast<const PageLine*>(cached->elements[0].get());
+    EXPECT_EQ(line->getBlock()->blockFontId(1), -17);
+    EXPECT_EQ(line->getBlock()->wordFontId(0, 1), -17);
+    EXPECT_EQ(line->getBlock()->wordFontId(1, 1), -21);
+    EXPECT_EQ(line->getBlock()->wordFontId(2, 1), -23);
+    EXPECT_TRUE(line->getBlock()->wordHasSmallCaps(2));
+    EXPECT_EQ(file.position(), file.size());
+  }
+  for (size_t length = 0; length < bytes.size(); ++length) {
+    {
+      std::ofstream file(path, std::ios::binary | std::ios::trunc);
+      file.write(bytes.data(), length);
+    }
+    HalFile file;
+    ASSERT_TRUE(file.open(path.c_str(), "rb"));
+    EXPECT_EQ(Page::deserialize(file), nullptr) << length;
+  }
+  std::filesystem::remove(path);
 }

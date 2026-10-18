@@ -80,8 +80,10 @@ bool PageLine::serialize(HalFile& file) {
 std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  if (!(serialization::tryReadPod(file, xPos) && serialization::tryReadPod(file, yPos))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   auto tb = TextBlock::deserialize(file);
   if (!tb) {
@@ -117,8 +119,10 @@ bool PageImage::serialize(HalFile& file) {
 std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  if (!(serialization::tryReadPod(file, xPos) && serialization::tryReadPod(file, yPos))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   auto ib = ImageBlock::deserialize(file);
   if (!ib) {
@@ -155,10 +159,11 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
   int16_t yPos = 0;
   uint16_t width = 0;
   uint8_t thickness = 0;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
-  serialization::readPod(file, width);
-  serialization::readPod(file, thickness);
+  if (!(serialization::tryReadPod(file, xPos) && serialization::tryReadPod(file, yPos) &&
+        serialization::tryReadPod(file, width) && serialization::tryReadPod(file, thickness))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
 
   if (width == 0 || thickness == 0) {
     LOG_ERR("PGE", "Deserialization failed: invalid horizontal rule metadata (width=%u thickness=%u)", width,
@@ -208,12 +213,30 @@ std::unique_ptr<PageDropCap> PageDropCap::deserialize(HalFile& file) {
   uint16_t scale256 = 0;
   uint8_t style = 0;
   uint8_t length = 0;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
-  serialization::readPod(file, fontId);
-  serialization::readPod(file, scale256);
-  serialization::readPod(file, style);
-  serialization::readPod(file, length);
+  if (!serialization::tryReadPod(file, xPos)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, yPos)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, fontId)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, scale256)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, style)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, length)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
   char text[MAX_TEXT_BYTES + 1] = {};
   if (length == 0 || length > MAX_TEXT_BYTES || scale256 == 0 || file.read(text, length) != length) {
     LOG_ERR("PGE", "Deserialization failed: invalid drop cap");
@@ -262,21 +285,42 @@ std::unique_ptr<PageBorderBox> PageBorderBox::deserialize(HalFile& file) {
   uint16_t height = 0;
   CssBorderSide sides[4];
   bool shaded = false;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
-  serialization::readPod(file, width);
-  serialization::readPod(file, height);
+  if (!serialization::tryReadPod(file, xPos)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, yPos)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, width)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
+  if (!serialization::tryReadPod(file, height)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
   for (CssBorderSide& side : sides) {
     uint8_t style = 0;
-    serialization::readPod(file, side.width);
-    serialization::readPod(file, style);
+    if (!serialization::tryReadPod(file, side.width)) {
+      LOG_ERR("CACHE", "Incomplete cache read");
+      return nullptr;
+    }
+    if (!serialization::tryReadPod(file, style)) {
+      LOG_ERR("CACHE", "Incomplete cache read");
+      return nullptr;
+    }
     if (style > static_cast<uint8_t>(CssBorderStyle::Dashed)) {
       LOG_ERR("PGE", "Deserialization failed: invalid border style %u", style);
       return nullptr;
     }
     side.style = static_cast<CssBorderStyle>(style);
   }
-  serialization::readPod(file, shaded);
+  if (!serialization::tryReadPod(file, shaded)) {
+    LOG_ERR("CACHE", "Incomplete cache read");
+    return nullptr;
+  }
   if (width == 0 || height == 0) {
     LOG_ERR("PGE", "Deserialization failed: empty border box");
     return nullptr;
@@ -363,7 +407,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   uint16_t count;
-  serialization::readPod(file, count);
+  if (!serialization::tryReadPod(file, count)) {
+    LOG_ERR("CACHE", "Failed cache readPod");
+    return nullptr;
+  }
 
   // Reserve up front so a page load costs one allocation for the element vector
   // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
@@ -377,7 +424,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
-    serialization::readPod(file, tag);
+    if (!serialization::tryReadPod(file, tag)) {
+      LOG_ERR("CACHE", "Failed cache readPod");
+      return nullptr;
+    }
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
@@ -417,7 +467,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   // Deserialize footnotes
   uint16_t fnCount;
-  serialization::readPod(file, fnCount);
+  if (!serialization::tryReadPod(file, fnCount)) {
+    LOG_ERR("CACHE", "Failed cache readPod");
+    return nullptr;
+  }
   if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
     LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
     return nullptr;
@@ -435,7 +488,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   uint16_t linkCount;
-  serialization::readPod(file, linkCount);
+  if (!serialization::tryReadPod(file, linkCount)) {
+    LOG_ERR("CACHE", "Failed cache readPod");
+    return nullptr;
+  }
   if (linkCount > MAX_LINKS_PER_PAGE) {
     LOG_ERR("PGE", "Invalid link count %u", linkCount);
     return nullptr;
@@ -448,10 +504,11 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
       return nullptr;
     }
     link.href[sizeof(link.href) - 1] = '\0';
-    serialization::readPod(file, link.x);
-    serialization::readPod(file, link.y);
-    serialization::readPod(file, link.width);
-    serialization::readPod(file, link.height);
+    if (!(serialization::tryReadPod(file, link.x) && serialization::tryReadPod(file, link.y) &&
+          serialization::tryReadPod(file, link.width) && serialization::tryReadPod(file, link.height))) {
+      LOG_ERR("CACHE", "Incomplete cache data");
+      return nullptr;
+    }
     if (link.href[0] == '\0' || link.width <= 0 || link.height <= 0) {
       LOG_ERR("PGE", "Invalid link geometry %u", i);
       return nullptr;

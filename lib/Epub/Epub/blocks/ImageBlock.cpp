@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MemoryManager.h>
 #include <Serialization.h>
 
 #include <cstdlib>
@@ -428,10 +429,19 @@ bool ImageBlock::serialize(HalFile& file) {
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   std::string path;
   std::string src;
-  serialization::readString(file, path);
-  serialization::readString(file, src);
+  const auto readString = [&file](std::string& value) {
+    const size_t largest = freeink::MemoryManager::instance().largestFreeBlock();
+    const size_t limit = largest == 0 ? 0 : std::min<size_t>(file.available(), largest - 1);
+    return serialization::tryReadString(file, value, limit);
+  };
+  if (!(readString(path) && readString(src))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
   int16_t w, h;
-  serialization::readPod(file, w);
-  serialization::readPod(file, h);
+  if (!(serialization::tryReadPod(file, w) && serialization::tryReadPod(file, h))) {
+    LOG_ERR("CACHE", "Incomplete cache data");
+    return nullptr;
+  }
   return std::unique_ptr<ImageBlock>(new (std::nothrow) ImageBlock(path, src, w, h));
 }
