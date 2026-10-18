@@ -1540,8 +1540,27 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
+  class JsonWriter final : public Print {
+    WebServer& server;
+    char buffer[128];
+    size_t used = 0;
+
+   public:
+    using Print::write;
+    explicit JsonWriter(WebServer& server) : server(server) {}
+    size_t write(uint8_t byte) override {
+      buffer[used++] = static_cast<char>(byte);
+      if (used == sizeof(buffer)) flush();
+      return 1;
+    }
+    void flush() {
+      if (used == 0) return;
+      server.sendContent(buffer, used);
+      used = 0;
+      yield();
+      resetTaskWatchdogIfSubscribed();
+    }
+  } output(*server);
   JsonDocument doc;
 
   for (size_t i = 0; i < servers.size(); i++) {
@@ -1560,11 +1579,9 @@ void CrossPointWebServer::handleGetOpdsServers() const {
       h["hasValue"] = !header.value.empty();
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) continue;
-
     if (i > 0) server->sendContent(",");
-    server->sendContent(output);
+    serializeJson(doc, output);
+    output.flush();
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
