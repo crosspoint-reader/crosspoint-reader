@@ -322,3 +322,58 @@ TEST(SdFontArena, ZeroSizeRingGlyphIsOwnedWithNoBitmap) {
 }
 
 }  // namespace
+
+// The reader frees a large page arena once the page is on the panel (EpubReaderActivity): a CJK
+// page's 25-31 KB of bitmaps would otherwise stay on the heap for as long as the page is read,
+// although the next render rebuilds the arena from the card anyway. pageArenaBytes() is the
+// heap the arena holds; releasePageArenaIfAtLeast() frees it only past a threshold, so a small
+// Latin arena stays.
+TEST(SdFontArena, PageArenaBytesAreTheHeapBitmapBytes) {
+  constexpr uint16_t kBitmap = 300;
+  const std::string path = writeTemp(buildFont(kBitmap, /*kerning=*/false));
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  EXPECT_EQ(0u, font.pageArenaBytes());
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(GLYPHS * kBitmap, font.pageArenaBytes()) << "A-D and U+FFFD";
+  font.clearCache();
+  EXPECT_EQ(0u, font.pageArenaBytes());
+}
+
+TEST(SdFontArena, ASmallArenaIsKept) {
+  constexpr uint16_t kBitmap = 300;
+  const std::string path = writeTemp(buildFont(kBitmap, /*kerning=*/false));
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(0u, font.releasePageArenaIfAtLeast(GLYPHS * kBitmap + 1));
+  EXPECT_EQ(GLYPHS * kBitmap, font.pageArenaBytes());
+}
+
+TEST(SdFontArena, ALargeArenaIsReleasedAndTheNextPrewarmRebuildsIt) {
+  constexpr uint16_t kBitmap = 300;
+  const std::string path = writeTemp(buildFont(kBitmap, /*kerning=*/false));
+  SdCardFont reference;
+  ASSERT_TRUE(reference.load(path.c_str()));
+  ASSERT_EQ(0, reference.prewarm("ABCD", 0x01));
+
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(GLYPHS * kBitmap, font.releasePageArenaIfAtLeast(GLYPHS * kBitmap));
+  EXPECT_EQ(0u, font.pageArenaBytes());
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  expectSameGlyphs(*reference.getEpdFont(0)->data, *font.getEpdFont(0)->data);
+}
+
+TEST(SdFontArena, AnArenaModeLoadHoldsNoHeapArena) {
+  const std::string path = writeTemp(buildFont(300, /*kerning=*/false));
+  BuildArena arena(64 * 1024);
+  ASSERT_TRUE(arena.valid());
+  SdCardFont font;
+  font.useArena(&arena);
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCD", 0x01));
+  EXPECT_EQ(0u, font.pageArenaBytes()) << "the bitmaps are in the caller's arena, not on the heap";
+  EXPECT_EQ(0u, font.releasePageArenaIfAtLeast(1));
+}

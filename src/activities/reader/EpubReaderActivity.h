@@ -821,6 +821,13 @@ class EpubReaderActivity final : public Activity {
   // the display bus is free. Serialises against the render task via RenderLock. No-op when
   // nothing is pending. Extracted from loop()'s idle branch.
   void runDeferredGrayscalePass();
+  // Frees a large SD font page arena (PAGE_ARENA_RELEASE_MIN_BYTES) once its page is on the panel:
+  // after the AA pass, a pre-render, or a render that owes no AA. Called under the render lock.
+  void releasePageGlyphArena(const char* after);
+  // The pre-render's heap floor: PRE_RENDER_MIN_FREE_HEAP_BYTES, raised by the arena the last release
+  // freed, which the pre-render would allocate again on top.
+  uint32_t preRenderMinFreeHeap() const;
+  uint32_t releasedPageArenaBytes_ = 0;
   // Background B: advance the idle build of the next consecutive section by one bounded
   // step (state probe, heap gate, or one ~BG_BUILD_BUDGET_MS parse slice). Runs only after
   // Background A has had its slice (A keeps priority: it drives perceived page-turn speed).

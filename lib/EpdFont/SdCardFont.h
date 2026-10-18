@@ -63,6 +63,11 @@ class SdCardFont {
 
   // Free mini data for all styles, restore stub EpdFontData.
   void clearCache();
+  // Heap bytes the page arenas hold: the glyph bitmaps prewarm() copied from the card for the page.
+  size_t pageArenaBytes() const;
+  // clearCache() when the page arenas hold at least `minBytes` of heap. Returns the bytes freed, or 0.
+  // The next prewarm() rebuilds them from the card, as every page render does anyway.
+  size_t releasePageArenaIfAtLeast(size_t minBytes);
 
   // Soft cache reset: drop the cumulative metadata-only prewarm cache built
   // up by repeated layout-time ensureFontReady() calls. Bitmap-mode
@@ -175,6 +180,9 @@ class SdCardFont {
     // retry. Rounded rather than floored: the retry multiplies it back out, and a floored
     // figure yields a glyph count whose arena still does not fit.
     uint32_t measuredBytesPerGlyph = 0;
+    // Heap bytes miniBitmap holds: 0 when the bitmaps are served from the flash mmap or live in a
+    // caller's arena (useArena), neither of which a release would give back to the heap.
+    uint32_t miniBitmapBytes = 0;
     uint32_t miniIntervalCount = 0;
     uint32_t miniGlyphCount = 0;
 

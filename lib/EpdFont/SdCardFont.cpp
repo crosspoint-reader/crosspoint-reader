@@ -77,6 +77,7 @@ void SdCardFont::freeStyleMiniData(PerStyle& s) {
   s.miniGlyphs = nullptr;
   freeArray(s.miniBitmap);
   s.miniBitmap = nullptr;
+  s.miniBitmapBytes = 0;
   s.miniIntervalCount = 0;
   s.miniGlyphCount = 0;
   s.miniMode = PerStyle::MiniMode::NONE;
@@ -1678,6 +1679,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
         // heap. Let the caller retry with fewer glyphs instead of losing the whole style.
         return PREWARM_ARENA_TOO_LARGE;
       }
+      s.miniBitmapBytes = arena_ ? 0 : totalBitmapSize;
 
       // Allocate a fresh readOrder covering all validCount glyphs, sorted by
       // bitmap file offset for sequential I/O.
@@ -1816,6 +1818,21 @@ void SdCardFont::clearCache() {
     styles_[i].reportedMissCount = 0;
     applyGlyphMissCallback(i);
   }
+}
+
+size_t SdCardFont::pageArenaBytes() const {
+  size_t bytes = 0;
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (styles_[i].present) bytes += styles_[i].miniBitmapBytes;
+  }
+  return bytes;
+}
+
+size_t SdCardFont::releasePageArenaIfAtLeast(const size_t minBytes) {
+  const size_t bytes = pageArenaBytes();
+  if (bytes == 0 || bytes < minBytes) return 0;
+  clearCache();
+  return bytes;
 }
 
 void SdCardFont::clearAccumulation() {

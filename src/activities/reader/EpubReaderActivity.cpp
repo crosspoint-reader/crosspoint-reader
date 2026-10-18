@@ -141,6 +141,21 @@ constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 // transient is also held under RenderLock, so no other reader work can allocate into the dip.
 constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 44 * 1024;
 
+// A page arena at least this large is freed once its page is on the panel (releasePageGlyphArena).
+// An SD font's arena holds the page's distinct glyph bitmaps, copied from the card: 3-10 KB on a
+// Latin page, which stays, but 25-31 KB on a dense CJK page (X3, NotoSansCJK 14pt), which otherwise
+// stays for as long as the page is read and keeps the heap under the pre-render floor above. The
+// next page's render or pre-render rebuilds its own arena anyway; only a redraw of the same page
+// (after a menu) reads its glyphs from the card again (~130 ms on such a page).
+constexpr size_t PAGE_ARENA_RELEASE_MIN_BYTES = 12 * 1024;
+
+// A pre-render after a release does not replace a resident arena (the floor above assumes it
+// does, "net ~neutral"): it allocates the next page's whole arena on top. Measured on X3: a
+// pre-render costs ~18 KB plus that arena (Hong Lou Meng 44-47 KB, Soseki 30 KB, with 29 KB and
+// 12.6 KB arenas). The floor then has to leave the 16 KB trough the comment above keeps.
+constexpr uint32_t PRE_RENDER_BASE_COST_BYTES = 18 * 1024;
+constexpr uint32_t PRE_RENDER_TROUGH_BYTES = 16 * 1024;
+
 // Background B (next-section pre-build) builds ONLY inside the borrowed secondary framebuffer.
 // It used to carry a second, heap-backed admission path (BG_BUILD_PARSE_MIN_FREE / EXTRACT_BASE /
 // MIN_CONTIG and a 72 KB CSS floor, derived from a 40 KB resolver floor no build has used since
@@ -1292,6 +1307,9 @@ void EpubReaderActivity::runDeferredGrayscalePass() {
   LOG_DBG("ERS", "Deferred AA%s: planes=%lums gray=%lums restore=%lums", gt.aborted ? " ABORTED" : "", gt.planesMs,
           gt.displayMs, gt.restoreMs);
   checkHeapIntegrity("after_deferred_aa");
+  // The page is on the panel with its grey levels: nothing reads its glyphs until the next render,
+  // which prewarms them again. Freed before the pre-render below is requested, so it can start.
+  releasePageGlyphArena("the AA pass");
   // The AA cleanup just reseeded frameBuffer from frameBufferActive (the current page),
   // so the buffer state is now correct for a pre-render. On X3, render() holds off the
   // PreRender pass while a deferred AA is owed (see the guard there); kick it now so a
@@ -1301,6 +1319,23 @@ void EpubReaderActivity::runDeferredGrayscalePass() {
   // unchanged.
   if (usesDeferredAa() && pendingPreRender) {
     requestUpdate();
+  }
+}
+
+uint32_t EpubReaderActivity::preRenderMinFreeHeap() const {
+  if (releasedPageArenaBytes_ == 0) return PRE_RENDER_MIN_FREE_HEAP_BYTES;
+  return std::max<uint32_t>(PRE_RENDER_MIN_FREE_HEAP_BYTES,
+                            PRE_RENDER_BASE_COST_BYTES + PRE_RENDER_TROUGH_BYTES + releasedPageArenaBytes_);
+}
+
+void EpubReaderActivity::releasePageGlyphArena(const char* after) {
+  FontCacheManager* fontCache = renderer.getFontCacheManager();
+  if (!fontCache) return;
+  const size_t freed = fontCache->releaseLargeSdPageArenas(PAGE_ARENA_RELEASE_MIN_BYTES);
+  // The latest page's: the next page is likely to need an arena of about the same size.
+  releasedPageArenaBytes_ = static_cast<uint32_t>(freed);
+  if (freed > 0) {
+    LOG_DBG("ERS", "Released the %u B page glyph arena after %s", static_cast<unsigned>(freed), after);
   }
 }
 
@@ -1582,10 +1617,11 @@ void EpubReaderActivity::stepBackgroundSectionBuild() {
       !preRenderedPage.ready && !backgroundBuildThrough_ && section->currentPage + 1 < section->pageCount &&
       lastRenderedSpineIndex_ == currentSpineIndex && lastRenderedPageIndex_ == section->currentPage &&
       (preRenderRearmSpine_ != currentSpineIndex || preRenderRearmPage_ != section->currentPage);
-  if (preRenderWanted && preRenderFree < PRE_RENDER_MIN_FREE_HEAP_BYTES) {
-    HEAP_GATE("preRenderArm", false, preRenderFree, PRE_RENDER_MIN_FREE_HEAP_BYTES, 0, 0);
+  const uint32_t preRenderFloor = preRenderMinFreeHeap();
+  if (preRenderWanted && preRenderFree < preRenderFloor) {
+    HEAP_GATE("preRenderArm", false, preRenderFree, preRenderFloor, 0, 0);
   }
-  if (preRenderWanted && preRenderFree >= PRE_RENDER_MIN_FREE_HEAP_BYTES) {
+  if (preRenderWanted && preRenderFree >= preRenderFloor) {
     preRenderRearmSpine_ = currentSpineIndex;
     preRenderRearmPage_ = section->currentPage;
     pendingPreRender = true;
@@ -3917,9 +3953,10 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     return;
   }
   const uint32_t freeHeap = esp_get_free_heap_size();
-  if (freeHeap < PRE_RENDER_MIN_FREE_HEAP_BYTES) {
+  const uint32_t preRenderFloor = preRenderMinFreeHeap();
+  if (freeHeap < preRenderFloor) {
     LOG_DBG("ERS", "PreRender skipped: free=%lu < floor=%lu", static_cast<unsigned long>(freeHeap),
-            static_cast<unsigned long>(PRE_RENDER_MIN_FREE_HEAP_BYTES));
+            static_cast<unsigned long>(preRenderFloor));
     return;
   }
 #if DEBUG_BACKGROUND_WORK
@@ -4003,6 +4040,9 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
   } else if (skippedForImages) {
     LOG_DBG("ERS", "PreRender skipped: page %d has images that would need a decode (or a single-push panel)", nextPage);
   }
+  // The next page waits in the framebuffer; displayPreRenderedPage() re-warms its glyphs before
+  // the AA replay, so the arena need not wait with it.
+  if (drawn) releasePageGlyphArena("the pre-render");
   checkHeapIntegrity("after_prerender");
 }
 
@@ -5732,6 +5772,10 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
     }
   }
 
+  // Without a deferred AA pass owed, the page is complete here (inline AA ran above, or none was
+  // wanted). Freed before the pre-render is scheduled, so it can start.
+  if (!pendingGrayscale_.active) releasePageGlyphArena("the page render");
+
   // Schedule the pre-render BEFORE releasing the lock so the loop task can
   // execute it during the waveform wait (~2-4s on X3). frameBuffer is already
   // swapped — the loop task writes into the new (inactive) buffer while the
@@ -6093,6 +6137,9 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
     }
     // timings not otherwise recorded for the pre-rendered path
   }
+  // The replay re-warmed the page's glyphs; the page is complete now, and the next pre-render
+  // scheduled after this call rebuilds its own.
+  releasePageGlyphArena("the AA replay");
   checkHeapIntegrity("after_bufferdisplay_aa");
 }
 
