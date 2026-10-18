@@ -168,7 +168,8 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
   in.freeMapPages = flash_.freeMapPages();
   glyphstore::Layout layout{};
   if (!glyphstore::planLayout(in, layout)) {
-    LOG_ERR("TTF", "families do not fit the font partition (%u styles, %lu free mapping pages)", in.styleCount,
+    // Not an error yet: the manager tries again without the last accent family, and logs if even the body cannot.
+    LOG_INF("TTF", "families do not fit the font partition (%u styles, %lu free mapping pages)", in.styleCount,
             static_cast<unsigned long>(in.freeMapPages));
     return false;
   }

@@ -44,8 +44,8 @@ size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasSizes, const
 
 bool TextBlock::allocArena(const size_t size, BuildArena* scratch) {
   if (scratch != nullptr) {
-    // The two 16-bit arrays come first, so the base needs 2-byte alignment; 4 keeps the
-    // cursor tidy for whatever follows.
+    // A line's word fonts (4-byte fields) come first, then the two 16-bit arrays: the base
+    // needs 4-byte alignment.
     arena = static_cast<uint8_t*>(scratch->alloc(size, 4));
     if (arena != nullptr) {
       arenaOwned_ = false;
