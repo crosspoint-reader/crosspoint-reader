@@ -18,6 +18,8 @@ class SdCardFontSystem {
   SdCardFontSystem() = default;
   SdCardFontSystem(const SdCardFontSystem&) = delete;
   SdCardFontSystem& operator=(const SdCardFontSystem&) = delete;
+  /// begin() has run: the SD families are known. The boot straight into USB Transfer skips it.
+  bool discovered() const { return discovered_; }
   /// Discover SD card fonts only. Call once during setup.
   ///
   /// SD font payloads are loaded lazily on reader entry (ensureLoaded*) and
@@ -103,6 +105,7 @@ class SdCardFontSystem {
   const SdCardFontRegistry& registry() const { return registry_; }
 
  private:
+  bool discovered_ = false;
   // A family on the card, or one of the book's.
   const SdCardFontFamilyInfo* findFamily(const char* name) const;
   // Reads a book family's directory as a family directory on the card, named "book:<name>"; else empties `family`.

@@ -54,6 +54,8 @@ uint8_t optionCount(const SettingInfo& s) {
   return isFontFamilyKey(s.key) ? fontFamilyOptionCount() : s.getEnumOptionCount();
 }
 
+bool optionsKnown(const SettingInfo& s) { return !isFontFamilyKey(s.key) || fontFamilyOptionsKnown(); }
+
 std::string optionLabel(const SettingInfo& s, const uint8_t index) {
   return isFontFamilyKey(s.key) ? fontFamilyOptionLabel(index) : s.getEnumOptionLabel(index);
 }

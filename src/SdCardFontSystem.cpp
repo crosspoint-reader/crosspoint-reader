@@ -116,6 +116,8 @@ uint8_t fontFamilyOptionCount() {
   return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + sdFontSystem.registry().getFamilies().size());
 }
 
+bool fontFamilyOptionsKnown() { return sdFontSystem.discovered(); }
+
 std::string fontFamilyOptionLabel(uint8_t i) {
   if (i < CrossPointSettings::BUILTIN_FONT_COUNT) {
     static const StrId BUILTIN_LABELS[] = {StrId::STR_BOOKERLY, StrId::STR_NOTO_SANS};
@@ -265,6 +267,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield});
   registry_.setTtfFits(&ttfFamilyFits);
   registry_.discover();
+  discovered_ = true;
 
   // Startup is discovery-only. SD font payloads are loaded lazily on reader
   // entry via ensureLoaded/ensureLoadedForPath and unloaded on reader exit.
