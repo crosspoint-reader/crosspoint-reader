@@ -1,5 +1,7 @@
 #pragma once
 
+#include <esp_partition.h>
+
 #include <cstddef>
 #include <cstdint>
 
@@ -31,6 +33,7 @@ enum class Result {
   READ_FAIL,
   ERASE_FAIL,
   WRITE_FAIL,
+  READBACK_FAIL,
   OTADATA_FAIL,
 };
 
@@ -61,6 +64,8 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
 // lookup). Streams the file in CHUNK-sized reads; the file is rewound on
 // success so the caller can immediately reread it for flashing.
 Result validateImageFile(const char* sdPath, size_t partitionSize);
+
+Result validateImagePartition(const esp_partition_t* partition, size_t size, const uint8_t expected[32]);
 
 const char* resultName(Result r);
 
