@@ -74,10 +74,12 @@ Nested lookups use the same dictionary. Both formatted and plain-text definition
 Returning to a previous definition restores its page and remembers its selection for the next press of **Confirm**.
 
 The reader keeps up to 16 previous definitions. At this limit, another lookup shows a brief message and leaves the current definition open.
-A failed lookup also leaves the current definition open.
+A failed lookup reloads the current definition and keeps its page and selection.
 
-Returning to a previous definition reads it from the SD card again. If the read or exact position restoration fails, the current definition stays open.
-This can happen when memory is too low to restore the previous formatting.
+The current definition is released before loading another entry, so two definitions do not need to fit in memory together.
+Returning to a previous definition reads it from the SD card again.
+If a previous definition cannot be read or its position restored, the definition screen closes and returns to book word selection.
+The screen also closes if a failed forward lookup cannot reload the current definition.
 
 
 ## Where to find dictionaries

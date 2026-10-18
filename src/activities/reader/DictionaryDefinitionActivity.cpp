@@ -136,6 +136,7 @@ bool DictionaryDefinitionActivity::prepareDefinition(Definition& next, const boo
   std::replace(next.text.begin(), next.text.end(), '\0', '\n');
   if (htmlDefinition && !forcePlain && next.text.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages(next)) return true;
   if (htmlDefinition) {
+    if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
     const auto heap = HalMemory::getDefaultHeap();
     if (heap.largestBlockBytes < next.text.size() + 1 || heap.freeBytes < next.text.size() + HEAP_HEADROOM) {
       LOG_ERR("DICT", "Low heap for plain definition (%u bytes)", static_cast<unsigned>(next.text.size() + 1));
@@ -332,6 +333,19 @@ void DictionaryDefinitionActivity::showMessage(const StrId nextMessage) {
   requestUpdate();
 }
 
+bool DictionaryDefinitionActivity::restoreCurrentDefinition(const bool styled) {
+  const int page = content.currentPage;
+  auto result = Dictionary::LookupResult::Found;
+  if (!lookup->dictionary.readDefinition(lookup->location, content.text, &result) ||
+      !prepareDefinition(content, !styled) || styled != !content.pages.empty() || page >= content.totalPages) {
+    LOG_ERR("DICT", "Cannot recover current definition after failed lookup");
+    finish();
+    return false;
+  }
+  content.currentPage = page;
+  return true;
+}
+
 void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
   {
     RenderLock lock;
@@ -341,6 +355,13 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
 
   RenderLock lock;
   messageVisible = false;
+  const bool styled = !content.pages.empty();
+  // Keep only navigation metadata while inflating and laying out another entry.
+  content.releasePayload();
+  if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+  const auto heap = HalMemory::getInternalHeap();
+  LOG_DBG("DICT", "Navigation after release: free=%u largest=%u", static_cast<unsigned>(heap.freeBytes),
+          static_cast<unsigned>(heap.largestBlockBytes));
   Definition next;
   DictLocation location;
   auto result = Dictionary::LookupResult::Found;
@@ -348,34 +369,45 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
       back ? lookup->dictionary.readDefinition(lookup->history[lookup->depth - 1].location, next.text, &result)
            : lookup->dictionary.lookup(lookup->pendingWord.c_str(), next.text, next.headword, &result, &location);
   lookup->pendingWord.clear();
+  const auto recover = [this, back, styled, &next](const StrId error) {
+    next.releasePayload();
+    std::string{}.swap(next.headword);
+    if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+    if (back) {
+      LOG_ERR("DICT", "Cannot restore previous definition; leaving lookup");
+      finish();
+    } else if (restoreCurrentDefinition(styled)) {
+      showMessage(error);
+    }
+  };
   if (!found) {
     switch (result) {
       case Dictionary::LookupResult::Found:
       case Dictionary::LookupResult::ReadError:
-        showMessage(StrId::STR_DICT_READ_FAILED);
+        recover(StrId::STR_DICT_READ_FAILED);
         break;
       case Dictionary::LookupResult::NotFound:
-        showMessage(StrId::STR_DICT_NOT_FOUND);
+        recover(StrId::STR_DICT_NOT_FOUND);
         break;
       case Dictionary::LookupResult::LowMemory:
-        showMessage(StrId::STR_DICT_LOW_MEMORY);
+        recover(StrId::STR_DICT_LOW_MEMORY);
         break;
       case Dictionary::LookupResult::Decompress:
-        showMessage(StrId::STR_DICT_DECOMPRESS_ERROR);
+        recover(StrId::STR_DICT_DECOMPRESS_ERROR);
         break;
     }
     return;
   }
   const bool forcePlain = back && !lookup->history[lookup->depth - 1].styled;
   if (!prepareDefinition(next, forcePlain)) {
-    showMessage(StrId::STR_DICT_LOW_MEMORY);
+    recover(StrId::STR_DICT_LOW_MEMORY);
     return;
   }
   if (back) {
     auto& previous = lookup->history[lookup->depth - 1];
     if (previous.styled != !next.pages.empty() || previous.page >= next.totalPages) {
       LOG_ERR("DICT", "Cannot restore definition layout");
-      showMessage(StrId::STR_DICT_RESTORE_FAILED);
+      recover(StrId::STR_DICT_RESTORE_FAILED);
       return;
     }
     next.headword = std::move(previous.headword);
@@ -391,7 +423,7 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
     previous.page = content.currentPage;
     previous.selectionPage = content.selectionPage;
     previous.selection = content.selection;
-    previous.styled = !content.pages.empty();
+    previous.styled = styled;
     lookup->location = location;
   }
   content = std::move(next);

@@ -30,6 +30,7 @@ methods = "\n".join(block(viewer, signature) for signature in (
     "bool DictionaryDefinitionActivity::reserveLines",
     "bool DictionaryDefinitionActivity::wrapText",
     "void DictionaryDefinitionActivity::showMessage",
+    "bool DictionaryDefinitionActivity::restoreCurrentDefinition",
     "void DictionaryDefinitionActivity::navigateDefinition",
     "bool DictionaryDefinitionActivity::buildPlainSelectionPages",
     "void DictionaryDefinitionActivity::startSelection",
@@ -58,6 +59,8 @@ harness = r'''
 #include <Memory.h>
 #include "activities/ActivityResult.h"
 #define LOG_ERR(...) ((void)0)
+template<typename... Args> void logDebug(Args&&...) {}
+#define LOG_DBG(...) logDebug(__VA_ARGS__)
 
 ''' + constants + r'''
 
@@ -69,6 +72,7 @@ struct HalMemory {
   struct Heap { size_t freeBytes = 1024 * 1024, largestBlockBytes = 1024 * 1024; };
   static inline size_t available = 1024 * 1024;
   static Heap getDefaultHeap() { return {available, available}; }
+  static Heap getInternalHeap() { return getDefaultHeap(); }
 };
 struct EpdFontFamily { enum Style { REGULAR }; };
 struct BlockStyle { bool isRtl = false; };
@@ -91,14 +95,20 @@ struct PageLine : PageElement {
   PageLine(std::unique_ptr<TextBlock> block, int, int y) : block(std::move(block)), y(y) {}
 };
 struct Page { std::vector<std::unique_ptr<PageElement>> elements; };
+struct FontCacheManager {
+  bool released = false;
+  void releaseSdFontCaches() { released = true; }
+};
 struct Renderer {
+  FontCacheManager cache;
+  FontCacheManager* getFontCacheManager() { return &cache; }
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style) const {
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
     int width = 0;
     while (*ptr) { utf8NextCodepoint(&ptr); ++width; }
     return width;
   }
-  void ensureSdCardFontReady(int, const char*, int) {}
+  void ensureSdCardFontReady(int, const char*, int) { cache.released = false; }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
   int getLineHeight(int, float) const { return 10; }
 };
@@ -108,9 +118,14 @@ struct Dictionary {
   enum class LookupResult { Found, NotFound, LowMemory, ReadError, Decompress };
   std::map<uint32_t, std::string> entries;
   bool failRead = false;
+  unsigned failuresRemaining = 0;
+  LookupResult failure = LookupResult::ReadError;
+  std::function<bool()> canRead;
   unsigned reads = 0;
   bool readDefinition(DictLocation location, std::string& text, LookupResult* result) {
     ++reads;
+    if (canRead && !canRead()) { *result = LookupResult::LowMemory; return false; }
+    if (failuresRemaining) { --failuresRemaining; *result = failure; return false; }
     if (failRead) { *result = LookupResult::ReadError; return false; }
     text = entries.at(location.offset);
     return true;
@@ -130,8 +145,9 @@ struct ClipSelectionActivity {
   template<typename... Args> explicit ClipSelectionActivity(Args&&...) {}
 };
 bool styledAvailable = false;
-bool buildDictionaryHtmlPages(Renderer&, const std::string&, uint16_t, uint16_t,
+bool buildDictionaryHtmlPages(Renderer& renderer, const std::string&, uint16_t, uint16_t,
                                std::vector<std::unique_ptr<Page>>& pages) {
+  renderer.cache.released = false;
   if (!styledAvailable) return false;
   for (int i = 0; i < 4; ++i) pages.push_back(std::make_unique<Page>());
   return true;
@@ -148,11 +164,13 @@ struct DictionaryDefinitionActivity {
   StrId message{};
   unsigned long messageTime = 0;
   bool messageVisible = false;
+  bool finished = false;
   std::unique_ptr<ClipSelectionActivity> child;
   ActivityResultHandler callback;
   BodyArea bodyArea() const { return {0, 0, 12, 20}; }
   void requestUpdate() {}
   void requestUpdateAndWait() {}
+  void finish() { finished = true; }
   void startActivityForResult(std::unique_ptr<ClipSelectionActivity> next, ActivityResultHandler handler) {
     child = std::move(next);
     callback = std::move(handler);
@@ -164,6 +182,7 @@ struct DictionaryDefinitionActivity {
   int measureSpan(int, const char*, size_t) const;
   void showMessage(StrId);
   void navigateDefinition(bool);
+  bool restoreCurrentDefinition(bool);
   bool buildPlainSelectionPages();
   void startSelection(int x = -1, int y = -1);
 };
@@ -179,14 +198,20 @@ int main() {
   view.content.currentPage = 1;
   view.content.selectionPage = 0;
   view.content.selection = {0, 1, 2, 0, true};
+  // On C3 the inflate window must fit before another definition is allocated.
+  dictionary.canRead = [&] {
+    return view.content.text.empty() && view.content.text.capacity() == std::string{}.capacity() &&
+           view.content.pages.capacity() == 0 && view.content.lines.capacity() == 0 &&
+           view.renderer.cache.released;
+  };
   view.lookup->pendingWord = "alias";
   view.navigateDefinition(false);
   assert(view.lookup->depth == 1 && view.lookup->location.offset == 20);
   assert(view.content.text == "other definition");
   dictionary.failRead = true;
   view.navigateDefinition(true);
-  assert(view.lookup->depth == 1 && view.content.text == "other definition");
-  assert(view.message == StrId::STR_DICT_READ_FAILED);
+  assert(view.finished && view.lookup->depth == 1);
+  view.finished = false;
   dictionary.failRead = false;
   view.navigateDefinition(true);
   assert(view.lookup->depth == 0 && view.lookup->location.offset == 10);
@@ -196,12 +221,28 @@ int main() {
   view.navigateDefinition(false);
   assert(view.lookup->depth == 0 && view.content.currentPage == 1);
   assert(view.message == StrId::STR_DICT_NOT_FOUND);
-  // A new definition that cannot be laid out does not replace the current one or add history.
+  assert(view.content.text == dictionary.entries.at(10) && view.content.selection.valid && !view.finished);
+  // A transient read/inflate failure restores the current entry without pushing history.
+  for (auto failure : {Dictionary::LookupResult::ReadError, Dictionary::LookupResult::LowMemory,
+                       Dictionary::LookupResult::Decompress}) {
+    dictionary.failure = failure;
+    dictionary.failuresRemaining = 1;
+    view.lookup->pendingWord = "alias";
+    view.navigateDefinition(false);
+    assert(!view.finished && view.lookup->depth == 0 && view.lookup->location.offset == 10);
+    assert(view.content.text == dictionary.entries.at(10) && view.content.currentPage == 1);
+    assert(view.content.selection.valid);
+  }
+  // If neither the new entry nor recovery can be laid out, leave lookup safely.
   HalMemory::available = 0;
   view.lookup->pendingWord = "alias";
   view.navigateDefinition(false);
   assert(view.lookup->depth == 0 && view.lookup->location.offset == 10 && view.content.currentPage == 1);
+  assert(view.finished);
+  view.finished = false;
   HalMemory::available = 1024 * 1024;
+  assert(view.prepareDefinition(view.content));
+  view.content.currentPage = 1;
   // Cycles consume ordinary slots. Refusing lookup 17 must not read SD or change the stack.
   for (int i = 0; i < 16; ++i) { view.lookup->pendingWord = "alias"; view.navigateDefinition(false); }
   assert(view.lookup->depth == 16);
@@ -228,7 +269,7 @@ int main() {
   view.navigateDefinition(true);
   assert(view.lookup->location.offset == 20 && view.content.text == dictionary.entries.at(20));
   view.lookup->location = {10, 10, true};
-  // Styled restoration must fail atomically if only plain layout is now available.
+  // Back must exit if the original styled position cannot be restored.
   view.htmlDefinition = styledAvailable = true;
   view.content.text = dictionary.entries.at(10);
   assert(view.prepareDefinition(view.content));
@@ -236,8 +277,9 @@ int main() {
   view.navigateDefinition(false);
   styledAvailable = false;
   view.navigateDefinition(true);
-  assert(view.lookup->depth == 1 && view.lookup->location.offset == 20 && !view.content.pages.empty());
-  assert(view.message == StrId::STR_DICT_RESTORE_FAILED);
+  assert(view.lookup->depth == 1 && view.lookup->location.offset == 20);
+  assert(view.finished);
+  view.finished = false;
   styledAvailable = true;
   view.navigateDefinition(true);
   assert(view.lookup->depth == 0 && !view.content.pages.empty());

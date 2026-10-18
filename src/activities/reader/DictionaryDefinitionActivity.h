@@ -62,6 +62,12 @@ class DictionaryDefinitionActivity final : public Activity {
     int linesPerPage = 1;
     int selectionPage = 0;
     ClipSelectionActivity::Selection selection;
+
+    void releasePayload() {
+      std::string{}.swap(text);
+      std::vector<std::unique_ptr<Page>>{}.swap(pages);
+      std::vector<Line>{}.swap(lines);
+    }
   };
 
   struct HistoryEntry {
@@ -92,6 +98,7 @@ class DictionaryDefinitionActivity final : public Activity {
   void startSelection(int x = -1, int y = -1);
   bool buildPlainSelectionPages();
   void navigateDefinition(bool back);
+  bool restoreCurrentDefinition(bool styled);
   void showMessage(StrId message);
 
   Definition content;
