@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -581,6 +582,8 @@ void EpubReaderActivity::openClippings() {
 }
 
 void EpubReaderActivity::loop() {
+  if (idleBuildFailedSpine != currentSpineIndex) idleBuildFailedSpine = -1;
+  if (backgroundInputActive()) lastInputMs = millis();
   if (loadFailurePopup.isActive()) {
     loadFailurePopup.handleInput(mappedInput, [this] { requestUpdate(); });
     return;
@@ -616,70 +619,6 @@ void EpubReaderActivity::loop() {
     applyOrientation(SETTINGS.orientation);
     requestUpdate();
     return;
-  }
-
-  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
-  {
-    RenderLock lock(RenderLock::Mode::Try);
-    if (lock.ownsLock() && section && !section->isBuilding() && renderer.hasFrameBuffer() &&
-        lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
-        ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP && ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
-        (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
-      idlePrewarmSpine = currentSpineIndex;
-      idlePrewarmPage = section->currentPage;
-      const int nextPage = section->currentPage + 1;
-      if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
-          if (auto* fcm = renderer.getFontCacheManager()) {
-            const auto t0 = millis();
-            auto scope = fcm->createPrewarmScope();
-            p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
-            scope.endScanAndPrewarm();
-            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
-          }
-        }
-      }
-    }
-  }
-
-  {
-    RenderLock lock(RenderLock::Mode::Try);
-    // Never next to the radio: once the reader reaches the watermark, the build starts in
-    // renderBook(), which stops the radio first.
-    if (lock.ownsLock() && section && !section->isBuilding() && section->isPartial() && buildViewportWidth > 0 &&
-        !partialRebuildStartFailed && !bleturner::holdsHeap() &&
-        section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
-      const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
-      if (!section->startBuild(buildSpec)) {
-        partialRebuildStartFailed = true;
-        LOG_ERR("ERS", "Failed to start deferred partial extension build");
-      } else {
-        LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
-                section->pageCount);
-      }
-    }
-  }
-
-  {
-    RenderLock lock(RenderLock::Mode::Try);
-    // Not under an open toolbar or panel: those repaint straight onto the page in the framebuffer.
-    if (lock.ownsLock() && overlay == Overlay::None && backgroundBuildWanted() && buildTickHeapGate()) {
-      // A build step can lend the framebuffer (image probes), which hands it back white while the
-      // panel still shows the page; redraw so nothing is later painted over the blank buffer.
-      const uint32_t loansBefore = renderer.frameBufferLoanCount();
-      const bool built = section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK);
-      if (renderer.frameBufferLoanCount() != loansBefore) {
-        pageBufferStale = true;
-        requestUpdate();
-      }
-      if (!built) {
-        LOG_ERR("ERS", "Background section build failed");
-        section.reset();
-        requestUpdate();
-      } else if (section->isBuildComplete() && applyDeferredReposition()) {
-        requestUpdate();
-      }
-    }
   }
 
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
@@ -944,6 +883,7 @@ void EpubReaderActivity::loop() {
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
+    runBackgroundWork();
     return;
   }
 
@@ -1536,17 +1476,97 @@ void EpubReaderActivity::onReturnFromEndOfBook() {
   }
 }
 
+bool EpubReaderActivity::backgroundInputActive() const {
+  float touchX = 0;
+  float touchY = 0;
+  if (gpio.rawInputActive() || gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() ||
+      gpio.isTouchHeldAt(touchX, touchY) || mappedInput.hasRemoteClick() ||
+      mappedInput.homeButtonAction() != HomeButtonAction::Ignore) {
+    return true;
+  }
+  for (uint8_t button = HalGPIO::BTN_BACK; button <= HalGPIO::BTN_POWER; ++button) {
+    if (gpio.isPressed(button) || gpio.isCapacitivePagePressed(button)) return true;
+  }
+  return false;
+}
+
+bool EpubReaderActivity::backgroundWorkAllowed() const {
+  return overlay == Overlay::None && pendingManualTurn == 0 && !activityManager.hasPendingUiWork() &&
+         !backgroundInputActive();
+}
+
+void EpubReaderActivity::runBackgroundWork() {
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock() || !section || !backgroundWorkAllowed()) return;
+
+  // A partial extension still starts near its watermark. Never allocate it beside the radio.
+  if (!section->isBuilding() && section->isPartial() && buildViewportWidth > 0 && !partialRebuildStartFailed &&
+      !bleturner::holdsHeap() &&
+      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+    HalPowerManager::Lock powerLock;
+    const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
+    if (!section->startBuild(buildSpec)) {
+      partialRebuildStartFailed = true;
+      LOG_ERR("ERS", "Failed to start deferred partial extension build");
+    } else {
+      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
+              section->pageCount);
+    }
+    return;
+  }
+
+  if (backgroundBuildWanted()) {
+    const auto recoverVisiblePage = [this] {
+      // Rebuild the displayed page once, without retrying optional work on the same bad chapter.
+      pendingPageJump = section->currentPage;
+      idleBuildFailedSpine = currentSpineIndex;
+      section.reset();
+      requestUpdate();
+    };
+    if (!buildTickHeapGate()) {
+      // Keep enough pages ahead that a saved partial cannot immediately restart its parser.
+      if (!section->isPartial() && !radioReleasedForBuild.load() &&
+          section->pageCount > section->currentPage + PARTIAL_REBUILD_START_MARGIN) {
+        HalPowerManager::Lock powerLock;
+        section->suspendBuild();
+        if (!section->isPartial()) {
+          LOG_ERR("ERS", "Failed to checkpoint idle section build");
+          recoverVisiblePage();
+        }
+      }
+      return;
+    }
+    HalPowerManager::Lock powerLock;
+    // One 1 KiB parser step per input poll; callbacks and finalization are not preemptible.
+    const uint32_t loansBefore = renderer.frameBufferLoanCount();
+    const bool built = section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK, 1);
+    if (renderer.frameBufferLoanCount() != loansBefore) {
+      pageBufferStale = true;
+      requestUpdate();
+    }
+    if (!built) {
+      LOG_ERR("ERS", "Background section build failed");
+      recoverVisiblePage();
+    } else if (section->isBuildComplete() && applyDeferredReposition()) {
+      requestUpdate();
+    }
+    return;
+  }
+}
+
 // The look-ahead never builds next to the radio. While the radio is stopped for a build it runs to
 // the end of the chapter, so the radio comes back with no parser alive.
 bool EpubReaderActivity::backgroundBuildWanted() const {
   return section && section->isBuilding() && !bleturner::holdsHeap() &&
          (radioReleasedForBuild.load() || section->isPartial() ||
-          static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+          static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD ||
+          (idleBuildFailedSpine != currentSpineIndex && lastRenderCompleteMs != 0 &&
+           millis() - lastRenderCompleteMs > IDLE_WORK_DEBOUNCE_MS && millis() - lastInputMs > IDLE_WORK_DEBOUNCE_MS));
 }
 
 bool EpubReaderActivity::skipLoopDelay() {
   // The main loop holds the render lock while querying this hint.
-  return overlay == Overlay::None && !buildHeapPaused && backgroundBuildWanted();
+  return backgroundWorkAllowed() && !buildHeapPaused && backgroundBuildWanted();
 }
 
 void EpubReaderActivity::renderBook() {
@@ -1935,7 +1955,8 @@ void EpubReaderActivity::onEndOfBookRendered() {
 }
 
 bool EpubReaderActivity::applyDeferredReposition() {
-  if ((!cachedVisibleTextOffset.has_value() && cachedChapterTotalPageCount == 0) || !section || section->isBuilding()) {
+  if ((!cachedVisibleTextOffset.has_value() && cachedChapterTotalPageCount == 0) || !section || section->isBuilding() ||
+      section->isPartial()) {
     return false;
   }
   bool changed = false;

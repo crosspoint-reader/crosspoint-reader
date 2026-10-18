@@ -134,6 +134,9 @@ class ActivityManager {
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);
 
+  // Main-loop work must yield to a queued repaint or activity transition.
+  bool hasPendingUiWork() const { return requestedUpdate.load() || pendingAction != PendingAction::None; }
+
   // Trigger a render and block until it completes.
   // Must NOT be called from the render task or while holding a RenderLock.
   void requestUpdateAndWait();

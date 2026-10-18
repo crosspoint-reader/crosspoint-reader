@@ -51,8 +51,6 @@ class EpubReaderActivity final : public ReaderActivity {
   StrId clippingMessage = StrId::STR_CLIPPING_SAVED;
   unsigned long clippingMessageTime = 0UL;
   bool currentPageBookmarked = false;
-  int idlePrewarmSpine = -1;
-  int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;
   bool bookmarkRemoved = false;
   std::vector<BookmarkEntry> cachedBookmarks;
@@ -128,10 +126,16 @@ class EpubReaderActivity final : public ReaderActivity {
 
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
   static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
+  static constexpr unsigned long IDLE_WORK_DEBOUNCE_MS = 400;
+  unsigned long lastInputMs = 0;
+  int idleBuildFailedSpine = -1;
   static constexpr size_t BACKGROUND_BUILD_MIN_FREE_HEAP = 32 * 1024;
   static constexpr size_t BACKGROUND_BUILD_MIN_MAX_ALLOC = 16 * 1024;
   // Requires the render lock; heap admission is checked separately by the build tick.
   bool backgroundBuildWanted() const;
+  bool backgroundInputActive() const;
+  bool backgroundWorkAllowed() const;
+  void runBackgroundWork();
   bool buildTickHeapGate();
   bool buildHeapPaused = false;
   // Bluetooth page turner: every chapter build stops the radio until the chapter is built and its
