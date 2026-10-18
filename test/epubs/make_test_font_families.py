@@ -2,7 +2,7 @@
 """Build test_font_families.epub -- a book set in several font families (Publisher Fonts, Stage B).
 
 The body is in one family ("Book Body", serif fallback), chapter titles, a dedication and a block quotation in a
-display family ("Book Display"), a paragraph and a heading in a second accent family ("Book Script"), code in a
+display family ("Book Display"), as is a drop cap, a paragraph and a heading in a second accent family ("Book Script"), code in a
 third ("Book Code"), one heading in the generic sans-serif, a code block in monospace, and a few blocks in families
 the book does not have. What the golden variants pin (EpubPipelineTest):
 
@@ -44,6 +44,7 @@ pre, .mono { font-family: "Courier New", monospace; }
 .script { font-family: "Book Script", cursive; }
 .inline { font-family: "Book Display"; }
 code { font-family: "Book Code", monospace; }
+.initial { float: left; font-size: 3em; font-family: "Book Display"; }
 """
 
 FACES = [
@@ -99,7 +100,7 @@ CHAPTERS = [
         '    <h1>Chapter <span class="inline">Two</span></h1>\n'
         '    <h2><span class="inline">A Heading Set in a Span</span></h2>\n'
         f'    <p class="dedication">{" ".join([PROSE] * 3)}</p>\n'
-        f"    <p>{PROSE}</p>",
+        f'    <p><span class="initial">{PROSE[0]}</span>{PROSE[1:]}</p>',  # a drop cap in the accent family
     ),
 ]
 

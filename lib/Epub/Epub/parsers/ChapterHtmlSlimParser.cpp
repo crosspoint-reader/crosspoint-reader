@@ -1607,6 +1607,10 @@ bool ChapterHtmlSlimParser::tryStartDropCapCapture(const CssStyle& cssStyle) {
   pendingDropCap_.depth = depth;
   pendingDropCap_.multiplier = mult;
   pendingDropCap_.style = capStyle;
+  // Its family, with the book's other families in use: the span's own, else the one it sits in.
+  pendingDropCap_.family = fontFamilies_.count == 0      ? 0
+                           : cssStyle.defined.fontFamily ? cssStyle.fontFamily
+                                                         : effectiveFontFamily_;
   pendingDropCap_.textLen = 0;
   return true;
 }
@@ -1625,7 +1629,13 @@ void ChapterHtmlSlimParser::finalizePendingDropCap() {
   // rather than falling back to scaling the small body font — same decompressor budget.
   int32_t capFontId = 0;  // 0 = body font
   float capScale = pendingDropCap_.multiplier;
-  if (fontSizeLadder_.native()) {
+  if (const BlockFontFamilies::Family* family = fontFamilies_.family(fontFamilies_.slotOf(pendingDropCap_.family))) {
+    // A cap in another of the book's families (a display face for the initials): that family's face at the cap's
+    // size, as a heading in it takes, outside the body ladder's one-auxiliary-face budget.
+    const FontSizeLadder::Resolved r = resolveFamilyFont(family, pendingDropCap_.multiplier);
+    capFontId = r.fontId;
+    capScale = r.residual;
+  } else if (fontSizeLadder_.native()) {
     // Every size has a face of its own: the cap is drawn at its own size, scaled only above the largest face.
     const FontSizeLadder::Resolved r = fontSizeLadder_.resolve(pendingDropCap_.multiplier * 100.0f);
     capFontId = r.fontId;

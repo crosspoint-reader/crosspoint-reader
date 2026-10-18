@@ -34,7 +34,9 @@ const char* kCss =
     ".body2 { font-family: 'book body', sans-serif }\n"
     ".helvetica { font-family: Helvetica, Arial, sans-serif }\n"
     ".georgia { font-family: Georgia, serif }\n"
-    ".mono { font-family: Courier, monospace }\n";
+    ".mono { font-family: Courier, monospace }\n"
+    ".cap { float: left; font-size: 3em }\n"
+    ".cap-display { float: left; font-size: 3em; font-family: Display }\n";
 
 struct Line {
   std::string text;
@@ -287,4 +289,24 @@ TEST_F(FontFamilyLayoutFixture, ALongBlockGivesAnAccentWordAfterItsFirstPartItsF
     }
   }
   EXPECT_TRUE(found);
+}
+
+TEST_F(FontFamilyLayoutFixture, ADropCapInAnotherFamilyHasThatFamilysFace) {
+  const std::string prose = "ll the words of the paragraph go on long enough to wrap beside the cap for a few lines.";
+  const BlockFontFamilies families = accents();
+  // The span's own family, and a cap that inherits its paragraph's.
+  for (const std::string& body : {"<p><span class='cap-display'>A</span>" + prose + "</p>",
+                                  "<p class='dedication'><span class='cap'>A</span>" + prose + "</p>"}) {
+    const auto lines = layout(body, &families);
+    const Line* cap = find(lines, "A");
+    ASSERT_TRUE(cap) << body;
+    EXPECT_EQ(kAccentBase, cap->fontId & ~0xFF) << body;  // a native size of the accent family
+    EXPECT_NE(kAccentBase, cap->fontId) << body;
+  }
+  // Without the book's families, the cap is the body's, as before.
+  const auto plain = layout("<p><span class='cap-display'>A</span>" + prose + "</p>", nullptr);
+  const Line* cap = find(plain, "A");
+  ASSERT_TRUE(cap);
+  EXPECT_EQ(0, cap->fontId);
+  EXPECT_FLOAT_EQ(3.0f, cap->mult);
 }

@@ -203,7 +203,8 @@ class ChapterHtmlSlimParser final : public Print {
     int depth = 0;            // parser depth of the drop-cap span (pre-increment)
     float multiplier = 1.0f;  // composed font-size multiplier relative to the body font
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
-    char text[16] = {};  // drop caps are 1 glyph, occasionally with a leading quote
+    uint32_t family = 0;  // CssStyle::fontFamily of the cap, while the book has other families (fontFamilies_)
+    char text[16] = {};   // drop caps are 1 glyph, occasionally with a leading quote
     int textLen = 0;
     uint32_t visibleOffset = 0;  // offset of the first captured byte
   };

@@ -284,7 +284,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=120 s=0 z=100 t=code
    W x=162 s=0 z=100 t=family
 SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
- PAGE 0 elements=20 footnotes=0
+ PAGE 0 elements=21 footnotes=0
   LINE y=0 x=0 align=2 mult=1.000 hfid=305419823 words=2
    W x=176 s=1 z=100 t=Chapter
    W x=256 s=1 z=100 t=Two
@@ -437,51 +437,53 @@ SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
    W x=179 s=0 z=100 t=few
    W x=210 s=0 z=100 t=blocks
    W x=267 s=0 z=100 t=apart.
-  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=12
-   W x=18 s=0 z=100 t=The
-   W x=52 s=0 z=100 t=body
-   W x=93 s=0 z=100 t=of
-   W x=122 s=0 z=100 t=the
-   W x=160 s=0 z=100 t=book
-   W x=205 s=0 z=100 t=is
-   W x=227 s=0 z=100 t=set
-   W x=262 s=0 z=100 t=in
-   W x=286 s=0 z=100 t=its
-   W x=318 s=0 z=100 t=own
-   W x=354 s=0 z=100 t=family,
-   W x=424 s=0 z=100 t=and
-  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=10
+  LINE y=360 x=0 align=0 mult=1.000 hfid=305419864 words=1
+   W x=0 s=0 z=100 t=T
+  LINE y=360 x=12 align=0 mult=1.000 hfid=0 words=12
+   W x=0 s=0 z=100 t=he
+   W x=29 s=0 z=100 t=body
+   W x=71 s=0 z=100 t=of
+   W x=101 s=0 z=100 t=the
+   W x=140 s=0 z=100 t=book
+   W x=186 s=0 z=100 t=is
+   W x=209 s=0 z=100 t=set
+   W x=245 s=0 z=100 t=in
+   W x=270 s=0 z=100 t=its
+   W x=303 s=0 z=100 t=own
+   W x=340 s=0 z=100 t=family,
+   W x=411 s=0 z=100 t=and
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=11
    W x=0 s=0 z=100 t=most
-   W x=51 s=0 z=100 t=of
-   W x=83 s=0 z=100 t=the
-   W x=124 s=0 z=100 t=text
-   W x=170 s=0 z=100 t=is
-   W x=195 s=0 z=100 t=body
-   W x=239 s=0 z=100 t=text:
-   W x=293 s=0 z=100 t=paragraphs
-   W x=399 s=0 z=100 t=of
-   W x=431 s=0 z=100 t=it,
+   W x=47 s=0 z=100 t=of
+   W x=75 s=0 z=100 t=the
+   W x=112 s=0 z=100 t=text
+   W x=154 s=0 z=100 t=is
+   W x=175 s=0 z=100 t=body
+   W x=215 s=0 z=100 t=text:
+   W x=265 s=0 z=100 t=paragraphs
+   W x=367 s=0 z=100 t=of
+   W x=395 s=0 z=100 t=it,
+   W x=425 s=0 z=100 t=one
   LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=9
-   W x=0 s=0 z=100 t=one
-   W x=41 s=0 z=100 t=after
-   W x=99 s=0 z=100 t=another,
-   W x=190 s=0 z=100 t=which
-   W x=242 s=0 z=100 t=is
-   W x=266 s=0 z=100 t=how
-   W x=305 s=0 z=100 t=the
-   W x=345 s=0 z=100 t=reader
-   W x=408 s=0 z=100 t=tells
+   W x=0 s=0 z=100 t=after
+   W x=58 s=0 z=100 t=another,
+   W x=149 s=0 z=100 t=which
+   W x=201 s=0 z=100 t=is
+   W x=225 s=0 z=100 t=how
+   W x=264 s=0 z=100 t=the
+   W x=304 s=0 z=100 t=reader
+   W x=367 s=0 z=100 t=tells
+   W x=422 s=0 z=100 t=the
   LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=10
-   W x=0 s=0 z=100 t=the
-   W x=40 s=0 z=100 t=body
-   W x=83 s=0 z=100 t=family
-   W x=147 s=0 z=100 t=from
-   W x=196 s=0 z=100 t=the
-   W x=236 s=0 z=100 t=families
-   W x=316 s=0 z=100 t=that
-   W x=369 s=0 z=100 t=set
-   W x=406 s=0 z=100 t=a
-   W x=427 s=0 z=100 t=few
-  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=2
-   W x=0 s=0 z=100 t=blocks
-   W x=57 s=0 z=100 t=apart.
+   W x=0 s=0 z=100 t=body
+   W x=41 s=0 z=100 t=family
+   W x=103 s=0 z=100 t=from
+   W x=150 s=0 z=100 t=the
+   W x=188 s=0 z=100 t=families
+   W x=266 s=0 z=100 t=that
+   W x=317 s=0 z=100 t=set
+   W x=352 s=0 z=100 t=a
+   W x=371 s=0 z=100 t=few
+   W x=403 s=0 z=100 t=blocks
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=apart.

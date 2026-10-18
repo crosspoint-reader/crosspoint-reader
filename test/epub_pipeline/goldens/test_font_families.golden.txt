@@ -276,7 +276,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=120 s=0 z=100 t=code
    W x=162 s=0 z=100 t=family
 SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
- PAGE 0 elements=20 footnotes=0
+ PAGE 0 elements=21 footnotes=0
   LINE y=0 x=0 align=2 mult=1.600 hfid=0 words=2
    W x=144 s=1 z=100 t=Chapter
    W x=272 s=1 z=100 t=Two
@@ -429,30 +429,32 @@ SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
    W x=179 s=0 z=100 t=few
    W x=210 s=0 z=100 t=blocks
    W x=267 s=0 z=100 t=apart.
-  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=12
-   W x=18 s=0 z=100 t=The
-   W x=52 s=0 z=100 t=body
-   W x=93 s=0 z=100 t=of
-   W x=122 s=0 z=100 t=the
-   W x=160 s=0 z=100 t=book
-   W x=205 s=0 z=100 t=is
-   W x=227 s=0 z=100 t=set
-   W x=262 s=0 z=100 t=in
-   W x=286 s=0 z=100 t=its
-   W x=318 s=0 z=100 t=own
-   W x=354 s=0 z=100 t=family,
-   W x=424 s=0 z=100 t=and
-  LINE y=408 x=0 align=0 mult=1.000 hfid=0 words=10
+  LINE y=376 x=0 align=0 mult=3.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=T
+  LINE y=384 x=24 align=0 mult=1.000 hfid=0 words=12
+   W x=0 s=0 z=100 t=he
+   W x=28 s=0 z=100 t=body
+   W x=69 s=0 z=100 t=of
+   W x=98 s=0 z=100 t=the
+   W x=136 s=0 z=100 t=book
+   W x=181 s=0 z=100 t=is
+   W x=203 s=0 z=100 t=set
+   W x=238 s=0 z=100 t=in
+   W x=262 s=0 z=100 t=its
+   W x=294 s=0 z=100 t=own
+   W x=330 s=0 z=100 t=family,
+   W x=400 s=0 z=100 t=and
+  LINE y=408 x=24 align=0 mult=1.000 hfid=0 words=10
    W x=0 s=0 z=100 t=most
-   W x=51 s=0 z=100 t=of
-   W x=83 s=0 z=100 t=the
-   W x=124 s=0 z=100 t=text
-   W x=170 s=0 z=100 t=is
-   W x=195 s=0 z=100 t=body
-   W x=239 s=0 z=100 t=text:
-   W x=293 s=0 z=100 t=paragraphs
-   W x=399 s=0 z=100 t=of
-   W x=431 s=0 z=100 t=it,
+   W x=48 s=0 z=100 t=of
+   W x=77 s=0 z=100 t=the
+   W x=115 s=0 z=100 t=text
+   W x=158 s=0 z=100 t=is
+   W x=180 s=0 z=100 t=body
+   W x=221 s=0 z=100 t=text:
+   W x=272 s=0 z=100 t=paragraphs
+   W x=375 s=0 z=100 t=of
+   W x=404 s=0 z=100 t=it,
   LINE y=432 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=one
    W x=41 s=0 z=100 t=after
