@@ -60,9 +60,9 @@ int probeStyle(const FileSource& file);
 /// the files declaring it, a static one before a variable one, then the weight nearest 400 (regular, italic) or
 /// 700 (bold, bold italic), then the first by name: a folder of static weights (Light, Regular, ExtraBold, ...,
 /// most of them declaring the regular style) then serves Regular, not whichever sorts first. A file of weight 600 or
-/// more declaring regular (italic) may serve bold (bold italic) too, unless it serves its own style. `out[style]` is
-/// that file's index, or -1. False when no file is regular: not a family the reader can use, since every missing
-/// style falls back to regular.
+/// more declaring regular (italic) may serve bold (bold italic) too, unless it serves its own style. Without a regular
+/// file, the italic, else the bold, else the bold italic one serves as the regular instead of its own style (every
+/// missing style falls back to regular). `out[style]` is that file's index, or -1. False when no file can be drawn.
 bool assignStyles(const FileProbe* files, size_t count, int (&out)[4]);
 
 /// True when flash mode can install a family with these style file sizes: every style copied into a font area of

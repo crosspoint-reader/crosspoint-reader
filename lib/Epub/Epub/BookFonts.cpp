@@ -360,6 +360,17 @@ void pickFaces(std::string_view records, const uint32_t family, CssParser::FontF
     CssParser::FontFace& best = out[style];
     if (best.name.empty() || std::abs(face.weight - target) < std::abs(best.weight - target)) best = face;
   }
+  // A family without a normal face (a script declared italic only, a display face bold only) draws in its nearest
+  // face: that face becomes the regular, and the styles it leaves fall back to it. Moved, not copied, so the store
+  // holds it once.
+  if (out[0].name.empty()) {
+    for (const uint8_t style : {2, 1, 3}) {
+      if (out[style].name.empty()) continue;
+      out[0] = out[style];
+      out[style] = CssParser::FontFace{};
+      break;
+    }
+  }
 }
 
 // The state file's code, and a family's name (see read()); kNoCode when there is no file of this kVersion.
@@ -431,7 +442,7 @@ uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, Fam
     const bool accent = i >= 0;
     CssParser::FontFace picked[4];
     pickFaces(records, accent ? families.accents[i] : CssFontFamily::identity(families.body), picked);
-    if (picked[0].name.empty()) continue;  // not embedded, or no regular face
+    if (picked[0].name.empty()) continue;  // not embedded
     const std::string dir = familyDir(epub.getCachePath(), accent ? accents : -1);
     Storage.mkdir(dir.c_str());
     std::string dest = dir + "/0.ttf";  // the style's digit goes in place of the 0
@@ -551,7 +562,7 @@ Found detectFamilies(const Epub& epub, BuildArena* scratch, bool* failed, const 
   css->clearCaches(/*evictEverything=*/true);  // the resolver's caches go back to the heap
   Found found;
   found.body = probe->family();
-  // An accent needs a regular face to be drawn (the registry's rule for a family).
+  // An accent needs a face to be drawn (pickFaces makes its nearest the regular).
   probe->accents(
       found.body,
       [records](const uint32_t family) {

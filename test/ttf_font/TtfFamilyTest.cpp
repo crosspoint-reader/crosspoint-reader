@@ -241,10 +241,31 @@ TEST(TtfFamily, FilesTheEngineCannotDrawAreIgnored) {
   EXPECT_EQ(1, chosen[0]);
 }
 
-TEST(TtfFamily, ADirectoryWithoutARegularStyleIsNoFamily) {
-  const ttf::FileProbe files[] = {{1}, {2}, {3}, {-1}};
+TEST(TtfFamily, WithoutARegularFileTheNearestStyleServesAsRegular) {
+  // A script embedded as its italic alone, a display face as its bold alone: drawn in that face, held once.
+  const ttf::FileProbe italicOnly[] = {{2}};
   int chosen[4];
-  EXPECT_FALSE(ttf::assignStyles(files, 4, chosen));
+  ASSERT_TRUE(ttf::assignStyles(italicOnly, 1, chosen));
+  EXPECT_EQ(0, chosen[0]);
+  EXPECT_EQ(-1, chosen[2]);  // falls back to the regular, the same face
+
+  const ttf::FileProbe boldOnly[] = {{1, 700}};
+  ASSERT_TRUE(ttf::assignStyles(boldOnly, 1, chosen));
+  EXPECT_EQ(0, chosen[0]);
+  EXPECT_EQ(-1, chosen[1]);
+
+  const ttf::FileProbe noRegular[] = {{1}, {2}, {3}, {-1}};  // italic first, then bold, then bold italic
+  ASSERT_TRUE(ttf::assignStyles(noRegular, 4, chosen));
+  EXPECT_EQ(1, chosen[0]);
+  EXPECT_EQ(0, chosen[1]);
+  EXPECT_EQ(-1, chosen[2]);
+  EXPECT_EQ(2, chosen[3]);
+}
+
+TEST(TtfFamily, ADirectoryWithNothingTheEngineDrawsIsNoFamily) {
+  const ttf::FileProbe files[] = {{-1}, {-1}};
+  int chosen[4];
+  EXPECT_FALSE(ttf::assignStyles(files, 2, chosen));
   EXPECT_FALSE(ttf::assignStyles(nullptr, 0, chosen));
 }
 

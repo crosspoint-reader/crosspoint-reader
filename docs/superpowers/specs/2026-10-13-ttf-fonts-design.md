@@ -1401,11 +1401,15 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
     BookerlyTT with one accent family 52.1-54.1 KB (18.4), Off beside BookerlyTT 56.3-56.9 KB (23.5); at Home
     76.5-76.7 KB. With the families of phase 2 the numbers are phase 2's: each further accent family costs its
     faces and tables (2-3 KB), not the word slots.
+- **One-face families (fixed after the first X4 run):** the card's family scan takes a face's style from the file
+  (`ttf::assignStyles`), so a family whose one file declares itself italic or bold (a script face, a display face
+  cut as bold) had no regular style and was not loaded, although it was copied; and `BookFonts` passed over a family
+  whose `@font-face` rules declare no normal face. Both now make the nearest face the regular (italic, then bold,
+  then bold italic), moved rather than shared so the store holds it once, and the styles it leaves fall back to it.
+  The device copy of the test book is back to Noto Sans Italic as Book Script and Ubuntu Bold as Book Code: on the X4
+  "3 families installed: 4 styles", the Script paragraph and the second-accent word in Noto Sans Italic, the inline
+  code in Ubuntu Bold.
 - **What is left:**
-  - The card's family scan takes a face's style from the file (`ttf::assignStyles`), not from the book's `@font-face`
-    rule that `BookFonts` chose it by: a one-face family whose file declares itself italic or bold (a script face, a
-    display face cut as bold) has no regular style and is not loaded, although it was copied. A book family could
-    take its styles from the file names `BookFonts` gives them.
   - A book replaced on the card by another file of the same path keeps the old book's `fonts.bin` for the first open:
     the families are selected before the book's cache is found stale and emptied, and examined again only at the next
     open.

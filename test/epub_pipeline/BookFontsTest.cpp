@@ -398,7 +398,7 @@ TEST_F(BookFontsTest, AHeadingSetInASpanCountsForTheSpansFamily) {
   EXPECT_EQ(family("Display"), found(*epub, records).accents[1]);
 }
 
-TEST_F(BookFontsTest, AnAccentWithoutARegularFaceIsPassedOver) {
+TEST_F(BookFontsTest, AnAccentWithOnlyABoldFaceIsDrawnInIt) {
   std::string css = kAccentCss;
   css.insert(css.find("src: url(../Fonts/d.ttf)"), "font-weight: bold; ");  // Display has only a bold face
   const auto epub = book(css, {kAccentChapter},
@@ -408,8 +408,12 @@ TEST_F(BookFontsTest, AnAccentWithoutARegularFaceIsPassedOver) {
   std::string records;
   ASSERT_TRUE(CssParser::loadFontFaces(epub->getCachePath(), records));
   const BookFonts::Found families = found(*epub, records);
-  EXPECT_EQ(family("Script"), families.accents[0]);
-  EXPECT_EQ(0u, families.accents[1]);
+  EXPECT_EQ(family("Display"), families.accents[0]);  // set in the most blocks, as with a regular face
+  EXPECT_EQ(family("Script"), families.accents[1]);
+  // Its one face is copied as the regular, once: the bold falls back to it.
+  ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, nullptr));
+  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "0.ttf"));
+  EXPECT_FALSE(fs::exists(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "1.ttf"));
 }
 
 TEST_F(BookFontsTest, ARefusedAccentGivesItsPlaceToTheNext) {
