@@ -826,7 +826,14 @@ class EpubReaderActivity final : public Activity {
   void releasePageGlyphArena(const char* after);
   // The pre-render's heap floor: PRE_RENDER_MIN_FREE_HEAP_BYTES, raised by the arena the last release
   // freed, which the pre-render would allocate again on top.
-  uint32_t preRenderMinFreeHeap() const;
+  uint32_t preRenderMinFreeHeap(bool inkOnly) const;
+  // The pre-render can keep 1-bit ink masks (SdCardFont::setInkOnlyPrewarm) instead of 2-bit glyphs:
+  // its draw is black and white only. Not on a single-push panel (its pre-render captures the grey
+  // planes from the same glyphs), and only for a native-size SD font, the font that has an arena.
+  bool inkOnlyPrerenderAvailable() const;
+  // Every glyph on the page is drawn at the font's own size: a scaled draw (a heading multiplier,
+  // a sized span, sup/sub, small caps) resamples the 2-bit levels, which an ink mask has lost.
+  static bool pageDrawsUnscaled(const Page& page);
   uint32_t releasedPageArenaBytes_ = 0;
   // Background B: advance the idle build of the next consecutive section by one bounded
   // step (state probe, heap gate, or one ~BG_BUILD_BUDGET_MS parse slice). Runs only after

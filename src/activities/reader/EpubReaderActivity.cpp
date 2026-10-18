@@ -1322,10 +1322,33 @@ void EpubReaderActivity::runDeferredGrayscalePass() {
   }
 }
 
-uint32_t EpubReaderActivity::preRenderMinFreeHeap() const {
+uint32_t EpubReaderActivity::preRenderMinFreeHeap(const bool inkOnly) const {
   if (releasedPageArenaBytes_ == 0) return PRE_RENDER_MIN_FREE_HEAP_BYTES;
+  // An ink-only pre-render keeps half the 2-bit bytes the last page's arena held.
+  const uint32_t arena = inkOnly ? releasedPageArenaBytes_ / 2 : releasedPageArenaBytes_;
   return std::max<uint32_t>(PRE_RENDER_MIN_FREE_HEAP_BYTES,
-                            PRE_RENDER_BASE_COST_BYTES + PRE_RENDER_TROUGH_BYTES + releasedPageArenaBytes_);
+                            PRE_RENDER_BASE_COST_BYTES + PRE_RENDER_TROUGH_BYTES + arena);
+}
+
+bool EpubReaderActivity::inkOnlyPrerenderAvailable() const {
+  if (renderer.supportsGrayFrame()) return false;
+  const int fontId = getEffectiveReaderFontId();
+  return renderer.getSdCardFonts().count(fontId) != 0 && renderer.fontBaseScale(fontId) == 1.0f;
+}
+
+bool EpubReaderActivity::pageDrawsUnscaled(const Page& page) {
+  constexpr uint8_t scaledStyles = EpdFontFamily::SUP | EpdFontFamily::SUB | EpdFontFamily::SMALL_CAPS;
+  for (const auto& element : page.elements) {
+    if (element->getTag() != TAG_PageLine) return false;  // tables, images: not worth proving
+    const TextBlock* block = static_cast<const PageLine*>(element.get())->getBlock();
+    if (!block || !block->valid()) continue;
+    const RenderStyle& style = block->getRenderStyle();
+    if (style.fontSizeMultiplier != 1.0f || style.headingFontId != 0 || block->hasWordSizes()) return false;
+    for (uint16_t i = 0; i < block->wordCount(); i++) {
+      if (block->wordStyle(i) & scaledStyles) return false;
+    }
+  }
+  return true;
 }
 
 void EpubReaderActivity::releasePageGlyphArena(const char* after) {
@@ -1617,7 +1640,7 @@ void EpubReaderActivity::stepBackgroundSectionBuild() {
       !preRenderedPage.ready && !backgroundBuildThrough_ && section->currentPage + 1 < section->pageCount &&
       lastRenderedSpineIndex_ == currentSpineIndex && lastRenderedPageIndex_ == section->currentPage &&
       (preRenderRearmSpine_ != currentSpineIndex || preRenderRearmPage_ != section->currentPage);
-  const uint32_t preRenderFloor = preRenderMinFreeHeap();
+  const uint32_t preRenderFloor = preRenderMinFreeHeap(inkOnlyPrerenderAvailable());
   if (preRenderWanted && preRenderFree < preRenderFloor) {
     HEAP_GATE("preRenderArm", false, preRenderFree, preRenderFloor, 0, 0);
   }
@@ -3953,7 +3976,8 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     return;
   }
   const uint32_t freeHeap = esp_get_free_heap_size();
-  const uint32_t preRenderFloor = preRenderMinFreeHeap();
+  // Optimistic for a page that turns out to draw scaled text: checked again once it is loaded.
+  const uint32_t preRenderFloor = preRenderMinFreeHeap(inkOnlyPrerenderAvailable());
   if (freeHeap < preRenderFloor) {
     LOG_DBG("ERS", "PreRender skipped: free=%lu < floor=%lu", static_cast<unsigned long>(freeHeap),
             static_cast<unsigned long>(preRenderFloor));
@@ -3994,17 +4018,23 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
              !p->hasUncachedImages(/*forceLoadLargeImages=*/true, /*monochromeOutput=*/true,
                                    /*alsoWarmGrayscale=*/getEffectiveTextAntiAliasing() && !secondaryBufferDegraded_)));
   const bool skippedForImages = p && !drawn;
+  const bool inkOnly = drawn && inkOnlyPrerenderAvailable() && pageDrawsUnscaled(*p);
+  // The floor above assumed ink masks where they were possible; a page that needs its 2-bit glyphs
+  // costs twice that arena, and has to fit on its own terms.
+  const bool fullArenaFits = inkOnly || freeHeap >= preRenderMinFreeHeap(false);
   uint16_t glyphsDropped = 0;
   uint16_t imagesMissed = 0;
   const unsigned long preRenderStart = millis();
-  if (drawn) {
+  if (drawn && fullArenaFits) {
     section->currentPage = nextPage;
     {
       // Belt and braces for the check above: a cache that exists can still fail to replay, and
       // the draw would then fall through to the decode this pass must never run.
       ImageBlock::PlaceholderOnlyScope cacheOnly;
+      renderer.getFontCacheManager()->setInkOnlyPrewarm(inkOnly);
       glyphsDropped =
           renderPageContentOnly(*p, layout.marginTop, layout.marginRight, layout.marginBottom, layout.marginLeft);
+      renderer.getFontCacheManager()->setInkOnlyPrewarm(false);
       imagesMissed = cacheOnly.placeholdersDrawn();
     }
     section->currentPage = savedPage;
@@ -4017,7 +4047,10 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     lowest = static_cast<uint32_t>(esp_get_minimum_free_heap_size());
     heap_caps_monitor_local_minimum_free_size_stop();
   }
-  if (drawn) {
+  if (drawn && !fullArenaFits) {
+    LOG_DBG("ERS", "PreRender skipped: page %d draws scaled text, and its 2-bit arena would not fit (free=%lu < %lu)",
+            nextPage, static_cast<unsigned long>(freeHeap), static_cast<unsigned long>(preRenderMinFreeHeap(false)));
+  } else if (drawn) {
     // An incomplete draw keeps `ready` (the framebuffer does hold that page now; the sleep
     // overlay and screenshots restore the current one from it) but is never shown: the turn
     // renders afresh, without this pass's Page in the heap.
@@ -4042,7 +4075,17 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
   }
   // The next page waits in the framebuffer; displayPreRenderedPage() re-warms its glyphs before
   // the AA replay, so the arena need not wait with it.
-  if (drawn) releasePageGlyphArena("the pre-render");
+  if (drawn && fullArenaFits && inkOnly) {
+    // Ink masks must not outlive the pass, whatever their size: the next draw may need the grey
+    // levels. Recorded as the 2-bit arena they stand for, which is what the floor reasons in.
+    FontCacheManager* fontCache = renderer.getFontCacheManager();
+    const size_t freed = fontCache->releaseLargeSdPageArenas(1);
+    fontCache->clearCache();
+    releasedPageArenaBytes_ = static_cast<uint32_t>(freed * 2);
+    LOG_DBG("ERS", "Released the %u B ink-only page glyph arena after the pre-render", static_cast<unsigned>(freed));
+  } else if (drawn && fullArenaFits) {
+    releasePageGlyphArena("the pre-render");
+  }
   checkHeapIntegrity("after_prerender");
 }
 
