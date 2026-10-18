@@ -1440,6 +1440,26 @@ TEST_F(TtfFontSetTest, APowerCutInAnSdModeInstallIsInstalledWholeAtTheNextLoad) 
   }
 }
 
+TEST_F(TtfFontSetTest, AWholeReaderFontAndThreeAccentFamiliesOnTheCardFitTogether) {
+  // The X4 case of phase 3: Bookerly whole as the reader's font, and a book's three accent families (Inter in two
+  // styles, Noto Sans Italic, Ubuntu Bold). Whole, they need 56 of the font area's 53 pages, and phase 3 left two of
+  // them out; with their tables on the card all four load, eight style blocks.
+  MemoryFile script[4];
+  MemoryFile code[4];
+  script[kRegular].bytes = readFont("NotoSans/NotoSans-Italic.ttf");
+  code[kRegular].bytes = readFont("Ubuntu/Ubuntu-Bold.ttf");
+  const auto set = openFamilies(flash, {files, accent, script, code}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(4, set->familyCount());
+  EXPECT_FALSE(set->font(0)->readsCard());
+  for (uint8_t f = 1; f < 4; ++f) EXPECT_TRUE(set->font(f)->readsCard()) << int{f};
+  const MemoryFile* const sources[] = {files, accent, script, code};
+  for (uint8_t f = 0; f < 4; ++f) {
+    expectDrawnAs(reference(sources[f][kRegular].bytes, 'e', 14), *set->font(f), kRegular,
+                  set->font(f)->glyph(kRegular, 'e'));
+  }
+}
+
 TEST_F(TtfFontSetTest, AFamilyTooLargeEvenForSdModeIsRefusedBeforeAnyErase) {
   SimNorFlash chip{16 * kPage};  // Bookerly's tables alone take 12 pages and a header
   EXPECT_EQ(nullptr, openFamilies(chip, {files}, busy));
