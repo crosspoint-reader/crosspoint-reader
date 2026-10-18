@@ -20,7 +20,8 @@ namespace BookFonts {
 
 /// Bump when what prepare() decides or writes changes: every book is examined again.
 /// v2: the state file holds a Family's name to its end, without a length byte.
-/// v3: the faces sit in fonts/ itself as <style>.ttf, not in a folder named after the family.
+/// v3: the faces sit in fonts/ itself as <style>.ttf, not in a folder named after the family; the state file is
+/// fonts.bin beside it.
 constexpr uint8_t kVersion = 3;
 /// A face bigger than this is not copied: the font area could not install it in flash mode anyway.
 constexpr size_t kMaxFaceBytes = 2 * 1024 * 1024;
@@ -39,8 +40,8 @@ enum class State : uint8_t {
 /// What prepare() found for the book whose cache is at `cachePath`. For Family, `*name` gets the family's name
 /// as the book declares it.
 State read(const std::string& cachePath, std::string* name = nullptr);
-/// Where a Family's files are: `<cachePath>/fonts`, one `<style>.ttf` per style (EpdFontFamily numbering), beside
-/// the state file.
+/// Where a Family's files are: `<cachePath>/fonts`, one `<style>.ttf` per style (EpdFontFamily numbering). The state
+/// file is `<cachePath>/fonts.bin`.
 std::string familyDir(const std::string& cachePath);
 
 /// Finds the book's body family and copies its font files to the card. `scratch`, when set, hosts the inflate

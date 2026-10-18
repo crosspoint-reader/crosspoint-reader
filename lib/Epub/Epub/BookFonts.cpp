@@ -25,7 +25,7 @@ namespace BookFonts {
 namespace {
 
 constexpr char kFontsDir[] = "/fonts";
-constexpr char kStateFile[] = "/fonts/state.bin";
+constexpr char kStateFile[] = "/fonts.bin";  // beside fonts/, which prepare() empties
 // The state file: kVersion, then a code -- None, Family (then the name, to the end of the file), or kFailed + n
 // for n failed attempts so far. At kMaxAttempts the book is given up on, as None.
 constexpr uint8_t kCodeNone = 0;
@@ -323,7 +323,6 @@ State stateOf(const uint8_t code) {
 }
 
 State writeState(const std::string& cachePath, const uint8_t code, const std::string_view name) {
-  Storage.mkdir((cachePath + kFontsDir).c_str());
   std::string bytes{static_cast<char>(kVersion), static_cast<char>(code)};
   if (code == kCodeFamily) bytes.append(name.data(), std::min<size_t>(name.size(), 255));
   const std::string path = cachePath + kStateFile;
