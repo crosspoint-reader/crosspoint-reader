@@ -44,6 +44,10 @@ class SerialTransferDevice : public serialtransfer::SerialTransferHost {
   // wedge the probe on the same non-matching window forever.
   void dropByte();
 
+  // True when the bytes ahead are a "CMD:" text command rather than a transfer message; see
+  // serialtransfer::textCommandAhead(). The activity then reads the line with readByte().
+  bool textCommandAhead() { return serialtransfer::textCommandAhead(*this); }
+
   // SerialTransferHost
   size_t available() override;
   int readByte() override;

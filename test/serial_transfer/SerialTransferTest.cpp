@@ -192,6 +192,25 @@ TEST(SerialTransferDispatch, IgnoresForeignMagic) {
   EXPECT_EQ(h.in.size(), line.size());
 }
 
+// The USB Transfer screen answers the firmware's own CMD: lines between transfer messages. It can
+// tell one from a transfer message by its first four bytes, without consuming anything, so a
+// message that only starts like one still reaches the protocol whole.
+TEST(SerialTransferDispatch, RecognisesATextCommandWithoutConsumingIt) {
+  FakeHost h;
+  h.push("CMD:STATE\n");
+  EXPECT_TRUE(serialtransfer::textCommandAhead(h));
+  EXPECT_EQ(h.in.size(), 10u);
+
+  FakeHost transfer;
+  transfer.push("CMNDS");
+  EXPECT_FALSE(serialtransfer::textCommandAhead(transfer)) << "CMND is the protocol's magic, not CMD:";
+
+  FakeHost partial;
+  partial.push("CMD");
+  EXPECT_FALSE(serialtransfer::textCommandAhead(partial)) << "not decided before four bytes are in";
+  EXPECT_EQ(partial.in.size(), 3u);
+}
+
 // A magic that only partially arrived must not be consumed; poll() waits.
 TEST(SerialTransferDispatch, PartialMagicNotConsumed) {
   FakeHost h;

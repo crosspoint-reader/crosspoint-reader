@@ -45,6 +45,7 @@
 #include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SerialTestApi.h"
 #include "SilentRestart.h"
 #include "UiFontScale.h"
 #include "WeatherSettingsStore.h"
@@ -81,29 +82,6 @@ GestureEventManager gestureEventManager(mappedInputManager, renderer);
 // press is serviced on the next main-loop pass. Installed once in setup().
 static bool hasPendingButtonInput() { return mappedInputManager.hasPendingInput(); }
 
-// logSerial.write() returns a SHORT count when the USB-CDC TX ring stays full past
-// HWCDC's ~100 ms tx timeout -- a host that reads in small chunks with work between
-// reads is enough to trigger it. Ignoring the return value silently drops the
-// remainder and truncates the transfer. SerialTransferDevice::writeBytes() already
-// loops for exactly this reason; this is the same guard for the one-shot senders in
-// this file. Yields rather than spinning: a tight loop on the C3 starves the USB-CDC
-// task that we are waiting on. Returns false if the host stopped draining entirely.
-static bool writeAllToSerial(const uint8_t* data, size_t len) {
-  constexpr unsigned long kWriteStallAbortMs = 15000;  // matches SerialTransferDevice
-  size_t sent = 0;
-  unsigned long lastProgressMs = millis();
-  while (sent < len) {
-    const size_t n = logSerial.write(data + sent, len - sent);
-    if (n > 0) {
-      sent += n;
-      lastProgressMs = millis();
-      continue;
-    }
-    if (millis() - lastProgressMs > kWriteStallAbortMs) return false;  // host vanished
-    delay(1);
-  }
-  return true;
-}
 ButtonEventManager& globalButtonEvents() { return buttonEventManager; }
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
@@ -1519,6 +1497,7 @@ void setup() {
   // is done — hand button sampling to the background sampler so presses are caught
   // on a steady ~10ms cadence even while the loop task is busy building sections.
   gpio.startInputSampler();
+  SerialTestApi::begin(renderer);
   // Now that the background sampler is live, let long lib-layer tasks (cover image
   // decoders) poll for queued presses and yield so button input keeps priority.
   CooperativeAbort::setLongTaskAbortPredicate(&hasPendingButtonInput);
@@ -1532,110 +1511,6 @@ void setup() {
   allowSleepAt = millis() + 2000;
   BootDiag::logSummary();
   logStartupMemory("setup_complete");
-}
-
-// Serial commands for scripted device tests: a script drives the UI, then checks where it went.
-//   CMD:BTN:<BACK|CONFIRM|LEFT|RIGHT|UP|DOWN>[:LONG]   -> BTN_OK
-//   CMD:ACT:<HOME|READER:<path>|SETTINGS|BOOKMARKS|LIBRARY[:<BOOKS|RECENT|NEW|AUTHORS>]|FILES:<dir>>
-//                                                      -> ACT_OK, or ACT_ERROR:<reason>
-//   CMD:STATE                                          -> STATE:activity=<name> stack=<...> <activity's pairs>
-// A press goes through HalGPIO::injectPress, so the user's button mapping and the long-press
-// threshold apply as for a real key. ACT only reaches the navigation routines the UI itself calls,
-// and none that would take the serial port away (file transfers, USB drive, sleep).
-// Returns false for a command that is not one of these.
-static bool handleTestCommand(const String& cmd) {
-  if (cmd.startsWith("BTN:")) {
-    String name = cmd.substring(4);
-    const bool longPress = name.endsWith(":LONG");
-    if (longPress) name = name.substring(0, name.length() - 5);
-    struct NamedButton {
-      const char* name;
-      uint8_t index;
-    };
-    static constexpr NamedButton kButtons[] = {{"BACK", HalGPIO::BTN_BACK}, {"CONFIRM", HalGPIO::BTN_CONFIRM},
-                                               {"LEFT", HalGPIO::BTN_LEFT}, {"RIGHT", HalGPIO::BTN_RIGHT},
-                                               {"UP", HalGPIO::BTN_UP},     {"DOWN", HalGPIO::BTN_DOWN}};
-    for (const NamedButton& button : kButtons) {
-      if (name == button.name) {
-        gpio.injectPress(button.index, longPress);
-        logSerial.printf("BTN_OK\n");
-        return true;
-      }
-    }
-    logSerial.printf("BTN_ERROR:unknown button %s\n", name.c_str());
-    return true;
-  }
-  if (cmd.startsWith("ACT:")) {
-    const String target = cmd.substring(4);
-    if (target == "HOME") {
-      activityManager.goHome();
-    } else if (target.startsWith("READER:")) {
-      std::string path = target.substring(7).c_str();
-      if (!Storage.exists(path.c_str())) {
-        logSerial.printf("ACT_ERROR:no such file %s\n", path.c_str());
-        return true;
-      }
-      activityManager.goToReader(std::move(path));
-    } else if (target == "SETTINGS") {
-      activityManager.goToSettings();
-    } else if (target == "BOOKMARKS") {
-      activityManager.goToGlobalBookmarks();
-    } else if (target.startsWith("FILES:")) {
-      activityManager.goToLibrary(LibraryTab::Books, target.substring(6).c_str());
-    } else if (target == "LIBRARY" || target.startsWith("LIBRARY:")) {
-      const String tab = target.length() > 8 ? target.substring(8) : String("BOOKS");
-      LibraryTab libraryTab = LibraryTab::Books;
-      if (tab == "RECENT") {
-        libraryTab = LibraryTab::Recent;
-      } else if (tab == "NEW") {
-        libraryTab = LibraryTab::New;
-      } else if (tab == "AUTHORS") {
-        libraryTab = LibraryTab::Authors;
-      } else if (tab != "BOOKS") {
-        logSerial.printf("ACT_ERROR:unknown library tab %s\n", tab.c_str());
-        return true;
-      }
-      activityManager.goToLibrary(libraryTab);
-    } else {
-      logSerial.printf("ACT_ERROR:unknown activity %s\n", target.c_str());
-      return true;
-    }
-    logSerial.printf("ACT_OK\n");
-    return true;
-  }
-  if (cmd == "STATE") {
-    std::string state;
-    {
-      RenderLock lock;  // the activity's state is also read by the render task
-      activityManager.describeState(state);
-    }
-    logSerial.printf("STATE:%s\n", state.c_str());
-    return true;
-  }
-  return false;
-}
-
-// ScreenshotUtil's host sender: the frame over serial, framed for scripts/debugging_monitor.py.
-static void sendScreenshotToHost(const uint8_t* frame, const uint32_t size, const int width, const int height,
-                                 const bool busy) {
-  if (busy) {
-    logSerial.printf("SCREENSHOT_ERROR:busy\n");
-    return;
-  }
-  if (!frame) {
-    // Framebuffers are released during the web server session — nothing to send.
-    logSerial.printf("SCREENSHOT_ERROR:framebuffer released\n");
-    return;
-  }
-  logSerial.printf("SCREENSHOT_START:%d:%d:%lu\n", width, height, static_cast<unsigned long>(size));
-  // ~52 KB in one go is exactly the sustained write that trips the short-write
-  // behaviour, so the END marker must not be sent if the payload was cut short:
-  // a truncated frame with a valid trailer looks complete to the host.
-  if (writeAllToSerial(frame, size)) {
-    logSerial.printf("SCREENSHOT_END\n");
-  } else {
-    logSerial.printf("SCREENSHOT_ERROR:transfer stalled\n");
-  }
 }
 
 void loop() {
@@ -1765,25 +1640,13 @@ void loop() {
       serialLineComplete = serialLine.feed(static_cast<char>(logSerial.read()));
     }
   }
+  // The serial test commands (CMD:..., see SerialTestApi.h and docs/serial-test-api.md).
   if (serialLineComplete) {
-    const String line(serialLine.take().c_str());
-    if (line.startsWith("CMD:")) {
-      String cmd = line.substring(4);
-      cmd.trim();
-      if (cmd == "SCREENSHOT") {
-        ScreenshotUtil::request(ScreenshotUtil::Target::Host);
-      } else if (cmd == "BOOTLOG") {
-        // On-demand replay of this session's boot summary, for when the monitor was
-        // attached too late to catch it and the automatic repeats are used up.
-        BootDiag::logSummary();
-      } else if (!handleTestCommand(cmd)) {
-        logSerial.printf("CMD_ERROR:unknown command %s\n", cmd.c_str());
-      }
-    }
+    SerialTestApi::handleLine(serialLine.take());
   }
 
   // Before the POWER+DOWN block below, which returns while the combo is held.
-  ScreenshotUtil::service(renderer, &sendScreenshotToHost);
+  ScreenshotUtil::service(renderer, &SerialTestApi::sendScreenshot);
 
   // Check for any user activity (button press or release, screen touch) or
   // active background work.
@@ -2191,6 +2054,22 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+
+  // After the activity's pass, so a pending CMD:IDLE sees what it queued.
+  SerialTestApi::service();
+  switch (SerialTestApi::takePowerRequest()) {
+    case SerialTestApi::PowerRequest::None:
+      break;
+    case SerialTestApi::PowerRequest::Sleep:
+      // The reply is already out; deep sleep ends the USB link, and only a button wakes the device.
+      logSerial.flush();
+      enterDeepSleep(/*fromTimeout=*/false, BootDiag::SleepTrigger::SerialCommand);
+      return;
+    case SerialTestApi::PowerRequest::Reboot:
+      logSerial.flush();
+      silentRestart();
+      return;
+  }
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {

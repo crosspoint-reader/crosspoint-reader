@@ -138,4 +138,10 @@ class HomeActivity final : public Activity {
   // the CPU to 10 MHz mid-burst and the next decode tick would crawl (observed: a ~1.5 s
   // cover decode taking ~25 s). Hold full speed until every recent cover is resolved.
   bool skipLoopDelay() override { return (firstRenderDone && !recentsLoaded) || recentsLoading || coverLoader.busy(); }
+#if SERIAL_TEST_API
+  // The covers still to load are the work CMD:IDLE waits for: the same answer as above.
+  bool hasPendingBackgroundWork() override { return skipLoopDelay(); }
+  // " sel=<selectorIndex> label=<book title or menu entry>": the cover row comes first.
+  void appendDebugState(std::string& out) const override;
+#endif
 };

@@ -41,11 +41,15 @@ void ScreenshotUtil::service(GfxRenderer& renderer, void (*sendToHost)(const uin
   // until it goes stale (2 s), holding every capture back for nothing.
   if (renderer.isRefreshPending()) return;
   pendingTarget = Target::None;
-  // The write buffer is not the frame on the panel: the reader pre-renders its next page into it, and
-  // after a two-buffer refresh it holds an older frame. The activity first drops what it keeps there
-  // (the reader forgets its pre-render), then the panel's frame is copied in.
-  activityManager.prepareFramebufferForCapture();
+  // The write buffer is not the frame on the panel: after a two-buffer refresh it holds an older
+  // frame, and the reader pre-renders its next page into it. So first the panel's frame as the
+  // display keeps it, then the activity's correction on top, in the order the light drawer uses
+  // (ActivityManager::dispatchLightPanelGesture). The other way round, the copy undid the reader's
+  // redraw -- and that copy cannot be trusted while a pre-render is pending: a buffer handed back
+  // after a Background-B borrow is seeded from the write buffer, pre-rendered page and all, which
+  // is how a capture came out as the next page without its status bar.
   if (renderer.hasSecondaryBuffer()) renderer.syncWriteBufferFromDisplayed();
+  activityManager.prepareFramebufferForCapture();
   if (target == Target::Host) {
     sendToHost(renderer.getFrameBuffer(), renderer.getBufferSize(), renderer.getDisplayWidth(),
                renderer.getDisplayHeight(), /*busy=*/false);

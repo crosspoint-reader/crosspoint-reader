@@ -60,6 +60,12 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 void setSerialWireMuted(bool muted);
 bool isSerialWireMuted();
 
+// The most verbose level written to the serial wire at run time (0 = ERR .. 3 = TRC; the serial
+// CMD:LOG sets it). LOG_LEVEL still decides what is compiled in, so this can only quieten the
+// wire; it starts at LOG_LEVEL. The RTC ring buffer keeps every line either way.
+void setLogWireLevel(uint8_t level);
+uint8_t logWireLevel();
+
 #ifdef ENABLE_SERIAL_LOG
 #if LOG_LEVEL >= 0
 #define LOG_ERR(origin, format, ...) logPrintf("ERR", origin, format "\n", ##__VA_ARGS__)

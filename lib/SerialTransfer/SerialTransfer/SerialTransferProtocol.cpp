@@ -12,7 +12,16 @@ constexpr uint8_t kAck = 0x06;
 // line prefix, so the two protocols don't collide.
 constexpr char kMagicCmd[4] = {'C', 'M', 'N', 'D'};
 constexpr char kMagicEpub[4] = {'E', 'P', 'U', 'B'};
+constexpr char kTextCommandPrefix[4] = {'C', 'M', 'D', ':'};
 }  // namespace
+
+bool textCommandAhead(SerialTransferHost& host) {
+  if (host.available() < sizeof(kTextCommandPrefix)) return false;
+  for (size_t i = 0; i < sizeof(kTextCommandPrefix); ++i) {
+    if (host.peek(i) != static_cast<uint8_t>(kTextCommandPrefix[i])) return false;
+  }
+  return true;
+}
 
 void SerialTransferHost::writeLine(const char* s) {
   writeBytes(reinterpret_cast<const uint8_t*>(s), std::strlen(s));

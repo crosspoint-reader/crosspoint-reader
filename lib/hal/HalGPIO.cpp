@@ -264,16 +264,25 @@ void HalGPIO::latchTouchGestures(const uint32_t timeMs) {
 // Latches the SDK's one-shot single-contact events. See TouchEvent for why they
 // cannot simply be read from the loop task. Drops the newest on a full ring,
 // matching pushEdgeLocked.
+bool HalGPIO::injectedInputPending() const {
+  portENTER_CRITICAL_SAFE(const_cast<portMUX_TYPE*>(&inputMux_));
+  const bool pending = deliveredInputs_ != injectedInputs_;
+  portEXIT_CRITICAL_SAFE(const_cast<portMUX_TYPE*>(&inputMux_));
+  return pending;
+}
+
+void HalGPIO::pushTouchEvent(const TouchEvent& event) {
+  portENTER_CRITICAL(&inputMux_);
+  const int next = (touchEventTail_ + 1) % TOUCH_EVENT_BUF;
+  if (next != touchEventHead_) {
+    touchEventBuf_[touchEventTail_] = event;
+    touchEventTail_ = next;
+  }
+  portEXIT_CRITICAL(&inputMux_);
+}
+
 void HalGPIO::latchTouchEvents() {
-  const auto push = [&](const TouchEvent& event) {
-    portENTER_CRITICAL(&inputMux_);
-    const int next = (touchEventTail_ + 1) % TOUCH_EVENT_BUF;
-    if (next != touchEventHead_) {
-      touchEventBuf_[touchEventTail_] = event;
-      touchEventTail_ = next;
-    }
-    portEXIT_CRITICAL(&inputMux_);
-  };
+  const auto push = [&](const TouchEvent& event) { pushTouchEvent(event); };
 
   const uint32_t now = millis();
   TouchEvent event;
@@ -689,6 +698,9 @@ void HalGPIO::update() {
   } else {
     snapTouchEvent_ = TouchEvent{};
   }
+  // Injected presses are all in the edge queue ButtonEventManager drains right after this; an
+  // injected touch is handed over once the ring it waits in is empty.
+  if (touchEventHead_ == touchEventTail_) deliveredInputs_ = injectedInputs_;
   snapTouchAtMs_ = snapTouchEvent_.atMs;
   snapTouchReleased_ = touchReleasedPending_;
   touchReleasedPending_ = false;
@@ -733,9 +745,42 @@ void HalGPIO::injectPress(const uint8_t buttonIndex, const bool longPress, const
   const uint32_t pressAt = releaseAt > holdMs ? releaseAt - holdMs : 0;
   portENTER_CRITICAL(&inputMux_);
   accumPressed_ |= (1u << buttonIndex);
+  injectedInputs_++;
   accumReleased_ |= (1u << buttonIndex);
   pushEdgeLocked(buttonIndex, true, pressAt);
   pushEdgeLocked(buttonIndex, false, releaseAt);
+  portEXIT_CRITICAL(&inputMux_);
+}
+
+void HalGPIO::injectTouch(const float nx, const float ny) {
+  if (!hasTouch()) return;
+  TouchEvent tap;
+  tap.kind = TouchEvent::Kind::Tap;
+  tap.nx = nx;
+  tap.ny = ny;
+  tap.heldMs = 80;  // a quick tap; nothing downstream times a tap's contact
+  tap.atMs = millis();
+  pushTouchEvent(tap);
+  portENTER_CRITICAL(&inputMux_);
+  touchReleasedPending_ = true;
+  injectedInputs_++;
+  portEXIT_CRITICAL(&inputMux_);
+}
+
+void HalGPIO::injectSwipe(const float nx, const float ny, const float nxEnd, const float nyEnd) {
+  if (!hasTouch()) return;
+  TouchEvent swipe;
+  swipe.kind = TouchEvent::Kind::Swipe;
+  swipe.nx = nx;
+  swipe.ny = ny;
+  swipe.nxEnd = nxEnd;
+  swipe.nyEnd = nyEnd;
+  swipe.heldMs = 200;  // well inside the SDK's TOUCH_SWIPE_MAX_MS
+  swipe.atMs = millis();
+  pushTouchEvent(swipe);
+  portENTER_CRITICAL(&inputMux_);
+  touchReleasedPending_ = true;
+  injectedInputs_++;
   portEXIT_CRITICAL(&inputMux_);
 }
 

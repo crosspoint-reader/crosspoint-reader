@@ -42,6 +42,7 @@
 #include "LibraryFreshness.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "SerialTestApi.h"
 #include "components/BookProgressPresentation.h"
 #include "components/UITheme.h"
 #include "components/icons/folder.h"
@@ -329,6 +330,7 @@ void FileBrowserActivity::drawCoverCell(const int index, const int x, const int 
                                             percent);
   }
 
+  if (selected) SerialTestApi::noteSelection(index, title.c_str());  // the cover grid's CMD:STATE sel=, label=
   const int labelY = y + th + 3;
   const bool black = !selected;
   renderer.drawText(SMALL_FONT_ID, x + 2, labelY,
@@ -1095,6 +1097,7 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   props.items = windowItems.data();
   props.itemsWindowFirst = windowFirst;
   props.itemsWindowCount = windowCount;
+  noteListSelection(props);
   screen.list(props);
 }
 
