@@ -14,9 +14,6 @@
 
 namespace {
 
-constexpr bool USE_8BIT_OUTPUT = false;
-constexpr bool USE_ATKINSON = true;
-constexpr bool USE_FLOYD_STEINBERG = false;
 constexpr uint16_t MAX_CANVAS_HEIGHT = 3072;
 
 inline bool writeByte(Print& out, const uint8_t value) { return out.write(value) == 1; }
@@ -35,66 +32,26 @@ inline bool write32(Print& out, const uint32_t value) {
 
 inline bool write32Signed(Print& out, const int32_t value) { return write32(out, static_cast<uint32_t>(value)); }
 
-bool writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
-  const int bytesPerRow = (width + 3) / 4 * 4;
+bool writeBmpHeader(Print& bmpOut, const int width, const int height, const bool oneBit) {
+  const int bitsPerPixel = oneBit ? 1 : 2;
+  const int colors = 1 << bitsPerPixel;
+  const int bytesPerRow = (width * bitsPerPixel + 31) / 32 * 4;
   const int imageSize = bytesPerRow * height;
-  const uint32_t paletteSize = 256 * 4;
-  const uint32_t fileSize = 14 + 40 + paletteSize + imageSize;
+  const uint32_t headerSize = 54 + colors * 4;
+  const uint32_t fileSize = headerSize + imageSize;
 
   if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, 14 + 40 + paletteSize) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
-      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, 8) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, 256) ||
-      !write32(bmpOut, 256)) {
+      !write32(bmpOut, headerSize) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
+      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, bitsPerPixel) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, colors) ||
+      !write32(bmpOut, colors)) {
     return false;
   }
 
-  for (int i = 0; i < 256; i++) {
-    if (!writeByte(bmpOut, static_cast<uint8_t>(i)) || !writeByte(bmpOut, static_cast<uint8_t>(i)) ||
-        !writeByte(bmpOut, static_cast<uint8_t>(i)) || !writeByte(bmpOut, 0)) {
+  for (int i = 0; i < colors; ++i) {
+    const auto gray = static_cast<uint8_t>(i * (oneBit ? 255 : 85));
+    if (!writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, 0))
       return false;
-    }
-  }
-  return true;
-}
-
-bool writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
-  const int bytesPerRow = (width + 31) / 32 * 4;
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 62 + imageSize;
-
-  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, 62) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
-      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, 1) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, 2) ||
-      !write32(bmpOut, 2)) {
-    return false;
-  }
-
-  static constexpr uint8_t palette[8] = {0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  for (const uint8_t value : palette) {
-    if (!writeByte(bmpOut, value)) return false;
-  }
-  return true;
-}
-
-bool writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
-  const int bytesPerRow = (width * 2 + 31) / 32 * 4;
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 70 + imageSize;
-
-  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, 70) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
-      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, 2) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, 4) ||
-      !write32(bmpOut, 4)) {
-    return false;
-  }
-
-  static constexpr uint8_t palette[16] = {0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x00,
-                                          0xAA, 0xAA, 0xAA, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  for (const uint8_t value : palette) {
-    if (!writeByte(bmpOut, value)) return false;
   }
   return true;
 }
@@ -123,7 +80,6 @@ struct GifBmpContext {
   std::unique_ptr<uint32_t[]> rowAccum;
   std::unique_ptr<uint32_t[]> rowCount;
   std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
-  std::unique_ptr<FloydSteinbergDitherer> fsDitherer;
   std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
   bool success{true};
   uint32_t lastYieldMs{0};
@@ -168,41 +124,26 @@ void updateGrayPalette(const GIFDRAW* pDraw, GifBmpContext& ctx) {
   }
 }
 
-void emitOutputRow(const uint8_t* row, GifBmpContext& ctx, int outY) {
+void emitOutputRow(const uint8_t* row, GifBmpContext& ctx) {
   memset(ctx.rowBuffer.get(), 0, static_cast<size_t>(ctx.bytesPerRow));
 
-  if (USE_8BIT_OUTPUT && !ctx.oneBit) {
+  if (ctx.oneBit) {
     for (int x = 0; x < ctx.dstWidth; ++x) {
-      ctx.rowBuffer[x] = adjustPixel(row[x]);
-    }
-  } else if (ctx.oneBit) {
-    for (int x = 0; x < ctx.dstWidth; ++x) {
-      const uint8_t bit =
-          ctx.atkinson1BitDitherer ? ctx.atkinson1BitDitherer->processPixel(row[x], x) : quantize1bit(row[x], x, outY);
+      const uint8_t bit = ctx.atkinson1BitDitherer->processPixel(row[x], x);
       const int byteIndex = x / 8;
       const int bitOffset = 7 - (x % 8);
       ctx.rowBuffer[byteIndex] |= (bit << bitOffset);
     }
-    if (ctx.atkinson1BitDitherer) ctx.atkinson1BitDitherer->nextRow();
+    ctx.atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx.dstWidth; ++x) {
       const uint8_t gray = adjustPixel(row[x]);
-      uint8_t twoBit;
-      if (ctx.atkinsonDitherer) {
-        twoBit = ctx.atkinsonDitherer->processPixel(gray, x);
-      } else if (ctx.fsDitherer) {
-        twoBit = ctx.fsDitherer->processPixel(gray, x);
-      } else {
-        twoBit = quantize(gray, x, outY);
-      }
+      const uint8_t twoBit = ctx.atkinsonDitherer->processPixel(gray, x);
       const int byteIndex = (x * 2) / 8;
       const int bitOffset = 6 - ((x * 2) % 8);
       ctx.rowBuffer[byteIndex] |= (twoBit << bitOffset);
     }
-    if (ctx.atkinsonDitherer)
-      ctx.atkinsonDitherer->nextRow();
-    else if (ctx.fsDitherer)
-      ctx.fsDitherer->nextRow();
+    ctx.atkinsonDitherer->nextRow();
   }
 
   const size_t bytesPerRow = static_cast<size_t>(ctx.bytesPerRow);
@@ -220,7 +161,7 @@ void processCanvasRow(const uint8_t* grayRow, int srcY, GifBmpContext& ctx) {
   grayRow += ctx.layout.sourceX;
 
   if (!ctx.needsScaling) {
-    emitOutputRow(grayRow, ctx, srcY);
+    emitOutputRow(grayRow, ctx);
     return;
   }
 
@@ -248,7 +189,7 @@ void processCanvasRow(const uint8_t* grayRow, int srcY, GifBmpContext& ctx) {
     for (int x = 0; x < ctx.dstWidth; ++x) {
       ctx.scaledGrayRow[x] = static_cast<uint8_t>((ctx.rowCount[x] > 0) ? (ctx.rowAccum[x] / ctx.rowCount[x]) : 255);
     }
-    emitOutputRow(ctx.scaledGrayRow.get(), ctx, ctx.currentOutY);
+    emitOutputRow(ctx.scaledGrayRow.get(), ctx);
     ctx.currentOutY++;
     ctx.nextOutYSrcStart = static_cast<uint32_t>(ctx.currentOutY + 1) * ctx.scaleY_fp;
     if (srcY_fp >= ctx.nextOutYSrcStart) {
@@ -361,7 +302,7 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
   ctx.scaleY_fp = (static_cast<uint32_t>(ctx.layout.sourceHeight) << 16) / ctx.dstHeight;
   ctx.needsScaling = ctx.layout.sourceWidth != ctx.dstWidth || ctx.layout.sourceHeight != ctx.dstHeight;
   ctx.nextOutYSrcStart = ctx.scaleY_fp;
-  const uint32_t bitsPerPixel = (USE_8BIT_OUTPUT && !oneBit) ? 8 : (oneBit ? 1 : 2);
+  const uint32_t bitsPerPixel = oneBit ? 1 : 2;
   const uint32_t rowBytes = ((static_cast<uint32_t>(ctx.dstWidth) * bitsPerPixel + 31) / 32) * 4;
   const uint32_t headerBytes = 54 + (1u << bitsPerPixel) * 4;
   if (static_cast<uint64_t>(rowBytes) * ctx.dstHeight + headerBytes > GifCommon::MAX_BMP_BYTES) {
@@ -369,18 +310,8 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
     return false;
   }
 
-  bool headerWritten = false;
-  if (USE_8BIT_OUTPUT && !oneBit) {
-    headerWritten = writeBmpHeader8bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
-    ctx.bytesPerRow = (ctx.dstWidth + 3) / 4 * 4;
-  } else if (oneBit) {
-    headerWritten = writeBmpHeader1bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
-    ctx.bytesPerRow = (ctx.dstWidth + 31) / 32 * 4;
-  } else {
-    headerWritten = writeBmpHeader2bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
-    ctx.bytesPerRow = (ctx.dstWidth * 2 + 31) / 32 * 4;
-  }
-  if (!headerWritten) {
+  ctx.bytesPerRow = rowBytes;
+  if (!writeBmpHeader(bmpOut, ctx.dstWidth, ctx.dstHeight, oneBit)) {
     LOG_ERR("GIF", "Failed to write BMP header");
     return false;
   }
@@ -412,19 +343,11 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
       LOG_ERR("GIF", "OOM: Atkinson1BitDitherer");
       return false;
     }
-  } else if (!USE_8BIT_OUTPUT) {
-    if (USE_ATKINSON) {
-      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(ctx.dstWidth, originalThresholds);
-      if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
-        LOG_ERR("GIF", "OOM: AtkinsonDitherer");
-        return false;
-      }
-    } else if (USE_FLOYD_STEINBERG) {
-      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(ctx.dstWidth, originalThresholds);
-      if (!ctx.fsDitherer || !ctx.fsDitherer->isValid()) {
-        LOG_ERR("GIF", "OOM: FloydSteinbergDitherer");
-        return false;
-      }
+  } else {
+    ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(ctx.dstWidth, originalThresholds);
+    if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
+      LOG_ERR("GIF", "OOM: AtkinsonDitherer");
+      return false;
     }
   }
 
@@ -465,11 +388,6 @@ bool GifToBmpConverter::gifFileToBmpStream(HalFile& gifFile, Print& bmpOut, bool
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
   return gifFileToBmpStreamInternal(gifFile, bmpOut, targetWidth, targetHeight, false, crop, originalThresholds);
-}
-
-bool GifToBmpConverter::gifFileToBmpStreamWithSize(HalFile& gifFile, Print& bmpOut, int targetMaxWidth,
-                                                   int targetMaxHeight) {
-  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetMaxWidth, targetMaxHeight, false, false);
 }
 
 bool GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(HalFile& gifFile, Print& bmpOut, int targetMaxWidth,

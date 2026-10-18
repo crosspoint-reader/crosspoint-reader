@@ -330,8 +330,7 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
   const ScopedCleanup cleanup{[&png]() { png->close(); }};
 
   if (rc != 0) {
-    LOG_ERR("PNG", "Failed to open PNG for dimensions: rc=%d lastError=%d file=%s", rc, png->getLastError(),
-            imagePath.c_str());
+    LOG_ERR("PNG", "Failed to open PNG for dimensions: %d", rc);
     return false;
   }
 

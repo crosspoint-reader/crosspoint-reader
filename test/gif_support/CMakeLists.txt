@@ -24,3 +24,16 @@ target_include_directories(GifSupportTest PRIVATE
 target_link_libraries(GifSupportTest PRIVATE crosspoint_test_common GTest::gtest_main animatedgif_host)
 gtest_discover_tests(GifSupportTest)
 add_test(NAME PatchAnimatedGif COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/test_patch_animatedgif.py)
+
+add_executable(GifBmpTest GifBmpTest.cpp
+  ${REPO_ROOT}/lib/GifToBmpConverter/GifToBmpConverter.cpp
+  ${REPO_ROOT}/lib/GfxRenderer/BitmapHelpers.cpp)
+target_include_directories(GifBmpTest PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/stubs
+  ${REPO_ROOT}/test/chapter_html_slim_parser/stubs
+  ${REPO_ROOT}/lib/GifToBmpConverter
+  ${REPO_ROOT}/lib/GifSupport
+  ${REPO_ROOT}/lib/GfxRenderer
+  ${REPO_ROOT}/lib/Memory)
+target_link_libraries(GifBmpTest PRIVATE crosspoint_test_common GTest::gtest_main animatedgif_host)
+gtest_discover_tests(GifBmpTest)
