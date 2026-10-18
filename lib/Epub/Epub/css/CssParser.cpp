@@ -1,6 +1,5 @@
 #include "CssParser.h"
 
-#include <Arduino.h>
 #include <AsciiText.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -45,10 +44,6 @@ constexpr size_t READ_BUFFER_SIZE = 512;
 constexpr size_t MAX_RULES = 1500;
 constexpr size_t SELECTOR_POOL_CAP = 32 * 1024;
 constexpr size_t MAX_UNIQUE_STYLES = 256;
-
-// Minimum free heap required to apply CSS during rendering
-// If below this threshold, we skip CSS to avoid display artifacts.
-constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
 
 // Maximum length for a single selector string
 // Prevents parsing of extremely long or malformed selectors
@@ -1421,16 +1416,7 @@ CssAncestor CssParser::makeAncestor(const std::string_view tagName, const std::s
 CssStyle CssParser::resolveStyle(const std::string_view tagName, const std::string_view classAttr,
                                  const std::string_view idAttr, const CssAncestor* ancestors,
                                  const size_t ancestorCount, const bool firstLetter) const {
-  static bool lowHeapWarningLogged = false;
-  if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_CSS) {
-    if (!lowHeapWarningLogged) {
-      lowHeapWarningLogged = true;
-      LOG_DBG("CSS", "Warning: low heap (%u bytes) below MIN_FREE_HEAP_FOR_CSS (%u), returning empty style",
-              ESP.getFreeHeap(), static_cast<unsigned>(MIN_FREE_HEAP_FOR_CSS));
-    }
-    return CssStyle{};
-  }
-
+  // Lookup borrows the stored rules and merges scalar fields without allocating.
   CssStyle result;
   if (entryCount_ == 0 || (firstLetter && !hasFirstLetterRules_)) return result;
 

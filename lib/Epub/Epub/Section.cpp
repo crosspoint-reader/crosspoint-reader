@@ -67,7 +67,8 @@ namespace {
 // v56: Rendering layout (fonts per word, drop caps, border boxes).
 // v57: Includes explicit hyphen/dash line breaks and invalidates both v56 layouts.
 // v58: Rebuild sections for corrected rendering layout and footnote placement.
-constexpr uint8_t SECTION_FILE_VERSION = 58;
+// v59: Preserve stored CSS styles during low-heap layout.
+constexpr uint8_t SECTION_FILE_VERSION = 59;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
