@@ -67,6 +67,8 @@ class Rasterizer {
 
   /// Allocates the scratch block (one heap block, held until release()). False on OOM, logged.
   bool allocate(const ScratchPlan& plan);
+  /// Frees the scratch block. The plan stays, so allocate(plan()) makes the same block again; until then load()
+  /// reports Transient.
   void release();
   bool allocated() const { return block_ != nullptr; }
   uint32_t scratchBytes() const { return blockBytes_; }

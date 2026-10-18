@@ -139,14 +139,13 @@ bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t 
   plan.outputBytes = std::min(plan.outputBytes + glyphstore::kRecordHeaderBytes + 3, ttf::kMaxOutputBytes);
   if (!rasterizer_.allocate(plan)) return false;
   // SD mode's page cache, only while a style reads its outlines from the card.
-  bool onCard = false;
-  for (uint8_t f = 0; f < count; ++f) onCard = onCard || fonts_[f]->readsCard();
+  count_ = count;
   sdPages_.reset();
-  if (onCard && !(sdPages_ = makeUniqueNoThrow<ttf::SdPageCache>())) {
+  if (readsCard() && !(sdPages_ = makeUniqueNoThrow<ttf::SdPageCache>())) {
     LOG_ERR("TTF", "OOM: SD page cache (%u B)", static_cast<unsigned>(sizeof(ttf::SdPageCache)));
+    count_ = 0;
     return false;
   }
-  count_ = count;
   if (store_.wipePending()) wipeIfPending(onBusy);
   LOG_INF("TTF", "%u famil%s loaded: %u B scratch, %u B SD pages, %u B per native size, log %lu of %lu B used", count,
           count == 1 ? "y" : "ies", static_cast<unsigned>(rasterizer_.scratchBytes()),
@@ -296,6 +295,38 @@ bool TtfFontSet::wipeIfPending(const std::function<void()>& onBusy) {
     for (auto& size : font.native_) {
       if (size) font.rebase(*size);
     }
+  }
+  return true;
+}
+
+// --- The set: what only a miss needs ---
+
+bool TtfFontSet::readsCard() const {
+  for (uint8_t f = 0; f < count_; ++f) {
+    if (fonts_[f]->readsCard()) return true;
+  }
+  return false;
+}
+
+uint32_t TtfFontSet::releaseMissMemory() {
+  const uint32_t scratch = rasterizer_.scratchBytes();
+  const uint32_t pages = sdPages_ ? sizeof(ttf::SdPageCache) : 0;
+  const uint32_t ring = ringBytes();
+  rasterizer_.release();
+  sdPages_.reset();  // every read through it ends with the call that made it (fontBytes() points each style at it)
+  freeRing();
+  LOG_INF("TTF", "miss memory freed: %lu B scratch, %lu B SD pages, %lu B ring", static_cast<unsigned long>(scratch),
+          static_cast<unsigned long>(pages), static_cast<unsigned long>(ring));
+  return scratch + pages + ring;
+}
+
+bool TtfFontSet::restoreMissMemory() {
+  if (!missMemoryReleased()) return true;
+  // The ring comes back block by block, as glyphs that need it are drawn.
+  if (!rasterizer_.allocated() && !rasterizer_.allocate(rasterizer_.plan())) return false;
+  if (readsCard() && !sdPages_ && !(sdPages_ = makeUniqueNoThrow<ttf::SdPageCache>())) {
+    LOG_ERR("TTF", "OOM: SD page cache (%u B)", static_cast<unsigned>(sizeof(ttf::SdPageCache)));
+    return false;
   }
   return true;
 }
@@ -689,7 +720,8 @@ bool TtfFont::ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const { 
 
 void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
   TtfFontSet& set = set_;
-  if (!utf8Text || style >= 4 || !styles_[style].present || set.ringMode_) return;
+  // Without the scratch block nothing is drawn (releaseMissMemory()): the lookups draw these as missing.
+  if (!utf8Text || style >= 4 || !styles_[style].present || set.ringMode_ || !set.rasterizer_.allocated()) return;
   uint32_t key = 0;
   if (!storeKey(size, style, 0, &key)) return;
   checkLock();

@@ -1495,3 +1495,56 @@ TEST_F(TtfFontSetTest, AFamilyTooLargeEvenForSdModeIsRefusedBeforeAnyErase) {
   EXPECT_EQ(0, busy);
   EXPECT_EQ(0u, chip.totalSectorErases());
 }
+
+// --- The memory ladder: what only a miss needs, freed for an image decode and allocated again ---------------------
+
+TEST_F(TtfFontSetTest, WithoutItsMissMemoryTheSetDrawsWhatIsStoredAndAMissWaits) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
+  ASSERT_NE(nullptr, set->font(1)->glyph(kRegular, 'A'));
+  const uint32_t scratch = set->scratchBytes();
+  EXPECT_FALSE(set->missMemoryReleased());
+  EXPECT_EQ(scratch, set->releaseMissMemory());  // flash mode: the scratch block alone, no ring
+  EXPECT_TRUE(set->missMemoryReleased());
+  EXPECT_EQ(0u, set->scratchBytes());
+  const uint32_t renders = set->font(0)->renders();
+  // What the store holds is drawn as before.
+  expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'A'));
+  expectDrawnAs(reference(accent[kRegular].bytes, 'A', 14), *set->font(1), kRegular,
+                set->font(1)->glyph(kRegular, 'A'));
+  // A miss is drawn as missing, and a prefetch draws nothing.
+  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'Q'));
+  set->font(0)->prefetch(kRegular, "Quiz");
+  EXPECT_EQ(renders, set->font(0)->renders());
+  // Back: the same block, and the miss, which was not marked missing, is drawn.
+  EXPECT_TRUE(set->restoreMissMemory());
+  EXPECT_FALSE(set->missMemoryReleased());
+  EXPECT_EQ(scratch, set->scratchBytes());
+  expectDrawnAs(reference(files[kRegular].bytes, 'Q', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'Q'));
+  EXPECT_EQ(renders + 1, set->font(0)->renders());
+  EXPECT_TRUE(set->restoreMissMemory());  // nothing left to do
+}
+
+TEST_F(TtfFontSetTest, AnSdModeSetGivesUpItsPageCacheAndTheRingAndGetsThemBack) {
+  SimNorFlash chip{kSdOnlyBytes};
+  const auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  ASSERT_TRUE(set->readsCard());
+  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
+  chip.failNextProgram();  // the ring from here on
+  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'B'));
+  ASSERT_TRUE(set->ringMode());
+  ASSERT_GT(set->ringBytes(), 0u);
+  const uint32_t scratch = set->scratchBytes();
+  const uint32_t ring = set->ringBytes();
+  EXPECT_EQ(scratch + sizeof(ttf::SdPageCache) + ring, set->releaseMissMemory());
+  EXPECT_EQ(0u, set->ringBytes());
+  for (MemoryFile& file : files) file.reads = 0;
+  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'g'));
+  EXPECT_EQ(0u, files[kRegular].reads);  // no outline is read without the scratch block
+  ASSERT_TRUE(set->restoreMissMemory());
+  EXPECT_EQ(scratch, set->scratchBytes());
+  expectDrawnAs(reference(files[kRegular].bytes, 'g', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'g'));
+  EXPECT_GT(files[kRegular].reads, 0u);  // from the card, through the page cache made again
+}

@@ -235,6 +235,17 @@ class TtfFontSet {
   uint32_t scratchBytes() const { return rasterizer_.scratchBytes(); }
   /// SD mode: the 512-byte pages read from the card since load(), every family's.
   uint32_t sdPageReads() const { return sdPages_ ? sdPages_->misses() : 0; }
+  /// A family reads its outlines from the card (SD mode).
+  bool readsCard() const;
+
+  /// Frees what only a glyph missing from the store needs: the scratch block (its plan kept), SD mode's page cache
+  /// and the ring. Glyphs in the store are drawn as before; a miss is drawn as missing until restoreMissMemory(),
+  /// and asked again at its next lookup (Transient). For the reader's memory ladder, which makes room for an image
+  /// decode this way. Only where no glyph record of the set is in use: between pages. The bytes freed.
+  uint32_t releaseMissMemory();
+  /// Allocates them again. False while the heap cannot hold them: misses stay missing until a later call.
+  bool restoreMissMemory();
+  bool missMemoryReleased() const { return count_ != 0 && (!rasterizer_.allocated() || (readsCard() && !sdPages_)); }
 
  private:
   friend class TtfFont;
