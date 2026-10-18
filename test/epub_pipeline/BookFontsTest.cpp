@@ -304,6 +304,22 @@ TEST_F(BookFontsTest, AChapterThatCannotBeReadIsRetriedTwiceMore) {
   EXPECT_EQ(BookFonts::State::None, BookFonts::read(epub->getCachePath()));
 }
 
+TEST_F(BookFontsTest, AnAccentLimitHoldsUnderItsSettingsAndIsForgottenUnderOthers) {
+  // The memory ladder's FewerFamilies step: kept across sessions, so a restart does not fail the same way again.
+  const std::string cache = (work / "limit").string();
+  fs::create_directories(cache);
+  EXPECT_EQ(BookFonts::kMaxAccents, BookFonts::accentLimit(cache, 7));
+  BookFonts::setAccentLimit(cache, 7, 2);
+  EXPECT_EQ(2, BookFonts::accentLimit(cache, 7));
+  BookFonts::setAccentLimit(cache, 7, 0);
+  EXPECT_EQ(0, BookFonts::accentLimit(cache, 7));
+  EXPECT_EQ(BookFonts::kMaxAccents, BookFonts::accentLimit(cache, 8));  // other font settings: forgotten
+  EXPECT_EQ(BookFonts::kMaxAccents, BookFonts::accentLimit(cache, 7));  // for good
+  BookFonts::setAccentLimit(cache, 7, 1);
+  BookFonts::setAccentLimit(cache, 7, BookFonts::kMaxAccents);
+  EXPECT_FALSE(fs::exists(cache + "/fontlimit.bin"));
+}
+
 // ---- Stage B phase 1: the body's generic family and the accent family -------------------------------------
 
 namespace {

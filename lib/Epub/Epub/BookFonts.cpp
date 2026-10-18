@@ -27,6 +27,9 @@ namespace {
 constexpr char kFontsDir[] = "/fonts";
 constexpr char kAccentDir[] = "/fonts/accent0";  // the digit is the accent family's
 constexpr char kStateFile[] = "/fonts.bin";      // beside fonts/, which prepare() empties
+// The accent limit (accentLimit()): kVersion, the settings key as stored, the accent families kept.
+constexpr char kLimitFile[] = "/fontlimit.bin";
+constexpr size_t kLimitBytes = 2 + sizeof(uint32_t);
 // The state file: kVersion, then a code -- None, Family (then the name, to the end of the file), or kFailed + n
 // for n failed attempts so far. At kMaxAttempts the book is given up on, as None.
 constexpr uint8_t kCodeNone = 0;
@@ -514,6 +517,35 @@ bool adobeKey(const std::string_view uuid, uint8_t (&key)[16]) {
 
 State read(const std::string& cachePath, std::string* name, Families* families, const int accent) {
   return stateOf(readCode(cachePath, name, families, accent));
+}
+
+uint8_t accentLimit(const std::string& cachePath, const uint32_t settingsKey) {
+  const std::string path = cachePath + kLimitFile;
+  std::string bytes;
+  // Checked first: most books have none, and a failed open logs.
+  if (!Storage.exists(path.c_str()) || !Storage.readFileToString("BKF", path, kLimitBytes, bytes)) return kMaxAccents;
+  uint32_t key = 0;
+  if (bytes.size() == kLimitBytes) std::memcpy(&key, &bytes[1], sizeof key);
+  if (bytes.size() != kLimitBytes || bytes[0] != static_cast<char>(kVersion) || key != settingsKey) {
+    Storage.remove(path.c_str());  // the settings changed since: every accent family is tried again
+    return kMaxAccents;
+  }
+  return std::min(static_cast<uint8_t>(bytes[kLimitBytes - 1]), kMaxAccents);
+}
+
+void setAccentLimit(const std::string& cachePath, const uint32_t settingsKey, const uint8_t accents) {
+  const std::string path = cachePath + kLimitFile;
+  if (accents >= kMaxAccents) {
+    if (Storage.exists(path.c_str())) Storage.remove(path.c_str());
+    return;
+  }
+  char bytes[kLimitBytes] = {static_cast<char>(kVersion)};
+  std::memcpy(&bytes[1], &settingsKey, sizeof settingsKey);
+  bytes[kLimitBytes - 1] = static_cast<char>(accents);
+  HalFile file;
+  if (!Storage.openFileForWrite("BKF", path, file)) return;
+  const bool written = file.write(bytes, sizeof bytes) == sizeof bytes;
+  if (!file.close() || !written) Storage.remove(path.c_str());
 }
 
 std::string familyDir(const std::string& cachePath, const int accent) {
