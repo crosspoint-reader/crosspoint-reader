@@ -1276,10 +1276,25 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
   installed again, prefetch per family, a failed write rings both until one wipe, an accent family without a regular
   style refused before any erase); `TtfRegistry` (two books' same-named families told apart); `FontFamilyLayoutTest`
   (three families). Host suite 2830/2830. The manager itself needs the renderer, so its set is exercised on the device.
-- **Device test: not run yet.** The X4 was off USB while this was built; `env:default`, `x4pro` and `lilygo_t5s3`
-  build. To check: Accents with a TTF reader font on the card (body in it, accent blocks in Inter), All Text (body
-  Ubuntu, accent blocks Inter), Off and Body Text unchanged, two books whose body families share a name (each its
-  own font), and the heap in the book per mode against phase 1's.
+- **X4 test (2026-10-18, serial test API, Bookerly 14 pt):** `/test/families_test.epub` in every mode, with the
+  built-in Bookerly, Bookerly's TTF files as a reader font on the card (BookerlyTT) and Bitter (`.cpfont`).
+  - Off: all Bookerly.
+  - Body Text: all Ubuntu.
+  - Accents with the built-in font: body Bookerly, the Book Display blocks in Inter (Bold headings), the generic sans
+    heading in Noto Sans.
+  - **Accents with BookerlyTT:** body BookerlyTT, Book Display blocks Inter: "2 families installed: 6 styles, log
+    589824 B", about 17 s for the install.
+  - **All Text:** body Ubuntu, Book Display blocks Inter (phase 1: Noto Sans), "2 families installed: 4 styles".
+  - Accents with Bitter: "Accent font Book Display left out: the reader's font is a .cpfont family", as phase 1.
+  - **Two books whose body families share a name** (`families_test2.epub`, Bookerly as "Book Body"), reader to reader:
+    each in its own font, the store installed again at each switch.
+  - Heap in the book, free: Off 67.4-70.0 KB, Body Text 55.9-57.0 KB, Accents 52.6-55.2 KB, All Text 52.3-54.8 KB,
+    Accents beside BookerlyTT 52.8-55.4 KB, All Text with BookerlyTT 54.0-55.3 KB, Accents with Bitter 63.4-65.9 KB
+    (phase 1 alike); at Home 75.8-76.4 KB.
+  - Found on the way, older than Stage B: `ActivityManager::goToReader` loads the next book's fonts before the reader
+    it replaces has exited, so that reader's look-ahead build tick ran against unloaded font IDs ("Font ... not
+    found", 27 lines; the build was dropped at its exit, nothing cached). Any reader-to-reader switch that changes
+    the font does this; the same-name switch now does too, since it now changes the font.
 - **What is left, and phase 3:**
   - A `.cpfont` reader font still has the font area to itself: the accent family beside it needs the `.cpfont` read
     from SD while the store holds the accent, or the accent in SD mode (2c-4).
