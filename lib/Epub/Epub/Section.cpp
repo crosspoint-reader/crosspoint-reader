@@ -65,7 +65,8 @@ namespace {
 // v54: Source ranges retain codepoints absorbed by NFC composition.
 // v55: Persist the first logical word of each paragraph for clipping separators.
 // v56: Split hyphen and dash tokens (e.g "foo—bar" into "foo—" and "bar") in standard reading mode
-constexpr uint8_t SECTION_FILE_VERSION = 56;
+// v57: Preserve stored CSS styles during low-heap layout.
+constexpr uint8_t SECTION_FILE_VERSION = 57;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

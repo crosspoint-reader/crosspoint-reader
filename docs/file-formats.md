@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 57
+
+The serialized layout is unchanged. Stored CSS rules now apply even below
+48 KiB free heap. Older completed and partial sections rebuild because they may
+contain missing styles, different line breaks, or content that should be hidden.
+Book metadata, CSS rule caches, and reading progress are kept.
+
 ### Version 55
 
 Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
