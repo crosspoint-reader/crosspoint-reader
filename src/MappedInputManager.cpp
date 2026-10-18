@@ -231,12 +231,6 @@ bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
 
 bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
 
-bool MappedInputManager::wasTapInRect(const int x, const int y, const int width, const int height) const {
-  int tx = 0;
-  int ty = 0;
-  return wasScreenTapped(tx, ty) && tx >= x && tx < x + width && ty >= y && ty < y + height;
-}
-
 MappedInputManager::RowTouch MappedInputManager::rowTouch(int& row, const int top, const int rowStep,
                                                           const int rowCount, const int xStart, const int xEnd,
                                                           const int rowHeight) const {
