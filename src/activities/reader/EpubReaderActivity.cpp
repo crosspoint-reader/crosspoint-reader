@@ -3041,10 +3041,14 @@ int EpubReaderActivity::resolveReaderFont(std::string* familyOut) const {
     if (familyOut) *familyOut = fontFamilyOptionLabel(static_cast<uint8_t>(bookFontFamilyOverride));
     return CrossPointSettings::getBuiltinReaderFontIdForPoints(static_cast<uint8_t>(bookFontFamilyOverride), pointSize);
   }
-  // Then the book's SD family, then the global one, each only while it is loaded at this size
-  // (resolveSdCardFontId() is 0 for a family taken off the card); otherwise the built-in family.
-  // With no size override this is SETTINGS.getReaderFontId().
-  for (const char* sdFamily : {bookSdFontFamilyOverride.c_str(), static_cast<const char*>(SETTINGS.sdFontFamilyName)}) {
+  // Then the book's SD family, then its embedded body family (Publisher Fonts, selected for it at book
+  // open), then the global one, each only while it is loaded at this size (resolveSdCardFontId() is 0
+  // for a family taken off the card); otherwise the built-in family. With no size override and no
+  // book family this is SETTINGS.getReaderFontId().
+  const char* publisherFamily =
+      (bookSdFontFamilyOverride.empty() && epub) ? sdFontSystem.bookFamilyNameFor(epub->getCachePath()) : "";
+  for (const char* sdFamily :
+       {bookSdFontFamilyOverride.c_str(), publisherFamily, static_cast<const char*>(SETTINGS.sdFontFamilyName)}) {
     if (sdFamily[0] == '\0') continue;
     const int id = resolveSdCardFontId(sdFamily, pointSize);
     if (id != 0) {
@@ -6806,6 +6810,9 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   int effectiveFontId = 0;
   if (hasLocalSdOverride) {
     effectiveFontId = resolveSdCardFontId(currentBook.sdFontFamilyOverride.c_str(), effectiveFontSize);
+  } else if (currentBook.fontFamilyOverride < 0) {
+    // Publisher Fonts, as getEffectiveReaderFontId(): the book's embedded body family when it has one.
+    effectiveFontId = resolveSdCardFontId(sdFontSystem.bookFamilyNameFor(epub->getCachePath()), effectiveFontSize);
   }
   if (effectiveFontId == 0 && currentBook.fontFamilyOverride >= 0) {
     effectiveFontId = CrossPointSettings::getBuiltinReaderFontIdForPoints(effectiveFontFamily, effectiveFontSize);

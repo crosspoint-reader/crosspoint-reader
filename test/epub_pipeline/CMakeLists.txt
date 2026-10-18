@@ -135,6 +135,10 @@ add_executable(EpubPipelineTest
   VisibleTextTest.cpp
   VisibleTextOffsetLutTest.cpp
   TextNodeRulesTest.cpp
+  BookFontsTest.cpp
+  # A book's embedded body font (Publisher Fonts): the probe and the extraction. Its SHA-1 comes from
+  # test/shims/wolfssl, standing in for wolfCrypt.
+  ${REPO_ROOT}/lib/Epub/Epub/BookFonts.cpp
   # lib/KOReaderSync position mapping: needs only the Epub and the SAX parser, not the network.
   ${REPO_ROOT}/lib/KOReaderSync/ProgressMapper.cpp
   ${REPO_ROOT}/lib/KOReaderSync/ChapterXPathIndexer.cpp
@@ -152,6 +156,7 @@ target_compile_definitions(EpubPipelineTest PRIVATE
   CORPUS_DIR="${REPO_ROOT}/test/epubs"
   GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
   JPEG_FIXTURE_DIR="${REPO_ROOT}/test/jpeg_decoder/fixtures"
+  FONT_FIXTURE_DIR="${REPO_ROOT}/lib/EpdFont/builtinFonts/source"
   ENABLE_SERIAL_LOG=1
   LOG_LEVEL=2
   # LongChapterPageTablesTest refuses build-table chunks on purpose (see ChunkedVector.h). The

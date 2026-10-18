@@ -342,6 +342,17 @@ class HalStorage {
     }
     return true;
   }
+  // Mirrors the device HalStorage: the whole file, its size checked against `cap` first. Fails on a
+  // missing, directory, empty, above-`cap` or short-read file.
+  bool readFileToString(const char*, const std::string& path, size_t cap, std::string& out) {
+    out.clear();
+    HalFile f;
+    if (!f.openForRead(path) || f.isDirectory()) return false;
+    const size_t size = f.fileSize();
+    if (size == 0 || size > cap) return false;
+    out.resize(size);
+    return f.read(out.data(), size) == static_cast<int>(size);
+  }
   bool mkdir(const char* path, bool recursive = true) {
     std::error_code ec;
     return recursive ? std::filesystem::create_directories(path, ec) : std::filesystem::create_directory(path, ec);

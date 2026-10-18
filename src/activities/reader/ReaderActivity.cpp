@@ -19,10 +19,12 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "Epub.h"
+#include "Epub/BookFonts.h"
 #include "Epub/CoverThumbSession.h"
 #include "EpubReaderActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MdReaderActivity.h"
+#include "SdCardFontGlobals.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -902,7 +904,10 @@ void ReaderActivity::onEnter() {
     // an extra e-ink flash. The throwaway Epub only computes paths + does a few
     // file-existence checks (no parsing), so this is cheap.
     const bool firstOpenIndexing = Epub(initialBookPath, "/.crosspoint").needsFirstOpenIndexing();
-    if (firstOpenIndexing) {
+    // Publisher Fonts: the book's embedded fonts are examined once, here, with the same popup and lent buffer.
+    // goToReader() left the loaded font alone until then (ensureSdFontLoadedForPath).
+    const bool bookFontsPending = bookFontsPendingForPath(initialBookPath.c_str());
+    if (firstOpenIndexing || bookFontsPending) {
       RenderLock lock;
       // drawPopup() overlays the indexing box on the displayed frame (it resyncs the write buffer
       // from the screen first), so the box lands on the launcher screen — e.g. the recent-books grid
@@ -930,7 +935,7 @@ void ReaderActivity::onEnter() {
     // performs no rendering.
     uint8_t* lentForIndexing = nullptr;
     size_t lentSize = 0;
-    if (firstOpenIndexing && renderer.hasSecondaryBuffer()) {
+    if ((firstOpenIndexing || bookFontsPending) && renderer.hasSecondaryBuffer()) {
       RenderLock lock;
       // The popup's swap left the write buffer holding the pre-popup frame; the return below seeds
       // the secondary from it. Make that the frame on the panel, so the reader's own overlays
@@ -949,6 +954,10 @@ void ReaderActivity::onEnter() {
     }
     BuildArena indexingScratch(lentForIndexing, lentSize);
     auto epub = loadEpub(initialBookPath, indexingScratch.valid() ? &indexingScratch : nullptr);
+    if (epub && bookFontsPending) {
+      // load() left nothing in the region: its rings were scoped to each read.
+      BookFonts::prepare(*epub, indexingScratch.valid() ? &indexingScratch : nullptr);
+    }
     if (lentForIndexing) {
       RenderLock lock;
       renderer.returnSecondaryBuffer();  // cannot fail: the region never entered the heap
@@ -960,6 +969,10 @@ void ReaderActivity::onEnter() {
     if (!epub) {
       onGoBack();
       return;
+    }
+    if (bookFontsPending) {
+      RenderLock lock;  // what goToReader holds for the same call; a font install draws its popup
+      ensureSdFontLoadedForPath(initialBookPath.c_str(), /*waitForBookFonts=*/false);
     }
     // Stamped after every load path above (warm cache, first-open index build, and the
     // drop-and-reload retry) so `book` is the true cost of getting a usable Epub.

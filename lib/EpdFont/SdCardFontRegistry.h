@@ -55,6 +55,14 @@ class SdCardFontRegistry {
   using TtfFits = bool (*)(const uint32_t* styleBytes, uint8_t count);
   void setTtfFits(const TtfFits fits) { ttfFits_ = fits; }
 
+  // One family directory outside the fonts roots (a book's embedded fonts, see BookFonts), read as discover()
+  // reads one; `family.name` is left to the caller. False when it holds no family the reader can draw.
+  bool scanFamily(const char* dirPath, SdCardFontFamilyInfo& family) {
+    family.files.clear();
+    scanDirectory(dirPath, family);
+    return !family.files.empty();
+  }
+
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
   int getFamilyIndex(const std::string& name) const;

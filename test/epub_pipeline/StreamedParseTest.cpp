@@ -9,7 +9,7 @@
 #include "Epub.h"
 #include "KOReaderSync/ChapterXPathIndexer.h"
 #include "KOReaderSync/ChapterXPathIndexerInternal.h"
-#include "KOReaderSync/SaxFeedSink.h"
+#include "SaxParser/SaxFeedSink.h"
 #include "SaxParser/SaxParser.h"
 
 namespace fs = std::filesystem;

@@ -327,6 +327,9 @@ std::string* ContentOpfParser::creatorField(const char* id, const char* property
 void ContentOpfParser::recordIdentifier() {
   if (identifierTooLong_) return;
   std::string value = trim(identifierText_);
+  if (identifierIsUnique_ || uniqueIdentifier.empty()) uniqueIdentifier = value;
+  if (uuidIdentifier.empty() && hasWordAt(value, 0, "urn:uuid:")) uuidIdentifier = value;
+  if (value.size() > MAX_ISBN_OR_ASIN) return;
   const bool isbnPrefix = dropIdentifierPrefix(value, "isbn");
   const bool asinPrefix = !isbnPrefix && dropIdentifierPrefix(value, "asin");
   if (value.empty()) return;
@@ -351,6 +354,10 @@ void ContentOpfParser::pickPrimaryAuthor() {
   creatorCount_ = 0;
   std::string().swap(creatorText_);
 }
+
+ContentOpfParser::ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath,
+                                   const size_t xmlSize, BookMetadataCache* cache)
+    : cachePath(cachePath), baseContentPath(baseContentPath), remainingSize(xmlSize), cache(cache) {}
 
 bool ContentOpfParser::setup() {
   if (!saxParser_.init(this, startElement, endElement, characterData)) {
@@ -487,6 +494,9 @@ void ContentOpfParser::startElement(void* userData, const char* name, const char
 
   if (self->state == START && isPackageTag(name)) {
     self->state = IN_PACKAGE;
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "unique-identifier") == 0) self->uniqueIdentifierId_ = atts[i + 1];
+    }
     return;
   }
 
@@ -520,7 +530,11 @@ void ContentOpfParser::startElement(void* userData, const char* name, const char
     self->identifierText_.clear();
     self->identifierTooLong_ = false;
     self->identifierScheme_ = IdentifierScheme::Other;
+    self->identifierIsUnique_ = false;
     for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "id") == 0) {
+        self->identifierIsUnique_ = !self->uniqueIdentifierId_.empty() && self->uniqueIdentifierId_ == atts[i + 1];
+      }
       if (strcmp(atts[i], "opf:scheme") != 0 && strcmp(atts[i], "scheme") != 0) continue;
       std::string scheme = atts[i + 1];
       for (char& c : scheme) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
@@ -974,6 +988,7 @@ void ContentOpfParser::endElement(void* userData, const char* name) {
   if (self->state == IN_METADATA && isMetadataTag(name)) {
     self->pickPrimaryAuthor();
     self->state = IN_PACKAGE;
+    self->metadataRead_ = true;
     return;
   }
 

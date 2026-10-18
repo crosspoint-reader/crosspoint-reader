@@ -490,11 +490,15 @@ struct CreatorResult {
   std::string seriesIndex;
   std::string isbn;
   std::string asin;
+  std::string uniqueIdentifier;
+  std::string uuidIdentifier;
 };
 
 // Parses an OPF whose <metadata> holds `metadata`, fed `chunk` bytes per write() (0 = all at once),
-// so a test can make the parser receive one creator's text in many pieces.
-CreatorResult parseCreators(const std::string& metadata, const size_t chunk = 0) {
+// so a test can make the parser receive one creator's text in many pieces. `packageAttributes` go on
+// the <package> element.
+CreatorResult parseCreators(const std::string& metadata, const size_t chunk = 0,
+                            const std::string& packageAttributes = "") {
   CreatorResult result;
   const std::string cacheDir = makeTempDir();
   if (cacheDir.empty()) return result;
@@ -502,7 +506,9 @@ CreatorResult parseCreators(const std::string& metadata, const size_t chunk = 0)
   const std::string base = "/book/OEBPS/";
   const std::string xml =
       "<?xml version='1.0' encoding='utf-8'?>"
-      "<package xmlns:opf='http://www.idpf.org/2007/opf' xmlns:dc='http://purl.org/dc/elements/1.1/'>"
+      "<package " +
+      packageAttributes +
+      " xmlns:opf='http://www.idpf.org/2007/opf' xmlns:dc='http://purl.org/dc/elements/1.1/'>"
       "<metadata>" +
       metadata +
       "</metadata>"
@@ -525,6 +531,8 @@ CreatorResult parseCreators(const std::string& metadata, const size_t chunk = 0)
   result.seriesIndex = parser.seriesIndex;
   result.isbn = parser.isbn;
   result.asin = parser.asin;
+  result.uniqueIdentifier = parser.uniqueIdentifier;
+  result.uuidIdentifier = parser.uuidIdentifier;
   return result;
 }
 
@@ -719,8 +727,46 @@ TEST(ContentOpfParserIdentifiers, AnIdentifierFedOneByteAtATimeStaysWholeAndTrim
   EXPECT_EQ(parseCreators("<dc:identifier>\n  urn:isbn:9780441013593\n</dc:identifier>", 1).isbn, "9780441013593");
 }
 
-// No real identifier is this long; a cut-off one would be a wrong one, so it is not kept at all.
+// No ISBN is this long, and no identifier at all is longer than 256 bytes; a cut-off one would be a
+// wrong one, so it is not kept at all.
 TEST(ContentOpfParserIdentifiers, AnOverlongIdentifierIsNotKept) {
   const std::string digits(200, '9');
-  EXPECT_EQ(parseCreators("<dc:identifier opf:scheme='ISBN'>" + digits + "</dc:identifier>").isbn, "");
+  const auto r = parseCreators("<dc:identifier opf:scheme='ISBN'>" + digits + "</dc:identifier>");
+  EXPECT_EQ(r.isbn, "");
+  EXPECT_EQ(r.uniqueIdentifier, digits);  // still the package's identifier
+  EXPECT_EQ(parseCreators("<dc:identifier>" + std::string(257, 'x') + "</dc:identifier>").uniqueIdentifier, "");
+}
+
+// The keys of a book's obfuscated fonts (BookFonts): the identifier the package's unique-identifier
+// names, else the first, and the first urn:uuid: one.
+TEST(ContentOpfParserIdentifiers, TheUniqueIdentifierIsTheOneThePackageNames) {
+  const std::string identifiers =
+      "<dc:identifier id='isbn'>urn:isbn:9780441013593</dc:identifier>"
+      "<dc:identifier id='uuid' opf:scheme='uuid'>\n URN:UUID:0123-4567 </dc:identifier>"
+      "<dc:identifier id='other'>urn:uuid:89ab</dc:identifier>";
+  const auto named = parseCreators(identifiers, 0, "unique-identifier='uuid'");
+  EXPECT_EQ(named.uniqueIdentifier, "URN:UUID:0123-4567");
+  EXPECT_EQ(named.uuidIdentifier, "URN:UUID:0123-4567");
+  EXPECT_EQ(named.isbn, "9780441013593");
+  EXPECT_EQ(parseCreators(identifiers, 7, "unique-identifier='other'").uniqueIdentifier, "urn:uuid:89ab");
+  const auto unnamed = parseCreators(identifiers, 0, "unique-identifier='missing'");
+  EXPECT_EQ(unnamed.uniqueIdentifier, "urn:isbn:9780441013593");  // the first
+  EXPECT_EQ(unnamed.uuidIdentifier, "URN:UUID:0123-4567");
+  EXPECT_EQ(parseCreators("<dc:title>T</dc:title>").uniqueIdentifier, "");
+}
+
+// A read that wants the metadata alone stops the stream once </metadata> has closed.
+TEST(ContentOpfParserIdentifiers, MetadataReadIsSetWhenTheMetadataCloses) {
+  const std::string head =
+      "<?xml version='1.0'?><package xmlns:dc='http://purl.org/dc/elements/1.1/'><metadata>"
+      "<dc:identifier>urn:uuid:01</dc:identifier>";
+  const std::string rest = "</metadata><manifest/><spine/></package>";
+  const std::string noCache;
+  ContentOpfParser parser(noCache, noCache, head.size() + rest.size(), nullptr);
+  ASSERT_TRUE(parser.setup());
+  ASSERT_EQ(parser.write(reinterpret_cast<const uint8_t*>(head.data()), head.size()), head.size());
+  EXPECT_FALSE(*parser.metadataRead());
+  ASSERT_EQ(parser.write(reinterpret_cast<const uint8_t*>(rest.data()), rest.size()), rest.size());
+  EXPECT_TRUE(*parser.metadataRead());
+  EXPECT_EQ(parser.uuidIdentifier, "urn:uuid:01");
 }

@@ -3,6 +3,7 @@
 #include <Epub/VisibleText.h>
 #include <Epub/htmlEntities.h>
 #include <Logging.h>
+#include <SaxParser/SaxFeedSink.h>
 #include <SaxParser/SaxParser.h>
 
 #include <algorithm>
@@ -11,8 +12,6 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-
-#include "SaxFeedSink.h"
 
 namespace ChapterXPathIndexerInternal {
 

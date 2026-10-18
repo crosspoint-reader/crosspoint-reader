@@ -136,14 +136,19 @@ class ContentOpfParser final : public Print {
   std::string* creatorField(const char* id, const char* property);
   void pickPrimaryAuthor();
 
-  // The dc:identifier being read: what its scheme attribute says it is, and its text. Longer than
-  // any ISBN or ASIN can be means it is neither, and a cut-off one would be a wrong one.
+  // The dc:identifier being read: what its scheme attribute says it is, whether it is the package's
+  // unique identifier, and its text. Longer than any ISBN or ASIN can be means it is neither, and a
+  // cut-off identifier would be a wrong one, so one longer than MAX_IDENTIFIER is not kept at all.
   enum class IdentifierScheme : uint8_t { Other, Isbn, Asin };
-  static constexpr size_t MAX_IDENTIFIER = 64;
+  static constexpr size_t MAX_ISBN_OR_ASIN = 64;
+  static constexpr size_t MAX_IDENTIFIER = 256;
   IdentifierScheme identifierScheme_ = IdentifierScheme::Other;
   std::string identifierText_;
   bool identifierTooLong_ = false;
+  bool identifierIsUnique_ = false;
+  std::string uniqueIdentifierId_;  // the package's unique-identifier attribute
   void recordIdentifier();
+  bool metadataRead_ = false;
 
   // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {
@@ -195,6 +200,11 @@ class ContentOpfParser final : public Print {
   // "urn:isbn:" / "isbn:" prefixes. For KOReader sync's metadata; empty when the book gives none.
   std::string isbn;
   std::string asin;
+  // The package's unique identifier (the dc:identifier its unique-identifier attribute names, else
+  // the first) and its first urn:uuid: identifier, trimmed: the keys of a book's obfuscated fonts
+  // (BookFonts). Empty when the book gives none.
+  std::string uniqueIdentifier;
+  std::string uuidIdentifier;
   std::string tocNcxPath;
   std::string tocNavPath;   // EPUB 3 nav document path
   std::string pageMapPath;  // EPUB 2.01 page-map.xml document path
@@ -203,11 +213,16 @@ class ContentOpfParser final : public Print {
   std::string textReferenceHref;
   std::vector<std::string> cssFiles;  // CSS stylesheet paths
 
-  explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
-                            BookMetadataCache* cache)
-      : cachePath(cachePath), baseContentPath(baseContentPath), remainingSize(xmlSize), cache(cache) {}
+  // Out of line: three callers, and the members it initialises are many.
+  explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, size_t xmlSize,
+                            BookMetadataCache* cache);
   ~ContentOpfParser() override;
 
+  // Set once </metadata> has closed: the stop flag of a read that wants the metadata alone (BookFonts' keys), so
+  // a large manifest is not parsed for nothing.
+  const bool* metadataRead() const { return &metadataRead_; }
+  // Hosts the SAX parser's state in `state` (SaxParser::stateBytes()) instead of the heap. Before setup().
+  void setParserState(void* state) { saxParser_.setExternalState(state, SaxParser::stateBytes()); }
   bool setup();
 
   size_t write(uint8_t) override;

@@ -511,6 +511,9 @@ class CrossPointSettings {
   uint8_t frontlightRestoreOnWake = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // Publisher Fonts: 0 = off, 1 = a book with an embedded TrueType body font is drawn in it (BookFonts). Off by
+  // default: opening such a book installs its family into the single glyph store, and so does the next book.
+  uint8_t publisherFonts = 0;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Show file extensions in the file browser (0 = hidden, 1 = show)
