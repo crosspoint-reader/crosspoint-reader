@@ -29,6 +29,7 @@
 #include <builtinFonts/all.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
+#include <hal/usb_serial_jtag_ll.h>
 
 #include <cstring>
 #include <vector>
@@ -914,6 +915,17 @@ static bool openSerialLogIfHostPresent() {
     return false;
   }
 
+  // HWCDC's buffer setters delete and recreate the RX queue and TX ring without masking the USB
+  // Serial/JTAG interrupt, whose handler uses both (hw_cdc_isr_handler checks tx_ring_buf, then
+  // receives from it). With CDC_ON_BOOT the core began Serial before setup(), so on a warm reboot
+  // with a host still attached the handler is live and a resize can race it into a freed buffer:
+  // after CMD:REBOOT the boot log stopped right here and the device answered nothing until a USB
+  // reset (X3, 2026-10-18; reproduced on the first REBOOT of a loop). A cold boot has no host
+  // traffic yet, which is why it never showed there. Mask the interrupt for the resize;
+  // Serial.begin() below re-enables exactly the interrupts it uses.
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+  usb_serial_jtag_ll_disable_intr_mask(USB_SERIAL_JTAG_LL_INTR_MASK);
+#endif
   // Enlarge the USB-CDC RX buffer from the 256-byte default before begin().
   // The serial file-transfer protocol receives 2048-byte chunks in bursts; a
   // 256-byte ring drops bytes whenever the byte-by-byte drain stalls briefly,
