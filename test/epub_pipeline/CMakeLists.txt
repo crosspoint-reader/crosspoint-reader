@@ -120,6 +120,7 @@ add_executable(EpubPipelineTest
   PageBreakAfterTest.cpp
   KeepTogetherTest.cpp
   NativeSizeLayoutTest.cpp
+  FontFamilyLayoutTest.cpp
   SpineCacheLayoutTest.cpp
   SaxStateInArenaTest.cpp
   JpegDownscaleTest.cpp

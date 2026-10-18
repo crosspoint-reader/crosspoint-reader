@@ -11,6 +11,7 @@
 #include <string>
 
 class BuildArena;
+struct BlockFontFamilies;
 
 namespace pipeline_harness {
 
@@ -29,6 +30,8 @@ struct Profile {
   bool bionicReadingEnabled = false;
   bool inlineFootnotePreviews = true;
   uint8_t imageRendering = 0;
+  // The book's other font families (Publisher Fonts' Accents and All Text); nullptr for none.
+  const BlockFontFamilies* fontFamilies = nullptr;
   // When non-zero, every section build is lent a heap-backed BuildArena of this many bytes, the
   // way the reader lends the borrowed secondary framebuffer to a background build. The heap
   // census then shows what such a build keeps on the heap; the arena's own use is reported per

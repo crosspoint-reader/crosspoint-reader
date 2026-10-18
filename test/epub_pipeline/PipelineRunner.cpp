@@ -152,6 +152,7 @@ bool runAndDump(const std::string& epubPath, const std::string& cacheDir, const 
     p.bionicReadingEnabled = profile.bionicReadingEnabled;
     p.inlineFootnotePreviews = profile.inlineFootnotePreviews;
     p.imageRendering = profile.imageRendering;
+    p.fontFamilies = profile.fontFamilies;
     if (g_buildBracket) g_buildBracket(i, true, lentArena.get());
     const bool built = section.createSectionFile(p, {}, /*skipEviction=*/true);
     if (g_buildBracket) g_buildBracket(i, false, lentArena.get());

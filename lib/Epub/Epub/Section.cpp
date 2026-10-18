@@ -333,7 +333,7 @@ uint32_t fnv1a(const uint8_t* data, size_t length) {
 }  // namespace
 
 uint32_t Section::calculatePropertyHash(const BuildParams& p) {
-  uint8_t buffer[64];
+  uint8_t buffer[96];
   size_t offset = 0;
 
   auto append = [&](const void* ptr, size_t size) {
@@ -356,6 +356,16 @@ uint32_t Section::calculatePropertyHash(const BuildParams& p) {
     append(&INLINE_FOOTNOTE_PREVIEW_LAYOUT_VERSION, sizeof(INLINE_FOOTNOTE_PREVIEW_LAYOUT_VERSION));
   }
   append(&p.imageRendering, sizeof(p.imageRendering));
+  // Only what the book's CSS can reach, and only when there is any: a variant without families keeps its old key.
+  if (p.embeddedStyle && p.fontFamilies && p.fontFamilies->count != 0) {
+    append(&p.fontFamilies->body, sizeof(p.fontFamilies->body));
+    for (int i = 0; i < p.fontFamilies->count; ++i) {
+      const BlockFontFamilies::Family& family = p.fontFamilies->families[i];
+      append(&family.key, sizeof(family.key));
+      append(&family.bodyFontId, sizeof(family.bodyFontId));
+      append(&family.ladder.nativeBase, sizeof(family.ladder.nativeBase));
+    }
+  }
 
   return fnv1a(buffer, offset);
 }
@@ -1202,6 +1212,7 @@ Section::BuildPhaseResult Section::runBuildSetup(BuildState& st) {
   }
   st.visitor->endExternalPageBreakAnchors();
   st.visitor->setFontSizeLadder(p.fontSizeLadder);
+  if (p.embeddedStyle && p.fontFamilies) st.visitor->setFontFamilies(*p.fontFamilies);
   // Anchors stream to SD as they are found rather than accumulating in the parser; the
   // finalizer below copies the spill into the section file's anchor map. Set before setup(),
   // which is where the parser opens it.

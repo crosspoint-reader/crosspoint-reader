@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "BlockFontFamilies.h"
 #include "Epub.h"
 #include "FontSizeLadder.h"
 #include "SpinePageIndex.h"
@@ -202,6 +203,11 @@ class Section {
     // property hash: it is a deterministic function of fontId, which is already hashed.
     // Default (empty) = scale-only fallback, the right behavior for SD fonts.
     FontSizeLadder fontSizeLadder;
+    // The book's other font families (Publisher Fonts' Accents and All Text), or nullptr. Hashed when it has any and
+    // the book's style is in use; empty, a book is laid out as without it. The caller's table, read when a build
+    // starts: it must outlive the build (the reader keeps it as a member). A pointer, so the params stay small on
+    // the stacks that copy them.
+    const BlockFontFamilies* fontFamilies = nullptr;
   };
 
   // Progress of an incremental (sliceable) section build. Setup/Parse/Finalize are the

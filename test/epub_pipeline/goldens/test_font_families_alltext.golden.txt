@@ -1,0 +1,453 @@
+BOOK title=Font Families lang=en spine=2 toc=0 reliableToc=0
+SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
+ PAGE 0 elements=30 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.000 hfid=2022 words=2
+   W x=174 s=1 z=100 t=Chapter
+   W x=254 s=1 z=100 t=One
+  LINE y=24 x=0 align=0 mult=1.000 hfid=2014 words=8
+   W x=18 s=0 z=100 t=For
+   W x=50 s=0 z=100 t=the
+   W x=87 s=0 z=100 t=reader
+   W x=147 s=0 z=100 t=who
+   W x=183 s=0 z=100 t=keeps
+   W x=230 s=0 z=100 t=the
+   W x=267 s=0 z=100 t=publisher's
+   W x=368 s=0 z=100 t=fonts.
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=The
+   W x=52 s=0 z=100 t=body
+   W x=93 s=0 z=100 t=of
+   W x=122 s=0 z=100 t=the
+   W x=160 s=0 z=100 t=book
+   W x=205 s=0 z=100 t=is
+   W x=227 s=0 z=100 t=set
+   W x=262 s=0 z=100 t=in
+   W x=286 s=0 z=100 t=its
+   W x=318 s=0 z=100 t=own
+   W x=354 s=0 z=100 t=family,
+   W x=424 s=0 z=100 t=and
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=most
+   W x=51 s=0 z=100 t=of
+   W x=83 s=0 z=100 t=the
+   W x=124 s=0 z=100 t=text
+   W x=170 s=0 z=100 t=is
+   W x=195 s=0 z=100 t=body
+   W x=239 s=0 z=100 t=text:
+   W x=293 s=0 z=100 t=paragraphs
+   W x=399 s=0 z=100 t=of
+   W x=431 s=0 z=100 t=it,
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=one
+   W x=41 s=0 z=100 t=after
+   W x=99 s=0 z=100 t=another,
+   W x=190 s=0 z=100 t=which
+   W x=242 s=0 z=100 t=is
+   W x=266 s=0 z=100 t=how
+   W x=305 s=0 z=100 t=the
+   W x=345 s=0 z=100 t=reader
+   W x=408 s=0 z=100 t=tells
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=the
+   W x=40 s=0 z=100 t=body
+   W x=83 s=0 z=100 t=family
+   W x=147 s=0 z=100 t=from
+   W x=196 s=0 z=100 t=the
+   W x=236 s=0 z=100 t=families
+   W x=316 s=0 z=100 t=that
+   W x=369 s=0 z=100 t=set
+   W x=406 s=0 z=100 t=a
+   W x=427 s=0 z=100 t=few
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=blocks
+   W x=57 s=0 z=100 t=apart.
+  LINE y=168 x=0 align=2 mult=1.000 hfid=2020 words=4
+   W x=117 s=1 z=100 t=A
+   W x=132 s=1 z=100 t=Heading
+   W x=210 s=1 z=100 t=in
+   W x=235 s=1 z=100 t=Sans-Serif
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=The
+   W x=52 s=0 z=100 t=body
+   W x=93 s=0 z=100 t=of
+   W x=122 s=0 z=100 t=the
+   W x=160 s=0 z=100 t=book
+   W x=205 s=0 z=100 t=is
+   W x=227 s=0 z=100 t=set
+   W x=262 s=0 z=100 t=in
+   W x=286 s=0 z=100 t=its
+   W x=318 s=0 z=100 t=own
+   W x=354 s=0 z=100 t=family,
+   W x=424 s=0 z=100 t=and
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=most
+   W x=51 s=0 z=100 t=of
+   W x=83 s=0 z=100 t=the
+   W x=124 s=0 z=100 t=text
+   W x=170 s=0 z=100 t=is
+   W x=195 s=0 z=100 t=body
+   W x=239 s=0 z=100 t=text:
+   W x=293 s=0 z=100 t=paragraphs
+   W x=399 s=0 z=100 t=of
+   W x=431 s=0 z=100 t=it,
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=one
+   W x=41 s=0 z=100 t=after
+   W x=99 s=0 z=100 t=another,
+   W x=190 s=0 z=100 t=which
+   W x=242 s=0 z=100 t=is
+   W x=266 s=0 z=100 t=how
+   W x=305 s=0 z=100 t=the
+   W x=345 s=0 z=100 t=reader
+   W x=408 s=0 z=100 t=tells
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=the
+   W x=40 s=0 z=100 t=body
+   W x=83 s=0 z=100 t=family
+   W x=147 s=0 z=100 t=from
+   W x=196 s=0 z=100 t=the
+   W x=236 s=0 z=100 t=families
+   W x=316 s=0 z=100 t=that
+   W x=369 s=0 z=100 t=set
+   W x=406 s=0 z=100 t=a
+   W x=427 s=0 z=100 t=few
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=blocks
+   W x=57 s=0 z=100 t=apart.
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=0 z=100 t=A
+   W x=36 s=0 z=100 t=body
+   W x=80 s=0 z=100 t=paragraph
+   W x=177 s=0 z=100 t=with
+   W x=221 s=0 z=100 t=an
+   W x=254 s=0 z=100 t=inline
+   W x=316 s=0 z=100 t=accent
+   W x=382 s=0 z=100 t=stays
+   W x=440 s=0 z=100 t=in
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=3
+   W x=0 s=0 z=100 t=the
+   W x=37 s=0 z=100 t=body
+   W x=77 s=0 z=100 t=family.
+  LINE y=360 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=0 z=100 t=A
+   W x=36 s=0 z=100 t=paragraph
+   W x=133 s=0 z=100 t=that
+   W x=187 s=0 z=100 t=is
+   W x=212 s=0 z=100 t=one
+   W x=254 s=0 z=100 t=span
+   W x=302 s=0 z=100 t=takes
+   W x=360 s=0 z=100 t=the
+   W x=401 s=0 z=100 t=span's
+  LINE y=384 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=family.
+  LINE y=408 x=0 align=0 mult=1.000 hfid=2014 words=7
+   W x=18 s=0 z=100 t=A
+   W x=43 s=0 z=100 t=quotation,
+   W x=159 s=0 z=100 t=its
+   W x=201 s=0 z=100 t=family
+   W x=273 s=0 z=100 t=inherited
+   W x=369 s=0 z=100 t=from
+   W x=426 s=0 z=100 t=the
+  LINE y=432 x=0 align=0 mult=1.000 hfid=2014 words=1
+   W x=0 s=0 z=100 t=blockquote.
+  LINE y=456 x=0 align=0 mult=1.000 hfid=0 words=5
+   W x=18 s=0 z=100 t=monospace
+   W x=112 s=0 z=100 t=stays
+   W x=166 s=0 z=100 t=the
+   W x=203 s=0 z=100 t=reader's
+   W x=282 s=0 z=100 t=font
+  LINE y=480 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=18 s=0 z=100 t=Georgia,
+   W x=100 s=0 z=100 t=with
+   W x=143 s=0 z=100 t=the
+   W x=183 s=0 z=100 t=serif
+   W x=234 s=0 z=100 t=the
+   W x=274 s=0 z=100 t=body
+   W x=317 s=0 z=100 t=names:
+   W x=385 s=0 z=100 t=the
+   W x=425 s=0 z=100 t=body
+  LINE y=504 x=0 align=0 mult=1.000 hfid=0 words=1
+   W x=0 s=0 z=100 t=font.
+  LINE y=528 x=0 align=0 mult=1.000 hfid=2014 words=7
+   W x=18 s=0 z=100 t=Helvetica,
+   W x=126 s=0 z=100 t=not
+   W x=177 s=0 z=100 t=in
+   W x=212 s=0 z=100 t=the
+   W x=261 s=0 z=100 t=book:
+   W x=325 s=0 z=100 t=its
+   W x=368 s=0 z=100 t=sans-serif
+  LINE y=552 x=0 align=0 mult=1.000 hfid=2014 words=1
+   W x=0 s=0 z=100 t=fallback.
+  LINE y=576 x=0 align=0 mult=1.000 hfid=0 words=11
+   W x=18 s=0 z=100 t=A
+   W x=33 s=0 z=100 t=family
+   W x=95 s=0 z=100 t=the
+   W x=133 s=0 z=100 t=book
+   W x=178 s=0 z=100 t=has
+   W x=218 s=0 z=100 t=but
+   W x=252 s=0 z=100 t=does
+   W x=297 s=0 z=100 t=not
+   W x=337 s=0 z=100 t=use
+   W x=373 s=0 z=100 t=much:
+   W x=428 s=0 z=100 t=the
+  LINE y=600 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=body
+   W x=40 s=0 z=100 t=font.
+  LINE y=624 x=0 align=2 mult=1.200 hfid=0 words=6
+   W x=70 s=1 z=100 t=A
+   W x=88 s=1 z=100 t=heading
+   W x=186 s=1 z=100 t=in
+   W x=216 s=1 z=100 t=the
+   W x=264 s=1 z=100 t=body
+   W x=317 s=1 z=100 t=family
+  LINE y=653 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=The
+   W x=52 s=0 z=100 t=body
+   W x=93 s=0 z=100 t=of
+   W x=122 s=0 z=100 t=the
+   W x=160 s=0 z=100 t=book
+   W x=205 s=0 z=100 t=is
+   W x=227 s=0 z=100 t=set
+   W x=262 s=0 z=100 t=in
+   W x=286 s=0 z=100 t=its
+   W x=318 s=0 z=100 t=own
+   W x=354 s=0 z=100 t=family,
+   W x=424 s=0 z=100 t=and
+  LINE y=677 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=most
+   W x=51 s=0 z=100 t=of
+   W x=83 s=0 z=100 t=the
+   W x=124 s=0 z=100 t=text
+   W x=170 s=0 z=100 t=is
+   W x=195 s=0 z=100 t=body
+   W x=239 s=0 z=100 t=text:
+   W x=293 s=0 z=100 t=paragraphs
+   W x=399 s=0 z=100 t=of
+   W x=431 s=0 z=100 t=it,
+  LINE y=701 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=one
+   W x=41 s=0 z=100 t=after
+   W x=99 s=0 z=100 t=another,
+   W x=190 s=0 z=100 t=which
+   W x=242 s=0 z=100 t=is
+   W x=266 s=0 z=100 t=how
+   W x=305 s=0 z=100 t=the
+   W x=345 s=0 z=100 t=reader
+   W x=408 s=0 z=100 t=tells
+ PAGE 1 elements=2 footnotes=0
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=the
+   W x=40 s=0 z=100 t=body
+   W x=83 s=0 z=100 t=family
+   W x=147 s=0 z=100 t=from
+   W x=196 s=0 z=100 t=the
+   W x=236 s=0 z=100 t=families
+   W x=316 s=0 z=100 t=that
+   W x=369 s=0 z=100 t=set
+   W x=406 s=0 z=100 t=a
+   W x=427 s=0 z=100 t=few
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=blocks
+   W x=57 s=0 z=100 t=apart.
+SPINE 1 href=OEBPS/chapter2.xhtml pages=1 truncated=0 cssFallback=0
+ PAGE 0 elements=20 footnotes=0
+  LINE y=0 x=0 align=2 mult=1.000 hfid=2022 words=2
+   W x=176 s=1 z=100 t=Chapter
+   W x=256 s=1 z=100 t=Two
+  LINE y=24 x=0 align=2 mult=1.400 hfid=0 words=6
+   W x=75 s=1 z=100 t=A
+   W x=96 s=1 z=100 t=Heading
+   W x=205 s=1 z=100 t=Set
+   W x=261 s=1 z=100 t=in
+   W x=296 s=1 z=100 t=a
+   W x=322 s=1 z=100 t=Span
+  LINE y=58 x=0 align=0 mult=1.000 hfid=2014 words=12
+   W x=18 s=0 z=100 t=The
+   W x=52 s=0 z=100 t=body
+   W x=93 s=0 z=100 t=of
+   W x=122 s=0 z=100 t=the
+   W x=160 s=0 z=100 t=book
+   W x=205 s=0 z=100 t=is
+   W x=227 s=0 z=100 t=set
+   W x=262 s=0 z=100 t=in
+   W x=286 s=0 z=100 t=its
+   W x=318 s=0 z=100 t=own
+   W x=354 s=0 z=100 t=family,
+   W x=424 s=0 z=100 t=and
+  LINE y=82 x=0 align=0 mult=1.000 hfid=2014 words=10
+   W x=0 s=0 z=100 t=most
+   W x=51 s=0 z=100 t=of
+   W x=83 s=0 z=100 t=the
+   W x=124 s=0 z=100 t=text
+   W x=170 s=0 z=100 t=is
+   W x=195 s=0 z=100 t=body
+   W x=239 s=0 z=100 t=text:
+   W x=293 s=0 z=100 t=paragraphs
+   W x=399 s=0 z=100 t=of
+   W x=431 s=0 z=100 t=it,
+  LINE y=106 x=0 align=0 mult=1.000 hfid=2014 words=9
+   W x=0 s=0 z=100 t=one
+   W x=41 s=0 z=100 t=after
+   W x=99 s=0 z=100 t=another,
+   W x=190 s=0 z=100 t=which
+   W x=242 s=0 z=100 t=is
+   W x=266 s=0 z=100 t=how
+   W x=305 s=0 z=100 t=the
+   W x=345 s=0 z=100 t=reader
+   W x=408 s=0 z=100 t=tells
+  LINE y=130 x=0 align=0 mult=1.000 hfid=2014 words=10
+   W x=0 s=0 z=100 t=the
+   W x=40 s=0 z=100 t=body
+   W x=83 s=0 z=100 t=family
+   W x=147 s=0 z=100 t=from
+   W x=196 s=0 z=100 t=the
+   W x=236 s=0 z=100 t=families
+   W x=316 s=0 z=100 t=that
+   W x=369 s=0 z=100 t=set
+   W x=406 s=0 z=100 t=a
+   W x=427 s=0 z=100 t=few
+  LINE y=154 x=0 align=0 mult=1.000 hfid=2014 words=11
+   W x=0 s=0 z=100 t=blocks
+   W x=62 s=0 z=100 t=apart.
+   W x=131 s=0 z=100 t=The
+   W x=169 s=0 z=100 t=body
+   W x=214 s=0 z=100 t=of
+   W x=247 s=0 z=100 t=the
+   W x=289 s=0 z=100 t=book
+   W x=338 s=0 z=100 t=is
+   W x=364 s=0 z=100 t=set
+   W x=403 s=0 z=100 t=in
+   W x=431 s=0 z=100 t=its
+  LINE y=178 x=0 align=0 mult=1.000 hfid=2014 words=10
+   W x=0 s=0 z=100 t=own
+   W x=41 s=0 z=100 t=family,
+   W x=116 s=0 z=100 t=and
+   W x=159 s=0 z=100 t=most
+   W x=212 s=0 z=100 t=of
+   W x=246 s=0 z=100 t=the
+   W x=289 s=0 z=100 t=text
+   W x=337 s=0 z=100 t=is
+   W x=364 s=0 z=100 t=body
+   W x=410 s=0 z=100 t=text:
+  LINE y=202 x=0 align=0 mult=1.000 hfid=2014 words=9
+   W x=0 s=0 z=100 t=paragraphs
+   W x=104 s=0 z=100 t=of
+   W x=134 s=0 z=100 t=it,
+   W x=166 s=0 z=100 t=one
+   W x=206 s=0 z=100 t=after
+   W x=263 s=0 z=100 t=another,
+   W x=353 s=0 z=100 t=which
+   W x=404 s=0 z=100 t=is
+   W x=427 s=0 z=100 t=how
+  LINE y=226 x=0 align=0 mult=1.000 hfid=2014 words=9
+   W x=0 s=0 z=100 t=the
+   W x=39 s=0 z=100 t=reader
+   W x=101 s=0 z=100 t=tells
+   W x=155 s=0 z=100 t=the
+   W x=194 s=0 z=100 t=body
+   W x=236 s=0 z=100 t=family
+   W x=299 s=0 z=100 t=from
+   W x=347 s=0 z=100 t=the
+   W x=386 s=0 z=100 t=families
+  LINE y=250 x=0 align=0 mult=1.000 hfid=2014 words=11
+   W x=0 s=0 z=100 t=that
+   W x=53 s=0 z=100 t=set
+   W x=90 s=0 z=100 t=a
+   W x=111 s=0 z=100 t=few
+   W x=145 s=0 z=100 t=blocks
+   W x=205 s=0 z=100 t=apart.
+   W x=272 s=0 z=100 t=The
+   W x=308 s=0 z=100 t=body
+   W x=351 s=0 z=100 t=of
+   W x=382 s=0 z=100 t=the
+   W x=422 s=0 z=100 t=book
+  LINE y=274 x=0 align=0 mult=1.000 hfid=2014 words=13
+   W x=0 s=0 z=100 t=is
+   W x=21 s=0 z=100 t=set
+   W x=55 s=0 z=100 t=in
+   W x=78 s=0 z=100 t=its
+   W x=109 s=0 z=100 t=own
+   W x=144 s=0 z=100 t=family,
+   W x=213 s=0 z=100 t=and
+   W x=250 s=0 z=100 t=most
+   W x=297 s=0 z=100 t=of
+   W x=325 s=0 z=100 t=the
+   W x=362 s=0 z=100 t=text
+   W x=404 s=0 z=100 t=is
+   W x=425 s=0 z=100 t=body
+  LINE y=298 x=0 align=0 mult=1.000 hfid=2014 words=8
+   W x=0 s=0 z=100 t=text:
+   W x=53 s=0 z=100 t=paragraphs
+   W x=158 s=0 z=100 t=of
+   W x=189 s=0 z=100 t=it,
+   W x=222 s=0 z=100 t=one
+   W x=263 s=0 z=100 t=after
+   W x=321 s=0 z=100 t=another,
+   W x=412 s=0 z=100 t=which
+  LINE y=322 x=0 align=0 mult=1.000 hfid=2014 words=10
+   W x=0 s=0 z=100 t=is
+   W x=25 s=0 z=100 t=how
+   W x=65 s=0 z=100 t=the
+   W x=106 s=0 z=100 t=reader
+   W x=170 s=0 z=100 t=tells
+   W x=226 s=0 z=100 t=the
+   W x=267 s=0 z=100 t=body
+   W x=311 s=0 z=100 t=family
+   W x=376 s=0 z=100 t=from
+   W x=426 s=0 z=100 t=the
+  LINE y=346 x=0 align=0 mult=1.000 hfid=2014 words=7
+   W x=0 s=0 z=100 t=families
+   W x=77 s=0 z=100 t=that
+   W x=127 s=0 z=100 t=set
+   W x=161 s=0 z=100 t=a
+   W x=179 s=0 z=100 t=few
+   W x=210 s=0 z=100 t=blocks
+   W x=267 s=0 z=100 t=apart.
+  LINE y=370 x=0 align=0 mult=1.000 hfid=0 words=12
+   W x=18 s=0 z=100 t=The
+   W x=52 s=0 z=100 t=body
+   W x=93 s=0 z=100 t=of
+   W x=122 s=0 z=100 t=the
+   W x=160 s=0 z=100 t=book
+   W x=205 s=0 z=100 t=is
+   W x=227 s=0 z=100 t=set
+   W x=262 s=0 z=100 t=in
+   W x=286 s=0 z=100 t=its
+   W x=318 s=0 z=100 t=own
+   W x=354 s=0 z=100 t=family,
+   W x=424 s=0 z=100 t=and
+  LINE y=394 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=most
+   W x=51 s=0 z=100 t=of
+   W x=83 s=0 z=100 t=the
+   W x=124 s=0 z=100 t=text
+   W x=170 s=0 z=100 t=is
+   W x=195 s=0 z=100 t=body
+   W x=239 s=0 z=100 t=text:
+   W x=293 s=0 z=100 t=paragraphs
+   W x=399 s=0 z=100 t=of
+   W x=431 s=0 z=100 t=it,
+  LINE y=418 x=0 align=0 mult=1.000 hfid=0 words=9
+   W x=0 s=0 z=100 t=one
+   W x=41 s=0 z=100 t=after
+   W x=99 s=0 z=100 t=another,
+   W x=190 s=0 z=100 t=which
+   W x=242 s=0 z=100 t=is
+   W x=266 s=0 z=100 t=how
+   W x=305 s=0 z=100 t=the
+   W x=345 s=0 z=100 t=reader
+   W x=408 s=0 z=100 t=tells
+  LINE y=442 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=0 s=0 z=100 t=the
+   W x=40 s=0 z=100 t=body
+   W x=83 s=0 z=100 t=family
+   W x=147 s=0 z=100 t=from
+   W x=196 s=0 z=100 t=the
+   W x=236 s=0 z=100 t=families
+   W x=316 s=0 z=100 t=that
+   W x=369 s=0 z=100 t=set
+   W x=406 s=0 z=100 t=a
+   W x=427 s=0 z=100 t=few
+  LINE y=466 x=0 align=0 mult=1.000 hfid=0 words=2
+   W x=0 s=0 z=100 t=blocks
+   W x=57 s=0 z=100 t=apart.
