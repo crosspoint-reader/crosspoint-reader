@@ -261,11 +261,8 @@ void ReaderActivity::render(RenderLock&&) {
     return;
   }
 
-  pageDrawnThisRender = false;
   renderBook();
-  if (pageDrawnThisRender) {
-    readerSession.onRenderComplete(millis(), trustedtime::trustedNow(), getProgressBasisPoints());
-  }
+  readerSession.onRenderComplete(millis(), trustedtime::trustedNow(), getProgressBasisPoints());
 }
 
 bool ReaderActivity::handleForcedRefresh() {

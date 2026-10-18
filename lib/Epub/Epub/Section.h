@@ -103,7 +103,7 @@ class Section {
   // false on error (the build is abandoned). Sets isBuildComplete() when finished.
   // yieldNow, when given, is asked after every parse step (1 KB of HTML, whose callbacks may
   // lay out and write several pages); true ends the call early so the caller can serve input.
-  // The next call resumes where this one left.
+  // The next call resumes where this one left off.
   bool buildSomeMore(int maxPages, bool (*yieldNow)() = nullptr);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }

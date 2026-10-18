@@ -22,13 +22,7 @@ class ReaderActivity : public Activity {
   ReaderSession readerSession;
   std::atomic<bool> pageRendered{false};
   bool bookRemembered = false;
-  void markPageRendered() {
-    pageRendered.store(true, std::memory_order_release);
-    pageDrawnThisRender = true;
-  }
-  // Set by markPageRendered() during the current render() pass (render task only): the reading
-  // session hears only about renders that drew a page, not error screens or a page still being built.
-  bool pageDrawnThisRender = false;
+  void markPageRendered() { pageRendered.store(true, std::memory_order_release); }
   void rememberBookOnceRendered();
 
   explicit ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
