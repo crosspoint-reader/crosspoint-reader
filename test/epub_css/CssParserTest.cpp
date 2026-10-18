@@ -139,6 +139,28 @@ TEST(CssParserUnits, FontSizeKeywordsAndAbsoluteUnits) {
   EXPECT_FALSE(bogus.hasFontSizeMultiplier());
 }
 
+// em, % and smaller/larger scale the parent's size; rem, px, pt and the absolute keywords are the
+// body's. The parser composes the first kind and starts over from the body for the second.
+TEST(CssParserUnits, FontSizeKnowsWhatItIsRelativeTo) {
+  for (const char* decl : {"font-size: 1.2em", "font-size: 80%", "font-size: smaller", "font-size: larger"}) {
+    const CssStyle st = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(st.hasFontSizeMultiplier()) << decl;
+    EXPECT_FALSE(st.fontSizeRootRelative) << decl;
+  }
+  for (const char* decl :
+       {"font-size: 1.2rem", "font-size: 12pt", "font-size: 20px", "font-size: small", "font-size: medium"}) {
+    const CssStyle st = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(st.hasFontSizeMultiplier()) << decl;
+    EXPECT_TRUE(st.fontSizeRootRelative) << decl;
+  }
+  // The flag travels with the size through the cascade.
+  CssStyle resolved = CssParser::parseInlineStyle("font-size: 1rem");
+  resolved.applyOver(CssParser::parseInlineStyle("font-size: 0.9em"));
+  EXPECT_FALSE(resolved.fontSizeRootRelative);
+  resolved.applyOver(CssParser::parseInlineStyle("font-size: 14px"));
+  EXPECT_TRUE(resolved.fontSizeRootRelative);
+}
+
 // A watermark span's `font-size: 1px` must read as invisible text; nothing meant to be read may.
 // The line sits at a tenth of the body (CssStyle::kInvisibleFontSizeMultiplier), 1.6 px of 16 px.
 TEST(CssParserUnits, FontSizeInvisibleOnlyBelowReadableSizes) {
@@ -160,4 +182,58 @@ TEST(CssParserUnits, FontSizeInvisibleOnlyBelowReadableSizes) {
   // the zero-size container idiom relies on its children re-declaring a size.
   EXPECT_FALSE(CssParser::parseInlineStyle("font-size: 0").isFontSizeInvisible());
   EXPECT_FALSE(CssParser::parseInlineStyle("font-size: 0px").isFontSizeInvisible());
+}
+
+// auto / avoid / avoid-page are an explicit "no break", kept so they can cancel an `always` from a
+// rule they outrank; values that are not about pages leave the property unset.
+TEST(CssParserDeclarations, PageBreakAvoidIsAnExplicitNoBreak) {
+  for (const char* decl :
+       {"page-break-before: always", "break-before: page", "page-break-before: left", "break-before: recto"}) {
+    const CssStyle style = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(style.hasPageBreakBefore() && style.pageBreakBefore) << decl;
+  }
+  for (const char* decl : {"page-break-before: auto", "page-break-before: avoid", "break-before: avoid-page",
+                           "page-break-before: always; page-break-before: avoid"}) {
+    const CssStyle style = CssParser::parseInlineStyle(decl);
+    EXPECT_TRUE(style.hasPageBreakBefore()) << decl;
+    EXPECT_FALSE(style.pageBreakBefore) << decl;
+  }
+  for (const char* decl : {"break-after: column", "page-break-after: inherit"}) {
+    EXPECT_FALSE(CssParser::parseInlineStyle(decl).hasPageBreakAfter()) << decl;
+  }
+  const CssStyle after = CssParser::parseInlineStyle("page-break-after: avoid");
+  EXPECT_TRUE(after.hasPageBreakAfter());
+  EXPECT_FALSE(after.pageBreakAfter);
+
+  // An inline `avoid` cancels the stylesheet's `always`.
+  CssStyle resolved = CssParser::parseInlineStyle("page-break-before: always");
+  resolved.applyOver(CssParser::parseInlineStyle("page-break-before: auto"));
+  EXPECT_FALSE(resolved.pageBreakBefore);
+}
+
+// `inherit` leaves the element to its parent: unset to the parser (has*() false), yet defined, so
+// it beats a lower rule's value in the cascade. It used to read as normal / left / none, which
+// cancelled the bold, italic, alignment or underline the element sat in.
+TEST(CssParserDeclarations, InheritDefersToTheParent) {
+  const CssStyle style = CssParser::parseInlineStyle("font-weight: inherit; font-style: inherit; text-align: inherit");
+  EXPECT_FALSE(style.hasFontWeight());
+  EXPECT_FALSE(style.hasFontStyle());
+  EXPECT_FALSE(style.hasTextAlign());
+  EXPECT_TRUE(style.defined.fontWeight && style.defined.fontStyle && style.defined.textAlign);
+
+  EXPECT_FALSE(CssParser::parseInlineStyle("text-decoration: inherit").hasTextDecoration());
+  EXPECT_FALSE(CssParser::parseInlineStyle("font-weight: bold; font-weight: inherit").hasFontWeight());
+  const CssStyle later = CssParser::parseInlineStyle("font-weight: inherit; font-weight: bold");
+  EXPECT_TRUE(later.hasFontWeight());
+  EXPECT_EQ(later.fontWeight, CssFontWeight::Bold);
+  // Explicit normal still resets.
+  const CssStyle normal = CssParser::parseInlineStyle("font-style: normal");
+  EXPECT_TRUE(normal.hasFontStyle());
+  EXPECT_EQ(normal.fontStyle, CssFontStyle::Normal);
+
+  // A more specific (here: inline) inherit cancels a stylesheet's bold.
+  CssStyle resolved = CssParser::parseInlineStyle("font-weight: bold; text-align: center");
+  resolved.applyOver(CssParser::parseInlineStyle("font-weight: inherit; text-align: inherit"));
+  EXPECT_FALSE(resolved.hasFontWeight());
+  EXPECT_FALSE(resolved.hasTextAlign());
 }

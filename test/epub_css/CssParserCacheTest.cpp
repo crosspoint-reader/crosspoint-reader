@@ -485,12 +485,12 @@ bool stylesEqual(const CssStyle& a, const CssStyle& b) {
          a.listStyleNone == b.listStyleNone && a.pageBreakBefore == b.pageBreakBefore &&
          a.pageBreakAfter == b.pageBreakAfter && a.cssFloat == b.cssFloat && a.smallCaps == b.smallCaps &&
          a.lineHeightMultiplier == b.lineHeightMultiplier && a.fontSizeMultiplier == b.fontSizeMultiplier &&
-         len(a.textIndent) == len(b.textIndent) && len(a.marginTop) == len(b.marginTop) &&
-         len(a.marginBottom) == len(b.marginBottom) && len(a.marginLeft) == len(b.marginLeft) &&
-         len(a.marginRight) == len(b.marginRight) && len(a.paddingTop) == len(b.paddingTop) &&
-         len(a.paddingBottom) == len(b.paddingBottom) && len(a.paddingLeft) == len(b.paddingLeft) &&
-         len(a.paddingRight) == len(b.paddingRight) && len(a.imageHeight) == len(b.imageHeight) &&
-         len(a.imageWidth) == len(b.imageWidth);
+         a.fontSizeRootRelative == b.fontSizeRootRelative && len(a.textIndent) == len(b.textIndent) &&
+         len(a.marginTop) == len(b.marginTop) && len(a.marginBottom) == len(b.marginBottom) &&
+         len(a.marginLeft) == len(b.marginLeft) && len(a.marginRight) == len(b.marginRight) &&
+         len(a.paddingTop) == len(b.paddingTop) && len(a.paddingBottom) == len(b.paddingBottom) &&
+         len(a.paddingLeft) == len(b.paddingLeft) && len(a.paddingRight) == len(b.paddingRight) &&
+         len(a.imageHeight) == len(b.imageHeight) && len(a.imageWidth) == len(b.imageWidth);
 }
 }  // namespace
 
@@ -746,7 +746,7 @@ TEST(CssParserArena, ResidentPreservesAllStyleFields) {
       "margin: 2em; padding-left: 5px; padding-right: 3px; text-indent: 1.5em; line-height: 1.6; "
       "font-size: 120%; vertical-align: super; float: left; font-variant: small-caps; "
       "list-style: none; page-break-before: always; page-break-after: always; }\n"
-      ".b { margin-top: 3px; text-align: right; }\n"
+      ".b { margin-top: 3px; text-align: right; font-size: 1.25rem; }\n"
       ".c { display: none; }\n"
       ".d { display: inline; }\n";
   const std::string cacheDir = makeTempDir();

@@ -60,3 +60,45 @@ TEST_F(Fixture, WithoutALookupTheFontMapServes) {
   manager.prewarmCache(4711, "Chapter One", 0x01);
   EXPECT_EQ(1, provider.prefetches);
 }
+
+// Small caps draw a lowercase letter with its capital's glyph, so the page prewarm must warm the
+// capitals -- and not the lowercase glyphs, which are never drawn.
+TEST_F(Fixture, SmallCapsTextIsPrewarmedAsTheCapitalsItDraws) {
+  fontMap.emplace(7, family);
+  {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("Łódź fine ß", 7, EpdFontFamily::SMALL_CAPS);
+    manager.recordText(" plain", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+  }
+  EXPECT_EQ(1, provider.prefetches);
+  EXPECT_EQ("ŁÓDŹ FINE ß plain", provider.text);  // ß has no single capital and is drawn as is
+}
+
+// Folding never lengthens the text (ı becomes a one-byte I), and bytes that do not decode are
+// copied as they are, so the folded text never outgrows the scan's cap.
+TEST_F(Fixture, SmallCapsFoldKeepsUndecodableBytes) {
+  fontMap.emplace(7, family);
+  {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("ı\x80z", 7, EpdFontFamily::SMALL_CAPS);
+    scope.endScanAndPrewarm();
+  }
+  EXPECT_EQ("I\x80Z", provider.text);
+}
+
+// The scan keeps at most 4096 bytes per style. A letter the cap cuts in two is left out whole.
+TEST_F(Fixture, SmallCapsFoldStopsAtTheScanCap) {
+  fontMap.emplace(7, family);
+  std::string polish;
+  for (int i = 0; i < 2500; i++) polish += "ł";  // 5000 bytes
+  {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("a", 7, EpdFontFamily::SMALL_CAPS);  // 4095 bytes left: an odd number
+    manager.recordText(polish.c_str(), 7, EpdFontFamily::SMALL_CAPS);
+    scope.endScanAndPrewarm();
+  }
+  std::string expected = "A";
+  for (int i = 0; i < 2047; i++) expected += "Ł";
+  EXPECT_EQ(expected, provider.text);
+}

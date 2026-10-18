@@ -98,7 +98,7 @@ void utf8TruncateChars(std::string& str, const size_t numChars) {
 // ---------------------------------------------------------------------------
 
 // Encode a Unicode codepoint as UTF-8 bytes appended to `out`.
-static void appendCodepoint(std::string& out, const uint32_t cp) {
+void utf8AppendCodepoint(std::string& out, const uint32_t cp) {
   if (cp < 0x80u) {
     out += static_cast<char>(cp);
   } else if (cp < 0x800u) {
@@ -392,12 +392,12 @@ std::string utf8NfcNorm(std::string s) {
       } else {
         // Cannot compose: emit current base as-is, the unmatched mark becomes
         // the new base token (it will be emitted or further composed next loop).
-        appendCodepoint(out, base);
+        utf8AppendCodepoint(out, base);
         base = mark;
       }
     }
 
-    appendCodepoint(out, base);
+    utf8AppendCodepoint(out, base);
   }
 
   return out;
@@ -484,6 +484,42 @@ uint32_t utf8LowerCodepoint(const uint32_t cp) {
   }
 }
 
+// Based on utf8SmallCapsUpper() from crosspoint-reader PR #3891 (Justin Mitchell, @itsthisjustin),
+// reworked to invert utf8LowerCodepoint() instead of repeating its ranges.
+uint32_t utf8UpperCodepoint(const uint32_t cp) {
+  if (cp < 0x80) {
+    return (cp >= 'a' && cp <= 'z') ? cp - 'a' + 'A' : cp;
+  }
+  // Lowercase-only letters: utf8LowerCodepoint() never produces them, so the search below cannot.
+  switch (cp) {
+    case 0x0131:  // ı
+      return 'I';
+    case 0x017F:  // ſ
+      return 'S';
+    case 0x03C2:      // ς
+      return 0x03A3;  // Σ
+    default:
+      break;
+  }
+  // Nothing utf8LowerCodepoint() produces lies above Latin Extended Additional.
+  if (cp > 0x1EFF) {
+    return cp;
+  }
+  // Every capital utf8LowerCodepoint() maps sits one of these distances below its small letter
+  // (Ÿ above ÿ), so the capital of `cp` is the candidate that lowercases back to it. No small
+  // letter has two such candidates (i's other one, İ, is not within reach), so the first hit is
+  // the only one. Most hit on the first or second offset; InvertsUtf8LowerCodepoint keeps the list
+  // complete.
+  static constexpr int32_t kCaseOffsets[] = {0x20, 1, 0x50, 0x25, 0x26, 0x3F, 0x40, 0x0F, -0x79};
+  for (const int32_t offset : kCaseOffsets) {
+    const uint32_t candidate = cp - static_cast<uint32_t>(offset);  // wraps to cp + 0x79 for Ÿ
+    if (utf8LowerCodepoint(candidate) == cp) {
+      return candidate;
+    }
+  }
+  return cp;
+}
+
 std::string utf8ToLower(const std::string& s) {
   std::string out;
   out.reserve(s.size());  // no mapping lengthens its codepoint's encoding
@@ -498,7 +534,7 @@ std::string utf8ToLower(const std::string& s) {
       // Copied as bytes, so a sequence that did not decode passes through as it was.
       out.append(reinterpret_cast<const char*>(start), static_cast<size_t>(p - start));
     } else {
-      appendCodepoint(out, lower);
+      utf8AppendCodepoint(out, lower);
     }
   }
   return out;

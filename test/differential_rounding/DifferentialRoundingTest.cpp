@@ -4,6 +4,7 @@
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
+#include "lib/EpdFont/EpdFontFamily.h"
 #include "lib/EpdFont/SmallCaps.h"
 
 // ============================================================================
@@ -414,8 +415,47 @@ TEST(SmallCapsFold, LatinExtendedAPairs) {
   EXPECT_TRUE(smallCaps::fold(cp));
   EXPECT_EQ(cp, 0x0100u);  // Ā
 
-  cp = 0x0131;  // ı dotless i — intentionally not folded
-  EXPECT_FALSE(smallCaps::fold(cp));
+  cp = 0x0131;  // ı dotless i: its capital is a plain I
+  EXPECT_TRUE(smallCaps::fold(cp));
+  EXPECT_EQ(cp, static_cast<uint32_t>('I'));
+}
+
+// In U+0139-U+0148 and U+0179-U+017E the capital sits on the ODD codepoint. Folding every odd
+// codepoint drew Ł as a shrunken ŀ and left ł, ń, ž at full size.
+TEST(SmallCapsFold, LatinExtendedAOddAlignedRuns) {
+  for (const auto& [lower, upper] : {std::pair<uint32_t, uint32_t>{0x0142, 0x0141},  // ł Ł
+                                     {0x0144, 0x0143},                               // ń Ń
+                                     {0x013A, 0x0139},                               // ĺ Ĺ
+                                     {0x0148, 0x0147},                               // ň Ň
+                                     {0x017A, 0x0179},                               // ź Ź
+                                     {0x017C, 0x017B},                               // ż Ż
+                                     {0x017E, 0x017D}}) {                            // ž Ž
+    uint32_t cp = lower;
+    EXPECT_TRUE(smallCaps::fold(cp)) << std::hex << lower;
+    EXPECT_EQ(cp, upper) << std::hex << lower;
+  }
+  // The capitals themselves stay full-size capitals.
+  for (const uint32_t upper : {0x0141u, 0x0143u, 0x0139u, 0x0147u, 0x0179u, 0x017Bu, 0x017Du, 0x0178u}) {
+    uint32_t cp = upper;
+    EXPECT_FALSE(smallCaps::fold(cp)) << std::hex << upper;
+    EXPECT_EQ(cp, upper);
+  }
+}
+
+TEST(SmallCapsFold, BeyondLatinExtendedA) {
+  for (const auto& [lower, upper] : {std::pair<uint32_t, uint32_t>{0x00FF, 0x0178},  // ÿ Ÿ
+                                     {0x03B1, 0x0391},                               // α Α
+                                     {0x03C2, 0x03A3},                               // final ς Σ
+                                     {0x03AC, 0x0386},                               // ά Ά
+                                     {0x0436, 0x0416},                               // ж Ж
+                                     {0x0451, 0x0401},                               // ё Ё
+                                     {0x0491, 0x0490},                               // ґ Ґ
+                                     {0x0219, 0x0218},                               // ș Ș
+                                     {0x1EDF, 0x1EDE}}) {                            // ở Ở
+    uint32_t cp = lower;
+    EXPECT_TRUE(smallCaps::fold(cp)) << std::hex << lower;
+    EXPECT_EQ(cp, upper) << std::hex << lower;
+  }
 }
 
 // Uppercase letters render full-size even under small-caps, so width is unchanged.
@@ -439,4 +479,99 @@ TEST(SmallCaps, FoldedRunAdvance) {
   const int step = fp4::toPixel(scaledAdvFP);                                       // 6
   const int scaledWidth = static_cast<int>(8 * smallCaps::SCALE + 0.5f);            // 6
   EXPECT_EQ(textWidthSC("tt"), step + scaledWidth);
+}
+
+// ============================================================================
+// Part 4: no ligatures under small caps
+//
+// Glyphs 'F' 'I' 'f' 'i' and the fi ligature U+FB01, no kerning. A small-caps "fi" is two small
+// capitals; forming the ligature first left a full-size lowercase "ﬁ" that the fold could not
+// touch, and measured the word at that glyph's width.
+// ============================================================================
+
+namespace {
+
+// clang-format off
+const EpdGlyph kLigGlyphs[] = {
+  // idx  width  height  advanceX  left  top  dataLength  dataOffset
+  /* 0 'F' */ { 8, 12, 144, 0, 12, 0, 0 },
+  /* 1 'I' */ { 4, 12,  80, 0, 12, 0, 0 },
+  /* 2 'f' */ { 6, 12,  96, 0, 12, 0, 0 },
+  /* 3 'i' */ { 3, 12,  64, 0, 12, 0, 0 },
+  /* 4 fi  */ { 9, 12, 160, 0, 12, 0, 0 },
+};
+
+const EpdUnicodeInterval kLigIntervals[] = {
+  { 0x46, 0x46, 0 },      // 'F'
+  { 0x49, 0x49, 1 },      // 'I'
+  { 0x66, 0x66, 2 },      // 'f'
+  { 0x69, 0x69, 3 },      // 'i'
+  { 0xFB01, 0xFB01, 4 },  // fi
+};
+
+const EpdLigaturePair kLigPairs[] = {
+  { (0x66u << 16) | 0x69u, 0xFB01 },  // f + i -> fi
+};
+
+const EpdFontData kLigFontData = {
+  .bitmap            = nullptr,
+  .glyph             = kLigGlyphs,
+  .intervals         = kLigIntervals,
+  .intervalCount     = 5,
+  .advanceY          = 16,
+  .ascender          = 12,
+  .descender         = 0,
+  .is2Bit            = false,
+  .groups            = nullptr,
+  .groupCount        = 0,
+  .glyphToGroup      = nullptr,
+  .kernLeftClasses   = nullptr,
+  .kernRightClasses  = nullptr,
+  .kernMatrix        = nullptr,
+  .kernLeftEntryCount  = 0,
+  .kernRightEntryCount = 0,
+  .kernLeftClassCount  = 0,
+  .kernRightClassCount = 0,
+  .ligaturePairs     = kLigPairs,
+  .ligaturePairCount = 1,
+  .provider          = nullptr,
+};
+// clang-format on
+
+const EpdFont& ligFont() {
+  static const EpdFont font(&kLigFontData);
+  return font;
+}
+
+int ligWidth(const char* str, const bool smallCaps) {
+  int w = 0, h = 0;
+  ligFont().getTextDimensions(str, &w, &h, smallCaps);
+  return w;
+}
+
+}  // namespace
+
+TEST(SmallCapsLigatures, PlainTextFormsTheLigature) { EXPECT_EQ(ligWidth("fi", false), 9); }
+
+// F at 3/4: advance round(144 * 0.75) = 108 FP -> 7 px; I at x=7 is round(4 * 0.75) = 3 px wide.
+TEST(SmallCapsLigatures, SmallCapsMeasureTwoSmallCapitals) {
+  const int step = fp4::toPixel(static_cast<int32_t>(144 * smallCaps::SCALE + 0.5f));  // 7
+  const int iWidth = static_cast<int>(4 * smallCaps::SCALE + 0.5f);                    // 3
+  EXPECT_EQ(ligWidth("fi", true), step + iWidth);
+}
+
+// The renderer's measure and draw loops form ligatures through the family, so the family is
+// where small caps turn them off -- for every font kind, the TTF engine's GSUB ligatures included.
+TEST(SmallCapsLigatures, FamilyFormsNoLigatureUnderSmallCaps) {
+  const EpdFontFamily family(&ligFont());
+  const char* rest = "i";
+  EXPECT_EQ(family.applyLigatures('f', rest, EpdFontFamily::REGULAR), 0xFB01u);
+  EXPECT_STREQ(rest, "");
+
+  rest = "i";
+  EXPECT_EQ(family.applyLigatures('f', rest, EpdFontFamily::SMALL_CAPS), static_cast<uint32_t>('f'));
+  EXPECT_STREQ(rest, "i");  // the i is left for the next glyph
+  const auto smallCapsBold = static_cast<EpdFontFamily::Style>(EpdFontFamily::SMALL_CAPS | EpdFontFamily::BOLD);
+  EXPECT_EQ(family.applyLigatures('f', rest, smallCapsBold), static_cast<uint32_t>('f'));
+  EXPECT_STREQ(rest, "i");
 }
