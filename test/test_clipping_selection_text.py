@@ -28,6 +28,7 @@ extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSele
 clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
 highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
+word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
 saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
 saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
@@ -56,6 +57,7 @@ struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4 }; };
 constexpr int TAG_PageLine = 1;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
+struct Renderer;
 struct Block {
   struct Style { bool isRtl = false; int8_t characterSpacing = 0; } style;
   struct Range { uint32_t start = 0, end = 3; } range;
@@ -68,6 +70,10 @@ struct Block {
   bool valid() const { return true; }
   const Style& getBlockStyle() const { return style; }
   int getRubyShift(int) const { return 0; }
+  int blockFontId(int fallback) const { return fallback; }
+  int wordFontId(uint16_t, int fallback) const { return fallback; }
+  int wordYOffset(const Renderer&, int, uint16_t) const { return 0; }
+  static int renderFontId(const Renderer&, int fontId, int) { return fontId; }
   uint16_t wordCount() const {
     return packedText.empty() ? (prefixSpace ? 2 : 1) : std::count(packedText.begin(), packedText.end(), '\0');
   }
@@ -217,7 +223,7 @@ struct EpubReaderActivity {
   int clippingAtPoint(const Page&, int, int) const;
   void drawClippingHighlights(const Page&, int, int, int) const;
 };
-""" + word_rect + saved_hit + saved_draw + r"""
+""" + word_font + word_rect + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
              bool rtl, int first = 0, uint32_t offset = 0, uint16_t row = 0) {
   std::vector<uint16_t> visual;
