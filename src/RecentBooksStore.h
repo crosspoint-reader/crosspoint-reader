@@ -63,6 +63,9 @@ class RecentBooksStore {
 
   mutable std::vector<RecentBook> recentBooks;
   mutable bool loaded = false;
+  // A load is under way (loadFromFile): whatever it calls that asks for the list gets the list as filled so far,
+  // never a second load.
+  mutable bool loading = false;
   uint8_t holds = 0;
 
   friend RecentBooksLoad JsonSettingsIO::loadRecentBooks(RecentBooksStore&, const char*);
