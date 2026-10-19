@@ -501,7 +501,7 @@ void HomeActivity::render(RenderLock&&) {
     }
     return;
   }
-  bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+  bool bufferRestored = coverRendered && coverBufferStored && restoreCoverBuffer();
 
   // Band spans topPadding..homeTopPadding: the cover tile starts at the fixed
   // homeTopPadding, so the height must shrink by topPadding or the band (and a
