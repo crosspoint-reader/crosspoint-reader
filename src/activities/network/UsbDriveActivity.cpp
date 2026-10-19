@@ -2,6 +2,11 @@
 
 #include <Arduino.h>
 #include <HalStorage.h>
+#if CROSSPOINT_NATIVE_DFU
+#include <HalUsbDfu.h>
+
+#include "NativeDfu.h"
+#endif
 #include <I18n.h>
 
 #include "MappedInputManager.h"
@@ -12,6 +17,10 @@ namespace fui = freeink::ui;
 
 void UsbDriveActivity::onEnter() {
   Activity::onEnter();
+#if CROSSPOINT_NATIVE_DFU
+  // Firmware reception must drain before the host gains raw SD access.
+  HalUsbDfu::stop();
+#endif
   resetUi();
   app.setScreen(&UsbDriveActivity::driveScreen, this);
 
@@ -27,6 +36,9 @@ void UsbDriveActivity::onEnter() {
     return;
   }
 
+#if CROSSPOINT_NATIVE_DFU
+  native_dfu::reconnectForStorage();
+#endif
   preparing = false;
   state = State::WaitingForHost;
   hostWaitStartedAt = millis();

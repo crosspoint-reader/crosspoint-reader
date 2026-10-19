@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <mbedtls/sha256.h>
@@ -63,6 +64,8 @@ const char* resultName(Result r) {
       return "ERASE_FAIL";
     case Result::WRITE_FAIL:
       return "WRITE_FAIL";
+    case Result::READBACK_FAIL:
+      return "READBACK_FAIL";
     case Result::OTADATA_FAIL:
       return "OTADATA_FAIL";
   }
@@ -89,7 +92,8 @@ namespace {
 // Stream `length` bytes from `file` starting at the current read offset, feeding them through
 // both the XOR-checksum and SHA256 accumulators. Used by validateImageFile so the whole image
 // is verified end-to-end without holding it in RAM (ESP32-C3 only has ~380 KB).
-Result feedHashAndChecksum(HalFile& file, size_t length, uint8_t* xorAccum, mbedtls_sha256_context* sha, uint8_t* buf,
+template <class Reader>
+Result feedHashAndChecksum(Reader& file, size_t length, uint8_t* xorAccum, mbedtls_sha256_context* sha, uint8_t* buf,
                            board_tag::Scanner* tagScanner) {
   size_t remaining = length;
   while (remaining > 0) {
@@ -109,13 +113,8 @@ Result feedHashAndChecksum(HalFile& file, size_t length, uint8_t* xorAccum, mbed
 }
 }  // namespace
 
-Result validateImageFile(const char* sdPath, size_t partitionSize) {
-  HalFile file;
-  if (!Storage.openFileForRead("FLASH", sdPath, file) || !file) {
-    LOG_ERR("FLASH", "validate: open failed: %s", sdPath);
-    return Result::OPEN_FAIL;
-  }
-
+template <class Reader>
+static Result validateImageReader(Reader& file, size_t partitionSize) {
   const size_t fileSize = file.fileSize();
   if (fileSize < MIN_FIRMWARE_SIZE) {
     LOG_ERR("FLASH", "validate: too small: %u", static_cast<unsigned>(fileSize));
@@ -146,16 +145,18 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
   uint16_t imageChip;
   std::memcpy(&imageChip, header + 12, sizeof(imageChip));
   const uint16_t deviceChip = runningPartitionChipId();
-  if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+  if (deviceChip == 0xFFFF || imageChip != deviceChip) {
     LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
     file.close();
     return Result::BAD_CHIP;
   }
   const uint8_t segCount = header[1];
   const bool hashAppended = header[23] != 0;
+  if (!segCount || segCount > 16) return Result::BAD_SEGMENTS;
 
-  auto buf = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[CHUNK]);
+  auto buf = makeUniqueNoThrow<uint8_t[]>(CHUNK);
   if (!buf) {
+    LOG_ERR("FLASH", "Validation buffer allocation failed");
     file.close();
     return Result::OOM;
   }
@@ -190,7 +191,7 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
 
     uint32_t dataLen;
     std::memcpy(&dataLen, segHdr + 4, sizeof(dataLen));
-    if (pos + dataLen > fileSize) {
+    if (dataLen > fileSize - pos) {
       LOG_ERR("FLASH", "validate: seg %u data overruns EOF (%u + %u > %u)", i, static_cast<unsigned>(pos),
               static_cast<unsigned>(dataLen), static_cast<unsigned>(fileSize));
       mbedtls_sha256_free(&shaCtx);
@@ -272,6 +273,46 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
   return Result::OK;
 }
 
+Result validateImageFile(const char* sdPath, size_t partitionSize) {
+  HalFile file;
+  if (!Storage.openFileForRead("FLASH", sdPath, file) || !file) return Result::OPEN_FAIL;
+  return validateImageReader(file, partitionSize);
+}
+
+Result validateImagePartition(const esp_partition_t* partition, size_t size, const uint8_t expected[32]) {
+  if (!partition || size > partition->size) return Result::TOO_LARGE;
+  if (runningPartitionChipId() == 0xFFFF) return Result::BAD_CHIP;
+  struct PartitionReader {
+    const esp_partition_t* partition;
+    size_t length, offset = 0;
+    mbedtls_sha256_context hash;
+    bool failed = false;
+    PartitionReader(const esp_partition_t* p, size_t n) : partition(p), length(n) {
+      mbedtls_sha256_init(&hash);
+      failed = mbedtls_sha256_starts(&hash, 0) != 0;
+    }
+    ~PartitionReader() { mbedtls_sha256_free(&hash); }
+    size_t fileSize() const { return length; }
+    int read(uint8_t* data, size_t n) {
+      if (failed || offset > length || n > length - offset ||
+          esp_partition_read(partition, offset, data, n) != ESP_OK || mbedtls_sha256_update(&hash, data, n)) {
+        failed = true;
+        return -1;
+      }
+      offset += n;
+      return int(n);
+    }
+    static void close() {}
+  } reader(partition, size);
+  const Result result = validateImageReader(reader, partition->size);
+  if (result != Result::OK) return result;
+  uint8_t actual[32];
+  if (reader.failed || reader.offset != size || mbedtls_sha256_finish(&reader.hash, actual) ||
+      memcmp(actual, expected, 32))
+    return Result::READBACK_FAIL;
+  return Result::OK;
+}
+
 Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated) {
   // Resolve destination first so we can size-check during validation. The full image-integrity
   // pass below verifies header, segment table, XOR checksum and SHA256 trailer end-to-end before
@@ -304,7 +345,7 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   LOG_INF("FLASH", "src=%s size=%u dest=%s @0x%x partsize=%u", sdPath, static_cast<unsigned>(firmwareSize), dest->label,
           static_cast<unsigned>(dest->address), static_cast<unsigned>(dest->size));
 
-  auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[CHUNK]);
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(CHUNK);
   if (!buffer) {
     LOG_ERR("FLASH", "OOM");
     file.close();

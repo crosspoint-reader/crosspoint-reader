@@ -14,8 +14,10 @@
 #include <HalStorage.h>
 #include <HalSystem.h>
 #include <HalTiltSensor.h>
+#include <HalUsbDfu.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <SPI.h>
 #include <TrustedTime.h>
 #include <VectorFontSupport.h>
@@ -42,6 +44,10 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#if CONFIG_IDF_TARGET_ESP32C3 || CROSSPOINT_NATIVE_DFU
+#include "activities/network/UsbDfuActivity.h"
+#include "network/UsbDfuService.h"
+#endif
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
@@ -163,6 +169,12 @@ static void armSilentReboot(const uint32_t target) {
 // running in that case.
 static void silentRestartTo(const uint32_t target, const char* targetName) {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
+#if CONFIG_IDF_TARGET_ESP32C3 || CROSSPOINT_NATIVE_DFU
+  // Activity replacement can span loop passes. Keep teardown restarts suppressed
+  // for the accepted transfer, including its pending screen handoff.
+  const auto update = usb_dfu::snapshot();
+  if (update.running && update.stage != usb_dfu::Stage::Waiting) return;
+#endif
   armSilentReboot(target);
   LOG_DBG("MAIN", "Silent restart (target=%s)", targetName);
   // E-ink retains the previous frame until the target's first paint lands
@@ -508,6 +520,7 @@ void setup() {
 
   gpio.begin();
   powerManager.begin();
+  HalUsbDfu::begin(gpio.deviceIsX3(), gpio.deviceIsX4());
 
   // Board TX-power ceiling. It can only be set once WiFi has started, so it is
   // applied on every STA/AP start rather than at each place that brings WiFi up.
@@ -635,8 +648,10 @@ void setup() {
       // the device in a USB-replug boot loop (or sleep right after a flash).
       break;
 #else
-      Storage.prepareForDeepSleep();
-      powerManager.startDeepSleep(gpio);
+      if (!HalUsbDfu::enabled()) {
+        Storage.prepareForDeepSleep();
+        powerManager.startDeepSleep(gpio);
+      }
       break;
 #endif
     case HalGPIO::WakeupReason::AfterFlash:
@@ -773,8 +788,8 @@ void loop() {
   const bool remoteActed = bleturner::tick(scene);
 
   if (activityManager.requiresExclusiveStorageLoop()) {
-    // USB Drive handed the raw SD card to the host. Do not run screenshots,
-    // sleep, shortcuts, or normal navigation while its filesystem is detached.
+    // USB Drive or firmware installation owns the device. Do not run
+    // screenshots, sleep, shortcuts, or normal navigation during the operation.
     activityManager.loop();
     if (activityManager.preventAutoSleep()) {
       powerManager.setPowerSaving(false);
@@ -787,6 +802,32 @@ void loop() {
     }
     return;
   }
+
+#if CONFIG_IDF_TARGET_ESP32C3 || CROSSPOINT_NATIVE_DFU
+  static bool dfuWorkerOwned = false;
+  if (dfuWorkerOwned && !usb_dfu::snapshot().running) {
+    dfuWorkerOwned = false;
+    if (!usb_dfu::snapshot().installed) usb_dfu::acknowledgeStopped();
+    activityManager.requestUpdate();
+  }
+  if (HalUsbDfu::takeHostRequest()) {
+    dfuWorkerOwned = usb_dfu::startBackground();
+    if (!dfuWorkerOwned) HalUsbDfu::arm();
+  }
+  if (usb_dfu::takeScreenRequest()) {
+    auto activity = makeUniqueNoThrow<UsbDfuActivity>(renderer, mappedInputManager);
+    if (!activity) {
+      LOG_ERR("DFU", "Unable to allocate USB update activity");
+      usb_dfu::rejectTransfer();
+    } else {
+      // Network activities normally reboot on exit to defragment the heap.
+      // Their teardown must finish without disconnecting an accepted USB update.
+      activityManager.replaceActivity(std::move(activity));
+      activityManager.loop();
+      return;
+    }
+  }
+#endif
 
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
@@ -832,7 +873,7 @@ void loop() {
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
-      remoteActed || activityManager.preventAutoSleep()) {
+      remoteActed || activityManager.preventAutoSleep() || HalUsbDfu::ready()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }

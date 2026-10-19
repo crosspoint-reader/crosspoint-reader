@@ -10,6 +10,7 @@
 #include <cassert>
 
 #include "HalGPIO.h"
+#include "HalUsbDfu.h"
 
 #if FREEINK_DEVICE_EEGO_A4
 #include <HalFrontlight.h>
@@ -41,8 +42,8 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   }
 
   auto wifiMode = WiFi.getMode();
-  if (wifiMode != WIFI_MODE_NULL) {
-    // Wifi is active, force disabling power saving
+  if (wifiMode != WIFI_MODE_NULL || HalUsbDfu::ready()) {
+    // WiFi and the software USB PHY require the normal CPU clock.
     enabled = false;
   }
 
@@ -75,6 +76,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+  HalUsbDfu::stop();
 #if FREEINK_DEVICE_EEGO_A4
   // LM3630A and GSL share I2C; turn the light off before touch releases the bus.
   Frontlight.setOn(false);
