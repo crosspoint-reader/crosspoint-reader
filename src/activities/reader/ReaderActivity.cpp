@@ -856,6 +856,21 @@ void ReaderActivity::onEnter() {
   // setup() (WakeTrace::armResume) rather than read from APP_STATE here — see armResume().
   WakeTrace::begin();
 
+  // A different book dropped onto the same path keeps the old one's cache until load() finds it stale, and with it
+  // what BookFonts found in the old book (fonts.bin), which the font below is chosen from. Found stale here, first,
+  // the cache goes now and this open examines the book.
+  //
+  // The first open of a book runs a multi-second index build inside load() (spine/TOC, content.opf, and the CSS
+  // compile): the EPUB branch below shows a popup for it, and skips it on a warm cache so cached re-opens don't add
+  // an extra e-ink flash. The probe only computes paths, does a few file-existence checks and reads the fingerprint
+  // (no parsing), so this is cheap.
+  bool firstOpenIndexing = false;
+  if (FsHelpers::hasEpubExtension(initialBookPath)) {
+    const Epub probe(initialBookPath, "/.crosspoint");
+    probe.clearCacheIfContentChanged();
+    firstOpenIndexing = probe.needsFirstOpenIndexing();
+  }
+
   // The book's font, loaded here rather than by goToReader(): the activity this one replaces has exited by now. A
   // reader replaced by another kept running its loop until the switch, and its look-ahead build then laid out and
   // drew with font IDs the new book's load had already removed ("Font ... not found").
@@ -906,12 +921,6 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
-    // The first open of a book runs a multi-second index build inside load()
-    // (spine/TOC, content.opf, and the CSS compile). Show a popup so the wait
-    // isn't a dead screen; skip it on a warm cache so cached re-opens don't add
-    // an extra e-ink flash. The throwaway Epub only computes paths + does a few
-    // file-existence checks (no parsing), so this is cheap.
-    const bool firstOpenIndexing = Epub(initialBookPath, "/.crosspoint").needsFirstOpenIndexing();
     // Publisher Fonts: the book's embedded fonts are examined once, here, with the same popup and lent buffer.
     // onEnter() left the loaded font alone until then (ensureSdFontLoadedForPath).
     const bool bookFontsPending = bookFontsPendingForPath(initialBookPath.c_str());

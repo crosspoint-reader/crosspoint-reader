@@ -510,6 +510,25 @@ void Epub::writeStoredFingerprint(const uint64_t fp) const {
   f.close();
 }
 
+bool Epub::clearCacheIfContentChanged() const {
+  // The cache key is derived from the file path only, so identical path + different content would silently serve
+  // a stale cache. fingerprint.bin pins the ZIP content fingerprint the cache was built from; a mismatch invalidates
+  // the entire cache dir (sections, CSS, thumbs, the book's fonts -- all derived from the old bytes).
+  uint64_t zipFp = 0;
+  if (!computeZipFingerprint(&zipFp) || !BookMetadataCache::cacheExists(cachePath)) return false;
+  uint64_t storedFp = 0;
+  if (!readStoredFingerprint(&storedFp)) {
+    // Pre-fingerprint cache (created before this firmware): adopt the current
+    // content instead of forcing every existing book through a full rebuild.
+    writeStoredFingerprint(zipFp);
+    return false;
+  }
+  if (storedFp == zipFp) return false;
+  LOG_INF("EBP", "Book content changed at same path, rebuilding cache");
+  clearCache(false);
+  return true;
+}
+
 bool Epub::needsFirstOpenIndexing() const {
   // Spine/TOC cache missing -> load() rebuilds it (content.opf + TOC/NCX + book.bin).
   if (!BookMetadataCache::cacheExists(cachePath)) return true;
@@ -694,24 +713,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
   // Always create CssParser - needed for inline style parsing even without CSS files
   cssParser.reset(new CssParser(cachePath));
 
-  // Detect a book replaced in place: the cache key is derived from the file path
-  // only, so identical path + different content would silently serve a stale
-  // cache. fingerprint.bin pins the ZIP content fingerprint the cache was built
-  // from; a mismatch invalidates the entire cache dir (sections, CSS, thumbs —
-  // all derived from the old bytes).
-  uint64_t zipFp = 0;
-  const bool haveFp = computeZipFingerprint(&zipFp);
-  if (haveFp && BookMetadataCache::cacheExists(cachePath)) {
-    uint64_t storedFp = 0;
-    if (!readStoredFingerprint(&storedFp)) {
-      // Pre-fingerprint cache (created before this firmware): adopt the current
-      // content instead of forcing every existing book through a full rebuild.
-      writeStoredFingerprint(zipFp);
-    } else if (storedFp != zipFp) {
-      LOG_INF("EBP", "Book content changed at same path, rebuilding cache");
-      clearCache(false);
-    }
-  }
+  clearCacheIfContentChanged();
 
   // An earlier build lost the TOC: rebuild rather than reuse its book.bin, which has no room to
   // take the TOC in afterwards. Only on the reader's open (see setLostTocRetryEnabled()).
@@ -917,8 +919,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
   if (!skipLoadingCss || tocRecovered) removeSpineCaches();
   if (tocRecovered) SpinePageIndex::discard(cachePath);
 
-  // Pin the content this cache was built from (see the staleness check above).
-  if (haveFp) writeStoredFingerprint(zipFp);
+  // Pin the content this cache was built from (see clearCacheIfContentChanged()).
+  if (uint64_t zipFp = 0; computeZipFingerprint(&zipFp)) writeStoredFingerprint(zipFp);
 
   applyMetadataSidecar();
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
