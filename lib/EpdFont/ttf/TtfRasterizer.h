@@ -68,7 +68,7 @@ class Rasterizer {
   /// Plans the scratch block without making it: scratchBytes() is its size from then on. False when a part is out of
   /// range (logged); the plan before stays.
   bool setPlan(const ScratchPlan& plan);
-  /// Makes the planned block on the heap, held until release(). False on OOM, logged.
+  /// Makes the planned block on the heap, held until release(). False on OOM.
   bool allocate();
   /// setPlan(), then allocate().
   bool allocate(const ScratchPlan& plan);

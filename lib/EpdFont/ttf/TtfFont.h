@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BuildArena.h>
 #include <NorFlash.h>
 
 #include <cstdint>
@@ -41,10 +42,13 @@ class TtfFont {
   /// Native sizes held at once, until dropNativeSizes().
   static constexpr uint8_t kMaxNativeSizes = 16;
 
-  /// Supplied by the app; both may stay null (host tests).
+  /// Supplied by the app; all may stay null (host tests).
   struct Hooks {
     bool (*renderLockHeld)() = nullptr;  ///< debug check of spec 3.4, logged once when false
     void (*yield)() = nullptr;           ///< called between glyphs and between install chunks
+    /// Frees what the app can spare when a miss's memory does not fit the heap (the built-in fonts' page caches),
+    /// before the miss asks once more. True when it freed something.
+    bool (*reclaim)() = nullptr;
   };
   static void setHooks(const Hooks& hooks);
 
@@ -192,6 +196,12 @@ class TtfFont {
 /// (RenderLock), so they share one scratch block, sized for the largest of their styles, one ring and one prefetch
 /// list: an accent family costs its faces and tables, never a second block.
 ///
+/// What only a miss needs (spec 5.3), the scratch block and SD mode's page cache, is made for the first glyph drawn
+/// that the store does not hold, never at load: a page drawn from the store needs none of it. A lookup takes it from
+/// the region lent to the misses for that lookup alone (glyph_miss::Scope, a section build's arena) when it has room,
+/// else from the heap, where it stays until releaseMissMemory(). One that cannot be had is counted
+/// (glyph_miss::starvedCount) and drawn as missing.
+///
 /// Not thread-safe: every call runs under RenderLock (spec 3.4).
 class TtfFontSet {
  public:
@@ -199,7 +209,7 @@ class TtfFontSet {
   /// four styles and three one-style families, and its face table (32 faces) the body's sizes and a few of each.
   static constexpr uint8_t kMaxFamilies = 4;
   static constexpr uint8_t kRingSlots = 8;
-  /// The ring's bitmaps together, at most: a native size's glyphs are large, and the ring is held until a wipe.
+  /// The ring's bitmaps together, at most: a native size's glyphs are large.
   static constexpr uint32_t kRingBudgetBytes = 8192;
   /// Missing glyphs one prefetch() call renders at most; the rest render as they are looked up.
   static constexpr uint8_t kPrefetchGlyphs = 64;
@@ -236,24 +246,21 @@ class TtfFontSet {
   bool ringMode() const { return ringMode_; }
   /// The heap the ring's bitmaps hold.
   uint32_t ringBytes() const;
-  /// The one scratch block every family renders in.
+  /// The one scratch block every family renders in, made or not.
   uint32_t scratchBytes() const { return rasterizer_.scratchBytes(); }
   /// SD mode: the 512-byte pages read from the card since load(), every family's.
-  uint32_t sdPageReads() const { return sdPages_ ? sdPages_->misses() : 0; }
+  uint32_t sdPageReads() const { return sdPageReads_ + (sdPages_ ? sdPages_->misses() : 0); }
   /// A family reads its outlines from the card (SD mode).
-  bool readsCard() const;
+  bool readsCard() const { return readsCard_; }
 
-  /// Frees what only a glyph missing from the store needs: the scratch block (its plan kept), SD mode's page cache
-  /// and the ring. Glyphs in the store are drawn as before; a miss is drawn as missing until restoreMissMemory(),
-  /// and asked again at its next lookup (Transient). For the reader's memory ladder, which makes room for an image
-  /// decode this way. Only where no glyph record of the set is in use: between pages. The bytes freed.
+  /// Frees what the misses made on the heap: the scratch block (its plan kept), SD mode's page cache and the ring.
+  /// Glyphs in the store need none of it, and the next miss makes it again. Only where no glyph record of the set is
+  /// in use: as RenderLock is given back, and for the reader's memory ladder before an image decode. The bytes freed.
   uint32_t releaseMissMemory();
-  /// Allocates them again. False while the heap cannot hold them: misses stay missing until a later call.
-  bool restoreMissMemory();
-  bool missMemoryReleased() const { return count_ != 0 && (!rasterizer_.allocated() || (readsCard() && !sdPages_)); }
 
  private:
   friend class TtfFont;
+  class MissScope;
 
   struct Pending {
     uint32_t codepoint;
@@ -269,13 +276,25 @@ class TtfFontSet {
   void failed(uint8_t style, uint32_t codepoint, ttf::Status status, bool haveKey, uint32_t key);
   void noteCommit(FlashGlyphStore::Commit result);
   uint32_t batchCapacity() const { return rasterizer_.plan().outputBytes; }
+  bool beginMiss();
+  void endMiss();
+  bool heapPages();
+  void usePages(ttf::SdPageCache* pages);
+  void noMemory(uint32_t codepoint);
 
   NorFlash& flash_;
   FlashGlyphStore store_;
   ttf::Rasterizer rasterizer_;
-  std::unique_ptr<ttf::SdPageCache> sdPages_;  // only while a style is in SD mode
+  // SD mode's page cache while a miss has one: ownedPages_, or a lookup's block of the lent arena.
+  ttf::SdPageCache* sdPages_ = nullptr;
+  std::unique_ptr<ttf::SdPageCache> ownedPages_;
+  uint32_t sdPageReads_ = 0;        // the pages caches given back since load() read
+  BuildArena* lentFrom_ = nullptr;  // the arena the lookup in progress draws in, if any
+  BuildArena::Block lent_;
   std::unique_ptr<TtfFont> fonts_[kMaxFamilies];
   uint8_t count_ = 0;
+  bool readsCard_ = false;
+  bool missesStarved_ = false;  // the heap could not hold a miss's memory in this pass (beginMiss())
   bool ringMode_ = false;
 
   // The ring: glyphs drawn without being stored. Their records live until the slot is reused, 8 lookups later.

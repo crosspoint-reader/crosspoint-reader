@@ -5,6 +5,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -140,22 +141,21 @@ bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t 
   if (styles != TtfFont::StylesResult::Ok) return false;
 
   // One block for every family: the output region doubles as the batch buffer, so it also holds the record header
-  // of its largest bitmap.
+  // of its largest bitmap. Planned only: the first miss makes it (beginMiss()).
   plan.outputBytes = std::min(plan.outputBytes + glyphstore::kRecordHeaderBytes + 3, ttf::kMaxOutputBytes);
-  if (!rasterizer_.allocate(plan)) return false;
-  // SD mode's page cache, only while a style reads its outlines from the card.
+  releaseMissMemory();
+  if (!rasterizer_.setPlan(plan)) return false;
   count_ = count;
-  sdPages_.reset();
-  if (readsCard() && !(sdPages_ = makeUniqueNoThrow<ttf::SdPageCache>())) {
-    LOG_ERR("TTF", "OOM: SD page cache (%u B)", static_cast<unsigned>(sizeof(ttf::SdPageCache)));
-    count_ = 0;
-    return false;
-  }
+  readsCard_ = false;
+  sdPageReads_ = 0;
+  for (uint8_t f = 0; f < count; ++f) readsCard_ = readsCard_ || fonts_[f]->readsCard();
   if (store_.wipePending() && mode == Install::IfNeeded) wipeIfPending(onBusy);
-  LOG_INF("TTF", "%u famil%s loaded: %u B scratch, %u B SD pages, %u B per native size, log %lu of %lu B used", count,
-          count == 1 ? "y" : "ies", static_cast<unsigned>(rasterizer_.scratchBytes()),
-          static_cast<unsigned>(sdPages_ ? sizeof(ttf::SdPageCache) : 0), static_cast<unsigned>(sizeof(TtfFont::Size)),
-          static_cast<unsigned long>(store_.logUsed()), static_cast<unsigned long>(store_.geometry().logSize));
+  LOG_INF(
+      "TTF",
+      "%u famil%s loaded: %u B scratch, %u B SD pages (made on a miss), %u B per native size, log %lu of %lu B used",
+      count, count == 1 ? "y" : "ies", static_cast<unsigned>(rasterizer_.scratchBytes()),
+      static_cast<unsigned>(readsCard_ ? sizeof(ttf::SdPageCache) : 0), static_cast<unsigned>(sizeof(TtfFont::Size)),
+      static_cast<unsigned long>(store_.logUsed()), static_cast<unsigned long>(store_.geometry().logSize));
   for (uint8_t f = 0; f < count; ++f) {
     LOG_INF("TTF", "family %u regular style: %u kern subtables%s, %u ligatures", f,
             fonts_[f]->styles_[0].kerning.subtableCount(),
@@ -306,34 +306,96 @@ bool TtfFontSet::wipeIfPending(const std::function<void()>& onBusy) {
 
 // --- The set: what only a miss needs ---
 
-bool TtfFontSet::readsCard() const {
-  for (uint8_t f = 0; f < count_; ++f) {
-    if (fonts_[f]->readsCard()) return true;
+// The memory one render() or prefetch() draws its glyphs in: made (or found) before the first outline is read, and,
+// when it came from the lent arena, given back as the call returns.
+class TtfFontSet::MissScope {
+ public:
+  explicit MissScope(TtfFontSet& set) : set_(set), ready_(set.beginMiss()) {}
+  ~MissScope() { set_.endMiss(); }
+  MissScope(const MissScope&) = delete;
+  MissScope& operator=(const MissScope&) = delete;
+  bool ready() const { return ready_; }
+
+ private:
+  TtfFontSet& set_;
+  bool ready_ = false;
+};
+
+bool TtfFontSet::beginMiss() {
+  if (rasterizer_.allocated() && (!readsCard_ || sdPages_)) return true;  // on the heap since an earlier miss
+  BuildArena* const arena = glyph_miss::arena();
+  // Room for all of it, the worst padding included: a refused allocation would read in the arena's own log as its
+  // owner running out.
+  const size_t want = rasterizer_.scratchBytes() + alignof(std::max_align_t) +
+                      (readsCard_ ? sizeof(ttf::SdPageCache) + alignof(ttf::SdPageCache) : 0);
+  if (arena && !rasterizer_.allocated() && !sdPages_ && arena->capacity() - arena->used() >= want) {
+    // All of it from the lent region, for this lookup alone: endMiss() gives it back, so the arena's owner finds its
+    // blocks as it left them.
+    lent_ = arena->reserveBlock();
+    auto* const scratch = static_cast<uint8_t*>(arena->alloc(rasterizer_.scratchBytes()));
+    void* const pages =
+        scratch && readsCard_ ? arena->alloc(sizeof(ttf::SdPageCache), alignof(ttf::SdPageCache)) : nullptr;
+    if (scratch && (pages || !readsCard_)) {
+      rasterizer_.attach(scratch);
+      if (pages) usePages(new (pages) ttf::SdPageCache());
+      lentFrom_ = arena;
+      return true;
+    }
+    arena->release(lent_);  // no room left in it: the heap then
+  }
+  // On the heap, until releaseMissMemory(). When the heap cannot hold it, what the app can spare goes first, once;
+  // after that the misses of the pass go without at once, rather than ask a heap that just said no for each glyph.
+  for (bool reclaimed = false; !missesStarved_; reclaimed = true) {
+    if (rasterizer_.allocate() && (!readsCard_ || sdPages_ || heapPages())) return true;
+    missesStarved_ = reclaimed || !hooks.reclaim || !hooks.reclaim();
   }
   return false;
 }
 
-uint32_t TtfFontSet::releaseMissMemory() {
-  const uint32_t scratch = rasterizer_.scratchBytes();
-  const uint32_t pages = sdPages_ ? sizeof(ttf::SdPageCache) : 0;
-  const uint32_t ring = ringBytes();
+void TtfFontSet::endMiss() {
+  if (!lentFrom_) return;
   rasterizer_.release();
-  sdPages_.reset();  // every read through it ends with the call that made it (fontBytes() points each style at it)
-  freeRing();
-  LOG_INF("TTF", "miss memory freed: %lu B scratch, %lu B SD pages, %lu B ring", static_cast<unsigned long>(scratch),
-          static_cast<unsigned long>(pages), static_cast<unsigned long>(ring));
-  return scratch + pages + ring;
+  if (sdPages_) sdPageReads_ += sdPages_->misses();
+  usePages(nullptr);
+  lentFrom_->release(lent_);
+  lentFrom_ = nullptr;
 }
 
-bool TtfFontSet::restoreMissMemory() {
-  if (!missMemoryReleased()) return true;
-  // The ring comes back block by block, as glyphs that need it are drawn.
-  if (!rasterizer_.allocated() && !rasterizer_.allocate(rasterizer_.plan())) return false;
-  if (readsCard() && !sdPages_ && !(sdPages_ = makeUniqueNoThrow<ttf::SdPageCache>())) {
-    LOG_ERR("TTF", "OOM: SD page cache (%u B)", static_cast<unsigned>(sizeof(ttf::SdPageCache)));
-    return false;
+void TtfFontSet::noMemory(const uint32_t codepoint) {
+  (void)codepoint;  // only logged, and logging may be compiled out
+  glyph_miss::noteStarved();
+  if (failuresLogged_ < kMaxFailuresLogged) {
+    ++failuresLogged_;
+    LOG_ERR("TTF", "U+%04lX: no %lu B to draw it in, drawn as missing", static_cast<unsigned long>(codepoint),
+            static_cast<unsigned long>(rasterizer_.scratchBytes() + (readsCard_ ? sizeof(ttf::SdPageCache) : 0)));
   }
-  return true;
+}
+
+bool TtfFontSet::heapPages() {
+  ownedPages_ = makeUniqueNoThrow<ttf::SdPageCache>();
+  usePages(ownedPages_.get());
+  return sdPages_ != nullptr;
+}
+
+void TtfFontSet::usePages(ttf::SdPageCache* pages) {
+  // Every SD-mode style reads its outlines through it, a FontBytes made before it was too (fontBytes()).
+  sdPages_ = pages;
+  for (uint8_t f = 0; f < count_; ++f) {
+    for (TtfFont::Style& style : fonts_[f]->styles_) style.sd.cache = pages;
+  }
+}
+
+uint32_t TtfFontSet::releaseMissMemory() {
+  missesStarved_ = false;                                                      // the next pass asks the heap again
+  if (!rasterizer_.allocated() && !ownedPages_ && ringBytes() == 0) return 0;  // as RenderLock goes back, mostly
+  const uint32_t freed = (rasterizer_.allocated() ? rasterizer_.scratchBytes() : 0) +
+                         (ownedPages_ ? static_cast<uint32_t>(sizeof(ttf::SdPageCache)) : 0) + ringBytes();
+  rasterizer_.release();
+  if (sdPages_) sdPageReads_ += sdPages_->misses();
+  usePages(nullptr);
+  ownedPages_.reset();
+  freeRing();
+  return freed;
 }
 
 // --- The set: the ring, and what a failed write means ---
@@ -342,9 +404,10 @@ const EpdGlyph* TtfFontSet::drawToRing(const EpdGlyph& metrics) {
   const uint8_t slot = ringNext_;
   ringNext_ = static_cast<uint8_t>((ringNext_ + 1) % kRingSlots);
   if (metrics.dataLength > ringCapacity_[slot]) {
-    // One heap block per slot, kept and reused while it is large enough: the ring exists only after the store
-    // filled up, for oversized glyphs, for a size the store had no room for, or without a store. A record is
-    // promised only until the next miss, so the oldest slots give way when the ring would pass its budget.
+    // One heap block per slot, kept and reused while it is large enough, until the pass ends (releaseMissMemory()):
+    // the ring exists only after the store filled up, for oversized glyphs, for a size the store had no room for, or
+    // without a store. A record is promised only until the next miss, so the oldest slots give way when the ring
+    // would pass its budget.
     freeRingSlot(slot);
     for (uint8_t age = 1; age < kRingSlots && ringBytes() + metrics.dataLength > kRingBudgetBytes; ++age) {
       freeRingSlot(static_cast<uint8_t>((slot + age) % kRingSlots));  // the slot after this one is the oldest
@@ -397,7 +460,7 @@ void TtfFontSet::failed(const uint8_t style, const uint32_t codepoint, const ttf
                         const uint32_t key) {
   (void)style;  // both only logged, and logging may be compiled out
   (void)codepoint;
-  // Transient (no scratch block, an SD read failed): drawn as missing this time, asked again at the next lookup.
+  // Transient (no memory to draw it in, an SD read failed): drawn as missing this time, asked again at the next lookup.
   if (!ttf::isPermanent(status)) return;
   if (haveKey && !ringMode_) noteCommit(store_.markNoGlyph(key));
   if (failuresLogged_ < kMaxFailuresLogged) {
@@ -619,7 +682,7 @@ bool TtfFont::fontBytes(const uint8_t style, FontBytes* bytes) {
     LOG_ERR("TTF", "family %u style %u could not be mapped", family_, style);
     return false;
   }
-  s.sd.cache = set_.sdPages_.get();  // the set's, made once the styles are open
+  s.sd.cache = set_.sdPages_;  // the set's while a miss has one (usePages())
   *bytes = s.onCard ? FontBytes(mapped, s.bytes, &s.sd) : FontBytes(mapped, s.bytes);
   return true;
 }
@@ -657,6 +720,13 @@ const EpdGlyph* TtfFont::render(const Size& size, const uint8_t style, const uin
     if (haveKey && !set.ringMode_ && !bytes.ioError()) set.noteCommit(set.store_.markNoGlyph(key));
     return nullptr;
   }
+  // A glyph to draw: in what the set's first miss makes (spec 5.3).
+  const TtfFontSet::MissScope miss(set);
+  if (!miss.ready()) {
+    set.noMemory(codepoint);
+    return nullptr;
+  }
+  glyph_miss::noteDrawn();
   EpdGlyph metrics{};
   const ttf::Status loaded = placeable(set.rasterizer_.load(bytes, face, index, size.ppem, &metrics), metrics);
   if (loaded != ttf::Status::Ok) {
@@ -725,8 +795,7 @@ bool TtfFont::ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const { 
 
 void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
   TtfFontSet& set = set_;
-  // Without the scratch block nothing is drawn (releaseMissMemory()): the lookups draw these as missing.
-  if (!utf8Text || style >= 4 || !styles_[style].present || set.ringMode_ || !set.rasterizer_.allocated()) return;
+  if (!utf8Text || style >= 4 || !styles_[style].present || set.ringMode_) return;
   uint32_t key = 0;
   if (!storeKey(size, style, 0, &key)) return;
   checkLock();
@@ -763,6 +832,10 @@ void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
     pending[count++] = {cp, index};
   }
   if (count == 0) return;
+  // Glyphs to draw, in what the set's first miss makes (spec 5.3). Without it the lookups ask again, one by one.
+  const TtfFontSet::MissScope miss(set);
+  if (!miss.ready()) return;
+  glyph_miss::noteDrawn();
 
   // In glyph order, which is file order: in SD mode the outline reads then move forward through the file.
   std::sort(pending, pending + count,

@@ -17,6 +17,7 @@
 // snapping the device renderer applies.
 #include <Arduino.h>
 #include <EpdFontFamily.h>
+#include <GlyphProvider.h>
 
 #include <cmath>
 #include <cstdint>
@@ -28,6 +29,8 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  // Measuring this codepoint stands in for a TrueType glyph the heap had no room to draw (glyph_miss). 0: none.
+  static inline uint32_t starvedCodepoint = 0;
   enum Orientation { Portrait, LandscapeClockwise, PortraitInverted, LandscapeCounterClockwise };
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -76,6 +79,7 @@ class GfxRenderer {
     for (const uint8_t* p = reinterpret_cast<const uint8_t*>(text); *p;) {
       uint32_t cp;
       p = decodeUtf8(p, cp);
+      if (cp == starvedCodepoint) glyph_miss::noteStarved();
       w += advance(cp, style);
     }
     return w;

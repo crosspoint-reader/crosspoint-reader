@@ -6,12 +6,16 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "BuildArena.h"
 #include "EpdFontFamily.h"
+#include "GlyphProvider.h"
 #include "SimNorFlash.h"
 #include "TtfBuilder.h"
 #include "TtfFont.h"
@@ -20,6 +24,24 @@
 #include "TtfTestUtil.h"
 
 using namespace ttf_test;
+
+namespace {
+// A nothrow array new of exactly this many bytes fails, as the scratch block's does on a heap without room for it.
+size_t refuseArrayBytes = 0;
+}  // namespace
+
+// The test program's array new and delete, so a test can refuse one (malloc and free underneath, which the
+// sanitizers pair as they pair any other).
+void* operator new[](const size_t size) {
+  if (void* p = std::malloc(size ? size : 1)) return p;
+  throw std::bad_alloc();
+}
+void* operator new[](const size_t size, const std::nothrow_t&) noexcept {
+  if (refuseArrayBytes != 0 && size == refuseArrayBytes) return nullptr;
+  return std::malloc(size ? size : 1);
+}
+void operator delete[](void* p) noexcept { std::free(p); }
+void operator delete[](void* p, size_t) noexcept { std::free(p); }
 
 namespace {
 
@@ -95,6 +117,7 @@ class TtfFontTest : public ::testing::Test {
   }
   void TearDown() override {
     TtfFont::setHooks({});
+    refuseArrayBytes = 0;
     EXPECT_EQ(0u, flash.violations());
     EXPECT_EQ(0u, flash.reprograms());
   }
@@ -1496,34 +1519,151 @@ TEST_F(TtfFontSetTest, AFamilyTooLargeEvenForSdModeIsRefusedBeforeAnyErase) {
   EXPECT_EQ(0u, chip.totalSectorErases());
 }
 
-// --- The memory ladder: what only a miss needs, freed for an image decode and allocated again ---------------------
+// --- What only a miss needs: made for the first glyph the store does not hold, in a lent arena or on the heap ------
 
-TEST_F(TtfFontSetTest, WithoutItsMissMemoryTheSetDrawsWhatIsStoredAndAMissWaits) {
-  const auto set = openSet();
+TEST_F(TtfFontSetTest, AGlyphFromTheStoreNeedsNoMissMemory) {
+  {
+    const auto set = openSet();
+    ASSERT_NE(nullptr, set);
+    ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
+    ASSERT_NE(nullptr, set->font(1)->glyph(kRegular, 'A'));
+  }
+  const auto set = openSet();  // the next boot: the store holds both
   ASSERT_NE(nullptr, set);
-  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
-  ASSERT_NE(nullptr, set->font(1)->glyph(kRegular, 'A'));
-  const uint32_t scratch = set->scratchBytes();
-  EXPECT_FALSE(set->missMemoryReleased());
-  EXPECT_EQ(scratch, set->releaseMissMemory());  // flash mode: the scratch block alone, no ring
-  EXPECT_TRUE(set->missMemoryReleased());
-  EXPECT_EQ(scratch, set->scratchBytes());  // the plan stays
-  const uint32_t renders = set->font(0)->renders();
-  // What the store holds is drawn as before.
+  EXPECT_EQ(0u, set->releaseMissMemory());  // nothing made at load
+  const uint32_t drawn = glyph_miss::drawnCount();
   expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'A'));
   expectDrawnAs(reference(accent[kRegular].bytes, 'A', 14), *set->font(1), kRegular,
                 set->font(1)->glyph(kRegular, 'A'));
-  // A miss is drawn as missing, and a prefetch draws nothing.
-  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'Q'));
-  set->font(0)->prefetch(kRegular, "Quiz");
-  EXPECT_EQ(renders, set->font(0)->renders());
-  // Back: the same block, and the miss, which was not marked missing, is drawn.
-  EXPECT_TRUE(set->restoreMissMemory());
-  EXPECT_FALSE(set->missMemoryReleased());
-  EXPECT_EQ(scratch, set->scratchBytes());
+  set->font(0)->prefetch(kRegular, "AAA");
+  EXPECT_EQ(0u, set->font(0)->renders());
+  EXPECT_EQ(drawn, glyph_miss::drawnCount());
+  EXPECT_EQ(0u, set->releaseMissMemory());  // and nothing made for them
+}
+
+TEST_F(TtfFontSetTest, TheFirstMissMakesTheScratchBlockAndTheReleaseFreesIt) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  ASSERT_GT(set->scratchBytes(), 0u);  // planned at load
+  EXPECT_EQ(0u, set->releaseMissMemory());
+  const uint32_t drawn = glyph_miss::drawnCount();
   expectDrawnAs(reference(files[kRegular].bytes, 'Q', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'Q'));
+  EXPECT_EQ(drawn + 1, glyph_miss::drawnCount());
+  // Held on the heap for the misses after it, in either family, until the release.
+  expectDrawnAs(reference(accent[kRegular].bytes, 'Q', 14), *set->font(1), kRegular,
+                set->font(1)->glyph(kRegular, 'Q'));
+  EXPECT_EQ(set->scratchBytes(), set->releaseMissMemory());  // flash mode: the scratch block alone, no ring
+  EXPECT_EQ(0u, set->releaseMissMemory());
+  // Made again by the next miss, and the glyphs stored meanwhile need none.
+  expectDrawnAs(reference(files[kRegular].bytes, 'Q', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'Q'));
+  EXPECT_EQ(0u, set->releaseMissMemory());
+  expectDrawnAs(reference(files[kRegular].bytes, 'z', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'z'));
+  EXPECT_EQ(set->scratchBytes(), set->releaseMissMemory());
+}
+
+TEST_F(TtfFontSetTest, AMissInALentArenaDrawsThereAndGivesItBack) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  BuildArena arena(48 * 1024);
+  ASSERT_TRUE(arena.valid());
+  // What the arena's owner holds, as a section build holds its page block while it lays a line out.
+  BuildArena::Block page = arena.reserveBlock();
+  auto* line = static_cast<uint8_t*>(arena.alloc(100));
+  ASSERT_NE(nullptr, line);
+  std::fill_n(line, 100, uint8_t{0x5A});
+  const size_t used = arena.used();
+  {
+    const glyph_miss::Scope misses(&arena);
+    expectDrawnAs(reference(files[kRegular].bytes, 'W', 14), *set->font(0), kRegular,
+                  set->font(0)->glyph(kRegular, 'W'));
+    set->font(1)->prefetch(kRegular, "Wavy");
+    EXPECT_EQ(4u, set->font(1)->renders());
+    EXPECT_FALSE(misses.starved());
+    {
+      const glyph_miss::Scope heap(nullptr);  // nested: none lent
+      expectDrawnAs(reference(files[kRegular].bytes, 'v', 14), *set->font(0), kRegular,
+                    set->font(0)->glyph(kRegular, 'v'));
+    }
+    EXPECT_EQ(&arena, glyph_miss::arena());
+  }
+  EXPECT_EQ(nullptr, glyph_miss::arena());
+  EXPECT_GE(arena.highWater(), used + set->scratchBytes());  // drawn in the arena
+  EXPECT_EQ(used, arena.used());                             // and given back
+  EXPECT_TRUE(std::all_of(line, line + 100, [](const uint8_t b) { return b == 0x5A; }));
+  EXPECT_TRUE(arena.release(page));  // the owner's block is still the newest
+  // Only the nested lookup outside the arena made its block on the heap.
+  EXPECT_EQ(set->scratchBytes(), set->releaseMissMemory());
+}
+
+TEST_F(TtfFontSetTest, AnArenaWithoutRoomLeavesTheMissToTheHeap) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  BuildArena small(1024);
+  {
+    const glyph_miss::Scope misses(&small);
+    expectDrawnAs(reference(files[kRegular].bytes, 'M', 14), *set->font(0), kRegular,
+                  set->font(0)->glyph(kRegular, 'M'));
+  }
+  EXPECT_EQ(0u, small.used());
+  EXPECT_EQ(0u, small.highWater());
+  EXPECT_EQ(0u, small.failedAllocSize());  // never asked: its log would say its owner ran out
+  EXPECT_EQ(set->scratchBytes(), set->releaseMissMemory());
+}
+
+TEST_F(TtfFontSetTest, AMissThatFindsNoMemoryIsDrawnAsMissingCountedAndAskedAgain) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  refuseArrayBytes = set->scratchBytes();
+  const uint32_t renders = set->font(0)->renders();
+  {
+    const glyph_miss::Scope misses(nullptr);
+    set->font(0)->prefetch(kRegular, "Kite");  // draws nothing, and says nothing: the lookups ask again
+    EXPECT_FALSE(misses.starved());
+    EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'K'));
+    EXPECT_TRUE(misses.starved());
+  }
+  EXPECT_EQ(renders, set->font(0)->renders());
+  EXPECT_EQ(0u, set->releaseMissMemory());
+  // Not marked missing in the store: drawn once the memory is there.
+  refuseArrayBytes = 0;
+  const uint32_t starved = glyph_miss::starvedCount();
+  expectDrawnAs(reference(files[kRegular].bytes, 'K', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'K'));
+  EXPECT_EQ(starved, glyph_miss::starvedCount());
   EXPECT_EQ(renders + 1, set->font(0)->renders());
-  EXPECT_TRUE(set->restoreMissMemory());  // nothing left to do
+}
+
+TEST_F(TtfFontSetTest, WhatTheAppCanSpareIsFreedOnceBeforeAMissGoesWithout) {
+  const auto set = openSet();
+  ASSERT_NE(nullptr, set);
+  static int reclaims = 0;
+  static bool frees = false;
+  reclaims = 0;
+  frees = true;
+  TtfFont::setHooks({nullptr, nullptr, [] {
+                       ++reclaims;
+                       if (frees) refuseArrayBytes = 0;  // the built-in font caches given back
+                       return frees;
+                     }});
+  const Reference r = reference(files[kRegular].bytes, 'R', 14);  // before any refusal
+  refuseArrayBytes = set->scratchBytes();
+  expectDrawnAs(r, *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'R'));
+  EXPECT_EQ(1, reclaims);
+  EXPECT_EQ(set->scratchBytes(), set->releaseMissMemory());
+  // Nothing to spare: asked once, and the miss goes without.
+  frees = false;
+  refuseArrayBytes = set->scratchBytes();
+  const uint32_t starved = glyph_miss::starvedCount();
+  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'S'));
+  EXPECT_EQ(2, reclaims);
+  EXPECT_EQ(starved + 1, glyph_miss::starvedCount());
+  // The rest of the pass goes without at once, with nothing asked of the heap or the app; the next pass asks again.
+  refuseArrayBytes = 0;
+  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'T'));
+  EXPECT_EQ(2, reclaims);
+  EXPECT_EQ(starved + 2, glyph_miss::starvedCount());
+  EXPECT_EQ(0u, set->releaseMissMemory());
+  const Reference t = reference(files[kRegular].bytes, 'T', 14);
+  expectDrawnAs(t, *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'T'));
 }
 
 TEST_F(TtfFontSetTest, ASetLoadedAgainWithoutAnInstallOpensTheStoreAsItIsOrNotAtAll) {
@@ -1559,25 +1699,36 @@ TEST_F(TtfFontSetTest, ASetLoadedAgainWithoutAnInstallOpensTheStoreAsItIsOrNotAt
   EXPECT_TRUE(same.load(sources, 2, kIdentitySet, {}, TtfFontSet::Install::Never));
 }
 
-TEST_F(TtfFontSetTest, AnSdModeSetGivesUpItsPageCacheAndTheRingAndGetsThemBack) {
+TEST_F(TtfFontSetTest, AnSdModeMissMakesItsPageCacheWhereItMakesTheScratchBlock) {
   SimNorFlash chip{kSdOnlyBytes};
   const auto set = openFamilies(chip, {files}, busy);
   ASSERT_NE(nullptr, set);
   ASSERT_TRUE(set->readsCard());
-  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'A'));
-  chip.failNextProgram();  // the ring from here on
+  EXPECT_EQ(0u, set->releaseMissMemory());  // nothing made at load, the page cache neither
+  // In a lent arena, the page cache with the scratch block, both given back.
+  BuildArena arena(48 * 1024);
+  {
+    const glyph_miss::Scope misses(&arena);
+    expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *set->font(0), kRegular,
+                  set->font(0)->glyph(kRegular, 'A'));
+  }
+  EXPECT_GE(arena.highWater(), set->scratchBytes() + sizeof(ttf::SdPageCache));
+  EXPECT_EQ(0u, arena.used());
+  EXPECT_EQ(0u, set->releaseMissMemory());
+  const uint32_t pagesRead = set->sdPageReads();
+  EXPECT_GT(pagesRead, 0u);  // kept count of when the cache went
+  // On the heap, until the release, the ring with them once the store stops taking glyphs.
   ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'B'));
+  chip.failNextProgram();
+  ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'C'));
   ASSERT_TRUE(set->ringMode());
   ASSERT_GT(set->ringBytes(), 0u);
-  const uint32_t scratch = set->scratchBytes();
   const uint32_t ring = set->ringBytes();
-  EXPECT_EQ(scratch + sizeof(ttf::SdPageCache) + ring, set->releaseMissMemory());
+  EXPECT_EQ(set->scratchBytes() + sizeof(ttf::SdPageCache) + ring, set->releaseMissMemory());
   EXPECT_EQ(0u, set->ringBytes());
+  EXPECT_GT(set->sdPageReads(), pagesRead);
+  // Made again for the next miss, which reads its outline from the card through it.
   for (MemoryFile& file : files) file.reads = 0;
-  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'g'));
-  EXPECT_EQ(0u, files[kRegular].reads);  // no outline is read without the scratch block
-  ASSERT_TRUE(set->restoreMissMemory());
-  EXPECT_EQ(scratch, set->scratchBytes());
   expectDrawnAs(reference(files[kRegular].bytes, 'g', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'g'));
-  EXPECT_GT(files[kRegular].reads, 0u);  // from the card, through the page cache made again
+  EXPECT_GT(files[kRegular].reads, 0u);
 }

@@ -27,6 +27,7 @@
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <GlyphProvider.h>
 #include <HalClock.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -2165,8 +2166,11 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
       case Step::Plain:
         break;
       case Step::LightRelief: {
-        // The page's glyphs into the store first: drawn from there, the page needs no miss afterwards.
-        if (drawsPage) prewarmPageFonts(page, xOffset, yOffset);
+        // The page's glyphs into the store first, drawn in the lent region: from there the page needs no miss after.
+        if (drawsPage) {
+          const glyph_miss::Scope misses(arena);
+          prewarmPageFonts(page, xOffset, yOffset);
+        }
         renderer.releaseFontCaches();
         const uint32_t freed = sdFontSystem.releaseTtfMissMemory();
         LOG_INF("ERS", "Memory ladder: light relief, %lu B of TrueType memory freed (free=%lu)",
@@ -2190,9 +2194,7 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
     // What the step freed comes back at once, while the decode's buffers are just freed and the heap least broken up.
     switch (in.step) {
       case Step::Plain:
-        break;
-      case Step::LightRelief:
-        in.fontsBack = sdFontSystem.restoreTtfMissMemory();
+      case Step::LightRelief:  // the next prewarm and the next miss make what it freed again
         break;
       case Step::HeavyRelief: {
         const unsigned long start = millis();
@@ -2254,9 +2256,7 @@ bool EpubReaderActivity::finishLadder(const ImageMemoryLadder::Action action, co
       break;
   }
   // The book's fonts as it has them now, with an install for a set the store does not hold, and the chapter laid out
-  // with them at the next render. A set is never left without its miss memory: a layout would measure the glyphs it
-  // cannot draw as missing.
-  if (sdFontSystem.ttfMissMemoryReleased() && !sdFontSystem.restoreTtfMissMemory()) unloadSdFontIfLoaded();
+  // with them at the next render.
   ensureSdFontLoadedForPath(epub->getPath().c_str());
   preRenderedPage = {};  // a font popup may have drawn over it
   fontRelayoutPending_ = true;
@@ -4233,6 +4233,8 @@ void EpubReaderActivity::renderPreRenderPass(const RenderLayout& layout) {
     // renders afresh, without this pass's Page in the heap.
     const bool incomplete = glyphsDropped > 0 || imagesMissed > 0;
     preRenderedPage = {true, currentSpineIndex, nextPage, preRenderDuration, millis(), incomplete};
+    // Drawn whole, the page that had a gap for lack of memory (renderContents) is shown without the sign.
+    if (!incomplete && glyphStarvedPage(currentSpineIndex, nextPage)) glyphStarvedSpine_ = glyphStarvedPage_ = -1;
 #if DEBUG_BACKGROUND_WORK
     if (!incomplete) bgCounters_.aCompletes++;
 #endif
@@ -5703,6 +5705,7 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   const uint32_t heapBefore = esp_get_free_heap_size();
+  const uint32_t starvedBefore = glyph_miss::starvedCount();
   prewarmPageFonts(*page, orientedMarginLeft, contentTop);
   const uint32_t heapAfter = esp_get_free_heap_size();
   fcm->logStats("prewarm");
@@ -5779,6 +5782,20 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
     memoryDegradedPage_ = section->currentPage;
   } else if (section && memoryDegradedPage(currentSpineIndex, section->currentPage)) {
     memoryDegradedSpine_ = memoryDegradedPage_ = -1;
+  }
+  // A TrueType glyph that found no memory to be drawn in, not even with the built-in font caches freed for it
+  // (glyph_miss), left a gap: the status bar says so while the page is on screen, and the page is drawn once more as
+  // soon as this pass has given its memory back. A gap in that redraw too is left until the page draws whole.
+  if (section && glyph_miss::starvedCount() != starvedBefore) {
+    const bool again = glyphStarvedPage(currentSpineIndex, section->currentPage);
+    glyphStarvedSpine_ = currentSpineIndex;
+    glyphStarvedPage_ = section->currentPage;
+    if (!again) {
+      LOG_ERR("ERS", "Page %d drawn with glyphs missing for lack of memory; drawing it again", section->currentPage);
+      glyphStarvedRedraw_ = true;  // asked for where the pre-render would be, below
+    }
+  } else if (section && glyphStarvedPage(currentSpineIndex, section->currentPage)) {
+    glyphStarvedSpine_ = glyphStarvedPage_ = -1;
   }
   // The BW render also touches images (placeholder/cache draws) and runs the full
   // glyph pipeline; check here too so a clean after_image_warm_pass followed by a
@@ -6037,7 +6054,13 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   // result is discarded — no correctness issue.
   // Not during a build-through: on the X3 the post-waveform frame sync reads this very buffer
   // when there is no second one (see BG_BUILD_THROUGH_PAGES).
-  if (!preRenderedPage.ready && !backgroundBuildThrough_ && section && section->currentPage + 1 < section->pageCount) {
+  if (glyphStarvedRedraw_) {
+    // The page drew with gaps (above): the next pass draws it again, once this one has given its memory back, and not
+    // as a pre-render, which would find no more memory than this pass did. Its AA is not worth waiting for.
+    glyphStarvedRedraw_ = false;
+    requestUpdate();
+  } else if (!preRenderedPage.ready && !backgroundBuildThrough_ && section &&
+             section->currentPage + 1 < section->pageCount) {
     pendingPreRender = true;
     markStagedForCurrentPage();
     // Do NOT request the update while a deferred AA is owed: isUpdateSuperseded()
@@ -6119,6 +6142,9 @@ void EpubReaderActivity::displayBuildPage(RenderLock& lock, const Page& page, co
     // Only while the buffer is actually lent; otherwise buildScratch_ is null and the scope
     // self-disables, leaving the heap path exactly as it was.
     FontCacheManager::ScopedSlotArena slotArena(*fcm, secondaryBorrowed_ ? buildScratch_.get() : nullptr);
+    // And a TrueType miss draws in it too, for the lookup alone (glyph_miss): the build stored the page's glyphs as it
+    // laid them out, so there are few.
+    const glyph_miss::Scope misses(secondaryBorrowed_ ? buildScratch_.get() : nullptr);
     prewarmPageFonts(page, layout.marginLeft, contentTop);
 
     renderer.clearScreen();
@@ -6194,6 +6220,7 @@ uint16_t EpubReaderActivity::renderPageContentOnly(const Page& page, const int o
   const int viewportHeight = std::max(0, renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom);
   const int contentTop = orientedMarginTop + getImageOnlyPageYOffset(page, viewportHeight);
 
+  const uint32_t starvedBefore = glyph_miss::starvedCount();
   prewarmPageFonts(page, orientedMarginLeft, contentTop);
 
   // On a single-push panel the pre-render owes the SAME thing a fresh render
@@ -6238,7 +6265,9 @@ uint16_t EpubReaderActivity::renderPageContentOnly(const Page& page, const int o
   // values, and so outside the capture. It carries no anti-aliasing either way:
   // UI chrome is 1-bit and produces no AA pixels at all.
   const FontDecompressor* fdc = fcm->getDecompressor();
-  return fdc ? fdc->getStats().fallbackOomGlyphs : 0;
+  // A TrueType glyph that found no memory to be drawn in (glyph_miss) left a gap as well.
+  return static_cast<uint16_t>((fdc ? fdc->getStats().fallbackOomGlyphs : 0) + glyph_miss::starvedCount() -
+                               starvedBefore);
 }
 
 bool EpubReaderActivity::usesDeferredAa() const {
@@ -6531,7 +6560,8 @@ void EpubReaderActivity::renderStatusBar() const {
 #endif
   GUI.drawStatusBar(renderer, bookProgress, chapter.page, chapter.total, title, 0, isStarred, printedPageLabel,
                     /*fillMargin=*/true, /*pageCountApproximate=*/chapter.approximate, syncIndicator,
-                    /*lowMemory=*/memoryDegradedPage(currentSpineIndex, section->currentPage));
+                    /*lowMemory=*/memoryDegradedPage(currentSpineIndex, section->currentPage) ||
+                        glyphStarvedPage(currentSpineIndex, section->currentPage));
 
 #if DEBUG_BACKGROUND_WORK
   renderBackgroundDebugOverlay();

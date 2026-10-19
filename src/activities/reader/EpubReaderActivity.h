@@ -291,6 +291,11 @@ class EpubReaderActivity final : public Activity {
   // on screen. -1: none.
   int memoryDegradedSpine_ = -1;
   int memoryDegradedPage_ = -1;
+  // The page drawn last with a TrueType glyph that found no memory to be drawn in (glyph_miss): drawn once more by
+  // itself, and the status bar shows the low-memory indicator while it is on screen with a gap. -1: none.
+  int glyphStarvedSpine_ = -1;
+  int glyphStarvedPage_ = -1;
+  bool glyphStarvedRedraw_ = false;  // that redraw is owed by the pass that found the gap
   // The ladder left an accent family out (or found no font it could load): the next render lays the chapter out again
   // with the fonts loaded now, at the same position.
   bool fontRelayoutPending_ = false;
@@ -875,6 +880,7 @@ class EpubReaderActivity final : public Activity {
   bool memoryDegradedPage(int spine, int page) const {
     return memoryDegradedSpine_ == spine && memoryDegradedPage_ == page;
   }
+  bool glyphStarvedPage(int spine, int page) const { return glyphStarvedSpine_ == spine && glyphStarvedPage_ == page; }
   bool imageWarmGaveUp(int spine, int page) const;
   void noteImageWarmMiss(int spine, int page);
   // Lend the secondary framebuffer to Background-B's build arena. Mirrors the Background-C

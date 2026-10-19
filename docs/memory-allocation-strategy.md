@@ -170,6 +170,7 @@ Arena instances:
 | Cover and indexing passes | lent framebuffer | the framebuffer size | the pass | `HomeActivity`, `FileBrowserActivity::lendForBackgroundWork`, `ReaderActivity` |
 | Library index build | lent framebuffer | the framebuffer size | one build step | `LibraryBuilder::step` (join, publish, author lookup), `LibraryOrder::sortBySeries` |
 | Font selector previews | lent framebuffer | the framebuffer size | one preview font | `FontSelectionActivity::lendPreviewArena`, `SdCardFont::useArena` |
+| TrueType miss memory | a build's arena, lent | the scratch block and page cache (§9.7) | one glyph lookup | `glyph_miss::Scope`: `Section::stepSectionBuild`, `EpubReaderActivity::displayBuildPage`, the ladder's light relief |
 
 In the lent region the CSS ruleset is resident in the arena (`CssParser::setIndexArena`), the SAX
 state is taken there (`ChapterHtmlSlimParser::setBuildArena`), and the ZIP ring shares the main
@@ -198,6 +199,7 @@ Invariants that hold the arena together; new consumers must not break them:
 | `PngStreamDecoder` object | PNG decode | about 3 KB + uzlib state | heap |
 | `renderFromCache` read buffer | every replay of a cached image | ≤ 4 KB | heap (raw `malloc`) |
 | `ParsedText` word vectors and layout scratch | paragraph | 3–4 KB | reused across paragraphs: no allocation per paragraph |
+| TrueType scratch block and SD page cache | a glyph the glyph store lacks | 10.5–14.5 KB + 4.2 KB | the lent arena for one lookup, else the heap until `RenderLock` is given back (§9.7) |
 | A line's word bytes | laid-out line | small | the page block on arena builds, else heap |
 | `TextBlock` object and `PageLine` | laid-out line | 88 B + 24 B (host) | heap |
 | Table cell objects | grid row | about 160 B a cell (host) | heap (the cells' line bytes are in the arena on arena builds) |
@@ -584,3 +586,31 @@ grow only when the heap holds the block (`heapReserveFor`, `HeapFit.h`): the pag
 printed-page label record and the resident anchors used when the spill will not open. Past that
 their entries are dropped, the section is marked simplified (`kCapPageLabels`,
 `kCapAnchorsPerChapter`), and the chapter builds whole.
+
+### 9.7 TrueType miss memory
+
+A TrueType set (`TtfFontSet`) draws a glyph the glyph store does not hold in a scratch block (10,542–11,012 B for the
+Latin families measured, 14,528 B for a CJK one) and, in SD mode, through a 4,204-byte page cache. Every other lookup
+reads the mapped store, and a section build stores the chapter's glyphs as it measures them, so a page drawn after its
+build needs neither. They used to be made at load and held for the whole book: 10.5–18.7 KB of a reading heap of
+28–34 KB on the X3 with a book's fonts loaded, which kept the next-page pre-render under its floor on nearly every
+turn.
+
+They are made for a miss now (`TtfFontSet::beginMiss`, spec 5.3 and 8.3):
+
+- in the arena lent to the misses (`glyph_miss::Scope`, `GlyphProvider.h`), for one lookup: a section build's slices
+  lend its external arena, a page drawn mid-build the same, the memory ladder's light relief the image-warm arena. The
+  lookup reserves a block above whatever the arena's owner holds and releases it before it returns (rule 2), and only
+  asks when the arena has room for both, so a refusal never lands in the owner's `failedAllocSize()`;
+- else on the heap, held for the misses that follow and freed as `RenderLock` is given back
+  (`RenderLock::setReleaseHook`): one allocation per pass, not per glyph (rule 1). A Background-B slice whose arena has
+  no room is the exception: it makes the block again in each slice that misses. During layout the lent region has
+  about 37 KB free on the X3 (§8.2), so this is rare;
+- else not at all: the app frees the built-in fonts' page caches once and the lookup asks again, then the glyph is
+  drawn as missing and counted (`glyph_miss::starvedCount`). A build slice that saw one fails the build rather than
+  keep a layout with a glyph measured as missing.
+
+Measured on the X3 (2026-10-19, four TrueType families with three of them in SD mode): the reading heap at the
+pre-render's gate rose from 28.2–30.1 KB free (13.3 KB largest) to 43.2–45.1 KB (27.6 KB), and Background-B's lowest
+heap during a build from 12.9–17.0 KB to 27.8–32.0 KB, with the scratch block and page cache in its arena (high water
+12 KB to 27 KB of 52 KB).

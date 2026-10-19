@@ -340,10 +340,7 @@ bool Rasterizer::allocate() {
   // One block, not one per glyph: a cell pool and outline arrays on the loop task's stack would take 4-10 KB of its
   // 16 KB, and per-glyph allocations would fragment the heap.
   owned_ = makeUniqueNoThrow<uint8_t[]>(blockBytes_);
-  if (!owned_) {
-    LOG_ERR("TTF", "scratch block: %lu bytes, out of memory", static_cast<unsigned long>(blockBytes_));
-    return false;
-  }
+  if (!owned_) return false;  // the caller says what went without it
   attach(owned_.get());
   return true;
 }

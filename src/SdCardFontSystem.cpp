@@ -33,6 +33,17 @@ void ttfYield() {
   vTaskDelay(1);
 }
 
+// What a TrueType miss may have when the heap cannot hold its memory (the built-in fonts' page caches, rebuilt by the
+// next prewarm), and the set whose misses' memory goes back with RenderLock. Set in begin().
+GfxRenderer* ttfRenderer = nullptr;
+SdCardFontSystem* ttfSystem = nullptr;
+
+bool ttfReclaim() { return ttfRenderer && ttfRenderer->releaseFontCaches(); }
+
+void ttfPassEnded() {
+  if (ttfSystem) ttfSystem->releaseTtfMissMemory();
+}
+
 // Lists a TTF family only when the glyph store can install it, in flash mode or, larger, in SD mode.
 bool ttfFamilyFits(const uint32_t* fileBytes, const uint32_t* sdBytes, const uint8_t count) {
   // While the store is open its mappings hide the budget an install would get: the load decides then.
@@ -312,8 +323,12 @@ ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
 }
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
-  (void)renderer;
-  TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield});
+  ttfRenderer = &renderer;
+  ttfSystem = this;
+  TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield, &ttfReclaim});
+  // A miss's memory on the heap lasts as long as the pass that drew it: whichever task rendered gives it back with
+  // RenderLock, and a page drawn from the glyph store needs none of it (TtfFontSet::releaseMissMemory).
+  RenderLock::setReleaseHook(&ttfPassEnded);
   registry_.setTtfFits(&ttfFamilyFits);
   registry_.discover();
   discovered_ = true;

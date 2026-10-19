@@ -391,10 +391,6 @@ void SdCardFontManager::wipeTtfIfPending(const std::function<void()>& onBusy) {
 
 uint32_t SdCardFontManager::releaseTtfMissMemory() { return ttfSet_ ? ttfSet_->releaseMissMemory() : 0; }
 
-bool SdCardFontManager::restoreTtfMissMemory() { return !ttfSet_ || ttfSet_->restoreMissMemory(); }
-
-bool SdCardFontManager::ttfMissMemoryReleased() const { return ttfSet_ && ttfSet_->missMemoryReleased(); }
-
 bool SdCardFontManager::suspendTtf(GfxRenderer& renderer) {
   if (!ttfSet_) return false;
   // What unloadAll() does to the renderer and the set; the families' names, font IDs and windows stay.

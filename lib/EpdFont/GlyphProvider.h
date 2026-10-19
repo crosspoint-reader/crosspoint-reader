@@ -4,6 +4,49 @@
 
 #include "EpdFontData.h"
 
+class BuildArena;
+
+/// What a provider that renders glyphs needs only for one its font does not hold yet (a TrueType family's scratch
+/// block, and in SD mode its page cache), made for the first such lookup rather than held while nothing misses: where
+/// that memory may come from, and whether it could be had.
+namespace glyph_miss {
+
+namespace detail {
+inline BuildArena* arena = nullptr;
+inline uint32_t starved = 0;
+inline uint32_t drawn = 0;
+}  // namespace detail
+
+/// The region lent to the misses (Scope), or nullptr: they use the heap.
+inline BuildArena* arena() { return detail::arena; }
+
+/// Lookups answered with nothing because that memory could not be had, not because the font lacks the glyph: a
+/// layout made while the count moved measured such glyphs as missing, and a page drawn while it moved has gaps.
+inline uint32_t starvedCount() { return detail::starved; }
+inline void noteStarved() { ++detail::starved; }
+
+/// Glyphs drawn that the font did not hold yet: a pass during which this moved paid for their memory.
+inline uint32_t drawnCount() { return detail::drawn; }
+inline void noteDrawn() { ++detail::drawn; }
+
+/// Lends `lent` to the misses for the scope, nullptr none, and tells whether one went without memory meanwhile. A miss
+/// takes a block from the arena and gives it back before its lookup returns, so the owner's blocks stay as they are;
+/// the arena must outlive the scope. Nests.
+class Scope {
+ public:
+  explicit Scope(BuildArena* lent) : previous_(detail::arena), starvedBefore_(detail::starved) { detail::arena = lent; }
+  ~Scope() { detail::arena = previous_; }
+  Scope(const Scope&) = delete;
+  Scope& operator=(const Scope&) = delete;
+  bool starved() const { return detail::starved != starvedBefore_; }
+
+ private:
+  BuildArena* previous_ = nullptr;
+  uint32_t starvedBefore_ = 0;
+};
+
+}  // namespace glyph_miss
+
 /// Supplies what a font's own tables do not hold.
 ///
 /// EpdFont asks it for a glyph after the interval table misses, and for pair kerning when the font

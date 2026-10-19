@@ -89,13 +89,12 @@ class SdCardFontManager {
   void wipeTtfIfPending(const std::function<void()>& onBusy);
   bool ttfLoaded() const { return ttfSet_ != nullptr; }
 
-  // What the loaded TTF families give up for an image decode (the reader's memory ladder). Their miss-only memory
-  // (TtfFontSet::releaseMissMemory), the bytes freed: 0 when none is loaded.
+  // What the loaded TTF families' misses made on the heap, freed (TtfFontSet::releaseMissMemory): the next miss makes
+  // it again. The bytes freed: 0 when none is loaded or nothing was held.
   uint32_t releaseTtfMissMemory();
-  bool restoreTtfMissMemory();
-  bool ttfMissMemoryReleased() const;
-  // Or all of their memory, until resumeTtf(): the set, its files, its native sizes, and their font IDs, which leave
-  // the renderer meanwhile, so nothing may be laid out or drawn with them. Only where no glyph of theirs is in use
+  // What they give up for an image decode at the reader's memory ladder's heavier step: all of their memory, until
+  // resumeTtf(): the set, its files, its native sizes, and their font IDs, which leave the renderer meanwhile, so
+  // nothing may be laid out or drawn with them. Only where no glyph of theirs is in use
   // and nothing laid out with them but a page waits. False when none is loaded.
   bool suspendTtf(GfxRenderer& renderer);
   bool ttfSuspended() const { return ttfSuspended_; }
