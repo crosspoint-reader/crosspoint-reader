@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -32,6 +33,7 @@ NoteInputs in(const bool entered, const bool linked = false, const bool refused 
   i.refused = refused;
   i.runningMs = runningMs;
   i.acknowledged = acknowledged;
+  i.hasBond = true;
   return i;
 }
 
@@ -46,6 +48,10 @@ TEST(LinkNoteRuleTest, Table) {
   disabled.enabled = false;
   NoteInputs leaving = in(false);
   leaving.reading = false;
+  NoteInputs noRemote = in(true);
+  noRemote.hasBond = false;
+  NoteInputs noRemoteWaiting = in(false);
+  noRemoteWaiting.hasBond = false;
   NoteInputs idleEntry = in(true);
   idleEntry.idleStopped = true;
   const Row rows[] = {
@@ -53,6 +59,8 @@ TEST(LinkNoteRuleTest, Table) {
       {"enter again after a failure", LinkNote::Failed, in(true), LinkNote::Connecting},
       {"enter with a remote still linked", LinkNote::None, in(true, true), LinkNote::None},
       {"enter with the radio off for idleness", LinkNote::None, idleEntry, LinkNote::None},
+      {"enter with no remote chosen", LinkNote::None, noRemote, LinkNote::None},
+      {"connect asked with no remote chosen", LinkNote::Connecting, noRemoteWaiting, LinkNote::Failed},
       {"waiting", LinkNote::Connecting, in(false), LinkNote::Connecting},
       {"link", LinkNote::Connecting, in(false, true), LinkNote::None},
       {"refused", LinkNote::Connecting, in(false, false, true), LinkNote::Failed},
@@ -80,6 +88,7 @@ class LinkNoteTest : public ::testing::Test {
   void SetUp() override {
     fake::reset();
     config.enabled = 1;
+    std::strcpy(config.peerAddr, "7d:de:5c:bd:ae:ca");
     bleturner::begin(fake::hostFns(), config);
     radio().queueStarts = true;
   }
@@ -262,6 +271,7 @@ TEST(StartOrder, QuickRefusalInsideStartAsyncStillReportsFailedAndRetries) {
   fake::reset();
   bleturner::Config config;
   config.enabled = 1;
+  std::strcpy(config.peerAddr, "7d:de:5c:bd:ae:ca");
   bleturner::begin(fake::hostFns(), config);
   fake::radio().queueStarts = false;
   fake::host().heap = {65535, 32768};  // HeapLow: refused before the stack

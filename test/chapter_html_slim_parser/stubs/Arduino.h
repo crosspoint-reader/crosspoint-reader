@@ -7,3 +7,4 @@ struct EspHostStub {
 };
 
 inline EspHostStub ESP;
+inline void vTaskDelay(uint32_t) {}

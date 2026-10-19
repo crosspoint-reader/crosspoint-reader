@@ -8,6 +8,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <Utf8.h>
+#include <Xtc.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -301,7 +302,8 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   entry.pathHash = clixPathHash(fullPath.data(), fullPath.size());
   const int priorIndex = findPrior(st, entry.pathHash);
 
-  const bool extractionExpected = st.readMetadata && FsHelpers::hasEpubExtension(name);
+  const bool isXtc = FsHelpers::hasXtcExtension(name);
+  const bool extractionExpected = st.readMetadata && (FsHelpers::hasEpubExtension(name) || isXtc);
   const uint8_t expectedStatus = extractionExpected ? CLIX_METADATA_EXTRACTED : CLIX_METADATA_NOT_ATTEMPTED;
   bool reuseMetadata = false;
   ClixRecord priorRecord{};
@@ -341,9 +343,22 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   // builds spine, TOC, CSS, cover, or section caches during the library walk.
   if (!reuseMetadata && extractionExpected) {
     st.stats->parsed++;
-    Epub epub(fullPath, CACHE_DIR);
     std::string bookTitle;
-    if (epub.loadMetadata(bookTitle, author)) {
+    bool loaded = false;
+    if (isXtc) {
+      // XTC/XTCH carry title and author in their own header block; load() reads that and the
+      // page table header, and writes no cache.
+      Xtc xtc(fullPath, CACHE_DIR);
+      loaded = xtc.load();
+      if (loaded) {
+        bookTitle = xtc.getTitle();
+        author = xtc.getAuthor();
+      }
+    } else {
+      Epub epub(fullPath, CACHE_DIR);
+      loaded = epub.loadMetadata(bookTitle, author);
+    }
+    if (loaded) {
       entry.record.metadataStatus = CLIX_METADATA_EXTRACTED;
       if (!bookTitle.empty()) {
         title = std::move(bookTitle);
@@ -1051,7 +1066,7 @@ bool isLibraryBookFile(const std::string_view path) {
     start = slash + 1;
   }
   return FsHelpers::checkFileExtension(path, ".epub") || FsHelpers::checkFileExtension(path, ".txt") ||
-         FsHelpers::checkFileExtension(path, ".md") || FsHelpers::checkFileExtension(path, ".xtc");
+         FsHelpers::checkFileExtension(path, ".md") || FsHelpers::hasXtcExtension(path);
 }
 
 bool markLibraryIndexDirty() {
