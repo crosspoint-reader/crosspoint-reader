@@ -118,12 +118,15 @@ void SdCardFontRegistry::addTtfFiles(const char* dirPath, const std::vector<std:
     LOG_DBG("SDREG", "No TrueType style the engine draws in %s", dirPath);
     return;
   }
-  uint32_t styleBytes[4];
+  uint32_t fileBytes[4];
+  uint32_t sdBytes[4];
   uint8_t styleCount = 0;
   for (const int file : chosen) {
-    if (file >= 0) styleBytes[styleCount++] = bytes[order[static_cast<size_t>(file)]];
+    if (file < 0) continue;
+    fileBytes[styleCount] = bytes[order[static_cast<size_t>(file)]];
+    sdBytes[styleCount++] = probes[static_cast<size_t>(file)].sdBytes;
   }
-  if (ttfFits_ && !ttfFits_(styleBytes, styleCount)) {
+  if (ttfFits_ && !ttfFits_(fileBytes, sdBytes, styleCount)) {
     LOG_INF("SDREG", "TTF family in %s is too large for the font partition; not listed", dirPath);
     return;
   }

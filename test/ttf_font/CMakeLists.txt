@@ -15,6 +15,7 @@ add_executable(TtfFontTest
   ${REPO_ROOT}/freeink-sdk/libs/font/FreeInkFont/src/KernTable.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/FlashGlyphStore.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/GlyphStoreFormat.cpp
+  ${REPO_ROOT}/lib/EpdFont/ttf/FontBytes.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfFace.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/TtfRasterizer.cpp
   ${REPO_ROOT}/lib/EpdFont/ttf/third_party/freetype/ftgrays.c

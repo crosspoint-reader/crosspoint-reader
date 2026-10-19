@@ -87,9 +87,9 @@ class FlashGlyphStore {
 
   /// Erases the header first, so a power cut from here on reads as "not installed". Then erases every
   /// sector of the new layout that holds data, but for the style blocks in `keepStyles` (a bit per block), which
-  /// the caller found holding their data already and does not write. SD mode needs `sdInfo`: each style's file
-  /// hash, size and table map (table entries must lie inside their style block); offsets and sizes come from
-  /// `layout`.
+  /// the caller found holding their data already and does not write. A layout with SD-mode blocks needs `sdInfo`,
+  /// a StyleInfo per block: each SD-mode style's file stamp, size and outlines (in the file, and past the block);
+  /// offsets, sizes and modes come from `layout`.
   bool beginInstall(const glyphstore::Layout& layout, const uint8_t identity[glyphstore::kIdentityBytes],
                     const glyphstore::StyleInfo* sdInfo, uint8_t keepStyles = 0);
   /// Copies style data into a style block, each byte once. Only between beginInstall() and finishInstall().
@@ -99,19 +99,19 @@ class FlashGlyphStore {
 
   // --- Session ---
 
-  /// Maps the store and finds where writing resumes.
+  /// Maps the store (the index, the pairs and the log, and the SD-mode styles' blocks) and finds where writing
+  /// resumes.
   OpenResult open(const uint8_t identity[glyphstore::kIdentityBytes]);
   void close();
   bool isOpen() const { return open_; }
-  uint8_t mode() const { return geometry_.mode; }
   uint8_t styleCount() const { return geometry_.styleCount; }
   /// EpdFontData::bitmap for every TTF face: EpdGlyph::dataOffset is relative to it.
   const uint8_t* logBase() const { return log_; }
-  /// A style's data, mapped. Flash mode maps one style at a time: the pointer stays valid until mapStyle()
-  /// is called for another style, so re-fetch it after a miss in another style. SD mode maps all styles
-  /// together.
+  /// A style's data, mapped. Flash-mode blocks map one at a time: the pointer stays valid until mapStyle() is
+  /// called for another flash-mode style, so re-fetch it after a miss in another style. SD-mode blocks are mapped
+  /// together by open(), and stay mapped.
   const uint8_t* mapStyle(uint8_t style);
-  /// A style's header record (SD mode: its table map). False when not open.
+  /// A style's header record (its mode; in SD mode its file and outlines). False when not open.
   bool styleInfo(uint8_t style, glyphstore::StyleInfo& out) const;
   /// Bumped by every wipe(). A face that holds a face index re-claims it with faceIndex() when this changed.
   uint32_t generation() const { return generation_; }
@@ -189,8 +189,10 @@ class FlashGlyphStore {
   const uint8_t* index_ = nullptr;
   const uint8_t* pairs_ = nullptr;
   const uint8_t* log_ = nullptr;
-  const uint8_t* styleMap_ = nullptr;
+  const uint8_t* styleMap_ = nullptr;  // the flash-mode style mapped now
+  const uint8_t* sdMap_ = nullptr;     // every SD-mode style's block
   uint8_t mappedStyle_ = 0xFF;
+  uint8_t firstSd_ = 0;  // the first SD-mode block; styleCount() when none
   uint32_t logUsed_ = 0;
   uint32_t usedSlots_ = 0;
   uint32_t usedPairs_ = 0;

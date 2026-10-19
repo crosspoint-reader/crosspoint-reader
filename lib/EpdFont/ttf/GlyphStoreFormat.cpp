@@ -17,25 +17,31 @@ uint32_t indexPagesFor(const uint32_t logPages, const uint32_t expectedRecord) {
 bool planLayout(const PlanInput& in, Layout& out) {
   out = Layout{};
   if (in.styleCount == 0 || in.styleCount > kMaxStyles) return false;
-  if (in.mode != kModeFlash && in.mode != kModeSd) return false;
 
   uint32_t offset = kHeaderRegionBytes;
   uint32_t stylePages = 0;
-  uint32_t largestStyle = 0;
+  uint32_t largestFlash = 0;
+  uint32_t sdPages = 0;
   for (uint8_t s = 0; s < in.styleCount; ++s) {
     const uint32_t pages = pagesFor(in.styleBytes[s]);
-    if (pages == 0) return false;
+    const uint8_t mode = in.styleMode[s];
+    if (pages == 0 || mode > kModeSd || (mode == kModeFlash && sdPages != 0)) return false;
     out.styleOffset[s] = offset;
     out.styleSize[s] = in.styleBytes[s];
+    out.styleMode[s] = mode;
     offset += pages * kPageBytes;
     stylePages += pages;
-    if (pages > largestStyle) largestStyle = pages;
+    if (mode == kModeSd) {
+      sdPages += pages;
+    } else if (pages > largestFlash) {
+      largestFlash = pages;
+    }
   }
 
   const uint32_t usablePages = in.usableBytes / kPageBytes;
   const uint32_t fixedPages = kHeaderRegionBytes / kPageBytes + stylePages;
-  const uint32_t mappedStyles = in.mode == kModeFlash ? largestStyle : stylePages;
-  const uint32_t expected = in.mode == kModeFlash ? kExpectedRecordFlash : kExpectedRecordSd;
+  const uint32_t mappedStyles = largestFlash + sdPages;
+  const uint32_t expected = in.styleMode[0] == kModeSd ? kExpectedRecordSd : kExpectedRecordFlash;
 
   // From the largest log the partition could hold down: the first that fits both the mapping budget and
   // the partition, together with the index it needs.
@@ -44,7 +50,6 @@ bool planLayout(const PlanInput& in, Layout& out) {
     if (mappedStyles + index + kPairPages + log + kSparePages > in.freeMapPages) continue;
     if (fixedPages + index + kPairPages + log > usablePages) continue;
     Geometry& g = out.geometry;
-    g.mode = in.mode;
     g.styleCount = in.styleCount;
     g.indexOffset = offset;
     g.indexSlots = index * kSlotsPerPage;

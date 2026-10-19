@@ -1206,3 +1206,292 @@ TEST_F(TtfFontSetTest, MoreStylesThanTheStoreHoldsAreRefusedBeforeAnyErase) {
   EXPECT_EQ(0, busy);
   EXPECT_EQ(0u, flash.totalSectorErases());
 }
+
+// --- Stage 2c-4: SD mode, a style's tables in the store and its outlines on the card ---------------------------
+
+namespace {
+
+constexpr uint32_t kPage = glyphstore::kPageBytes;
+// Bookerly's four styles take 35 of a font area's pages in flash mode (the whole files), 19 in SD mode (their tables,
+// 3 pages each): on 24 pages only SD mode fits.
+constexpr uint32_t kSdOnlyBytes = 24 * kPage;
+
+void expectWrittenOnce(const SimNorFlash& chip) {
+  EXPECT_EQ(0u, chip.violations());
+  EXPECT_EQ(0u, chip.reprograms());
+}
+
+uint32_t erasesBetween(const SimNorFlash& chip, const uint32_t from, const uint32_t to) {
+  uint32_t total = 0;
+  for (uint32_t sector = from / glyphstore::kSectorBytes; sector < to / glyphstore::kSectorBytes; ++sector) {
+    total += chip.sectorErases(sector);
+  }
+  return total;
+}
+
+}  // namespace
+
+TEST_F(TtfFontSetTest, AFamilyTooLargeForFlashModeIsDrawnFromTheCardAsFlashModeDrawsIt) {
+  SimNorFlash chip{kSdOnlyBytes};
+  {
+    const auto set = openFamilies(chip, {files}, busy);
+    ASSERT_NE(nullptr, set);
+    EXPECT_EQ(1, busy);
+    TtfFont& font = *set->font(0);
+    EXPECT_TRUE(font.readsCard());
+    for (uint8_t style = 0; style < 4; ++style) {
+      for (const uint32_t cp : {uint32_t{'A'}, uint32_t{'g'}, uint32_t{'W'}, uint32_t{0xE9}, uint32_t{' '}}) {
+        expectDrawnAs(reference(files[style].bytes, cp, 14), font, style, font.glyph(style, cp));
+      }
+    }
+    const EpdFont* fonts[4] = {};
+    ASSERT_TRUE(font.nativeFonts(40, fonts));
+    expectDrawnAs(referenceAt(files[kRegular].bytes, 'M', px(40)), font, kRegular, nativeGlyph(fonts[kRegular], 'M'));
+    EXPECT_GT(set->sdPageReads(), 0u);
+  }
+  // The next boot draws them from the store: neither rendered again nor read from the card, but for the table
+  // directory the open compares with the block's.
+  for (MemoryFile& file : files) file.offsets.clear();
+  const auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(1, busy);
+  expectDrawnAs(reference(files[kBold].bytes, 'W', 14), *set->font(0), kBold, set->font(0)->glyph(kBold, 'W'));
+  EXPECT_EQ(0u, set->font(0)->renders());
+  const std::vector<uint8_t>& bold = files[kBold].bytes;
+  const uint32_t directoryEnd = 12 + 16u * static_cast<uint32_t>(bold[4] << 8 | bold[5]);
+  ASSERT_FALSE(files[kBold].offsets.empty());
+  for (const uint32_t offset : files[kBold].offsets) EXPECT_LT(offset, directoryEnd);
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, KerningAndLigaturesInSdModeAreFlashModes) {
+  SimNorFlash chip{kSdOnlyBytes};
+  const auto card = openFamilies(chip, {files}, busy);
+  const auto whole = openFamilies(flash, {files}, busy);
+  ASSERT_NE(nullptr, card);
+  ASSERT_NE(nullptr, whole);
+  ASSERT_TRUE(card->font(0)->readsCard());
+  ASSERT_FALSE(whole->font(0)->readsCard());
+  for (const auto& [left, right] : {std::pair<uint32_t, uint32_t>{'A', 'V'}, {'T', 'o'}, {'W', 'e'}, {'f', 'i'}}) {
+    EXPECT_EQ(whole->font(0)->kerning(kRegular, left, right), card->font(0)->kerning(kRegular, left, right));
+  }
+  EXPECT_NE(0, card->font(0)->kerning(kRegular, 'A', 'V'));
+  const EpdFont* regular = card->font(0)->font(kRegular);
+  ASSERT_NE(nullptr, regular);
+  ASSERT_GT(regular->data->ligaturePairCount, 0u);  // GSUB read from the store, in place
+  EXPECT_EQ(whole->font(0)->font(kRegular)->data->ligaturePairCount, regular->data->ligaturePairCount);
+  const EpdGlyph* fromCard = card->font(0)->glyph(kRegular, 0xFB01);
+  const EpdGlyph* fromFlash = whole->font(0)->glyph(kRegular, 0xFB01);
+  ASSERT_NE(nullptr, fromCard);
+  ASSERT_NE(nullptr, fromFlash);
+  EXPECT_EQ(bitmapOf(*whole->font(0), kRegular, fromFlash), bitmapOf(*card->font(0), kRegular, fromCard));
+}
+
+TEST_F(TtfFontSetTest, APrefetchReadsTheOutlinesForwardThroughTheFile) {
+  // A backward seek makes SdFat walk the file's cluster chain from its start (spec 5.1): the page's misses, in
+  // whatever order the text has them, are drawn in glyph order, which is file order.
+  SimNorFlash chip{kSdOnlyBytes};
+  const auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  files[kRegular].offsets.clear();
+  set->font(0)->prefetch(kRegular, "zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA");
+  const std::vector<uint32_t>& reads = files[kRegular].offsets;
+  ASSERT_GT(reads.size(), 4u);
+  EXPECT_TRUE(std::is_sorted(reads.begin(), reads.end()));
+  const uint32_t rendered = set->font(0)->renders();
+  EXPECT_EQ(52u, rendered);
+  for (const uint32_t cp : {uint32_t{'a'}, uint32_t{'q'}, uint32_t{'Z'}}) {
+    expectDrawnAs(reference(files[kRegular].bytes, cp, 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, cp));
+  }
+  EXPECT_EQ(rendered, set->font(0)->renders());  // stored by the batch
+}
+
+TEST_F(TtfFontSetTest, AFileOnTheCardThatChangedInstallsTheSetAgain) {
+  // The identity covers each file's name, size and time; its stamp, the path too. A store whose SD-mode file is
+  // another than the one its tables came from would read outlines at the wrong offsets, so it is installed again.
+  SimNorFlash chip{kSdOnlyBytes};
+  ASSERT_NE(nullptr, openFamilies(chip, {files}, busy));
+  files[kItalic].stamp ^= 1;  // the same name, size and time, in another directory
+  auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, busy);
+  expectDrawnAs(reference(files[kItalic].bytes, 'g', 14), *set->font(0), kItalic, set->font(0)->glyph(kItalic, 'g'));
+  set.reset();
+  // Another file of another size under the same identity: installed again too, its own outlines drawn.
+  files[kItalic].bytes = readFont("Bookerly/Bookerly-BoldItalic.ttf");
+  set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(3, busy);
+  expectDrawnAs(reference(files[kItalic].bytes, 'g', 14), *set->font(0), kItalic, set->font(0)->glyph(kItalic, 'g'));
+  set.reset();
+  ASSERT_NE(nullptr, openFamilies(chip, {files}, busy));
+  EXPECT_EQ(3, busy);  // and kept from then on
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, AFileRewrittenInPlaceAtTheSameSizeAndTimeInstallsTheSetAgain) {
+  // The stamp and the size match; the file's table directory does not (one table's checksum changed).
+  SimNorFlash chip{kSdOnlyBytes};
+  ASSERT_NE(nullptr, openFamilies(chip, {files}, busy));
+  std::vector<uint8_t>& italic = files[kItalic].bytes;
+  italic[findRecord(italic, "GPOS") + 4] ^= 0x5A;
+  const auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, busy);
+  expectDrawnAs(reference(italic, 'k', 14), *set->font(0), kItalic, set->font(0)->glyph(kItalic, 'k'));
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, AnAccentStaysWholeWhenNothingWithMoreOnTheCardFits) {
+  // 47 pages and 17 free mapping pages: both families whole fit with a 4-page log, which the 8-page rule would
+  // refuse; but Inter's tables, mapped beside Bookerly's largest style, pass the mapping budget. Whole beats left
+  // out.
+  SimNorFlash tight{47 * kPage, 17};
+  const auto set = openFamilies(tight, {files, accent}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, set->familyCount());
+  EXPECT_FALSE(set->font(0)->readsCard());
+  EXPECT_FALSE(set->font(1)->readsCard());
+}
+
+TEST_F(TtfFontSetTest, ACardReadErrorDrawsTheGlyphAsMissingAndAsksAgain) {
+  SimNorFlash chip{kSdOnlyBytes};
+  const auto set = openFamilies(chip, {files}, busy);
+  ASSERT_NE(nullptr, set);
+  files[kRegular].failReads = true;
+  EXPECT_EQ(nullptr, set->font(0)->glyph(kRegular, 'R'));  // transient: not marked as missing
+  files[kRegular].failReads = false;
+  expectDrawnAs(reference(files[kRegular].bytes, 'R', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'R'));
+  EXPECT_FALSE(set->ringMode());
+}
+
+TEST_F(TtfFontSetTest, TheBodyStaysInFlashModeWhileTheAccentFamilyGoesToTheCard) {
+  // 42 pages: Bookerly's and Inter's whole files (40 pages and a header) leave no room for a log; Bookerly whole
+  // and Inter's tables (6 pages) leave 7.
+  SimNorFlash chip{42 * kPage};
+  {
+    const auto set = openFamilies(chip, {files, accent}, busy);
+    ASSERT_NE(nullptr, set);
+    EXPECT_FALSE(set->font(0)->readsCard());
+    EXPECT_TRUE(set->font(1)->readsCard());
+    expectDrawnAs(reference(files[kRegular].bytes, 'Q', 14), *set->font(0), kRegular,
+                  set->font(0)->glyph(kRegular, 'Q'));
+    expectDrawnAs(reference(accent[kBold].bytes, 'Q', 14), *set->font(1), kBold, set->font(1)->glyph(kBold, 'Q'));
+    for (MemoryFile& file : files) file.reads = 0;
+    accent[kRegular].reads = 0;
+    ASSERT_NE(nullptr, set->font(0)->glyph(kRegular, 'k'));
+    ASSERT_NE(nullptr, set->font(1)->glyph(kRegular, 'k'));
+    EXPECT_EQ(0u, files[kRegular].reads);   // the body's outlines come from flash
+    EXPECT_GT(accent[kRegular].reads, 0u);  // the accent's from the card
+  }
+  const auto set = openFamilies(chip, {files, accent}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(1, busy);
+  expectDrawnAs(reference(accent[kBold].bytes, 'Q', 14), *set->font(1), kBold, set->font(1)->glyph(kBold, 'Q'));
+  EXPECT_EQ(0u, set->font(1)->renders());
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, AnAccentFamilyKeepsFlashModeOnlyWhileTheLogKeepsEightPages) {
+  // 47 pages: both families whole leave a log of 4 pages (the least the planner allows), Inter on the card one of
+  // 10. The accent goes to the card; the body stays whole.
+  SimNorFlash tight{47 * kPage};
+  const auto set = openFamilies(tight, {files, accent}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_FALSE(set->font(0)->readsCard());
+  EXPECT_TRUE(set->font(1)->readsCard());
+  // The test's 53 pages leave both whole a log of 9: both stay in flash mode, as before SD mode.
+  const auto roomy = openFamilies(flash, {files, accent}, busy);
+  ASSERT_NE(nullptr, roomy);
+  EXPECT_FALSE(roomy->font(0)->readsCard());
+  EXPECT_FALSE(roomy->font(1)->readsCard());
+}
+
+TEST_F(TtfFontSetTest, ABodyTooLargeForFlashModeTakesTheAccentFamiliesToTheCardWithIt) {
+  // 26 pages: Bookerly whole does not fit; every style's tables do (12 + 6 pages, a header and a log of 5).
+  SimNorFlash chip{26 * kPage};
+  const auto set = openFamilies(chip, {files, accent}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_TRUE(set->font(0)->readsCard());
+  EXPECT_TRUE(set->font(1)->readsCard());
+  expectDrawnAs(reference(files[kItalic].bytes, 'y', 14), *set->font(0), kItalic, set->font(0)->glyph(kItalic, 'y'));
+  expectDrawnAs(reference(accent[kRegular].bytes, 'y', 14), *set->font(1), kRegular,
+                set->font(1)->glyph(kRegular, 'y'));
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, AnSdModeBlockThatHoldsItsTablesIsKept) {
+  // Bookerly whole beside Inter's tables, then beside Inter's and Ubuntu's: the first six blocks hold what the new
+  // layout puts there, the SD-mode ones included, and only Ubuntu's tables are written.
+  SimNorFlash chip{46 * kPage};
+  ASSERT_NE(nullptr, openFamilies(chip, {files, accent}, busy));
+  const uint32_t interAt = glyphstore::kHeaderRegionBytes + 4 * 7 * kPage;
+  const uint32_t before = erasesBetween(chip, glyphstore::kHeaderRegionBytes, interAt + 6 * kPage);
+  MemoryFile ubuntu[4];
+  ubuntu[kRegular].bytes = readFont("Ubuntu/Ubuntu-Regular.ttf");
+  const auto set = openFamilies(chip, {files, accent, ubuntu}, busy, kIdentityB);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, busy);
+  EXPECT_FALSE(set->font(0)->readsCard());
+  ASSERT_TRUE(set->font(1)->readsCard());
+  ASSERT_TRUE(set->font(2)->readsCard());
+  EXPECT_EQ(before, erasesBetween(chip, glyphstore::kHeaderRegionBytes, interAt + 6 * kPage));  // all six kept
+  expectDrawnAs(reference(accent[kBold].bytes, 'B', 14), *set->font(1), kBold, set->font(1)->glyph(kBold, 'B'));
+  expectDrawnAs(reference(ubuntu[kRegular].bytes, 'B', 14), *set->font(2), kRegular,
+                set->font(2)->glyph(kRegular, 'B'));
+  expectWrittenOnce(chip);
+}
+
+TEST_F(TtfFontSetTest, APowerCutInAnSdModeInstallIsInstalledWholeAtTheNextLoad) {
+  // Inter Regular on 10 pages: its tables (3 pages) fit, its file (6) does not. A cut at every 997th step of the
+  // install (a block made from the file's tables, then the header): the next boot finds no store, or a whole one, and
+  // draws from it what the file draws, without programming a byte twice.
+  MemoryFile inter[4];
+  inter[kRegular].bytes = accent[kRegular].bytes;
+  SimNorFlash dry{10 * kPage};
+  ASSERT_NE(nullptr, openFamilies(dry, {inter}, busy));
+  ASSERT_TRUE(openFamilies(dry, {inter}, busy)->font(0)->readsCard());
+  const Reference want = reference(inter[kRegular].bytes, 'G', 14);
+  const uint64_t steps = dry.steps();
+  for (const bool partial : {false, true}) {
+    for (uint64_t cut = 0; cut < steps; cut += 997) {
+      SimNorFlash chip{10 * kPage};
+      chip.partialCut(partial);
+      chip.cutAfterSteps(static_cast<int64_t>(cut));
+      openFamilies(chip, {inter}, busy);
+      chip.powerCycle();
+      const auto set = openFamilies(chip, {inter}, busy);
+      ASSERT_NE(nullptr, set) << cut;
+      expectDrawnAs(want, *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'G'));
+      expectWrittenOnce(chip);
+      if (HasFailure()) return;
+    }
+  }
+}
+
+TEST_F(TtfFontSetTest, AWholeReaderFontAndThreeAccentFamiliesOnTheCardFitTogether) {
+  // The X4 case of phase 3: Bookerly whole as the reader's font, and a book's three accent families (Inter in two
+  // styles, Noto Sans Italic, Ubuntu Bold). Whole, they need 56 of the font area's 53 pages, and phase 3 left two of
+  // them out; with their tables on the card all four load, eight style blocks.
+  MemoryFile script[4];
+  MemoryFile code[4];
+  script[kRegular].bytes = readFont("NotoSans/NotoSans-Italic.ttf");
+  code[kRegular].bytes = readFont("Ubuntu/Ubuntu-Bold.ttf");
+  const auto set = openFamilies(flash, {files, accent, script, code}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(4, set->familyCount());
+  EXPECT_FALSE(set->font(0)->readsCard());
+  for (uint8_t f = 1; f < 4; ++f) EXPECT_TRUE(set->font(f)->readsCard()) << int{f};
+  const MemoryFile* const sources[] = {files, accent, script, code};
+  for (uint8_t f = 0; f < 4; ++f) {
+    expectDrawnAs(reference(sources[f][kRegular].bytes, 'e', 14), *set->font(f), kRegular,
+                  set->font(f)->glyph(kRegular, 'e'));
+  }
+}
+
+TEST_F(TtfFontSetTest, AFamilyTooLargeEvenForSdModeIsRefusedBeforeAnyErase) {
+  SimNorFlash chip{16 * kPage};  // Bookerly's tables alone take 12 pages and a header
+  EXPECT_EQ(nullptr, openFamilies(chip, {files}, busy));
+  EXPECT_EQ(0, busy);
+  EXPECT_EQ(0u, chip.totalSectorErases());
+}

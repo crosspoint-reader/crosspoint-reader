@@ -66,7 +66,7 @@ uint32_t countUsed(const uint8_t* table, const uint32_t slots) {
 // The regions are sector-aligned, in the order index, pairs, log, after the header and state sectors, and
 // inside the flash. Each table is at least kMaxProbe slots, so a probe never wraps onto itself.
 bool validGeometry(const Geometry& g, const uint32_t flashSize) {
-  if (g.mode > kModeSd || g.styleCount == 0 || g.styleCount > kMaxStyles) return false;
+  if (g.styleCount == 0 || g.styleCount > kMaxStyles) return false;
   if (g.indexSlots < kMaxProbe || g.pairSlots < kMaxProbe || g.logSize == 0 || g.logSize % kSectorBytes != 0) {
     return false;
   }
@@ -79,16 +79,23 @@ bool validGeometry(const Geometry& g, const uint32_t flashSize) {
          uint64_t{g.logOffset} + g.logSize <= flashSize;
 }
 
-// The style blocks are sector-aligned, in order, between the state sector and the index, and every table
-// entry of a style lies inside its block.
+// The style blocks are sector-aligned, in order, between the state sector and the index, the SD-mode ones after
+// every flash-mode one; an SD-mode style's outlines lie in its file and past its block.
 bool validStyles(const StyleInfo* styles, const Geometry& g) {
   uint32_t floor = kFirstRegionOffset;
+  bool sd = false;
   for (uint8_t s = 0; s < g.styleCount; ++s) {
     const StyleInfo& style = styles[s];
     if (style.offset < floor || style.offset % kSectorBytes != 0 || style.size == 0) return false;
-    if (uint64_t{style.offset} + style.size > g.indexOffset || style.tableCount > kMaxTables) return false;
-    for (uint32_t t = 0; t < style.tableCount; ++t) {
-      if (uint64_t{style.tables[t].blockOffset} + style.tables[t].length > style.size) return false;
+    if (uint64_t{style.offset} + style.size > g.indexOffset || style.mode > kModeSd) return false;
+    if (style.mode == kModeFlash && sd) return false;
+    if (style.mode == kModeSd) {
+      const SdOutlines& o = style.outlines;
+      if (o.fontOffset < style.size || uint64_t{o.fontOffset} + o.length > UINT32_MAX ||
+          uint64_t{o.fileOffset} + o.length > style.fileSize) {
+        return false;
+      }
+      sd = true;
     }
     floor = style.offset + style.size;
   }
@@ -109,8 +116,10 @@ bool FlashGlyphStore::beginInstall(const Layout& layout, const uint8_t identity[
                                    const StyleInfo* sdInfo, const uint8_t keepStyles) {
   close();
   const Geometry& g = layout.geometry;
-  if (!validGeometry(g, flash_.size()) || (g.mode == kModeSd && !sdInfo)) {
-    LOG_ERR("GST", "install: the layout does not fit the flash, or SD mode lacks its table maps");
+  bool sd = false;
+  for (uint8_t s = 0; s < g.styleCount && s < kMaxStyles; ++s) sd = sd || layout.styleMode[s] == kModeSd;
+  if (!validGeometry(g, flash_.size()) || (sd && !sdInfo)) {
+    LOG_ERR("GST", "install: the layout does not fit the flash, or SD mode lacks its files");
     return false;
   }
   auto header = makeUniqueNoThrow<Header>();
@@ -124,12 +133,14 @@ bool FlashGlyphStore::beginInstall(const Layout& layout, const uint8_t identity[
   std::memcpy(header->identity, identity, kIdentityBytes);
   header->geometry = g;
   for (uint8_t s = 0; s < g.styleCount; ++s) {
-    if (sdInfo) header->styles[s] = sdInfo[s];
-    header->styles[s].offset = layout.styleOffset[s];
-    header->styles[s].size = layout.styleSize[s];
+    StyleInfo& style = header->styles[s];
+    if (layout.styleMode[s] == kModeSd) style = sdInfo[s];
+    style.offset = layout.styleOffset[s];
+    style.size = layout.styleSize[s];
+    style.mode = layout.styleMode[s];
   }
   if (!validStyles(header->styles, g)) {
-    LOG_ERR("GST", "install: the style blocks or their tables do not fit");
+    LOG_ERR("GST", "install: the style blocks or their outlines do not fit");
     return false;
   }
 
@@ -189,13 +200,28 @@ FlashGlyphStore::OpenResult FlashGlyphStore::open(const uint8_t identity[kIdenti
     return OpenResult::MapFailed;
   }
   geometry_ = g;
+  firstSd_ = g.styleCount;
   for (uint8_t s = 0; s < g.styleCount; ++s) {
     styleOffset_[s] = header->styles[s].offset;
     styleSize_[s] = header->styles[s].size;
+    if (header->styles[s].mode == kModeSd && firstSd_ == g.styleCount) firstSd_ = s;
   }
   index_ = region_;
   pairs_ = region_ + (g.pairOffset - g.indexOffset);
   log_ = region_ + (g.logOffset - g.indexOffset);
+  if (firstSd_ < g.styleCount) {
+    // The SD-mode blocks, which stay mapped, go right beside the regions, before any flash-mode block: a flash-mode
+    // block mapped after them leaves, when it goes, a gap that joins the free pages past it. Mapped after one, they
+    // would split those pages, and a larger flash-mode block could find no run long enough to map into.
+    const uint8_t last = g.styleCount - 1;
+    sdMap_ = flash_.map(styleOffset_[firstSd_], styleOffset_[last] + styleSize_[last] - styleOffset_[firstSd_]);
+    if (!sdMap_) {
+      LOG_ERR("GST", "open: cannot map the SD-mode styles' tables (%u map pages free)",
+              static_cast<unsigned>(flash_.freeMapPages()));
+      close();
+      return OpenResult::MapFailed;
+    }
+  }
   uint32_t wipeWord = kErased;
   if (!flash_.read(kWipeWordOffset, &wipeWord, sizeof wipeWord)) wipeWord = 0;  // unreadable: assume pending
   wipePending_ = wipeWord != kErased;
@@ -216,9 +242,11 @@ FlashGlyphStore::OpenResult FlashGlyphStore::open(const uint8_t identity[kIdenti
 
 void FlashGlyphStore::close() {
   if (styleMap_) flash_.unmap(styleMap_);
+  if (sdMap_) flash_.unmap(sdMap_);
   if (region_) flash_.unmap(region_);
-  styleMap_ = nullptr;
+  styleMap_ = sdMap_ = nullptr;
   mappedStyle_ = 0xFF;
+  firstSd_ = 0;
   region_ = index_ = pairs_ = log_ = nullptr;
   geometry_ = Geometry{};
   logUsed_ = usedSlots_ = usedPairs_ = claimedFaces_ = 0;
@@ -230,18 +258,8 @@ void FlashGlyphStore::close() {
 
 const uint8_t* FlashGlyphStore::mapStyle(const uint8_t style) {
   if (!open_ || style >= geometry_.styleCount) return nullptr;
-  if (geometry_.mode == kModeSd) {
-    // All styles' tables map together: the budget counted them all.
-    if (!styleMap_) {
-      const uint8_t last = geometry_.styleCount - 1;
-      styleMap_ = flash_.map(styleOffset_[0], styleOffset_[last] + styleSize_[last] - styleOffset_[0]);
-      if (!styleMap_) {
-        LOG_ERR("GST", "cannot map the copied tables");
-        return nullptr;
-      }
-    }
-    return styleMap_ + (styleOffset_[style] - styleOffset_[0]);
-  }
+  // The SD-mode blocks, the last ones, are mapped together from open() on: the budget counted them all.
+  if (style >= firstSd_) return sdMap_ + (styleOffset_[style] - styleOffset_[firstSd_]);
   // Flash mode: one style at a time, so the budget holds only the largest.
   if (styleMap_ && mappedStyle_ == style) return styleMap_;
   if (styleMap_) flash_.unmap(styleMap_);

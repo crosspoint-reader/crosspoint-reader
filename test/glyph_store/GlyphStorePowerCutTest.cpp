@@ -68,6 +68,32 @@ Layout sweepLayout() {
   return layout;
 }
 
+// A body style in flash mode and an accent style in SD mode (2c-4): its header record carries its file and outlines.
+Layout mixedLayout() {
+  Layout layout = sweepLayout();
+  layout.geometry.styleCount = 2;
+  layout.styleOffset[1] = layout.styleOffset[0] + kSectorBytes;
+  layout.styleSize[1] = 256;
+  layout.styleMode[1] = kModeSd;
+  return layout;
+}
+
+StyleInfo sdAccent() {
+  StyleInfo info{};
+  info.fileStamp = 0x5EED;
+  info.fileSize = 200000;
+  info.outlines = {4000, 256, 150000};
+  return info;
+}
+
+const StyleInfo kMixedInfo[kMaxStyles] = {{}, sdAccent()};
+
+// What a session installs.
+struct Install {
+  Layout layout;
+  const StyleInfo* sdInfo;
+};
+
 bool claim(FlashGlyphStore& store, Sizes& sizes) {
   return store.faceIndex(0, kBodyPpem, &sizes.body) && store.faceIndex(0, kHeadingPpem, &sizes.heading) &&
          store.faceIndex(1, kBodyPpem, &sizes.accent);
@@ -83,10 +109,10 @@ bool commitAll(FlashGlyphStore& store, const GlyphSpec* glyphs, const size_t cou
 }
 
 // Every kind of write a session makes, from the install on.
-Outcome runSession(SimNorFlash& flash) {
+Outcome runSession(SimNorFlash& flash, const Install& what) {
   Outcome out;
   FlashGlyphStore store(flash);
-  out.installed = install(store, sweepLayout());
+  out.installed = install(store, what.layout, kIdentityA, what.sdInfo);
   if (!out.installed || store.open(kIdentityA) != OpenResult::Ready || !claim(store, out.sizes)) return out;
   out.batchA = commitAll(store, kBatchA, std::size(kBatchA), out.sizes);
   out.noGlyph = store.markNoGlyph(makeKey(kNoGlyphCodepoint, 0, out.sizes.body)) == Commit::Stored;
@@ -108,7 +134,7 @@ void checkGlyphs(const FlashGlyphStore& store, const GlyphSpec* glyphs, const si
   }
 }
 
-void checkAfterReboot(SimNorFlash& flash, const Outcome& out, const std::string& where) {
+void checkAfterReboot(SimNorFlash& flash, const Install& what, const Outcome& out, const std::string& where) {
   FlashGlyphStore store(flash);
   const OpenResult opened = store.open(kIdentityA);
   if (out.installed) {
@@ -116,6 +142,18 @@ void checkAfterReboot(SimNorFlash& flash, const Outcome& out, const std::string&
   } else if (opened != OpenResult::Ready) {
     EXPECT_EQ(OpenResult::NotInstalled, opened) << where;
     return;  // the next install starts from scratch
+  }
+  // An installed store says every style's mode, and an SD-mode style's file, as the install gave them.
+  for (uint8_t s = 0; s < what.layout.geometry.styleCount; ++s) {
+    StyleInfo info{};
+    ASSERT_TRUE(store.styleInfo(s, info)) << where;
+    EXPECT_EQ(what.layout.styleMode[s], info.mode) << where;
+    if (info.mode != kModeSd) continue;
+    EXPECT_EQ(what.sdInfo[s].fileStamp, info.fileStamp) << where;
+    EXPECT_EQ(what.sdInfo[s].fileSize, info.fileSize) << where;
+    EXPECT_EQ(what.sdInfo[s].outlines.fileOffset, info.outlines.fileOffset) << where;
+    EXPECT_EQ(what.sdInfo[s].outlines.fontOffset, info.outlines.fontOffset) << where;
+    EXPECT_EQ(what.sdInfo[s].outlines.length, info.outlines.length) << where;
   }
   // A size claimed in the session answers the same now; a torn claim lands on a fresh entry instead.
   Sizes sizes;
@@ -258,11 +296,10 @@ void sweepWipe(const bool pending) {
   }
 }
 
-}  // namespace
-
-TEST(GlyphStorePowerCut, EveryCutDuringASessionLeavesAConsistentStore) {
+// Cuts the power at every step of a session, from the install on.
+void sweepSession(const Install& what) {
   SimNorFlash dry(kFlashBytes);
-  const Outcome all = runSession(dry);
+  const Outcome all = runSession(dry, what);
   ASSERT_TRUE(all.installed && all.batchA && all.noGlyph && all.batchB && all.pair && all.accentPair);
   const uint64_t steps = dry.steps();
   for (const bool partial : {false, true}) {
@@ -270,14 +307,24 @@ TEST(GlyphStorePowerCut, EveryCutDuringASessionLeavesAConsistentStore) {
       SimNorFlash flash(kFlashBytes);
       flash.partialCut(partial);
       flash.cutAfterSteps(static_cast<int64_t>(cut));
-      const Outcome out = runSession(flash);
+      const Outcome out = runSession(flash, what);
       const std::string where = "cut " + std::to_string(cut) + (partial ? " partial" : "");
       ASSERT_TRUE(flash.dead()) << where;
       flash.powerCycle();
-      checkAfterReboot(flash, out, where);
-      if (HasFailure()) return;  // one cut's report is enough to debug from
+      checkAfterReboot(flash, what, out, where);
+      if (::testing::Test::HasFailure()) return;  // one cut's report is enough to debug from
     }
   }
+}
+
+}  // namespace
+
+TEST(GlyphStorePowerCut, EveryCutDuringASessionLeavesAConsistentStore) { sweepSession({sweepLayout(), nullptr}); }
+
+TEST(GlyphStorePowerCut, EveryCutDuringASessionWithAnSdModeStyleLeavesAConsistentStore) {
+  // The install writes a flash-mode block, an SD-mode block and a header whose records carry the SD-mode file: a cut
+  // anywhere before the header's last byte reads as not installed, and an installed store's records are whole.
+  sweepSession({mixedLayout(), kMixedInfo});
 }
 
 TEST(GlyphStorePowerCut, EveryCutDuringAWipeIsRecoverable) { sweepWipe(true); }

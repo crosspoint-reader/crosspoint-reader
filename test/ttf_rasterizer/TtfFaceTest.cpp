@@ -118,6 +118,32 @@ TEST(TtfFace, Format4MapsByDeltasAndByTheGlyphArray) {
   EXPECT_EQ(0, lookup(buildFont(font), 'D'));
 }
 
+TEST(TtfFace, Format4ReadsStayInsideTheCmapTable) {
+  // The table directory says the cmap is shorter than its subtable: the bytes past it are still in the file (the
+  // glyf table follows), but in SD mode they could be the card's, so nothing past the table is read.
+  Font font = threeGlyphs();
+  font.cmapRangeOffsets = true;  // one segment A-B through the glyph array, which ends the subtable
+  Bytes data = buildFont(font);
+  const size_t lengthField = findRecord(data, "cmap") + 12;
+  const uint32_t length = static_cast<uint32_t>(data[lengthField] << 24 | data[lengthField + 1] << 16 |
+                                                data[lengthField + 2] << 8 | data[lengthField + 3]);
+  set32(data, lengthField, length - 2);  // B's glyph array entry is past the table
+  EXPECT_EQ(1, lookup(data, 'A'));
+  EXPECT_EQ(0, lookup(data, 'B'));
+  set32(data, lengthField, length - 6);  // the segment arrays run past it too: passed over, and no other map
+  Face face;
+  EXPECT_EQ(FaceStatus::Unsupported, parse(data, &face));
+}
+
+TEST(TtfFace, AFormat4SubtableRunningPastTheTableGivesWayToTheNext) {
+  // FreeType's validator drops the (3,1) subtable whose arrays the table cuts short, and takes the (0,3) one.
+  Bytes cut = cmapFormat4({{'A', 2}}, false);
+  cut.resize(cut.size() - 4);  // the cmap table ends inside the subtable's last arrays
+  Font font = threeGlyphs();
+  font.extraTables = {{"cmap", cmapTable({{0, 3, cmapFormat4({{'A', 1}}, false)}, {3, 1, cut}})}};
+  EXPECT_EQ(1, lookup(buildFont(font), 'A'));
+}
+
 TEST(TtfFace, Format12ReachesPastTheBmp) {
   Font font = threeGlyphs();
   font.cmapFormat12 = true;

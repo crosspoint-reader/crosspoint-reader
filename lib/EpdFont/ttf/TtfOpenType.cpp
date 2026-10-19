@@ -11,10 +11,9 @@ bool Kerning::resolve(FontBytes& bytes, const Face& face) {
   subtables_.reset();
   count_ = 0;
   legacy_ = false;
-  const uint8_t* font = bytes.data();
-  if (font == nullptr) return false;
-  if (face.gpos != 0) {
-    const uint8_t* gpos = font + face.gpos;
+  // The layout tables are read in place: in SD mode every table but the outlines is mapped.
+  const uint8_t* gpos = face.gpos != 0 ? bytes.span(face.gpos, face.gposLength) : nullptr;
+  if (gpos != nullptr) {
     const unsigned found = freeink::font::gpos::ResolveKernSubtables(gpos, face.gposLength, nullptr, 0);
     if (found != 0) {
       const uint16_t keep = found < kMaxSubtables ? static_cast<uint16_t>(found) : kMaxSubtables;
@@ -26,19 +25,21 @@ bool Kerning::resolve(FontBytes& bytes, const Face& face) {
     }
   }
   // No GPOS kerning: the legacy table, read in place at each pair.
-  legacy_ = face.kern != 0;
+  legacy_ = face.kern != 0 && bytes.span(face.kern, face.kernLength) != nullptr;
   return legacy_;
 }
 
 int32_t Kerning::pair(FontBytes& bytes, const Face& face, const uint16_t left, const uint16_t right,
                       bool* covered) const {
-  const uint8_t* font = bytes.data();
-  if (font != nullptr && count_ != 0) {
-    return freeink::font::gpos::PairKernAdjustment(font + face.gpos, face.gposLength, subtables_.get(), count_, left,
-                                                   right, covered);
-  }
-  if (font != nullptr && legacy_) {
-    return freeink::font::kerntable::PairKernAdjustment(font + face.kern, face.kernLength, left, right, covered);
+  if (count_ != 0) {
+    if (const uint8_t* gpos = bytes.span(face.gpos, face.gposLength)) {
+      return freeink::font::gpos::PairKernAdjustment(gpos, face.gposLength, subtables_.get(), count_, left, right,
+                                                     covered);
+    }
+  } else if (legacy_) {
+    if (const uint8_t* kern = bytes.span(face.kern, face.kernLength)) {
+      return freeink::font::kerntable::PairKernAdjustment(kern, face.kernLength, left, right, covered);
+    }
   }
   if (covered) *covered = false;
   return 0;
@@ -53,7 +54,8 @@ uint16_t Ligatures::glyphFor(FontBytes& bytes, const Face& face, const uint32_t 
 
 bool resolveLigatures(FontBytes& bytes, const Face& face, Ligatures* out) {
   *out = Ligatures{};
-  if (face.gsub == 0 || bytes.data() == nullptr) return false;
+  const uint8_t* gsub = face.gsub != 0 ? bytes.span(face.gsub, face.gsubLength) : nullptr;
+  if (gsub == nullptr) return false;
   const uint32_t f = glyphIndex(bytes, face, 'f');
   const uint32_t i = glyphIndex(bytes, face, 'i');
   const uint32_t l = glyphIndex(bytes, face, 'l');
@@ -62,8 +64,7 @@ bool resolveLigatures(FontBytes& bytes, const Face& face, Ligatures* out) {
   const unsigned lengths[5] = {2, 2, 2, 3, 3};
   for (uint8_t k = 0; k < 5; ++k) {
     if (sequences[k][lengths[k] - 1] == 0) continue;
-    const uint32_t glyph =
-        freeink::font::gsub::LigatureGlyphId(bytes.data() + face.gsub, face.gsubLength, sequences[k], lengths[k]);
+    const uint32_t glyph = freeink::font::gsub::LigatureGlyphId(gsub, face.gsubLength, sequences[k], lengths[k]);
     // A glyph the font does not have would draw as missing, every time: without it the letters draw instead.
     out->glyphs[k] = glyph != 0 && glyph < face.numGlyphs ? static_cast<uint16_t>(glyph) : 0;
   }

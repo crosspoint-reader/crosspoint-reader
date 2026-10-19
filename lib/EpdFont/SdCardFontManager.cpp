@@ -27,6 +27,7 @@ SdCardFontManager::~SdCardFontManager() {
     }
     loaded_.clear();
     ttfSet_.reset();
+    ttfSources_.reset();
     ttfFlash_.reset();
   }
 }
@@ -122,7 +123,8 @@ static bool writeFamily(const SdCardFontFamilyInfo& family, uint8_t requestedPoi
 }
 
 // What a load holds while the set installs: every family's style files, open (an install copies them into the
-// store), and each family's identity. On the heap: several families' handles and sources would crowd the frame.
+// store), and each family's identity. On the heap: several families' handles and sources would crowd the frame. Kept
+// while a family is in SD mode, which reads its outlines through these files; the other families' files are closed.
 struct SdCardFontManager::TtfSources {
   HalFile files[kMaxTtfFamilies][4];
   ttf::FileSource sources[kMaxTtfFamilies][4];
@@ -145,10 +147,14 @@ void openTtfFiles(const SdCardFontFamilyInfo& family, HalFile (&files)[4], ttf::
       continue;
     }
     const auto size = static_cast<uint32_t>(handle.fileSize());
-    sources[file.style] = ttf::fileSource(handle, size);
     uint16_t date = 0;
     uint16_t time = 0;
     handle.getModifyDateTime(&date, &time);
+    // The card's stamp of the file, which an SD-mode store keeps (FileSource::stamp): its path and time.
+    const uint32_t when = static_cast<uint32_t>(date) << 16 | time;
+    const uint32_t stamp =
+        glyphstore::fnv1a(&when, sizeof when, glyphstore::fnv1a(file.path.c_str(), file.path.size()));
+    sources[file.style] = ttf::fileSource(handle, size, stamp);
     const char* slash = std::strrchr(file.path.c_str(), '/');
     stamps[file.style] = {slash ? slash + 1 : file.path.c_str(), size, date, time};
   }
@@ -233,6 +239,16 @@ bool SdCardFontManager::loadTtfFamilies(const SdCardFontFamilyInfo* const* famil
     ttfFlash_.reset();
     return false;
   }
+  // The files of a family in SD mode stay open while the set is loaded; the rest are closed now.
+  bool onCard = false;
+  for (uint8_t f = 0; f < count; ++f) {
+    if (f < loaded && ttfSet_->font(f)->readsCard()) {
+      onCard = true;
+      continue;
+    }
+    for (HalFile& file : opened->files[f]) file = HalFile();  // closed, and its handle freed
+  }
+  if (onCard) ttfSources_ = std::move(opened);
   renderer.setFontResolver(&SdCardFontManager::resolveTtfSize, this);
   ttfAsked_ = askedKey(families, count);
   loadedFamilyName_ = ttfFamilies_[0].name;
@@ -517,14 +533,17 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
       const TtfFont& font = *ttfSet_->font(f);
       renderer.removeFont(ttfFamilies_[f].fontId);
       LOG_INF("SDMGR",
-              "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store, %lu kerning pairs worked out",
+              "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store, %lu kerning pairs worked out%s",
               ttfFamilies_[f].name.c_str(), static_cast<unsigned long>(font.renders()),
-              static_cast<unsigned long>(font.storeHits()), static_cast<unsigned long>(font.kernLookups()));
+              static_cast<unsigned long>(font.storeHits()), static_cast<unsigned long>(font.kernLookups()),
+              font.readsCard() ? " (SD mode)" : "");
       ttfFamilies_[f] = {};
     }
+    LOG_INF("SDMGR", "TTF set unloaded: %lu SD pages read", static_cast<unsigned long>(ttfSet_->sdPageReads()));
     ttfCount_ = 0;
     ttfAsked_ = 0;
-    ttfSet_.reset();  // closes the store before its flash goes
+    ttfSet_.reset();  // closes the store before its flash goes, and stops reading before its files close
+    ttfSources_.reset();
     ttfFlash_.reset();
   }
   dropSizeAlias(renderer);

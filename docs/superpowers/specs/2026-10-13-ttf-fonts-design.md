@@ -13,6 +13,8 @@ with the direct integration in section 3.
 - **A book's embedded fonts (section 11):** Stage A, the book's body family drawn as that book's font, is built on
   branch `feat/book-fonts` (2026-10-17; slimmed and X4-tested 2026-10-18). Stage B, more than one family per book,
   is designed in 11.1; phase 1 is merged (11.1.1), phase 2, the store of a family set, is built (11.1.2).
+- **Stage 2c-4, SD mode** (a style's tables in the store, its outlines on the card, the mode a style block's), is
+  built on branch `feat/ttf-sd-mode` (2026-10-18, 8.2).
 
 It is working material. When the work merges, lasting parts move to reference docs, open items move
 to `docs/future_work/`, and this file is deleted (see the docs layout convention).
@@ -199,7 +201,8 @@ log              append-only glyph records, erased at install
 ```
 
 **Mode choice at install.** Flash mode applies if every style, plus the index and a minimum log of
-256 KB, fits the usable partition and the mapping budget. Otherwise the font uses SD mode.
+256 KB, fits the usable partition and the mapping budget. Otherwise the font uses SD mode. (As built in 2c-4, 8.2:
+the mode is a style block's, chosen per family of a set.)
 
 **Region sizes come from the mapping budget, not from the partition size.** The C3 has 128 MMU pages
 of 64 KB shared by the app's code, its rodata and every mapping. About 31 are free at runtime, a
@@ -376,7 +379,8 @@ more often. Each still erases only the sectors that hold data.
 ### 5.1 `FontBytes`
 
 **As built (Stage 2b, `lib/EpdFont/ttf/FontBytes.h`):** the flash mode, a pointer and a length, with the
-reads inline and both flags. Stage 2c adds the SD mode behind the same calls.
+reads inline and both flags. Stage 2c adds the SD mode behind the same calls. (As built in 2c-4, 8.2: no table map;
+the mapped part is a font of its own but for glyf, which alone is read from the card.)
 
 `FontBytes` is the engine's only way to read a font. It offers `u8/u16/u32(offset)` and
 `read(offset, len, dst)`, and every access is bounds-checked. Two error flags are kept apart, because
@@ -640,7 +644,8 @@ See section 11 for the full deferred list.
   `OS/2.usWeightClass` nearest 400 (regular, italic) or 700 (bold styles), then the first by name. A regular
   style is required.
 - **Too large for flash mode:** such a family is not listed at all until SD mode (2c-4); the check is
-  `glyphstore::planLayout` against the font area and the mapping budget at discovery.
+  `glyphstore::planLayout` against the font area and the mapping budget at discovery. (2c-4: listed when SD mode
+  takes it, 8.2.)
 - **Sizes:** a TTF family offers 8 pt and the 10-26 pt ladder (`ReaderSizeList::native()`), drawn natively; a
   size change registers a new font ID without a reload.
 - **The wipe** runs at family load and at book open (the explicit-family `ensureLoaded`), behind the "Loading
@@ -702,7 +707,7 @@ are cached as `.fpv` files, keyed by the family identity.
 | **Stage 1** | Two changes, neither altering behaviour: (a) `GlyphProvider` in place of `glyphMissHandler` and its context; `SdCardFont` implements it and `getGlyphBitmap` loses the cast. (b) `GfxRenderer`'s single font-lookup helper plus the optional resolver hook. | One PR (the plan's Task 5) | PR #468 |
 | **Stage 2a** | `FlashGlyphStore` and its host tests (simulated NOR flash, power-cut injection). | Own PR | Merged (PR #469) |
 | **Stage 2b** | `TtfRasterizer`: integer loader, vendored and patched `ftgrays`, span packing to 2-bit, and the regression test against FreeType. | Own PR | PR #470 (built and reviewed 2026-10-15; plan `plans/2026-10-14-ttf-stage2b-rasterizer.md`) |
-| **Stage 2c** | `FontBytes`' SD mode, `TtfFont` (with `prefetch` and its two hooks), the pre-resolved GPOS reader and the kerning pair index, `Gsub`, registry and manager wiring, dormant rungs and the TTF ladder branch, previews. Split into four plans: **2c-1** TTF families at the body size, flash mode; **2c-2** native sizes (headings, CSS sizes, drop caps at their own pixel size); **2c-3** kerning and ligatures; **2c-4** SD mode, and previews (a family that is not installed is read from the SD card). | Own PR each | 2c-1 merged (PR #472); 2c-2 merged (PR #474); 2c-3 built, reviewed and X3-validated 2026-10-16 (SDK PR #7 merged; app branch `feat/ttf-kerning`; plan `plans/2026-10-15-ttf-stage2c3-kerning-ligatures.md`); 2c-4 next |
+| **Stage 2c** | `FontBytes`' SD mode, `TtfFont` (with `prefetch` and its two hooks), the pre-resolved GPOS reader and the kerning pair index, `Gsub`, registry and manager wiring, dormant rungs and the TTF ladder branch, previews. Split into four plans: **2c-1** TTF families at the body size, flash mode; **2c-2** native sizes (headings, CSS sizes, drop caps at their own pixel size); **2c-3** kerning and ligatures; **2c-4** SD mode, and previews (a family that is not installed is read from the SD card). | Own PR each | 2c-1 merged (PR #472); 2c-2 merged (PR #474); 2c-3 built, reviewed and X3-validated 2026-10-16 (SDK PR #7 merged; app branch `feat/ttf-kerning`; plan `plans/2026-10-15-ttf-stage2c3-kerning-ligatures.md`); 2c-4's SD mode built on Stage B phase 3, 2026-10-18 (branch `feat/ttf-sd-mode`, 8.2); its previews not built |
 | **Stage 2d** | User-guide section on TTF fonts; FreeType credit (required by the FTL licence). | With 2c or own PR | Not planned |
 
 Each stage builds on the previous one. Stacked PRs are retargeted to master as their base merges.
@@ -800,12 +805,136 @@ Stage 2 plans:
   - **The drop cap:** native up to the family's ceiling, scaled above it (5.5).
 - **Done in 2c-3 (2026-10-16):** kerning pairs in the store's pair index (font units, codepoint keys) and the
   coverage pre-check: a pair whose left glyph kerns with nothing is never stored (5.4).
-- **Still open, by plan:** `cmapEnd`-bounded format-4 reads, the SD-mode record-size planner input, grouping a page's misses by style, tricky fonts and the S3's internal-RAM scratch
-  (2c-4); the `sdRecord` rename.
+- **Still open, by plan:** tricky fonts and the S3's internal-RAM scratch (2c-4); the `sdRecord` rename. Done in 2c-4
+  (8.2): `cmapEnd`-bounded format-4 reads, the SD-mode record-size planner input; grouping a page's misses by style
+  was done by Stage B (11.1.2: one prefetch call per family and style).
 - **For 2c-2, from the 2c-1 device run (done in 2c-2):** a drop cap is drawn at about 4x the body size (a 16 pt body gives
   about 133 px per em). That is above the 26 pt the scratch block is planned for, near the 4 KB output region, and
   at 6x it passes `EpdGlyphRef`'s `int8` top. Native sizes need a larger planned maximum, and a resampled fallback
   above what the region and `EpdGlyphRef` hold.
+
+### 8.2 Stage 2c-4, SD mode, as built (2026-10-18, branch `feat/ttf-sd-mode`)
+
+Asked for on PR #501 (rygwdn): books with more than two embedded families, the fonts used most kept in flash and the
+others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews of a family that is not installed
+(7.6), the other half of 2c-4, are not built.
+
+- **The mode is a style block's (`glyphstore::kFormatVersion` 3, docs/file-formats.md).** `StyleInfo` holds it and,
+  in SD mode, the file's stamp as the card gives it (`FileSource::stamp`, FNV-1a over its path and FAT modification
+  time), its size, and where glyf is (`SdOutlines`: in the file, and past the block). The table map of 4.2 is gone
+  (an SD-mode block is a font of its own, below). `Geometry` lost its mode; the header is 312 B (version 2: 1,240).
+  SD-mode blocks follow every flash-mode one, so they map together, in one mapping beside the one flash-mode block
+  mapped at a time (three of `EspNorFlash`'s four mappings). They are mapped at open, right after the index and log,
+  before any flash-mode block: mapped after one, they would sit between its pages and the free ones, and a larger
+  flash-mode block could find no run of free pages long enough once the smaller one went (review finding). The planner counts the largest flash-mode block and
+  every SD-mode block against the mapping budget, and expects 250 B records when the body itself is in SD mode (a
+  font too large for flash mode is CJK in practice), else 100 B. An older store reads as not installed.
+- **An SD-mode block (`ttf::SdBlock`, `TtfFamily.h`)** holds the file's tables the engine reads but glyf (cmap,
+  head, hhea, hmtx, loca, maxp, OS/2, GPOS, GSUB, kern, whichever it has), 4-byte aligned in file order, behind a
+  table directory of its own whose glyf record points past the block. `parseFace`, the cmap, kerning and ligatures
+  read it in place, unchanged; only an outline read lands past the block, where `FontBytes` reads the file. Rather
+  than the design's table map translated at every read: no lookup per read, and the SDK's layout readers keep a
+  pointer. `SdBlock` makes the block on the fly from the file's directory (`source()` serves any range), so an
+  install copies it, and the kept-blocks check (11.1.3) compares it, as it does a whole file. An optional table
+  (OS/2, GPOS, GSUB, kern) whose record lies outside the file is left out, as `parseFace` takes it absent; the
+  first record of a tag is the one used, as in `parseFace`. Blocks: Bookerly
+  176 KB of its 450 KB a style (GPOS 111 KB of it), Inter 167 of 341 KB, Ubuntu 92 of 300 KB, Noto Sans 245 of
+  630 KB, DroidSansFallbackFull 357 KB of 4 MB.
+- **`FontBytes`:** the inline reads serve what is in place and call out of line for the rest: the SD range through
+  the set's `SdPageCache` (eight 512 B pages on sector offsets, least recently used read over, the last page
+  checked first; 4.2 KB of heap only while a style is on the card), else out of range. `data()` is gone: the layout
+  readers take `span(offset, length)`, null unless the table is in place (the 2c-3 note in 11).
+- **Which families go to the card (`TtfFontSet::install`):** flash mode while the whole set fits; past that the
+  families go to SD mode from the last on (the least used accent first, as the book ranks them), the body last of
+  all, so the body stays whole while it fits and a body too large for flash mode takes the accents with it. An
+  accent family stays whole only while the log keeps 8 pages (about 5,000 Latin glyphs): beside BookerlyTT, Inter
+  whole with the other two accents on the card leaves a 4-page log, all three on the card a 10-page one. When no plan
+  with more on the card fits at all (SD-mode blocks map together, so they can cost more mapping pages than one whole
+  style), the first plan that fit is taken, small log and all, rather than a family left out. The mode is chosen per
+  family, so a family's styles share it.
+- **Forward reads:** prefetch renders a run's misses in glyph order (3.2), which is file order, so a batch's outline
+  reads move forward through the file (host test: a reversed alphabet reads the file in rising offsets). A miss
+  outside a batch reads where it must.
+- **A changed file:** an SD-mode style whose file's stamp or size differs from the install's installs the set again
+  at open (`StylesResult::Changed`), so a store never reads another file's outlines at its own loca offsets. The
+  identity already covered each file's name, size and time; the stamp adds its directory. A file rewritten in place
+  at the same size and time passes both, so the open also reads the file's table directory (two small reads a style)
+  and compares the block it would make with the block's own directory: every table's tag, checksum, length and
+  place (`SdBlock::sameAs`).
+- **Errors:** a failed card read is an I/O error, Transient (6.1): drawn as missing, not marked, asked again; the page
+  that failed is not kept.
+- **Scratch:** a body in SD mode gets the 8 KB cell pool (5.3); accent families in SD mode keep 4 KB.
+- **`cmapEnd`:** format-4 reads stay inside the cmap table (8.1). A subtable whose segment arrays run past it is
+  passed over when the map is chosen, as FreeType's validator drops it, so another Unicode subtable serves; a glyph
+  array entry past it maps nothing.
+- **Registry (7.1):** lists a family the store takes at all (`ttf::fitsStore`: flash mode, else SD mode). The probe
+  discovery already runs sums what the SD-mode block would take (`FileProbe::sdBytes`), so nothing more is read.
+  DroidSansFallbackFull and other large families are listed, and a book family too large for flash mode loads in SD
+  mode. `BookFonts::kMaxFaceBytes` (2 MB) still refuses larger embedded faces; its reason (flash mode could not
+  install them) no longer holds.
+- **Manager:** keeps the open files of a family in SD mode while the set is loaded (`TtfSources`), closes the others
+  after the load, and destroys the set before its files. The unload log names the families in SD mode and the pages
+  the set read from the card.
+- **Family limits** stay 4 / 4 / 5 (`TtfFontSet`, `SdCardFontManager`, `BlockFontFamilies`): the store's eight style
+  blocks are the limit SD mode does not move, and each family costs heap (below).
+- **A `.cpfont` reader font beside an accent family: assessed, not built.** Both want the font area. The `.cpfont`
+  would have to load from the card (`SdCardFont::load`, about 9-14 KB of heap for its per-page tables, arena and
+  kern classes, and slower pages) while the store holds the accents; the manager unloads everything at each load
+  (`loadFamily` and `loadTtfFamilies` both start with `unloadAll`) and would have to hold an `SdCardFont` and a
+  `TtfFontSet` together, and the font system's and the book open's rules that leave the accent out beside a
+  `.cpfont` would go. Estimated 1-1.5 KB of flash and 10-14 KB more heap in the book than Accents beside a built-in
+  font, which with three accents would leave about 35-40 KB free: not cheap, so left out.
+- **Cost, `env:default` (C3), against Stage B phase 3 with the drop-cap fix (987b431e7, 5,840,705 B, 55,416 B RAM):**
+  the cmap bound +52 B; `FontBytes`' SD mode +640 B; the per-block format +266 B; the engine's SD mode +2,034 B
+  (`SdBlock` 770 B, the mode choice and SD-mode install about 520 B, the rest the shared directory walk, load and
+  open); registry and manager +570 B; the review follow-ups +430 B (the directory check at open, the fallback plan,
+  the cmap choice, the SD-mode blocks mapped at open). **+3,992 B in all** (5,844,697 B), static RAM unchanged.
+  x4pro +3,472 B, lilygo_t5s3 +3,236 B (static RAM +8 B each). No MMU page boundary crossed: code leaves 42.6 KB of
+  its 42nd page (46.3 KB before), rodata 20.3 KB of its 47th (20.6 KB), 89 pages in all.
+- **Tests:** `FontBytesSd` (routing between the tables and the card, the page cache's reads, eviction and failures,
+  two files); `TtfFace.Format4ReadsStayInsideTheCmapTable`; the glyph store's per-block modes, SD blocks after flash
+  blocks, an SD-mode style's records, older versions installed over, and the session power-cut sweep over a store
+  with an SD-mode block; `TtfSdBlock` (the block is the font but for glyf, byte for byte; any range reads alike;
+  files without outlines refused) and the probe's size; `TtfFontSetTest`: a family too large for flash mode drawn as
+  flash mode draws it, next boot from the store; kerning and ligatures alike; prefetch reads forward; a changed file
+  installs again; a card read error asked again; the body whole and the accent on the card; the 8-page log rule; a
+  body in SD mode taking the accents along; an SD-mode block kept; a power cut at every 997th step of an SD-mode
+  install; the X4 set of phase 3 loading in full; a family too large even for SD mode refused before any erase; a
+  file rewritten in place at the same size and time installed again; an accent kept whole when nothing with more on
+  the card fits; an optional table outside the file left out of the block; a cut-short format-4 subtable passed over
+  for the next. Host suite 2883/2883.
+- **X4 test (2026-10-18, serial test API, 14 pt; files uploaded over USB serial, so every file is dated 1980):**
+  - **Discovery:** DroidSansFallbackFull (4 MB, one style) is listed, "Found TTF family: DroidSansFallback (1
+    files)"; too large for flash mode, it was not listed before.
+  - **A CJK body in SD mode** (`test_cjk_zh_honglou.epub` in DroidSansFallback): "1 family installed: 1 styles
+    (0 kept, 1 in SD mode), log 1769472 B" in about 6.9 s behind the popup, erasing the previous store included;
+    14,528 B scratch (the 8 KB pool) and 4,204 B of SD pages. The first chapter (6 pages, 503 distinct glyphs) built
+    in 3.8 s and read 1,261 SD pages (2.5 a glyph): about 7.5 ms a new glyph, render, card and flash writes in all.
+    The text is DroidSansFallback, the heading at its own native size; the ASCII quotes, which DroidSansFallback
+    lacks (no Latin), draw as missing. Page turns took 1.1-1.3 s to idle, the panel's time, every glyph from the
+    store. After a reboot the family opened in about 60 ms (the directory check included) and the book in 1.2 s:
+    "0 glyphs rendered, 4912 read from the store", 0 SD pages read. Heap in the book 48.5-50.0 KB free (largest
+    36.9-43.0 KB).
+  - **BookerlyTT and `families_test.epub` in Accents:** "4 families installed: 8 styles (0 kept, 4 in SD mode), log
+    589824 B" in about 11.8 s: Bookerly whole, Book Display (Inter, two styles), Book Script (Noto Sans Italic) and
+    Book Code (Ubuntu Bold) on the card. Phase 3 left Book Script and Book Code out. In the screenshots every family
+    draws where the goldens say: the Inter title, headings and span paragraph; the Book Script paragraph, heading and
+    inline "second accent"; the Ubuntu Bold inline code and code block; the body in BookerlyTT. The first chapter
+    built in 2.3 s; the session read 124 SD pages. Heap in the book 41.1-43.4 KB free (largest 30.7 KB), against
+    52.1-54.1 KB (18.4) for phase 3's BookerlyTT with one accent: two more families' faces and tables, and the
+    4.2 KB of SD pages.
+  - **Kept blocks:** to Off, "1 family installed: 4 styles (4 kept, 0 in SD mode)" in 6.0 s (heap 56.1-56.6 KB,
+    largest 42.9 KB); back to Accents, "4 families installed: 8 styles (4 kept, 4 in SD mode)" in 6.2 s (phase 3:
+    13.8 s with nothing kept). With the section cached and the store new, the first page drew its misses (36 SD
+    pages) in a 74 ms prewarm, the page in 0.9 s.
+  - **Accents beside the built-in Bookerly:** the three accent families fit whole, "3 families installed: 4 styles
+    (0 kept, 0 in SD mode)", as before SD mode: 53.2 KB free (43.0). Body Text 55.5-56.0 KB (22.5), as phase 3.
+  - Home 76.5 KB after every mode. No errors from the store, the engine or the flash; the Background-C fall-back for
+    low heap in Off and Body Text is phase 2's (11.1.2).
+- **Left open:** previews of a family not installed (7.6); tricky fonts and the S3's internal-RAM scratch (8.1);
+  `BookFonts::kMaxFaceBytes`; the install reads each SD-mode file's directory up to three times (planning, the kept
+  check, the copy), a few small reads each; the forward-read order holds within a prefetch batch, not across them
+  (the CJK chapter read 2.5 pages a glyph).
 
 ## 9. Testing
 
@@ -1054,7 +1183,7 @@ with one font ID (per-word data carries only the style bits).
   - **`SECTION_FILE_VERSION` 83 is redundant for TTF families** (their font ID changes with `kRenderVersion`).
     It was kept, so every book is laid out once more after the update, built-in fonts included.
   - **`FontBytes::data()` for SD mode (2c-4):** the glue adds file offsets to it, so it must stay null unless the
-    whole file is addressable at it.
+    whole file is addressable at it. (Done in 2c-4, 8.2: `data()` gave way to `span()`.)
   - **Small costs:** a 64-bit division per stored pair (`int32` suffices); the `checkLock` message says "glyph
     rendered" for a kerning miss.
   - **`KernTable`:** stops at a subtable whose pair count overruns the table (FreeType clamps and carries on),
@@ -1413,7 +1542,8 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
   - A book replaced on the card by another file of the same path keeps the old book's `fonts.bin` for the first open:
     the families are selected before the book's cache is found stale and emptied, and examined again only at the next
     open.
-  - A `.cpfont` reader font still has the font area to itself (11.1.2).
+  - A `.cpfont` reader font still has the font area to itself (11.1.2); assessed with SD mode, not built (8.2). The
+    accent families beside a TrueType reader font now load in full, on the card (8.2).
   - The kept-blocks install spares the copy but not the reinstall of the index and log: a kept family's glyphs render
     again. Keeping them would need a per-family identity in the header (a format change).
 
