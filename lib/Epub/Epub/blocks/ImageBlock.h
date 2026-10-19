@@ -59,6 +59,12 @@ void set(BuildArena* arena);
 // heap fallback inside the decoder, which is already handled — it cannot crash.
 bool canServe(size_t bytes);
 
+// A decode refused for the heap, or cut short by an allocation that failed (its pixel cache included), says so
+// here: the reader's memory ladder (ImageMemoryLadder) retries such a decode with more memory, and leaves one that
+// failed for any other reason alone. A count, so a caller compares it before and after its decodes.
+void noteHeapShort();
+uint32_t heapShortCount();
+
 // RAII installer — restores the previous value, so nesting is safe.
 class ScopedArena {
  public:
@@ -165,11 +171,25 @@ class ImageBlock final : public Block {
   // Returns true if the file is ready for decoding.
   bool ensureExtracted() const;
 
-  // `loading`: the box says the image is still being prepared (a mid-build draw) rather than
-  // "large image, press to load".
-  void renderPlaceholder(GfxRenderer& renderer, int x, int y, bool loading = false) const;
+ public:
+  // What a placeholder box says beside the alt text: "large image, press to load", the image is still being
+  // prepared (a mid-build draw), or there was not memory enough to decode it.
+  enum class Placeholder : uint8_t { Large, Loading, LowMemory };
+
+  // The LowMemory placeholders drawn since the last call: the reader shows its low-memory indicator while the page
+  // on screen has one.
+  static uint16_t takeLowMemoryPlaceholders() {
+    const uint16_t drawn = lowMemoryDrawn_;
+    lowMemoryDrawn_ = 0;
+    return drawn;
+  }
+
+ private:
+  void renderPlaceholder(GfxRenderer& renderer, int x, int y, Placeholder kind) const;
   static bool placeholderOnly_;
+  static Placeholder placeholderOnlyKind_;
   static uint16_t placeholdersDrawn_;
+  static uint16_t lowMemoryDrawn_;
 
  public:
   // While one of these is live, render() draws every image that is not already in its pixel
@@ -181,9 +201,13 @@ class ImageBlock final : public Block {
   // placeholdersDrawn() is for a caller that must not show a page with a placeholder on it at
   // all (the next-page pre-render): a cache that exists can still fail to replay -- a stale
   // version is deleted on read, a width mismatch is refused -- and only the draw finds out.
+  //
+  // `kind` LowMemory: the reader's memory ladder found that no decode of these images fits (see
+  // ImageMemoryLadder), so the page is drawn with them as "not enough memory" boxes instead.
   struct PlaceholderOnlyScope {
-    PlaceholderOnlyScope() {
+    explicit PlaceholderOnlyScope(const Placeholder kind = Placeholder::Loading) {
       placeholderOnly_ = true;
+      placeholderOnlyKind_ = kind;
       placeholdersDrawn_ = 0;
     }
     ~PlaceholderOnlyScope() { placeholderOnly_ = false; }

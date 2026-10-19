@@ -103,6 +103,16 @@ void drawSyncIndicator(const GfxRenderer& renderer, const int x, const int y, co
       return;
   }
 }
+
+// A memory chip, as wide as the sync indicator: a body with its die, and pins above and below.
+void drawLowMemoryIndicator(const GfxRenderer& renderer, const int x, const int y) {
+  renderer.drawRect(x + 1, y + 2, SYNC_INDICATOR_SIZE - 2, SYNC_INDICATOR_SIZE - 4, true);
+  renderer.fillRect(x + 4, y + 5, SYNC_INDICATOR_SIZE - 8, SYNC_INDICATOR_SIZE - 10, true);
+  for (int pin = x + 3; pin < x + SYNC_INDICATOR_SIZE - 2; pin += 2) {
+    renderer.fillRect(pin, y, 1, 2, true);
+    renderer.fillRect(pin, y + SYNC_INDICATOR_SIZE - 2, 1, 2, true);
+  }
+}
 }  // namespace
 
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
@@ -1097,7 +1107,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const bool isStarred,
                               const std::string& printedPageLabel, const bool fillMargin,
-                              const bool pageCountApproximate, const SyncIndicator syncIndicator) const {
+                              const bool pageCountApproximate, const SyncIndicator syncIndicator,
+                              const bool lowMemory) const {
   // While a section is still being laid out the total page count is a byte-based estimate, shown
   // with a leading "~" so the reader knows it will firm up as the chapter finishes building.
   const char* pageCountPrefix = pageCountApproximate ? "~" : "";
@@ -1134,7 +1145,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const bool hasStatusItems = hasProgressText || SETTINGS.statusBarBattery || !title.empty() ||
                               SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE ||
                               (SETTINGS.useClock && SETTINGS.statusBarClock) || !printedPageLabel.empty() ||
-                              syncIndicator != SyncIndicator::None;
+                              syncIndicator != SyncIndicator::None || lowMemory;
   if (!hasStatusItems) {
     return;
   }
@@ -1216,14 +1227,16 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Right cluster, laid out from the right edge inwards: progress text (already drawn), then the
-  // star, then the sync indicator, then the clock when it is right-positioned.
+  // star, then the sync indicator, then the low-memory one, then the clock when it is right-positioned.
   const int rightEdge = screenWidth - metrics.statusBarHorizontalMargin - orientedMarginRight;
   const int starWidth = isStarred ? renderer.getTextWidth(SMALL_FONT_ID, "*") : 0;
   const int starReserve = isStarred ? starWidth + (progressTextWidth > 0 ? starGap : 0) : 0;
   const int syncReserve = syncIndicator != SyncIndicator::None
                               ? SYNC_INDICATOR_SIZE + (progressTextWidth + starReserve > 0 ? statusItemGap : 0)
                               : 0;
-  int rightClusterWidth = progressTextWidth + starReserve + syncReserve;
+  const int memoryReserve =
+      lowMemory ? SYNC_INDICATOR_SIZE + (progressTextWidth + starReserve + syncReserve > 0 ? statusItemGap : 0) : 0;
+  int rightClusterWidth = progressTextWidth + starReserve + syncReserve + memoryReserve;
 
   // Draw Clock at whichever end it was assigned. Left: just past the battery. Right: just past the
   // star / progress text, so it can never land on top of either.
@@ -1275,6 +1288,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     renderer.drawText(SMALL_FONT_ID, rightEdge - progressTextWidth - starReserve, textY, "*");
   }
   drawSyncIndicator(renderer, rightEdge - progressTextWidth - starReserve - syncReserve, textY + 6, syncIndicator);
+  if (lowMemory) {
+    drawLowMemoryIndicator(renderer, rightEdge - progressTextWidth - starReserve - syncReserve - memoryReserve,
+                           textY + 6);
+  }
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {

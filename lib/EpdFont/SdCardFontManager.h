@@ -89,6 +89,24 @@ class SdCardFontManager {
   void wipeTtfIfPending(const std::function<void()>& onBusy);
   bool ttfLoaded() const { return ttfSet_ != nullptr; }
 
+  // What the loaded TTF families give up for an image decode (the reader's memory ladder). Their miss-only memory
+  // (TtfFontSet::releaseMissMemory), the bytes freed: 0 when none is loaded.
+  uint32_t releaseTtfMissMemory();
+  bool restoreTtfMissMemory();
+  bool ttfMissMemoryReleased() const;
+  // Or all of their memory, until resumeTtf(): the set, its files, its native sizes, and their font IDs, which leave
+  // the renderer meanwhile, so nothing may be laid out or drawn with them. Only where no glyph of theirs is in use
+  // and nothing laid out with them but a page waits. False when none is loaded.
+  bool suspendTtf(GfxRenderer& renderer);
+  bool ttfSuspended() const { return ttfSuspended_; }
+  // The families loaded (or suspended), in the set's order.
+  uint8_t ttfFamilyCount() const { return ttfCount_; }
+  const std::string& ttfFamilyName(const uint8_t family) const { return ttfFamilies_[family].name; }
+  // The suspended families loaded again from `families`, the same ones in the same order: the store opens as it is,
+  // never installed (TtfFontSet::Install::Never), and every font ID comes back as it was, so nothing laid out with
+  // them is laid out again. False, nothing loaded, when they cannot be (the heap is short): the caller loads fewer.
+  bool resumeTtf(const SdCardFontFamilyInfo* const* families, GfxRenderer& renderer);
+
   // A loaded TTF family's native sizes (headings, CSS sizes, drop caps at their own pixel size). The renderer
   // asks for a size's font ID the first time something is laid out or drawn with it (the resolver installed at
   // load), and the face is made then. Their IDs come from a window FontSizeLadder::setNative() computes too, one
@@ -132,6 +150,10 @@ class SdCardFontManager {
     int32_t nativeBase = 0;  // 0: none
   };
   struct TtfSources;
+  // Whether loadTtfFamilies() leaves families out when they cannot load together, or loads exactly these.
+  enum class TtfChoice : uint8_t { FewerIfNeeded, ExactlyThese };
+  bool loadTtf(const SdCardFontFamilyInfo* const* families, uint8_t count, GfxRenderer& renderer, uint8_t targetPtSize,
+               const std::function<void()>& onColdLoad, TtfChoice choice);
   static int computeFontId(uint32_t contentHash, const char* familyName, uint8_t pointSize);
   void dropSizeAlias(GfxRenderer& renderer);
   void registerTtfFace(GfxRenderer& renderer, uint8_t family, int fontId);
@@ -157,4 +179,6 @@ class SdCardFontManager {
   TtfFamily ttfFamilies_[kMaxTtfFamilies];  // the set's families, in its order
   uint8_t ttfCount_ = 0;
   uint32_t ttfAsked_ = 0;  // the families the load was asked for (ttfFamiliesLoaded)
+  // suspendTtf(): the set is gone, its families' names and font IDs kept for resumeTtf().
+  bool ttfSuspended_ = false;
 };

@@ -119,6 +119,35 @@ bool parseIntList(std::string_view text, int* out, const size_t count) {
   return true;
 }
 
+namespace {
+// "<key>=<a>" or "<key>=<a>,<b>"; `numbers[1]` keeps its value when there is no second number.
+bool parseKeyedPair(const std::string_view arg, const std::string_view wantedKey, int (&numbers)[2]) {
+  std::string_view key;
+  std::string_view value;
+  if (!splitKeyValue(arg, key, value) || key != wantedKey) return false;
+  const bool split = value.find(',') != std::string_view::npos;
+  return parseIntList(value, numbers, split ? 2 : 1);
+}
+}  // namespace
+
+bool parseHeapHold(const std::string_view arg, int& bytes, int& blocks, const int maxBlocks) {
+  int numbers[2] = {0, 1};
+  if (!parseKeyedPair(arg, "HOLD", numbers)) return false;
+  if (numbers[0] <= 0 || numbers[1] < 1 || numbers[1] > maxBlocks || numbers[0] < numbers[1]) return false;
+  bytes = numbers[0];
+  blocks = numbers[1];
+  return true;
+}
+
+bool parseHeapRefuse(const std::string_view arg, int& decodes, int& reloads) {
+  int numbers[2] = {0, 0};
+  if (!parseKeyedPair(arg, "REFUSE", numbers)) return false;
+  if (numbers[0] < 0 || numbers[0] > 255 || numbers[1] < 0 || numbers[1] > 255) return false;
+  decodes = numbers[0];
+  reloads = numbers[1];
+  return true;
+}
+
 bool parseLogLevel(const std::string_view text, uint8_t& level) {
   // Tag and long name per level, in level order: "ERR" or "ERROR" is 0.
   static constexpr const char* kNames[] = {"ERR", "ERROR", "INF", "INFO", "DBG", "DEBUG", "TRC", "TRACE"};

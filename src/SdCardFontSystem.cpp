@@ -14,6 +14,7 @@
 
 #include "CrossPointSettings.h"
 #include "SdCardFontGlobals.h"
+#include "SerialTestApi.h"
 #include "activities/RenderLock.h"
 
 static_assert(CrossPointSettings::FONT_SIZE_RUNGS[CrossPointSettings::FONT_SIZE_RUNG_COUNT - 1].points <=
@@ -214,15 +215,24 @@ void SdCardFontSystem::scanBookFamily(SdCardFontFamilyInfo& family, const std::s
 void SdCardFontSystem::selectBookFamilies(const std::string& cachePath, const uint8_t mode, const char* readerFamily) {
   const SdCardFontFamilyInfo* reader = findFamily(readerFamily);
   const bool besideCpfont = reader && !reader->ttf();
+  // The settings an accent limit holds under: the mode and the reader's family, whose glyph store the accents share.
+  const char* family = readerFamily ? readerFamily : "";
+  const uint32_t settingsKey = glyphstore::fnv1a(family, strlen(family), glyphstore::fnv1a(&mode, 1));
   // Kept across the book's later opens in the same mode; anything else is read again, since the book may have been
   // examined since.
   if ((!bookBody_.name.empty() || !bookAccents_[0].name.empty()) && cachePath == bookCachePath_ && mode == bookMode_ &&
       besideCpfont == bookBesideCpfont_) {
+    if (settingsKey != bookSettingsKey_) {
+      bookSettingsKey_ = settingsKey;
+      accentLimit_ = BookFonts::accentLimit(cachePath, settingsKey);  // another reader font: forgets the limit
+    }
     return;
   }
   bookCachePath_ = cachePath;
   bookMode_ = mode;
   bookBesideCpfont_ = besideCpfont;
+  bookSettingsKey_ = settingsKey;
+  accentLimit_ = cachePath.empty() ? BookFonts::kMaxAccents : BookFonts::accentLimit(cachePath, settingsKey);
   scanBookFamily(bookBody_, {}, {});
   for (SdCardFontFamilyInfo& accent : bookAccents_) scanBookFamily(accent, {}, {});
   bookFonts_ = {};  // what read() leaves alone stays "none"
@@ -243,10 +253,45 @@ void SdCardFontSystem::selectBookFamilies(const std::string& cachePath, const ui
   }
 }
 
+uint8_t SdCardFontSystem::bookAccentsLoaded() const {
+  uint8_t loaded = 0;
+  for (uint8_t n = 0; n < BookFonts::kMaxAccents; ++n) {
+    const char* name = accentFamilyName(n);
+    if (name[0] != '\0' && manager_.getFontId(name, manager_.currentPointSize()) != 0) ++loaded;
+  }
+  return loaded;
+}
+
+void SdCardFontSystem::limitBookAccents(const uint8_t accents) {
+  if (bookCachePath_.empty() || accents >= accentLimit_) return;
+  accentLimit_ = accents;
+  BookFonts::setAccentLimit(bookCachePath_, bookSettingsKey_, accents);
+  LOG_INF("SDFS", "Book keeps %u accent famil%s from now on", accents, accents == 1 ? "y" : "ies");
+}
+
 const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::string& cachePath) const {
   return !cachePath.empty() && cachePath == bookCachePath_ && bookMode_ >= CrossPointSettings::PUBLISHER_FONTS_ACCENTS
              ? &bookFonts_
              : nullptr;
+}
+
+bool SdCardFontSystem::resumeTtf(GfxRenderer& renderer) {
+  if (!manager_.ttfSuspended()) return manager_.ttfLoaded();
+  if (SerialTestApi::takeReloadRefusal()) {
+    // A test build's CMD:HEAP:REFUSE: the set does not come back, as when the heap is too short for it.
+    LOG_INF("SDFS", "TTF set reload refused (CMD:HEAP:REFUSE)");
+    manager_.unloadAll(renderer);
+    return false;
+  }
+  const SdCardFontFamilyInfo* families[SdCardFontManager::kMaxTtfFamilies] = {};
+  for (uint8_t f = 0; f < manager_.ttfFamilyCount(); ++f) {
+    families[f] = findFamily(manager_.ttfFamilyName(f).c_str());
+    if (!families[f]) {
+      manager_.unloadAll(renderer);  // gone since: the reader loads what is there
+      return false;
+    }
+  }
+  return manager_.resumeTtf(families, renderer);
 }
 
 void SdCardFontSystem::unload(GfxRenderer& renderer) {

@@ -59,6 +59,14 @@ State read(const std::string& cachePath, std::string* name = nullptr, Families* 
 /// family n's, named the same, in `<cachePath>/fonts/accent<n>`. The state file is `<cachePath>/fonts.bin`.
 std::string familyDir(const std::string& cachePath, int accent = -1);
 
+/// The reader's memory ladder (ImageMemoryLadder) leaves the book's least used accent families out when a page and its
+/// images do not fit beside them: the accent families it keeps, from then on, while the font settings stay those it
+/// was found under (`settingsKey`, the caller's hash of them). kMaxAccents when it keeps them all: none was set, or
+/// it was set under other settings, which forgets it. In `<cachePath>/fontlimit.bin`.
+uint8_t accentLimit(const std::string& cachePath, uint32_t settingsKey);
+/// Keeps `accents` (kMaxAccents: all, which forgets the limit).
+void setAccentLimit(const std::string& cachePath, uint32_t settingsKey, uint8_t accents);
+
 /// Finds the book's body and accent families and copies their font files to the card. `scratch`, when set, hosts
 /// the inflate ring and the parser state (the lent framebuffer at book open); otherwise the heap. The CSS must be
 /// loaded (Epub::load without skipping it). Writes the state file: Family or None, or, when a read failed, another

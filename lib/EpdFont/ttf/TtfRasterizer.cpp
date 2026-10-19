@@ -315,7 +315,8 @@ ScratchPlan mergePlans(const ScratchPlan& a, const ScratchPlan& b) {
   return plan;
 }
 
-bool Rasterizer::allocate(const ScratchPlan& plan) {
+bool Rasterizer::allocate(const ScratchPlan& wanted) {
+  const ScratchPlan plan = wanted;  // a copy: `wanted` may be plan_ itself, as allocate(plan()) passes it
   release();
   if (plan.points > kMaxScratchPoints || plan.contours > kMaxScratchContours || plan.outputBytes > kMaxOutputBytes ||
       plan.poolBytes < 2048 || plan.poolBytes > kPoolBytesSd || plan.maxPpem26_6 == 0 ||
@@ -347,7 +348,6 @@ bool Rasterizer::allocate(const ScratchPlan& plan) {
 void Rasterizer::release() {
   block_.reset();
   blockBytes_ = 0;
-  plan_ = ScratchPlan{};
   loaded_ = Status::Transient;
 }
 

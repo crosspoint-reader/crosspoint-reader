@@ -206,6 +206,10 @@ class TtfFontSet {
 
   /// One family's files by style (size 0: the family has no such style).
   using Files = ttf::FileSource[4];
+  /// Whether load() may install the set. Never opens only a store that holds the set already, as a set loaded again
+  /// after the reader's memory ladder freed it does: no erase, no copy and no pending wipe, nothing in the way of
+  /// the page it is drawing.
+  enum class Install : uint8_t { IfNeeded, Never };
 
   explicit TtfFontSet(NorFlash& flash);
   TtfFontSet(const TtfFontSet&) = delete;
@@ -216,10 +220,11 @@ class TtfFontSet {
   /// calls `onBusy`, then copies every family's styles. Flash mode while the whole set fits; past that the families
   /// go to SD mode from the last (the least used accent) on, the body last of all. Finishes a pending wipe, behind
   /// `onBusy` too. False when the set cannot be drawn: a family without a regular style or with one the engine
-  /// cannot read, more than the partition holds in SD mode, or out of memory. An SD-mode style reads its outlines
-  /// through its FileSource for as long as the set is loaded: those files must stay open until then.
+  /// cannot read, more than the partition holds in SD mode, or out of memory; with Install::Never, also a set the
+  /// store does not hold as it is. An SD-mode style reads its outlines through its FileSource for as long as the set
+  /// is loaded: those files must stay open until then.
   bool load(const Files* families, uint8_t count, const uint8_t identity[glyphstore::kIdentityBytes],
-            const std::function<void()>& onBusy = {});
+            const std::function<void()>& onBusy = {}, Install install = Install::IfNeeded);
   uint8_t familyCount() const { return count_; }
   /// The set's family `family`, in load()'s order; nullptr past familyCount().
   TtfFont* font(uint8_t family) const { return family < count_ ? fonts_[family].get() : nullptr; }
@@ -235,6 +240,17 @@ class TtfFontSet {
   uint32_t scratchBytes() const { return rasterizer_.scratchBytes(); }
   /// SD mode: the 512-byte pages read from the card since load(), every family's.
   uint32_t sdPageReads() const { return sdPages_ ? sdPages_->misses() : 0; }
+  /// A family reads its outlines from the card (SD mode).
+  bool readsCard() const;
+
+  /// Frees what only a glyph missing from the store needs: the scratch block (its plan kept), SD mode's page cache
+  /// and the ring. Glyphs in the store are drawn as before; a miss is drawn as missing until restoreMissMemory(),
+  /// and asked again at its next lookup (Transient). For the reader's memory ladder, which makes room for an image
+  /// decode this way. Only where no glyph record of the set is in use: between pages. The bytes freed.
+  uint32_t releaseMissMemory();
+  /// Allocates them again. False while the heap cannot hold them: misses stay missing until a later call.
+  bool restoreMissMemory();
+  bool missMemoryReleased() const { return count_ != 0 && (!rasterizer_.allocated() || (readsCard() && !sdPages_)); }
 
  private:
   friend class TtfFont;

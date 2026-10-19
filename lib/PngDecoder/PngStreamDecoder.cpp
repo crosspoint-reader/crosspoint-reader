@@ -109,6 +109,7 @@ void PngStreamDecoder::end() {
 
 bool PngStreamDecoder::begin(FsFile& file, Info& info) {
   file_ = &file;
+  outOfMemory_ = false;
   rowsProduced_ = 0;
   paletteSize_ = 0;
   hasPaletteAlpha_ = false;
@@ -213,6 +214,7 @@ bool PngStreamDecoder::begin(FsFile& file, Info& info) {
     previousRow_ = static_cast<uint8_t*>(calloc(rawRowBytes_, 1));
     if (!currentRow_ || !previousRow_) {
       LOG_ERR("PNG", "Failed to allocate scanline buffers (%u bytes each)", rawRowBytes_);
+      outOfMemory_ = true;
       end();
       return false;
     }
@@ -302,6 +304,7 @@ bool PngStreamDecoder::begin(FsFile& file, Info& info) {
     LOG_ERR("PNG", "Inflate ring alloc failed: need %u contiguous bytes (scratch arena: %s); image dropped",
             static_cast<unsigned>(InflateReader::ringSizeFor(uncompressed)),
             arenaOwnsBuffers_ ? "present but too small" : "none supplied");
+    outOfMemory_ = true;
     end();
     return false;
   }

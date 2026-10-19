@@ -36,7 +36,7 @@ except ImportError:
 # First words of every reply the firmware sends to a command (see docs/serial-test-api.md).
 REPLY = re.compile(
     r"^(BTN_|ACT_|STATE:|CMD_ERROR|GET:|GET_END|GET_ERROR|SET_|LOG_|TOUCH_|SWIPE_|SLEEP_OK|REBOOT_OK|"
-    r"EVENTS_|IDLE|DICT|HELP:|BOOTLOG_)"
+    r"EVENTS_|IDLE|DICT|HELP:|BOOTLOG_|HEAP_)"
 )
 FAILED = re.compile(r"_ERROR|_TIMEOUT|^CMD_ERROR")
 

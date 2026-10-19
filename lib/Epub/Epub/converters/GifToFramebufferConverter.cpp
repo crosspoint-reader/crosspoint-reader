@@ -12,7 +12,7 @@
 
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
-#include "PixelCache.h"
+#include "PixelCache.h"  // also image_scratch::noteHeapShort
 
 namespace {
 
@@ -307,6 +307,7 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   GifState* st = new (std::nothrow) GifState();
   if (!st) {
     LOG_ERR("GIF", "Failed to allocate GIF state");
+    image_scratch::noteHeapShort();
     return false;
   }
 

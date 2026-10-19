@@ -75,6 +75,17 @@ class SdCardFontSystem {
     return manager_.ttfNativeSizes(bodyFontId);
   }
 
+  /// What the loaded TrueType families give up while an image decodes (the reader's memory ladder, see
+  /// ImageMemoryLadder): their miss-only memory, or all of it until resumeTtf(). SdCardFontManager has the rules.
+  bool ttfLoaded() const { return manager_.ttfLoaded(); }
+  uint32_t releaseTtfMissMemory() { return manager_.releaseTtfMissMemory(); }
+  bool restoreTtfMissMemory() { return manager_.restoreTtfMissMemory(); }
+  bool ttfMissMemoryReleased() const { return manager_.ttfMissMemoryReleased(); }
+  bool suspendTtf(GfxRenderer& renderer) { return manager_.suspendTtf(renderer); }
+  /// The suspended families loaded again, found by name, under the same font IDs. False, none loaded, when they
+  /// cannot be.
+  bool resumeTtf(GfxRenderer& renderer);
+
   /// Publisher Fonts in `mode` (CrossPointSettings::PUBLISHER_FONTS) for the book cached at `cachePath`, whose body
   /// is otherwise drawn in `readerFamily` ("" for a built-in font): the families BookFonts copied out of it become
   /// the book's, drawn like families on the card while that book is open. Body Text and All Text take its body family
@@ -86,10 +97,17 @@ class SdCardFontSystem {
   /// resolveFontId(). A book family's name starts with "book:", which no family directory can, so it never shadows
   /// a family on the card.
   const char* bookFamilyName() const { return bookBody_.name.c_str(); }
-  /// The book's accent family `n`'s name (the most used first) while it is selected, else "".
+  /// The book's accent family `n`'s name (the most used first) while it is selected and not left out (see
+  /// limitBookAccents()), else "".
   const char* accentFamilyName(const uint8_t n) const {
-    return n < BookFonts::kMaxAccents ? bookAccents_[n].name.c_str() : "";
+    return n < BookFonts::kMaxAccents && n < accentLimit_ ? bookAccents_[n].name.c_str() : "";
   }
+  /// The book's accent families loaded beside its body.
+  uint8_t bookAccentsLoaded() const;
+  /// The memory ladder's FewerFamilies step (ImageMemoryLadder): the book keeps its first `accents` accent families,
+  /// the most used, from its next load on, and for as long as the font settings it is read with stay as they are
+  /// (BookFonts::accentLimit), so a restart does not fail the same way again.
+  void limitBookAccents(uint8_t accents);
   /// The book's body family name when it belongs to the book cached at `cachePath`, else "".
   const char* bookFamilyNameFor(const std::string& cachePath) const {
     return cachePath == bookCachePath_ ? bookFamilyName() : "";
@@ -121,4 +139,6 @@ class SdCardFontSystem {
   BookFonts::Families bookFonts_;                             // what that book holds
   uint8_t bookMode_ = 0;                                      // the mode they were selected in
   bool bookBesideCpfont_ = false;                             // the reader's font was a .cpfont family then
+  uint32_t bookSettingsKey_ = 0;                              // the mode and the reader's family, hashed
+  uint8_t accentLimit_ = BookFonts::kMaxAccents;              // the accent families the book keeps
 };

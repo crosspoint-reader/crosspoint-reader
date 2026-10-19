@@ -809,6 +809,11 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
   // Publisher Fonts: not examined yet, what is loaded stays, until the reader has examined the book and asks again.
   const std::string cachePath = publisherFontsCache(path, book);
   if (waitForBookFonts && !cachePath.empty() && BookFonts::read(cachePath) == BookFonts::State::Pending) return;
+  // They do not apply to the book now (off, the book's own style off, a font chosen for it): the accent families the
+  // memory ladder left out of it are tried again once they do (BookFonts::accentLimit).
+  if (cachePath.empty()) {
+    BookFonts::setAccentLimit(Epub::cachePathFor(path, "/.crosspoint"), 0, BookFonts::kMaxAccents);
+  }
 
   // No family override: the global SD font (if any), at the effective size.
   const char* family = SETTINGS.sdFontFamilyName;

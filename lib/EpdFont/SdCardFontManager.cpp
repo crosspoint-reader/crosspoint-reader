@@ -164,11 +164,11 @@ void openTtfFiles(const SdCardFontFamilyInfo& family, HalFile (&files)[4], ttf::
 // The first `count` families as one set, under the set's identity; nullptr when they cannot be drawn together.
 std::unique_ptr<TtfFontSet> loadSet(NorFlash& flash, const ttf::FileSource (*sources)[4],
                                     const uint8_t (*identities)[glyphstore::kIdentityBytes], const uint8_t count,
-                                    const std::function<void()>& onColdLoad) {
+                                    const std::function<void()>& onColdLoad, const TtfFontSet::Install install) {
   uint8_t identity[glyphstore::kIdentityBytes];
   ttf::setIdentity(identities, count, identity);
   auto set = makeUniqueNoThrow<TtfFontSet>(flash);
-  if (!set || !set->load(sources, count, identity, onColdLoad)) return nullptr;
+  if (!set || !set->load(sources, count, identity, onColdLoad, install)) return nullptr;
   return set;
 }
 
@@ -184,9 +184,15 @@ uint32_t askedKey(const SdCardFontFamilyInfo* const* families, const uint8_t cou
 
 }  // namespace
 
-bool SdCardFontManager::loadTtfFamilies(const SdCardFontFamilyInfo* const* families, uint8_t count,
+bool SdCardFontManager::loadTtfFamilies(const SdCardFontFamilyInfo* const* families, const uint8_t count,
                                         GfxRenderer& renderer, const uint8_t targetPtSize,
                                         const std::function<void()>& onColdLoad) {
+  return loadTtf(families, count, renderer, targetPtSize, onColdLoad, TtfChoice::FewerIfNeeded);
+}
+
+bool SdCardFontManager::loadTtf(const SdCardFontFamilyInfo* const* families, uint8_t count, GfxRenderer& renderer,
+                                const uint8_t targetPtSize, const std::function<void()>& onColdLoad,
+                                const TtfChoice choice) {
   if (!renderer_) renderer_ = &renderer;
   if (!loadedFamilyName_.empty()) unloadAll(renderer);
   if (count == 0) return false;
@@ -204,14 +210,17 @@ bool SdCardFontManager::loadTtfFamilies(const SdCardFontFamilyInfo* const* famil
   for (uint8_t f = 0; f < count; ++f) {
     openTtfFiles(*families[f], opened->files[f], opened->sources[f], opened->identities[f]);
   }
+  // Exactly these families are a set the store holds already: never installed then (see resumeTtf()).
+  const TtfFontSet::Install install =
+      choice == TtfChoice::ExactlyThese ? TtfFontSet::Install::Never : TtfFontSet::Install::IfNeeded;
   uint8_t loaded = count;
-  auto set = loadSet(*flash, opened->sources, opened->identities, count, onColdLoad);
-  while (!set && loaded > 1) {
+  auto set = loadSet(*flash, opened->sources, opened->identities, count, onColdLoad, install);
+  while (!set && loaded > 1 && choice == TtfChoice::FewerIfNeeded) {
     // Too large together, or an accent family that does not read: without the last family, the least used accent,
     // and so on down to the body's family alone, as before Stage B.
     --loaded;
     LOG_INF("SDMGR", "TTF families do not load together; %s left out", families[loaded]->name.c_str());
-    set = loadSet(*flash, opened->sources, opened->identities, loaded, onColdLoad);
+    set = loadSet(*flash, opened->sources, opened->identities, loaded, onColdLoad, install);
   }
   if (!set) {
     LOG_ERR("SDMGR", "TTF family %s cannot be drawn", families[0]->name.c_str());
@@ -325,6 +334,7 @@ std::optional<ResolvedFont<EpdFontFamily>> SdCardFontManager::resolveTtfSize(voi
 }
 
 std::optional<SdCardFontManager::NativeSizes> SdCardFontManager::ttfNativeSizes(const int bodyFontId) const {
+  if (!ttfSet_) return std::nullopt;  // none loaded, or suspended
   for (uint8_t f = 0; f < ttfCount_; ++f) {
     const TtfFamily& family = ttfFamilies_[f];
     if (family.fontId != bodyFontId || family.nativeBase == 0) continue;
@@ -377,6 +387,53 @@ bool SdCardFontManager::setTtfBodySize(GfxRenderer& renderer, const uint8_t poin
 
 void SdCardFontManager::wipeTtfIfPending(const std::function<void()>& onBusy) {
   if (ttfSet_) ttfSet_->wipeIfPending(onBusy);
+}
+
+uint32_t SdCardFontManager::releaseTtfMissMemory() { return ttfSet_ ? ttfSet_->releaseMissMemory() : 0; }
+
+bool SdCardFontManager::restoreTtfMissMemory() { return !ttfSet_ || ttfSet_->restoreMissMemory(); }
+
+bool SdCardFontManager::ttfMissMemoryReleased() const { return ttfSet_ && ttfSet_->missMemoryReleased(); }
+
+bool SdCardFontManager::suspendTtf(GfxRenderer& renderer) {
+  if (!ttfSet_) return false;
+  // What unloadAll() does to the renderer and the set; the families' names, font IDs and windows stay.
+  dropTtfNativeSizes(renderer);
+  renderer.setFontResolver(nullptr, nullptr);
+  for (uint8_t f = 0; f < ttfCount_; ++f) renderer.removeFont(ttfFamilies_[f].fontId);
+  ttfSet_.reset();  // closes the store before its flash goes, and stops reading before its files close
+  ttfSources_.reset();
+  ttfFlash_.reset();
+  ttfSuspended_ = true;
+  LOG_INF("SDMGR", "TTF set of %u famil%s suspended", ttfCount_, ttfCount_ == 1 ? "y" : "ies");
+  return true;
+}
+
+bool SdCardFontManager::resumeTtf(const SdCardFontFamilyInfo* const* families, GfxRenderer& renderer) {
+  if (!ttfSuspended_) return ttfSet_ != nullptr;
+  const uint8_t count = ttfCount_;
+  // The IDs alone, not the names: the heap is at its shortest here.
+  int fontIds[kMaxTtfFamilies] = {};
+  int32_t nativeBases[kMaxTtfFamilies] = {};
+  for (uint8_t f = 0; f < count; ++f) {
+    fontIds[f] = ttfFamilies_[f].fontId;
+    nativeBases[f] = ttfFamilies_[f].nativeBase;
+  }
+  const uint32_t asked = ttfAsked_;
+  const uint8_t pointSize = loadedPointSize_;
+  unloadAll(renderer);  // the suspended state: nothing of the set is left to free
+  bool same = loadTtf(families, count, renderer, pointSize, {}, TtfChoice::ExactlyThese) && ttfCount_ == count;
+  for (uint8_t f = 0; same && f < count; ++f) {
+    same = ttfFamilies_[f].fontId == fontIds[f] && ttfFamilies_[f].nativeBase == nativeBases[f];
+  }
+  if (!same) {
+    // Pages laid out with the old IDs would draw nothing in their place.
+    if (ttfSet_) LOG_ERR("SDMGR", "TTF set loaded again under other font IDs; unloaded");
+    unloadAll(renderer);
+    return false;
+  }
+  ttfAsked_ = asked;  // what the load was asked for, the families left out at its time among them
+  return true;
 }
 
 bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t targetPtSize,
@@ -537,15 +594,17 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
               ttfFamilies_[f].name.c_str(), static_cast<unsigned long>(font.renders()),
               static_cast<unsigned long>(font.storeHits()), static_cast<unsigned long>(font.kernLookups()),
               font.readsCard() ? " (SD mode)" : "");
-      ttfFamilies_[f] = {};
     }
     LOG_INF("SDMGR", "TTF set unloaded: %lu SD pages read", static_cast<unsigned long>(ttfSet_->sdPageReads()));
-    ttfCount_ = 0;
-    ttfAsked_ = 0;
     ttfSet_.reset();  // closes the store before its flash goes, and stops reading before its files close
     ttfSources_.reset();
     ttfFlash_.reset();
   }
+  // A suspended set is gone already; what was kept for its resume goes now.
+  for (uint8_t f = 0; f < ttfCount_; ++f) ttfFamilies_[f] = {};
+  ttfCount_ = 0;
+  ttfAsked_ = 0;
+  ttfSuspended_ = false;
   dropSizeAlias(renderer);
   renderer.clearSdCardFonts();
   for (auto& lf : loaded_) {

@@ -76,6 +76,61 @@ TEST_F(PlaceholderOnlyScopeFixture, ACacheThatExistsButFailsToReplayIsCountedAnd
   EXPECT_FALSE(fs::exists(target));
 }
 
+// --- Short of memory (the reader's memory ladder) ---------------------------------------------
+
+struct LowMemoryFixture : PlaceholderOnlyScopeFixture {
+  void SetUp() override {
+    PlaceholderOnlyScopeFixture::SetUp();
+    ImageBlock::takeLowMemoryPlaceholders();
+  }
+  void TearDown() override {
+    ESP.setFreeHeap(200 * 1024);
+    PlaceholderOnlyScopeFixture::TearDown();
+  }
+};
+
+TEST_F(LowMemoryFixture, ADecodeTheHeapRefusesIsDrawnAsALowMemoryBoxAndCountedShortOfMemory) {
+  ImageBlock block = blockAt(work / "img.png");
+  ESP.setFreeHeap(8 * 1024);  // under the PNG decoder's floor
+  const uint32_t before = image_scratch::heapShortCount();
+  block.render(renderer, 0, 0, /*forceLoad=*/true, /*monochromeOutput=*/true);
+  EXPECT_FALSE(block.hasPixelCache());
+  EXPECT_GT(image_scratch::heapShortCount(), before);
+  EXPECT_EQ(1u, ImageBlock::takeLowMemoryPlaceholders()) << "not left blank";
+  EXPECT_EQ(0u, ImageBlock::takeLowMemoryPlaceholders()) << "taken once";
+  // With the memory back it decodes, and nothing says it is short.
+  ESP.setFreeHeap(200 * 1024);
+  const uint32_t after = image_scratch::heapShortCount();
+  block.render(renderer, 0, 0, true, true);
+  EXPECT_TRUE(block.hasPixelCache());
+  EXPECT_EQ(after, image_scratch::heapShortCount());
+  EXPECT_EQ(0u, ImageBlock::takeLowMemoryPlaceholders());
+}
+
+TEST_F(LowMemoryFixture, AnImageThatCannotBeDecodedAtAllIsNotShortOfMemory) {
+  const fs::path target = work / "broken.png";
+  {
+    std::ofstream broken(target.string(), std::ios::binary);
+    broken << "\x89PNG\r\n\x1a\n not a png at all";
+  }
+  ImageBlock block(target.string(), 120, 160, "");
+  const uint32_t before = image_scratch::heapShortCount();
+  block.render(renderer, 0, 0, true, true);
+  EXPECT_EQ(before, image_scratch::heapShortCount()) << "more memory would not decode it: the ladder leaves it";
+  EXPECT_EQ(0u, ImageBlock::takeLowMemoryPlaceholders());
+}
+
+TEST_F(LowMemoryFixture, ALowMemoryScopeDrawsTheUncachedImagesAsBoxesWithoutADecode) {
+  const fs::path target = work / "img.png";
+  ImageBlock block = blockAt(target);
+  ImageBlock::PlaceholderOnlyScope scope(ImageBlock::Placeholder::LowMemory);
+  block.render(renderer, 0, 0, true, true);
+  EXPECT_EQ(1u, scope.placeholdersDrawn());
+  EXPECT_EQ(1u, ImageBlock::takeLowMemoryPlaceholders());
+  EXPECT_FALSE(block.hasPixelCache());
+  EXPECT_FALSE(fs::exists(target));
+}
+
 TEST_F(PlaceholderOnlyScopeFixture, EachScopeStartsCountingFromZero) {
   ImageBlock block = blockAt(work / "img.png");
   {

@@ -6,6 +6,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -679,6 +680,70 @@ void injectContact(const std::string_view arg, const size_t count, const char* o
 void cmdTouch(const std::string_view arg) { injectContact(arg, 2, "TOUCH_OK"); }
 void cmdSwipe(const std::string_view arg) { injectContact(arg, 4, "SWIPE_OK"); }
 
+// ---- HEAP -----------------------------------------------------------------------------------
+
+// Test ballast: blocks held on the heap until CMD:HEAP:FREE, to put the device where a short or broken-up heap takes
+// it (the reader's memory ladder, ImageMemoryLadder) on demand.
+constexpr int kBallastBlocks = 16;
+void* ballast[kBallastBlocks] = {};
+size_t ballastBytes = 0;
+// CMD:HEAP:REFUSE: set on the loop task, used up on whichever task climbs the ladder.
+std::atomic<uint8_t> decodeRefusals{0};
+std::atomic<uint8_t> reloadRefusals{0};
+
+bool takeRefusal(std::atomic<uint8_t>& refusals) {
+  uint8_t left = refusals.load();
+  while (left > 0 && !refusals.compare_exchange_weak(left, static_cast<uint8_t>(left - 1))) {
+  }
+  return left > 0;
+}
+
+void replyHeap(const char* head) {
+  replyf("%s:free=%lu largest=%lu held=%lu", head, static_cast<unsigned long>(esp_get_free_heap_size()),
+         static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT)),
+         static_cast<unsigned long>(ballastBytes));
+}
+
+// CMD:HEAP (what is free), CMD:HEAP:HOLD=<bytes>[,<blocks>] (hold that much more, in equal blocks), CMD:HEAP:FREE,
+// CMD:HEAP:REFUSE=<decodes>[,<reloads>].
+void cmdHeap(const std::string_view arg) {
+  int decodes = 0;
+  int reloads = 0;
+  if (SerialCommandGrammar::parseHeapRefuse(arg, decodes, reloads)) {
+    decodeRefusals = static_cast<uint8_t>(decodes);
+    reloadRefusals = static_cast<uint8_t>(reloads);
+    replyf("HEAP_OK:refuse decodes=%d reloads=%d", decodes, reloads);
+    return;
+  }
+  if (arg == "FREE") {
+    for (void*& block : ballast) {
+      free(block);
+      block = nullptr;
+    }
+    ballastBytes = 0;
+  } else if (!arg.empty()) {
+    int bytes = 0;
+    int blocks = 0;
+    if (!SerialCommandGrammar::parseHeapHold(arg, bytes, blocks, kBallastBlocks)) {
+      reply("HEAP_ERROR:expected HOLD=<bytes>[,<blocks>], REFUSE=<decodes>[,<reloads>] or FREE");
+      return;
+    }
+    const size_t each = static_cast<size_t>(bytes / blocks);
+    for (void*& block : ballast) {
+      if (blocks == 0) break;
+      if (block) continue;
+      if (!(block = malloc(each))) break;
+      ballastBytes += each;
+      --blocks;
+    }
+    if (blocks > 0) {
+      replyHeap("HEAP_ERROR:not all held");
+      return;
+    }
+  }
+  replyHeap("HEAP_OK");
+}
+
 // ---- Power ----------------------------------------------------------------------------------
 
 void cmdSleep(std::string_view /*arg*/) {
@@ -715,7 +780,7 @@ constexpr Command kCommands[] = {
 #if SERIAL_TEST_API
     {"IDLE", &cmdIdle},       {"EVENTS", &cmdEvents}, {"GET", &cmdGet},     {"SET", &cmdSet},
     {"LOG", &cmdLog},         {"TOUCH", &cmdTouch},   {"SWIPE", &cmdSwipe}, {"SLEEP", &cmdSleep},
-    {"REBOOT", &cmdReboot},
+    {"REBOOT", &cmdReboot},   {"HEAP", &cmdHeap},
 #endif
 };
 
@@ -847,6 +912,10 @@ void noteBuildDone(const int spineIndex, const int pageCount) {
   }
   portEXIT_CRITICAL(&probeMux);
 }
+
+bool takeDecodeRefusal() { return takeRefusal(decodeRefusals); }
+
+bool takeReloadRefusal() { return takeRefusal(reloadRefusals); }
 
 PowerRequest takePowerRequest() {
   const PowerRequest request = powerRequest;
