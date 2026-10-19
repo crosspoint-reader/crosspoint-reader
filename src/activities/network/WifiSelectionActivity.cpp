@@ -1259,10 +1259,11 @@ void WifiSelectionActivity::renderConnecting() const {
       y += titleHeight;
     }
 
-    std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
-    if (ssidInfo.length() > 25) {
-      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
-    }
+    // Cut to the width it is drawn in, not to a byte count: the prefix is translated, and a byte
+    // count could split a multi-byte character of the SSID. Ported from crosspoint-reader PR #4079
+    // (Tuan Q. Nguyen).
+    const std::string ssidInfo =
+        renderer.truncatedText(UI_10_FONT_ID, (std::string(tr(STR_TO_PREFIX)) + selectedSSID).c_str(), statusWidth);
     renderer.drawCenteredText(UI_10_FONT_ID, top, ssidInfo.c_str());
   }
 
@@ -1279,10 +1280,11 @@ void WifiSelectionActivity::renderConnected() const {
 
   renderer.drawCenteredText(UI_12_FONT_ID, top - 30, tr(STR_CONNECTED), true, EpdFontFamily::BOLD);
 
-  std::string ssidInfo = std::string(tr(STR_NETWORK_PREFIX)) + selectedSSID;
-  if (ssidInfo.length() > 28) {
-    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
-  }
+  // By width, as in renderConnecting().
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const std::string ssidInfo =
+      renderer.truncatedText(UI_10_FONT_ID, (std::string(tr(STR_NETWORK_PREFIX)) + selectedSSID).c_str(),
+                             renderer.getScreenWidth() - metrics.contentSidePadding * 2);
   renderer.drawCenteredText(UI_10_FONT_ID, top + 10, ssidInfo.c_str());
 
   const std::string ipInfo = std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP;

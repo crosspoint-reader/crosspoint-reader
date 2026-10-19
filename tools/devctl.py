@@ -20,7 +20,8 @@ A --script file holds one step per line; blank lines and lines starting with # a
 Every line the device prints goes to --log with a timestamp. Needs pyserial, and Pillow for shot:.
 
 The port is opened with the default DTR/RTS lines, which does not reset an ESP32-C3 (unlike
-tools/serial_transfer.py, which deasserts them). The device re-enumerates its USB port across a
+tools/serial_transfer.py, which deasserts them), and closed with RTS dropped before DTR, which does
+not either (a plain close on Windows does). The device re-enumerates its USB port across a
 reboot or a sleep; the reader reopens it and carries on.
 """
 import argparse
@@ -95,13 +96,21 @@ class Device:
                 time.sleep(0.5)
         sys.exit(f"cannot open {self.port}")
 
+    def close(self):
+        # RTS goes low before DTR: a plain close on Windows drops DTR first, and the ESP32-C3's USB serial unit
+        # takes RTS high with DTR low as a reset request (esptool's), so every run restarted the device to Home.
+        if self.ser.is_open:
+            self.ser.rts = False
+            self.ser.dtr = False
+        self.ser.close()
+
     def _read(self, size):
         try:
             return self.ser.read(size)
         except (serial.SerialException, OSError):
             # The port went away (reboot, sleep, re-enumeration): reopen and go on.
             try:
-                self.ser.close()
+                self.close()
             except Exception:
                 pass
             time.sleep(1)
@@ -261,7 +270,7 @@ def main():
 
     device = Device(args.port, args.log)
     ok = run(device, steps, args.rotate, args.keep_going)
-    device.ser.close()
+    device.close()
     sys.exit(0 if ok else 1)
 
 

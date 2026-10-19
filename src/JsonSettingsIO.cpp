@@ -171,7 +171,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
 
 bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path) {
   JsonDocument doc;
-  forEachSetting([&](const SettingInfo& info) {
+  forEachPersistedSetting([&](const SettingInfo& info) {
     if (!info.key) return;
     // persistPtr covers rows whose UI type carries no field pointer of its own (slider ACTIONs).
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
@@ -279,7 +279,7 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     return false;
   };
 
-  forEachSetting([&](const SettingInfo& info) {
+  forEachPersistedSetting([&](const SettingInfo& info) {
     if (!info.key) return;
     // See the matching comment in saveSettings.
     const auto field = info.valuePtr ? info.valuePtr : info.persistPtr;

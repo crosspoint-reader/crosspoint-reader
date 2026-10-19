@@ -33,9 +33,12 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 95;  // v95: CJK punctuation is narrowed by the book's
+constexpr uint8_t SECTION_FILE_VERSION = 96;  // v96: CJK punctuation is narrowed by the book's
                                               // table, a mark is a token of its own, CJK lines
                                               // justify flush, zh/ja text sits on a whole-em grid
+                                              // v95: a paragraph whose size undoes the book's
+                                              // root size is body text (Calibre: body 1.125em,
+                                              // p 0.88889em); v94 laid it out at 0.889
                                               // v94: a word in another of the book's families
                                               // than its block's is laid out in that family's
                                               // face (a line's word fonts, TextBlock::WordFont);

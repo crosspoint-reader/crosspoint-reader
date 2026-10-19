@@ -50,7 +50,7 @@ Listed here so nobody redoes it.
   - A block's width rounds down to whole ems at the block's own font size, with half the cut on each side.
   - A first-line indent rounds down to whole ems, at least 1.
   - A block beside a float gets no grid.
-- **Section version** 95.
+- **Section version** 96.
 - **Tests and books.**
   - `test/cjk_layout/CjkTypographyTest.cpp` and `test/typography/`.
   - The rule checker places every unspaced CJK character where the widths before it put it, and checks that justified lines with CJK gaps end flush on a whole-em grid (`CjkJustifiedRules`).

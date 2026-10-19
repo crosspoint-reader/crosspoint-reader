@@ -77,6 +77,9 @@ Things to know about the port:
 - **Opening the port does not reset the device** with the default DTR/RTS lines.
   `tools/serial_transfer.py` deasserts them, and that *does* reset an ESP32-C3 (see
   [The USB Transfer screen](#the-usb-transfer-screen)).
+- **Closing it can.** On Windows a plain close drops DTR before RTS, and an ESP32-C3 takes RTS high
+  with DTR low as a reset request: it restarts to Home (`resetReason=11` in the boot log). Set RTS
+  low, then DTR low, then close, as `tools/devctl.py` does.
 - **The port goes away on a reboot or sleep.** The USB device re-enumerates. A long-running host
   has to close and reopen the port; `tools/devctl.py` does this by itself.
 - **One program at a time.** Close your monitor before running a script, and never hold the port
