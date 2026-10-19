@@ -182,10 +182,11 @@ TEST(CjkSpaces, AGluedLatinWordAfterADashStaysGlued) {
 }
 
 TEST(CjkTokens, EachLineStartsAtItsFirstTokensVisibleOffset) {
-  // 漢 (3 bytes) | 字。 (6 bytes) | 仮: tokens start at 100, 103 and 109.
+  // 漢 (3 bytes) | 字。 (6 bytes) | 仮: tokens start at 100, 103 and 109. On 20 px rather than 25: the line-end 。
+  // is half-width, so on 25 px 漢字。 would share a line.
   ParsedText text(false, false, leftAligned());
   text.addWord("漢字。仮", EpdFontFamily::REGULAR, false, false, ParsedText::DEFAULT_WORD_SIZE_PCT, 100);
-  const auto lines = layout(text, 25);
+  const auto lines = layout(text, 20);
   ASSERT_EQ(lines.size(), 3u);
   EXPECT_EQ(lines[0].visibleOffset, 100u);
   EXPECT_EQ(lines[1].visibleOffset, 103u);

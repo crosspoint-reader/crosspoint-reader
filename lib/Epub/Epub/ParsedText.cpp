@@ -715,6 +715,73 @@ void ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int font
   for (size_t i = 0; i < words.size(); ++i) {
     out.push_back(measureWordWidth(renderer, wordFontId(i, fontId), words[i], wordStyles[i], false, wordScale(i)));
   }
+  applyPunctuationWidths(renderer, fontId, out);
+}
+
+void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int fontId, std::vector<uint16_t>& widths) {
+  using CjkPunctuation::Class;
+  const size_t count = words.size();
+  lineStartTrim_.assign(count, 0);
+  lineEndTrim_.assign(count, 0);
+
+  // A mark is CJK punctuation only where its font draws it full-width, at least 4/5 of the em of 一 in the same
+  // face and size: a curly quote in a Latin font is narrow. Every token is judged on its natural width before any
+  // is narrowed, as a narrowed neighbour (” at 6/8 before “) would no longer pass.
+  int emFont = -1;
+  EpdFontFamily::Style emStyle = EpdFontFamily::REGULAR;
+  float emScale = 0.0f;
+  int em = 0;
+  const auto fullWidth = [&](const size_t i) {
+    const EpdFontFamily::Style style = static_cast<EpdFontFamily::Style>(wordStyles[i] & EpdFontFamily::BOLD_ITALIC);
+    if (wordFontId(i, fontId) != emFont || style != emStyle || wordScale(i) != emScale) {
+      emFont = wordFontId(i, fontId);
+      emStyle = style;
+      emScale = wordScale(i);
+      em = measureWordWidth(renderer, emFont, "\xE4\xB8\x80", emStyle, false, emScale);  // 一
+    }
+    return em > 0 && widths[i] * 5 >= em * 4;
+  };
+  const auto singleCodepoint = [&](const size_t i) {
+    const auto* p = reinterpret_cast<const unsigned char*>(words[i].c_str());
+    const uint32_t cp = utf8NextCodepoint(&p);
+    return *p == 0 ? cp : 0;
+  };
+
+  // The class of each token that is one full-width mark (addWord makes every adjustable mark a token).
+  std::vector<uint8_t>& marks = markClass_;
+  marks.assign(count, static_cast<uint8_t>(Class::None));
+  for (size_t i = 0; i < count; ++i) {
+    const uint32_t cp = singleCodepoint(i);
+    const Class c = cp != 0 ? CjkPunctuation::classOf(cp) : Class::None;
+    if (c != Class::None && fullWidth(i)) marks[i] = static_cast<uint8_t>(c);
+  }
+  // The class of token j's character next to the mark: a mark token's own, else the edge codepoint's (a curly quote
+  // inside a word is Latin).
+  const auto neighbourClass = [&](const size_t j, const uint32_t edge) {
+    if (singleCodepoint(j) != 0) return static_cast<Class>(marks[j]);
+    return CjkPunctuation::isCurlyQuote(edge) ? Class::None : CjkPunctuation::classOf(edge);
+  };
+
+  const auto table = typography_.punctuation;
+  for (size_t i = 0; i < count; ++i) {
+    const auto mark = static_cast<Class>(marks[i]);
+    if (mark == Class::None || mark == Class::IdeographicSpace || mark == Class::AmbiguousQuote) continue;
+    // An opening mark looks at the character before it, every other mark at the one after it; across a space there
+    // is no neighbour.
+    Class neighbour = Class::None;
+    if (mark == Class::Opening) {
+      if (i > 0 && !TokenBoundary::hasSpace(wordBoundaries[i])) {
+        neighbour = neighbourClass(i - 1, lastCodepoint(words[i - 1]));
+      }
+    } else if (i + 1 < count && !TokenBoundary::hasSpace(wordBoundaries[i + 1])) {
+      neighbour = neighbourClass(i + 1, firstCodepoint(words[i + 1]));
+    }
+    const int full = widths[i];
+    const int mid = (full * CjkPunctuation::widthOf(table, mark, neighbour, false).forced + 4) / 8;
+    const int edge = (full * CjkPunctuation::widthOf(table, mark, Class::None, true).forced + 4) / 8;
+    widths[i] = static_cast<uint16_t>(mid);
+    (mark == Class::Opening ? lineStartTrim_ : lineEndTrim_)[i] = static_cast<int16_t>(edge - mid);
+  }
 }
 
 void ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
@@ -801,8 +868,11 @@ void ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId
     for (size_t j = i; j < totalWordCount; ++j) {
       const int gap = (j > static_cast<size_t>(i)) ? interWordGaps[j] : 0;
       currlen += wordWidths[j] + gap;
+      // The line as drawn: its first and last token at their line-edge widths (CJK punctuation, spec 5.2). It only
+      // grows with j, as a token is always wider than what a line edge takes off it.
+      const int lineLen = withEdgeTrims(currlen, i, j);
 
-      if (currlen > effectivePageWidth) {
+      if (lineLen > effectivePageWidth) {
         break;
       }
 
@@ -815,7 +885,7 @@ void ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId
       if (j == totalWordCount - 1) {
         cost = 0;  // Last line — no penalty regardless of looseness
       } else {
-        const int remainingSpace = effectivePageWidth - currlen;
+        const int remainingSpace = effectivePageWidth - lineLen;
         // Knuth-Plass style demerits:
         //   badness  = (gap/lineWidth)³ × 10000, clamped to [0, 10000]
         //   demerits = (1 + badness)²
@@ -894,7 +964,7 @@ size_t ParsedText::computeSingleLineBreakNoHyphen(const GfxRenderer& renderer, c
     const int spacing = isFirstWord ? 0 : naturalGapBefore(renderer, fontId, currentIndex);
 
     const int candidateWidth = spacing + wordWidths[currentIndex];
-    if (lineWidth + candidateWidth <= effectivePageWidth) {
+    if (withEdgeTrims(lineWidth + candidateWidth, lineStartIndex, currentIndex) <= effectivePageWidth) {
       lineWidth += candidateWidth;
       ++currentIndex;
       continue;
@@ -1082,7 +1152,7 @@ void ParsedText::computeHyphenatedLineBreaks(
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
       // Word fits on current line
-      if (lineWidth + candidateWidth <= effectivePageWidth) {
+      if (withEdgeTrims(lineWidth + candidateWidth, lineStart, currentIndex) <= effectivePageWidth) {
         lineWidth += candidateWidth;
         ++currentIndex;
         continue;
@@ -1179,7 +1249,7 @@ void ParsedText::computeHyphenatedLineBreaksFromIndex(
       const int spacing = isFirstWord ? 0 : interWordGaps[currentIndex];
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
-      if (lineWidth + candidateWidth <= effectivePageWidth) {
+      if (withEdgeTrims(lineWidth + candidateWidth, lineStart, currentIndex) <= effectivePageWidth) {
         lineWidth += candidateWidth;
         ++currentIndex;
         continue;
@@ -1327,6 +1397,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
   const uint16_t remainderWidth = measureWordWidth(renderer, font, remainder, style, false, scale);
   wordWidths.insert(wordWidths.begin() + wordIndex + 1, remainderWidth);
+  lineStartTrim_.insert(lineStartTrim_.begin() + wordIndex + 1, 0);
+  lineEndTrim_.insert(lineEndTrim_.begin() + wordIndex + 1, 0);
   if (outInsertedHyphen) {
     *outInsertedHyphen = chosenNeedsHyphen;
   }
@@ -1350,12 +1422,20 @@ ParsedText::LineProcessResult ParsedText::extractLine(
 
   // Calculate total word width for this line, count actual word gaps,
   // and accumulate total natural gap widths (including space kerning adjustments).
+  // A token's width on this line: mid-line, but the first and last at their line-edge widths (CJK punctuation).
+  const auto boxWidth = [&](const size_t wordIdx) {
+    int width = wordWidths[lastBreakAt + wordIdx];
+    if (wordIdx == 0) width += lineStartTrim_[lastBreakAt];
+    if (wordIdx + 1 == lineWordCount) width += lineEndTrim_[lastBreakAt + wordIdx];
+    return width;
+  };
+
   int lineWordWidthSum = 0;
   size_t actualGapCount = 0;
   int totalNaturalGaps = 0;
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
+    lineWordWidthSum += boxWidth(wordIdx);
     // Count gaps: each word after the first creates a gap, unless it's a continuation.
     // Gaps before closing punctuation (. , ) » etc.) are excluded from justification
     // distribution so they stay at natural space width.
@@ -1406,6 +1486,27 @@ ParsedText::LineProcessResult ParsedText::extractLine(
     xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
   }
 
+  // A narrowed CJK mark is drawn where its ink sits: ink in the right half of its em (an opening bracket) moves
+  // left by what the mark lost, centred ink by half of it, ink in the left half stays (spec 5.2).
+  const auto inkShift = [&](const size_t wordIdx, const int box) {
+    const size_t i = lastBreakAt + wordIdx;
+    const auto* p = reinterpret_cast<const unsigned char*>(words[i].c_str());
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0 || *p != 0 || CjkPunctuation::classOf(cp) == CjkPunctuation::Class::None) return 0;
+    const int natural = measureWordWidth(renderer, wordFontId(i, fontId), words[i], wordStyles[i], false, wordScale(i));
+    if (box >= natural) return 0;
+    int inkLeft = 0;
+    int inkWidth = 0;
+    int advance = 0;
+    if (!renderer.getGlyphInk(wordFontId(i, fontId), cp, wordStyles[i], inkLeft, inkWidth, advance) || advance <= 0) {
+      return 0;
+    }
+    const int removed = natural - box;
+    if (2 * inkLeft >= advance) return removed;
+    if (2 * (inkLeft + inkWidth) <= advance) return 0;
+    return removed / 2;
+  };
+
   // Pre-calculate X positions for words
   // Continuation words attach to the previous word with no space before them
   std::vector<int16_t>& lineXPos = lineXPosScratch_;
@@ -1413,11 +1514,12 @@ ParsedText::LineProcessResult ParsedText::extractLine(
   lineXPos.reserve(lineWordCount);
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
-    lineXPos.push_back(xpos);
+    const int box = boxWidth(wordIdx);
+    lineXPos.push_back(static_cast<int16_t>(xpos - inkShift(wordIdx, box)));
 
     const bool nextIsContinuation = wordIdx + 1 < lineWordCount && boundaries[lastBreakAt + wordIdx + 1].continues;
     if (nextIsContinuation) {
-      int advance = wordWidths[lastBreakAt + wordIdx];
+      int advance = box;
       // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
       advance += static_cast<int>(
           kernBefore(renderer, fontId, lastBreakAt + wordIdx + 1) * wordScale(lastBreakAt + wordIdx) + 0.5f);
@@ -1443,7 +1545,7 @@ ParsedText::LineProcessResult ParsedText::extractLine(
           gap += justifyExtra;
         }
       }
-      xpos += wordWidths[lastBreakAt + wordIdx] + gap;
+      xpos += box + gap;
     }
   }
 

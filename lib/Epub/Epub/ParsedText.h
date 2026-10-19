@@ -54,6 +54,12 @@ class ParsedText {
   // per book on the host census once the word vectors stopped regrowing (memory audit
   // 2026-09, R2). clear() keeps their capacity, so a chapter allocates them once.
   std::vector<uint16_t> wordWidths_;
+  // How much wider (> 0) or narrower (< 0) each token is when a line starts at it (an opening CJK mark) or ends
+  // after it (any other mark) than its width mid-line, in pixels (CjkPunctuation.h). Layout scratch in step with
+  // wordWidths_: calculateWordWidths fills all three, hyphenateWordAtIndex inserts into all three.
+  std::vector<int16_t> lineStartTrim_;
+  std::vector<int16_t> lineEndTrim_;
+  std::vector<uint8_t> markClass_;  // applyPunctuationWidths' scratch
   std::vector<size_t> lineBreakIndices_;
   std::vector<bool> lineEndsWithHyphenatedWord_;
   std::vector<int> splitPrefixWordIndexes_;
@@ -187,6 +193,12 @@ class ParsedText {
   // Fills `out` (cleared first); uses blockStyle.fontSizeMultiplier internally.
   void calculateWordWidths(const GfxRenderer& renderer, int fontId,
                            std::vector<uint16_t>& out);  // uses blockStyle.fontSizeMultiplier internally
+  // Narrows each CJK mark that is a token to its mid-line width and fills lineStartTrim_/lineEndTrim_.
+  void applyPunctuationWidths(const GfxRenderer& renderer, int fontId, std::vector<uint16_t>& widths);
+  // A line first..last as drawn: its first and last token at their line-edge widths.
+  int withEdgeTrims(const int naturalWidth, const size_t first, const size_t last) const {
+    return naturalWidth + lineStartTrim_[first] + lineEndTrim_[last];
+  }
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,

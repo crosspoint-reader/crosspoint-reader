@@ -1,6 +1,7 @@
 // The CJK line-breaking rules (spec section 9.1), checked on every line the host pipeline lays out
 // for the CJK corpus books: kinsoku at the edges of the lines the layout broke, no hyphen in CJK
-// text, and no space between two characters of unspaced CJK text (Han, kana, CJK punctuation).
+// text, no space between two characters of unspaced CJK text (Han, kana, CJK punctuation), and every CJK
+// mark at the width its book's punctuation table gives it (spec section 5.2).
 //
 // The books run left-aligned, so every gap on a line is its natural gap: zero at a CJK gap or a
 // glued seam, the space advance at a word gap. Each book's paragraphs open with an indented first
@@ -8,12 +9,17 @@
 #include <Utf8.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
+#include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "Epub/CjkLineBreak.h"
+#include "Epub/CjkPunctuation.h"
+#include "Epub/TypographyProfile.h"
 #include "GfxRenderer.h"
 #include "PipelineRunner.h"
 
@@ -32,6 +38,10 @@ struct DumpLine {
   std::vector<DumpWord> words;
   float sizeMultiplier = 1.0f;  // the block's font-size multiplier (LINE mult=); table cell lines have none
   bool followsLine = false;     // the line before it in `lines` is the previous line of the same flow
+  std::string shape;            // x, alignment and size of the LINE record: lines of one shape share a text width
+  bool justified = false;       // align=0
+  bool cell = false;            // a table cell line (LN record)
+  int y = 0;
 };
 
 uint32_t firstCodepoint(const std::string& text) {
@@ -61,8 +71,22 @@ std::vector<DumpLine> parseLines(const std::string& dump) {
     if (line.rfind("LINE ", 0) == 0 || line.rfind("LN ", 0) == 0) {
       DumpLine next;
       next.followsLine = inFlow;
+      next.cell = line.rfind("LN ", 0) == 0;
       const size_t mult = line.find(" mult=");
       if (mult != std::string::npos) next.sizeMultiplier = std::stof(line.substr(mult + 6));
+      std::istringstream record(line);
+      std::string field;
+      std::string x;
+      std::string align;
+      std::string size;
+      while (record >> field) {
+        if (field.rfind("x=", 0) == 0) x = field;
+        if (field.rfind("align=", 0) == 0) align = field;
+        if (field.rfind("mult=", 0) == 0) size = field;
+        if (field.rfind("y=", 0) == 0) next.y = std::stoi(field.substr(2));
+      }
+      next.shape = x + " " + align + " " + size;
+      next.justified = align == "align=0";
       lines.push_back(next);
       inFlow = true;
     } else if (line.rfind("W x=", 0) == 0 && !lines.empty()) {
@@ -98,8 +122,77 @@ int wordWidth(const GfxRenderer& renderer, const DumpLine& line, const DumpWord&
   return scale == 1.0f ? raw : static_cast<int>(raw * scale + 0.5f);
 }
 
+// The width a token is laid out at, its line-edge width at the start (an opening mark) or end (any other mark) of
+// its line, and how far left of that box its ink puts its draw position (spec 5.2): ParsedText's rules, restated.
+class LineWidths {
+ public:
+  LineWidths(const GfxRenderer& renderer, const DumpLine& line, const TypographyProfile::Punctuation table)
+      : renderer_(renderer), line_(line), table_(table) {}
+
+  int box(const size_t k) const {
+    const int natural = wordWidth(renderer_, line_, line_.words[k]);
+    const CjkPunctuation::Class mark = markClass(k);
+    if (mark == CjkPunctuation::Class::None) return natural;
+    const bool opening = mark == CjkPunctuation::Class::Opening;
+    const bool atEdge = opening ? k == 0 : k + 1 == line_.words.size();
+    CjkPunctuation::Class neighbour = CjkPunctuation::Class::None;
+    if (!atEdge) {
+      neighbour = opening ? edgeClass(k - 1, lastCodepoint(line_.words[k - 1].text))
+                          : edgeClass(k + 1, firstCodepoint(line_.words[k + 1].text));
+    }
+    return (natural * CjkPunctuation::widthOf(table_, mark, neighbour, atEdge).forced + 4) / 8;
+  }
+
+  // The left edge of token k's box: its draw position plus the shift its ink placement took off it.
+  int left(const size_t k) const {
+    const int removed = wordWidth(renderer_, line_, line_.words[k]) - box(k);
+    switch (markClass(k)) {
+      case CjkPunctuation::Class::Opening:
+        return line_.words[k].x + removed;
+      case CjkPunctuation::Class::Closing:
+      case CjkPunctuation::Class::FullStop:
+      case CjkPunctuation::Class::Comma:
+      case CjkPunctuation::Class::None:
+        return line_.words[k].x;
+      default:
+        return line_.words[k].x + removed / 2;
+    }
+  }
+
+  int right(const size_t k) const { return left(k) + box(k); }
+
+ private:
+  int em(const size_t k) const {
+    DumpWord one = line_.words[k];
+    one.text = "\xE4\xB8\x80";  // 一
+    return wordWidth(renderer_, line_, one);
+  }
+  bool fullWidth(const size_t k) const { return wordWidth(renderer_, line_, line_.words[k]) * 5 >= em(k) * 4; }
+  CjkPunctuation::Class edgeClass(const size_t k, const uint32_t cp) const {
+    if (CjkPunctuation::isCurlyQuote(cp) && !fullWidth(k)) return CjkPunctuation::Class::None;
+    return CjkPunctuation::classOf(cp);
+  }
+  // The class of token k when it is one full-width mark whose width the table sets, else None.
+  CjkPunctuation::Class markClass(const size_t k) const {
+    const std::string& text = line_.words[k].text;
+    const auto* p = reinterpret_cast<const unsigned char*>(text.c_str());
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0 || *p != 0) return CjkPunctuation::Class::None;
+    const CjkPunctuation::Class c = edgeClass(k, cp);
+    if (c == CjkPunctuation::Class::IdeographicSpace || c == CjkPunctuation::Class::AmbiguousQuote) {
+      return CjkPunctuation::Class::None;
+    }
+    return c != CjkPunctuation::Class::None && fullWidth(k) ? c : CjkPunctuation::Class::None;
+  }
+
+  const GfxRenderer& renderer_;
+  const DumpLine& line_;
+  TypographyProfile::Punctuation table_;
+};
+
 struct Case {
   std::string epub;
+  std::string language;
   bool hyphenation = false;
 };
 
@@ -116,12 +209,13 @@ class CjkRules : public testing::TestWithParam<Case> {
     const std::string test = testing::UnitTest::GetInstance()->current_test_info()->name();
     const auto cacheDir = fs::temp_directory_path() / "epub_pipeline_test" /
                           ("cjk_rules_" + test.substr(0, test.find('/')) + "_" + fs::path(c.epub).stem().string() +
-                           (c.hyphenation ? "_hyph" : ""));
+                           (c.hyphenation ? "_hyph" : "") + (alignment() == 0 ? "_justified" : ""));
     fs::remove_all(cacheDir);
     fs::create_directories(cacheDir);
     pipeline_harness::Profile profile;
-    profile.paragraphAlignment = 1;  // left: a line's gaps are its natural gaps
+    profile.paragraphAlignment = alignment();
     profile.hyphenationEnabled = c.hyphenation;
+    table = TypographyProfile::forLanguage(c.language).punctuation;
     std::ostringstream dump;
     ASSERT_TRUE(pipeline_harness::runAndDump(c.epub, cacheDir.string(), profile, dump)) << dump.str();
     lines = parseLines(dump.str());
@@ -129,8 +223,11 @@ class CjkRules : public testing::TestWithParam<Case> {
   }
 
   int wordWidth(const DumpLine& line, const DumpWord& w) const { return ::wordWidth(renderer, line, w); }
+  // The reader's paragraph alignment: left (1), where a line's gaps are its natural gaps.
+  virtual uint8_t alignment() const { return 1; }
 
   GfxRenderer renderer;
+  TypographyProfile::Punctuation table = TypographyProfile::Punctuation::SimplifiedChinese;
   std::vector<DumpLine> lines;
 };
 
@@ -164,35 +261,58 @@ TEST_P(CjkRules, NoHyphenAfterCjkText) {
   }
 }
 
-// Between two characters of unspaced CJK text there is no space: not where the source broke a line,
-// not where the parser flushed a long run, not across an inline element.
-TEST_P(CjkRules, NoSpaceBetweenUnspacedCjkCharacters) {
+// Each character of unspaced CJK text sits where the widths before it put it: no space where the source broke a
+// line, where the parser flushed a long run or across an inline element, and every CJK mark at the width its
+// book's punctuation table gives it beside its neighbours (spec 5.2). A justified line (table cells keep their
+// own alignment) may stretch the gap, never overlap it.
+TEST_P(CjkRules, UnspacedCjkSitsWhereItsWidthsPutIt) {
   for (const auto& line : lines) {
+    const LineWidths widths(renderer, line, table);
     for (size_t i = 0; i + 1 < line.words.size(); ++i) {
       const DumpWord& left = line.words[i];
       const DumpWord& right = line.words[i + 1];
       if (!utf8IsUnspacedCjk(lastCodepoint(left.text)) || !utf8IsUnspacedCjk(firstCodepoint(right.text))) continue;
-      EXPECT_EQ(right.x - left.x - wordWidth(line, left), 0)
-          << "gap between \"" << left.text << "\" and \"" << right.text << "\" in: " << lineText(line);
+      const int gap = widths.left(i + 1) - widths.right(i);
+      if (line.justified || line.cell) {
+        EXPECT_GE(gap, 0) << "\"" << right.text << "\" overlaps \"" << left.text << "\" in: " << lineText(line);
+      } else {
+        EXPECT_EQ(gap, 0) << "\"" << right.text << "\" is not where \"" << left.text
+                          << "\" ends, in: " << lineText(line);
+      }
     }
   }
 }
 
+// The line has a breakable gap between two characters of unspaced CJK text, the gaps a justified CJK line stretches.
+bool hasCjkGap(const DumpLine& line) {
+  for (size_t i = 0; i + 1 < line.words.size(); ++i) {
+    const uint32_t left = lastCodepoint(line.words[i].text);
+    const uint32_t right = firstCodepoint(line.words[i + 1].text);
+    if (utf8IsUnspacedCjk(left) && utf8IsUnspacedCjk(right) && CjkLineBreak::isGapBetween(left, right)) return true;
+  }
+  return false;
+}
+
 std::vector<Case> cjkBooks() {
   std::vector<Case> cases;
-  for (const char* book :
-       {"test_cjk_line_breaking", "test_cjk_ja_soseki", "test_cjk_ko_hyeon", "test_cjk_zh_honglou"}) {
+  for (const auto& [book, language] : std::vector<std::pair<const char*, const char*>>{
+           {"test_cjk_line_breaking", "ja"},
+           {"test_cjk_ja_soseki", "ja"},
+           {"test_cjk_ko_hyeon", "ko"},
+           {"test_cjk_zh_honglou", "zh-Hant"},
+           {"test_cjk_zh_punctuation", "zh-Hans"}}) {
     const std::string path = (fs::path(CORPUS_DIR) / (std::string(book) + ".epub")).string();
-    cases.push_back(Case{path, false});
-    cases.push_back(Case{path, true});
+    cases.push_back(Case{path, language, false});
+    cases.push_back(Case{path, language, true});
   }
   return cases;
 }
 
-INSTANTIATE_TEST_SUITE_P(CjkCorpus, CjkRules, testing::ValuesIn(cjkBooks()),
-                         [](const testing::TestParamInfo<Case>& info) {
-                           return fs::path(info.param.epub).stem().string() + (info.param.hyphenation ? "_hyph" : "");
-                         });
+std::string caseName(const testing::TestParamInfo<Case>& info) {
+  return fs::path(info.param.epub).stem().string() + (info.param.hyphenation ? "_hyph" : "");
+}
+
+INSTANTIATE_TEST_SUITE_P(CjkCorpus, CjkRules, testing::ValuesIn(cjkBooks()), caseName);
 
 }  // namespace
 

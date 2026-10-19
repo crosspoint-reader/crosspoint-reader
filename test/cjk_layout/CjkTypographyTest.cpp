@@ -68,6 +68,8 @@ TEST(CjkPunctuationWidths, EachMarkIsATokenGluedWhereKinsokuHoldsIt) {
   ASSERT_EQ(lines.size(), 1u);
   EXPECT_EQ(lines[0].words, (std::vector<std::string>{"字", "」", "。", "次"}));
   EXPECT_EQ(lines[0].continues, (std::vector<bool>{false, true, true, false}));
+  // 」 before 。 is half-width (all but the last of a run), 。 before text keeps its width.
+  EXPECT_EQ(lines[0].xpos, (X{0, 10, 15, 25}));
 }
 TEST(CjkPunctuationWidths, ALatinWordKeepsItsCurlyQuotes) {
   ParsedText text(false, false, aligned(CssTextAlign::Left));
@@ -75,4 +77,76 @@ TEST(CjkPunctuationWidths, ALatinWordKeepsItsCurlyQuotes) {
   const auto lines = layout(text, 400);
   ASSERT_EQ(lines.size(), 1u);
   EXPECT_EQ(lines[0].words.size(), 1u);
+}
+TEST(CjkPunctuationWidths, ACurlyQuotePairInCjkTextSetsAQuarterEmEachSide) {
+  // ”“ in Chinese dialogue, at 160 % (16 px glyphs; the shim draws curly quotes full-width): ” before an opening
+  // mark and “ after a closing one are 6/8 each, 12 px. The “ judges ” by its full width: narrowed to 12 px, ” is
+  // below the 4/5 em a curly quote needs to count as CJK punctuation.
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.addWord("\xE5\xA5\xBD\xE2\x80\x9D\xE2\x80\x9C\xE5\xAD\x97", EpdFontFamily::REGULAR, false, false,
+               160);  // 好”“字
+  const auto lines = layout(text, 400);
+  ASSERT_EQ(lines.size(), 1u);
+  // “ keeps its ink (the right half): drawn 4 px left of its 12 px box at 28.
+  EXPECT_EQ(lines[0].xpos, (X{0, 16, 24, 40}));
+}
+TEST(CjkPunctuationWidths, AMarkEndingALineIsHalfWidthSoTheLineHoldsIt) {
+  // 字字字字。 is 45 px with the line-end 。 at half width: it fits a 45 px line. Measured at full width the line
+  // would end before 字。.
+  for (const bool hyphenation : {false, true}) {
+    ParsedText text(false, hyphenation, aligned(CssTextAlign::Left));
+    text.addWord("字字字字。字字", EpdFontFamily::REGULAR);
+    EXPECT_EQ(wordsOf(layout(text, 45)), (Words{{"字", "字", "字", "字", "。"}, {"字", "字"}}))
+        << (hyphenation ? "greedy breaker" : "DP breaker");
+  }
+}
+TEST(CjkPunctuationWidths, AnOpeningBracketStartingALineIsHalfWidthAndDrawnByItsInk) {
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.addWord("字字字字「字」", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 40);
+  ASSERT_EQ(wordsOf(lines), (Words{{"字", "字", "字", "字"}, {"「", "字", "」"}}));
+  // 「 keeps only its ink (the right half of its em): drawn 5 px left of the line start, so the ink starts there.
+  EXPECT_EQ(lines[1].xpos, (X{-5, 5, 15}));
+}
+TEST(CjkPunctuationWidths, TraditionalChineseKeepsItsCentredMarksFullWidth) {
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.setTypography(TypographyProfile::forLanguage("zh-TW"));
+  text.addWord("字」。次", EpdFontFamily::REGULAR);
+  EXPECT_EQ(layout(text, 400)[0].xpos, (X{0, 10, 20, 30}));
+}
+TEST(CjkPunctuationWidths, JapaneseLetsAFullStopEndingALineStayFull) {
+  // JLREQ: 。 at a line end is half or full, and it stays full unless push-in needs it (PR A3b), so 字。 does not
+  // fit after 字字字.
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.setTypography(TypographyProfile::forLanguage("ja"));
+  text.addWord("字字字字。字字", EpdFontFamily::REGULAR);
+  EXPECT_EQ(wordsOf(layout(text, 45)), (Words{{"字", "字", "字"}, {"字", "。", "字", "字"}}));
+}
+TEST(CjkPunctuationWidths, APageBottomRetryKeepsTheMarksWidths) {
+  // The retry re-lays a hyphenated line with its words whole: it merges tokens back and measures again, so the
+  // line-edge widths must stay in step with the tokens. The last line's 」 is half-width before 。 as without a retry.
+  Hyphenator::setPreferredLanguage("ko");
+  ParsedText text(false, /*hyphenationEnabled=*/true, aligned(CssTextAlign::Justify));
+  for (const char* word : {"가나", "다라마바사아", "자」。차"}) text.addWord(word, EpdFontFamily::REGULAR);
+  GfxRenderer renderer;
+  std::vector<Line> lines;
+  bool retried = false;
+  text.layoutAndExtractLines(
+      renderer, kFontId, 62,
+      [&](std::unique_ptr<TextBlock> block, const bool endsHyphenated, const bool suppressRetry) {
+        if (endsHyphenated && !suppressRetry && !retried) {  // what the parser does at a page bottom
+          retried = true;
+          return ParsedText::LineProcessResult::RetryWithoutHyphenation;
+        }
+        Line& line = lines.emplace_back();
+        for (uint16_t i = 0; i < block->wordCount(); ++i) {
+          line.words.emplace_back(block->wordText(i));
+          line.xpos.push_back(block->wordXpos(i));
+        }
+        return ParsedText::LineProcessResult::Accepted;
+      },
+      /*includeLastLine=*/true);
+  ASSERT_TRUE(retried);
+  ASSERT_EQ(wordsOf(lines), (Words{{"가나"}, {"다라마바사아"}, {"자", "」", "。", "차"}}));
+  EXPECT_EQ(lines[2].xpos, (X{0, 10, 15, 25}));
 }

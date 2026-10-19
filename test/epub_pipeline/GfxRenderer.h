@@ -11,6 +11,8 @@
 // Metric model (all per codepoint, style-aware, kerning-free):
 //   advance(cp)        = 6 + (cp % 7)            -> 6..12 px
 //   advance(cp, BOLD)  = advance(cp) + 1
+//   advance(cp), a full-width CJK character (Han, kana, Hangul, CJK punctuation, full-width forms) = 16 px, one em,
+//   as a CJK font sets them
 //   space width        = 6 px
 //   line height        = 24 px, ascender = 18 px
 // Scaled variants multiply and truncate toward zero, mirroring the integer
@@ -18,11 +20,14 @@
 #include <Arduino.h>
 #include <EpdFontFamily.h>
 #include <GlyphProvider.h>
+#include <Utf8.h>
 
 #include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "Epub/CjkPunctuation.h"
 
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
 
@@ -84,6 +89,33 @@ class GfxRenderer {
     }
     return w;
   }
+  // Where a glyph's ink sits in its advance, as a CJK font draws its marks: an opening bracket on the right half,
+  // a closing bracket, 。 and 、 on the left half, the other marks centred; anything else fills its advance.
+  bool getGlyphInk(const int /*fontId*/, const uint32_t cp, const EpdFontFamily::Style style, int& inkLeft,
+                   int& inkWidth, int& adv) const {
+    adv = advance(cp, style);
+    switch (CjkPunctuation::classOf(cp)) {
+      case CjkPunctuation::Class::None:
+        inkLeft = 0;
+        inkWidth = adv;
+        break;
+      case CjkPunctuation::Class::Opening:
+        inkLeft = (adv + 1) / 2;
+        inkWidth = adv - inkLeft;
+        break;
+      case CjkPunctuation::Class::Closing:
+      case CjkPunctuation::Class::FullStop:
+      case CjkPunctuation::Class::Comma:
+        inkLeft = 0;
+        inkWidth = adv / 2;
+        break;
+      default:
+        inkLeft = adv / 4;
+        inkWidth = adv / 2;
+        break;
+    }
+    return true;
+  }
   int getSpaceWidth(int, EpdFontFamily::Style = EpdFontFamily::REGULAR) const { return 6; }
   int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 6; }
   int getKerning(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 0; }
@@ -121,7 +153,8 @@ class GfxRenderer {
 
  private:
   static int advance(const uint32_t cp, const EpdFontFamily::Style style) {
-    const int base = 6 + static_cast<int>(cp % 7);
+    const bool fullWidthCjk = utf8IsCjkBreakable(cp) && !(cp >= 0xFF61 && cp <= 0xFFDC);  // halfwidth forms are narrow
+    const int base = fullWidthCjk ? 16 : 6 + static_cast<int>(cp % 7);
     // Style is a bitmask; only the BOLD bit affects width in this synthetic model.
     return (style & EpdFontFamily::BOLD) ? base + 1 : base;
   }
