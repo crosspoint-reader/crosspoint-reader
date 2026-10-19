@@ -69,6 +69,9 @@ Definitions are drawn in your reading font. Dictionaries may use IPA symbols (e.
 - **Long press on text** — select the touched word on touchscreen devices when touch reader controls are enabled
 - **Back during selection** — cancel selection
 - **Back while reading a definition** — return to the previous definition, or to book word selection at the first definition
+- **Long Back while reading a definition** — hold **Back** for at least one second, then release to close all definitions and return directly to reading
+
+During definition word selection, press **Back** to cancel selection first, then hold **Back** to leave the lookup chain.
 
 Nested lookups use the same dictionary. Both formatted and plain-text definitions support selection.
 Returning to a previous definition restores its page and remembers its selection for the next press of **Confirm**.

@@ -76,7 +76,10 @@ void DictionaryWordSelectActivity::performLookup() {
       requestUpdate();
       return;
     }
-    startActivityForResult(std::move(activity), [this](const ActivityResult&) { finish(); });
+    startActivityForResult(std::move(activity), [this](const ActivityResult& result) {
+      setResult(ActivityResult{result});
+      finish();
+    });
     return;
   }
   // Name the failure: a genuine miss is "Not found"; a word that WAS found but
@@ -131,9 +134,6 @@ void DictionaryWordSelectActivity::loop() {
   }
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
-      ActivityResult res;
-      res.isCancelled = true;
-      setResult(std::move(res));
       finish();
     }
   }

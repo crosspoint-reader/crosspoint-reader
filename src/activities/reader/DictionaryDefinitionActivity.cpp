@@ -16,6 +16,7 @@
 
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
+#include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
@@ -564,7 +565,12 @@ void DictionaryDefinitionActivity::loop() {
   }
   const int totalPages = content.totalPages;
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (lookup && lookup->depth > 0)
+    if (lookup && mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+      finish();
+    } else if (lookup && lookup->depth > 0)
       navigateDefinition(true);
     else
       finish();

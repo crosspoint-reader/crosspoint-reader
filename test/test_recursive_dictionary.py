@@ -42,6 +42,15 @@ location = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictLocat
 selection = block(selector, "struct Selection {", True)
 plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
 constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
+back_handler = block(viewer, "if (mappedInput.wasReleased(MappedInputManager::Button::Back))")
+lookup_source = (ROOT / "src/activities/reader/DictionaryWordSelectActivity.cpp").read_text()
+definition_result = block(lookup_source, "[this](const ActivityResult& result)")
+reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
+lookup_result = block(reader_source.split("startActivityForResult(std::move(lookup)", 1)[1],
+                      "[this](const ActivityResult& result)")
+reader_constants = (ROOT / "src/activities/reader/ReaderUtils.h").read_text().split("namespace ReaderUtils {", 1)[1].split(
+    "constexpr unsigned long SKIP_HOLD_MS", 1
+)[0]
 harness = r'''
 #include <algorithm>
 #include <array>
@@ -62,7 +71,7 @@ harness = r'''
 template<typename... Args> void logDebug(Args&&...) {}
 #define LOG_DBG(...) logDebug(__VA_ARGS__)
 
-''' + constants + r'''
+''' + constants + '\nnamespace ReaderUtils {\n' + reader_constants + '}\n' + r'''
 
 enum class StrId { STR_DICT_LOOKING_UP, STR_DICT_NOT_FOUND, STR_DICT_LOW_MEMORY, STR_DICT_READ_FAILED,
                    STR_DICT_DECOMPRESS_ERROR, STR_DICT_RESTORE_FAILED, STR_DICT_HISTORY_FULL };
@@ -113,6 +122,13 @@ struct Renderer {
   int getLineHeight(int, float) const { return 10; }
 };
 struct Settings { int getReaderFontId() const { return 0; } } SETTINGS;
+struct MappedInputManager {
+  enum class Button { Back };
+  bool released = false;
+  unsigned long heldMs = 0;
+  bool wasReleased(Button) const { return released; }
+  unsigned long getHeldTime() const { return heldMs; }
+};
 ''' + location + r'''
 struct Dictionary {
   enum class LookupResult { Found, NotFound, LowMemory, ReadError, Decompress };
@@ -157,7 +173,7 @@ struct DictionaryDefinitionActivity {
   struct PlainSelectionLine;
 ''' + structs + r'''
   Renderer renderer;
-  int mappedInput = 0;
+  MappedInputManager mappedInput;
   bool htmlDefinition = false;
   Definition content;
   std::unique_ptr<LookupState> lookup;
@@ -165,12 +181,19 @@ struct DictionaryDefinitionActivity {
   unsigned long messageTime = 0;
   bool messageVisible = false;
   bool finished = false;
+  bool selectionOpened = false;
+  ActivityResult result;
   std::unique_ptr<ClipSelectionActivity> child;
   ActivityResultHandler callback;
   BodyArea bodyArea() const { return {0, 0, 12, 20}; }
   void requestUpdate() {}
   void requestUpdateAndWait() {}
   void finish() { finished = true; }
+  void setResult(ActivityResult&& next) { result = std::move(next); }
+  void openDictionaryWordSelect() { selectionOpened = true; }
+  void handleBack() { ''' + back_handler + r''' }
+  void onDefinitionResult(const ActivityResult& child) { (''' + definition_result + r''')(child); }
+  void onLookupResult(const ActivityResult& child) { (''' + lookup_result + r''')(child); }
   void startActivityForResult(std::unique_ptr<ClipSelectionActivity> next, ActivityResultHandler handler) {
     child = std::move(next);
     callback = std::move(handler);
@@ -324,6 +347,48 @@ int main() {
   view.lookup->selectionPages.clear();
   HalMemory::available = 0;
   assert(!view.buildPlainSelectionPages());
+  HalMemory::available = 1024 * 1024;
+  dictionary.canRead = {};
+  // Short Back restores one entry; long Back waits for release and cancels the entire flow.
+  for (const unsigned long heldMs : {999ul, 1000ul, 2000ul}) {
+    DictionaryDefinitionActivity backView;
+    backView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{20, 10, true});
+    backView.lookup->depth = 1;
+    backView.lookup->history[0].location = {10, 10, true};
+    backView.content.text = dictionary.entries.at(20);
+    assert(backView.prepareDefinition(backView.content));
+    backView.mappedInput.heldMs = heldMs;
+    const unsigned readsBeforeBack = dictionary.reads;
+    backView.handleBack();
+    assert(!backView.finished && backView.lookup->depth == 1 && dictionary.reads == readsBeforeBack);
+    backView.mappedInput.released = true;
+    backView.handleBack();
+    if (heldMs < 1000) {
+      assert(!backView.finished && backView.lookup->depth == 0);
+    } else {
+      assert(backView.finished && backView.result.isCancelled && dictionary.reads == readsBeforeBack);
+      DictionaryDefinitionActivity parent, reader;
+      parent.onDefinitionResult(backView.result);
+      assert(parent.finished && parent.result.isCancelled);
+      reader.onLookupResult(parent.result);
+      assert(!reader.selectionOpened);
+    }
+  }
+  // A non-dictionary viewer still closes normally, even after a long hold.
+  DictionaryDefinitionActivity parent, reader;
+  parent.mappedInput.released = true;
+  parent.mappedInput.heldMs = 2000;
+  parent.handleBack();
+  assert(parent.finished && !parent.result.isCancelled);
+  reader.onLookupResult(parent.result);
+  assert(reader.selectionOpened);
+  // Long Back also exits at the first definition, where there are no ancestors.
+  DictionaryDefinitionActivity root;
+  root.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{10, 10, true});
+  root.mappedInput.released = true;
+  root.mappedInput.heldMs = 1000;
+  root.handleBack();
+  assert(root.finished && root.result.isCancelled);
 }
 '''
 
