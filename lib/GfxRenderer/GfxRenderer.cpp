@@ -3308,6 +3308,24 @@ int GfxRenderer::scaledTextAdvanceX(const EpdFontFamily& font, const char* text,
   return (cursorFP + 8) >> 4;  // the same snap the draw applies to a glyph position
 }
 
+bool GfxRenderer::getGlyphInk(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, int& inkLeft,
+                              int& inkWidth, int& advance) const {
+  const EpdFontFamily* const family = findFontFamily(fontId);
+  if (!family) return false;
+  const EpdGlyphRef glyph = family->getGlyph(cp, style);
+  if (!glyph) return false;
+  const float scale = fontBaseScale(fontId);
+  inkLeft = static_cast<int>(glyph.left * scale);
+  inkWidth = static_cast<int>(glyph.width * scale + 0.5f);
+  advance = static_cast<int>(fp4::toPixel(glyph.advanceX) * scale + 0.5f);
+  return true;
+}
+
+bool GfxRenderer::hasGlyph(const int fontId, const uint32_t cp, const EpdFontFamily::Style style) const {
+  const EpdFontFamily* const family = findFontFamily(fontId);
+  return family && family->hasGlyph(cp, style);
+}
+
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
   const EpdFontFamily* const family = findFontFamily(fontId);
   if (!family) {

@@ -13,7 +13,9 @@ set(PIPELINE_SOURCES
   ${REPO_ROOT}/lib/Epub/Epub/SpinePageIndex.cpp
   ${REPO_ROOT}/lib/Epub/Epub/Page.cpp
   ${REPO_ROOT}/lib/Epub/Epub/CjkLineBreak.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/CjkPunctuation.cpp
   ${REPO_ROOT}/lib/Epub/Epub/ParsedText.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/TypographyProfile.cpp
   ${REPO_ROOT}/lib/Epub/Epub/BookMetadataCache.cpp
   ${REPO_ROOT}/lib/Epub/Epub/MetadataSidecar.cpp
   ${REPO_ROOT}/lib/Epub/Epub/FootnotePreviews.cpp

@@ -27,12 +27,16 @@
 #include "Epub/css/CssParser.h"
 #include "FootnotePreviews.h"
 #include "Page.h"
+#include "TypographyProfile.h"
 #include "blocks/ImageBlock.h"  // image_scratch: pass-wide decode arena
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 95;  // v95: a paragraph whose size undoes the book's
+constexpr uint8_t SECTION_FILE_VERSION = 96;  // v96: CJK punctuation is narrowed by the book's
+                                              // table, a mark is a token of its own, CJK lines
+                                              // justify flush, zh/ja text sits on a whole-em grid
+                                              // v95: a paragraph whose size undoes the book's
                                               // root size is body text (Calibre: body 1.125em,
                                               // p 0.88889em); v94 laid it out at 0.889
                                               // v94: a word in another of the book's families
@@ -1230,7 +1234,11 @@ Section::BuildPhaseResult Section::runBuildSetup(BuildState& st) {
   // Only the lent framebuffer region has room for the parser's SAX state (~10 KB) on top of the
   // build's own use; the owned heap arena is 10 KB in total and would just move the block.
   if (st.arena && st.arena != st.ownedArena.get()) st.visitor->setBuildArena(st.arena);
-  Hyphenator::setPreferredLanguage(epub->getLanguage());
+  // The book's language decides its typography (TypographyProfile.h): hyphenation patterns, CJK punctuation widths,
+  // the CJK grid.
+  const TypographyProfile typography = TypographyProfile::forLanguage(epub->getLanguage());
+  Hyphenator::setLanguageHyphenator(typography.hyphenator);
+  st.visitor->setTypography(typography);
 
   // Inline footnote previews are NOT wired up here: the note text this spine needs may not be
   // in the store yet, and resolving it needs the spine's inflated XHTML — which phase (a) is

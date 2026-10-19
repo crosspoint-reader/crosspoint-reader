@@ -157,6 +157,7 @@ add_subdirectory(text_block_range)
 add_subdirectory(token_boundary)
 add_subdirectory(cjk_line_break)
 add_subdirectory(cjk_layout)
+add_subdirectory(typography)
 add_subdirectory(zip_entry_reader)
 add_subdirectory(koreader_document_id)
 # After zip_entry_reader: reuses its inflate_reader_host target.

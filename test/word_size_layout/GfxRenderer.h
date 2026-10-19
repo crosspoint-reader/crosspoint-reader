@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "Epub/CjkPunctuation.h"
+
 class GfxRenderer {
  public:
   static constexpr int GLYPH_W = 10;
@@ -28,6 +30,9 @@ class GfxRenderer {
   static constexpr int WIDE_GLYPH_W = 15;
   static constexpr int WIDE_SPACE_W = 8;
   static constexpr int WIDE_ASCENDER = 20;
+  // A font with no CJK glyphs, as a Latin reader font: it draws each CJK character as its replacement glyph, which
+  // advances GLYPH_W like everything else, and hasGlyph says it has none of them.
+  static constexpr int LATIN_FONT = 9;
   static int glyphW(const int fontId) { return fontId == WIDE_FONT ? WIDE_GLYPH_W : GLYPH_W; }
   static int ascender(const int fontId) { return fontId == WIDE_FONT ? WIDE_ASCENDER : ASCENDER; }
 
@@ -64,6 +69,36 @@ class GfxRenderer {
   }
   int getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style /*style*/) const {
     return countCodepoints(text) * glyphW(fontId);
+  }
+  // Where a glyph's ink sits in its advance, as a CJK font draws its marks: an opening bracket on the right half,
+  // a closing bracket, 。 and 、 on the left half, the other marks centred; anything else fills its advance.
+  bool getGlyphInk(const int fontId, const uint32_t cp, const EpdFontFamily::Style /*style*/, int& inkLeft,
+                   int& inkWidth, int& adv) const {
+    adv = glyphW(fontId);
+    switch (CjkPunctuation::classOf(cp)) {
+      case CjkPunctuation::Class::None:
+        inkLeft = 0;
+        inkWidth = adv;
+        break;
+      case CjkPunctuation::Class::Opening:
+        inkLeft = (adv + 1) / 2;
+        inkWidth = adv - inkLeft;
+        break;
+      case CjkPunctuation::Class::Closing:
+      case CjkPunctuation::Class::FullStop:
+      case CjkPunctuation::Class::Comma:
+        inkLeft = 0;
+        inkWidth = adv / 2;
+        break;
+      default:
+        inkLeft = adv / 4;
+        inkWidth = adv / 2;
+        break;
+    }
+    return true;
+  }
+  bool hasGlyph(const int fontId, const uint32_t cp, const EpdFontFamily::Style /*style*/) const {
+    return fontId != LATIN_FONT || cp < 0x2E80;
   }
   int getSpaceAdvance(const int fontId, uint32_t /*leftCp*/, uint32_t /*rightCp*/, EpdFontFamily::Style style) const {
     return getSpaceWidth(fontId, style);

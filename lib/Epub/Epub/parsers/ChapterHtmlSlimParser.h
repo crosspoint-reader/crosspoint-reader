@@ -232,6 +232,7 @@ class ChapterHtmlSlimParser final : public Print {
   // Sibling-size ladder of the body font (see FontSizeLadder). resolveBlockFont() snaps a
   // block's effective font size to the nearest real font on it; empty = scale-only fallback.
   FontSizeLadder fontSizeLadder_;
+  TypographyProfile typography_;
   // One non-body font per section: body regular/bold/italic plus one auxiliary regular is
   // exactly the FontDecompressor's four page slots. The first block to resolve off-body
   // claims the slot; blocks that would need a different font keep the scale fallback.
@@ -976,6 +977,8 @@ class ChapterHtmlSlimParser final : public Print {
   void setFontSizeLadder(const FontSizeLadder& ladder) { fontSizeLadder_ = ladder; }
   // Supplies the book's other font families (see BlockFontFamilies); none by default.
   void setFontFamilies(const BlockFontFamilies& families) { fontFamilies_ = families; }
+  // The book's typography (TypographyProfile.h), handed to every block the parser lays out; Latin rules by default.
+  void setTypography(const TypographyProfile& typography) { typography_ = typography; }
 
  private:
   // Snap a completed block's effective font size (block multiplier, after uniform per-word
