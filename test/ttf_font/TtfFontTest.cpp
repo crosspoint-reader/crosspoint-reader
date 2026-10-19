@@ -6,7 +6,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <new>
 #include <string>
@@ -28,20 +30,48 @@ using namespace ttf_test;
 namespace {
 // A nothrow array new of exactly this many bytes fails, as the scratch block's does on a heap without room for it.
 size_t refuseArrayBytes = 0;
+// The bytes the program's news hold now: what a loaded family keeps is the difference across its load.
+size_t heapBytesHeld = 0;
+
+// A block with its size in front of it (malloc and free underneath, which the sanitizers pair as they pair any other).
+constexpr size_t kSizeHeader = alignof(std::max_align_t);
+void* holdBytes(const size_t size) noexcept {
+  auto* const block = static_cast<unsigned char*>(std::malloc(kSizeHeader + size));
+  if (!block) return nullptr;
+  std::memcpy(block, &size, sizeof size);
+  heapBytesHeld += size;
+  return block + kSizeHeader;
+}
+void freeBytes(void* p) noexcept {
+  if (!p) return;
+  auto* const block = static_cast<unsigned char*>(p) - kSizeHeader;
+  size_t size = 0;
+  std::memcpy(&size, block, sizeof size);
+  heapBytesHeld -= size;
+  std::free(block);
+}
 }  // namespace
 
-// The test program's array new and delete, so a test can refuse one (malloc and free underneath, which the
-// sanitizers pair as they pair any other).
+// The test program's new and delete, so a test can refuse an array new and count what the heap holds.
+void* operator new(const size_t size) {
+  if (void* p = holdBytes(size)) return p;
+  throw std::bad_alloc();
+}
+void* operator new(const size_t size, const std::nothrow_t&) noexcept { return holdBytes(size); }
 void* operator new[](const size_t size) {
-  if (void* p = std::malloc(size ? size : 1)) return p;
+  if (void* p = holdBytes(size)) return p;
   throw std::bad_alloc();
 }
 void* operator new[](const size_t size, const std::nothrow_t&) noexcept {
   if (refuseArrayBytes != 0 && size == refuseArrayBytes) return nullptr;
-  return std::malloc(size ? size : 1);
+  return holdBytes(size);
 }
-void operator delete[](void* p) noexcept { std::free(p); }
-void operator delete[](void* p, size_t) noexcept { std::free(p); }
+void operator delete(void* p) noexcept { freeBytes(p); }
+void operator delete(void* p, size_t) noexcept { freeBytes(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { freeBytes(p); }
+void operator delete[](void* p) noexcept { freeBytes(p); }
+void operator delete[](void* p, size_t) noexcept { freeBytes(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { freeBytes(p); }
 
 namespace {
 
@@ -880,6 +910,42 @@ TEST_F(TtfFontTest, AFontWithoutKerningAsksNothing) {
   const auto font = open();
   EXPECT_EQ(0, font->kerning(kRegular, 'A', 'B'));
   EXPECT_EQ(0u, font->kernLookups());
+}
+
+// What a family keeps on the heap grows with the styles it has, a native size's too: a book's accent family of one
+// style holds no memory for the three it lacks.
+TEST_F(TtfFontTest, AFamilyHoldsMemoryOnlyForTheStylesItHas) {
+  Font built = kernedBoxes();
+  built.extraTables.clear();  // no kerning: nothing else a style holds differs between them
+  const std::vector<uint8_t> bytes = buildFont(built);
+  const uint8_t* const identities[] = {kIdentityA, kIdentityB, kIdentityA};
+  const int styleCounts[] = {1, 2, 4};
+  size_t family[3] = {};
+  size_t native[3] = {};
+  for (int i = 0; i < 3; ++i) {
+    for (int s = 0; s < 4; ++s) {
+      files[s].bytes = s < styleCounts[i] ? bytes : std::vector<uint8_t>{};
+    }
+    ASSERT_NE(nullptr, open(identities[i]));  // installed: what an install or the first mapping keeps is not counted
+    const size_t before = heapBytesHeld;
+    const auto font = open(identities[i]);
+    ASSERT_NE(nullptr, font);
+    family[i] = heapBytesHeld - before;
+    const EpdFont* fonts[4] = {};
+    const size_t beforeNative = heapBytesHeld;
+    ASSERT_TRUE(font->nativeFonts(40, fonts));
+    native[i] = heapBytesHeld - beforeNative;
+    for (int s = 0; s < 4; ++s) EXPECT_EQ(s < styleCounts[i], fonts[s] != nullptr) << s;
+    EXPECT_EQ(styleCounts[i] > kBold, font->font(kBold) != nullptr);
+  }
+  std::printf("[  heap    ] loaded set, 1/2/4 styles: %zu/%zu/%zu B; a native size: %zu/%zu/%zu B\n", family[0],
+              family[1], family[2], native[0], native[1], native[2]);
+  const size_t perStyle = family[1] - family[0];
+  EXPECT_GT(perStyle, 0u);
+  EXPECT_EQ(3 * perStyle, family[2] - family[0]);
+  const size_t perNativeStyle = native[1] - native[0];
+  EXPECT_GT(perNativeStyle, 0u);
+  EXPECT_EQ(3 * perNativeStyle, native[2] - native[0]);
 }
 
 TEST_F(TtfFontTest, TheFiLigatureDrawsTheGlyphGsubNames) {

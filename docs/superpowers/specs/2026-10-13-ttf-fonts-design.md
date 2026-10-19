@@ -615,10 +615,12 @@ See section 11 for the full deferred list.
 ### 6.3 Budgets
 
 - **Resident heap per loaded TTF family:**
-  - its `TtfFont`, 1,672 B on the X3: four styles' faces, kerning and ligature records whether the family has them
-    or not, and the body face;
+  - its `TtfFont`, 120 B on the X3, and 392 B for each style the family has: the style's face, kerning and
+    ligature records (260 B) and the body face's font of it (132 B). 520 B for one style, 1,696 B for four; until
+    2026-10-19 it was 1,672 B whatever the family had;
   - the GPOS reader's subtable list, about 100-200 B per style;
-  - about 0.5 KB per further face in use (540 B measured on the X3): a book's native sizes, at most 16 (2c-2).
+  - per further face in use, 20 B and 132 B per style (152 B for one style, 548 B for four; 540 B before): a book's
+    native sizes, at most 16 (2c-2).
 
   And per set, 960 B (`TtfFontSet`). Every font table and every stored bitmap is mapped, not copied, and there is no
   per-page arena. That comes to about 2-3 KB a family, against roughly 9-14 KB for an SD `.cpfont` (about 6 KB of kern
@@ -1021,8 +1023,11 @@ section build renders the chapter's glyphs into it as it measures them.
   memory +1,038, the pre-render's floor +178), static RAM +32 B (the `glyph_miss` counters and arena, the new hooks).
   No MMU page boundary crossed: code ends 31.6 KB short of its 42nd page's end, rodata 44.5 KB short of its 51st, 93
   pages in all.
-- **Left open:** a `TtfFont` keeps four styles' records and every face four styles' fonts, used or not: about 3.7 KB
-  for BookerlyTTF beside three one- and two-style accent families.
+- **Left open then, done since (2026-10-19, branch `fix/lowmem-and-ram`):** a `TtfFont` kept four styles' records
+  and every face four styles' fonts, used or not. It now holds them only for the styles it has files for
+  (`TtfFont::slot_`): a one-style accent family holds 1,152 B less (520 B against 1,672 B on the X3) and each of its
+  native sizes 388 B less, a two-style one 760 B and 256 B less; a four-style family holds 24 B more, in two more heap
+  blocks. Flash +696 B. `TtfFontTest.AFamilyHoldsMemoryOnlyForTheStylesItHas` measures it on the host.
 
 ## 9. Testing
 
