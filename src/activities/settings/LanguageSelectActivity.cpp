@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iterator>
 
+#include "CjkUiFonts.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 
@@ -41,6 +42,7 @@ void LanguageSelectActivity::activateIndex(const int index) {
   {
     RenderLock lock(*this);
     I18N.setLanguage(static_cast<Language>(SORTED_LANGUAGE_INDICES[index]));
+    CjkUiFonts::setLanguage(I18N.getLanguage());
   }
   finish();
 }

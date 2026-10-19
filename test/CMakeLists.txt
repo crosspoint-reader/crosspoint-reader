@@ -91,6 +91,8 @@ set(I18N_GENERATED_KEYS "${I18N_GENERATED_DIR}/I18nKeys.h")
 set(I18N_GENERATED_STRINGS "${I18N_GENERATED_DIR}/I18nStrings.cpp")
 
 file(GLOB I18N_TRANSLATION_FILES "${REPO_ROOT}/lib/I18n/translations/*.yaml")
+# gen_i18n.py also checks every translation against the UI font headers.
+file(GLOB I18N_UI_FONT_HEADERS "${REPO_ROOT}/lib/EpdFont/builtinFonts/*.h")
 
 add_custom_command(
   OUTPUT ${I18N_GENERATED_KEYS} ${I18N_GENERATED_STRINGS}
@@ -98,6 +100,7 @@ add_custom_command(
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/scripts/gen_i18n.py
           ${REPO_ROOT}/lib/I18n/translations ${I18N_GENERATED_DIR}
   DEPENDS ${REPO_ROOT}/scripts/gen_i18n.py ${I18N_TRANSLATION_FILES}
+          ${REPO_ROOT}/lib/EpdFont/scripts/ui_font_coverage.py ${I18N_UI_FONT_HEADERS}
   COMMENT "Generating I18n headers for host tests"
   VERBATIM
 )
@@ -196,6 +199,7 @@ add_subdirectory(epub_progress_record)
 add_subdirectory(home_menu)
 add_subdirectory(ui_font_ladder)
 add_subdirectory(text_truncation)
+add_subdirectory(text_wrap)
 add_subdirectory(default_ignorable)
 add_subdirectory(utf8_compose)
 add_subdirectory(utf8_lower)
@@ -203,6 +207,7 @@ add_subdirectory(adaptive_tone)
 add_subdirectory(gray8_writer)
 add_subdirectory(glyph_fallback)
 add_subdirectory(glyph_provider)
+add_subdirectory(fallback_face_provider)
 add_subdirectory(glyph_store)
 add_subdirectory(ttf_rasterizer)
 add_subdirectory(ttf_font)

@@ -3,6 +3,7 @@
 #include <CooperativeAbort.h>
 #include <Epub.h>
 #include <Epub/BookFonts.h>
+#include <Epub/CjkLineBreak.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
@@ -36,6 +37,7 @@
 
 #include "BootDiagnostics.h"
 #include "ButtonEventManager.h"
+#include "CjkUiFonts.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "GestureEventManager.h"
@@ -736,6 +738,19 @@ void setupDisplayAndFonts(bool seamless = false, bool skipSdFontDiscovery = fals
     renderer.insertScaledFont(CrossPointSettings::getBuiltinReaderFontId(CrossPointSettings::NOTOSANS, rung.size),
                               notosans18FontFamily, scale);
   }
+  // CJK glyphs behind every UI face, so a Chinese, Japanese or Korean UI draws, and the language
+  // picker draws those languages' names whatever the UI language is. See CjkUiFonts.h.
+  CjkUiFonts::attach(smallFont, 8);
+  CjkUiFonts::attach(ui10RegularFont, 10);
+  CjkUiFonts::attach(ui10BoldFont, 10);
+  CjkUiFonts::attach(ui12RegularFont, 12);
+  CjkUiFonts::attach(ui12BoldFont, 12);
+  CjkUiFonts::attach(ui14RegularFont, 14);
+  CjkUiFonts::attach(ui14BoldFont, 14);
+  CjkUiFonts::setLanguage(I18N.getLanguage());
+  // Chinese and Japanese write no spaces: wrapped UI text breaks between their characters by the
+  // reader's CJK rules, kinsoku included.
+  renderer.setWordBreaker(&CjkLineBreak::breakByteOffsets);
   // The three UI slots are bound by the font ladder rather than registered here, so the first
   // bind and every later rebind run the same code path.
   applyUiFontScale();

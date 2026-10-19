@@ -93,6 +93,11 @@ done
 
 python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h
 
+# The CJK UI faces hold each CJK translation's characters that the UI faces above lack, so they
+# come after them. The script dedupes and verifies by itself; the pass below repeats that over the
+# whole set, which is harmless.
+python build_cjk_ui_fonts.py
+
 echo ""
 echo "Deduplicating tables shared between faces..."
 # fontconvert.py writes each face independently, so every size of a family repeats the tables

@@ -6,9 +6,6 @@
 class EpdFont {
   void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY,
                      bool smallCaps = false) const;
-  /// Interval table plus the SD font's on-demand loader, with no fallbacks --
-  /// so getGlyph()'s fallbacks can never recurse into one another.
-  EpdGlyphRef findGlyph(uint32_t cp) const;
   /// Everything getGlyph() does once the interval table has missed: the SD on-demand loader,
   /// then the visual-relative and U+FFFD fallbacks. Out of line on purpose -- it is the rare
   /// path, and inlining the fallback chain into every call site would cost flash for nothing.
@@ -18,6 +15,11 @@ class EpdFont {
   const EpdFontData* data;
   explicit EpdFont(const EpdFontData* data) : data(data) {}
   ~EpdFont() = default;
+
+  /// Interval table plus the provider, with no fallbacks -- so getGlyph()'s fallbacks can never
+  /// recurse into one another. Public for FallbackFaceProvider, which serves another font's
+  /// missing glyphs and must not answer with this face's U+FFFD or a lookalike.
+  EpdGlyphRef findGlyph(uint32_t cp) const;
   void getTextDimensions(const char* string, int* w, int* h, bool smallCaps = false) const;
 
   /// The glyph for `cp`. When the font has no glyph for it, falls back first to
