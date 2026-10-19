@@ -362,15 +362,36 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 }
 
 bool RecentBooksStore::loadFromFile() {
-  // Loaded from here on, file or no file: no file (or a broken one) is an empty list, which a
-  // later addBook() then saves as the new file.
+  // No file, an empty one or a broken one is an empty list, loaded, which a later addBook() then saves as the new file.
+  // Too little memory to read it is no list at all: the store stays unloaded, so no save writes an empty list over
+  // the file (saveToFile), and the next ensureLoaded() tries again.
   std::vector<RecentBook>().swap(recentBooks);
-  loaded = true;
-  if (Storage.exists(RECENT_BOOKS_FILE_JSON)) {
-    String json = Storage.readFile(RECENT_BOOKS_FILE_JSON);
-    if (!json.isEmpty()) {
-      return JsonSettingsIO::loadRecentBooks(*this, json.c_str());
-    }
+  loaded = false;
+  if (!Storage.exists(RECENT_BOOKS_FILE_JSON)) {
+    loaded = true;
+    return false;
+  }
+  String json = Storage.readFile(RECENT_BOOKS_FILE_JSON);
+  if (json.isEmpty()) {
+    // Nothing read from a file that is there: an empty file, or no memory for its text (String's allocation
+    // fails without aborting).
+    HalFile file;
+    const size_t size = Storage.openFileForRead("RBS", RECENT_BOOKS_FILE_JSON, file) ? file.fileSize() : 1;
+    loaded = size == 0;
+    if (!loaded) LOG_ERR("RBS", "Could not read the recent books (%u B)", static_cast<unsigned>(size));
+    return false;
+  }
+  switch (JsonSettingsIO::loadRecentBooks(*this, json.c_str())) {
+    case RecentBooksLoad::Loaded:
+      loaded = true;
+      return true;
+    case RecentBooksLoad::Broken:
+      std::vector<RecentBook>().swap(recentBooks);
+      loaded = true;
+      return false;
+    case RecentBooksLoad::ShortOfMemory:
+      std::vector<RecentBook>().swap(recentBooks);
+      return false;
   }
   return false;
 }

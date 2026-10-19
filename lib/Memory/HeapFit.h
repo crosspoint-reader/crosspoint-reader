@@ -19,6 +19,10 @@ inline bool heapHasBlockFor(size_t bytes) {
   return heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT) >= bytes + ALLOCATOR_SLACK;
 }
 
+// Whether the heap has `bytes` free in all: for many small allocations (a list's strings), which need no one block
+// but do come from the same throwing operator new.
+inline bool heapHasFree(size_t bytes) { return heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT) >= bytes; }
+
 // Makes room in the std::vector or std::string `c` for `extra` more elements, so the appends that
 // follow cannot reallocate. Grows it as it would grow itself, to at least twice its capacity, but
 // only when the heap holds a block for that: the container would ask through the throwing
