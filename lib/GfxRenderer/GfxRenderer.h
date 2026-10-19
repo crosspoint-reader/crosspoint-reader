@@ -654,10 +654,14 @@ class GfxRenderer {
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   /// Where codepoint `cp`'s ink sits in its advance, in pixels at the size `fontId` draws (its base scale applied,
-  /// as getTextAdvanceX does): the ink starts `inkLeft` from the pen and is `inkWidth` wide. False when the font
-  /// has no glyph for it. Layout places narrowed CJK punctuation by it (CjkPunctuation.h).
+  /// as getTextAdvanceX does): the ink starts `inkLeft` from the pen and is `inkWidth` wide. It is the glyph drawn
+  /// for `cp`, so a fallback's when the font has none; false when there is no glyph at all. Layout places narrowed
+  /// CJK punctuation by it (CjkPunctuation.h).
   bool getGlyphInk(int fontId, uint32_t cp, EpdFontFamily::Style style, int& inkLeft, int& inkWidth,
                    int& advance) const;
+  /// Whether `fontId` has a glyph of its own for `cp`, not a lookalike or U+FFFD (which getGlyphInk and every
+  /// measure fall back to). Layout asks it for 一 before treating a font as a CJK font.
+  bool hasGlyph(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,

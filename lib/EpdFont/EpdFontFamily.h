@@ -27,6 +27,9 @@ class EpdFontFamily {
   void getTextDimensions(const char* string, int* w, int* h, Style style = REGULAR) const;
   const EpdFontData* getData(Style style = REGULAR) const;
   EpdGlyphRef getGlyph(uint32_t cp, Style style = REGULAR) const;
+  /// Whether the font for `style` has a glyph of its own for `cp` (EpdFont::findGlyph): getGlyph's lookalike and
+  /// U+FFFD fallbacks do not count.
+  bool hasGlyph(uint32_t cp, Style style = REGULAR) const;
   int8_t getKerning(uint32_t leftCp, uint32_t rightCp, Style style = REGULAR) const;
   uint32_t applyLigatures(uint32_t cp, const char*& text, Style style = REGULAR) const;
   /// Asks the provider of each style in `styleMask` (bit i = Style i) to prepare `utf8Text`; each font

@@ -34,11 +34,11 @@ BlockStyle aligned(const CssTextAlign alignment, const int16_t indent = 0) {
   return bs;
 }
 
-std::vector<Line> layout(ParsedText& text, const uint16_t width) {
+std::vector<Line> layout(ParsedText& text, const uint16_t width, const int fontId = kFontId) {
   GfxRenderer renderer;
   std::vector<Line> lines;
   text.layoutAndExtractLines(
-      renderer, kFontId, width,
+      renderer, fontId, width,
       [&](std::unique_ptr<TextBlock> block, bool, bool) {
         Line& line = lines.emplace_back();
         for (uint16_t i = 0; i < block->wordCount(); ++i) {
@@ -215,6 +215,17 @@ TEST(CjkGrid, AnIndentRoundsDownToWholeEmsAndNoIndentStaysNone) {
     text.addWord("一二三", EpdFontFamily::REGULAR);
     EXPECT_EQ(layout(text, 47)[0].xpos.front(), firstX) << "indent " << indent;
   }
+}
+TEST(CjkGrid, AFontWithoutCjkGlyphsGetsNoGridAndNoNarrowedMarks) {
+  // A Latin reader font draws every CJK character as its replacement glyph, all at one advance. Measured by that
+  // glyph, 一 would make a grid and the marks would pass as full-width; the font has no 一, so neither applies.
+  ParsedText text(false, false, aligned(CssTextAlign::Left, 15));
+  text.setTypography(TypographyProfile::forLanguage("ja"));
+  text.addWord("字」。次", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 47, GfxRenderer::LATIN_FONT);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0].xpos, (X{15, 25, 35}));
+  EXPECT_EQ(lines[1].xpos, (X{0}));
 }
 TEST(CjkGrid, OtherBooksHaveNoGrid) {
   ParsedText text(false, false, aligned(CssTextAlign::Left));

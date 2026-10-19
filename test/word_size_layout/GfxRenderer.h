@@ -30,6 +30,9 @@ class GfxRenderer {
   static constexpr int WIDE_GLYPH_W = 15;
   static constexpr int WIDE_SPACE_W = 8;
   static constexpr int WIDE_ASCENDER = 20;
+  // A font with no CJK glyphs, as a Latin reader font: it draws each CJK character as its replacement glyph, which
+  // advances GLYPH_W like everything else, and hasGlyph says it has none of them.
+  static constexpr int LATIN_FONT = 9;
   static int glyphW(const int fontId) { return fontId == WIDE_FONT ? WIDE_GLYPH_W : GLYPH_W; }
   static int ascender(const int fontId) { return fontId == WIDE_FONT ? WIDE_ASCENDER : ASCENDER; }
 
@@ -93,6 +96,9 @@ class GfxRenderer {
         break;
     }
     return true;
+  }
+  bool hasGlyph(const int fontId, const uint32_t cp, const EpdFontFamily::Style /*style*/) const {
+    return fontId != LATIN_FONT || cp < 0x2E80;
   }
   int getSpaceAdvance(const int fontId, uint32_t /*leftCp*/, uint32_t /*rightCp*/, EpdFontFamily::Style style) const {
     return getSpaceWidth(fontId, style);

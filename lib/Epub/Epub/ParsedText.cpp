@@ -109,6 +109,14 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   return static_cast<uint16_t>(raw * scale + 0.5f);
 }
 
+// The em of CJK text in this face and size: the advance of 一. 0 when the face has no 一 of its own: a Latin font
+// draws CJK characters as its replacement glyph, whose advance says nothing about CJK widths, so no mark is taken
+// for full-width punctuation and no grid is made from it.
+int cjkEm(const GfxRenderer& renderer, const int fontId, const EpdFontFamily::Style style, const float scale) {
+  if (!renderer.hasGlyph(fontId, 0x4E00, style)) return 0;
+  return measureWordWidth(renderer, fontId, "\xE4\xB8\x80", style, false, scale);  // 一
+}
+
 std::string buildLinePreview(const std::vector<std::string>& words,
                              const std::vector<TokenBoundary::Boundary>& boundaries, const size_t start,
                              const size_t endExclusive, const size_t maxLen = 120) {
@@ -485,8 +493,7 @@ void ParsedText::layoutAndExtractLines(
   // indent rounds down to whole ems, at least one; a block with none keeps none. Floats keep their own width.
   gridInset_ = 0;
   if (typography_.wholeEmGrid && blockStyle.floatZoneCount == 0) {
-    const int em = measureWordWidth(renderer, fontId, "\xE4\xB8\x80", EpdFontFamily::REGULAR, false,
-                                    blockStyle.fontSizeMultiplier);
+    const int em = cjkEm(renderer, fontId, EpdFontFamily::REGULAR, blockStyle.fontSizeMultiplier);
     if (em > 0 && pageWidth >= em) {
       const int gridWidth = pageWidth - pageWidth % em;
       gridInset_ = static_cast<int16_t>((pageWidth - gridWidth) / 2);
@@ -743,7 +750,7 @@ void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int f
   lineEndTrim_.assign(count, 0);
 
   // A mark is CJK punctuation only where its font draws it full-width, at least 4/5 of the em of 一 in the same
-  // face and size: a curly quote in a Latin font is narrow. Every token is judged on its natural width before any
+  // face and size: a curly quote in a Latin font is narrow, and a font without CJK glyphs has no em (cjkEm). Every token is judged on its natural width before any
   // is narrowed, as a narrowed neighbour (” at 6/8 before “) would no longer pass.
   int emFont = -1;
   EpdFontFamily::Style emStyle = EpdFontFamily::REGULAR;
@@ -755,7 +762,7 @@ void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int f
       emFont = wordFontId(i, fontId);
       emStyle = style;
       emScale = wordScale(i);
-      em = measureWordWidth(renderer, emFont, "\xE4\xB8\x80", emStyle, false, emScale);  // 一
+      em = cjkEm(renderer, emFont, emStyle, emScale);
     }
     return em > 0 && widths[i] * 5 >= em * 4;
   };

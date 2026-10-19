@@ -89,6 +89,10 @@ class GfxRenderer {
     }
     return w;
   }
+  // The stub font has every glyph, CJK included.
+  bool hasGlyph(const int /*fontId*/, const uint32_t /*cp*/, const EpdFontFamily::Style /*style*/) const {
+    return true;
+  }
   // Where a glyph's ink sits in its advance, as a CJK font draws its marks: an opening bracket on the right half,
   // a closing bracket, 。 and 、 on the left half, the other marks centred; anything else fills its advance.
   bool getGlyphInk(const int /*fontId*/, const uint32_t cp, const EpdFontFamily::Style style, int& inkLeft,

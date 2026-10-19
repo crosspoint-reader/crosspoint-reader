@@ -3321,6 +3321,11 @@ bool GfxRenderer::getGlyphInk(const int fontId, const uint32_t cp, const EpdFont
   return true;
 }
 
+bool GfxRenderer::hasGlyph(const int fontId, const uint32_t cp, const EpdFontFamily::Style style) const {
+  const EpdFontFamily* const family = findFontFamily(fontId);
+  return family && family->hasGlyph(cp, style);
+}
+
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
   const EpdFontFamily* const family = findFontFamily(fontId);
   if (!family) {
