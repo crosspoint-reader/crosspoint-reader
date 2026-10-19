@@ -25,9 +25,10 @@ class TtfFontSet;
 /// TtfFontSet, the families installed together, whose store and scratch block it shares.
 ///
 /// It serves the body size and, on demand, native sizes (headings, CSS sizes, drop caps at their own pixel size):
-/// each size is four EpdFontData without tables, so every lookup goes to a per-style GlyphProvider adapter, and has
-/// its own entry in the store's face table. Kerning comes from the font's GPOS (or legacy kern) table through the
-/// store's pair index, and the fi/fl/ff/ffi/ffl ligatures from its GSUB table (spec 5.4).
+/// each size is an EpdFontData without tables for each style the family has, so every lookup goes to a per-style
+/// GlyphProvider adapter, and has its own entry in the store's face table. Kerning comes from the font's GPOS (or
+/// legacy kern) table through the store's pair index, and the fi/fl/ff/ffi/ffl ligatures from its GSUB table
+/// (spec 5.4).
 ///
 /// Not thread-safe: every call runs under RenderLock (spec 3.4).
 class TtfFont {
@@ -52,6 +53,7 @@ class TtfFont {
   };
   static void setHooks(const Hooks& hooks);
 
+  ~TtfFont();
   TtfFont(const TtfFont&) = delete;
   TtfFont& operator=(const TtfFont&) = delete;
 
@@ -67,7 +69,7 @@ class TtfFont {
   /// left it reaches (head.xMin) would not fit EpdGlyphRef's int8 there. Larger text is this size scaled.
   uint8_t maxNativePx() const { return maxNativePx_; }
 
-  /// The four fonts of the native size `px` (whole pixels per em), made on first use; nullptr for a style the
+  /// The fonts of the native size `px` (whole pixels per em), by style, made on first use; nullptr for a style the
   /// family lacks. When all kMaxNativeSizes are held, or memory is short, the nearest size held serves instead:
   /// `servedPpem` (26.6) says which, so the caller can scale it to `px`. False, with `fonts` untouched, when `px`
   /// is outside kMinNativePx..kMaxNativePx, a line height does not fit EpdFontData, or no size can serve. They live
@@ -116,8 +118,8 @@ class TtfFont {
     }
   };
 
-  /// One pixel size: its index in the store's face table and the four styles' fonts. Never copied or moved: each
-  /// font points at its own data, and each provider at its size.
+  /// One pixel size: its index in the store's face table and the fonts of the family's styles. Never copied or moved:
+  /// each font points at its own data, and each provider at its size.
   struct Size {
     struct StyleFont {
       EpdFontData data{};
@@ -133,7 +135,8 @@ class TtfFont {
     bool indexValid = false;
     bool claimTried = false;  // in store generation `generation`
     uint32_t generation = 0;
-    StyleFont styles[4];
+    // One for each style the family has a file for, where slot_ says: the body's made at load, a native size's with it.
+    std::unique_ptr<StyleFont[]> styles;
   };
 
   // A style's file, shared by every size.
@@ -165,6 +168,15 @@ class TtfFont {
   enum class StylesResult : uint8_t { Ok, MapFailed, Changed, Failed };
 
   TtfFont(TtfFontSet& set, uint8_t family) : set_(set), family_(family) {}
+  // The style `style`, when the family has a file for it; else nullptr.
+  Style* styleAt(const uint8_t style) const {
+    return style < 4 && slot_[style] != kNoSlot ? &styles_[slot_[style]] : nullptr;
+  }
+  // Whether the family draws `style`: it has a file for it that the engine reads.
+  bool draws(const uint8_t style) const {
+    const Style* const found = styleAt(style);
+    return found && found->present;
+  }
   StylesResult openStyles(const ttf::FileSource (&files)[4], uint8_t& block, ttf::ScratchPlan* plan);
   bool fontBytes(uint8_t style, FontBytes* bytes);
   bool configure(Size& size, uint32_t ppem);
@@ -180,7 +192,12 @@ class TtfFont {
 
   TtfFontSet& set_;
   uint8_t family_;  // its index in the set: in its face entries and pair slots
-  Style styles_[4];
+  // Only the styles the family has a file for, a book's accent family often one or two (each style ~260 B, and its
+  // font in every size ~130 B): slot_ gives a style's place in them and in each size's fonts. Made at load.
+  static constexpr uint8_t kNoSlot = 0xFF;
+  std::unique_ptr<Style[]> styles_;
+  uint8_t slot_[4] = {kNoSlot, kNoSlot, kNoSlot, kNoSlot};
+  uint8_t styleCount_ = 0;
   Size body_;
   uint8_t pointSize_ = 0;
   std::unique_ptr<Size> native_[kMaxNativeSizes];

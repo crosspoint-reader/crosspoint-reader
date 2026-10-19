@@ -858,6 +858,14 @@ CssStyle ChapterHtmlSlimParser::normalizeFontSizeForElement(const char* tagName,
     if (pct >= 100 - deadZone && pct <= 100 + deadZone) {
       normalized.fontSizeMultiplier = 1.0f;
     }
+    // A size that undoes the dropped root size is the book's body text: Calibre sets <body> to its base size and
+    // sizes every paragraph back down by a class (1.125em x 0.88889em = 1). Dropping only the root's factor left
+    // such paragraphs at 0.889 of the reader's size, drawn as the body face shrunk. Only an exact undo, within 1%:
+    // a size its designer chose below the body text's (0.85em under a 1.2em body, 1.02) is kept.
+    const float fromRoot = normalized.fontSizeMultiplier * rootFontSizeBaseline_;
+    if (hasRootFontSizeBaseline_ && fromRoot > 0.99f && fromRoot < 1.01f) {
+      normalized.fontSizeMultiplier = 1.0f;
+    }
   }
   return normalized;
 }
@@ -1905,6 +1913,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     currentTextBlock.reset(new (std::nothrow) ParsedText(extraParagraphSpacing, hyphenationEnabled,
                                                          blockStyleWithIndent, bionicReadingEnabled));
   }
+  if (currentTextBlock) currentTextBlock->setTypography(typography_);
   wireTextBlock();
   wordsExtractedInBlock = 0;
 }
@@ -2290,6 +2299,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     row.cells.back().colSpan = colSpan;
     row.cells.back().text =
         std::unique_ptr<ParsedText>(new ParsedText(false, false));  // no paragraph spacing, no hyphenation in cells
+    row.cells.back().text->setTypography(self->typography_);
     self->currentTable->pendingRowBytes += TABLE_BUFFER_BYTES_PER_CELL;
     row.effectiveCols = static_cast<uint8_t>(row.effectiveCols + colSpan);
     // Column overflow: this row cannot be a grid row. Not degraded here — the cell just created is
@@ -5146,6 +5156,7 @@ bool ChapterHtmlSlimParser::degradeRowAtOpenCell(const char* reason) {
     ok = emitCellAsParagraph(chunk, /*emitImage=*/false);
   }
   open.text = std::unique_ptr<ParsedText>(new ParsedText(false, false));
+  open.text->setTypography(typography_);
 
   t.pendingRow.cells.push_back(std::move(open));
   t.pendingRow.effectiveCols = 0;

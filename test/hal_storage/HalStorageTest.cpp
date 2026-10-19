@@ -1,7 +1,8 @@
 // HalFile handles from lib/hal/HalStorage.cpp, built as the firmware builds it, over SdFat on an
 // in-memory card. Whatever an open returns, its handle may be closed: an open that fails holds the
 // Impl all failed opens share, costing no heap, and an open whose own Impl cannot be had fails like
-// any other instead of aborting the device. A handle never opened keeps its assert.
+// any other instead of aborting the device, an open for writing before it touches the card. A
+// handle never opened keeps its assert.
 // As in HalStorage.cpp: FsFile is SdFat's here, which the test mounts and writes through.
 #define HAL_STORAGE_IMPL
 #include <HalClock.h>
@@ -33,6 +34,7 @@ time_t now() { return 0; }
 namespace {
 bool refuseNothrowNew = false;
 size_t heapNews = 0;
+size_t heapDeletes = 0;
 }  // namespace
 
 void* operator new(const std::size_t size) {
@@ -45,8 +47,14 @@ void* operator new(const std::size_t size, const std::nothrow_t&) noexcept {
   ++heapNews;
   return std::malloc(size != 0 ? size : 1);
 }
-void operator delete(void* block) noexcept { std::free(block); }
-void operator delete(void* block, std::size_t) noexcept { std::free(block); }
+void operator delete(void* block) noexcept {
+  if (block) ++heapDeletes;
+  std::free(block);
+}
+void operator delete(void* block, std::size_t) noexcept {
+  if (block) ++heapDeletes;
+  std::free(block);
+}
 
 namespace {
 
@@ -102,6 +110,7 @@ class HalStorageTest : public ::testing::Test {
     ASSERT_TRUE(Storage.begin());
     refuseNothrowNew = false;
     heapNews = 0;
+    heapDeletes = 0;
   }
   void TearDown() override {
     refuseNothrowNew = false;
@@ -115,6 +124,16 @@ class HalStorageTest : public ::testing::Test {
     ASSERT_TRUE(file);
     ASSERT_EQ(file.write(text.data(), text.size()), text.size());
     ASSERT_TRUE(file.close());
+  }
+
+  // The file at `path` as SdFat reads it; "<none>" when there is none.
+  std::string contents(const char* path) {
+    FsFile file = vol_.open(path, O_RDONLY);
+    if (!file) return "<none>";
+    std::string text(static_cast<size_t>(file.fileSize()), '\0');
+    EXPECT_EQ(file.read(text.data(), text.size()), static_cast<int>(text.size()));
+    file.close();
+    return text;
   }
 
   RamCard card_{64 * 2048};  // 64 MB
@@ -197,7 +216,56 @@ TEST_F(HalStorageTest, AnOpenWhoseImplCannotBeHadFailsAndMayBeClosed) {
   char text[8] = {};
   EXPECT_EQ(read.read(text, sizeof(text)), 4);
   EXPECT_STREQ(text, "page");
-  EXPECT_TRUE(Storage.exists("/new.txt"));
+  EXPECT_FALSE(Storage.exists("/new.txt"));  // the open for writing failed before it made the file
+}
+
+// It used to create or empty the file first and fail after: what an existing file held was lost.
+TEST_F(HalStorageTest, AnOpenForWritingWhoseImplCannotBeHadLeavesTheCardAsItWas) {
+  put("/book.txt", "page");
+  refuseNothrowNew = true;
+
+  HalFile written;
+  EXPECT_FALSE(Storage.openFileForWrite("TEST", "/book.txt", written));
+  HalFile truncated = Storage.open("/book.txt", O_RDWR | O_TRUNC);
+  EXPECT_FALSE(truncated);
+  HalFile created = Storage.open("/new.txt", O_RDWR | O_CREAT);
+  EXPECT_FALSE(created);
+  HalFile alsoCreated;
+  EXPECT_FALSE(Storage.openFileForWrite("TEST", "/new-too.txt", alsoCreated));
+  written.close();
+  truncated.close();
+  created.close();
+  alsoCreated.close();
+
+  refuseNothrowNew = false;
+  EXPECT_EQ(contents("/book.txt"), "page");
+  EXPECT_EQ(contents("/new.txt"), "<none>");
+  EXPECT_EQ(contents("/new-too.txt"), "<none>");
+}
+
+TEST_F(HalStorageTest, AnOpenForWritingHoldsOneImplAndAFailedOneGivesItBack) {
+  put("/book.txt", "page");
+  HalFile written;
+  heapNews = heapDeletes = 0;
+  ASSERT_TRUE(Storage.openFileForWrite("TEST", "/book.txt", written));
+  EXPECT_EQ(heapNews, 1u);
+  EXPECT_EQ(heapDeletes, 0u);
+  EXPECT_EQ(written.write("leaf", 4), 4u);
+  EXPECT_TRUE(written.close());
+  EXPECT_EQ(contents("/book.txt"), "leaf");
+
+  // No such folder: the Impl taken for the open goes back, and the handle holds the shared one.
+  HalFile missing;
+  heapNews = heapDeletes = 0;
+  EXPECT_FALSE(Storage.openFileForWrite("TEST", "/no-folder/book.txt", missing));
+  EXPECT_FALSE(missing);
+  HalFile created = Storage.open("/no-folder/new.txt", O_RDWR | O_CREAT);
+  EXPECT_FALSE(created);
+  EXPECT_EQ(heapNews, 2u);
+  EXPECT_EQ(heapDeletes, 2u);
+  missing.close();
+  created.close();
+  EXPECT_EQ(heapDeletes, 2u);  // the shared Impl is never freed
 }
 
 TEST_F(HalStorageTest, ManyFailedOpensShareOneImplAndNeverFreeIt) {

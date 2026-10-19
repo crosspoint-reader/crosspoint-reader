@@ -17,10 +17,14 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <vector>
 
+#include "BuildArena.h"
 #include "EpdFontData.h"
 #include "FontDecompressor.h"
+#include "GlyphProvider.h"
 
 // A real generated font: 19 groups, uncompressed sizes up to ~25 KB, rings measured from the
 // finished DEFLATE streams by fontconvert.py.
@@ -158,4 +162,95 @@ TEST(FontGroupStream, TooSmallRingIsRefusedNotCorrupted) {
   if (starved.ok) {
     EXPECT_EQ(starved.bytes, good.bytes) << "a starved ring produced different bytes without erroring";
   }
+}
+
+// --- The prewarm's rings in a lent region ------------------------------------------------------
+
+namespace {
+
+constexpr const char* kPageText = "The quick brown fox jumps over the lazy dog, 1234567890 times: \u00e9\u00e8\u00fc!";
+
+// The glyph index of `cp`, as EpdFont's interval lookup finds it; -1 when the font has none.
+int32_t glyphIndexOf(const EpdFontData& font, const uint32_t cp) {
+  for (uint32_t i = 0; i < font.intervalCount; i++) {
+    const EpdUnicodeInterval& in = font.intervals[i];
+    if (cp >= in.first && cp <= in.last) return static_cast<int32_t>(in.offset + (cp - in.first));
+  }
+  return -1;
+}
+
+// Every inked glyph of the page text as getBitmap() hands it out, concatenated.
+std::vector<uint8_t> pageBitmaps(FontDecompressor& fdc, const EpdFontData& font) {
+  std::vector<uint8_t> out;
+  for (const char* p = kPageText; *p != '\0'; ++p) {
+    const auto byte = static_cast<unsigned char>(*p);
+    if (byte >= 0x80) continue;  // ASCII only here; the prewarm warms the accented ones too
+    const int32_t index = glyphIndexOf(font, byte);
+    if (index < 0) continue;
+    const EpdGlyphRef glyph = epdResolveGlyph(&font, static_cast<uint32_t>(index));
+    const uint16_t bytes = glyphDataBytes(glyph.width, glyph.height, font.is2Bit);
+    if (bytes == 0) continue;
+    const uint8_t* bitmap = fdc.getBitmap(&font, glyph, static_cast<uint32_t>(index));
+    if (!bitmap) return {};
+    out.insert(out.end(), bitmap, bitmap + bytes);
+  }
+  return out;
+}
+
+}  // namespace
+
+// A page render lends the secondary framebuffer to its prewarm (glyph_miss::Scope): each group's ring comes from it and
+// goes back before the next group, so the region is as it was when the lend ends, and the page slots, which the render
+// and the AA pass read after the lend, never come from it.
+TEST(FontPrewarmRing, TheRingsComeFromTheLentRegionAndThePageSlotsFromTheHeap) {
+  const EpdFontData& font = Font();
+  FontDecompressor onHeap;
+  ASSERT_TRUE(onHeap.init());
+  ASSERT_EQ(0, onHeap.prewarmCache(&font, kPageText));
+  const FontDecompressor::Stats heapStats = onHeap.getStats();
+  ASSERT_GT(heapStats.uniqueGroupsAccessed, 0u);
+  EXPECT_EQ(0u, heapStats.arenaTemps);  // no region lent: every ring on the heap, as before
+
+  std::vector<uint8_t> secondary(48000);
+  BuildArena region(secondary.data(), secondary.size());
+  FontDecompressor lent;
+  ASSERT_TRUE(lent.init());
+  {
+    const glyph_miss::Scope misses(&region);
+    ASSERT_EQ(0, lent.prewarmCache(&font, kPageText));
+  }
+  const FontDecompressor::Stats& lentStats = lent.getStats();
+  EXPECT_EQ(heapStats.uniqueGroupsAccessed, lentStats.arenaTemps);  // every ring from the region
+  EXPECT_EQ(0u, region.used());                                     // and given back
+  EXPECT_EQ(heapStats.peakTempBytes, lentStats.peakTempBytes);
+  EXPECT_GE(region.highWater(), lentStats.peakTempBytes);
+  EXPECT_FALSE(lent.hasArenaBackedSlots());
+  EXPECT_EQ(heapStats.pageBufferBytes, lentStats.pageBufferBytes);  // the slots: on the heap, the same
+  std::printf(
+      "[  heap    ] prewarm of %u groups: %lu B page slots on the heap; largest ring %lu B, now in the lent "
+      "region\n",
+      static_cast<unsigned>(lentStats.uniqueGroupsAccessed),
+      static_cast<unsigned long>(lentStats.pageBufferBytes + lentStats.pageGlyphsBytes),
+      static_cast<unsigned long>(lentStats.peakTempBytes));
+
+  // The display has the buffer again and draws over it: the page's glyphs still come from the slots, as on the heap.
+  std::memset(secondary.data(), 0x5A, secondary.size());
+  const std::vector<uint8_t> expected = pageBitmaps(onHeap, font);
+  ASSERT_FALSE(expected.empty());
+  EXPECT_EQ(expected, pageBitmaps(lent, font));
+  EXPECT_EQ(0u, lent.getStats().fallbackCacheMisses);  // all from the page slots, no ring needed
+}
+
+// A region with no room for a ring leaves it to the heap, as before the lend.
+TEST(FontPrewarmRing, ARegionWithoutRoomLeavesTheRingToTheHeap) {
+  std::vector<uint8_t> small(64);
+  BuildArena region(small.data(), small.size());
+  FontDecompressor fdc;
+  ASSERT_TRUE(fdc.init());
+  {
+    const glyph_miss::Scope misses(&region);
+    EXPECT_EQ(0, fdc.prewarmCache(&Font(), kPageText));
+  }
+  EXPECT_EQ(0u, fdc.getStats().arenaTemps);
+  EXPECT_EQ(0u, region.used());
 }

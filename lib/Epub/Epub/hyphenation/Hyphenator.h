@@ -38,6 +38,11 @@ class Hyphenator {
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
 
+  // The patterns for a language tag ("en", "en-US", "eng"), null when the language has none. The book's
+  // TypographyProfile holds this, and the section build installs it with setLanguageHyphenator().
+  static const LanguageHyphenator* forLanguage(const std::string& lang);
+  static void setLanguageHyphenator(const LanguageHyphenator* hyphenator) { cachedHyphenator_ = hyphenator; }
+
  private:
   static const LanguageHyphenator* cachedHyphenator_;
 };

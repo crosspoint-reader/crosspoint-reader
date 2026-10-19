@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "CjkPunctuation.h"
 #include "TokenBoundary.h"
+#include "TypographyProfile.h"
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
@@ -53,6 +55,15 @@ class ParsedText {
   // per book on the host census once the word vectors stopped regrowing (memory audit
   // 2026-09, R2). clear() keeps their capacity, so a chapter allocates them once.
   std::vector<uint16_t> wordWidths_;
+  // Each token's CjkPunctuation::Class when it is one full-width mark, and how much wider (> 0) or narrower (< 0) it
+  // is at the line edge its mark acts at than mid-line, in pixels: where a line starts at an opening mark, where it
+  // ends after any other. Two bytes a token. Layout scratch in step with wordWidths_: calculateWordWidths fills both,
+  // hyphenateWordAtIndex inserts into both.
+  std::vector<uint8_t> markClass_;
+  std::vector<int8_t> edgeTrim_;
+  // How far the block's lines sit in from the left: half of what rounding the width down to whole ems took (the CJK
+  // grid, spec section 5.5). Set by each layout pass.
+  int16_t gridInset_ = 0;
   std::vector<size_t> lineBreakIndices_;
   std::vector<bool> lineEndsWithHyphenatedWord_;
   std::vector<int> splitPrefixWordIndexes_;
@@ -102,6 +113,8 @@ class ParsedText {
   uint32_t lastLineVisibleOffset_ = 0;
   LinePlace linePlace_;
   BlockStyle blockStyle;
+  // The book's typography (TypographyProfile.h): Latin rules until the parser sets the book's.
+  TypographyProfile typography_;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool bionicReadingEnabled;
@@ -184,6 +197,16 @@ class ParsedText {
   // Fills `out` (cleared first); uses blockStyle.fontSizeMultiplier internally.
   void calculateWordWidths(const GfxRenderer& renderer, int fontId,
                            std::vector<uint16_t>& out);  // uses blockStyle.fontSizeMultiplier internally
+  // Narrows each CJK mark that is a token to its mid-line width and fills markClass_/edgeTrim_.
+  void applyPunctuationWidths(const GfxRenderer& renderer, int fontId, std::vector<uint16_t>& widths);
+  // How token i's width changes when a line starts at it, and when a line ends after it.
+  int lineStartTrim(const size_t i) const { return opensLine(i) ? edgeTrim_[i] : 0; }
+  int lineEndTrim(const size_t i) const { return opensLine(i) ? 0 : edgeTrim_[i]; }
+  bool opensLine(const size_t i) const { return markClass_[i] == static_cast<uint8_t>(CjkPunctuation::Class::Opening); }
+  // A line first..last as drawn: its first and last token at their line-edge widths.
+  int withEdgeTrims(const int naturalWidth, const size_t first, const size_t last) const {
+    return naturalWidth + lineStartTrim(first) + lineEndTrim(last);
+  }
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
@@ -233,6 +256,8 @@ class ParsedText {
   // before the first layout pass of the block; callers skip continuations.
   bool foldUniformWordSizes();
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
+  // Survives reset(): it is the book's, not the block's.
+  void setTypography(const TypographyProfile& typography) { typography_ = typography; }
   // See lineArena_ / beforeLine_. Both survive reset().
   void setLineArena(BuildArena* arena) { lineArena_ = arena; }
   void setBeforeLineHook(std::function<void(uint8_t maxSizePct)> hook) { beforeLine_ = std::move(hook); }
