@@ -66,6 +66,7 @@ add_subdirectory(ligature_guard)
 add_subdirectory(page_link)
 add_subdirectory(content_opf_parser)
 add_subdirectory(chapter_position)
+add_subdirectory(book_metadata_cache)
 add_subdirectory(home_button)
 add_subdirectory(button_press_navigation)
 
@@ -76,6 +77,8 @@ add_subdirectory(http_header)
 add_subdirectory(txt_to_html)
 
 add_subdirectory(absolute_grayscale)
+
+add_subdirectory(gif_support)
 
 add_subdirectory(sd_card_font)
 add_subdirectory(clipping_preview)
@@ -89,3 +92,17 @@ add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
+add_test(NAME RemoteButtonInputIntegration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_remote_button_input.py)
+add_test(NAME BleLearning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ble_learning.py)
+add_subdirectory(ble_link_note_title)
+add_subdirectory(ble_chapter_build_gate)
+add_subdirectory(ble_remote_turn_gate)
+
+add_subdirectory(${REPO_ROOT}/lib/BlePageTurner/test BlePageTurnerTests)
+
+add_test(NAME selection_buttons COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_selection_buttons.py)
+add_test(NAME list_viewport COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_list_viewport.py)
+add_test(NAME clipping_highlight_planes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_clipping_highlight_planes.py)
+add_test(NAME clipping_selection_text COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_clipping_selection_text.py)
+
+add_test(NAME recursive_dictionary COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_recursive_dictionary.py)

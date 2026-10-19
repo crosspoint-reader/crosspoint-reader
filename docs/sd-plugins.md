@@ -14,10 +14,12 @@ and the firmware carries no vendor names, URLs, or file-format knowledge.
     ...assets
 ```
 
-**Discovery and the on-device list.** Every plugin folder (anything holding a
-`manifest.json`, `plugin.js`, or `device.json`) appears under **Settings →
-System → Plugins** on the reader, showing its `title` and one-line
-`description`. Selecting a plugin with an on-device catalog (`device.json`
+**Discovery and the on-device list.** The plugin subsystem is controlled by
+**Settings → Connectivity → Plugins**. When enabled, **Plugins** is
+shown on the Home screen even when no plugins are installed. Every plugin folder
+(anything holding a `manifest.json`, `plugin.js`, or `device.json`) appears under
+**Home → Plugins**, showing its `title` and one-line `description`. Selecting a
+plugin with an on-device catalog (`device.json`
 with `browse.url`) opens that catalog. Selecting any other plugin shows its
 `README.md` (up to 16KB, as plain paged text) when it has one, so even a
 browser-only plugin (no `device.json`) can explain how to use it from the web
@@ -28,6 +30,53 @@ UI; without a README the row does nothing. `title`/`description` are read from
 first two-dot-free options exist so plugins are easy to copy onto the card
 from a computer. All three roots are scanned; on a name collision the earlier
 root in that order wins.
+
+For bundle installs that target one of those plugin roots with a single direct
+folder name, firmware first reuses an existing same-named plugin directory from
+any supported root. This keeps updates in place with their local settings and
+tokens. If no installed copy exists, the bundle uses its configured destination
+root as before. Nested bundle subdirectories and non-plugin destinations are
+unchanged.
+
+During firmware-managed plugin installation, a plugin directory may contain a
+`.installing` marker. Normal plugin discovery and file resolution quarantine that
+directory until the transaction completes, even if `manifest.json`, `plugin.js`,
+or `device.json` is already present. Raw on-disk probes used for migration and
+installer recovery can still see the directory. The marker describes transaction
+state; it does not change the normal plugin validity contract once removed.
+
+### Enabling plugins and Plugin Hub
+
+The **Plugins** setting is the global gate for SD-card plugin discovery and
+execution. New installations default to **Disabled**. Firmware upgrades detect
+existing plugin folders and keep plugins enabled so an upgrade does
+not silently disable an existing setup. Turning plugins off does not
+delete or rename any plugin files; turning it back on makes them discoverable
+again.
+
+Plugin Hub is optional and is not required for sideloaded plugins. The native
+Hub is considered available when the first matching `pluginhub` directory has a
+`device.json` and is not quarantined by `.installing`; `manifest.json`,
+`plugin.js`, and `README.md` are not required for native availability. When
+plugins are enabled, no native Hub is available, and the installer has not
+been hidden, **Home → Plugins** contains a synthetic **Plugin Hub — Download,
+discover, and update plugins** entry. Selecting it offers:
+
+- **Install** — download and install Plugin Hub over Wi-Fi. Backing out of the
+  Wi-Fi selector cancels installation, turns Wi-Fi back off, and returns to the
+  Plugins picker without changing the Hide preference.
+- **Hide** — hide only the synthetic Plugin Hub install entry. Installed and
+  sideloaded plugins continue to work normally.
+- **Cancel** — leave the entry visible and make no changes.
+
+The **Hide** preference persists across reboots. Setting **Settings → Connectivity →
+Plugins** to **Enabled** clears it, which brings the installer entry back.
+
+For users who prefer manual installation, Plugin Hub can be downloaded directly
+from <https://github.com/crosspoint-reader/crosspoint-plugin-hub/releases>. Copy or
+extract the `pluginhub` folder so it ends up at one of these supported locations:
+`/.crosspoint/plugins/pluginhub/`, `/plugins/pluginhub/`, or
+`/.plugins/pluginhub/`.
 
 A plugin can ship any combination: `plugin.js` alone (web-only),
 `device.json` alone (on-device only), or both. A `device.json` may declare only
@@ -95,7 +144,7 @@ api.registerAction('myaction', async (args) => {
 ## Surface 3: on-device manifests and catalog screens (`device.json`)
 
 A declarative manifest the firmware's generic `PluginCatalogActivity` renders
-under **Settings → System → Plugins**. It expresses "authenticated JSON
+under **Home → Plugins**. It expresses "authenticated JSON
 catalog: sign in, browse, download, sidecar" — enough for most book services —
 without any code running on the device. Anything beyond this vocabulary
 belongs in `plugin.js`.
@@ -114,14 +163,53 @@ nothing stays resident. Browser-only plugins (`plugin.js` without a
 `device.json`) are listed as inert "Web-only plugin" rows — an install is
 visibly installed — while their UI lives in the web interface.
 
+### Firmware identity and plugin capabilities
+
+Plugin compatibility is expressed by the firmware itself so any catalog or plugin
+can decide whether an entry is safe to offer or use on a particular build. Plugin
+Hub is the first consumer that motivated this contract, but these are generic
+plugin-system capabilities, not Plugin Hub-specific flags. These values are part
+of the plugin-system contract, not hardware detection.
+
+| Value | Stock CrossPoint value | Purpose |
+|---|---|---|
+| `firmware_family` | `crosspoint` | Broad compatibility family. Forks that intentionally keep the same plugin contract can advertise the same family. |
+| `plugin_api` | `1` | Numeric plugin contract level for requirements that need a minimum firmware API generation. |
+| `plugin_capabilities` | comma-separated names below | Fine-grained feature advertisement. A catalog entry may require one or more capabilities without hard-coding a firmware version. |
+
+Stock CrossPoint currently advertises these catalog capabilities:
+
+| Capability | What it means | Why it exists in the plugin system |
+|---|---|---|
+| `catalog.lists` | The catalog manifest can expose named browse lists, including lists supplied dynamically through `browse.lists_url`. | Any plugin can split or dynamically publish multiple catalog views without adding plugin-specific firmware logic. Plugin Hub currently uses this for Official/Community catalogs. |
+| `catalog.notices` | A browse list can display an optional confirmation notice with custom title, message, Confirm, and Cancel labels before opening. | Any plugin can require a generic user notice before entering a catalog or section. Plugin Hub currently uses this for the Community-plugin warning. |
+| `catalog.bundle_install` | A catalog entry can install a multi-file plugin bundle from a base URL plus a file list into the plugin directory. | Any catalog can distribute a plugin or other supported bundle made of multiple files without a dedicated installer in firmware. Plugin Hub currently uses this to install complete plugins. |
+| `catalog.version_tracking` | Catalog item versions are compared with installed plugin manifests to show Installed or Update status. | Any catalog can expose install/update state using the generic installed-plugin version contract. Plugin Hub currently uses it to identify available updates. |
+| `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
+| `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
+
+Capability names describe firmware behavior available to the entire plugin system.
+They must not encode Plugin Hub policy or ownership, and another plugin may use the
+same capability whenever it depends on the same generic firmware behavior.
+Additional firmware features should advertise their own capability names only when
+the corresponding runtime support is actually present. Catalog entries that omit
+compatibility metadata remain visible for backward compatibility.
+
 ### Schema
 
-Every string field is a template. Available substitutions:
+String fields explicitly passed through the template resolver support substitutions.
+Template-bearing fields include request URLs, bodies, and header values;
+`browse.lists_url`; list notice title/message/Confirm/Cancel text; `bundle.subdir`;
+download filename/username/password; and sidecar path/body.
 
 | Variable | Meaning | Available in |
 |---|---|---|
-| `{token}` | contents of the token file at `token.path` | everywhere |
-| `{cfg.KEY}` | value of `KEY` in the flat JSON config file at `config.file` | everywhere |
+| `{token}` | contents of the token file at `token.path` | template fields |
+| `{cfg.KEY}` | value of `KEY` in the flat JSON config file at `config.file` | template fields |
+| `{firmware_family}` | stable firmware family (`crosspoint` on stock CrossPoint) | template fields |
+| `{firmware_version}` | current `CROSSPOINT_VERSION` value | template fields |
+| `{plugin_api}` | numeric plugin API level | template fields |
+| `{plugin_capabilities}` | comma-separated advertised capability names | template fields |
 | `{page}` | current 1-based page | browse |
 | `{limit}` | `page_size + 1` (the extra row detects "more pages") | browse |
 | `{id}` `{title}` `{author}` `{url}` | fields of the selected item | download, sidecar |
@@ -137,6 +225,10 @@ Two browse formats:
   `PROPFIND` multistatus, an OPDS/Atom feed, or any XML list is all manifest
   config. XML field selectors are `"elem"` (child element text), `"elem@attr"`
   (child element attribute), or `"@attr"` (attribute on the item element).
+
+For JSON catalogs, `browse.compatibility` maps optional catalog-entry fields to firmware checks. If a catalog entry omits compatibility metadata, it is accepted and displayed normally. When an entry declares restrictions, `firmware_family` is a comma-separated allow-list, `plugin_api_min` requires the device API to be at least that value, and every comma-separated `requires` capability must be advertised by the firmware. Any mismatch silently omits that entry.
+
+JSON catalogs may also map `description`, `detail_author`, and `repository` for a generic item-details view, plus `details_url` and `details_format` for optional richer content. Catalog row subtitles may use up to three lines; the full Details view is still opened explicitly. Version-tracked catalogs automatically use Details before install/update and, for backward compatibility, recognize conventional item keys named `description`, `author`, `repository`, `details.url`, and `details.format` when explicit mappings are absent. Other JSON catalogs get the same Details-before-Fetch flow when a details field is mapped. The firmware re-streams the cached page only for the selected item, so long metadata is not retained for every row in memory. If `details_url` is present, firmware fetches that selected item only (bounded to 24 KiB); `details_format: "html"` uses the existing semantic HTML reader while an empty format or `text` is plain text. An unavailable URL or unsupported format falls back to the normal description/author/version/repository Details page and never blocks Install, Update, or Fetch.
 
 ```jsonc
 {
@@ -164,21 +256,37 @@ Two browse formats:
     "items": "",                            // dotted path to the item array; "" = response root
     "fields": {                             // json: dotted paths (numeric = array index)
       "title": "title",                     // required (items without one are dropped)
-      "author": "authors.0.name",
+      "author": "authors.0.name",            // compact row subtitle
+      "detail_author": "authors.0.name",     // optional Details author; defaults to author
       "id": "id",
       "url": "download_url",                // when the item carries a direct file URL
-      "version": "version"                  // catalog-of-plugins only: badges each row
+      "version": "version",                 // catalog-of-plugins only: badges each row
                                             // Installed / Update by comparing this to the
                                             // installed plugin's manifest.json (found by id).
                                             // Both are MAJOR.MINOR.PATCH ("1.2.0"); only a
                                             // newer catalog version shows Update.
+      "description": "description",         // optional: full paged text on Details
+      "repository": "repository",           // optional: line under the author on Details
+      "details_url": "details.url",            // optional: fetched only when Details opens
+      "details_format": "details.format"       // optional: "html" or plain-text default
+    },
+    "compatibility": {                    // optional JSON-only catalog filtering
+      "firmware_family": "compatibility.firmware_family",
+      "plugin_api_min": "compatibility.plugin_api_min",
+      "requires": "compatibility.requires"
     },
     "page_size": 8,                         // 1..16; response should honor {limit}
 
     "lists": [                              // optional named sub-catalogs (json only):
       { "title": "All Books" },             // a picker screen precedes browsing;
       { "title": "Favorites",               // each entry may override url and/or
-        "body": "{\"page\":{page},\"per_page\":{limit},\"list\":\"favorites\"}" }
+        "body": "{\"page\":{page},\"per_page\":{limit},\"list\":\"favorites\"}",
+        "notice": {                            // optional confirmation before opening
+          "title": "Community content",        // defaults to the list title
+          "message": "Review this notice before continuing.",
+          "confirm": "Continue",               // defaults to translated Confirm
+          "cancel": "Go Back"                  // defaults to translated Cancel
+        } }
     ],                                      // omitted keys fall back to browse's
 
     // --- xml format (ignore the json fields above; fields become selectors) ---
@@ -256,9 +364,14 @@ Two browse formats:
   page" row precedes the items past page 1 and a "Next page" row follows
   them while more pages exist — tappable and button-reachable like any row.
 - **Lists** (json): with `browse.lists`, opening the catalog shows a picker
-  of the named entries first; each entry browses with its own url/body
-  overrides (server-side categories, shelves, sort orders). Back from the
-  book list returns to the picker.
+  of the named entries first (a single list skips the picker and opens
+  directly, after its notice; Back then leaves the catalog); each entry browses with its own url/body
+  overrides (server-side categories, shelves, sort orders). A list with
+  `notice.message` shows a confirmation before browsing; Back/cancel returns
+  to the picker, while confirm continues into the selected list. `notice.title`
+  defaults to the list title, and omitted button labels use the firmware's
+  translated Cancel/Confirm defaults. Back from the book list returns to the
+  picker.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
@@ -267,6 +380,10 @@ Two browse formats:
 - **After download**: the book's layout cache is invalidated and the optional
   sidecar is written. Use the `{dest}.meta.json` convention so the fields ride
   KOSync progress uploads and event handlers (see `plugin-events.md`).
+  Downloading a book file (`.epub`, `.txt`, `.md`, `.xtc`) also marks the
+  Library index stale, so the book appears the next time the Library opens.
+  Hidden files and folders (names that start with `.`) don't mark it, because
+  the Library never lists them.
 
 ### Heap budget (ESP32-C3, ~380KB total)
 
@@ -290,7 +407,7 @@ Two browse formats:
 ### Testing a new manifest
 
 1. Copy the plugin folder to `/.crosspoint/plugins/<name>/` on the SD card.
-2. Settings → System → Plugins → your title. With no token and no `auth`
+2. Enable **Settings → Connectivity → Plugins**, then open **Home → Plugins → your title**. With no token and no `auth`
    block you should see the not-signed-in screen; with `auth`, the code/QR
    screen.
 3. Watch serial (`[PCAT]` tag) for request/parse failures — the log includes

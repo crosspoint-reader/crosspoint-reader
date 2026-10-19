@@ -1,6 +1,7 @@
 #include "Dictionary.h"
 
 #include <Arduino.h>
+#include <HalMemory.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -69,7 +70,7 @@ bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 // headers are tiny and both keys always appear early when present.
 struct IfoFacts {
   bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
-  bool htmlDefinitions = false;  // sametypesequence=h (definitions are HTML)
+  bool htmlDefinitions = false;  // sametypesequence=h or x (HTML or XDXF)
 };
 
 IfoFacts readIfoFacts(const std::string& ifoPath) {
@@ -86,9 +87,8 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   line = strstr(buf, "sametypesequence");
   eq = line ? strchr(line, '=') : nullptr;
   if (eq) {
-    // Only the single-field sequence "h" is treated as HTML; multi-type
-    // entries keep the plain-text viewing path.
-    facts.htmlDefinitions = eq[1] == 'h' && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
+    // HTML and XDXF share the styled renderer; multi-type entries stay plain text.
+    facts.htmlDefinitions = (eq[1] == 'h' || eq[1] == 'x') && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
   }
   return facts;
 }
@@ -590,6 +590,11 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     out.resize(append ? originalSize : 0);
     return fail(LookupResult::ReadError);
   }
+  // Keep room for the viewer's plain-text fallback while retaining the input.
+  if (htmlDefinitions && ESP.getMaxAllocHeap() < out.size() + DEFINITION_HEAP_HEADROOM_BYTES) {
+    LOG_ERR("DICT", "Low heap for %lu byte definition fallback", static_cast<unsigned long>(out.size()));
+    return fail(LookupResult::LowMemory);
+  }
   return true;
 }
 
@@ -656,11 +661,22 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
 }
 
 bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-                        LookupResult* outResult) {
+                        LookupResult* outResult, DictLocation* locationOut) {
+  if (locationOut) *locationOut = {};
   const auto setResult = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
   };
   setResult(LookupResult::NotFound);
+  // cleanWord plus three stem variants can retain five input-sized buffers,
+  // including growth of a concatenated variant. Keep the viewer intact on OOM.
+  const size_t wordBytes = word ? strlen(word) + 1 : 1;
+  const size_t workingBytes = 5 * wordBytes + 6 * sizeof(std::string) + DEFINITION_HEAP_HEADROOM_BYTES;
+  const auto heap = HalMemory::getDefaultHeap();
+  if (heap.freeBytes < workingBytes || heap.largestBlockBytes < 2 * wordBytes) {
+    LOG_ERR("DICT", "Low heap for lookup (%u byte working set)", static_cast<unsigned>(workingBytes));
+    setResult(LookupResult::LowMemory);
+    return false;
+  }
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
@@ -771,6 +787,7 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   }
 
   if (readDefinition(location, definitionOut, outResult)) {
+    if (locationOut) *locationOut = location;
     setResult(LookupResult::Found);
     return true;
   }

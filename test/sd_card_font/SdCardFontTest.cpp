@@ -1,5 +1,6 @@
 #include <HalStorage.h>
 #include <SdCardFont.h>
+#include <Utf8.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -462,8 +463,68 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   font.buildAdvanceTable("", 1);
   EXPECT_FALSE(font.hasAdvanceTable());
   failNextArraySize = (4096 + 2) * sizeof(uint32_t);  // the codepoint scratch
-  EXPECT_EQ(-1, font.buildAdvanceTable(page(FIRST, 10).c_str(), 1));
+  const std::string largeText = page(FIRST, 10) + std::string(4096, ' ');
+  EXPECT_EQ(-1, font.buildAdvanceTable(largeText.c_str(), 1));
   EXPECT_FALSE(font.hasAdvanceTable());
   ASSERT_EQ(0, font.buildAdvanceTable(page(FIRST, 10).c_str(), 1));
   EXPECT_TRUE(font.hasAdvanceTable());
+}
+
+TEST(SdCardFontTest, ShortAdvancePreparationAvoidsLargeScratchAndRepeatedReads) {
+  makeFont();
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  const std::string text = page(FIRST, 3);
+  failNextArraySize = (4096 + 2) * sizeof(uint32_t);
+  const int result = font.buildAdvanceTable(text.c_str(), 1);
+  failNextArraySize = 0;
+  ASSERT_EQ(result, 0);
+  for (uint32_t cp = FIRST; cp < FIRST + 3; ++cp) EXPECT_EQ(32 << 4, font.getAdvance(cp, 0));
+  sdFontTestReads = 0;
+  ASSERT_EQ(font.buildAdvanceTable(text.c_str(), 1), 0);
+  EXPECT_EQ(sdFontTestReads, 0u);
+}
+
+TEST(SdCardFontTest, SmallCapsPrepareOriginalAndUppercasePackedMetricsWithoutBitmaps) {
+  const struct {
+    uint32_t first;
+    uint32_t last;
+    const char* words;
+    size_t bytes;
+  } cases[] = {
+      {0x20, 0x7F, "ab\0z", 5}, {0x0391, 0x03CB, "\xCE\xB1\0\xCE\xB2", 6}, {0x0410, 0x044F, "\xD0\xB0\0\xD1\x8F", 6}};
+  for (const auto& fixture : cases) {
+    SCOPED_TRACE(fixture.first);
+    makeFont(fixture.last - fixture.first + 2);
+    put32(64, fixture.first);
+    put32(68, fixture.last);
+    for (uint32_t cp = fixture.first; cp <= fixture.last; ++cp) {
+      put16(64 + 24 + (cp - fixture.first) * sizeof(EpdGlyph) + offsetof(EpdGlyph, advanceX), (10 + cp - fixture.first)
+                                                                                                  << 4);
+    }
+    SdCardFont font;
+    ASSERT_TRUE(font.load("fixture"));
+    const char* segments[] = {fixture.words};
+    const size_t lengths[] = {fixture.bytes};
+    ASSERT_EQ(font.buildAdvanceTablePacked(segments, lengths, 1, false, false, 1), 0);
+    auto* cursor = reinterpret_cast<const uint8_t*>(fixture.words);
+    EXPECT_EQ(font.getAdvance(utf8SmallCapsUpper(utf8NextCodepoint(&cursor)), 0), 0);
+    ASSERT_EQ(font.buildAdvanceTablePacked(segments, lengths, 1, false, false, 1, nullptr, true), 0);
+    cursor = reinterpret_cast<const uint8_t*>(fixture.words);
+    const auto* end = cursor + fixture.bytes;
+    while (cursor < end) {
+      if (*cursor == 0) {
+        ++cursor;
+        continue;
+      }
+      const uint32_t cp = utf8NextCodepoint(&cursor);
+      EXPECT_EQ(font.getAdvance(cp, 0), (10 + cp - fixture.first) << 4);
+      const uint32_t upper = utf8SmallCapsUpper(cp);
+      EXPECT_EQ(font.getAdvance(upper, 0), (10 + upper - fixture.first) << 4);
+    }
+    EXPECT_EQ(font.getStats().bitmapBytes, 0u);
+    sdFontTestReads = 0;
+    ASSERT_EQ(font.buildAdvanceTablePacked(segments, lengths, 1, false, false, 1, nullptr, true), 0);
+    EXPECT_EQ(sdFontTestReads, 0u);
+  }
 }
