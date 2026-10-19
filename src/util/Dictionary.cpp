@@ -264,12 +264,6 @@ bool Dictionary::open(const char* folderName) {
     LOG_ERR("DICT", "%s uses 64-bit index offsets (unsupported)", resolved.c_str());
     return false;
   }
-  // Checked once here so buildPath() can never fail on the lookup path.
-  if (resolved.size() + LONGEST_SUFFIX_LEN + 1 > PATH_BUF_BYTES) {
-    LOG_ERR("DICT", "Dictionary path too long (%u chars, max %u)", static_cast<unsigned>(resolved.size()),
-            static_cast<unsigned>(PATH_BUF_BYTES - LONGEST_SUFFIX_LEN - 1));
-    return false;
-  }
   hasSyn = Storage.exists((resolved + ".syn").c_str());
   htmlDefinitions = ifo.htmlDefinitions;
 
@@ -278,6 +272,7 @@ bool Dictionary::open(const char* folderName) {
   dzScratch.release();
 
   basePath = std::move(resolved);
+  pathScratch.reserve(basePath.size() + LONGEST_SUFFIX_LEN);
   return true;
 }
 
@@ -296,13 +291,9 @@ bool Dictionary::ensureScanBuffers() {
   return true;
 }
 
-bool Dictionary::buildPath(char* buf, size_t bufSize, const char* suffix) const {
-  const int n = snprintf(buf, bufSize, "%s%s", basePath.c_str(), suffix);
-  if (n < 0 || static_cast<size_t>(n) >= bufSize) {
-    LOG_ERR("DICT", "Path too long: %s%s", basePath.c_str(), suffix);
-    return false;
-  }
-  return true;
+const char* Dictionary::buildPath(const char* suffix) {
+  pathScratch.assign(basePath).append(suffix);
+  return pathScratch.c_str();
 }
 
 // A sidecar is stale when it is missing, unreadable, the wrong version, or built
@@ -444,17 +435,13 @@ bool Dictionary::buildSidecar(const std::string& sourcePath, const std::string& 
 bool Dictionary::openSession(LookupSession& session) {
   if (!isOpen() || !ensureScanBuffers()) return false;
 
-  // One buffer reused for both paths — no transient heap on the lookup path.
-  char path[PATH_BUF_BYTES];
-  if (!buildPath(path, sizeof(path), ".idx")) return false;
-  if (!Storage.openFileForRead("DICT", path, session.idx)) return false;
+  if (!Storage.openFileForRead("DICT", buildPath(".idx"), session.idx)) return false;
   session.idxSize = static_cast<uint32_t>(session.idx.fileSize());
   session.idxScan.attach(&session.idx, scanBuf->idx, session.idxSize);
 
   // The sidecar is optional and its header only has to be validated once per
   // lookup; without a usable one locate() scans from byte 0.
-  if (!buildPath(path, sizeof(path), ".qidx")) return true;
-  if (Storage.openFileForRead("DICT", path, session.qidx)) {
+  if (Storage.openFileForRead("DICT", buildPath(".qidx"), session.qidx)) {
     const SidecarHeader header = readSidecarHeader(session.qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
     if (header.valid && header.sourceFileSize == session.idxSize) {
       session.sampleCount = header.sampleCount;
@@ -469,8 +456,7 @@ bool Dictionary::openSynonyms(LookupSession& session) {
   session.synOpened = true;
   if (!hasSyn) return false;
 
-  char path[PATH_BUF_BYTES];
-  if (!buildPath(path, sizeof(path), ".syn") || !Storage.openFileForRead("DICT", path, session.syn)) {
+  if (!Storage.openFileForRead("DICT", buildPath(".syn"), session.syn)) {
     // A .syn exists but won't open: the synonym probe never reached a verdict, so
     // flag it the way openSession() flags an unopenable .idx rather than let
     // lookup() report a genuine miss for a word the .syn does carry.
@@ -480,7 +466,7 @@ bool Dictionary::openSynonyms(LookupSession& session) {
   session.synSize = static_cast<uint32_t>(session.syn.fileSize());
   session.synScan.attach(&session.syn, scanBuf->syn, session.synSize);
 
-  if (buildPath(path, sizeof(path), ".sidx") && Storage.openFileForRead("DICT", path, session.sidx)) {
+  if (Storage.openFileForRead("DICT", buildPath(".sidx"), session.sidx)) {
     const SidecarHeader header = readSidecarHeader(session.sidx, SIDX_MAGIC, SAMPLE_INTERVAL);
     if (header.valid && header.sourceFileSize == session.synSize) session.synSampleCount = header.sampleCount;
   }
@@ -695,10 +681,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     return fail(LookupResult::ReadError);
   }
 
-  char pathBuf[PATH_BUF_BYTES];
-  if (!buildPath(pathBuf, sizeof(pathBuf), hasPlainDict ? ".dict" : ".dict.dz")) {
-    return fail(LookupResult::ReadError);
-  }
+  const char* const dictPath = buildPath(hasPlainDict ? ".dict" : ".dict.dz");
 
   // Take the inflate window BEFORE the definition buffer: it is the larger of
   // the two and both come out of the same free run, so asking for it second is
@@ -724,7 +707,8 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     // update, a reopen and a reread per lookup for bytes it was going to
     // allocate room for anyway.
     DictZip::ExtractError xerr = DictZip::ExtractError::None;
-    if (!DictZip::extractEntry(pathBuf, location.offset, size, reinterpret_cast<uint8_t*>(&out[0]), dzScratch, &xerr)) {
+    if (!DictZip::extractEntry(dictPath, location.offset, size, reinterpret_cast<uint8_t*>(&out[0]), dzScratch,
+                               &xerr)) {
       // Map the specific extraction cause to the lookup result: allocation
       // failure (heap fragmentation) vs corrupt/truncated .dz vs an IO error.
       LOG_ERR("DICT", "dictzip extraction failed for %s (error %d)", basePath.c_str(), static_cast<int>(xerr));
@@ -743,7 +727,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
   }
 
   HalFile dict;
-  if (!Storage.openFileForRead("DICT", pathBuf, dict)) {
+  if (!Storage.openFileForRead("DICT", dictPath, dict)) {
     out.clear();
     return fail(LookupResult::ReadError);
   }

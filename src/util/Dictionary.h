@@ -137,22 +137,16 @@ class Dictionary {
   // per-probe headword read into one.
   static constexpr size_t SCAN_BUF_BYTES = 512;
 
-  // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
-  // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
-  // ".dict.dz", leaving ~137 chars for folder + stem — far beyond any real
-  // dictionary. open() rejects anything that would not fit, so the hot path
-  // cannot fail on length. Kept under the 256-byte stack-local guideline.
-  static constexpr size_t PATH_BUF_BYTES = 160;
-
-  // Length of the longest suffix appended to basePath (".dict.dz"); used for
-  // the open()-time length check.
+  // Length of the longest suffix appended to basePath (".dict.dz"): open() reserves
+  // pathScratch for basePath plus this.
   static constexpr size_t LONGEST_SUFFIX_LEN = sizeof(".dict.dz") - 1;
 
-  // Compose "<basePath><suffix>" into a caller-supplied stack buffer. The
-  // lookup path runs this instead of `basePath + suffix` so path construction
-  // costs no transient heap. False (and logs) when the path would not fit,
-  // which open() has already ruled out.
-  bool buildPath(char* buf, size_t bufSize, const char* suffix) const;
+  // "<basePath><suffix>", composed in pathScratch, whose room open() reserved, so
+  // the lookup path builds its paths without transient heap and at any length.
+  // Valid until the next call. A fixed 160-byte stack buffer refused any base
+  // path over 151 chars: a folder and stem of some length on the card, and every
+  // dictionary of the host test once its build directory was long.
+  const char* buildPath(const char* suffix);
 
   // Take the reusable session buffers if they aren't held yet: SCAN_BUF_BYTES
   // for the .idx scan and the same again for .syn. Allocated once per session,
@@ -286,7 +280,8 @@ class Dictionary {
   // hyphen. The last resort when the compound itself is not a headword.
   static void hyphenParts(const std::string& word, std::vector<std::string>& out);
 
-  std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
+  std::string basePath;     // "/dictionaries/<folder>/<stem>", empty when not open
+  std::string pathScratch;  // buildPath()'s result; lookups are single-threaded, as for wordBuf
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;
