@@ -1,11 +1,11 @@
 Subject: [PATCH] FatPartition: keep the free cluster search moving forward,
- start it at the FSInfo hint
+ start it at the FSInfo hint, keep the hint
 
 The allocateCluster(), allocContiguous() and freeChain() hunks are from
 crosspoint-reader PR #3969 (Tuan Q. Nguyen, @martinqnguyen), verbatim; it
-is their 0003 there and our 0004 here, after our own 0003. The init()
-hunks are ours: the second half that PR leaves for later, as described in
-crosspoint-reader issue #3886.
+is their 0003 there and our 0004 here, after our own 0003. The init() and
+fsInfoSync() hunks are ours: the second half that PR leaves for later, as
+described in crosspoint-reader issue #3886. Their header half is in 0003.
 
 freeChain() pulled m_allocSearchStart down to every cluster it freed. The
 freed cluster is taken again by the next allocation, and the one after it
@@ -42,6 +42,20 @@ time, never a cluster: every candidate is still read from the FAT, and
 the wrap above reaches the clusters below the hint. The free count
 beside it is not read. A failed FSInfo read leaves the search at
 cluster 2 and the mount as it was.
+
+That hint only helped a card a PC or USB host wrote last. A card only the
+reader writes kept no hint (SdFat's formatter leaves 0xFFFFFFFF) or a
+stale one, and every mount's first allocation still walked the FAT up to
+the free space. fsInfoSync(), which cacheSync() calls after the FAT and
+the directory sectors, now writes the hint itself: the cluster after the
+search start, which init() turns back into that very start. It writes
+only when the search has moved to another FAT sector than the hint names,
+so at most once per 128 clusters allocated on FAT32 (a page turn's
+rewrite of progress.bin takes one), and it touches nothing but the hint:
+the free count, the signatures and the backup FSInfo stay as they were. An FSInfo
+without its signatures is never written. Advisory, like the hint itself:
+a failed read or write is dropped without failing the sync, and FSInfo is
+left alone for the rest of the mount.
 
 ---
 --- a/src/FatLib/FatPartition.cpp
@@ -94,7 +108,7 @@ cluster 2 and the mount as it was.
      if (fg < 0) {
 @@ -100,8 +111,15 @@
    endCluster = bgnCluster = m_allocSearchStart + 1;
-
+ 
    // search the FAT for free clusters
 +  bool wrapped = false;
    while (1) {
@@ -117,16 +131,33 @@ cluster 2 and the mount as it was.
 -    }
      cluster = next;
    } while (fg);
-
-@@ -399,6 +414,7 @@
+ 
+@@ -390,6 +405,13 @@
+   return -1;
+ }
+ //------------------------------------------------------------------------------
++// The three signatures FSInfo must carry before its hint means anything.
++static bool fsInfoValid(const FsInfo_t* fsi) {
++  return fsi && getLe32(fsi->leadSignature) == FSINFO_LEAD_SIGNATURE &&
++         getLe32(fsi->structSignature) == FSINFO_STRUCT_SIGNATURE &&
++         getLe32(fsi->trailSignature) == FSINFO_TRAIL_SIGNATURE;
++}
++//------------------------------------------------------------------------------
+ bool FatPartition::init(FsBlockDevice* dev, uint8_t part,
+                         Sector_t startSector) {
+   Cluster_t countOfClusters;
+@@ -399,8 +421,10 @@
    const BpbFat32_t* bpb;
    const MbrSector_t* mbr;
    uint8_t tmp;
 +  uint16_t fsInfoSector = 0;
    m_fatType = 0;
    m_allocSearchStart = 1;
++  m_fsInfoSector = 0;
    m_cache.init(dev);
-@@ -495,11 +511,31 @@
+ #if USE_SEPARATE_FAT_CACHE
+   m_fatCache.init(dev);
+@@ -495,13 +519,72 @@
    } else {
      m_rootDirStart = getLe32(bpb->fat32RootCluster);
      m_fatType = 32;
@@ -141,20 +172,61 @@ cluster 2 and the mount as it was.
 +  // sector below the free space. The hint is advisory: only range-checked
 +  // here, since allocateCluster() reads each candidate's FAT entry and wraps
 +  // once, a stale or garbage hint costs time, never a cluster. The free count
-+  // beside it is not used.
++  // beside it is not used. A valid FSInfo is kept up to date from here on
++  // (fsInfoSync()).
 +  if (fsInfoSector && startSector + fsInfoSector < m_fatStartSector) {
 +    const FsInfo_t* fsi = reinterpret_cast<const FsInfo_t*>(
 +        dataCachePrepare(startSector + fsInfoSector, FsCache::CACHE_FOR_READ));
-+    if (fsi && getLe32(fsi->leadSignature) == FSINFO_LEAD_SIGNATURE &&
-+        getLe32(fsi->structSignature) == FSINFO_STRUCT_SIGNATURE &&
-+        getLe32(fsi->trailSignature) == FSINFO_TRAIL_SIGNATURE) {
++    if (fsInfoValid(fsi)) {
 +      uint32_t hint = getLe32(fsi->nextFree);
++      m_fsInfoSector = startSector + fsInfoSector;
++      m_fsInfoNextFree = hint;
 +      if (hint >= 2 && hint <= m_lastCluster) {
-+        // One below: drivers store the last cluster allocated or the next free.
++        // One below: drivers store the last cluster allocated or the next
++        // free, as fsInfoSync() does.
 +        m_allocSearchStart = hint - 1;
 +      }
 +    }
 +  }
    return true;
-
+ 
  fail:
+   return false;
+ }
++//------------------------------------------------------------------------------
++// Keep FAT32's FSInfo next-free hint at the free cluster search, so the next
++// mount (every wake from deep sleep, on these readers) starts the search where
++// this one left it. SdFat never wrote FSInfo: a card written by nothing else
++// kept the hint a PC left, or none, and every mount's first allocation read
++// the FAT from there up to the free space. Called by cacheSync() after the
++// FAT and directory sectors are written; writes only once the search has
++// moved to another FAT sector than the hint is in, so at most once per FAT
++// sector of clusters allocated. Advisory like the hint itself: a failure is
++// never reported, and a sector that will not take the hint is left alone from
++// then on. The free count beside the hint is not touched.
++bool FatPartition::fsInfoSync() {
++  if (!m_fsInfoSector || m_allocSearchStart < 2) {
++    return true;
++  }
++  // The next cluster to try, which init() turns back into this search start.
++  const Cluster_t hint = m_allocSearchStart < m_lastCluster
++                             ? m_allocSearchStart + 1
++                             : m_lastCluster;
++  // FAT32 entries are 4 bytes: the FAT sector of cluster c is c >> 7.
++  const uint8_t shift = m_bytesPerSectorShift - 2;
++  if ((hint >> shift) == (m_fsInfoNextFree >> shift)) {
++    return true;
++  }
++  FsInfo_t* fsi = reinterpret_cast<FsInfo_t*>(
++      dataCachePrepare(m_fsInfoSector, FsCache::CACHE_FOR_WRITE));
++  if (fsInfoValid(fsi)) {
++    setLe32(fsi->nextFree, hint);
++    if (m_cache.sync()) {
++      m_fsInfoNextFree = hint;
++      return true;
++    }
++  }
++  m_cache.invalidate();  // drops a hint the card would not take
++  m_fsInfoSector = 0;
++  return true;
++}
