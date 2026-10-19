@@ -12,11 +12,12 @@
 // (Section::calculatePropertyHash).
 //
 // The idea of per-element font slots for a book's families is crosspoint-reader PR #3934's (Justin Mitchell); here a
-// block takes one family, and a generic serif or sans-serif maps onto a built-in face.
+// block takes one family, a word in another family than its block's that family's face through a font slot of its
+// own (TextBlock::WordFont), and a generic serif or sans-serif maps onto a built-in face.
 struct BlockFontFamilies {
-  // The built-in faces for the two generic families and the book's accent family: beside a TrueType reader font
-  // neither generic is the body's own.
-  static constexpr int kMaxFamilies = 3;
+  // The built-in faces for the two generic families and the book's accent families (BookFonts::kMaxAccents): beside
+  // a TrueType reader font neither generic is the body's own.
+  static constexpr int kMaxFamilies = 5;
 
   struct Family {
     // A family's identity (CssFontFamily::identity), or a generic family (CssFontFamily::kSerif, kSansSerif).
@@ -36,16 +37,19 @@ struct BlockFontFamilies {
     families[count++] = {key, bodyFontId, ladder};
   }
 
-  // The family a block whose font-family is `cssFamily` (CssStyle::fontFamily) is laid out in: its named family
-  // when that is here, else its generic one; nullptr for the body font.
-  const Family* find(const uint32_t cssFamily) const {
+  // The family text whose font-family is `cssFamily` (CssStyle::fontFamily) is laid out in, as a slot: its named
+  // family when that is here, else its generic one, as its index plus one; 0 for the body font. A block takes one
+  // family; a word in another than its block's has a font slot of this number (ParsedText::addWord).
+  uint8_t slotOf(const uint32_t cssFamily) const {
     const uint32_t identity = CssFontFamily::identity(cssFamily);
-    if (identity != 0 && identity == CssFontFamily::identity(body)) return nullptr;
+    if (identity != 0 && identity == CssFontFamily::identity(body)) return 0;
     for (const uint32_t key : {identity, cssFamily & CssFontFamily::kGenericMask}) {
       for (int i = 0; key != 0 && i < count; ++i) {
-        if (families[i].key == key) return &families[i];
+        if (families[i].key == key) return static_cast<uint8_t>(i + 1);
       }
     }
-    return nullptr;
+    return 0;
   }
+  // The family of a slot slotOf() gave; nullptr for the body font.
+  const Family* family(const uint8_t slot) const { return slot == 0 || slot > count ? nullptr : &families[slot - 1]; }
 };

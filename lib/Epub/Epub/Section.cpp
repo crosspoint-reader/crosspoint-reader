@@ -31,7 +31,11 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 93;  // v93: 20 pt is the 18 pt faces scaled, so the
+constexpr uint8_t SECTION_FILE_VERSION = 94;  // v94: a word in another of the book's families
+                                              // than its block's is laid out in that family's
+                                              // face (a line's word fonts, TextBlock::WordFont);
+                                              // v93 lines hold it in the block's font
+                                              // v93: 20 pt is the 18 pt faces scaled, so the
                                               // 20-26 pt font IDs changed; a v92 heading still
                                               // names the old ones and would draw nothing
                                               // v92: CJK text breaks between characters, with kinsoku
@@ -334,6 +338,8 @@ uint32_t fnv1a(const uint8_t* data, size_t length) {
 
 uint32_t Section::calculatePropertyHash(const BuildParams& p) {
   uint8_t buffer[96];
+  static_assert(sizeof(buffer) >= 21 + sizeof(uint32_t) + BlockFontFamilies::kMaxFamilies * 3 * sizeof(int32_t),
+                "the settings (21 B) and every family fit");
   size_t offset = 0;
 
   auto append = [&](const void* ptr, size_t size) {

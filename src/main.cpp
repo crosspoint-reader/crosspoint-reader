@@ -824,6 +824,11 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
   // Publisher Fonts: not examined yet, what is loaded stays, until the reader has examined the book and asks again.
   const std::string cachePath = publisherFontsCache(path, book);
   if (waitForBookFonts && !cachePath.empty() && BookFonts::read(cachePath) == BookFonts::State::Pending) return;
+  // They do not apply to the book now (off, the book's own style off, a font chosen for it): the accent families the
+  // memory ladder left out of it are tried again once they do (BookFonts::accentLimit).
+  if (cachePath.empty()) {
+    BookFonts::setAccentLimit(Epub::cachePathFor(path, "/.crosspoint"), 0, BookFonts::kMaxAccents);
+  }
 
   // No family override: the global SD font (if any), at the effective size.
   const char* family = SETTINGS.sdFontFamilyName;
@@ -833,11 +838,12 @@ void ensureSdFontLoadedForPath(const char* path, const bool waitForBookFonts) {
     family = "";  // per-book built-in font override: no SD font needed; unload if one was active
   }
   // The families BookFonts copied out of the book: its body family in place of the reader's font, and its accent
-  // family beside whichever draws the body. They load together, the body's first.
+  // families beside whichever draws the body. They load together, the body's first and the most used accent next.
   sdFontSystem.selectBookFamilies(cachePath, SETTINGS.publisherFonts, family);
   if (sdFontSystem.bookFamilyName()[0] != '\0') family = sdFontSystem.bookFamilyName();
-  const char* families[] = {family, sdFontSystem.accentFamilyName()};
-  sdFontSystem.ensureLoaded(renderer, families, 2, effectiveSize, onColdFontLoad);
+  const char* families[1 + BookFonts::kMaxAccents] = {family};
+  for (uint8_t n = 0; n < BookFonts::kMaxAccents; ++n) families[1 + n] = sdFontSystem.accentFamilyName(n);
+  sdFontSystem.ensureLoaded(renderer, families, 1 + BookFonts::kMaxAccents, effectiveSize, onColdFontLoad);
 }
 
 // --- Temporary boot-phase heap-corruption bisect probes -------------------------------

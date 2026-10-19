@@ -8,6 +8,7 @@
 //   - every codepoint advances GLYPH_W pixels (scaled by the per-word scale)
 //   - space advance is SPACE_W, kerning is always 0
 //   - ascender is ASCENDER, scaled variants multiply and round
+//   - font WIDE_FONT (a word font of another family) has WIDE_GLYPH_W, WIDE_SPACE_W and WIDE_ASCENDER instead
 // drawText/drawTextScaled calls are recorded so tests can assert baseline
 // alignment and per-word scales.
 
@@ -23,6 +24,12 @@ class GfxRenderer {
   static constexpr int SPACE_W = 5;
   static constexpr int ASCENDER = 16;
   static constexpr int LINE_HEIGHT = 20;
+  static constexpr int WIDE_FONT = 7;
+  static constexpr int WIDE_GLYPH_W = 15;
+  static constexpr int WIDE_SPACE_W = 8;
+  static constexpr int WIDE_ASCENDER = 20;
+  static int glyphW(const int fontId) { return fontId == WIDE_FONT ? WIDE_GLYPH_W : GLYPH_W; }
+  static int ascender(const int fontId) { return fontId == WIDE_FONT ? WIDE_ASCENDER : ASCENDER; }
 
   struct DrawCall {
     std::string text;
@@ -52,25 +59,33 @@ class GfxRenderer {
   }
 
   // --- Measurement surface used by ParsedText ---
-  int getSpaceWidth(int /*fontId*/, EpdFontFamily::Style /*style*/ = EpdFontFamily::REGULAR) const { return SPACE_W; }
-  int getTextAdvanceX(int /*fontId*/, const char* text, EpdFontFamily::Style /*style*/) const {
-    return countCodepoints(text) * GLYPH_W;
+  int getSpaceWidth(const int fontId, EpdFontFamily::Style /*style*/ = EpdFontFamily::REGULAR) const {
+    return fontId == WIDE_FONT ? WIDE_SPACE_W : SPACE_W;
   }
-  int getSpaceAdvance(int /*fontId*/, uint32_t /*leftCp*/, uint32_t /*rightCp*/, EpdFontFamily::Style /*style*/) const {
-    return SPACE_W;
+  int getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style /*style*/) const {
+    return countCodepoints(text) * glyphW(fontId);
+  }
+  int getSpaceAdvance(const int fontId, uint32_t /*leftCp*/, uint32_t /*rightCp*/, EpdFontFamily::Style style) const {
+    return getSpaceWidth(fontId, style);
   }
   int getKerning(int /*fontId*/, uint32_t /*leftCp*/, uint32_t /*rightCp*/, EpdFontFamily::Style /*style*/) const {
     return 0;
   }
-  int getFontAscenderSize(int /*fontId*/) const { return ASCENDER; }
-  int getFontAscenderSizeScaled(int /*fontId*/, const float scale) const {
-    return static_cast<int>(ASCENDER * scale + 0.5f);
+  int getFontAscenderSize(const int fontId) const { return ascender(fontId); }
+  int getFontAscenderSizeScaled(const int fontId, const float scale) const {
+    return static_cast<int>(ascender(fontId) * scale + 0.5f);
   }
   int getLineHeight(int /*fontId*/) const { return LINE_HEIGHT; }
   int getLineHeightScaled(int /*fontId*/, const float scale) const {
     return static_cast<int>(LINE_HEIGHT * scale + 0.5f);
   }
-  void ensureFontReady(int /*fontId*/, const char* /*utf8Text*/) const {}
+  // What layout asked each font to get ready for, in order.
+  struct ReadyCall {
+    int fontId;
+    std::string text;
+  };
+  mutable std::vector<ReadyCall> readyCalls;
+  void ensureFontReady(const int fontId, const char* utf8Text) const { readyCalls.push_back({fontId, utf8Text}); }
 
   // --- Render surface used by TextBlock ---
   bool isFontCacheScanning() const { return false; }

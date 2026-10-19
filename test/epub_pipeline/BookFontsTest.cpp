@@ -304,6 +304,22 @@ TEST_F(BookFontsTest, AChapterThatCannotBeReadIsRetriedTwiceMore) {
   EXPECT_EQ(BookFonts::State::None, BookFonts::read(epub->getCachePath()));
 }
 
+TEST_F(BookFontsTest, AnAccentLimitHoldsUnderItsSettingsAndIsForgottenUnderOthers) {
+  // The memory ladder's FewerFamilies step: kept across sessions, so a restart does not fail the same way again.
+  const std::string cache = (work / "limit").string();
+  fs::create_directories(cache);
+  EXPECT_EQ(BookFonts::kMaxAccents, BookFonts::accentLimit(cache, 7));
+  BookFonts::setAccentLimit(cache, 7, 2);
+  EXPECT_EQ(2, BookFonts::accentLimit(cache, 7));
+  BookFonts::setAccentLimit(cache, 7, 0);
+  EXPECT_EQ(0, BookFonts::accentLimit(cache, 7));
+  EXPECT_EQ(BookFonts::kMaxAccents, BookFonts::accentLimit(cache, 8));  // other font settings: forgotten
+  EXPECT_EQ(BookFonts::kMaxAccents, BookFonts::accentLimit(cache, 7));  // for good
+  BookFonts::setAccentLimit(cache, 7, 1);
+  BookFonts::setAccentLimit(cache, 7, BookFonts::kMaxAccents);
+  EXPECT_FALSE(fs::exists(cache + "/fontlimit.bin"));
+}
+
 // ---- Stage B phase 1: the body's generic family and the accent family -------------------------------------
 
 namespace {
@@ -333,13 +349,13 @@ TEST_F(BookFontsTest, TheBodysGenericFamilyIsKept) {
                          {"<body><h1>Title</h1><p>Prose in the generic serif the body names.</p></body>"});
   const BookFonts::Found families = found(*epub);
   EXPECT_EQ(CssFontFamily::kSerif, families.body);
-  EXPECT_EQ(0u, families.accent);  // a generic family is no accent
+  EXPECT_EQ(0u, families.accents[0]);  // a generic family is no accent
   // Probed although the book embeds no font, so the reader knows what its body is set in.
   ASSERT_EQ(BookFonts::State::None, BookFonts::prepare(*epub, nullptr));
   BookFonts::Families read;
   EXPECT_EQ(BookFonts::State::None, BookFonts::read(epub->getCachePath(), nullptr, &read));
   EXPECT_EQ(CssFontFamily::kSerif, read.body);
-  EXPECT_EQ(0u, read.accent);
+  EXPECT_EQ(0u, read.accents[0]);
 }
 
 TEST_F(BookFontsTest, TheGenericOfMostOfTheBodyTextIsTheBodys) {
@@ -361,20 +377,27 @@ TEST_F(BookFontsTest, TheAccentIsTheFamilyTheMostOtherBlocksAreSetIn) {
   // body paragraph's.
   const BookFonts::Found families = found(*epub, records);
   EXPECT_EQ(family("Body") | CssFontFamily::kSerif, families.body);
-  EXPECT_EQ(family("Display"), families.accent);
+  EXPECT_EQ(family("Display"), families.accents[0]);
+  EXPECT_EQ(family("Script"), families.accents[1]);  // the second accent family
+  EXPECT_EQ(0u, families.accents[2]);
 
   ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, nullptr));
   std::string body;
   std::string accent;
+  std::string second;
   BookFonts::Families read;
   ASSERT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &body, &read));
-  EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &accent, nullptr, /*body=*/false));
+  EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &accent, nullptr, 0));
+  EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &second, nullptr, 1));
   EXPECT_EQ("Body", body);
   EXPECT_EQ("Display", accent);
+  EXPECT_EQ("Script", second);
   EXPECT_EQ(families.body, read.body);
-  EXPECT_EQ(family("Display"), read.accent);
+  EXPECT_EQ(family("Display"), read.accents[0]);
+  EXPECT_EQ(family("Script"), read.accents[1]);
   EXPECT_EQ(kTrueType, readFile(fs::path(BookFonts::familyDir(epub->getCachePath())) / "0.ttf"));
-  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), true)) / "0.ttf"));
+  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "0.ttf"));
+  EXPECT_EQ(kNotoSans, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 1)) / "0.ttf"));
 }
 
 TEST_F(BookFontsTest, AHeadingSetInASpanCountsForTheSpansFamily) {
@@ -387,10 +410,11 @@ TEST_F(BookFontsTest, AHeadingSetInASpanCountsForTheSpansFamily) {
                           {"OEBPS/Fonts/s.ttf", "font/ttf", kNotoSans}});
   std::string records;
   ASSERT_TRUE(CssParser::loadFontFaces(epub->getCachePath(), records));
-  EXPECT_EQ(family("Script"), found(*epub, records).accent);
+  EXPECT_EQ(family("Script"), found(*epub, records).accents[0]);
+  EXPECT_EQ(family("Display"), found(*epub, records).accents[1]);
 }
 
-TEST_F(BookFontsTest, AnAccentWithoutARegularFaceIsPassedOver) {
+TEST_F(BookFontsTest, AnAccentWithOnlyABoldFaceIsDrawnInIt) {
   std::string css = kAccentCss;
   css.insert(css.find("src: url(../Fonts/d.ttf)"), "font-weight: bold; ");  // Display has only a bold face
   const auto epub = book(css, {kAccentChapter},
@@ -399,21 +423,32 @@ TEST_F(BookFontsTest, AnAccentWithoutARegularFaceIsPassedOver) {
                           {"OEBPS/Fonts/s.ttf", "font/ttf", kNotoSans}});
   std::string records;
   ASSERT_TRUE(CssParser::loadFontFaces(epub->getCachePath(), records));
-  EXPECT_EQ(family("Script"), found(*epub, records).accent);
+  const BookFonts::Found families = found(*epub, records);
+  EXPECT_EQ(family("Display"), families.accents[0]);  // set in the most blocks, as with a regular face
+  EXPECT_EQ(family("Script"), families.accents[1]);
+  // Its one face is copied as the regular, once: the bold falls back to it.
+  ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, nullptr));
+  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "0.ttf"));
+  EXPECT_FALSE(fs::exists(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "1.ttf"));
 }
 
-TEST_F(BookFontsTest, ARefusedAccentLeavesTheBodyFamily) {
+TEST_F(BookFontsTest, ARefusedAccentGivesItsPlaceToTheNext) {
   const auto epub = book(kAccentCss, {kAccentChapter},
                          {{"OEBPS/Fonts/b.ttf", "font/ttf", kTrueType},
                           {"OEBPS/Fonts/d.ttf", "font/otf", kCff},
                           {"OEBPS/Fonts/s.ttf", "font/ttf", kNotoSans}});
   ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, nullptr));
   BookFonts::Families read;
-  std::string accent = "stale";
-  EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &accent, &read, /*body=*/false));
-  EXPECT_EQ(0u, read.accent);
-  EXPECT_EQ("", accent);
-  EXPECT_FALSE(fs::exists(BookFonts::familyDir(epub->getCachePath(), true)));
+  std::string accent;
+  std::string second = "stale";
+  EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &accent, &read, 0));
+  EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &second, nullptr, 1));
+  EXPECT_EQ(family("Script"), read.accents[0]);  // Display's CFF is refused: Script is the first accent now
+  EXPECT_EQ(0u, read.accents[1]);
+  EXPECT_EQ("Script", accent);
+  EXPECT_EQ("", second);
+  EXPECT_EQ(kNotoSans, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "0.ttf"));
+  EXPECT_FALSE(fs::exists(BookFonts::familyDir(epub->getCachePath(), 1)));
   EXPECT_EQ(kTrueType, readFile(fs::path(BookFonts::familyDir(epub->getCachePath())) / "0.ttf"));
 }
 
@@ -425,9 +460,63 @@ TEST_F(BookFontsTest, AnAccentIsCopiedWhenTheBodyIsNotEmbedded) {
   ASSERT_EQ(BookFonts::State::None, BookFonts::prepare(*epub, nullptr));
   std::string accent;
   BookFonts::Families read;
-  EXPECT_EQ(BookFonts::State::None, BookFonts::read(epub->getCachePath(), &accent, &read, /*body=*/false));
+  EXPECT_EQ(BookFonts::State::None, BookFonts::read(epub->getCachePath(), &accent, &read, 0));
   EXPECT_EQ("Display", accent);
-  EXPECT_EQ(family("Display"), read.accent);
+  EXPECT_EQ(family("Display"), read.accents[0]);
   EXPECT_EQ(0u, read.body);
-  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), true)) / "0.ttf"));
+  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "0.ttf"));
+}
+
+// ---- Stage B phase 3: several accent families -----------------------------------------------------------
+
+namespace {
+
+// Four families besides the body, ranked by their blocks: Display (three), Script (two), Code (one), Rare (one,
+// later in the book).
+const char* kFourAccentCss =
+    "@font-face { font-family: Body; src: url(../Fonts/b.ttf); }\n"
+    "@font-face { font-family: Display; src: url(../Fonts/d.ttf); }\n"
+    "@font-face { font-family: Script; src: url(../Fonts/s.ttf); }\n"
+    "@font-face { font-family: Code; src: url(../Fonts/c.ttf); }\n"
+    "@font-face { font-family: Rare; src: url(../Fonts/r.ttf); }\n"
+    "p { font-family: Body }\nh1, h2 { font-family: Display }\n.script { font-family: Script }\n"
+    "pre, code { font-family: Code, monospace }\n.rare { font-family: Rare }\n";
+
+const char* kFourAccentChapter =
+    "<body><h1>One</h1><h2>Two</h2><h2>Three</h2><p class='script'>For someone</p>"
+    "<p>Body prose, long enough to be the body text by far, with <code>inline code</code> and a "
+    "<span class='script'>scripted aside</span> in it, as body text is.</p><p>More body prose.</p>"
+    "<h2 class='script'>A heading in the second accent</h2><pre>code block</pre><p class='rare'>Rare</p></body>";
+
+}  // namespace
+
+TEST_F(BookFontsTest, TheAccentFamiliesAreRankedByTheirBlocksAndTheFirstThreeCopied) {
+  const auto epub = book(kFourAccentCss, {kFourAccentChapter},
+                         {{"OEBPS/Fonts/b.ttf", "font/ttf", kTrueType},
+                          {"OEBPS/Fonts/d.ttf", "font/ttf", kInter},
+                          {"OEBPS/Fonts/s.ttf", "font/ttf", kNotoSans},
+                          {"OEBPS/Fonts/c.ttf", "font/ttf", kTrueTypeBold},
+                          {"OEBPS/Fonts/r.ttf", "font/ttf", kTrueType}});
+  std::string records;
+  ASSERT_TRUE(CssParser::loadFontFaces(epub->getCachePath(), records));
+  const BookFonts::Found families = found(*epub, records);
+  EXPECT_EQ(family("Display"), families.accents[0]);
+  EXPECT_EQ(family("Script"), families.accents[1]);
+  // Code and Rare have a block each; Code's came first, and the inline code counts for its paragraph.
+  EXPECT_EQ(family("Code"), families.accents[2]);
+
+  ASSERT_EQ(BookFonts::State::Family, BookFonts::prepare(*epub, nullptr));
+  BookFonts::Families read;
+  std::string names[BookFonts::kMaxAccents];
+  for (int n = 0; n < BookFonts::kMaxAccents; ++n) {
+    EXPECT_EQ(BookFonts::State::Family, BookFonts::read(epub->getCachePath(), &names[n], &read, n));
+  }
+  EXPECT_EQ("Display", names[0]);
+  EXPECT_EQ("Script", names[1]);
+  EXPECT_EQ("Code", names[2]);
+  EXPECT_EQ(family("Code"), read.accents[2]);
+  EXPECT_EQ(kInter, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 0)) / "0.ttf"));
+  EXPECT_EQ(kNotoSans, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 1)) / "0.ttf"));
+  EXPECT_EQ(kTrueTypeBold, readFile(fs::path(BookFonts::familyDir(epub->getCachePath(), 2)) / "0.ttf"));
+  EXPECT_FALSE(fs::exists(BookFonts::familyDir(epub->getCachePath(), 3)));  // Rare: past kMaxAccents
 }

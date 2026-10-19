@@ -96,8 +96,8 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
 }
 
 // A directory of .ttf files: each file's style and weight come from its head and OS/2 tables, and the file of
-// each style nearest the regular or bold weight serves it (ttf::assignStyles). Only a directory with a regular
-// style becomes a family.
+// each style nearest the regular or bold weight serves it (ttf::assignStyles; without a regular file, its nearest
+// style serves as the regular). Only a directory with a file the engine draws becomes a family.
 void SdCardFontRegistry::addTtfFiles(const char* dirPath, const std::vector<std::string>& names,
                                      const std::vector<uint32_t>& bytes, SdCardFontFamilyInfo& family) const {
   std::vector<size_t> order(names.size());
@@ -115,15 +115,18 @@ void SdCardFontRegistry::addTtfFiles(const char* dirPath, const std::vector<std:
   }
   int chosen[4];
   if (!ttf::assignStyles(probes.data(), probes.size(), chosen)) {
-    LOG_DBG("SDREG", "No regular TrueType style in %s", dirPath);
+    LOG_DBG("SDREG", "No TrueType style the engine draws in %s", dirPath);
     return;
   }
-  uint32_t styleBytes[4];
+  uint32_t fileBytes[4];
+  uint32_t sdBytes[4];
   uint8_t styleCount = 0;
   for (const int file : chosen) {
-    if (file >= 0) styleBytes[styleCount++] = bytes[order[static_cast<size_t>(file)]];
+    if (file < 0) continue;
+    fileBytes[styleCount] = bytes[order[static_cast<size_t>(file)]];
+    sdBytes[styleCount++] = probes[static_cast<size_t>(file)].sdBytes;
   }
-  if (ttfFits_ && !ttfFits_(styleBytes, styleCount)) {
+  if (ttfFits_ && !ttfFits_(fileBytes, sdBytes, styleCount)) {
     LOG_INF("SDREG", "TTF family in %s is too large for the font partition; not listed", dirPath);
     return;
   }

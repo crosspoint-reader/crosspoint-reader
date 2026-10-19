@@ -108,7 +108,7 @@ void setup() {
                 static_cast<unsigned>(kReaderMapPages), static_cast<unsigned>(esp_get_free_heap_size()));
 
   PlanInput in{};
-  in.mode = kModeFlash;
+  in.styleMode[0] = in.styleMode[1] = kModeFlash;
   in.styleCount = 2;
   in.styleBytes[0] = in.styleBytes[1] = kStyleBytes;
   in.usableBytes = flash.size();
@@ -140,7 +140,7 @@ void setup() {
 
   uint8_t body = 0;
   uint8_t heading = 0;
-  if (!store.sizeIndex(29 << 6, &body) || !store.sizeIndex(54 << 6, &heading)) return finish("sizeIndex failed");
+  if (!store.faceIndex(0, 29 << 6, &body) || !store.faceIndex(0, 54 << 6, &heading)) return finish("faceIndex failed");
   for (uint32_t i = 0; i < kGlyphs; ++i) {
     gKeys[i] = makeKey(0x21 + i, static_cast<uint8_t>(i % 2), i % 3 == 0 ? heading : body);
   }
@@ -193,14 +193,15 @@ void setup() {
   unsigned pairsStored = 0;
   for (uint32_t p = 0; p < kPairs; ++p) {
     pairsStored +=
-        store.storePair(0x41 + p % 26, 0x61 + p / 26, p % 2, static_cast<int16_t>(-static_cast<int>(p % 90)));
+        store.storePair(0x41 + p % 26, 0x61 + p / 26, 0, p % 2, static_cast<int16_t>(-static_cast<int>(p % 90)));
   }
   const int64_t pairWriteUs = esp_timer_get_time() - t;
   t = esp_timer_get_time();
   unsigned pairsRight = 0;
   for (uint32_t p = 0; p < kPairs; ++p) {
     int16_t kern = 1;
-    if (store.findPair(0x41 + p % 26, 0x61 + p / 26, p % 2, &kern) && kern == -static_cast<int>(p % 90)) ++pairsRight;
+    if (store.findPair(0x41 + p % 26, 0x61 + p / 26, 0, p % 2, &kern) && kern == -static_cast<int>(p % 90))
+      ++pairsRight;
   }
   Serial.printf("BENCH pair_store        per_pair=%lldus  stored=%u/%u\n", pairWriteUs / kPairs, pairsStored,
                 static_cast<unsigned>(kPairs));
@@ -222,7 +223,7 @@ void setup() {
   const bool wiped = store.wipe();
   Serial.printf("BENCH wipe              %u ms  %s\n", msSince(t), wiped ? "ok" : "FAILED");
   uint8_t afterWipe = 0xFF;
-  const bool sizeClaimed = store.sizeIndex(29 << 6, &afterWipe);
+  const bool sizeClaimed = store.faceIndex(0, 29 << 6, &afterWipe);
   Serial.printf("after wipe:             first glyph %s, sizes restart at %d\n",
                 store.find(gKeys[0], nullptr) == Lookup::NotStored ? "absent" : "STILL THERE",
                 sizeClaimed ? afterWipe : -1);

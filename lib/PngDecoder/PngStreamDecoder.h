@@ -55,7 +55,8 @@ class PngStreamDecoder {
         keyR_(0),
         keyG_(0),
         keyB_(0),
-        started_(false) {}
+        started_(false),
+        outOfMemory_(false) {}
   ~PngStreamDecoder();
   PngStreamDecoder(const PngStreamDecoder&) = delete;
   PngStreamDecoder& operator=(const PngStreamDecoder&) = delete;
@@ -64,6 +65,8 @@ class PngStreamDecoder {
   // inflate stream. Fills `info`. Returns false on a malformed, unsupported
   // (interlaced) or oversized image, or if buffer allocation fails.
   bool begin(FsFile& file, Info& info);
+  // begin() failed because a buffer could not be allocated: the image may well decode with more memory.
+  bool outOfMemory() const { return outOfMemory_; }
 
   // Draw the inflate ring and the two scanline buffers from `arena` instead of the heap.
   // Call BEFORE begin(); ignored once begin() has allocated.
@@ -146,4 +149,5 @@ class PngStreamDecoder {
   uint16_t keyR_ = 0, keyG_ = 0, keyB_ = 0;
 
   bool started_ = false;
+  bool outOfMemory_ = false;
 };

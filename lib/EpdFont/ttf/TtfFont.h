@@ -17,10 +17,11 @@
 
 class TtfFontSet;
 
-/// One TrueType family drawn from the glyph store (spec 3.2), in flash mode: every style's whole TTF is copied
-/// into the `spiffs` partition when the family is installed, and read there in place. A glyph is rendered the
-/// first time it is looked up and stored, so later lookups, in this session and the next, read it from flash.
-/// It belongs to a TtfFontSet, the families installed together, whose store and scratch block it shares.
+/// One TrueType family drawn from the glyph store (spec 3.2). In flash mode every style's whole TTF is copied into
+/// the `spiffs` partition when the family is installed, and read there in place; in SD mode only its tables are,
+/// and the outlines are read from the file on the card (spec 5.1). A glyph is rendered the first time it is looked
+/// up and stored, so later lookups, in this session and the next, read it from flash in either mode. It belongs to a
+/// TtfFontSet, the families installed together, whose store and scratch block it shares.
 ///
 /// It serves the body size and, on demand, native sizes (headings, CSS sizes, drop caps at their own pixel size):
 /// each size is four EpdFontData without tables, so every lookup goes to a per-style GlyphProvider adapter, and has
@@ -75,6 +76,9 @@ class TtfFont {
 
   /// New glyphs are drawn without being stored until the next wipe: the set's store filled up, or failed.
   bool ringMode() const;
+  /// A style of the family reads its outlines from its file on the card (SD mode): that file stays open while the
+  /// set is loaded.
+  bool readsCard() const;
 
   uint32_t renders() const { return renders_; }
   uint32_t storeHits() const { return hits_; }
@@ -131,8 +135,10 @@ class TtfFont {
   // A style's file, shared by every size.
   struct Style {
     bool present = false;
-    uint8_t block = 0;  // the store's style block
+    bool onCard = false;  // SD mode: the block holds the tables, `sd` the outlines on the card
+    uint8_t block = 0;    // the store's style block
     uint32_t bytes = 0;
+    ttf::SdRange sd;
     ttf::Face face;
     ttf::Kerning kerning;
     ttf::Ligatures ligatures;  // every size's EpdFontData points at its pairs
@@ -150,8 +156,9 @@ class TtfFont {
   };
 
   // What opening the installed styles found: MapFailed means a style's block cannot be mapped (the budget shrank
-  // since the install); Failed, no usable regular style or an unreadable header.
-  enum class StylesResult : uint8_t { Ok, MapFailed, Failed };
+  // since the install); Changed, an SD-mode style's file on the card is not the one installed; Failed, no usable
+  // regular style or an unreadable header.
+  enum class StylesResult : uint8_t { Ok, MapFailed, Changed, Failed };
 
   TtfFont(TtfFontSet& set, uint8_t family) : set_(set), family_(family) {}
   StylesResult openStyles(const ttf::FileSource (&files)[4], uint8_t& block, ttf::ScratchPlan* plan);
@@ -180,7 +187,7 @@ class TtfFont {
 };
 
 /// The TrueType families drawn together from one glyph store (spec 11.1): the reader's body family, and a book's
-/// accent family beside it. Their styles are installed together, the set's identity (ttf::setIdentity) telling the
+/// accent families beside it. Their styles are installed together, the set's identity (ttf::setIdentity) telling the
 /// store which set it holds, and their glyphs share its log, index and face table. Only one renders at a time
 /// (RenderLock), so they share one scratch block, sized for the largest of their styles, one ring and one prefetch
 /// list: an accent family costs its faces and tables, never a second block.
@@ -188,8 +195,9 @@ class TtfFont {
 /// Not thread-safe: every call runs under RenderLock (spec 3.4).
 class TtfFontSet {
  public:
-  /// The body's family and one accent family (Publisher Fonts). The store takes up to glyphstore::kMaxStyles.
-  static constexpr uint8_t kMaxFamilies = 2;
+  /// The body's family and three accent families (Publisher Fonts): the store's eight style blocks hold a body of
+  /// four styles and three one-style families, and its face table (32 faces) the body's sizes and a few of each.
+  static constexpr uint8_t kMaxFamilies = 4;
   static constexpr uint8_t kRingSlots = 8;
   /// The ring's bitmaps together, at most: a native size's glyphs are large, and the ring is held until a wipe.
   static constexpr uint32_t kRingBudgetBytes = 8192;
@@ -198,18 +206,25 @@ class TtfFontSet {
 
   /// One family's files by style (size 0: the family has no such style).
   using Files = ttf::FileSource[4];
+  /// Whether load() may install the set. Never opens only a store that holds the set already, as a set loaded again
+  /// after the reader's memory ladder freed it does: no erase, no copy and no pending wipe, nothing in the way of
+  /// the page it is drawing.
+  enum class Install : uint8_t { IfNeeded, Never };
 
   explicit TtfFontSet(NorFlash& flash);
   TtfFontSet(const TtfFontSet&) = delete;
   TtfFontSet& operator=(const TtfFontSet&) = delete;
 
   /// Opens the store for these families, in this order, under the set's `identity`. When the partition holds no
-  /// store, another set's, or one whose mappings no longer fit, installs it first: calls `onBusy`, then copies
-  /// every family's styles. Finishes a pending wipe, behind `onBusy` too. False when the set cannot be drawn: a
-  /// family without a regular style or with one the engine cannot read, more than the partition holds, or out of
-  /// memory.
+  /// store, another set's, one whose mappings no longer fit, or one whose SD-mode file changed, installs it first:
+  /// calls `onBusy`, then copies every family's styles. Flash mode while the whole set fits; past that the families
+  /// go to SD mode from the last (the least used accent) on, the body last of all. Finishes a pending wipe, behind
+  /// `onBusy` too. False when the set cannot be drawn: a family without a regular style or with one the engine
+  /// cannot read, more than the partition holds in SD mode, or out of memory; with Install::Never, also a set the
+  /// store does not hold as it is. An SD-mode style reads its outlines through its FileSource for as long as the set
+  /// is loaded: those files must stay open until then.
   bool load(const Files* families, uint8_t count, const uint8_t identity[glyphstore::kIdentityBytes],
-            const std::function<void()>& onBusy = {});
+            const std::function<void()>& onBusy = {}, Install install = Install::IfNeeded);
   uint8_t familyCount() const { return count_; }
   /// The set's family `family`, in load()'s order; nullptr past familyCount().
   TtfFont* font(uint8_t family) const { return family < count_ ? fonts_[family].get() : nullptr; }
@@ -223,6 +238,19 @@ class TtfFontSet {
   uint32_t ringBytes() const;
   /// The one scratch block every family renders in.
   uint32_t scratchBytes() const { return rasterizer_.scratchBytes(); }
+  /// SD mode: the 512-byte pages read from the card since load(), every family's.
+  uint32_t sdPageReads() const { return sdPages_ ? sdPages_->misses() : 0; }
+  /// A family reads its outlines from the card (SD mode).
+  bool readsCard() const;
+
+  /// Frees what only a glyph missing from the store needs: the scratch block (its plan kept), SD mode's page cache
+  /// and the ring. Glyphs in the store are drawn as before; a miss is drawn as missing until restoreMissMemory(),
+  /// and asked again at its next lookup (Transient). For the reader's memory ladder, which makes room for an image
+  /// decode this way. Only where no glyph record of the set is in use: between pages. The bytes freed.
+  uint32_t releaseMissMemory();
+  /// Allocates them again. False while the heap cannot hold them: misses stay missing until a later call.
+  bool restoreMissMemory();
+  bool missMemoryReleased() const { return count_ != 0 && (!rasterizer_.allocated() || (readsCard() && !sdPages_)); }
 
  private:
   friend class TtfFont;
@@ -245,6 +273,7 @@ class TtfFontSet {
   NorFlash& flash_;
   FlashGlyphStore store_;
   ttf::Rasterizer rasterizer_;
+  std::unique_ptr<ttf::SdPageCache> sdPages_;  // only while a style is in SD mode
   std::unique_ptr<TtfFont> fonts_[kMaxFamilies];
   uint8_t count_ = 0;
   bool ringMode_ = false;

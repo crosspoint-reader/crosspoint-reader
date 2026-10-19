@@ -8,6 +8,7 @@
 // tests cover that branch directly plus the range bookkeeping the goldens cannot reach.
 #include <gtest/gtest.h>
 
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -20,10 +21,15 @@ constexpr const char* SHY = "\xC2\xAD";  // UTF-8 U+00AD
 
 TextBlock::WordRange makeRange(const std::vector<std::string>& words, const std::vector<EpdFontFamily::Style>& styles,
                                const std::vector<uint8_t>& sizes, const size_t first, const size_t count) {
+  // Layout keeps a word's size with its font slot (TextBlock::WordSize); every word here is in the block's font. The
+  // range points at them, so each conversion lives for the test run.
+  static std::deque<std::vector<TextBlock::WordSize>> kept;
+  std::vector<TextBlock::WordSize>& wordSizes = kept.emplace_back();
+  for (const uint8_t pct : sizes) wordSizes.push_back({pct, 0});
   TextBlock::WordRange r;
   r.words = &words;
   r.styles = &styles;
-  r.sizes = &sizes;
+  r.sizes = &wordSizes;
   r.first = first;
   r.count = count;
   return r;

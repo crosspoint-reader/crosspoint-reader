@@ -493,6 +493,7 @@ bool shouldEnableJpegCache(const RenderConfig& config, const int width, const in
   if (freeHeap < minFreeForCaching) {
     LOG_DBG("JPG", "Skipping cache: free heap %u < %u (band %u bytes)", static_cast<unsigned>(freeHeap),
             static_cast<unsigned>(minFreeForCaching), static_cast<unsigned>(bandBytes));
+    image_scratch::noteHeapShort();  // drawn, but every later draw decodes it again
     return false;
   }
 
@@ -1515,6 +1516,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   const size_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < requiredHeap) {
     LOG_ERR("JPG", "Not enough heap for JPEG decoder (%u free, need %u)", freeHeap, requiredHeap);
+    image_scratch::noteHeapShort();
     return false;
   }
 
@@ -1555,6 +1557,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     pool = makeUniqueNoThrow<JpegWorkPool>(TJPG_WORK_POOL_SIZE);
     if (!pool || !*pool) {
       LOG_ERR("JPG", "Failed to allocate TJpgDec work pool (%u bytes)", static_cast<unsigned>(TJPG_WORK_POOL_SIZE));
+      image_scratch::noteHeapShort();
       file.close();
       return false;
     }

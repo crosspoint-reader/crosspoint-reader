@@ -42,6 +42,11 @@ bool parseInt(std::string_view text, int& out);
 // Exactly `count` comma-separated integers ("x,y" for a tap, "x1,y1,x2,y2" for a swipe).
 bool parseIntList(std::string_view text, int* out, size_t count);
 
+// CMD:HEAP's ballast: "HOLD=<bytes>" or "HOLD=<bytes>,<blocks>", the bytes split over 1..maxBlocks equal blocks.
+bool parseHeapHold(std::string_view arg, int& bytes, int& blocks, int maxBlocks);
+// CMD:HEAP's refusals: "REFUSE=<decodes>" or "REFUSE=<decodes>,<reloads>", each 0..255.
+bool parseHeapRefuse(std::string_view arg, int& decodes, int& reloads);
+
 // The log levels of lib/Logging (0 = ERR .. 3 = TRC), by their tag or its long name:
 // ERR|ERROR, INF|INFO, DBG|DEBUG, TRC|TRACE. Case-insensitive.
 bool parseLogLevel(std::string_view text, uint8_t& level);

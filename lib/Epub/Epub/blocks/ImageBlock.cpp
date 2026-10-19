@@ -94,9 +94,12 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 namespace image_scratch {
 namespace {
 BuildArena* g_arena = nullptr;
-}
+uint32_t g_heapShort = 0;
+}  // namespace
 BuildArena* get() { return g_arena; }
 void set(BuildArena* arena) { g_arena = arena; }
+void noteHeapShort() { ++g_heapShort; }
+uint32_t heapShortCount() { return g_heapShort; }
 bool canServe(const size_t bytes) {
   if (!g_arena || !g_arena->valid()) return false;
   const size_t used = g_arena->used();
@@ -370,26 +373,31 @@ std::unique_ptr<ImageBlock> ImageBlock::makeCrop(const int16_t srcYOffset, const
 }
 
 bool ImageBlock::placeholderOnly_ = false;
+ImageBlock::Placeholder ImageBlock::placeholderOnlyKind_ = ImageBlock::Placeholder::Loading;
 uint16_t ImageBlock::placeholdersDrawn_ = 0;
+uint16_t ImageBlock::lowMemoryDrawn_ = 0;
 
-void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y, const bool loading) const {
+void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y, const Placeholder kind) const {
   constexpr int BORDER = 1;
   constexpr int PADDING = 6;
 
+  if (kind == Placeholder::LowMemory && lowMemoryDrawn_ < UINT16_MAX) lowMemoryDrawn_++;
   renderer.drawRect(x, y, width, height, BORDER, true);
 
   const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
   const bool hasAlt = !altText.empty();
-  // Loading: the alt text (if any) and one "indexing" line. Large image: three lines as before.
-  const int lineCount = loading ? (hasAlt ? 2 : 1) : (hasAlt ? 3 : 2);
+  // Loading, low memory: the alt text (if any) and one line saying which. Large image: three lines as before.
+  const bool large = kind == Placeholder::Large;
+  const int lineCount = large ? (hasAlt ? 3 : 2) : (hasAlt ? 2 : 1);
   const int totalTextH = lineH * lineCount;
 
   if (lineH > 0 && width > PADDING * 2 && height > totalTextH + PADDING * 2) {
     const int textX = x + PADDING;
     const int textY = y + (height - totalTextH) / 2;
-    if (loading) {
+    if (!large) {
       if (hasAlt) renderer.drawText(UI_10_FONT_ID, textX, textY, altText.c_str());
-      renderer.drawText(UI_10_FONT_ID, textX, textY + lineH * (lineCount - 1), tr(STR_INDEXING));
+      renderer.drawText(UI_10_FONT_ID, textX, textY + lineH * (lineCount - 1),
+                        kind == Placeholder::Loading ? tr(STR_INDEXING) : tr(STR_DICT_LOW_MEMORY));
       return;
     }
     renderer.drawText(UI_10_FONT_ID, textX, textY, tr(STR_LARGE_IMAGE));
@@ -437,13 +445,13 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
   // decode on the build's heap.
   if (placeholderOnly_) {
     if (placeholdersDrawn_ < UINT16_MAX) placeholdersDrawn_++;
-    renderPlaceholder(renderer, x, y, /*loading=*/true);
+    renderPlaceholder(renderer, x, y, placeholderOnlyKind_);
     return;
   }
 
   if (wouldShowPlaceholder(forceLoad, monochromeOutput)) {
     LOG_DBG("IMG", "Large image placeholder at %d,%d (%dx%d): %s", x, y, width, height, imagePath.c_str());
-    renderPlaceholder(renderer, x, y);
+    renderPlaceholder(renderer, x, y, Placeholder::Large);
     return;
   }
 
@@ -546,9 +554,15 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y, const b
 
   // A resumed decode draws only the rows after its park; the finished cache has them all.
   const bool resuming = jpeg && Storage.exists(config.checkpointPath.c_str());
+  const uint32_t heapShortBefore = image_scratch::heapShortCount();
   bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
   if (!success) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
+    // Short of memory: say so in the image's place rather than leave it blank. Not in a pass that writes the
+    // caches alone (the image lane, getWriteRows() 0): the framebuffer holds another page there.
+    if (image_scratch::heapShortCount() != heapShortBefore && renderer.getWriteRows() > 0) {
+      renderPlaceholder(renderer, x, y, Placeholder::LowMemory);
+    }
     return;
   }
   if (resuming && !Storage.exists(config.checkpointPath.c_str())) {

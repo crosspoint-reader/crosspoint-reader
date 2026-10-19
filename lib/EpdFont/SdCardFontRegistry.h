@@ -53,9 +53,10 @@ class SdCardFontRegistry {
   // Scan SD card, populate families_. Returns true if any families found.
   bool discover();
 
-  // Asked at discovery whether a TTF family with these style file sizes can be installed; one that cannot is not
-  // listed, since picking it would only fall back to a built-in font. Unset (host tests): every family is listed.
-  using TtfFits = bool (*)(const uint32_t* styleBytes, uint8_t count);
+  // Asked at discovery whether a TTF family with these styles can be installed, from their file sizes and their
+  // SD-mode blocks' (ttf::FileProbe::sdBytes); one that cannot is not listed, since picking it would only fall back to
+  // a built-in font. Unset (host tests): every family is listed.
+  using TtfFits = bool (*)(const uint32_t* fileBytes, const uint32_t* sdBytes, uint8_t count);
   void setTtfFits(const TtfFits fits) { ttfFits_ = fits; }
 
   // One family directory outside the fonts roots (a book's embedded fonts, see BookFonts), read as discover()

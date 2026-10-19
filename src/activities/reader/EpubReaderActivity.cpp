@@ -122,7 +122,7 @@ std::optional<int> parsePrintedPageLabel(const std::string& label) {
 constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 
 // Pre-render of the next page within the current chapter only runs when heap is healthy.
-// 44 KB, derived from what the pass actually consumes rather than from what happens to be
+// 34 KB, derived from what the pass actually consumes rather than from what happens to be
 // free — this floor was set the other way twice and was wrong both times:
 //   2026-06-11 (X3): 64 KB silently disabled Background A whenever steady free dipped to
 //     ~65 KB (e.g. right after a cache rebuild), which also starved Background B behind it.
@@ -137,10 +137,22 @@ constexpr int PAGE_TURN_LABELS[] = {1, 1, 3, 6, 12};
 //   deepest transient      peakTemp, up to 8467 B on this font, inside prewarm decompress
 //   => ~23 KB of headroom below the entry point, nothing retained afterwards (the Page dies
 //      with the pass; only framebuffer pixels survive).
-// 44 KB therefore troughs at ~21 KB worst case, above the ~16 KB the sliced section build
-// reserves, and leaves X3 (which enters at 53-55 KB) ~10 KB of margin instead of ~2. The
+// 44 KB therefore troughed at ~21 KB worst case, above the ~16 KB the sliced section build
+// reserves, and left X3 (which enters at 53-55 KB) ~10 KB of margin instead of ~2. The
 // transient is also held under RenderLock, so no other reader work can allocate into the dip.
-constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 44 * 1024;
+//
+// 2026-10-18 (X4): a TrueType reader font beside a book's three accent families reads at
+// 43-45 KB free, so 44 KB refused the pass on most pages. The pass's own measure of its cost
+// (the heap's low point while it runs, "cost" in its log line), floor lowered to 20 KB for the
+// run, 19 passes:
+//   four TrueType families, a test book's pages      2664-6704 B
+//   one TrueType family, dense prose (The Anarchy)    4208-4692 B
+//   built-in Bookerly, the same prose                6692-8520 B
+// A TrueType face prewarms nothing into the decompressor's page slots (its glyphs are read from
+// the mapped glyph store), and the page itself costs far less than 2026-08-02's 10.5 KB. The
+// trough rule stays (21 KB, as above); the cost allowance is the largest measured, 8.5 KB, plus
+// half again: 21 + 13 = 34 KB. With four families that troughs at ~30 KB or more.
+constexpr uint32_t PRE_RENDER_MIN_FREE_HEAP_BYTES = 34 * 1024;
 
 // A page arena at least this large is freed once its page is on the panel (releasePageGlyphArena).
 // An SD font's arena holds the page's distinct glyph bitmaps, copied from the card: 3-10 KB on a
@@ -1984,7 +1996,8 @@ bool EpubReaderActivity::stepImageWarmLocked() {
   const int lastPage = static_cast<int>(section->pageCount) - 1;
   const int windowEnd = cur + kImageWarmLookahead;
   for (int p = cur; p <= std::min(lastPage, windowEnd); ++p) {
-    if (imageWarmGaveUp(currentSpineIndex, p)) continue;
+    // A page the reader's own ladder just gave up on is not climbed again here: every step was refused a moment ago.
+    if (imageWarmGaveUp(currentSpineIndex, p) || memoryDegradedPage(currentSpineIndex, p)) continue;
     if (CooperativeAbort::shouldAbortLongTask()) return false;
     section->currentPage = p;
     auto page = section->loadPageFromSectionFile();
@@ -2045,17 +2058,22 @@ bool EpubReaderActivity::warmPageForImageLane(const Page& page, const int spine,
   const unsigned long t0 = millis();
   imageProcessingActive_ = true;
   CooperativeAbort::clearAborted();
+  BuildArena* const arena = scratch && scratch->valid() ? scratch.get() : nullptr;
+  const uint8_t accents = sdFontSystem.bookAccentsLoaded();
+  ImageMemoryLadder::Action ladder;
   {
-    image_scratch::ScopedArena scratchScope(scratch && scratch->valid() ? scratch.get() : nullptr);
+    image_scratch::ScopedArena scratchScope(arena);
     GfxRenderer::ScopedCacheOnlyImageWrites cacheOnly(renderer);
-    page.warmImageCaches(renderer, layout.marginLeft, contentTop, /*forceLoad=*/true, /*monochromeOutput=*/true,
-                         warmGrayscale);
+    // Cheaper here than on a page turn: a page whose images the lane decodes is drawn from their caches.
+    ladder = warmImagesClimbingLadder(page, layout.marginLeft, contentTop, /*forceLoad=*/true, warmGrayscale, arena,
+                                      /*drawsPage=*/false, accents);
   }
   // Preempted by input: not a failure, the next quiet moment retries.
   const bool preempted = CooperativeAbort::consumeAborted();
   imageProcessingActive_ = false;
   scratch.reset();
   renderer.returnSecondaryBuffer();  // cannot fail: the region never entered the heap
+  if (finishLadder(ladder, accents)) return true;
 
   const bool complete = !page.hasUncachedImages(true, true, warmGrayscale);
   if (!complete && !preempted) noteImageWarmMiss(spine, pageIndex);
@@ -2098,6 +2116,152 @@ bool EpubReaderActivity::imageWarmGaveUp(const int spine, const int page) const 
   return std::any_of(imageWarmMisses_.begin(), imageWarmMisses_.end(), [&](const ImageWarmMiss& m) {
     return m.spine == spine && m.page == page && m.tries >= kImageWarmMaxTries;
   });
+}
+
+namespace {
+const char* ladderActionName(const ImageMemoryLadder::Action action) {
+  switch (action) {
+    case ImageMemoryLadder::Action::Done:
+      return "done";
+    case ImageMemoryLadder::Action::LightRelief:
+      return "light relief";
+    case ImageMemoryLadder::Action::HeavyRelief:
+      return "heavy relief";
+    case ImageMemoryLadder::Action::DropAccent:
+      return "an accent family fewer";
+    case ImageMemoryLadder::Action::Emergency:
+      return "emergency: images as boxes";
+    case ImageMemoryLadder::Action::Restart:
+      return "restart";
+  }
+  return "?";
+}
+}  // namespace
+
+void EpubReaderActivity::prewarmPageFonts(const Page& page, const int xOffset, const int yOffset) {
+  auto scope = renderer.getFontCacheManager()->createPrewarmScope();
+  page.renderTextOnly(renderer, getEffectiveReaderFontId(), xOffset, yOffset);  // scan pass
+  scope.endScanAndPrewarm();
+}
+
+ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Page& page, const int xOffset,
+                                                                       const int yOffset, const bool forceLoad,
+                                                                       const bool warmGrayscale, BuildArena* arena,
+                                                                       const bool drawsPage, const uint8_t accents) {
+  using ImageMemoryLadder::Action;
+  using ImageMemoryLadder::Decode;
+  using ImageMemoryLadder::Step;
+  ImageMemoryLadder::Input in;
+  in.accents = accents;
+  for (;;) {
+    in.ttfLoaded = sdFontSystem.ttfLoaded();
+    // A live build has laid text out with the set, and goes on from where it is.
+    in.canUnload =
+        !(section && section->hasActiveBuild()) && !(backgroundSection_ && backgroundSection_->hasActiveBuild());
+    in.fontsBack = true;
+    const uint32_t heapShortBefore = image_scratch::heapShortCount();
+    if (arena) arena->reset();  // nothing of the step before lives in it
+    switch (in.step) {
+      case Step::Plain:
+        break;
+      case Step::LightRelief: {
+        // The page's glyphs into the store first: drawn from there, the page needs no miss afterwards.
+        if (drawsPage) prewarmPageFonts(page, xOffset, yOffset);
+        renderer.releaseFontCaches();
+        const uint32_t freed = sdFontSystem.releaseTtfMissMemory();
+        LOG_INF("ERS", "Memory ladder: light relief, %lu B of TrueType memory freed (free=%lu)",
+                static_cast<unsigned long>(freed), static_cast<unsigned long>(esp_get_free_heap_size()));
+        break;
+      }
+      case Step::HeavyRelief:
+        renderer.releaseFontCaches();
+        sdFontSystem.suspendTtf(renderer);
+        LOG_INF("ERS", "Memory ladder: heavy relief, the TrueType set unloaded (free=%lu)",
+                static_cast<unsigned long>(esp_get_free_heap_size()));
+        break;
+    }
+    if (SerialTestApi::takeDecodeRefusal()) {
+      // A test build's CMD:HEAP:REFUSE: the step's decode fails as one the heap refused would.
+      image_scratch::noteHeapShort();
+      LOG_INF("ERS", "Memory ladder: decode refused (CMD:HEAP:REFUSE)");
+    } else {
+      page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale);
+    }
+    // What the step freed comes back at once, while the decode's buffers are just freed and the heap least broken up.
+    switch (in.step) {
+      case Step::Plain:
+        break;
+      case Step::LightRelief:
+        in.fontsBack = sdFontSystem.restoreTtfMissMemory();
+        break;
+      case Step::HeavyRelief: {
+        const unsigned long start = millis();
+        in.fontsBack = sdFontSystem.resumeTtf(renderer);
+        LOG_INF("ERS", "Memory ladder: the TrueType set %s in %lu ms (free=%lu)",
+                in.fontsBack ? "loaded again" : "did not load again", millis() - start,
+                static_cast<unsigned long>(esp_get_free_heap_size()));
+        break;
+      }
+    }
+    in.decode = CooperativeAbort::wasAborted()                            ? Decode::Failed
+                : !page.hasUncachedImages(forceLoad, true, warmGrayscale) ? Decode::Done
+                : image_scratch::heapShortCount() != heapShortBefore      ? Decode::HeapShort
+                                                                          : Decode::Failed;
+    const Action action = ImageMemoryLadder::next(in);
+    switch (action) {
+      case Action::LightRelief:
+        in.step = Step::LightRelief;
+        continue;
+      case Action::HeavyRelief:
+        in.step = Step::HeavyRelief;
+        continue;
+      case Action::Done:
+      case Action::DropAccent:
+      case Action::Emergency:
+      case Action::Restart:
+        if (in.step == Step::Plain && in.decode == Decode::Done) {
+          LOG_DBG("ERS", "Memory ladder: decoded without relief (free=%lu)",
+                  static_cast<unsigned long>(esp_get_free_heap_size()));
+        } else {
+          LOG_INF("ERS", "Memory ladder: %s after step %u (free=%lu)", ladderActionName(action),
+                  static_cast<unsigned>(in.step), static_cast<unsigned long>(esp_get_free_heap_size()));
+        }
+        return action;
+    }
+  }
+}
+
+bool EpubReaderActivity::finishLadder(const ImageMemoryLadder::Action action, const uint8_t accents) {
+  switch (action) {
+    case ImageMemoryLadder::Action::Done:
+    case ImageMemoryLadder::Action::LightRelief:
+    case ImageMemoryLadder::Action::HeavyRelief:
+    case ImageMemoryLadder::Action::Emergency:
+      return false;
+    case ImageMemoryLadder::Action::DropAccent:
+      sdFontSystem.limitBookAccents(static_cast<uint8_t>(accents - 1));
+      break;
+    case ImageMemoryLadder::Action::Restart:
+      // The images are cached by now; a fresh heap is what the fonts need.
+      saveStateForRestart();
+      if (trySilentRestartToReaderForHeapRecovery()) return true;
+      // Refused: one heap restart since the last cold boot already. The page is drawn with its images as boxes
+      // then, without the ladder, or the next render would climb it to here again.
+      if (section) {
+        memoryDegradedSpine_ = currentSpineIndex;
+        memoryDegradedPage_ = section->currentPage;
+      }
+      break;
+  }
+  // The book's fonts as it has them now, with an install for a set the store does not hold, and the chapter laid out
+  // with them at the next render. A set is never left without its miss memory: a layout would measure the glyphs it
+  // cannot draw as missing.
+  if (sdFontSystem.ttfMissMemoryReleased() && !sdFontSystem.restoreTtfMissMemory()) unloadSdFontIfLoaded();
+  ensureSdFontLoadedForPath(epub->getPath().c_str());
+  preRenderedPage = {};  // a font popup may have drawn over it
+  fontRelayoutPending_ = true;
+  requestUpdate();
+  return true;
 }
 
 void EpubReaderActivity::noteImageWarmMiss(const int spine, const int page) {
@@ -2985,7 +3149,10 @@ void EpubReaderActivity::applyBookReaderOverrides(
   // what the path-based resolution reads, and the RenderLock this holds is the one the cold-load
   // popup expects its caller to own.
   if (epub) ensureSdFontLoadedForPath(epub->getPath().c_str());
+  resetSectionKeepingPosition();
+}
 
+void EpubReaderActivity::resetSectionKeepingPosition() {
   if (section) {
     const int currentPage = section->currentPage;
     if (!section->hasActiveBuild()) {
@@ -3181,8 +3348,9 @@ static FontSizeLadder buildReaderFontSizeLadder(const int bodyFontId) {
 // Publisher Fonts' Accents and All Text: the book's other families, for the blocks set in them. A generic serif or
 // sans-serif goes to the built-in family of that kind, unless the body is already in it (the reader's own family, or
 // the generic the book's body names: the reader's font stands for that). Monospace stays the reader's font: no
-// monospace face is built in. The book's accent family is in it when it is loaded beside the body: a built-in font,
-// a TrueType reader font, or the book's own body family in All Text (not beside a .cpfont reader font).
+// monospace face is built in. Each of the book's accent families is in it when it is loaded beside the body: a
+// built-in font, a TrueType reader font, or the book's own body family in All Text (not beside a .cpfont reader
+// font); one the glyph store had no room for is not.
 // Deterministic from the book's selection and the body font, as the ladder is from the body font.
 static void buildBookFontFamilies(BlockFontFamilies& families, const std::string& cachePath, const int bodyFontId,
                                   const uint8_t pointSize) {
@@ -3206,12 +3374,14 @@ static void buildBookFontFamilies(BlockFontFamilies& families, const std::string
     if ((book->body & CssFontFamily::kGenericMask) == family + 1u || familyBody[family] == bodyFontId) continue;
     families.add(family + 1u, familyBody[family], builtinFontSizeLadder(family, bodyPt));
   }
-  const char* accent = sdFontSystem.accentFamilyNameFor(cachePath);
-  const int accentId = accent[0] != '\0' ? resolveSdCardFontId(accent, pointSize) : 0;
-  if (const auto native = accentId != 0 ? sdFontSystem.ttfNativeSizes(accentId) : std::nullopt) {
-    FontSizeLadder ladder;
-    ladder.setNative(native->base, native->bodyPpem, native->minPx, native->maxPx);
-    families.add(book->accent, accentId, ladder);
+  for (uint8_t n = 0; n < BookFonts::kMaxAccents; ++n) {
+    const char* accent = sdFontSystem.accentFamilyNameFor(cachePath, n);
+    const int accentId = accent[0] != '\0' ? resolveSdCardFontId(accent, pointSize) : 0;
+    if (const auto native = accentId != 0 ? sdFontSystem.ttfNativeSizes(accentId) : std::nullopt) {
+      FontSizeLadder ladder;
+      ladder.setNative(native->base, native->bodyPpem, native->minPx, native->maxPx);
+      families.add(book->accents[n], accentId, ladder);
+    }
   }
 }
 
@@ -5128,6 +5298,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // this one (cleared before recoverSecondaryBufferIfNeeded, which may end B's borrow).
   statusRefreshDeferred_ = false;
   recoverSecondaryBufferIfNeeded();
+  if (fontRelayoutPending_) {
+    // The memory ladder changed the book's fonts (finishLadder): the chapter is laid out again with them.
+    fontRelayoutPending_ = false;
+    resetSectionKeepingPosition();
+  }
 
   const int spineCount = epub->getSpineItemsCount();
   if (spineCount <= 0) {
@@ -5279,20 +5454,9 @@ bool EpubReaderActivity::maybeRestartForFragmentedHeap(const uint32_t freeHeap, 
   }
 
   fragmentationRecoveryRestartAttempted_ = true;
-
-  // Persist the live position only when it is authoritative. During a section (re)build
-  // (readerPhase_ != READING, or section already reset for one) the saved navTarget has not
-  // been applied yet — a fresh Section still sits at currentPage 0 — and saving that would
-  // clobber the user's real position in progress.bin, which already holds the correct value
-  // (issue #75: progress reset to the chapter start after a heap-recovery reboot).
+  saveStateForRestart();
   const int page = (section ? section->currentPage : 0);
   const int pageCount = (section ? section->pageCount : 0);
-  if (section && readerPhase_ == ReaderPhase::READING) {
-    saveProgress(currentSpineIndex, page, pageCount);
-  }
-  // The reboot skips onExit, which is where the stack is otherwise saved. Unlike the position it
-  // does not depend on the build phase: every entry was recorded when its link was followed.
-  saveLinkBackStack();
 
   // Release both framebuffers (primary + secondary already gone) to free ~48 KB
   // more contiguous heap, then do a pre-reboot warm pass for any images that
@@ -5323,6 +5487,20 @@ bool EpubReaderActivity::maybeRestartForFragmentedHeap(const uint32_t freeHeap, 
   }
   LOG_ERR("ERS", "Heap recovery restart blocked by safety latch; staying in degraded mode");
   return false;
+}
+
+void EpubReaderActivity::saveStateForRestart() {
+  // Persist the live position only when it is authoritative. During a section (re)build
+  // (readerPhase_ != READING, or section already reset for one) the saved navTarget has not
+  // been applied yet — a fresh Section still sits at currentPage 0 — and saving that would
+  // clobber the user's real position in progress.bin, which already holds the correct value
+  // (issue #75: progress reset to the chapter start after a heap-recovery reboot).
+  if (section && readerPhase_ == ReaderPhase::READING) {
+    saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  }
+  // The reboot skips onExit, which is where the stack is otherwise saved. Unlike the position it
+  // does not depend on the build phase: every entry was recorded when its link was followed.
+  saveLinkBackStack();
 }
 
 bool EpubReaderActivity::writeReaderProgressCache(const std::string& cachePath, const int spineIndex,
@@ -5427,7 +5605,11 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   // bail on RenderLock::peek(), and this whole pass runs under the lock the render task took
   // before calling renderContents()) — this flag is a second, explicit guard against that
   // invariant silently breaking if a future change adds a yield point in here.
-  imageProcessingActive_ = page->hasUncachedImages(warmForceLoad, imageMonochrome, warmGrayscaleImageCache);
+  // A page the memory ladder gave up on draws its undecoded images as low-memory boxes at once (see the BW render):
+  // every decode was refused a moment ago, and a clock tick that redraws the page must not climb the ladder again.
+  const bool ladderGaveUp = section && memoryDegradedPage(currentSpineIndex, section->currentPage);
+  imageProcessingActive_ =
+      !ladderGaveUp && page->hasUncachedImages(warmForceLoad, imageMonochrome, warmGrayscaleImageCache);
   // BORROW the secondary buffer as the decode scratch rather than releasing it. Both give the
   // decoders the same ~52 KB, but the borrowed block never enters the heap:
   //   - it cannot be carved up by the decode's own churn (rule 4 — this pass was the documented
@@ -5460,12 +5642,14 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
       LOG_DBG("ERS", "Released secondary buffer for image warm pass (nothing to lend)");
     }
   }
-  {
+  const uint8_t accents = imageProcessingActive_ ? sdFontSystem.bookAccentsLoaded() : 0;
+  ImageMemoryLadder::Action ladder = ImageMemoryLadder::Action::Done;
+  if (imageProcessingActive_) {
     // Scoped so the arena is uninstalled before the borrow is returned below — a stale
     // image_scratch pointer into a region the display owns again would be a use-after-free.
     image_scratch::ScopedArena warmScratchScope(warmScratch.get());
-    page->warmImageCaches(renderer, orientedMarginLeft, contentTop, warmForceLoad, imageMonochrome,
-                          warmGrayscaleImageCache);
+    ladder = warmImagesClimbingLadder(*page, orientedMarginLeft, contentTop, warmForceLoad, warmGrayscaleImageCache,
+                                      warmScratch.get(), /*drawsPage=*/true, accents);
   }
   // The borrow is returned after clearScreen() below, not here: returnSecondaryBuffer() seeds the
   // restored buffer from the live framebuffer, and right now that still holds the decode's
@@ -5510,14 +5694,16 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
     warmScratch.reset();
     renderer.returnSecondaryBuffer();
   }
+  if (finishLadder(ladder, accents)) {
+    lock.unlock();  // renderNormalPass takes it again; the page is drawn once the chapter is laid out again
+    return;
+  }
 
   logReaderMemSnapshot("prewarm_begin");
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   const uint32_t heapBefore = esp_get_free_heap_size();
-  auto scope = fcm->createPrewarmScope();
-  page->renderTextOnly(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);  // scan pass
-  scope.endScanAndPrewarm();
+  prewarmPageFonts(*page, orientedMarginLeft, contentTop);
   const uint32_t heapAfter = esp_get_free_heap_size();
   fcm->logStats("prewarm");
   const auto tPrewarm = millis();
@@ -5576,8 +5762,24 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   }
 
   logReaderMemSnapshot("before_bw_render");
-  page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad,
-               imageMonochrome);
+  ImageBlock::takeLowMemoryPlaceholders();  // the warm pass's boxes were cleared with the screen
+  {
+    // The ladder found no decode fits: the images are boxes, and no decode is tried again on the heap.
+    std::optional<ImageBlock::PlaceholderOnlyScope> boxes;
+    if (ladderGaveUp || ladder == ImageMemoryLadder::Action::Emergency) {
+      boxes.emplace(ImageBlock::Placeholder::LowMemory);
+    }
+    page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad,
+                 imageMonochrome);
+  }
+  // An image drawn as a low-memory box: the status bar says so while the page is on screen, and its redraws skip
+  // the decodes. Cleared once the page draws without one.
+  if (ImageBlock::takeLowMemoryPlaceholders() > 0 && section) {
+    memoryDegradedSpine_ = currentSpineIndex;
+    memoryDegradedPage_ = section->currentPage;
+  } else if (section && memoryDegradedPage(currentSpineIndex, section->currentPage)) {
+    memoryDegradedSpine_ = memoryDegradedPage_ = -1;
+  }
   // The BW render also touches images (placeholder/cache draws) and runs the full
   // glyph pipeline; check here too so a clean after_image_warm_pass followed by a
   // corrupt reading convicts the BW render rather than the decode.
@@ -5917,9 +6119,7 @@ void EpubReaderActivity::displayBuildPage(RenderLock& lock, const Page& page, co
     // Only while the buffer is actually lent; otherwise buildScratch_ is null and the scope
     // self-disables, leaving the heap path exactly as it was.
     FontCacheManager::ScopedSlotArena slotArena(*fcm, secondaryBorrowed_ ? buildScratch_.get() : nullptr);
-    auto scope = fcm->createPrewarmScope();
-    page.renderTextOnly(renderer, getEffectiveReaderFontId(), layout.marginLeft, contentTop);  // scan pass
-    scope.endScanAndPrewarm();
+    prewarmPageFonts(page, layout.marginLeft, contentTop);
 
     renderer.clearScreen();
     {
@@ -5994,9 +6194,7 @@ uint16_t EpubReaderActivity::renderPageContentOnly(const Page& page, const int o
   const int viewportHeight = std::max(0, renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom);
   const int contentTop = orientedMarginTop + getImageOnlyPageYOffset(page, viewportHeight);
 
-  auto scope = fcm->createPrewarmScope();
-  page.renderTextOnly(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);
-  scope.endScanAndPrewarm();
+  prewarmPageFonts(page, orientedMarginLeft, contentTop);
 
   // On a single-push panel the pre-render owes the SAME thing a fresh render
   // produces, or a pre-rendered page would look different from one rendered on
@@ -6164,12 +6362,7 @@ void EpubReaderActivity::displayPreRenderedPage(const Page& page, const int orie
     // and replaying against a metadata-only table dereferences a null bitmap base
     // (observed: Load access fault at glyph->dataOffset + heap corruption). When the
     // cache is still warm this is nearly free via the prewarm coverage fast-path.
-    {
-      auto* fcm = renderer.getFontCacheManager();
-      auto scope = fcm->createPrewarmScope();
-      page.renderTextOnly(renderer, fontId, orientedMarginLeft, contentTop);  // scan pass
-      scope.endScanAndPrewarm();
-    }
+    prewarmPageFonts(page, orientedMarginLeft, contentTop);
     renderer.setFastGrayscaleLut(SETTINGS.fastAntiAliasing);
     // No waveform to hide behind on this path (displayBuffer() above already returned), so the
     // per-element abort translates directly into saved wall-clock on both devices.
@@ -6337,7 +6530,8 @@ void EpubReaderActivity::renderStatusBar() const {
   const SyncIndicator syncIndicator = SyncIndicator::None;
 #endif
   GUI.drawStatusBar(renderer, bookProgress, chapter.page, chapter.total, title, 0, isStarred, printedPageLabel,
-                    /*fillMargin=*/true, /*pageCountApproximate=*/chapter.approximate, syncIndicator);
+                    /*fillMargin=*/true, /*pageCountApproximate=*/chapter.approximate, syncIndicator,
+                    /*lowMemory=*/memoryDegradedPage(currentSpineIndex, section->currentPage));
 
 #if DEBUG_BACKGROUND_WORK
   renderBackgroundDebugOverlay();
@@ -7019,9 +7213,12 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   p.inlineFootnotePreviews = effectiveInlineFootnotePreviews;
   p.imageRendering = effectiveImageRendering;
   p.fontSizeLadder = buildReaderFontSizeLadder(effectiveFontId);
-  BlockFontFamilies fontFamilies;
-  buildBookFontFamilies(fontFamilies, epub->getCachePath(), effectiveFontId, effectiveFontSize);
-  p.fontFamilies = &fontFamilies;
+  // On the heap: about 0.5 KB with the book's accent families, too much for this frame under a section build.
+  const auto fontFamilies = makeUniqueNoThrow<BlockFontFamilies>();
+  if (fontFamilies) {
+    buildBookFontFamilies(*fontFamilies, epub->getCachePath(), effectiveFontId, effectiveFontSize);
+    p.fontFamilies = fontFamilies.get();
+  }
   if (!section->loadSectionFile(p)) {
     LOG_DBG("SLP", "EPUB: section cache not found for spine %d, rebuilding", spineIndex);
     if (!section->createSectionFile(p, nullptr, /*skipEviction=*/false)) {

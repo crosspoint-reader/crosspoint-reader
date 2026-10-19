@@ -5,8 +5,10 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "TtfBuilder.h"
+#include "TtfFace.h"
 #include "TtfFamily.h"
 #include "TtfFontTestUtil.h"
 #include "TtfTestUtil.h"
@@ -241,10 +243,31 @@ TEST(TtfFamily, FilesTheEngineCannotDrawAreIgnored) {
   EXPECT_EQ(1, chosen[0]);
 }
 
-TEST(TtfFamily, ADirectoryWithoutARegularStyleIsNoFamily) {
-  const ttf::FileProbe files[] = {{1}, {2}, {3}, {-1}};
+TEST(TtfFamily, WithoutARegularFileTheNearestStyleServesAsRegular) {
+  // A script embedded as its italic alone, a display face as its bold alone: drawn in that face, held once.
+  const ttf::FileProbe italicOnly[] = {{2}};
   int chosen[4];
-  EXPECT_FALSE(ttf::assignStyles(files, 4, chosen));
+  ASSERT_TRUE(ttf::assignStyles(italicOnly, 1, chosen));
+  EXPECT_EQ(0, chosen[0]);
+  EXPECT_EQ(-1, chosen[2]);  // falls back to the regular, the same face
+
+  const ttf::FileProbe boldOnly[] = {{1, 700}};
+  ASSERT_TRUE(ttf::assignStyles(boldOnly, 1, chosen));
+  EXPECT_EQ(0, chosen[0]);
+  EXPECT_EQ(-1, chosen[1]);
+
+  const ttf::FileProbe noRegular[] = {{1}, {2}, {3}, {-1}};  // italic first, then bold, then bold italic
+  ASSERT_TRUE(ttf::assignStyles(noRegular, 4, chosen));
+  EXPECT_EQ(1, chosen[0]);
+  EXPECT_EQ(0, chosen[1]);
+  EXPECT_EQ(-1, chosen[2]);
+  EXPECT_EQ(2, chosen[3]);
+}
+
+TEST(TtfFamily, ADirectoryWithNothingTheEngineDrawsIsNoFamily) {
+  const ttf::FileProbe files[] = {{-1}, {-1}};
+  int chosen[4];
+  EXPECT_FALSE(ttf::assignStyles(files, 2, chosen));
   EXPECT_FALSE(ttf::assignStyles(nullptr, 0, chosen));
 }
 
@@ -320,16 +343,156 @@ TEST(TtfFamily, TheBundledFilesCarryTheirWeights) {
   EXPECT_EQ(700, ttf::probeFile(bold.source()).weight);
 }
 
-TEST(TtfFamily, AFamilyFitsFlashModeOnlyWithinThePartitionAndTheMappingBudget) {
+TEST(TtfFamily, AFamilyFitsTheStoreInFlashModeElseInSdMode) {
   constexpr uint32_t kX3FontArea = 3538944 - 65536;
   const uint32_t bookerly[4] = {450048, 452000, 460000, 455000};
-  EXPECT_TRUE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 32));
-  const uint32_t cjk[1] = {10u * 1024 * 1024};  // one CJK style is larger than the partition
-  EXPECT_FALSE(ttf::fitsFlashMode(cjk, 1, kX3FontArea, 32));
-  const uint32_t wide[4] = {1000000, 1000000, 1000000, 1000000};  // 4 MB of styles
-  EXPECT_FALSE(ttf::fitsFlashMode(wide, 4, kX3FontArea, 32));
-  EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 4, kX3FontArea, 12));  // too few mapping pages for a style and a log
-  EXPECT_FALSE(ttf::fitsFlashMode(bookerly, 0, kX3FontArea, 32));
+  const uint32_t bookerlyTables[4] = {176356, 178372, 170664, 184176};
+  EXPECT_TRUE(ttf::fitsStore(bookerly, bookerlyTables, 4, kX3FontArea, 32));
+  // One CJK style is larger than the partition; its tables are not (DroidSansFallbackFull: 4 MB, 357 KB of tables).
+  const uint32_t cjk[1] = {10u * 1024 * 1024};
+  const uint32_t cjkTables[1] = {356752};
+  EXPECT_TRUE(ttf::fitsStore(cjk, cjkTables, 1, kX3FontArea, 32));
+  const uint32_t noTables[1] = {0};  // a file whose SD-mode block cannot be made
+  EXPECT_FALSE(ttf::fitsStore(cjk, noTables, 1, kX3FontArea, 32));
+  // Four styles of 1 MB with 450 KB of tables each: too large whole, and their tables, mapped together, pass the
+  // mapping budget.
+  const uint32_t wide[4] = {1000000, 1000000, 1000000, 1000000};
+  const uint32_t wideTables[4] = {450000, 450000, 450000, 450000};
+  EXPECT_FALSE(ttf::fitsStore(wide, wideTables, 4, kX3FontArea, 32));
+  EXPECT_FALSE(ttf::fitsStore(bookerly, bookerlyTables, 4, kX3FontArea, 12));  // too few mapping pages either way
+  EXPECT_FALSE(ttf::fitsStore(bookerly, bookerlyTables, 0, kX3FontArea, 32));
+}
+
+TEST(TtfFamily, TheProbeSaysWhatTheSdModeBlockTakes) {
+  for (const char* name : {"Bookerly/Bookerly-Regular.ttf", "Inter/Inter-Bold.ttf", "NotoSans/NotoSans-Italic.ttf",
+                           "Ubuntu/Ubuntu-Regular.ttf"}) {
+    MemoryFile file{readFont(name)};
+    ttf::SdBlock block;
+    ASSERT_TRUE(block.plan(file.source())) << name;
+    EXPECT_EQ(block.bytes(), ttf::probeFile(file.source()).sdBytes) << name;
+  }
+}
+
+// --- SD mode's style block ---
+
+namespace {
+
+// The whole block, read through its source.
+std::vector<uint8_t> blockImage(ttf::SdBlock& block) {
+  std::vector<uint8_t> image(block.bytes());
+  const ttf::FileSource source = block.source();
+  EXPECT_TRUE(source.read(source.ctx, 0, image.data(), block.bytes()));
+  return image;
+}
+
+}  // namespace
+
+TEST(TtfSdBlock, IsTheFontButForItsOutlines) {
+  MemoryFile file{readFont("Bookerly/Bookerly-Regular.ttf")};
+  ttf::SdBlock block;
+  ASSERT_TRUE(block.plan(file.source()));
+  // Its ten tables the engine reads, 4-byte aligned behind an 11-record directory (fontTools agrees); glyf is
+  // 208,484 bytes at 58,840 in the file.
+  EXPECT_EQ(176356u, block.bytes());
+  const glyphstore::SdOutlines outlines = block.outlines();
+  EXPECT_EQ(block.bytes(), outlines.fontOffset);
+  EXPECT_EQ(58840u, outlines.fileOffset);
+  EXPECT_EQ(208484u, outlines.length);
+
+  const std::vector<uint8_t> image = blockImage(block);
+  ttf::SdPageCache cache;
+  const ttf::SdRange sd{file.source(), outlines.fontOffset, outlines.fileOffset, outlines.length, &cache};
+  FontBytes card(image.data(), static_cast<uint32_t>(image.size()), &sd);
+  FontBytes whole(file.bytes.data(), static_cast<uint32_t>(file.bytes.size()));
+  ttf::Face face;
+  ttf::Face wholeFace;
+  ASSERT_EQ(ttf::FaceStatus::Ok, ttf::parseFace(card, &face));
+  ASSERT_EQ(ttf::FaceStatus::Ok, ttf::parseFace(whole, &wholeFace));
+  EXPECT_EQ(wholeFace.unitsPerEm, face.unitsPerEm);
+  EXPECT_EQ(wholeFace.numGlyphs, face.numGlyphs);
+  EXPECT_EQ(wholeFace.numHMetrics, face.numHMetrics);
+  EXPECT_EQ(wholeFace.maxPoints, face.maxPoints);
+  EXPECT_EQ(wholeFace.ascender, face.ascender);
+  EXPECT_EQ(wholeFace.descender, face.descender);
+  EXPECT_EQ(wholeFace.height, face.height);
+  EXPECT_EQ(wholeFace.cmapFormat, face.cmapFormat);
+  EXPECT_EQ(wholeFace.glyfLength, face.glyfLength);
+  EXPECT_EQ(outlines.fontOffset, face.glyf);
+  EXPECT_NE(0u, face.gpos);
+  EXPECT_NE(0u, face.gsub);
+  for (const uint32_t cp : {uint32_t{'A'}, uint32_t{'z'}, uint32_t{0xE9}, uint32_t{0x2014}, uint32_t{0x4E2D}}) {
+    EXPECT_EQ(ttf::glyphIndex(whole, wholeFace, cp), ttf::glyphIndex(card, face, cp)) << cp;
+  }
+  // Every table but glyf is in place, byte for byte the file's; glyf never is.
+  ASSERT_NE(nullptr, card.span(face.gpos, face.gposLength));
+  EXPECT_EQ(0, std::memcmp(whole.span(wholeFace.gpos, wholeFace.gposLength), card.span(face.gpos, face.gposLength),
+                           face.gposLength));
+  EXPECT_EQ(0, std::memcmp(whole.span(wholeFace.loca, wholeFace.locaLength), card.span(face.loca, face.locaLength),
+                           face.locaLength));
+  EXPECT_EQ(nullptr, card.span(face.glyf, 1));
+  EXPECT_FALSE(card.outOfRange());
+  EXPECT_EQ(0u, cache.misses());  // nothing of the outlines read yet
+}
+
+TEST(TtfSdBlock, AnyRangeReadsAsTheWholeBlockDoes) {
+  MemoryFile file{readFont("Inter/Inter-Regular.ttf")};
+  ttf::SdBlock block;
+  ASSERT_TRUE(block.plan(file.source()));
+  const std::vector<uint8_t> image = blockImage(block);
+  const ttf::FileSource source = block.source();
+  // Pieces of every size: the directory a byte at a time, across a table's end and its padding, a copy chunk.
+  for (const uint32_t piece : {1u, 7u, 333u, 4096u}) {
+    std::vector<uint8_t> pieces(image.size());
+    for (uint32_t at = 0; at < image.size(); at += piece) {
+      const uint32_t len = std::min<uint32_t>(piece, static_cast<uint32_t>(image.size()) - at);
+      ASSERT_TRUE(source.read(source.ctx, at, pieces.data() + at, len)) << piece << " at " << at;
+    }
+    EXPECT_EQ(image, pieces) << piece;
+  }
+  uint8_t past = 0;
+  EXPECT_FALSE(source.read(source.ctx, block.bytes(), &past, 1));
+}
+
+TEST(TtfSdBlock, AnOptionalTableOutsideTheFileIsLeftOutAsTheFaceLeavesItOut) {
+  // A GPOS record past the end of the file: parseFace() takes the font as having no GPOS, so the block copies none,
+  // and the probe's size says so too.
+  Font font;
+  font.glyphs.resize(1);
+  font.glyphs[0].contours = {rect(0, 0, 64, 64)};
+  font.extraTables = {{"GPOS", Bytes(64, 0)}};
+  Bytes bytes = buildFont(font);
+  set32(bytes, findRecord(bytes, "GPOS") + 12, static_cast<uint32_t>(bytes.size()));
+  MemoryFile file{bytes};
+  ttf::SdBlock block;
+  ASSERT_TRUE(block.plan(file.source()));
+  EXPECT_EQ(block.bytes(), ttf::probeFile(file.source()).sdBytes);
+  const std::vector<uint8_t> image = blockImage(block);
+  const glyphstore::SdOutlines outlines = block.outlines();
+  ttf::SdPageCache cache;
+  const ttf::SdRange sd{file.source(), outlines.fontOffset, outlines.fileOffset, outlines.length, &cache};
+  FontBytes card(image.data(), static_cast<uint32_t>(image.size()), &sd);
+  ttf::Face face;
+  ASSERT_EQ(ttf::FaceStatus::Ok, ttf::parseFace(card, &face));
+  EXPECT_EQ(0u, face.gpos);
+  EXPECT_TRUE(block.sameAs(image.data(), static_cast<uint32_t>(image.size())));
+}
+
+TEST(TtfSdBlock, AFileWithoutOutlinesOrNotTrueTypeHasNone) {
+  ttf::SdBlock block;
+  Bytes noGlyf = builtFont();
+  noGlyf[findRecord(noGlyf, "glyf") + 3] = 'X';  // 'glyX'
+  MemoryFile withoutOutlines{noGlyf};
+  EXPECT_FALSE(block.plan(withoutOutlines.source()));
+  Bytes cff = builtFont();
+  std::memcpy(cff.data(), "OTTO", 4);
+  MemoryFile notTrueType{cff};
+  EXPECT_FALSE(block.plan(notTrueType.source()));
+  Bytes broken = builtFont();
+  set32(broken, findRecord(broken, "hmtx") + 12, static_cast<uint32_t>(broken.size()));  // runs past the end
+  MemoryFile outside{broken};
+  EXPECT_FALSE(block.plan(outside.source()));
+  MemoryFile fine{builtFont()};
+  EXPECT_TRUE(block.plan(fine.source()));
 }
 
 // --- Native size font IDs ---

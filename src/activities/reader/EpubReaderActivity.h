@@ -22,6 +22,7 @@
 #include "EpubLinkBackStack.h"
 #include "EpubProgressRecord.h"
 #include "EpubReaderMenuActivity.h"
+#include "ImageMemoryLadder.h"
 #include "KOReaderAutoSync.h"
 #include "KOReaderSyncWorker.h"
 #include "ProgressMapper.h"
@@ -285,6 +286,14 @@ class EpubReaderActivity final : public Activity {
   // stepBackgroundSectionBuild() and stepCurrentSectionBuild() before they start any
   // heap-hungry work.
   bool imageProcessingActive_ = false;
+  // The page drawn last with an image as a low-memory box (the memory ladder gave up on it, ImageMemoryLadder): its
+  // redraws skip the decodes, the image lane leaves it, and the status bar shows the low-memory indicator while it is
+  // on screen. -1: none.
+  int memoryDegradedSpine_ = -1;
+  int memoryDegradedPage_ = -1;
+  // The ladder left an accent family out (or found no font it could load): the next render lays the chapter out again
+  // with the fonts loaded now, at the same position.
+  bool fontRelayoutPending_ = false;
   // Arms forceHalfRefreshAfterPopup_ for the NEXT incremental section build, marking that build's
   // popup -> content transition as "dramatic" and worth a clean HALF baseline (vs. the routine,
   // frequent forward-reading crossing into a still-building Background-B section, where forcing
@@ -848,6 +857,24 @@ class EpubReaderActivity final : public Activity {
   // framebuffer byte. `onScreen`: the page is the one displayed; once the images it showed as
   // placeholders are cached it is redrawn. Always returns true (the tick was spent).
   bool warmPageForImageLane(const Page& page, int spine, int pageIndex, bool onScreen, bool warmGrayscale);
+  // The memory ladder (ImageMemoryLadder): warms `page`'s missing image caches at (xOffset, yOffset), and while a
+  // decode is short of memory, decodes again with font memory freed, step by step. `arena` is the decode scratch
+  // (the lent framebuffer), rewound between steps. `drawsPage`: the page is drawn next, so its glyphs are put into
+  // the glyph store before the light step frees what a miss needs. `accents`: the book's accent families loaded
+  // beside the body. Returns where it ended: Done, Emergency, or what finishLadder() is for.
+  ImageMemoryLadder::Action warmImagesClimbingLadder(const Page& page, int xOffset, int yOffset, bool forceLoad,
+                                                     bool warmGrayscale, BuildArena* arena, bool drawsPage,
+                                                     uint8_t accents);
+  // The ladder's DropAccent and Restart, once the decode scratch is home: the book keeps one accent family fewer,
+  // its fonts are loaded again and the next render lays the chapter out; or the device restarts to the reader. True
+  // when the page must not be drawn now.
+  bool finishLadder(ImageMemoryLadder::Action action, uint8_t accents);
+  // The scan pass over `page`'s text and the prewarm of every font and style it uses: TrueType glyphs into the glyph
+  // store, built-in ones into the decompressor's page slots.
+  void prewarmPageFonts(const Page& page, int xOffset, int yOffset);
+  bool memoryDegradedPage(int spine, int page) const {
+    return memoryDegradedSpine_ == spine && memoryDegradedPage_ == page;
+  }
   bool imageWarmGaveUp(int spine, int page) const;
   void noteImageWarmMiss(int spine, int page);
   // Lend the secondary framebuffer to Background-B's build arena. Mirrors the Background-C
@@ -987,6 +1014,12 @@ class EpubReaderActivity final : public Activity {
   mutable int lastStatusBarBattery = -1;
   mutable int lastStatusBarClockMinute = -1;
   bool maybeRestartForFragmentedHeap(uint32_t freeHeap, uint32_t contigHeap);
+  // What a restart to the reader must save first, since it skips onExit: the position, when it is authoritative,
+  // and the link back stack.
+  void saveStateForRestart();
+  // A layout change mid-session (a per-book override, the memory ladder's fewer families): the section goes, and
+  // the next render builds it again at the paragraph (or page) on screen.
+  void resetSectionKeepingPosition();
   void saveProgress(int spineIndex, int currentPage, int pageCount,
                     std::optional<uint16_t> paragraphIndex = std::nullopt,
                     const std::optional<EpubProgressRecord::Shown>& shown = std::nullopt);

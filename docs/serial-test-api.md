@@ -22,6 +22,7 @@ screenshot. This page explains what the commands do, how to use them, and how to
   - [Touch: `TOUCH` and `SWIPE`](#touch-touch-and-swipe)
   - [Logging: `LOG`](#logging-log)
   - [Power: `SLEEP` and `REBOOT`](#power-sleep-and-reboot)
+  - [Heap ballast: `HEAP`](#heap-ballast-heap)
   - [Other: `BOOTLOG`, `HELP`](#other-bootlog-help)
 - [The USB Transfer screen](#the-usb-transfer-screen)
 - [Safety notes](#safety-notes)
@@ -422,6 +423,46 @@ Replies: `SLEEP_OK`, `REBOOT_OK`, sent before the device acts.
   use it on a device nobody can reach.
 - `REBOOT` restarts to Home the way the firmware's own maintenance restarts do: the reading session
   is closed, no boot screen. The port re-enumerates; reopen it.
+
+### Heap ballast: `HEAP`
+
+```
+CMD:HEAP
+CMD:HEAP:HOLD=<bytes>[,<blocks>]
+CMD:HEAP:FREE
+CMD:HEAP:REFUSE=<decodes>[,<reloads>]
+```
+
+Reply: `HEAP_OK:free=<bytes> largest=<bytes> held=<bytes>` (free heap, its largest block, the ballast
+held), `HEAP_OK:refuse decodes=<n> reloads=<n>`, or `HEAP_ERROR:expected HOLD=<bytes>[,<blocks>],
+REFUSE=<decodes>[,<reloads>] or FREE`, or `HEAP_ERROR:not all held:...` when the heap could not give
+every block (what was taken stays held).
+
+Holds `<bytes>` more of the heap, in `<blocks>` equal blocks (1 to 16 in all, default 1), until
+`CMD:HEAP:FREE` gives it all back. Nothing else frees it, so a test can put the device where a short
+or broken-up heap takes it, on demand: with enough held, the decode of a page's image is refused and
+the reader's memory ladder (`src/activities/reader/ImageMemoryLadder.h`) climbs, one step further
+for each step that still leaves too little. Several blocks take several of the heap's free regions,
+which shrinks its largest block as well as what is free. Only in builds with the full API.
+
+```sh
+python3 tools/devctl.py cmd:HEAP cmd:HEAP:HOLD=24000,4 "cmd:ACT:READER:/test/book.epub@3:1" idle:60000 \
+  shot:page.png cmd:HEAP:FREE
+```
+
+Free it before you leave the device: held ballast survives every screen until a restart. And take
+it once the screen you test is open: code that allocates with a throwing `new` aborts the device when
+the heap is short (a book open loads the recent-books list that way), and ballast held across a
+screen change can starve it.
+
+`REFUSE` reaches what ballast cannot. With the lent framebuffer as the decoders' arena, their heap
+floors are 16 KB, and the ladder's first relief step frees about 15 KB of font memory (X4, four
+TrueType families): ballast that makes that step fail leaves the reader no heap to draw with.
+`REFUSE=<decodes>` makes the ladder's next `<decodes>` decode steps fail as if the heap had refused
+them (the step's font memory is still freed and taken back for real), and `<reloads>` the next
+reloads of the TrueType set after its heavy step. `REFUSE=2` shows the heavy step, `REFUSE=3` (more,
+for the image lane's tries) the "not enough memory" boxes, `REFUSE=2,1` an accent family left out;
+`REFUSE=0` clears them. Test builds only, like `HOLD`.
 
 ### Other: `BOOTLOG`, `HELP`
 

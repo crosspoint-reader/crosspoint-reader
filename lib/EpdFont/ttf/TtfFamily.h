@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "FontBytes.h"
 #include "GlyphStoreFormat.h"
 
 /// What the registry and the manager need to know about a TrueType family before loading it: which style a
@@ -19,24 +20,16 @@ inline uint8_t nativeIdPixels(const int fontId) { return static_cast<uint8_t>(fo
 /// A window base from `hash`: its bits 8-30. 0 (no window) when they are all clear.
 inline int32_t nativeBaseFrom(const uint32_t hash) { return static_cast<int32_t>(hash & 0x7FFFFF00u); }
 
-/// A font file read in pieces (on the SD card), not mapped.
-struct FileSource {
-  uint32_t size = 0;
-  /// Copies `len` bytes at `offset` to `dst`. False on an I/O error.
-  bool (*read)(void* ctx, uint32_t offset, void* dst, uint32_t len) = nullptr;
-  void* ctx = nullptr;
-};
-
-/// A FileSource over an open file with seekSet() and read() (HalFile on the device), `size` bytes long. The file
-/// must outlive the source.
+/// A FileSource over an open file with seekSet() and read() (HalFile on the device), `size` bytes long, with the
+/// card's `stamp` of it (FileSource::stamp). The file must outlive the source.
 template <typename File>
-FileSource fileSource(File& file, const uint32_t size) {
+FileSource fileSource(File& file, const uint32_t size, const uint32_t stamp = 0) {
   return {size,
           [](void* ctx, const uint32_t offset, void* dst, const uint32_t len) {
             auto* f = static_cast<File*>(ctx);
             return f->seekSet(offset) && f->read(dst, len) == static_cast<int>(len);
           },
-          &file};
+          &file, stamp};
 }
 
 /// True for a name ending in ".ttf", in any case. In-progress copies ("x.ttf.tmp") do not count.
@@ -51,6 +44,8 @@ struct FileProbe {
   uint16_t weight = 400;
   /// It has an fvar table: a variable font, drawn as its default instance only (spec 5.6).
   bool variable = false;
+  /// What its SD-mode block would take (SdBlock::bytes()).
+  uint32_t sdBytes = 0;
 };
 FileProbe probeFile(const FileSource& file);
 /// probeFile(file).style.
@@ -60,15 +55,62 @@ int probeStyle(const FileSource& file);
 /// the files declaring it, a static one before a variable one, then the weight nearest 400 (regular, italic) or
 /// 700 (bold, bold italic), then the first by name: a folder of static weights (Light, Regular, ExtraBold, ...,
 /// most of them declaring the regular style) then serves Regular, not whichever sorts first. A file of weight 600 or
-/// more declaring regular (italic) may serve bold (bold italic) too, unless it serves its own style. `out[style]` is
-/// that file's index, or -1. False when no file is regular: not a family the reader can use, since every missing
-/// style falls back to regular.
+/// more declaring regular (italic) may serve bold (bold italic) too, unless it serves its own style. Without a regular
+/// file, the italic, else the bold, else the bold italic one serves as the regular instead of its own style (every
+/// missing style falls back to regular). `out[style]` is that file's index, or -1. False when no file can be drawn.
 bool assignStyles(const FileProbe* files, size_t count, int (&out)[4]);
 
-/// True when flash mode can install a family with these style file sizes: every style copied into a font area of
-/// `usableBytes`, with the largest style, the index and a minimal log mapped within `freeMapPages`
-/// (glyphstore::planLayout). Larger families need SD mode (Stage 2c-4).
-bool fitsFlashMode(const uint32_t* styleBytes, uint8_t count, uint32_t usableBytes, uint32_t freeMapPages);
+/// SD mode (spec 4.1): what a style's block holds. A font of its own, made of the file's tables the engine reads but
+/// glyf (cmap, head, hhea, hmtx, loca, maxp, OS/2, GPOS, GSUB, kern, whichever it has), each 4-byte aligned, in file
+/// order, behind a table directory whose glyf record points past the block: FontBytes reads the outlines there from
+/// the file on the card. The block is never held in memory: source() serves any range of it, the directory made here
+/// and the tables read from the file, so an install copies it, and compares it with what flash holds, as it does a
+/// whole file in flash mode.
+class SdBlock {
+ public:
+  /// Reads `file`'s table directory. False when it is no TrueType file with outlines, a table it would copy lies
+  /// outside the file, or a read fails. `file` must outlive the block.
+  bool plan(const FileSource& file);
+  /// The block's bytes: its directory and tables.
+  uint32_t bytes() const { return bytes_; }
+  /// glyf: where it is in the file, and where the block's directory puts it.
+  glyphstore::SdOutlines outlines() const { return {glyf_.fileOffset, bytes_, glyf_.length}; }
+  /// The block as a file, bytes() long. Valid while the block and its file are.
+  FileSource source() { return {bytes_, &SdBlock::readSource, this}; }
+  /// Whether `block`, `size` bytes, starts with this block's table directory: every table's tag, checksum, length and
+  /// place the same, so the file is the one it was made from.
+  bool sameAs(const uint8_t* block, uint32_t size) const;
+
+ private:
+  static constexpr uint8_t kMaxTables = 11;  // the ten tables the engine reads, and glyf
+  struct Table {
+    uint32_t tag;
+    uint32_t checksum;
+    uint32_t fileOffset;
+    uint32_t length;
+    uint32_t blockOffset;  // glyf: past the block
+  };
+  bool addTable(const void* record);
+  uint32_t directoryWord(uint32_t index) const;
+  bool read(uint32_t offset, uint8_t* dst, uint32_t len) const;
+  static bool readSource(void* ctx, uint32_t offset, void* dst, uint32_t len);
+
+  // Set by plan(); empty until then, so a block asked before it (or after it failed) holds nothing.
+  FileSource file_;
+  uint32_t version_ = 0;
+  Table tables_[kMaxTables] = {};  // in file order, glyf among them
+  Table glyf_ = {};
+  uint16_t seen_ = 0;  // the tags met in the directory
+  uint8_t count_ = 0;
+  uint32_t bytes_ = 0;
+};
+
+/// True when the glyph store can install a family with these styles: in flash mode, every style's file
+/// (`fileBytes`) copied into a font area of `usableBytes`, with the largest style, the index and a minimal log mapped
+/// within `freeMapPages`; else in SD mode, every style's tables (`sdBytes`, FileProbe::sdBytes) copied and mapped
+/// together (glyphstore::planLayout).
+bool fitsStore(const uint32_t* fileBytes, const uint32_t* sdBytes, uint8_t count, uint32_t usableBytes,
+               uint32_t freeMapPages);
 
 /// Bump whenever the engine's output changes for the same font (the rasterizer, the 150 dpi sizing, the 2-bit
 /// thresholds): the identity changes with it, so every installed store is rebuilt.

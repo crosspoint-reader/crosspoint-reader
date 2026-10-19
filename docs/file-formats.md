@@ -60,7 +60,7 @@ bookmarks included, and `fontprev/` (`ClearCacheActivity`).
 | `img_<hash><ext>`, `<image>.1bit.pxc`, `<image>.bayer.pxc` | EPUB | `PixelCache::PXC_MAGIC` | Images extracted from the book (`<hash>` is FNV-1a 64 of the entry), and their dithered pixel caches: `u16` magic, `u16` width, `u16` height, 2-bit pixels |
 | `cover.img` | EPUB | none | The cover image's bytes, extracted once (or copied from a cover sidecar) |
 | `linkstack.bin` | EPUB | `EpubLinkBackStack::kVersion` (1) | The link Back stack: [below](#linkstackbin) |
-| `fonts.bin`, `fonts/<style>.ttf`, `fonts/accent/<style>.ttf` | EPUB | `BookFonts::kVersion` (4) | The book's embedded body and accent fonts (Publisher Fonts): [below](#fontsbin) |
+| `fonts.bin`, `fonts/<style>.ttf`, `fonts/accent<n>/<style>.ttf` | EPUB | `BookFonts::kVersion` (5) | The book's embedded body and accent fonts (Publisher Fonts): [below](#fontsbin) |
 | `kosync_push.bin` | EPUB | `LastPush::kVersion` (1) | Our last KOReader push: [below](#kosync_pushbin) |
 | `koreader_docid.txt`, `koreader_syncmethod.txt` | EPUB | none | The KOReader document id, after the file size and fingerprint it was computed for, and the match method learned for the book |
 | `index.bin` | TXT, Markdown | `CACHE_VERSION`: TXT 2 (magic `TXTI`), Markdown 4 (`MKDI`) | Page offsets under the current layout. `SleepActivity` checks the TXT magic and version too |
@@ -91,7 +91,7 @@ fonts need.
 | Magic | Written by | Version | Contents |
 |---|---|---|---|
 | `CPFC` | `FlashFontPartition` | none | A `.cpfont` family copied from the card, mapped in place. See [contributing/font-cache-structures.md](contributing/font-cache-structures.md) |
-| `CPTT` | `FlashGlyphStore` | `glyphstore::kFormatVersion` (2) | The TTF glyph store: [below](#the-ttf-glyph-store-cptt) |
+| `CPTT` | `FlashGlyphStore` | `glyphstore::kFormatVersion` (3) | The TTF glyph store: [below](#the-ttf-glyph-store-cptt) |
 
 ## `book.bin`
 
@@ -370,21 +370,22 @@ An empty stack is stored as no file. The file is written when the reader closes 
 
 ## `fonts.bin`
 
-What `BookFonts::prepare` (`lib/Epub/Epub/BookFonts.*`) found when the Publisher Fonts setting first met the book: the family its body text is set in, whether it embeds it, and the accent family (the embedded family the most other blocks are set in), with where the copies are. Written once per book, last, after the font files; the next open trusts it.
+What `BookFonts::prepare` (`lib/Epub/Epub/BookFonts.*`) found when the Publisher Fonts setting first met the book: the family its body text is set in, whether it embeds it, and up to three accent families (the embedded families other blocks are set in, the one the most blocks are set in first), with where the copies are. Written once per book, last, after the font files; the next open trusts it.
 
 ```text
-u8  version             BookFonts::kVersion (4)
+u8  version             BookFonts::kVersion (5)
 u8  code                0 none: the book's body keeps the reader's font
                         1 family: its body family is in fonts/
                         2 + n: n failed attempts (a read failed); examined again at the next open, given up at 3
 u32 body                the body text's font-family, as CssStyle::fontFamily keeps it (CssFontFamily: the family's
                         identity, its generic serif or sans-serif in the low two bits); 0 for the reader's font
-u32 accent              the accent family's identity when it is in fonts/accent/, else 0
-    names               the body family's name as the book declares it (empty unless code is 1), then, when there
-                        is an accent family, '\0' and its name; to the end of the file
+u32 accents[3]          the accent families' identities (BookFonts::kMaxAccents), the most used first, accent n's
+                        files in fonts/accent<n>/; 0 past the last
+    names               the body family's name as the book declares it (empty unless code is 1), then, for each
+                        accent family, '\0' and its name; to the end of the file
 ```
 
-The body family's files sit in `fonts/`, the accent family's in `fonts/accent/`, one per style, named `<style>.ttf` (0 regular, 1 bold, 2 italic, 3 bold italic): plain TrueType, any IDPF or Adobe font obfuscation undone. The reader loads either directory as it loads a `.ttf` family directory on the card. A file of another version, or none, means the book has not been examined; `prepare` then removes the whole `fonts/` directory first.
+The body family's files sit in `fonts/`, accent family n's in `fonts/accent<n>/` (`accent0` to `accent2`), one per style, named `<style>.ttf` (0 regular, 1 bold, 2 italic, 3 bold italic): plain TrueType, any IDPF or Adobe font obfuscation undone. An accent family whose faces are refused (CFF, WOFF, encrypted) gives its place to the next. The reader loads each directory as it loads a `.ttf` family directory on the card. A file of another version, or none, means the book has not been examined; `prepare` then removes the whole `fonts/` directory first.
 
 ## `kosync_push.bin`
 
@@ -505,7 +506,7 @@ parsed.
 
 `FlashGlyphStore` (`lib/EpdFont/ttf`) keeps the reader's TrueType families in the font area: their files, and
 every glyph drawn from them, so a glyph is rendered once and then read from flash. It holds a family set: one
-family, or several drawn together (the body's, and a book's accent family under Publisher Fonts), installed
+family, or several drawn together (the body's, and a book's accent families under Publisher Fonts), installed
 together. The layout is
 `glyphstore::Layout` (`GlyphStoreFormat.h`); the design and its reasons are in the TTF spec, sections 4 and 11.1.
 Every byte is programmed at most once between erases, so each marker below is one that only a complete write
@@ -513,13 +514,20 @@ produces; a power cut leaves at worst bytes nothing references.
 
 | Offset | Size | Contents |
 |---|---|---|
-| 0 | 4 KB sector | `Header`, written last at install: `u32` magic `CPTT`, `u16` version, `u16` header bytes, the set's 16-byte identity, the `Geometry` (mode, style count, the regions' offsets and sizes), 8 `StyleInfo` (a style block's offset and size; in SD mode also its file and table map), then `u32` FNV-1a over all of it |
+| 0 | 4 KB sector | `Header`, written last at install: `u32` magic `CPTT`, `u16` version, `u16` header bytes, the set's 16-byte identity, the `Geometry` (style count, the regions' offsets and sizes), 8 `StyleInfo` (a style block's offset, size and mode; in SD mode also its file and outlines, below), then `u32` FNV-1a over all of it |
 | 4 KB | 4 KB sector | The state: 32 face entries `{u32 face, u32 claimed}`, then the `u32` wipe word |
-| 64 KB | 64 KB pages | The style blocks, each family's styles in the set's order, each on its own page so one maps alone |
+| 64 KB | 64 KB pages | The style blocks, each family's styles in the set's order, each on its own page so one maps alone; the SD-mode blocks after every flash-mode one |
 | `indexOffset` | whole pages | Glyph index: 8-byte slots `{u32 key, u32 value}`, open addressing, at most 128 probes |
 | `pairOffset` | 64 KB | Kerning pairs: `{u32 left << 16 \| right, u32 pairStyle << 16 \| i16 font units}` |
 | `logOffset` | whole pages | Glyph records, append only: `u32 key`, the 16-byte `EpdGlyph`, the 2-bit bitmap, padded to 4 bytes |
 
+- **A style block's mode.** Flash mode: the style's whole TTF file. SD mode (a family too large for flash mode, or
+  beside others that fill the font area): a font of its own made of the file's tables but `glyf` (`cmap`, `head`,
+  `hhea`, `hmtx`, `loca`, `maxp`, `OS/2`, `GPOS`, `GSUB`, `kern`, whichever it has), each 4-byte aligned behind a
+  table directory whose `glyf` record points past the block (`SdOutlines::fontOffset`); the outlines are read from
+  the file on the card there (`SdOutlines::fileOffset`, `length`). An SD-mode `StyleInfo` also holds the file's
+  stamp (`FileSource::stamp`: FNV-1a over its path and modification time) and size; a file that no longer matches
+  them installs the set again. Flash-mode blocks map one at a time, the SD-mode ones together.
 - **A face** is a family at one size: `face = family << 24 | ppem` (26.6 pixels per em; the family is its index in
   the set). An entry is in use once `claimed` reads 0. A glyph key is `codepoint | style << 21 | faceIndex << 23`,
   bits 28-31 zero, so a key never reads as erased. The 32 entries are every family's; taking the last one, or asking
@@ -532,5 +540,6 @@ produces; a power cut leaves at worst bytes nothing references.
   FNV-1a over each style file's name, size and modification time and the engine's render version
   (`ttf::familyIdentity`). A store of another identity, or one whose header fails its check, is installed again.
 
-Version 1 held one family: four style blocks, and a size table of bare ppems with pairs keyed by style alone. A
-version-1 header reads as not installed, so the first load installs the set over it.
+Version 1 held one family: four style blocks, and a size table of bare ppems with pairs keyed by style alone.
+Version 2 had the mode in the `Geometry`, the store's, and a table map in each `StyleInfo` (1,240 B headers).
+An older header reads as not installed, so the first load installs the set over it.

@@ -387,9 +387,15 @@ TEST(TtfScratch, AllocationHoldsThePlanAndRefusesImpossibleOnes) {
   // The pool, 512 points (a vector and a tag each), 256 contour ends, the output.
   EXPECT_GE(rasterizer.scratchBytes(), kPoolBytesSd + 512u * 9 + 256u * 2 + 4096);
   EXPECT_NE(nullptr, rasterizer.output());
+  const uint32_t bytes = rasterizer.scratchBytes();
   rasterizer.release();
   EXPECT_FALSE(rasterizer.allocated());
   EXPECT_EQ(nullptr, rasterizer.output());
+  EXPECT_EQ(0u, rasterizer.scratchBytes());
+  // The plan stays: the same block is made again from it.
+  EXPECT_EQ(4096u, rasterizer.plan().outputBytes);
+  ASSERT_TRUE(rasterizer.allocate(rasterizer.plan()));
+  EXPECT_EQ(bytes, rasterizer.scratchBytes());
   EXPECT_FALSE(rasterizer.allocate({512, 256, 4096, 1024}));  // pool under ftgrays' minimum
   EXPECT_FALSE(rasterizer.allocate({kMaxScratchPoints + 1, 1, 64, kPoolBytesFlash}));
   EXPECT_FALSE(rasterizer.allocate({8, 1, kMaxOutputBytes + 1, kPoolBytesFlash}));

@@ -25,8 +25,11 @@ namespace BookFonts {
 namespace {
 
 constexpr char kFontsDir[] = "/fonts";
-constexpr char kAccentDir[] = "/fonts/accent";
-constexpr char kStateFile[] = "/fonts.bin";  // beside fonts/, which prepare() empties
+constexpr char kAccentDir[] = "/fonts/accent0";  // the digit is the accent family's
+constexpr char kStateFile[] = "/fonts.bin";      // beside fonts/, which prepare() empties
+// The accent limit (accentLimit()): kVersion, the settings key as stored, the accent families kept.
+constexpr char kLimitFile[] = "/fontlimit.bin";
+constexpr size_t kLimitBytes = 2 + sizeof(uint32_t);
 // The state file: kVersion, then a code -- None, Family (then the name, to the end of the file), or kFailed + n
 // for n failed attempts so far. At kMaxAttempts the book is given up on, as None.
 constexpr uint8_t kCodeNone = 0;
@@ -50,9 +53,9 @@ constexpr size_t kAdobeBytes = 1024;
 // chapter uses) and centred or right-aligned text passed over. Headings, tables and hidden text left out
 // changed one book.
 //
-// The same pass counts the blocks each family is set in, for the accent family: what #3934 (Justin Mitchell) draws
-// in its "Ignore Body Font" mode, the book's families other than the body's, here one family by blocks, as the
-// reader lays a block out in one family (ChapterHtmlSlimParser::resolveBlockFont).
+// The same pass counts the blocks each family is set in, for the accent families: what #3934 (Justin Mitchell) draws
+// in its "Ignore Body Font" mode, the book's families other than the body's, here ranked by blocks, as the reader
+// lays a block out in one family (ChapterHtmlSlimParser::resolveBlockFont).
 class BodyFontProbe {
  public:
   explicit BodyFontProbe(CssParser& css) : css_(css) {}
@@ -87,20 +90,22 @@ class BodyFontProbe {
     }
     return best->family;
   }
-  // The accent family (Publisher Fonts' Accents): of the families blocks are set in, other than `body`'s and the
-  // reader's, the one the most blocks are set in that `usable` takes; its identity, or 0 for none.
+  // The accent families (Publisher Fonts' Accents): of the families blocks are set in, other than `body`'s and the
+  // reader's, those `usable` takes, the one the most blocks are set in first; their identities, 0 past the last.
   template <typename Usable>
-  uint32_t accent(const uint32_t body, Usable usable) const {
-    uint32_t best = 0;
-    uint32_t bestBlocks = 0;
-    for (const Usage& u : blocks_) {
-      if (u.bytes <= bestBlocks || u.family == 0 || u.family == CssFontFamily::identity(body) || !usable(u.family)) {
-        continue;
+  void accents(const uint32_t body, Usable usable, uint32_t (&out)[kMaxAccents]) const {
+    for (uint32_t& accent : out) {
+      uint32_t bestBlocks = 0;
+      accent = 0;
+      for (const Usage& u : blocks_) {
+        if (u.bytes <= bestBlocks || u.family == 0 || u.family == CssFontFamily::identity(body) ||
+            std::find(out, out + kMaxAccents, u.family) != out + kMaxAccents || !usable(u.family)) {
+          continue;
+        }
+        accent = u.family;
+        bestBlocks = u.bytes;
       }
-      best = u.family;
-      bestBlocks = u.bytes;
     }
-    return best;
   }
 
   static void onStart(void* ctx, const char* name, const char** atts) {
@@ -358,35 +363,41 @@ void pickFaces(std::string_view records, const uint32_t family, CssParser::FontF
     CssParser::FontFace& best = out[style];
     if (best.name.empty() || std::abs(face.weight - target) < std::abs(best.weight - target)) best = face;
   }
+  // A family without a normal face (a script declared italic only, a display face bold only) draws in its nearest
+  // face: that face becomes the regular, and the styles it leaves fall back to it. Moved, not copied, so the store
+  // holds it once.
+  if (out[0].name.empty()) {
+    for (const uint8_t style : {2, 1, 3}) {
+      if (out[style].name.empty()) continue;
+      out[0] = out[style];
+      out[style] = CssParser::FontFace{};
+      break;
+    }
+  }
 }
 
 // The state file's code, and a family's name (see read()); kNoCode when there is no file of this kVersion.
 constexpr uint8_t kNoCode = 0xFF;
-constexpr size_t kHeaderBytes = 2 + 2 * sizeof(uint32_t);  // version, code, the body and accent families
-uint8_t readCode(const std::string& cachePath, std::string* name, Families* families, const bool body) {
+constexpr size_t kHeaderBytes = 2 + sizeof(Families);  // version, code, the body and accent families
+static_assert(sizeof(Families) == (1 + kMaxAccents) * sizeof(uint32_t), "the families are stored as they are");
+uint8_t readCode(const std::string& cachePath, std::string* name, Families* families, const int accent) {
   const std::string path = cachePath + kStateFile;
   std::string bytes;
   // Checked first: an unexamined book has none, and a failed open logs.
-  if (!Storage.exists(path.c_str()) || !Storage.readFileToString("BKF", path, kHeaderBytes + 2 * 255 + 1, bytes) ||
+  if (!Storage.exists(path.c_str()) ||
+      !Storage.readFileToString("BKF", path, kHeaderBytes + (1 + kMaxAccents) * 256, bytes) ||
       bytes.size() < kHeaderBytes || bytes[0] != static_cast<char>(kVersion)) {
     return kNoCode;
   }
   const auto code = static_cast<uint8_t>(bytes[1]);
-  if (families) {
-    std::memcpy(&families->body, &bytes[2], sizeof(uint32_t));
-    std::memcpy(&families->accent, &bytes[2 + sizeof(uint32_t)], sizeof(uint32_t));
-  }
-  // The names: the body family's, then '\0' and the accent family's (c_str() ends either).
+  if (families) std::memcpy(families, &bytes[2], sizeof(Families));
+  // The names: the body family's (empty unless a Family), then '\0' and each accent family's (c_str() ends each).
   bytes.erase(0, kHeaderBytes);
-  size_t length = strlen(bytes.c_str());
-  if (code == kCodeFamily && length == 0) return kNoCode;
+  if (code == kCodeFamily && bytes.c_str()[0] == '\0') return kNoCode;
   if (name) {
-    if (!body || code != kCodeFamily) {
-      bytes.erase(0, std::min(length + 1, bytes.size()));
-      length = strlen(bytes.c_str());
-    }
-    bytes.resize(length);
-    *name = std::move(bytes);
+    size_t at = 0;
+    for (int skip = accent + 1; skip > 0 && at < bytes.size(); --skip) at += strlen(bytes.c_str() + at) + 1;
+    *name = at < bytes.size() ? bytes.c_str() + at : "";
   }
   return code;
 }
@@ -397,13 +408,12 @@ State stateOf(const uint8_t code) {
   return State::Pending;
 }
 
-State writeState(const std::string& cachePath, const uint8_t code, const uint32_t body, const uint32_t accent,
+State writeState(const std::string& cachePath, const uint8_t code, const Families& families,
                  const std::string_view names) {
   std::string bytes(kHeaderBytes, '\0');
   bytes[0] = static_cast<char>(kVersion);
   bytes[1] = static_cast<char>(code);
-  std::memcpy(&bytes[2], &body, sizeof(body));
-  std::memcpy(&bytes[2 + sizeof(body)], &accent, sizeof(accent));
+  std::memcpy(&bytes[2], &families, sizeof(families));
   bytes.append(names);
   const std::string path = cachePath + kStateFile;
   HalFile file;
@@ -418,7 +428,7 @@ State writeState(const std::string& cachePath, const uint8_t code, const uint32_
 
 // Finds the body and accent families and copies their faces out of the book; the state file's code for what came
 // of it (kCodeFailed for a failed read). `found` gets the families, `names` their names as the book declares them
-// (the body's for a Family, then '\0' and the accent's when it was copied), into `records`.
+// (the body's for a Family, then '\0' and each accent's that was copied), into `records`.
 uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, Families& found, std::string& names) {
   // A book without faces is probed too: Accents needs its body's generic family (CssFontFamily).
   if (!CssParser::loadFontFaces(epub.getCachePath(), records)) records.clear();
@@ -428,12 +438,15 @@ uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, Fam
   found.body = families.body;
   Keys keys;
   uint8_t code = kCodeNone;
-  // The body family to fonts/, the accent family to fonts/accent/.
-  for (const bool accent : {false, true}) {
+  uint8_t accents = 0;  // copied so far
+  // The body family to fonts/, the accent families, the most used first, to fonts/accent0/ on; one refused gives
+  // its place to the next.
+  for (int i = -1; i < kMaxAccents; ++i) {
+    const bool accent = i >= 0;
     CssParser::FontFace picked[4];
-    pickFaces(records, accent ? families.accent : CssFontFamily::identity(families.body), picked);
-    if (picked[0].name.empty()) continue;  // not embedded, or no regular face
-    const std::string dir = familyDir(epub.getCachePath(), accent);
+    pickFaces(records, accent ? families.accents[i] : CssFontFamily::identity(families.body), picked);
+    if (picked[0].name.empty()) continue;  // not embedded
+    const std::string dir = familyDir(epub.getCachePath(), accent ? accents : -1);
     Storage.mkdir(dir.c_str());
     std::string dest = dir + "/0.ttf";  // the style's digit goes in place of the 0
     Copy copy = Copy::Done;
@@ -454,7 +467,7 @@ uint8_t examine(const Epub& epub, BuildArena* scratch, std::string& records, Fam
     LOG_INF("BKF", "%s font %.*s", accent ? "Accent" : "Body", static_cast<int>(picked[0].name.size()),
             picked[0].name.data());
     if (accent) {
-      found.accent = families.accent;
+      found.accents[accents++] = families.accents[i];
       names.push_back('\0');
     } else {
       code = kCodeFamily;
@@ -502,12 +515,44 @@ bool adobeKey(const std::string_view uuid, uint8_t (&key)[16]) {
   return bytes == sizeof(key) && high < 0;
 }
 
-State read(const std::string& cachePath, std::string* name, Families* families, const bool body) {
-  return stateOf(readCode(cachePath, name, families, body));
+State read(const std::string& cachePath, std::string* name, Families* families, const int accent) {
+  return stateOf(readCode(cachePath, name, families, accent));
 }
 
-std::string familyDir(const std::string& cachePath, const bool accent) {
-  return cachePath + (accent ? kAccentDir : kFontsDir);
+uint8_t accentLimit(const std::string& cachePath, const uint32_t settingsKey) {
+  const std::string path = cachePath + kLimitFile;
+  std::string bytes;
+  // Checked first: most books have none, and a failed open logs.
+  if (!Storage.exists(path.c_str()) || !Storage.readFileToString("BKF", path, kLimitBytes, bytes)) return kMaxAccents;
+  uint32_t key = 0;
+  if (bytes.size() == kLimitBytes) std::memcpy(&key, &bytes[1], sizeof key);
+  if (bytes.size() != kLimitBytes || bytes[0] != static_cast<char>(kVersion) || key != settingsKey) {
+    Storage.remove(path.c_str());  // the settings changed since: every accent family is tried again
+    return kMaxAccents;
+  }
+  return std::min(static_cast<uint8_t>(bytes[kLimitBytes - 1]), kMaxAccents);
+}
+
+void setAccentLimit(const std::string& cachePath, const uint32_t settingsKey, const uint8_t accents) {
+  const std::string path = cachePath + kLimitFile;
+  if (accents >= kMaxAccents) {
+    if (Storage.exists(path.c_str())) Storage.remove(path.c_str());
+    return;
+  }
+  char bytes[kLimitBytes] = {static_cast<char>(kVersion)};
+  std::memcpy(&bytes[1], &settingsKey, sizeof settingsKey);
+  bytes[kLimitBytes - 1] = static_cast<char>(accents);
+  HalFile file;
+  if (!Storage.openFileForWrite("BKF", path, file)) return;
+  const bool written = file.write(bytes, sizeof bytes) == sizeof bytes;
+  if (!file.close() || !written) Storage.remove(path.c_str());
+}
+
+std::string familyDir(const std::string& cachePath, const int accent) {
+  if (accent < 0) return cachePath + kFontsDir;
+  std::string dir = cachePath + kAccentDir;
+  dir.back() = static_cast<char>('0' + accent);
+  return dir;
 }
 
 Found detectFamilies(const Epub& epub, BuildArena* scratch, bool* failed, const std::string_view records) {
@@ -549,12 +594,15 @@ Found detectFamilies(const Epub& epub, BuildArena* scratch, bool* failed, const 
   css->clearCaches(/*evictEverything=*/true);  // the resolver's caches go back to the heap
   Found found;
   found.body = probe->family();
-  // The accent needs a regular face to be drawn (the registry's rule for a family).
-  found.accent = probe->accent(found.body, [records](const uint32_t family) {
-    CssParser::FontFace faces[4];
-    pickFaces(records, family, faces);
-    return !faces[0].name.empty();
-  });
+  // An accent needs a face to be drawn (pickFaces makes its nearest the regular).
+  probe->accents(
+      found.body,
+      [records](const uint32_t family) {
+        CssParser::FontFace faces[4];
+        pickFaces(records, family, faces);
+        return !faces[0].name.empty();
+      },
+      found.accents);
   return found;
 }
 
@@ -564,7 +612,7 @@ State prepare(const Epub& epub, BuildArena* scratch) {
   const std::string& cachePath = epub.getCachePath();
   // The CSS was not loaded, or did not compile: nothing to decide from yet.
   if (!epub.getCssParser() || !epub.getCssParser()->hasCache()) return State::Pending;
-  const uint8_t last = readCode(cachePath, nullptr, nullptr, true);
+  const uint8_t last = readCode(cachePath, nullptr, nullptr, -1);
   const uint8_t attempts = last != kNoCode && last >= kCodeFailed ? static_cast<uint8_t>(last - kCodeFailed) : 0;
   Storage.removeDir((cachePath + kFontsDir).c_str());  // whatever an earlier attempt left
 
@@ -572,8 +620,8 @@ State prepare(const Epub& epub, BuildArena* scratch) {
   Families found;
   std::string names;
   const uint8_t code = examine(epub, scratch, records, found, names);
-  return writeState(cachePath, code == kCodeFailed ? static_cast<uint8_t>(kCodeFailed + attempts + 1) : code,
-                    found.body, found.accent, names);
+  return writeState(cachePath, code == kCodeFailed ? static_cast<uint8_t>(kCodeFailed + attempts + 1) : code, found,
+                    names);
 }
 
 }  // namespace BookFonts

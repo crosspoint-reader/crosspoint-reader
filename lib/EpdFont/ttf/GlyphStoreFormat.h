@@ -8,7 +8,8 @@
 ///   0            header sector: Header, written once per install
 ///   4 KB         state sector: the face table, then the wipe word; a wipe erases it last
 ///   64 KB        style blocks, each starting on a 64 KB page so one maps alone (flash mode: the whole
-///                TTF; SD mode: the tables copied out of it), every family's styles in the set's order
+///                TTF; SD mode: its tables behind a directory of their own), every family's styles in the set's
+///                order, the SD-mode blocks after every flash-mode one
 ///   indexOffset  glyph index: Slot {key, the record's dataOffset, or kNoGlyph}, open addressing
 ///   pairOffset   kerning pair index: Slot {left << 16 | right, pairStyle(family, style) << 16 | font units}
 ///   logOffset    append-only glyph records: [u32 key][EpdGlyph][2-bit bitmap], each 4-byte aligned
@@ -17,7 +18,7 @@
 /// "empty". A power cut can only leave bytes with more 1 bits than were written (NorFlash.h); every marker
 /// that must not appear by accident is therefore one that only a complete write produces.
 ///
-/// The store holds a family set (spec 11.1): one family, or a book's body family and its accent family. A family is
+/// The store holds a family set (spec 11.1): one family, or a book's body family and its accent families. A family is
 /// its index in the set. The set's identity covers their order, so an index names the same family for as long as
 /// the store stays installed.
 namespace glyphstore {
@@ -25,14 +26,16 @@ namespace glyphstore {
 constexpr uint32_t kMagic = 0x54545043;  // "CPTT"
 /// 1: one family, and a size table of ppems.
 /// 2: a family set (Stage B): the size table became a face table (faceOf()), a pair slot carries the family beside
-/// the style, and the header has eight style blocks. A version-1 store reads as not installed and is installed over.
-constexpr uint16_t kFormatVersion = 2;
-constexpr uint8_t kModeFlash = 0;  ///< every style's whole TTF is in the partition
-constexpr uint8_t kModeSd = 1;     ///< the tables are in the partition; outlines are read from the SD card
+/// the style, and the header has eight style blocks.
+/// 3: the mode is a style block's, not the store's (2c-4): StyleInfo holds it, and in SD mode the file the outlines
+/// come from and where they are; Geometry lost its mode, StyleInfo its table map. An older store reads as not
+/// installed and is installed over.
+constexpr uint16_t kFormatVersion = 3;
+constexpr uint8_t kModeFlash = 0;  ///< a style block holds the style's whole TTF
+constexpr uint8_t kModeSd = 1;     ///< it holds the tables; the outlines are read from the TTF file on the SD card
 /// Style blocks of every family together: two families of four, or a body of four and four one-style accent
 /// families. A family has at least its regular style, so a set has at most this many families.
 constexpr uint8_t kMaxStyles = 8;
-constexpr uint8_t kMaxTables = 8;
 /// Faces (a family at one size) claimed since the last wipe, every family's: a book's body takes 5-10 sizes and an
 /// accent family 2-4.
 constexpr uint8_t kFaceEntries = 32;
@@ -104,27 +107,27 @@ struct Slot {
 };
 static_assert(sizeof(Slot) == kSlotBytes, "a slot is 8 bytes");
 
-/// SD mode: where a table copied out of the TTF sits.
-struct TableEntry {
-  uint32_t tag;          ///< the OpenType tag as read from the file
-  uint32_t fileOffset;   ///< offset in the TTF file
-  uint32_t blockOffset;  ///< offset in this style's block
+/// SD mode: where a style's outlines, its glyf table, are. The engine reads an SD-mode style through the block's own
+/// table directory, which puts glyf at `fontOffset`: past the block, so no read finds it in flash.
+struct SdOutlines {
+  uint32_t fileOffset;  ///< where glyf is in the TTF file
+  uint32_t fontOffset;  ///< where the block's directory puts it
   uint32_t length;
 };
 
 struct StyleInfo {
-  uint32_t offset;      ///< partition offset of the style block
-  uint32_t size;        ///< bytes of style data in the block
-  uint32_t sdPathHash;  ///< SD mode: the TTF file the outlines come from
-  uint32_t fileSize;    ///< SD mode
-  uint32_t tableCount;  ///< SD mode: entries used in tables
-  TableEntry tables[kMaxTables];
+  uint32_t offset;  ///< partition offset of the style block
+  uint32_t size;    ///< bytes of style data in the block
+  uint8_t mode;     ///< kModeFlash or kModeSd
+  uint8_t reserved[3];
+  uint32_t fileStamp;   ///< SD mode: the TTF file the outlines come from, as the card describes it (FileSource::stamp)
+  uint32_t fileSize;    ///< SD mode: its size
+  SdOutlines outlines;  ///< SD mode
 };
 
 struct Geometry {
-  uint8_t mode;
   uint8_t styleCount;
-  uint16_t reserved;
+  uint8_t reserved[3];
   uint32_t indexOffset;
   uint32_t indexSlots;
   uint32_t pairOffset;
@@ -166,11 +169,12 @@ inline uint32_t fnv1a(const void* data, const size_t len, uint32_t hash = 216613
   return hash;
 }
 
-/// What the caller knows before an install: the mode, and per style block the bytes to copy (flash mode: the
-/// TTF file; SD mode: the copied tables, summed), every family's styles in the set's order.
+/// What the caller knows before an install: per style block, every family's styles in the set's order, its mode and
+/// the bytes to copy (flash mode: the TTF file; SD mode: its tables and their directory). SD-mode blocks follow every
+/// flash-mode one, so they map together.
 struct PlanInput {
-  uint8_t mode;
   uint8_t styleCount;
+  uint8_t styleMode[kMaxStyles];
   uint32_t styleBytes[kMaxStyles];
   uint32_t usableBytes;   ///< NorFlash::size(): the partition below the language slot
   uint32_t freeMapPages;  ///< NorFlash::freeMapPages(), measured while nothing of the store is mapped
@@ -180,14 +184,16 @@ struct Layout {
   Geometry geometry;
   uint32_t styleOffset[kMaxStyles];
   uint32_t styleSize[kMaxStyles];
+  uint8_t styleMode[kMaxStyles];
 };
 
 /// Region sizes from the mapping budget:
 ///   log pages = free pages - mapped style pages - index pages - pair pages - 2 spare,
-/// also bounded by the partition. The index gets enough pages that 70 % of its slots holds the
-/// records the log holds (kExpectedRecord*), so it does not fill first. Flash mode maps one style at a
-/// time, so the largest style counts; SD mode maps all copied tables together. False when the log
-/// would be under kMinLogPages.
+/// also bounded by the partition. The index gets enough pages that 70 % of its slots holds the records the log
+/// holds, so it does not fill first: kExpectedRecordSd bytes each when the body (the first style) is in SD mode, a
+/// font too large for flash mode being a CJK font, else kExpectedRecordFlash. Flash-mode blocks map one at a time,
+/// so the largest counts; SD-mode blocks map together, so all count. False when the log would be under
+/// kMinLogPages, or an SD-mode block comes before a flash-mode one.
 bool planLayout(const PlanInput& in, Layout& out);
 
 }  // namespace glyphstore

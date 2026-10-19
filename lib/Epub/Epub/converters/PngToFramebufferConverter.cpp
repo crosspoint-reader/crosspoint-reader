@@ -275,18 +275,21 @@ bool PngToFramebufferConverter::decodeOpenFile(FsFile& file, const std::string& 
   const size_t freeHeap = ESP.getFreeHeap();
   if (const size_t floor = pngDecodeHeapFloor(); freeHeap < floor) {
     LOG_ERR("PNG", "Not enough heap for PNG decode (%u free, need %u)", (unsigned)freeHeap, (unsigned)floor);
+    image_scratch::noteHeapShort();
     return false;
   }
 
   auto decoder = std::unique_ptr<PngStreamDecoder>(new (std::nothrow) PngStreamDecoder());
   if (!decoder) {
     LOG_ERR("PNG", "Failed to allocate PNG decoder");
+    image_scratch::noteHeapShort();
     return false;
   }
   decoder->setScratchArena(image_scratch::get());
   PngStreamDecoder::Info info;
   if (!decoder->begin(file, info)) {
     LOG_ERR("PNG", "Failed to start PNG decode: %s", imagePath.c_str());
+    if (decoder->outOfMemory()) image_scratch::noteHeapShort();
     return false;
   }
 
@@ -318,6 +321,7 @@ bool PngToFramebufferConverter::decodeOpenFile(FsFile& file, const std::string& 
   auto grayLine = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[srcWidth]);
   if (!grayLine) {
     LOG_ERR("PNG", "Failed to allocate gray line buffer");
+    image_scratch::noteHeapShort();
     return false;
   }
 

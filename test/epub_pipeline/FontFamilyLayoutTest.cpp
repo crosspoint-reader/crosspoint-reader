@@ -1,7 +1,8 @@
 // A book's other font families (Publisher Fonts' Accents and All Text, BlockFontFamilies): a block whose CSS
 // font-family is one of them is laid out with that family's face at its size, through the block font ID; a generic
 // sans-serif goes to a built-in family; the body family, monospace and families the book does not have keep the body
-// font. Without families nothing about a block's font changes (Off and Body Text).
+// font. A word in another family than its block's has that family's face at the block's size (a word font, Stage B
+// phase 3). Without families nothing about a block's font changes (Off and Body Text).
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -24,6 +25,7 @@ constexpr int32_t kAccentBase = 0x12345600;  // the accent family's native sizes
 constexpr int32_t kAccentBody = 0x777;       // its face at the body size
 constexpr uint32_t kBody14pt = (14 * 64 * 150 + 36) / 72;
 constexpr int32_t kSansBody = 2014;  // the built-in sans-serif at 14 pt; its rungs are 2000 + their size
+constexpr int32_t kBodyFont = 14;    // the reader's body font
 
 const char* kCss =
     "body { font-family: 'Book Body', serif }\n"
@@ -32,12 +34,15 @@ const char* kCss =
     ".body2 { font-family: 'book body', sans-serif }\n"
     ".helvetica { font-family: Helvetica, Arial, sans-serif }\n"
     ".georgia { font-family: Georgia, serif }\n"
-    ".mono { font-family: Courier, monospace }\n";
+    ".mono { font-family: Courier, monospace }\n"
+    ".cap { float: left; font-size: 3em }\n"
+    ".cap-display { float: left; font-size: 3em; font-family: Display }\n";
 
 struct Line {
   std::string text;
   int32_t fontId;  // 0: the body face
   float mult;
+  std::vector<TextBlock::WordFont> wordFonts;  // per word; a fontId of 0: the block's font
 };
 
 struct FontFamilyLayoutFixture : testing::Test {
@@ -64,6 +69,7 @@ struct FontFamilyLayoutFixture : testing::Test {
     params.viewportWidth = 480;
     params.viewportHeight = 800;
     params.lineCompression = 1.0f;
+    params.fontId = kBodyFont;
     params.embeddedStyle = true;
     params.fontFamilies = families;
     GfxRenderer renderer;
@@ -82,6 +88,8 @@ struct FontFamilyLayoutFixture : testing::Test {
       for (uint16_t w = 0; w < block.wordCount(); ++w) {
         if (w > 0) line.text += ' ';
         line.text += block.wordText(w);
+        const TextBlock::WordFont* font = block.wordFont(w);
+        line.wordFonts.push_back(font ? *font : TextBlock::WordFont{});
       }
       lines.push_back(line);
     }
@@ -216,4 +224,89 @@ TEST_F(FontFamilyLayoutFixture, ALongBlockLaidOutInPartsKeepsItsFamily) {
   const auto lines = layout("<p class='dedication'>" + words + "</p>", &families);
   ASSERT_GT(lines.size(), 3u);
   for (const Line& line : lines) EXPECT_EQ(kAccentBody, line.fontId) << line.text;
+}
+
+TEST_F(FontFamilyLayoutFixture, AnAccentWordInABodyParagraphHasTheAccentFace) {
+  const BlockFontFamilies families = accents();
+  const auto lines = layout("<p>Body <span class='dedication'>accent</span> body</p>", &families);
+  const Line* mixed = find(lines, "Body accent body");
+  ASSERT_NE(nullptr, mixed);
+  EXPECT_EQ(0, mixed->fontId);
+  ASSERT_EQ(3u, mixed->wordFonts.size());
+  EXPECT_EQ(0, mixed->wordFonts[0].fontId);
+  EXPECT_EQ(kAccentBody, mixed->wordFonts[1].fontId);
+  EXPECT_FLOAT_EQ(1.0f, mixed->wordFonts[1].scale);
+  EXPECT_EQ(0, mixed->wordFonts[2].fontId);
+}
+
+TEST_F(FontFamilyLayoutFixture, AWordInAnotherFamilyHasItsFaceAtTheBlocksSize) {
+  const BlockFontFamilies families = accents();
+  const auto lines = layout("<h1>Head <span class='sans'>sans</span> words</h1>", &families);
+  const Line* h1 = find(lines, "Head sans words");
+  ASSERT_NE(nullptr, h1);
+  EXPECT_EQ(kAccentBase | 47, h1->fontId);  // the heading's own family, Display, at 160 %
+  ASSERT_EQ(3u, h1->wordFonts.size());
+  EXPECT_EQ(2022, h1->wordFonts[1].fontId);  // the built-in sans at 160 %: its 157 % rung
+  EXPECT_FLOAT_EQ(1.0f, h1->wordFonts[1].scale);
+  EXPECT_EQ(0, h1->wordFonts[0].fontId);
+  EXPECT_EQ(0, h1->wordFonts[2].fontId);
+}
+
+TEST_F(FontFamilyLayoutFixture, ABodyWordInAnAccentBlockHasTheBodyFont) {
+  const BlockFontFamilies families = accents();
+  const auto lines = layout("<p class='dedication'>For <span class='body2'>someone</span> dear</p>", &families);
+  const Line* dedication = find(lines, "For someone dear");
+  ASSERT_NE(nullptr, dedication);
+  EXPECT_EQ(kAccentBody, dedication->fontId);
+  ASSERT_EQ(3u, dedication->wordFonts.size());
+  EXPECT_EQ(kBodyFont, dedication->wordFonts[1].fontId);
+  EXPECT_EQ(0, dedication->wordFonts[0].fontId);
+}
+
+TEST_F(FontFamilyLayoutFixture, WordsOfFamiliesTheBookLacksStayInTheBlocksFont) {
+  const BlockFontFamilies families = accents();
+  const auto lines =
+      layout("<p>Body <span class='mono'>mono</span> and <span class='georgia'>serif</span></p>", &families);
+  const Line* line = find(lines, "Body mono and serif");
+  ASSERT_NE(nullptr, line);
+  for (const TextBlock::WordFont& font : line->wordFonts) EXPECT_EQ(0, font.fontId);
+}
+
+TEST_F(FontFamilyLayoutFixture, ALongBlockGivesAnAccentWordAfterItsFirstPartItsFace) {
+  // Past 96 words a block is laid out before it ends, its font resolved then: a family a later word brings in still
+  // gets its face.
+  const BlockFontFamilies families = accents();
+  std::string words;
+  for (int i = 0; i < 100; ++i) words += "word ";
+  const auto lines = layout("<p>" + words + "<span class='dedication'>late</span></p>", &families);
+  bool found = false;
+  for (const Line& line : lines) {
+    EXPECT_EQ(0, line.fontId) << line.text;
+    for (const TextBlock::WordFont& font : line.wordFonts) {
+      if (font.fontId == 0) continue;
+      EXPECT_EQ(kAccentBody, font.fontId);
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found);
+}
+
+TEST_F(FontFamilyLayoutFixture, ADropCapInAnotherFamilyHasThatFamilysFace) {
+  const std::string prose = "ll the words of the paragraph go on long enough to wrap beside the cap for a few lines.";
+  const BlockFontFamilies families = accents();
+  // The span's own family, and a cap that inherits its paragraph's.
+  for (const std::string& body : {"<p><span class='cap-display'>A</span>" + prose + "</p>",
+                                  "<p class='dedication'><span class='cap'>A</span>" + prose + "</p>"}) {
+    const auto lines = layout(body, &families);
+    const Line* cap = find(lines, "A");
+    ASSERT_TRUE(cap) << body;
+    EXPECT_EQ(kAccentBase, cap->fontId & ~0xFF) << body;  // a native size of the accent family
+    EXPECT_NE(kAccentBase, cap->fontId) << body;
+  }
+  // Without the book's families, the cap is the body's, as before.
+  const auto plain = layout("<p><span class='cap-display'>A</span>" + prose + "</p>", nullptr);
+  const Line* cap = find(plain, "A");
+  ASSERT_TRUE(cap);
+  EXPECT_EQ(0, cap->fontId);
+  EXPECT_FLOAT_EQ(3.0f, cap->mult);
 }
