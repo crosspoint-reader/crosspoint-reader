@@ -763,7 +763,9 @@ RecentBooksLoad JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const c
   };
 
   for (JsonObject obj : arr) {
-    if (store.getCount() >= kMaxBooks) break;
+    // The list as filled so far, not getCount(): that asks ensureLoaded(), and the store is not loaded until this
+    // returns.
+    if (store.recentBooks.size() >= kMaxBooks) break;
     RecentBook book;
     book.path = obj["path"] | std::string("");
     book.title = obj["title"] | std::string("");
@@ -798,7 +800,7 @@ RecentBooksLoad JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const c
     store.recentBooks.push_back(std::move(book));
   }
 
-  LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
+  LOG_DBG("RBS", "Recent books loaded from file (%u entries)", static_cast<unsigned>(store.recentBooks.size()));
   return RecentBooksLoad::Loaded;
 }
 

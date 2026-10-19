@@ -40,7 +40,7 @@ RecentBooksStore::Hold::~Hold() {
 }
 
 void RecentBooksStore::ensureLoaded() const {
-  if (loaded) return;
+  if (loaded || loading) return;
   // loadFromFile() is the one place the list is filled; const only to the caller's eye.
   const_cast<RecentBooksStore*>(this)->loadFromFile();
 }
@@ -365,6 +365,17 @@ bool RecentBooksStore::loadFromFile() {
   // No file, an empty one or a broken one is an empty list, loaded, which a later addBook() then saves as the new file.
   // Too little memory to read it is no list at all: the store stays unloaded, so no save writes an empty list over
   // the file (saveToFile), and the next ensureLoaded() tries again.
+  //
+  // One load at a time. The store is not loaded until the parse is through, so a getCount() or getBooks() inside it
+  // would start a second load that swaps the half-filled list away and parses the file again, once per entry, until
+  // the heap ran short -- and left duplicates behind, which the next save wrote over the file (the parse counted its
+  // entries with getCount(), 2026-10).
+  if (loading) return false;
+  struct Loading {
+    bool& flag;
+    explicit Loading(bool& f) : flag(f) { flag = true; }
+    ~Loading() { flag = false; }
+  } const underWay(loading);
   std::vector<RecentBook>().swap(recentBooks);
   loaded = false;
   if (!Storage.exists(RECENT_BOOKS_FILE_JSON)) {
