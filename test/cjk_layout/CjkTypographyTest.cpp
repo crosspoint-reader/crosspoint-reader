@@ -4,7 +4,9 @@
 // opening bracket's ink on the right half of its advance, a closing bracket, 。 and 、 on the left half.
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <memory>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -149,6 +151,35 @@ TEST(CjkPunctuationWidths, APageBottomRetryKeepsTheMarksWidths) {
   ASSERT_TRUE(retried);
   ASSERT_EQ(wordsOf(lines), (Words{{"가나"}, {"다라마바사아"}, {"자", "」", "。", "차"}}));
   EXPECT_EQ(lines[2].xpos, (X{0, 10, 15, 25}));
+}
+
+// Live allocations of this test binary, counted by the replacements of the global operator new and delete below.
+namespace {
+long gLiveAllocations = 0;
+}
+void* operator new(const std::size_t size) {
+  if (void* p = std::malloc(size ? size : 1)) {
+    ++gLiveAllocations;
+    return p;
+  }
+  throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept {
+  if (p != nullptr) --gLiveAllocations;
+  std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept { ::operator delete(p); }
+
+TEST(CjkPunctuationWidths, ReleasingTheLayoutScratchGivesBackTheMarksScratchToo) {
+  // An incremental build gives the layout scratch back when it yields a slice: a laid-out block of text with marks
+  // then holds nothing more than before its first word.
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.setTypography(TypographyProfile::forLanguage("zh"));
+  const long before = gLiveAllocations;
+  text.addWord("字」。次", EpdFontFamily::REGULAR);
+  layout(text, 400);
+  text.releaseLayoutScratch();
+  EXPECT_EQ(gLiveAllocations, before);
 }
 TEST(CjkJustification, AJustifiedCjkLineEndsFlush) {
   // 4 characters on a 47 px line: 7 px over 3 gaps, 2 px each and the last pixel to one of them.

@@ -679,6 +679,9 @@ void ParsedText::layoutAndExtractLines(
 void ParsedText::releaseLayoutScratch() {
   // Pure scratch: recomputed by every layout, so safe to drop at any point between feeds.
   std::vector<uint16_t>().swap(wordWidths_);
+  std::vector<int16_t>().swap(lineStartTrim_);
+  std::vector<int16_t>().swap(lineEndTrim_);
+  std::vector<uint8_t>().swap(markClass_);
   std::vector<size_t>().swap(lineBreakIndices_);
   std::vector<bool>().swap(lineEndsWithHyphenatedWord_);
   std::vector<int>().swap(splitPrefixWordIndexes_);
