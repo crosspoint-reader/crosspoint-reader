@@ -60,6 +60,9 @@ class ParsedText {
   std::vector<int16_t> lineStartTrim_;
   std::vector<int16_t> lineEndTrim_;
   std::vector<uint8_t> markClass_;  // applyPunctuationWidths' scratch
+  // How far the block's lines sit in from the left: half of what rounding the width down to whole ems took (the CJK
+  // grid, spec section 5.5). Set by each layout pass.
+  int16_t gridInset_ = 0;
   std::vector<size_t> lineBreakIndices_;
   std::vector<bool> lineEndsWithHyphenatedWord_;
   std::vector<int> splitPrefixWordIndexes_;

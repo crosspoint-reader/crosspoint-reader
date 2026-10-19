@@ -463,7 +463,7 @@ void ParsedText::layoutAndExtractLines(
     renderer.ensureFontReady(font != 0 ? font : fontId, allText.c_str());
   }
 
-  const int pageWidth = viewportWidth;
+  int pageWidth = viewportWidth;
 
   // Compute firstLineIndent once here so all layout helpers use the same value.
   // On a continuation flush the remaining words are mid-paragraph, so no indent.
@@ -479,6 +479,21 @@ void ParsedText::layoutAndExtractLines(
                      pageWidth - 1)
           : 0;
   int firstLineIndent = cssTextIndent + (isContinuation_ ? 0 : static_cast<int>(blockStyle.firstLineExtraIndent));
+
+  // The CJK grid (spec 5.5): a Chinese or Japanese book's text width rounds down to whole ems of the block's font,
+  // half the cut on each side, so pure CJK lines fill exactly and characters line up in columns. A first-line
+  // indent rounds down to whole ems, at least one; a block with none keeps none. Floats keep their own width.
+  gridInset_ = 0;
+  if (typography_.wholeEmGrid && blockStyle.floatZoneCount == 0) {
+    const int em = measureWordWidth(renderer, fontId, "\xE4\xB8\x80", EpdFontFamily::REGULAR, false,
+                                    blockStyle.fontSizeMultiplier);
+    if (em > 0 && pageWidth >= em) {
+      const int gridWidth = pageWidth - pageWidth % em;
+      gridInset_ = static_cast<int16_t>((pageWidth - gridWidth) / 2);
+      pageWidth = gridWidth;
+      if (firstLineIndent > 0) firstLineIndent = std::max(em, firstLineIndent - firstLineIndent % em);
+    }
+  }
 
   std::vector<uint16_t>& wordWidths = wordWidths_;
   calculateWordWidths(renderer, fontId, wordWidths);
@@ -1493,11 +1508,11 @@ ParsedText::LineProcessResult ParsedText::extractLine(
 
   // Calculate initial x position (first line starts at indent for left/justified text;
   // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
-  auto xpos = static_cast<int16_t>(lineIndent);
+  auto xpos = static_cast<int16_t>(lineIndent + gridInset_);
   if (blockStyle.alignment == CssTextAlign::Right) {
-    xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
+    xpos = gridInset_ + effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
   } else if (blockStyle.alignment == CssTextAlign::Center) {
-    xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
+    xpos = gridInset_ + (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
   }
 
   // A narrowed CJK mark is drawn where its ink sits: ink in the right half of its em (an opening bracket) moves

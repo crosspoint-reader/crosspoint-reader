@@ -167,3 +167,46 @@ TEST(CjkJustification, LatinLinesKeepTheirRounding) {
   ASSERT_EQ(lines.size(), 2u);
   EXPECT_EQ(lines[0].xpos, (X{0, 30, 60}));
 }
+TEST(CjkGrid, AJapaneseBookRoundsTheWidthDownToWholeEmsAndCentresIt) {
+  // 47 px holds 4 ems of 10 px: the lines are 40 px wide, 3 px in from the left.
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.setTypography(TypographyProfile::forLanguage("ja"));
+  text.addWord("一二三四五", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 47);
+  EXPECT_EQ(wordsOf(lines), (Words{{"一", "二", "三", "四"}, {"五"}}));
+  EXPECT_EQ(lines[0].xpos, (X{3, 13, 23, 33}));
+  EXPECT_EQ(lines[1].xpos, (X{3}));
+}
+TEST(CjkGrid, AnIndentRoundsDownToWholeEmsAndNoIndentStaysNone) {
+  for (const auto& [indent, firstX] : std::vector<std::pair<int16_t, int16_t>>{{15, 13}, {5, 13}, {0, 3}}) {
+    ParsedText text(false, false, aligned(CssTextAlign::Left, indent));
+    text.setTypography(TypographyProfile::forLanguage("zh"));
+    text.addWord("一二三", EpdFontFamily::REGULAR);
+    EXPECT_EQ(layout(text, 47)[0].xpos.front(), firstX) << "indent " << indent;
+  }
+}
+TEST(CjkGrid, OtherBooksHaveNoGrid) {
+  ParsedText text(false, false, aligned(CssTextAlign::Left));
+  text.addWord("一二三四五", EpdFontFamily::REGULAR);
+  EXPECT_EQ(layout(text, 47)[0].xpos, (X{0, 10, 20, 30}));
+}
+TEST(CjkGrid, AHeadingsGridIsInItsOwnEms) {
+  // A block at 1.2 times the body size has 12 px ems: 47 px holds 3 of them, 5 px in from the left.
+  BlockStyle heading = aligned(CssTextAlign::Left);
+  heading.fontSizeMultiplier = 1.2f;
+  ParsedText text(false, false, heading);
+  text.setTypography(TypographyProfile::forLanguage("ja"));
+  text.addWord("一二三四", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 47);
+  EXPECT_EQ(wordsOf(lines), (Words{{"一", "二", "三"}, {"四"}}));
+  EXPECT_EQ(lines[0].xpos, (X{5, 17, 29}));
+}
+TEST(CjkGrid, ABlockBesideAFloatKeepsItsOwnWidth) {
+  BlockStyle beside = aligned(CssTextAlign::Left);
+  beside.floatZoneCount = 1;
+  beside.floatZones[0] = {0, 0, 0, false};  // a zone no line meets: the block is beside a float all the same
+  ParsedText text(false, false, beside);
+  text.setTypography(TypographyProfile::forLanguage("ja"));
+  text.addWord("一二三四五", EpdFontFamily::REGULAR);
+  EXPECT_EQ(layout(text, 47)[0].xpos, (X{0, 10, 20, 30}));
+}

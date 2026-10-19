@@ -338,6 +338,13 @@ TEST_P(CjkJustifiedRules, JustifiedLinesEndFlushOnAWholeEmGrid) {
     int right = 0;
     for (const auto& edge : edges) right = std::max(right, edge.first);
     for (const auto& [edge, i] : edges) EXPECT_EQ(edge, right) << "not flush: " << lineText(lines[i]);
+    if (profile.wholeEmGrid) {
+      DumpWord one;
+      one.text = "\xE4\xB8\x80";  // 一
+      const int em = ::wordWidth(renderer, lines[edges.front().second], one);
+      EXPECT_EQ((right - leftEdge[shape]) % em, 0)
+          << "text width " << right - leftEdge[shape] << " is not whole ems of " << em << " (" << shape << ")";
+    }
   }
 }
 
