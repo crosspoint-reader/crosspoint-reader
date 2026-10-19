@@ -150,12 +150,13 @@ bool TtfFontSet::load(const Files* families, const uint8_t count, const uint8_t 
   sdPageReads_ = 0;
   for (uint8_t f = 0; f < count; ++f) readsCard_ = readsCard_ || fonts_[f]->readsCard();
   if (store_.wipePending() && mode == Install::IfNeeded) wipeIfPending(onBusy);
-  LOG_INF(
-      "TTF",
-      "%u famil%s loaded: %u B scratch, %u B SD pages (made on a miss), %u B per native size, log %lu of %lu B used",
-      count, count == 1 ? "y" : "ies", static_cast<unsigned>(rasterizer_.scratchBytes()),
-      static_cast<unsigned>(readsCard_ ? sizeof(ttf::SdPageCache) : 0), static_cast<unsigned>(sizeof(TtfFont::Size)),
-      static_cast<unsigned long>(store_.logUsed()), static_cast<unsigned long>(store_.geometry().logSize));
+  LOG_INF("TTF",
+          "%u famil%s loaded: %u B scratch, %u B SD pages (made on a miss), %u B per native size and style, log %lu of "
+          "%lu B used",
+          count, count == 1 ? "y" : "ies", static_cast<unsigned>(rasterizer_.scratchBytes()),
+          static_cast<unsigned>(readsCard_ ? sizeof(ttf::SdPageCache) : 0),
+          static_cast<unsigned>(sizeof(TtfFont::Size::StyleFont)), static_cast<unsigned long>(store_.logUsed()),
+          static_cast<unsigned long>(store_.geometry().logSize));
   for (uint8_t f = 0; f < count; ++f) {
     LOG_INF("TTF", "family %u regular style: %u kern subtables%s, %u ligatures", f,
             fonts_[f]->styles_[0].kerning.subtableCount(),
@@ -381,7 +382,8 @@ void TtfFontSet::usePages(ttf::SdPageCache* pages) {
   // Every SD-mode style reads its outlines through it, a FontBytes made before it was too (fontBytes()).
   sdPages_ = pages;
   for (uint8_t f = 0; f < count_; ++f) {
-    for (TtfFont::Style& style : fonts_[f]->styles_) style.sd.cache = pages;
+    TtfFont& font = *fonts_[f];
+    for (uint8_t i = 0; i < font.styleCount_; ++i) font.styles_[i].sd.cache = pages;
   }
 }
 
@@ -488,10 +490,26 @@ void TtfFontSet::noteCommit(const Commit result) {
 
 // --- A family: its styles and sizes ---
 
+TtfFont::~TtfFont() = default;  // out of line: its styles and sizes are freed in one place, not in every set's
+
 TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], uint8_t& block, ttf::ScratchPlan* plan) {
   maxNativePx_ = kMaxNativePx;
+  if (!styles_) {
+    // The styles the family has files for, and the body size's fonts of them. Opened again after an install, the
+    // family keeps them: its files are the same.
+    uint8_t count = 0;
+    for (uint8_t s = 0; s < 4; ++s) slot_[s] = files[s].size != 0 ? count++ : kNoSlot;
+    styles_ = makeUniqueNoThrow<Style[]>(count);
+    body_.styles = makeUniqueNoThrow<Size::StyleFont[]>(count);
+    if (!styles_ || !body_.styles) {
+      LOG_ERR("TTF", "OOM: family %u's %u styles", family_, count);
+      return StylesResult::Failed;
+    }
+    styleCount_ = count;
+  }
   for (uint8_t s = 0; s < 4; ++s) {
-    Style& style = styles_[s];
+    if (files[s].size == 0) continue;
+    Style& style = styles_[slot_[s]];
     style.present = false;
     style.onCard = false;
     style.sd = {};
@@ -499,7 +517,6 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], uin
     style.kerning = ttf::Kerning{};
     style.ligatures = ttf::Ligatures{};
     std::fill_n(style.uncoveredLeft, sizeof style.uncoveredLeft, 0);
-    if (files[s].size == 0) continue;
     style.block = block++;
     glyphstore::StyleInfo info{};
     if (!set_.store_.styleInfo(style.block, info)) return StylesResult::Failed;
@@ -537,15 +554,15 @@ TtfFont::StylesResult TtfFont::openStyles(const ttf::FileSource (&files)[4], uin
     const uint32_t pool = style.onCard && family_ == 0 ? ttf::kPoolBytesSd : ttf::kPoolBytesFlash;
     *plan = ttf::mergePlans(*plan, ttf::planScratch(style.face, largest, pool));
   }
-  if (!styles_[0].present) return StylesResult::Failed;
+  if (!draws(0)) return StylesResult::Failed;
   return StylesResult::Ok;
 }
 
 bool TtfFont::configure(Size& size, const uint32_t ppem) {
   ttf::LineMetrics metrics[4];
   for (uint8_t s = 0; s < 4; ++s) {
-    if (!styles_[s].present) continue;
-    metrics[s] = ttf::lineMetrics(styles_[s].face, ppem);
+    if (!draws(s)) continue;
+    metrics[s] = ttf::lineMetrics(styleAt(s)->face, ppem);
     if (metrics[s].advanceY <= 0 || metrics[s].advanceY > 255) {
       LOG_ERR("TTF", "style %u at %lu/64 px: line height %ld does not fit", s, static_cast<unsigned long>(ppem),
               static_cast<long>(metrics[s].advanceY));
@@ -555,19 +572,20 @@ bool TtfFont::configure(Size& size, const uint32_t ppem) {
   size.ppem = ppem;
   size.claimTried = false;
   for (uint8_t s = 0; s < 4; ++s) {
-    Size::StyleFont& style = size.styles[s];
+    if (slot_[s] == kNoSlot) continue;
+    Size::StyleFont& style = size.styles[slot_[s]];
     style.provider.owner = this;
     style.provider.size = &size;
     style.provider.style = s;
     style.data = EpdFontData{};
-    if (!styles_[s].present) continue;
+    if (!draws(s)) continue;
     style.data.advanceY = static_cast<uint8_t>(metrics[s].advanceY);
     style.data.ascender = metrics[s].ascender;
     style.data.descender = metrics[s].descender;
     style.data.is2Bit = true;
     style.data.bitmap = set_.store_.logBase();
     style.data.provider = &style.provider;
-    const ttf::Ligatures& ligatures = styles_[s].ligatures;
+    const ttf::Ligatures& ligatures = styleAt(s)->ligatures;
     style.data.ligaturePairs = ligatures.count != 0 ? ligatures.pairs : nullptr;
     style.data.ligaturePairCount = ligatures.count;
   }
@@ -576,13 +594,13 @@ bool TtfFont::configure(Size& size, const uint32_t ppem) {
 
 void TtfFont::rebase(Size& size) {
   if (size.ppem == 0) return;
-  for (uint8_t s = 0; s < 4; ++s) {
-    if (styles_[s].present) size.styles[s].data.bitmap = set_.store_.logBase();
+  for (uint8_t i = 0; i < styleCount_; ++i) {
+    if (styles_[i].present) size.styles[i].data.bitmap = set_.store_.logBase();
   }
 }
 
 bool TtfFont::setBodySize(const uint8_t pointSize) {
-  if (pointSize == 0 || pointSize > kMaxPointSize || !styles_[0].present) return false;
+  if (pointSize == 0 || pointSize > kMaxPointSize || !draws(0)) return false;
   if (!configure(body_, ttf::ppemFromPoints(pointSize))) return false;
   pointSize_ = pointSize;
   claimSize(body_);
@@ -590,20 +608,20 @@ bool TtfFont::setBodySize(const uint8_t pointSize) {
 }
 
 const EpdFont* TtfFont::font(const uint8_t style) const {
-  return style < 4 && styles_[style].present && body_.ppem != 0 ? &body_.styles[style].font : nullptr;
+  return draws(style) && body_.ppem != 0 ? &body_.styles[slot_[style]].font : nullptr;
 }
 
 bool TtfFont::ringMode() const { return set_.ringMode(); }
 
 bool TtfFont::readsCard() const {
-  for (const Style& style : styles_) {
-    if (style.present && style.onCard) return true;
+  for (uint8_t i = 0; i < styleCount_; ++i) {
+    if (styles_[i].present && styles_[i].onCard) return true;
   }
   return false;
 }
 
 TtfFont::Size* TtfFont::nativeSize(const uint8_t px) {
-  if (px < kMinNativePx || px > maxNativePx_ || !styles_[0].present) return nullptr;
+  if (px < kMinNativePx || px > maxNativePx_ || !draws(0)) return nullptr;
   const uint32_t ppem = static_cast<uint32_t>(px) << 6;
   std::unique_ptr<Size>* free = nullptr;
   for (auto& size : native_) {
@@ -616,7 +634,8 @@ TtfFont::Size* TtfFont::nativeSize(const uint8_t px) {
   }
   checkLock();
   auto size = makeUniqueNoThrow<Size>();
-  if (!size) {
+  if (size) size->styles = makeUniqueNoThrow<Size::StyleFont[]>(styleCount_);
+  if (!size || !size->styles) {
     LOG_ERR("TTF", "%u px: no memory for a native size; the nearest serves", px);
     return nearestNative(ppem);
   }
@@ -642,7 +661,7 @@ TtfFont::Size* TtfFont::nearestNative(const uint32_t ppem) {
 bool TtfFont::nativeFonts(const uint8_t px, const EpdFont* (&fonts)[4], uint32_t* servedPpem) {
   Size* size = nativeSize(px);
   if (!size) return false;
-  for (uint8_t s = 0; s < 4; ++s) fonts[s] = styles_[s].present ? &size->styles[s].font : nullptr;
+  for (uint8_t s = 0; s < 4; ++s) fonts[s] = draws(s) ? &size->styles[slot_[s]].font : nullptr;
   if (servedPpem) *servedPpem = size->ppem;
   return true;
 }
@@ -680,7 +699,7 @@ bool TtfFont::storeKey(Size& size, const uint8_t style, const uint32_t codepoint
 
 bool TtfFont::fontBytes(const uint8_t style, FontBytes* bytes) {
   // Flash mode maps one style block at a time, every family's, so the pointer is fetched again for every render.
-  Style& s = styles_[style];
+  Style& s = *styleAt(style);
   const uint8_t* mapped = set_.store_.mapStyle(s.block);
   if (!mapped) {
     LOG_ERR("TTF", "family %u style %u could not be mapped", family_, style);
@@ -692,7 +711,7 @@ bool TtfFont::fontBytes(const uint8_t style, FontBytes* bytes) {
 }
 
 const EpdGlyph* TtfFont::glyph(Size& size, const uint8_t style, const uint32_t codepoint) {
-  if (style >= 4 || !styles_[style].present || size.ppem == 0) return nullptr;
+  if (!draws(style) || size.ppem == 0) return nullptr;
   if (utf8IsDefaultIgnorable(codepoint)) return &kIgnorable;
   uint32_t key = 0;
   const bool haveKey = storeKey(size, style, codepoint, &key);
@@ -717,8 +736,9 @@ const EpdGlyph* TtfFont::render(const Size& size, const uint8_t style, const uin
   FontBytes bytes;
   if (!fontBytes(style, &bytes)) return nullptr;
   TtfFontSet& set = set_;
-  const ttf::Face& face = styles_[style].face;
-  const uint16_t index = styles_[style].ligatures.glyphFor(bytes, face, codepoint);
+  const Style& drawn = *styleAt(style);
+  const ttf::Face& face = drawn.face;
+  const uint16_t index = drawn.ligatures.glyphFor(bytes, face, codepoint);
   if (index == 0) {
     // The font has no glyph for it. An I/O error is not an answer (SD mode): ask again next time.
     if (haveKey && !set.ringMode_ && !bytes.ioError()) set.noteCommit(set.store_.markNoGlyph(key));
@@ -759,8 +779,9 @@ const EpdGlyph* TtfFont::render(const Size& size, const uint8_t style, const uin
 }
 
 int8_t TtfFont::kerning(const Size& size, const uint8_t style, const uint32_t left, const uint32_t right) {
-  if (style >= 4 || !styles_[style].present || !styles_[style].kerning.any() || size.ppem == 0) return 0;
-  Style& s = styles_[style];
+  Style* const found = styleAt(style);
+  if (!found || !found->present || !found->kerning.any() || size.ppem == 0) return 0;
+  Style& s = *found;
   FlashGlyphStore& store = set_.store_;
   // The store keys a pair by its codepoints (BMP only) and keeps font units, so every size shares it.
   const bool storable = left <= 0xFFFF && right <= 0xFFFF;
@@ -799,13 +820,14 @@ bool TtfFont::ownsBitmap(const EpdGlyph* glyph, const uint8_t*& bitmap) const { 
 
 void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
   TtfFontSet& set = set_;
-  if (!utf8Text || style >= 4 || !styles_[style].present || set.ringMode_) return;
+  if (!utf8Text || !draws(style) || set.ringMode_) return;
   uint32_t key = 0;
   if (!storeKey(size, style, 0, &key)) return;
   checkLock();
   FontBytes bytes;
   if (!fontBytes(style, &bytes)) return;
-  const ttf::Face& face = styles_[style].face;
+  const Style& drawn = *styleAt(style);
+  const ttf::Face& face = drawn.face;
   FlashGlyphStore& store = set.store_;
   TtfFontSet::Pending* const pending = set.pending_;
 
@@ -827,7 +849,7 @@ void TtfFont::prefetch(Size& size, const uint8_t style, const char* utf8Text) {
     if (std::any_of(pending, pending + count, [cp](const TtfFontSet::Pending& p) { return p.codepoint == cp; })) {
       continue;
     }
-    const uint16_t index = styles_[style].ligatures.glyphFor(bytes, face, cp);
+    const uint16_t index = drawn.ligatures.glyphFor(bytes, face, cp);
     if (index == 0) {
       if (!bytes.ioError()) set.noteCommit(store.markNoGlyph(key));
       if (set.ringMode_) return;

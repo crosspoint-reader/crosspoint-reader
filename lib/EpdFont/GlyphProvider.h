@@ -8,7 +8,8 @@ class BuildArena;
 
 /// What a provider that renders glyphs needs only for one its font does not hold yet (a TrueType family's scratch
 /// block, and in SD mode its page cache), made for the first such lookup rather than held while nothing misses: where
-/// that memory may come from, and whether it could be had.
+/// that memory may come from, and whether it could be had. A built-in font's group ring (FontDecompressor) is taken
+/// from the same lent region, for one group's read.
 namespace glyph_miss {
 
 namespace detail {

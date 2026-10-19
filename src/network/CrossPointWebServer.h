@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "UploadBuffer.h"
 #include "html/WebBundle.generated.h"
 
 // Structure to hold file information
@@ -45,13 +46,12 @@ class CrossPointWebServer {
     size_t size = 0;
     bool success = false;
     String error = "";
+    bool lowMemory = false;  // `error` is the heap's: answered 503, to be tried again
 
     // Upload write buffer - batches small writes into larger SD card operations
     // 4KB is a good balance: large enough to reduce syscall overhead, small enough
     // to keep individual write times short and avoid watchdog issues
-    static constexpr size_t UPLOAD_BUFFER_SIZE = 4096;  // 4KB buffer
-    std::vector<uint8_t> buffer;
-    size_t bufferPos = 0;
+    UploadBuffer buffer;
 
     // For the log and the failure report: the request body's length (the file plus its form
     // framing), when data last arrived, and whether Back on the device ended it.
@@ -175,9 +175,8 @@ class CrossPointWebServer {
     uint8_t header[8] = {0};
     size_t headerBytesReceived = 0;
     size_t bytesWritten = 0;
-    static constexpr size_t BUFFER_SIZE = 4096;
-    std::vector<uint8_t> buffer;
-    size_t bufferPos = 0;
+    bool lowMemory = false;  // refused for want of its buffer: answered 503, to be tried again
+    UploadBuffer buffer;
 
     FontUploadState() = default;
   } fontUpload;

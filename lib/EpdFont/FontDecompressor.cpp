@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "GlyphProvider.h"  // glyph_miss::arena()
+
 namespace {
 
 // One group's inflate buffer, for the duration of one decompress-and-extract.
@@ -21,8 +23,8 @@ namespace {
 // there for the same reason (see FontCacheManager::ScopedSlotArena); the group temp was simply
 // left behind on the heap.
 //
-// Falls back to the heap when there is no arena (the ordinary foreground draw) or when the build
-// has the arena filled, so this can only ever turn a failure into a success.
+// Falls back to the heap when there is no arena or when the build has the arena filled, so this
+// can only ever turn a failure into a success.
 class GroupTemp {
  public:
   GroupTemp(BuildArena* arena, const uint32_t bytes) {
@@ -59,6 +61,12 @@ class GroupTemp {
   BuildArena::Block block_;
   uint8_t* buf_ = nullptr;
 };
+
+// Where a group's ring is taken first: the slot arena, else the region lent to the glyph misses
+// (glyph_miss::Scope). A page render lends the secondary framebuffer there for its prewarm, and a
+// ring is given back before its group is done, so nothing of it outlives the lend; the slots never
+// come from that region, so they last into the render and its AA pass.
+BuildArena* ringArena(BuildArena* slotArena) { return slotArena ? slotArena : glyph_miss::arena(); }
 
 // Room left in an installed arena, for the OOM diagnostics: distinguishes "no arena here" from
 // "arena was there and full", which are different bugs with the same symptom.
@@ -324,14 +332,14 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     return nullptr;
   }
 
-  GroupTemp temp(slotArena_, ringBytes);
+  GroupTemp temp(ringArena(slotArena_), ringBytes);
   uint8_t* ring = temp.get();
   if (!ring) {
     // Logged once per size class per pass; the running total goes out in logStats().
     LOG_ERR("FDC",
             "OOM: cannot allocate a %lu-byte ring for group %u fallback (arena headroom %lu); skipping this size and "
             "larger for the pass",
-            ringBytes, groupIndex, arenaHeadroom(slotArena_));
+            ringBytes, groupIndex, arenaHeadroom(ringArena(slotArena_)));
     stats.fallbackOomBytes = ringBytes;
     stats.fallbackOomGlyphs++;
     stats.getBitmapTimeUs += micros() - tStart;
@@ -764,12 +772,12 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       if (slot.glyphs[i].groupIndex == groupIdx && slot.glyphs[i].bufferOffset == UINT32_MAX) owed++;
     }
 
-    GroupTemp temp(slotArena_, ringBytes);
+    GroupTemp temp(ringArena(slotArena_), ringBytes);
     uint8_t* ring = temp.get();
     if (!ring) {
       LOG_ERR("FDC",
               "OOM: cannot allocate a %lu-byte ring for group %u during prewarm (arena headroom %lu, %u glyphs lost)",
-              ringBytes, groupIdx, arenaHeadroom(slotArena_), owed);
+              ringBytes, groupIdx, arenaHeadroom(ringArena(slotArena_)), owed);
       missed += owed;
       continue;
     }
