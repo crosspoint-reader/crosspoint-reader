@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -1103,6 +1104,105 @@ TEST_F(TtfFontSetTest, AFailedWriteRingsEveryFamilyAndOneWipeServesThemAgain) {
 TEST_F(TtfFontSetTest, AnAccentFamilyWithoutARegularStyleRefusesTheSetBeforeAnyErase) {
   accent[kRegular].bytes.clear();
   EXPECT_EQ(nullptr, openSet());
+  EXPECT_EQ(0, busy);
+  EXPECT_EQ(0u, flash.totalSectorErases());
+}
+
+// --- Stage B phase 3: several accent families ------------------------------------------------------------------
+
+namespace {
+
+// Families of files, in the set's order, loaded on `chip` at 14 pt as the set `identity`; null when the set cannot
+// be drawn.
+std::unique_ptr<TtfFontSet> openFamilies(SimNorFlash& chip, const std::vector<MemoryFile*>& families, int& busy,
+                                         const uint8_t* identity = kIdentitySet) {
+  auto set = std::make_unique<TtfFontSet>(chip);
+  std::vector<std::array<ttf::FileSource, 4>> sources(families.size());
+  for (size_t f = 0; f < families.size(); ++f) {
+    for (int s = 0; s < 4; ++s) {
+      if (!families[f][s].bytes.empty()) sources[f][s] = families[f][s].source();
+    }
+  }
+  static_assert(sizeof(std::array<ttf::FileSource, 4>) == sizeof(TtfFontSet::Files), "one family's files");
+  if (!set->load(reinterpret_cast<const TtfFontSet::Files*>(sources.data()), static_cast<uint8_t>(families.size()),
+                 identity, [&busy] { ++busy; })) {
+    return nullptr;
+  }
+  for (uint8_t f = 0; f < families.size(); ++f) {
+    if (!set->font(f)->setBodySize(14)) return nullptr;
+  }
+  return set;
+}
+
+}  // namespace
+
+TEST_F(TtfFontSetTest, ABodyAndThreeAccentFamiliesAreDrawnFromOneStore) {
+  // Inter as the body (two styles), and three one-style accent families: the four of TtfFontSet::kMaxFamilies.
+  MemoryFile ubuntu[4];
+  MemoryFile ubuntuBold[4];
+  MemoryFile bookerly[4];
+  ubuntu[kRegular].bytes = readFont("Ubuntu/Ubuntu-Regular.ttf");
+  ubuntuBold[kRegular].bytes = readFont("Ubuntu/Ubuntu-Bold.ttf");
+  bookerly[kRegular].bytes = files[kRegular].bytes;
+  const auto set = openFamilies(flash, {accent, ubuntu, ubuntuBold, bookerly}, busy);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(TtfFontSet::kMaxFamilies, set->familyCount());
+  EXPECT_EQ(1, busy);
+  const MemoryFile* const sources[] = {accent, ubuntu, ubuntuBold, bookerly};
+  for (uint8_t f = 0; f < 4; ++f) {
+    expectDrawnAs(reference(sources[f][kRegular].bytes, 'g', 14), *set->font(f), kRegular,
+                  set->font(f)->glyph(kRegular, 'g'));
+  }
+}
+
+namespace {
+
+// Sector erases over the store's first style blocks: `bytes` from where planLayout puts them, a page in.
+uint32_t erasesOver(const SimNorFlash& flash, const uint32_t bytes) {
+  uint32_t total = 0;
+  const uint32_t first = glyphstore::kHeaderRegionBytes / glyphstore::kSectorBytes;
+  for (uint32_t s = first; s < first + glyphstore::alignUp(bytes, glyphstore::kSectorBytes) / glyphstore::kSectorBytes;
+       ++s) {
+    total += flash.sectorErases(s);
+  }
+  return total;
+}
+
+}  // namespace
+
+TEST_F(TtfFontSetTest, AnotherSetWithTheSameLeadingFamilyKeepsItsStyleBlocks) {
+  // A TrueType reader font beside one book's accent family, then beside another's: the reader font's blocks hold
+  // their files where the new layout puts them, and are neither erased nor written again.
+  ASSERT_NE(nullptr, openSet());
+  const uint32_t bodyBytes = static_cast<uint32_t>(files[kRegular].bytes.size());
+  const uint32_t before = erasesOver(flash, bodyBytes);
+  MemoryFile ubuntu[4];
+  ubuntu[kRegular].bytes = readFont("Ubuntu/Ubuntu-Regular.ttf");
+  const auto set = openFamilies(flash, {files, ubuntu}, busy, kIdentityB);
+  ASSERT_NE(nullptr, set);
+  EXPECT_EQ(2, busy);                               // installed again: another set
+  EXPECT_EQ(before, erasesOver(flash, bodyBytes));  // Bookerly Regular's block kept
+  EXPECT_EQ(0u, flash.reprograms());                // and nothing written over it
+  expectDrawnAs(reference(files[kBold].bytes, 'W', 14), *set->font(0), kBold, set->font(0)->glyph(kBold, 'W'));
+  expectDrawnAs(reference(ubuntu[kRegular].bytes, 'W', 14), *set->font(1), kRegular,
+                set->font(1)->glyph(kRegular, 'W'));  // where Inter was: written anew
+}
+
+TEST_F(TtfFontSetTest, ABlockHoldingAnotherFileIsWrittenAgain) {
+  ASSERT_NE(nullptr, openSet());
+  const uint32_t interBytes = static_cast<uint32_t>(accent[kRegular].bytes.size());
+  const uint32_t before = erasesOver(flash, interBytes);
+  // Inter first: its block starts where Bookerly Regular's did, which holds Bookerly.
+  const auto swapped = openSet(kIdentityB, 2, /*accentFirst=*/true);
+  ASSERT_NE(nullptr, swapped);
+  EXPECT_LT(before, erasesOver(flash, interBytes));
+  expectDrawnAs(reference(accent[kRegular].bytes, 'A', 14), *swapped->font(0), kRegular,
+                swapped->font(0)->glyph(kRegular, 'A'));
+}
+
+TEST_F(TtfFontSetTest, MoreStylesThanTheStoreHoldsAreRefusedBeforeAnyErase) {
+  // Bookerly's four, Inter's two, Bookerly's four again: ten style blocks for the store's eight.
+  EXPECT_EQ(nullptr, openFamilies(flash, {files, accent, files}, busy));
   EXPECT_EQ(0, busy);
   EXPECT_EQ(0u, flash.totalSectorErases());
 }

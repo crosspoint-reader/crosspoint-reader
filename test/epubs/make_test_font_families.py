@@ -2,23 +2,27 @@
 """Build test_font_families.epub -- a book set in several font families (Publisher Fonts, Stage B).
 
 The body is in one family ("Book Body", serif fallback), chapter titles, a dedication and a block quotation in a
-display family ("Book Display"), one heading in the generic sans-serif, a code block in monospace, and a few blocks
-in families the book does not have. What the golden variants pin (EpubPipelineTest):
+display family ("Book Display"), as is a drop cap, a paragraph and a heading in a second accent family ("Book Script"), code in a
+third ("Book Code"), one heading in the generic sans-serif, a code block in monospace, and a few blocks in families
+the book does not have. What the golden variants pin (EpubPipelineTest):
 
   default        Off and Body Text: font-family changes no block's font (the body font ID differs in Body Text,
                  which the dump does not show)
-  _accents       Accents with a built-in reader font: Book Display is the accent family (its own faces, native
-                 sizes), sans-serif and a sans-serif fallback go to the built-in sans; the body family, serif (the
-                 body's own generic), monospace and cursive stay the body font
-  _alltext       All Text: Book Body is the body font, and Book Display the accent family beside it in one glyph
-                 store (Stage B phase 2): the same layout as _accents, the body font ID aside
+  _accents       Accents with a built-in reader font: Book Display, Book Script and Book Code are the accent
+                 families, ranked by their blocks (their own faces, native sizes); sans-serif and a sans-serif
+                 fallback go to the built-in sans; the body family, serif (the body's own generic) and monospace
+                 stay the body font
+  _alltext       All Text: Book Body is the body font, and the accent families beside it in one glyph store: the
+                 same layout as _accents, the body font ID aside
 
 Per block: a block's words all in one family give the block that family (a heading set in a span, a paragraph that
-is one span), else the family of the element that opened it (a body paragraph with an inline accent).
+is one span), else the family of the element that opened it (a body paragraph with an inline accent). Per word: a
+word in another family than its block's has that family's face at the block's size (Stage B phase 3), as the inline
+spans and the inline <code> of the mixed body paragraph do.
 
 With --fonts DIR the book embeds TrueType faces for the device test (Ubuntu as Book Body, Inter as Book Display,
-Noto Sans as Book Script, all from lib/EpdFont/builtinFonts/source) and is written to --out; the corpus copy
-embeds none, the layout does not read them.
+Noto Sans Italic as Book Script, Ubuntu Bold as Book Code, all from lib/EpdFont/builtinFonts/source) and is written
+to --out; the corpus copy embeds none, the layout does not read them.
 
 Regenerate with:  python test/epubs/make_test_font_families.py
 then refresh goldens: UPDATE_GOLDENS=1 ctest --test-dir <build> -R EpubPipeline
@@ -39,6 +43,8 @@ h2.generic, .sans { font-family: sans-serif; }
 pre, .mono { font-family: "Courier New", monospace; }
 .script { font-family: "Book Script", cursive; }
 .inline { font-family: "Book Display"; }
+code { font-family: "Book Code", monospace; }
+.initial { float: left; font-size: 3em; font-family: "Book Display"; }
 """
 
 FACES = [
@@ -46,7 +52,8 @@ FACES = [
     ("Book Body", "bold", "Ubuntu/Ubuntu-Bold.ttf", "body-bold.ttf"),
     ("Book Display", "normal", "Inter/Inter-Regular.ttf", "display.ttf"),
     ("Book Display", "bold", "Inter/Inter-Bold.ttf", "display-bold.ttf"),
-    ("Book Script", "normal", "NotoSans/NotoSans-Regular.ttf", "script.ttf"),
+    ("Book Script", "normal", "NotoSans/NotoSans-Italic.ttf", "script.ttf"),
+    ("Book Code", "normal", "Ubuntu/Ubuntu-Bold.ttf", "code.ttf"),
 ]
 
 CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
@@ -80,16 +87,20 @@ CHAPTERS = [
         "    <pre>monospace stays the reader's font</pre>\n"
         '    <p class="georgia">Georgia, with the serif the body names: the body font.</p>\n'
         '    <p class="helvetica">Helvetica, not in the book: its sans-serif fallback.</p>\n'
-        '    <p class="script">A family the book has but does not use much: the body font.</p>\n'
+        '    <p class="script">A paragraph in the second accent family.</p>\n'
         "    <h3>A heading in the body family</h3>\n"
-        f"    <p>{PROSE}</p>",
+        f"    <p>{PROSE}</p>\n"
+        '    <p>Body text with an <span class="inline">accent</span>, a <span class="script">second accent</span> '
+        "and <code>inline code</code> in it, each in its own family.</p>\n"
+        '    <h2 class="script">A Heading in the Second Accent</h2>\n'
+        "    <pre><code>code in the code family</code></pre>",
     ),
     (
         "Two",
         '    <h1>Chapter <span class="inline">Two</span></h1>\n'
         '    <h2><span class="inline">A Heading Set in a Span</span></h2>\n'
         f'    <p class="dedication">{" ".join([PROSE] * 3)}</p>\n'
-        f"    <p>{PROSE}</p>",
+        f'    <p><span class="initial">{PROSE[0]}</span>{PROSE[1:]}</p>',  # a drop cap in the accent family
     ),
 ]
 

@@ -122,7 +122,7 @@ static bool writeFamily(const SdCardFontFamilyInfo& family, uint8_t requestedPoi
 }
 
 // What a load holds while the set installs: every family's style files, open (an install copies them into the
-// store), and each family's identity. On the heap: two families' handles and sources would crowd the frame.
+// store), and each family's identity. On the heap: several families' handles and sources would crowd the frame.
 struct SdCardFontManager::TtfSources {
   HalFile files[kMaxTtfFamilies][4];
   ttf::FileSource sources[kMaxTtfFamilies][4];
@@ -200,12 +200,12 @@ bool SdCardFontManager::loadTtfFamilies(const SdCardFontFamilyInfo* const* famil
   }
   uint8_t loaded = count;
   auto set = loadSet(*flash, opened->sources, opened->identities, count, onColdLoad);
-  if (!set && count > 1) {
-    // Too large together, or an accent family that does not read: the body's family alone, as before Stage B.
-    LOG_INF("SDMGR", "TTF families %s and %s do not load together; %s alone", families[0]->name.c_str(),
-            families[1]->name.c_str(), families[0]->name.c_str());
-    loaded = 1;
-    set = loadSet(*flash, opened->sources, opened->identities, 1, onColdLoad);
+  while (!set && loaded > 1) {
+    // Too large together, or an accent family that does not read: without the last family, the least used accent,
+    // and so on down to the body's family alone, as before Stage B.
+    --loaded;
+    LOG_INF("SDMGR", "TTF families do not load together; %s left out", families[loaded]->name.c_str());
+    set = loadSet(*flash, opened->sources, opened->identities, loaded, onColdLoad);
   }
   if (!set) {
     LOG_ERR("SDMGR", "TTF family %s cannot be drawn", families[0]->name.c_str());

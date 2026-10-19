@@ -64,6 +64,13 @@ bool assignStyles(const FileProbe* files, const size_t count, int (&out)[4]) {
     const int style = files[i].style;
     if ((style == 0 || style == 2) && files[i].weight >= 600 && out[style] != static_cast<int>(i)) offer(i, style | 1);
   }
+  // No regular face (a script that is only italic, a display face only bold, as books embed them): the nearest style
+  // serves as the regular, and the slot it leaves falls back to it. Moved, not shared, so the store holds it once.
+  for (const int style : {2, 1, 3}) {
+    if (out[0] >= 0) break;
+    out[0] = out[style];
+    out[style] = -1;
+  }
   return out[0] >= 0;
 }
 

@@ -29,11 +29,15 @@ std::string normalizePath(const std::string& path, const std::string& cacheDir) 
 
 // One `W` record per word, at `indent`. Kept to a single shape so the word-stream extraction used
 // to verify "no content was dropped" (`\bW x=\S+ s=\S+ z=\S+ t=(.*)`) sees table cells and ordinary
-// paragraphs alike.
+// paragraphs alike. A word in a font of its own (TextBlock::WordFont) is followed by a `WF` record.
 void dumpWords(std::ostream& out, const TextBlock& block, const char* indent) {
   for (uint16_t w = 0; w < block.wordCount(); ++w) {
     out << indent << "W x=" << block.wordXpos(w) << " s=" << static_cast<int>(block.wordStyle(w))
         << " z=" << static_cast<int>(block.wordSizePct(w)) << " t=" << block.wordText(w) << "\n";
+    if (const TextBlock::WordFont* font = block.wordFont(w)) {
+      out << indent << " WF fid=" << font->fontId << " mult=" << std::fixed << std::setprecision(3) << font->scale
+          << "\n";
+    }
   }
 }
 

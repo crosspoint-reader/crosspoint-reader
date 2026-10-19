@@ -12,11 +12,11 @@ class Epub;
 /// its CSS and the text of its first chapters, and copied out of the EPUB as plain TrueType files to
 /// `<book cache>/fonts/`, where they load like a `.ttf` family on the card.
 ///
-/// Two families at most: the body text's, and an accent family, the one the most other blocks (headings, a
-/// dedication) are set in. The glyph store holds them together, or the accent family beside a TrueType reader font
-/// (TTF spec, section 11.1). What is refused, so the book keeps the reader's font: a family that is generic or not
-/// embedded; CFF outlines (`OTTO`), WOFF, WOFF2 and font collections; fonts encrypted rather than obfuscated; faces
-/// over kMaxFaceBytes.
+/// The body text's family, and up to kMaxAccents accent families, ranked by the blocks (headings, a dedication, a
+/// code block) set in them. The glyph store holds them together, or the accent families beside a TrueType reader
+/// font (TTF spec, section 11.1). What is refused, so the book keeps the reader's font (or, for an accent family,
+/// the next one takes its place): a family that is generic or not embedded; CFF outlines (`OTTO`), WOFF, WOFF2 and
+/// font collections; fonts encrypted rather than obfuscated; faces over kMaxFaceBytes.
 namespace BookFonts {
 
 /// Bump when what prepare() decides or writes changes: every book is examined again.
@@ -25,7 +25,11 @@ namespace BookFonts {
 /// fonts.bin beside it.
 /// v4: the state file also holds the body's font-family and the accent family (fonts/accent/), and a book without
 /// @font-face rules is probed too, for its body's generic family.
-constexpr uint8_t kVersion = 4;
+/// v5: up to kMaxAccents accent families, in fonts/accent<n>/.
+constexpr uint8_t kVersion = 5;
+/// Accent families copied at most: the glyph store's eight style blocks hold a body of four styles and three
+/// one-style families, and its face table (32 faces) a book's body sizes and a few of each.
+constexpr uint8_t kMaxAccents = 3;
 /// A face bigger than this is not copied: the font area could not install it in flash mode anyway.
 constexpr size_t kMaxFaceBytes = 2 * 1024 * 1024;
 /// prepare() reads at most this much of each chapter, and at most kProbeChapters chapters from the text start.
@@ -42,16 +46,18 @@ enum class State : uint8_t {
 
 /// The families prepare() found, besides the body family's State.
 struct Families {
-  uint32_t body = 0;    ///< the body text's font-family (CssStyle::fontFamily); 0 for the reader's font
-  uint32_t accent = 0;  ///< the accent family's identity (CssFontFamily) when it is in familyDir(, true), else 0
+  uint32_t body = 0;  ///< the body text's font-family (CssStyle::fontFamily); 0 for the reader's font
+  /// The accent families' identities (CssFontFamily), the most used first, each in familyDir(, n); 0 past the last.
+  uint32_t accents[kMaxAccents] = {};
 };
 
 /// What prepare() found for the book whose cache is at `cachePath`. `*name` gets the name the book declares for
-/// its body family when `body` and the State is Family, else for its accent family ("" for none).
-State read(const std::string& cachePath, std::string* name = nullptr, Families* families = nullptr, bool body = true);
-/// Where a Family's files are: `<cachePath>/fonts`, one `<style>.ttf` per style (EpdFontFamily numbering); the
-/// accent family's, named the same, in `<cachePath>/fonts/accent`. The state file is `<cachePath>/fonts.bin`.
-std::string familyDir(const std::string& cachePath, bool accent = false);
+/// its body family (when the State is Family, else ""), or with `accent` 0..kMaxAccents-1 for that accent family
+/// ("" for none).
+State read(const std::string& cachePath, std::string* name = nullptr, Families* families = nullptr, int accent = -1);
+/// Where a Family's files are: `<cachePath>/fonts`, one `<style>.ttf` per style (EpdFontFamily numbering); accent
+/// family n's, named the same, in `<cachePath>/fonts/accent<n>`. The state file is `<cachePath>/fonts.bin`.
+std::string familyDir(const std::string& cachePath, int accent = -1);
 
 /// Finds the book's body and accent families and copies their font files to the card. `scratch`, when set, hosts
 /// the inflate ring and the parser state (the lent framebuffer at book open); otherwise the heap. The CSS must be
@@ -67,10 +73,11 @@ struct Found {
   /// an inline accent's text counting for its paragraph's, over the first kProbeChapterBytes of up to
   /// kProbeChapters chapters from the text start (fewer once kProbeEnoughText has been seen). 0 for the reader's font.
   uint32_t body = 0;
-  /// The accent family's identity: the family the most blocks (p, div, li, dd, blockquote, pre, h1-h6) are set in,
-  /// other than the body's, among those `records` (CssParser::loadFontFaces) has a regular face of; 0 for none. A
-  /// block is set in its text's family when all of its text is in one, else in its own.
-  uint32_t accent = 0;
+  /// The accent families' identities: the families blocks (p, div, li, dd, blockquote, pre, h1-h6) are set in,
+  /// other than the body's, among those `records` (CssParser::loadFontFaces) has a regular face of, the one the most
+  /// blocks are set in first; 0 past the last. A block is set in its text's family when all of its text is in one,
+  /// else in its own.
+  uint32_t accents[kMaxAccents] = {};
 };
 /// `*failed` is set when a chapter could not be read.
 Found detectFamilies(const Epub& epub, BuildArena* scratch, bool* failed, std::string_view records = {});

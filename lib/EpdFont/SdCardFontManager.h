@@ -54,12 +54,13 @@ class SdCardFontManager {
                   BuildArena* arena = nullptr);
 
   // TTF families drawn together from one glyph store (TtfFontSet, spec 11.1), the body's first: the reader's font
-  // or the book's body family, and a book's accent family beside it.
-  static constexpr uint8_t kMaxTtfFamilies = 2;
+  // or the book's body family, and a book's accent families beside it (BookFonts::kMaxAccents).
+  static constexpr uint8_t kMaxTtfFamilies = 4;
   // Loads TTF families together, each with its body face at targetPtSize and a window of native sizes;
   // onColdLoad fires before the set is installed. When they cannot be drawn together (the set does not fit the
-  // font area, a family other than the first cannot be read), the first is loaded alone. False when even the
-  // first cannot.
+  // font area or the store's style blocks, a family other than the first cannot be read), families are left out
+  // from the end, the least used accent first, until the rest can; never the first. False when even the first
+  // cannot.
   bool loadTtfFamilies(const SdCardFontFamilyInfo* const* families, uint8_t count, GfxRenderer& renderer,
                        uint8_t targetPtSize, const std::function<void()>& onColdLoad = {});
   // True when the TTF families last loaded were asked for as these, in this order, from the same files: a book's

@@ -189,7 +189,9 @@ const char* bookSdFontFamily(const int8_t builtinFamilyOverride, const std::stri
 const SdCardFontFamilyInfo* SdCardFontSystem::findFamily(const char* name) const {
   if (!name || name[0] == '\0') return nullptr;
   if (bookBody_.name == name) return &bookBody_;
-  if (bookAccent_.name == name) return &bookAccent_;
+  for (const SdCardFontFamilyInfo& accent : bookAccents_) {
+    if (accent.name == name) return &accent;
+  }
   // Names compared in place: the registry's findFamily() takes a std::string, and this runs while pages are
   // laid out, where building one for a long family name would allocate.
   for (const auto& family : registry_.getFamilies()) {
@@ -214,7 +216,7 @@ void SdCardFontSystem::selectBookFamilies(const std::string& cachePath, const ui
   const bool besideCpfont = reader && !reader->ttf();
   // Kept across the book's later opens in the same mode; anything else is read again, since the book may have been
   // examined since.
-  if ((!bookBody_.name.empty() || !bookAccent_.name.empty()) && cachePath == bookCachePath_ && mode == bookMode_ &&
+  if ((!bookBody_.name.empty() || !bookAccents_[0].name.empty()) && cachePath == bookCachePath_ && mode == bookMode_ &&
       besideCpfont == bookBesideCpfont_) {
     return;
   }
@@ -222,21 +224,23 @@ void SdCardFontSystem::selectBookFamilies(const std::string& cachePath, const ui
   bookMode_ = mode;
   bookBesideCpfont_ = besideCpfont;
   scanBookFamily(bookBody_, {}, {});
-  scanBookFamily(bookAccent_, {}, {});
+  for (SdCardFontFamilyInfo& accent : bookAccents_) scanBookFamily(accent, {}, {});
   bookFonts_ = {};  // what read() leaves alone stays "none"
   if (cachePath.empty()) return;
   std::string name;
   const bool body = mode == CrossPointSettings::PUBLISHER_FONTS_BODY || mode == CrossPointSettings::PUBLISHER_FONTS_ALL;
-  if (BookFonts::read(cachePath, &name, &bookFonts_, true) == BookFonts::State::Family && body) {
+  if (BookFonts::read(cachePath, &name, &bookFonts_) == BookFonts::State::Family && body) {
     scanBookFamily(bookBody_, name, BookFonts::familyDir(cachePath));
   }
-  if (mode < CrossPointSettings::PUBLISHER_FONTS_ACCENTS || bookFonts_.accent == 0) return;
-  BookFonts::read(cachePath, &name, nullptr, /*body=*/false);
-  if (bookBody_.name.empty() && besideCpfont) {
-    LOG_INF("SDFS", "Accent font %s left out: the reader's font is a .cpfont family", name.c_str());
-    return;
+  if (mode < CrossPointSettings::PUBLISHER_FONTS_ACCENTS) return;
+  for (uint8_t n = 0; n < BookFonts::kMaxAccents && bookFonts_.accents[n] != 0; ++n) {
+    BookFonts::read(cachePath, &name, nullptr, n);
+    if (bookBody_.name.empty() && besideCpfont) {
+      LOG_INF("SDFS", "Accent font %s left out: the reader's font is a .cpfont family", name.c_str());
+      continue;
+    }
+    scanBookFamily(bookAccents_[n], name, BookFonts::familyDir(cachePath, n));
   }
-  scanBookFamily(bookAccent_, name, BookFonts::familyDir(cachePath, /*accent=*/true));
 }
 
 const BookFonts::Families* SdCardFontSystem::bookFontFamiliesFor(const std::string& cachePath) const {

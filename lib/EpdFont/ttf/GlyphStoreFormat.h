@@ -17,7 +17,7 @@
 /// "empty". A power cut can only leave bytes with more 1 bits than were written (NorFlash.h); every marker
 /// that must not appear by accident is therefore one that only a complete write produces.
 ///
-/// The store holds a family set (spec 11.1): one family, or a book's body family and its accent family. A family is
+/// The store holds a family set (spec 11.1): one family, or a book's body family and its accent families. A family is
 /// its index in the set. The set's identity covers their order, so an index names the same family for as long as
 /// the store stays installed.
 namespace glyphstore {

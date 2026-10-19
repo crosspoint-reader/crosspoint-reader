@@ -1068,7 +1068,7 @@ with one font ID (per-word data carries only the style bits).
     fragment; `OpenType.h`'s header names two users, now three; `run.sh` keeps a stale "GSUB feature branch"
     comment; the SDK's `GposKerningTest.cpp` has a few clang-format deviations.
 
-### 11.1 Stage B: more than one font family per book (designed; phase 1 built, 11.1.1; phase 2 built, 11.1.2)
+### 11.1 Stage B: more than one font family per book (designed; phase 1 built, 11.1.1; phase 2 built, 11.1.2; phase 3 built, 11.1.3)
 
 What #3934 calls "Ignore Body Font", and what most books with embedded fonts actually use them for: the body in
 one family, and a few elements set apart in others (a display face for headings and chapter numbers, a script
@@ -1308,6 +1308,114 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
     returning a list, `BookFonts` copying each (`fonts/accent<n>/`), and `TtfFontSet::kMaxFamilies`,
     `SdCardFontManager::kMaxTtfFamilies` and `BlockFontFamilies::kMaxFamilies` raised; the store already takes eight
     style blocks and the face table is shared. The fallback would then drop families from the end, one at a time.
+
+#### 11.1.3 Phase 3, as built (2026-10-18, branch `feat/book-fonts-stage-b3`)
+
+- **Per-word font slots (`SECTION_FILE_VERSION` 94).** A word in another of the book's families than its block's
+  (an inline span in an accent family, an inline `<code>` in the book's code family, a body-family span inside an
+  accent heading) is laid out, measured and drawn in that family's face at the block's size. From #3934's
+  `wordSizeSlots` and `MAX_WORD_FONTS` (credited in the code):
+  - **Layout.** A word's slot is its family's (`BlockFontFamilies::slotOf`: the family's index plus one, 0 for the
+    body), kept beside its size percent (`TextBlock::WordSize` in ParsedText's size vector, so no new lockstep vector:
+    every insert, erase, split and bionic rebuild carries it as it carried the size). The block's table,
+    `ParsedText::fontSlots_`, is filled when the parser resolves the block's font: `resolveFamilyFont`, the block's
+    own resolver factored out, gives each slot its family's face at the block's size before resolution (after the
+    uniform-size fold), with its own residual; the slot of the block's own family, or of a face equal to the
+    block's, stays empty: the block's font.
+    A block laid out in parts resolves a family its later words bring in when the first such word arrives
+    (`wordFontsSize_`, cleared at each new block, so a block that inherits a resolved style keeps its words in its
+    font, as before).
+  - **Measurement.** Widths, the hyphenation split and the line's justification use the word's font and its slot's
+    scale; the space after a word is the word's font's (the space belongs to the word before it, as the style did);
+    two words in two fonts do not kern. `ensureFontReady` goes once per font with that font's words only, so a TTF
+    family renders none of another family's glyphs.
+  - **The line.** A TextBlock holds the fonts its words use, `{fontId, scale}` (8 B each, at most
+    `TextBlock::kMaxWordFonts` 8), at the front of its arena, and a slot byte per word after the sizes; their count
+    is the sizes byte's high nibble. No pointer is held: the table is the arena base and the slots sit just before
+    the text, so a resident line is no larger. A line without word fonts is byte-identical to phase 2's, so Off and
+    Body Text keep every golden; lines are rejected on load when a font names no ID or a slot no font.
+  - **Drawing.** `render()` and `wordBox()` take the word's font and scale; the line keeps its block font's baseline
+    (a word in a taller family reaches above it, as a larger word does), and the ascender cache is keyed by font and
+    scale. Word selection and footnote targets use `wordBox`, so a selected accent word is boxed and redrawn in its
+    own face.
+- **Several accent families.**
+  - `BookFonts` (`kVersion` 5) ranks the families blocks are set in by their block count (`accents()`, the probe's
+    tally as before) and copies the first `kMaxAccents` (3) that have a regular face, each to `fonts/accent<n>/`; a
+    family whose faces are refused (CFF, WOFF, encrypted) gives its place to the next. `fonts.bin` holds the body's
+    font-family, the three ranked identities and the names (docs/file-formats.md).
+  - The limits rise together: `TtfFontSet::kMaxFamilies` and `SdCardFontManager::kMaxTtfFamilies` 4 (the body and
+    three accents: eight style blocks hold a four-style body and three one-style families, and the 32-entry face table
+    a body's 5-10 sizes and a few of each), `BlockFontFamilies::kMaxFamilies` 5 (the two generics as well). Not eight:
+    a family past four would rarely fit beside a TTF body, and every family slot costs static RAM in the manager and
+    the font system and about 100 B in each `BlockFontFamilies` (the reader's, the parser's copy, and the one
+    `drawCurrentPageToBuffer` builds, now on the heap: at five families it would be 0.5 KB of stack).
+  - `SdCardFontSystem` selects every copied accent family (`bookAccents_`), the book open asks for the body and the
+    accents in rank order, and `buildBookFontFamilies` adds each one the store loaded. A set that does not fit the
+    font area or the style blocks drops families from the end, the least-used accent first and never the first family,
+    one at a time and logged (`TTF families do not load together; <name> left out`).
+- **An install keeps the style blocks that hold their files.** Before it erases anything, the install compares each
+  style block's place in the new layout with its file (half a copy buffer at a time, stopping at the first difference)
+  and keeps every block that holds its file exactly: `beginInstall` leaves it unerased and the copy skips it. The
+  layout puts the blocks from the same offset in the set's order, so a set that keeps its leading families (a TTF
+  reader font beside another book's accents, or beside none) copies only the rest. No format change: the bytes
+  decide, so a block cut short by a power cut or holding another file is written again, and the header is still
+  erased first and written last. The index, pairs and log are new as before (the set identity changed), so the kept
+  family's glyphs render again; only the copy is spared.
+- **Cost, `env:default` (C3), against master c5a973828 (#501 and #502 merged; 5,837,177 B, 55,256 B RAM):**
+  per-word slots +2,656 B, several accent families +370 B (static RAM +160 B: two more book families in the font
+  system and two more family records in the manager), the install that keeps blocks +270 B; **+3,296 B in all**
+  (5,840,473 B), static RAM +160 B. Stage B in all: 3.7 + 2.9 + 3.3 = 9.9 KB, inside the 8-12 KB estimate. No MMU
+  page boundary crossed: code leaves 47.6 KB of its 42nd page (master 50.7 KB), rodata 21.1 KB of its 47th (21.2 KB),
+  89 pages in all. Heap: the parser's family table copy grows from about 290 B to 490 B during a build; a
+  line with word fonts costs 8 B per font and a byte per word, in the arena it already had; the parser's size vector
+  2 B per word instead of 1 (about 128 B at its steady capacity).
+- **Tests:** `WordFontSlotTest` (measurement, spacing and the split in the slot's font, each font readied with its own
+  words, an empty slot byte-identical, a line carrying only its words' fonts, render and `wordBox` on the line's
+  baseline, serialization and a corrupt slot refused); `FontFamilyLayoutTest` (an accent word in a body paragraph, a
+  sans word in an accent heading at the heading's size, a body word in an accent block, families the book lacks, a
+  late word of a block laid out in parts); `BookFontsTest` (three accents ranked and copied, a fourth left out, a
+  refused accent giving its place to the next); `TtfFontSetTest` (a body and three accents in one store, ten style
+  blocks refused before any erase, a leading family's blocks kept and another file's written again);
+  `test_font_families` gains a second accent family (a paragraph, a span and a heading in Book Script) and a code
+  family (an inline `<code>` and a code block in Book Code), its Accents and All Text goldens showing each word's
+  font. Host suite 2848/2848.
+- **X4 test (2026-10-18, serial test API, Bookerly 14 pt; device copy with Ubuntu as Book Body, Inter as Book
+  Display, Noto Sans as Book Script, Inter Bold as Book Code):**
+  - Off: all Bookerly.
+  - Body Text: all Ubuntu, as phase 2.
+  - Accents with the built-in font: body Bookerly; the dedication, quotation and span paragraph in Inter; the Book
+    Script paragraph and heading in Noto Sans; the code block in Inter Bold; in the body paragraphs, the `.inline`
+    words in Inter, the `.script` words in Noto Sans and the inline code in Inter Bold, each word between Bookerly
+    words (the section file, decoded from the card, holds those words' fonts). "3 families installed: 4 styles
+    (2 kept)": Book Display's blocks from the session before.
+  - All Text: body Ubuntu, the same accent words and blocks in their families; "4 families installed: 6 styles".
+  - Accents beside BookerlyTT: "Book Code left out", then "Book Script left out" (eight styles do not fit the font
+    area), BookerlyTT and Book Display installed together, as phase 2.
+  - The kept blocks: from Accents beside BookerlyTT to Off, "1 family installed: 4 styles (4 kept)" in 4.6 s; back to
+    Accents, "2 families installed: 6 styles (4 kept)" in 5.6 s, Book Display alone copied (13.8 s with nothing kept;
+    phase 2 measured 13-17 s for each such switch).
+  - Word selection: "accent," (Inter), "sec-/ond" (Noto Sans, across the line break) and "inline" (Inter Bold) are
+    boxed to their glyphs and redrawn in their faces; the lookup is of the word ("inline").
+  - Heap in the book, free (largest block): Off 66.0-68.9 KB (36.9), Body Text 55.7-56.2 KB (22.5), Accents with
+    three accent families 46.7-52.9 KB (34.8-38.9), All Text with four families 48.4-50.3 KB (34.8), Accents beside
+    BookerlyTT with one accent family 52.1-54.1 KB (18.4), Off beside BookerlyTT 56.3-56.9 KB (23.5); at Home
+    76.5-76.7 KB. With the families of phase 2 the numbers are phase 2's: each further accent family costs its
+    faces and tables (2-3 KB), not the word slots.
+- **One-face families (fixed after the first X4 run):** the card's family scan takes a face's style from the file
+  (`ttf::assignStyles`), so a family whose one file declares itself italic or bold (a script face, a display face
+  cut as bold) had no regular style and was not loaded, although it was copied; and `BookFonts` passed over a family
+  whose `@font-face` rules declare no normal face. Both now make the nearest face the regular (italic, then bold,
+  then bold italic), moved rather than shared so the store holds it once, and the styles it leaves fall back to it.
+  The device copy of the test book is back to Noto Sans Italic as Book Script and Ubuntu Bold as Book Code: on the X4
+  "3 families installed: 4 styles", the Script paragraph and the second-accent word in Noto Sans Italic, the inline
+  code in Ubuntu Bold.
+- **What is left:**
+  - A book replaced on the card by another file of the same path keeps the old book's `fonts.bin` for the first open:
+    the families are selected before the book's cache is found stale and emptied, and examined again only at the next
+    open.
+  - A `.cpfont` reader font still has the font area to itself (11.1.2).
+  - The kept-blocks install spares the copy but not the reinstall of the index and log: a kept family's glyphs render
+    again. Keeping them would need a per-family identity in the header (a format change).
 
 ## 12. Side findings (separate from this work)
 

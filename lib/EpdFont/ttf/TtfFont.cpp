@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <new>
 
 using glyphstore::kIdentityBytes;
@@ -49,6 +50,21 @@ void checkLock() {
     logged = true;
     LOG_ERR("TTF", "glyph rendered without RenderLock (spec 3.4)");
   }
+}
+
+// Whether the flash at `offset` holds `file` already, compared in halves of the install's copy buffer (the file's
+// beside the flash's); a block that differs stops at its first chunk that does.
+bool holdsFile(const NorFlash& flash, const uint32_t offset, const ttf::FileSource& file, uint8_t* buffer) {
+  constexpr uint32_t kHalf = kCopyBytes / 2;
+  for (uint32_t at = 0; at < file.size; at += kHalf) {
+    const uint32_t len = std::min(kHalf, file.size - at);
+    if (!file.read(file.ctx, at, buffer, len) || !flash.read(offset + at, buffer + kHalf, len) ||
+        std::memcmp(buffer, buffer + kHalf, len) != 0) {
+      return false;
+    }
+    if (hooks.yield) hooks.yield();
+  }
+  return true;
 }
 
 }  // namespace
@@ -152,7 +168,8 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
   in.freeMapPages = flash_.freeMapPages();
   glyphstore::Layout layout{};
   if (!glyphstore::planLayout(in, layout)) {
-    LOG_ERR("TTF", "families do not fit the font partition (%u styles, %lu free mapping pages)", in.styleCount,
+    // Not an error yet: the manager tries again without the last accent family, and logs if even the body cannot.
+    LOG_INF("TTF", "families do not fit the font partition (%u styles, %lu free mapping pages)", in.styleCount,
             static_cast<unsigned long>(in.freeMapPages));
     return false;
   }
@@ -163,13 +180,26 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
     LOG_ERR("TTF", "install: no %lu B copy buffer", static_cast<unsigned long>(kCopyBytes));
     return false;
   }
-  if (!store_.beginInstall(layout, identity, nullptr)) return false;
+  // A style block that holds its file already where this layout puts it stays as it is, neither erased nor copied:
+  // a set that keeps its leading families (a TrueType reader font beside another book's accent families, or beside
+  // none) copies only the rest. Reading a kept file costs a fraction of erasing and writing it again.
+  uint8_t kept = 0;
   uint8_t block = 0;
+  for (uint8_t f = 0; f < count; ++f) {
+    for (const ttf::FileSource& file : families[f]) {
+      if (file.size == 0) continue;
+      if (holdsFile(flash_, layout.styleOffset[block], file, buffer.get())) kept |= static_cast<uint8_t>(1u << block);
+      ++block;
+    }
+  }
+  if (!store_.beginInstall(layout, identity, nullptr, kept)) return false;
+  block = 0;
   for (uint8_t f = 0; f < count; ++f) {
     for (uint8_t s = 0; s < 4; ++s) {
       const ttf::FileSource& file = families[f][s];
       if (file.size == 0) continue;
-      for (uint32_t offset = 0; offset < file.size; offset += kCopyBytes) {
+      const bool copy = (kept & (1u << block)) == 0;
+      for (uint32_t offset = 0; copy && offset < file.size; offset += kCopyBytes) {
         const uint32_t len = std::min(kCopyBytes, file.size - offset);
         if (!file.read(file.ctx, offset, buffer.get(), len) ||
             !store_.writeStyleData(block, offset, buffer.get(), len)) {
@@ -182,8 +212,8 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
     }
   }
   if (!store_.finishInstall()) return false;
-  LOG_INF("TTF", "%u famil%s installed: %u styles, log %lu B", count, count == 1 ? "y" : "ies", in.styleCount,
-          static_cast<unsigned long>(layout.geometry.logSize));
+  LOG_INF("TTF", "%u famil%s installed: %u styles (%d kept), log %lu B", count, count == 1 ? "y" : "ies", in.styleCount,
+          __builtin_popcount(kept), static_cast<unsigned long>(layout.geometry.logSize));
   return true;
 }
 
