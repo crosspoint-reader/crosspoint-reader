@@ -164,6 +164,11 @@ behind every UI face as fallback glyphs (`src/CjkUiFonts.cpp`, `docs/i18n.md`). 
 between Chinese and Japanese characters. The build fails when a translation uses a character no UI
 face has.
 
+The faces ship as 1-bit DEFLATE groups, 97,132 B where they took 175,916 B flat
+(`compress_ui_face.py`). The active UI language's two faces are inflated into its language pack
+slot and drawn from flash with no decode (`docs/i18n.md`); the other two languages' glyphs, for the
+language picker and CJK book titles, decode one at a time, ~2.5 ms each on the C3.
+
 **Still open: text that is not a UI string.** Book titles and authors, TOC entries, chapter titles in
 the status bar, file names and the finished-book screen draw the characters they share with a
 translation and a box (□) for each of the rest. Before the CJK faces they drew nothing (X3,
@@ -186,7 +191,14 @@ UI face's misses, so the SD font would be its last source. Questions that decide
 **Smaller items:**
 - a CJK keyboard: none of the three has one, so text entry stays Latin;
 - bold UI text draws CJK in the regular weight (a synthetic bold would be a 1 px double strike);
-- the large UI step draws 12 pt CJK under 14 pt Latin headings; a 14 pt CJK size costs ~125 KB;
+- the large UI step draws 12 pt CJK under 14 pt Latin headings; a 14 pt CJK size costs ~125 KB flat,
+  ~60 KB compressed, and its active-language faces would need about another 64 KB page of the
+  language pack slot;
+- the interval tables (15,648 B for the three languages) are nearly one interval per glyph; a sorted
+  codepoint list would save ~12 KB;
+- 67 Han characters at 10 pt and 92 at 12 pt are byte-identical in the Chinese and Japanese faces
+  (3,080 B and 5,910 B flat); dropping them from the Japanese faces would draw the same pixels from
+  the Chinese ones, but a Japanese UI would then decode those per glyph, outside its language pack;
 - the translations are machine-made and unreviewed (`docs/translators.md`).
 
 ## Dictionary on CJK pages
