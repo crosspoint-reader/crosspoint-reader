@@ -6,9 +6,9 @@
 #include <algorithm>
 #include <iterator>
 
-#include "CjkUiFonts.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "UiLanguage.h"
 
 namespace fui = freeink::ui;
 
@@ -39,11 +39,7 @@ const char* LanguageSelectActivity::headerTitle() const { return tr(STR_LANGUAGE
 void LanguageSelectActivity::activateIndex(const int index) {
   app.clearTapFlash();
   nav.selected = index;
-  {
-    RenderLock lock(*this);
-    I18N.setLanguage(static_cast<Language>(SORTED_LANGUAGE_INDICES[index]));
-    CjkUiFonts::setLanguage(I18N.getLanguage());
-  }
+  UiLanguage::apply(static_cast<Language>(SORTED_LANGUAGE_INDICES[index]));
   finish();
 }
 
