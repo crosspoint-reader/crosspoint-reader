@@ -42,7 +42,11 @@ location = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictLocat
 selection = block(selector, "struct Selection {", True)
 plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
 constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
-back_handler = block(viewer, "if (mappedInput.wasReleased(MappedInputManager::Button::Back))")
+viewer_loop = block(viewer, "void DictionaryDefinitionActivity::loop()")
+back_handler = viewer_loop.split("  int sx = 0;", 1)[1].split(
+    "  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm))", 1
+)[0]
+back_handler = "  int sx = 0;" + back_handler
 lookup_source = (ROOT / "src/activities/reader/DictionaryWordSelectActivity.cpp").read_text()
 definition_result = block(lookup_source, "[this](const ActivityResult& result)")
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
@@ -67,6 +71,7 @@ harness = r'''
 #include <Utf8.h>
 #include <Memory.h>
 #include "activities/ActivityResult.h"
+#include "components/HeaderBackTapTarget.h"
 #define LOG_ERR(...) ((void)0)
 template<typename... Args> void logDebug(Args&&...) {}
 #define LOG_DBG(...) logDebug(__VA_ARGS__)
@@ -121,13 +126,27 @@ struct Renderer {
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
   int getLineHeight(int, float) const { return 10; }
 };
-struct Settings { int getReaderFontId() const { return 0; } } SETTINGS;
+struct Settings {
+  bool touchReaderControls = true;
+  int getReaderFontId() const { return 0; }
+} SETTINGS;
 struct MappedInputManager {
   enum class Button { Back };
   bool released = false;
   unsigned long heldMs = 0;
+  bool longPress = false;
+  bool contactSuppressed = false;
+  int touchX = 0, touchY = 0;
   bool wasReleased(Button) const { return released; }
   unsigned long getHeldTime() const { return heldMs; }
+  bool wasScreenLongPress(int& x, int& y) {
+    if (!longPress) return false;
+    longPress = false;
+    contactSuppressed = true;
+    x = touchX;
+    y = touchY;
+    return true;
+  }
 };
 ''' + location + r'''
 struct Dictionary {
@@ -389,6 +408,31 @@ int main() {
   root.mappedInput.heldMs = 1000;
   root.handleBack();
   assert(root.finished && root.result.isCancelled);
+  // Header long-press exits independently of text-selection settings; body long-press still selects.
+  HeaderBackTapTarget::set(4, 4, 32, 32);
+  for (const bool controlsEnabled : {false, true}) {
+    SETTINGS.touchReaderControls = controlsEnabled;
+    for (const bool onHeader : {false, true}) {
+      DictionaryDefinitionActivity touchView;
+      touchView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{10, 10, true});
+      touchView.content.text = dictionary.entries.at(10);
+      assert(touchView.prepareDefinition(touchView.content));
+      touchView.mappedInput.longPress = true;
+      touchView.mappedInput.touchX = onHeader ? 10 : 50;
+      touchView.mappedInput.touchY = onHeader ? 10 : 0;
+      const unsigned readsBeforeTouch = dictionary.reads;
+      touchView.handleBack();
+      assert(touchView.mappedInput.contactSuppressed && dictionary.reads == readsBeforeTouch);
+      assert(touchView.finished == onHeader && touchView.result.isCancelled == onHeader);
+      assert(bool(touchView.child) == (!onHeader && controlsEnabled));
+      if (onHeader) {
+        DictionaryDefinitionActivity parent, reader;
+        parent.onDefinitionResult(touchView.result);
+        reader.onLookupResult(parent.result);
+        assert(!reader.selectionOpened);
+      }
+    }
+  }
 }
 '''
 

@@ -17,6 +17,7 @@
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
 #include "ReaderUtils.h"
+#include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
 #include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
@@ -564,8 +565,12 @@ void DictionaryDefinitionActivity::loop() {
     }
   }
   const int totalPages = content.totalPages;
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (lookup && mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS) {
+  int sx = 0;
+  int sy = 0;
+  const bool longPress = lookup && mappedInput.wasScreenLongPress(sx, sy);
+  const bool headerLongPress = longPress && HeaderBackTapTarget::contains(sx, sy);
+  if (headerLongPress || mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (lookup && (headerLongPress || mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS)) {
       ActivityResult result;
       result.isCancelled = true;
       setResult(std::move(result));
@@ -576,9 +581,7 @@ void DictionaryDefinitionActivity::loop() {
       finish();
     return;
   }
-  int sx = 0;
-  int sy = 0;
-  if (lookup && SETTINGS.touchReaderControls && mappedInput.wasScreenLongPress(sx, sy)) {
+  if (longPress && SETTINGS.touchReaderControls) {
     startSelection(sx, sy);
     return;
   }
