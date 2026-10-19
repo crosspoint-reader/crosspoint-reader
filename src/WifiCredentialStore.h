@@ -64,9 +64,14 @@ class WifiCredentialStore {
   bool saveToFile() const;
   bool loadFromFile();
 
-  // Credential management
+  // Credential management. Both save at once: false from either is a failed save, or a credential
+  // refused for want of room (addCredential(), see hasRoomFor()) or not found (removeCredential()).
   bool addCredential(const std::string& ssid, const std::string& password);
   bool removeCredential(const std::string& ssid);
+  // False when `ssid` is new and the list is full, so addCredential() would refuse it.
+  bool hasRoomFor(const std::string& ssid) const {
+    return credentials.size() < MAX_NETWORKS || hasSavedCredential(ssid);
+  }
   const WifiCredential* findCredential(const std::string& ssid) const;
 
   // Update cached BSSID/channel hint and last observed IP configuration in one write.

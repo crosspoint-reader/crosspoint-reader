@@ -667,7 +667,10 @@ void cmdSet(const std::string_view arg) {
   }
   // As the web settings page does: settle the settings that depend on others, save, and read the
   // value back so the reply shows what was stored (a dependent setting may have moved it).
-  SettingsByKey::commit();
+  if (!SettingsByKey::commit()) {
+    reply("SET_ERROR:not saved ", key);
+    return;
+  }
   SettingsByKey::visitKeyed(key, &replySetRow, nullptr);
 }
 

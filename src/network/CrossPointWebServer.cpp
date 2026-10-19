@@ -2155,7 +2155,13 @@ void CrossPointWebServer::handlePostSettings() {
     }
   }
 
-  SettingsByKey::commit();
+  // The page reports any answer but 200 as not saved and keeps the edits, so the user can retry.
+  if (!SettingsByKey::commit()) {
+    LOG_ERR("WEB", "Applied %d setting(s), but the settings file was not written", applied);
+    server->send(500, "text/plain",
+                 "the settings file could not be written to the SD card; the change lasts until the reader restarts");
+    return;
+  }
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
@@ -2844,15 +2850,22 @@ void CrossPointWebServer::handlePostWifiNetwork() {
       ok = WIFI_STORE.addCredential(ssid, password);
     }
 
+    // The entry is there and an edit makes no new one, so a failure is a failed save.
     if (!ok) {
-      server->send(400, "text/plain", "Failed to update Wi-Fi network");
+      server->send(500, "text/plain", "Failed to update Wi-Fi network");
       return;
     }
 
     LOG_DBG("WEB", "Updated Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
   } else {
-    if (!WIFI_STORE.addCredential(ssid, password)) {
+    // A full list apart: addCredential() refusing a network with room is a failed save, which was
+    // reported as the limit.
+    if (!WIFI_STORE.hasRoomFor(ssid)) {
       server->send(400, "text/plain", "Cannot add network (limit reached)");
+      return;
+    }
+    if (!WIFI_STORE.addCredential(ssid, password)) {
+      server->send(500, "text/plain", "Failed to save Wi-Fi network");
       return;
     }
     LOG_DBG("WEB", "Added Wi-Fi network: %s", ssid.c_str());
@@ -2889,8 +2902,8 @@ void CrossPointWebServer::handleDeleteWifiNetwork() {
   }
 
   const std::string ssid = credentials[static_cast<size_t>(idx)].ssid;
-  if (!WIFI_STORE.removeCredential(ssid)) {
-    server->send(400, "text/plain", "Failed to delete Wi-Fi network");
+  if (!WIFI_STORE.removeCredential(ssid)) {  // found by index, so a failed save
+    server->send(500, "text/plain", "Failed to delete Wi-Fi network");
     return;
   }
 

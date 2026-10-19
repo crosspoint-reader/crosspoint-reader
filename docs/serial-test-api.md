@@ -333,6 +333,7 @@ SET_OK:<key>=<value>[ label=<option>]        the value as stored afterwards
 GET_ERROR:unknown key <key>
 SET_ERROR:unknown key <key> | out of range <value> | bad value <value>
 SET_ERROR:not writable <key> | expected <key>=<value>
+SET_ERROR:not saved <key>                    applied, but the settings file was not written
 GET_ERROR / SET_ERROR:font families not loaded on this screen <key>   (boot straight into USB Transfer)
 ```
 

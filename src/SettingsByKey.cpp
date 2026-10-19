@@ -99,9 +99,9 @@ WriteResult writeString(const SettingInfo& s, const std::string& value) {
   return WriteResult::Applied;
 }
 
-void commit() {
+bool commit() {
   CrossPointSettings::normalizeDependentSettings(SETTINGS);
-  SETTINGS.saveToFile();
+  return SETTINGS.saveToFile();
 }
 
 int visitKeyed(const std::string_view key, const RowVisitor visit, void* ctx) {
