@@ -626,7 +626,7 @@ int clampPercent(int percent) {
 // The secondary framebuffer lent as a bump arena for the scope, or nothing when there is none to lend (arena() is
 // nullptr). The block never enters the heap, so giving it back cannot fail; it is given back with the scope, or at
 // giveBack(). returnSecondaryBuffer() seeds the buffer from the framebuffer as it is then, so the lend ends before the
-// page is displayed, never after. The image decodes of a render and of the image lane draw in it.
+// page is displayed, never after. The image decodes and the TrueType misses of a render draw in it.
 class LentSecondary {
  public:
   explicit LentSecondary(GfxRenderer& renderer) : renderer_(renderer) {
@@ -5771,7 +5771,26 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   const uint32_t heapBefore = esp_get_free_heap_size();
   const uint32_t starvedBefore = glyph_miss::starvedCount();
   const uint32_t missesBefore = glyph_miss::drawnCount();
-  prewarmPageFonts(*page, orientedMarginLeft, contentTop);
+  {
+    // The prewarm puts the page's TrueType glyphs into the glyph store, and each one the store does not hold yet (the
+    // store installed again, a new size or style) is a miss: a 10.5-14.5 KB scratch block, in SD mode a 4.2 KB page
+    // cache too. Made on the heap, that stayed until the pass gave RenderLock back (X3, the first page after the store
+    // was installed again: free fell from 50.3 to 38.7 KB in the prewarm and was still 39.9 KB at the BW render). The
+    // image warm is over and nothing reads the secondary buffer before the page is displayed, so it is lent to the
+    // misses, as to a decode above: each takes its block from it and gives it back (glyph_miss). Not without a
+    // TrueType set, where nothing misses, nor when Background-B holds the buffer.
+    std::optional<LentSecondary> missLend;
+    if (sdFontSystem.ttfLoaded() && renderer.hasSecondaryBuffer()) missLend.emplace(renderer);
+    const glyph_miss::Scope misses(missLend ? missLend->arena() : nullptr);
+    prewarmPageFonts(*page, orientedMarginLeft, contentTop);
+  }
+  // What a miss made on the heap anyway goes back now, not with RenderLock: the BW render draws from the store, and a
+  // miss there makes it again (TtfFontSet::releaseMissMemory, which keeps the starved-glyph count).
+  const uint32_t missMemoryFreed = sdFontSystem.releaseTtfMissMemory();
+  if (missMemoryFreed > 0) {
+    LOG_DBG("ERS", "Freed %lu B of TrueType miss memory after the prewarm",
+            static_cast<unsigned long>(missMemoryFreed));
+  }
   const uint32_t heapAfter = esp_get_free_heap_size();
   fcm->logStats("prewarm");
   const auto tPrewarm = millis();
