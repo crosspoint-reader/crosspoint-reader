@@ -15,6 +15,11 @@ Strings that exist only in this firmware (the Library, Diagnostics, plugins and 
 machine-translated in 2.40 and have not been reviewed by native speakers yet. Corrections are
 welcome.
 
+Chinese (Simplified), Japanese and Korean are machine translations of the whole UI, with no
+crosspoint-reader translation to start from. No native speaker has reviewed them yet; they are the
+translations that most need one. A change to them may need their UI fonts regenerated
+(see [i18n.md](i18n.md#chinese-japanese-and-korean)).
+
 ## Contributing
 
 If you'd like to add your name to this list, please open a PR adding yourself and your Github link. Thank you!

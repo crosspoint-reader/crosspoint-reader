@@ -2,9 +2,11 @@
 
 #include <ArduinoJson.h>
 #include <HalStorage.h>
+#include <HeapFit.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <string>
@@ -724,16 +726,32 @@ bool JsonSettingsIO::saveRecentBooks(const RecentBooksStore& store, const char* 
   return Storage.writeFile(path, json);
 }
 
-bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) {
+RecentBooksLoad JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) {
   JsonDocument doc;
   auto error = deserializeJson(doc, json);
+  if (error == DeserializationError::NoMemory) {
+    LOG_ERR("RBS", "No memory to read the recent books");
+    return RecentBooksLoad::ShortOfMemory;
+  }
   if (error) {
     LOG_ERR("RBS", "JSON parse error: %s", error.c_str());
-    return false;
+    return RecentBooksLoad::Broken;
   }
 
   store.recentBooks.clear();
   JsonArray arr = doc["books"].as<JsonArray>();
+  // The list and every entry's strings come from the throwing operator new, which aborts the device on a short heap
+  // (a book opened at the memory ladder's lowest, 2026-10): the list asked for in one block, and the strings, at most
+  // the file's own text and their block headers, against what is free. Short, nothing is read.
+  constexpr size_t kMaxBooks = 10;
+  constexpr size_t kStringOverhead = 6 * 16;  // a heap block header for each of an entry's strings
+  const size_t count = std::min<size_t>(arr.size(), kMaxBooks);
+  if (!heapHasBlockFor(count * sizeof(RecentBook)) ||
+      !heapHasFree(count * (sizeof(RecentBook) + kStringOverhead) + strlen(json))) {
+    LOG_ERR("RBS", "No memory to read %u recent books", static_cast<unsigned>(count));
+    return RecentBooksLoad::ShortOfMemory;
+  }
+  store.recentBooks.reserve(count);
   // Which meaning the per-book size overrides in this file carry (point sizes since version 2).
   // Absent (0) is every file written before the sizes were put in pixel order.
   const auto fontSizeOrderV = static_cast<uint8_t>(doc["fontSizeOrderV"].as<int>());
@@ -745,7 +763,7 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
   };
 
   for (JsonObject obj : arr) {
-    if (store.getCount() >= 10) break;
+    if (store.getCount() >= kMaxBooks) break;
     RecentBook book;
     book.path = obj["path"] | std::string("");
     book.title = obj["title"] | std::string("");
@@ -777,11 +795,11 @@ bool JsonSettingsIO::loadRecentBooks(RecentBooksStore& store, const char* json) 
     book.fontSizeNormalizationOverride = clampInt8(obj["fontSizeNormalizationOverride"] | -1, -1, 1, -1);
     book.guideDotsOverride = clampInt8(obj["guideDotsOverride"] | -1, -1, 1, -1);
     book.inlineFootnotePreviewsOverride = clampInt8(obj["inlineFootnotePreviewsOverride"] | -1, -1, 1, -1);
-    store.recentBooks.push_back(book);
+    store.recentBooks.push_back(std::move(book));
   }
 
   LOG_DBG("RBS", "Recent books loaded from file (%d entries)", store.getCount());
-  return true;
+  return RecentBooksLoad::Loaded;
 }
 
 // ---- OpdsServerStore ----

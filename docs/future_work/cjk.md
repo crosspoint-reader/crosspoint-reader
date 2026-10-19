@@ -5,7 +5,8 @@ Status: open items as of 2026-10-18.
 Line breaking for Chinese, Japanese and Korean is done. What remains for full CJK support:
 - **Typography:** justification, punctuation squeeze and the character grid (A3), and ruby (B).
 - **Fonts:** a CJK font readers can install, fast, plus a TTF path for CJK fonts.
-- **UI text:** book titles, TOC entries and status-bar chapter names in CJK.
+- **UI text:** the UI itself is translated; book titles, TOC entries and status-bar chapter names in CJK
+  still need the reader's CJK font as a fallback.
 - **The dictionary** on CJK pages.
 - **Small edge cases** the reviews found.
 
@@ -157,19 +158,36 @@ Already decided:
 
 ## UI text in CJK
 
-**Open.** The built-in UI faces cover Latin, Cyrillic, Vietnamese and some symbol ranges, but no CJK (the `builtin` preset in `fontconvert_sdcard.py`). `GlyphFallback` only stands in Latin look-alikes, so CJK UI text draws nothing at all, not even boxes. X3 on 2026-10-18 with 紅樓夢:
-- the Home card shows no title and no author, just the progress line;
-- the Library grid shows a blank generated cover with no caption under it.
+**Partly done** (branch `feat/cjk-ui-fonts`). Chinese, Japanese and Korean UI translations ship with
+their own small UI faces: each holds the characters its translation uses, at 10 and 12 pt, attached
+behind every UI face as fallback glyphs (`src/CjkUiFonts.cpp`, `docs/i18n.md`). Wrapped UI text breaks
+between Chinese and Japanese characters. The build fails when a translation uses a character no UI
+face has.
 
-TOC entries, chapter titles in the status bar, file names and the finished-book screen use the same faces.
+**Still open: text that is not a UI string.** Book titles and authors, TOC entries, chapter titles in
+the status bar, file names and the finished-book screen draw the characters they share with a
+translation and a box (□) for each of the rest. Before the CJK faces they drew nothing (X3,
+2026-10-18, 紅樓夢: no title or author on the Home card, no caption under the Library cover). Without
+the boxes the faces made it worse: the Home card showed a lone 雪, the one character of the author
+曹雪芹 a translation happens to use, as if it were the title.
 
 **Why it matters.** Even with a CJK reading font, a CJK reader cannot find or navigate their books.
 
-**Where.** The UI faces (`builtinFonts/`, the font ladder in `GfxRenderer`), `GlyphFallback`, and the theme's text drawing.
+**Next step.** Chain the reader's SD CJK font behind the CJK UI faces, as upstream does (crosspoint-reader
+#2521, Tsz Ho Sze, and follow-ups #3026, #3071, #3484, #3646): `FallbackFaceProvider` already serves a
+UI face's misses, so the SD font would be its last source. Questions that decide the design:
+- An SD font is 2-bit and the UI faces are 1-bit, and the renderer draws at the depth of the font it
+  was asked for: the 2-bit glyph has to be thresholded on the way, or drawn as its ink mask (#500's
+  1-bit pre-render does exactly that).
+- Its glyphs live in a heap page arena filled by a prewarm, which UI screens do not run; upstream
+  prewarms per string (#3026) and bounds it for lists (#3071).
+- Heap: upstream loads extra SD font sizes for the UI only on boards with PSRAM (#3646).
 
-**Next step.** Port upstream's UI fallback fonts (crosspoint-reader #2521 and its follow-ups). Spec section 3 lists it as out of scope for A-B. Two questions decide the design:
-- Can the reader's SD CJK font serve as the fallback when it is installed?
-- How much flash would a small built-in CJK UI face take?
+**Smaller items:**
+- a CJK keyboard: none of the three has one, so text entry stays Latin;
+- bold UI text draws CJK in the regular weight (a synthetic bold would be a 1 px double strike);
+- the large UI step draws 12 pt CJK under 14 pt Latin headings; a 14 pt CJK size costs ~125 KB;
+- the translations are machine-made and unreviewed (`docs/translators.md`).
 
 ## Dictionary on CJK pages
 
