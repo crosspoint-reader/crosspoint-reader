@@ -528,3 +528,31 @@ TEST(SdCardFontTest, SmallCapsPrepareOriginalAndUppercasePackedMetricsWithoutBit
     EXPECT_EQ(sdFontTestReads, 0u);
   }
 }
+
+TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
+  makeFont();
+  // Glyph 3 claims more bytes than its pixels need, as a corrupt .cpfont does.
+  constexpr size_t GLYPH_OFFSET = 64 + 24;
+  EpdGlyph glyph{};
+  std::memcpy(&glyph, sdFontTestFile.data() + GLYPH_OFFSET + 3 * sizeof(glyph), sizeof(glyph));
+  glyph.dataLength = 49335;
+  std::memcpy(sdFontTestFile.data() + GLYPH_OFFSET + 3 * sizeof(glyph), &glyph, sizeof(glyph));
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_EQ(0, font.prewarm(page(FIRST, 5).c_str(), 1, false, false, false));
+  const auto* data = font.getEpdFont()->data;
+  for (uint32_t cp = FIRST; cp < FIRST + 5; ++cp) {
+    const EpdGlyph* found = nullptr;
+    for (uint32_t i = 0; i < data->intervalCount; ++i) {
+      const auto& interval = data->intervals[i];
+      if (cp >= interval.first && cp <= interval.last) found = data->glyph + interval.offset + cp - interval.first;
+    }
+    ASSERT_NE(nullptr, found);
+    if (cp == FIRST + 3) {
+      EXPECT_EQ(0, found->dataLength);
+      EXPECT_EQ(0, found->width);
+    } else {
+      EXPECT_EQ(BITMAP_BYTES, found->dataLength);
+    }
+  }
+}
