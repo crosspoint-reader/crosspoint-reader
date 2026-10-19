@@ -94,7 +94,8 @@ struct PixelCache {
   // Same layout, written by a decode that had to settle for less than the requested scale (a
   // progressive JPEG at a coarser DCT scale, or its DC-only preview) because the heap could not
   // hold the workspace. Readers replay it like any cache; a warm pass with the framebuffers
-  // released deletes it and decodes again (ImageBlock::dropCoarseCache). Before this the .pxc
+  // released, or the reader's memory ladder with memory freed, decodes it again and replaces it
+  // when that decode finishes (ImageBlock::CoarseRedecodeScope). Before this the .pxc
   // had no quality key, so a preview-grade image stood in for the book's for good (memory audit
   // 2026-09, F3).
   static constexpr uint16_t PXC_MAGIC_COARSE = 0x8006;

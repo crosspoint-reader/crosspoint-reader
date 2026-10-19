@@ -1598,6 +1598,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   // IDCT); the fine resampler in emitGrayBlock covers the residual ratio.
   uint8_t tjpgScale = 0;
   uint8_t wantedProgressiveScale = 0;  // the scale the target asked for, before the workspace loop
+  bool noWorkspace = false;            // the full decoder would do, but its workspace found no room
   int jpegScaleDenom = 1;
   std::unique_ptr<JpegWorkPool> progressiveWorkspace;
   size_t progressiveWorkspaceBytes = 0;
@@ -1620,14 +1621,24 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
       LOG_INF("JPG", "No room for a progressive workspace (%u free); DC-only preview",
               static_cast<unsigned>(ESP.getFreeHeap()));
       fullProgressive = false;
+      noWorkspace = true;
       tjpgScale = 0;
     }
   }
   // The DC-only preview resizes to the destination itself.
   const bool dcPreview = mode == JpegMode::Progressive && !fullProgressive;
   // Below the requested quality because of the heap: the cache written from this decode is
-  // stamped coarse so a later pass with room can replace it (PixelCache::PXC_MAGIC_COARSE).
-  const bool coarseDecode = dcPreview || (fullProgressive && tjpgScale > wantedProgressiveScale);
+  // stamped coarse so a later pass with room can replace it (PixelCache::PXC_MAGIC_COARSE). Not a
+  // preview of a JPEG the full decoder cannot read (its probe failed): no room would do better.
+  const bool coarseDecode = noWorkspace || (fullProgressive && tjpgScale > wantedProgressiveScale);
+  // What a finer decode would take: the workspace one scale finer, or the coarsest one when none had room. The
+  // reader's memory ladder decodes the picture again only where that can be had (image_scratch::noteCoarse).
+  const image_scratch::CoarseNeed finerNeed =
+      coarseDecode
+          ? image_scratch::CoarseNeed{static_cast<uint32_t>(ProgressiveJpeg::workspaceBytes(
+                                          progressiveInfo, static_cast<uint8_t>(noWorkspace ? 3 : tjpgScale - 1))),
+                                      static_cast<uint32_t>(PROGRESSIVE_WORKSPACE_HEAP_FLOOR)}
+          : image_scratch::CoarseNeed{};
 
   // TJpgDec descales by floor(dim / 2^scale): each MCU side (8 or 16 px) is a multiple of
   // the scale denominator, so its per-MCU shifts sum to exactly the floor. Match that here
@@ -1953,8 +1964,12 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
         ctx.scaledSrcHeight = destHeight;
         configureResample(ctx, false);
         runDcPreview = true;
-        if (ctx.caching) ctx.cache.markCoarse();  // a preview is standing in for the full decode
-        if (ctx.companion) ctx.companion->cache.markCoarse();
+        // A preview standing in for the full decode is coarse when memory is what it lacked; for an
+        // unsupported or damaged stream it is the best there is.
+        if (result == ProgressiveJpeg::Result::OutOfMemory) {
+          if (ctx.caching) ctx.cache.markCoarse();
+          if (ctx.companion) ctx.companion->cache.markCoarse();
+        }
       }
     }
   }
@@ -2033,8 +2048,8 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   // Finalize the streamed cache file. Note: a flush failure mid-decode clears
   // ctx.caching (the partial file is dropped), so re-read the flag here.
-  if (ctx.caching) {
-    ctx.cache.finalize();
+  if (ctx.caching && ctx.cache.finalize() && finerNeed.bytes != 0) {
+    image_scratch::noteCoarse(finerNeed);  // a coarse picture published for lack of memory
   }
   // Only alongside a complete primary: a companion without it would be a cache nobody asked for.
   if (ctx.companion) {

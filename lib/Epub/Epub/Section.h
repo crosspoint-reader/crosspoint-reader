@@ -310,8 +310,8 @@ class Section {
   // demand, borrowing the framebuffer as its arena. The one remaining caller is the
   // pre-reboot heap-recovery pass, which deliberately warms everything so the next boot can
   // render images with no decoder at all.
-  // redecodeCoarse: see Page::warmImageCaches -- only for passes that run with the framebuffers
-  // released, where the full progressive workspace fits.
+  // redecodeCoarse: see Page::warmImageCaches -- only for passes with memory to spare, as this one
+  // with the framebuffers released, where the full progressive workspace fits.
   void warmAllImageCaches(int xOffset, int yOffset, bool forceLoad, bool monochromeOutput = true,
                           bool alsoWarmGrayscale = false, bool redecodeCoarse = false);
   bool isTruncatedCache() const { return truncatedCache; }

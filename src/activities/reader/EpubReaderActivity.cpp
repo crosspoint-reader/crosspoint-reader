@@ -2123,9 +2123,11 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
   in.canUnload =
       !(section && section->hasActiveBuild()) && !(backgroundSection_ && backgroundSection_->hasActiveBuild());
   unsigned long reloadMs = 0;
+  image_scratch::CoarseNeed coarse;  // what the plain step's coarse pictures need for a finer one
   for (;;) {
     const uint32_t heapShortBefore = image_scratch::heapShortCount();
-    if (arena) arena->reset();  // nothing of the step before lives in it
+    image_scratch::takeCoarseNeed();  // none from a decode before the step's
+    if (arena) arena->reset();        // nothing of the step before lives in it
     if (in.step != Step::Plain) {
       const bool light = in.step == Step::LightRelief;
       // The light step puts the page's glyphs into the store first, drawn in the lent region: from there the page
@@ -2152,7 +2154,15 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
       image_scratch::noteHeapShort();
       LOG_INF("ERS", "Memory ladder: decode refused (CMD:HEAP:REFUSE)");
     } else {
-      page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale);
+      // A relief step decodes a coarse picture again too, only where, with what it freed, the workspace of a finer one
+      // can be had now; the picture stays until a decode replaces it.
+      const bool finer = in.step != Step::Plain && image_scratch::coarseNeedFits(coarse);
+      if (in.step != Step::Plain && coarse.bytes != 0 && !finer) {
+        LOG_INF("ERS", "Memory ladder: still no %lu B for a finer picture: the coarse one stays",
+                static_cast<unsigned long>(coarse.bytes));
+      }
+      page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale,
+                           /*redecodeCoarse=*/finer);
     }
     // The set comes back at once, while the decode's buffers are just freed and the heap least broken up. What the
     // light step freed, the next prewarm and the next miss make again.
@@ -2161,10 +2171,23 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
       in.fontsBack = sdFontSystem.resumeTtf(renderer);
       reloadMs = millis() - start;
     }
-    in.decode = CooperativeAbort::wasAborted()                            ? Decode::Failed
-                : !page.hasUncachedImages(forceLoad, true, warmGrayscale) ? Decode::Done
-                : image_scratch::heapShortCount() != heapShortBefore      ? Decode::HeapShort
-                                                                          : Decode::Failed;
+    // Short of memory with every image cached: a decode published a coarse picture (image_scratch::noteCoarse); a
+    // decode the heap refused leaves none.
+    const bool heapShort = image_scratch::heapShortCount() != heapShortBefore;
+    if (in.step == Step::Plain) coarse = image_scratch::takeCoarseNeed();
+    if (CooperativeAbort::wasAborted()) {
+      in.decode = Decode::Failed;
+    } else if (page.hasUncachedImages(forceLoad, true, warmGrayscale)) {
+      in.decode = heapShort ? Decode::HeapShort : Decode::Failed;
+    } else {
+      in.decode = heapShort ? Decode::Coarse : Decode::Done;
+    }
+    if (in.decode == Decode::Coarse && in.step == Step::Plain) {
+      // Worth the light step only where what it frees, the TrueType misses' memory, makes room for a finer one.
+      in.coarseFits = image_scratch::coarseNeedFits(coarse, sdFontSystem.ttfMissMemoryBytes());
+      LOG_INF("ERS", "Memory ladder: a coarse picture, %lu B from a finer one%s",
+              static_cast<unsigned long>(coarse.bytes), in.coarseFits ? "" : " that cannot be had: kept");
+    }
     const Action action = ImageMemoryLadder::next(in);
     switch (action) {
       case Action::LightRelief:

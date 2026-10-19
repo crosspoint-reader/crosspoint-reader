@@ -391,6 +391,8 @@ void SdCardFontManager::wipeTtfIfPending(const std::function<void()>& onBusy) {
 
 uint32_t SdCardFontManager::releaseTtfMissMemory() { return ttfSet_ ? ttfSet_->releaseMissMemory() : 0; }
 
+uint32_t SdCardFontManager::ttfMissMemoryBytes() const { return ttfSet_ ? ttfSet_->missMemoryBytes() : 0; }
+
 void SdCardFontManager::closeTtfSet(GfxRenderer& renderer) {
   dropTtfNativeSizes(renderer);
   renderer.setFontResolver(nullptr, nullptr);
