@@ -306,8 +306,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=308 s=0 z=100 t=같이
    W x=334 s=0 z=100 t=성을
    W x=357 s=0 z=100 t=내며,
-  LINE y=551 x=0 align=0 mult=1.000 hfid=0 words=15
-   W x=18 s=0 z=100 t=“에이,
+  LINE y=551 x=0 align=0 mult=1.000 hfid=0 words=16
+   W x=18 s=0 z=100 t=“
+   W x=26 s=0 z=100 t=에이,
    W x=58 s=0 z=100 t=오라질
    W x=91 s=0 z=100 t=년,
    W x=119 s=0 z=100 t=조롱복은
@@ -322,11 +323,13 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=361 s=0 z=100 t=어쩌란
    W x=397 s=0 z=100 t=말이야!
    W x=441 s=0 z=100 t=왜
-  LINE y=575 x=0 align=0 mult=1.000 hfid=0 words=15
+  LINE y=575 x=0 align=0 mult=1.000 hfid=0 words=17
    W x=0 s=0 z=100 t=눈을
    W x=29 s=0 z=100 t=바루
    W x=53 s=0 z=100 t=뜨지
-   W x=77 s=0 z=100 t=못해!”하고
+   W x=77 s=0 z=100 t=못해!
+   W x=102 s=0 z=100 t=”
+   W x=111 s=0 z=100 t=하고
    W x=135 s=0 z=100 t=김
    W x=153 s=0 z=100 t=첨지는
    W x=191 s=0 z=100 t=앓는

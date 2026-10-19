@@ -3,26 +3,30 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
  PAGE 0 elements=30 footnotes=0
   LINE y=0 x=0 align=2 mult=1.200 hfid=0 words=1
    W x=223 s=1 z=100 t=一
-  LINE y=47 x=0 align=0 mult=1.000 hfid=0 words=18
+  LINE y=47 x=0 align=0 mult=1.000 hfid=0 words=22
    W x=18 s=0 z=100 t=吾
    W x=30 s=0 z=100 t=輩
-   W x=40 s=0 z=100 t=（わ
+   W x=40 s=0 z=100 t=（
+   W x=52 s=0 z=100 t=わ
    W x=64 s=0 z=100 t=が
    W x=72 s=0 z=100 t=は
-   W x=80 s=0 z=100 t=い）
+   W x=80 s=0 z=100 t=い
+   W x=87 s=0 z=100 t=）
    W x=93 s=0 z=100 t=は
    W x=101 s=0 z=100 t=猫
    W x=113 s=0 z=100 t=で
    W x=120 s=0 z=100 t=あ
-   W x=132 s=0 z=100 t=る。
+   W x=132 s=0 z=100 t=る
+   W x=140 s=0 z=100 t=。
    W x=151 s=0 z=100 t=名
    W x=163 s=0 z=100 t=前
    W x=175 s=0 z=100 t=は
    W x=183 s=0 z=100 t=ま
    W x=192 s=0 z=100 t=だ
    W x=199 s=0 z=100 t=無
-   W x=207 s=0 z=100 t=い。
-  LINE y=71 x=0 align=0 mult=1.000 hfid=0 words=48
+   W x=207 s=0 z=100 t=い
+   W x=214 s=0 z=100 t=。
+  LINE y=71 x=0 align=0 mult=1.000 hfid=0 words=51
    W x=18 s=0 z=100 t=ど
    W x=27 s=0 z=100 t=こ
    W x=35 s=0 z=100 t=で
@@ -35,14 +39,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=89 s=0 z=100 t=と
    W x=97 s=0 z=100 t=見
    W x=104 s=0 z=100 t=当
-   W x=111 s=0 z=100 t=（け
+   W x=111 s=0 z=100 t=（
+   W x=123 s=0 z=100 t=け
    W x=129 s=0 z=100 t=ん
    W x=138 s=0 z=100 t=と
-   W x=146 s=0 z=100 t=う）
+   W x=146 s=0 z=100 t=う
+   W x=155 s=0 z=100 t=）
    W x=161 s=0 z=100 t=が
    W x=169 s=0 z=100 t=つ
    W x=180 s=0 z=100 t=か
-   W x=187 s=0 z=100 t=ぬ。
+   W x=187 s=0 z=100 t=ぬ
+   W x=199 s=0 z=100 t=。
    W x=210 s=0 z=100 t=何
    W x=218 s=0 z=100 t=で
    W x=225 s=0 z=100 t=も
@@ -71,14 +78,15 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=423 s=0 z=100 t=事
    W x=432 s=0 z=100 t=だ
    W x=439 s=0 z=100 t=け
-  LINE y=95 x=0 align=0 mult=1.000 hfid=0 words=48
+  LINE y=95 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=は
    W x=8 s=0 z=100 t=記
    W x=16 s=0 z=100 t=憶
    W x=25 s=0 z=100 t=し
    W x=37 s=0 z=100 t=て
    W x=43 s=0 z=100 t=い
-   W x=50 s=0 z=100 t=る。
+   W x=50 s=0 z=100 t=る
+   W x=58 s=0 z=100 t=。
    W x=69 s=0 z=100 t=吾
    W x=81 s=0 z=100 t=輩
    W x=91 s=0 z=100 t=は
@@ -97,7 +105,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=196 s=0 z=100 t=の
    W x=203 s=0 z=100 t=を
    W x=211 s=0 z=100 t=見
-   W x=218 s=0 z=100 t=た。
+   W x=218 s=0 z=100 t=た
+   W x=224 s=0 z=100 t=。
    W x=235 s=0 z=100 t=し
    W x=247 s=0 z=100 t=か
    W x=254 s=0 z=100 t=も
@@ -120,14 +129,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=401 s=0 z=100 t=中
    W x=407 s=0 z=100 t=で
    W x=414 s=0 z=100 t=一
-  LINE y=119 x=0 align=0 mult=1.000 hfid=0 words=41
+  LINE y=119 x=0 align=0 mult=1.000 hfid=0 words=48
    W x=0 s=0 z=100 t=番
    W x=6 s=0 z=100 t=獰
    W x=17 s=0 z=100 t=悪
-   W x=24 s=0 z=100 t=（ど
+   W x=24 s=0 z=100 t=（
+   W x=36 s=0 z=100 t=ど
    W x=45 s=0 z=100 t=う
    W x=54 s=0 z=100 t=あ
-   W x=66 s=0 z=100 t=く）
+   W x=66 s=0 z=100 t=く
+   W x=77 s=0 z=100 t=）
    W x=83 s=0 z=100 t=な
    W x=93 s=0 z=100 t=種
    W x=101 s=0 z=100 t=族
@@ -137,7 +148,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=138 s=0 z=100 t=た
    W x=144 s=0 z=100 t=そ
    W x=155 s=0 z=100 t=う
-   W x=164 s=0 z=100 t=だ。
+   W x=164 s=0 z=100 t=だ
+   W x=171 s=0 z=100 t=。
    W x=182 s=0 z=100 t=こ
    W x=190 s=0 z=100 t=の
    W x=197 s=0 z=100 t=書
@@ -151,24 +163,29 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=273 s=0 z=100 t=我々
    W x=289 s=0 z=100 t=を
    W x=297 s=0 z=100 t=捕
-   W x=308 s=0 z=100 t=（つ
+   W x=308 s=0 z=100 t=（
+   W x=320 s=0 z=100 t=つ
    W x=331 s=0 z=100 t=か
-   W x=338 s=0 z=100 t=ま）
+   W x=338 s=0 z=100 t=ま
+   W x=347 s=0 z=100 t=）
    W x=353 s=0 z=100 t=え
    W x=364 s=0 z=100 t=て
    W x=370 s=0 z=100 t=煮
-   W x=378 s=0 z=100 t=（に）
+   W x=378 s=0 z=100 t=（
+   W x=390 s=0 z=100 t=に
+   W x=401 s=0 z=100 t=）
    W x=407 s=0 z=100 t=て
    W x=413 s=0 z=100 t=食
    W x=424 s=0 z=100 t=う
    W x=433 s=0 z=100 t=と
-  LINE y=143 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=143 x=0 align=0 mult=1.000 hfid=0 words=53
    W x=0 s=0 z=100 t=い
    W x=7 s=0 z=100 t=う
    W x=16 s=0 z=100 t=話
    W x=22 s=0 z=100 t=で
    W x=29 s=0 z=100 t=あ
-   W x=41 s=0 z=100 t=る。
+   W x=41 s=0 z=100 t=る
+   W x=49 s=0 z=100 t=。
    W x=60 s=0 z=100 t=し
    W x=72 s=0 z=100 t=か
    W x=79 s=0 z=100 t=し
@@ -201,18 +218,21 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=301 s=0 z=100 t=な
    W x=311 s=0 z=100 t=か
    W x=318 s=0 z=100 t=っ
-   W x=328 s=0 z=100 t=た。
+   W x=328 s=0 z=100 t=た
+   W x=334 s=0 z=100 t=。
    W x=345 s=0 z=100 t=た
    W x=351 s=0 z=100 t=だ
    W x=358 s=0 z=100 t=彼
    W x=364 s=0 z=100 t=の
    W x=371 s=0 z=100 t=掌
-   W x=381 s=0 z=100 t=（て
+   W x=381 s=0 z=100 t=（
+   W x=393 s=0 z=100 t=て
    W x=399 s=0 z=100 t=の
    W x=406 s=0 z=100 t=ひ
-   W x=417 s=0 z=100 t=ら）
+   W x=417 s=0 z=100 t=ら
+   W x=423 s=0 z=100 t=）
    W x=429 s=0 z=100 t=に
-  LINE y=167 x=0 align=0 mult=1.000 hfid=0 words=51
+  LINE y=167 x=0 align=0 mult=1.000 hfid=0 words=52
    W x=0 s=0 z=100 t=載
    W x=6 s=0 z=100 t=せ
    W x=15 s=0 z=100 t=ら
@@ -249,7 +269,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=283 s=0 z=100 t=り
    W x=290 s=0 z=100 t=で
    W x=297 s=0 z=100 t=あ
-   W x=309 s=0 z=100 t=る。
+   W x=309 s=0 z=100 t=る
+   W x=317 s=0 z=100 t=。
    W x=328 s=0 z=100 t=掌
    W x=338 s=0 z=100 t=の
    W x=345 s=0 z=100 t=上
@@ -264,7 +285,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=415 s=0 z=100 t=書
    W x=426 s=0 z=100 t=生
    W x=434 s=0 z=100 t=の
-  LINE y=191 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=191 x=0 align=0 mult=1.000 hfid=0 words=53
    W x=0 s=0 z=100 t=顔
    W x=12 s=0 z=100 t=を
    W x=20 s=0 z=100 t=見
@@ -285,14 +306,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=136 s=0 z=100 t=の
    W x=143 s=0 z=100 t=見
    W x=150 s=0 z=100 t=始
-   W x=162 s=0 z=100 t=（み
+   W x=162 s=0 z=100 t=（
+   W x=174 s=0 z=100 t=み
    W x=184 s=0 z=100 t=は
    W x=192 s=0 z=100 t=じ
-   W x=198 s=0 z=100 t=め）
+   W x=198 s=0 z=100 t=め
+   W x=210 s=0 z=100 t=）
    W x=216 s=0 z=100 t=で
    W x=223 s=0 z=100 t=あ
    W x=235 s=0 z=100 t=ろ
-   W x=245 s=0 z=100 t=う。
+   W x=245 s=0 z=100 t=う
+   W x=254 s=0 z=100 t=。
    W x=265 s=0 z=100 t=こ
    W x=273 s=0 z=100 t=の
    W x=280 s=0 z=100 t=時
@@ -315,8 +339,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=416 s=0 z=100 t=っ
    W x=426 s=0 z=100 t=て
    W x=432 s=0 z=100 t=い
-  LINE y=215 x=0 align=0 mult=1.000 hfid=0 words=45
-   W x=0 s=0 z=100 t=る。
+  LINE y=215 x=0 align=0 mult=1.000 hfid=0 words=50
+   W x=0 s=0 z=100 t=る
+   W x=8 s=0 z=100 t=。
    W x=19 s=0 z=100 t=第
    W x=29 s=0 z=100 t=一
    W x=39 s=0 z=100 t=毛
@@ -346,14 +371,18 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=252 s=0 z=100 t=で
    W x=259 s=0 z=100 t=薬
    W x=269 s=0 z=100 t=缶
-   W x=277 s=0 z=100 t=（や
+   W x=277 s=0 z=100 t=（
+   W x=289 s=0 z=100 t=や
    W x=297 s=0 z=100 t=か
-   W x=304 s=0 z=100 t=ん）
-   W x=319 s=0 z=100 t=だ。
+   W x=304 s=0 z=100 t=ん
+   W x=313 s=0 z=100 t=）
+   W x=319 s=0 z=100 t=だ
+   W x=326 s=0 z=100 t=。
    W x=337 s=0 z=100 t=そ
    W x=348 s=0 z=100 t=の
    W x=355 s=0 z=100 t=後
-   W x=363 s=0 z=100 t=（ご
+   W x=363 s=0 z=100 t=（
+   W x=375 s=0 z=100 t=ご
    W x=384 s=0 z=100 t=）
    W x=390 s=0 z=100 t=猫
    W x=402 s=0 z=100 t=に
@@ -361,9 +390,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=419 s=0 z=100 t=だ
    W x=426 s=0 z=100 t=い
    W x=433 s=0 z=100 t=ぶ
-  LINE y=239 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=239 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=逢
-   W x=7 s=0 z=100 t=（あ）
+   W x=7 s=0 z=100 t=（
+   W x=19 s=0 z=100 t=あ
+   W x=31 s=0 z=100 t=）
    W x=37 s=0 z=100 t=っ
    W x=47 s=0 z=100 t=た
    W x=53 s=0 z=100 t=が
@@ -372,9 +403,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=78 s=0 z=100 t=な
    W x=88 s=0 z=100 t=片
    W x=96 s=0 z=100 t=輪
-   W x=107 s=0 z=100 t=（か
+   W x=107 s=0 z=100 t=（
+   W x=119 s=0 z=100 t=か
    W x=126 s=0 z=100 t=た
-   W x=132 s=0 z=100 t=わ）
+   W x=132 s=0 z=100 t=わ
+   W x=144 s=0 z=100 t=）
    W x=150 s=0 z=100 t=に
    W x=161 s=0 z=100 t=は
    W x=169 s=0 z=100 t=一
@@ -384,14 +417,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=200 s=0 z=100 t=会
    W x=212 s=0 z=100 t=（
    W x=224 s=0 z=100 t=で
-   W x=231 s=0 z=100 t=く）
+   W x=231 s=0 z=100 t=く
+   W x=242 s=0 z=100 t=）
    W x=248 s=0 z=100 t=わ
    W x=260 s=0 z=100 t=し
    W x=272 s=0 z=100 t=た
    W x=278 s=0 z=100 t=事
    W x=287 s=0 z=100 t=が
    W x=295 s=0 z=100 t=な
-   W x=305 s=0 z=100 t=い。
+   W x=305 s=0 z=100 t=い
+   W x=312 s=0 z=100 t=。
    W x=323 s=0 z=100 t=の
    W x=330 s=0 z=100 t=み
    W x=340 s=0 z=100 t=な
@@ -406,13 +441,14 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=418 s=0 z=100 t=ま
    W x=427 s=0 z=100 t=り
    W x=434 s=0 z=100 t=に
-  LINE y=263 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=263 x=0 align=0 mult=1.000 hfid=0 words=51
    W x=0 s=0 z=100 t=突
    W x=7 s=0 z=100 t=起
    W x=17 s=0 z=100 t=し
    W x=29 s=0 z=100 t=て
    W x=35 s=0 z=100 t=い
-   W x=42 s=0 z=100 t=る。
+   W x=42 s=0 z=100 t=る
+   W x=50 s=0 z=100 t=。
    W x=61 s=0 z=100 t=そ
    W x=72 s=0 z=100 t=う
    W x=81 s=0 z=100 t=し
@@ -431,17 +467,22 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=196 s=0 z=100 t=う
    W x=205 s=0 z=100 t=と
    W x=213 s=0 z=100 t=煙
-   W x=221 s=0 z=100 t=（け
+   W x=221 s=0 z=100 t=（
+   W x=233 s=0 z=100 t=け
    W x=239 s=0 z=100 t=む
-   W x=250 s=0 z=100 t=り）
+   W x=250 s=0 z=100 t=り
+   W x=257 s=0 z=100 t=）
    W x=263 s=0 z=100 t=を
    W x=271 s=0 z=100 t=吹
-   W x=278 s=0 z=100 t=く。
+   W x=278 s=0 z=100 t=く
+   W x=289 s=0 z=100 t=。
    W x=300 s=0 z=100 t=ど
    W x=309 s=0 z=100 t=う
    W x=318 s=0 z=100 t=も
    W x=324 s=0 z=100 t=咽
-   W x=330 s=0 z=100 t=（む）
+   W x=330 s=0 z=100 t=（
+   W x=342 s=0 z=100 t=む
+   W x=353 s=0 z=100 t=）
    W x=359 s=0 z=100 t=せ
    W x=368 s=0 z=100 t=ぽ
    W x=376 s=0 z=100 t=く
@@ -450,8 +491,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=404 s=0 z=100 t=に
    W x=415 s=0 z=100 t=弱
    W x=423 s=0 z=100 t=っ
-   W x=433 s=0 z=100 t=た。
-  LINE y=287 x=0 align=0 mult=1.000 hfid=0 words=33
+   W x=433 s=0 z=100 t=た
+   W x=439 s=0 z=100 t=。
+  LINE y=287 x=0 align=0 mult=1.000 hfid=0 words=36
    W x=0 s=0 z=100 t=こ
    W x=8 s=0 z=100 t=れ
    W x=17 s=0 z=100 t=が
@@ -462,9 +504,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=55 s=0 z=100 t=む
    W x=66 s=0 z=100 t=煙
    W x=74 s=0 z=100 t=草
-   W x=82 s=0 z=100 t=（た
+   W x=82 s=0 z=100 t=（
+   W x=94 s=0 z=100 t=た
    W x=100 s=0 z=100 t=ば
-   W x=109 s=0 z=100 t=こ）
+   W x=109 s=0 z=100 t=こ
+   W x=117 s=0 z=100 t=）
    W x=123 s=0 z=100 t=と
    W x=131 s=0 z=100 t=い
    W x=138 s=0 z=100 t=う
@@ -484,8 +528,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=259 s=0 z=100 t=頃
    W x=267 s=0 z=100 t=知
    W x=278 s=0 z=100 t=っ
-   W x=288 s=0 z=100 t=た。
-  LINE y=311 x=0 align=0 mult=1.000 hfid=0 words=46
+   W x=288 s=0 z=100 t=た
+   W x=294 s=0 z=100 t=。
+  LINE y=311 x=0 align=0 mult=1.000 hfid=0 words=49
    W x=18 s=0 z=100 t=こ
    W x=26 s=0 z=100 t=の
    W x=33 s=0 z=100 t=書
@@ -494,8 +539,10 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=59 s=0 z=100 t=掌
    W x=69 s=0 z=100 t=の
    W x=76 s=0 z=100 t=裏
-   W x=84 s=0 z=100 t=（う
-   W x=105 s=0 z=100 t=ち）
+   W x=84 s=0 z=100 t=（
+   W x=96 s=0 z=100 t=う
+   W x=105 s=0 z=100 t=ち
+   W x=113 s=0 z=100 t=）
    W x=119 s=0 z=100 t=で
    W x=126 s=0 z=100 t=し
    W x=138 s=0 z=100 t=ば
@@ -513,7 +560,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=243 s=0 z=100 t=お
    W x=249 s=0 z=100 t=っ
    W x=259 s=0 z=100 t=た
-   W x=265 s=0 z=100 t=が、
+   W x=265 s=0 z=100 t=が
+   W x=273 s=0 z=100 t=、
    W x=283 s=0 z=100 t=し
    W x=295 s=0 z=100 t=ば
    W x=304 s=0 z=100 t=ら
@@ -532,8 +580,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=415 s=0 z=100 t=し
    W x=427 s=0 z=100 t=始
    W x=439 s=0 z=100 t=め
-  LINE y=335 x=0 align=0 mult=1.000 hfid=0 words=42
-   W x=0 s=0 z=100 t=た。
+  LINE y=335 x=0 align=0 mult=1.000 hfid=0 words=48
+   W x=0 s=0 z=100 t=た
+   W x=6 s=0 z=100 t=。
    W x=17 s=0 z=100 t=書
    W x=28 s=0 z=100 t=生
    W x=36 s=0 z=100 t=が
@@ -557,27 +606,33 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=183 s=0 z=100 t=が
    W x=191 s=0 z=100 t=無
    W x=199 s=0 z=100 t=暗
-   W x=211 s=0 z=100 t=（む
+   W x=211 s=0 z=100 t=（
+   W x=223 s=0 z=100 t=む
    W x=234 s=0 z=100 t=や
-   W x=242 s=0 z=100 t=み）
+   W x=242 s=0 z=100 t=み
+   W x=252 s=0 z=100 t=）
    W x=258 s=0 z=100 t=に
    W x=269 s=0 z=100 t=眼
    W x=279 s=0 z=100 t=が
    W x=287 s=0 z=100 t=廻
-   W x=297 s=0 z=100 t=る。
+   W x=297 s=0 z=100 t=る
+   W x=305 s=0 z=100 t=。
    W x=316 s=0 z=100 t=胸
    W x=326 s=0 z=100 t=が
    W x=334 s=0 z=100 t=悪
    W x=341 s=0 z=100 t=く
    W x=352 s=0 z=100 t=な
-   W x=362 s=0 z=100 t=る。
+   W x=362 s=0 z=100 t=る
+   W x=370 s=0 z=100 t=。
    W x=381 s=0 z=100 t=到
    W x=392 s=0 z=100 t=底
-   W x=398 s=0 z=100 t=（と
+   W x=398 s=0 z=100 t=（
+   W x=410 s=0 z=100 t=と
    W x=418 s=0 z=100 t=う
-  LINE y=359 x=0 align=0 mult=1.000 hfid=0 words=54
+  LINE y=359 x=0 align=0 mult=1.000 hfid=0 words=56
    W x=0 s=0 z=100 t=て
-   W x=6 s=0 z=100 t=い）
+   W x=6 s=0 z=100 t=い
+   W x=13 s=0 z=100 t=）
    W x=19 s=0 z=100 t=助
    W x=25 s=0 z=100 t=か
    W x=32 s=0 z=100 t=ら
@@ -589,7 +644,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=79 s=0 z=100 t=て
    W x=85 s=0 z=100 t=い
    W x=92 s=0 z=100 t=る
-   W x=100 s=0 z=100 t=と、
+   W x=100 s=0 z=100 t=と
+   W x=108 s=0 z=100 t=、
    W x=118 s=0 z=100 t=ど
    W x=127 s=0 z=100 t=さ
    W x=137 s=0 z=100 t=り
@@ -630,7 +686,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=421 s=0 z=100 t=く
    W x=432 s=0 z=100 t=ら
    W x=438 s=0 z=100 t=考
-  LINE y=383 x=0 align=0 mult=1.000 hfid=0 words=12
+  LINE y=383 x=0 align=0 mult=1.000 hfid=0 words=13
    W x=0 s=0 z=100 t=え
    W x=11 s=0 z=100 t=出
    W x=17 s=0 z=100 t=そ
@@ -642,8 +698,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=69 s=0 z=100 t=分
    W x=80 s=0 z=100 t=ら
    W x=86 s=0 z=100 t=な
-   W x=96 s=0 z=100 t=い。
-  LINE y=407 x=0 align=0 mult=1.000 hfid=0 words=45
+   W x=96 s=0 z=100 t=い
+   W x=103 s=0 z=100 t=。
+  LINE y=407 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=18 s=0 z=100 t=ふ
    W x=25 s=0 z=100 t=と
    W x=33 s=0 z=100 t=気
@@ -659,7 +716,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=111 s=0 z=100 t=は
    W x=119 s=0 z=100 t=い
    W x=126 s=0 z=100 t=な
-   W x=136 s=0 z=100 t=い。
+   W x=136 s=0 z=100 t=い
+   W x=143 s=0 z=100 t=。
    W x=154 s=0 z=100 t=た
    W x=160 s=0 z=100 t=く
    W x=171 s=0 z=100 t=さ
@@ -672,24 +730,28 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=229 s=0 z=100 t=が
    W x=237 s=0 z=100 t=一
    W x=247 s=0 z=100 t=疋
-   W x=258 s=0 z=100 t=（ぴ
+   W x=258 s=0 z=100 t=（
+   W x=270 s=0 z=100 t=ぴ
    W x=276 s=0 z=100 t=き
    W x=285 s=0 z=100 t=）
    W x=291 s=0 z=100 t=も
    W x=297 s=0 z=100 t=見
    W x=304 s=0 z=100 t=え
-   W x=315 s=0 z=100 t=ぬ。
+   W x=315 s=0 z=100 t=ぬ
+   W x=327 s=0 z=100 t=。
    W x=338 s=0 z=100 t=肝
    W x=348 s=0 z=100 t=心
-   W x=355 s=0 z=100 t=（か
+   W x=355 s=0 z=100 t=（
+   W x=367 s=0 z=100 t=か
    W x=374 s=0 z=100 t=ん
    W x=383 s=0 z=100 t=じ
-   W x=389 s=0 z=100 t=ん）
+   W x=389 s=0 z=100 t=ん
+   W x=398 s=0 z=100 t=）
    W x=404 s=0 z=100 t=の
    W x=411 s=0 z=100 t=母
    W x=420 s=0 z=100 t=親
    W x=430 s=0 z=100 t=さ
-  LINE y=431 x=0 align=0 mult=1.000 hfid=0 words=43
+  LINE y=431 x=0 align=0 mult=1.000 hfid=0 words=49
    W x=0 s=0 z=100 t=え
    W x=11 s=0 z=100 t=姿
    W x=19 s=0 z=100 t=を
@@ -699,13 +761,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=55 s=0 z=100 t=し
    W x=67 s=0 z=100 t=ま
    W x=76 s=0 z=100 t=っ
-   W x=86 s=0 z=100 t=た。
+   W x=86 s=0 z=100 t=た
+   W x=92 s=0 z=100 t=。
    W x=103 s=0 z=100 t=そ
    W x=114 s=0 z=100 t=の
    W x=121 s=0 z=100 t=上
    W x=127 s=0 z=100 t=今
-   W x=136 s=0 z=100 t=（い
-   W x=155 s=0 z=100 t=ま）
+   W x=136 s=0 z=100 t=（
+   W x=148 s=0 z=100 t=い
+   W x=155 s=0 z=100 t=ま
+   W x=164 s=0 z=100 t=）
    W x=170 s=0 z=100 t=ま
    W x=179 s=0 z=100 t=で
    W x=186 s=0 z=100 t=の
@@ -717,13 +782,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=235 s=0 z=100 t=て
    W x=241 s=0 z=100 t=無
    W x=249 s=0 z=100 t=暗
-   W x=261 s=0 z=100 t=（む
+   W x=261 s=0 z=100 t=（
+   W x=273 s=0 z=100 t=む
    W x=284 s=0 z=100 t=や
-   W x=292 s=0 z=100 t=み）
+   W x=292 s=0 z=100 t=み
+   W x=302 s=0 z=100 t=）
    W x=308 s=0 z=100 t=に
    W x=319 s=0 z=100 t=明
    W x=327 s=0 z=100 t=る
-   W x=335 s=0 z=100 t=い。
+   W x=335 s=0 z=100 t=い
+   W x=342 s=0 z=100 t=。
    W x=353 s=0 z=100 t=眼
    W x=363 s=0 z=100 t=を
    W x=371 s=0 z=100 t=明
@@ -733,11 +801,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=399 s=0 z=100 t=ら
    W x=405 s=0 z=100 t=れ
    W x=414 s=0 z=100 t=ぬ
-  LINE y=455 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=455 x=0 align=0 mult=1.000 hfid=0 words=52
    W x=0 s=0 z=100 t=く
    W x=11 s=0 z=100 t=ら
    W x=17 s=0 z=100 t=い
-   W x=24 s=0 z=100 t=だ。
+   W x=24 s=0 z=100 t=だ
+   W x=31 s=0 z=100 t=。
    W x=42 s=0 z=100 t=は
    W x=50 s=0 z=100 t=て
    W x=56 s=0 z=100 t=な
@@ -746,21 +815,26 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=81 s=0 z=100 t=も
    W x=87 s=0 z=100 t=容
    W x=96 s=0 z=100 t=子
-   W x=105 s=0 z=100 t=（よ
+   W x=105 s=0 z=100 t=（
+   W x=117 s=0 z=100 t=よ
    W x=129 s=0 z=100 t=う
-   W x=138 s=0 z=100 t=す）
+   W x=138 s=0 z=100 t=す
+   W x=145 s=0 z=100 t=）
    W x=151 s=0 z=100 t=が
    W x=159 s=0 z=100 t=お
    W x=165 s=0 z=100 t=か
    W x=172 s=0 z=100 t=し
    W x=184 s=0 z=100 t=い
-   W x=191 s=0 z=100 t=と、
+   W x=191 s=0 z=100 t=と
+   W x=199 s=0 z=100 t=、
    W x=209 s=0 z=100 t=の
    W x=216 s=0 z=100 t=そ
    W x=227 s=0 z=100 t=の
    W x=234 s=0 z=100 t=そ
    W x=245 s=0 z=100 t=這
-   W x=257 s=0 z=100 t=（は）
+   W x=257 s=0 z=100 t=（
+   W x=269 s=0 z=100 t=は
+   W x=277 s=0 z=100 t=）
    W x=283 s=0 z=100 t=い
    W x=290 s=0 z=100 t=出
    W x=296 s=0 z=100 t=し
@@ -772,14 +846,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=348 s=0 z=100 t=常
    W x=359 s=0 z=100 t=に
    W x=370 s=0 z=100 t=痛
-   W x=377 s=0 z=100 t=い。
+   W x=377 s=0 z=100 t=い
+   W x=384 s=0 z=100 t=。
    W x=395 s=0 z=100 t=吾
    W x=407 s=0 z=100 t=輩
    W x=417 s=0 z=100 t=は
    W x=425 s=0 z=100 t=藁
-   W x=435 s=0 z=100 t=（わ
-  LINE y=479 x=0 align=0 mult=1.000 hfid=0 words=21
-   W x=0 s=0 z=100 t=ら）
+   W x=435 s=0 z=100 t=（
+   W x=447 s=0 z=100 t=わ
+  LINE y=479 x=0 align=0 mult=1.000 hfid=0 words=23
+   W x=0 s=0 z=100 t=ら
+   W x=6 s=0 z=100 t=）
    W x=12 s=0 z=100 t=の
    W x=19 s=0 z=100 t=上
    W x=25 s=0 z=100 t=か
@@ -799,8 +876,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=131 s=0 z=100 t=の
    W x=138 s=0 z=100 t=で
    W x=145 s=0 z=100 t=あ
-   W x=157 s=0 z=100 t=る。
-  LINE y=503 x=0 align=0 mult=1.000 hfid=0 words=47
+   W x=157 s=0 z=100 t=る
+   W x=165 s=0 z=100 t=。
+  LINE y=503 x=0 align=0 mult=1.000 hfid=0 words=48
    W x=18 s=0 z=100 t=よ
    W x=30 s=0 z=100 t=う
    W x=39 s=0 z=100 t=や
@@ -826,7 +904,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=206 s=0 z=100 t=池
    W x=215 s=0 z=100 t=が
    W x=223 s=0 z=100 t=あ
-   W x=235 s=0 z=100 t=る。
+   W x=235 s=0 z=100 t=る
+   W x=243 s=0 z=100 t=。
    W x=254 s=0 z=100 t=吾
    W x=266 s=0 z=100 t=輩
    W x=276 s=0 z=100 t=は
@@ -848,11 +927,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=417 s=0 z=100 t=う
    W x=426 s=0 z=100 t=と
    W x=434 s=0 z=100 t=考
-  LINE y=527 x=0 align=0 mult=1.000 hfid=0 words=46
+  LINE y=527 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=え
    W x=11 s=0 z=100 t=て
    W x=17 s=0 z=100 t=見
-   W x=24 s=0 z=100 t=た。
+   W x=24 s=0 z=100 t=た
+   W x=30 s=0 z=100 t=。
    W x=41 s=0 z=100 t=別
    W x=48 s=0 z=100 t=に
    W x=59 s=0 z=100 t=こ
@@ -862,14 +942,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=91 s=0 z=100 t=う
    W x=100 s=0 z=100 t=分
    W x=111 s=0 z=100 t=別
-   W x=118 s=0 z=100 t=（ふ
+   W x=118 s=0 z=100 t=（
+   W x=130 s=0 z=100 t=ふ
    W x=137 s=0 z=100 t=ん
    W x=146 s=0 z=100 t=べ
-   W x=157 s=0 z=100 t=つ）
+   W x=157 s=0 z=100 t=つ
+   W x=168 s=0 z=100 t=）
    W x=174 s=0 z=100 t=も
    W x=180 s=0 z=100 t=出
    W x=186 s=0 z=100 t=な
-   W x=196 s=0 z=100 t=い。
+   W x=196 s=0 z=100 t=い
+   W x=203 s=0 z=100 t=。
    W x=214 s=0 z=100 t=し
    W x=226 s=0 z=100 t=ば
    W x=235 s=0 z=100 t=ら
@@ -895,14 +978,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=398 s=0 z=100 t=か
    W x=405 s=0 z=100 t=と
    W x=413 s=0 z=100 t=考
-  LINE y=551 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=551 x=0 align=0 mult=1.000 hfid=0 words=52
    W x=0 s=0 z=100 t=え
    W x=11 s=0 z=100 t=付
    W x=20 s=0 z=100 t=い
-   W x=27 s=0 z=100 t=た。
+   W x=27 s=0 z=100 t=た
+   W x=33 s=0 z=100 t=。
    W x=44 s=0 z=100 t=ニ
    W x=53 s=0 z=100 t=ャ
-   W x=65 s=0 z=100 t=ー、
+   W x=65 s=0 z=100 t=ー
+   W x=74 s=0 z=100 t=、
    W x=84 s=0 z=100 t=ニ
    W x=93 s=0 z=100 t=ャ
    W x=105 s=0 z=100 t=ー
@@ -920,7 +1005,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=203 s=0 z=100 t=も
    W x=209 s=0 z=100 t=来
    W x=217 s=0 z=100 t=な
-   W x=227 s=0 z=100 t=い。
+   W x=227 s=0 z=100 t=い
+   W x=234 s=0 z=100 t=。
    W x=245 s=0 z=100 t=そ
    W x=256 s=0 z=100 t=の
    W x=263 s=0 z=100 t=う
@@ -945,8 +1031,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=420 s=0 z=100 t=れ
    W x=429 s=0 z=100 t=か
    W x=436 s=0 z=100 t=か
-  LINE y=575 x=0 align=0 mult=1.000 hfid=0 words=47
-   W x=0 s=0 z=100 t=る。
+  LINE y=575 x=0 align=0 mult=1.000 hfid=0 words=53
+   W x=0 s=0 z=100 t=る
+   W x=8 s=0 z=100 t=。
    W x=19 s=0 z=100 t=腹
    W x=25 s=0 z=100 t=が
    W x=33 s=0 z=100 t=非
@@ -956,7 +1043,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=77 s=0 z=100 t=っ
    W x=87 s=0 z=100 t=て
    W x=93 s=0 z=100 t=来
-   W x=101 s=0 z=100 t=た。
+   W x=101 s=0 z=100 t=た
+   W x=107 s=0 z=100 t=。
    W x=118 s=0 z=100 t=泣
    W x=125 s=0 z=100 t=き
    W x=134 s=0 z=100 t=た
@@ -967,12 +1055,14 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=173 s=0 z=100 t=が
    W x=181 s=0 z=100 t=出
    W x=187 s=0 z=100 t=な
-   W x=197 s=0 z=100 t=い。
+   W x=197 s=0 z=100 t=い
+   W x=204 s=0 z=100 t=。
    W x=215 s=0 z=100 t=仕
    W x=221 s=0 z=100 t=方
    W x=228 s=0 z=100 t=が
    W x=236 s=0 z=100 t=な
-   W x=246 s=0 z=100 t=い、
+   W x=246 s=0 z=100 t=い
+   W x=253 s=0 z=100 t=、
    W x=263 s=0 z=100 t=何
    W x=271 s=0 z=100 t=で
    W x=278 s=0 z=100 t=も
@@ -982,10 +1072,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=310 s=0 z=100 t=ら
    W x=316 s=0 z=100 t=食
    W x=327 s=0 z=100 t=物
-   W x=334 s=0 z=100 t=（く
+   W x=334 s=0 z=100 t=（
+   W x=346 s=0 z=100 t=く
    W x=357 s=0 z=100 t=い
    W x=364 s=0 z=100 t=も
-   W x=370 s=0 z=100 t=の）
+   W x=370 s=0 z=100 t=の
+   W x=377 s=0 z=100 t=）
    W x=383 s=0 z=100 t=の
    W x=390 s=0 z=100 t=あ
    W x=402 s=0 z=100 t=る
@@ -993,7 +1085,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=417 s=0 z=100 t=ま
    W x=426 s=0 z=100 t=で
    W x=433 s=0 z=100 t=あ
-  LINE y=599 x=0 align=0 mult=1.000 hfid=0 words=47
+  LINE y=599 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=る
    W x=8 s=0 z=100 t=こ
    W x=16 s=0 z=100 t=う
@@ -1013,7 +1105,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=137 s=0 z=100 t=池
    W x=146 s=0 z=100 t=を
    W x=154 s=0 z=100 t=左
-   W x=160 s=0 z=100 t=（ひ
+   W x=160 s=0 z=100 t=（
+   W x=172 s=0 z=100 t=ひ
    W x=183 s=0 z=100 t=だ
    W x=190 s=0 z=100 t=）
    W x=196 s=0 z=100 t=り
@@ -1022,7 +1115,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=224 s=0 z=100 t=り
    W x=231 s=0 z=100 t=始
    W x=243 s=0 z=100 t=め
-   W x=255 s=0 z=100 t=た。
+   W x=255 s=0 z=100 t=た
+   W x=261 s=0 z=100 t=。
    W x=272 s=0 z=100 t=ど
    W x=281 s=0 z=100 t=う
    W x=290 s=0 z=100 t=も
@@ -1031,7 +1125,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=318 s=0 z=100 t=に
    W x=329 s=0 z=100 t=苦
    W x=336 s=0 z=100 t=し
-   W x=348 s=0 z=100 t=い。
+   W x=348 s=0 z=100 t=い
+   W x=355 s=0 z=100 t=。
    W x=366 s=0 z=100 t=そ
    W x=377 s=0 z=100 t=こ
    W x=385 s=0 z=100 t=を
@@ -1041,12 +1136,14 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=423 s=0 z=100 t=て
    W x=429 s=0 z=100 t=無
    W x=437 s=0 z=100 t=理
-  LINE y=623 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=623 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=や
    W x=8 s=0 z=100 t=り
    W x=15 s=0 z=100 t=に
    W x=26 s=0 z=100 t=這
-   W x=38 s=0 z=100 t=（は）
+   W x=38 s=0 z=100 t=（
+   W x=50 s=0 z=100 t=は
+   W x=58 s=0 z=100 t=）
    W x=64 s=0 z=100 t=っ
    W x=74 s=0 z=100 t=て
    W x=80 s=0 z=100 t=行
@@ -1070,23 +1167,27 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=240 s=0 z=100 t=所
    W x=247 s=0 z=100 t=へ
    W x=257 s=0 z=100 t=出
-   W x=263 s=0 z=100 t=た。
+   W x=263 s=0 z=100 t=た
+   W x=269 s=0 z=100 t=。
    W x=280 s=0 z=100 t=こ
    W x=288 s=0 z=100 t=こ
    W x=296 s=0 z=100 t=へ
    W x=306 s=0 z=100 t=這
    W x=318 s=0 z=100 t=入
-   W x=329 s=0 z=100 t=（は
-   W x=349 s=0 z=100 t=い）
+   W x=329 s=0 z=100 t=（
+   W x=341 s=0 z=100 t=は
+   W x=349 s=0 z=100 t=い
+   W x=356 s=0 z=100 t=）
    W x=362 s=0 z=100 t=っ
    W x=372 s=0 z=100 t=た
-   W x=378 s=0 z=100 t=ら、
+   W x=378 s=0 z=100 t=ら
+   W x=384 s=0 z=100 t=、
    W x=394 s=0 z=100 t=ど
    W x=403 s=0 z=100 t=う
    W x=412 s=0 z=100 t=に
    W x=423 s=0 z=100 t=か
    W x=430 s=0 z=100 t=な
-  LINE y=647 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=647 x=0 align=0 mult=1.000 hfid=0 words=54
    W x=0 s=0 z=100 t=る
    W x=8 s=0 z=100 t=と
    W x=16 s=0 z=100 t=思
@@ -1096,8 +1197,10 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=46 s=0 z=100 t=垣
    W x=52 s=0 z=100 t=の
    W x=59 s=0 z=100 t=崩
-   W x=65 s=0 z=100 t=（く
-   W x=88 s=0 z=100 t=ず）
+   W x=65 s=0 z=100 t=（
+   W x=77 s=0 z=100 t=く
+   W x=88 s=0 z=100 t=ず
+   W x=96 s=0 z=100 t=）
    W x=102 s=0 z=100 t=れ
    W x=111 s=0 z=100 t=た
    W x=117 s=0 z=100 t=穴
@@ -1115,7 +1218,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=223 s=0 z=100 t=り
    W x=230 s=0 z=100 t=込
    W x=240 s=0 z=100 t=ん
-   W x=249 s=0 z=100 t=だ。
+   W x=249 s=0 z=100 t=だ
+   W x=256 s=0 z=100 t=。
    W x=267 s=0 z=100 t=縁
    W x=274 s=0 z=100 t=は
    W x=282 s=0 z=100 t=不
@@ -1124,7 +1228,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=306 s=0 z=100 t=な
    W x=316 s=0 z=100 t=も
    W x=322 s=0 z=100 t=の
-   W x=329 s=0 z=100 t=で、
+   W x=329 s=0 z=100 t=で
+   W x=336 s=0 z=100 t=、
    W x=346 s=0 z=100 t=も
    W x=352 s=0 z=100 t=し
    W x=364 s=0 z=100 t=こ
@@ -1137,12 +1242,13 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=416 s=0 z=100 t=て
    W x=422 s=0 z=100 t=い
    W x=429 s=0 z=100 t=な
-  LINE y=671 x=0 align=0 mult=1.000 hfid=0 words=42
+  LINE y=671 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=か
    W x=7 s=0 z=100 t=っ
    W x=17 s=0 z=100 t=た
    W x=23 s=0 z=100 t=な
-   W x=33 s=0 z=100 t=ら、
+   W x=33 s=0 z=100 t=ら
+   W x=39 s=0 z=100 t=、
    W x=49 s=0 z=100 t=吾
    W x=61 s=0 z=100 t=輩
    W x=71 s=0 z=100 t=は
@@ -1151,14 +1257,18 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=97 s=0 z=100 t=に
    W x=108 s=0 z=100 t=路
    W x=119 s=0 z=100 t=傍
-   W x=131 s=0 z=100 t=（ろ
+   W x=131 s=0 z=100 t=（
+   W x=143 s=0 z=100 t=ろ
    W x=153 s=0 z=100 t=ぼ
-   W x=160 s=0 z=100 t=う）
+   W x=160 s=0 z=100 t=う
+   W x=169 s=0 z=100 t=）
    W x=175 s=0 z=100 t=に
    W x=186 s=0 z=100 t=餓
    W x=193 s=0 z=100 t=死
-   W x=204 s=0 z=100 t=（が
-   W x=224 s=0 z=100 t=し）
+   W x=204 s=0 z=100 t=（
+   W x=216 s=0 z=100 t=が
+   W x=224 s=0 z=100 t=し
+   W x=236 s=0 z=100 t=）
    W x=242 s=0 z=100 t=し
    W x=254 s=0 z=100 t=た
    W x=260 s=0 z=100 t=か
@@ -1169,7 +1279,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=302 s=0 z=100 t=の
    W x=309 s=0 z=100 t=で
    W x=316 s=0 z=100 t=あ
-   W x=328 s=0 z=100 t=る。
+   W x=328 s=0 z=100 t=る
+   W x=336 s=0 z=100 t=。
    W x=347 s=0 z=100 t=一
    W x=357 s=0 z=100 t=樹
    W x=368 s=0 z=100 t=の
@@ -1179,13 +1290,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=400 s=0 z=100 t=よ
    W x=412 s=0 z=100 t=く
    W x=423 s=0 z=100 t=云
-   W x=431 s=0 z=100 t=（い）
-  LINE y=695 x=0 align=0 mult=1.000 hfid=0 words=46
+   W x=431 s=0 z=100 t=（
+   W x=443 s=0 z=100 t=い
+   W x=450 s=0 z=100 t=）
+  LINE y=695 x=0 align=0 mult=1.000 hfid=0 words=51
    W x=0 s=0 z=100 t=っ
    W x=10 s=0 z=100 t=た
    W x=16 s=0 z=100 t=も
    W x=22 s=0 z=100 t=の
-   W x=29 s=0 z=100 t=だ。
+   W x=29 s=0 z=100 t=だ
+   W x=36 s=0 z=100 t=。
    W x=47 s=0 z=100 t=こ
    W x=55 s=0 z=100 t=の
    W x=62 s=0 z=100 t=垣
@@ -1195,10 +1309,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=93 s=0 z=100 t=は
    W x=101 s=0 z=100 t=今
    W x=110 s=0 z=100 t=日
-   W x=119 s=0 z=100 t=（こ
+   W x=119 s=0 z=100 t=（
+   W x=131 s=0 z=100 t=こ
    W x=139 s=0 z=100 t=ん
    W x=148 s=0 z=100 t=に
-   W x=159 s=0 z=100 t=ち）
+   W x=159 s=0 z=100 t=ち
+   W x=167 s=0 z=100 t=）
    W x=173 s=0 z=100 t=に
    W x=184 s=0 z=100 t=至
    W x=193 s=0 z=100 t=る
@@ -1209,9 +1325,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=239 s=0 z=100 t=が
    W x=247 s=0 z=100 t=隣
    W x=253 s=0 z=100 t=家
-   W x=259 s=0 z=100 t=（と
+   W x=259 s=0 z=100 t=（
+   W x=271 s=0 z=100 t=と
    W x=279 s=0 z=100 t=な
-   W x=289 s=0 z=100 t=り）
+   W x=289 s=0 z=100 t=り
+   W x=296 s=0 z=100 t=）
    W x=302 s=0 z=100 t=の
    W x=309 s=0 z=100 t=三
    W x=321 s=0 z=100 t=毛
@@ -1227,16 +1345,19 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=412 s=0 z=100 t=に
    W x=423 s=0 z=100 t=な
    W x=433 s=0 z=100 t=っ
-  LINE y=719 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=719 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=て
    W x=6 s=0 z=100 t=い
-   W x=13 s=0 z=100 t=る。
+   W x=13 s=0 z=100 t=る
+   W x=21 s=0 z=100 t=。
    W x=32 s=0 z=100 t=さ
    W x=42 s=0 z=100 t=て
    W x=48 s=0 z=100 t=邸
-   W x=58 s=0 z=100 t=（や
+   W x=58 s=0 z=100 t=（
+   W x=70 s=0 z=100 t=や
    W x=78 s=0 z=100 t=し
-   W x=90 s=0 z=100 t=き）
+   W x=90 s=0 z=100 t=き
+   W x=99 s=0 z=100 t=）
    W x=105 s=0 z=100 t=へ
    W x=115 s=0 z=100 t=は
    W x=123 s=0 z=100 t=忍
@@ -1257,13 +1378,16 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=249 s=0 z=100 t=し
    W x=261 s=0 z=100 t=て
    W x=267 s=0 z=100 t=善
-   W x=276 s=0 z=100 t=（い）
+   W x=276 s=0 z=100 t=（
+   W x=288 s=0 z=100 t=い
+   W x=295 s=0 z=100 t=）
    W x=301 s=0 z=100 t=い
    W x=308 s=0 z=100 t=か
    W x=315 s=0 z=100 t=分
    W x=326 s=0 z=100 t=ら
    W x=332 s=0 z=100 t=な
-   W x=342 s=0 z=100 t=い。
+   W x=342 s=0 z=100 t=い
+   W x=349 s=0 z=100 t=。
    W x=360 s=0 z=100 t=そ
    W x=371 s=0 z=100 t=の
    W x=378 s=0 z=100 t=う
@@ -1273,17 +1397,20 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=418 s=0 z=100 t=く
    W x=429 s=0 z=100 t=な
  PAGE 1 elements=15 footnotes=0
-  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=46
-   W x=0 s=0 z=100 t=る、
+  LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=51
+   W x=0 s=0 z=100 t=る
+   W x=8 s=0 z=100 t=、
    W x=18 s=0 z=100 t=腹
    W x=24 s=0 z=100 t=は
    W x=32 s=0 z=100 t=減
-   W x=43 s=0 z=100 t=る、
+   W x=43 s=0 z=100 t=る
+   W x=51 s=0 z=100 t=、
    W x=61 s=0 z=100 t=寒
    W x=67 s=0 z=100 t=さ
    W x=77 s=0 z=100 t=は
    W x=85 s=0 z=100 t=寒
-   W x=91 s=0 z=100 t=し、
+   W x=91 s=0 z=100 t=し
+   W x=103 s=0 z=100 t=、
    W x=113 s=0 z=100 t=雨
    W x=125 s=0 z=100 t=が
    W x=133 s=0 z=100 t=降
@@ -1304,7 +1431,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=258 s=0 z=100 t=の
    W x=265 s=0 z=100 t=猶
    W x=274 s=0 z=100 t=予
-   W x=280 s=0 z=100 t=（ゆ
+   W x=280 s=0 z=100 t=（
+   W x=292 s=0 z=100 t=ゆ
    W x=302 s=0 z=100 t=う
    W x=311 s=0 z=100 t=よ
    W x=323 s=0 z=100 t=）
@@ -1315,12 +1443,13 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=361 s=0 z=100 t=く
    W x=372 s=0 z=100 t=な
    W x=382 s=0 z=100 t=っ
-   W x=392 s=0 z=100 t=た。
+   W x=392 s=0 z=100 t=た
+   W x=398 s=0 z=100 t=。
    W x=409 s=0 z=100 t=仕
    W x=415 s=0 z=100 t=方
    W x=422 s=0 z=100 t=が
    W x=430 s=0 z=100 t=な
-  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=51
    W x=0 s=0 z=100 t=い
    W x=7 s=0 z=100 t=か
    W x=14 s=0 z=100 t=ら
@@ -1347,7 +1476,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=200 s=0 z=100 t=い
    W x=207 s=0 z=100 t=て
    W x=213 s=0 z=100 t=行
-   W x=223 s=0 z=100 t=く。
+   W x=223 s=0 z=100 t=く
+   W x=234 s=0 z=100 t=。
    W x=245 s=0 z=100 t=今
    W x=254 s=0 z=100 t=か
    W x=261 s=0 z=100 t=ら
@@ -1371,11 +1501,12 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=421 s=0 z=100 t=っ
    W x=431 s=0 z=100 t=て
    W x=437 s=0 z=100 t=お
-  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=48 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=っ
    W x=10 s=0 z=100 t=た
    W x=16 s=0 z=100 t=の
-   W x=23 s=0 z=100 t=だ。
+   W x=23 s=0 z=100 t=だ
+   W x=30 s=0 z=100 t=。
    W x=41 s=0 z=100 t=こ
    W x=49 s=0 z=100 t=こ
    W x=57 s=0 z=100 t=で
@@ -1383,7 +1514,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=76 s=0 z=100 t=輩
    W x=86 s=0 z=100 t=は
    W x=94 s=0 z=100 t=彼
-   W x=100 s=0 z=100 t=（か）
+   W x=100 s=0 z=100 t=（
+   W x=112 s=0 z=100 t=か
+   W x=119 s=0 z=100 t=）
    W x=125 s=0 z=100 t=の
    W x=132 s=0 z=100 t=書
    W x=143 s=0 z=100 t=生
@@ -1404,19 +1537,22 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=269 s=0 z=100 t=に
    W x=280 s=0 z=100 t=遭
    W x=292 s=0 z=100 t=遇
-   W x=301 s=0 z=100 t=（そ
+   W x=301 s=0 z=100 t=（
+   W x=313 s=0 z=100 t=そ
    W x=324 s=0 z=100 t=う
    W x=333 s=0 z=100 t=ぐ
-   W x=345 s=0 z=100 t=う）
+   W x=345 s=0 z=100 t=う
+   W x=354 s=0 z=100 t=）
    W x=360 s=0 z=100 t=し
    W x=372 s=0 z=100 t=た
    W x=378 s=0 z=100 t=の
    W x=385 s=0 z=100 t=で
    W x=392 s=0 z=100 t=あ
-   W x=404 s=0 z=100 t=る。
+   W x=404 s=0 z=100 t=る
+   W x=412 s=0 z=100 t=。
    W x=423 s=0 z=100 t=第
    W x=433 s=0 z=100 t=一
-  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=47
+  LINE y=72 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=に
    W x=11 s=0 z=100 t=逢
    W x=18 s=0 z=100 t=っ
@@ -1428,7 +1564,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=65 s=0 z=100 t=ん
    W x=74 s=0 z=100 t=で
    W x=81 s=0 z=100 t=あ
-   W x=93 s=0 z=100 t=る。
+   W x=93 s=0 z=100 t=る
+   W x=101 s=0 z=100 t=。
    W x=112 s=0 z=100 t=こ
    W x=120 s=0 z=100 t=れ
    W x=129 s=0 z=100 t=は
@@ -1459,12 +1596,14 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=353 s=0 z=100 t=り
    W x=360 s=0 z=100 t=頸
    W x=372 s=0 z=100 t=筋
-   W x=378 s=0 z=100 t=（く
+   W x=378 s=0 z=100 t=（
+   W x=390 s=0 z=100 t=く
    W x=401 s=0 z=100 t=び
    W x=413 s=0 z=100 t=す
-   W x=420 s=0 z=100 t=じ）
+   W x=420 s=0 z=100 t=じ
+   W x=426 s=0 z=100 t=）
    W x=432 s=0 z=100 t=を
-  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=50
+  LINE y=96 x=0 align=0 mult=1.000 hfid=0 words=54
    W x=0 s=0 z=100 t=つ
    W x=11 s=0 z=100 t=か
    W x=18 s=0 z=100 t=ん
@@ -1472,12 +1611,15 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=34 s=0 z=100 t=表
    W x=44 s=0 z=100 t=へ
    W x=54 s=0 z=100 t=抛
-   W x=61 s=0 z=100 t=（ほ
-   W x=79 s=0 z=100 t=う）
+   W x=61 s=0 z=100 t=（
+   W x=73 s=0 z=100 t=ほ
+   W x=79 s=0 z=100 t=う
+   W x=88 s=0 z=100 t=）
    W x=94 s=0 z=100 t=り
    W x=101 s=0 z=100 t=出
    W x=107 s=0 z=100 t=し
-   W x=119 s=0 z=100 t=た。
+   W x=119 s=0 z=100 t=た
+   W x=125 s=0 z=100 t=。
    W x=136 s=0 z=100 t=い
    W x=143 s=0 z=100 t=や
    W x=151 s=0 z=100 t=こ
@@ -1506,7 +1648,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=337 s=0 z=100 t=せ
    W x=346 s=0 z=100 t=て
    W x=352 s=0 z=100 t=い
-   W x=359 s=0 z=100 t=た。
+   W x=359 s=0 z=100 t=た
+   W x=365 s=0 z=100 t=。
    W x=376 s=0 z=100 t=し
    W x=388 s=0 z=100 t=か
    W x=395 s=0 z=100 t=し
@@ -1515,7 +1658,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=424 s=0 z=100 t=じ
    W x=430 s=0 z=100 t=い
    W x=437 s=0 z=100 t=の
-  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=43
+  LINE y=120 x=0 align=0 mult=1.000 hfid=0 words=51
    W x=0 s=0 z=100 t=と
    W x=8 s=0 z=100 t=寒
    W x=14 s=0 z=100 t=い
@@ -1532,7 +1675,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=107 s=0 z=100 t=が
    W x=115 s=0 z=100 t=出
    W x=121 s=0 z=100 t=来
-   W x=129 s=0 z=100 t=ん。
+   W x=129 s=0 z=100 t=ん
+   W x=138 s=0 z=100 t=。
    W x=149 s=0 z=100 t=吾
    W x=161 s=0 z=100 t=輩
    W x=171 s=0 z=100 t=は
@@ -1543,8 +1687,10 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=216 s=0 z=100 t=ん
    W x=225 s=0 z=100 t=の
    W x=232 s=0 z=100 t=隙
-   W x=242 s=0 z=100 t=（す
-   W x=261 s=0 z=100 t=き）
+   W x=242 s=0 z=100 t=（
+   W x=254 s=0 z=100 t=す
+   W x=261 s=0 z=100 t=き
+   W x=270 s=0 z=100 t=）
    W x=276 s=0 z=100 t=を
    W x=284 s=0 z=100 t=見
    W x=291 s=0 z=100 t=て
@@ -1552,14 +1698,19 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=308 s=0 z=100 t=所
    W x=315 s=0 z=100 t=へ
    W x=325 s=0 z=100 t=這
-   W x=337 s=0 z=100 t=（は）
+   W x=337 s=0 z=100 t=（
+   W x=349 s=0 z=100 t=は
+   W x=357 s=0 z=100 t=）
    W x=363 s=0 z=100 t=い
    W x=370 s=0 z=100 t=上
-   W x=376 s=0 z=100 t=（あ
-   W x=400 s=0 z=100 t=が）
+   W x=376 s=0 z=100 t=（
+   W x=388 s=0 z=100 t=あ
+   W x=400 s=0 z=100 t=が
+   W x=408 s=0 z=100 t=）
    W x=414 s=0 z=100 t=っ
-   W x=424 s=0 z=100 t=た。
-  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=51
+   W x=424 s=0 z=100 t=た
+   W x=430 s=0 z=100 t=。
+  LINE y=144 x=0 align=0 mult=1.000 hfid=0 words=54
    W x=0 s=0 z=100 t=す
    W x=7 s=0 z=100 t=る
    W x=15 s=0 z=100 t=と
@@ -1574,7 +1725,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=87 s=0 z=100 t=出
    W x=93 s=0 z=100 t=さ
    W x=103 s=0 z=100 t=れ
-   W x=112 s=0 z=100 t=た。
+   W x=112 s=0 z=100 t=た
+   W x=118 s=0 z=100 t=。
    W x=129 s=0 z=100 t=吾
    W x=141 s=0 z=100 t=輩
    W x=151 s=0 z=100 t=は
@@ -1588,7 +1740,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=213 s=0 z=100 t=這
    W x=225 s=0 z=100 t=い
    W x=232 s=0 z=100 t=上
-   W x=238 s=0 z=100 t=り、
+   W x=238 s=0 z=100 t=り
+   W x=245 s=0 z=100 t=、
    W x=255 s=0 z=100 t=這
    W x=267 s=0 z=100 t=い
    W x=274 s=0 z=100 t=上
@@ -1599,7 +1752,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=312 s=0 z=100 t=げ
    W x=319 s=0 z=100 t=出
    W x=325 s=0 z=100 t=さ
-   W x=335 s=0 z=100 t=れ、
+   W x=335 s=0 z=100 t=れ
+   W x=344 s=0 z=100 t=、
    W x=354 s=0 z=100 t=何
    W x=362 s=0 z=100 t=で
    W x=369 s=0 z=100 t=も
@@ -1611,7 +1765,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=418 s=0 z=100 t=五
    W x=429 s=0 z=100 t=遍
    W x=437 s=0 z=100 t=繰
-  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=46
+  LINE y=168 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=り
    W x=7 s=0 z=100 t=返
    W x=13 s=0 z=100 t=し
@@ -1623,7 +1777,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=63 s=0 z=100 t=し
    W x=75 s=0 z=100 t=て
    W x=81 s=0 z=100 t=い
-   W x=88 s=0 z=100 t=る。
+   W x=88 s=0 z=100 t=る
+   W x=96 s=0 z=100 t=。
    W x=107 s=0 z=100 t=そ
    W x=118 s=0 z=100 t=の
    W x=125 s=0 z=100 t=時
@@ -1645,7 +1800,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=277 s=0 z=100 t=に
    W x=288 s=0 z=100 t=な
    W x=298 s=0 z=100 t=っ
-   W x=308 s=0 z=100 t=た。
+   W x=308 s=0 z=100 t=た
+   W x=314 s=0 z=100 t=。
    W x=325 s=0 z=100 t=こ
    W x=333 s=0 z=100 t=の
    W x=340 s=0 z=100 t=間
@@ -1655,14 +1811,18 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=372 s=0 z=100 t=の
    W x=379 s=0 z=100 t=三
    W x=391 s=0 z=100 t=馬
-   W x=397 s=0 z=100 t=（さ
+   W x=397 s=0 z=100 t=（
+   W x=409 s=0 z=100 t=さ
    W x=419 s=0 z=100 t=ん
-   W x=428 s=0 z=100 t=ま）
-  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=44
+   W x=428 s=0 z=100 t=ま
+   W x=437 s=0 z=100 t=）
+  LINE y=192 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=を
    W x=8 s=0 z=100 t=偸
-   W x=20 s=0 z=100 t=（ぬ
-   W x=44 s=0 z=100 t=す）
+   W x=20 s=0 z=100 t=（
+   W x=32 s=0 z=100 t=ぬ
+   W x=44 s=0 z=100 t=す
+   W x=51 s=0 z=100 t=）
    W x=57 s=0 z=100 t=ん
    W x=66 s=0 z=100 t=で
    W x=73 s=0 z=100 t=こ
@@ -1676,20 +1836,24 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=136 s=0 z=100 t=っ
    W x=146 s=0 z=100 t=て
    W x=152 s=0 z=100 t=か
-   W x=159 s=0 z=100 t=ら、
+   W x=159 s=0 z=100 t=ら
+   W x=165 s=0 z=100 t=、
    W x=175 s=0 z=100 t=や
    W x=183 s=0 z=100 t=っ
    W x=193 s=0 z=100 t=と
    W x=201 s=0 z=100 t=胸
    W x=211 s=0 z=100 t=の
    W x=218 s=0 z=100 t=痞
-   W x=228 s=0 z=100 t=（つ
+   W x=228 s=0 z=100 t=（
+   W x=240 s=0 z=100 t=つ
    W x=251 s=0 z=100 t=か
-   W x=258 s=0 z=100 t=え）
+   W x=258 s=0 z=100 t=え
+   W x=269 s=0 z=100 t=）
    W x=275 s=0 z=100 t=が
    W x=283 s=0 z=100 t=下
    W x=290 s=0 z=100 t=り
-   W x=297 s=0 z=100 t=た。
+   W x=297 s=0 z=100 t=た
+   W x=303 s=0 z=100 t=。
    W x=314 s=0 z=100 t=吾
    W x=326 s=0 z=100 t=輩
    W x=336 s=0 z=100 t=が
@@ -1703,19 +1867,22 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=411 s=0 z=100 t=さ
    W x=421 s=0 z=100 t=れ
    W x=430 s=0 z=100 t=よ
-  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=51
+  LINE y=216 x=0 align=0 mult=1.000 hfid=0 words=55
    W x=0 s=0 z=100 t=う
    W x=9 s=0 z=100 t=と
    W x=17 s=0 z=100 t=し
    W x=29 s=0 z=100 t=た
    W x=35 s=0 z=100 t=と
    W x=43 s=0 z=100 t=き
-   W x=52 s=0 z=100 t=に、
+   W x=52 s=0 z=100 t=に
+   W x=63 s=0 z=100 t=、
    W x=73 s=0 z=100 t=こ
    W x=81 s=0 z=100 t=の
    W x=88 s=0 z=100 t=家
-   W x=94 s=0 z=100 t=（う
-   W x=115 s=0 z=100 t=ち）
+   W x=94 s=0 z=100 t=（
+   W x=106 s=0 z=100 t=う
+   W x=115 s=0 z=100 t=ち
+   W x=123 s=0 z=100 t=）
    W x=129 s=0 z=100 t=の
    W x=136 s=0 z=100 t=主
    W x=142 s=0 z=100 t=人
@@ -1734,7 +1901,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=254 s=0 z=100 t=出
    W x=260 s=0 z=100 t=て
    W x=266 s=0 z=100 t=来
-   W x=274 s=0 z=100 t=た。
+   W x=274 s=0 z=100 t=た
+   W x=280 s=0 z=100 t=。
    W x=291 s=0 z=100 t=下
    W x=298 s=0 z=100 t=女
    W x=306 s=0 z=100 t=は
@@ -1755,11 +1923,13 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=424 s=0 z=100 t=け
    W x=430 s=0 z=100 t=て
    W x=436 s=0 z=100 t=こ
-  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=47
+  LINE y=240 x=0 align=0 mult=1.000 hfid=0 words=53
    W x=0 s=0 z=100 t=の
    W x=7 s=0 z=100 t=宿
-   W x=15 s=0 z=100 t=（や
-   W x=35 s=0 z=100 t=ど）
+   W x=15 s=0 z=100 t=（
+   W x=27 s=0 z=100 t=や
+   W x=35 s=0 z=100 t=ど
+   W x=44 s=0 z=100 t=）
    W x=50 s=0 z=100 t=な
    W x=60 s=0 z=100 t=し
    W x=72 s=0 z=100 t=の
@@ -1780,7 +1950,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=194 s=0 z=100 t=御
    W x=202 s=0 z=100 t=台
    W x=213 s=0 z=100 t=所
-   W x=220 s=0 z=100 t=（お
+   W x=220 s=0 z=100 t=（
+   W x=232 s=0 z=100 t=お
    W x=238 s=0 z=100 t=だ
    W x=245 s=0 z=100 t=い
    W x=252 s=0 z=100 t=ど
@@ -1789,8 +1960,10 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=279 s=0 z=100 t=）
    W x=285 s=0 z=100 t=へ
    W x=295 s=0 z=100 t=上
-   W x=301 s=0 z=100 t=（あ
-   W x=325 s=0 z=100 t=が）
+   W x=301 s=0 z=100 t=（
+   W x=313 s=0 z=100 t=あ
+   W x=325 s=0 z=100 t=が
+   W x=333 s=0 z=100 t=）
    W x=339 s=0 z=100 t=っ
    W x=349 s=0 z=100 t=て
    W x=355 s=0 z=100 t=来
@@ -1801,9 +1974,10 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=394 s=0 z=100 t=す
    W x=401 s=0 z=100 t=と
    W x=409 s=0 z=100 t=い
-   W x=416 s=0 z=100 t=う。
+   W x=416 s=0 z=100 t=う
+   W x=425 s=0 z=100 t=。
    W x=436 s=0 z=100 t=主
-  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=49
+  LINE y=264 x=0 align=0 mult=1.000 hfid=0 words=53
    W x=0 s=0 z=100 t=人
    W x=7 s=0 z=100 t=は
    W x=15 s=0 z=100 t=鼻
@@ -1817,7 +1991,8 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=76 s=0 z=100 t=撚
    W x=83 s=0 z=100 t=（
    W x=95 s=0 z=100 t=ひ
-   W x=106 s=0 z=100 t=ね）
+   W x=106 s=0 z=100 t=ね
+   W x=112 s=0 z=100 t=）
    W x=118 s=0 z=100 t=り
    W x=125 s=0 z=100 t=な
    W x=135 s=0 z=100 t=が
@@ -1832,14 +2007,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=219 s=0 z=100 t=ら
    W x=225 s=0 z=100 t=く
    W x=236 s=0 z=100 t=眺
-   W x=244 s=0 z=100 t=（な
-   W x=266 s=0 z=100 t=が）
+   W x=244 s=0 z=100 t=（
+   W x=256 s=0 z=100 t=な
+   W x=266 s=0 z=100 t=が
+   W x=274 s=0 z=100 t=）
    W x=280 s=0 z=100 t=め
    W x=292 s=0 z=100 t=て
    W x=298 s=0 z=100 t=お
    W x=304 s=0 z=100 t=っ
    W x=314 s=0 z=100 t=た
-   W x=320 s=0 z=100 t=が、
+   W x=320 s=0 z=100 t=が
+   W x=328 s=0 z=100 t=、
    W x=338 s=0 z=100 t=や
    W x=346 s=0 z=100 t=が
    W x=354 s=0 z=100 t=て
@@ -1853,7 +2031,7 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=422 s=0 z=100 t=い
    W x=429 s=0 z=100 t=て
    W x=435 s=0 z=100 t=や
-  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=44
+  LINE y=288 x=0 align=0 mult=1.000 hfid=0 words=50
    W x=0 s=0 z=100 t=れ
    W x=9 s=0 z=100 t=と
    W x=17 s=0 z=100 t=い
@@ -1865,14 +2043,17 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=66 s=0 z=100 t=へ
    W x=76 s=0 z=100 t=這
    W x=88 s=0 z=100 t=入
-   W x=99 s=0 z=100 t=（は
-   W x=119 s=0 z=100 t=い）
+   W x=99 s=0 z=100 t=（
+   W x=111 s=0 z=100 t=は
+   W x=119 s=0 z=100 t=い
+   W x=126 s=0 z=100 t=）
    W x=132 s=0 z=100 t=っ
    W x=142 s=0 z=100 t=て
    W x=148 s=0 z=100 t=し
    W x=160 s=0 z=100 t=ま
    W x=169 s=0 z=100 t=っ
-   W x=179 s=0 z=100 t=た。
+   W x=179 s=0 z=100 t=た
+   W x=185 s=0 z=100 t=。
    W x=196 s=0 z=100 t=主
    W x=202 s=0 z=100 t=人
    W x=209 s=0 z=100 t=は
@@ -1888,17 +2069,20 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=301 s=0 z=100 t=と
    W x=309 s=0 z=100 t=見
    W x=316 s=0 z=100 t=え
-   W x=327 s=0 z=100 t=た。
+   W x=327 s=0 z=100 t=た
+   W x=333 s=0 z=100 t=。
    W x=344 s=0 z=100 t=下
    W x=351 s=0 z=100 t=女
    W x=359 s=0 z=100 t=は
    W x=367 s=0 z=100 t=口
    W x=379 s=0 z=100 t=惜
-   W x=387 s=0 z=100 t=（く
-   W x=410 s=0 z=100 t=や）
+   W x=387 s=0 z=100 t=（
+   W x=399 s=0 z=100 t=く
+   W x=410 s=0 z=100 t=や
+   W x=418 s=0 z=100 t=）
    W x=424 s=0 z=100 t=し
    W x=436 s=0 z=100 t=そ
-  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=42
+  LINE y=312 x=0 align=0 mult=1.000 hfid=0 words=51
    W x=0 s=0 z=100 t=う
    W x=9 s=0 z=100 t=に
    W x=20 s=0 z=100 t=吾
@@ -1908,12 +2092,15 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=61 s=0 z=100 t=所
    W x=68 s=0 z=100 t=へ
    W x=78 s=0 z=100 t=抛
-   W x=85 s=0 z=100 t=（ほ
-   W x=103 s=0 z=100 t=う）
+   W x=85 s=0 z=100 t=（
+   W x=97 s=0 z=100 t=ほ
+   W x=103 s=0 z=100 t=う
+   W x=112 s=0 z=100 t=）
    W x=118 s=0 z=100 t=り
    W x=125 s=0 z=100 t=出
    W x=131 s=0 z=100 t=し
-   W x=143 s=0 z=100 t=た。
+   W x=143 s=0 z=100 t=た
+   W x=149 s=0 z=100 t=。
    W x=160 s=0 z=100 t=か
    W x=167 s=0 z=100 t=く
    W x=178 s=0 z=100 t=し
@@ -1927,21 +2114,27 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=255 s=0 z=100 t=こ
    W x=263 s=0 z=100 t=の
    W x=270 s=0 z=100 t=家
-   W x=276 s=0 z=100 t=（う
-   W x=297 s=0 z=100 t=ち）
+   W x=276 s=0 z=100 t=（
+   W x=288 s=0 z=100 t=う
+   W x=297 s=0 z=100 t=ち
+   W x=305 s=0 z=100 t=）
    W x=311 s=0 z=100 t=を
    W x=319 s=0 z=100 t=自
    W x=326 s=0 z=100 t=分
    W x=337 s=0 z=100 t=の
    W x=344 s=0 z=100 t=住
    W x=353 s=0 z=100 t=家
-   W x=359 s=0 z=100 t=（す
+   W x=359 s=0 z=100 t=（
+   W x=371 s=0 z=100 t=す
    W x=378 s=0 z=100 t=み
-   W x=388 s=0 z=100 t=か）
+   W x=388 s=0 z=100 t=か
+   W x=395 s=0 z=100 t=）
    W x=401 s=0 z=100 t=と
    W x=409 s=0 z=100 t=極
-   W x=420 s=0 z=100 t=（き）
-  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=10
+   W x=420 s=0 z=100 t=（
+   W x=432 s=0 z=100 t=き
+   W x=441 s=0 z=100 t=）
+  LINE y=336 x=0 align=0 mult=1.000 hfid=0 words=11
    W x=0 s=0 z=100 t=め
    W x=12 s=0 z=100 t=る
    W x=20 s=0 z=100 t=事
@@ -1951,4 +2144,5 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=58 s=0 z=100 t=の
    W x=65 s=0 z=100 t=で
    W x=72 s=0 z=100 t=あ
-   W x=84 s=0 z=100 t=る。
+   W x=84 s=0 z=100 t=る
+   W x=92 s=0 z=100 t=。

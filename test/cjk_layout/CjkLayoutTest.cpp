@@ -89,17 +89,17 @@ TEST(CjkTokens, HyphenationOnStillBreaksWithoutAHyphen) {
 }
 
 TEST(CjkKinsoku, ClosingPunctuationNeverStartsALine) {
-  // 五。 is one token, so the line ends before 五 rather than leave 。 at the start of the next.
+  // 。 is glued to 五, so the line ends before 五 rather than leave 。 at the start of the next.
   ParsedText text(false, false, leftAligned());
   text.addWord("一二三四五。六", EpdFontFamily::REGULAR);
   EXPECT_EQ(wordsOf(layout(text, 50)),
-            (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"五。", "六"}}));
+            (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"五", "。", "六"}}));
 }
 
 TEST(CjkKinsoku, AnOpeningBracketNeverEndsALine) {
   ParsedText text(false, false, leftAligned());
   text.addWord("一二三四「五」", EpdFontFamily::REGULAR);
-  EXPECT_EQ(wordsOf(layout(text, 50)), (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"「五」"}}));
+  EXPECT_EQ(wordsOf(layout(text, 50)), (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"「", "五", "」"}}));
 }
 
 namespace {

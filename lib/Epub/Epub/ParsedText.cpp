@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "CjkLineBreak.h"
+#include "CjkPunctuation.h"
 #include "Epub/VisibleText.h"
 #include "hyphenation/HyphenationCommon.h"
 #include "hyphenation/Hyphenator.h"
@@ -249,12 +250,52 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   word = utf8NfcNorm(std::move(word));
 
   // Chinese and Japanese are written without spaces: a word with CJK characters becomes one token
-  // per break the CJK rules allow, so a line can end between its characters. Kinsoku pairs such as
-  // 字。 share a token. Latin words get no offsets and stay whole. Our implementation of
-  // crosspoint-reader PR #2288 ("feat: Support for Korean line breaks and glyph spacing", Justin
-  // Mitchell, 22f35750).
+  // per break the CJK rules allow, so a line can end between its characters. Latin words get no
+  // offsets and stay whole. Our implementation of crosspoint-reader PR #2288 ("feat: Support for
+  // Korean line breaks and glyph spacing", Justin Mitchell, 22f35750).
+  //
+  // Every CJK mark whose width the punctuation table can change is a token of its own as well, glued
+  // where kinsoku forbids a break (字。 stays together, but 。 gets its own x position): a token is
+  // drawn at its font's advances, so only a mark that is a token can be drawn narrower (spec 5.2).
   const std::vector<size_t> cjkBreaks = CjkLineBreak::breakByteOffsets(word);
-  if (!reserveWords(cjkBreaks.size() + 1)) return;
+  // Only in a word with CJK text: a Latin word keeps its curly quotes inside it.
+  std::vector<size_t> markEdges;  // byte offsets around each adjustable mark, glued unless a break is allowed
+  bool hasCjk = false;
+  for (const auto* q = reinterpret_cast<const unsigned char*>(word.c_str()); *q && !hasCjk;) {
+    hasCjk = utf8IsCjkBreakable(utf8NextCodepoint(&q));
+  }
+  if (hasCjk) {
+    const auto* const begin = reinterpret_cast<const unsigned char*>(word.c_str());
+    const auto* p = begin;
+    while (*p) {
+      const size_t at = static_cast<size_t>(p - begin);
+      const uint32_t cp = utf8NextCodepoint(&p);
+      if (cp == 0) break;
+      const CjkPunctuation::Class c = CjkPunctuation::classOf(cp);
+      if (c == CjkPunctuation::Class::None || c == CjkPunctuation::Class::IdeographicSpace ||
+          c == CjkPunctuation::Class::AmbiguousQuote) {
+        continue;
+      }
+      const size_t after = static_cast<size_t>(p - begin);
+      if (at > 0) markEdges.push_back(at);
+      if (after < word.size()) markEdges.push_back(after);
+    }
+  }
+  // The token boundaries: the CJK breaks, then each mark edge that is not already one (glued).
+  struct Cut {
+    size_t at;
+    bool breakable;
+  };
+  std::vector<Cut> cuts;
+  cuts.reserve(cjkBreaks.size() + markEdges.size());
+  for (const size_t at : cjkBreaks) cuts.push_back({at, true});
+  for (const size_t at : markEdges) {
+    if (std::find(cjkBreaks.begin(), cjkBreaks.end(), at) == cjkBreaks.end()) cuts.push_back({at, false});
+  }
+  std::sort(cuts.begin(), cuts.end(), [](const Cut& a, const Cut& b) { return a.at < b.at; });
+  cuts.erase(std::unique(cuts.begin(), cuts.end(), [](const Cut& a, const Cut& b) { return a.at == b.at; }),
+             cuts.end());
+  if (!reserveWords(cuts.size() + 1)) return;
 
   EpdFontFamily::Style combinedStyle = fontStyle;
   if (underline) {
@@ -277,18 +318,21 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     }
   }
 
-  if (cjkBreaks.empty()) {
+  if (cuts.empty()) {
     pushToken(std::move(word), combinedStyle, boundary, size, visibleOffset, fontSlot);
     return;
   }
   size_t start = 0;
   uint32_t offset = visibleOffset;
-  for (size_t i = 0; i <= cjkBreaks.size(); ++i) {
-    const size_t end = i < cjkBreaks.size() ? cjkBreaks[i] : word.size();
+  for (size_t i = 0; i <= cuts.size(); ++i) {
+    const size_t end = i < cuts.size() ? cuts[i].at : word.size();
     pushToken(word.substr(start, end - start), combinedStyle, boundary, size, offset, fontSlot);
     // The next token starts where this one's visible bytes end (KOSync positions).
     offset += static_cast<uint32_t>(VisibleText::visibleBytes(word.data() + start, static_cast<int>(end - start)));
-    boundary = TokenBoundary::Boundary{false, true};
+    if (i < cuts.size()) {
+      // A CJK break is a breakable zero-width gap; a mark's other edges are glued (no space, no break).
+      boundary = cuts[i].breakable ? TokenBoundary::Boundary{false, true} : TokenBoundary::Boundary{true, false};
+    }
     start = end;
   }
 }
