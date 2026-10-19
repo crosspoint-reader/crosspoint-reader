@@ -117,6 +117,11 @@ inline bool panelFadesInSunlight() { return BoardConfig::ACTIVE.panelFadesInSunl
 // consistently with the rest of this header.
 inline bool hasTouch() { return BoardConfig::hasTouch(); }
 
+// The board's touch controller reports more than one contact (GT911), as its profile says.
+// HalGPIO::supportsMultiTouch() answers the same for the controller that answered its probe
+// at this boot.
+inline bool hasMultiTouch() { return BoardConfig::ACTIVE.touch.controller == BoardConfig::TouchController::Gt911; }
+
 // The touch controller reports a capacitive Home key (X4 Pro). On that board it
 // is the only "back" the hardware has — there is no back button.
 inline bool hasHomeKey() { return BoardConfig::hasHomeKey(); }
