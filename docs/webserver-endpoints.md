@@ -651,10 +651,11 @@ curl -X POST -H "Content-Type: application/json" \
 
 **Response (200 OK):** `Applied <n> setting(s)`, where `<n>` counts the keys accepted.
 
-| Status | Body                    | Cause                    |
-| ------ | ----------------------- | ------------------------ |
-| 400    | `Missing JSON body`     | No body                  |
-| 400    | `Invalid JSON: <error>` | Body does not parse      |
+| Status | Body                                         | Cause                                                            |
+| ------ | -------------------------------------------- | ---------------------------------------------------------------- |
+| 400    | `Missing JSON body`                          | No body                                                          |
+| 400    | `Invalid JSON: <error>`                      | Body does not parse                                              |
+| 500    | `the settings file could not be written ...` | Applied but not saved: the values last until the reader restarts |
 
 For a credential (`obfuscated`) string, sending the key replaces the stored
 value, so the page sends it only when the user typed something.
@@ -782,8 +783,9 @@ The delete routes are POSTs because the device's HTTP server cannot take a body 
 
 POST with `index` edits that entry (the SSID can change); without it, adds a new one.
 Errors are `400` with a plain-text body: `Missing JSON body`, `Invalid JSON: ...`, `SSID is required`,
-`Invalid network index`, `Missing index`, `Failed to update Wi-Fi network`,
-`Cannot add network (limit reached)`, `Failed to delete Wi-Fi network`.
+`Invalid network index`, `Missing index`, `Cannot add network (limit reached)`; `500` when the
+networks file could not be written: `Failed to update Wi-Fi network`, `Failed to save Wi-Fi network`,
+`Failed to delete Wi-Fi network`.
 
 ### OPDS servers
 

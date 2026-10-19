@@ -35,7 +35,8 @@ WriteResult writeNumber(const SettingInfo& s, int value);
 WriteResult writeString(const SettingInfo& s, const std::string& value);
 
 // After a batch of writes: settle the settings that depend on others, then save to the card.
-void commit();
+// False when the save failed: the values hold until the next restart, then the old ones are back.
+[[nodiscard]] bool commit();
 
 // Hands `visit` every row that has a key (`key` empty) or the row with that key, and returns how
 // many it handed over. One walk for every caller that works by key, behind a plain function

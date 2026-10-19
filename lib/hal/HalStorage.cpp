@@ -356,13 +356,38 @@ uint64_t HalStorage::sdFreeBytes() {
 
 class HalFile::Impl {
  public:
-  Impl(FsFile&& fsFile) : file(std::move(fsFile)) {}
+  explicit Impl(FsFile&& fsFile) : file(std::move(fsFile)) {}
   FsFile file;
+
+  // The Impl for what an open returned, taken under the StorageLock. An open file gets one of its
+  // own. A failed open gets `failed`, which costs no heap: a missing file or the end of a folder's
+  // listing used to take and free an Impl each.
+  //
+  // When an open file's Impl cannot be had, the file is closed and the open fails like any other.
+  // std::make_unique aborted the device there (-fno-exceptions); a handle without an Impl would be
+  // one never opened, whose close() asserts, and callers may close any handle an open returned.
+  static Impl* adopt(FsFile&& opened) {
+    if (!opened.isOpen()) return &failed;
+    if (auto* own = new (std::nothrow) Impl(std::move(opened))) return own;
+    LOG_ERR("SD", "OOM: %u bytes for a file handle, the open fails", static_cast<unsigned>(sizeof(Impl)));
+    opened.close();
+    return &failed;
+  }
+
+  // A closed FsFile answers every call as a failed open does and changes nothing, so one serves
+  // every failed open, from every task.
+  static Impl failed;
 };
+
+HalFile::Impl HalFile::Impl::failed{FsFile()};
+
+void HalFile::ImplDeleter::operator()(Impl* impl) const {
+  if (impl != &Impl::failed) delete impl;
+}
 
 HalFile::HalFile() = default;
 
-HalFile::HalFile(std::unique_ptr<Impl> impl) : impl(std::move(impl)) {}
+HalFile::HalFile(Impl* impl) : impl(impl) {}
 
 HalFile::~HalFile() {
   if (!impl) return;
@@ -382,7 +407,7 @@ HalFile& HalFile::operator=(HalFile&& other) {
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   if (opensForWriting(oflag)) noteContentChange(path);
-  return HalFile(std::make_unique<HalFile::Impl>(SDCard.open(path, oflag)));
+  return HalFile(HalFile::Impl::adopt(SDCard.open(path, oflag)));
 }
 
 bool HalStorage::mkdir(const char* path, const bool pFlag) {
@@ -436,9 +461,9 @@ bool HalStorage::areSameFile(const char* first, const char* second, bool& same) 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  const bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
+  file = HalFile(HalFile::Impl::adopt(std::move(fsFile)));
+  return ok && file.isOpen();  // not open after all when its Impl could not be had
 }
 
 bool HalStorage::openFileForRead(const char* moduleName, const std::string& path, HalFile& file) {
@@ -453,9 +478,9 @@ bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalF
   StorageLock lock;  // ensure thread safety for the duration of this function
   noteContentChange(path);
   FsFile fsFile;
-  bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  const bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
+  file = HalFile(HalFile::Impl::adopt(std::move(fsFile)));
+  return ok && file.isOpen();
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, HalFile& file) {
@@ -473,8 +498,8 @@ bool HalStorage::openFileForUpdate(const char* moduleName, const char* path, Hal
   if (!ok) {
     LOG_ERR(moduleName, "Failed to open %s for update", path);
   }
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  file = HalFile(HalFile::Impl::adopt(std::move(fsFile)));
+  return ok && file.isOpen();
 }
 
 bool HalStorage::openFileForUpdate(const char* moduleName, const std::string& path, HalFile& file) {
@@ -579,7 +604,9 @@ uint64_t HalFile::position64() const { HAL_FILE_FORWARD_CALL(position, ); }
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);
-  return HalFile(std::make_unique<Impl>(impl->file.openNextFile()));
+  // A falsy handle ends a listing, so one whose Impl could not be had ends it early: logged by
+  // adopt(), and no worse than the abort it replaces.
+  return HalFile(Impl::adopt(impl->file.openNextFile()));
 }
 bool HalFile::isOpen() const { return impl != nullptr && impl->file.isOpen(); }  // already thread-safe, no need to wrap
 HalFile::operator bool() const { return isOpen(); }

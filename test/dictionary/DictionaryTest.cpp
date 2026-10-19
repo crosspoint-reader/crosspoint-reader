@@ -681,6 +681,31 @@ TEST_F(DictionaryTest, ReleaseCachesLeavesTheDictionaryUsable) {
   EXPECT_EQ(definition, expectedDefinition("quixotic"));
 }
 
+// Base paths longer than the 151 chars a fixed 160-byte path buffer once left, on the card itself:
+// a folder name the registry can list (under 128 bytes) and a long stem. Every folder of this suite
+// hit the same limit when the build directory was long.
+TEST_F(DictionaryTest, LongFolderAndStemNamesAreLookedUp) {
+  for (const std::string kind : {"plain", "zipped"}) {
+    const std::string folder = kind + std::string(110, 'F');
+    const std::string stem(60, 'S');
+    const fs::path dest = kDictRoot / folder;
+    fs::remove_all(dest);
+    fs::create_directories(dest);
+    for (const auto& e : fs::directory_iterator(kFixtureDir / kind)) {
+      // plain.idx becomes SSS...S.idx, zipped.dict.dz SSS...S.dict.dz.
+      fs::copy_file(e.path(), dest / (stem + e.path().filename().string().substr(kind.size())));
+    }
+    ASSERT_GT(("/dictionaries/" + folder + "/" + stem).size(), 151u);
+
+    Dictionary dict;
+    ASSERT_NO_FATAL_FAILURE(openIndexed(dict, folder));
+    std::string definition;
+    std::string headword;
+    ASSERT_TRUE(dict.lookup("quixotic", definition, headword)) << kind;
+    EXPECT_EQ(definition, expectedDefinition("quixotic")) << kind;
+  }
+}
+
 // --- dictzip ----------------------------------------------------------------
 
 TEST_F(DictionaryTest, CompressedDictionaryMatchesThePlainOneByteForByte) {

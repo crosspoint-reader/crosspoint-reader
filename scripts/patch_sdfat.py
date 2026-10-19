@@ -30,7 +30,9 @@ verbatim apart from the init() hunks:
         file low on the card made the next new file read the FAT from there to
         the free space, some 2,000 sectors on a 16 GB card half full. Ours on
         top: a FAT32 mount starts the search at the FSInfo next-free hint,
-        range-checked, instead of at cluster 2.
+        range-checked, instead of at cluster 2, and cacheSync() keeps that
+        hint at the search start (its header half rides in 0003, since one
+        patch owns each file).
 
 Their safety gates come along too: SdFat must be exactly the release the patches were
 reviewed against, and every file a patch touches must hash to that release's bytes or
@@ -97,13 +99,13 @@ PATCHES = (
         "0003-sync-fat-cache-before-data-cache.patch",
         "src/FatLib/FatPartition.h",
         "fb91c81beac2779a0d4b08e886a5fefdf8062b8ad422ccec4e178ae4e88b72e5",
-        "ad9d6a745aa8c91c8f006a61b2a6296e8dd89a1d05f1b335446e371ec541efcc",
+        "9e29bbda9fa9bb932e669bb0905ca3bb33c4f804ec23590e5845d916d0c2e79a",
     ),
     (
         "0004-keep-free-cluster-search-moving-forward.patch",
         "src/FatLib/FatPartition.cpp",
         "36163b3dc4ee985da9a6c6fb99b635fb5b63255d35fa5b3ccc1778db1534c0fe",
-        "46847407b29354adb72be0448d60fccd4eb23e01fdb2061ee231aa58ff108396",
+        "d50ebd94f6dfc5fc1dfe90352a5bca069fe9f440f5f5b7fe489709b9fa40f6aa",
     ),
 )
 

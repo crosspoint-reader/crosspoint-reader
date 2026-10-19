@@ -1,16 +1,13 @@
 #include "BookRelocation.h"
 
 #include <Epub.h>
+#include <FolderWalk.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
-#include <HalSystem.h>
 #include <KOReaderDocumentId.h>
 #include <Logging.h>
-#include <Memory.h>
 #include <Txt.h>
 #include <Xtc.h>
-
-#include <vector>
 
 #include "CrossPointState.h"
 #include "GlobalBookmarkIndex.h"
@@ -21,8 +18,6 @@ namespace BookRelocation {
 namespace {
 
 constexpr char CACHE_ROOT[] = "/.crosspoint";
-// A long file name is up to 255 UTF-16 units, so up to 765 bytes of UTF-8.
-constexpr size_t NAME_BUFFER_BYTES = 768;
 
 // "epub", "xtc" or "txt": a cache made by one reader is no use to another.
 std::string cacheKind(const std::string& cacheDir) {
@@ -89,34 +84,21 @@ void bookMoved(const std::string& oldPath, const std::string& newPath) {
 }
 
 void folderMoved(const std::string& oldDir, const std::string& newDir) {
-  auto name = makeUniqueNoThrow<char[]>(NAME_BUFFER_BYTES);
-  if (!name) {
-    LOG_ERR("BKR", "OOM: books under %s keep no state", newDir.c_str());
-    return;
-  }
-  // Iterative, not recursive: a deep tree must not cost a stack frame and an open folder per level.
-  std::vector<std::string> pending{newDir};
-  while (!pending.empty()) {
-    const std::string dirPath = std::move(pending.back());
-    pending.pop_back();
-    FsFile dir = Storage.open(dirPath.c_str());
-    if (!dir || !dir.isDirectory()) {
-      if (dir) dir.close();
-      continue;
-    }
-    for (FsFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
-      HalSystem::feedWatchdog();
-      entry.getName(name.get(), NAME_BUFFER_BYTES);
-      const bool isDir = entry.isDirectory();
-      entry.close();
-      const std::string child = dirPath + "/" + name.get();
-      if (isDir) {
-        pending.push_back(child);
-      } else {
-        bookMoved(oldDir + child.substr(newDir.size()), child);
-      }
-    }
-    dir.close();
+  // Not a queue of the folders still to visit: that held every folder of a level at once, so a
+  // library of thousands of folders could take the heap. FolderWalk holds one position per level
+  // and still reaches every book. bookMoved() writes only under /.crosspoint, never in the tree
+  // being walked, as the walk needs.
+  struct Move {
+    const std::string& oldDir;
+    const std::string& newDir;
+  };
+  Move move{oldDir, newDir};
+  const auto relocate = [](const std::string& path, void* ctx) {
+    const auto& m = *static_cast<const Move*>(ctx);
+    bookMoved(m.oldDir + path.substr(m.newDir.size()), path);
+  };
+  if (!FolderWalk::eachFile(newDir, relocate, &move)) {
+    LOG_ERR("BKR", "Books under %s keep no state", newDir.c_str());
   }
 }
 

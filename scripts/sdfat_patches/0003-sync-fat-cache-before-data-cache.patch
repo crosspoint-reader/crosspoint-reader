@@ -20,18 +20,49 @@ for them this order briefly leaves an entry pointing at freed clusters.
 The single cache already does exactly that, so with this patch the
 separate cache creates no crash state the shared one could not.
 
+Also the header half of 0004's FSInfo write-back, since one patch owns
+each file: the two members it keeps, and fsInfoSync() in cacheSync()
+(both variants) after the FAT and the directory sectors.
+
 ---
 --- a/src/FatLib/FatPartition.h
 +++ b/src/FatLib/FatPartition.h
-@@ -203,7 +203,10 @@
+@@ -164,6 +164,8 @@
+   Sector_t m_fatStartSector;         // Start sector for first FAT.
+   Cluster_t m_lastCluster;           // Last cluster number in FAT.
+   Cluster_t m_rootDirStart;          // Start sector FAT16, cluster FAT32.
++  Sector_t m_fsInfoSector = 0;       // FAT32 FSInfo kept by fsInfoSync(), or 0.
++  Cluster_t m_fsInfoNextFree = 0;    // Next-free hint that FSInfo holds.
+   //----------------------------------------------------------------------------
+   // sector I/O functions.
+   bool cacheSafeRead(Sector_t sector, uint8_t* dst) {
+@@ -203,7 +205,11 @@
      return m_fatCache.prepare(sector, options);
    }
    bool cacheSync() {
 -    return m_cache.sync() && m_fatCache.sync() && syncDevice();
 +    // FAT before directory, the order one shared cache gave by eviction: a
 +    // power cut in between leaves allocated but unreferenced clusters, not an
-+    // entry pointing at clusters the FAT still marks free.
-+    return m_fatCache.sync() && m_cache.sync() && syncDevice();
++    // entry pointing at clusters the FAT still marks free. FSInfo, advisory,
++    // after both.
++    return m_fatCache.sync() && m_cache.sync() && fsInfoSync() && syncDevice();
    }
  #else   // USE_SEPARATE_FAT_CACHE
    uint8_t* fatCachePrepare(Sector_t sector, uint8_t options) {
+@@ -212,7 +218,7 @@
+     }
+     return dataCachePrepare(sector, options);
+   }
+-  bool cacheSync() { return m_cache.sync() && syncDevice(); }
++  bool cacheSync() { return m_cache.sync() && fsInfoSync() && syncDevice(); }
+ #endif  // USE_SEPARATE_FAT_CACHE
+   uint8_t* dataCachePrepare(Sector_t sector, uint8_t options) {
+     return m_cache.prepare(sector, options);
+@@ -224,6 +230,7 @@
+   //----------------------------------------------------------------------------
+   bool allocateCluster(Cluster_t current, Cluster_t* next);
+   bool allocContiguous(uint32_t count, Cluster_t* firstCluster);
++  bool fsInfoSync();
+   uint8_t sectorOfCluster(uint32_t position) const {
+     return (position >> 9) & m_clusterSectorMask;
+   }

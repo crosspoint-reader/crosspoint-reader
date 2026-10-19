@@ -183,13 +183,27 @@ class HalFile : public Print {
     return fgetc(fp_);
   }
 
-  bool seek(size_t pos) { return fp_ && fseek(fp_, static_cast<long>(pos), SEEK_SET) == 0; }
+  // A folder's position is where its listing stands, counted in 32-byte directory entries as on
+  // FAT (one per name here; FAT spends more on a long one), so a walk can close a folder and seek
+  // back into its listing (FolderWalk).
+  static constexpr size_t kDirEntryBytes = 32;
+  bool seek(size_t pos) {
+    if (isDir_) {
+      if (pos % kDirEntryBytes != 0 || pos / kDirEntryBytes > entries_.size()) return false;
+      next_ = pos / kDirEntryBytes;
+      return true;
+    }
+    return fp_ && fseek(fp_, static_cast<long>(pos), SEEK_SET) == 0;
+  }
   bool seekSet(size_t pos) { return seek(pos); }
   bool seekCur(int64_t offset) { return fp_ && fseek(fp_, static_cast<long>(offset), SEEK_CUR) == 0; }
   bool seek64(uint64_t pos) { return fp_ && fseek(fp_, static_cast<long>(pos), SEEK_SET) == 0; }
   bool seekSet64(uint64_t pos) { return seek64(pos); }
 
-  size_t position() const { return fp_ ? static_cast<size_t>(ftell(fp_)) : 0; }
+  size_t position() const {
+    if (isDir_) return next_ * kDirEntryBytes;
+    return fp_ ? static_cast<size_t>(ftell(fp_)) : 0;
+  }
   uint64_t position64() const { return position(); }
   // Bytes left to read, as on device: EpubImageManifest::load() sizes its corruption guard from
   // this, so a constant here made every persisted manifest look corrupt on the host.

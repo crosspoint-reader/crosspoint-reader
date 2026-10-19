@@ -37,6 +37,9 @@ class SparseCard final : public FsBlockDeviceInterface {
   Sector_t fatBegin = 0;  // both FAT copies, set once the card is formatted
   Sector_t fatEnd = 0;
   Sector_t failReadsOf = ~Sector_t(0);
+  Sector_t failWritesOf = ~Sector_t(0);
+  Sector_t countWritesOf = ~Sector_t(0);  // its writes are counted in countedWrites, failed ones too
+  size_t countedWrites = 0;
 
   bool isBusy() override { return false; }
   bool readSector(const Sector_t sector, uint8_t* dst) override {
@@ -54,7 +57,8 @@ class SparseCard final : public FsBlockDeviceInterface {
   Sector_t sectorCount() override { return sectors_; }
   bool syncDevice() override { return true; }
   bool writeSector(const Sector_t sector, const uint8_t* src) override {
-    if (sector >= sectors_) return false;
+    if (sector == countWritesOf) ++countedWrites;
+    if (sector == failWritesOf || sector >= sectors_) return false;
     if (std::all_of(src, src + 512, [](const uint8_t b) { return b == 0; })) {
       data_.erase(sector);
     } else {
@@ -142,6 +146,11 @@ class Card {
     dev.poke(partStart_ + fsInfoSector_, sector);
   }
   Sector_t fsInfoSector() const { return partStart_ + fsInfoSector_; }
+  uint32_t fsInfoNextFree() const {
+    uint8_t sector[512];
+    dev.peek(fsInfoSector(), sector);
+    return le32(sector + 492);
+  }
 
   // As SDCardManager::openFileForWrite(): O_TRUNC frees the old clusters first.
   bool write(const char* path, const uint64_t size, const uint32_t stamp = 0) {
@@ -519,6 +528,80 @@ TEST(SdFatAlloc, AnUnreadableFsInfoSectorDoesNotFailTheMount) {
   EXPECT_TRUE(card.dataIntact("/after.bin", 1, 2));
 }
 
+// A card only the reader writes (books over Wi-Fi or USB serial) carries no hint a PC left, or a
+// stale one: until the reader kept FSInfo itself, the first new file after every wake read the FAT
+// up to the free space.
+TEST(SdFatAlloc, AWakeStartsWhereTheReaderLeftOff) {
+  Card card(16 * GB);
+  ASSERT_TRUE(card.vol.mkdir("/.crosspoint/epub_1/spines/0", true));
+  card.setFsInfoNextFree(NO_HINT);  // as SdFat's formatter leaves it
+  card.remount();
+  ASSERT_TRUE(card.fill("/books1.epub", 4 * GB - MB));  // the reader's own uploads this time
+  ASSERT_TRUE(card.fill("/books2.epub", 4 * GB - MB));
+  for (int i = 0; i < 50; ++i) {
+    const std::string path = "/.crosspoint/epub_1/spines/0/" + std::to_string(i) + ".bin";
+    ASSERT_TRUE(card.write(path.c_str(), 2 * MB));
+  }
+  for (int wake = 0; wake < 3; ++wake) {
+    card.remount();
+    EXPECT_LE(card.fatReadsToWrite(("/wake" + std::to_string(wake) + ".bin").c_str(), 1), 2u) << "wake " << wake;
+  }
+  EXPECT_EQ(card.check(), "");
+}
+
+// One FSInfo write for each FAT sector of clusters the search passes (128 on FAT32), not one per
+// allocation, and only the hint changes: the signatures and the free count stay as they were.
+TEST(SdFatAlloc, FsInfoIsWrittenOncePerFatSectorOfClusters) {
+  Card card(2 * GB + 64 * MB);
+  ASSERT_EQ(card.fatType, 32);
+  uint8_t before[512];
+  card.dev.peek(card.fsInfoSector(), before);
+  card.dev.countWritesOf = card.fsInfoSector();
+
+  for (int i = 0; i < 1280; ++i) ASSERT_TRUE(card.write(("/f" + std::to_string(i) + ".bin").c_str(), 1));
+
+  EXPECT_GE(card.dev.countedWrites, 9u);
+  EXPECT_LE(card.dev.countedWrites, 11u);
+  const uint32_t last = card.firstCluster("/f1279.bin");  // the search start: the last one taken
+  EXPECT_LE(card.fsInfoNextFree(), last + 1);
+  EXPECT_GT(card.fsInfoNextFree() + 128, last);  // within a FAT sector of it
+  uint8_t after[512];
+  card.dev.peek(card.fsInfoSector(), after);
+  EXPECT_EQ(memcmp(before, after, 492), 0);
+  EXPECT_EQ(memcmp(before + 496, after + 496, 16), 0);
+  EXPECT_EQ(card.check(), "");
+}
+
+// An FSInfo without its signatures is not FSInfo: never written.
+TEST(SdFatAlloc, AnInvalidFsInfoIsNeverWritten) {
+  Card card(2 * GB + 64 * MB);
+  card.setFsInfoNextFree(5, false);
+  card.remount();
+  card.dev.countWritesOf = card.fsInfoSector();
+
+  for (int i = 0; i < 300; ++i) ASSERT_TRUE(card.write(("/f" + std::to_string(i) + ".bin").c_str(), 1));
+
+  EXPECT_EQ(card.dev.countedWrites, 0u);
+  EXPECT_EQ(card.fsInfoNextFree(), 5u);
+  EXPECT_EQ(card.check(), "");
+}
+
+// A sector that will not take the hint fails no file, and is tried once a mount.
+TEST(SdFatAlloc, AnFsInfoSectorThatWillNotBeWrittenFailsNothing) {
+  Card card(2 * GB + 64 * MB);
+  card.dev.failWritesOf = card.fsInfoSector();
+  card.dev.countWritesOf = card.fsInfoSector();
+
+  for (int i = 0; i < 300; ++i) {
+    ASSERT_TRUE(card.write(("/f" + std::to_string(i) + ".bin").c_str(), 1, i + 1)) << "file " << i;
+  }
+
+  EXPECT_EQ(card.dev.countedWrites, 1u);
+  card.dev.failWritesOf = ~Sector_t(0);
+  EXPECT_EQ(card.check(), "");
+  for (int i = 0; i < 300; ++i) EXPECT_TRUE(card.dataIntact(("/f" + std::to_string(i) + ".bin").c_str(), 1, i + 1));
+}
+
 // Random rounds on a nearly full card, remounting with good and garbage FSInfo hints in
 // between; the FAT and every file's data are checked as they go.
 void runRandomRounds(Card& card, const int rounds, const uint32_t seed, const uint32_t maxFileClusters) {
@@ -585,8 +668,8 @@ void runRandomRounds(Card& card, const int rounds, const uint32_t seed, const ui
       auto it = std::next(files.begin(), rng() % files.size());
       ASSERT_TRUE(card.vol.remove(it->first.c_str()));
       files.erase(it);
-    } else if (op < 85) {  // wake: remount, FSInfo as some other system left it
-      switch (rng() % 6) {
+    } else if (op < 85) {  // wake: remount, FSInfo as the reader or some other system left it
+      switch (rng() % 7) {
         case 0:
           card.setFsInfoNextFree(NO_HINT);
           break;
@@ -602,6 +685,8 @@ void runRandomRounds(Card& card, const int rounds, const uint32_t seed, const ui
         case 4:
           card.setFsInfoNextFree(rng());
           break;
+        case 5:
+          break;  // as the reader kept it
         default:
           card.setFsInfoNextFree(2 + rng() % (card.lastCluster - 1), false);
           break;
