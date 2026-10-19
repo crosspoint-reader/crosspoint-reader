@@ -272,17 +272,25 @@ inline std::vector<StrId> homeThemeValues() {
   return {VALUES, VALUES + count};
 }
 
-// Shared immutable list for persistence and as the base for UI settings.
-// Constructed once; persistence borrows it without copying SettingInfo entries.
-const std::vector<SettingInfo>& getBaseSettingsList();
+using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
-// UI callers own a copy for runtime filtering and font/dictionary options.
+// Visits synchronously in list order. Borrowed references are valid only during
+// the callback; move from the descriptor to retain ownership. Its board conditions
+// must be fixed before settings load, or load and save would see different keys.
+void forEachBaseSetting(SettingVisitor visit, void* context);
+
+template <typename Fn>
+void forEachBaseSetting(Fn& fn) {
+  forEachBaseSetting([](void* context, SettingInfo& info) { (*static_cast<Fn*>(context))(info); }, &fn);
+}
+
+// Collects the same descriptors into an owning list for UI and web callers.
+std::vector<SettingInfo> getBaseSettingsList(size_t extraCapacity = 0);
+
+// UI callers own the list for runtime filtering and font/dictionary options.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
                                                 const std::vector<DictionaryEntry>* dictionaries = nullptr) {
-  const auto& baseList = getBaseSettingsList();
-  std::vector<SettingInfo> v;
-  v.reserve(baseList.size() + (dictionaries && !dictionaries->empty() ? 1 : 0));
-  v.insert(v.end(), baseList.begin(), baseList.end());
+  auto v = getBaseSettingsList(dictionaries && !dictionaries->empty() ? 1 : 0);
   // Frontlit and lightless variants of a board share one binary (EEGO A4);
   // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
   // has not run at load time, so the base list must keep the persisted key.
