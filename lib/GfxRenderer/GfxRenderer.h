@@ -145,7 +145,7 @@ class GfxRenderer {
     uint32_t scaleBits;    // exact float bits of the scale factor (no quantisation)
     uint16_t cp;           // codepoint; above the BMP renders uncached (see alloc)
     uint16_t offset;       // byte offset into scaledGlyphArena_
-    uint8_t sel;           // minRaw2Bit (scale < 1) or drawMask (scale >= 1)
+    uint8_t sel;           // the drawMask the glyph was resampled for
     uint8_t w;
     uint8_t h;
   };
