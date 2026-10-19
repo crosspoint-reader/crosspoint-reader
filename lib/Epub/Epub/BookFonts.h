@@ -30,8 +30,11 @@ constexpr uint8_t kVersion = 5;
 /// Accent families copied at most: the glyph store's eight style blocks hold a body of four styles and three
 /// one-style families, and its face table (32 faces) a book's body sizes and a few of each.
 constexpr uint8_t kMaxAccents = 3;
-/// A face bigger than this is not copied: the font area could not install it in flash mode anyway.
-constexpr size_t kMaxFaceBytes = 2 * 1024 * 1024;
+/// A face bigger than this is not copied. Not for the font area: a face too large for flash mode is drawn in SD mode
+/// (its tables in flash, its outlines read from the copy on the card), so the size left to bound is the copy itself,
+/// extracted from the book once, behind the open's popup, and kept on the card. A full CJK face, as books embed them,
+/// is 8-20 MB; one over this is taken for an error rather than minutes of extraction.
+constexpr size_t kMaxFaceBytes = 24 * 1024 * 1024;
 /// prepare() reads at most this much of each chapter, and at most kProbeChapters chapters from the text start.
 constexpr size_t kProbeChapterBytes = 64 * 1024;
 constexpr int kProbeChapters = 6;

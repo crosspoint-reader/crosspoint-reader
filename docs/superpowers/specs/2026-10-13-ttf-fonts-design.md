@@ -870,8 +870,8 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
 - **Registry (7.1):** lists a family the store takes at all (`ttf::fitsStore`: flash mode, else SD mode). The probe
   discovery already runs sums what the SD-mode block would take (`FileProbe::sdBytes`), so nothing more is read.
   DroidSansFallbackFull and other large families are listed, and a book family too large for flash mode loads in SD
-  mode. `BookFonts::kMaxFaceBytes` (2 MB) still refuses larger embedded faces; its reason (flash mode could not
-  install them) no longer holds.
+  mode. `BookFonts::kMaxFaceBytes` was 2 MB, for flash mode; it is 24 MB since (a full CJK face is 8-20 MB), bounding
+  only the copy extracted from the book.
 - **Manager:** keeps the open files of a family in SD mode while the set is loaded (`TtfSources`), closes the others
   after the load, and destroys the set before its files. The unload log names the families in SD mode and the pages
   the set read from the card.
@@ -932,7 +932,7 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   - Home 76.5 KB after every mode. No errors from the store, the engine or the flash; the Background-C fall-back for
     low heap in Off and Body Text is phase 2's (11.1.2).
 - **Left open:** previews of a family not installed (7.6); tricky fonts and the S3's internal-RAM scratch (8.1);
-  `BookFonts::kMaxFaceBytes`; the install reads each SD-mode file's directory up to three times (planning, the kept
+  the install reads each SD-mode file's directory up to three times (planning, the kept
   check, the copy), a few small reads each; the forward-read order holds within a prefetch batch, not across them
   (the CJK chapter read 2.5 pages a glyph).
 
