@@ -98,14 +98,20 @@ class LowestCodepoints {
   uint32_t largestAt_ = 0;
 };
 
-// Offers each codepoint of a null-terminated UTF-8 string that `wanted` accepts.
+// Offers each codepoint of a null-terminated UTF-8 string, and with
+// includeSmallCaps its small-caps uppercase too, to `collected` if `wanted`
+// accepts it.
 template <typename Wanted>
-void collectCodepoints(const char* text, LowestCodepoints& collected, Wanted wanted) {
+void collectCodepoints(const char* text, LowestCodepoints& collected, const bool includeSmallCaps, Wanted wanted) {
   const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
   while (*p) {
     const uint32_t cp = utf8NextCodepoint(&p);
     if (cp == 0) break;
     if (wanted(cp)) collected.add(cp);
+    if (includeSmallCaps) {
+      const uint32_t upper = utf8SmallCapsUpper(cp);
+      if (upper != cp && wanted(upper)) collected.add(upper);
+    }
   }
 }
 
@@ -1576,6 +1582,10 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
     // by the merge anyway. The renderer fast path tolerates missing entries
     // (returns 0); the slow path is still correct for those codepoints.
     if (advanceTableSize_[si] >= ADVANCE_CACHE_LIMIT) continue;
+    if (std::all_of(codepoints, codepoints + cpCount,
+                    [&](const uint32_t cp) { return advanceTableLookup(si, cp, nullptr); })) {
+      continue;
+    }
 
     // For each codepoint in `codepoints`, skip those already cached, then
     // resolve to a glyph index. Build a parallel array sorted by glyph index
@@ -1670,7 +1680,7 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
 
 int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_t* segmentLens,
                                         const size_t segmentCount, const bool includeSpace, const bool includeHyphen,
-                                        uint8_t styleMask, const char* extraText) {
+                                        uint8_t styleMask, const char* extraText, const bool includeSmallCaps) {
   if (!loaded_) return -1;
   styleMask = resolveStyleMask(styleMask);
   if (styleMask == 0) return 0;
@@ -1708,11 +1718,23 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
   // The merge keeps the lowest ADVANCE_CACHE_LIMIT codepoints of the table and
   // the new entries, so it can never keep more new entries than that, and only
   // the lowest of them: collecting those is enough to build the same table.
-  // +2 reserved slots for space and hyphen injected after the main scan.
-  uint32_t* codepoints = new (std::nothrow) uint32_t[ADVANCE_CACHE_LIMIT + 2];
-  if (!codepoints) {
-    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", (ADVANCE_CACHE_LIMIT + 2) * 4);
-    return -1;
+  // Byte counts also bound the codepoints, so short table words need no heap.
+  size_t limit = extraText ? strlen(extraText) : 0;
+  for (size_t seg = 0; seg < segmentCount; ++seg) limit += segmentLens[seg];
+  if (includeSmallCaps) limit *= 2;
+  limit = std::min<size_t>(limit, ADVANCE_CACHE_LIMIT);
+  static constexpr size_t INLINE_CODEPOINTS = 32;
+  uint32_t inlineCodepoints[INLINE_CODEPOINTS + 2];  // +2 reserved slots for space and hyphen
+  std::unique_ptr<uint32_t[]> heapCodepoints;
+  uint32_t* codepoints = inlineCodepoints;
+  if (limit > INLINE_CODEPOINTS) {
+    heapCodepoints = makeUniqueNoThrow<uint32_t[]>(limit + 2);
+    if (!heapCodepoints) {
+      LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)",
+              static_cast<unsigned>((limit + 2) * sizeof(uint32_t)));
+      return -1;
+    }
+    codepoints = heapCodepoints.get();
   }
 
   // One pass per style: each skips the codepoints its own table already holds,
@@ -1731,17 +1753,17 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
         const char* p = segments[seg];
         const char* const end = p + segmentLens[seg];
         while (p < end) {
-          collectCodepoints(p, into, wanted);
+          collectCodepoints(p, into, includeSmallCaps, wanted);
           p += strlen(p) + 1;
         }
       }
-      if (extraText) collectCodepoints(extraText, into, wanted);
+      if (extraText) collectCodepoints(extraText, into, includeSmallCaps, wanted);
       if (includeSpace && wanted(' ')) into.addReserved(' ');
       if (includeHyphen && wanted('-')) into.addReserved('-');
     };
 
     bool anyLacking = false;
-    LowestCodepoints collected(codepoints, ADVANCE_CACHE_LIMIT);
+    LowestCodepoints collected(codepoints, static_cast<uint32_t>(limit));
     collect(collected, [&](const uint32_t cp) {
       if (advanceTableLookup(si, cp, nullptr)) return false;
       if (resolves(cp)) return true;
@@ -1752,12 +1774,11 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
     totalMissed += fetchAdvancesForCodepoints(collected.data(), collected.size(), 1 << si);
 
     if (anyLacking) {
-      LowestCodepoints lacking(codepoints, ADVANCE_CACHE_LIMIT);
+      LowestCodepoints lacking(codepoints, static_cast<uint32_t>(limit));
       collect(lacking, [&](const uint32_t cp) { return !resolves(cp); });
       totalMissed += static_cast<int>(lacking.size());
     }
   }
-  delete[] codepoints;
   stats_.prewarmTotalMs = millis() - startMs;
   return totalMissed;
 }

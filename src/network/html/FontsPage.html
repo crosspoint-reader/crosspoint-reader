@@ -3,73 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CrossPoint Reader - Fonts</title>
+    <title>Fonts - CrossPoint Reader</title>
     <style>
-      :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-        --danger-color: #e74c3c;
-        --danger-hover: #c0392b;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          color-scheme: dark;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
-      }
-      h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
-      }
-      h2 { color: var(--title-color); margin-top: 0; }
       h3 { margin: 0 0 8px 0; }
-      .card {
-        background: var(--card-bg);
-        border-radius: 8px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-      .nav-links {
-        margin: 20px 0;
-        display: flex;
-        gap: 10px;
-      }
-      .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
-        text-decoration: none;
-        border-radius: 4px;
-      }
-      .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
-      }
       .family {
         border-bottom: 1px solid var(--border-color);
         padding: 12px 0;
@@ -89,12 +25,12 @@
       }
       .btn-danger {
         background: var(--danger-color);
-        color: white;
+        color: var(--button-text);
       }
       .btn-danger:hover { background: var(--danger-hover); }
       .btn-primary {
         background: var(--accent-color);
-        color: white;
+        color: var(--button-text);
       }
       .btn-primary:hover { background: var(--accent-hover-color); }
       .upload-form {
@@ -111,26 +47,15 @@
         color: var(--font-color);
       }
       .upload-form input[type="file"] { flex: 1; min-width: 200px; }
-      #status {
-        margin-top: 10px;
-        padding: 8px;
-        border-radius: 4px;
-        display: none;
-      }
-      .status-ok { background: #d4edda; color: #155724; display: block !important; }
-      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
       .empty { color: var(--label-color); text-align: center; padding: 20px; }
     </style>
+  <link rel="stylesheet" href="/assets/web.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/crosspoint-icon.svg" />
   </head>
-  <body>
-    <h1>📚 CrossPoint Reader</h1>
+  <body class="web-ui">
+    <!--#include file="shared/Header.html.inc" -->
+<main class="page-content">
 
-    <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/files">File Manager</a>
-      <a href="/settings">Settings</a>
-      <a href="/fonts" class="active">Fonts</a>
-    </div>
 
     <div class="card">
       <h2>Installed Fonts</h2>
@@ -144,9 +69,10 @@
         <button type="submit" class="btn btn-primary">Upload</button>
       </form>
       <p id="pickedInfo" class="family-meta" style="margin: 8px 0 0;"></p>
-      <div id="status"></div>
     </div>
 
+    </main>
+<!--#include file="shared/Footer.html.inc" -->
   <script>
     function formatSize(bytes) {
       if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
@@ -221,11 +147,7 @@
     }
 
     async function deleteFamily(name) {
-      if (!confirm('Delete font family "' + name + '"?')) return;
-      const status = document.getElementById('status');
-      status.className = '';
-      status.style.display = 'block';
-      status.textContent = 'Deleting ' + name + '...';
+      if (!await showWebConfirm('Delete font family "' + name + '"?')) return;
       try {
         const res = await fetch('/api/fonts/delete', {
           method: 'POST',
@@ -233,15 +155,12 @@
           body: JSON.stringify({family: name})
         });
         if (res.ok) {
-          status.className = 'status-ok';
-          status.textContent = 'Deleted "' + name + '".';
+          showWebToast('Deleted "' + name + '".', false);
         } else {
-          status.className = 'status-err';
-          status.textContent = 'Failed to delete "' + name + '".';
+          showWebToast('Failed to delete "' + name + '".', true);
         }
       } catch (err) {
-        status.className = 'status-err';
-        status.textContent = 'Delete error: ' + err.message;
+        showWebToast('Delete error: ' + err.message, true);
       }
       await loadFonts();
     }
@@ -279,12 +198,9 @@
 
     document.getElementById('uploadForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const status = document.getElementById('status');
       const files = supportedFontFilesOnly(document.getElementById('fontFiles').files);
       if (files.length === 0) {
-        status.className = 'status-err';
-        status.style.display = 'block';
-        status.textContent = 'No ' + supportedExts() + ' files selected.';
+        showWebToast('No ' + supportedExts() + ' files selected.', true);
         return;
       }
 
@@ -293,19 +209,17 @@
       // for every upload, corrupting the install layout.
       const families = [...new Set(files.map(f => sanitizeFamily(familyFromFilename(f.name))))];
       if (families.length !== 1) {
-        status.className = 'status-err';
-        status.style.display = 'block';
-        status.textContent = 'Please select files from a single font family.';
+        showWebToast('Please select files from a single font family.', true);
         return;
       }
       const family = families[0];
 
-      status.className = '';
-      status.style.display = 'block';
-
       let uploaded = 0;
       for (const file of files) {
-        status.textContent = 'Uploading ' + (uploaded + 1) + '/' + files.length + ': ' + file.name;
+        // Re-shown (and its auto-hide timer reset) on every file, so the
+        // toast stays up for the whole upload rather than disappearing
+        // mid-way through a multi-file transfer.
+        showWebToast('Uploading ' + (uploaded + 1) + '/' + files.length + ': ' + file.name, false);
         const formData = new FormData();
         formData.append('family', family);
         formData.append('file', file, file.name);
@@ -313,23 +227,20 @@
           const res = await fetch('/api/fonts/upload', { method: 'POST', body: formData });
           const data = await res.json();
           if (!data.ok) {
-            status.className = 'status-err';
-            status.textContent = 'Failed on ' + file.name + ': ' + (data.error || 'unknown error');
+            showWebToast('Failed on ' + file.name + ': ' + (data.error || 'unknown error'), true);
             await loadFonts();
             return;
           }
         } catch (err) {
-          status.className = 'status-err';
-          status.textContent = 'Upload error on ' + file.name + ': ' + err.message;
+          showWebToast('Upload error on ' + file.name + ': ' + err.message, true);
           await loadFonts();
           return;
         }
         uploaded++;
       }
 
-      status.className = 'status-ok';
-      status.textContent = 'Uploaded ' + uploaded + ' file' + (uploaded === 1 ? '' : 's') +
-        ' to family "' + family + '".';
+      showWebToast('Uploaded ' + uploaded + ' file' + (uploaded === 1 ? '' : 's') +
+        ' to family "' + family + '".', false);
       await loadFonts();
     });
 
