@@ -71,11 +71,11 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=0 s=0 z=100 t=교원인
    W x=60 s=0 z=100 t=듯한
    W x=104 s=0 z=100 t=양복장이를
-   W x=196 s=0 z=100 t=동광학교(東
-   W x=293 s=0 z=100 t=光
-   W x=315 s=0 z=100 t=學
-   W x=337 s=0 z=100 t=校)까지
-   W x=409 s=0 z=100 t=태워다
+   W x=197 s=0 z=100 t=동광학교(東
+   W x=294 s=0 z=100 t=光
+   W x=317 s=0 z=100 t=學
+   W x=339 s=0 z=100 t=校)까지
+   W x=412 s=0 z=100 t=태워다
   LINE y=263 x=0 align=0 mult=1.000 hfid=0 words=2
    W x=0 s=0 z=100 t=주기로
    W x=54 s=0 z=100 t=되었다.
@@ -202,9 +202,9 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
    W x=0 s=0 z=100 t=신조(信
    W x=72 s=0 z=100 t=條)에
    W x=135 s=0 z=100 t=어디까지
-   W x=218 s=0 z=100 t=충실하였다.
-   W x=327 s=0 z=100 t=따라서
-   W x=394 s=0 z=100 t=의사에게
+   W x=219 s=0 z=100 t=충실하였다.
+   W x=328 s=0 z=100 t=따라서
+   W x=396 s=0 z=100 t=의사에게
   LINE y=599 x=0 align=0 mult=1.000 hfid=0 words=10
    W x=0 s=0 z=100 t=보인
    W x=42 s=0 z=100 t=적이
@@ -263,13 +263,13 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=2 truncated=0 cssFallback=0
   LINE y=0 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=의지하면
    W x=74 s=0 z=100 t=그
-   W x=100 s=0 z=100 t=오라질
-   W x=158 s=0 z=100 t=년이
-   W x=200 s=0 z=100 t=천방지축(天
-   W x=295 s=0 z=100 t=方
-   W x=315 s=0 z=100 t=地
-   W x=335 s=0 z=100 t=軸)으로
-   W x=405 s=0 z=100 t=남비에
+   W x=101 s=0 z=100 t=오라질
+   W x=160 s=0 z=100 t=년이
+   W x=203 s=0 z=100 t=천방지축(天
+   W x=299 s=0 z=100 t=方
+   W x=320 s=0 z=100 t=地
+   W x=341 s=0 z=100 t=軸)으로
+   W x=412 s=0 z=100 t=남비에
   LINE y=24 x=0 align=0 mult=1.000 hfid=0 words=9
    W x=0 s=0 z=100 t=대고
    W x=44 s=0 z=100 t=끓였다.

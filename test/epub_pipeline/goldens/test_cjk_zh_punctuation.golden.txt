@@ -10,30 +10,30 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=18 s=0 z=100 t=今
    W x=34 s=0 z=100 t=天
    W x=50 s=0 z=100 t=早
-   W x=66 s=0 z=100 t=上
-   W x=82 s=0 z=100 t=下
-   W x=98 s=0 z=100 t=了
-   W x=114 s=0 z=100 t=一
-   W x=130 s=0 z=100 t=场
-   W x=146 s=0 z=100 t=小
-   W x=162 s=0 z=100 t=雨
-   W x=178 s=0 z=100 t=，
-   W x=194 s=0 z=100 t=街
-   W x=210 s=0 z=100 t=上
-   W x=226 s=0 z=100 t=的
-   W x=242 s=0 z=100 t=人
-   W x=258 s=0 z=100 t=不
-   W x=274 s=0 z=100 t=多
-   W x=290 s=0 z=100 t=。
-   W x=306 s=0 z=100 t=我
-   W x=322 s=0 z=100 t=带
-   W x=338 s=0 z=100 t=着
-   W x=354 s=0 z=100 t=伞
-   W x=370 s=0 z=100 t=出
-   W x=386 s=0 z=100 t=门
-   W x=402 s=0 z=100 t=，
-   W x=418 s=0 z=100 t=走
-   W x=434 s=0 z=100 t=到
+   W x=67 s=0 z=100 t=上
+   W x=83 s=0 z=100 t=下
+   W x=100 s=0 z=100 t=了
+   W x=116 s=0 z=100 t=一
+   W x=133 s=0 z=100 t=场
+   W x=149 s=0 z=100 t=小
+   W x=165 s=0 z=100 t=雨
+   W x=181 s=0 z=100 t=，
+   W x=198 s=0 z=100 t=街
+   W x=214 s=0 z=100 t=上
+   W x=231 s=0 z=100 t=的
+   W x=247 s=0 z=100 t=人
+   W x=264 s=0 z=100 t=不
+   W x=280 s=0 z=100 t=多
+   W x=296 s=0 z=100 t=。
+   W x=312 s=0 z=100 t=我
+   W x=329 s=0 z=100 t=带
+   W x=345 s=0 z=100 t=着
+   W x=362 s=0 z=100 t=伞
+   W x=378 s=0 z=100 t=出
+   W x=395 s=0 z=100 t=门
+   W x=411 s=0 z=100 t=，
+   W x=427 s=0 z=100 t=走
+   W x=444 s=0 z=100 t=到
   LINE y=71 x=0 align=0 mult=1.000 hfid=0 words=27
    W x=0 s=0 z=100 t=车
    W x=17 s=0 z=100 t=站
@@ -41,27 +41,27 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=51 s=0 z=100 t=时
    W x=68 s=0 z=100 t=候
    W x=84 s=0 z=100 t=，
-   W x=101 s=0 z=100 t=雨
-   W x=118 s=0 z=100 t=已
-   W x=135 s=0 z=100 t=经
-   W x=152 s=0 z=100 t=停
-   W x=169 s=0 z=100 t=了
-   W x=185 s=0 z=100 t=。
-   W x=202 s=0 z=100 t=车
-   W x=219 s=0 z=100 t=站
-   W x=236 s=0 z=100 t=旁
-   W x=253 s=0 z=100 t=边
-   W x=270 s=0 z=100 t=有
-   W x=287 s=0 z=100 t=一
-   W x=304 s=0 z=100 t=家
-   W x=321 s=0 z=100 t=小
-   W x=338 s=0 z=100 t=店
-   W x=354 s=0 z=100 t=，
-   W x=371 s=0 z=100 t=店
-   W x=388 s=0 z=100 t=主
-   W x=405 s=0 z=100 t=正
-   W x=422 s=0 z=100 t=在
-   W x=439 s=0 z=100 t=把
+   W x=102 s=0 z=100 t=雨
+   W x=119 s=0 z=100 t=已
+   W x=136 s=0 z=100 t=经
+   W x=153 s=0 z=100 t=停
+   W x=170 s=0 z=100 t=了
+   W x=186 s=0 z=100 t=。
+   W x=204 s=0 z=100 t=车
+   W x=221 s=0 z=100 t=站
+   W x=238 s=0 z=100 t=旁
+   W x=255 s=0 z=100 t=边
+   W x=273 s=0 z=100 t=有
+   W x=290 s=0 z=100 t=一
+   W x=307 s=0 z=100 t=家
+   W x=324 s=0 z=100 t=小
+   W x=341 s=0 z=100 t=店
+   W x=357 s=0 z=100 t=，
+   W x=375 s=0 z=100 t=店
+   W x=392 s=0 z=100 t=主
+   W x=409 s=0 z=100 t=正
+   W x=426 s=0 z=100 t=在
+   W x=444 s=0 z=100 t=把
   LINE y=95 x=0 align=0 mult=1.000 hfid=0 words=23
    W x=0 s=0 z=100 t=桌
    W x=16 s=0 z=100 t=子
@@ -89,59 +89,59 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
   LINE y=119 x=0 align=0 mult=1.000 hfid=0 words=28
    W x=18 s=0 z=100 t=书
    W x=34 s=0 z=100 t=架
-   W x=50 s=0 z=100 t=上
-   W x=66 s=0 z=100 t=放
-   W x=82 s=0 z=100 t=着
-   W x=98 s=0 z=100 t=三
-   W x=114 s=0 z=100 t=本
-   W x=130 s=0 z=100 t=书
-   W x=144 s=0 z=100 t=：
-   W x=154 s=0 z=100 t=《
-   W x=170 s=0 z=100 t=春
-   W x=186 s=0 z=100 t=天
-   W x=202 s=0 z=100 t=的
-   W x=218 s=0 z=100 t=花
-   W x=234 s=0 z=100 t=园
-   W x=250 s=0 z=100 t=》
-   W x=258 s=0 z=100 t=、
-   W x=266 s=0 z=100 t=《
-   W x=282 s=0 z=100 t=海
-   W x=298 s=0 z=100 t=边
-   W x=314 s=0 z=100 t=的
-   W x=330 s=0 z=100 t=小
-   W x=346 s=0 z=100 t=屋
-   W x=362 s=0 z=100 t=》
-   W x=378 s=0 z=100 t=和
-   W x=394 s=0 z=100 t=《
-   W x=410 s=0 z=100 t=星
-   W x=426 s=0 z=100 t=期
+   W x=51 s=0 z=100 t=上
+   W x=68 s=0 z=100 t=放
+   W x=85 s=0 z=100 t=着
+   W x=102 s=0 z=100 t=三
+   W x=119 s=0 z=100 t=本
+   W x=136 s=0 z=100 t=书
+   W x=150 s=0 z=100 t=：
+   W x=161 s=0 z=100 t=《
+   W x=177 s=0 z=100 t=春
+   W x=194 s=0 z=100 t=天
+   W x=211 s=0 z=100 t=的
+   W x=227 s=0 z=100 t=花
+   W x=244 s=0 z=100 t=园
+   W x=260 s=0 z=100 t=》
+   W x=268 s=0 z=100 t=、
+   W x=277 s=0 z=100 t=《
+   W x=293 s=0 z=100 t=海
+   W x=310 s=0 z=100 t=边
+   W x=327 s=0 z=100 t=的
+   W x=344 s=0 z=100 t=小
+   W x=361 s=0 z=100 t=屋
+   W x=377 s=0 z=100 t=》
+   W x=394 s=0 z=100 t=和
+   W x=411 s=0 z=100 t=《
+   W x=427 s=0 z=100 t=星
+   W x=444 s=0 z=100 t=期
   LINE y=143 x=0 align=0 mult=1.000 hfid=0 words=26
    W x=0 s=0 z=100 t=六
    W x=16 s=0 z=100 t=》
    W x=24 s=0 z=100 t=。
    W x=41 s=0 z=100 t=我
-   W x=58 s=0 z=100 t=最
-   W x=75 s=0 z=100 t=喜
-   W x=92 s=0 z=100 t=欢
-   W x=109 s=0 z=100 t=第
-   W x=126 s=0 z=100 t=二
-   W x=143 s=0 z=100 t=本——
-   W x=174 s=0 z=100 t=它
-   W x=191 s=0 z=100 t=讲
-   W x=208 s=0 z=100 t=的
-   W x=225 s=0 z=100 t=是
-   W x=242 s=0 z=100 t=一
-   W x=259 s=0 z=100 t=个
-   W x=276 s=0 z=100 t=渔
-   W x=293 s=0 z=100 t=夫
-   W x=310 s=0 z=100 t=和
-   W x=327 s=0 z=100 t=他
-   W x=344 s=0 z=100 t=的
-   W x=361 s=0 z=100 t=狗
-   W x=377 s=0 z=100 t=。
-   W x=394 s=0 z=100 t=每
-   W x=411 s=0 z=100 t=次
-   W x=428 s=0 z=100 t=读
+   W x=59 s=0 z=100 t=最
+   W x=77 s=0 z=100 t=喜
+   W x=94 s=0 z=100 t=欢
+   W x=112 s=0 z=100 t=第
+   W x=130 s=0 z=100 t=二
+   W x=148 s=0 z=100 t=本——
+   W x=179 s=0 z=100 t=它
+   W x=197 s=0 z=100 t=讲
+   W x=215 s=0 z=100 t=的
+   W x=233 s=0 z=100 t=是
+   W x=250 s=0 z=100 t=一
+   W x=268 s=0 z=100 t=个
+   W x=286 s=0 z=100 t=渔
+   W x=303 s=0 z=100 t=夫
+   W x=321 s=0 z=100 t=和
+   W x=339 s=0 z=100 t=他
+   W x=357 s=0 z=100 t=的
+   W x=374 s=0 z=100 t=狗
+   W x=390 s=0 z=100 t=。
+   W x=408 s=0 z=100 t=每
+   W x=426 s=0 z=100 t=次
+   W x=444 s=0 z=100 t=读
   LINE y=167 x=0 align=0 mult=1.000 hfid=0 words=22
    W x=0 s=0 z=100 t=到
    W x=16 s=0 z=100 t=最
@@ -170,31 +170,31 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=34 s=0 z=100 t=问
    W x=50 s=0 z=100 t=我
    W x=66 s=0 z=100 t=：
-   W x=82 s=0 z=100 t=“
-   W x=90 s=0 z=100 t=你
-   W x=106 s=0 z=100 t=明
-   W x=122 s=0 z=100 t=天
-   W x=138 s=0 z=100 t=有
-   W x=154 s=0 z=100 t=空
-   W x=170 s=0 z=100 t=吗
-   W x=186 s=0 z=100 t=？
-   W x=202 s=0 z=100 t=”
-   W x=211 s=0 z=100 t=我
-   W x=227 s=0 z=100 t=说
-   W x=243 s=0 z=100 t=：
-   W x=259 s=0 z=100 t=“
-   W x=267 s=0 z=100 t=有
-   W x=283 s=0 z=100 t=空
-   W x=299 s=0 z=100 t=。
-   W x=315 s=0 z=100 t=”
-   W x=324 s=0 z=100 t=于
-   W x=340 s=0 z=100 t=是
-   W x=356 s=0 z=100 t=我
-   W x=372 s=0 z=100 t=们
-   W x=388 s=0 z=100 t=约
-   W x=404 s=0 z=100 t=好
-   W x=420 s=0 z=100 t=上
-   W x=436 s=0 z=100 t=午
+   W x=83 s=0 z=100 t=“
+   W x=91 s=0 z=100 t=你
+   W x=107 s=0 z=100 t=明
+   W x=124 s=0 z=100 t=天
+   W x=140 s=0 z=100 t=有
+   W x=156 s=0 z=100 t=空
+   W x=173 s=0 z=100 t=吗
+   W x=189 s=0 z=100 t=？
+   W x=205 s=0 z=100 t=”
+   W x=214 s=0 z=100 t=我
+   W x=231 s=0 z=100 t=说
+   W x=247 s=0 z=100 t=：
+   W x=263 s=0 z=100 t=“
+   W x=271 s=0 z=100 t=有
+   W x=287 s=0 z=100 t=空
+   W x=303 s=0 z=100 t=。
+   W x=319 s=0 z=100 t=”
+   W x=329 s=0 z=100 t=于
+   W x=345 s=0 z=100 t=是
+   W x=362 s=0 z=100 t=我
+   W x=378 s=0 z=100 t=们
+   W x=394 s=0 z=100 t=约
+   W x=411 s=0 z=100 t=好
+   W x=427 s=0 z=100 t=上
+   W x=444 s=0 z=100 t=午
   LINE y=215 x=0 align=0 mult=1.000 hfid=0 words=27
    W x=0 s=0 z=100 t=十
    W x=16 s=0 z=100 t=点
@@ -226,34 +226,34 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
   LINE y=239 x=0 align=0 mult=1.000 hfid=0 words=30
    W x=18 s=0 z=100 t=这
    W x=34 s=0 z=100 t=一
-   W x=50 s=0 z=100 t=段
-   W x=66 s=0 z=100 t=用
-   W x=82 s=0 z=100 t=来
-   W x=98 s=0 z=100 t=测
-   W x=114 s=0 z=100 t=试
-   W x=130 s=0 z=100 t=连
-   W x=146 s=0 z=100 t=续
-   W x=162 s=0 z=100 t=的
-   W x=178 s=0 z=100 t=标
-   W x=194 s=0 z=100 t=点
-   W x=210 s=0 z=100 t=：
-   W x=226 s=0 z=100 t=“
-   W x=234 s=0 z=100 t=好
-   W x=250 s=0 z=100 t=！
-   W x=266 s=0 z=100 t=”
-   W x=275 s=0 z=100 t=“
-   W x=283 s=0 z=100 t=真
-   W x=299 s=0 z=100 t=的
-   W x=315 s=0 z=100 t=吗
-   W x=331 s=0 z=100 t=？
-   W x=347 s=0 z=100 t=”
-   W x=356 s=0 z=100 t=“
-   W x=364 s=0 z=100 t=当
-   W x=380 s=0 z=100 t=然
-   W x=396 s=0 z=100 t=。
-   W x=412 s=0 z=100 t=”
-   W x=421 s=0 z=100 t=——
-   W x=435 s=0 z=100 t=大
+   W x=51 s=0 z=100 t=段
+   W x=67 s=0 z=100 t=用
+   W x=84 s=0 z=100 t=来
+   W x=100 s=0 z=100 t=测
+   W x=117 s=0 z=100 t=试
+   W x=133 s=0 z=100 t=连
+   W x=150 s=0 z=100 t=续
+   W x=167 s=0 z=100 t=的
+   W x=183 s=0 z=100 t=标
+   W x=200 s=0 z=100 t=点
+   W x=216 s=0 z=100 t=：
+   W x=232 s=0 z=100 t=“
+   W x=240 s=0 z=100 t=好
+   W x=256 s=0 z=100 t=！
+   W x=272 s=0 z=100 t=”
+   W x=281 s=0 z=100 t=“
+   W x=289 s=0 z=100 t=真
+   W x=306 s=0 z=100 t=的
+   W x=322 s=0 z=100 t=吗
+   W x=338 s=0 z=100 t=？
+   W x=354 s=0 z=100 t=”
+   W x=363 s=0 z=100 t=“
+   W x=371 s=0 z=100 t=当
+   W x=388 s=0 z=100 t=然
+   W x=404 s=0 z=100 t=。
+   W x=420 s=0 z=100 t=”
+   W x=429 s=0 z=100 t=——
+   W x=444 s=0 z=100 t=大
   LINE y=263 x=0 align=0 mult=1.000 hfid=0 words=28
    W x=0 s=0 z=100 t=家
    W x=17 s=0 z=100 t=都
@@ -262,27 +262,27 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=67 s=0 z=100 t=。
    W x=76 s=0 z=100 t=（
    W x=92 s=0 z=100 t=这
-   W x=109 s=0 z=100 t=里
-   W x=126 s=0 z=100 t=的
-   W x=143 s=0 z=100 t=括
-   W x=160 s=0 z=100 t=号
-   W x=177 s=0 z=100 t=后
-   W x=194 s=0 z=100 t=面
-   W x=211 s=0 z=100 t=紧
-   W x=228 s=0 z=100 t=跟
-   W x=245 s=0 z=100 t=着
-   W x=262 s=0 z=100 t=句
-   W x=279 s=0 z=100 t=号
-   W x=295 s=0 z=100 t=。
-   W x=303 s=0 z=100 t=）
-   W x=320 s=0 z=100 t=然
-   W x=337 s=0 z=100 t=后
-   W x=354 s=0 z=100 t=又
-   W x=371 s=0 z=100 t=是
-   W x=388 s=0 z=100 t=一
-   W x=405 s=0 z=100 t=句
-   W x=422 s=0 z=100 t=很
-   W x=439 s=0 z=100 t=长
+   W x=110 s=0 z=100 t=里
+   W x=127 s=0 z=100 t=的
+   W x=144 s=0 z=100 t=括
+   W x=161 s=0 z=100 t=号
+   W x=178 s=0 z=100 t=后
+   W x=196 s=0 z=100 t=面
+   W x=213 s=0 z=100 t=紧
+   W x=230 s=0 z=100 t=跟
+   W x=247 s=0 z=100 t=着
+   W x=265 s=0 z=100 t=句
+   W x=282 s=0 z=100 t=号
+   W x=298 s=0 z=100 t=。
+   W x=306 s=0 z=100 t=）
+   W x=323 s=0 z=100 t=然
+   W x=340 s=0 z=100 t=后
+   W x=357 s=0 z=100 t=又
+   W x=375 s=0 z=100 t=是
+   W x=392 s=0 z=100 t=一
+   W x=409 s=0 z=100 t=句
+   W x=426 s=0 z=100 t=很
+   W x=444 s=0 z=100 t=长
   LINE y=287 x=0 align=0 mult=1.000 hfid=0 words=11
    W x=0 s=0 z=100 t=的
    W x=16 s=0 z=100 t=话
@@ -300,51 +300,51 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=34 s=0 z=100 t=格
    W x=50 s=0 z=100 t=从
    W x=66 s=0 z=100 t=12
-   W x=79 s=0 z=100 t=元
-   W x=95 s=0 z=100 t=涨
-   W x=111 s=0 z=100 t=到
-   W x=127 s=0 z=100 t=了
-   W x=143 s=0 z=100 t=15
-   W x=159 s=0 z=100 t=元
-   W x=175 s=0 z=100 t=，
-   W x=191 s=0 z=100 t=涨
-   W x=207 s=0 z=100 t=幅
-   W x=223 s=0 z=100 t=是
-   W x=239 s=0 z=100 t=25%
-   W x=264 s=0 z=100 t=。
-   W x=280 s=0 z=100 t=我
-   W x=296 s=0 z=100 t=们
-   W x=312 s=0 z=100 t=用
-   W x=328 s=0 z=100 t=Python
-   W x=390 s=0 z=100 t=写
-   W x=406 s=0 z=100 t=了
-   W x=422 s=0 z=100 t=一
-   W x=438 s=0 z=100 t=个
+   W x=80 s=0 z=100 t=元
+   W x=96 s=0 z=100 t=涨
+   W x=112 s=0 z=100 t=到
+   W x=129 s=0 z=100 t=了
+   W x=145 s=0 z=100 t=15
+   W x=161 s=0 z=100 t=元
+   W x=177 s=0 z=100 t=，
+   W x=193 s=0 z=100 t=涨
+   W x=210 s=0 z=100 t=幅
+   W x=226 s=0 z=100 t=是
+   W x=242 s=0 z=100 t=25%
+   W x=267 s=0 z=100 t=。
+   W x=284 s=0 z=100 t=我
+   W x=300 s=0 z=100 t=们
+   W x=316 s=0 z=100 t=用
+   W x=332 s=0 z=100 t=Python
+   W x=395 s=0 z=100 t=写
+   W x=411 s=0 z=100 t=了
+   W x=427 s=0 z=100 t=一
+   W x=444 s=0 z=100 t=个
   LINE y=335 x=0 align=0 mult=1.000 hfid=0 words=24
    W x=0 s=0 z=100 t=小
    W x=17 s=0 z=100 t=程
-   W x=34 s=0 z=100 t=序
-   W x=50 s=0 z=100 t=，
-   W x=67 s=0 z=100 t=统
-   W x=84 s=0 z=100 t=计
-   W x=101 s=0 z=100 t=了
-   W x=118 s=0 z=100 t=2020
-   W x=157 s=0 z=100 t=年
-   W x=174 s=0 z=100 t=到
-   W x=191 s=0 z=100 t=2024
-   W x=227 s=0 z=100 t=年
-   W x=244 s=0 z=100 t=的
-   W x=261 s=0 z=100 t=数
-   W x=278 s=0 z=100 t=据
-   W x=294 s=0 z=100 t=，
-   W x=311 s=0 z=100 t=结
-   W x=328 s=0 z=100 t=果
-   W x=345 s=0 z=100 t=和
-   W x=362 s=0 z=100 t=预
-   W x=379 s=0 z=100 t=想
-   W x=396 s=0 z=100 t=的
-   W x=413 s=0 z=100 t=差
-   W x=430 s=0 z=100 t=不
+   W x=35 s=0 z=100 t=序
+   W x=51 s=0 z=100 t=，
+   W x=69 s=0 z=100 t=统
+   W x=86 s=0 z=100 t=计
+   W x=104 s=0 z=100 t=了
+   W x=122 s=0 z=100 t=2020
+   W x=161 s=0 z=100 t=年
+   W x=179 s=0 z=100 t=到
+   W x=197 s=0 z=100 t=2024
+   W x=233 s=0 z=100 t=年
+   W x=251 s=0 z=100 t=的
+   W x=269 s=0 z=100 t=数
+   W x=286 s=0 z=100 t=据
+   W x=302 s=0 z=100 t=，
+   W x=320 s=0 z=100 t=结
+   W x=338 s=0 z=100 t=果
+   W x=355 s=0 z=100 t=和
+   W x=373 s=0 z=100 t=预
+   W x=391 s=0 z=100 t=想
+   W x=408 s=0 z=100 t=的
+   W x=426 s=0 z=100 t=差
+   W x=444 s=0 z=100 t=不
   LINE y=359 x=0 align=0 mult=1.000 hfid=0 words=2
    W x=0 s=0 z=100 t=多
    W x=16 s=0 z=100 t=。
@@ -352,30 +352,30 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=18 s=0 z=100 t=　
    W x=34 s=0 z=100 t=段
    W x=50 s=0 z=100 t=首
-   W x=66 s=0 z=100 t=的
-   W x=82 s=0 z=100 t=全
-   W x=98 s=0 z=100 t=角
-   W x=114 s=0 z=100 t=空
-   W x=130 s=0 z=100 t=格
-   W x=146 s=0 z=100 t=保
-   W x=162 s=0 z=100 t=持
-   W x=178 s=0 z=100 t=全
-   W x=194 s=0 z=100 t=宽
-   W x=210 s=0 z=100 t=。
-   W x=226 s=0 z=100 t=这
-   W x=242 s=0 z=100 t=一
-   W x=258 s=0 z=100 t=段
-   W x=274 s=0 z=100 t=的
-   W x=290 s=0 z=100 t=文
-   W x=306 s=0 z=100 t=字
-   W x=322 s=0 z=100 t=也
-   W x=338 s=0 z=100 t=比
-   W x=354 s=0 z=100 t=较
-   W x=370 s=0 z=100 t=长
-   W x=386 s=0 z=100 t=，
-   W x=402 s=0 z=100 t=用
-   W x=418 s=0 z=100 t=来
-   W x=434 s=0 z=100 t=让
+   W x=67 s=0 z=100 t=的
+   W x=83 s=0 z=100 t=全
+   W x=100 s=0 z=100 t=角
+   W x=116 s=0 z=100 t=空
+   W x=132 s=0 z=100 t=格
+   W x=149 s=0 z=100 t=保
+   W x=165 s=0 z=100 t=持
+   W x=182 s=0 z=100 t=全
+   W x=198 s=0 z=100 t=宽
+   W x=214 s=0 z=100 t=。
+   W x=231 s=0 z=100 t=这
+   W x=247 s=0 z=100 t=一
+   W x=263 s=0 z=100 t=段
+   W x=280 s=0 z=100 t=的
+   W x=296 s=0 z=100 t=文
+   W x=313 s=0 z=100 t=字
+   W x=329 s=0 z=100 t=也
+   W x=345 s=0 z=100 t=比
+   W x=362 s=0 z=100 t=较
+   W x=378 s=0 z=100 t=长
+   W x=394 s=0 z=100 t=，
+   W x=411 s=0 z=100 t=用
+   W x=427 s=0 z=100 t=来
+   W x=444 s=0 z=100 t=让
   LINE y=407 x=0 align=0 mult=1.000 hfid=0 words=27
    W x=0 s=0 z=100 t=逗
    W x=17 s=0 z=100 t=号
@@ -384,26 +384,26 @@ SPINE 0 href=OEBPS/chapter1.xhtml pages=1 truncated=0 cssFallback=0
    W x=67 s=0 z=100 t=号
    W x=84 s=0 z=100 t=和
    W x=101 s=0 z=100 t=句
-   W x=118 s=0 z=100 t=号
-   W x=135 s=0 z=100 t=出
-   W x=152 s=0 z=100 t=现
-   W x=169 s=0 z=100 t=在
-   W x=186 s=0 z=100 t=行
-   W x=203 s=0 z=100 t=尾
-   W x=219 s=0 z=100 t=，
-   W x=236 s=0 z=100 t=看
-   W x=253 s=0 z=100 t=看
-   W x=270 s=0 z=100 t=它
-   W x=287 s=0 z=100 t=们
-   W x=304 s=0 z=100 t=在
-   W x=321 s=0 z=100 t=行
-   W x=338 s=0 z=100 t=尾
-   W x=355 s=0 z=100 t=是
-   W x=372 s=0 z=100 t=不
-   W x=389 s=0 z=100 t=是
-   W x=406 s=0 z=100 t=只
-   W x=423 s=0 z=100 t=占
-   W x=440 s=0 z=100 t=半
+   W x=119 s=0 z=100 t=号
+   W x=136 s=0 z=100 t=出
+   W x=153 s=0 z=100 t=现
+   W x=170 s=0 z=100 t=在
+   W x=187 s=0 z=100 t=行
+   W x=204 s=0 z=100 t=尾
+   W x=220 s=0 z=100 t=，
+   W x=238 s=0 z=100 t=看
+   W x=255 s=0 z=100 t=看
+   W x=272 s=0 z=100 t=它
+   W x=289 s=0 z=100 t=们
+   W x=306 s=0 z=100 t=在
+   W x=323 s=0 z=100 t=行
+   W x=341 s=0 z=100 t=尾
+   W x=358 s=0 z=100 t=是
+   W x=375 s=0 z=100 t=不
+   W x=392 s=0 z=100 t=是
+   W x=409 s=0 z=100 t=只
+   W x=426 s=0 z=100 t=占
+   W x=444 s=0 z=100 t=半
   LINE y=431 x=0 align=0 mult=1.000 hfid=0 words=12
    W x=0 s=0 z=100 t=个
    W x=16 s=0 z=100 t=字

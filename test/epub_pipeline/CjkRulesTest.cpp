@@ -231,6 +231,12 @@ class CjkRules : public testing::TestWithParam<Case> {
   std::vector<DumpLine> lines;
 };
 
+// The same books laid out justified.
+class CjkJustifiedRules : public CjkRules {
+ protected:
+  uint8_t alignment() const override { return 0; }
+};
+
 // At a line break with unspaced CJK on either side, the line after it does not start with closing
 // punctuation and the line before it does not end with an opening bracket (spec Appendix A.1): a
 // line starting with " after a CJK line, or ending with " before one, is caught too.
@@ -293,6 +299,48 @@ bool hasCjkGap(const DumpLine& line) {
   return false;
 }
 
+// A justified line with CJK gaps that is not its paragraph's last ends flush (spec 5.1), all at one right edge,
+// and in a Chinese or Japanese book the text width is a whole number of ems (spec 5.5). Lines with one LINE record
+// shape (x, alignment, size) share a text width; the shape's left edge is where its leftmost line starts. A line
+// is not its paragraph's last when the next line of its flow has the same shape, starts at that left edge (not
+// indented) and follows without a margin. Lines justified at word spaces (Latin, Korean) keep their old rounding
+// and are not checked.
+TEST_P(CjkJustifiedRules, JustifiedLinesEndFlushOnAWholeEmGrid) {
+  const TypographyProfile profile = TypographyProfile::forLanguage(GetParam().language);
+  if (profile.justify != TypographyProfile::Justify::BetweenCharacters) GTEST_SKIP() << "justified at word spaces";
+
+  std::map<std::string, int> leftEdge;  // shape -> where its leftmost line starts
+  std::map<std::string, int> lineStep;  // shape -> its smallest step down the page
+  for (size_t i = 0; i < lines.size(); ++i) {
+    if (lines[i].words.empty()) continue;
+    const int left = LineWidths(renderer, lines[i], table).left(0);
+    const auto [at, inserted] = leftEdge.emplace(lines[i].shape, left);
+    if (!inserted) at->second = std::min(at->second, left);
+    if (i > 0 && lines[i].followsLine && lines[i - 1].shape == lines[i].shape && lines[i].y > lines[i - 1].y) {
+      const auto [step, fresh] = lineStep.emplace(lines[i].shape, lines[i].y - lines[i - 1].y);
+      if (!fresh) step->second = std::min(step->second, lines[i].y - lines[i - 1].y);
+    }
+  }
+
+  std::map<std::string, std::vector<std::pair<int, size_t>>> rightEdges;  // shape -> (right edge, line)
+  for (size_t i = 0; i + 1 < lines.size(); ++i) {
+    const DumpLine& line = lines[i];
+    const DumpLine& next = lines[i + 1];
+    if (line.words.empty() || next.words.empty() || !line.justified || !hasCjkGap(line)) continue;
+    if (!next.followsLine || next.shape != line.shape) continue;
+    if (LineWidths(renderer, next, table).left(0) != leftEdge[line.shape]) continue;  // the next paragraph's start
+    if (next.y > line.y && next.y - line.y > lineStep[line.shape]) continue;          // a margin: a new paragraph
+    rightEdges[line.shape].emplace_back(LineWidths(renderer, line, table).right(line.words.size() - 1), i);
+  }
+  ASSERT_FALSE(rightEdges.empty()) << "no justified CJK line to check";
+
+  for (const auto& [shape, edges] : rightEdges) {
+    int right = 0;
+    for (const auto& edge : edges) right = std::max(right, edge.first);
+    for (const auto& [edge, i] : edges) EXPECT_EQ(edge, right) << "not flush: " << lineText(lines[i]);
+  }
+}
+
 std::vector<Case> cjkBooks() {
   std::vector<Case> cases;
   for (const auto& [book, language] : std::vector<std::pair<const char*, const char*>>{
@@ -313,6 +361,7 @@ std::string caseName(const testing::TestParamInfo<Case>& info) {
 }
 
 INSTANTIATE_TEST_SUITE_P(CjkCorpus, CjkRules, testing::ValuesIn(cjkBooks()), caseName);
+INSTANTIATE_TEST_SUITE_P(CjkCorpus, CjkJustifiedRules, testing::ValuesIn(cjkBooks()), caseName);
 
 }  // namespace
 

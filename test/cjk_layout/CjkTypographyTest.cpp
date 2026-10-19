@@ -150,3 +150,20 @@ TEST(CjkPunctuationWidths, APageBottomRetryKeepsTheMarksWidths) {
   ASSERT_EQ(wordsOf(lines), (Words{{"가나"}, {"다라마바사아"}, {"자", "」", "。", "차"}}));
   EXPECT_EQ(lines[2].xpos, (X{0, 10, 15, 25}));
 }
+TEST(CjkJustification, AJustifiedCjkLineEndsFlush) {
+  // 4 characters on a 47 px line: 7 px over 3 gaps, 2 px each and the last pixel to one of them.
+  ParsedText text(false, false, aligned(CssTextAlign::Justify));
+  text.addWord("一二三四五六七八", EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 47);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0].xpos.back() + 10, 47);
+  EXPECT_EQ(lines[0].xpos, (X{0, 12, 24, 37}));
+}
+TEST(CjkJustification, LatinLinesKeepTheirRounding) {
+  // aa bb cc on 81 px: 11 px over 2 word gaps, 5 each; the last pixel stays at the end as before.
+  ParsedText text(false, false, aligned(CssTextAlign::Justify));
+  for (const char* word : {"aa", "bb", "cc", "dd"}) text.addWord(word, EpdFontFamily::REGULAR);
+  const auto lines = layout(text, 81);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0].xpos, (X{0, 30, 60}));
+}

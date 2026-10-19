@@ -1432,6 +1432,7 @@ ParsedText::LineProcessResult ParsedText::extractLine(
 
   int lineWordWidthSum = 0;
   size_t actualGapCount = 0;
+  bool cjkGapOnLine = false;
   int totalNaturalGaps = 0;
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
@@ -1445,6 +1446,7 @@ ParsedText::LineProcessResult ParsedText::extractLine(
       // A word gap or a CJK gap: both stretch when justified, only the word gap has a width.
       const bool beforeClosing = isClosingPunctuation(firstCp);
       if (!beforeClosing) actualGapCount++;
+      if (boundary.noSpaceBefore) cjkGapOnLine = true;
       if (TokenBoundary::hasSpace(boundary)) {
         // Inter-word gaps scale with the preceding word's effective size, matching wordStyles usage.
         totalNaturalGaps += static_cast<int>(
@@ -1473,9 +1475,21 @@ ParsedText::LineProcessResult ParsedText::extractLine(
   // For justified text, compute per-gap extra to distribute remaining space evenly.
   // Cap stretch to effectivePageWidth/8 per gap to prevent rivers in sparse lines.
   const int spareSpace = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
-  const int justifyExtra = (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1)
-                               ? std::min(spareSpace / static_cast<int>(actualGapCount), effectivePageWidth / 8)
-                               : 0;
+  const bool justified = blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1;
+  const int justifyExtra =
+      justified ? std::min(spareSpace / static_cast<int>(actualGapCount), effectivePageWidth / 8) : 0;
+  // A line with CJK gaps ends flush: what the even share leaves over goes 1 px each to evenly spaced gaps
+  // (spec 5.1). Latin lines keep the old rounding, so their layout does not move.
+  const int justifyRemainder = justified && cjkGapOnLine && justifyExtra < effectivePageWidth / 8 && spareSpace > 0
+                                   ? spareSpace - justifyExtra * static_cast<int>(actualGapCount)
+                                   : 0;
+  int stretchedGaps = 0;
+  const auto gapExtra = [&]() {
+    const int g = stretchedGaps++;
+    const int gaps = static_cast<int>(actualGapCount);
+    if (gaps == 0) return justifyExtra;
+    return justifyExtra + ((g + 1) * justifyRemainder / gaps - g * justifyRemainder / gaps);
+  };
 
   // Calculate initial x position (first line starts at indent for left/justified text;
   // may be negative for hanging indents, e.g. margin-left:3em; text-indent:-1em).
@@ -1526,7 +1540,7 @@ ParsedText::LineProcessResult ParsedText::extractLine(
       // Non-breaking space tokens are stretchable — expand them during justification like normal spaces.
       if (words[lastBreakAt + wordIdx] == " " && boundaries[lastBreakAt + wordIdx].continues &&
           blockStyle.alignment == CssTextAlign::Justify && !isLastLine) {
-        advance += justifyExtra;
+        advance += gapExtra();
       }
       xpos += advance;
     } else {
@@ -1542,7 +1556,7 @@ ParsedText::LineProcessResult ParsedText::extractLine(
         // extra space before ".", ")", "»" etc.
         const bool nextIsClosing = isClosingPunctuation(nextFirstCp);
         if (blockStyle.alignment == CssTextAlign::Justify && !isLastLine && !nextIsClosing) {
-          gap += justifyExtra;
+          gap += gapExtra();
         }
       }
       xpos += box + gap;
