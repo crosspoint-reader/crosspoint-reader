@@ -5,6 +5,7 @@
 #include <Utf8.h>
 
 #include <deque>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -18,6 +19,8 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 
 class GfxRenderer {
  public:
+  mutable size_t fontPreparations = 0;
+  std::function<void()> onFontPrepare;
   enum class TextMeasureMode { Layout, Rendered };
   // The fixture has no framebuffer to lend; image probes run as without a loan.
   class FrameBufferLoan {
@@ -111,6 +114,8 @@ class GfxRenderer {
   }
   void ensureSdCardFontReady(int fontId, const char* const* segments, const size_t* lengths, size_t count,
                              bool includeSpace, bool includeHyphen, uint8_t mask, bool includeSmallCaps = false) const {
+    ++fontPreparations;
+    if (onFontPrepare) onFontPrepare();
     for (size_t i = 0; i < count; ++i) {
       const char* word = segments[i];
       while (word < segments[i] + lengths[i]) {

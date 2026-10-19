@@ -1,6 +1,7 @@
 #include "Dictionary.h"
 
 #include <Arduino.h>
+#include <HalMemory.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -632,11 +633,22 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
 }
 
 bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-                        LookupResult* outResult) {
+                        LookupResult* outResult, DictLocation* locationOut) {
+  if (locationOut) *locationOut = {};
   const auto setResult = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
   };
   setResult(LookupResult::NotFound);
+  // cleanWord plus three stem variants can retain five input-sized buffers,
+  // including growth of a concatenated variant. Keep the viewer intact on OOM.
+  const size_t wordBytes = word ? strlen(word) + 1 : 1;
+  const size_t workingBytes = 5 * wordBytes + 6 * sizeof(std::string) + DEFINITION_HEAP_HEADROOM_BYTES;
+  const auto heap = HalMemory::getDefaultHeap();
+  if (heap.freeBytes < workingBytes || heap.largestBlockBytes < 2 * wordBytes) {
+    LOG_ERR("DICT", "Low heap for lookup (%u byte working set)", static_cast<unsigned>(workingBytes));
+    setResult(LookupResult::LowMemory);
+    return false;
+  }
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
@@ -685,6 +697,7 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   // Found in the index — propagate the precise failure reason from readDefinition
   // (decompression / low memory / read error) so the caller can name it.
   if (readDefinition(location, definitionOut, outResult)) {
+    if (locationOut) *locationOut = location;
     setResult(LookupResult::Found);
     return true;
   }

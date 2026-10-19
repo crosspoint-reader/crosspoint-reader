@@ -65,8 +65,25 @@ HTML dictionaries (`sametypesequence=h`) and XDXF dictionaries (`sametypesequenc
 Definitions are drawn in your reading font. Dictionaries may use IPA symbols (e.g. `ˈ ː ɹ ɪ ʊ`…) as pronunciation guide, which built-in reader fonts do not include, so they are shown as `�`. To see them, install an [SD card font](./sd-card-fonts.md) that covers IPA and select it as the reading font.
 
 - **Left/Right** or side **Up/Down** — previous / next page
-- **Back** — return to word selection
+- **Confirm** — select words or a phrase inside the definition, then choose **Look Up**
+- **Long press on text** — select the touched word on touchscreen devices when touch reader controls are enabled
+- **Back during selection** — cancel selection
+- **Back while reading a definition** — return to the previous definition, or to book word selection at the first definition
+- **Long Back while reading a definition** — hold **Back** for at least one second, then release to close all definitions and return directly to reading
+- **Long press the header Back arrow** — close all definitions and return directly to reading on touchscreen devices, even when touch reader controls are disabled
 
+During definition word selection, press **Back** to cancel selection first, then hold **Back** or long-press the header Back arrow to leave the lookup chain.
+
+Nested lookups use the same dictionary. Both formatted and plain-text definitions support selection.
+Returning to a previous definition restores its page and remembers its selection for the next press of **Confirm**.
+
+The reader keeps up to 16 previous definitions. At this limit, another lookup shows a brief message and leaves the current definition open.
+A failed lookup reloads the current definition and keeps its page and selection.
+
+The current definition is released before loading another entry, so two definitions do not need to fit in memory together.
+Returning to a previous definition reads it from the SD card again.
+If a previous definition cannot be read or its position restored, the definition screen closes and returns to book word selection.
+The screen also closes if a failed forward lookup cannot reload the current definition.
 
 
 ## Where to find dictionaries

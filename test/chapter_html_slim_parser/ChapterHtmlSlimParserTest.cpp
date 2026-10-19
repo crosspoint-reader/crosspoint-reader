@@ -191,6 +191,72 @@ TEST_F(ChapterHtmlSlimParserTest, StreamsGifDimensionsWithoutExtractingPayload) 
   std::filesystem::remove(imagePath);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, AbandonedLayoutStopsExtractingLines) {
+  ParsedText text;
+  for (int i = 0; i < 100; ++i) text.addWord("word", EpdFontFamily::REGULAR);
+  bool stop = false;
+  size_t lines = 0;
+  text.layoutAndExtractLines(
+      renderer, 0, 80,
+      [&](std::unique_ptr<TextBlock>, uint32_t) {
+        ++lines;
+        stop = true;
+      },
+      true, 0, 100, SIZE_MAX, &stop);
+  EXPECT_EQ(lines, 1u);
+}
+
+class ParserStopTest : public ChapterHtmlSlimParserTest {};
+
+TEST_P(ParserStopTest, PageCallbackStopsParsingAndClosesFile) {
+  filepath = (std::filesystem::temp_directory_path() / "crosspoint-parser-stop.xhtml").string();
+  std::string html = "<html><body>";
+  for (int i = 0; i < 100; ++i) html += GetParam();
+  html += "</body></html>";
+  {
+    HalFile file;
+    ASSERT_TRUE(file.open(filepath.c_str(), "wb"));
+    ASSERT_EQ(file.write(html.data(), html.size()), html.size());
+  }
+  renderer.sdFont = true;
+  parser.viewportWidth = 160;
+  parser.viewportHeight = 32;
+  unsigned pages = 0;
+  size_t fontPreparationsAtStop = 0;
+  parser.completePageFn = [&](std::unique_ptr<Page> page, auto, auto, auto) {
+    ASSERT_NE(page, nullptr);
+    ++pages;
+    fontPreparationsAtStop = renderer.fontPreparations;
+    parser.requestStop();
+  };
+  EXPECT_FALSE(parser.parseAndBuildPages());
+  EXPECT_EQ(pages, 1u);
+  EXPECT_EQ(renderer.fontPreparations, fontPreparationsAtStop);
+  EXPECT_EQ(parser.xmlParser_, nullptr);
+  EXPECT_FALSE(parser.parseFile_.isOpen());
+  std::filesystem::remove(filepath);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    FlowBoundaries, ParserStopTest,
+    ::testing::Values("<p>one two three four five six seven eight</p>", "one two three four five six seven eight ",
+                      "<p>one two three four five six</p><hr/>",
+                      "<table><tr><td>one two three four</td><td>five six seven eight</td></tr></table>"));
+
+TEST_F(ChapterHtmlSlimParserTest, StopDuringFinalFlushDoesNotEmitAnotherPage) {
+  parser.viewportWidth = 80;
+  parser.viewportHeight = 32;
+  for (int i = 0; i < 100; ++i) parser.currentTextBlock->addWord("word", EpdFontFamily::REGULAR);
+  unsigned pages = 0;
+  parser.completePageFn = [&](std::unique_ptr<Page> page, auto, auto, auto) {
+    ASSERT_NE(page, nullptr);
+    ++pages;
+    parser.requestStop();
+  };
+  EXPECT_FALSE(parser.finishParse());
+  EXPECT_EQ(pages, 1u);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
   ParsedText text;
   text.addWord("a", EpdFontFamily::REGULAR);

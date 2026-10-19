@@ -163,7 +163,15 @@ void KOReaderSyncActivity::performSync() {
       statusMessage = tr(STR_SYNCING_CLIPPINGS);
     }
     requestUpdateAndWait();
-    if (!clippingSync::run(epubPath, documentHash)) {
+    bool clippingsSynced;
+    {
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && CONFIG_IDF_TARGET_ESP32C3
+      RenderLock lock;
+      GfxRenderer::FrameBufferLoan loan(renderer);
+#endif
+      clippingsSynced = clippingSync::run(epubPath, documentHash);
+    }
+    if (!clippingsSynced) {
       {
         RenderLock lock(*this);
         state = SYNC_FAILED;

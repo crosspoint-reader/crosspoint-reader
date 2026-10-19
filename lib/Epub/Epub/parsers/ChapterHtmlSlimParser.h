@@ -226,6 +226,7 @@ class ChapterHtmlSlimParser {
   // ParsedText::hadDroppedWords() this turns layout OOM into ParseStatus::Error
   // so the section build fails readably instead of emitting pages with holes.
   bool layoutOom = false;
+  bool stopRequested = false;
 
   // Resumable parse state. The one-shot parseAndBuildPages() drives these
   // internally; the incremental section builder drives them across render ticks
@@ -332,8 +333,10 @@ class ChapterHtmlSlimParser {
   enum class ParseStatus { More, Done, Error };
   bool beginParse();
   ParseStatus parseStep();
-  bool finishParse();  // flush the trailing page and tear down; returns true
+  bool finishParse();  // flush the trailing page and tear down; false on OOM/stop
   void abortParse();   // tear down without flushing (error / abandon)
+  // Safe from completePageFn; cleanup waits until the active callback returns.
+  void requestStop();
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
