@@ -6,6 +6,11 @@ Parses each generated .h file in the given directory, identifies compressed font
 (those with a Groups array), decompresses each group (byte-aligned bitmap format),
 compacts to packed format, and verifies the data matches expected glyph sizes.
 
+Both bit depths: the 2-bit reader faces (fontconvert.py) and the 1-bit UI faces
+(compress_ui_face.py), whose rows are padded to a byte the same way. A 1-bit face also
+carries the length and CRC32 of the flat bitmap it decodes back to (<name>PackedBytes,
+<name>PackedCrc32); those are checked against the decompressed glyphs too.
+
 Supports both contiguous-group fonts (Latin) and frequency-grouped fonts (CJK)
 with glyphToGroup mapping arrays.
 """
@@ -43,13 +48,13 @@ def parse_groups(text):
     return groups
 
 
-def parse_glyphs(text, is_2bit=True):
+def parse_glyphs(text, is_2bit):
     """Parse EpdGlyphPacked entries: { width, height, advanceX, left, top }.
 
     dataLength is not stored -- it is derived from width * height * bpp, and this script is one of
     the things that keeps that derivation honest: it compares the derived value against the actual
-    packed length of every glyph it decompresses. Only compressed fonts reach here, and --compress
-    requires --2bit, so bpp is 2 unless a caller says otherwise.
+    packed length of every glyph it decompresses. The caller says the bit depth: the header's
+    `mode:` line.
     """
     glyphs = []
     bpp = 2 if is_2bit else 1
@@ -75,6 +80,21 @@ def get_group_glyph_indices(group, group_index, glyphs, glyph_to_group):
         # Contiguous: sequential from firstGlyphIndex
         first = group['firstGlyphIndex']
         return list(range(first, first + group['glyphCount']))
+
+
+def compact_aligned_1bit_to_packed(aligned_data, width, height):
+    """Byte-aligned 1-bit rows to the continuous 1-bit stream (reverse of row_aligned() in
+    compress_ui_face.py)."""
+    if width == 0 or height == 0:
+        return b''
+    packed = bytearray(math.ceil(width * height / 8))
+    row_stride = (width + 7) // 8
+    for y in range(height):
+        for x in range(width):
+            if (aligned_data[y * row_stride + x // 8] >> (7 - (x % 8))) & 1:
+                pos = y * width + x
+                packed[pos // 8] |= 0x80 >> (pos % 8)
+    return bytes(packed)
 
 
 def compact_aligned_to_packed(aligned_data, width, height):
@@ -116,6 +136,7 @@ def verify_font_file(filepath):
         return (os.path.basename(filepath), None, "uncompressed, skipping")
 
     font_name = groups_match.group(1)
+    is_2bit = ' * mode: 2-bit' in content
 
     # Extract bitmap data
     bitmap_match = re.search(
@@ -147,7 +168,7 @@ def verify_font_file(filepath):
     if not glyphs_match:
         return (font_name, False, "could not find Glyphs array")
 
-    glyphs = parse_glyphs(glyphs_match.group(1))
+    glyphs = parse_glyphs(glyphs_match.group(1), is_2bit)
 
     # Check for glyphToGroup array (frequency-grouped fonts)
     glyph_to_group = None
@@ -164,6 +185,7 @@ def verify_font_file(filepath):
             return (font_name, False, f"glyphToGroup contains group ID {max_group_id} but only {len(groups)} groups exist")
 
     # Verify each group
+    packed_by_glyph = {}
     for gi, group in enumerate(groups):
         # Extract compressed chunk
         chunk = compressed_data[group['compressedOffset']:group['compressedOffset'] + group['compressedSize']]
@@ -200,8 +222,12 @@ def verify_font_file(filepath):
                     return (font_name, False, f"group {gi}, glyph {glyph_idx}: zero-size glyph dataLength {glyph['dataLength']} != expected 0")
                 continue
 
-            aligned_size = ((width + 3) // 4) * height
-            packed_size = math.ceil(width * height / 4)
+            if is_2bit:
+                aligned_size = ((width + 3) // 4) * height
+                packed_size = math.ceil(width * height / 4)
+            else:
+                aligned_size = ((width + 7) // 8) * height
+                packed_size = math.ceil(width * height / 8)
 
             # dataLength is the whole check now. A compressed font no longer stores an offset at
             # all: FontDecompressor walks the group to find where a glyph starts, so the only thing
@@ -219,7 +245,11 @@ def verify_font_file(filepath):
             aligned_glyph = decompressed[byte_aligned_offset:byte_aligned_offset + aligned_size]
 
             # Compact to packed and verify pixel values are valid (0-3 for 2-bit)
-            packed_glyph = compact_aligned_to_packed(aligned_glyph, width, height)
+            if is_2bit:
+                packed_glyph = compact_aligned_to_packed(aligned_glyph, width, height)
+            else:
+                packed_glyph = compact_aligned_1bit_to_packed(aligned_glyph, width, height)
+            packed_by_glyph[glyph_idx] = packed_glyph
             if len(packed_glyph) != packed_size:
                 return (font_name, False, f"group {gi}, glyph {glyph_idx}: compacted size {len(packed_glyph)} != expected {packed_size}")
 
@@ -229,9 +259,24 @@ def verify_font_file(filepath):
         if byte_aligned_offset != group['uncompressedSize']:
             return (font_name, False, f"group {gi}: total byte-aligned size {byte_aligned_offset} != uncompressedSize {group['uncompressedSize']}")
 
+    # A 1-bit UI face states the flat bitmap it decodes back to; the glyphs, in order, must be it.
+    packed_bytes_match = re.search(r'static constexpr uint32_t ' + re.escape(font_name) + r'PackedBytes = (\d+);', content)
+    packed_crc_match = re.search(r'static constexpr uint32_t ' + re.escape(font_name) + r'PackedCrc32 = 0x([0-9A-Fa-f]+);',
+                                 content)
+    if packed_bytes_match or packed_crc_match:
+        if not (packed_bytes_match and packed_crc_match):
+            return (font_name, False, "PackedBytes and PackedCrc32 must come together")
+        flat = b''.join(packed_by_glyph.get(i, b'') for i in range(len(glyphs)))
+        if len(flat) != int(packed_bytes_match.group(1)):
+            return (font_name, False, f"glyphs decode to {len(flat)} B, PackedBytes says {packed_bytes_match.group(1)}")
+        if (zlib.crc32(flat) & 0xFFFFFFFF) != int(packed_crc_match.group(1), 16):
+            return (font_name, False, "glyphs decode to a bitmap whose CRC32 is not PackedCrc32")
+
     extra_info = ""
     if glyph_to_group is not None:
         extra_info = " (frequency-grouped)"
+    if not is_2bit:
+        extra_info += " (1-bit)"
     return (font_name, True, f"{len(groups)} groups, {len(glyphs)} glyphs OK{extra_info}")
 
 
