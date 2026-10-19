@@ -35,6 +35,7 @@
 #include <builtinFonts/notosans_16_regular.h>
 #include <builtinFonts/notosans_18_regular.h>
 #include <esp_heap_caps.h>
+#include <esp_rom_crc.h>
 #include <esp_timer.h>
 
 // ---------------------------------------------------------------------------
@@ -316,6 +317,27 @@ static void benchCjkInflate(const char* label, const EpdFontData* data) {
   const int64_t us = timerElapsedUs();
   Serial.printf("BENCH cjk_inflate       %-18s total=%6lldus  bytes=%lu  per_byte=%lldns  %s\n", label, us,
                 (unsigned long)bytes, bytes ? (us * 1000) / bytes : 0, ok ? "ok" : "FAILED");
+}
+
+// ---------------------------------------------------------------------------
+// 4c. What checking the language pack slot costs on every map.
+//
+// FlashLangPartition::map() runs esp_rom_crc32_le over everything the slot holds before it hands
+// out a pointer: 88,264 B for Chinese, ~20-30 KB for most languages, once per boot and per language
+// change. Measured here over two font arrays of about that size, read through the flash cache cold,
+// as the mapped slot is. Host-estimated at 5-25 ms for Chinese.
+// ---------------------------------------------------------------------------
+
+static void benchSlotCrc() {
+  constexpr uint32_t CHINESE_SLOT_BYTES = 88264;
+  timerStart();
+  uint32_t crc = esp_rom_crc32_le(0, notosans_18_regularBitmaps, sizeof(notosans_18_regularBitmaps));
+  crc = esp_rom_crc32_le(crc, bookerly_18_bolditalicBitmaps, sizeof(bookerly_18_bolditalicBitmaps));
+  const int64_t us = timerElapsedUs();
+  sink += crc;
+  const uint32_t bytes = sizeof(notosans_18_regularBitmaps) + sizeof(bookerly_18_bolditalicBitmaps);
+  Serial.printf("BENCH slot_crc          %-18s total=%6lldus  bytes=%lu  per_byte=%lldns  chinese_slot~%lldus\n",
+                "rom crc32_le", us, (unsigned long)bytes, (us * 1000) / bytes, us * CHINESE_SLOT_BYTES / bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -944,6 +966,7 @@ void setup() {
   benchCjkCold("cjk_ui_zh_12", &cjk_ui_zh_12);
   benchCjkInflate("cjk_ui_zh_10", &cjk_ui_zh_10);
   benchCjkInflate("cjk_ui_zh_12", &cjk_ui_zh_12);
+  benchSlotCrc();
 
   Serial.println("\n-- Fallback-slot sizing (correctness, not timing) --");
   checkWidestGlyph("bookerly_18_bi", &bookerly_18_bolditalic, 0x01C4);

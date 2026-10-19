@@ -27,6 +27,8 @@
 //   [ 4 B] data length
 //   [ 4 B] extension offset, from slot start (0: none)
 //   [ 4 B] extension length (0: none)
+//   [ 4 B] CRC32 of the strings: the data, then the table, as build() wrote them
+//   [ 4 B] CRC32 of the extension, as build() wrote it (0: none)
 //   [table] keyCount x uint16_t — offsets into data; bit 15 set means "fall back
 //           to English", with the low 15 bits being the offset into the English
 //           blob, matching what the generator emits for in-image languages
@@ -39,18 +41,25 @@
 //           their CJK UI faces here (src/CjkUiFonts.cpp), inflated from the
 //           compressed faces in the image so they read like rodata.
 //
-// The two extension fields were the reserved bytes of the original layout,
-// which build() always wrote as zero, so a slot from before them reads as a
-// pack without an extension.
-//
 // The header is written LAST. A power cut part-way through build() therefore
 // leaves no magic, and the slot reads as absent rather than as plausible
 // garbage — the reader falls back to English and rebuilds on the next boot.
+//
+// Why the contents carry CRCs (format 2). The header alone cannot prove the
+// bytes behind it are the ones it describes, because other firmware writes this
+// flash too. A firmware from before the 128 KB slot keeps its own 64 KB slot in
+// this slot's upper half, and its font cache and TTF glyph store in the lower
+// half; any of them can rewrite sectors here and leave this header standing.
+// Measured on the X3: back from such a firmware, the Chinese pack still
+// "matched", and its 12 pt CJK face drew as solid boxes from the bytes that
+// firmware had written over its tail. So map() checks both CRCs before it hands
+// out a pointer, and acquire() rebuilds a slot that fails them.
 
 namespace FlashLangPartition {
 
-static constexpr size_t HEADER_BYTES = 32;
-static constexpr uint8_t FORMAT_VERSION = 1;
+static constexpr size_t HEADER_BYTES = 40;
+// 2: the CRCs. A format-1 slot reads as absent and is rebuilt once.
+static constexpr uint8_t FORMAT_VERSION = 2;
 
 // The largest back-reference distance the generator's deflate encoder may use.
 // It compresses with a 4 KB window precisely so the ring below can be 4 KB
@@ -61,8 +70,8 @@ static constexpr size_t INFLATE_RING_BYTES = 4096;
 struct Mapped {
   const uint16_t* offsets;
   const char* data;
-  // The extension, mapped; nullptr when the slot carries none, or it could not
-  // be mapped with the strings (the strings are then mapped alone).
+  // The extension, mapped and verified; nullptr when the slot carries none, or
+  // it could not be mapped with the strings, or it failed its CRC.
   const uint8_t* ext;
   uint32_t extLen;
 };
@@ -93,8 +102,9 @@ struct Extension {
   void* ctx;
 };
 
-// True when the slot already holds exactly this (language, stamp) pair with an
-// extension of `extBytes` (0: none), i.e. there is nothing to rebuild. An
+// True when the slot's HEADER describes exactly this (language, stamp) pair with
+// an extension of `extBytes` (0: none). Cheap, and not proof: whether the bytes
+// behind the header are still the ones it describes is what map() checks. An
 // extension that failed to build last time does not match, so it is retried.
 bool holds(uint8_t langIndex, uint32_t stamp, uint32_t extBytes);
 
@@ -112,10 +122,31 @@ bool holds(uint8_t langIndex, uint32_t stamp, uint32_t extBytes);
 bool build(uint8_t langIndex, uint32_t stamp, const uint8_t* compressed, size_t compressedLen, size_t uncompressedLen,
            uint16_t keyCount, const uint16_t* enOffsets, const Extension* ext = nullptr);
 
-// Map the slot for reading: as many 64 KB pages as its contents span, the
-// extension included. Fails if it is absent, belongs to another language,
-// carries a different stamp, or is malformed.
-bool map(uint8_t langIndex, uint32_t stamp, uint16_t keyCount, Mapped* out);
+// What map() found.
+enum class MapResult : uint8_t {
+  Ok,                // the strings, and the extension if the slot has one, mapped and verified
+  WithoutExtension,  // the strings mapped and verified; the extension could not be mapped with them
+  ExtensionCorrupt,  // the strings mapped and verified; the extension failed its CRC and is withheld
+  Corrupt,           // the strings failed their CRC: nothing handed out
+  Absent,            // no slot for this language, stamp and key count, or a malformed header
+  MapFailed,         // the strings could not be mapped at all
+};
+
+// Map the slot for reading — as many 64 KB pages as its contents span, the
+// extension included — and verify what it maps against the header's CRCs
+// before handing any of it out: one read of the mapped bytes, ~88 KB for
+// Chinese. `out` is filled only for Ok, WithoutExtension and ExtensionCorrupt.
+MapResult map(uint8_t langIndex, uint32_t stamp, uint16_t keyCount, Mapped* out);
+
+// Everything I18n wants from the slot, in one call: the pack of `langIndex`
+// mapped and verified, built first when the slot does not hold it and REBUILT
+// when it holds it but fails its CRCs, then mapped once more. One build at
+// most, whatever happens, so a slot that keeps failing costs one rebuild per
+// call rather than a loop. After a rebuild an extension that still fails is
+// left out and the strings stand alone. False: no strings could be had (the
+// caller stays on English).
+bool acquire(uint8_t langIndex, uint32_t stamp, const uint8_t* compressed, size_t compressedLen, size_t uncompressedLen,
+             uint16_t keyCount, const uint16_t* enOffsets, const Extension* ext, Mapped* out);
 
 // Release the mapping. No-op if not mapped.
 void unmap();

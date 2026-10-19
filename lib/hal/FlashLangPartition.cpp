@@ -3,6 +3,7 @@
 #include <InflateReader.h>
 #include <Logging.h>
 #include <esp_partition.h>
+#include <esp_rom_crc.h>
 
 #include <algorithm>
 #include <cstring>
@@ -24,6 +25,11 @@ static size_t s_mapBytes = 0;  // how much of the slot the live mapping covers
 
 static constexpr size_t roundUp(const size_t v, const size_t to) { return (v + to - 1) / to * to; }
 
+// CRC-32 as zlib computes it, chained from 0. ROM code: costs no flash.
+static uint32_t crc32(const uint32_t crc, const void* data, const size_t len) {
+  return esp_rom_crc32_le(crc, static_cast<const uint8_t*>(data), static_cast<uint32_t>(len));
+}
+
 // On-flash header, read and written as a unit. Packed layout is fixed by the
 // comment in the header file; the struct mirrors it so the offsets stay in one
 // place rather than being recomputed at each access.
@@ -38,6 +44,8 @@ struct Header {
   uint32_t dataLen;
   uint32_t extOff;  // 0 with extLen 0: no extension
   uint32_t extLen;
+  uint32_t stringsCrc;  // the data, then the table
+  uint32_t extCrc;
 };
 static_assert(sizeof(Header) == HEADER_BYTES, "language slot header layout changed");
 
@@ -63,6 +71,13 @@ static bool readHeader(const esp_partition_t* part, Header& out) {
   if (memcmp(out.magic, MAGIC, 4) != 0) return false;
   if (out.version != FORMAT_VERSION) return false;
   return true;
+}
+
+// The table and the strings where build() puts them, inside the slot. A header that says otherwise is
+// not one this firmware wrote.
+static bool layoutValid(const Header& h) {
+  return h.tableOff == HEADER_BYTES && h.dataOff >= h.tableOff + static_cast<uint32_t>(h.keyCount) * 2u &&
+         static_cast<size_t>(h.dataOff) + h.dataLen <= FlashFontPartition::LANG_RESERVED_BYTES;
 }
 
 // The extension a header describes, if it is one this firmware can trust: after the strings and
@@ -93,6 +108,7 @@ class ChunkedSlotWriter final : public SlotWriter {
       failed_ = true;
       return false;
     }
+    crc_ = crc32(crc_, data, len);
     const auto* bytes = static_cast<const uint8_t*>(data);
     while (len > 0) {
       const size_t take = std::min(len, WRITE_CHUNK - fill_);
@@ -110,6 +126,8 @@ class ChunkedSlotWriter final : public SlotWriter {
   // Programs what is still buffered. The total written, once this succeeds.
   bool finish() { return flush(); }
   size_t written() const { return written_; }
+  // CRC32 of every byte handed to write(): what map() expects to read back.
+  uint32_t crc() const { return crc_; }
 
  private:
   bool flush() {
@@ -133,6 +151,7 @@ class ChunkedSlotWriter final : public SlotWriter {
   size_t scratchBytes_;
   size_t fill_ = 0;
   size_t written_ = 0;
+  uint32_t crc_ = 0;
   bool failed_ = false;
 };
 
@@ -256,6 +275,9 @@ bool build(const uint8_t langIndex, const uint32_t stamp, const uint8_t* compres
 
   TableBuilder builder(table.get(), keyCount, enOffsets);
   size_t written = 0;
+  // Over the bytes as they are written, from RAM: a byte that did not program, or that something else
+  // overwrites later, then fails map()'s check of what flash holds.
+  uint32_t stringsCrc = 0;
   bool done = false;
   while (!done) {
     size_t produced = 0;
@@ -274,6 +296,7 @@ bool build(const uint8_t langIndex, const uint32_t stamp, const uint8_t* compres
         return false;
       }
       builder.feed(chunk.get(), produced);
+      stringsCrc = crc32(stringsCrc, chunk.get(), produced);
       written += produced;
     }
     done = (st == InflateStatus::Done);
@@ -293,13 +316,16 @@ bool build(const uint8_t langIndex, const uint32_t stamp, const uint8_t* compres
     LOG_ERR("FLP", "table write failed");
     return false;
   }
+  stringsCrc = crc32(stringsCrc, table.get(), tableBytes);
 
   // The extension, through the staging chunk; the inflate ring is free now and is its scratch.
   uint32_t extLen = 0;
+  uint32_t extCrc = 0;
   if (ext) {
     ChunkedSlotWriter writer(part, slot + extOff, ext->bytes, chunk.get(), ring.get(), INFLATE_RING_BYTES);
     if (ext->produce(ext->ctx, writer) && writer.finish() && writer.written() == ext->bytes) {
       extLen = ext->bytes;
+      extCrc = writer.crc();
     } else {
       LOG_ERR("FLP", "language %u extension failed after %u of %u B - the strings stand alone", langIndex,
               static_cast<unsigned>(writer.written()), static_cast<unsigned>(ext->bytes));
@@ -318,6 +344,8 @@ bool build(const uint8_t langIndex, const uint32_t stamp, const uint8_t* compres
   h.dataLen = static_cast<uint32_t>(written);
   h.extOff = extLen ? static_cast<uint32_t>(extOff) : 0;
   h.extLen = extLen;
+  h.stringsCrc = stringsCrc;
+  h.extCrc = extCrc;
   if (esp_partition_write(part, slot, &h, sizeof(h)) != ESP_OK) {
     LOG_ERR("FLP", "header write failed");
     return false;
@@ -329,23 +357,24 @@ bool build(const uint8_t langIndex, const uint32_t stamp, const uint8_t* compres
   return true;
 }
 
-bool map(const uint8_t langIndex, const uint32_t stamp, const uint16_t keyCount, Mapped* out) {
-  if (!out) return false;
+MapResult map(const uint8_t langIndex, const uint32_t stamp, const uint16_t keyCount, Mapped* out) {
+  if (!out) return MapResult::Absent;
 
   const esp_partition_t* part = findPartition();
-  if (!part) return false;
+  if (!part) return MapResult::Absent;
   const size_t slot = slotOffset(part);
-  if (slot == 0) return false;
+  if (slot == 0) return MapResult::Absent;
 
   Header h;
-  if (!readHeader(part, h)) return false;
-  if (h.langIndex != langIndex || h.stamp != stamp || h.keyCount != keyCount) return false;
-  if (h.dataOff + h.dataLen > FlashFontPartition::LANG_RESERVED_BYTES) return false;
+  if (!readHeader(part, h)) return MapResult::Absent;
+  if (h.langIndex != langIndex || h.stamp != stamp || h.keyCount != keyCount) return MapResult::Absent;
+  if (!layoutValid(h)) return MapResult::Absent;
 
   // Whole pages, and only as many as the contents span: every page mapped here is one the flash
   // font cache cannot map (the C3 shares 128 of them between the app and every mapping), so a pack
   // without an extension still costs exactly the one page it always did.
-  bool withExt = extensionValid(h);
+  const bool hasExt = extensionValid(h);
+  bool withExt = hasExt;
   const size_t stringsEnd = h.dataOff + h.dataLen;
   for (;;) {
     const size_t need = roundUp(withExt ? static_cast<size_t>(h.extOff) + h.extLen : stringsEnd, MAP_PAGE_BYTES);
@@ -360,19 +389,64 @@ bool map(const uint8_t langIndex, const uint32_t stamp, const uint16_t keyCount,
     }
     if (!withExt) {
       LOG_ERR("FLP", "mmap failed");
-      return false;
+      return MapResult::MapFailed;
     }
     LOG_ERR("FLP", "mmap of %u B with the extension failed - mapping the strings alone", static_cast<unsigned>(need));
     withExt = false;
   }
 
-  out->offsets = reinterpret_cast<const uint16_t*>(s_mmapPtr + h.tableOff);
-  out->data = reinterpret_cast<const char*>(s_mmapPtr + h.dataOff);
-  out->ext = withExt ? s_mmapPtr + h.extOff : nullptr;
-  out->extLen = withExt ? h.extLen : 0;
+  // Nothing is handed out before the bytes behind the header are proved to be the ones it was
+  // written with. A corrupt table would otherwise send a string read anywhere.
+  const uint8_t* base = s_mmapPtr;
+  const uint32_t stringsCrc =
+      crc32(crc32(0, base + h.dataOff, h.dataLen), base + h.tableOff, static_cast<size_t>(h.dataOff - h.tableOff));
+  if (stringsCrc != h.stringsCrc) {
+    LOG_ERR("FLP", "language %u strings fail their CRC (%08lx, header %08lx)", langIndex,
+            static_cast<unsigned long>(stringsCrc), static_cast<unsigned long>(h.stringsCrc));
+    return MapResult::Corrupt;
+  }
+  out->offsets = reinterpret_cast<const uint16_t*>(base + h.tableOff);
+  out->data = reinterpret_cast<const char*>(base + h.dataOff);
+  out->ext = nullptr;
+  out->extLen = 0;
+
+  MapResult result = MapResult::Ok;
+  if (withExt) {
+    const uint32_t extCrc = crc32(0, base + h.extOff, h.extLen);
+    if (extCrc == h.extCrc) {
+      out->ext = base + h.extOff;
+      out->extLen = h.extLen;
+    } else {
+      LOG_ERR("FLP", "language %u extension fails its CRC (%08lx, header %08lx)", langIndex,
+              static_cast<unsigned long>(extCrc), static_cast<unsigned long>(h.extCrc));
+      result = MapResult::ExtensionCorrupt;
+    }
+  } else if (hasExt) {
+    result = MapResult::WithoutExtension;
+  }
   LOG_DBG("FLP", "language %u mapped: table=%p data=%p ext=%p (%u B)", langIndex, out->offsets, out->data, out->ext,
           static_cast<unsigned>(out->extLen));
-  return true;
+  return result;
+}
+
+bool acquire(const uint8_t langIndex, const uint32_t stamp, const uint8_t* compressed, const size_t compressedLen,
+             const size_t uncompressedLen, const uint16_t keyCount, const uint16_t* enOffsets, const Extension* ext,
+             Mapped* out) {
+  const uint32_t extBytes = ext ? ext->bytes : 0;
+  if (holds(langIndex, stamp, extBytes)) {
+    const MapResult held = map(langIndex, stamp, keyCount, out);
+    if (held == MapResult::Ok || held == MapResult::WithoutExtension) return true;
+    // A rebuild cannot give the strings a mapping the MMU has no page for.
+    if (held == MapResult::MapFailed) return false;
+    LOG_ERR("FLP", "language %u slot holds bytes it was not written with - rebuilding", langIndex);
+  }
+  // Either a different language, or the same one from a different firmware build — the stamp covers
+  // both — or the bytes behind the header changed since. One build, whatever it leads to.
+  if (!build(langIndex, stamp, compressed, compressedLen, uncompressedLen, keyCount, enOffsets, ext)) return false;
+  const MapResult built = map(langIndex, stamp, keyCount, out);
+  // An extension that fails even when just written is left out: the strings are what matter, and the
+  // extension's reader works without it (CjkUiFonts decodes per glyph instead).
+  return built == MapResult::Ok || built == MapResult::WithoutExtension || built == MapResult::ExtensionCorrupt;
 }
 
 void unmap() {

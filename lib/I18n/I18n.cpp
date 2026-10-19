@@ -56,39 +56,33 @@ void I18n::refreshActiveStrings() {
   const uint32_t extBytes = _ext ? _ext->bytes(_language) : 0;
   const uint32_t stamp = extBytes ? pack.stamp ^ _ext->stamp(_language) : pack.stamp;
 
-  if (!FlashLangPartition::holds(langIndex, stamp, extBytes)) {
-    // Either a different language, or the same one from a different firmware
-    // build — the stamp covers both. Rebuilding costs an erase plus ~30 KB of
-    // inflate, once, and only on the boot that follows the change; a CJK
-    // language adds its UI faces, ~45-73 KB of inflate more.
-    struct Producer {
-      LanguagePackExtension* ext;
-      Language lang;
-    } producer{_ext, _language};
-    const FlashLangPartition::Extension extension{extBytes,
-                                                  [](void* ctx, FlashLangPartition::SlotWriter& out) {
-                                                    const auto* p = static_cast<const Producer*>(ctx);
-                                                    return p->ext->produce(p->lang, out);
-                                                  },
-                                                  &producer};
-    if (!FlashLangPartition::build(langIndex, stamp, pack.data, pack.compressedLen, pack.uncompressedLen, keyCount,
-                                   OFFSETS_EN, extBytes ? &extension : nullptr)) {
-      LOG_ERR("I18N", "language pack %u could not be built - staying on English", langIndex);
-      return;
-    }
-  }
-
+  // Built when the slot does not hold this pack -- a different language, the same one from a
+  // different firmware build (the stamp covers both), or bytes that changed behind its header since,
+  // which acquire() finds by the slot's CRCs and rebuilds at once, in this boot. Rebuilding costs an
+  // erase plus ~30 KB of inflate; a CJK language adds its UI faces, ~45-73 KB of inflate more.
+  struct Producer {
+    LanguagePackExtension* ext;
+    Language lang;
+  } producer{_ext, _language};
+  const FlashLangPartition::Extension extension{extBytes,
+                                                [](void* ctx, FlashLangPartition::SlotWriter& out) {
+                                                  const auto* p = static_cast<const Producer*>(ctx);
+                                                  return p->ext->produce(p->lang, out);
+                                                },
+                                                &producer};
   FlashLangPartition::Mapped mapped;
-  if (!FlashLangPartition::map(langIndex, stamp, keyCount, &mapped)) {
-    LOG_ERR("I18N", "language pack %u could not be mapped - staying on English", langIndex);
+  if (!FlashLangPartition::acquire(langIndex, stamp, pack.data, pack.compressedLen, pack.uncompressedLen, keyCount,
+                                   OFFSETS_EN, extBytes ? &extension : nullptr, &mapped)) {
+    LOG_ERR("I18N", "language pack %u could not be built or mapped - staying on English", langIndex);
     return;
   }
 
   _active = {mapped.data, mapped.offsets};
   LOG_INF("I18N", "language pack %u active", langIndex);
 
-  // An extension that failed to build or to map is simply not attached; its reader works without
-  // it. holds() above sees the missing extension next time and builds again.
+  // An extension that failed to build, to map or to verify is simply not attached; its reader works
+  // without it. One that failed to build or to verify is built again by the next refresh; one the
+  // MMU had no page for is not, since a rebuild would not change that.
   if (_ext && mapped.ext && mapped.extLen == extBytes) _ext->attach(_language, mapped.ext, mapped.extLen);
 }
 
