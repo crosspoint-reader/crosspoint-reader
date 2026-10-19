@@ -1,6 +1,6 @@
 # Posts (and keeps updated) a comment on each PR linking the firmware artifacts
-# that CI built for its head commit, so a change can be flashed without digging
-# through the Actions UI.
+# and the web interface bundle that CI built for its head commit, so a change can
+# be flashed without digging through the Actions UI.
 #
 # Ported from crosspoint-reader PR #3389 (Uri Tauber / @uritauber). The logic is
 # theirs; the board list is ours and must track ci.yml's build matrix.
@@ -91,20 +91,39 @@ jobs:
                 .map((artifact) => [artifact.name, artifact]),
             );
             const missingBuilds = builds.filter((build) => !artifacts.has(build.name));
+            // The web interface bundle, web-<hash>.bin, uploaded on its own by ci.yml. Optional,
+            // unlike the builds above: a PR branched before ci.yml uploaded it has none, and
+            // its firmware ZIPs still carry the bundle.
+            const webBundle = [...artifacts.values()].find((artifact) =>
+              /^web-[0-9a-f]+\.bin$/.test(artifact.name),
+            );
+            const artifactUrl = (artifact) =>
+              `https://github.com/${owner}/${repo}/actions/runs/${run.id}/artifacts/${artifact.id}`;
             const shortSha = run.head_sha.slice(0, 7);
             let body = `${marker}\n### Firmware builds\n\n`;
 
             if (missingBuilds.length === 0) {
               const links = builds.map(({ name, device }) => {
                 const artifact = artifacts.get(name);
-                const url = `https://github.com/${owner}/${repo}/actions/runs/${run.id}/artifacts/${artifact.id}`;
-                return `- [${device} (\`${name}\`)](${url})`;
+                return `- [${device} (\`${name}\`)](${artifactUrl(artifact)})`;
               });
+              if (webBundle) {
+                links.push(
+                  `- [Web interface, every device (\`${webBundle.name}\`)](${artifactUrl(webBundle)})`,
+                );
+              }
               body += `Automatically generated for the latest commit of this PR (\`${shortSha}\`).\n\n`;
               body += `${links.join('\n')}\n\n`;
-              body += 'Download the file for your device, extract the `.bin` from the ZIP, then flash it with ';
+              body += 'Download the file for your device, extract the `firmware*.bin` from the ZIP, then flash it with ';
               body += '[CrossPoint Reader Flash Tools](https://crosspointreader.com/#flash-tools). ';
-              body += '**Make sure you use the correct firmware file for your device.**';
+              body += '**Make sure you use the correct firmware file for your device.**\n\n';
+              body += 'The web interface lives on the SD card and must match the firmware. A PR build is not ';
+              body += 'published, so when the device shows the setup page it cannot download the pages itself: ';
+              body += 'extract the `web-….bin` from its ZIP and choose it under *Install from a file*, or copy it ';
+              body += 'to the top folder of the SD card. ';
+              body += webBundle
+                ? 'Each firmware ZIP holds the same file.'
+                : 'It is in each firmware ZIP, next to the firmware.';
 
               if (run.conclusion !== 'success') {
                 body += `\n\n> The firmware builds succeeded, but [another CI check finished with ${run.conclusion}](${run.html_url}).`;

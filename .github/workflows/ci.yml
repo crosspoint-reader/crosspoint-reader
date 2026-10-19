@@ -233,6 +233,7 @@ jobs:
       # because the pages are board-independent and the bundle is
       # byte-reproducible, so the merged download holds one copy for all boards.
       - name: Check the web bundle
+        id: web
         run: |
           set -euo pipefail
           count=$(ls .pio/build/${{ matrix.env }}/web-*.bin 2>/dev/null | wc -l)
@@ -240,6 +241,7 @@ jobs:
             echo "::error::expected one web-*.bin in .pio/build/${{ matrix.env }}, found $count"
             exit 1
           fi
+          echo "name=$(basename .pio/build/${{ matrix.env }}/web-*.bin)" >> "$GITHUB_OUTPUT"
 
       - name: Upload ${{ matrix.asset }} artifact
         uses: actions/upload-artifact@v6
@@ -248,6 +250,18 @@ jobs:
           path: |
             .pio/build/${{ matrix.env }}/${{ matrix.asset }}
             .pio/build/${{ matrix.env }}/web-*.bin
+          if-no-files-found: error
+
+      # The bundle again, on its own, for pr-firmware-links.yml to link: a PR build is not
+      # published, so its setup page cannot download the bundle and the tester has to supply it.
+      # One leg uploads it, since an artifact name can be used only once per run and every leg's
+      # bundle is the same file.
+      - name: Upload the web bundle artifact
+        if: matrix.env == 'default'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.web.outputs.name }}
+          path: .pio/build/${{ matrix.env }}/${{ steps.web.outputs.name }}
           if-no-files-found: error
 
   unit-tests:
