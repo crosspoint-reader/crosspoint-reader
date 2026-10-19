@@ -23,7 +23,6 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "SleepImagePool.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -478,19 +477,23 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
     randomFileIndex = static_cast<uint16_t>(random(fileCount));
   }
 
-  const auto location = SleepImagePool::resolveIndex(directoryCounts, DIRECTORY_COUNT, randomFileIndex);
-  if (!location.valid) return false;
+  size_t directoryIndex = 0;
+  uint16_t localIndex = randomFileIndex;
+  if (randomFileIndex >= directoryCounts[0]) {
+    directoryIndex = 1;
+    localIndex = static_cast<uint16_t>(randomFileIndex - directoryCounts[0]);
+  }
 
-  auto dir = Storage.open(dirPaths[location.directoryIndex]);
+  auto dir = Storage.open(dirPaths[directoryIndex]);
   if (!dir || !dir.isDirectory()) {
-    LOG_ERR("SLP", "Failed to open selected sleep image directory: %s", dirPaths[location.directoryIndex]);
+    LOG_ERR("SLP", "Failed to open selected sleep image directory: %s", dirPaths[directoryIndex]);
     return false;
   }
-  for (uint16_t index = 0; index <= location.localIndex; ++index) {
+  for (uint16_t index = 0; index <= localIndex; ++index) {
     if (!findNextValidSleepImage(dir, recentKind, name.get())) return false;
   }
 
-  const char* selectedDirPath = dirPaths[location.directoryIndex];
+  const char* selectedDirPath = dirPaths[directoryIndex];
   selectedPath.reserve(strlen(selectedDirPath) + 1 + strlen(name.get()));
   selectedPath = selectedDirPath;
   selectedPath += "/";
