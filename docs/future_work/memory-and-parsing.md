@@ -40,15 +40,11 @@ The rules and measurements these items refer to are in [Memory Allocation Strate
 
 ## The image lane waits for Background-B
 
-**Open.** The image lane (`EpubReaderActivity::stepImageWarmLocked`) runs only while Background-B is not building (`backgroundBuildState_ != BackgroundBuildState::Building`) and while the current section has no active build. A B build of the next chapter therefore keeps the lane from warming an image a few pages ahead, and the target page of a chapter jump always decodes in the foreground, because Background-C holds the buffer until its build ends.
+**Done (2026-10-19, branch `perf/reader-phase-memory`).** The lane runs before B: B borrows the secondary buffer only once the lane has looked at its window and found nothing to decode, and a lane decode or a page render that meets a B build in the buffer has B give it back, at most `LaneBeforeBuild::kMaxYields` (4) times per target and not counted as preemptions. See `src/activities/reader/LaneBeforeBuild.h` and [the image lane](../background-rendering.md#image-lane--pixel-caches-ahead-of-the-reader).
 
-**Why it matters.** The lane exists so that a page turn replays a `.pxc` instead of running a 1–4 s decode. The scheduler comment ranks images the reader is about to reach above a section fifty pages away, but a running B build is not preempted.
+**Measured (X3, Build Through test book, `make_test_font_families.py --build-through`).** Where the conflict happened was build-through, not a mid-chapter B build: with anti-aliasing off B took the buffer on a chapter's last pages 0.6 s after the page appeared, before the lane's settle, and the three picture pages decoded on the heap beside its build (11,780 and 15,672 B free at the JPEGs' lows, the PNG drawn as a low-memory box). With anti-aliasing on, the deferred AA pass delayed B past the lane's settle, so the lane already won. With the lane first, the pictures are decoded in the lent buffer before B starts, B builds through without meeting a decode, and it still finished the next chapter before the reader reached it (the turn onto the next chapter was a cache hit, 1.5 s to a settled screen, as before). A page render that decodes in the buffer B gave back reached 32-34 KB free at its low.
 
-**Where.** The call to `stepImageWarmLocked` in the background scheduler; `beginBackgroundBorrow` / `endBackgroundBorrow`; B's preemption budget (`backgroundPreemptCount_`, `BG_BUILD_MAX_PREEMPTIONS`).
-
-**Tried.** Nothing. A text chapter builds in 0.4–1 s of slices, so the conflict may be rare.
-
-**Next step.** Measure first: log when the lane finds an uncached image in its window while B is building, over a few X3 sessions. If it happens, let the lane preempt B. A preempted B build already keeps its extracted XHTML (`abortSectionBuild`), so the retry is cheap.
+**Still open.** The target page of a chapter jump still decodes in the foreground: Background-C holds the buffer until its build ends, and C is not preempted.
 
 ## The font prewarm sets the session's heap minimum
 

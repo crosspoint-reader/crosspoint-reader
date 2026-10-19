@@ -865,9 +865,13 @@ class EpubReaderActivity final : public Activity {
   // Serialises SD access against the render task via RenderLock; skips the tick instead of
   // blocking when the render task is busy.
   void stepBackgroundSectionBuild();
-  // The image lane's step; called from stepBackgroundSectionBuild with the RenderLock held.
-  // True when it did a page's worth of work this tick (the caller then yields to the loop).
-  bool stepImageWarmLocked();
+  // The image lane's step; called from stepBackgroundSectionBuild with the RenderLock held. What
+  // it found in its window (LaneBeforeBuild::Window): Dirty when it did a page's worth of work this
+  // tick (the caller then yields to the loop); Background-B may borrow only on Clean or Closed.
+  LaneBeforeBuild::Window stepImageWarmLocked();
+  // warmPageForImageLane() with the buffer taken back from Background-B first, if B holds it. False
+  // when there was no buffer to lend, so nothing was done.
+  bool warmPageTakingBuffer(const Page& page, int spine, int pageIndex, bool onScreen, bool warmGrayscale);
   // Decode one page's missing image caches into the borrowed secondary buffer, writing no
   // framebuffer byte. `onScreen`: the page is the one displayed; once the images it showed as
   // placeholders are cached it is redrawn. Always returns true (the tick was spent).
