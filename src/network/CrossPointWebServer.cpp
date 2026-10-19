@@ -2576,6 +2576,13 @@ void CrossPointWebServer::handleFontDownload() {
 
 void CrossPointWebServer::handleFontUploadData() {
   HTTPUpload& up = server->upload();
+  // An upload that does not go in leaves no trace: its part goes, the font it was to replace
+  // stays. Closed only when open: a START refused before the open (the first upload since boot
+  // with a bad name) never opened the handle, and HalFile::close() asserts on that.
+  const auto discardFontUploadPart = [this] {
+    if (fontUpload.file) fontUpload.file.close();
+    if (!fontUpload.filePath.empty()) Storage.remove((fontUpload.filePath + UPLOAD_PART_SUFFIX).c_str());
+  };
 
   switch (up.status) {
     case UPLOAD_FILE_START: {
@@ -2588,9 +2595,8 @@ void CrossPointWebServer::handleFontUploadData() {
       fontUpload.bytesWritten = 0;
       fontUpload.bufferPos = 0;
       fontUpload.buffer.resize(FontUploadState::BUFFER_SIZE);
-      // The END and ABORTED cases delete filePath whenever the upload is not valid. Left
-      // over from the previous upload, it named that upload's INSTALLED font, so a START
-      // refused below (bad family or file name, no family dir) deleted it.
+      // END and ABORTED delete filePath's part whenever the upload is not valid; a START refused
+      // below (bad family or file name, no family dir) leaves them none to delete.
       fontUpload.filePath.clear();
 
       if (!FontInstaller::isValidFamilyName(family.c_str())) {
@@ -2620,8 +2626,13 @@ void CrossPointWebServer::handleFontUploadData() {
       FontInstaller::buildFontPath(family.c_str(), filename.c_str(), path, sizeof(path));
       fontUpload.filePath = path;
 
-      if (!Storage.openFileForWrite("WEB", path, fontUpload.file)) {
-        LOG_ERR("WEB", "Failed to open font file for write: %s", path);
+      // Staged in <font>.part, which the registry does not list, and moved in by
+      // finishUploadPart() once it has all arrived, as every other upload is. Written in place, an
+      // upload cut short left a truncated font for the registry to list and the reader to load,
+      // and an aborted one deleted the font it was to replace.
+      const std::string partPath = fontUpload.filePath + UPLOAD_PART_SUFFIX;
+      if (!Storage.openFileForWrite("WEB", partPath, fontUpload.file)) {
+        LOG_ERR("WEB", "Failed to open font file for write: %s", partPath.c_str());
         break;
       }
 
@@ -2631,8 +2642,6 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_WRITE: {
-      // No END guard needed here, unlike /upload: this ABORTED branch deletes the file whether or
-      // not END already closed it.
       if (dropUploadIfCancelled() || !fontUpload.valid) break;
       HalSystem::feedWatchdog();
 
@@ -2683,6 +2692,9 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_END: {
+      // As in handleUpload(): a cancel on the last chunk still reaches END, with ABORTED straight
+      // after, so installing the font here would keep the font of an aborted upload.
+      if (!server->client().connected()) break;
       if (fontUpload.valid && !fontUpload.magicChecked) {
         LOG_ERR("WEB", "Invalid .cpfont upload: header not fully received");
         fontUpload.valid = false;
@@ -2698,11 +2710,11 @@ void CrossPointWebServer::handleFontUploadData() {
         }
         fontUpload.bufferPos = 0;
       }
-      fontUpload.file.close();
-
-      if (!fontUpload.valid && !fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
+      if (fontUpload.valid && !finishUploadPart(fontUpload.file, fontUpload.filePath.c_str())) {
+        LOG_ERR("WEB", "Failed to install uploaded font: %s", fontUpload.filePath.c_str());
+        fontUpload.valid = false;
       }
+      if (!fontUpload.valid) discardFontUploadPart();
 
       fontUpload.buffer = {};
       LOG_DBG("WEB", "Font upload end: valid=%d, %zu bytes", fontUpload.valid, fontUpload.bytesWritten);
@@ -2710,10 +2722,7 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_ABORTED: {
-      fontUpload.file.close();
-      if (!fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
-      }
+      discardFontUploadPart();
       fontUpload.valid = false;
       fontUpload.buffer = {};
       LOG_DBG("WEB", "Font upload aborted");
