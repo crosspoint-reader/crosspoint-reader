@@ -765,6 +765,42 @@ inline bool boardHas(const SettingRequires capability) {
   return true;
 }
 
+// Whether settings.json keeps a row: what the board's profile says it has, not what answered at
+// this boot. boardHas() asks the touch controller's probe, and a probe that missed one boot hid the
+// touch rows from that boot's load and dropped them from its next save, so the boot after, with the
+// controller answering again, started every gesture and touch control from its default. The other
+// capabilities are answered from the profile already (the light by Frontlight.present() on every
+// board this firmware builds for), so they keep what boardHas() says.
+//
+// Based on crosspoint-reader PR #4078 (Tuan Q. Nguyen), which keeps the tilt row in the persisted
+// list when the IMU probe fails; tilt is answered from the profile here, the touch rows were not.
+inline bool boardKeeps(const SettingRequires capability) {
+  switch (capability) {
+    case SettingRequires::TouchPanel:
+      return HalCapabilities::hasTouch();
+    case SettingRequires::MultiTouchPanel:
+      return HalCapabilities::hasMultiTouch();
+    case SettingRequires::Nothing:
+    case SettingRequires::TiltSensor:
+    case SettingRequires::SelectableGrayscaleLut:
+    case SettingRequires::ReadingLight:
+    case SettingRequires::WarmLight:
+    case SettingRequires::SunlightFadingPanel:
+      return boardHas(capability);
+  }
+  return true;
+}
+
+// The walk forEachSetting() and forEachPersistedSetting() share, filtered by `offers`.
+template <bool (*offers)(SettingRequires), typename Visit>
+void visitRows(Visit&& visit) {
+  using Visitor = std::remove_reference_t<Visit>;
+  const RowSink sink{const_cast<void*>(static_cast<const void*>(&visit)), [](void* visitor, SettingInfo& row) {
+                       if (offers(row.requiredCapability)) (*static_cast<Visitor*>(visitor))(row);
+                     }};
+  buildSettings(sink);
+}
+
 }  // namespace SettingsListDetail
 
 // Calls `visit(SettingInfo&)` for every setting this board offers, in list order. Each row is
@@ -777,12 +813,12 @@ inline bool boardHas(const SettingRequires capability) {
 // an X3 aborted in that reserve on the settings screen with 26 KB of fragmented heap free.
 template <typename Visit>
 void forEachSetting(Visit&& visit) {
-  using Visitor = std::remove_reference_t<Visit>;
-  const SettingsListDetail::RowSink sink{const_cast<void*>(static_cast<const void*>(&visit)),
-                                         [](void* visitor, SettingInfo& row) {
-                                           if (SettingsListDetail::boardHas(row.requiredCapability)) {
-                                             (*static_cast<Visitor*>(visitor))(row);
-                                           }
-                                         }};
-  SettingsListDetail::buildSettings(sink);
+  SettingsListDetail::visitRows<&SettingsListDetail::boardHas>(visit);
+}
+
+// forEachSetting() for settings.json: also the rows of hardware the board has but that did not
+// answer at this boot (SettingsListDetail::boardKeeps), so a load and a save never forget them.
+template <typename Visit>
+void forEachPersistedSetting(Visit&& visit) {
+  SettingsListDetail::visitRows<&SettingsListDetail::boardKeeps>(visit);
 }
