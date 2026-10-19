@@ -747,6 +747,8 @@ void setupDisplayAndFonts(bool seamless = false, bool skipSdFontDiscovery = fals
   CjkUiFonts::attach(ui12BoldFont, 12);
   CjkUiFonts::attach(ui14RegularFont, 14);
   CjkUiFonts::attach(ui14BoldFont, 14);
+  // The faces ship compressed and decode through the same decompressor as the reader faces.
+  CjkUiFonts::setDecompressor(&fontDecompressor);
   CjkUiFonts::setLanguage(I18N.getLanguage());
   // Chinese and Japanese write no spaces: wrapped UI text breaks between their characters by the
   // reader's CJK rules, kinsoku included.

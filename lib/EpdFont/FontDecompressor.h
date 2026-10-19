@@ -201,6 +201,9 @@ class FontDecompressor {
     InflateReader reader_;
     uint32_t pos_ = 0;    // absolute position in the decompressed group
     uint32_t limit_ = 0;  // group.uncompressedSize; reads past it are a stream error
+    // 2-bit reader faces and 1-bit UI faces (compress_ui_face.py) pad rows to a byte alike, but
+    // pack a different number of pixels into it.
+    bool is2Bit_ = true;
   };
 
   // RAM a group costs to read: its measured ring, or the whole group for fonts generated
@@ -208,9 +211,25 @@ class FontDecompressor {
   // outrun the bytes produced so far.
   static uint32_t ringBytesFor(const EpdFontGroup& group);
 
+  // The largest ringBytesFor() over a face's groups: the ring inflateFace() needs.
+  static uint32_t maxRingBytes(const EpdFontData* face);
+
+  // Inflates a whole compressed face, glyph by glyph in glyph order, into `sink`: exactly the flat
+  // bitmap the face would carry uncompressed (EpdFontData::bitmap with bitmapOffsets). What
+  // CjkUiFonts writes into the language pack slot, so the active UI language's CJK faces read
+  // straight out of flash instead of being decoded per glyph.
+  //
+  // `ring` must hold maxRingBytes(face); `glyphBuf` HOT_GLYPH_BUF_SIZE bytes. Both are the
+  // caller's, so this allocates nothing. The sink gets one call per glyph with pixels; returning
+  // false stops the walk. Only for faces with contiguous groups (glyphToGroup == nullptr), which is
+  // every built-in face. False on a malformed face, a stream error, or a sink refusal.
+  static bool inflateFace(const EpdFontData* face, uint8_t* ring, uint32_t ringBytes, uint8_t* glyphBuf,
+                          bool (*sink)(void* ctx, const uint8_t* bytes, uint32_t len), void* ctx);
+
  private:
   // Widest byte-aligned row any glyph can have: width is a uint8_t, and a byte-aligned row is
-  // ceil(width/4) bytes, so 64 is a hard bound rather than a corpus measurement. Small enough
-  // that both the compaction row buffer and the skip sink live on the stack.
+  // ceil(width/4) bytes (2-bit; a 1-bit row is half that), so 64 is a hard bound rather than a
+  // corpus measurement. Small enough that both the compaction row buffer and the skip sink live
+  // on the stack.
   static constexpr uint16_t MAX_ROW_STRIDE = 64;
 };

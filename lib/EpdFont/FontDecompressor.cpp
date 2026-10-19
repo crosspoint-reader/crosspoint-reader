@@ -129,6 +129,41 @@ uint32_t FontDecompressor::ringBytesFor(const EpdFontGroup& group) {
   return std::min(measured, group.uncompressedSize);
 }
 
+uint32_t FontDecompressor::maxRingBytes(const EpdFontData* face) {
+  uint32_t most = 0;
+  if (!face || !face->groups) return 0;
+  for (uint16_t g = 0; g < face->groupCount; g++) most = std::max(most, ringBytesFor(face->groups[g]));
+  return most;
+}
+
+bool FontDecompressor::inflateFace(const EpdFontData* face, uint8_t* ring, const uint32_t ringBytes, uint8_t* glyphBuf,
+                                   bool (*sink)(void* ctx, const uint8_t* bytes, uint32_t len), void* ctx) {
+  if (!face || !face->groups || face->groupCount == 0 || face->glyphToGroup || !ring || !glyphBuf || !sink) {
+    return false;
+  }
+  // Contiguous groups tile the glyph array in order, so walking them walks every glyph once, in the
+  // order the flat bitmap holds them.
+  uint32_t next = 0;
+  for (uint16_t g = 0; g < face->groupCount; g++) {
+    const EpdFontGroup& group = face->groups[g];
+    const uint32_t need = ringBytesFor(group);
+    if (group.firstGlyphIndex != next || need > ringBytes) return false;
+    GroupStream stream;
+    if (!stream.begin(face, group, ring, need)) return false;
+    uint32_t aligned = 0;
+    for (uint32_t i = group.firstGlyphIndex; i < group.firstGlyphIndex + group.glyphCount; i++) {
+      const EpdGlyphRef glyph = epdResolveGlyph(face, i);
+      const uint16_t bytes = glyphDataBytes(glyph.width, glyph.height, face->is2Bit);
+      if (bytes == 0) continue;  // no pixels: nothing in the stream, nothing in the flat bitmap
+      if (bytes > HOT_GLYPH_BUF_SIZE || !stream.extractGlyph(aligned, glyph, glyphBuf)) return false;
+      if (!sink(ctx, glyphBuf, bytes)) return false;
+      aligned += groupRowBytes(glyph.width, face->is2Bit) * glyph.height;
+    }
+    next = group.firstGlyphIndex + group.glyphCount;
+  }
+  return true;
+}
+
 bool FontDecompressor::GroupStream::begin(const EpdFontData* fontData, const EpdFontGroup& group, uint8_t* ring,
                                           const uint32_t ringBytes) {
   if (!ring || ringBytes == 0) return false;
@@ -136,6 +171,7 @@ bool FontDecompressor::GroupStream::begin(const EpdFontData* fontData, const Epd
   reader_.setSource(&fontData->bitmap[group.compressedOffset], group.compressedSize);
   pos_ = 0;
   limit_ = group.uncompressedSize;
+  is2Bit_ = fontData->is2Bit;
   return true;
 }
 
@@ -168,22 +204,40 @@ bool FontDecompressor::GroupStream::skipTo(const uint32_t offset) {
 bool FontDecompressor::GroupStream::extractGlyph(const uint32_t alignedOffset, const EpdGlyphRef& glyph,
                                                  uint8_t* packedDst) {
   if (glyph.width == 0 || glyph.height == 0) return true;  // no payload; consumes nothing
-  const uint32_t rowStride = (glyph.width + 3u) / 4u;
+  const uint32_t rowStride = groupRowBytes(glyph.width, is2Bit_);
   if (rowStride > MAX_ROW_STRIDE) return false;  // unreachable for a uint8_t width; guards the buffers
   if (alignedOffset + rowStride * glyph.height > limit_) return false;
   if (!skipTo(alignedOffset)) return false;
 
-  // A width that is a multiple of 4 leaves no row padding, so the byte-aligned and packed forms
-  // are identical and the stream lands straight in the destination.
-  if (glyph.width % 4 == 0) return readExact(packedDst, rowStride * glyph.height);
+  // A width that fills its last row byte exactly leaves no row padding, so the byte-aligned and
+  // packed forms are identical and the stream lands straight in the destination.
+  if (glyph.width % (is2Bit_ ? 4 : 8) == 0) return readExact(packedDst, rowStride * glyph.height);
 
-  // Otherwise repack as the rows arrive. The bit accumulator deliberately carries across rows:
-  // packed pixels flow continuously where byte-aligned rows are padded to a byte. Same bit order
-  // as to_byte_aligned() in fontconvert.py, read backwards.
   uint8_t row[MAX_ROW_STRIDE];
   uint8_t outByte = 0;
   uint8_t outBits = 0;
   uint32_t writeIdx = 0;
+  if (!is2Bit_) {
+    // The 1-bit UI faces: the same repack one pixel per bit. Inverse of row_aligned() in
+    // compress_ui_face.py.
+    for (uint8_t y = 0; y < glyph.height; y++) {
+      if (!readExact(row, rowStride)) return false;
+      for (uint8_t x = 0; x < glyph.width; x++) {
+        outByte = static_cast<uint8_t>((outByte << 1) | ((row[x / 8] >> (7 - (x % 8))) & 0x1));
+        if (++outBits == 8) {
+          packedDst[writeIdx++] = outByte;
+          outByte = 0;
+          outBits = 0;
+        }
+      }
+    }
+    if (outBits > 0) packedDst[writeIdx] = static_cast<uint8_t>(outByte << (8 - outBits));
+    return true;
+  }
+
+  // Otherwise repack as the rows arrive. The bit accumulator deliberately carries across rows:
+  // packed pixels flow continuously where byte-aligned rows are padded to a byte. Same bit order
+  // as to_byte_aligned() in fontconvert.py, read backwards.
   for (uint8_t y = 0; y < glyph.height; y++) {
     if (!readExact(row, rowStride)) return false;
     for (uint8_t x = 0; x < glyph.width; x++) {
@@ -207,7 +261,7 @@ uint32_t FontDecompressor::getAlignedOffset(const EpdFontData* fontData, uint16_
 
   auto accumGlyph = [&](const EpdGlyphRef& g) {
     if (g.width > 0 && g.height > 0) {
-      offset += ((g.width + 3) / 4) * g.height;
+      offset += groupRowBytes(g.width, fontData->is2Bit) * g.height;
     }
   };
 
@@ -318,7 +372,13 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   // identical ERR lines in 40 ms, 147 ms of getBitmap time against ~1 ms normally, and a
   // page render of 129 ms against 43. Only the failing size class is latched out; a smaller
   // group may still fit and is still attempted.
-  if (stats.fallbackOomBytes != 0 && ringBytes >= stats.fallbackOomBytes) {
+  //
+  // Reader (2-bit) faces only. The pass the latch lasts for ends in logStats(), which only the
+  // reader calls: a UI screen never does, so a latched 1-bit UI face would stay blank for the
+  // rest of the session. A UI face decodes here only for the few CJK glyphs a screen draws from a
+  // face the language pack has not materialised (CjkUiFonts), so it simply retries each time.
+  const bool latches = fontData->is2Bit;
+  if (latches && stats.fallbackOomBytes != 0 && ringBytes >= stats.fallbackOomBytes) {
     stats.fallbackOomGlyphs++;
     stats.getBitmapTimeUs += micros() - tStart;
     return nullptr;
@@ -327,12 +387,11 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   GroupTemp temp(slotArena_, ringBytes);
   uint8_t* ring = temp.get();
   if (!ring) {
-    // Logged once per size class per pass; the running total goes out in logStats().
-    LOG_ERR("FDC",
-            "OOM: cannot allocate a %lu-byte ring for group %u fallback (arena headroom %lu); skipping this size and "
-            "larger for the pass",
-            ringBytes, groupIndex, arenaHeadroom(slotArena_));
-    stats.fallbackOomBytes = ringBytes;
+    // Logged once per size class per pass for a reader face, once per glyph for a UI face (see
+    // above); the running total goes out in logStats().
+    LOG_ERR("FDC", "OOM: cannot allocate a %lu-byte ring for group %u fallback (arena headroom %lu)%s", ringBytes,
+            groupIndex, arenaHeadroom(slotArena_), latches ? "; skipping this size and larger for the pass" : "");
+    if (latches) stats.fallbackOomBytes = ringBytes;
     stats.fallbackOomGlyphs++;
     stats.getBitmapTimeUs += micros() - tStart;
     return nullptr;
@@ -706,7 +765,7 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       }
 
       if (glyph.width > 0 && glyph.height > 0) {
-        groupAlignedTracker[gpPos] += ((glyph.width + 3) / 4) * glyph.height;
+        groupAlignedTracker[gpPos] += groupRowBytes(glyph.width, fontData->is2Bit) * glyph.height;
       }
     }
 
@@ -734,7 +793,7 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
         }
 
         if (glyph.width > 0 && glyph.height > 0) {
-          alignedOff += ((glyph.width + 3) / 4) * glyph.height;
+          alignedOff += groupRowBytes(glyph.width, fontData->is2Bit) * glyph.height;
         }
       }
     }

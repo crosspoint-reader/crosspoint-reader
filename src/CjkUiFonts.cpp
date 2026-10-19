@@ -62,6 +62,10 @@ size_t sizeIndexFor(const uint8_t points) {
 
 }  // namespace
 
+void CjkUiFonts::setDecompressor(FontDecompressor* decompressor) {
+  for (FallbackFaceProvider& provider : providers) provider.setDecompressor(decompressor);
+}
+
 void CjkUiFonts::attach(EpdFont& font, const uint8_t points) {
   const EpdFontData* data = font.data;
   // A provider already there is an SD or TTF font's own; a compressed or 2-bit face could not draw
