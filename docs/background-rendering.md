@@ -85,8 +85,10 @@ Renders the *next* logical page into the inactive framebuffer so a forward turn 
   a navigation dispatched from `main.cpp` moves `currentPage` before its render runs, and arming
   then would turn that render into a `PreRender` pass that never shows the new page.
 - **Runs** as the `PreRender` pass (`renderPreRenderPass`) on the render task.
-- **Gate:** free heap ≥ `PRE_RENDER_MIN_FREE_HEAP_BYTES` (44 KB, derived from what the pass
-  consumes; see the comment at its definition); an image page only once **every image replays from
+- **Gate:** free heap ≥ the floor `PreRenderGate.h` derives from what the passes cost: a 21 KB trough
+  plus half again the most a pass cost in the book (13 KB until one is measured), and while the page
+  drawn last drew TrueType glyphs the store did not hold yet, at least the most a pass with such
+  misses cost; an image page only once **every image replays from
   its pixel cache**: `.1bit.pxc` always, plus `.bayer.pxc` wherever AA replays it (AA on and the
   secondary buffer resident, the image lane's `warmGrayscale` rule). The image lane has usually
   written them pages ahead. The pass never decodes — that is seconds, unabortable, under the render
@@ -111,8 +113,9 @@ Renders the *next* logical page into the inactive framebuffer so a forward turn 
   the refresh notes under "On X3 specifically").
 - **Note on X3:** a page turn is *waveform-bound* (~0.5 s), so A only saves the ~90 ms of
   prewarm+BW compute. Its benefit is modest on X3; the panel, not the CPU, sets page-turn speed.
-  Whether the X3's reading heap clears the floor reliably is open: see "X3 and the pre-render heap
-  floor" in [future_work/display-and-refresh.md](future_work/display-and-refresh.md).
+  With a book's fonts loaded the X3 now clears the floor on every turn (2026-10-19, spec 8.3 of
+  [the TTF design](superpowers/specs/2026-10-13-ttf-fonts-design.md)): about 60-75 ms a turn, the
+  pass's render, and 0.3-0.9 s on a CJK page.
 
 ### Ordering: the deferred AA pass runs before the pre-render
 

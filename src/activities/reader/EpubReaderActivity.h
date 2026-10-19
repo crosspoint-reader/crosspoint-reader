@@ -291,6 +291,11 @@ class EpubReaderActivity final : public Activity {
   // on screen. -1: none.
   int memoryDegradedSpine_ = -1;
   int memoryDegradedPage_ = -1;
+  // The page drawn last with a TrueType glyph that found no memory to be drawn in (glyph_miss): drawn once more by
+  // itself, and the status bar shows the low-memory indicator while it is on screen with a gap. -1: none.
+  int glyphStarvedSpine_ = -1;
+  int glyphStarvedPage_ = -1;
+  bool glyphStarvedRedraw_ = false;  // that redraw is owed by the pass that found the gap
   // The ladder left an accent family out (or found no font it could load): the next render lays the chapter out again
   // with the fonts loaded now, at the same position.
   bool fontRelayoutPending_ = false;
@@ -833,7 +838,7 @@ class EpubReaderActivity final : public Activity {
   // Frees a large SD font page arena (PAGE_ARENA_RELEASE_MIN_BYTES) once its page is on the panel:
   // after the AA pass, a pre-render, or a render that owes no AA. Called under the render lock.
   void releasePageGlyphArena(const char* after);
-  // The pre-render's heap floor: PRE_RENDER_MIN_FREE_HEAP_BYTES, raised by the arena the last release
+  // The pre-render's heap floor: PreRenderGate's from the costs measured so far, raised by the arena the last release
   // freed, which the pre-render would allocate again on top.
   uint32_t preRenderMinFreeHeap(bool inkOnly) const;
   // The pre-render can keep 1-bit ink masks (SdCardFont::setInkOnlyPrewarm) instead of 2-bit glyphs:
@@ -844,6 +849,11 @@ class EpubReaderActivity final : public Activity {
   // a sized span, sup/sub, small caps) resamples the 2-bit levels, which an ink mask has lost.
   static bool pageDrawsUnscaled(const Page& page);
   uint32_t releasedPageArenaBytes_ = 0;
+  // The most a pre-render pass has cost in this book, measured by the pass (PreRenderGate), and apart the most one cost
+  // that drew glyphs the glyph store did not hold yet; 0 until one is. And whether the page drawn last drew such.
+  uint32_t preRenderCostMax_ = 0;
+  uint32_t preRenderMissCostMax_ = 0;
+  bool lastPageDrewMisses_ = false;
   // Background B: advance the idle build of the next consecutive section by one bounded
   // step (state probe, heap gate, or one ~BG_BUILD_BUDGET_MS parse slice). Runs only after
   // Background A has had its slice (A keeps priority: it drives perceived page-turn speed).
@@ -875,6 +885,7 @@ class EpubReaderActivity final : public Activity {
   bool memoryDegradedPage(int spine, int page) const {
     return memoryDegradedSpine_ == spine && memoryDegradedPage_ == page;
   }
+  bool glyphStarvedPage(int spine, int page) const { return glyphStarvedSpine_ == spine && glyphStarvedPage_ == page; }
   bool imageWarmGaveUp(int spine, int page) const;
   void noteImageWarmMiss(int spine, int page);
   // Lend the secondary framebuffer to Background-B's build arena. Mirrors the Background-C

@@ -76,11 +76,9 @@ class SdCardFontSystem {
   }
 
   /// What the loaded TrueType families give up while an image decodes (the reader's memory ladder, see
-  /// ImageMemoryLadder): their miss-only memory, or all of it until resumeTtf(). SdCardFontManager has the rules.
+  /// ImageMemoryLadder): what their misses hold, or all of it until resumeTtf(). SdCardFontManager has the rules.
   bool ttfLoaded() const { return manager_.ttfLoaded(); }
   uint32_t releaseTtfMissMemory() { return manager_.releaseTtfMissMemory(); }
-  bool restoreTtfMissMemory() { return manager_.restoreTtfMissMemory(); }
-  bool ttfMissMemoryReleased() const { return manager_.ttfMissMemoryReleased(); }
   bool suspendTtf(GfxRenderer& renderer) { return manager_.suspendTtf(renderer); }
   /// The suspended families loaded again, found by name, under the same font IDs. False, none loaded, when they
   /// cannot be.

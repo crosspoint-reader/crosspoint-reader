@@ -54,7 +54,7 @@ numbers come from step 0.
 | **Direct integration through the glyph-miss hook**, not through `SdCardFont` | `SdCardFont`'s per-page machinery works around SD reads: per-page lookup tables, a bitmap arena with a retry ladder, metrics-only layout, a per-page kern matrix, a heap miss ring. The mapped store makes all of it unnecessary, because a lookup returns a pointer into flash. Reusing that machinery would have meant two large refactors of a 2,000-line class on the page-turn path. |
 | Render a glyph at its first lookup, in layout or in a draw | New glyphs are rendered during section builds, which already run in the background or behind the "Indexing" popup. Page turns then rarely render anything. There is no metrics-only mode to maintain. |
 | Native ladder rungs, created lazily | Sharp headings are a main benefit of TTF. Rungs are the absolute `FONT_SIZE_RUNGS` (at most 9), so the store holds a bounded set of sizes. A rung costs about 0.5 KB of RAM. |
-| A resident scratch block per loaded family, holding a 4 KB cell pool (8 KB for SD-mode families) | Section builds already borrow the lent framebuffer. With the pool on the stack, rendering took 4.1 / 6.1 / 10.2 KB of the loop task's 16 KB stack for a 2 / 4 / 8 KB pool (X3, step 0). The pool size is a speed dial: against 2 KB, 4 KB is 9-18% faster (Bookerly 29 px: 469 → 429 µs), and 8 KB makes CJK about 37% faster (1,327 → 833 µs). Output is byte-identical across pool sizes. |
+| One scratch block per set, holding a 4 KB cell pool (8 KB for a body in SD mode), made for a miss and gone when nothing misses (8.3) | A page drawn from the store needs none of it, and held while reading it kept the X3 under the next-page pre-render's floor; a section build lends its arena to it. With the pool on the stack, rendering took 4.1 / 6.1 / 10.2 KB of the loop task's 16 KB stack for a 2 / 4 / 8 KB pool (X3, step 0). The pool size is a speed dial: against 2 KB, 4 KB is 9-18% faster (Bookerly 29 px: 469 → 429 µs), and 8 KB makes CJK about 37% faster (1,327 → 833 µs). Output is byte-identical across pool sizes. |
 | Kerning: pairs stored lazily in the store's pair index; a miss is resolved by a GPOS reader that pre-resolves the kern subtables once | Measured on the X3 over a real page (736 pairs) and 30,000 characters of prose (19,379 pairs), every option exact. FreeInkFont's `Gpos.cpp` re-parses GPOS on every call: 137 µs/pair. The pre-resolved reader: 37.7 µs. Tables compiled at install: 3.0 µs, but 1.4 s compile, 71 KB flash and a 114 KB heap peak per style. A RAM pair cache: 2.0 µs over a chapter, 5 KB RAM, cold every session. The lazy store: **0.45 µs warm**, no RAM, about 230 slot writes on a first page and about 400 more over a first chapter. The user chose the lazy store. |
 | Misses are rendered in glyph-ID order, batched per text run | On a real 19.7 MB CJK font on the SD card, reading each glyph's outline costs 4.76 ms in text order and 0.73 ms in file order, because SdFat walks the FAT chain on every backward seek. Glyph IDs follow file order. |
 
@@ -170,7 +170,8 @@ relies on that.
 
 `TtfFont` relies on the same contract. Its miss path, prefetch, kerning store writes, scratch block, ring
 and SD page cache are touched only under `RenderLock`. A debug-build assert on the miss path checks that the
-calling task holds the rendering mutex.
+calling task holds the rendering mutex. What a miss made on the heap goes as the lock is given back
+(`RenderLock::setReleaseHook`, `TtfFontSet::releaseMissMemory`): nothing of a lookup outlives the hold it ran in.
 
 Store hits read immutable flash. The write order (record first, slot last) means a probe never sees a
 slot whose record is incomplete.
@@ -443,10 +444,10 @@ Modes:
   So a TTF at 14 pt lays out like a `.cpfont` at 14 pt. Only the layout matches: the converter
   auto-hints its bitmaps, so a TTF's glyph boxes and pixels match FreeType unhinted, not the `.cpfont`.
 
-### 5.3 Scratch memory (resident while a TTF family is loaded)
+### 5.3 Scratch memory (made on a miss)
 
-One block, allocated at family load and freed at unload. Its size is computed from the font, with no
-allocation per glyph:
+One block for the set, planned at load (`Rasterizer::setPlan`) and made for the first glyph drawn that the store does
+not hold (8.3). Its size is computed from the font, with no allocation per glyph:
 
 - **cell pool:** 4 KB, or 8 KB for an SD-mode (CJK) family. The pool size never changes the output
   (host check: identical bytes), only the speed; see the scratch row in section 2;
@@ -458,9 +459,21 @@ allocation per glyph:
   (`ScratchPlan::maxPpem26_6`): a glyph too big for the region at a larger size is Transient, the plan's
   fault, while one too big at a planned size is Unsupported.
 
-That comes to about 6-10 KB for text fonts and about 14 KB for a CJK family. The block is not borrowed from the lent framebuffer,
-because section builds already use that region for their build arena. A glyph with more points than
-the cap can never load (6.1); text glyphs stay well under it.
+That comes to about 6-10 KB for text fonts and about 14 KB for a CJK family (X3: 10,542-11,012 B Latin, 14,528 B
+CJK). A glyph with more points than the cap can never load (6.1); text glyphs stay well under it.
+
+Where it is made (`TtfFontSet::beginMiss`), with SD mode's page cache (5.1) beside it:
+
+- **In a lent arena, for one lookup.** Inside `glyph_miss::Scope` (a section build's slices, a page drawn
+  mid-build, the memory ladder's prewarm) a `render()` or `prefetch()` takes both from that arena and gives them back
+  before it returns: a block nested inside whatever the arena's owner holds, so the owner's blocks stay as they were
+  (`BuildArena`'s LIFO rule). Only when the arena has room for both, the worst padding included.
+- **Else on the heap, for the pass.** Held for the misses after it until `RenderLock` is given back (3.4). When the
+  heap cannot hold it, the app frees the built-in fonts' page caches once (`TtfFont::Hooks::reclaim`) and the lookup
+  asks again.
+- **Or not at all.** The glyph is drawn as missing, as Transient (not marked in the store), and counted
+  (`glyph_miss::starvedCount`): a section build that measured such a glyph is not kept (8.3), a pre-render draws its
+  page incomplete, and a page drawn on screen is drawn again once, then marked low-memory in the status bar.
 
 ### 5.4 Kerning and ligatures
 
@@ -602,19 +615,19 @@ See section 11 for the full deferred list.
 ### 6.3 Budgets
 
 - **Resident heap per loaded TTF family:**
-  - scratch, 6-10 KB (about 14 KB for a CJK family, with the 8 KB pool);
+  - its `TtfFont`, 1,672 B on the X3: four styles' faces, kerning and ligature records whether the family has them
+    or not, and the body face;
   - the GPOS reader's subtable list, about 100-200 B per style;
-  - the SD page cache, 4 KB, in SD mode only;
-  - the ligature tables, a few dozen bytes;
-  - about 0.5 KB per face in use (540 B measured on the X3): the body face plus a book's native sizes, at most 16
-    (2c-2);
-  - the ring's bitmaps, at most 8 KB (2c-2).
+  - about 0.5 KB per further face in use (540 B measured on the X3): a book's native sizes, at most 16 (2c-2).
 
-  Every font table and every stored bitmap is mapped, not copied, and there is no per-page arena. That
-  comes to about 7-14 KB for a Latin family (about 19 KB for CJK in SD mode), against roughly 9-14 KB for an SD `.cpfont` (about 6 KB of kern classes plus
-  a 3-8 KB arena per page).
-- **Ring mode only:** the 8-slot heap ring, allocated when entering ring mode and freed at the wipe or
-  at unload.
+  And per set, 960 B (`TtfFontSet`). Every font table and every stored bitmap is mapped, not copied, and there is no
+  per-page arena. That comes to about 2-3 KB a family, against roughly 9-14 KB for an SD `.cpfont` (about 6 KB of kern
+  classes plus a 3-8 KB arena per page).
+- **Only while a miss is drawn (5.3, 8.3):** the scratch block, 6-10 KB (about 14 KB for a CJK set, with the 8 KB
+  pool), and in SD mode the page cache, 4.2 KB: in a lent arena for one lookup, else on the heap until `RenderLock` is
+  given back. Was resident until 8.3.
+- **Ring mode, and glyphs the store cannot take:** the 8-slot heap ring, at most 8 KB, made as glyphs need it and
+  freed with the scratch block.
 - **Flash for the code:** about 20-25 KB. The engine is 6.4 KB and `Gpos`/`Gsub` about 4 KB; the rest is
   `TtfFont`, the store, `FontBytes`, the provider and lookup changes, and the registry. Measured in the
   build and quoted in the PR.
@@ -935,6 +948,81 @@ others read from the card. Built on Stage B phase 3 (PR #503, 11.1.3). Previews 
   the install reads each SD-mode file's directory up to three times (planning, the kept
   check, the copy), a few small reads each; the forward-read order holds within a prefetch batch, not across them
   (the CJK chapter read 2.5 pages a glyph).
+
+### 8.3 Miss memory made on a miss, as built (2026-10-19, branch `perf/x3-prerender-memory`)
+
+Asked for after the X3 run of 2026-10-19: with a book's embedded fonts loaded the X3 refused the next-page pre-render
+on most page turns. The reader's heap at the pre-render's gate, measured with temporary logs (X3, a test book in the
+four families of `test_font_families`, ten turns a mode; free and largest block in KB):
+
+| Mode | Free / largest | TTF scratch | SD pages | `TtfFont`s | Native sizes | Page slots |
+|---|---|---|---|---|---|---|
+| Off, built-in Bookerly | 49.7-52.9 / 40.9 | - | - | - | - | 4.8-6.4 KB |
+| Body Text, 1 family | 40.5-41.7 / 25.6 | 10,542 | - | 1,740 | 2,160 | - |
+| Accents, built-in body + 3 | 30.6-33.5 / 14.3 | 11,012 | - | 5,112 | 2,160 | 5.0 KB |
+| All Text, 4 families | 33.0-34.9 / 14.8 | 11,012 | - | 6,852 | 2,700 | - |
+| BookerlyTTF + 3, 4 in SD mode | 28.2-30.1 / 13.3 | 11,012 | 4,204 | 6,980 | 2,700 | - |
+| CJK in SD mode | 34.0 / 26.6 | 14,528 | 4,204 | 1,672 | 540 | - |
+
+Every mode also held the scaled-glyph cache (4,864 B), and with TrueType families the set (928 B). The scratch block
+and the page cache, 10.5-18.7 KB, were the largest part, and neither is used while a page is drawn from the store: a
+section build renders the chapter's glyphs into it as it measures them.
+
+- **Made on a miss (5.3).** `TtfFontSet::load` plans the block; a `render()` or `prefetch()` that has a glyph to draw
+  makes it and the page cache (`beginMiss`): in the arena lent to the misses (`glyph_miss::Scope`, `GlyphProvider.h`)
+  for that lookup alone, or on the heap until `RenderLock` is given back (the release hook, `SdCardFontSystem`). The
+  ring goes with them. A store hit makes nothing, nor does a lookup the font has no glyph for. `restoreMissMemory()`
+  is gone: the memory ladder's light relief frees what is held (`releaseMissMemory()`) and the next miss makes it
+  again.
+- **Builds lend their arena.** `Section::stepSectionBuild` lends the build's external arena (the borrowed
+  framebuffer) to the misses of each slice, the reader lends it to a page drawn mid-build, and the ladder's light
+  relief lends the image-warm arena to the prewarm it runs. A build on its owned 10 KB arena uses the heap, as before.
+  A slice during which a glyph found no memory at all fails the build (`glyph_miss::Scope::starved`): its layout
+  measured that glyph as missing, so it is discarded, and B tries again later, C and the blocking build fall back to
+  a released build.
+- **When the heap is short.** The app frees the built-in fonts' page caches once (`TtfFont::Hooks::reclaim`,
+  `GfxRenderer::releaseFontCaches`) and the miss asks again. A glyph that still finds none is drawn as missing and
+  counted: a pre-render counts it with the dropped glyphs, so its page is not shown; a page drawn on screen is drawn
+  again by itself once the pass has given its memory back, and if that draw has a gap too, the status bar shows the
+  low-memory sign until the page draws whole. A redraw rather than escalating the memory ladder: the miss needs one
+  block of 11-19 KB, which the end of the pass nearly always gives back, and a page left marked is still readable.
+- **The pre-render's floor** comes from what the passes cost (`PreRenderGate.h`): the 21 KB trough, plus half again
+  the most a pass cost in the book (13 KB until one is measured), and while the page drawn last drew misses, at least
+  the most a pass with misses cost.
+- **Measured (X3, the same book and turns, master against the branch, with the temporary logs; free heap and
+  largest block at the gate in KB, and the turns of ten that found their page pre-rendered).** The book built in the
+  run (Background-C and -B), and opened again with its chapters cached, after another set had taken the glyph store
+  (every glyph a miss again):
+
+  | Mode | Built in the run: before | after | Cached, store new: before | after |
+  |---|---|---|---|---|
+  | Off, built-in Bookerly | 49.7-52.9 / 40.9, 10 | 49.6-52.9 / 40.9, 10 | 51.0-54.2 / 40.9, 10 | 50.5-53.8 / 40.9, 10 |
+  | Body Text | 40.5-41.7 / 25.6, 10 | 51.1-52.4 / 34.8, 10 | 42.3-43.0 / 34.8, 10 | 52.7-53.3 / 45.0, 10 |
+  | Accents | 30.6-33.5 / 14.3, 0 | 41.8-44.7 / 23.5, 10 | 32.4-34.7 / 19.4, 0 | 43.4-45.7 / 34.8, 9 |
+  | All Text | 33.0-34.9 / 14.8, 0 | 44.2-46.1 / 25.6, 10 | 35.5-36.1 / 20.5, 10 | 46.6-47.2 / 28.7, 10 |
+  | BookerlyTTF + 3 accents | 28.2-30.1 / 13.3, 0 | 43.2-45.1 / 27.6, 10 | 30.1-30.8 / 23.5, 0 | 45.6-46.2 / 29.7, 9 |
+  | CJK in SD mode | - | 52.2 / 40.9, 10 | 34.1 / 26.6, 0 | 53.1 / 45.0, 10 |
+
+  The two turns of nine were the test's: its screenshot after the fifth turn redraws the page, which drops the
+  pre-rendered one. A turn onto a pre-rendered page reached its first frame in 423-425 ms, against 483-519 ms rendered
+  on the turn (Latin) and 718 ms (CJK, up to 1.3 s). Every page drew as before, pixel for pixel (the screenshots before
+  and after, the status bar left out). The section builds drew their misses in the lent framebuffer: Background-B's
+  lowest heap with BookerlyTTF and three accents rose from 12.9-17.0 KB to 27.8-32.0 KB (its arena's high water from 12
+  to 27 KB of 52 KB), and the parser's "continuing in degraded mode" warnings over the run went from 85 to none. A pass
+  that drew its glyphs cost 15-26 KB, against 4.5-9.9 KB from the store; while one was expected, the floor rose to
+  39-47 KB.
+- **A glyph without memory, on the device:** with 34 KB of the heap held (`CMD:HEAP:HOLD`, 19 KB free, 10 KB largest)
+  a CJK page whose glyphs the store did not hold drew with gaps in 0.54 s, logged
+  "drawn with glyphs missing for lack of memory; drawing it again", drew again with gaps and showed the low-memory
+  sign; once the heap was given back the page drew whole, and without the sign. After the first glyph that finds no
+  memory, the rest of the pass's misses go without at once (`missesStarved_`): each asking the heap and the app again
+  had taken the page to 2.4 s.
+- **Cost, `env:default` (C3), against master ae66522f9:** flash +1,272 B (the rasterizer's plan apart +56, the miss
+  memory +1,038, the pre-render's floor +178), static RAM +32 B (the `glyph_miss` counters and arena, the new hooks).
+  No MMU page boundary crossed: code ends 31.6 KB short of its 42nd page's end, rodata 44.5 KB short of its 51st, 93
+  pages in all.
+- **Left open:** a `TtfFont` keeps four styles' records and every face four styles' fonts, used or not: about 3.7 KB
+  for BookerlyTTF beside three one- and two-style accent families.
 
 ## 9. Testing
 
@@ -1559,7 +1647,8 @@ the multi-family store and the manager's family set; (3) per-word font slots, an
 - **SD fonts kern only when drawing,** so layout widths and drawn widths differ by the kerning.
 - **The end-of-book screen cannot make the cover thumbnail while a TTF family is loaded** (2c-3 X3 run): the JPEG
   decoder needs 40,960 B and found 39,684, because the family's 10 KB scratch is still resident. The thumbnail is
-  marked transient and made later. 2c-3 adds about 0.7 KB per family; it failed under 2c-2 too.
+  marked transient and made later. 2c-3 adds about 0.7 KB per family; it failed under 2c-2 too. Since 8.3 the scratch
+  block is made only for a miss.
 - **The loop task's stack is 16 KB, not 8 KB.** FreeInkUI overrides `getArduinoLoopTaskStackSize`.
   The comment in `src/main.cpp` above the loop-task high-water log still says 8 KB.
 - **SDK:**

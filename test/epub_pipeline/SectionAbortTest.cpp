@@ -14,6 +14,7 @@
 // There was no fixture, which is why it survived. This is that fixture: it fails on the old
 // `!reusedHtml` condition and passes on `!extractDone`.
 #include <Arduino.h>
+#include <GlyphProvider.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -133,4 +134,28 @@ TEST(SectionAbort, NoOpAbortLeavesAnExistingCacheAlone) {
 
   EXPECT_TRUE(fs::exists(html));
   EXPECT_EQ(fs::file_size(html), sizeBefore);
+}
+
+// A glyph laid out while no memory could be had to draw it (a TrueType miss, glyph_miss) was measured as missing: the
+// build fails rather than keep that layout, and leaves no section behind; with the memory there, it builds. A miss
+// that went without outside the build's own slices (a page drawn between them) is none of its business.
+TEST(SectionAbort, ABuildThatMeasuredAGlyphWithoutMemoryIsNotKept) {
+  const std::string cacheDir = freshCacheDir("starved_glyph");
+  const std::string epubPath = std::string(CORPUS_DIR) + "/test_headings.epub";
+
+  GfxRenderer renderer;
+  auto epub = std::make_shared<Epub>(epubPath, cacheDir);
+  ASSERT_TRUE(epub->load(true));
+  Section section(epub, kSpineIndex, renderer);
+
+  GfxRenderer::starvedCodepoint = 'e';
+  EXPECT_FALSE(section.createSectionFile(defaultParams(), {}, /*skipEviction=*/true));
+  GfxRenderer::starvedCodepoint = 0;
+  EXPECT_FALSE(section.hasActiveBuild());
+  EXPECT_FALSE(section.loadSectionFile(defaultParams()));
+
+  glyph_miss::noteStarved();
+  ASSERT_TRUE(section.createSectionFile(defaultParams(), {}, /*skipEviction=*/true));
+  EXPECT_TRUE(section.loadSectionFile(defaultParams()));
+  EXPECT_GT(section.pageCount, 0);
 }

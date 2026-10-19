@@ -18,6 +18,7 @@
 // (X3: highWater=9216/10240, failedAlloc=0, build time neutral). The former
 // per-site new/realloc path has been removed.
 #include <BuildArena.h>
+#include <GlyphProvider.h>
 #include <InflateReader.h>
 
 #include <algorithm>
@@ -2022,12 +2023,25 @@ Section::BuildStep Section::stepSectionBuild(const BuildParams& params, const ui
     }
   }
 
+  // A glyph the layout measures and the glyph store does not hold yet is drawn in the lent region rather than on the
+  // heap (glyph_miss). One that found no memory at all was measured as missing: the layout is not kept, and the build
+  // fails as a heap-short one does, so it runs again with more memory (released, or at a quieter moment).
+  const glyph_miss::Scope misses(buildState_->arena != buildState_->ownedArena.get() ? buildState_->arena : nullptr);
+  const auto starved = [&] {
+    if (!misses.starved()) return false;
+    LOG_ERR("SCT", "stepSectionBuild spine=%d: a glyph found no memory to be drawn in; the build is not kept",
+            spineIndex);
+    abortSectionBuild();
+    return true;
+  };
+
   // The CSS fallback (parse-failed-with-CSS) downgrades to a no-CSS build by restarting
   // from setup. Loop rather than recurse; at most one downgrade ever happens.
   while (true) {
     if (runBuildParse(*buildState_, budgetMs) == BuildPhaseResult::More) {
-      return BuildStep::More;
+      return starved() ? BuildStep::Failed : BuildStep::More;
     }
+    if (starved()) return BuildStep::Failed;
 
     const BuildPhaseResult fin = runBuildFinalize(*buildState_);
     if (fin == BuildPhaseResult::RetryNoCss) {

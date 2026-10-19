@@ -42,4 +42,7 @@ class RenderLock {
   static bool peek();
   // True when the calling task holds renderingMutex: the debug check for code that relies on it.
   static bool heldByCurrentTask();
+  // Called by the task giving the mutex back, just before it does: the end of whatever that task rendered, where what
+  // only lived for it can go (TrueType miss memory, SdCardFontSystem). One hook; nullptr removes it.
+  static void setReleaseHook(void (*hook)());
 };

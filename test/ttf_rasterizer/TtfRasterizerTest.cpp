@@ -320,6 +320,23 @@ TEST_F(TtfRasterizerTest, WithoutAScratchBlockNothingIsWrongWithTheGlyph) {
   EXPECT_TRUE(isPermanent(Status::Unsupported));
 }
 
+TEST_F(TtfRasterizerTest, ALentBlockDrawsAsTheOneItMakes) {
+  const uint16_t g = add(outline({rect(0, 0, 192, 64), rect(32, 96, 160, 192)}));
+  ASSERT_EQ(Status::Ok, draw(g));
+  const std::string made = image;
+  // Planned, not made: nothing to draw in yet, and nothing wrong with the glyph.
+  ASSERT_TRUE(rasterizer.setPlan(roomyPlan()));
+  EXPECT_FALSE(rasterizer.allocated());
+  EXPECT_EQ(Status::Transient, rasterizer.load(bytes, face, g, kUnitPpem, &metrics));
+  // The caller's block, as a section build's arena lends it, 8-aligned.
+  std::vector<uint64_t> lent((rasterizer.scratchBytes() + 7) / 8);
+  rasterizer.attach(reinterpret_cast<uint8_t*>(lent.data()));
+  ASSERT_EQ(Status::Ok, rasterizer.render(bytes, face, g, kUnitPpem, &metrics));
+  EXPECT_EQ(made, picture(metrics, rasterizer.output()));
+  rasterizer.release();  // given back, not freed: the vector frees it
+  EXPECT_FALSE(rasterizer.allocated());
+}
+
 TEST_F(TtfRasterizerTest, RasterizeWritesWhereItIsTold) {
   const uint16_t g = add(outline({rect(0, 0, 192, 64)}));
   data = buildFont(font);
@@ -391,9 +408,11 @@ TEST(TtfScratch, AllocationHoldsThePlanAndRefusesImpossibleOnes) {
   rasterizer.release();
   EXPECT_FALSE(rasterizer.allocated());
   EXPECT_EQ(nullptr, rasterizer.output());
-  EXPECT_EQ(0u, rasterizer.scratchBytes());
-  // The plan stays: the same block is made again from it.
+  // The plan stays, and its size: the same block is made again from it.
+  EXPECT_EQ(bytes, rasterizer.scratchBytes());
   EXPECT_EQ(4096u, rasterizer.plan().outputBytes);
+  ASSERT_TRUE(rasterizer.allocate());
+  EXPECT_EQ(bytes, rasterizer.scratchBytes());
   ASSERT_TRUE(rasterizer.allocate(rasterizer.plan()));
   EXPECT_EQ(bytes, rasterizer.scratchBytes());
   EXPECT_FALSE(rasterizer.allocate({512, 256, 4096, 1024}));  // pool under ftgrays' minimum

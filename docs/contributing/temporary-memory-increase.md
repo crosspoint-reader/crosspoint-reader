@@ -54,7 +54,7 @@ The thresholds are compile-time constants, most of them overridable with a `-D` 
 | `IN_PLACE_BUILD_*` | `EpubReaderActivity.cpp` | building with the secondary buffer kept resident (X4 only) |
 | `RESIDENT_BUILD_ABORT_*` | `EpubReaderActivity.cpp` | abandoning a resident Background-C build that is running out of heap |
 | `BG_BUILD_BORROW_MIN_FREE_HEAP_BYTES`, `BG_BUILD_BORROW_MIN_CONTIG_HEAP_BYTES` | `EpubReaderActivity.cpp` | starting a Background-B build in the borrowed buffer |
-| `PRE_RENDER_MIN_FREE_HEAP_BYTES` | `EpubReaderActivity.cpp` | pre-rendering the next page |
+| `PreRenderGate::kTroughBytes`, `kUnmeasuredAllowanceBytes` | `PreRenderGate.h` | pre-rendering the next page, with the costs the passes measured |
 
 When the embedded-style gate refuses, `Section::startBuild` builds the section without CSS (a different cache variant) rather than failing. On a later entry the reader finds the no-CSS variant (`Section::isEmbeddedStyleFallback`) and rebuilds with CSS.
 

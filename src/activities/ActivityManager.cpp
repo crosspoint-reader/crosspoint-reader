@@ -1254,15 +1254,17 @@ RenderLock::RenderLock(ExclusiveActivityAccess) {
   }
 }
 
-RenderLock::~RenderLock() {
-  if (isLocked) {
-    xSemaphoreGive(activityManager.renderingMutex);
-    isLocked = false;
-  }
-}
+namespace {
+void (*renderLockReleaseHook)() = nullptr;
+}  // namespace
+
+void RenderLock::setReleaseHook(void (*hook)()) { renderLockReleaseHook = hook; }
+
+RenderLock::~RenderLock() { unlock(); }
 
 void RenderLock::unlock() {
   if (isLocked) {
+    if (renderLockReleaseHook) renderLockReleaseHook();  // still under the mutex
     xSemaphoreGive(activityManager.renderingMutex);
     isLocked = false;
   }
