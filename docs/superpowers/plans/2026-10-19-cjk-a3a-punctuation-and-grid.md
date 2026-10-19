@@ -22,6 +22,7 @@
 - clang-format 21 is what CI runs (`bin/clang-format-fix`); version 22 differs on comment alignment. Run the version-21 check before pushing.
 - Host tests build and run from Git Bash (`cmake --build build/test -j 8 -- -k 0`, `ctest`); on Windows four tests fail on master too (`BookFontsTest` ×2, `LongChapterPageTables` ×2) and are not this plan's.
 - Firmware: `default`, `x4pro` and `lilygo_t5s3` must build (`PLATFORMIO_CORE_DIR=C:/pio`, one `pio run` at a time).
+- Code containing backslash escapes (`"\xE4\xB8\x80"` for 一 appears in `ParsedText.cpp` and the tests) goes in with the Write or Edit tool. A bash heredoc or a non-raw Python string rewrites the escapes, and the result compiles: the replay of this plan lost a debugging round to a corrupted 一 ("not whole ems of 26").
 
 ## Review Focus
 
@@ -713,7 +714,7 @@ TEST(CjkPunctuationWidths, ALatinWordKeepsItsCurlyQuotes) {
 
 - [ ] **Step 2: Run to see it fail.** `cmake --build build/test --target CjkLayoutTest && build/test/cjk_layout/CjkLayoutTest.exe --gtest_filter='CjkPunctuationWidths.*'` — Expected: `EachMarkIsATokenGluedWhereKinsokuHoldsIt` FAILS (words `字」。` and `次`).
 
-- [ ] **Step 3: Implement the cuts in `addWord`.** Replace the comment and the `reserveWords(cjkBreaks.size() + 1)` line after `const std::vector<size_t> cjkBreaks = CjkLineBreak::breakByteOffsets(word);` with the block below (the `cjkBreaks` line stays where it is, between the comment and `// Only in a word with CJK text`):
+- [ ] **Step 3: Implement the cuts in `addWord`.** Replace everything from the comment that starts "Chinese and Japanese are written without spaces" through `if (!reserveWords(cjkBreaks.size() + 1)) return;` (the comment, the `cjkBreaks` declaration and the reserve) with the block below, which declares `cjkBreaks` again itself:
 
 ```cpp
   // Chinese and Japanese are written without spaces: a word with CJK characters becomes one token
@@ -792,7 +793,7 @@ and the push loop at the end of `addWord` with:
 
 - [ ] **Step 5: Bump the section version** to 95 in `Section.cpp`, with the comment lines "v95: CJK punctuation is narrowed by the book's / table, a mark is a token of its own, CJK lines / justify flush, zh/ja text sits on a whole-em grid" above the v94 entry (one bump for the whole of A3a).
 
-- [ ] **Step 6: Run.** `CjkLayoutTest.exe` — Expected: all PASS. Pipeline: `UPDATE_GOLDENS=1 build/test/epub_pipeline/EpubPipelineTest.exe --gtest_filter='SyntheticCorpus/*MatchesGolden*'`, then `git status test/epub_pipeline/goldens` — Expected: only `test_cjk_*` goldens changed (tokens split at marks, x positions unchanged). Then the full pipeline run without `UPDATE_GOLDENS` — Expected: all PASS.
+- [ ] **Step 6: Run.** `CjkLayoutTest.exe` — Expected: all PASS. Pipeline: `UPDATE_GOLDENS=1 build/test/epub_pipeline/EpubPipelineTest.exe --gtest_filter='SyntheticCorpus/*MatchesGolden*'`, then `git status test/epub_pipeline/goldens` — Expected: only `test_cjk_*` goldens changed (tokens split at marks, x positions unchanged). `test_cjk_ko_hyeon` is among them: Hangul counts as CJK text, so the curly quotes inside its words split into glued tokens too. Then the full pipeline run without `UPDATE_GOLDENS` — Expected: all PASS.
 
 - [ ] **Step 7: Commit.** `git commit -m "feat(epub): every adjustable CJK mark is a token of its own"`
 
@@ -897,7 +898,7 @@ TEST(CjkPunctuationWidths, APageBottomRetryKeepsTheMarksWidths) {
 - [ ] **Step 2: Run to see them fail.** `cmake --build build/test --target CjkLayoutTest && build/test/cjk_layout/CjkLayoutTest.exe` — Expected: the new width tests FAIL on their x positions and line splits (every mark is still full width), and `EachLineStartsAtItsFirstTokensVisibleOffset` still passes at 20 px.
 
 - [ ] **Step 3: Implement.**
-  - **Shims.** Both host `GfxRenderer.h` files include `"Epub/CjkPunctuation.h"` and get this function (in `test/word_size_layout` the advance line is `adv = glyphW(fontId);` and the unused parameter is `style`; in `test/epub_pipeline` as shown):
+  - **Shims.** Both host `GfxRenderer.h` files include `"Epub/CjkPunctuation.h"` (after the standard headers) and get this function. In `test/epub_pipeline` it is exactly as shown. In `test/word_size_layout` the signature is `bool getGlyphInk(const int fontId, const uint32_t cp, const EpdFontFamily::Style /*style*/, int& inkLeft, int& inkWidth, int& adv) const` and the first line `adv = glyphW(fontId);`, the rest the same:
 ```cpp
   // Where a glyph's ink sits in its advance, as a CJK font draws its marks: an opening bracket on the right half,
   // a closing bracket, 。 and 、 on the left half, the other marks centred; anything else fills its advance.
@@ -1022,6 +1023,7 @@ void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int f
 ```
   - **The four breakers** measure a candidate line with its edge widths: in `computeLineBreaks` after `currlen += wordWidths[j] + gap;` add `const int lineLen = withEdgeTrims(currlen, i, j);` (comment: "The line as drawn: its first and last token at their line-edge widths (CJK punctuation, spec 5.2). It only grows with j, as a token is always wider than what a line edge takes off it.") and use `lineLen` in the `> effectivePageWidth` break test and in `remainingSpace`; in `computeHyphenatedLineBreaks` and `computeHyphenatedLineBreaksFromIndex` the fit test becomes `withEdgeTrims(lineWidth + candidateWidth, lineStart, currentIndex) <= effectivePageWidth`; in `computeSingleLineBreakNoHyphen` `withEdgeTrims(lineWidth + candidateWidth, lineStartIndex, currentIndex) <= effectivePageWidth`.
   - **`hyphenateWordAtIndex`** keeps the trims in step: after `wordWidths.insert(...)` add `lineStartTrim_.insert(lineStartTrim_.begin() + wordIndex + 1, 0);` and the same for `lineEndTrim_`.
+  - **`releaseLayoutScratch`** gives the three new vectors back with the rest of the scratch: after `std::vector<uint16_t>().swap(wordWidths_);` add `std::vector<int16_t>().swap(lineStartTrim_);`, `std::vector<int16_t>().swap(lineEndTrim_);`, `std::vector<uint8_t>().swap(markClass_);`.
   - **`extractLine`**: before the word-width sum add
 ```cpp
   // A token's width on this line: mid-line, but the first and last at their line-edge widths (CJK punctuation).
@@ -1059,7 +1061,7 @@ void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int f
 
 - [ ] **Step 4: The rule checker.** In `CjkRulesTest.cpp`:
   - includes `"Epub/CjkPunctuation.h"`, `"Epub/TypographyProfile.h"`, `<algorithm>`, `<limits>`, `<map>`; the header comment lists the punctuation rule;
-  - `DumpLine` gains `std::string shape`, `bool justified`, `bool cell`, `int y`, parsed from the `LINE`/`LN` record (`x=`, `align=`, `mult=` make the shape; `align=0` is justified; an `LN` record is a cell; `y=`);
+  - `DumpLine` gains `std::string shape`, `bool justified`, `bool cell`, `int y`, parsed from the `LINE`/`LN` record (`x=`, `align=`, `mult=` make the shape; `align=0` is justified; an `LN` record is a cell; `y=`). An `LN` record carries none of these fields, so a cell line's shape is empty and its y 0;
   - `Case` gains `std::string language`; `CjkRules` gets `table = TypographyProfile::forLanguage(c.language).punctuation` in `SetUp`, a `virtual uint8_t alignment() const { return 1; }` used for `profile.paragraphAlignment`, and the cache directory name ends `_justified` when `alignment() == 0`;
   - the `LineWidths` helper class before `struct Case`:
 ```cpp
@@ -1320,7 +1322,7 @@ TEST(CjkJustification, LatinLinesKeepTheirRounding) {
 ```
   and in `CjkRulesTest.cpp` the justified suite, as in Task 6's listing below but without the `if (profile.wholeEmGrid) { ... }` block: `class CjkJustifiedRules : public CjkRules { protected: uint8_t alignment() const override { return 0; } };` after `CjkRules`, the test `JustifiedLinesEndFlushOnAWholeEmGrid`, and `INSTANTIATE_TEST_SUITE_P(CjkCorpus, CjkJustifiedRules, testing::ValuesIn(cjkBooks()), caseName);`.
 - [ ] **Step 2: Run to see them fail.** Expected: `AJustifiedCjkLineEndsFlush` FAILS (`{0, 12, 24, 36}`), the justified suite FAILS "not flush" on the ja and zh books.
-- [ ] **Step 3: Implement.** In `extractLine` count CJK gaps while summing (`bool cjkGapOnLine = false;`, and in the gap branch `if (boundary.noSpaceBefore) cjkGapOnLine = true;`), replace `justifyExtra`'s definition with
+- [ ] **Step 3: Implement.** In `extractLine` note CJK gaps while summing: declare `bool cjkGapOnLine = false;` with the other sums, and inside `if (wordIdx > 0 && !boundary.continues) {`, right after `if (!beforeClosing) actualGapCount++;`, add `if (boundary.noSpaceBefore) cjkGapOnLine = true;`. Replace `justifyExtra`'s definition with
 ```cpp
   const bool justified = blockStyle.alignment == CssTextAlign::Justify && !isLastLine && actualGapCount >= 1;
   const int justifyExtra =
@@ -1339,7 +1341,7 @@ TEST(CjkJustification, LatinLinesKeepTheirRounding) {
   };
 ```
   and use `gapExtra()` where `justifyExtra` was added (the non-breaking-space path and the word-gap path).
-- [ ] **Step 4: Run.** Expected: both tests PASS; the justified suite PASSES on every book (skipped for Korean, which justifies at word spaces); Latin goldens unchanged, CJK goldens regenerated (`git status`).
+- [ ] **Step 4: Run.** Expected: both tests PASS; the justified suite PASSES on every book (skipped for Korean, which justifies at word spaces); Latin goldens unchanged, CJK goldens regenerated (`git status`). `test_cjk_ko_hyeon` moves as well: a Korean line with Han characters on it has CJK gaps, so it ends flush too (the rule is per line, not per language).
 - [ ] **Step 5: Commit.** `git commit -m "feat(epub): justified CJK lines end flush"`
 
 ---
