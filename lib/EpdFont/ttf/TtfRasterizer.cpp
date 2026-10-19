@@ -315,9 +315,7 @@ ScratchPlan mergePlans(const ScratchPlan& a, const ScratchPlan& b) {
   return plan;
 }
 
-bool Rasterizer::allocate(const ScratchPlan& wanted) {
-  const ScratchPlan plan = wanted;  // a copy: `wanted` may be plan_ itself, as allocate(plan()) passes it
-  release();
+bool Rasterizer::setPlan(const ScratchPlan& plan) {
   if (plan.points > kMaxScratchPoints || plan.contours > kMaxScratchContours || plan.outputBytes > kMaxOutputBytes ||
       plan.poolBytes < 2048 || plan.poolBytes > kPoolBytesSd || plan.maxPpem26_6 == 0 ||
       plan.maxPpem26_6 > kMaxPpem26_6) {
@@ -326,28 +324,40 @@ bool Rasterizer::allocate(const ScratchPlan& wanted) {
             static_cast<unsigned long>(plan.maxPpem26_6));
     return false;
   }
+  release();
   // The pool comes first: the block's start is aligned for ftgrays' cells and for the points that follow.
   pointsOffset_ = alignUp(plan.poolBytes, 8);
   contoursOffset_ = pointsOffset_ + plan.points * static_cast<uint32_t>(sizeof(FT_Vector));
   tagsOffset_ = contoursOffset_ + plan.contours * static_cast<uint32_t>(sizeof(unsigned short));
   outputOffset_ = tagsOffset_ + plan.points;
-  const uint32_t bytes = outputOffset_ + plan.outputBytes;
-  // One block for the family's lifetime: a cell pool and outline arrays on the loop task's stack would take
-  // 4-10 KB of its 16 KB, and per-glyph allocations would fragment the heap.
-  block_ = makeUniqueNoThrow<uint8_t[]>(bytes);
-  if (!block_) {
-    LOG_ERR("TTF", "scratch block: %lu bytes, out of memory", static_cast<unsigned long>(bytes));
-    return false;
-  }
-  blockBytes_ = bytes;
-  plan_ = plan;
-  loaded_ = Status::Transient;
+  blockBytes_ = outputOffset_ + plan.outputBytes;
+  plan_ = plan;  // last: `plan` may be plan_ itself, as allocate(plan()) passes it
   return true;
 }
 
+bool Rasterizer::allocate() {
+  if (block_ || blockBytes_ == 0) return block_ != nullptr;  // made already, or nothing planned
+  // One block, not one per glyph: a cell pool and outline arrays on the loop task's stack would take 4-10 KB of its
+  // 16 KB, and per-glyph allocations would fragment the heap.
+  owned_ = makeUniqueNoThrow<uint8_t[]>(blockBytes_);
+  if (!owned_) {
+    LOG_ERR("TTF", "scratch block: %lu bytes, out of memory", static_cast<unsigned long>(blockBytes_));
+    return false;
+  }
+  attach(owned_.get());
+  return true;
+}
+
+bool Rasterizer::allocate(const ScratchPlan& plan) { return setPlan(plan) && allocate(); }
+
+void Rasterizer::attach(uint8_t* block) {
+  block_ = block;
+  loaded_ = Status::Transient;
+}
+
 void Rasterizer::release() {
-  block_.reset();
-  blockBytes_ = 0;
+  block_ = nullptr;
+  owned_.reset();
   loaded_ = Status::Transient;
 }
 
@@ -359,13 +369,13 @@ Status Rasterizer::load(FontBytes& bytes, const Face& face, const uint16_t glyph
   if (ppem26_6 == 0 || ppem26_6 > kMaxPpem26_6) return loaded_ = Status::Unsupported;
 
   bytes.clearErrors();
-  auto* points = reinterpret_cast<FT_Vector*>(block_.get() + pointsOffset_);
+  auto* points = reinterpret_cast<FT_Vector*>(block_ + pointsOffset_);
   Loader loader{bytes,
                 face,
                 unitsToPixels(face, ppem26_6),
                 points,
-                reinterpret_cast<unsigned short*>(block_.get() + contoursOffset_),
-                block_.get() + tagsOffset_,
+                reinterpret_cast<unsigned short*>(block_ + contoursOffset_),
+                block_ + tagsOffset_,
                 plan_.points,
                 plan_.contours};
   int32_t pp1x = 0;
@@ -431,9 +441,9 @@ Status Rasterizer::rasterize(uint8_t* dst) {
   FT_Outline outline{};
   outline.n_contours = numContours_;
   outline.n_points = numPoints_;
-  outline.points = reinterpret_cast<FT_Vector*>(block_.get() + pointsOffset_);
-  outline.tags = block_.get() + tagsOffset_;
-  outline.contours = reinterpret_cast<unsigned short*>(block_.get() + contoursOffset_);
+  outline.points = reinterpret_cast<FT_Vector*>(block_ + pointsOffset_);
+  outline.tags = block_ + tagsOffset_;
+  outline.contours = reinterpret_cast<unsigned short*>(block_ + contoursOffset_);
   outline.flags = FT_OUTLINE_NONE;  // nonzero winding, as TrueType
 
   SpanSink sink{dst, width_, height_};
@@ -447,7 +457,7 @@ Status Rasterizer::rasterize(uint8_t* dst) {
 
   FT_Raster raster = nullptr;
   ttf_grays_raster.raster_new(nullptr, &raster);
-  ttf_grays_raster.raster_reset(raster, block_.get(), plan_.poolBytes);
+  ttf_grays_raster.raster_reset(raster, block_, plan_.poolBytes);
   return ttf_grays_raster.raster_render(raster, &params) == 0 ? Status::Ok : Status::Malformed;
 }
 

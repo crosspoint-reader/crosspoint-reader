@@ -52,7 +52,7 @@ ScratchPlan mergePlans(const ScratchPlan& a, const ScratchPlan& b);
 /// Glyph outlines to 2-bit bitmaps: FreeType's TrueType loader rebuilt in integers (simple glyphs, compound
 /// glyphs with offsets and 2.14 transforms, unhinted, exactly as FreeType scales them) feeding FreeType's own
 /// anti-aliasing rasterizer (ftgrays), whose coverage spans are packed straight into the 2-bit stream with the
-/// converter's thresholds. One per loaded family; it owns the family's scratch block.
+/// converter's thresholds. One per loaded set, drawing in the scratch block it makes or is lent.
 ///
 /// Two steps, so a caller can learn a glyph's size before choosing where it goes: load() reads and scales
 /// the outline into the scratch block and reports the metrics; rasterize() draws it anywhere.
@@ -65,16 +65,24 @@ class Rasterizer {
   Rasterizer(const Rasterizer&) = delete;
   Rasterizer& operator=(const Rasterizer&) = delete;
 
-  /// Allocates the scratch block (one heap block, held until release()). False on OOM, logged.
+  /// Plans the scratch block without making it: scratchBytes() is its size from then on. False when a part is out of
+  /// range (logged); the plan before stays.
+  bool setPlan(const ScratchPlan& plan);
+  /// Makes the planned block on the heap, held until release(). False on OOM, logged.
+  bool allocate();
+  /// setPlan(), then allocate().
   bool allocate(const ScratchPlan& plan);
-  /// Frees the scratch block. The plan stays, so allocate(plan()) makes the same block again; until then load()
-  /// reports Transient.
+  /// Draws in `block` instead, until release(): scratchBytes() bytes, aligned to 8, which the caller owns.
+  void attach(uint8_t* block);
+  /// Gives the block up, freeing it when allocate() made it. The plan stays; until a block is made or attached
+  /// again, load() reports Transient.
   void release();
   bool allocated() const { return block_ != nullptr; }
+  /// The planned block's size, made or not.
   uint32_t scratchBytes() const { return blockBytes_; }
   const ScratchPlan& plan() const { return plan_; }
   /// The output region, plan().outputBytes long: render() leaves its bitmap here.
-  uint8_t* output() { return block_ ? block_.get() + outputOffset_ : nullptr; }
+  uint8_t* output() { return block_ ? block_ + outputOffset_ : nullptr; }
 
   /// Loads `glyph` of `face` at `ppem26_6` into the scratch block and fills `metrics`: width, height, left
   /// and top of FreeType's unhinted bitmap, advanceX (12.4) as the .cpfont converter derives it, and
@@ -90,7 +98,8 @@ class Rasterizer {
  private:
   struct Loader;
 
-  std::unique_ptr<uint8_t[]> block_;
+  uint8_t* block_ = nullptr;          // owned_, or the caller's (attach())
+  std::unique_ptr<uint8_t[]> owned_;  // what allocate() made
   uint32_t blockBytes_ = 0;
   ScratchPlan plan_;
   uint32_t pointsOffset_ = 0;

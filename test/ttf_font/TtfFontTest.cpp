@@ -1507,7 +1507,7 @@ TEST_F(TtfFontSetTest, WithoutItsMissMemoryTheSetDrawsWhatIsStoredAndAMissWaits)
   EXPECT_FALSE(set->missMemoryReleased());
   EXPECT_EQ(scratch, set->releaseMissMemory());  // flash mode: the scratch block alone, no ring
   EXPECT_TRUE(set->missMemoryReleased());
-  EXPECT_EQ(0u, set->scratchBytes());
+  EXPECT_EQ(scratch, set->scratchBytes());  // the plan stays
   const uint32_t renders = set->font(0)->renders();
   // What the store holds is drawn as before.
   expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *set->font(0), kRegular, set->font(0)->glyph(kRegular, 'A'));
