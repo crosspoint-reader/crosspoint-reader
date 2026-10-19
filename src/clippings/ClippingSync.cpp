@@ -1,6 +1,7 @@
 #include "ClippingSync.h"
 
 #include <ArduinoJson.h>
+#include <BuildScratch.h>
 #include <HalMemory.h>
 #include <KOReaderCredentialStore.h>
 #include <Logging.h>
@@ -14,7 +15,7 @@
 
 namespace {
 // One item per response: 4 KiB text may occupy 24 KiB when JSON-escaped.
-// Reuse one checked heap buffer for requests and responses; it cannot fit on the task stack.
+// Reuse one buffer for requests and responses; C3 borrows it from the framebuffer.
 constexpr size_t BUFFER_SIZE = 32 * 1024;
 
 bool request(freeink::SecureHttpClient& http, const std::string& url, char* buffer, JsonDocument& doc,
@@ -139,7 +140,13 @@ bool clippingSync::run(const std::string& bookPath, const std::string& documentH
     ~Unload() { CLIPPINGS.unload(); }
   } unload;
 
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && CONFIG_IDF_TARGET_ESP32C3
+  const auto releaseScratch = [](char* buffer) { buildscratch::release(reinterpret_cast<uint8_t*>(buffer)); };
+  std::unique_ptr<char[], decltype(releaseScratch)> buffer(reinterpret_cast<char*>(buildscratch::claim(BUFFER_SIZE)),
+                                                           releaseScratch);
+#else
   auto buffer = makeUniqueNoThrow<char[]>(BUFFER_SIZE);
+#endif
   auto http = makeUniqueNoThrow<freeink::SecureHttpClient>();
   const auto heap = HalMemory::getDefaultHeap();
   if (!buffer || !http || heap.freeBytes < 40000 || heap.largestBlockBytes < 20000) {
