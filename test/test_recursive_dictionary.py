@@ -39,6 +39,8 @@ structs = "\n".join(block(header, f"struct {name} {{", True) for name in (
     "Line", "BodyArea", "Definition", "HistoryEntry", "LookupState"
 ))
 location = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictLocation {", True)
+marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().splitlines()
+              if "DICTIONARY_PLAIN_HEADWORD_MARKER =" in line)
 selection = block(selector, "struct Selection {", True)
 plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
 constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
@@ -76,7 +78,7 @@ harness = r'''
 template<typename... Args> void logDebug(Args&&...) {}
 #define LOG_DBG(...) logDebug(__VA_ARGS__)
 
-''' + constants + '\nnamespace ReaderUtils {\n' + reader_constants + '}\n' + r'''
+''' + constants + '\nnamespace ReaderUtils {\n' + reader_constants + '}\n' + marker + '\n' + r'''
 
 enum class StrId { STR_DICT_LOOKING_UP, STR_DICT_NOT_FOUND, STR_DICT_LOW_MEMORY, STR_DICT_READ_FAILED,
                    STR_DICT_DECOMPRESS_ERROR, STR_DICT_RESTORE_FAILED, STR_DICT_HISTORY_FULL };
@@ -88,7 +90,7 @@ struct HalMemory {
   static Heap getDefaultHeap() { return {available, available}; }
   static Heap getInternalHeap() { return getDefaultHeap(); }
 };
-struct EpdFontFamily { enum Style { REGULAR }; };
+struct EpdFontFamily { enum Style { REGULAR, BOLD }; };
 struct BlockStyle { bool isRtl = false; };
 struct TextBlock {
   struct SourceRange { uint32_t start, end; };
@@ -187,7 +189,7 @@ bool buildDictionaryHtmlPages(Renderer& renderer, const std::string&, uint16_t, 
   for (int i = 0; i < 4; ++i) pages.push_back(std::make_unique<Page>());
   return true;
 }
-std::string htmlToPlainText(const std::string& text) { return text; }
+std::string htmlToPlainText(const std::string& text, char) { return text; }
 struct DictionaryDefinitionActivity {
   struct PlainSelectionLine;
 ''' + structs + r'''
@@ -221,7 +223,7 @@ struct DictionaryDefinitionActivity {
   bool layoutHtmlPages(Definition&);
   bool reserveLines(Definition&, size_t);
   bool wrapText(Definition&);
-  int measureSpan(int, const char*, size_t) const;
+  int measureSpan(int, const char*, size_t, EpdFontFamily::Style = EpdFontFamily::REGULAR) const;
   void showMessage(StrId);
   void navigateDefinition(bool);
   bool restoreCurrentDefinition(bool);
@@ -447,6 +449,7 @@ lookup_harness = r'''
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 #define LOG_ERR(...) ((void)0)
 constexpr size_t DEFINITION_HEAP_HEADROOM_BYTES = 8192;
@@ -456,18 +459,31 @@ struct HalMemory {
   static Heap getDefaultHeap() { return heap; }
 };
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
-''' + location + r'''
+struct EspStub {
+  size_t getMaxAllocHeap() { return 1024 * 1024; }
+};
+EspStub ESP;
+struct TxtToHtml {
+  static size_t escapedHtmlSize(std::string_view text) { return text.size(); }
+  static void appendEscapedHtml(std::string& out, std::string_view text) { out.append(text); }
+};
+''' + location + '\n' + marker + r'''
 class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
   struct LookupSession {};
+  static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
   bool hasSyn = false;
+  bool htmlDefinitions = false;
   unsigned searches = 0;
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
   DictLocation locate(LookupSession&, const char*, std::string*) { ++searches; return {}; }
-  DictLocation locateSynonym(LookupSession&, const char*, std::string*) { ++searches; return {}; }
-  bool readDefinition(DictLocation, std::string&, LookupResult*) { return false; }
+  bool locateSynonyms(LookupSession&, const char*, std::vector<DictLocation>&, std::vector<std::string>&, bool*) {
+    ++searches;
+    return false;
+  }
+  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false) { return false; }
   static std::string cleanWord(const char*);
   static void stemVariants(const std::string&, std::vector<std::string>&);
   bool lookup(const char*, std::string&, std::string&, LookupResult*, DictLocation*);
