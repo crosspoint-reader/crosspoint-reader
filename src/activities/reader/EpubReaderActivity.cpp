@@ -796,9 +796,11 @@ void EpubReaderActivity::onEnter() {
   // Start a reading-stats session. We use the cheap filename-based hash here:
   // computing the content hash would re-read the file on every reader open,
   // and a renamed book getting a new stats entry is acceptable — it'll still
-  // accumulate going forward.
-  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(epub->getPath()), epub->getTitle(),
-                                      epub->getAuthor());
+  // accumulate going forward. A device test's book is no history (SerialTestApi::isTestBook).
+  if (const std::string& bookPath = epub->getPath(); !SerialTestApi::isTestBook(bookPath)) {
+    globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(bookPath), epub->getTitle(),
+                                        epub->getAuthor());
+  }
   // Bookmarks + recent-books overrides + the stats session. These are the loads a wake
   // shortcut would most plausibly skip or cache in RTC, so they get their own bucket.
   WakeTrace::mark(WakeTrace::Phase::StoresLoaded);
@@ -2031,21 +2033,20 @@ bool EpubReaderActivity::warmPageForImageLane(const Page& page, const int spine,
   imageProcessingActive_ = true;
   CooperativeAbort::clearAborted();
   BuildArena* const arena = scratch && scratch->valid() ? scratch.get() : nullptr;
-  const uint8_t accents = sdFontSystem.bookAccentsLoaded();
   ImageMemoryLadder::Action ladder;
   {
     image_scratch::ScopedArena scratchScope(arena);
     GfxRenderer::ScopedCacheOnlyImageWrites cacheOnly(renderer);
     // Cheaper here than on a page turn: a page whose images the lane decodes is drawn from their caches.
     ladder = warmImagesClimbingLadder(page, layout.marginLeft, contentTop, /*forceLoad=*/true, warmGrayscale, arena,
-                                      /*drawsPage=*/false, accents);
+                                      /*drawsPage=*/false);
   }
   // Preempted by input: not a failure, the next quiet moment retries.
   const bool preempted = CooperativeAbort::consumeAborted();
   imageProcessingActive_ = false;
   scratch.reset();
   renderer.returnSecondaryBuffer();  // cannot fail: the region never entered the heap
-  if (finishLadder(ladder, accents)) return true;
+  if (finishLadder(ladder)) return true;
 
   const bool complete = !page.hasUncachedImages(true, true, warmGrayscale);
   if (!complete && !preempted) noteImageWarmMiss(spine, pageIndex);
@@ -2091,22 +2092,14 @@ bool EpubReaderActivity::imageWarmGaveUp(const int spine, const int page) const 
 }
 
 namespace {
+// The ladder's log names its actions, the relief steps among them, by these.
+constexpr const char* kLadderActionNames[] = {
+    "done", "light relief", "heavy relief", "an accent family fewer", "emergency: images as boxes", "restart"};
+static_assert(sizeof(kLadderActionNames) / sizeof(kLadderActionNames[0]) ==
+                  static_cast<size_t>(ImageMemoryLadder::Action::Restart) + 1,
+              "a name for every ImageMemoryLadder::Action");
 const char* ladderActionName(const ImageMemoryLadder::Action action) {
-  switch (action) {
-    case ImageMemoryLadder::Action::Done:
-      return "done";
-    case ImageMemoryLadder::Action::LightRelief:
-      return "light relief";
-    case ImageMemoryLadder::Action::HeavyRelief:
-      return "heavy relief";
-    case ImageMemoryLadder::Action::DropAccent:
-      return "an accent family fewer";
-    case ImageMemoryLadder::Action::Emergency:
-      return "emergency: images as boxes";
-    case ImageMemoryLadder::Action::Restart:
-      return "restart";
-  }
-  return "?";
+  return kLadderActionNames[static_cast<uint8_t>(action)];
 }
 }  // namespace
 
@@ -2119,67 +2112,84 @@ void EpubReaderActivity::prewarmPageFonts(const Page& page, const int xOffset, c
 ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Page& page, const int xOffset,
                                                                        const int yOffset, const bool forceLoad,
                                                                        const bool warmGrayscale, BuildArena* arena,
-                                                                       const bool drawsPage, const uint8_t accents) {
+                                                                       const bool drawsPage) {
   using ImageMemoryLadder::Action;
   using ImageMemoryLadder::Decode;
   using ImageMemoryLadder::Step;
+  // What is loaded, and whether a build is live, stay as they are while the ladder climbs: only the heavy step, the
+  // last, unloads the set, and no build steps beside a decode (imageProcessingActive_).
   ImageMemoryLadder::Input in;
-  in.accents = accents;
+  in.accents = sdFontSystem.bookAccentsLoaded();
+  in.ttfLoaded = sdFontSystem.ttfLoaded();
+  // A live build has laid text out with the set, and goes on from where it is.
+  in.canUnload =
+      !(section && section->hasActiveBuild()) && !(backgroundSection_ && backgroundSection_->hasActiveBuild());
+  unsigned long reloadMs = 0;
+  image_scratch::CoarseNeed coarse;  // what the plain step's coarse pictures need for a finer one
   for (;;) {
-    in.ttfLoaded = sdFontSystem.ttfLoaded();
-    // A live build has laid text out with the set, and goes on from where it is.
-    in.canUnload =
-        !(section && section->hasActiveBuild()) && !(backgroundSection_ && backgroundSection_->hasActiveBuild());
-    in.fontsBack = true;
     const uint32_t heapShortBefore = image_scratch::heapShortCount();
-    if (arena) arena->reset();  // nothing of the step before lives in it
-    switch (in.step) {
-      case Step::Plain:
-        break;
-      case Step::LightRelief: {
-        // The page's glyphs into the store first, drawn in the lent region: from there the page needs no miss after.
-        if (drawsPage) {
-          const glyph_miss::Scope misses(arena);
-          prewarmPageFonts(page, xOffset, yOffset);
-        }
-        renderer.releaseFontCaches();
-        const uint32_t freed = sdFontSystem.releaseTtfMissMemory();
-        LOG_INF("ERS", "Memory ladder: light relief, %lu B of TrueType memory freed (free=%lu)",
-                static_cast<unsigned long>(freed), static_cast<unsigned long>(esp_get_free_heap_size()));
-        break;
+    image_scratch::takeCoarseNeed();  // none from a decode before the step's
+    if (arena) arena->reset();        // nothing of the step before lives in it
+    if (in.step != Step::Plain) {
+      const bool light = in.step == Step::LightRelief;
+      // The light step puts the page's glyphs into the store first, drawn in the lent region: from there the page
+      // needs no miss after. Both steps free the built-in font caches; the light one then what the TrueType set's
+      // misses hold, the heavy one the whole set.
+      if (light && drawsPage) {
+        const glyph_miss::Scope misses(arena);
+        prewarmPageFonts(page, xOffset, yOffset);
       }
-      case Step::HeavyRelief:
-        renderer.releaseFontCaches();
+      const uint32_t freeBefore = esp_get_free_heap_size();
+      renderer.releaseFontCaches();
+      if (light) {
+        sdFontSystem.releaseTtfMissMemory();
+      } else {
         sdFontSystem.suspendTtf(renderer);
-        LOG_INF("ERS", "Memory ladder: heavy relief, the TrueType set unloaded (free=%lu)",
-                static_cast<unsigned long>(esp_get_free_heap_size()));
-        break;
+      }
+      const uint32_t freeNow = esp_get_free_heap_size();
+      LOG_INF("ERS", "Memory ladder: %s, %ld B freed (free=%lu)",
+              ladderActionName(light ? Action::LightRelief : Action::HeavyRelief),
+              static_cast<long>(freeNow) - static_cast<long>(freeBefore), static_cast<unsigned long>(freeNow));
     }
     if (SerialTestApi::takeDecodeRefusal()) {
       // A test build's CMD:HEAP:REFUSE: the step's decode fails as one the heap refused would.
       image_scratch::noteHeapShort();
       LOG_INF("ERS", "Memory ladder: decode refused (CMD:HEAP:REFUSE)");
     } else {
-      page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale);
-    }
-    // What the step freed comes back at once, while the decode's buffers are just freed and the heap least broken up.
-    switch (in.step) {
-      case Step::Plain:
-      case Step::LightRelief:  // the next prewarm and the next miss make what it freed again
-        break;
-      case Step::HeavyRelief: {
-        const unsigned long start = millis();
-        in.fontsBack = sdFontSystem.resumeTtf(renderer);
-        LOG_INF("ERS", "Memory ladder: the TrueType set %s in %lu ms (free=%lu)",
-                in.fontsBack ? "loaded again" : "did not load again", millis() - start,
-                static_cast<unsigned long>(esp_get_free_heap_size()));
-        break;
+      // A relief step decodes a coarse picture again too, only where, with what it freed, the workspace of a finer one
+      // can be had now; the picture stays until a decode replaces it.
+      const bool finer = in.step != Step::Plain && image_scratch::coarseNeedFits(coarse);
+      if (in.step != Step::Plain && coarse.bytes != 0 && !finer) {
+        LOG_INF("ERS", "Memory ladder: still no %lu B for a finer picture: the coarse one stays",
+                static_cast<unsigned long>(coarse.bytes));
       }
+      page.warmImageCaches(renderer, xOffset, yOffset, forceLoad, /*monochromeOutput=*/true, warmGrayscale,
+                           /*redecodeCoarse=*/finer);
     }
-    in.decode = CooperativeAbort::wasAborted()                            ? Decode::Failed
-                : !page.hasUncachedImages(forceLoad, true, warmGrayscale) ? Decode::Done
-                : image_scratch::heapShortCount() != heapShortBefore      ? Decode::HeapShort
-                                                                          : Decode::Failed;
+    // The set comes back at once, while the decode's buffers are just freed and the heap least broken up. What the
+    // light step freed, the next prewarm and the next miss make again.
+    if (in.step == Step::HeavyRelief) {
+      const unsigned long start = millis();
+      in.fontsBack = sdFontSystem.resumeTtf(renderer);
+      reloadMs = millis() - start;
+    }
+    // Short of memory with every image cached: a decode published a coarse picture (image_scratch::noteCoarse); a
+    // decode the heap refused leaves none.
+    const bool heapShort = image_scratch::heapShortCount() != heapShortBefore;
+    if (in.step == Step::Plain) coarse = image_scratch::takeCoarseNeed();
+    if (CooperativeAbort::wasAborted()) {
+      in.decode = Decode::Failed;
+    } else if (page.hasUncachedImages(forceLoad, true, warmGrayscale)) {
+      in.decode = heapShort ? Decode::HeapShort : Decode::Failed;
+    } else {
+      in.decode = heapShort ? Decode::Coarse : Decode::Done;
+    }
+    if (in.decode == Decode::Coarse && in.step == Step::Plain) {
+      // Worth the light step only where what it frees, the TrueType misses' memory, makes room for a finer one.
+      in.coarseFits = image_scratch::coarseNeedFits(coarse, sdFontSystem.ttfMissMemoryBytes());
+      LOG_INF("ERS", "Memory ladder: a coarse picture, %lu B from a finer one%s",
+              static_cast<unsigned long>(coarse.bytes), in.coarseFits ? "" : " that cannot be had: kept");
+    }
     const Action action = ImageMemoryLadder::next(in);
     switch (action) {
       case Action::LightRelief:
@@ -2188,31 +2198,35 @@ ImageMemoryLadder::Action EpubReaderActivity::warmImagesClimbingLadder(const Pag
       case Action::HeavyRelief:
         in.step = Step::HeavyRelief;
         continue;
-      case Action::Done:
       case Action::DropAccent:
+        // For good (BookFonts::accentLimit); finishLadder() loads the fonts the book keeps.
+        sdFontSystem.limitBookAccents(static_cast<uint8_t>(in.accents - 1));
+        break;
+      case Action::Done:
       case Action::Emergency:
       case Action::Restart:
-        if (in.step == Step::Plain && in.decode == Decode::Done) {
-          LOG_DBG("ERS", "Memory ladder: decoded without relief (free=%lu)",
-                  static_cast<unsigned long>(esp_get_free_heap_size()));
-        } else {
-          LOG_INF("ERS", "Memory ladder: %s after step %u (free=%lu)", ladderActionName(action),
-                  static_cast<unsigned>(in.step), static_cast<unsigned long>(esp_get_free_heap_size()));
-        }
-        return action;
+        break;
     }
+    if (in.step == Step::Plain && in.decode == Decode::Done) {
+      LOG_DBG("ERS", "Memory ladder: decoded without relief (free=%lu)",
+              static_cast<unsigned long>(esp_get_free_heap_size()));
+    } else {
+      // The set's reload, by the heavy step: one that failed is what DropAccent and Restart are for.
+      LOG_INF("ERS", "Memory ladder: %s after step %u (reload %lu ms, free=%lu)", ladderActionName(action),
+              static_cast<unsigned>(in.step), reloadMs, static_cast<unsigned long>(esp_get_free_heap_size()));
+    }
+    return action;
   }
 }
 
-bool EpubReaderActivity::finishLadder(const ImageMemoryLadder::Action action, const uint8_t accents) {
+bool EpubReaderActivity::finishLadder(const ImageMemoryLadder::Action action) {
   switch (action) {
     case ImageMemoryLadder::Action::Done:
     case ImageMemoryLadder::Action::LightRelief:
     case ImageMemoryLadder::Action::HeavyRelief:
     case ImageMemoryLadder::Action::Emergency:
       return false;
-    case ImageMemoryLadder::Action::DropAccent:
-      sdFontSystem.limitBookAccents(static_cast<uint8_t>(accents - 1));
+    case ImageMemoryLadder::Action::DropAccent:  // the family is left out already (warmImagesClimbingLadder)
       break;
     case ImageMemoryLadder::Action::Restart:
       // The images are cached by now; a fresh heap is what the fonts need.
@@ -5624,14 +5638,13 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
       LOG_DBG("ERS", "Released secondary buffer for image warm pass (nothing to lend)");
     }
   }
-  const uint8_t accents = imageProcessingActive_ ? sdFontSystem.bookAccentsLoaded() : 0;
   ImageMemoryLadder::Action ladder = ImageMemoryLadder::Action::Done;
   if (imageProcessingActive_) {
     // Scoped so the arena is uninstalled before the borrow is returned below — a stale
     // image_scratch pointer into a region the display owns again would be a use-after-free.
     image_scratch::ScopedArena warmScratchScope(warmScratch.get());
     ladder = warmImagesClimbingLadder(*page, orientedMarginLeft, contentTop, warmForceLoad, warmGrayscaleImageCache,
-                                      warmScratch.get(), /*drawsPage=*/true, accents);
+                                      warmScratch.get(), /*drawsPage=*/true);
   }
   // The borrow is returned after clearScreen() below, not here: returnSecondaryBuffer() seeds the
   // restored buffer from the live framebuffer, and right now that still holds the decode's
@@ -5676,7 +5689,7 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
     warmScratch.reset();
     renderer.returnSecondaryBuffer();
   }
-  if (finishLadder(ladder, accents)) {
+  if (finishLadder(ladder)) {
     lock.unlock();  // renderNormalPass takes it again; the page is drawn once the chapter is laid out again
     return;
   }

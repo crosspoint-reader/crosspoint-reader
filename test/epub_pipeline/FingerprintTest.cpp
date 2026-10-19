@@ -10,6 +10,7 @@
 #include <string>
 
 #include "Epub.h"
+#include "Epub/BookFonts.h"
 
 namespace fs = std::filesystem;
 
@@ -88,6 +89,33 @@ TEST_F(FingerprintFixture, PreFingerprintCacheIsAdoptedNotWiped) {
   EXPECT_EQ(loadTitle(), "Heading Font Size Test");
   EXPECT_TRUE(canaryAlive()) << "upgrade must adopt existing caches, not mass-invalidate";
   EXPECT_TRUE(fs::exists(epubCacheRoot() / "fingerprint.bin")) << "sidecar not written on adoption";
+}
+
+// The reader chooses a book's fonts from what BookFonts found in it (fonts.bin, in the cache) before load(). A book
+// replaced under the same name must not be drawn in the old book's fonts: its stale cache goes first, and the new
+// book is examined at this open.
+TEST_F(FingerprintFixture, AReplacedBookForgetsTheOldBooksFontsBeforeLoad) {
+  fs::copy_file(kBookA, bookPath);
+  std::string cachePath;
+  {
+    Epub epub(bookPath.string(), cacheDir);
+    ASSERT_TRUE(epub.load(true));
+    ASSERT_EQ(BookFonts::State::None, BookFonts::prepare(epub, nullptr));
+    cachePath = epub.getCachePath();
+  }
+  {
+    const Epub same(bookPath.string(), cacheDir);
+    EXPECT_FALSE(same.clearCacheIfContentChanged());
+    EXPECT_EQ(BookFonts::State::None, BookFonts::read(cachePath)) << "the book as it was keeps what was found";
+  }
+
+  fs::remove(bookPath);
+  fs::copy_file(kBookB, bookPath);
+  ASSERT_EQ(BookFonts::State::None, BookFonts::read(cachePath)) << "until then the old book's answer stands";
+  const Epub replaced(bookPath.string(), cacheDir);
+  EXPECT_TRUE(replaced.clearCacheIfContentChanged());
+  EXPECT_EQ(BookFonts::State::Pending, BookFonts::read(cachePath)) << "the old book's fonts.bin is gone";
+  EXPECT_TRUE(replaced.needsFirstOpenIndexing());
 }
 
 TEST_F(FingerprintFixture, NeedsFirstOpenIndexingReportsContentSwap) {

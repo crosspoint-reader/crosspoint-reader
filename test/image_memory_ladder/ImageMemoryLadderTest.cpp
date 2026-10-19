@@ -35,6 +35,24 @@ TEST(ImageMemoryLadder, ADecodeShortOfMemoryClimbsOneStepAtATime) {
   EXPECT_EQ(Action::Emergency, next(fourFamilies(Step::HeavyRelief, Decode::HeapShort)));
 }
 
+TEST(ImageMemoryLadder, ACoarsePictureWithNoRoomForAFinerOneDoesNotClimb) {
+  Input in = fourFamilies(Step::Plain, Decode::Coarse);
+  in.coarseFits = false;
+  EXPECT_EQ(Action::Done, next(in)) << "drawn as it is: no relief, no decode for nothing";
+}
+
+TEST(ImageMemoryLadder, ACoarsePictureClimbsToTheLightStepAndNoFurther) {
+  Input in = fourFamilies(Step::Plain, Decode::Coarse);
+  in.coarseFits = true;
+  EXPECT_EQ(Action::LightRelief, next(in));
+  // Coarse again (or the room was not there after all): the coarse picture is drawn, never a box. Never the heavy
+  // step either, which unloads the TrueType set for a picture that is drawn either way.
+  in.step = Step::LightRelief;
+  EXPECT_EQ(Action::Done, next(in));
+  in.step = Step::HeavyRelief;
+  EXPECT_EQ(Action::Done, next(in));
+}
+
 TEST(ImageMemoryLadder, ADecodeThatFailsForAnotherReasonIsLeftAlone) {
   for (const Step step : {Step::Plain, Step::LightRelief, Step::HeavyRelief}) {
     EXPECT_EQ(Action::Done, next(fourFamilies(step, Decode::Failed))) << static_cast<int>(step);
@@ -58,7 +76,7 @@ TEST(ImageMemoryLadder, ALiveSectionBuildKeepsTheSetLoaded) {
 
 TEST(ImageMemoryLadder, ASetThatDoesNotComeBackLosesItsLeastUsedAccentFamily) {
   for (const Step step : {Step::LightRelief, Step::HeavyRelief}) {
-    for (const Decode decode : {Decode::Done, Decode::HeapShort, Decode::Failed}) {
+    for (const Decode decode : {Decode::Done, Decode::Coarse, Decode::HeapShort, Decode::Failed}) {
       Input in = fourFamilies(step, decode);
       in.fontsBack = false;
       EXPECT_EQ(Action::DropAccent, next(in)) << static_cast<int>(step) << " " << static_cast<int>(decode);

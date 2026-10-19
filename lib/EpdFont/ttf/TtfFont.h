@@ -257,6 +257,8 @@ class TtfFontSet {
   /// Glyphs in the store need none of it, and the next miss makes it again. Only where no glyph record of the set is
   /// in use: as RenderLock is given back, and for the reader's memory ladder before an image decode. The bytes freed.
   uint32_t releaseMissMemory();
+  /// What releaseMissMemory() would free now.
+  uint32_t missMemoryBytes() const;
 
  private:
   friend class TtfFont;

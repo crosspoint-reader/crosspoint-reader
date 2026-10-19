@@ -13,6 +13,7 @@
 #include "ReaderActivity.h"
 #include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
+#include "SerialTestApi.h"
 #include "activities/home/BookDetails.h"
 #include "components/UITheme.h"
 
@@ -54,8 +55,11 @@ void LineReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(filePath, title, details.author, series, ReaderActivity::coverThumbPlaceholder(filePath));
 
   // Start reading-stats session. Same filename-hash policy as EPUB, so the history is keyed by the
-  // file name; BookRelocation carries it over when the file is renamed.
-  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(filePath), title, details.author);
+  // file name; BookRelocation carries it over when the file is renamed. A device test's book is no history
+  // (SerialTestApi::isTestBook).
+  if (!SerialTestApi::isTestBook(filePath)) {
+    globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(filePath), title, details.author);
+  }
 
   // Trigger first update
   requestUpdate();

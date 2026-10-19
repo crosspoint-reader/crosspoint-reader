@@ -6,6 +6,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <optional>
+
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
@@ -337,11 +339,10 @@ void Page::warmImageCaches(GfxRenderer& renderer, const int xOffset, const int y
     if (element->getTag() != TAG_PageImage) continue;
     const auto& ib = static_cast<const PageImage&>(*element).getImageBlock();
     if (ib.wouldShowPlaceholder(forceLoadLargeImages, monochromeOutput)) continue;
+    // A cache stamped coarse is out of the way of the decodes below, and back on every way out unless they replace it.
+    std::optional<ImageBlock::CoarseRedecodeScope> coarse;
+    if (redecodeCoarse) coarse.emplace(ib, monochromeOutput, alsoWarmGrayscale && monochromeOutput);
     // Check whether the appropriate cache already exists
-    if (redecodeCoarse) {
-      ib.dropCoarseCache(monochromeOutput);
-      if (alsoWarmGrayscale && monochromeOutput) ib.dropCoarseCache(false);
-    }
     const bool alreadyCached = monochromeOutput ? ib.hasPixelCache() : ib.hasGrayscaleCache();
     // Both variants missing and both wanted: ask the decoder for them in a single inflate
     // instead of paying two. Requires BOTH to be absent — if the BW cache is already on disk

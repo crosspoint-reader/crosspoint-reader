@@ -391,15 +391,20 @@ void SdCardFontManager::wipeTtfIfPending(const std::function<void()>& onBusy) {
 
 uint32_t SdCardFontManager::releaseTtfMissMemory() { return ttfSet_ ? ttfSet_->releaseMissMemory() : 0; }
 
-bool SdCardFontManager::suspendTtf(GfxRenderer& renderer) {
-  if (!ttfSet_) return false;
-  // What unloadAll() does to the renderer and the set; the families' names, font IDs and windows stay.
+uint32_t SdCardFontManager::ttfMissMemoryBytes() const { return ttfSet_ ? ttfSet_->missMemoryBytes() : 0; }
+
+void SdCardFontManager::closeTtfSet(GfxRenderer& renderer) {
   dropTtfNativeSizes(renderer);
   renderer.setFontResolver(nullptr, nullptr);
   for (uint8_t f = 0; f < ttfCount_; ++f) renderer.removeFont(ttfFamilies_[f].fontId);
   ttfSet_.reset();  // closes the store before its flash goes, and stops reading before its files close
   ttfSources_.reset();
   ttfFlash_.reset();
+}
+
+bool SdCardFontManager::suspendTtf(GfxRenderer& renderer) {
+  if (!ttfSet_) return false;
+  closeTtfSet(renderer);
   ttfSuspended_ = true;
   LOG_INF("SDMGR", "TTF set of %u famil%s suspended", ttfCount_, ttfCount_ == 1 ? "y" : "ies");
   return true;
@@ -580,11 +585,8 @@ void SdCardFontManager::dropSizeAlias(GfxRenderer& renderer) {
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   if (!renderer_) renderer_ = &renderer;
   if (ttfSet_) {
-    dropTtfNativeSizes(renderer);
-    renderer.setFontResolver(nullptr, nullptr);
     for (uint8_t f = 0; f < ttfCount_; ++f) {
       const TtfFont& font = *ttfSet_->font(f);
-      renderer.removeFont(ttfFamilies_[f].fontId);
       LOG_INF("SDMGR",
               "TTF family %s unloaded: %lu glyphs rendered, %lu read from the store, %lu kerning pairs worked out%s",
               ttfFamilies_[f].name.c_str(), static_cast<unsigned long>(font.renders()),
@@ -592,9 +594,7 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
               font.readsCard() ? " (SD mode)" : "");
     }
     LOG_INF("SDMGR", "TTF set unloaded: %lu SD pages read", static_cast<unsigned long>(ttfSet_->sdPageReads()));
-    ttfSet_.reset();  // closes the store before its flash goes, and stops reading before its files close
-    ttfSources_.reset();
-    ttfFlash_.reset();
+    closeTtfSet(renderer);
   }
   // A suspended set is gone already; what was kept for its resume goes now.
   for (uint8_t f = 0; f < ttfCount_; ++f) ttfFamilies_[f] = {};

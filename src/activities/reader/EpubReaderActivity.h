@@ -870,15 +870,13 @@ class EpubReaderActivity final : public Activity {
   // The memory ladder (ImageMemoryLadder): warms `page`'s missing image caches at (xOffset, yOffset), and while a
   // decode is short of memory, decodes again with font memory freed, step by step. `arena` is the decode scratch
   // (the lent framebuffer), rewound between steps. `drawsPage`: the page is drawn next, so its glyphs are put into
-  // the glyph store before the light step frees what a miss needs. `accents`: the book's accent families loaded
-  // beside the body. Returns where it ended: Done, Emergency, or what finishLadder() is for.
+  // the glyph store before the light step frees what a miss needs. Returns where it ended: Done, Emergency, or what
+  // finishLadder() is for; at DropAccent the book already keeps one accent family fewer.
   ImageMemoryLadder::Action warmImagesClimbingLadder(const Page& page, int xOffset, int yOffset, bool forceLoad,
-                                                     bool warmGrayscale, BuildArena* arena, bool drawsPage,
-                                                     uint8_t accents);
-  // The ladder's DropAccent and Restart, once the decode scratch is home: the book keeps one accent family fewer,
-  // its fonts are loaded again and the next render lays the chapter out; or the device restarts to the reader. True
-  // when the page must not be drawn now.
-  bool finishLadder(ImageMemoryLadder::Action action, uint8_t accents);
+                                                     bool warmGrayscale, BuildArena* arena, bool drawsPage);
+  // The ladder's DropAccent and Restart, once the decode scratch is home: the book's fonts are loaded again and the
+  // next render lays the chapter out; or the device restarts to the reader. True when the page must not be drawn now.
+  bool finishLadder(ImageMemoryLadder::Action action);
   // The scan pass over `page`'s text and the prewarm of every font and style it uses: TrueType glyphs into the glyph
   // store, built-in ones into the decompressor's page slots.
   void prewarmPageFonts(const Page& page, int xOffset, int yOffset);

@@ -25,6 +25,7 @@
 #include "ReaderUtils.h"
 #include "ReadingSessionTracker.h"
 #include "RecentBooksStore.h"
+#include "SerialTestApi.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -52,9 +53,12 @@ void XtcReaderActivity::onEnter() {
                        ReaderActivity::coverThumbPlaceholder(xtc->getPath()));
 
   // Start the reading-stats session. XTC has real title/author from the
-  // file header so the per-book screen will look nicer than TXT/MD.
-  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(xtc->getPath()), xtc->getTitle(),
-                                      xtc->getAuthor());
+  // file header so the per-book screen will look nicer than TXT/MD. A device test's book is no history
+  // (SerialTestApi::isTestBook).
+  if (!SerialTestApi::isTestBook(xtc->getPath())) {
+    globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(xtc->getPath()), xtc->getTitle(),
+                                        xtc->getAuthor());
+  }
 
   // Trigger first update
   requestUpdate();

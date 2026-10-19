@@ -9,6 +9,7 @@
 // The guarantee tested here: however often a decode is stopped, and wherever, the caches it
 // finally publishes are byte for byte those of an uninterrupted decode -- both variants, for the
 // full progressive decoder and for TJpgDec.
+#include <esp_heap_caps.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -18,10 +19,12 @@
 #include <vector>
 
 #include "CooperativeAbort.h"
+#include "Epub/blocks/ImageBlock.h"
 #include "Epub/converters/JpegToFramebufferConverter.h"
 #include "Epub/converters/PixelCache.h"
 #include "GfxRenderer.h"
 #include "HalStorage.h"
+#include "ProgressiveJpeg.h"
 
 namespace fs = std::filesystem;
 
@@ -253,6 +256,110 @@ TEST(ImageParkRestartFixture, RestartMarkersDecodeLikeTheirTwin) {
   const auto plain = decodeTo("prog_full_420_base.jpg", "plain");
   ASSERT_GT(plain.size(), 2 * PixelCache::PXC_HEADER_BYTES);
   EXPECT_EQ(decodeTo("prog_full_420_base_rst.jpg", "rst"), plain);
+  fs::remove_all(work);
+}
+
+// A progressive JPEG whose full decode finds no room for its workspace is drawn from its DC preview: the cache is
+// stamped coarse, for a pass with room to decode again, and the decode counts as short of memory and says what a
+// finer one needs, so the reader's memory ladder can tell whether making room is worth it. A full decode is neither.
+TEST(CoarseProgressiveJpeg, APreviewForLackOfRoomIsStampedCoarseAndShortOfMemory) {
+  const fs::path work = fs::temp_directory_path() / "img_coarse_preview";
+  fs::remove_all(work);
+  fs::create_directories(work);
+  GfxRenderer renderer;
+  const std::string jpg = JPEG_FIXTURE_DIR "/prog_full_420.jpg";
+  ProgressiveJpeg::ImageInfo info;
+  {
+    FsFile file;
+    ASSERT_TRUE(Storage.openFileForRead("TEST", jpg, file));
+    ASSERT_EQ(ProgressiveJpeg::Result::Ok, ProgressiveJpeg::probe(file, info));
+    file.close();
+  }
+  const auto decodeMagic = [&](const std::string& tag) {
+    RenderConfig c;
+    c.maxWidth = 150;
+    c.maxHeight = 104;
+    c.useExactDimensions = true;
+    c.monochromeOutput = true;
+    c.cachePath = (work / (tag + "_bw.pxc")).string();
+    JpegToFramebufferConverter converter;
+    EXPECT_TRUE(converter.decodeToFramebuffer(jpg, renderer, c));
+    std::ifstream in(c.cachePath, std::ios::binary);
+    uint16_t magic = 0;
+    in.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    return magic;
+  };
+  const uint32_t savedHeap = ESP.getFreeHeap();
+  // A byte short of the smallest workspace and the 20 KB it must leave (JPEG_CACHE_POST_GATE_BYTES +
+  // JPEG_CACHE_HEAP_FLOOR): room for the preview and its cache band still.
+  const auto coarsest = static_cast<uint32_t>(ProgressiveJpeg::workspaceBytes(info, 3));
+  ESP.setFreeHeap(coarsest + 20 * 1024 - 1);
+  image_scratch::takeCoarseNeed();
+  uint32_t shortBefore = image_scratch::heapShortCount();
+  EXPECT_EQ(PixelCache::PXC_MAGIC_COARSE, decodeMagic("preview"));
+  EXPECT_NE(shortBefore, image_scratch::heapShortCount());
+  const image_scratch::CoarseNeed need = image_scratch::takeCoarseNeed();
+  EXPECT_EQ(coarsest, need.bytes) << "none had room: the coarsest workspace is the next finer decode";
+  EXPECT_EQ(20u * 1024, need.heapFloor);
+  EXPECT_FALSE(image_scratch::coarseNeedFits(need)) << "no more room than the decode had";
+  EXPECT_TRUE(image_scratch::coarseNeedFits(need, 1)) << "a byte freed first is room enough";
+  ESP.setFreeHeap(savedHeap);
+
+  shortBefore = image_scratch::heapShortCount();
+  EXPECT_EQ(PixelCache::PXC_MAGIC, decodeMagic("full"));
+  EXPECT_EQ(shortBefore, image_scratch::heapShortCount());
+  EXPECT_EQ(0u, image_scratch::takeCoarseNeed().bytes);
+  fs::remove_all(work);
+}
+
+// The check the memory ladder makes before it frees memory for a coarse picture, and again before it decodes, is the
+// decoder's own: where it says the finer workspace fits, the decode gets it; a byte short, the decode does not.
+TEST(CoarseProgressiveJpeg, WhereTheFinerWorkspaceFitsTheDecodeIsFiner) {
+  const fs::path work = fs::temp_directory_path() / "img_coarse_finer";
+  fs::remove_all(work);
+  fs::create_directories(work);
+  GfxRenderer renderer;
+  const std::string jpg = JPEG_FIXTURE_DIR "/prog_full_420.jpg";
+  ProgressiveJpeg::ImageInfo info;
+  {
+    FsFile file;
+    ASSERT_TRUE(Storage.openFileForRead("TEST", jpg, file));
+    ASSERT_EQ(ProgressiveJpeg::Result::Ok, ProgressiveJpeg::probe(file, info));
+    file.close();
+  }
+  RenderConfig c;
+  c.maxWidth = 150;
+  c.maxHeight = 104;
+  c.useExactDimensions = true;
+  c.monochromeOutput = true;
+  c.cachePath = (work / "bw.pxc").string();
+  // The same image decoded again over its cache, as the light step does: what does the decode need next?
+  const auto decodeNeed = [&](const uint32_t freeHeap) {
+    ESP.setFreeHeap(freeHeap);
+    image_scratch::takeCoarseNeed();
+    JpegToFramebufferConverter converter;
+    EXPECT_TRUE(converter.decodeToFramebuffer(jpg, renderer, c));
+    return image_scratch::takeCoarseNeed();
+  };
+  const uint32_t savedHeap = ESP.getFreeHeap();
+  const auto coarsest = static_cast<uint32_t>(ProgressiveJpeg::workspaceBytes(info, 3));
+  const image_scratch::CoarseNeed need = decodeNeed(coarsest + 20 * 1024 - 1);  // the DC preview
+  ASSERT_EQ(coarsest, need.bytes);
+
+  ESP.setFreeHeap(need.bytes + need.heapFloor - 1);
+  EXPECT_FALSE(image_scratch::coarseNeedFits(need));
+  EXPECT_EQ(coarsest, decodeNeed(need.bytes + need.heapFloor - 1).bytes) << "a byte short: the preview again";
+
+  ESP.setFreeHeap(need.bytes + need.heapFloor);
+  EXPECT_TRUE(image_scratch::coarseNeedFits(need));
+  {
+    const HostLargestFreeBlock fragmented(need.bytes);
+    EXPECT_FALSE(image_scratch::coarseNeedFits(need)) << "free in all, but in no one block";
+  }
+  // The finer decode: the full decoder at its coarsest scale, not the DC preview, so the next finer is one up.
+  EXPECT_EQ(static_cast<uint32_t>(ProgressiveJpeg::workspaceBytes(info, 2)),
+            decodeNeed(need.bytes + need.heapFloor).bytes);
+  ESP.setFreeHeap(savedHeap);
   fs::remove_all(work);
 }
 

@@ -157,7 +157,9 @@ Reply: `ACT_OK`, or `ACT_ERROR:<reason>` (`no such file <path>`, `bad position <
 `unknown activity <name>`, `unknown settings tab <name>`, `unknown library tab <name>`).
 
 - Paths are paths on the SD card (`/test/book.epub`). A file name may itself contain `@`: only the
-  text after the last `@` is read as a position, and only when it has one of the two forms.
+  text after the last `@` is read as a position, and only when it has one of the two forms. A book
+  under `/test/` stays out of the recent books and the reading stats (see
+  [Safety notes](#safety-notes)).
 - Positions are for EPUB books, and need the full API (so do `DICT`, `FILE_TRANSFER`,
   `USB_TRANSFER` and the settings tab). `@<spine>:<page>` counts from 1, exactly as `STATE` reports
   `spine=` and `page=`: `@20:12` opens the 12th page of the 20th spine item and `STATE` then says
@@ -284,6 +286,14 @@ That is what you want before a screenshot after a page turn or after opening a b
 
 Send `CMD:IDLE` after the command it should wait for; the device handles them in order. While an
 `IDLE` is pending, the device still answers other commands; a second `IDLE` replaces the first.
+
+**`IDLE:<ms>` is no timing of what it waited for.** It counts from when the device read the `IDLE`
+line, and the device reads one command line per loop pass: work that holds the loop before that
+is left out. Opening a book whose font family has to be installed first (the "Loading font..."
+popup) holds the loop for seconds, so an `IDLE` sent right behind the `ACT` is read only after the
+install. A 20.6 s open of a book with a TrueType family not yet installed was answered
+`IDLE:3580`. Time an open on the host, from sending `ACT` to the `IDLE` reply:
+`tools/devctl.py --log <file>` stamps every line with the host's clock.
 
 ```
 > CMD:BTN:RIGHT
@@ -535,6 +545,14 @@ The commands act on a real device with a real user's books and settings:
 - **Opening a book changes its reading position.** The reader saves where it is, and a
   `@<spine>:<page>` open saves that page at once. Test with books kept for testing (a `/test`
   folder), not the user's own.
+- **A book under `/test/` is a test book** in builds with the full API (in any case: `/TEST/` is
+  the same folder on FAT, and the file browser opens it so): opening it records it neither in the
+  recent books (Home, the library's Recent tab) nor in the reading stats. Both keep a fixed number
+  of books (10 and 100), and a test run that opened its books used to push the user's own out of
+  them. The rest is as for any book: its position is saved in its cache, `state.json` names it as
+  the book last open, and a per-book setting changed on it holds while it stays open, but is not
+  kept, since per-book settings live in the recent-books entry it does not get
+  (`SerialTestApi::isTestBook`).
 - **Presses do what the user configured.** A double press of Power may be bound to sleep, a long
   Confirm to a sync. Check the binding with `GET` first, or bind it to something harmless for the
   test and restore it.

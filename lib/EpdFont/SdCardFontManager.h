@@ -92,6 +92,8 @@ class SdCardFontManager {
   // What the loaded TTF families' misses made on the heap, freed (TtfFontSet::releaseMissMemory): the next miss makes
   // it again. The bytes freed: 0 when none is loaded or nothing was held.
   uint32_t releaseTtfMissMemory();
+  // What releaseTtfMissMemory() would free now.
+  uint32_t ttfMissMemoryBytes() const;
   // What they give up for an image decode at the reader's memory ladder's heavier step: all of their memory, until
   // resumeTtf(): the set, its files, its native sizes, and their font IDs, which leave the renderer meanwhile, so
   // nothing may be laid out or drawn with them. Only where no glyph of theirs is in use
@@ -154,6 +156,9 @@ class SdCardFontManager {
   bool loadTtf(const SdCardFontFamilyInfo* const* families, uint8_t count, GfxRenderer& renderer, uint8_t targetPtSize,
                const std::function<void()>& onColdLoad, TtfChoice choice);
   static int computeFontId(uint32_t contentHash, const char* familyName, uint8_t pointSize);
+  // The loaded TTF set closed and its font IDs out of the renderer: unloadAll() and suspendTtf(). The families'
+  // names, font IDs and windows stay.
+  void closeTtfSet(GfxRenderer& renderer);
   void dropSizeAlias(GfxRenderer& renderer);
   void registerTtfFace(GfxRenderer& renderer, uint8_t family, int fontId);
   int32_t pickNativeBase(const GfxRenderer& renderer, uint32_t identityHash, const char* familyName) const;

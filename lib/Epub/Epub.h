@@ -182,6 +182,12 @@ class Epub {
   // whether to show a progress popup before calling load().
   bool needsFirstOpenIndexing() const;
 
+  // A different book dropped onto the same path: the cache, keyed by the path, is the old book's (sections, CSS,
+  // thumbs, what BookFonts found in it), so it is wiped. True when it was. load() asks first; a caller that reads
+  // the cache before load() -- the reader chooses the book's fonts from fonts.bin -- asks before that. A cache from
+  // before fingerprints is adopted instead.
+  bool clearCacheIfContentChanged() const;
+
   // Lets load() rebuild the cache when an earlier build lost the TOC the book declares, for at
   // most three builds in all, so a TOC that never parses stops costing a rebuild per open. Only
   // the reader's open turns this on: it shows the indexing popup and lends the secondary
