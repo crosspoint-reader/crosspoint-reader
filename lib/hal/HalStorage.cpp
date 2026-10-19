@@ -260,6 +260,9 @@ bool opensForWriting(const oflag_t oflag) {
   return (oflag & O_ACCMODE) != O_RDONLY || (oflag & (O_CREAT | O_TRUNC | O_APPEND)) != 0;
 }
 
+// An open that may make its file or empty it: it changes the card before it returns.
+bool changesOnOpen(const oflag_t oflag) { return (oflag & (O_CREAT | O_TRUNC)) != 0; }
+
 }  // namespace
 
 // `path` null: the change is somewhere unknown (a file renamed through its handle, a USB Drive
@@ -357,6 +360,7 @@ uint64_t HalStorage::sdFreeBytes() {
 class HalFile::Impl {
  public:
   explicit Impl(FsFile&& fsFile) : file(std::move(fsFile)) {}
+  Impl(const char* path, const oflag_t oflag) : file(SDCard.open(path, oflag)) {}  // openInto()
   FsFile file;
 
   // The Impl for what an open returned, taken under the StorageLock. An open file gets one of its
@@ -371,6 +375,23 @@ class HalFile::Impl {
     if (auto* own = new (std::nothrow) Impl(std::move(opened))) return own;
     LOG_ERR("SD", "OOM: %u bytes for a file handle, the open fails", static_cast<unsigned>(sizeof(Impl)));
     opened.close();
+    return &failed;
+  }
+
+  // An open that may make its file or empty it (changesOnOpen()): the Impl's block is taken BEFORE
+  // the open, and the file opened straight into it. adopt() comes too late for one: the open has
+  // made or emptied the file by then, so a refused Impl lost what an existing file held. Without
+  // the block the open fails here with the card untouched; an open that fails gives the block back
+  // and gets `failed`.
+  static Impl* openInto(const char* path, const oflag_t oflag) {
+    void* const block = ::operator new(sizeof(Impl), std::nothrow);
+    if (!block) {
+      LOG_ERR("SD", "OOM: %u bytes for a file handle, the open fails", static_cast<unsigned>(sizeof(Impl)));
+      return &failed;
+    }
+    auto* const own = new (block) Impl(path, oflag);  // the file opened straight into its block
+    if (own->file.isOpen()) return own;
+    delete own;
     return &failed;
   }
 
@@ -407,6 +428,7 @@ HalFile& HalFile::operator=(HalFile&& other) {
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   if (opensForWriting(oflag)) noteContentChange(path);
+  if (changesOnOpen(oflag)) return HalFile(HalFile::Impl::openInto(path, oflag));
   return HalFile(HalFile::Impl::adopt(SDCard.open(path, oflag)));
 }
 
@@ -475,12 +497,11 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
-  StorageLock lock;  // ensure thread safety for the duration of this function
-  noteContentChange(path);
-  FsFile fsFile;
-  const bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
-  file = HalFile(HalFile::Impl::adopt(std::move(fsFile)));
-  return ok && file.isOpen();
+  // With the flags SDCardManager::openFileForWrite opens it with, through open(): its Impl is had
+  // before the file is emptied or made.
+  file = open(path, O_RDWR | O_CREAT | O_TRUNC);
+  if (!file) LOG_ERR(moduleName, "Failed to open %s for writing", path);
+  return file.isOpen();
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, HalFile& file) {
