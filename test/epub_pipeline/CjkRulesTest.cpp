@@ -190,6 +190,33 @@ class LineWidths {
   TypographyProfile::Punctuation table_;
 };
 
+// The block each line belongs to: a body line's shape (x, alignment and size, so one text width and left edge), a
+// table cell line's own cell.
+std::vector<std::string> blockKeys(const std::vector<DumpLine>& lines) {
+  std::vector<std::string> keys;
+  size_t cell = 0;
+  for (const auto& line : lines) {
+    if (line.cell && !line.followsLine) ++cell;
+    keys.push_back(line.cell ? "cell " + std::to_string(cell) : line.shape);
+  }
+  return keys;
+}
+
+// Where each block's leftmost line starts. A line that starts further right is a paragraph's indented first line
+// (or a centred line); with the CJK grid every line of a block starts a few pixels in.
+std::map<std::string, int> blockLeftEdges(const GfxRenderer& renderer, const std::vector<DumpLine>& lines,
+                                          const std::vector<std::string>& keys,
+                                          const TypographyProfile::Punctuation table) {
+  std::map<std::string, int> edges;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    if (lines[i].words.empty()) continue;
+    const int left = LineWidths(renderer, lines[i], table).left(0);
+    const auto [at, inserted] = edges.emplace(keys[i], left);
+    if (!inserted) at->second = std::min(at->second, left);
+  }
+  return edges;
+}
+
 struct Case {
   std::string epub;
   std::string language;
@@ -241,19 +268,28 @@ class CjkJustifiedRules : public CjkRules {
 // punctuation and the line before it does not end with an opening bracket (spec Appendix A.1): a
 // line starting with " after a CJK line, or ending with " before one, is caught too.
 TEST_P(CjkRules, KinsokuHoldsAtEveryCjkLineBreak) {
+  const std::vector<std::string> keys = blockKeys(lines);
+  const std::map<std::string, int> leftEdge = blockLeftEdges(renderer, lines, keys, table);
+  size_t breaks = 0;   // line breaks with unspaced CJK on either side
+  size_t checked = 0;  // those that are layout breaks, not a paragraph's start
   for (size_t i = 1; i < lines.size(); ++i) {
     const DumpLine& prev = lines[i - 1];
     const DumpLine& line = lines[i];
     if (!line.followsLine || prev.words.empty() || line.words.empty()) continue;
-    if (line.words.front().x > 0) continue;  // a paragraph's indented first line: not a layout break
     const uint32_t end = lastCodepoint(prev.words.back().text);
     const uint32_t start = firstCodepoint(line.words.front().text);
     if (!utf8IsUnspacedCjk(end) && !utf8IsUnspacedCjk(start)) continue;
+    ++breaks;
+    // A paragraph's indented first line is not a layout break.
+    if (LineWidths(renderer, line, table).left(0) > leftEdge.at(keys[i])) continue;
+    ++checked;
     EXPECT_FALSE(CjkLineBreak::isNoLineEnd(end))
         << "line ends with an opening bracket: " << lineText(prev) << " before: " << lineText(line);
     EXPECT_FALSE(CjkLineBreak::isNoLineStart(start))
         << "line starts with closing punctuation: " << lineText(line) << " after: " << lineText(prev);
   }
+  // Paragraph starts are the fewer of a book's line breaks: a check that skips most of them checks nothing.
+  EXPECT_GE(checked * 2, breaks) << "only " << checked << " of " << breaks << " CJK line breaks checked";
 }
 
 // CJK scripts are not hyphenated: no line ends with a hyphen after a CJK character.
@@ -309,13 +345,11 @@ TEST_P(CjkJustifiedRules, JustifiedLinesEndFlushOnAWholeEmGrid) {
   const TypographyProfile profile = TypographyProfile::forLanguage(GetParam().language);
   if (profile.justify != TypographyProfile::Justify::BetweenCharacters) GTEST_SKIP() << "justified at word spaces";
 
-  std::map<std::string, int> leftEdge;  // shape -> where its leftmost line starts
+  const std::vector<std::string> keys = blockKeys(lines);
+  std::map<std::string, int> leftEdge = blockLeftEdges(renderer, lines, keys, table);  // shape -> its left edge
   std::map<std::string, int> lineStep;  // shape -> its smallest step down the page
   for (size_t i = 0; i < lines.size(); ++i) {
     if (lines[i].words.empty()) continue;
-    const int left = LineWidths(renderer, lines[i], table).left(0);
-    const auto [at, inserted] = leftEdge.emplace(lines[i].shape, left);
-    if (!inserted) at->second = std::min(at->second, left);
     if (i > 0 && lines[i].followsLine && lines[i - 1].shape == lines[i].shape && lines[i].y > lines[i - 1].y) {
       const auto [step, fresh] = lineStep.emplace(lines[i].shape, lines[i].y - lines[i - 1].y);
       if (!fresh) step->second = std::min(step->second, lines[i].y - lines[i - 1].y);
