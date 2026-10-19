@@ -858,6 +858,14 @@ CssStyle ChapterHtmlSlimParser::normalizeFontSizeForElement(const char* tagName,
     if (pct >= 100 - deadZone && pct <= 100 + deadZone) {
       normalized.fontSizeMultiplier = 1.0f;
     }
+    // A size that undoes the dropped root size is the book's body text: Calibre sets <body> to its base size and
+    // sizes every paragraph back down by a class (1.125em x 0.88889em = 1). Dropping only the root's factor left
+    // such paragraphs at 0.889 of the reader's size, drawn as the body face shrunk. Only an exact undo, within 1%:
+    // a size its designer chose below the body text's (0.85em under a 1.2em body, 1.02) is kept.
+    const float fromRoot = normalized.fontSizeMultiplier * rootFontSizeBaseline_;
+    if (hasRootFontSizeBaseline_ && fromRoot > 0.99f && fromRoot < 1.01f) {
+      normalized.fontSizeMultiplier = 1.0f;
+    }
   }
   return normalized;
 }
