@@ -46,6 +46,11 @@ const std::vector<SettingInfo>& getBaseSettingsList() {
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                             "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY),
 #endif
+#if FREEINK_DEVICE_PICCO
+        SettingInfo::Enum(StrId::STR_SLIDE_SWITCH, &CrossPointSettings::slideSwitchAction,
+                          {StrId::STR_FRONTLIGHT, StrId::STR_NIGHT_MODE, StrId::STR_TOUCH_READER_CONTROLS},
+                          "slideSwitchAction", StrId::STR_CAT_DISPLAY),
+#endif
         // Night mode = inverted output polarity everywhere (ActivityManager
         // applies it to every activity), so it lives in the Display category.
         SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
@@ -343,8 +348,6 @@ const std::vector<SettingInfo>& getBaseSettingsList() {
     };
     // Double-click power frontlight shortcut only exists on the X4 Pro.
     if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
-    // Tilt page turn needs an IMU with a gyroscope.
-    if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
     if (!BoardConfig::hasTouch()) {
       // The reader menu style stays available on button boards (the toolbar
       // chrome is button-navigable); only the touch controls are hidden.
