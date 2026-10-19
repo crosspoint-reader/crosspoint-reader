@@ -311,6 +311,10 @@ On 2026-10-08 it ran (X3, AA on, one session in one book). After each deferred A
 `Reader mem[prerender_begin]` showed 58.5 KB free, the pass ran, and a turn found its page
 pre-rendered. What brought the retained baseline back down was not identified.
 
+2026-10-19: the floor is derived from what the passes measure now (`PreRenderGate.h`), and a TrueType set no
+longer holds its scratch block while reading (spec 8.3 of the TTF design). With a book's fonts loaded, which had
+refused the pass on nearly every turn, the X3 pre-rendered every turn of a test book at 41.8-52.2 KB free.
+
 **Why it matters.** Without A every turn pays the page render on top of the waveform.
 
 **Ruled out.** Lowering the floor. It is derived from what the pass consumes (~23 KB transient), and

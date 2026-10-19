@@ -838,7 +838,7 @@ class EpubReaderActivity final : public Activity {
   // Frees a large SD font page arena (PAGE_ARENA_RELEASE_MIN_BYTES) once its page is on the panel:
   // after the AA pass, a pre-render, or a render that owes no AA. Called under the render lock.
   void releasePageGlyphArena(const char* after);
-  // The pre-render's heap floor: PRE_RENDER_MIN_FREE_HEAP_BYTES, raised by the arena the last release
+  // The pre-render's heap floor: PreRenderGate's from the costs measured so far, raised by the arena the last release
   // freed, which the pre-render would allocate again on top.
   uint32_t preRenderMinFreeHeap(bool inkOnly) const;
   // The pre-render can keep 1-bit ink masks (SdCardFont::setInkOnlyPrewarm) instead of 2-bit glyphs:
@@ -849,6 +849,11 @@ class EpubReaderActivity final : public Activity {
   // a sized span, sup/sub, small caps) resamples the 2-bit levels, which an ink mask has lost.
   static bool pageDrawsUnscaled(const Page& page);
   uint32_t releasedPageArenaBytes_ = 0;
+  // The most a pre-render pass has cost in this book, measured by the pass (PreRenderGate), and apart the most one cost
+  // that drew glyphs the glyph store did not hold yet; 0 until one is. And whether the page drawn last drew such.
+  uint32_t preRenderCostMax_ = 0;
+  uint32_t preRenderMissCostMax_ = 0;
+  bool lastPageDrewMisses_ = false;
   // Background B: advance the idle build of the next consecutive section by one bounded
   // step (state probe, heap gate, or one ~BG_BUILD_BUDGET_MS parse slice). Runs only after
   // Background A has had its slice (A keeps priority: it drives perceived page-turn speed).

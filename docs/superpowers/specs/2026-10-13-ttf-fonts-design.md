@@ -986,6 +986,9 @@ section build renders the chapter's glyphs into it as it measures them.
   again by itself once the pass has given its memory back, and if that draw has a gap too, the status bar shows the
   low-memory sign until the page draws whole. A redraw rather than escalating the memory ladder: the miss needs one
   block of 11-19 KB, which the end of the pass nearly always gives back, and a page left marked is still readable.
+- **The pre-render's floor** comes from what the passes cost (`PreRenderGate.h`): the 21 KB trough, plus half again
+  the most a pass cost in the book (13 KB until one is measured), and while the page drawn last drew misses, at least
+  the most a pass with misses cost.
 - **Measured (X3, the same book and turns, master against the branch, with the temporary logs; free heap and
   largest block at the gate in KB, and the turns of ten that found their page pre-rendered).** The book built in the
   run (Background-C and -B), and opened again with its chapters cached, after another set had taken the glyph store
@@ -1014,9 +1017,10 @@ section build renders the chapter's glyphs into it as it measures them.
   sign; once the heap was given back the page drew whole, and without the sign. After the first glyph that finds no
   memory, the rest of the pass's misses go without at once (`missesStarved_`): each asking the heap and the app again
   had taken the page to 2.4 s.
-- **Cost, `env:default` (C3), against master ae66522f9:** flash +1,094 B (the rasterizer's plan apart +56, the miss
-  memory +1,038), static RAM +32 B (the `glyph_miss` counters and arena, the new hooks). No MMU page boundary crossed:
-  code ends 31.8 KB short of its 42nd page's end, rodata 44.5 KB short of its 51st, 93 pages in all.
+- **Cost, `env:default` (C3), against master ae66522f9:** flash +1,272 B (the rasterizer's plan apart +56, the miss
+  memory +1,038, the pre-render's floor +178), static RAM +32 B (the `glyph_miss` counters and arena, the new hooks).
+  No MMU page boundary crossed: code ends 31.6 KB short of its 42nd page's end, rodata 44.5 KB short of its 51st, 93
+  pages in all.
 - **Left open:** a `TtfFont` keeps four styles' records and every face four styles' fonts, used or not: about 3.7 KB
   for BookerlyTTF beside three one- and two-style accent families.
 
