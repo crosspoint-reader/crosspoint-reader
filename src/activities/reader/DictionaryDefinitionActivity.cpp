@@ -46,7 +46,7 @@ void DictionaryDefinitionActivity::onEnter() {
   }
   if (plainTextReason) {
     LOG_INF("DICT", "Plain-text definition: %s (bytes=%u)", plainTextReason, static_cast<unsigned>(definition.size()));
-    if (htmlDefinition) definition = htmlToPlainText(definition);
+    if (htmlDefinition) definition = htmlToPlainText(definition, DICTIONARY_PLAIN_HEADWORD_MARKER);
     wrapText();
   } else {
     LOG_INF("DICT", "Styled definition: %u pages", static_cast<unsigned>(pages.size()));
@@ -148,6 +148,9 @@ void DictionaryDefinitionActivity::wrapText() {
 
   uint32_t i = 0;
   while (i < n) {
+    // A marker at the start of a line makes that whole line bold. It stands
+    // for a <h2> in the HTML path, and for a synonym's headword label in the
+    // plain-text path.
     if (lineEnd == lineStart && i == lineStart && text[i] == DICTIONARY_PLAIN_HEADWORD_MARKER) {
       lineStart = ++i;
       lineEnd = lineStart;

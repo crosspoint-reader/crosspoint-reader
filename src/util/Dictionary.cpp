@@ -717,13 +717,22 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   // Found in the index — propagate the precise failure reason from readDefinition
   // (decompression / low memory / read error) so the caller can name it.
   if (!synonymLocations.empty()) {
+    // The markup the merge below appends. The budget is derived from these,
+    // so the two cannot drift apart and the reserve is never short.
+    constexpr char kHtmlLabelOpen[] = "<h2>";
+    constexpr char kHtmlLabelClose[] = "</h2>";
+    constexpr char kPlainSeparator[] = "\n\n";
+
     size_t combinedSize = 0;
     for (size_t i = 0; i < synonymLocations.size(); i++) {
       const auto& synonymLocation = synonymLocations[i];
       const size_t definitionSize = std::min<uint32_t>(synonymLocation.size, MAX_DEFINITION_BYTES);
-      const size_t separatorSize = combinedSize == 0 ? 0 : (htmlDefinitions ? 8 : 2);
-      const size_t labelSize =
-          htmlDefinitions ? TxtToHtml::escapedHtmlSize(synonymHeadwords[i]) + 12 : synonymHeadwords[i].size() + 1;
+      // The HTML path needs no separator: the heading is a block of its own.
+      const size_t separatorSize = combinedSize == 0 || htmlDefinitions ? 0 : sizeof(kPlainSeparator) - 1;
+      const size_t labelSize = htmlDefinitions
+                                   ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(synonymHeadwords[i]) +
+                                         sizeof(kHtmlLabelClose) - 1
+                                   : sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + synonymHeadwords[i].size() + 1;
       if (combinedSize > MAX_DEFINITION_BYTES - separatorSize ||
           labelSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize ||
           definitionSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize - labelSize) {
@@ -743,13 +752,13 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     definitionOut.reserve(combinedSize);
     matchedHeadwordOut = cleaned;
     for (size_t i = 0; i < synonymLocations.size(); i++) {
-      if (i != 0) {
-        definitionOut += htmlDefinitions ? "<br><br>" : "\n\n";
+      if (i != 0 && !htmlDefinitions) {
+        definitionOut += kPlainSeparator;
       }
       if (htmlDefinitions) {
-        definitionOut += "<b>";
+        definitionOut += kHtmlLabelOpen;
         TxtToHtml::appendEscapedHtml(definitionOut, synonymHeadwords[i]);
-        definitionOut += "</b><br>";
+        definitionOut += kHtmlLabelClose;
       } else {
         definitionOut.push_back(DICTIONARY_PLAIN_HEADWORD_MARKER);
         definitionOut += synonymHeadwords[i];

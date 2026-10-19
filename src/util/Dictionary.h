@@ -16,6 +16,8 @@ struct DictLocation {
   bool readError = false;
 };
 
+// Marks the headword label line of a plain-text definition. The wrap loop
+// draws a line that starts with it in bold.
 inline constexpr char DICTIONARY_PLAIN_HEADWORD_MARKER = '\x01';
 
 // Slim StarDict reader: exact-match lookup with a synonym and mini stemming
@@ -80,7 +82,9 @@ class Dictionary {
   // Clean the word, look it up, and on a miss retry dictionary-authored
   // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). When several
   // .syn records resolve to distinct headwords, their definitions are combined
-  // in dictionary order and capped at MAX_DEFINITION_BYTES. Returns true on a
+  // in dictionary order and capped at MAX_DEFINITION_BYTES. Each headword is
+  // labelled: <h2> in the HTML path, DICTIONARY_PLAIN_HEADWORD_MARKER in the
+  // plain-text path, which draws the marked line in bold. Returns true on a
   // hit. *outResult (if provided) reports the precise outcome so the UI can
   // distinguish a genuine miss from a decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
