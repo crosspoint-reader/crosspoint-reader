@@ -1,4 +1,6 @@
+#include <Epub.h>
 #include <Epub/Page.h>
+#include <Epub/converters/ImageDimsProbe.h>
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
@@ -72,6 +74,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
                                &cssParser};
 
   void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(); }
+  void TearDown() override { Epub::enableGifProbeForTest = false; }
 
   // Lays out a body fragment through the cached-page path and joins its words the way a
   // clipping does: '\n' at a paragraph start, ' ' across a source gap, nothing otherwise.
@@ -121,6 +124,72 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     return selected;
   }
 };
+
+TEST(ImageDimsProbe, ReadsBothGifSignaturesInFragmentedStreams) {
+  for (const uint8_t version : {'7', '9'}) {
+    const uint8_t header[] = {'G', 'I', 'F', '8', version, 'a', 0, 12, 2, 0};
+    for (size_t split = 0; split <= sizeof(header); ++split) {
+      ImageDimsProbe probe;
+      probe.write(header, split);
+      ImageDimensions dims{};
+      EXPECT_EQ(probe.getDimensions(dims), split == sizeof(header));
+      probe.write(header + split, sizeof(header) - split);
+      ASSERT_TRUE(probe.getDimensions(dims));
+      EXPECT_EQ(dims.width, 3072);
+      EXPECT_EQ(dims.height, 2);
+      EXPECT_EQ(probe.write(0), 0u);
+    }
+  }
+}
+
+TEST(ImageDimsProbe, RejectsInvalidGifHeadersAndDimensions) {
+  const std::vector<std::vector<uint8_t>> headers = {
+      {'G', 'I', 'F', '8', '8', 'a', 1, 0, 1, 0},   {'G', 'I', 'F', '8', '9', 'b', 1, 0, 1, 0},
+      {'G', 'I', 'F', '8', '9', 'a', 0, 0, 1, 0},   {'G', 'I', 'F', '8', '9', 'a', 1, 0, 0, 0},
+      {'G', 'I', 'F', '8', '9', 'a', 0, 128, 1, 0},
+  };
+  for (const auto& header : headers) {
+    ImageDimsProbe probe;
+    probe.write(header.data(), header.size());
+    ImageDimensions dims{};
+    EXPECT_FALSE(probe.getDimensions(dims));
+  }
+}
+
+TEST(ImageDimsProbe, PreservesJpegAndPngDimensions) {
+  const std::vector<std::vector<uint8_t>> headers = {
+      {0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, 0, 2, 0, 3},
+      {0x89, 'P', 'N', 'G', 13, 10, 26, 10, 0, 0, 0, 13, 'I', 'H', 'D', 'R', 0, 0, 0, 3, 0, 0, 0, 2},
+  };
+  for (const auto& header : headers) {
+    for (size_t split = 0; split <= header.size(); ++split) {
+      ImageDimsProbe probe;
+      probe.write(header.data(), split);
+      probe.write(header.data() + split, header.size() - split);
+      ImageDimensions dims{};
+      ASSERT_TRUE(probe.getDimensions(dims));
+      EXPECT_EQ(dims.width, 3);
+      EXPECT_EQ(dims.height, 2);
+    }
+  }
+}
+
+TEST_F(ChapterHtmlSlimParserTest, StreamsGifDimensionsWithoutExtractingPayload) {
+  parser.epub = std::make_shared<Epub>();
+  parser.epub->imageBytes = {'G', 'I', 'F', '8', '9', 'a', 1, 0, 1, 0};
+  parser.imageRendering = 0;
+  const auto imagePath = std::filesystem::temp_directory_path() / "crosspoint-gif-probe-0.gif";
+  std::filesystem::remove(imagePath);
+  parser.imageBasePath = imagePath.string().substr(0, imagePath.string().size() - 5);
+  Epub::enableGifProbeForTest = true;
+  const char* attrs[] = {"src", "probe.gif", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "body", nullptr);
+  ChapterHtmlSlimParser::startElement(&parser, "img", attrs);
+  EXPECT_EQ(parser.epub->headerProbes, 1u);
+  EXPECT_EQ(parser.epub->fullExtractions, 0u);
+  EXPECT_FALSE(std::filesystem::exists(imagePath));
+  std::filesystem::remove(imagePath);
+}
 
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
   ParsedText text;
