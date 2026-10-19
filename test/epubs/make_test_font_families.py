@@ -26,6 +26,11 @@ to --out; the corpus copy embeds none, the layout does not read them. The device
 a baseline JPEG, a progressive JPEG and a PNG among text in every family, made here with Pillow and large enough
 that their decodes need real heap: the pages the reader's memory ladder (ImageMemoryLadder) is tested on.
 
+With --build-through (device only, needs --fonts) it writes a different book instead, "Build Through": five
+chapters of prose in every family, each ending in a baseline JPEG, a progressive JPEG and a PNG of its own on its
+last pages. Those are the pages a reader reaches while Background-B builds the next chapter (build-through on the
+X3) and the image lane warms the pictures ahead, so the device test sees the two meet in every chapter.
+
 Regenerate with:  python test/epubs/make_test_font_families.py
 then refresh goldens: UPDATE_GOLDENS=1 ctest --test-dir <build> -R EpubPipeline
 """
@@ -128,34 +133,36 @@ IMAGE_CHAPTER = (
 )
 
 
-def make_images():
-    """A baseline JPEG, a progressive JPEG and a PNG: smooth shapes over gradients, the same bytes every run."""
+def picture(width, height, phase):
+    """Smooth shapes over gradients, the same pixels every run."""
     try:
         from PIL import Image, ImageDraw
     except ImportError:
         raise SystemExit("--fonts needs Pillow for the test images: pip install pillow")
+    image = Image.new("RGB", (width, height))
+    pixels = image.load()
+    for y in range(height):
+        for x in range(width):
+            r = int(127 + 127 * math.sin((x + phase) / 37.0))
+            g = int(127 + 127 * math.sin((y - phase) / 23.0))
+            b = (x * 255 // width + y * 255 // height) // 2
+            pixels[x, y] = (r, g, b)
+    draw = ImageDraw.Draw(image)
+    for i in range(12):
+        cx = (i * 97 + phase) % width
+        cy = (i * 61 + phase * 2) % height
+        draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], outline=(0, 0, 0), width=4)
+    return image
 
-    def picture(width, height, phase):
-        image = Image.new("RGB", (width, height))
-        pixels = image.load()
-        for y in range(height):
-            for x in range(width):
-                r = int(127 + 127 * math.sin((x + phase) / 37.0))
-                g = int(127 + 127 * math.sin((y - phase) / 23.0))
-                b = (x * 255 // width + y * 255 // height) // 2
-                pixels[x, y] = (r, g, b)
-        draw = ImageDraw.Draw(image)
-        for i in range(12):
-            cx = (i * 97 + phase) % width
-            cy = (i * 61 + phase * 2) % height
-            draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], outline=(0, 0, 0), width=4)
-        return image
 
-    def saved(image, **options):
-        buffer = io.BytesIO()
-        image.save(buffer, **options)
-        return buffer.getvalue()
+def saved(image, **options):
+    buffer = io.BytesIO()
+    image.save(buffer, **options)
+    return buffer.getvalue()
 
+
+def make_images():
+    """A baseline JPEG, a progressive JPEG and a PNG."""
     return {
         "images/baseline.jpg": saved(picture(900, 675, 0), format="JPEG", quality=80, optimize=False),
         "images/progressive.jpg": saved(picture(800, 600, 40), format="JPEG", quality=80, progressive=True),
@@ -163,9 +170,52 @@ def make_images():
     }
 
 
-def build(out, fonts_dir):
+# "Build Through": every chapter is long enough that Background-B's build of it spans several page turns on the X3
+# (~90 pages, a few seconds of slices), and ends in three pictures of its own, each on a page of its own, among the
+# last pages.
+BUILD_THROUGH_CHAPTERS = 5
+BUILD_THROUGH_PARAGRAPHS = 160
+BUILD_THROUGH_PROSE = [
+    f"{PROSE} Now and then a word is set apart, like <span class=\"inline\">this display phrase</span>, a "
+    f"<span class=\"script\">turn of the script hand</span> or a little <code>code</code>, and the body goes on "
+    f"after it as before, line after line, until the paragraph ends.",
+    f"{PROSE} {PROSE}",
+    f"A shorter paragraph in the body family, with <span class=\"inline\">one accent</span> in it.",
+]
+
+
+def build_through_chapter(n):
+    prose = "\n".join(f"    <p>{BUILD_THROUGH_PROSE[i % len(BUILD_THROUGH_PROSE)]}</p>" for i in range(BUILD_THROUGH_PARAGRAPHS))
+    return (
+        f"Through {n}",
+        f"    <h1>Chapter {n}</h1>\n"
+        f'    <p class="dedication">The pictures of chapter {n} wait at its end.</p>\n'
+        f"{prose}\n"
+        f'    <p><img src="images/c{n}-baseline.jpg" alt="Chapter {n}, a baseline JPEG"/></p>\n'
+        f'    <p class="script">Under the baseline picture of chapter {n}.</p>\n'
+        f'    <p><img src="images/c{n}-progressive.jpg" alt="Chapter {n}, a progressive JPEG"/></p>\n'
+        f"    <p>{PROSE}</p>\n"
+        f'    <p><img src="images/c{n}-figure.png" alt="Chapter {n}, a PNG figure"/></p>\n'
+        f"    <p>The last words of chapter {n}.</p>",
+    )
+
+
+def build_through_images(n):
+    phase = n * 53
+    return {
+        f"images/c{n}-baseline.jpg": saved(picture(1000, 1333, phase), format="JPEG", quality=85, optimize=False),
+        f"images/c{n}-progressive.jpg": saved(
+            picture(1000, 750, phase + 40), format="JPEG", quality=85, progressive=True
+        ),
+        f"images/c{n}-figure.png": saved(picture(640, 853, phase + 80), format="PNG"),
+    }
+
+
+def build(out, fonts_dir, build_through=False):
     manifest, spine, files = [], [], {}
     css = CSS
+    chapters = CHAPTERS + ([IMAGE_CHAPTER] if fonts_dir else [])
+    title, ident = "Font Families", "font-families"
     if fonts_dir:
         rules = []
         for i, (family, weight, src, name) in enumerate(FACES):
@@ -174,15 +224,22 @@ def build(out, fonts_dir):
             manifest.append(f'<item id="font{i}" href="fonts/{name}" media-type="font/ttf"/>')
             rules.append(f'@font-face {{ font-family: "{family}"; font-weight: {weight}; src: url(fonts/{name}); }}')
         css = "\n".join(rules) + "\n" + css
-        for i, (name, data) in enumerate(make_images().items()):
+        images = make_images()
+        if build_through:
+            chapters = [build_through_chapter(n) for n in range(1, BUILD_THROUGH_CHAPTERS + 1)]
+            images = {}
+            for n in range(1, BUILD_THROUGH_CHAPTERS + 1):
+                images.update(build_through_images(n))
+            title, ident = "Build Through", "build-through"
+        for i, (name, data) in enumerate(images.items()):
             files[name] = data
             media = "image/png" if name.endswith(".png") else "image/jpeg"
             manifest.append(f'<item id="image{i}" href="{name}" media-type="{media}"/>')
     files["style.css"] = css
     manifest.append('<item id="css" href="style.css" media-type="text/css"/>')
-    for i, (title, body) in enumerate(CHAPTERS + ([IMAGE_CHAPTER] if fonts_dir else []), start=1):
+    for i, (chapter_title, body) in enumerate(chapters, start=1):
         name = f"chapter{i}.xhtml"
-        files[name] = CHAPTER.format(title=title, body=body)
+        files[name] = CHAPTER.format(title=chapter_title, body=body)
         manifest.append(f'<item id="chapter{i}" href="{name}" media-type="application/xhtml+xml"/>')
         spine.append(f'<itemref idref="chapter{i}"/>')
 
@@ -190,10 +247,10 @@ def build(out, fonts_dir):
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">\n'
         '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n'
-        "    <dc:title>Font Families</dc:title>\n"
+        f"    <dc:title>{title}</dc:title>\n"
         "    <dc:creator>Test Corpus</dc:creator>\n"
         "    <dc:language>en</dc:language>\n"
-        '    <dc:identifier id="bookid">font-families</dc:identifier>\n'
+        f'    <dc:identifier id="bookid">{ident}</dc:identifier>\n'
         "  </metadata>\n"
         "  <manifest>\n    " + "\n    ".join(manifest) + "\n  </manifest>\n"
         "  <spine>\n    " + "\n    ".join(spine) + "\n  </spine>\n"
@@ -227,8 +284,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--fonts", help="embed TrueType faces from this directory (device test copy)")
     parser.add_argument("--out", default=OUT)
+    parser.add_argument("--build-through", action="store_true", help="write the Build Through book (needs --fonts)")
     args = parser.parse_args()
-    build(args.out, args.fonts)
+    if args.build_through and not args.fonts:
+        parser.error("--build-through needs --fonts")
+    build(args.out, args.fonts, args.build_through)
 
 
 if __name__ == "__main__":

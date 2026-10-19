@@ -66,7 +66,9 @@ stepBackgroundSectionBuild();                // 3. Background A re-arm, the imag
 
 Rationale: deferred AA finishes the current page's quality; **C** unblocks reading (you can't
 read until it produces pages); **A**, the image lane and **B** are speculative look-ahead that only
-matter once the current page/section is settled.
+matter once the current page/section is settled. Of those, the pictures a few pages ahead come
+before a chapter fifty pages away: the image lane runs before B, and B takes the secondary buffer only
+once the lane has nothing left to decode (`LaneBeforeBuild.h`, see the image lane below).
 
 ---
 
@@ -136,11 +138,23 @@ before B; one page per tick.
   next section's first pages when that section's cache exists (not a CSS-fallback cache, which the
   reader rebuilds on entry). A window found clean is remembered (`imageWarmCleanSpine_` /
   `imageWarmCleanPage_`) until the position moves or B completes a section the window reaches into.
-- **Gates:** no C build active; B neither `Building` nor holding the borrow; a secondary buffer to
-  lend; no queued input and no gesture in flight; `IMAGE_LANE_SETTLE_MS` (300 ms) since the last
-  turn, the last page on screen, or the last preempted decode. The scheduler already runs nothing
-  while the deferred AA is owed. The lane waiting on B is open, see "The image lane waits for
-  Background-B" in [future_work/memory-and-parsing.md](future_work/memory-and-parsing.md).
+- **Gates:** no C build active; a secondary buffer to lend, or B holding it (below); no queued input
+  and no gesture in flight; `IMAGE_LANE_SETTLE_MS` (300 ms) since the last turn, the last page on
+  screen, or the last preempted decode. The scheduler already runs nothing while the deferred AA is
+  owed.
+- **Before B** (`LaneBeforeBuild.h`): the lane reports what it found (`LaneBeforeBuild::Window`), and
+  B borrows the buffer only when the lane has looked at the window for the page on screen and found
+  nothing to decode (`Clean`), or cannot run at all (`Closed`). While the lane waits for its settle
+  or has not looked yet (`Unknown`) B waits too, building through or not. When the lane finds a page
+  to decode while B builds in the buffer, B gives the buffer back first (a *yield*,
+  `yieldBackgroundBorrowToImages()`): the live build is discarded, its inflated XHTML stays on the
+  card, and B starts again once the window is clean. A yield is not one of B's preemptions; B
+  allows `LaneBeforeBuild::kMaxYields` (4) per target, shared with the page render's (see B), and
+  past them the lane waits for B as it used to. While B holds the buffer the window is looked at as
+  its pages will be drawn once the buffer is home, grey caches included.
+- **Progress:** B never waits for the lane for long. The window has a few pages, and each one is
+  decoded, given up on after `kImageWarmMaxTries`, or, when a press cuts its decode short, decoded by
+  the render that shows it, so by a chapter's last page at the latest the lane finds nothing left.
 - **Warm:** `warmPageForImageLane()` borrows the secondary buffer as the decoders' scratch and writes
   caches only (`GfxRenderer::ScopedCacheOnlyImageWrites`), so the framebuffer, and a pre-rendered
   page in it, is untouched. It decodes at the offsets the page render uses, because the ordered
@@ -172,7 +186,8 @@ cache hit, not a blocking parse. `stepBackgroundSectionBuild()`, one bounded sli
   it. The block never enters the heap, so returning it cannot fail. There is no heap-backed B: with
   no buffer to lend (a C build holds it, or a release never came back) B waits, and C builds the
   section when the reader arrives.
-  - **Gates:** the reader has been settled for `BG_BUILD_BORROW_QUIET_MS` (**1.5 s**), measured from
+  - **Gates:** the image lane is done with its window (see the image lane, *Before B*); the reader
+    has been settled for `BG_BUILD_BORROW_QUIET_MS` (**1.5 s**), measured from
     the last page reaching the screen (`lastPageOnScreenMs_`), not the last turn; no button edge is
     queued (`CooperativeAbort::shouldAbortLongTask()`); free ≥ `BG_BUILD_BORROW_MIN_FREE_HEAP_BYTES`
     (14 KB, plus `BG_BUILD_RESOLVE_EXTRA_HEAP_BYTES`, currently 0, for a spine that still owes the
@@ -193,11 +208,20 @@ cache hit, not a blocking parse. `stepBackgroundSectionBuild()`, one bounded sli
     to the next chapter first, C adopts the live build. X3 only, because its controller keeps the
     displayed frame as its own baseline; elsewhere the SSD1677's RED would first need seeding from a
     frame the lent buffer may no longer hold.
+  - **No decode beside the build:** a page render that finds an image to decode while B keeps the
+    buffer (`renderContents()`) has B yield it first, and renders as if B had never held it. It
+    used to decode on the heap beside the build (X3, 2026-10-19, anti-aliasing off: a JPEG at
+    11,780 B free, a PNG refused its 32 KB ring and drawn as a low-memory box). Past B's yields the
+    images are drawn as "indexing" placeholders, and the lane decodes them and redraws the page once
+    B is done. With the lane before B these yields are the exception: B builds through only once the
+    lane has decoded the pictures of the chapter's last pages.
   - **Preemption:** otherwise a page turn ends the borrow, and `endBackgroundBorrow()` tears the live
     build down *before* handing the block back (the build allocates inside it). The parse is lost,
     but the inflated XHTML from phase (a) stays on the card (`Section::abortSectionBuild()` keys on
     `extractDone`), so the retry is the cheap one. After `BG_BUILD_MAX_PREEMPTIONS` (2) the spine is
     left to C; a next-chapter spine abandoned mid-chapter is retried on the chapter's last pages.
+    Neither an overlay opening nor a yield to an image decode counts (`endBackgroundBorrow(false)`):
+    they say nothing about whether the parse fits between two turns.
 - **Lean CSS resolver:** every build uses the disk-backed resolver (`setLeanResolve`). The hot-rule
   LRU it gives up cannot hit during a build anyway: the parser memoises on `tag|class|id`, so the
   resolver only sees first occurrences.
@@ -287,6 +311,9 @@ the first render after the build ends. `onExit()` restores it too if the reader 
   `Background-B: returned secondary buffer (spine N, build discarded|no build live,
   preemptions=K; heap … at start, … lowest)`. Repeated `build discarded` at `preemptions=2` means B
   keeps losing the race to page turns on that spine and is handing it to C.
+  `Background-B: giving the buffer back to the image lane|the page render (spine N, yield K of 4)`
+  precedes a discard that is a yield; `Page N: images drawn as placeholders until Background-B's
+  build is done` means B had no yields left.
 - **Heap gates** (`INF`, off by default — build `-DHEAP_GATE_TRACE=1`): one
   `gate=<name> PASS|REJECT free=…(floor=…) contig=…(floor=…)` line per decision. Several floors
   reject *silently* otherwise, so this is the only way to see which one decided a build's path.
