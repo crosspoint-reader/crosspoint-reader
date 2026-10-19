@@ -41,7 +41,7 @@ Listed here so nobody redoes it.
   - The direction is data only: every book is laid out left to right, horizontally (spec section 4).
 - **Punctuation widths** (`CjkPunctuation`), written from W3C JLREQ and CLREQ; crengine's tables were a cross-check, not the source.
   - Every adjustable mark is a token of its own, glued where kinsoku holds it (`ParsedText::addWord`).
-  - Mid-line widths are set before line breaking (`applyPunctuationWidths`). The line-edge widths are applied by all four breakers and `extractLine` (`lineStartTrim_`, `lineEndTrim_`).
+  - Mid-line widths are set before line breaking (`applyPunctuationWidths`). The line-edge widths are applied by all four breakers and `extractLine` (`markClass_`, `edgeTrim_`: two bytes a token).
   - A narrowed mark is drawn where its ink sits (`GfxRenderer::getGlyphInk`).
   - A mark is narrowed only when its font draws it full-width, at least 4/5 of the em of 一, so a Latin reader font changes nothing.
   - Simplified Chinese and Japanese narrow most marks next to other punctuation and at line edges; traditional Chinese keeps its centred marks full width.

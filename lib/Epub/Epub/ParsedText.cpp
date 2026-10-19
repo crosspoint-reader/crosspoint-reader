@@ -686,9 +686,8 @@ void ParsedText::layoutAndExtractLines(
 void ParsedText::releaseLayoutScratch() {
   // Pure scratch: recomputed by every layout, so safe to drop at any point between feeds.
   std::vector<uint16_t>().swap(wordWidths_);
-  std::vector<int16_t>().swap(lineStartTrim_);
-  std::vector<int16_t>().swap(lineEndTrim_);
   std::vector<uint8_t>().swap(markClass_);
+  std::vector<int8_t>().swap(edgeTrim_);
   std::vector<size_t>().swap(lineBreakIndices_);
   std::vector<bool>().swap(lineEndsWithHyphenatedWord_);
   std::vector<int>().swap(splitPrefixWordIndexes_);
@@ -746,8 +745,7 @@ void ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int font
 void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int fontId, std::vector<uint16_t>& widths) {
   using CjkPunctuation::Class;
   const size_t count = words.size();
-  lineStartTrim_.assign(count, 0);
-  lineEndTrim_.assign(count, 0);
+  edgeTrim_.assign(count, 0);
 
   // A mark is CJK punctuation only where its font draws it full-width, at least 4/5 of the em of 一 in the same
   // face and size: a curly quote in a Latin font is narrow, and a font without CJK glyphs has no em (cjkEm). Every
@@ -806,7 +804,8 @@ void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int f
     const int mid = (full * CjkPunctuation::widthOf(table, mark, neighbour, false).forced + 4) / 8;
     const int edge = (full * CjkPunctuation::widthOf(table, mark, Class::None, true).forced + 4) / 8;
     widths[i] = static_cast<uint16_t>(mid);
-    (mark == Class::Opening ? lineStartTrim_ : lineEndTrim_)[i] = static_cast<int16_t>(edge - mid);
+    // Half an em at most, so a byte holds it at any size a page can show; clamped all the same.
+    edgeTrim_[i] = static_cast<int8_t>(std::clamp(edge - mid, -127, 127));
   }
 }
 
@@ -1423,8 +1422,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
   const uint16_t remainderWidth = measureWordWidth(renderer, font, remainder, style, false, scale);
   wordWidths.insert(wordWidths.begin() + wordIndex + 1, remainderWidth);
-  lineStartTrim_.insert(lineStartTrim_.begin() + wordIndex + 1, 0);
-  lineEndTrim_.insert(lineEndTrim_.begin() + wordIndex + 1, 0);
+  markClass_.insert(markClass_.begin() + wordIndex + 1, static_cast<uint8_t>(CjkPunctuation::Class::None));
+  edgeTrim_.insert(edgeTrim_.begin() + wordIndex + 1, 0);
   if (outInsertedHyphen) {
     *outInsertedHyphen = chosenNeedsHyphen;
   }
@@ -1451,8 +1450,8 @@ ParsedText::LineProcessResult ParsedText::extractLine(
   // A token's width on this line: mid-line, but the first and last at their line-edge widths (CJK punctuation).
   const auto boxWidth = [&](const size_t wordIdx) {
     int width = wordWidths[lastBreakAt + wordIdx];
-    if (wordIdx == 0) width += lineStartTrim_[lastBreakAt];
-    if (wordIdx + 1 == lineWordCount) width += lineEndTrim_[lastBreakAt + wordIdx];
+    if (wordIdx == 0) width += lineStartTrim(lastBreakAt);
+    if (wordIdx + 1 == lineWordCount) width += lineEndTrim(lastBreakAt + wordIdx);
     return width;
   };
 
