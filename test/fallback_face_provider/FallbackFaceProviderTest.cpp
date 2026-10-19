@@ -11,13 +11,13 @@
 
 namespace {
 
-constexpr uint32_t ZH_ONLY = 0x8BBE;     // 设: in the Chinese set, not the Japanese
-constexpr uint32_t ZH_AND_JA = 0x5B9A;   // 定: in both, with each region's glyph form
-constexpr uint32_t JA_ONLY = 0x66F8;     // 書
-constexpr uint32_t HANGUL = 0xC124;      // 설
-constexpr uint32_t IN_NO_FACE = 0x9F98;  // 龘
+constexpr uint32_t ZH_ONLY = 0x8BBE;      // 设: in the Chinese set, not the Japanese
+constexpr uint32_t ZH_AND_JA = 0x5B9A;    // 定: in both, with each region's glyph form
+constexpr uint32_t JA_ONLY = 0x66F8;      // 書
+constexpr uint32_t HANGUL = 0xC124;       // 설
+constexpr uint32_t IN_NO_FACE = 0x9F98;   // 龘
 constexpr uint32_t GREEK_ALPHA = 0x03B1;  // in no face, and no CJK face's to answer for
-constexpr uint32_t STAND_IN = 0x25A1;  // □, which every CJK UI face carries
+constexpr uint32_t STAND_IN = 0x25A1;     // □, which every CJK UI face carries
 
 bool claimsHan(const uint32_t cp) { return cp >= 0x4E00 && cp <= 0x9FFF; }
 
