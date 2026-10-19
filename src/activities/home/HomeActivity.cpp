@@ -773,7 +773,11 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   renderer.clearScreen();
-  bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+  // Only while coverRendered still vouches for the stored pixels. A cover decoded since they were
+  // stored clears it (yieldAfterDecode) but leaves the buffer, which still holds the placeholder:
+  // restored, its edge showed through the new cover, whose white pixels do not overwrite.
+  // Ported from crosspoint-reader PR #4076 (Leopoldo Pla Sempere).
+  bool bufferRestored = coverRendered && coverBufferStored && restoreCoverBuffer();
 
   GUI.drawHeader(renderer, Rect{contentRect.x, metrics.topPadding, contentRect.width, metrics.homeTopPadding}, nullptr);
 
