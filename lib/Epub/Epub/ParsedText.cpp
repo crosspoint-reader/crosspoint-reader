@@ -750,8 +750,9 @@ void ParsedText::applyPunctuationWidths(const GfxRenderer& renderer, const int f
   lineEndTrim_.assign(count, 0);
 
   // A mark is CJK punctuation only where its font draws it full-width, at least 4/5 of the em of 一 in the same
-  // face and size: a curly quote in a Latin font is narrow, and a font without CJK glyphs has no em (cjkEm). Every token is judged on its natural width before any
-  // is narrowed, as a narrowed neighbour (” at 6/8 before “) would no longer pass.
+  // face and size: a curly quote in a Latin font is narrow, and a font without CJK glyphs has no em (cjkEm). Every
+  // token is judged on its natural width before any is narrowed, as a narrowed neighbour (” at 6/8 before “) would no
+  // longer pass.
   int emFont = -1;
   EpdFontFamily::Style emStyle = EpdFontFamily::REGULAR;
   float emScale = 0.0f;

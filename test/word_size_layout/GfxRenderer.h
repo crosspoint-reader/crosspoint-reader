@@ -14,11 +14,11 @@
 
 #include <EpdFontFamily.h>
 
-#include "Epub/CjkPunctuation.h"
-
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "Epub/CjkPunctuation.h"
 
 class GfxRenderer {
  public:

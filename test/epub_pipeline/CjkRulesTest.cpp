@@ -350,12 +350,12 @@ TEST_P(CjkJustifiedRules, JustifiedLinesEndFlushOnAWholeEmGrid) {
 
 std::vector<Case> cjkBooks() {
   std::vector<Case> cases;
-  for (const auto& [book, language] : std::vector<std::pair<const char*, const char*>>{
-           {"test_cjk_line_breaking", "ja"},
-           {"test_cjk_ja_soseki", "ja"},
-           {"test_cjk_ko_hyeon", "ko"},
-           {"test_cjk_zh_honglou", "zh-Hant"},
-           {"test_cjk_zh_punctuation", "zh-Hans"}}) {
+  for (const auto& [book, language] :
+       std::vector<std::pair<const char*, const char*>>{{"test_cjk_line_breaking", "ja"},
+                                                        {"test_cjk_ja_soseki", "ja"},
+                                                        {"test_cjk_ko_hyeon", "ko"},
+                                                        {"test_cjk_zh_honglou", "zh-Hant"},
+                                                        {"test_cjk_zh_punctuation", "zh-Hans"}}) {
     const std::string path = (fs::path(CORPUS_DIR) / (std::string(book) + ".epub")).string();
     cases.push_back(Case{path, language, false});
     cases.push_back(Case{path, language, true});

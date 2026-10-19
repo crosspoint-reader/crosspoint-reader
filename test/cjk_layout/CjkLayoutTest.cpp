@@ -99,7 +99,8 @@ TEST(CjkKinsoku, ClosingPunctuationNeverStartsALine) {
 TEST(CjkKinsoku, AnOpeningBracketNeverEndsALine) {
   ParsedText text(false, false, leftAligned());
   text.addWord("一二三四「五」", EpdFontFamily::REGULAR);
-  EXPECT_EQ(wordsOf(layout(text, 50)), (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"「", "五", "」"}}));
+  EXPECT_EQ(wordsOf(layout(text, 50)),
+            (std::vector<std::vector<std::string>>{{"一", "二", "三", "四"}, {"「", "五", "」"}}));
 }
 
 namespace {
