@@ -164,6 +164,7 @@ add_subdirectory(png_decoder)
 add_subdirectory(book_metadata_cache)
 add_subdirectory(uzlib_lzcopy)
 add_subdirectory(sdfat_alloc)
+add_subdirectory(hal_storage)  # after sdfat_alloc: links its sdfat_host
 add_subdirectory(font_group_stream)
 add_subdirectory(font_cache_manager)  # after font_group_stream: links its uzlib_font_ring
 add_subdirectory(gif_decoder)

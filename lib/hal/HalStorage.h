@@ -158,8 +158,14 @@ class HalStorage {
 class HalFile : public Print {
   friend class HalStorage;
   class Impl;
-  std::unique_ptr<Impl> impl;
-  explicit HalFile(std::unique_ptr<Impl> impl);
+  // Frees an open's Impl, never the one every failed open shares (HalStorage.cpp).
+  struct ImplDeleter {
+    void operator()(Impl* impl) const;
+  };
+  // Null only in a handle that was never opened (or was moved from): an open always leaves an
+  // Impl, a failed one too, so a handle may be closed whatever its open returned.
+  std::unique_ptr<Impl, ImplDeleter> impl;
+  explicit HalFile(Impl* impl);
 
  public:
   HalFile();
