@@ -287,6 +287,14 @@ That is what you want before a screenshot after a page turn or after opening a b
 Send `CMD:IDLE` after the command it should wait for; the device handles them in order. While an
 `IDLE` is pending, the device still answers other commands; a second `IDLE` replaces the first.
 
+**`IDLE:<ms>` is no timing of what it waited for.** It counts from when the device read the `IDLE`
+line, and the device reads one command line per loop pass: work that holds the loop before that
+is left out. Opening a book whose font family has to be installed first (the "Loading font..."
+popup) holds the loop for seconds, so an `IDLE` sent right behind the `ACT` is read only after the
+install. A 20.6 s open of a book with a TrueType family not yet installed was answered
+`IDLE:3580`. Time an open on the host, from sending `ACT` to the `IDLE` reply:
+`tools/devctl.py --log <file>` stamps every line with the host's clock.
+
 ```
 > CMD:BTN:RIGHT
 < BTN_OK
