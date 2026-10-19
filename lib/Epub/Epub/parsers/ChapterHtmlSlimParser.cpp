@@ -1905,6 +1905,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     currentTextBlock.reset(new (std::nothrow) ParsedText(extraParagraphSpacing, hyphenationEnabled,
                                                          blockStyleWithIndent, bionicReadingEnabled));
   }
+  if (currentTextBlock) currentTextBlock->setTypography(typography_);
   wireTextBlock();
   wordsExtractedInBlock = 0;
 }
@@ -2290,6 +2291,7 @@ void ChapterHtmlSlimParser::startElement(void* userData, const char* name, const
     row.cells.back().colSpan = colSpan;
     row.cells.back().text =
         std::unique_ptr<ParsedText>(new ParsedText(false, false));  // no paragraph spacing, no hyphenation in cells
+    row.cells.back().text->setTypography(self->typography_);
     self->currentTable->pendingRowBytes += TABLE_BUFFER_BYTES_PER_CELL;
     row.effectiveCols = static_cast<uint8_t>(row.effectiveCols + colSpan);
     // Column overflow: this row cannot be a grid row. Not degraded here — the cell just created is
@@ -5146,6 +5148,7 @@ bool ChapterHtmlSlimParser::degradeRowAtOpenCell(const char* reason) {
     ok = emitCellAsParagraph(chunk, /*emitImage=*/false);
   }
   open.text = std::unique_ptr<ParsedText>(new ParsedText(false, false));
+  open.text->setTypography(typography_);
 
   t.pendingRow.cells.push_back(std::move(open));
   t.pendingRow.effectiveCols = 0;

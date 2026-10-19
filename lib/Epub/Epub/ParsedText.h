@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "TokenBoundary.h"
+#include "TypographyProfile.h"
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
@@ -102,6 +103,8 @@ class ParsedText {
   uint32_t lastLineVisibleOffset_ = 0;
   LinePlace linePlace_;
   BlockStyle blockStyle;
+  // The book's typography (TypographyProfile.h): Latin rules until the parser sets the book's.
+  TypographyProfile typography_;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool bionicReadingEnabled;
@@ -233,6 +236,8 @@ class ParsedText {
   // before the first layout pass of the block; callers skip continuations.
   bool foldUniformWordSizes();
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
+  // Survives reset(): it is the book's, not the block's.
+  void setTypography(const TypographyProfile& typography) { typography_ = typography; }
   // See lineArena_ / beforeLine_. Both survive reset().
   void setLineArena(BuildArena* arena) { lineArena_ = arena; }
   void setBeforeLineHook(std::function<void(uint8_t maxSizePct)> hook) { beforeLine_ = std::move(hook); }

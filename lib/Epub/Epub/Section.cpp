@@ -27,6 +27,7 @@
 #include "Epub/css/CssParser.h"
 #include "FootnotePreviews.h"
 #include "Page.h"
+#include "TypographyProfile.h"
 #include "blocks/ImageBlock.h"  // image_scratch: pass-wide decode arena
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
@@ -1227,7 +1228,11 @@ Section::BuildPhaseResult Section::runBuildSetup(BuildState& st) {
   // Only the lent framebuffer region has room for the parser's SAX state (~10 KB) on top of the
   // build's own use; the owned heap arena is 10 KB in total and would just move the block.
   if (st.arena && st.arena != st.ownedArena.get()) st.visitor->setBuildArena(st.arena);
-  Hyphenator::setPreferredLanguage(epub->getLanguage());
+  // The book's language decides its typography (TypographyProfile.h): hyphenation patterns, CJK punctuation widths,
+  // the CJK grid.
+  const TypographyProfile typography = TypographyProfile::forLanguage(epub->getLanguage());
+  Hyphenator::setLanguageHyphenator(typography.hyphenator);
+  st.visitor->setTypography(typography);
 
   // Inline footnote previews are NOT wired up here: the note text this spine needs may not be
   // in the store yet, and resolving it needs the spine's inflated XHTML — which phase (a) is
