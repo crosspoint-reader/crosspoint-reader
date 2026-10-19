@@ -35,7 +35,7 @@ Listed here so nobody redoes it.
 - The pre-render of the next page prewarms 1-bit ink masks instead of 2-bit glyphs: half the bytes, the same black-and-white pixels.
 - **Effect on the X3:** a dense Chinese page turns in ~503 ms instead of ~678 ms, and reading leaves ~53 KB free instead of 15-21 KB.
 
-**#PR_NUMBER (A3a): punctuation widths, flush justification, the whole-em grid.**
+**#520 (A3a): punctuation widths, flush justification, the whole-em grid.**
 - **A profile per book language** (`TypographyProfile::forLanguage`, from the OPF `dc:language`): how lines break and justify, the punctuation table, the grid, the inline direction and the hyphenator. It travels `Section` → `ChapterHtmlSlimParser` → every `ParsedText`.
   - Traditional Chinese is `zh-Hant`, `-TW`, `-HK`, `-MO` and `lzh`; an explicit `-Hans` wins.
   - The direction is data only: every book is laid out left to right, horizontally (spec section 4).
