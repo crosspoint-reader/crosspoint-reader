@@ -256,6 +256,9 @@ constexpr uint32_t LARGEST_FREE_BLOCK_SLACK = 16;
 #ifndef BG_BUILD_THROUGH_PAGES
 #define BG_BUILD_THROUGH_PAGES 3
 #endif
+// Every page a decode can meet the build on gets its yield (see kMaxYields).
+static_assert(LaneBeforeBuild::kMaxYields >= BG_BUILD_THROUGH_PAGES + 1,
+              "B must be able to yield to the pictures on every page it builds through");
 
 // The image lane's settle after a page turn, a draw or a preempted decode (see
 // stepImageWarmLocked). Short on purpose: the lane also waits for any gesture in flight and for
@@ -1409,10 +1412,8 @@ void EpubReaderActivity::startActivityForResult(std::unique_ptr<Activity>&& acti
     // spine to the foreground once it is hit. An overlay opening says nothing about whether the
     // parse fits between two turns, so letting it burn that budget would mean two visits to the
     // reader menu permanently demote the next section to a blocking Background-C build with its
-    // popup. Restore the count so B resumes with exactly the budget it had.
-    const uint8_t preemptionsBeforeOverlay = backgroundPreemptCount_;
-    endBackgroundBorrow();
-    backgroundPreemptCount_ = preemptionsBeforeOverlay;
+    // popup. So it is not counted: B resumes with exactly the budget it had.
+    endBackgroundBorrow(/*preemption=*/false);
     // The child draws over the page, so nothing staged for this screen survives it: the owed
     // deferred AA of the page on it, and a queued or finished pre-render of the next page (it lives
     // in the write framebuffer, which the child draws into). Left armed, the render that follows
@@ -1452,12 +1453,10 @@ void EpubReaderActivity::suspendBackgroundWork() {
     // the look-ahead's own Probe state discards the Section object the moment
     // loadSectionFile() finds the file. Dropping it here would free nothing
     // worth having and cost the next visit a needless re-open.
-    const uint8_t preemptionsBeforeOverlay = backgroundPreemptCount_;
-    endBackgroundBorrow();
-    // Same reasoning as startActivityForResult's: an overlay opening says
-    // nothing about whether the parse fits between two page turns, so it must
-    // not burn the budget that makes B abandon a spine.
-    backgroundPreemptCount_ = preemptionsBeforeOverlay;
+    // Not a preemption, for the same reason as in startActivityForResult: an
+    // overlay opening says nothing about whether the parse fits between two
+    // page turns, so it must not burn the budget that makes B abandon a spine.
+    endBackgroundBorrow(/*preemption=*/false);
     // Discard the pre-rendered next page: it lives in the WRITE framebuffer
     // (renderPageContentOnly draws there, not into the secondary), which is exactly
     // what the overlay is about to draw over.
@@ -1486,6 +1485,7 @@ void EpubReaderActivity::resetBackgroundBuild() {
   backgroundBuildState_ = BackgroundBuildState::Probe;
   backgroundBuildPercent_ = -1;
   backgroundPreemptCount_ = 0;
+  backgroundImageYields_ = 0;
   backgroundBuildStarved_ = false;
 }
 
@@ -1532,7 +1532,7 @@ bool EpubReaderActivity::beginBackgroundBorrow() {
   return true;
 }
 
-void EpubReaderActivity::endBackgroundBorrow() {
+void EpubReaderActivity::endBackgroundBorrow(const bool preemption) {
   if (!backgroundBorrowActive_) {
     return;
   }
@@ -1562,7 +1562,7 @@ void EpubReaderActivity::endBackgroundBorrow() {
   // is deliberately NOT reset here — it is what stops this from looping forever on a spine whose
   // parse cannot fit between two page turns.
   if (buildWasLive) {
-    backgroundPreemptCount_++;
+    if (preemption) backgroundPreemptCount_++;
     backgroundBuildState_ = BackgroundBuildState::Probe;
     backgroundBuildGateCheckMs_ = 0;
   }
@@ -1584,6 +1584,15 @@ void EpubReaderActivity::endBackgroundBorrow() {
     statusRefreshDeferred_ = false;
     requestUpdate();
   }
+}
+
+void EpubReaderActivity::yieldBackgroundBorrowToImages(const char* to) {
+  if (!backgroundBorrowActive_) return;
+  LOG_INF("ERS", "Background-B: giving the buffer back to %s (spine %d, yield %u of %u)", to,
+          backgroundBuildSpineIndex_, static_cast<unsigned>(backgroundImageYields_ + 1),
+          static_cast<unsigned>(LaneBeforeBuild::kMaxYields));
+  endBackgroundBorrow(/*preemption=*/false);  // a yield instead (LaneBeforeBuild)
+  backgroundImageYields_++;
 }
 
 void EpubReaderActivity::stepBackgroundSectionBuild() {
@@ -5562,6 +5571,25 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   const int viewportHeight = std::max(0, renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom);
   const int contentTop = orientedMarginTop + getImageOnlyPageYOffset(*page, viewportHeight);
 
+  // Building through a chapter's last pages, Background-B kept the secondary buffer for its build of the next one
+  // (recoverSecondaryBufferIfNeeded). A decode now would run on the heap beside that build (LaneBeforeBuild): B gives
+  // the buffer back first, and the page renders as if B had never held it. Past B's yields the images wait for it as
+  // placeholders, and the image lane decodes them and redraws the page once B is done.
+  bool imagesWaitForBuild = false;
+  if (backgroundBorrowActive_ && section && !memoryDegradedPage(currentSpineIndex, section->currentPage) &&
+      page->hasUncachedImages(forceLoadLargeImages || !SETTINGS.largeImagePlaceholder, /*monochromeOutput=*/true)) {
+    switch (LaneBeforeBuild::decodeWhileBuilding(backgroundImageYields_)) {
+      case LaneBeforeBuild::Decode::TakeFromBuild:
+        yieldBackgroundBorrowToImages("the page render");
+        break;
+      case LaneBeforeBuild::Decode::AfterBuild:
+        imagesWaitForBuild = true;
+        LOG_INF("ERS", "Page %d: images drawn as placeholders until Background-B's build is done (%u yields spent)",
+                section->currentPage, static_cast<unsigned>(backgroundImageYields_));
+        break;
+    }
+  }
+
   const bool aaEnabledForThisRender =
       getEffectiveTextAntiAliasing() && renderer.hasSecondaryBuffer() && !secondaryBufferDegraded_;
   if (getEffectiveTextAntiAliasing() && !aaEnabledForThisRender) {
@@ -5604,8 +5632,8 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   // A page the memory ladder gave up on draws its undecoded images as low-memory boxes at once (see the BW render):
   // every decode was refused a moment ago, and a clock tick that redraws the page must not climb the ladder again.
   const bool ladderGaveUp = section && memoryDegradedPage(currentSpineIndex, section->currentPage);
-  imageProcessingActive_ =
-      !ladderGaveUp && page->hasUncachedImages(warmForceLoad, imageMonochrome, warmGrayscaleImageCache);
+  imageProcessingActive_ = !ladderGaveUp && !imagesWaitForBuild &&
+                           page->hasUncachedImages(warmForceLoad, imageMonochrome, warmGrayscaleImageCache);
   // BORROW the secondary buffer as the decode scratch rather than releasing it. Both give the
   // decoders the same ~52 KB, but the borrowed block never enters the heap:
   //   - it cannot be carved up by the decode's own churn (rule 4 — this pass was the documented
@@ -5761,10 +5789,13 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   logReaderMemSnapshot("before_bw_render");
   ImageBlock::takeLowMemoryPlaceholders();  // the warm pass's boxes were cleared with the screen
   {
-    // The ladder found no decode fits: the images are boxes, and no decode is tried again on the heap.
+    // The ladder found no decode fits: the images are boxes, and no decode is tried again on the heap. Or they wait
+    // for Background-B's build (above).
     std::optional<ImageBlock::PlaceholderOnlyScope> boxes;
     if (ladderGaveUp || ladder == ImageMemoryLadder::Action::Emergency) {
       boxes.emplace(ImageBlock::Placeholder::LowMemory);
+    } else if (imagesWaitForBuild) {
+      boxes.emplace(ImageBlock::Placeholder::Loading);
     }
     page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad,
                  imageMonochrome);

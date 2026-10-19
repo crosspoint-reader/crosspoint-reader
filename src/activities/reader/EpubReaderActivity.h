@@ -25,6 +25,7 @@
 #include "ImageMemoryLadder.h"
 #include "KOReaderAutoSync.h"
 #include "KOReaderSyncWorker.h"
+#include "LaneBeforeBuild.h"
 #include "ProgressMapper.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
@@ -497,6 +498,10 @@ class EpubReaderActivity final : public Activity {
   // writes and battery for a cache it never finishes. After BG_BUILD_MAX_PREEMPTIONS the
   // target is abandoned to Background-C and the cursor moves on. Reset per target.
   uint8_t backgroundPreemptCount_ = 0;
+  // Times B gave the buffer back to an image decode for backgroundBuildSpineIndex_ (LaneBeforeBuild): bounded by
+  // LaneBeforeBuild::kMaxYields, after which the images wait for B. Kept apart from backgroundPreemptCount_, which
+  // abandons the chapter to the foreground. Reset per target.
+  uint8_t backgroundImageYields_ = 0;
   // The last background build ran short of memory -- degraded, truncated or failed -- and was
   // skipped (the foreground builds that chapter when the reader gets there). B then waits for the
   // reader to enter the next chapter before it tries another, so a book that never fits costs
@@ -900,7 +905,12 @@ class EpubReaderActivity final : public Activity {
   // a framebuffer again. No-op unless Background-B currently holds the borrow. The one path
   // that must NOT call this is the buildSection() adoption, where the borrow transfers to
   // Background-C with the build intact; it clears backgroundBorrowActive_ directly instead.
-  void endBackgroundBorrow();
+  // `preemption`: a live build discarded here counts toward BG_BUILD_MAX_PREEMPTIONS; false for
+  // an overlay opening or a yield to an image decode, which say nothing about the parse fitting.
+  void endBackgroundBorrow(bool preemption = true);
+  // Background-B gives its borrowed buffer back to an image decode the reader is about to see (LaneBeforeBuild): the
+  // live build is discarded, not counted as a preemption, and counted as a yield instead. `to` names the decode.
+  void yieldBackgroundBorrowToImages(const char* to);
   // Background C: advance the incremental build of the CURRENT section (the one the reader is
   // looking at) by one bounded slice. Runs only while `section` has an active build, with the
   // highest reader-build priority (ahead of A and B). On a newly built target page or on
