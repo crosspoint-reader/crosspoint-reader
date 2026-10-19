@@ -1,0 +1,712 @@
+CrossPoint hyphenation pattern licenses and copyright notices
+
+These notices apply to the tables in lib/Epub/Epub/hyphenation/generated/.
+The pattern licenses differ from the license for the hypher Rust code.
+CrossPoint selects the MIT option where the pattern owner offers that option.
+The LPPL text is in LPPL-1.3c.txt in this directory.
+The original source notices follow.
+
+========================================================================
+en
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-en-us.tex
+========================================================================
+
+% title: Hyphenation patterns for American English
+% copyright: Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: English, American spelling
+%     tag: en-us
+% version: 2005-05-30
+% authors:
+%   -
+%     name: Gerard D.C. Kuiken
+% licence:
+%     text: >
+%         Copying and distribution of this file, with or without modification,
+%         are permitted in any medium without royalty provided the copyright
+%         notice and this notice are preserved.
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 3
+% changes:
+%     March 1, 1990 Initial release
+%     May 30, 2005 Added copyright notice, no patterns change.
+% texlive:
+%     encoding: ascii
+%     babelname: usenglishmax
+%     legacy_patterns: ushyphmax.tex
+%     message: Hyphenation patterns for American English
+%     package: english
+% known_bugs:
+%     de-mo-c-rat: 'instead of dem-o-crat (see GitHub issue #15)'
+% ==========================================
+%
+% ushyphmax.tex -- patterns for more hyphenation pattern memory (12000+).
+% Also known as ushyphen.max.
+%
+% Needs extended pattern memory.
+% Hyphenation trie becomes 7283 with 377 ops.
+%
+% These patterns are based on the Hyphenation Exception Log
+% published in TUGboat, Volume 10 (1989), No. 3, pp. 337-341,
+% and a large number of incorrectly hyphenated words not yet published.
+% If added to Liang's before the closing bracket } of
+
+========================================================================
+fr
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-fr.tex
+========================================================================
+
+% title: Hyphenation patterns for French
+% copyright: Copyright (C) 1994-2002 Daniel Flipo, Bernard Gaulle, 2016 Arthur Reutenauer
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: French
+%     tag: fr
+% version: V2.13 2016/05/12
+% authors:
+%     -
+%         name: Daniel Flipo
+%     -
+%         name: Bernard Gaulle
+%         note: deceased
+%     -
+%         name: Arthur Reutenauer
+%         contact: arthur (at) reutenauer.eu
+%     -
+%         email: cesure-l (at) gutenberg (dot} eu (dot) org
+% licence:
+%     name: MIT
+%     url: https://opensource.org/licenses/MIT
+%     text: >
+%         Permission is hereby granted, free of charge, to any person obtaining
+%         a copy of this software and associated documentation files (the
+%         "Software"), to deal in the Software without restriction, including
+%         without limitation the rights to use, copy, modify, merge, publish,
+%         distribute, sublicense, and/or sell copies of the Software, and to
+%         permit persons to whom the Software is furnished to do so, subject to
+%         the following conditions:
+%
+%         The above copyright notice and this permission notice shall be
+%         included in all copies or substantial portions of the Software.
+%
+%         THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+%         EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+%         MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+%         NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+%         BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+%         ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+%         CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+%         SOFTWARE.
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% texlive:
+%     synonyms:
+%         - patois
+%         - francais
+%     encoding: ec
+%     babelname: french
+%     legacy_patterns: frhyph.tex
+%     message: French hyphenation patterns
+%     description: Hyphenation patterns for French in T1/EC and UTF-8 encodings.
+% ==========================================
+%%%%%%%% The most famous good guys who worked hard to obtain something usable.
+% Jacques Desarmenien, Universite de Strasbourg :
+%          -  << how to run TeX in a French environment: hyphenation, fonts,
+%             typography. >> in Tugboat, 5 (1984) 91-102. and TeX85 conference
+%          -  << La division par ordinateur des mots francais :
+%             application a TeX >> in TSI vol. 5 No 4, 1986 (C) AFCET-
+%                                                             Gauthier-Villars
+% Norman Buckle, UQAH (nb; many additions)
+% Michael Ferguson, INRS-Telecommunications (mjf) June 1988
+% Justin Bur, Universite de Montreal (jbb; checked against original list)
+%                    all patterns including apostrophe missing from nb list
+% after that, GUTenberg  and specially Daniel Flipo and Bernard Gaulle
+% did their best effort to improve the list of patterns.
+%
+%
+
+========================================================================
+de
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-de-1996.tex
+========================================================================
+
+% title: German Hyphenation Patterns (Reformed Orthography, 2006)
+%
+% notice: TeX-Trennmuster für die reformierte (2006) deutsche Rechtschreibung
+%
+% version: 2024-02-28
+%
+% authors:
+%   -
+%     name:    Deutschsprachige Trennmustermannschaft
+%     contact: trennmuster@dante.de
+%
+% copyright: Copyright (c) 2013-2024
+%            Stephan Hennig, Werner Lemberg, Günter Milde,
+%            Sander van Geloven, Georg Pfeiffer, Gisbert W. Selke,
+%            Tobias Wendorf, Keno Wehr
+%
+% licence:
+%     name: MIT
+%     url:  https://opensource.org/licenses/mit-license.php
+%     text: >
+%           Permission is hereby granted, free of charge, to any person
+%           obtaining a copy of this software and associated documentation
+%           files (the “Software”), to deal in the Software without
+%           restriction, including without limitation the rights to use,
+%           copy, modify, merge, publish, distribute, sublicense, and/or
+%           sell copies of the Software, and to permit persons to whom the
+%           Software is furnished to do so, subject to the following
+%           conditions:
+%
+%           The above copyright notice and this permission notice shall be
+%           included in all copies or substantial portions of the Software.
+%
+%           THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
+%           EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+%           OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+%           NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+%           HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+%           WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%           FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+%           OTHER DEALINGS IN THE SOFTWARE.
+%
+% source: https://repo.or.cz/w/wortliste.git?a=commit;h=304aaa2188a75e57afe36bad0443d90a9c715b8e
+%
+% language:
+%     name: German, reformed spelling
+%     tag:  de-1996
+%
+% hyphenmins:
+%     generation:
+%         left:  2
+%         right: 2
+%     typesetting:
+%         left:  2
+%         right: 2
+%
+% texlive:
+%     encoding: ec
+%     babelname: ngerman
+%     use_old_patterns_comment: Kept for the sake of backward compatibility, but newer and better patterns by WL are available.
+%     legacy_patterns: dehyphn.tex
+%     message: German hyphenation patterns (reformed orthography)
+%     package: german
+%
+% ===========================================================================
+
+\message{German Hyphenation Patterns (Reformed Orthography, 2006) `dehyphn-x' 2024-02-28 (WL)}
+
+%
+% The used patgen parameters are
+%
+%   1 1 | 1 3 | 2 3 1
+%   2 2 | 2 4 | 1 5 1
+%   3 3 | 3 5 | 1 6 1
+%   4 4 | 4 6 | 1 7 1
+%   5 5 | 5 12 | 1 8 1
+%   6 6 | 6 12 | 1 9 1
+%   7 7 | 7 12 | 1 9 1
+%   8 8 | 8 12 | 1 9 1
+
+========================================================================
+es
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-es.tex
+========================================================================
+
+% copyright: Copyright (C) 1993, 1997 Javier Bezos, 2001-2019 Javier Bezos, CervanTeX
+% title: Hyphenation patterns for Spanish
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Spanish
+%     tag: es
+% version: 5.0 2019-09-24
+% authors:
+%   -
+%     name: Javier Bezos
+% licence:
+%     name: MIT/X11
+%     url: https://opensource.org/licenses/MIT
+%     text: >
+%         Permission is hereby granted, free of charge, to any person obtaining a copy
+%         of this software and associated documentation files (the "Software"), to deal
+%         in the Software without restriction, including without limitation the rights
+%         to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+%         copies of the Software, and to permit persons to whom the Software is
+%         furnished to do so, subject to the following conditions:
+%
+%         The above copyright notice and this permission notice shall be included in
+%         all copies or substantial portions of the Software.
+%
+%         THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%         IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%         FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%         AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+%         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+%         SOFTWARE.
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% texlive:
+%     synonyms:
+%         - espanol
+%     encoding: ec
+%     babelname: spanish
+%     legacy_patterns: eshyph.tex
+%     message: Spanish hyphenation patterns
+%     description: Hyphenation patterns for Spanish in T1/EC and UTF-8 encodings.
+% ==========================================
+%
+% For further info, bug reports and comments:
+%
+%       https://github.com/jbezos/tex-hyphen-spanish
+%
+% I would like to thanks Francesc Carmona for his permission
+% to steal parts of his work without restrictions. For his
+% patterns, (c) by Francesc Carmona
+%
+%
+%
+% _____________________________________________________________
+% Javier Bezos                | http://www.cervantex.es/
+% .............................................................
+% TeX y tipografia            | http://www.texnia.com/
+%
+
+========================================================================
+ru
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-ru.tex
+========================================================================
+
+% title: Hyphenation patterns for Russian
+% copyright: Copyright (C) 1999-2003 Alexander I. Lebedev
+% notice:
+%     This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Russian
+%     tag: ru
+% version: 2003/03/10
+% authors:
+%     -
+%         name: Alexander I. Lebedev
+%         contact: swan (at) scon155.phys.msu.su
+% licence:
+%     name: LPPL
+%     version: 1.2
+%     or_later: true
+%     url: https://latex-project.org/lppl/
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% texlive:
+%     encoding: t2a
+%     babelname: russian
+%     use_old_patterns_comment: The old system allows choosing patterns and encodings manually. That mechanism needs to be implemented first in this package, so we still fall back on old system.
+%     legacy_patterns: ruhyphen.tex
+%     message: Russian hyphenation patterns
+%     description: |-
+%         Hyphenation patterns for Russian in T2A and UTF-8 encodings.
+%         For 8-bit engines, the 'ruhyphen' package provides a number of
+%         different pattern sets, as well as different (8-bit) encodings, that
+%         can be chosen at format-generation time.  The UTF-8 version only
+%         provides the default pattern set.  A mechanism similar to the one used
+%         for 8-bit patterns may be implemented in the future.
+% ==========================================
+% Patterns were generated with patgen from a 990,000-word list and then
+% manually corrected.
+%
+% The program consists of the files ruhyphal.tex, cyryoal.tex and two
+% document files README.ruhyphal and hyphen.rules.  The file cyryoal.tex
+% can be regenerated using mkcyryo script (a part of ruhyphen package)
+% and the latest release of rus-ispell dictionaries
+% <ftp://scon155.phys.msu.su/pub/russian/ispell/>.
+
+========================================================================
+it
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-it.tex
+========================================================================
+
+% title: Hyphenation patterns for Italian
+% copyright: Copyright (C) 2008-2011 Claudio Beccari
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Italian
+%     tag: it
+% version: 4.9 2014/04/22
+% authors:
+%   -
+%     name: Claudio Beccari
+%     contact: claudio.beccari (at) gmail.com
+% licence:
+%     - This file is available under any of the following licences:
+%     -
+%         name: LPPL
+%         version: 1.3
+%         or_later: true
+%         url: http://www.latex-project.org/lppl.txt
+%         status: maintained
+%         maintainer: Claudio Beccari, e-mail claudio dot beccari at gmail dot com
+%     -
+%         name: MIT
+%         url: https://opensource.org/licenses/MIT
+%         text: >
+%             Permission is hereby granted, free of charge, to any person
+%             obtaining a copy of this software and associated documentation
+%             files (the "Software"), to deal in the Software without
+%             restriction, including without limitation the rights to use,
+%             copy, modify, merge, publish, distribute, sublicense, and/or sell
+%             copies of the Software, and to permit persons to whom the
+%             Software is furnished to do so, subject to the following
+%             conditions:
+%
+%             The above copyright notice and this permission notice shall be
+%             included in all copies or substantial portions of the Software.
+%
+%             THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+%             EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+%             OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+%             NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+%             HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+%             WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%             FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+%             OTHER DEALINGS IN THE SOFTWARE.
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% changes:
+%     - 2014-04-22 - Add few patterns involving `h'
+%     - 2011-08-16 - Change the licence from GNU LGPL into LPPL v1.3.
+%     - 2010-05-24 - Fix for Italian patterns for proper hyphenation of -ich and Ljubljana.
+%     - 2008-06-09 - Import of original ithyph.tex into hyph-utf8 package.
+%     - 2008-03-08 - (last change in ithyph.tex)
+% texlive:
+%     encoding: ascii
+%     babelname: italian
+%     legacy_patterns: ithyph.tex
+%     message: Italian hyphenation patterns
+%     description: |-
+%         Hyphenation patterns for Italian in ASCII encoding.
+%         Compliant with the Recommendation UNI 6461 on hyphenation
+%         issued by the Italian Standards Institution
+%         (Ente Nazionale di Unificazione UNI).
+% ==========================================
+%
+% These hyphenation patterns for the Italian language are supposed to comply
+% with the Recommendation UNI 6461 on hyphenation issued by the Italian
+% Standards Institution (Ente Nazionale di Unificazione UNI).  No guarantee
+% or declaration of fitness to any particular purpose is given and any
+% liability is disclaimed.
+%
+
+========================================================================
+uk
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-uk.tex
+========================================================================
+
+% title: Hyphenation patterns for Ukrainian
+% copyright: Copyright (C) 1998-2001 Maksym Polyakov
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Ukrainian
+%     tag: uk
+% version: 2001/05/10
+% authors:
+%   -
+%     name: Maksym Polyakov
+%     contact: polyama (at) auburn.edu, mpoliak (at) i.com.ua
+% licence:
+%     name: LPPL
+%     url: https://latex-project.org/lppl/
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% texlive:
+%     encoding: t2a
+%     babelname: ukrainian
+%     use_old_patterns_comment: The old system allows choosing patterns and encodings manually. That mechanism needs to be implemented first in this package, so we still fall back on old system.
+%     legacy_patterns: ukrhyph.tex
+%     message: Ukrainian hyphenation patterns
+%     description: |-
+%         Hyphenation patterns for Ukrainian in T2A and UTF-8 encodings.
+%         For 8-bit engines, the 'ukrhyph' package provides a number of
+%         different pattern sets, as well as different (8-bit) encodings, that
+%         can be chosen at format-generation time.  The UTF-8 version only
+%         provides the default pattern set.  A mechanism similar to the one used
+%         for 8-bit patterns may be implemented in the future.
+%
+
+========================================================================
+pl
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-pl.tex
+========================================================================
+
+% title: Hyphenation patterns for Polish
+% copyright: Copyright (C) 1987-1995 Hanna Kołodziejska, Bogusław Jackowski, Marek Ryćko
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Polish
+%     tag: pl
+% version: 3.0a, Wednesday, May 17th, 1995
+% authors:
+%   -
+%     name: Hanna Kołodziejska
+%   -
+%     name: Bogusław Jackowski
+%     contact: b_jackowski (at) gust.org.pl
+%   -
+%     name: Marek Ryćko
+%     contact: marek (at) do.com.pl
+% licence:
+%     - This file is made available under any of the following licences:
+%     -
+%         name: MIT
+%         url: https://opensource.org/licenses/MIT
+%         text: >
+%             Permission is hereby granted, free of charge, to any person
+%             obtaining a copy of this software and associated documentation
+%             files (the “Software”), to deal in the Software without
+%             restriction, including without limitation the rights to use,
+%             copy, modify, merge, publish, distribute, sublicense, and/or sell
+%             copies of the Software, and to permit persons to whom the
+%             Software is furnished to do so, subject to the following
+%             conditions:
+%
+%             The above copyright notice and this permission notice shall be
+%             included in all copies or substantial portions of the Software.
+%
+%             THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
+%             EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+%             OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+%             NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+%             HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+%             WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%             FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+%             OTHER DEALINGS IN THE SOFTWARE.
+%     - text: >
+%         This macro file belongs to the public domain
+%         under the conditions specified by the author of TeX:
+%
+%            “Macro files like PLAIN.TEX should not be changed in any way,
+%             except with respect to preloaded fonts,
+%             unless the changes are authorized by the authors of the macros.”
+%
+%                                                   Donald E. Knuth
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% changes:
+%     - The first version of the patterns was developed
+%           by Hanna Kołodziejska (1987).
+%     - The adaptation to the LeX format (see below) and extensive modification
+%           were done by Bogusław Jackowski & Marek Ryćko (1987--1989).
+%     - The hyphenation rules were further improved and adapted to the
+%           TeX 3.x requirements by Hanna Kołodziejska (1991).
+%     - Lone-standing version (3.0a) of patterns was prepared (under pressure
+%           from LaTeX users) by Bogusław Jackowski and Marek Ryćko, following
+%           Mariusz Olko's suggestions, 1995.
+%     - The LeX format mentioned above was the first version of the adaptation
+%           of TeX to the Polish language. The next version is called MeX.
+% texlive:
+%     encoding: qx
+%     babelname: polish
+%     legacy_patterns: plhyph.tex
+%     message: Polish hyphenation patterns
+%     description: |-
+%         Hyphenation patterns for Polish in QX and UTF-8 encodings.
+%         These patterns are also used by Polish TeX formats MeX and LaMeX.
+%
+
+========================================================================
+pt
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-pt.tex
+========================================================================
+
+% title: Hyphenation patterns for Portuguese
+% copyright: Copyright (C) 1987, 1994, 1996, 2015 Pedro J. de Rezende, 1996, 2015 J. Joao Dias Almeida, 2024 Leonardo Araujo and Aline Benevides
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Portuguese
+%     tag: pt
+% version: 1.4 2024-07-13
+% authors:
+%   -
+%     name: Pedro J. de Rezende
+%     contact: rezende (at) ic.unicamp.br
+%   -
+%     name: J. Joao Dias Almeida
+%     contact: jj (at) di.uminho.pt
+%   -
+%     name: Leonardo Araujo
+%     contact: leolca (at) gmail.com
+%   -
+%     name: Aline Benevides
+%     contact: benevides.aline12 (at) gmail.com
+% licence:
+%     name: BSD 3-clause licence
+%     url: https://opensource.org/licenses/BSD-3-Clause
+%     text: >
+%         Redistribution and use in source and binary forms, with or without
+%         modification, are permitted provided that the following conditions
+%         are met:
+%         * Redistributions of source code must retain the above copyright
+%           notice, this list of conditions and the following disclaimer.
+%         * Redistributions in binary form must reproduce the above copyright
+%           notice, this list of conditions and the following disclaimer in the
+%           documentation and/or other materials provided with the
+%           distribution.
+%         * Neither the name of the University of Campinas, of the University
+%           of Minho nor the names of its contributors may be used to endorse
+%           or promote products derived from this software without specific
+%           prior written permission.
+% 
+%         THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+%         "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+%         LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+%         A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL PEDRO J. DE
+%         REZENDE OR J.JOAO DIAS ALMEIDA BE LIABLE FOR ANY DIRECT, INDIRECT,
+%         INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+%         BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+%         OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+%         AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+%         LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+%         WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%         POSSIBILITY OF SUCH DAMAGE.
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 3
+% changes:
+%     - Version 1.4 Release date: 13/07/2024 Leonardo Araujo and Aline Benevides
+%     - Version 1.3 Release date: 12/08/2015 Pedro J. de Rezende and J. Joao Dias Almeida
+%     - Version 1.2 Release date: 07/21/1996 Pedro J. de Rezende and J. Joao Dias Almeida
+%     - Version 1.1 Release date: 04/12/1994 Pedro J. de Rezende
+%     - Version 1.0 Release date: 02/13/1987 Pedro J. de Rezende
+% texlive:
+%     synonyms:
+%         - portuges
+%     encoding: ec
+%     babelname: portuguese
+%     legacy_patterns: pthyph.tex
+%     message: Portuguese hyphenation patterns
+%     description: Hyphenation patterns for Portuguese in T1/EC and UTF-8 encodings.
+%
+
+========================================================================
+sv
+Source: https://raw.githubusercontent.com/typst/hypher/d81cc506416bffef2a75ee2dc969d4b41bc36613/patterns/hyph-sv.tex
+========================================================================
+
+% title: Hyphenation patterns for Swedish
+% copyright: Copyright (C) 1994 Jan Michael Rynning
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Swedish
+%     tag: sv
+% version: 1994-03-03
+% authors:
+%   -
+%     name: Jan Michael Rynning
+%     contact: jmr (at) incolumitas.se
+% licence:
+%     name: LPPL
+%     version: 1.2
+%     or_later: true
+% hyphenmins:
+%     generation:
+%         left: 1
+%         right: 2
+%     typesetting:
+%         left: 2
+%         right: 2
+% changes:
+%     - 1991-01-08: First version available for anonymous FTP.
+%     - 1991-08-08: Changed \aa to \aa0 at end of line, to stop TeX from
+%           concatenating the patterns.
+%     - 1991-09-03: Cleaned up lots of inconsistencies in the dictionary.
+%           As a consequence, the patterns shrunk a lot.  Also added some 4000
+%           one-syllable words, some of which were hyphenated by the old
+%           patterns, and some 1500 compound words, about half of which were
+%           incorrectly hyphenated by the old patterns.
+%     - 1991-11-01: Added another some 6200 compound words, all of which were
+%           incorrectly hyphenated by the old patterns.
+%     - 1991-11-13: Added another some 6500 compound words, all of which were
+%           incorrectly hyphenated by the old patterns.
+%     - 1992-01-30: Changed macros to ^^, for use with LaTeX and dc fonts.
+%     - 1994-03-03: The hyphenated dictionary now contains about 118,000 words.
+%           The hyphenation now works much better for compound words.
+%           Patgen parameters 1 2 20, 2 1 8, 1 4 7, 3 2 1, 1 10000 4.
+% texlive:
+%     encoding: ec
+%     message: Swedish hyphenation patterns
+%     legacy_patterns: svhyph.tex
+%     description: Hyphenation patterns for Swedish in T1/EC and UTF-8 encodings.
+%     babelname: swedish
+% ==========================================
+% These hyphenation patterns work quite well for simple words, but not
+% quite as well for compound words.  I'm working on improving the quality,
+% by adding more words.  If you know any Swedish words which are not
+% correctly hypheneted using these patterns, or if you have questions or
+% comments, please contact me:
+%
+% Jan Michael Rynning <jmr@incolumitas.se>
+%
+
+========================================================================
+fi
+Source: https://github.com/typst/hypher/blob/c7395d6cb0cb7a42b41594b7552074750dc3f7db/patterns/hyph-fi.tex
+========================================================================
+
+% title: Hyphenation patterns for Finnish
+% copyright: Copyright (C) 1986, 1988, 1989 Kauko Saarinen
+% notice: This file is part of the hyph-utf8 package.
+%     See http://www.hyphenation.org/tex for more information.
+% language:
+%     name: Finnish
+%     tag: fi
+% version: 2.2
+% authors:
+%   -
+%     name: Kauko Saarinen
+%     affiliation: Computing Centre, University of Jyväskylä, Finland
+% licence:
+%     - text: Patterns may be freely distributed
+% hyphenmins:
+%     typesetting:
+%         left: 2
+%         right: 2
+% changes:
+%     - First release 1986-01 by Kauko Saarinen,
+%     - >
+%         Completely rewritten 1988-01. The new patterns make
+%         much less mistakes with foreign and compound words.
+%         The article "Automatic Hyphenation of Finnish"
+%         by Professor Fred Karlsson is also referred
+%     - 1989-03-08 (vers. 2.2), some vowel triples by Fred Karlsson added.
+%     - 1995-01-09: added \uccode and \lccode by Thomas Esser
+% texlive:
+%     encoding: ec
+%     babelname: finnish
+%     legacy_patterns: fihyph.tex
+%     message: Finnish hyphenation patterns
+%     package: finnish
+%

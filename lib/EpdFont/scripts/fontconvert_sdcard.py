@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Generate .cpfont binary files for SD card font loading.
 
+Font licenses and copyright notices are in licenses/fonts.txt.
+
 Outputs binary .cpfont files containing glyph metadata and uncompressed
 2-bit bitmaps, matching the EpdFontData/EpdGlyph/EpdUnicodeInterval struct
 layout on the ESP32-C3 (little-endian, RISC-V).

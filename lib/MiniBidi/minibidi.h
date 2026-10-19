@@ -5,6 +5,7 @@
  * minibidi.h — standalone header for ESP32C3 BiDi calculations
  *
  * Derived from [mintty](https://github.com/mintty/mintty/) (Thomas Wolff, MIT licence).
+ * License and copyright notices: licenses/borrowed-code.txt.
  * Includes: UAX#9 bidi (do_bidi) and Arabic contextual shaping (do_shape),
  * both ported from mintty src/minibidi.c (Ahmad Khalifa, Thomas Wolff).
  * Stripped of: box-drawing mirror, terminal dependencies, GCC nested

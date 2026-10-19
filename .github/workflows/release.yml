@@ -114,6 +114,21 @@ jobs:
           cp ".pio/build/${PIO_ENV}/firmware.bin" "$asset"
           echo "name=$asset" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare license asset
+        if: matrix.device == 'x3-x4'
+        env:
+          PIO_ENV: ${{ github.event.release.prerelease && matrix.rc_env || matrix.release_env }}
+        run: python3 scripts/build_release_license.py --env "$PIO_ENV" --output dist/LICENSE
+
+      - name: Stage license asset
+        if: matrix.device == 'x3-x4'
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-license
+          path: dist/LICENSE
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Stage firmware asset
         uses: actions/upload-artifact@v6
         with:
@@ -136,6 +151,12 @@ jobs:
           pattern: crosspoint-*.bin
           merge-multiple: true
 
+      - name: Download license asset
+        uses: actions/download-artifact@v4
+        with:
+          name: release-license
+          path: dist
+
       - name: Attach firmware assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -146,5 +167,6 @@ jobs:
             test -f "dist/crosspoint-${version}-${device}.bin"
           done
           test "$(find dist -maxdepth 1 -type f -name 'crosspoint-*.bin' | wc -l)" -eq 7
-          gh release upload "$RELEASE_TAG" dist/crosspoint-*.bin \
+          test -s dist/LICENSE
+          gh release upload "$RELEASE_TAG" dist/crosspoint-*.bin dist/LICENSE \
             --repo "$GITHUB_REPOSITORY" --clobber

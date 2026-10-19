@@ -84,6 +84,9 @@ jobs:
               ".pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}"
           fi
 
+      - name: Prepare license asset
+        run: python3 scripts/build_release_license.py --env ${{ matrix.pio_env }} --output .pio/build/${{ matrix.pio_env }}/LICENSE
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v6
         with:
@@ -94,3 +97,4 @@ jobs:
             .pio/build/${{ matrix.pio_env }}/firmware.elf
             .pio/build/${{ matrix.pio_env }}/firmware.map
             .pio/build/${{ matrix.pio_env }}/partitions.bin
+            .pio/build/${{ matrix.pio_env }}/LICENSE

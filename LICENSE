@@ -19,3 +19,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+This MIT license covers original CrossPoint code, except where a file states
+other terms. Third-party code, fonts, icons, and data keep their own licenses.
+The combined firmware executable uses GPLv3 because it includes wolfSSL.
+See licenses/README.md for notices, license texts, and source instructions.
