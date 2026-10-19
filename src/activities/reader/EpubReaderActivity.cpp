@@ -623,6 +623,33 @@ int clampPercent(int percent) {
   return percent;
 }
 
+// The secondary framebuffer lent as a bump arena for the scope, or nothing when there is none to lend (arena() is
+// nullptr). The block never enters the heap, so giving it back cannot fail; it is given back with the scope, or at
+// giveBack(). returnSecondaryBuffer() seeds the buffer from the framebuffer as it is then, so the lend ends before the
+// page is displayed, never after. The image decodes of a render and of the image lane draw in it.
+class LentSecondary {
+ public:
+  explicit LentSecondary(GfxRenderer& renderer) : renderer_(renderer) {
+    size_t size = 0;
+    uint8_t* const block = renderer_.borrowSecondaryBuffer(&size);
+    if (block) arena_.emplace(block, size);
+  }
+  ~LentSecondary() { giveBack(); }
+  LentSecondary(const LentSecondary&) = delete;
+  LentSecondary& operator=(const LentSecondary&) = delete;
+
+  BuildArena* arena() { return arena_ ? &*arena_ : nullptr; }
+  void giveBack() {
+    if (!arena_) return;
+    arena_.reset();
+    renderer_.returnSecondaryBuffer();
+  }
+
+ private:
+  GfxRenderer& renderer_;
+  std::optional<BuildArena> arena_;
+};
+
 int getImageOnlyPageYOffset(const Page& page, const int viewportHeight) {
   if (viewportHeight <= 0 || page.elements.empty()) {
     return 0;
@@ -2066,14 +2093,12 @@ bool EpubReaderActivity::warmPageForImageLane(const Page& page, const int spine,
   const int viewportHeight = std::max(0, renderer.getScreenHeight() - layout.marginTop - layout.marginBottom);
   const int contentTop = layout.marginTop + getImageOnlyPageYOffset(page, viewportHeight);
 
-  size_t borrowedSize = 0;
-  uint8_t* borrowed = renderer.borrowSecondaryBuffer(&borrowedSize);
-  if (!borrowed) return false;
-  auto scratch = makeUniqueNoThrow<BuildArena>(borrowed, borrowedSize);
+  LentSecondary lend(renderer);
+  BuildArena* const arena = lend.arena();
+  if (!arena) return false;
   const unsigned long t0 = millis();
   imageProcessingActive_ = true;
   CooperativeAbort::clearAborted();
-  BuildArena* const arena = scratch && scratch->valid() ? scratch.get() : nullptr;
   ImageMemoryLadder::Action ladder;
   {
     image_scratch::ScopedArena scratchScope(arena);
@@ -2085,8 +2110,7 @@ bool EpubReaderActivity::warmPageForImageLane(const Page& page, const int spine,
   // Preempted by input: not a failure, the next quiet moment retries.
   const bool preempted = CooperativeAbort::consumeAborted();
   imageProcessingActive_ = false;
-  scratch.reset();
-  renderer.returnSecondaryBuffer();  // cannot fail: the region never entered the heap
+  lend.giveBack();
   if (finishLadder(ladder)) return true;
 
   const bool complete = !page.hasUncachedImages(true, true, warmGrayscale);
@@ -5677,34 +5701,24 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   // Release stays as the fallback for when there is nothing to lend (already released for a C
   // build, or no secondary buffer at all), so the previous behaviour is intact on those paths.
   // See docs/memory-allocation-strategy.md §9.3.
-  std::unique_ptr<BuildArena> warmScratch;
-  bool borrowedSecondaryForWarm = false;
+  std::optional<LentSecondary> warmLend;
   if (imageProcessingActive_ && renderer.hasSecondaryBuffer()) {
-    size_t borrowedSize = 0;
-    if (uint8_t* borrowed = renderer.borrowSecondaryBuffer(&borrowedSize)) {
-      warmScratch = makeUniqueNoThrow<BuildArena>(borrowed, borrowedSize);
-      if (warmScratch && warmScratch->valid()) {
-        borrowedSecondaryForWarm = true;
-        LOG_DBG("ERS", "Borrowed secondary buffer (%u bytes) as image warm scratch",
-                static_cast<uint32_t>(borrowedSize));
-      } else {
-        warmScratch.reset();
-        renderer.returnSecondaryBuffer();  // cannot fail: the region never entered the heap
-      }
-    }
-    if (!borrowedSecondaryForWarm) {
+    warmLend.emplace(renderer);
+    if (!warmLend->arena()) {
+      warmLend.reset();
       renderer.releaseSecondaryBuffer();
       releasedSecondaryForWarm = true;
       LOG_DBG("ERS", "Released secondary buffer for image warm pass (nothing to lend)");
     }
   }
+  BuildArena* const warmScratch = warmLend ? warmLend->arena() : nullptr;
   ImageMemoryLadder::Action ladder = ImageMemoryLadder::Action::Done;
   if (imageProcessingActive_) {
     // Scoped so the arena is uninstalled before the borrow is returned below — a stale
     // image_scratch pointer into a region the display owns again would be a use-after-free.
-    image_scratch::ScopedArena warmScratchScope(warmScratch.get());
+    image_scratch::ScopedArena warmScratchScope(warmScratch);
     ladder = warmImagesClimbingLadder(*page, orientedMarginLeft, contentTop, warmForceLoad, warmGrayscaleImageCache,
-                                      warmScratch.get(), /*drawsPage=*/true);
+                                      warmScratch, /*drawsPage=*/true);
   }
   // The borrow is returned after clearScreen() below, not here: returnSecondaryBuffer() seeds the
   // restored buffer from the live framebuffer, and right now that still holds the decode's
@@ -5740,15 +5754,12 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
   }
   imageProcessingActive_ = false;
   renderer.clearScreen();
-  if (borrowedSecondaryForWarm) {
-    // Now that the framebuffer is clean, hand the block back. returnSecondaryBuffer() seeds the
-    // restored secondary from it and arms the one-shot RED baseline, exactly as
-    // reallocSecondaryBuffer() would have — so the release path's careful
-    // "do NOT syncRedRamFromFrameBuffer()" reasoning above applies unchanged here. Unlike that
-    // path this cannot fail, so there is no eviction and no restart branch.
-    warmScratch.reset();
-    renderer.returnSecondaryBuffer();
-  }
+  // Now that the framebuffer is clean, hand the block back. returnSecondaryBuffer() seeds the
+  // restored secondary from it and arms the one-shot RED baseline, exactly as
+  // reallocSecondaryBuffer() would have — so the release path's careful
+  // "do NOT syncRedRamFromFrameBuffer()" reasoning above applies unchanged here. Unlike that
+  // path this cannot fail, so there is no eviction and no restart branch.
+  warmLend.reset();
   if (finishLadder(ladder)) {
     lock.unlock();  // renderNormalPass takes it again; the page is drawn once the chapter is laid out again
     return;
