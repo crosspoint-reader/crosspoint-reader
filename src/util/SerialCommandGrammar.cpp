@@ -160,6 +160,20 @@ bool parseLogLevel(const std::string_view text, uint8_t& level) {
   return false;
 }
 
+bool parseLanguage(const std::string_view text, const char* const* codes, const char* const* names, const size_t count,
+                   size_t& index) {
+  for (size_t i = 0; i < count; ++i) {
+    if (equalsIgnoreCase(text, codes[i]) || text == names[i]) {
+      index = i;
+      return true;
+    }
+  }
+  int number = 0;
+  if (!parseInt(text, number) || number < 0 || static_cast<size_t>(number) >= count) return false;
+  index = static_cast<size_t>(number);
+  return true;
+}
+
 void appendField(std::string& out, const char* key, const std::string_view value) {
   out += ' ';
   out += key;

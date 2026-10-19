@@ -204,6 +204,26 @@ TEST(SerialCommandGrammar, LogLevelsByTagOrName) {
   EXPECT_FALSE(SerialCommandGrammar::parseLogLevel("WARN", level)) << "the firmware has no WARN level";
 }
 
+TEST(SerialCommandGrammar, LanguagesByCodeNameOrIndex) {
+  const char* const codes[] = {"EN", "DE", "ZH"};
+  const char* const names[] = {"English", "Deutsch", "\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"};
+  size_t index = 9;
+  ASSERT_TRUE(SerialCommandGrammar::parseLanguage("ZH", codes, names, 3, index));
+  EXPECT_EQ(index, 2u);
+  ASSERT_TRUE(SerialCommandGrammar::parseLanguage("de", codes, names, 3, index)) << "a code in any case";
+  EXPECT_EQ(index, 1u);
+  ASSERT_TRUE(
+      SerialCommandGrammar::parseLanguage("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87", codes, names, 3, index));
+  EXPECT_EQ(index, 2u);
+  ASSERT_TRUE(SerialCommandGrammar::parseLanguage("0", codes, names, 3, index));
+  EXPECT_EQ(index, 0u);
+  EXPECT_FALSE(SerialCommandGrammar::parseLanguage("3", codes, names, 3, index)) << "past the last language";
+  EXPECT_FALSE(SerialCommandGrammar::parseLanguage("-1", codes, names, 3, index));
+  EXPECT_FALSE(SerialCommandGrammar::parseLanguage("FR", codes, names, 3, index));
+  EXPECT_FALSE(SerialCommandGrammar::parseLanguage("english", codes, names, 3, index)) << "a name matches exactly";
+  EXPECT_FALSE(SerialCommandGrammar::parseLanguage("", codes, names, 3, index));
+}
+
 TEST(SerialCommandGrammar, PlainValuesAreWrittenBare) {
   std::string line = "STATE:activity=Home";
   SerialCommandGrammar::appendField(line, "sel", 3L);

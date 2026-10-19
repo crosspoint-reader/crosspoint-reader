@@ -51,6 +51,11 @@ bool parseHeapRefuse(std::string_view arg, int& decodes, int& reloads);
 // ERR|ERROR, INF|INFO, DBG|DEBUG, TRC|TRACE. Case-insensitive.
 bool parseLogLevel(std::string_view text, uint8_t& level);
 
+// A UI language for CMD:SET:language=, out of `count` languages given by their codes (EN, DE, ZH...)
+// and native names: its code in any case, its name exactly as the picker shows it, or its index.
+bool parseLanguage(std::string_view text, const char* const* codes, const char* const* names, size_t count,
+                   size_t& index);
+
 // Appends " <key>=<value>" to a CMD:STATE line. A value that holds a space, a quote, a backslash or
 // an '=' is written in double quotes with '"' and '\' escaped by a backslash, so a host can split
 // the line on spaces outside quotes; control characters (a newline in a popup's text) become

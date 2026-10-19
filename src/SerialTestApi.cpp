@@ -33,6 +33,7 @@
 #include "CrossPointState.h"
 #include "SettingsByKey.h"
 #include "TouchUi.h"  // CP_TOUCH_UI
+#include "UiLanguage.h"
 #include "util/Dictionary.h"
 #include "util/IdleGate.h"
 #endif
@@ -543,9 +544,30 @@ void replyGetRow(const SettingInfo& s, void* /*ctx*/) {
   reply(line);
 }
 
+// The UI language is not a setting: I18n keeps it in a file of its own, and the web settings API has
+// no row for it. GET and SET take it by this key all the same.
+constexpr std::string_view LANGUAGE_KEY = "language";
+
+// "language=<code> label=<name>", as a GET or SET_OK reply shows it.
+void appendLanguage(std::string& line) {
+  const Language language = I18N.getLanguage();
+  line += LANGUAGE_KEY;
+  line += '=';
+  line += I18N.getLanguageCode(language);
+  appendField(line, "label", I18N.getLanguageName(language));
+}
+
 void cmdGet(const std::string_view key) {
   if (key == "*") {
-    replyf("GET_END:%d", SettingsByKey::visitKeyed({}, &replyGetRow, nullptr));
+    const int count = SettingsByKey::visitKeyed({}, &replyGetRow, nullptr);
+    std::string line = "GET:";
+    appendLanguage(line);
+    reply(line);
+    replyf("GET_END:%d", count + 1);
+  } else if (key == LANGUAGE_KEY) {
+    std::string line = "GET:";
+    appendLanguage(line);
+    reply(line);
   } else if (key.empty() || SettingsByKey::visitKeyed(key, &replyGetRow, nullptr) == 0) {
     reply("GET_ERROR:unknown key ", key);
   }
@@ -605,11 +627,37 @@ void replySetRow(const SettingInfo& s, void* /*ctx*/) {
   reply(line);
 }
 
+// SET:language=<code|name|index>: the switch the language picker makes, then a redraw of the screen
+// on display so it shows the new strings.
+void setLanguage(const std::string_view value) {
+  constexpr size_t count = static_cast<size_t>(Language::_COUNT);
+  const char* codes[count];
+  const char* names[count];
+  for (size_t i = 0; i < count; ++i) {
+    codes[i] = I18N.getLanguageCode(static_cast<Language>(i));
+    names[i] = I18N.getLanguageName(static_cast<Language>(i));
+  }
+  size_t index = 0;
+  if (!SerialCommandGrammar::parseLanguage(value, codes, names, count, index)) {
+    reply("SET_ERROR:bad value ", value);
+    return;
+  }
+  UiLanguage::apply(static_cast<Language>(index));
+  activityManager.requestUpdate();
+  std::string line = "SET_OK:";
+  appendLanguage(line);
+  reply(line);
+}
+
 void cmdSet(const std::string_view arg) {
   std::string_view key;
   SetRequest request{{}, "SET_ERROR:unknown key ", false};
   if (!SerialCommandGrammar::splitKeyValue(arg, key, request.value)) {
     reply("SET_ERROR:expected <key>=<value>");
+    return;
+  }
+  if (key == LANGUAGE_KEY) {
+    setLanguage(request.value);
     return;
   }
   SettingsByKey::visitKeyed(key, &writeSetRow, &request);

@@ -321,7 +321,8 @@ CMD:SET:<key>=<value>
 ```
 
 The keys are the ones the web settings page uses (`GET /api/settings` in
-[webserver-endpoints.md](webserver-endpoints.md)); `CMD:GET:*` lists every key the board offers.
+[webserver-endpoints.md](webserver-endpoints.md)), plus `language` (below); `CMD:GET:*` lists every
+key the board offers.
 
 Replies:
 
@@ -353,6 +354,32 @@ GET_ERROR / SET_ERROR:font families not loaded on this screen <key>   (boot stra
 ...
 > CMD:SET:btnDoublePower=6
 < SET_OK:btnDoublePower=6 label=Standby
+```
+
+**The UI language** is not a setting (it is kept in `/.crosspoint/language.bin`, and the web
+settings page has no row for it), but `GET` and `SET` take it as the key `language`, and `GET:*`
+lists it last:
+
+```
+GET:language=<code> label=<name>
+SET_OK:language=<code> label=<name>
+SET_ERROR:bad value <value>
+```
+
+- The value is the language's code in any case (`EN`, `de`, `ZH`), its name exactly as the
+  language picker shows it (`Deutsch`, `简体中文`), or its index in the build's language list
+  (English is 0).
+- `SET` makes the switch the language picker makes, saves it, and redraws the screen on display.
+  A screen that built its rows when it opened keeps them until it is opened again.
+- Change it back afterwards: the setting persists, and the next session reads it.
+
+```
+> CMD:GET:language
+< GET:language=EN label=English
+> CMD:SET:language=de
+< SET_OK:language=DE label=Deutsch
+> CMD:SET:language=EN
+< SET_OK:language=EN label=English
 ```
 
 ### Dictionary: `ACT:DICT`
