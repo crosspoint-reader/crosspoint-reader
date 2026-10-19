@@ -157,7 +157,9 @@ Reply: `ACT_OK`, or `ACT_ERROR:<reason>` (`no such file <path>`, `bad position <
 `unknown activity <name>`, `unknown settings tab <name>`, `unknown library tab <name>`).
 
 - Paths are paths on the SD card (`/test/book.epub`). A file name may itself contain `@`: only the
-  text after the last `@` is read as a position, and only when it has one of the two forms.
+  text after the last `@` is read as a position, and only when it has one of the two forms. A book
+  under `/test/` stays out of the recent books and the reading stats (see
+  [Safety notes](#safety-notes)).
 - Positions are for EPUB books, and need the full API (so do `DICT`, `FILE_TRANSFER`,
   `USB_TRANSFER` and the settings tab). `@<spine>:<page>` counts from 1, exactly as `STATE` reports
   `spine=` and `page=`: `@20:12` opens the 12th page of the 20th spine item and `STATE` then says
@@ -535,6 +537,14 @@ The commands act on a real device with a real user's books and settings:
 - **Opening a book changes its reading position.** The reader saves where it is, and a
   `@<spine>:<page>` open saves that page at once. Test with books kept for testing (a `/test`
   folder), not the user's own.
+- **A book under `/test/` is a test book** in builds with the full API (in any case: `/TEST/` is
+  the same folder on FAT, and the file browser opens it so): opening it records it neither in the
+  recent books (Home, the library's Recent tab) nor in the reading stats. Both keep a fixed number
+  of books (10 and 100), and a test run that opened its books used to push the user's own out of
+  them. The rest is as for any book: its position is saved in its cache, `state.json` names it as
+  the book last open, and a per-book setting changed on it holds while it stays open, but is not
+  kept, since per-book settings live in the recent-books entry it does not get
+  (`SerialTestApi::isTestBook`).
 - **Presses do what the user configured.** A double press of Power may be bound to sleep, a long
   Confirm to a sync. Check the binding with `GET` first, or bind it to something harmless for the
   test and restore it.

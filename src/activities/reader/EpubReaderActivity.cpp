@@ -796,9 +796,11 @@ void EpubReaderActivity::onEnter() {
   // Start a reading-stats session. We use the cheap filename-based hash here:
   // computing the content hash would re-read the file on every reader open,
   // and a renamed book getting a new stats entry is acceptable — it'll still
-  // accumulate going forward.
-  globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(epub->getPath()), epub->getTitle(),
-                                      epub->getAuthor());
+  // accumulate going forward. A device test's book is no history (SerialTestApi::isTestBook).
+  if (const std::string& bookPath = epub->getPath(); !SerialTestApi::isTestBook(bookPath)) {
+    globalReadingSessionTracker().begin(KOReaderDocumentId::calculateFromFilename(bookPath), epub->getTitle(),
+                                        epub->getAuthor());
+  }
   // Bookmarks + recent-books overrides + the stats session. These are the loads a wake
   // shortcut would most plausibly skip or cache in RTC, so they get their own bucket.
   WakeTrace::mark(WakeTrace::Phase::StoresLoaded);

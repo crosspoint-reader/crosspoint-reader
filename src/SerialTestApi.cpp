@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -967,6 +968,15 @@ void noteBuildDone(const int spineIndex, const int pageCount) {
 bool takeDecodeRefusal() { return takeRefusal(decodeRefusals); }
 
 bool takeReloadRefusal() { return takeRefusal(reloadRefusals); }
+
+bool isTestBook(const std::string_view path) {
+  // In any case: FAT folds it, and the file browser opens the folder a test names /test/ as /TEST/.
+  constexpr std::string_view kFolder = "/test/";
+  return path.size() >= kFolder.size() &&
+         std::equal(kFolder.begin(), kFolder.end(), path.begin(), [](const char want, const char got) {
+           return want == std::tolower(static_cast<unsigned char>(got));
+         });
+}
 
 PowerRequest takePowerRequest() {
   const PowerRequest request = powerRequest;

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+#include "SerialTestApi.h"
 #include "activities/home/BookDetails.h"
 
 namespace {
@@ -47,6 +48,7 @@ void RecentBooksStore::ensureLoaded() const {
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& series, const std::string& coverBmpPath) {
+  if (SerialTestApi::isTestBook(path)) return;  // a device test's book takes no reader's book's place
   const Hold hold;
   RecentBook newBook{path, title, author, series, coverBmpPath};
   // The EPUB and text readers pass metadata they have just loaded, sidecar applied; stamp the sidecar

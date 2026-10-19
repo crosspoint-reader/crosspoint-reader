@@ -60,6 +60,10 @@ void noteBuildDone(int spineIndex, int pageCount);
 // short. Each true answer uses one up. The reader asks before each decode step, SdCardFontSystem before a reload.
 bool takeDecodeRefusal();
 bool takeReloadRefusal();
+// A device test's book: one under /test/ (in any case, as FAT). Opening it records it neither in the recent books
+// nor in the reading stats, whose caps (10 and 100 books) a test run would otherwise fill, pushing the reader's own
+// books out.
+bool isTestBook(std::string_view path);
 #else
 inline void begin(GfxRenderer&) {}
 inline void service() {}
@@ -69,6 +73,7 @@ inline void noteSelection(int, const char*) {}
 inline void noteBuildDone(int, int) {}
 inline bool takeDecodeRefusal() { return false; }
 inline bool takeReloadRefusal() { return false; }
+inline bool isTestBook(std::string_view) { return false; }
 #endif
 
 }  // namespace SerialTestApi
