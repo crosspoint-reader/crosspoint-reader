@@ -49,6 +49,12 @@ class Epub {
   bool syntheticTocFallbackEnabled = false;
   // See setLostTocRetryEnabled().
   bool lostTocRetryEnabled_ = false;
+  // See setBuildProgress().
+  void (*buildProgress_)(void* ctx, uint8_t percent) = nullptr;
+  void* buildProgressCtx_ = nullptr;
+  void reportBuildProgress(const uint8_t percent) const {
+    if (buildProgress_ != nullptr) buildProgress_(buildProgressCtx_, percent);
+  }
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCacheMode cacheMode);
@@ -206,6 +212,14 @@ class Epub {
   // framebuffer for the rebuild. The sleep screen, book info and KOReader sync also call
   // load(true, ...), for metadata, and must not re-index on the way.
   void setLostTocRetryEnabled(bool enabled) { lostTocRetryEnabled_ = enabled; }
+
+  // Told by load(), when it builds the cache, how far the build has got: `fn(ctx, percent)` at the
+  // end of the OPF pass, the TOC pass and book.bin. For the first-open popup's progress bar
+  // (ReaderActivity); a load from the cache never calls it. Null clears it.
+  void setBuildProgress(void (*fn)(void* ctx, uint8_t percent), void* ctx) {
+    buildProgress_ = fn;
+    buildProgressCtx_ = ctx;
+  }
 
   // Sidecars above this are treated as not-a-metadata-file and ignored. A
   // Calibre metadata OPF is a couple of KB; the cap stops a stray large file

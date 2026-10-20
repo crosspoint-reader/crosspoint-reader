@@ -217,4 +217,33 @@ TEST(FirstOpenIndexing, AKingsAvatarProfileReadsEachDocumentOnceAndIndexesNothin
   fs::remove_all(work);
 }
 
+// The build tells its caller how far it has got, at each phase's end, for the popup's progress bar;
+// a load from the cache does not.
+std::vector<int> g_progress;
+
+TEST(FirstOpenIndexing, ABuildReportsItsProgressAtEachPhaseEnd) {
+  const fs::path work = fs::temp_directory_path() / ("first_open_progress_" + std::to_string(getpid()));
+  fs::remove_all(work);
+  fs::create_directories(work);
+  const big_spine_book::Book book = big_spine_book::write((work / "book.epub").string(), 60, 50);
+  const auto onProgress = [](void*, const uint8_t percent) { g_progress.push_back(percent); };
+
+  g_progress.clear();
+  {
+    Epub epub(book.path, (work / "cache").string());
+    epub.setBuildProgress(onProgress, nullptr);
+    ASSERT_TRUE(epub.load(true, false));
+  }
+  EXPECT_EQ(g_progress, (std::vector<int>{35, 65, 85}));
+
+  g_progress.clear();
+  {
+    Epub epub(book.path, (work / "cache").string());
+    epub.setBuildProgress(onProgress, nullptr);
+    ASSERT_TRUE(epub.load(true, false));
+  }
+  EXPECT_TRUE(g_progress.empty()) << "a warm load builds nothing";
+  fs::remove_all(work);
+}
+
 }  // namespace

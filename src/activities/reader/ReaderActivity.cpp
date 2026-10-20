@@ -33,6 +33,7 @@
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/IndexingProgressGate.h"
 #include "util/WakeTrace.h"
 
 #ifndef DEBUG_MEMORY_CONSUMPTION
@@ -729,7 +730,8 @@ std::unique_ptr<PngDecodeSession> ReaderActivity::beginPngThumbSession(const std
   return beginPngThumbSessionImpl(bookPath, height * 6 / 10, height, name, filesOut, scratch, /*crop=*/true);
 }
 
-std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, BuildArena* scratch) {
+std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, BuildArena* scratch,
+                                               void (*progress)(void* ctx, uint8_t percent), void* progressCtx) {
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
@@ -740,7 +742,10 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, BuildAre
   // The open that gets the indexing popup and the lent framebuffer: needsFirstOpenIndexing()
   // reports a due retry, so a TOC an earlier build lost is retried here and nowhere else.
   epub->setLostTocRetryEnabled(true);
-  if (epub->load(true, SETTINGS.embeddedStyle == 0, scratch)) {
+  epub->setBuildProgress(progress, progressCtx);
+  const bool loaded = epub->load(true, SETTINGS.embeddedStyle == 0, scratch);
+  epub->setBuildProgress(nullptr, nullptr);
+  if (loaded) {
     return epub;
   }
 
@@ -924,13 +929,30 @@ void ReaderActivity::onEnter() {
     // Publisher Fonts: the book's embedded fonts are examined once, here, with the same popup and lent buffer.
     // onEnter() left the loaded font alone until then (ensureSdFontLoadedForPath).
     const bool bookFontsPending = bookFontsPendingForPath(initialBookPath.c_str());
+    Rect indexingPopup;
     if (firstOpenIndexing || bookFontsPending) {
       RenderLock lock;
       // drawPopup() overlays the indexing box on the displayed frame (it resyncs the write buffer
       // from the screen first), so the box lands on the launcher screen — e.g. the recent-books grid
       // — without the stale-buffer diff toggling the old/new selection cells before the popup appears.
-      GUI.drawPopup(renderer, tr(STR_INDEXING));
+      indexingPopup = GUI.drawPopup(renderer, tr(STR_INDEXING));
     }
+    // The popup's progress bar, for a build long enough to want one (IndexingProgressGate): drawn
+    // at the end of a build phase over the frame on screen, a FAST refresh each.
+    struct IndexingProgress {
+      const GfxRenderer& renderer;
+      Rect popup;
+      IndexingProgressGate gate;
+    } indexingProgress{renderer, indexingPopup, IndexingProgressGate(millis())};
+    const auto onBuildProgress = [](void* ctx, const uint8_t percent) {
+      auto* p = static_cast<IndexingProgress*>(ctx);
+      if (!p->gate.shouldDraw(millis(), percent)) return;
+      RenderLock lock;
+      // A refresh swaps the buffers where the secondary was not lent: draw over what is shown.
+      p->renderer.syncWriteBufferFromDisplayed();
+      GUI.fillPopupProgress(p->renderer, p->popup, percent);
+      LOG_DBG("READER", "Indexing progress %u%%", static_cast<unsigned>(percent));
+    };
     // First-open indexing allocates per-spine transient state — the batch-size-lookup vectors
     // (~28 KB contiguous for a 1700-spine book) and the TOC's 32 KB NCX inflate ring — while the
     // ~48 KB secondary framebuffer sits unused. Observed on-device: buildBookBin aborted (bare
@@ -972,7 +994,9 @@ void ReaderActivity::onEnter() {
       }
     }
     BuildArena indexingScratch(lentForIndexing, lentSize);
-    auto epub = loadEpub(initialBookPath, indexingScratch.valid() ? &indexingScratch : nullptr);
+    const bool showsProgress = firstOpenIndexing || bookFontsPending;
+    auto epub = loadEpub(initialBookPath, indexingScratch.valid() ? &indexingScratch : nullptr,
+                         showsProgress ? +onBuildProgress : nullptr, showsProgress ? &indexingProgress : nullptr);
     if (epub && bookFontsPending) {
       // load() left nothing in the region: its rings were scoped to each read.
       BookFonts::prepare(*epub, indexingScratch.valid() ? &indexingScratch : nullptr);

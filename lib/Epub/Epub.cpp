@@ -826,6 +826,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
   LOG_DBG("EBP", "OPF pass completed in %lu ms", millis() - opfStart);
+  // Shares of a big book's build, as the X3 times them: OPF, TOC, book.bin, then the stylesheets.
+  reportBuildProgress(35);
 
   // TOC Pass - try EPUB 3 nav first, fall back to NCX
   const uint32_t tocStart = millis();
@@ -916,6 +918,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
   LOG_DBG("EBP", "TOC pass completed in %lu ms", millis() - tocStart);
+  reportBuildProgress(65);
 
   // Close the cache files
   if (!bookMetadataCache->endWrite()) {
@@ -931,6 +934,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
   LOG_DBG("EBP", "buildBookBin completed in %lu ms", millis() - buildStart);
+  reportBuildProgress(85);
   LOG_DBG("EBP", "Total indexing completed in %lu ms", millis() - indexingStart);
 
   if (!bookMetadataCache->cleanupTmpFiles()) {
