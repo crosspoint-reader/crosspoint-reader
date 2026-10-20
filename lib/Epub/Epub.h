@@ -60,6 +60,9 @@ class Epub {
   // The picture a cover reference leads to: the reference itself when it names a JPEG or PNG, else
   // the picture of the document it names (findCoverImageInDocument). A fragment is dropped.
   std::string coverPictureOf(const std::string& href) const;
+  // The picture behind an EPUB 3 nav document's cover landmark (<a epub:type="cover">), or empty.
+  // Streams the document through NavCoverScanner.
+  std::string findCoverLandmark(const std::string& navHref) const;
   // writePageList=false leaves pagelist.bin alone (an NCX tried after a parsed nav).
   bool parseTocNcxFile(bool writePageList = true) const;
   bool parseTocNavFile() const;

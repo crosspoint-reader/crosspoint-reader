@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Epub.h"
+#include "Epub/NavCoverScanner.h"
 #include "StoredZipWriter.h"
 
 namespace fs = std::filesystem;
@@ -99,6 +100,15 @@ std::string xhtmlWithImg(const std::string& body) {
          body + "</body></html>\n";
 }
 
+std::string navDocument(const std::string& tocItems, const std::string& landmarkItems) {
+  return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\" "
+         "xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>N</title></head><body>"
+         "<nav epub:type=\"toc\"><ol>" +
+         tocItems + "</ol></nav>" +
+         (landmarkItems.empty() ? "" : "<nav epub:type=\"landmarks\"><ol>" + landmarkItems + "</ol></nav>") +
+         "</body></html>\n";
+}
+
 }  // namespace
 
 // The ZIP-name scan took the first name it knew in archive order, and "title" was one of them, so a
@@ -179,6 +189,36 @@ TEST_F(CoverFallback, ManifestItemIdSvgIsAWrapperNotThePicture) {
   EXPECT_EQ(coverViaLoad(), "OEBPS/image/img0002.png");
 }
 
+// An EPUB 3 nav landmarks entry epub:type="cover" was not followed.
+TEST_F(CoverFallback, NavLandmarksCoverIsFollowed) {
+  Book book;
+  book.manifestExtra =
+      "<item id=\"nav\" properties=\"nav\" media-type=\"application/xhtml+xml\" href=\"nav.xhtml\"/>\n"
+      "<item id=\"cpage\" media-type=\"application/xhtml+xml\" href=\"xhtml/c.xhtml\"/>\n"
+      "<item id=\"img\" media-type=\"image/png\" href=\"image/front.png\"/>\n";
+  book.files = {
+      {"OEBPS/nav.xhtml", navDocument("<li><a href=\"xhtml/p-001.xhtml\">One</a></li>",
+                                      "<li><a epub:type=\"cover\" href=\"xhtml/c.xhtml#top\">Cover</a></li>")},
+      {"OEBPS/xhtml/c.xhtml", xhtmlWithImg("<img src=\"../image/front.png\" alt=\"\"/>")},
+      {"OEBPS/image/front.png", kPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/front.png");
+  EXPECT_EQ(coverViaLoadForCover(), "OEBPS/image/front.png");
+}
+
+TEST_F(CoverFallback, ANavLandmarkMayNameThePictureItself) {
+  Book book;
+  book.manifestExtra =
+      "<item id=\"nav\" properties=\"nav\" media-type=\"application/xhtml+xml\" href=\"nav/toc.xhtml\"/>\n"
+      "<item id=\"img\" media-type=\"image/png\" href=\"image/front.png\"/>\n";
+  book.files = {
+      {"OEBPS/nav/toc.xhtml", navDocument("<li><a href=\"../xhtml/p-001.xhtml\">One</a></li>",
+                                          "<li><a href=\"../image/front.png\" epub:type=\"cover\">Cover</a></li>")},
+      {"OEBPS/image/front.png", kPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/front.png");
+}
+
 // properties tokens separated by a newline or a tab: already recognised (the SAX parser normalises
 // attribute whitespace), kept as tests because the fork claimed them broken.
 TEST_F(CoverFallback, CoverImagePropertySeparatedByNewline) {
@@ -215,4 +255,56 @@ TEST_F(CoverFallback, GuideCoverPageWithLogoBeforeCoverPicture) {
                 {"OEBPS/image/art.png", kBigPng}};
   writeBook(book);
   EXPECT_EQ(coverViaLoad(), "OEBPS/image/art.png");
+}
+
+// The fork's contents rule takes an entry labelled "Title Page" ahead of the ZIP scan, so the title
+// banner on that page beat a file named cover.png. No such rule here.
+TEST_F(CoverFallback, TitlePageTocEntryDoesNotBeatACoverFile) {
+  Book book;
+  book.manifestExtra =
+      "<item id=\"nav\" properties=\"nav\" media-type=\"application/xhtml+xml\" href=\"nav.xhtml\"/>\n"
+      "<item id=\"tp\" media-type=\"application/xhtml+xml\" href=\"xhtml/titlepage.xhtml\"/>\n"
+      "<item id=\"banner\" media-type=\"image/png\" href=\"image/banner.png\"/>\n"
+      "<item id=\"img\" media-type=\"image/png\" href=\"image/cover.png\"/>\n";
+  book.files = {{"OEBPS/nav.xhtml", navDocument("<li><a href=\"xhtml/titlepage.xhtml\">Title Page</a></li>"
+                                                "<li><a href=\"xhtml/p-001.xhtml\">One</a></li>",
+                                                "")},
+                {"OEBPS/xhtml/titlepage.xhtml", xhtmlWithImg("<img src=\"../image/banner.png\" alt=\"\"/>")},
+                {"OEBPS/image/banner.png", kPng},
+                {"OEBPS/image/cover.png", kPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/cover.png");
+}
+
+// --- The landmark scanner on its own ------------------------------------------------------------
+
+namespace {
+std::string scanNav(const std::string& doc, const bool byteAtATime = false) {
+  NavCoverScanner scanner;
+  if (byteAtATime) {
+    for (const char c : doc) scanner.write(static_cast<uint8_t>(c));
+  } else {
+    scanner.write(reinterpret_cast<const uint8_t*>(doc.data()), doc.size());
+  }
+  return std::string(scanner.result());
+}
+}  // namespace
+
+TEST(NavCoverScanner, FindsTheCoverLinkWhateverTheAttributeOrder) {
+  EXPECT_EQ(scanNav("<a epub:type=\"cover\" href=\"c.xhtml\">Cover</a>"), "c.xhtml");
+  EXPECT_EQ(scanNav("<a href='c.xhtml#x' epub:type='frontmatter cover'>Cover</a>"), "c.xhtml#x");
+  EXPECT_EQ(scanNav("<nav epub:type=\"landmarks\"><ol><li><a epub:type=\"toc\" href=\"t.xhtml\">T</a></li>"
+                    "<li><a epub:type=\"cover\" href=\"c.xhtml\">C</a></li></ol></nav>",
+                    true),
+            "c.xhtml");
+}
+
+TEST(NavCoverScanner, IgnoresWhatIsNotACoverLink) {
+  EXPECT_EQ(scanNav("<a epub:type=\"covers\" href=\"c.xhtml\">C</a>"), "");
+  EXPECT_EQ(scanNav("<a epub:type=\"cover\">no href</a><a href=\"next.xhtml\">Next</a>"), "");
+  EXPECT_EQ(scanNav("<p>A \"cover\" in text, epub:type=\"cover\" href=\"x.xhtml\"</p>"), "");
+}
+
+TEST(NavCoverScanner, AnApostropheInACommentDoesNotHideTheLandmarks) {
+  EXPECT_EQ(scanNav("<!-- the reader's landmarks --><a epub:type=\"cover\" href=\"c.xhtml\">C</a>"), "c.xhtml");
 }

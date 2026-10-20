@@ -27,6 +27,7 @@
 #include "Epub/HashUtils.h"
 #include "Epub/ImageFormatDetector.h"
 #include "Epub/MetadataSidecar.h"
+#include "Epub/NavCoverScanner.h"
 #include "Epub/SpineHrefMatch.h"
 #include "Epub/SpinePageIndex.h"
 #include "Epub/TocFallbackPolicy.h"
@@ -237,9 +238,13 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   if (!haveCover && !opfParser.guideCoverPageHref.empty()) {
     takeCover("guide", coverPictureOf(opfParser.guideCoverPageHref));
   }
-  // Then the guesses, the free one first: a manifest item whose id says cover, and the file names.
+  // Then the guesses, the free one first: a manifest item whose id says cover, the EPUB 3 nav
+  // document's cover landmark (which means reading that document), and the file names.
   if (!haveCover && !opfParser.coverIdItemHref.empty()) {
     takeCover("manifest id", coverPictureOf(opfParser.coverIdItemHref));
+  }
+  if (!haveCover && !opfParser.tocNavPath.empty()) {
+    takeCover("nav landmarks", findCoverLandmark(opfParser.tocNavPath));
   }
 
   if (!haveCover) {
@@ -307,6 +312,20 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   LOG_DBG("EBP", "parseContentOpf total=%lu ms", millis() - opfParseStart);
   LOG_DBG("EBP", "Successfully parsed content.opf");
   return true;
+}
+
+std::string Epub::findCoverLandmark(const std::string& navHref) const {
+  // ~0.5 KB of fixed buffers, once per book that gets this far: on the heap, not the loop stack.
+  const auto scanner = makeUniqueNoThrow<NavCoverScanner>();
+  if (!scanner) {
+    LOG_ERR("EBP", "No memory to scan nav document %s", navHref.c_str());
+    return {};
+  }
+  if (!readItemContentsToStream(navHref, *scanner, 1024, scanner->stopFlag())) {
+    LOG_DBG("EBP", "Could not read nav document %s", navHref.c_str());
+  }
+  // The landmark names the cover page (often with a #fragment), now and then the picture itself.
+  return coverPictureOf(resolveInFolderOf(navHref, scanner->result()));
 }
 
 std::string Epub::coverPictureOf(const std::string& href) const {
