@@ -47,6 +47,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "DisplayedPage.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
@@ -5248,17 +5249,22 @@ void EpubReaderActivity::renderNormalPass(RenderLock& lock, const RenderLayout& 
   {
     RenderLock relock;
 
-    // Defensive guard: section can be invalidated by loop-side flows while the
-    // render lock was released during display waveform wait.
-    if (!section) {
-      LOG_ERR("ERS", "render: section became null after display completion");
-      return;
+    // The loop task had the lock during the waveform, and a page turn taken then has moved the position on; one that
+    // crossed into another spine has reset the section. So everything below describes the page this pass drew, from
+    // the identity renderContents() pinned under the lock, not the live position (DisplayedPage.h).
+    const DisplayedPage::Identity drawn{lastRenderedSpineIndex_, lastRenderedPageIndex_, lastRenderedPageCount_};
+    const DisplayedPage::Settlement settled = DisplayedPage::settle(
+        drawn, {section != nullptr, currentSpineIndex, section ? section->currentPage : 0}, epub->getSpineItemsCount());
+    if (settled.superseded) {
+      LOG_DBG("ERS", "Page spine=%d page=%d superseded during its display: now spine=%d page=%d", drawn.spine,
+              drawn.page, currentSpineIndex, section ? section->currentPage : -1);
     }
-
-    pendingProgressSave.spineIndex = currentSpineIndex;
-    pendingProgressSave.page = section->currentPage;
-    pendingProgressSave.pageCount = section->pageCount;
-    pendingProgressSave.pending.store(true, std::memory_order_release);
+    if (settled.recordProgress) {
+      pendingProgressSave.spineIndex = settled.progress.spine;
+      pendingProgressSave.page = settled.progress.page;
+      pendingProgressSave.pageCount = settled.progress.pageCount;
+      pendingProgressSave.pending.store(true, std::memory_order_release);
+    }
     lastRenderStats.freeHeapAfter = esp_get_free_heap_size();
     // Avoid heap walk in the hot render path; largest free block is sampled in index lifecycle logs.
     lastRenderStats.largestFreeBlockAfter = 0;
@@ -5270,11 +5276,10 @@ void EpubReaderActivity::renderNormalPass(RenderLock& lock, const RenderLayout& 
         "ERS",
         "Page summary: spine=%d page=%d/%d prerendered=0 refresh=%s mode=0x%02X renderMs=%lu "
         "prewarmMs=%lu bwMs=%lu displayMs=%lu fontHits=%lu fontMisses=%lu fontHitPct=%lu glyphCalls=%lu glyphUs=%lu",
-        currentSpineIndex, lastRenderedPageIndex_, lastRenderedPageCount_, refreshModeName(lastPageRefreshMode_),
-        lastPageDisplayModeByte_, lastRenderStats.requestRenderMs, lastRenderStats.phases.prewarmMs,
-        lastRenderStats.phases.bwRenderMs, lastRenderStats.phases.displayMs, lastRenderStats.fontCacheHits,
-        lastRenderStats.fontCacheMisses, fontHitRatePct, lastRenderStats.fontGetBitmapCalls,
-        lastRenderStats.fontGetBitmapTimeUs);
+        drawn.spine, drawn.page, drawn.pageCount, refreshModeName(lastPageRefreshMode_), lastPageDisplayModeByte_,
+        lastRenderStats.requestRenderMs, lastRenderStats.phases.prewarmMs, lastRenderStats.phases.bwRenderMs,
+        lastRenderStats.phases.displayMs, lastRenderStats.fontCacheHits, lastRenderStats.fontCacheMisses,
+        fontHitRatePct, lastRenderStats.fontGetBitmapCalls, lastRenderStats.fontGetBitmapTimeUs);
 
     if (pendingScreenshot) {
       // The page has just been redrawn without the menu. Ask for the screenshot rather than take it
