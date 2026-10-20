@@ -202,9 +202,10 @@ void HalGPIO::begin() {
   }
 
   // USB-presence detect. The pin must exist AND not be shared with the fuel-gauge
-  // I2C bus: X3 lists usbDetect = GPIO20, which is also its gauge SDA, so it must
-  // stay an I2C line. X4 has no gauge and owns GPIO20 outright; X4 Pro leaves
-  // usbDetect unassigned because the pin has not been identified yet.
+  // I2C bus: the X3's GPIO20 is its gauge SDA and must stay an I2C line (its
+  // profile now leaves usbDetect unassigned; older SDK pins listed GPIO20, which
+  // the bus check below still refuses). X4 has no gauge and owns GPIO20 outright;
+  // X4 Pro leaves usbDetect unassigned because the pin has not been identified yet.
   const int8_t usbDetect = BoardConfig::ACTIVE.usbDetect;
   const BoardConfig::BatteryGaugeConfig& gauge = BoardConfig::ACTIVE.batteryGauge;
   if (usbDetect != BoardConfig::PIN_UNASSIGNED && usbDetect != gauge.i2cSda && usbDetect != gauge.i2cScl) {
