@@ -447,3 +447,5 @@ STR_FIRMWARE_WRITE_FAILED: "Микробағдарламаны жазу сәтс
 STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF: "Қуатты өшірмеңіз!"
 STR_RECOVERY_MODE: "Қалпына келтіру режимі"
 STR_RECOVERY_MODE_HINT: "firmware.bin файлын SD картаның түбірлік қалтасына салып, оны таңдаңыз"
+STR_DELETE_ITEM_CONFIRM: "Жою?"
+STR_SET_SLEEP_COVER_CONFIRM: "Мұқаба орнату?"
