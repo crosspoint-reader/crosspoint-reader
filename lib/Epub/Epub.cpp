@@ -424,6 +424,10 @@ bool Epub::parsePageMapFile() const {
 }
 
 void Epub::primeZip(ZipFile& zip) const {
+  zip.seedLookupCursor(zipLookupCursor_);
+  // A lookup's read window comes out of the region lent to load() while it runs (released before
+  // the lookup returns), else from the heap.
+  zip.setLookupScratch(loadScratch_);
   if (!zipDetailsCached_) return;
   ZipFile::ZipDetails d;
   d.centralDirOffset = zipCentralDirOffset_;
@@ -433,11 +437,24 @@ void Epub::primeZip(ZipFile& zip) const {
 }
 
 void Epub::adoptZipDetails(const ZipFile& zip) const {
+  if (zip.lookupCursor() != 0) zipLookupCursor_ = zip.lookupCursor();
   const auto& d = zip.details();
   if (!d.isSet || zipDetailsCached_) return;
   zipCentralDirOffset_ = d.centralDirOffset;
   zipTotalEntries_ = d.totalEntries;
   zipDetailsCached_ = true;
+}
+
+bool Epub::lookupItemStat(ZipFile& zip, const std::string& path, ZipFile::FileStatSlim* out) const {
+  if (statMemoValid_ && statMemoPath_ == path) {
+    *out = statMemo_;
+    return true;
+  }
+  if (!zip.loadFileStatSlim(path.c_str(), out)) return false;
+  statMemoPath_ = path;
+  statMemo_ = *out;
+  statMemoValid_ = true;
+  return true;
 }
 
 bool Epub::computeZipFingerprint(uint64_t* out) const {
@@ -1989,7 +2006,10 @@ bool Epub::readItemContentsToStreamWithArena(const std::string& itemHref, Print&
   // EntryReader is the only deflate path in ZipFile that can take an arena; readFileToStream
   // always mallocs. Same 1 KB chunk size as that path, so the SD write pattern is unchanged.
   ZipFile::EntryReader reader(zip, 1024, arena);
-  const bool opened = reader.open(path.c_str());
+  ZipFile::FileStatSlim stat = {};
+  const bool found = lookupItemStat(zip, path, &stat);
+  if (!found) LOG_ERR("EBP", "Entry not found: %s", path.c_str());
+  const bool opened = found && reader.open(stat);
   adoptZipDetails(zip);
   if (!opened) return false;
 
@@ -2112,8 +2132,10 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
   ZipFile zip(filepath);
   primeZip(zip);
-  const bool ok = zip.getInflatedFileSize(path.c_str(), size);
+  ZipFile::FileStatSlim stat = {};
+  const bool ok = lookupItemStat(zip, path, &stat);
   adoptZipDetails(zip);
+  if (ok) *size = static_cast<size_t>(stat.uncompressedSize);
   return ok;
 }
 

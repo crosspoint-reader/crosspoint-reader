@@ -75,6 +75,18 @@ class Epub {
   mutable uint32_t zipCentralDirOffset_ = 0;
   mutable uint16_t zipTotalEntries_ = 0;
   mutable bool zipDetailsCached_ = false;
+  // The lookup cursor of the last ZipFile, handed to the next (ZipFile::seedLookupCursor): the
+  // package documents sit together, often behind every chapter and image, and a lookup that
+  // started at the first entry each time read the whole directory for every one of them.
+  mutable uint32_t zipLookupCursor_ = 0;
+  // The last entry looked up by name and its stat. A document is sized and then read
+  // (container.xml, the OPF, the NCX, each stylesheet), and the read's lookup was a second walk of
+  // the directory for the same name. One entry: the reads that repeat follow straight on.
+  mutable std::string statMemoPath_;
+  mutable ZipFile::FileStatSlim statMemo_ = {};
+  mutable bool statMemoValid_ = false;
+  // The stat of the entry at the normalised `path`, from the memo or one lookup.
+  bool lookupItemStat(ZipFile& zip, const std::string& path, ZipFile::FileStatSlim* out) const;
 
   // Per-book cache of each spine entry's ZIP central-directory stat, resolved in ONE
   // central-directory walk (fillFileStats) the first time any spine stat is requested.
