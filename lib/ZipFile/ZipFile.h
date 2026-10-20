@@ -44,11 +44,12 @@ class ZipFile {
     bool isSet;
   };
 
-  // Target for batch uncompressed size lookup (sorted by hash, then len)
+  // Target for the batch lookups (sorted by hash, then len)
   struct SizeTarget {
-    uint64_t hash;   // FNV-1a 64-bit hash of normalized path
-    uint16_t len;    // Length of path for collision reduction
-    uint16_t index;  // Caller's index (e.g. spine index)
+    uint64_t hash;      // FNV-1a 64-bit hash of normalized path
+    uint16_t len;       // Length of path for collision reduction
+    uint16_t index;     // Caller's index (e.g. spine index)
+    uint32_t size = 0;  // fillUncompressedSizes' answer, in what would otherwise be tail padding
   };
 
  private:
@@ -104,14 +105,13 @@ class ZipFile {
   // False for a deflated entry -- there is no such range: those bytes are a DEFLATE stream, not
   // the file. Also false if the entry is missing or its local header does not check out.
   bool getStoredEntryRange(const char* filename, uint32_t* offset, uint32_t* size);
-  // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
-  // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
-  // Returns number of targets matched. Deques, not vectors: a 1700-spine book needs ~28 KB of
-  // targets, and demanding that as ONE contiguous block aborts on a fragmented heap (bare
-  // operator new under -fno-exceptions) — deque's ~512-byte chunks drop the contiguity
-  // requirement while keeping the random-access iterators lower_bound needs. Reads through a
-  // 4 KB window of its own when the heap has one.
-  int fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes);
+  // Batch lookup: ONE walk of the central directory sets `size` of every target whose (hash, len)
+  // names an entry to that entry's uncompressed size, and leaves the others alone. `targets` must
+  // be sorted by (hash, len); a caller with more names than it has table for walks once per
+  // table-full. The walk reads through `window` (null: straight from the file, a dozen card calls
+  // per entry), which the caller owns so that several walks share one. Returns the number of
+  // targets matched; the walk stops once that reaches `count`.
+  int fillUncompressedSizes(SizeTarget* targets, size_t count, uint8_t* window, size_t windowBytes);
   // Batch lookup of FULL entry stats in ONE central-directory walk (vs one linear scan per
   // loadFileStatSlim call). targets must be sorted by (hash, len) like fillUncompressedSizes;
   // stats[target.index] receives the entry's FileStatSlim. Returns number matched. Deques: a

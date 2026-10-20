@@ -443,6 +443,9 @@ void walkCentralDirectory(serialization::BufferedFileReader& in, OnEntry&& onEnt
   }
 }
 
+// The answer rides in the struct's padding: a lookup table costs 16 B a name, as it did without it.
+static_assert(sizeof(ZipFile::SizeTarget) == 16, "SizeTarget grew");
+
 bool targetBefore(const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
   return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
 }
@@ -461,19 +464,19 @@ int forEachTargetNamed(It begin, It end, const char* name, const uint16_t nameLe
 }
 }  // namespace
 
-int ZipFile::fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes) {
-  if (targets.empty()) return 0;
+int ZipFile::fillUncompressedSizes(SizeTarget* const targets, const size_t count, uint8_t* const window,
+                                   const size_t windowBytes) {
+  if (targets == nullptr || count == 0) return 0;
   const ScopedOpenClose zip{*this};
   if (!zip || !loadZipDetails()) return 0;
 
   file.seek(zipDetails.centralDirOffset);
-  serialization::BufferedFileReader in(file, CENTRAL_DIR_WINDOW_BYTES);
+  serialization::BufferedFileReader in(file, window, windowBytes);
   int matched = 0;
   walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim& stat) {
-    matched += forEachTargetNamed(targets.begin(), targets.end(), name, nameLen, [&](const SizeTarget& t) {
-      if (t.index < sizes.size()) sizes[t.index] = stat.uncompressedSize;
-    });
-    return matched < static_cast<int>(targets.size());
+    matched += forEachTargetNamed(targets, targets + count, name, nameLen,
+                                  [&](SizeTarget& t) { t.size = stat.uncompressedSize; });
+    return matched < static_cast<int>(count);
   });
   return matched;
 }
