@@ -411,7 +411,9 @@ void ContentOpfParser::beginSpineTable() {
   spinePending_ = 0;
   if (spineTable_ != nullptr) return;  // lent
   PassTable<SpineTarget>::HeapSizing sizing;
-  ownSpineTable_ = PassTable<SpineTarget>::fromHeap(spineCandidates_ > 0 ? spineCandidates_ : 1, sizing);
+  // At most one table-full of slots a SpineTarget can number.
+  const size_t wanted = std::min<size_t>(spineCandidates_ > 0 ? spineCandidates_ : 1, UINT16_MAX);
+  ownSpineTable_ = PassTable<SpineTarget>::fromHeap(wanted, sizing);
   if (ownSpineTable_.capacity() > 0) {
     spineTable_ = ownSpineTable_.entries();
     spineCapacity_ = ownSpineTable_.capacity();
