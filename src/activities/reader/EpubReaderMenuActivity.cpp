@@ -1,3 +1,4 @@
+#include "BuildFeatures.h"
 #include "EpubReaderMenuActivity.h"
 
 #include <GfxRenderer.h>
@@ -362,8 +363,12 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   toolsItems.push_back(SettingInfo::Action(StrId::STR_READING_STATS_FOR_THIS_BOOK, SettingAction::None));
   toolsItems.push_back(SettingInfo::Action(StrId::STR_MARK_AS_READ, SettingAction::None));
   toolsItems.push_back(SettingInfo::Action(StrId::STR_DELETE_CACHE, SettingAction::None));
+#if CP_FEATURE_SCREENSHOT
   toolsItems.push_back(SettingInfo::Action(StrId::STR_SCREENSHOT_BUTTON, SettingAction::None));
+#endif
+#if CP_FEATURE_QR_PAGE
   toolsItems.push_back(SettingInfo::Action(StrId::STR_DISPLAY_QR, SettingAction::None));
+#endif
   toolsItems.push_back(SettingInfo::Action(StrId::STR_GO_HOME_BUTTON, SettingAction::None));
 #if ENABLE_BENCHMARKS
   toolsItems.push_back(SettingInfo::Action(StrId::STR_RENDER_BENCHMARK, SettingAction::None));

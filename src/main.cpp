@@ -35,6 +35,7 @@
 #include <cstring>
 #include <vector>
 
+#include "BuildFeatures.h"
 #include "BootDiagnostics.h"
 #include "ButtonEventManager.h"
 #include "CjkUiFonts.h"
@@ -1741,6 +1742,7 @@ void loop() {
   // after the screenshot completes.
   static unsigned long powerHoldStart = 0;
 
+#if CP_FEATURE_SCREENSHOT
   static bool screenshotButtonsReleased = true;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     if (screenshotButtonsReleased) {
@@ -1755,6 +1757,7 @@ void loop() {
   } else {
     screenshotButtonsReleased = true;
   }
+#endif
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (millis() - sleepTimerStart >= sleepTimeoutMs) {

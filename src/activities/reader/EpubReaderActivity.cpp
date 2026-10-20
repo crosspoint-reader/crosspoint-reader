@@ -15,6 +15,7 @@
 #define DEBUG_BACKGROUND_WORK 0
 #endif
 
+#include "BuildFeatures.h"
 #include "EpubReaderActivity.h"
 
 #include <CooperativeAbort.h>
@@ -61,7 +62,9 @@
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "PreRenderGate.h"
+#if CP_FEATURE_QR_PAGE
 #include "QrDisplayActivity.h"
+#endif
 #include "QuickOverridesActivity.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
@@ -2931,6 +2934,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
+#if CP_FEATURE_QR_PAGE
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       std::unique_ptr<Page> p;
       {
@@ -2964,6 +2968,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+#endif
     case EpubReaderMenuActivity::MenuAction::STAR_PAGE: {
       {
         RenderLock lock(*this);
@@ -3071,6 +3076,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 #endif  // ENABLE_BENCHMARKS
       break;
     }
+#if CP_FEATURE_SCREENSHOT
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
       {
         RenderLock lock(*this);
@@ -3079,6 +3085,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+#endif
     case EpubReaderMenuActivity::MenuAction::PULL_REMOTE: {
       // One-tap pull path: run network preconditions and apply remote progress
       // directly instead of showing an intermediate chooser screen.
