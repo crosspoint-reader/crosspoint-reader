@@ -724,9 +724,8 @@ void HalGPIO::updateUsbState(const unsigned long now) {
     usbLastPollMs = now;
     usbElectricalConnected = isUsbElectricalConnected();
   }
-  const bool connected = usbHostLinkActive || usbElectricalConnected;
-  usbStateChanged = (connected != lastUsbConnected);
-  lastUsbConnected = connected;
+  // A host-link dropout of a few ms is no unplug: see UsbLinkDebounce.
+  usbStateChanged = usbLink.update(usbHostLinkActive || usbElectricalConnected, now);
 }
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }

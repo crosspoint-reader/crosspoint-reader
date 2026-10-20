@@ -982,7 +982,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Debug-only: periodic serial dump of background-work counters (no-op in release).
+  // Periodic serial dump of background-work counters (DEBUG_BACKGROUND_WORK, defined at the top of
+  // this file -- on in release builds too).
   serviceBackgroundDebugLog();
 
   if (pendingProgressSave.pending.load(std::memory_order_acquire)) {
@@ -1145,6 +1146,7 @@ void EpubReaderActivity::loop() {
     if (!buttonPrevTurn && !buttonNextTurn) {
       // Input-idle and no page turn pending: hand the idle slice to the background
       // routines (deferred AA, then Background A pre-render, then Background B).
+      serviceOwedPeriodicRefresh();
       serviceBackgroundWork();
       return;
     }
@@ -1203,6 +1205,26 @@ void EpubReaderActivity::loop() {
   }
 }
 
+void EpubReaderActivity::serviceOwedPeriodicRefresh() {
+  // Settled means: no pass running or queued (the turn's pre-render is requested only after its
+  // AA), no deferred AA still to run, no waveform still on the panel.
+  if (!periodicRefreshOwed_ || RenderLock::peek() || isUpdateSuperseded()) {
+    return;
+  }
+  {
+    RenderLock lock;
+    if (pendingGrayscale_.active || renderer.isRefreshPending()) {
+      return;
+    }
+  }
+  periodicRefreshOwed_ = false;
+  // The tick's own checks: a turn since has drawn the new minute, and there is nothing left to
+  // do. A pass that started in between owes it again.
+  if (!shouldSkipPeriodicUpdate()) {
+    requestUpdate();
+  }
+}
+
 void EpubReaderActivity::serviceBackgroundWork() {
   // Priority order, highest first. Each routine self-gates on its own pending state and
   // is expected to do a bounded amount of work and return so the next loop tick can
@@ -1241,8 +1263,15 @@ void EpubReaderActivity::serviceBackgroundDebugLog() {
   if (lastBgDebugLogMs_ != 0UL && (now - lastBgDebugLogMs_) < 5000UL) {
     return;
   }
+  // Never waits for the lock: DEBUG_BACKGROUND_WORK is on in every build, and a blocking take
+  // here held the loop task -- input, the IDLE answer, the minute tick -- for as long as the pass
+  // in flight, up to a page turn's 2.4 s HALF refresh, every 5 s. A busy lock tries again on the
+  // next loop pass.
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) {
+    return;
+  }
   lastBgDebugLogMs_ = now;
-  RenderLock lock;
   // B state + gate inputs so a stalled B explains itself from the log alone (e.g. parked
   // in waitheap because free/contig sit below the BG_BUILD_* floors, or css=1 with too
   // little heap for Section::heapAllowsEmbeddedStyle()).
@@ -6863,15 +6892,24 @@ bool EpubReaderActivity::skipLoopDelay() {
 bool EpubReaderActivity::shouldSkipPeriodicUpdate() const {
   // Polled once a minute by ActivityManager::loop() on the loop task with no lock held, so it
   // had the same unlocked read of `section` as the hints above (and raced render() on
-  // statusRefreshDeferred_). A pass holding the lock means "cannot tell": request the update. At
-  // worst that is one redundant status-bar refresh, where skipping could leave the clock a minute
-  // behind if the pass in flight drew its status bar before the minute turned. It does not take
-  // B's borrow from a live build either: the pass in flight already returned it on entry
-  // (recoverSecondaryBufferIfNeeded), unless build-through keeps it, and then the extra render
-  // keeps it too.
+  // statusRefreshDeferred_). A pass holding the lock means "cannot tell" -- and it is usually a
+  // page turn: its display, its AA replay, the next page's pre-render. Requesting the update then
+  // queued a full redraw of the same page behind the turn, and the queued request made the turn's
+  // AA skip as if the page were on its way out (aaPreemptedByNavigation): on the X3 such a turn
+  // took 2.5-3.7 s instead of 1.8 s. Skipping outright could leave the clock a minute behind, as
+  // the pass in flight may have drawn its status bar before the minute turned. So the refresh is
+  // owed, and loop() asks again once the reader has settled (serviceOwedPeriodicRefresh) -- by
+  // when a page turn has drawn the new minute anyway, or the checks below find it still missing.
   RenderLock lock(RenderLock::Mode::Try);
   if (!lock.ownsLock()) {
-    return false;
+    periodicRefreshOwed_ = true;
+    return true;
+  }
+  // Between a turn's pass and its deferred AA: a request now would cost the page its AA the same
+  // way.
+  if (pendingGrayscale_.active) {
+    periodicRefreshOwed_ = true;
+    return true;
   }
   // Background-B holds the secondary buffer: any render takes it back, and taking it back
   // discards B's live build (endBackgroundBorrow). A clock-minute or battery tick would do that

@@ -8,6 +8,8 @@
 
 #include <atomic>
 
+#include "UsbLinkDebounce.h"
+
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
 #define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
@@ -59,7 +61,8 @@ class HalGPIO {
   InputManager inputMgr;
 #endif
 
-  bool lastUsbConnected = false;
+  // The debounced verdict behind isUsbConnectedCached() and wasUsbStateChanged().
+  UsbLinkDebounce usbLink;
   bool usbStateChanged = false;
   unsigned long usbLastPollMs = 0;
   bool usbElectricalConnected = false;  // last result of the per-device electrical/charge check
@@ -495,7 +498,8 @@ class HalGPIO {
 
   // USB state as sampled by the last update() call. Prefer this in per-loop
   // polling: isUsbConnected() performs a fresh I2C read on X3.
-  bool isUsbConnectedCached() const { return lastUsbConnected; }
+  // A detach is held back until the raw reading has stayed absent for a moment (UsbLinkDebounce).
+  bool isUsbConnectedCached() const { return usbLink.connected(); }
 
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;
