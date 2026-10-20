@@ -36,6 +36,28 @@ inline bool shouldReuseInstalledBundleDir(const std::string& destDir, const std:
   return !subdir.empty() && subdir.find('/') == std::string::npos && isPluginRoot(destDir);
 }
 
+// A bundle entry is both an SD path and the tail of its URL. Percent-encode the
+// bytes a request line cannot carry (spaces, controls, non-ASCII) and the ones
+// that would end the path ('?', '#'); '/' and '%' stay, so nested entries and
+// already-encoded names fetch as before.
+inline std::string bundleEntryUrlPath(const std::string& rel) {
+  static constexpr char HEX_DIGITS[] = "0123456789ABCDEF";
+  std::string out;
+  out.reserve(rel.size());
+  for (const char ch : rel) {
+    const auto c = static_cast<unsigned char>(ch);
+    if (c <= 0x20 || c >= 0x7F || c == '"' || c == '#' || c == '<' || c == '>' || c == '?' || c == '\\' || c == '^' ||
+        c == '`' || c == '{' || c == '|' || c == '}') {
+      out += '%';
+      out += HEX_DIGITS[c >> 4];
+      out += HEX_DIGITS[c & 0x0F];
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 enum class DeviceKind { None, Catalog, Background, Menu };
 enum class PickerAction { None, Catalog, Readme, Menu };
 

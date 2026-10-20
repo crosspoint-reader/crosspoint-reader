@@ -39,6 +39,11 @@ tokens. If no installed copy exists, the bundle uses its configured destination
 root as before. Nested bundle subdirectories and non-plugin destinations are
 unchanged.
 
+Each bundle file is fetched from the item's base URL plus its listed name. The
+name is percent-encoded for the URL (spaces, non-ASCII, `?`, `#` and other bytes
+a request line cannot carry; `/` and `%` are kept) and written to SD as listed,
+so an entry such as `Hôm nay.txt` works.
+
 During firmware-managed plugin installation, a plugin directory may contain a
 `.installing` marker. Normal plugin discovery and file resolution quarantine that
 directory until the transaction completes, even if `manifest.json`, `plugin.js`,

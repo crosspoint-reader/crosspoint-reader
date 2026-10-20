@@ -1227,7 +1227,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       const std::string parent = dest.substr(0, slash);
       if (!Storage.exists(parent.c_str())) Storage.mkdir(parent.c_str());
     }
-    const auto result = downloadFile(base + rel, dest + ".new");
+    const auto result = downloadFile(base + PluginLocations::bundleEntryUrlPath(rel), dest + ".new");
     if (result != HttpDownloader::OK) return result;
     staged.push_back(dest);
   }

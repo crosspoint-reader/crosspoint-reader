@@ -20,6 +20,17 @@ TEST(PluginManifestClassification, DirectPluginBundlesMayReuseInstalledRoot) {
   EXPECT_FALSE(PluginLocations::shouldReuseInstalledBundleDir("/.crosspoint/plugins", ""));
 }
 
+TEST(PluginManifestClassification, BundleEntryUrlPathEncodesWhatARequestLineCannotCarry) {
+  // Plain and nested ASCII entries are unchanged.
+  EXPECT_EQ(PluginLocations::bundleEntryUrlPath("plugin.js"), "plugin.js");
+  EXPECT_EQ(PluginLocations::bundleEntryUrlPath("assets/icon-1_a.bin"), "assets/icon-1_a.bin");
+  // Spaces and UTF-8 bytes are percent-encoded; the SD name stays as listed.
+  EXPECT_EQ(PluginLocations::bundleEntryUrlPath("H\xC3\xB4m nay.txt"), "H%C3%B4m%20nay.txt");
+  // '?' and '#' would end the path; already-encoded names are not encoded twice.
+  EXPECT_EQ(PluginLocations::bundleEntryUrlPath("a?b#c.txt"), "a%3Fb%23c.txt");
+  EXPECT_EQ(PluginLocations::bundleEntryUrlPath("a%20b.txt"), "a%20b.txt");
+}
+
 TEST(PluginManifestClassification, BrowseUrlIsCatalog) {
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, false), PluginLocations::DeviceKind::Catalog);
   EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, true), PluginLocations::DeviceKind::Catalog);
