@@ -9,6 +9,25 @@
 
 class BuildArena;
 
+#ifdef ZIP_FILE_SCAN_STATS
+// Host tests only (firmware never defines it): central-directory walks started and entries read by
+// them, across every ZipFile. A lookup's cost on the card is the entries it reads, so this is what
+// a test bounds where a host's wall-clock time says little.
+struct ZipScanStats {
+  size_t walks = 0;
+  size_t entries = 0;
+};
+inline ZipScanStats& zipScanStats() {
+  static ZipScanStats stats;
+  return stats;
+}
+#define ZIP_SCAN_STAT_WALK() (++zipScanStats().walks)
+#define ZIP_SCAN_STAT_ENTRY() (++zipScanStats().entries)
+#else
+#define ZIP_SCAN_STAT_WALK() ((void)0)
+#define ZIP_SCAN_STAT_ENTRY() ((void)0)
+#endif
+
 class ZipFile {
  public:
   struct FileStatSlim {
@@ -212,10 +231,12 @@ class ZipFile {
     const ScopedOpenClose zip{*this};
     if (!zip) return false;
     file.seek(zipDetails.centralDirOffset);
+    ZIP_SCAN_STAT_WALK();
     char nameBuf[256];
     uint32_t sig;
     while (file.available()) {
       if (file.read(&sig, 4) != 4 || sig != 0x02014b50) break;
+      ZIP_SCAN_STAT_ENTRY();
       file.seekCur(6);
       uint16_t method;
       file.read(&method, 2);

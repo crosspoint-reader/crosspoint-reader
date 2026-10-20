@@ -168,6 +168,8 @@ target_compile_definitions(EpubPipelineTest PRIVATE
   # LongChapterPageTablesTest refuses build-table chunks on purpose (see ChunkedVector.h). The
   # hook is inert until a test arms it; firmware and the dump tools never define it.
   CHUNKED_VECTOR_FAULT_INJECTION
+  # Central-directory walk counters (ZipFile.h), for the tests that bound them. Inert otherwise.
+  ZIP_FILE_SCAN_STATS
 )
 target_link_libraries(EpubPipelineTest PRIVATE
   crosspoint_test_common

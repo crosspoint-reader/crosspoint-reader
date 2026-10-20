@@ -6,13 +6,22 @@
 #include <cstdio>
 #include <string>
 
+#include "LogObserver.h"
+
+namespace {
+LogObserver g_observer = nullptr;
+}  // namespace
+
+void setLogObserver(const LogObserver observer) { g_observer = observer; }
+
 void logPrintf(const char* level, const char* origin, const char* format, ...) {
-  std::fprintf(stderr, "[%s][%s] ", level, origin);
+  char line[1024];
   va_list args;
   va_start(args, format);
-  std::vfprintf(stderr, format, args);
+  std::vsnprintf(line, sizeof(line), format, args);
   va_end(args);
-  std::fprintf(stderr, "\n");
+  if (g_observer != nullptr) g_observer(level, origin, line);
+  std::fprintf(stderr, "[%s][%s] %s\n", level, origin, line);
 }
 std::string getLastLogs() { return {}; }
 void clearLastLogs() {}

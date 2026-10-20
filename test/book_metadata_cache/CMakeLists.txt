@@ -9,7 +9,8 @@ add_executable(BookMetadataCacheTest
 
 target_include_directories(BookMetadataCacheTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
-  # esp_heap_caps.h / esp_system.h host stubs (shared with the pipeline test).
+  # esp_heap_caps.h / esp_system.h host stubs and the synthetic-book writers (shared with the
+  # pipeline test).
   ${REPO_ROOT}/test/epub_pipeline
   # Real stdio-backed FsFile/Storage — must precede test/shims, whose
   # HalStorage.h is a no-op stub, and whose BookMetadataCache.h would shadow
@@ -30,6 +31,9 @@ target_include_directories(BookMetadataCacheTest PRIVATE
   # BookMetadataCache.h stub never shadows the real header under test.
   ${REPO_ROOT}/test/shims
 )
+
+# Counts central-directory walks (ZipFile.h); firmware never defines it.
+target_compile_definitions(BookMetadataCacheTest PRIVATE ZIP_FILE_SCAN_STATS)
 
 target_link_libraries(BookMetadataCacheTest PRIVATE
   crosspoint_test_common

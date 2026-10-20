@@ -98,6 +98,7 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
   bool found = false;
 
   file.seek(startPos);
+  ZIP_SCAN_STAT_WALK();
 
   uint32_t sig;
   char itemName[256];
@@ -126,6 +127,7 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     if (wrapped && entryStart >= startPos) {
       break;
     }
+    ZIP_SCAN_STAT_ENTRY();
 
     file.seekCur(6);
     file.read(&fileStat->method, 2);
@@ -336,11 +338,13 @@ bool ZipFile::contentFingerprint(uint64_t* out) {
   // 1000+-entry book). Through the 4 KB window they collapse into a few
   // sequential SD reads; the per-entry skips stay inside the window for free.
   file.seek(zipDetails.centralDirOffset);
+  ZIP_SCAN_STAT_WALK();
   serialization::BufferedFileReader reader(file);
   char nameBuf[256];
   uint32_t entries = 0;
   uint32_t sig;
   while (reader.readPod(sig) && sig == 0x02014b50) {
+    ZIP_SCAN_STAT_ENTRY();
     reader.seek(reader.position() + 6);  // versionMadeBy, versionNeeded, flags
     uint16_t method, nameLen, extraLen, commentLen;
     uint32_t crc32, compSz, uncompSz, localOff;
@@ -412,6 +416,7 @@ int ZipFile::fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::d
   if (!loadZipDetails()) return 0;
 
   file.seek(zipDetails.centralDirOffset);
+  ZIP_SCAN_STAT_WALK();
 
   int matched = 0;
   const int targetCount = static_cast<int>(targets.size());
@@ -421,6 +426,7 @@ int ZipFile::fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::d
   while (file.available()) {
     file.read(&sig, 4);
     if (sig != 0x02014b50) break;
+    ZIP_SCAN_STAT_ENTRY();
 
     file.seekCur(6);
     uint16_t method;
@@ -480,6 +486,7 @@ int ZipFile::fillFileStats(const std::deque<SizeTarget>& targets, std::deque<Fil
   if (!loadZipDetails()) return 0;
 
   file.seek(zipDetails.centralDirOffset);
+  ZIP_SCAN_STAT_WALK();
 
   int matched = 0;
   const int targetCount = static_cast<int>(targets.size());
@@ -489,6 +496,7 @@ int ZipFile::fillFileStats(const std::deque<SizeTarget>& targets, std::deque<Fil
   while (file.available()) {
     file.read(&sig, 4);
     if (sig != 0x02014b50) break;
+    ZIP_SCAN_STAT_ENTRY();
 
     file.seekCur(6);
     uint16_t method;

@@ -1,10 +1,12 @@
 // epub_build_inventory: an exact allocation inventory of section builds.
 //
 // Usage: epub_build_inventory <book.epub> <cacheDir> <outDir> [--arena=BYTES] [--spines=A,B,..]
-//                             [--viewport=WxH]
+//                             [--viewport=WxH] [--load-only]
 //
 // For every selected spine it measures ONE build (createSectionFile) and writes raw records to
-// <outDir>/spine_<N>.txt, for test/epub_pipeline/inventory_report.py to symbolize:
+// <outDir>/spine_<N>.txt, for test/epub_pipeline/inventory_report.py to symbolize. With
+// --load-only it measures the book's first open instead (Epub::load on an empty cache, the arena
+// lent to it as ReaderActivity lends the secondary framebuffer) and writes <outDir>/load.txt:
 //
 //   SUMMARY  heap base/peak/end of the build, arena capacity/high-water, the arena's use at the
 //            heap's peak, the heap's live bytes at the arena's peak
@@ -31,6 +33,7 @@
 #include <sstream>
 #include <string>
 
+#include "Epub.h"
 #include "HeapTrack.h"
 #include "PipelineRunner.h"
 
@@ -165,11 +168,82 @@ std::set<int> parseSpines(const char* list) {
   return out;
 }
 
+// Opens a measurement window: the heap profiler's, and the shadow stack of `lent`'s allocations.
+void openWindow(const BuildArena* lent) {
+  g_tracked = lent;
+  g_top = 0;
+  g_atArenaPeakTop = 0;
+  g_atHeapPeakTop = 0;
+  g_arenaPeak = 0;
+  g_heapAtArenaPeak = 0;
+  g_arenaCursorAtHeapPeak = 0;
+  g_overflow = false;
+  g_phase = 0;
+  g_phaseArenaPeak = 0;
+  g_otherArenaAllocs = 0;
+  g_otherArenaBytes = 0;
+  g_largeCount = 0;
+  for (auto& p : g_phases) p = Phase{};
+  heapTrackWindowBegin();
+  g_phases[0].heapStart = heapTrackLive();
+  g_phases[0].arenaStart = lent ? lent->used() : 0;
+  g_active = true;
+}
+
+// Closes it and writes its records to `path` (`spine` -1: a book load, not a section build).
+void closeWindow(const std::string& path, const int spine, const BuildArena* lent) {
+  g_active = false;
+  if (g_phase < kMaxPhases) {
+    g_phases[g_phase].heapPeak = heapTrackPhaseMark();
+    g_phases[g_phase].arenaPeak = g_phaseArenaPeak;
+  }
+  heapTrackWindowEnd();
+  const HeapTrackWindowSummary w = heapTrackWindowSummary();
+
+  std::FILE* f = std::fopen(path.c_str(), "w");
+  if (f == nullptr) {
+    std::fprintf(stderr, "cannot write %s\n", path.c_str());
+    return;
+  }
+  std::fprintf(f,
+               "SUMMARY spine=%d heapBase=%zu heapPeak=%zu heapAtSnap=%zu heapEnd=%zu arenaCap=%zu "
+               "arenaHighWater=%zu arenaAtHeapPeak=%zu heapAtArenaPeak=%zu otherArenaAllocs=%d "
+               "otherArenaBytes=%zu overflow=%d\n",
+               spine, w.base, w.peak, w.atSnap, w.end, lent ? lent->capacity() : 0, g_arenaPeak,
+               g_arenaCursorAtHeapPeak, g_heapAtArenaPeak, g_otherArenaAllocs, g_otherArenaBytes, g_overflow ? 1 : 0);
+  const char* names[] = {"setup", "extract+resident", "parse+finalize", "p3", "p4", "p5", "p6", "p7"};
+  for (int i = 0; i <= g_phase && i < kMaxPhases; ++i) {
+    std::fprintf(f, "PHASE %s heapStart=%zu heapPeak=%zu arenaStart=%zu arenaPeak=%zu\n", spine < 0 ? "load" : names[i],
+                 g_phases[i].heapStart, g_phases[i].heapPeak, g_phases[i].arenaStart, g_phases[i].arenaPeak);
+  }
+  static HeapTrackWindowSite sites[4096];
+  const int n = heapTrackWindowSites(sites, 4096);
+  for (int i = 0; i < n; ++i) {
+    const auto& s = sites[i];
+    std::fprintf(f, "HEAP pc=0x%lx ctx1=0x%lx ctx2=0x%lx count=%zu bytes=%zu start=%zu peak=%zu end=%zu max=%zu\n",
+                 static_cast<unsigned long>(rel(s.pc)), static_cast<unsigned long>(rel(s.ctx1)),
+                 static_cast<unsigned long>(rel(s.ctx2)), s.winCount, s.winBytes, s.startLive, s.peakLive, s.endLive,
+                 s.maxSize);
+  }
+  for (int i = 0; i < g_largeCount; ++i) {
+    std::fprintf(f, "ARENA_LARGE bytes=%zu count=%d f0=0x%lx\n", g_large[i].bytes, g_large[i].count,
+                 static_cast<unsigned long>(rel(g_large[i].caller)));
+  }
+  writeArena(f, "ARENA_AT_ARENA_PEAK", g_atArenaPeak, g_atArenaPeakTop);
+  writeArena(f, "ARENA_AT_HEAP_PEAK", g_atHeapPeak, g_atHeapPeakTop);
+  std::fclose(f);
+  std::fprintf(stderr, "%s %d: heap base=%zu peak=%zu (+%zu) end=%zu | arena peak=%zu at-heap-peak=%zu -> %s\n",
+               spine < 0 ? "load" : "spine", spine, w.base, w.peak, w.peak - w.base, w.end, g_arenaPeak,
+               g_arenaCursorAtHeapPeak, path.c_str());
+}
+
 }  // namespace
 
 int main(const int argc, char** argv) {
   if (argc < 4) {
-    std::fprintf(stderr, "usage: %s <book.epub> <cacheDir> <outDir> [--arena=BYTES] [--spines=A,B] [--viewport=WxH]\n",
+    std::fprintf(stderr,
+                 "usage: %s <book.epub> <cacheDir> <outDir> [--arena=BYTES] [--spines=A,B] [--viewport=WxH] "
+                 "[--load-only]\n",
                  argv[0]);
     return 2;
   }
@@ -178,6 +252,7 @@ int main(const int argc, char** argv) {
   const std::string outDir = argv[3];
   pipeline_harness::Profile profile;
   std::set<int> spines;
+  bool loadOnly = false;
   for (int i = 4; i < argc; ++i) {
     if (std::strncmp(argv[i], "--arena=", 8) == 0) {
       profile.lentArenaBytes = static_cast<size_t>(std::strtoul(argv[i] + 8, nullptr, 10));
@@ -189,6 +264,8 @@ int main(const int argc, char** argv) {
         profile.viewportWidth = static_cast<uint16_t>(w);
         profile.viewportHeight = static_cast<uint16_t>(h);
       }
+    } else if (std::strcmp(argv[i], "--load-only") == 0) {
+      loadOnly = true;
     }
   }
 
@@ -208,72 +285,27 @@ int main(const int argc, char** argv) {
   hooks.onLane = onLane;
   heapTrackSetWindowPeakCallback(onHeapPeak);
 
+  if (loadOnly) {
+    // The book's first open as ReaderActivity runs it: Epub::load building book.bin and the CSS
+    // cache, with --arena standing in for the lent secondary framebuffer. One window, written to
+    // <outDir>/load.txt. The region is allocated before tracking starts, as the framebuffer is.
+    BuildArena lent(profile.lentArenaBytes);
+    heapTrackBegin();
+    openWindow(lent.valid() ? &lent : nullptr);
+    Epub epub(epubPath, cacheDir);
+    const bool ok = epub.load(true, false, lent.valid() ? &lent : nullptr);
+    closeWindow(outDir + "/load.txt", -1, lent.valid() ? &lent : nullptr);
+    heapTrackEnd();
+    return ok ? 0 : 1;
+  }
+
   pipeline_harness::setBuildBracket([&](const int spine, const bool begin, BuildArena* lent) {
     if (!spines.empty() && spines.count(spine) == 0) return;
     if (begin) {
-      g_tracked = lent;
-      g_top = 0;
-      g_atArenaPeakTop = 0;
-      g_atHeapPeakTop = 0;
-      g_arenaPeak = 0;
-      g_heapAtArenaPeak = 0;
-      g_arenaCursorAtHeapPeak = 0;
-      g_overflow = false;
-      g_phase = 0;
-      g_phaseArenaPeak = 0;
-      g_otherArenaAllocs = 0;
-      g_otherArenaBytes = 0;
-      g_largeCount = 0;
-      for (auto& p : g_phases) p = Phase{};
-      heapTrackWindowBegin();
-      g_phases[0].heapStart = heapTrackLive();
-      g_phases[0].arenaStart = lent ? lent->used() : 0;
-      g_active = true;
+      openWindow(lent);
       return;
     }
-    g_active = false;
-    if (g_phase < kMaxPhases) {
-      g_phases[g_phase].heapPeak = heapTrackPhaseMark();
-      g_phases[g_phase].arenaPeak = g_phaseArenaPeak;
-    }
-    heapTrackWindowEnd();
-    const HeapTrackWindowSummary w = heapTrackWindowSummary();
-
-    const std::string path = outDir + "/spine_" + std::to_string(spine) + ".txt";
-    std::FILE* f = std::fopen(path.c_str(), "w");
-    if (f == nullptr) {
-      std::fprintf(stderr, "cannot write %s\n", path.c_str());
-      return;
-    }
-    std::fprintf(f,
-                 "SUMMARY spine=%d heapBase=%zu heapPeak=%zu heapAtSnap=%zu heapEnd=%zu arenaCap=%zu "
-                 "arenaHighWater=%zu arenaAtHeapPeak=%zu heapAtArenaPeak=%zu otherArenaAllocs=%d "
-                 "otherArenaBytes=%zu overflow=%d\n",
-                 spine, w.base, w.peak, w.atSnap, w.end, lent ? lent->capacity() : 0, g_arenaPeak,
-                 g_arenaCursorAtHeapPeak, g_heapAtArenaPeak, g_otherArenaAllocs, g_otherArenaBytes, g_overflow ? 1 : 0);
-    const char* names[] = {"setup", "extract+resident", "parse+finalize", "p3", "p4", "p5", "p6", "p7"};
-    for (int i = 0; i <= g_phase && i < kMaxPhases; ++i) {
-      std::fprintf(f, "PHASE %s heapStart=%zu heapPeak=%zu arenaStart=%zu arenaPeak=%zu\n", names[i],
-                   g_phases[i].heapStart, g_phases[i].heapPeak, g_phases[i].arenaStart, g_phases[i].arenaPeak);
-    }
-    static HeapTrackWindowSite sites[4096];
-    const int n = heapTrackWindowSites(sites, 4096);
-    for (int i = 0; i < n; ++i) {
-      const auto& s = sites[i];
-      std::fprintf(f, "HEAP pc=0x%lx ctx1=0x%lx ctx2=0x%lx count=%zu bytes=%zu start=%zu peak=%zu end=%zu max=%zu\n",
-                   static_cast<unsigned long>(rel(s.pc)), static_cast<unsigned long>(rel(s.ctx1)),
-                   static_cast<unsigned long>(rel(s.ctx2)), s.winCount, s.winBytes, s.startLive, s.peakLive, s.endLive,
-                   s.maxSize);
-    }
-    for (int i = 0; i < g_largeCount; ++i) {
-      std::fprintf(f, "ARENA_LARGE bytes=%zu count=%d f0=0x%lx\n", g_large[i].bytes, g_large[i].count,
-                   static_cast<unsigned long>(rel(g_large[i].caller)));
-    }
-    writeArena(f, "ARENA_AT_ARENA_PEAK", g_atArenaPeak, g_atArenaPeakTop);
-    writeArena(f, "ARENA_AT_HEAP_PEAK", g_atHeapPeak, g_atHeapPeakTop);
-    std::fclose(f);
-    std::fprintf(stderr, "spine %d: heap base=%zu peak=%zu (+%zu) end=%zu | arena peak=%zu at-heap-peak=%zu -> %s\n",
-                 spine, w.base, w.peak, w.peak - w.base, w.end, g_arenaPeak, g_arenaCursorAtHeapPeak, path.c_str());
+    closeWindow(outDir + "/spine_" + std::to_string(spine) + ".txt", spine, lent);
   });
 
   // The harness's canonical dump goes to a file: its SPINE lines carry the page counts, which is
