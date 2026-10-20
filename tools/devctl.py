@@ -15,6 +15,8 @@ them all and exits non-zero if any failed).
   shot:<file.png>       CMD:SCREENSHOT, decode the 1-bit frame, rotate it, save it
   wait:<seconds>        read (and log) the device's output for a while
   expect:<regex>:<sec>  read until an output line matches (re.search), fail otherwise
+  select:<regex>[:<n>]  press Down, waiting for each, until STATE's label matches (re.fullmatch); at most n
+                        presses (default 40). The label is checked first, so a row already selected takes none.
 
 A --script file holds one step per line; blank lines and lines starting with # are skipped.
 Every line the device prints goes to --log with a timestamp. Needs pyserial, and Pillow for shot:.
@@ -25,6 +27,7 @@ not either (a plain close on Windows does). The device re-enumerates its USB por
 reboot or a sleep; the reader reopens it and carries on.
 """
 import argparse
+import os
 import re
 import sys
 import time
@@ -37,9 +40,17 @@ except ImportError:
 # First words of every reply the firmware sends to a command (see docs/serial-test-api.md).
 REPLY = re.compile(
     r"^(BTN_|ACT_|STATE:|CMD_ERROR|GET:|GET_END|GET_ERROR|SET_|LOG_|TOUCH_|SWIPE_|SLEEP_OK|REBOOT_OK|"
-    r"EVENTS_|IDLE|DICT|HELP:|BOOTLOG_|HEAP_)"
+    r"EVENTS_|IDLE|DICT|HELP:|BOOTLOG_|HEAP_|TTF:|TTF_|FS:|FS_)"
 )
+# Commands that answer with several lines, and the line that ends them.
+MULTI_LINE = {"GET:*": re.compile(r"^GET_END"), "FS:LS:": re.compile(r"^FS_END")}
 FAILED = re.compile(r"_ERROR|_TIMEOUT|^CMD_ERROR")
+
+
+def native_path(path):
+    """A Git Bash path (/c/tmp/x.png) as Windows' Python opens it (C:/tmp/x.png); others as they are."""
+    match = re.match(r"^/([a-zA-Z])/(.*)$", path)
+    return f"{match.group(1).upper()}:/{match.group(2)}" if os.name == "nt" and match else path
 
 
 def split_fields(text):
@@ -152,14 +163,17 @@ class Device:
         self.note(f">>> CMD:{text}")
         self.ser.write(("CMD:" + text + "\n").encode())
 
-    def command(self, text, timeout=20, until=None):
-        """Send a command; return its reply line (the terminator for GET:*), or None."""
+    def command(self, text, timeout=20, until=None, lines=None):
+        """Send a command; return its reply line (the terminator of a several-line reply), or None. With `until`,
+        the lines before the terminator that are not log lines go to `lines`."""
         self.send(text)
         deadline = time.time() + timeout
         while (line := self.read_line(deadline)) is not None:
             if until is not None:
                 if until.match(line) or FAILED.search(line):
                     return line
+                if lines is not None and REPLY.match(line):
+                    lines.append(line)
                 continue
             if REPLY.match(line):
                 return line
@@ -200,9 +214,12 @@ def run(device, steps, rotate, keep_going=False):
         kind, _, rest = step.partition(":")
         ok = True
         if kind == "cmd":
-            until = re.compile(r"^GET_END") if rest == "GET:*" else None
+            until = next((end for start, end in MULTI_LINE.items() if rest.startswith(start)), None)
             timeout = idle_timeout(rest[5:]) if rest.startswith("IDLE") else 20
-            reply = device.command(rest, timeout=timeout, until=until)
+            lines = []
+            reply = device.command(rest, timeout=timeout, until=until, lines=lines)
+            for line in lines:
+                print(line)
             print(reply if reply else f"NO REPLY to {rest}")
             ok = bool(reply) and not FAILED.search(reply)
         elif kind == "state":
@@ -221,9 +238,30 @@ def run(device, steps, rotate, keep_going=False):
             print(reply if reply else "NO REPLY to IDLE")
             ok = bool(reply) and reply.startswith("IDLE:")
         elif kind == "shot":
-            error = device.screenshot(rest, rotate)
-            print(f"screenshot -> {rest}" if error is None else f"SCREENSHOT FAILED: {error}")
+            path = native_path(rest)
+            error = device.screenshot(path, rotate)
+            print(f"screenshot -> {path}" if error is None else f"SCREENSHOT FAILED: {error}")
             ok = error is None
+        elif kind == "select":
+            pattern, _, most = rest.partition(":")
+            presses = int(most) if most.isdigit() else 40
+            ok = False
+            for press in range(presses + 1):
+                reply = device.command("STATE")
+                fields = split_fields(reply[len("STATE:"):]) if reply and reply.startswith("STATE:") else {}
+                if re.fullmatch(pattern, fields.get("label", "")):
+                    state = fields
+                    ok = True
+                    print(f"selected {fields.get('label')!r} after {press} presses")
+                    break
+                if press == presses:
+                    break
+                # One press at a time: presses sent back to back reach the list faster than it redraws, and it
+                # moves further than asked.
+                device.command("BTN:DOWN")
+                device.command("IDLE:5000", timeout=idle_timeout("5000"))
+            if not ok:
+                print(f"NOT SELECTED: {pattern} (last label {fields.get('label')!r})")
         elif kind == "wait":
             end = time.time() + float(rest)
             while device.read_line(end) is not None:
@@ -268,9 +306,15 @@ def main():
     if not steps:
         ap.error("no steps given")
 
-    device = Device(args.port, args.log)
-    ok = run(device, steps, args.rotate, args.keep_going)
-    device.close()
+    # Labels, chapter titles and popups may be in any script: a console's code page must not stop the run.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    device = Device(args.port, native_path(args.log) if args.log else None)
+    try:
+        ok = run(device, steps, args.rotate, args.keep_going)
+    finally:
+        # Whatever went wrong, the port closes RTS before DTR: an exception that closed it plainly would reset the
+        # device (see close()).
+        device.close()
     sys.exit(0 if ok else 1)
 
 

@@ -88,6 +88,9 @@ class SdCardFontManager {
   // Runs the TTF glyph store's pending wipe (it filled up), calling onBusy first. Only at book open.
   void wipeTtfIfPending(const std::function<void()>& onBusy);
   bool ttfLoaded() const { return ttfSet_ != nullptr; }
+  // The loaded set, for the serial test API (CMD:TTF): nullptr when none is loaded or it is suspended. Only under
+  // RenderLock, as every use of the set.
+  TtfFontSet* ttfSet() const { return ttfSet_.get(); }
 
   // What the loaded TTF families' misses made on the heap, freed (TtfFontSet::releaseMissMemory): the next miss makes
   // it again. The bytes freed: 0 when none is loaded or nothing was held.

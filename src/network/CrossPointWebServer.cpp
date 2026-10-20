@@ -36,6 +36,7 @@
 #include "ReadingStats.h"
 #include "SdCardFontGlobals.h"
 #include "SdCardFontRegistry.h"
+#include "SerialTestApi.h"
 #include "SettingsByKey.h"
 #include "SettingsList.h"
 #include "SystemStatus.h"
@@ -2570,7 +2571,9 @@ void CrossPointWebServer::handleFontDownload() {
 
     LOG_DBG("WEB", "Installing font family: %s", targets.name(i));
 
-    if (!installRemoteFamily(installSession, targets, i, baseUrl, installer, error)) {
+    const bool installed = installRemoteFamily(installSession, targets, i, baseUrl, installer, error);
+    SerialTestApi::noteFontInstalled(targets.name(i), installed);
+    if (!installed) {
       JsonDocument errDoc;
       errDoc["ok"] = false;
       errDoc["error"] = error;

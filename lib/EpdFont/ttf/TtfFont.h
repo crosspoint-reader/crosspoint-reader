@@ -50,6 +50,8 @@ class TtfFont {
     /// Frees what the app can spare when a miss's memory does not fit the heap (the built-in fonts' page caches),
     /// before the miss asks once more. True when it freed something.
     bool (*reclaim)() = nullptr;
+    /// Milliseconds since boot, to time a wipe (TtfFontSet::storeEvents()); without it wipes are counted untimed.
+    uint32_t (*nowMs)() = nullptr;
   };
   static void setHooks(const Hooks& hooks);
 
@@ -259,6 +261,32 @@ class TtfFontSet {
   /// Runs a pending wipe (the store filled up, or a write failed), calling `onBusy` first. Only where no glyph
   /// record of the set is in use: at book open. True when a wipe ran.
   bool wipeIfPending(const std::function<void()>& onBusy = {});
+  /// The store reacts as if it had just filled up: new glyphs go to the ring, and a wipe is pending. The serial test
+  /// API's CMD:TTF:FULL, to reach what a full store does at any size. False when no store is open.
+  bool markFull();
+
+  /// What the set and its store hold now, for the serial test API's CMD:TTF.
+  struct Stats {
+    uint8_t families = 0;
+    bool readsCard = false;  ///< a family reads its outlines from the card (SD mode)
+    bool ringMode = false;
+    bool wipePending = false;
+    uint32_t logUsed = 0;
+    uint32_t logSize = 0;
+    uint32_t usedSlots = 0;  ///< glyph index slots in use
+    uint32_t renders = 0;    ///< glyphs drawn from outlines since load, every family's
+    uint32_t hits = 0;       ///< lookups the store answered since load
+  };
+  Stats stats() const;
+
+  /// How often a store filled up and was wiped since boot, every set's, and how long the last wipe took (0 without
+  /// the nowMs hook). Read from any task: the serial test API polls it for its EVT: lines.
+  struct StoreEvents {
+    uint32_t fills = 0;
+    uint32_t wipes = 0;
+    uint32_t lastWipeMs = 0;
+  };
+  static StoreEvents storeEvents();
   /// New glyphs are drawn without being stored until the next wipe.
   bool ringMode() const { return ringMode_; }
   /// The heap the ring's bitmaps hold.

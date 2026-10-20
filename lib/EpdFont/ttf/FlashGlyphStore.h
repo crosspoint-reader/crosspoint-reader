@@ -145,6 +145,9 @@ class FlashGlyphStore {
   // --- A full store, and the wipe ---
 
   bool wipePending() const { return wipePending_; }
+  /// Stops writes and records wipe pending, as a full log does: what a filled store does next, at any size. The serial
+  /// test API's CMD:TTF:FULL. False when the store is not open or the wipe word could not be written.
+  bool markFull();
   /// Nothing is written until the next wipe: the log or the index filled, a write failed, or the store opened
   /// with a wipe pending. A full face table alone does not stop writes.
   bool writesStopped() const { return writesStopped_; }

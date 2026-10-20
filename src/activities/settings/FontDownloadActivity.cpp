@@ -12,6 +12,7 @@
 
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"
+#include "SerialTestApi.h"
 #include "SilentRestart.h"
 #include "activities/NetworkMemoryTrim.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -385,6 +386,7 @@ void FontDownloadActivity::downloadFamily(int familyIdx) {
 
   // Run the actual download with families_ empty (defragmented heap).
   downloadFamilyImpl(family, familyIdx);
+  SerialTestApi::noteFontInstalled(family.name(0), state_ == COMPLETE);
   // The transfer held the loop task. Its progress callback read Back as an event and dropped every
   // other press; clear whatever is still half-made, so nothing pressed during the transfer reaches
   // the list as a step or a second Confirm.

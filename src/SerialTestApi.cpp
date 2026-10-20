@@ -21,17 +21,21 @@
 #include "util/SerialCommandGrammar.h"
 
 #if SERIAL_TEST_API
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <Memory.h>
+#include <ProtectedPaths.h>
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <ttf/TtfFont.h>
 
 #include <cstring>
 
 #include "ButtonEventManager.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "SdCardFontGlobals.h"
 #include "SettingsByKey.h"
 #include "TouchUi.h"  // CP_TOUCH_UI
 #include "UiLanguage.h"
@@ -166,12 +170,24 @@ BuildDone buildRing[kBuildRing] = {};
 uint8_t buildHead = 0;
 uint8_t buildTail = 0;
 
+// Font downloads that ended, for EVT:FONT_INSTALLED.
+struct FontInstalled {
+  char family[32];
+  bool ok;
+};
+constexpr int kFontRing = 4;
+FontInstalled fontRing[kFontRing] = {};
+uint8_t fontHead = 0;
+uint8_t fontTail = 0;
+
 // ---- State shared by the commands and service() ---------------------------------------------
 
 GfxRenderer* testRenderer = nullptr;
 bool eventsOn = false;
 uint32_t reportedActivity = 0;
 uint32_t reportedPopup = 0;
+uint32_t reportedFills = 0;
+uint32_t reportedWipes = 0;
 // An event line (sent unasked once EVENTS:ON) waits only 50 ms, so a host that enabled events and
 // went away cannot hold the loop up.
 constexpr unsigned long kEventStallMs = 50;
@@ -796,6 +812,110 @@ void cmdHeap(const std::string_view arg) {
   replyHeap("HEAP_OK");
 }
 
+// ---- TTF ------------------------------------------------------------------------------------
+
+// CMD:TTF's fields for a loaded set. Under RenderLock.
+void appendStats(std::string& line, const TtfFontSet& set) {
+  const TtfFontSet::Stats s = set.stats();
+  std::string names;
+  for (uint8_t f = 0; f < sdFontSystem.ttfFamilyCount(); ++f) {
+    if (f > 0) names += ',';
+    names += sdFontSystem.ttfFamilyName(f);
+  }
+  line += "families=" + std::to_string(s.families);
+  appendField(line, "names", names);
+  appendField(line, "sd", s.readsCard ? 1L : 0L);
+  appendField(line, "log_used", static_cast<long>(s.logUsed));
+  appendField(line, "log_size", static_cast<long>(s.logSize));
+  appendField(line, "slots", static_cast<long>(s.usedSlots));
+  appendField(line, "ring", s.ringMode ? 1L : 0L);
+  appendField(line, "pending", s.wipePending ? 1L : 0L);
+  appendField(line, "renders", static_cast<long>(s.renders));
+  appendField(line, "hits", static_cast<long>(s.hits));
+}
+
+// CMD:TTF: what the loaded TrueType set and its glyph store hold. CMD:TTF:FULL: the store acts as if it had just filled
+// up (TtfFontSet::markFull), so what a full store does can be watched at any size.
+void cmdTtf(const std::string_view arg) {
+  if (!arg.empty() && arg != "FULL") {
+    reply("TTF_ERROR:expected FULL, got ", arg);
+    return;
+  }
+  const TtfFontSet::StoreEvents events = TtfFontSet::storeEvents();
+  std::string line = "TTF:";
+  {
+    RenderLock lock;  // the set is the render task's too; the reply goes out once it is released
+    TtfFontSet* set = sdFontSystem.ttfSet();
+    if (arg == "FULL") {
+      line = set && set->markFull() ? "TTF_OK:full" : "TTF_ERROR:no TrueType family loaded";
+    } else if (!set) {
+      line += "none";
+    } else {
+      appendStats(line, *set);
+    }
+  }
+  if (arg != "FULL") {
+    appendField(line, "fills", static_cast<long>(events.fills));
+    appendField(line, "wipes", static_cast<long>(events.wipes));
+    appendField(line, "last_wipe_ms", static_cast<long>(events.lastWipeMs));
+  }
+  reply(line);
+}
+
+// ---- FS -------------------------------------------------------------------------------------
+
+// CMD:FS:LS:<folder> lists a folder, one "FS:<d|f> <bytes> <name>" line an entry and FS_END:<count>; CMD:FS:RM:<path>
+// removes a file, or a folder with everything in it. Hidden folders can be reached (the caches under /.crosspoint);
+// the credential stores, a dot-named item itself and any path spelled by an 8.3 alias cannot.
+void cmdFs(const std::string_view arg) {
+  std::string_view verb;
+  std::string_view rest;
+  splitHead(arg, verb, rest);
+  if ((verb != "LS" && verb != "RM") || rest.empty() || rest.front() != '/') {
+    reply("FS_ERROR:expected LS:/<folder> or RM:/<path>");
+    return;
+  }
+  // normalisePath drops the leading slash (the root becomes ""); the replies and the root check want it back.
+  const std::string path = "/" + FsHelpers::normalisePath(std::string(rest));
+  const auto refuseAlias = [](std::string_view, std::string_view) { return true; };
+  const ProtectedPaths::Target target = verb == "LS" ? ProtectedPaths::Target::Directory : ProtectedPaths::Target::Item;
+  if (path == "/" ? verb == "RM" : ProtectedPaths::isProtectedPath(path, target, true, refuseAlias)) {
+    reply("FS_ERROR:protected ", path);
+    return;
+  }
+  HalFile item = Storage.open(path.c_str());
+  if (!item) {
+    reply("FS_ERROR:not found ", path);
+    return;
+  }
+  if (verb == "RM") {
+    const bool folder = item.isDirectory();
+    item = HalFile();  // closed before it goes
+    if (!(folder ? Storage.removeDir(path.c_str()) : Storage.remove(path.c_str()))) {
+      reply("FS_ERROR:could not remove ", path);
+      return;
+    }
+    reply("FS_OK:removed ", path);
+    return;
+  }
+  if (!item.isDirectory()) {
+    reply("FS_ERROR:not a folder ", path);
+    return;
+  }
+  long count = 0;
+  char name[128];
+  for (HalFile entry = item.openNextFile(); entry; entry = item.openNextFile()) {
+    entry.getName(name, sizeof(name));
+    const bool folder = entry.isDirectory();
+    char head[32];
+    snprintf(head, sizeof(head), "FS:%c %lu ", folder ? 'd' : 'f',
+             folder ? 0UL : static_cast<unsigned long>(entry.fileSize()));
+    reply(head, name);
+    ++count;
+  }
+  replyf("FS_END:%ld", count);
+}
+
 // ---- Power ----------------------------------------------------------------------------------
 
 void cmdSleep(std::string_view /*arg*/) {
@@ -832,7 +952,7 @@ constexpr Command kCommands[] = {
 #if SERIAL_TEST_API
     {"IDLE", &cmdIdle},       {"EVENTS", &cmdEvents}, {"GET", &cmdGet},     {"SET", &cmdSet},
     {"LOG", &cmdLog},         {"TOUCH", &cmdTouch},   {"SWIPE", &cmdSwipe}, {"SLEEP", &cmdSleep},
-    {"REBOOT", &cmdReboot},   {"HEAP", &cmdHeap},
+    {"REBOOT", &cmdReboot},   {"HEAP", &cmdHeap},     {"TTF", &cmdTtf},     {"FS", &cmdFs},
 #endif
 };
 
@@ -854,16 +974,25 @@ void serviceEvents() {
   const TextProbe popup = readProbe(popupProbe);
   BuildDone builds[kBuildRing];
   int buildCount = 0;
+  FontInstalled fonts[kFontRing];
+  int fontCount = 0;
   portENTER_CRITICAL(&probeMux);
   while (buildHead != buildTail) {
     builds[buildCount++] = buildRing[buildHead];
     buildHead = static_cast<uint8_t>((buildHead + 1) % kBuildRing);
   }
+  while (fontHead != fontTail) {
+    fonts[fontCount++] = fontRing[fontHead];
+    fontHead = static_cast<uint8_t>((fontHead + 1) % kFontRing);
+  }
   portEXIT_CRITICAL(&probeMux);
+  const TtfFontSet::StoreEvents store = TtfFontSet::storeEvents();
   // Nothing is written, and nothing piles up, while no host asked for events.
   if (!eventsOn) {
     reportedActivity = activity;
     reportedPopup = popup.sequence;
+    reportedFills = store.fills;
+    reportedWipes = store.wipes;
     return;
   }
   if (activity != reportedActivity) {
@@ -878,6 +1007,25 @@ void serviceEvents() {
     char line[48];
     snprintf(line, sizeof(line), "EVT:BUILD_DONE spine=%d pages=%u", builds[i].spine + 1,
              static_cast<unsigned>(builds[i].pages));
+    reply(line, {}, kEventStallMs);
+  }
+  if (store.fills != reportedFills) {
+    reportedFills = store.fills;
+    char line[40];
+    snprintf(line, sizeof(line), "EVT:TTF_FULL fills=%lu", static_cast<unsigned long>(store.fills));
+    reply(line, {}, kEventStallMs);
+  }
+  if (store.wipes != reportedWipes) {
+    reportedWipes = store.wipes;
+    char line[56];
+    snprintf(line, sizeof(line), "EVT:TTF_WIPE ms=%lu wipes=%lu", static_cast<unsigned long>(store.lastWipeMs),
+             static_cast<unsigned long>(store.wipes));
+    reply(line, {}, kEventStallMs);
+  }
+  for (int i = 0; i < fontCount; ++i) {
+    std::string line = "EVT:FONT_INSTALLED";
+    appendField(line, "family", fonts[i].family);
+    appendField(line, "ok", fonts[i].ok ? 1L : 0L);
     reply(line, {}, kEventStallMs);
   }
 }
@@ -961,6 +1109,18 @@ void noteBuildDone(const int spineIndex, const int pageCount) {
   if (next != buildHead) {
     buildRing[buildTail] = BuildDone{static_cast<int16_t>(spineIndex), static_cast<uint16_t>(pageCount)};
     buildTail = next;
+  }
+  portEXIT_CRITICAL(&probeMux);
+}
+
+void noteFontInstalled(const char* family, const bool ok) {
+  portENTER_CRITICAL(&probeMux);
+  const uint8_t next = static_cast<uint8_t>((fontTail + 1) % kFontRing);
+  if (next != fontHead) {
+    FontInstalled& entry = fontRing[fontTail];
+    snprintf(entry.family, sizeof(entry.family), "%s", family ? family : "");
+    entry.ok = ok;
+    fontTail = next;
   }
   portEXIT_CRITICAL(&probeMux);
 }

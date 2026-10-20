@@ -40,6 +40,8 @@ SdCardFontSystem* ttfSystem = nullptr;
 
 bool ttfReclaim() { return ttfRenderer && ttfRenderer->releaseFontCaches(); }
 
+uint32_t ttfNowMs() { return millis(); }
+
 void ttfPassEnded() {
   if (ttfSystem) ttfSystem->releaseTtfMissMemory();
 }
@@ -325,7 +327,7 @@ ReaderSizeList SdCardFontSystem::sizeListFor(const char* familyName) const {
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   ttfRenderer = &renderer;
   ttfSystem = this;
-  TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield, &ttfReclaim});
+  TtfFont::setHooks({&RenderLock::heldByCurrentTask, &ttfYield, &ttfReclaim, &ttfNowMs});
   // A miss's memory on the heap lasts as long as the pass that drew it: whichever task rendered gives it back with
   // RenderLock, and a page drawn from the glyph store needs none of it (TtfFontSet::releaseMissMemory).
   RenderLock::setReleaseHook(&ttfPassEnded);
