@@ -9,6 +9,7 @@
 #include <InflateReader.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PassTable.h>
 #include <PngToBmpConverter.h>
 #include <Serialization.h>
 #include <SidecarFiles.h>
@@ -38,6 +39,13 @@
 #include "Epub/parsers/TocNcxParser.h"
 
 namespace {
+
+// What readItemContentsToStream needs of a lent region to read through it: the 1 KB read buffer
+// and the largest inflate ring, with their alignment.
+size_t streamScratchBytes() { return 1024 + InflateReader::ringSizeFor(0) + 2 * alignof(std::max_align_t); }
+
+// A spine idref table in the lent region smaller than this is not worth taking from it.
+constexpr size_t OPF_SPINE_MIN_ENTRIES = 128;
 
 // Bytes ImageFormatDetector::detect(FsFile&) sniffs. Also the threshold at which "this is not a
 // format we support" becomes a PERMANENT answer rather than "the extractor hasn't got that far yet".
@@ -143,8 +151,21 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
     LOG_ERR("EBP", "Could not setup content.opf parser");
     return false;
   }
+  // The spine's idref table, from the region lent to load() when it has room beside what the
+  // stream read below takes: reserved first, so the read's block nests above it and is released
+  // before it (BuildArena is LIFO). Without it the parser sizes a table from the heap.
+  PassTable<ContentOpfParser::SpineTarget> spineTable;
+  if (cacheMode == OpfCacheMode::Enabled) {
+    spineTable = PassTable<ContentOpfParser::SpineTarget>::fromRegion(loadScratch_, UINT16_MAX, OPF_SPINE_MIN_ENTRIES,
+                                                                      0, streamScratchBytes());
+    opfParser.lendSpineTable(spineTable.entries(), spineTable.capacity());
+  }
 
-  if (!readItemContentsToStream(contentOpfFilePath, opfParser, 1024)) {
+  const bool opfRead = readItemContentsToStream(contentOpfFilePath, opfParser, 1024);
+  // The read's block is back; the table's goes too, before anything else takes the region.
+  opfParser.lendSpineTable(nullptr, 0);
+  spineTable = PassTable<ContentOpfParser::SpineTarget>();
+  if (!opfRead) {
     LOG_ERR("EBP", "Could not read content.opf");
     return false;
   }
@@ -1973,8 +1994,7 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   // again, at negligible cost.
   BuildArena* const arena = scratch != nullptr ? scratch : loadScratch_;
   if (arena != nullptr && arena->valid()) {
-    const size_t wanted = 1024 + InflateReader::ringSizeFor(0) + 2 * alignof(std::max_align_t);
-    if (arena->capacity() - arena->used() >= wanted) {
+    if (arena->capacity() - arena->used() >= streamScratchBytes()) {
       return readItemContentsToStreamWithArena(itemHref, out, arena, stop);
     }
   }

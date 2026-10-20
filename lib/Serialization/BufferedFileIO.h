@@ -108,6 +108,25 @@ class BufferedFileReader {
     return len == 0 || read(&s[0], len);
   }
 
+  // readString() of the record at `offset`, for random access between sequential stretches: from
+  // the window when the record lies inside it, else straight from the file (a seek and two reads,
+  // not a window's worth). The window and the logical position are left as they were.
+  bool readStringAt(const uint32_t offset, std::string& s) {
+    uint32_t len = 0;
+    if (offset >= windowStart_ && offset + sizeof(len) <= windowStart_ + fill_) {
+      memcpy(&len, bufferBase() + (offset - windowStart_), sizeof(len));
+      if (len <= MAX_STRING_LENGTH && offset + sizeof(len) + len <= windowStart_ + fill_) {
+        s.assign(reinterpret_cast<const char*>(bufferBase() + (offset - windowStart_) + sizeof(len)), len);
+        return true;
+      }
+    }
+    file_.seek(offset);
+    const bool ok = serialization::readString(file_, s);
+    // Where the window's next refill reads from.
+    file_.seek(windowStart_ + fill_);
+    return ok;
+  }
+
  private:
   // Owned or borrowed, never both: the owning constructor leaves external_ null and vice versa.
   uint8_t* bufferBase() const { return external_ ? external_ : buf_.get(); }

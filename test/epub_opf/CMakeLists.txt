@@ -24,6 +24,8 @@ target_include_directories(ContentOpfParserTest PRIVATE
   ${REPO_ROOT}/lib/Logging
   ${REPO_ROOT}/test/zip_entry_reader
   ${REPO_ROOT}/test/shims
+  # The esp_heap_caps.h host stub the spine idref table (PassTable) sizes itself from.
+  ${REPO_ROOT}/test/epub_pipeline
 )
 
 target_link_libraries(ContentOpfParserTest PRIVATE

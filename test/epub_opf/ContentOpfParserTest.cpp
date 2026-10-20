@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <filesystem>
 #include <random>
 #include <string>
@@ -93,10 +94,9 @@ struct ScopedSpineHrefSink {
   ~ScopedSpineHrefSink() { opf_test_hooks::g_spineHrefSink = nullptr; }
 };
 
-// Makes the heap refuse the manifest index's growth and nothing else. The parser's only other
-// nothrow arrays are the item store's read/write buffers, so refusing anything larger than those
-// fails the index (which doubles past them within a few hundred items) and leaves the store
-// buffered, as it would be on a device that is merely short of a large block.
+// Makes the heap refuse any block larger than the item store's 4 KB read/write buffers, as a device
+// short of a large block would: the spine idref table then gets what fits (a few hundred entries a
+// pass), and the store stays buffered.
 struct ScopedIndexGrowthOom {
   ScopedIndexGrowthOom() {
     opf_test_hooks::g_refusedNothrowArrays = 0;
@@ -308,7 +308,7 @@ TEST(ContentOpfParser, OversizedFirstManifestIdNeitherHangsNorBreaksLaterIdrefs)
   EXPECT_EQ(capturedSpineHrefs[1], "book/OEBPS/text/ok2.xhtml");
 }
 
-TEST(ContentOpfParser, ResolvesSpineIdrefsUsingIndexedLookupForLargeManifest) {
+TEST(ContentOpfParser, ResolvesOutOfOrderSpineIdrefsInALargeManifest) {
   const std::string cacheDir = makeTempDir();
   ASSERT_FALSE(cacheDir.empty());
   TempDirGuard dirGuard(cacheDir);
@@ -316,7 +316,7 @@ TEST(ContentOpfParser, ResolvesSpineIdrefsUsingIndexedLookupForLargeManifest) {
   std::vector<std::string> capturedSpineHrefs;
   ScopedSpineHrefSink sinkGuard(&capturedSpineHrefs);
 
-  constexpr int kItemCount = 420;  // > LARGE_SPINE_THRESHOLD to force index path
+  constexpr int kItemCount = 420;
   const std::string base = "/book/OEBPS/";
   const std::string xml =
       "<?xml version='1.0' encoding='utf-8'?>"
@@ -344,11 +344,9 @@ TEST(ContentOpfParser, ResolvesSpineIdrefsUsingIndexedLookupForLargeManifest) {
 }
 
 // A huge manifest (the King's Avatar case: 1732 items) must parse without aborting and resolve every
-// spine idref. The in-RAM index grows with NOTHROW allocation — kept when memory allows (the common
-// case, and what the host has), dropped for the exact linear scan only on genuine OOM. Either way the
-// book OPENS and resolves correctly. This is the regression guard for "a huge book crashes the device"
-// (it used to abort building the index on -fno-exceptions) AND for "the fallback is O(N^2) slow" (the
-// index is kept when there's memory, so a big book stays fast).
+// spine idref, whatever table the heap allows: the regression guard for "a huge book crashes the
+// device" (an index once aborted on -fno-exceptions) and, with the order tests below, for "the
+// fallback is O(N^2) slow".
 namespace {
 // Parses a 1500-item manifest whose spine names its last, a middle and its first item plus one
 // unknown id, and checks the three known ones resolve in spine order.
@@ -360,7 +358,7 @@ void expectHugeManifestResolves() {
   std::vector<std::string> capturedSpineHrefs;
   ScopedSpineHrefSink sinkGuard(&capturedSpineHrefs);
 
-  constexpr int kItemCount = 1500;  // well past LARGE_SPINE_THRESHOLD (400)
+  constexpr int kItemCount = 1500;
   const std::string base = "/book/OEBPS/";
   const std::string xml =
       "<?xml version='1.0' encoding='utf-8'?>"
@@ -388,25 +386,24 @@ void expectHugeManifestResolves() {
 }
 }  // namespace
 
-TEST(ContentOpfParser, HugeManifestResolvesThroughTheIndex) {
-  // The host heap holds the whole index, so this is the binary-search lookup: the path a big book
-  // takes whenever the device has the memory.
+TEST(ContentOpfParser, HugeManifestResolvesThroughAFullTable) {
+  // The host heap holds a table for every itemref: one pass over the item store.
   expectHugeManifestResolves();
 }
 
-TEST(ContentOpfParser, HugeManifestResolvesThroughLinearScanWhenIndexGrowthFails) {
-  // The index's first refused growth latches indexDisabled_ and frees it, so every idref goes
-  // through the exact linear scan over .items.bin instead.
+TEST(ContentOpfParser, HugeManifestResolvesWhenTheHeapRefusesALargeTable) {
+  // The refused sizes halve down to a table that fits; it resolves the same hrefs.
   const ScopedIndexGrowthOom oom;
   expectHugeManifestResolves();
-  EXPECT_GT(opf_test_hooks::g_refusedNothrowArrays, 0u) << "the index never failed to grow; the fallback did not run";
+  EXPECT_GT(opf_test_hooks::g_refusedNothrowArrays, 0u) << "no table was refused; the smaller one did not run";
 }
 
-// Without the index, every idref used to rescan .items.bin from its first record: a 2956-itemref
-// book read ~4.4 million records and spent 75 s in this parse on the device. Spine order follows
-// manifest order in practice, so resuming after the previous match reads the store about once.
-// Measured in bytes read, not time: a host finishes either scan quickly, the device does not.
-TEST(ContentOpfParser, AnInOrderSpineReadsTheItemStoreAboutOnceWithoutTheIndex) {
+// Every idref used to rescan .items.bin from its first record: a 2956-itemref book read ~4.4
+// million records and spent 75 s in this parse on the device. Spine order follows manifest order
+// in practice, so a pass that resumes after the previous table-full's matches, and writes each
+// itemref out as soon as it is the next one due, reads the store about once. Measured in bytes
+// read, not time: a host finishes either way quickly, the device does not.
+TEST(ContentOpfParser, AnInOrderSpineReadsTheItemStoreAboutOnceOnASmallHeap) {
   const std::string cacheDir = makeTempDir();
   ASSERT_FALSE(cacheDir.empty());
   TempDirGuard dirGuard(cacheDir);
@@ -431,7 +428,7 @@ TEST(ContentOpfParser, AnInOrderSpineReadsTheItemStoreAboutOnceWithoutTheIndex) 
   ASSERT_TRUE(parseOpfXml(parser, xml));
   const size_t bytesRead = FsFile::bytesRead - bytesReadBefore;
 
-  EXPECT_GT(opf_test_hooks::g_refusedNothrowArrays, 0u) << "the index never failed to grow; the fallback did not run";
+  EXPECT_GT(opf_test_hooks::g_refusedNothrowArrays, 0u) << "no table was refused; the small heap did not apply";
   ASSERT_EQ(capturedSpineHrefs.size(), static_cast<size_t>(kItemCount));
   for (int i = 0; i < kItemCount; ++i) {
     ASSERT_EQ(capturedSpineHrefs[i], "book/OEBPS/text/ch" + std::to_string(i) + ".xhtml") << "itemref " << i;
@@ -440,7 +437,79 @@ TEST(ContentOpfParser, AnInOrderSpineReadsTheItemStoreAboutOnceWithoutTheIndex) 
   EXPECT_LE(bytesRead, 2 * storeBytes) << "item store is " << storeBytes << " bytes";
 }
 
-TEST(ContentOpfParser, DisablesHashTrustedIndexOnDuplicateIdsAndStillResolves) {
+// A spine whose order the manifest does not follow. Resuming after the previous match reads the
+// store about once for a spine in manifest order, and about three times for a manifest in name
+// order (Sigil's: ch0, ch1, ch10, ch100, ...); a manifest in reverse spine order takes it a whole
+// store per itemref -- quadratic in the spine, the scan the X3 fell back to when King's Avatar's
+// manifest index could not grow past 1024 items (2026-10-20). A table-full of itemrefs per pass
+// reads it a few times in all, in either order, on the same small heap.
+namespace {
+double itemStoreReadsFor(const std::vector<int>& manifestOrder, const int images) {
+  const std::string cacheDir = makeTempDir();
+  EXPECT_FALSE(cacheDir.empty());
+  TempDirGuard dirGuard(cacheDir);
+  std::vector<std::string> capturedSpineHrefs;
+  ScopedSpineHrefSink sinkGuard(&capturedSpineHrefs);
+
+  const int chapters = static_cast<int>(manifestOrder.size());
+  std::string manifest;
+  for (const int i : manifestOrder) {
+    manifest += "<item id='ch" + std::to_string(i) + "' href='text/ch" + std::to_string(i) +
+                ".xhtml' media-type='application/xhtml+xml'/>";
+  }
+  for (int i = 0; i < images; ++i) {
+    manifest += "<item id='img" + std::to_string(i) + "' href='images/img" + std::to_string(i) +
+                ".jpg' media-type='image/jpeg'/>";
+  }
+  std::string spine;
+  for (int i = 0; i < chapters; ++i) spine += "<itemref idref='ch" + std::to_string(i) + "'/>";
+  const std::string xml =
+      "<?xml version='1.0' encoding='utf-8'?>"
+      "<package xmlns:opf='http://www.idpf.org/2007/opf' xmlns:dc='http://purl.org/dc/elements/1.1/'>"
+      "<metadata><dc:title>Order</dc:title></metadata>"
+      "<manifest>" +
+      manifest + "</manifest><spine>" + spine + "</spine></package>";
+
+  const ScopedIndexGrowthOom oom;
+  BookMetadataCache cache(cacheDir);
+  ContentOpfParser parser(cacheDir, "/book/OEBPS/", xml.size(), &cache);
+  const size_t bytesReadBefore = FsFile::bytesRead;
+  EXPECT_TRUE(parseOpfXml(parser, xml));
+  const size_t bytesRead = FsFile::bytesRead - bytesReadBefore;
+
+  EXPECT_EQ(capturedSpineHrefs.size(), static_cast<size_t>(chapters));
+  for (int i = 0; i < chapters && i < static_cast<int>(capturedSpineHrefs.size()); ++i) {
+    const std::string want = "book/OEBPS/text/ch" + std::to_string(i) + ".xhtml";
+    EXPECT_EQ(capturedSpineHrefs[i], want) << "itemref " << i;
+    if (capturedSpineHrefs[i] != want) break;
+  }
+  const auto storeBytes = static_cast<size_t>(std::filesystem::file_size(cacheDir + "/.items.bin"));
+  return static_cast<double>(bytesRead) / static_cast<double>(storeBytes);
+}
+}  // namespace
+
+TEST(ContentOpfParser, ASpineInAnotherOrderThanTheManifestReadsTheItemStoreAFewTimesOnASmallHeap) {
+  constexpr int kChapters = 1732;
+  constexpr int kImages = 1600;
+  std::vector<int> nameOrder(kChapters);
+  for (int i = 0; i < kChapters; ++i) nameOrder[i] = i;
+  std::sort(nameOrder.begin(), nameOrder.end(),
+            [](const int a, const int b) { return std::to_string(a) < std::to_string(b); });
+  std::vector<int> reverseOrder(kChapters);
+  for (int i = 0; i < kChapters; ++i) reverseOrder[i] = kChapters - 1 - i;
+
+  const double byName = itemStoreReadsFor(nameOrder, kImages);
+  const double reversed = itemStoreReadsFor(reverseOrder, kImages);
+  std::printf(
+      "[ opf      ] %d itemrefs, 4 KB blocks: item store read %.1fx with the manifest in name order, %.1fx in "
+      "reverse\n",
+      kChapters, byName, reversed);
+  // A 4 KB table holds 256 itemrefs: seven passes, and the hrefs found out of turn read back one by one.
+  EXPECT_LE(byName, 12.0);
+  EXPECT_LE(reversed, 12.0) << "the resumed scan of old read the store once per itemref here";
+}
+
+TEST(ContentOpfParser, ARepeatedManifestIdResolvesToItsFirstItem) {
   const std::string cacheDir = makeTempDir();
   ASSERT_FALSE(cacheDir.empty());
   TempDirGuard dirGuard(cacheDir);
@@ -448,12 +517,9 @@ TEST(ContentOpfParser, DisablesHashTrustedIndexOnDuplicateIdsAndStillResolves) {
   std::vector<std::string> capturedSpineHrefs;
   ScopedSpineHrefSink sinkGuard(&capturedSpineHrefs);
 
-  // The indexed lookup trusts (idHash, idLen) without reading the id back, so two manifest
-  // items sharing an id (equal hash AND length — the same key shape a genuine 32-bit collision
-  // would produce) must disable the index for the whole book. The exact linear scan then
-  // resolves the ambiguous idref to its FIRST manifest occurrence, and unrelated idrefs keep
-  // resolving normally.
-  constexpr int kItemCount = 420;  // > LARGE_SPINE_THRESHOLD so the index path would engage
+  // Two manifest items share an id (invalid EPUB): the ambiguous idref resolves to its FIRST
+  // manifest occurrence, and unrelated idrefs keep resolving normally.
+  constexpr int kItemCount = 420;
   const std::string base = "/book/OEBPS/";
   const std::string xml =
       "<?xml version='1.0' encoding='utf-8'?>"
