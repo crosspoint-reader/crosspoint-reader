@@ -131,6 +131,8 @@ void ClearCacheActivity::clearCache() {
 void ClearCacheActivity::loop() {
   if (state == WARNING) {
     confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+    // The selection callback can change state through beginClear().
+    // cppcheck-suppress knownConditionTrueFalse
     if (!confirmPopup.isActive() && state == WARNING) {
       goBack();
     }
