@@ -57,6 +57,10 @@ book is the common flow, and the reader's own `reader.exit` fires after the
 sleep-time drain: binding a progress-sync handler to both events means the
 current position is pushed on the sleep connection, not the next one.
 
+A file opened from a plugin menu as a `document` (see `sd-plugins.md`, "Menus") emits
+no `reader.open`, `reader.exit` or `reader.session`, and `sleep.enter` carries
+no book.
+
 ### `reader.session` contract
 
 All values are strings in the event's `vars` object:

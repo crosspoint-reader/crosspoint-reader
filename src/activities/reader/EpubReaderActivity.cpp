@@ -714,7 +714,7 @@ void EpubReaderActivity::loop() {
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
   clearEndOfBookOptionsIfNeeded();
 
-  if (SETTINGS.removeReadBooksFromRecents) {
+  if (SETTINGS.removeReadBooksFromRecents && !pluginDocument) {
     if (atEndOfBook && !recentsEntryRemoved) {
       recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
     } else if (!atEndOfBook && recentsEntryRemoved) {
@@ -724,7 +724,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (atEndOfBook) {
-    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !pluginDocument && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;
   }
@@ -1233,7 +1233,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-      onGoHome();
+      leaveReader();
       return;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
@@ -1251,7 +1251,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }
         }
       }
-      onGoHome();
+      leaveReader();
       return;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
@@ -1297,7 +1297,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_FOOTNOTES:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
-      return KOREADER_STORE.hasCredentials() ? ReaderUtils::GO_HOME_MS : 0;
+      return (!pluginDocument && KOREADER_STORE.hasCredentials()) ? ReaderUtils::GO_HOME_MS : 0;
     case CrossPointSettings::LP_MENU_READER_MENU:
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -1306,7 +1306,8 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
-  if (!KOREADER_STORE.hasCredentials()) return false;
+  // The sync screen saves progress and reopens the book as a normal one.
+  if (pluginDocument || !KOREADER_STORE.hasCredentials()) return false;
 
   RenderLock renderLock;
 
@@ -1529,12 +1530,16 @@ void EpubReaderActivity::beginLoanTimeSync() {
       requestUpdate();
       return;
     }
-    APP_STATE.openEpubPath = bookPath;
-    APP_STATE.saveToFile();
     // Reboot straight back into this book with a clean heap (no-op on touch
     // boards, which fall through to the in-place relaunch below).
-    silentRestartToReader();
-    activityManager.goToReader(bookPath);
+    if (pluginDocument) {
+      silentRestartToDocument(bookPath.c_str());
+    } else {
+      APP_STATE.openEpubPath = bookPath;
+      APP_STATE.saveToFile();
+      silentRestartToReader();
+    }
+    activityManager.goToReader(bookPath, false, pluginDocument);
   });
 }
 
@@ -2007,6 +2012,7 @@ void EpubReaderActivity::clearDeferredReposition() {
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
+  if (pluginDocument) return true;  // a document keeps no position
   std::optional<uint32_t> offset;
   if (section && spineIndex == currentSpineIndex && currentPage >= 0 && currentPage < section->pageCount) {
     offset = (currentPage == section->currentPage && currentPageVisibleOffset.has_value())
@@ -3363,6 +3369,7 @@ void EpubReaderActivity::updateBookmarkFlag() {
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Epub;
+  info.pluginDocument = pluginDocument;
   if (epub) {
     snprintf(info.title, sizeof(info.title), "%s", epub->getTitle().c_str());
     info.spineIndex = currentSpineIndex;

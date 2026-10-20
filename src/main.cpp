@@ -123,6 +123,8 @@ EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 RTC_NOINIT_ATTR uint32_t silentRebootPayload;
+// Book path for SILENT_REBOOT_PLUGIN_DOCUMENT; a document never writes APP_STATE.openEpubPath.
+RTC_NOINIT_ATTR char silentRebootDocumentPath[256];
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
@@ -130,6 +132,7 @@ constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
 constexpr uint32_t SILENT_REBOOT_TARGET_JOIN_NETWORK = 3;
 constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_JOIN_NETWORK;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
+constexpr uint32_t SILENT_REBOOT_PLUGIN_DOCUMENT = 1U << 1;
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -154,17 +157,17 @@ static bool deepSleepInProgress = false;
 // off leaves the light off while the saved "was on" preference is kept), so
 // carry the live state across the reboot instead of re-deriving it from
 // settings. Cleared with the magic in setup().
-static void armSilentReboot(const uint32_t target) {
+static void armSilentReboot(const uint32_t target, const uint32_t flags = 0) {
   silentRebootTarget = target;
-  silentRebootPayload = Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0;
+  silentRebootPayload = (Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0) | flags;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
 }
 
 // Returns instead of rebooting when sleep supersedes the reboot; callers keep
 // running in that case.
-static void silentRestartTo(const uint32_t target, const char* targetName) {
+static void silentRestartTo(const uint32_t target, const char* targetName, const uint32_t flags = 0) {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
-  armSilentReboot(target);
+  armSilentReboot(target, flags);
   LOG_DBG("MAIN", "Silent restart (target=%s)", targetName);
   // E-ink retains the previous frame until the target's first paint lands
   // (~2-3s). Without an overlay, users don't see the reboot and fire input
@@ -179,6 +182,16 @@ static void silentRestartTo(const uint32_t target, const char* targetName) {
 void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME, "home"); }
 
 void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER, "reader"); }
+
+void silentRestartToDocument(const char* path) {
+  const size_t len = strlen(path);
+  if (len >= sizeof(silentRebootDocumentPath)) {
+    LOG_ERR("MAIN", "document path too long for silent restart: %u", static_cast<unsigned>(len));
+    return;
+  }
+  memcpy(silentRebootDocumentPath, path, len + 1);
+  silentRestartTo(SILENT_REBOOT_TARGET_READER, "document", SILENT_REBOOT_PLUGIN_DOCUMENT);
+}
 
 void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS, "settings"); }
 
@@ -386,7 +399,7 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
   size_t varCount = 0;
   char percent[8];
   const ScreenshotInfo info = activityManager.getScreenshotInfo();
-  if (info.readerType != ScreenshotInfo::ReaderType::None && !APP_STATE.openEpubPath.empty()) {
+  if (info.readerType != ScreenshotInfo::ReaderType::None && !info.pluginDocument && !APP_STATE.openEpubPath.empty()) {
     snprintf(percent, sizeof(percent), "%d", info.progressPercent);
     vars[varCount++] = {"book", APP_STATE.openEpubPath.c_str()};
     vars[varCount++] = {"percent", percent};
@@ -459,7 +472,10 @@ static bool holdSleepWhileUsbPowered() {
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
-  APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+  // A plugin document is not the remembered book: waking must not reopen that book
+  // or show its cover as if the user had slept out of it.
+  APP_STATE.lastSleepFromReader =
+      activityManager.isReaderActivity() && !activityManager.getScreenshotInfo().pluginDocument;
 
   // Sleep may end in a power-off (battery death, latch); persist the clock
   // floor now so a later cold boot resumes from it.
@@ -581,6 +597,13 @@ void setup() {
   const uint32_t snapshotTarget =
       (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_MAX) ? silentRebootTarget : 0;
   const bool silentRebootLightOn = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
+  // RTC_NOINIT is garbage on cold boot: only trust a terminated buffer behind the flag.
+  std::string silentRebootDocument;
+  if (isSilentReboot && (silentRebootPayload & SILENT_REBOOT_PLUGIN_DOCUMENT) != 0 &&
+      memchr(silentRebootDocumentPath, '\0', sizeof(silentRebootDocumentPath)) != nullptr) {
+    silentRebootDocument = silentRebootDocumentPath;
+  }
+  silentRebootDocumentPath[0] = '\0';
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
@@ -782,6 +805,9 @@ void setup() {
   } else if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
+             !silentRebootDocument.empty()) {
+    activityManager.goToReader(std::move(silentRebootDocument), false, /*pluginDocument=*/true);
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);

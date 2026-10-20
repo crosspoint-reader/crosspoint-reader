@@ -92,8 +92,11 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
   void goToBrowser();
-  void goToPlugins(bool showOpds);
-  void goToReader(std::string path, bool allowFastInitialRefresh = false);
+  // returnDocument: a plugin document being left; reopens the menu entry that opened it.
+  void goToPlugins(bool showOpds, std::string returnDocument = {});
+  // pluginDocument: a plugin document that leaves Recents, progress, and the
+  // last-opened book untouched (see ReaderActivity::pluginDocument).
+  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool pluginDocument = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

@@ -14,6 +14,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderActivity.h"
+#include "OpdsServerStore.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -30,7 +31,8 @@ ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedIn
 }
 
 std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                       std::string path, const bool allowFastInitialRefresh) {
+                                                       std::string path, const bool allowFastInitialRefresh,
+                                                       const bool pluginDocument) {
   // ActivityManager requires heap ownership; each branch allocates exactly one screen-lifetime object.
   std::unique_ptr<ReaderActivity> activity;
   if (FsHelpers::hasXtcExtension(path)) {
@@ -41,7 +43,9 @@ std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, Ma
 
   if (!activity) {
     LOG_ERR("READER", "OOM: reader activity");
+    return activity;
   }
+  activity->pluginDocument = pluginDocument;
   return activity;
 }
 
@@ -67,8 +71,8 @@ void ReaderActivity::onEnter() {
     return;
   }
 
-  // Clear remembered book after opening it
-  if (!APP_STATE.openEpubPath.empty()) {
+  // Clear remembered book after opening it. A document leaves the user's book in place.
+  if (!pluginDocument && !APP_STATE.openEpubPath.empty()) {
     APP_STATE.openEpubPath.clear();
     APP_STATE.saveToFile();
   }
@@ -85,7 +89,7 @@ void ReaderActivity::onEnter() {
 }
 
 void ReaderActivity::rememberBookOnceRendered() {
-  if (bookRemembered || !pageRendered.load(std::memory_order_acquire)) return;
+  if (pluginDocument || bookRemembered || !pageRendered.load(std::memory_order_acquire)) return;
   bookRemembered = true;
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
@@ -108,7 +112,7 @@ void ReaderActivity::onExit() {
   // durable before a subscriber can act on the exit notification.
   flushReaderSession();
 
-  if (pluginevents::anySubscriber(pluginevents::Event::ReaderExit)) {
+  if (!pluginDocument && pluginevents::anySubscriber(pluginevents::Event::ReaderExit)) {
     char percent[8];
     snprintf(percent, sizeof(percent), "%d", getScreenshotInfo().progressPercent);
     const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}};
@@ -126,7 +130,8 @@ void ReaderActivity::onExit() {
 void ReaderActivity::prepareForSleep() { flushReaderSession(); }
 
 void ReaderActivity::flushReaderSession() {
-  if (!readerSession.isEmitWorthy() || !pluginevents::anySubscriber(pluginevents::Event::ReaderSession)) {
+  if (pluginDocument || !readerSession.isEmitWorthy() ||
+      !pluginevents::anySubscriber(pluginevents::Event::ReaderSession)) {
     readerSession.reset();
     return;
   }
@@ -157,6 +162,16 @@ void ReaderActivity::flushReaderSession() {
 }
 
 bool ReaderActivity::handleBackNavigation() {
+  if (pluginDocument) {
+    // Same Back edges as below, but both lead back to the plugin menu.
+    if (mappedInput.wasBackGesture()) return false;
+    if (!mappedInput.wasLongPressed(MappedInputManager::Button::Back, ReaderUtils::GO_BACK_OR_HOME_MS) &&
+        !mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      return false;
+    }
+    leaveReader();
+    return true;
+  }
   return ReaderUtils::handleBackNavigation(mappedInput, activityManager, bookPath.c_str(),
                                            {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->onGoHome(); }});
 }
@@ -184,7 +199,7 @@ bool ReaderActivity::handleEndOfBookMenu(const bool suppressConfirmRelease) {
       activityManager.goToReader(openPath);
       return true;
     case EndOfBookOptions::Action::GoHome:
-      onGoHome();
+      leaveReader();
       return true;
     case EndOfBookOptions::Action::LastPage:
       onReturnFromEndOfBook();
@@ -207,12 +222,28 @@ bool ReaderActivity::handleEndOfBookPageTurn(const bool prevTriggered, const boo
     return true;
   }
   if (nextTriggered) {
-    onGoHome();
+    leaveReader();
   } else if (prevTriggered) {
     onReturnFromEndOfBook();
     requestUpdate();
   }
   return true;
+}
+
+// Boards without a Back button (or with touch off) leave through Home: a document
+// still lands on its plugin menu, and Home from there goes Home.
+bool ReaderActivity::handleHomeGesture() {
+  if (!pluginDocument) return false;
+  leaveReader();
+  return true;
+}
+
+void ReaderActivity::leaveReader() {
+  if (pluginDocument) {
+    activityManager.goToPlugins(OPDS_STORE.hasServers(), bookPath);
+    return;
+  }
+  onGoHome();
 }
 
 void ReaderActivity::loop() {
@@ -248,7 +279,8 @@ void ReaderActivity::render(RenderLock&&) {
     }
     renderer.clearScreen();
     if (endOfBookOptions) {
-      endOfBookOptions->loadOnce(bookPath);
+      // A document suggests no sibling files: they would open as books, outside the plugin's menu.
+      endOfBookOptions->loadOnce(bookPath, !pluginDocument);
       // Release-publish AFTER loadOnce() so the main task's acquire load can't
       // observe an object whose names/selector are still being populated.
       endOfBookOptionsReady.store(true, std::memory_order_release);

@@ -26,6 +26,7 @@
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/PluginDocuments.h"
 
 namespace fui = freeink::ui;
 
@@ -119,7 +120,9 @@ void LibraryListActivity::onExit() {
 
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  const auto pluginDocuments = plugindocuments::collect();
+  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0,
+                                             {plugindocuments::isDocument, &pluginDocuments});
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;

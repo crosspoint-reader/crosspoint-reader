@@ -55,6 +55,21 @@ TEST(PluginManifestClassification, CatalogOpensEvenWithReadme) {
             PluginLocations::PickerAction::Catalog);
 }
 
+TEST(PluginManifestClassification, MenuWinsOverCatalogAndEvents) {
+  using PluginLocations::DeviceKind;
+  EXPECT_EQ(PluginLocations::classifyDeviceManifest(false, false, true), DeviceKind::Menu);
+  EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, false, true), DeviceKind::Menu);
+  EXPECT_EQ(PluginLocations::classifyDeviceManifest(true, true, true), DeviceKind::Menu);
+  EXPECT_EQ(PluginLocations::classifyDeviceManifest(false, true, true), DeviceKind::Menu);
+}
+
+TEST(PluginManifestClassification, MenuOpensEvenWithReadme) {
+  EXPECT_EQ(PluginLocations::pickerAction(PluginLocations::DeviceKind::Menu, true),
+            PluginLocations::PickerAction::Menu);
+  EXPECT_EQ(PluginLocations::pickerAction(PluginLocations::DeviceKind::Menu, false),
+            PluginLocations::PickerAction::Menu);
+}
+
 TEST(PluginManifestClassification, OnlyANewerCatalogVersionIsAnUpdate) {
   EXPECT_TRUE(PluginLocations::isNewerVersion("1.1.0", "1.0.0"));
   EXPECT_TRUE(PluginLocations::isNewerVersion("0.1.10", "0.1.9"));
@@ -73,4 +88,15 @@ TEST(PluginManifestClassification, VersionsMustBeExactlyThreeDigitComponents) {
     EXPECT_TRUE(PluginLocations::isNewerVersion("0.0.1", bad)) << bad;   // installed treated as unversioned
   }
   EXPECT_TRUE(PluginLocations::isNewerVersion("4294967295.0.0", "1.0.0"));  // UINT32_MAX still fits
+}
+
+TEST(PluginManifestClassification, DocumentReturnsOnlyToItsOwnPlugin) {
+  const std::string manifest = "/plugins/WADN/device.json";
+  EXPECT_TRUE(PluginLocations::isInManifestDir(manifest, "/plugins/WADN/today.txt"));
+  EXPECT_TRUE(PluginLocations::isInManifestDir(manifest, "/plugins/WADN/notes/week.txt"));
+  EXPECT_FALSE(PluginLocations::isInManifestDir(manifest, "/plugins/WADNX/today.txt"));
+  EXPECT_FALSE(PluginLocations::isInManifestDir(manifest, "/plugins/WADN/"));
+  EXPECT_FALSE(PluginLocations::isInManifestDir(manifest, "/books/today.txt"));
+  EXPECT_FALSE(PluginLocations::isInManifestDir("", "/plugins/WADN/today.txt"));
+  EXPECT_FALSE(PluginLocations::isInManifestDir("device.json", "/today.txt"));
 }

@@ -452,3 +452,24 @@ TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(index.bookCount(), 513);
 }
+
+TEST_F(LibraryBuilderTest, SkipFileHidesThePathsItRejects) {
+  fake::add("/plugins/WADN/today.txt");
+  fake::add("/plugins/WADN/novel.epub");
+  const std::vector<std::string> documents = {"/plugins/WADN/today.txt"};
+  const SkipFile skip{[](const void* ctx, const std::string_view fullPath) {
+                        const auto& paths = *static_cast<const std::vector<std::string>*>(ctx);
+                        return std::find(paths.begin(), paths.end(), fullPath) != paths.end();
+                      },
+                      &documents};
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, skip));
+
+  EXPECT_EQ(stats.books, 3);
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  std::vector<std::string> listed;
+  for (uint16_t row = 0; row < 3; ++row) listed.push_back(pathAt(index, SortOrder::RecentAsc, row));
+  EXPECT_EQ(std::count(listed.begin(), listed.end(), "/plugins/WADN/today.txt"), 0);
+  EXPECT_EQ(std::count(listed.begin(), listed.end(), "/plugins/WADN/novel.epub"), 1);
+}

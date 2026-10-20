@@ -22,6 +22,9 @@ class ReaderActivity : public Activity {
   ReaderSession readerSession;
   std::atomic<bool> pageRendered{false};
   bool bookRemembered = false;
+  // Plugin document: no Recents, last-opened book, saved progress, automatic
+  // file moves, or reader events. Leaving returns to the plugin's menu.
+  bool pluginDocument = false;
   void markPageRendered() { pageRendered.store(true, std::memory_order_release); }
   void rememberBookOnceRendered();
 
@@ -60,6 +63,8 @@ class ReaderActivity : public Activity {
   virtual void onEndOfBookRendered() {}
 
   bool handleBackNavigation();
+  // Leaves the book: Home, or for a plugin document the menu it was opened from.
+  void leaveReader();
   /** True while the end-of-book suggestion menu is on screen and owning input. */
   bool endOfBookMenuActive() const;
   /** True while a toolbar, panel or menu over the page owns the device keys: a remote turn is refused. */
@@ -75,7 +80,8 @@ class ReaderActivity : public Activity {
   ~ReaderActivity() override = default;
 
   static std::unique_ptr<ReaderActivity> create(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                std::string path, bool allowFastInitialRefresh);
+                                                std::string path, bool allowFastInitialRefresh,
+                                                bool pluginDocument = false);
 
   void onEnter() override;
   void onExit() override;
@@ -85,5 +91,6 @@ class ReaderActivity : public Activity {
 
   bool isReaderActivity() const final { return true; }
   bool acceptsRemoteInput() const final { return pageRendered.load(std::memory_order_acquire); }
+  bool handleHomeGesture() override;
   bool handleForcedRefresh() final;
 };

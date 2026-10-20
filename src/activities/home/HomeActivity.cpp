@@ -25,6 +25,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/PluginDocuments.h"
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Library, File transfer, Settings
@@ -75,7 +76,9 @@ void HomeActivity::fillCoverGridFromLibrary() {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     library::BuildStats stats;
-    if (!library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0) ||
+    const auto pluginDocuments = plugindocuments::collect();
+    if (!library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0,
+                                    {plugindocuments::isDocument, &pluginDocuments}) ||
         !index.open(library::libraryIndexPath())) {
       LOG_ERR("HOME", "Cannot populate cover grid from library");
       return;

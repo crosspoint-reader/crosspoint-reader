@@ -329,7 +329,7 @@ void XtcReaderActivity::onReturnFromEndOfBook() {
 }
 
 void XtcReaderActivity::saveProgress() const {
-  if (!xtc) return;
+  if (!xtc || pluginDocument) return;  // a document keeps no position
   uint8_t data[4];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
@@ -358,6 +358,7 @@ void XtcReaderActivity::loadProgress() {
 ScreenshotInfo XtcReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Xtc;
+  info.pluginDocument = pluginDocument;
   if (xtc) {
     const std::string t = xtc->getTitle();
     snprintf(info.title, sizeof(info.title), "%s", t.c_str());
