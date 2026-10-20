@@ -459,8 +459,11 @@ Borrow (the lent region becomes an arena):
 - Background-C and the blocking build (`compileSectionCache`), §9.2.
 - The per-page image warm in `renderContents`, the image lane (`warmPageForImageLane`) and the
   image-header walk, §9.3.
-- First-open indexing (`ReaderActivity`), Home's cover pass and frame cache (`HomeActivity`), and
-  the Library's title parses and cover work (`FileBrowserActivity::lendForBackgroundWork`).
+- First-open indexing (`ReaderActivity`): the inflate rings of `Epub::load`'s stream reads, and
+  `buildBookBin`'s spine size table (`SizeLookupTable`, 16 B a spine item, one ZIP directory walk
+  per table-full). With nothing lent the table takes the heap's largest block, and at least 2 KB.
+- Home's cover pass and frame cache (`HomeActivity`), and the Library's title parses and cover work
+  (`FileBrowserActivity::lendForBackgroundWork`).
 - The Library's book-index build (`LibraryBuilder`): every phase but the card walk works in the lent
   region and resets it at each step (`LibraryJoin`, `LibraryPublish`, the author lookups), and an
   author's books are sorted there (`LibraryOrder::sortBySeries`). With nothing to lend, the build is
