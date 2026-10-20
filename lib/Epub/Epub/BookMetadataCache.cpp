@@ -3,6 +3,7 @@
 #include <BuildArena.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <PassTable.h>
 #include <Serialization.h>
 #include <ZipFile.h>
 #include <esp_heap_caps.h>
@@ -29,90 +30,27 @@ constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
 // One walk of the ZIP central directory resolves as many spine items as the table holds, so the
 // table decides how many walks a book costs. It used to be all or nothing: King's Avatar (1732
 // spine items, ~3300 entries) found 43.5 KB free on the X3, short of the 67 KB the whole table
-// asked for, and took a walk per spine item instead -- 427 s of a 431 s first open. The table
-// now takes what there is, and the spine is resolved a table-full per walk:
-//  - the lent region when first-open indexing has one (ReaderActivity lends the secondary
-//    framebuffer: 52 KB on the X3, 3000 spine items a walk), so the heap is not touched;
-//  - else the heap's largest block, leaving HEAP_RESERVE_BYTES free for the rest of the build;
-//  - at least MIN_TABLE_ENTRIES whatever the heap reports, halving on refusal down to
-//    FLOOR_TABLE_ENTRIES: ceil(n / 128) walks wherever 2 KB can be had.
-// Below the floor, or below LARGE_SPINE_THRESHOLD spine items, the lookup goes per item.
+// asked for, and took a walk per spine item instead -- 427 s of a 431 s first open. Now it is a
+// PassTable: a block of the lent region when first-open indexing has one (52 KB on the X3, 3000
+// spine items a walk) so the heap is not touched, else the heap's largest block, and at least
+// 128 entries: ceil(n / 128) walks wherever 2 KB can be had. Below LARGE_SPINE_THRESHOLD spine
+// items, or with no table at all, the lookup goes per item.
 //
-// The walk reads through a 4 KB window, taken first: unbuffered, it is about a dozen card calls
-// per central-directory entry (~0.8 s a walk for King's Avatar), buffered a few dozen reads.
-class SizeLookupTable {
- public:
-  static constexpr size_t WINDOW_BYTES = 4096;
-  static constexpr size_t MIN_TABLE_ENTRIES = 128;
-  static constexpr size_t FLOOR_TABLE_ENTRIES = 16;
-  static constexpr size_t HEAP_RESERVE_BYTES = 16 * 1024;
-  // A heap block a little larger than the table: the allocator's header and alignment.
-  static constexpr size_t HEAP_BLOCK_SLACK = 64;
+// The walk reads through a 4 KB window beside the table: unbuffered, it is about a dozen card
+// calls per central-directory entry (~0.8 s a walk for King's Avatar), buffered a few dozen reads.
+constexpr size_t SIZE_LOOKUP_WINDOW_BYTES = 4096;
+constexpr size_t SIZE_LOOKUP_MIN_ENTRIES = 128;
 
-  SizeLookupTable(BuildArena* scratch, const size_t spineCount) {
-    if (spineCount == 0 || takeFromArena(scratch, spineCount)) return;
-    takeFromHeap(spineCount);
+PassTable<ZipFile::SizeTarget> sizeLookupTable(BuildArena* scratch, const size_t spineCount) {
+  auto table = PassTable<ZipFile::SizeTarget>::fromRegion(scratch, spineCount, SIZE_LOOKUP_MIN_ENTRIES,
+                                                          SIZE_LOOKUP_WINDOW_BYTES);
+  if (table.capacity() == 0) {
+    PassTable<ZipFile::SizeTarget>::HeapSizing sizing;
+    sizing.minEntries = SIZE_LOOKUP_MIN_ENTRIES;
+    table = PassTable<ZipFile::SizeTarget>::fromHeap(spineCount, sizing, SIZE_LOOKUP_WINDOW_BYTES);
   }
-  ~SizeLookupTable() {
-    if (arena_ != nullptr && block_.valid()) arena_->release(block_);
-  }
-  SizeLookupTable(const SizeLookupTable&) = delete;
-  SizeLookupTable& operator=(const SizeLookupTable&) = delete;
-
-  ZipFile::SizeTarget* entries() const { return table_; }
-  // Spine items per walk; 0 means per-item lookups.
-  size_t capacity() const { return capacity_; }
-  uint8_t* window() const { return window_; }
-  size_t windowBytes() const { return window_ != nullptr ? WINDOW_BYTES : 0; }
-  bool inArena() const { return arena_ != nullptr; }
-
- private:
-  bool takeFromArena(BuildArena* scratch, const size_t spineCount) {
-    if (scratch == nullptr || !scratch->valid()) return false;
-    const size_t room = scratch->capacity() - scratch->used();
-    const size_t overhead = WINDOW_BYTES + 2 * alignof(std::max_align_t);
-    if (room <= overhead) return false;
-    const size_t fit = std::min(spineCount, (room - overhead) / sizeof(ZipFile::SizeTarget));
-    if (fit < std::min(spineCount, MIN_TABLE_ENTRIES)) return false;
-    block_ = scratch->reserveBlock();
-    table_ = scratch->allocArray<ZipFile::SizeTarget>(fit);
-    if (table_ == nullptr) {
-      scratch->release(block_);
-      return false;
-    }
-    arena_ = scratch;
-    capacity_ = fit;
-    window_ = static_cast<uint8_t*>(scratch->alloc(WINDOW_BYTES));
-    return true;
-  }
-
-  void takeFromHeap(const size_t spineCount) {
-    heapWindow_ = makeUniqueNoThrow<uint8_t[]>(WINDOW_BYTES);
-    window_ = heapWindow_.get();
-    const size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-    const size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT);
-    const size_t budget = std::min(largest > HEAP_BLOCK_SLACK ? largest - HEAP_BLOCK_SLACK : 0,
-                                   freeHeap > HEAP_RESERVE_BYTES ? freeHeap - HEAP_RESERVE_BYTES : 0);
-    const size_t floor = std::min(spineCount, FLOOR_TABLE_ENTRIES);
-    size_t want = std::clamp(budget / sizeof(ZipFile::SizeTarget), std::min(spineCount, MIN_TABLE_ENTRIES), spineCount);
-    for (; want >= floor && want > 0; want /= 2) {
-      heapTable_ = makeUniqueNoThrow<ZipFile::SizeTarget[]>(want);
-      if (heapTable_) {
-        table_ = heapTable_.get();
-        capacity_ = want;
-        return;
-      }
-    }
-  }
-
-  BuildArena* arena_ = nullptr;
-  BuildArena::Block block_;
-  std::unique_ptr<uint8_t[]> heapWindow_;
-  std::unique_ptr<ZipFile::SizeTarget[]> heapTable_;
-  ZipFile::SizeTarget* table_ = nullptr;
-  uint8_t* window_ = nullptr;
-  size_t capacity_ = 0;
-};
+  return table;
+}
 }  // namespace
 
 /* ============= WRITING / BUILDING FUNCTIONS ================ */
@@ -413,10 +351,10 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   }
 
   // Each spine item's size, a table-full of spine items per central-directory walk (see
-  // SizeLookupTable). A table-full's names are read from the spine file ahead of the loop below,
+  // sizeLookupTable). A table-full's names are read from the spine file ahead of the loop below,
   // which reads the same records again to write them out with their sizes.
   const bool batched = spineCount >= LARGE_SPINE_THRESHOLD;
-  const SizeLookupTable lookup(batched ? scratch : nullptr, batched ? spineCount : 0);
+  const PassTable<ZipFile::SizeTarget> lookup = sizeLookupTable(batched ? scratch : nullptr, batched ? spineCount : 0);
   ZipFile::SizeTarget* const table = lookup.entries();
   const size_t perWalk = lookup.capacity();
   if (batched && perWalk == 0) {
@@ -443,7 +381,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     std::sort(table, table + count, [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
       return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
     });
-    zip.fillUncompressedSizes(table, count, lookup.window(), lookup.windowBytes());
+    zip.fillUncompressedSizes(table, count, lookup.extra(), lookup.extraBytes());
     walks++;
     std::sort(table, table + count,
               [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) { return a.index < b.index; });
@@ -500,7 +438,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     writeSpineEntry(bookWriter, spineScratch);
   }
   LOG_DBG("BMC", "Spine sizes: %d items in %d walks, %u per walk in the %s", spineCount, walks,
-          static_cast<unsigned>(perWalk), lookup.inArena() ? "lent region" : "heap");
+          static_cast<unsigned>(perWalk), lookup.inRegion() ? "lent region" : "heap");
   (void)walks;  // only read by LOG_DBG, which compiles out at lower log levels
   // Close opened zip file
   zip.close();
