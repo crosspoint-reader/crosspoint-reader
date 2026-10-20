@@ -390,6 +390,9 @@ def get_release_tag(pioenv: str, base_version: str) -> str:
     envs are built for the tag CI created for them. Dev, slim, bench and the board dev
     envs are never published, so the setup page asks for an upload instead.
     """
+    if pioenv == "x4-orbit":
+        # Published by .github/workflows/x4-orbit.yml as a rolling release on the fork.
+        return "x4-orbit-latest"
     if pioenv.endswith("gh_release_rc"):
         return os.environ.get("CROSSPOINT_RC_VERSION", "")
     if pioenv.endswith("gh_release"):

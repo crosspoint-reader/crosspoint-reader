@@ -1,3 +1,54 @@
+# x4-orbit — a Witch(hunt) Reader build for the Xteink X4 and X3
+
+> **This branch is a personal, unofficial build of [Witch(hunt) Reader](https://github.com/jpirnay/witchhunt-reader)**
+> (itself based on CrossPoint). It is not supported by either project. The Witch(hunt) README follows further down.
+
+**Download:** [`firmware-x4-orbit.bin` (latest build)](https://github.com/riverac11-lgtm/x4-orbit/releases/tag/x4-orbit-latest)
+
+## What this build is
+
+Witch(hunt) Reader — chosen for its font, embedded-style and image handling and its background pre-rendering —
+trimmed to reading and pulling books from an OPDS server (built around BookOrbit), with:
+
+- **Search in book** (reader menu > Search book): case- and accent-insensitive, shows chapter and snippet for each
+  hit, jumps to the page and underlines the match.
+- **Faster OPDS browsing.** One secure connection is kept open for the whole visit instead of a new TLS handshake per
+  catalog page, search, cover or download.
+- **"On device" marker** on catalog books that are already in your download folder.
+- **Hold Back to leave the OPDS browser** from any depth, straight to Home.
+- **Its own boot splash.**
+
+**Removed** from the menus and build: screenshots, show page as QR, weather, KOReader sync, Calibre wireless, WebDAV,
+dictionary and internet firmware updates. The web server, USB file transfer, SD-card firmware update and recovery mode
+are kept. Settings and OPDS servers live in the same files as in CrossPoint, so they normally carry over; if an OPDS
+login fails after switching, enter it again. Details and build steps: [docs/x4-orbit.md](docs/x4-orbit.md).
+
+## Who should not install it
+
+**Only flash this on an Xteink X4 or X3** (one binary covers both). Do not install it on:
+
+| Device | Why |
+| --- | --- |
+| Xteink X4 Pro, X4 Classic | Different chip (ESP32-S3) and hardware. The SD updater refuses this file; don't force it through a USB flasher. |
+| LilyGo T5S3, Seeed reTerminal Sticky, M5PaperMono, any other device | Not built for them; the SD updater refuses this file. |
+| **A USB-locked X4** (some third-party-store units) | If anything goes wrong there is no USB recovery path. Check that the [web installer](https://crosspointreader.com/#flash-tools) can see your device first, or unlock it with the [unlock tool](https://crosspointreader.com/#unlock-tool). |
+
+Also skip it if you rely on any of the removed features above — use Witch(hunt) or CrossPoint instead.
+
+## Installing and going back
+
+1. Put `firmware-x4-orbit.bin` **and a fallback `.bin`** (stock [CrossPoint](https://github.com/daveallie/crosspoint-reader/releases)
+   or [Witch(hunt)](https://github.com/jpirnay/witchhunt-reader/releases)) on the SD card.
+2. Flash with **Settings > System > SD Card Firmware Update**.
+3. Open the reader's web page once while on Wi-Fi: it downloads its matching web interface from the same release.
+4. To go back: flash the fallback file the same way. If menus misbehave, hold **Up + Power** while powering on to go
+   straight to the SD firmware picker. If the reader won't boot at all, use the
+   [web installer](https://crosspointreader.com/#flash-tools) over USB-C.
+
+This build has not been through either project's testing. Use it at your own risk.
+
+---
+
 # Witch(hunt) Reader
 
 This firmware is based on the [crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader), a great piece of software by Dave Allie and others.

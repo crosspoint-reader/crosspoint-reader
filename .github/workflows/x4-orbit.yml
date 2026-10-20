@@ -1,0 +1,109 @@
+name: x4-orbit firmware
+
+# Builds the personal profile (env:x4-orbit) and publishes it, with the matching web
+# interface bundle, as the rolling pre-release x4-orbit-latest. The firmware fetches its
+# web bundle from that release, so both files are attached to it.
+on:
+  push:
+    branches: [x4-orbit]
+    paths-ignore: ['README.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write  # publishes the x4-orbit-latest release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install web asset tooling
+        run: npm ci
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-v2-${{ runner.os }}-x4-orbit-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-v2-${{ runner.os }}-x4-orbit-
+
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          pio pkg install -e x4-orbit
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+
+      - name: Host unit tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+          cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test
+          ctest --test-dir build/test --output-on-failure -j
+
+      - name: Build x4-orbit firmware
+        run: |
+          set -euo pipefail
+          pio run -e x4-orbit 2>&1 | tee pio.log
+          {
+            echo "## x4-orbit firmware"
+            grep -E "RAM:\s" -m1 pio.log | sed 's/^/- /' || true
+            grep -E "Flash:\s" -m1 pio.log | sed 's/^/- /' || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          cp .pio/build/x4-orbit/firmware.bin firmware-x4-orbit.bin
+          count=$(ls .pio/build/x4-orbit/web-*.bin 2>/dev/null | wc -l)
+          [ "$count" = "1" ] || { echo "::error::expected one web-*.bin, found $count"; exit 1; }
+          cp .pio/build/x4-orbit/web-*.bin .
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v6
+        with:
+          name: firmware-x4-orbit
+          path: |
+            firmware-x4-orbit.bin
+            web-*.bin
+          if-no-files-found: error
+
+      # A rolling pre-release holding the newest build: a stable download link
+      # (releases/download/x4-orbit-latest/firmware-x4-orbit.bin) that does not expire like
+      # run artifacts. Web bundles of earlier builds are removed; only this firmware's is kept.
+      - name: Publish x4-orbit-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}  # a fork's gh would otherwise target the parent repo
+        run: |
+          set -uo pipefail
+          web=$(ls web-*.bin)
+          notes="Built from ${GITHUB_SHA::7} on $(date -u +%Y-%m-%d). Flash firmware-x4-orbit.bin via Settings > System > SD Card Firmware Update; the reader fetches ${web} from here by itself the first time its web page is opened."
+          run() { out=$("$@" 2>&1) || { echo "::error title=release::$* -> ${out//$'\n'/ | }"; exit 1; }; echo "$out"; }
+          if gh release view x4-orbit-latest >/dev/null 2>&1; then
+            run gh release upload x4-orbit-latest firmware-x4-orbit.bin "$web" --clobber
+            for old in $(gh release view x4-orbit-latest --json assets -q '.assets[].name' | grep '^web-.*\.bin$'); do
+              [ "$old" = "$web" ] || run gh release delete-asset x4-orbit-latest "$old" -y
+            done
+            run gh release edit x4-orbit-latest --notes "$notes" --target "$GITHUB_SHA"
+          else
+            run gh release create x4-orbit-latest firmware-x4-orbit.bin "$web" --prerelease \
+              --title "x4-orbit (latest build)" --notes "$notes" --target "$GITHUB_SHA"
+          fi
