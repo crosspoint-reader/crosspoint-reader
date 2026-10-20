@@ -1182,10 +1182,13 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
         continue;
       }
 
-      compileTempFile_.flush();
       CssStyle merged = style;
       auto existingIt = compileSelectorOffsets_.find(key);
       if (existingIt != compileSelectorOffsets_.end() && existingIt->second.order + 1 >= order) {
+        // The earlier declaration is read back through a second handle, which sees only what has
+        // reached the card. Synced here and only here: a sync writes the data and the directory
+        // entry, a few ms on the device, and one before every rule cost seconds a stylesheet.
+        compileTempFile_.flush();
         CssStyle existing;
         FsFile tempRead;
         if (Storage.openFileForRead("CSS", compileTempPath_, tempRead) &&

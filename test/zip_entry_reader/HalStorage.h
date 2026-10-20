@@ -172,6 +172,8 @@ class HalFile : public Print {
   // directory walk there.
   static inline size_t calls = 0;
   static inline size_t opens = 0;
+  // And flushes: on the device a sync writes the file's data and its directory entry out to the card.
+  static inline size_t flushes = 0;
 
   int read(void* buf, size_t n) {
     ++calls;
@@ -260,6 +262,7 @@ class HalFile : public Print {
     return fwrite(&c, 1, 1, fp_);
   }
   void flush() {
+    ++flushes;
     if (fp_) fflush(fp_);
   }
   size_t getName(char* out, size_t len) {

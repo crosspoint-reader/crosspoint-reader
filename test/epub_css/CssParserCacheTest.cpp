@@ -878,6 +878,45 @@ TEST(CssParserCache, ListStyleAndPageBreaksSurviveDiskCache) {
   std::filesystem::remove(cssPath, rmEc);  // best-effort; see removePath()
 }
 
+// The compile stages each rule in a temp file and synced it before every one: on the card a sync
+// writes the file's data and its directory entry, a few ms each, so a stylesheet of a few hundred
+// rules cost seconds of a first open (X3, 2026-10-20: King's Avatar's two stylesheets, 1.7 s). The
+// sync is only needed when a rule redeclared next to its first declaration is read back through a
+// second handle to merge them; the rules still compile the same.
+TEST(CssParserCache, CompilingSyncsTheStagingFileOnlyToReadARuleBack) {
+  const std::string cacheDir = makeTempDir();
+  ASSERT_FALSE(cacheDir.empty());
+  constexpr int kRules = 400;
+  std::string css;
+  for (int i = 0; i < kRules; ++i) {
+    css += ".r" + std::to_string(i) + " { margin-left: " + std::to_string(i % 7) + "em; font-style: italic }\n";
+  }
+  // Three adjacent redeclarations, merged with the rule before them.
+  css += ".r399 { font-weight: bold }\n.r399 { text-align: center }\n";
+  css += ".extra { font-weight: bold }\n.extra { font-style: italic }\n";
+  std::string cssPath;
+  ASSERT_TRUE(writeTempCssFile(std::vector<uint8_t>(css.begin(), css.end()), cssPath));
+
+  CssParser parser(cacheDir);
+  FsFile::flushes = 0;
+  ASSERT_TRUE(compileCache(parser, cssPath));
+  const size_t flushes = FsFile::flushes;
+  std::printf("[ css      ] %d rules compiled with %zu flushes of the staging file\n", kRules + 2, flushes);
+  EXPECT_LE(flushes, 8u) << "a flush per rule was ~" << kRules;
+
+  const CssStyle merged = parser.resolveStyle("p", "r399");
+  EXPECT_EQ(merged.fontStyle, CssFontStyle::Italic);
+  EXPECT_EQ(merged.fontWeight, CssFontWeight::Bold);
+  EXPECT_EQ(merged.textAlign, CssTextAlign::Center);
+  const CssStyle extra = parser.resolveStyle("p", "extra");
+  EXPECT_EQ(extra.fontWeight, CssFontWeight::Bold);
+  EXPECT_EQ(extra.fontStyle, CssFontStyle::Italic);
+
+  removePath(cacheDir);
+  std::error_code rmEc;
+  std::filesystem::remove(cssPath, rmEc);
+}
+
 // A compile that hits MAX_RULES mid-stream persists a cache that holds the first MAX_RULES rules
 // and is STAMPED truncated (flags byte bit 1), so the book is parsed once and every later open
 // says what is missing (rulesTruncated()). It used to write no cache at all, which re-parsed the
