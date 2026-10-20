@@ -135,6 +135,22 @@ TEST_F(CoverFallback, ZipScanStillTakesATitlePageWhenNothingSaysCover) {
   EXPECT_EQ(coverViaLoad(), "OEBPS/image/TitlePage.png");
 }
 
+// <meta name="cover"> naming an XHTML page was dropped. The picture inside has a name the ZIP scan
+// does not know.
+TEST_F(CoverFallback, MetaCoverNamingAnXhtmlWrapperLeadsToItsPicture) {
+  Book book;
+  book.version = "2.0";
+  book.metadataExtra = "<meta name=\"cover\" content=\"coverpage\"/>";
+  book.manifestExtra =
+      "<item id=\"coverpage\" media-type=\"application/xhtml+xml\" href=\"xhtml/cover.xhtml\"/>\n"
+      "<item id=\"img\" media-type=\"image/png\" href=\"image/front.png\"/>\n";
+  book.files = {{"OEBPS/xhtml/cover.xhtml", xhtmlWithImg("<img src=\"../image/front.png\" alt=\"\"/>")},
+                {"OEBPS/image/front.png", kPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/front.png");
+  EXPECT_EQ(coverViaLoadForCover(), "OEBPS/image/front.png");
+}
+
 // properties tokens separated by a newline or a tab: already recognised (the SAX parser normalises
 // attribute whitespace), kept as tests because the fork claimed them broken.
 TEST_F(CoverFallback, CoverImagePropertySeparatedByNewline) {

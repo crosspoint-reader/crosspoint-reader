@@ -763,13 +763,13 @@ void ContentOpfParser::startElement(void* userData, const char* name, const char
     if (self->itemWriter_.has_value()) self->itemWriter_->writeString(href);
 
     if (itemId == self->coverItemId) {
-      // Some EPUBs set meta name="cover" to an XHTML wrapper item.
-      // Only treat it as a cover image when the manifest media-type is image/*.
+      // Some EPUBs set meta name="cover" to an XHTML wrapper item. Only an image/* item is the cover
+      // image itself; a page is kept for Epub to look inside when nothing better turns up.
       if (mediaClass == MediaClass::Image) {
         self->coverItemHref = href;
-      } else {
-        LOG_DBG("COF", "Ignoring meta cover item '%s' with non-image media type: %s", itemId.c_str(),
-                mediaType != nullptr ? mediaType : "(none)");
+      } else if (self->metaCoverPageHref.empty()) {
+        LOG_DBG("COF", "Meta cover item '%s' is a page, not a picture: %s", itemId.c_str(), href.c_str());
+        self->metaCoverPageHref = href;
       }
     }
 

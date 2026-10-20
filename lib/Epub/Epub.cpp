@@ -199,7 +199,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   //   cover.svg: <svg viewBox="0 0 1135 1600"><image xlink:href="cover.jpg"/></svg>
   //
   // Cover and thumbnail generation decode JPEG and PNG only, so the picture inside is the cover. A
-  // wrapper that holds none is dropped, and the guide and ZIP-name scans below look for one instead.
+  // wrapper that holds none is dropped, and the fallbacks below look for one instead.
   // Ported from crosspoint-reader PR #3539 (OSAKANA TARO, @osakanataro).
   if (isCoverWrapperDocument(bookMetadata.coverItemHref)) {
     std::string inWrapper = findCoverImageInDocument(bookMetadata.coverItemHref);
@@ -211,40 +211,36 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
     bookMetadata.coverItemHref = std::move(inWrapper);
   }
 
-  // Guide-based cover fallback: if no cover found via metadata/properties,
-  // or if the manifest-declared cover path is invalid, try extracting the image
-  // reference from the guide's cover page XHTML.
-  bool shouldTryGuideCoverFallback = bookMetadata.coverItemHref.empty();
-  if (!bookMetadata.coverItemHref.empty()) {
-    size_t coverItemSize = 0;
-    if (!getItemSize(bookMetadata.coverItemHref, &coverItemSize)) {
-      LOG_DBG("EBP", "Manifest cover not found in archive, trying guide cover fallback: %s",
-              bookMetadata.coverItemHref.c_str());
-      shouldTryGuideCoverFallback = true;
-    }
-  }
-
-  if (shouldTryGuideCoverFallback && !opfParser.guideCoverPageHref.empty()) {
-    LOG_DBG("EBP", "Trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
-    std::string fromGuide = findCoverImageInDocument(opfParser.guideCoverPageHref);
-    if (!fromGuide.empty()) {
-      bookMetadata.coverItemHref = std::move(fromGuide);
-      LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
-    }
-  }
-
   auto hasReadableCover = [&](const std::string& path) {
     if (path.empty()) return false;
     size_t coverSize = 0;
     return getItemSize(path, &coverSize);
   };
 
-  if (!hasReadableCover(bookMetadata.coverItemHref)) {
-    if (!bookMetadata.coverItemHref.empty()) {
-      LOG_DBG("EBP", "Cover href unresolved, trying common cover candidates: %s", bookMetadata.coverItemHref.c_str());
-      // Not a cover: the scan below takes a set href for one already found and would never look.
-      bookMetadata.coverItemHref.clear();
-    }
+  // Without a cover picture from the manifest, or with one missing from the archive, the fallbacks
+  // below run in turn, the book's own word first. Each counts only when it leads to a picture in the
+  // archive. First a <meta name="cover"> that names a page rather than a picture (it used to be
+  // dropped; after witchling-reader commit 5b62bbee, syfq91), then the guide's cover page.
+  bool haveCover = hasReadableCover(bookMetadata.coverItemHref);
+  if (!haveCover && !bookMetadata.coverItemHref.empty()) {
+    LOG_DBG("EBP", "Manifest cover not found in archive, trying the fallbacks: %s", bookMetadata.coverItemHref.c_str());
+  }
+  const auto takeCover = [&](const char* source, std::string found) {
+    if (!hasReadableCover(found)) return;
+    LOG_DBG("EBP", "Found cover image via %s: %s", source, found.c_str());
+    bookMetadata.coverItemHref = std::move(found);
+    haveCover = true;
+  };
+  if (!haveCover && !opfParser.metaCoverPageHref.empty()) {
+    takeCover("meta cover page", coverPictureOf(opfParser.metaCoverPageHref));
+  }
+  if (!haveCover && !opfParser.guideCoverPageHref.empty()) {
+    takeCover("guide", coverPictureOf(opfParser.guideCoverPageHref));
+  }
+
+  if (!haveCover) {
+    // Not a cover: the scan below takes a set href for one already found and would never look.
+    bookMetadata.coverItemHref.clear();
 
     // Single forward pass through the ZIP central directory. For each image entry, lowercase the
     // basename and rank it (coverNameRank); the best rank wins, and of one rank the first in the
@@ -307,6 +303,13 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   LOG_DBG("EBP", "parseContentOpf total=%lu ms", millis() - opfParseStart);
   LOG_DBG("EBP", "Successfully parsed content.opf");
   return true;
+}
+
+std::string Epub::coverPictureOf(const std::string& href) const {
+  if (href.empty()) return {};
+  std::string target = href.substr(0, href.find('#'));
+  if (FsHelpers::hasJpgExtension(target) || FsHelpers::hasPngExtension(target)) return target;
+  return findCoverImageInDocument(target);
 }
 
 std::string Epub::findCoverImageInDocument(const std::string& docHref) const {

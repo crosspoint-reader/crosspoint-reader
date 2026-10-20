@@ -57,6 +57,9 @@ class Epub {
   // the best kind (see CoverImageRefScanner), the largest file. Streams the document, never reads it
   // whole into RAM.
   std::string findCoverImageInDocument(const std::string& docHref) const;
+  // The picture a cover reference leads to: the reference itself when it names a JPEG or PNG, else
+  // the picture of the document it names (findCoverImageInDocument). A fragment is dropped.
+  std::string coverPictureOf(const std::string& href) const;
   // writePageList=false leaves pagelist.bin alone (an NCX tried after a parsed nav).
   bool parseTocNcxFile(bool writePageList = true) const;
   bool parseTocNavFile() const;
