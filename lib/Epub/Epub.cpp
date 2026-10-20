@@ -563,7 +563,7 @@ void Epub::discoverCssFilesFromZip() {
     return;
   }
 
-  // Use streamCentralDirectoryNames (O(1) heap, fixed 256-byte stack buffer per entry)
+  // Use streamCentralDirectoryNames (a 4 KB read window and a fixed 256-byte name buffer)
   // instead of loadAllFileStatSlims(). The old path built a full unordered_map of every
   // ZIP entry — on EPUBs with 3000+ entries this consumed ~200 KB and crashed.
   ZipFile zf(filepath);

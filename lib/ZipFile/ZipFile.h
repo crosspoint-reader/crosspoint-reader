@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 class BuildArena;
@@ -108,12 +109,15 @@ class ZipFile {
   // Returns number of targets matched. Deques, not vectors: a 1700-spine book needs ~28 KB of
   // targets, and demanding that as ONE contiguous block aborts on a fragmented heap (bare
   // operator new under -fno-exceptions) — deque's ~512-byte chunks drop the contiguity
-  // requirement while keeping the random-access iterators lower_bound needs.
+  // requirement while keeping the random-access iterators lower_bound needs. Reads through a
+  // 4 KB window of its own when the heap has one.
   int fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes);
   // Batch lookup of FULL entry stats in ONE central-directory walk (vs one linear scan per
   // loadFileStatSlim call). targets must be sorted by (hash, len) like fillUncompressedSizes;
-  // stats[target.index] receives the entry's FileStatSlim. Returns number matched. Same deque
-  // rationale as fillUncompressedSizes (avoid a big contiguous block on a fragmented heap).
+  // stats[target.index] receives the entry's FileStatSlim. Returns number matched. Deques: a
+  // 1700-spine book needs ~28 KB of targets, and demanding that as ONE contiguous block aborts on
+  // a fragmented heap (bare operator new under -fno-exceptions). Reads through a 4 KB window of its
+  // own when the heap has one.
   int fillFileStats(const std::deque<SizeTarget>& targets, std::deque<FileStatSlim>& stats);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
@@ -222,43 +226,17 @@ class ZipFile {
   bool contentFingerprint(uint64_t* out);
 
   // Stream every filename in the central directory to a callback without building
-  // the in-memory stat cache. Uses a fixed 256-byte stack buffer — O(1) heap.
-  // Safe for large EPUBs (3000+ entries) where loadAllFileStatSlims() would OOM.
-  // Callback signature: void(std::string_view filename).
+  // the in-memory stat cache: one walk through a 4 KB window (straight from the file,
+  // a dozen card calls per entry, if the heap refuses the window), names in a 256-byte
+  // stack buffer. Safe for large EPUBs (3000+ entries) where loadAllFileStatSlims()
+  // would OOM. Callback signature: void(std::string_view filename); the view is valid
+  // for the call only.
   template <typename F>
   bool streamCentralDirectoryNames(F&& callback) {
-    if (!loadZipDetails()) return false;
-    const ScopedOpenClose zip{*this};
-    if (!zip) return false;
-    file.seek(zipDetails.centralDirOffset);
-    ZIP_SCAN_STAT_WALK();
-    char nameBuf[256];
-    uint32_t sig;
-    while (file.available()) {
-      if (file.read(&sig, 4) != 4 || sig != 0x02014b50) break;
-      ZIP_SCAN_STAT_ENTRY();
-      file.seekCur(6);
-      uint16_t method;
-      file.read(&method, 2);
-      file.seekCur(8);
-      uint32_t compSz, uncompSz, localOff;
-      file.read(&compSz, 4);
-      file.read(&uncompSz, 4);
-      uint16_t nameLen, extraLen, commentLen;
-      file.read(&nameLen, 2);
-      file.read(&extraLen, 2);
-      file.read(&commentLen, 2);
-      file.seekCur(8);
-      file.read(&localOff, 4);
-      if (nameLen < sizeof(nameBuf)) {
-        file.read(nameBuf, nameLen);
-        nameBuf[nameLen] = '\0';
-        callback(std::string_view{nameBuf, nameLen});
-      } else {
-        file.seekCur(nameLen);
-      }
-      file.seekCur(extraLen + commentLen);
-    }
-    return true;
+    using Callback = std::remove_reference_t<F>;
+    return streamCentralDirectoryNames(
+        [](void* ctx, const std::string_view name) { (*static_cast<Callback*>(ctx))(name); },
+        const_cast<void*>(static_cast<const void*>(&callback)));
   }
+  bool streamCentralDirectoryNames(void (*visit)(void* ctx, std::string_view name), void* ctx);
 };

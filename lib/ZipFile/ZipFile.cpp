@@ -405,144 +405,110 @@ bool ZipFile::getInflatedFileSize(const char* filename, size_t* size) {
   return true;
 }
 
-int ZipFile::fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes) {
-  if (targets.empty()) {
-    return 0;
+namespace {
+constexpr uint32_t CENTRAL_DIR_SIGNATURE = 0x02014b50;
+// A central-directory record's fixed fields after its signature, up to the name.
+constexpr size_t CENTRAL_DIR_FIXED_BYTES = 42;
+// The batch walks' read window: SD reads come in sectors, and a record is ~46 bytes plus its name.
+constexpr size_t CENTRAL_DIR_WINDOW_BYTES = 4096;
+
+// Walks the central directory from the reader's position, calling onEntry(name, nameLen, stat) for
+// each entry whose name fits 255 bytes, until it returns false or the directory ends. Each record
+// is three reads of the window (fixed fields, name, the skip past extra field and comment) where
+// a walk through the file itself was about a dozen card calls per entry.
+template <typename OnEntry>
+void walkCentralDirectory(serialization::BufferedFileReader& in, OnEntry&& onEntry) {
+  ZIP_SCAN_STAT_WALK();
+  char name[256];
+  uint8_t fixed[CENTRAL_DIR_FIXED_BYTES];
+  uint32_t sig = 0;
+  while (in.readPod(sig) && sig == CENTRAL_DIR_SIGNATURE && in.read(fixed, sizeof(fixed))) {
+    ZIP_SCAN_STAT_ENTRY();
+    ZipFile::FileStatSlim stat;
+    uint16_t nameLen, extraLen, commentLen;
+    memcpy(&stat.method, fixed + 6, sizeof(stat.method));
+    memcpy(&stat.compressedSize, fixed + 16, sizeof(stat.compressedSize));
+    memcpy(&stat.uncompressedSize, fixed + 20, sizeof(stat.uncompressedSize));
+    memcpy(&nameLen, fixed + 24, sizeof(nameLen));
+    memcpy(&extraLen, fixed + 26, sizeof(extraLen));
+    memcpy(&commentLen, fixed + 28, sizeof(commentLen));
+    memcpy(&stat.localHeaderOffset, fixed + 38, sizeof(stat.localHeaderOffset));
+    if (nameLen < sizeof(name)) {
+      if (!in.read(name, nameLen)) return;
+      if (!onEntry(name, nameLen, stat)) return;
+    } else {
+      in.seek(in.position() + nameLen);
+    }
+    in.seek(in.position() + extraLen + commentLen);
   }
+}
 
+bool targetBefore(const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+  return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+}
+
+// Hands every target that names this entry to `fill`, the targets sorted by targetBefore. Returns
+// how many it handed over.
+template <typename It, typename Fill>
+int forEachTargetNamed(It begin, It end, const char* name, const uint16_t nameLen, Fill&& fill) {
+  const ZipFile::SizeTarget key = {HashUtils::fnvHash64(name, nameLen), nameLen, 0};
+  int n = 0;
+  for (It it = std::lower_bound(begin, end, key, targetBefore); it != end && it->hash == key.hash && it->len == nameLen;
+       ++it, ++n) {
+    fill(*it);
+  }
+  return n;
+}
+}  // namespace
+
+int ZipFile::fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes) {
+  if (targets.empty()) return 0;
   const ScopedOpenClose zip{*this};
-  if (!zip) return 0;
-
-  if (!loadZipDetails()) return 0;
+  if (!zip || !loadZipDetails()) return 0;
 
   file.seek(zipDetails.centralDirOffset);
-  ZIP_SCAN_STAT_WALK();
-
+  serialization::BufferedFileReader in(file, CENTRAL_DIR_WINDOW_BYTES);
   int matched = 0;
-  const int targetCount = static_cast<int>(targets.size());
-  uint32_t sig;
-  char itemName[256];
-
-  while (file.available()) {
-    file.read(&sig, 4);
-    if (sig != 0x02014b50) break;
-    ZIP_SCAN_STAT_ENTRY();
-
-    file.seekCur(6);
-    uint16_t method;
-    file.read(&method, 2);
-    file.seekCur(8);
-    uint32_t compressedSize, uncompressedSize;
-    file.read(&compressedSize, 4);
-    file.read(&uncompressedSize, 4);
-    uint16_t nameLen, m, k;
-    file.read(&nameLen, 2);
-    file.read(&m, 2);
-    file.read(&k, 2);
-    file.seekCur(8);
-    uint32_t localHeaderOffset;
-    file.read(&localHeaderOffset, 4);
-
-    if (nameLen < 256) {
-      file.read(itemName, nameLen);
-      itemName[nameLen] = '\0';
-
-      uint64_t hash = HashUtils::fnvHash64(itemName, nameLen);
-      SizeTarget key = {hash, nameLen, 0};
-
-      auto it = std::lower_bound(targets.begin(), targets.end(), key, [](const SizeTarget& a, const SizeTarget& b) {
-        return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
-      });
-
-      while (it != targets.end() && it->hash == hash && it->len == nameLen) {
-        if (it->index < sizes.size()) {
-          sizes[it->index] = uncompressedSize;
-          matched++;
-        }
-        ++it;
-      }
-
-      if (matched >= targetCount) {
-        break;
-      }
-    } else {
-      file.seekCur(nameLen);
-    }
-
-    file.seekCur(m + k);
-  }
-
+  walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim& stat) {
+    matched += forEachTargetNamed(targets.begin(), targets.end(), name, nameLen, [&](const SizeTarget& t) {
+      if (t.index < sizes.size()) sizes[t.index] = stat.uncompressedSize;
+    });
+    return matched < static_cast<int>(targets.size());
+  });
   return matched;
 }
 
 int ZipFile::fillFileStats(const std::deque<SizeTarget>& targets, std::deque<FileStatSlim>& stats) {
-  if (targets.empty()) {
-    return 0;
-  }
-
+  if (targets.empty()) return 0;
   const ScopedOpenClose zip{*this};
-  if (!zip) return 0;
-
-  if (!loadZipDetails()) return 0;
+  if (!zip || !loadZipDetails()) return 0;
 
   file.seek(zipDetails.centralDirOffset);
-  ZIP_SCAN_STAT_WALK();
-
+  // Its own window, for the one walk a book makes here (pass-through if the heap refuses it).
+  serialization::BufferedFileReader in(file, CENTRAL_DIR_WINDOW_BYTES);
   int matched = 0;
-  const int targetCount = static_cast<int>(targets.size());
-  uint32_t sig;
-  char itemName[256];
-
-  while (file.available()) {
-    file.read(&sig, 4);
-    if (sig != 0x02014b50) break;
-    ZIP_SCAN_STAT_ENTRY();
-
-    file.seekCur(6);
-    uint16_t method;
-    file.read(&method, 2);
-    file.seekCur(8);
-    uint32_t compressedSize, uncompressedSize;
-    file.read(&compressedSize, 4);
-    file.read(&uncompressedSize, 4);
-    uint16_t nameLen, m, k;
-    file.read(&nameLen, 2);
-    file.read(&m, 2);
-    file.read(&k, 2);
-    file.seekCur(8);
-    uint32_t localHeaderOffset;
-    file.read(&localHeaderOffset, 4);
-
-    if (nameLen < 256) {
-      file.read(itemName, nameLen);
-      itemName[nameLen] = '\0';
-
-      const uint64_t hash = HashUtils::fnvHash64(itemName, nameLen);
-      const SizeTarget key = {hash, nameLen, 0};
-
-      auto it = std::lower_bound(targets.begin(), targets.end(), key, [](const SizeTarget& a, const SizeTarget& b) {
-        return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
-      });
-
-      while (it != targets.end() && it->hash == hash && it->len == nameLen) {
-        if (it->index < stats.size()) {
-          stats[it->index] = {method, compressedSize, uncompressedSize, localHeaderOffset};
-          matched++;
-        }
-        ++it;
-      }
-
-      if (matched >= targetCount) {
-        break;
-      }
-    } else {
-      file.seekCur(nameLen);
-    }
-
-    file.seekCur(m + k);
-  }
-
+  walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim& stat) {
+    matched += forEachTargetNamed(targets.begin(), targets.end(), name, nameLen, [&](const SizeTarget& t) {
+      if (t.index < stats.size()) stats[t.index] = stat;
+    });
+    return matched < static_cast<int>(targets.size());
+  });
   return matched;
+}
+
+bool ZipFile::streamCentralDirectoryNames(void (*const visit)(void* ctx, std::string_view name), void* const ctx) {
+  if (!loadZipDetails()) return false;
+  const ScopedOpenClose zip{*this};
+  if (!zip) return false;
+  file.seek(zipDetails.centralDirOffset);
+  // First-open indexing walks every name once for the stylesheets the OPF does not list: King's
+  // Avatar's 3300 entries took ~47000 card calls read field by field, about 0.8 s on the X3.
+  serialization::BufferedFileReader in(file, CENTRAL_DIR_WINDOW_BYTES);
+  walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim&) {
+    visit(ctx, std::string_view{name, nameLen});
+    return true;
+  });
+  return true;
 }
 
 uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) {
