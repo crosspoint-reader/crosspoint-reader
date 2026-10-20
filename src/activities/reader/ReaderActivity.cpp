@@ -946,8 +946,10 @@ void ReaderActivity::onEnter() {
     // it afterwards; a book-lifetime allocation landing in the freed hole then left the realloc
     // short, and the reader started without its buffer (heap-recovery restart at best). Now the
     // buffer is LENT: the rings bump-allocate inside the region through Epub::load's scratch,
-    // the region never enters the heap, and the return below cannot fail. The tables keep the
-    // heap, which without the ring has room for them. Same pattern as Background-C's borrow.
+    // the region never enters the heap, and the return below cannot fail. So does buildBookBin's
+    // spine size table, 16 B a spine item: on the heap, King's Avatar's (1732) did not fit on the
+    // X3 and the lookup took a ZIP directory walk per spine item, a 431 s open. Same pattern as
+    // Background-C's borrow.
     // The popup above is drawn BEFORE the borrow: drawPopup needs the active buffer, and load()
     // performs no rendering.
     uint8_t* lentForIndexing = nullptr;

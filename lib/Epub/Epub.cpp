@@ -885,9 +885,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
 
-  // Build final book.bin
+  // Build final book.bin. Its spine size lookup takes its table from the lent region, which no
+  // stream read holds at this point.
   const uint32_t buildStart = millis();
-  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
+  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata, loadScratch_)) {
     LOG_ERR("EBP", "Could not update mappings and sizes");
     return false;
   }
