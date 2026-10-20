@@ -75,16 +75,36 @@ inline bool hasButtonGatedBatteryLatch() {
          BoardConfig::ACTIVE.power.latch0 != BoardConfig::PIN_UNASSIGNED;
 }
 
-// The USB-detect pin doubles as the fuel gauge's I2C data line (the X3's GPIO20),
-// so it reads HIGH from the bus pull-ups whatever the cable does. USB presence
-// then has to come from the gauge's charge current, which the HAL reads from a
-// BQ27220 -- and that is an I2C transaction, so it is polled on a throttle rather
+// USB presence has to come from the fuel gauge's charge current: the board has a
+// BQ27220 to read, no charger IC that could report the input rail, and no pin
+// that reads the cable. That is the X3. Its GPIO20 is the gauge's I2C data line,
+// which reads HIGH from the bus pull-ups whatever the cable does; the profile
+// used to list it as usbDetect anyway and now leaves usbDetect unassigned
+// (Free-Ink edcc629), so both forms count as "no pin".
+//
+// The charger test is what keeps the T5S3 out. It has a BQ27220 and no usbDetect
+// either, but its BQ25896 answers for the rail, and a cable inferred from charge
+// current would close the serial-log gate on a full battery (main.cpp).
+//
+// Reading the gauge is an I2C transaction, so it is polled on a throttle rather
 // than every loop like a pin.
-inline bool usbPresenceFromFuelGauge() {
-  const BoardConfig::BoardProfile& p = BoardConfig::ACTIVE;
-  return hasI2cFuelGauge() && p.usbDetect != BoardConfig::PIN_UNASSIGNED && p.usbDetect == p.batteryGauge.i2cSda &&
-         p.batteryGauge.gaugeType == BoardConfig::GaugeType::Bq27220;
+constexpr bool usbPresenceFromFuelGauge(const BoardConfig::BoardProfile& p) {
+  const bool noDetectPin = p.usbDetect == BoardConfig::PIN_UNASSIGNED || p.usbDetect == p.batteryGauge.i2cSda;
+  return p.batteryGauge.gaugeAddr != 0 && p.batteryGauge.gaugeType == BoardConfig::GaugeType::Bq27220 &&
+         p.batteryGauge.chargerAddr == 0 && noDetectPin;
 }
+inline bool usbPresenceFromFuelGauge() { return usbPresenceFromFuelGauge(BoardConfig::ACTIVE); }
+
+// Pinned against the shipped profiles, so an SDK resync that changes any of the
+// fields above fails the build here instead of silently turning the X3's
+// charging indication and USB wake handling off.
+static_assert(usbPresenceFromFuelGauge(BoardConfig::XTEINK_X3) &&
+                  usbPresenceFromFuelGauge(BoardConfig::XTEINK_X3_UC8279),
+              "X3: USB presence must come from the BQ27220");
+static_assert(!usbPresenceFromFuelGauge(BoardConfig::XTEINK_X4) &&
+                  !usbPresenceFromFuelGauge(BoardConfig::XTEINK_X4_PRO) &&
+                  !usbPresenceFromFuelGauge(BoardConfig::LILYGO_T5S3),
+              "only the X3 infers USB from the fuel gauge");
 
 // --- Display -----------------------------------------------------------------
 
