@@ -13,15 +13,23 @@ TEST(IndexingProgressGate, AnOpenThatEndsSoonDrawsNoBar) {
   EXPECT_FALSE(gate.drawn());
 }
 
-// King's Avatar's phase ends on the X3 after the fix (OPF ~0.9 s, TOC ~0.8 s, book.bin ~0.6 s):
-// the bar appears once the popup has been up for two seconds, and moves again a second on.
-TEST(IndexingProgressGate, ALongOpenDrawsTheBarAtPhaseEndsAfterTwoSeconds) {
+// King's Avatar's phase ends on the X3 (2026-10-20, ms after the popup frame: OPF 1130, TOC 3155,
+// book.bin 4373): one bar, at the TOC. A second one at book.bin would cost its ~0.6 s refresh for
+// the ~0.7 s of work left.
+TEST(IndexingProgressGate, KingsAvatarOnTheX3GetsOneBar) {
   IndexingProgressGate gate(0);
-  EXPECT_FALSE(gate.shouldDraw(900, 35));
-  EXPECT_TRUE(gate.shouldDraw(2100, 65));
-  EXPECT_FALSE(gate.shouldDraw(2700, 85)) << "within a second of the last draw";
-  EXPECT_TRUE(gate.shouldDraw(3200, 90));
+  EXPECT_FALSE(gate.shouldDraw(1130, 35)) << "before the popup has been up two seconds";
+  EXPECT_TRUE(gate.shouldDraw(3155, 65));
+  EXPECT_FALSE(gate.shouldDraw(4373, 85)) << "within two seconds of the last draw";
   EXPECT_TRUE(gate.drawn());
+}
+
+// A longer build still sees the bar move, once each phase ends two seconds or more after the last.
+TEST(IndexingProgressGate, ALongerOpenMovesTheBarEveryTwoSecondsAtMost) {
+  IndexingProgressGate gate(0);
+  EXPECT_TRUE(gate.shouldDraw(2500, 35));
+  EXPECT_FALSE(gate.shouldDraw(4400, 65));
+  EXPECT_TRUE(gate.shouldDraw(4600, 85));
 }
 
 TEST(IndexingProgressGate, TheBarNeverMovesBackOrRedrawsTheSamePercent) {

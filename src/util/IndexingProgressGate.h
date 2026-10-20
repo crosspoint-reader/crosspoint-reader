@@ -9,12 +9,14 @@
 // load runs on the SD card, which shares the SPI bus with the panel, so the refresh cannot overlap
 // it). Most books index in well under a second and must not pay for one: the bar appears only
 // once the popup has been up for kShowAfterMs, at the end of a build phase (OPF, TOC, book.bin),
-// and moves at most every kMinIntervalMs. King's Avatar (1732 spine items) indexes for a few
-// seconds on the X3 and gets a bar or two; a book of a few dozen chapters gets none.
+// and moves at most every kMinIntervalMs. Each move costs ~0.6 s on the X3, so moves closer than
+// that interval would cost as much as the work they report: King's Avatar (1732 spine items) ended
+// its TOC 3.2 s into the popup and its book.bin 1.2 s later, and the second bar made its popup
+// 0.6 s longer (X3, 2026-10-20). It now gets one bar; a book of a few dozen chapters gets none.
 class IndexingProgressGate {
  public:
   static constexpr uint32_t kShowAfterMs = 2000;
-  static constexpr uint32_t kMinIntervalMs = 1000;
+  static constexpr uint32_t kMinIntervalMs = 2000;
 
   explicit IndexingProgressGate(const uint32_t popupShownMs) : popupShownMs_(popupShownMs) {}
 
