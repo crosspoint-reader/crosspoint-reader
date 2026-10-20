@@ -437,8 +437,12 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // Write out spine data to book.bin
     writeSpineEntry(bookWriter, spineScratch);
   }
-  LOG_DBG("BMC", "Spine sizes: %d items in %d walks, %u per walk in the %s", spineCount, walks,
-          static_cast<unsigned>(perWalk), lookup.inRegion() ? "lent region" : "heap");
+  if (perWalk > 0) {
+    LOG_DBG("BMC", "Spine sizes: %d items in %d central-directory walks, table of %u in the %s", spineCount, walks,
+            static_cast<unsigned>(perWalk), lookup.inRegion() ? "lent region" : "heap");
+  } else {
+    LOG_DBG("BMC", "Spine sizes: %d items looked up one by one", spineCount);
+  }
   (void)walks;  // only read by LOG_DBG, which compiles out at lower log levels
   // Close opened zip file
   zip.close();
