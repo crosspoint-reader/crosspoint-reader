@@ -181,7 +181,7 @@ face has.
 The faces ship as 1-bit DEFLATE groups, 97,132 B where they took 175,916 B flat
 (`compress_ui_face.py`). The active UI language's two faces are inflated into its language pack
 slot and drawn from flash with no decode (`docs/i18n.md`); the other two languages' glyphs, for the
-language picker and CJK book titles, decode one at a time, ~2.5 ms each on the C3.
+language picker and CJK book titles, decode one at a time, ~1.9 ms each on the X3.
 
 **Still open: text that is not a UI string.** Book titles and authors, TOC entries, chapter titles in
 the status bar, file names and the finished-book screen draw the characters they share with a

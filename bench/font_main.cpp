@@ -265,6 +265,7 @@ static void benchReaderBitmapCold(const char* label, const EpdFontData* data) {
 //     total is roughly what one draw of that page would cost with no pack behind it.
 //   * cjk_inflate: a whole face, in glyph order -- what building the language pack pays once per
 //     language change or firmware update for the active language. Estimated at ~2.5 us a byte.
+// X3, 2026-10-19: cjk_cold 1.87-1.90 ms a glyph (133-135 ms for the 71), cjk_inflate 105-106 ms a face.
 // ---------------------------------------------------------------------------
 
 // clang-format off
@@ -325,7 +326,8 @@ static void benchCjkInflate(const char* label, const EpdFontData* data) {
 // FlashLangPartition::map() runs esp_rom_crc32_le over everything the slot holds before it hands
 // out a pointer: 88,264 B for Chinese, ~20-30 KB for most languages, once per boot and per language
 // change. Measured here over two font arrays of about that size, read through the flash cache cold,
-// as the mapped slot is. Host-estimated at 5-25 ms for Chinese.
+// as the mapped slot is. Host-estimated at 5-25 ms for Chinese; X3, 2026-10-20: 11.5 ms over 94,221 B,
+// 121 ns a byte, ~10.7 ms for Chinese.
 // ---------------------------------------------------------------------------
 
 static void benchSlotCrc() {
