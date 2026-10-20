@@ -414,8 +414,22 @@ Wi-Fi; only a `catalog` entry starts Wi-Fi, when it is picked.
 | `type` | Picking it |
 |---|---|
 | `menu` | Shows its `items`. Back returns to the parent menu. |
-| `catalog` | Opens the catalog (Wi-Fi, sign-in, browse, download) as described above. `url` and `body` override `browse.url` and `browse.body`; `browse.lists` and search still apply. Back at the catalog root returns to the menu. With `download` (an item id), the list is not shown: after Wi-Fi and the first page, that item downloads at once and the menu comes back (also after Back during the download). An id missing from the first page shows "No files found". |
+| `catalog` | Opens the catalog (Wi-Fi, sign-in, browse, download) as described above. `url` and `body` override `browse.url` and `browse.body`; `browse.lists` and search still apply. Back at the catalog root returns to the menu. See also one-tap downloads below. |
 | `file` | Opens `path` in the reader. |
+
+A `catalog` entry with `"download": "<id>"` is a one-tap download, for a
+plugin that syncs a fixed set of files:
+
+- The item list is not shown. After Wi-Fi (and sign-in, if needed) the first
+  page is fetched, the item whose `browse.fields.id` value equals the id
+  downloads at once, and the menu comes back. Back during the download also
+  returns to the menu.
+- With more than one `browse.lists`, the list picker still comes first; the
+  id is looked up on page 1 of the chosen list.
+- An id that is not on that page shows the "No files found" error; Back
+  returns to the menu.
+- Every file the download writes has its layout cache cleared, so a page the
+  server rewrote opens with its new content even when its size is unchanged.
 
 `file` entries have two modes:
 
@@ -449,10 +463,14 @@ A relative `path` is in the plugin's folder. An absolute path (starting with
 plugins list: the menu to return to is found from the plugin folder that holds
 the file.
 
-Limits: 32 entries in total and 3 levels of menus. These entries are skipped
-and logged (`[PCAT]`): no `title`, an unknown `type`, a `catalog` with no
-browse URL, and a `file` path that contains `..` or points at a credential
-store. If no entry is left and there is no `browse.url`, the plugin shows the
+Limits: 32 entries in total, counted in file order; later entries are
+skipped. The root list and two levels of submenus: a `menu` entry inside a
+second-level submenu is skipped with its items. These entries are skipped
+too, and logged (`[PCAT]`): no `title`, an unknown `type`, a `catalog` with
+no browse URL, and a `file` path that contains `..`, points at a credential
+store, or is longer than 255 bytes (a silent restart carries the open
+document's path in 256 bytes of RTC memory). The Library applies the same
+rules when it decides which files are documents. If no entry is left and there is no `browse.url`, the plugin shows the
 "invalid manifest" error. Picking a file that does not exist yet (a page the
 plugin has not synced) shows a short notice and the menu stays open.
 While a `catalog` entry is open, the menu is freed so Wi-Fi and TLS get the

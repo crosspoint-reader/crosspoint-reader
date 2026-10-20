@@ -10,6 +10,7 @@
 #include "activities/CatalogActivity.h"
 #include "components/OptionPopup.h"
 #include "network/HttpDownloader.h"
+#include "util/PluginDocuments.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 
@@ -118,7 +119,7 @@ class PluginCatalogActivity final : public CatalogActivity {
 
   // One device.json "menu" row; submenus link children through `parent`.
   struct MenuEntry {
-    enum class Type : uint8_t { Menu, Catalog, File };
+    using Type = plugindocuments::MenuItem::Type;
     Type type = Type::Menu;
     bool document = true;  // File: open as a plugin document (ReaderActivity::pluginDocument)
     int16_t parent = -1;   // enclosing submenu entry; -1 = the menu root
@@ -159,7 +160,8 @@ class PluginCatalogActivity final : public CatalogActivity {
   int menuCatalog = -1;           // menu entry whose catalog is open; -1 = none
   std::string menuCatalogUrl;     // that entry's url/body overrides, kept after the menu is freed
   std::string menuCatalogBody;
-  std::string menuCatalogItem;  // that entry's one-tap item; "" = browse as usual
+  std::string menuCatalogItem;   // that entry's one-tap item; "" = browse as usual
+  int pendingAutoDownload = -1;  // items index the one-tap entry downloads on the next loop
   bool showOpds = false;
   bool rootMode = false;
   std::string returnDocument;    // consumed by onEnter()
@@ -200,8 +202,6 @@ class PluginCatalogActivity final : public CatalogActivity {
   bool reopenMenuFor(const std::string& documentPath);
   // Re-reads device.json, then showMenu(); the picker if the menu is gone.
   bool reloadMenu(int parent, int selectEntry);
-  // Flattens one level of the "menu" tree into menuEntries, recursing into submenus.
-  void parseMenu(JsonArrayConst entries, const std::string& pluginDir, int16_t parent, int depth);
   // Header for the shown submenu: its entry title, or the plugin's at the root.
   const std::string& menuTitle() const;
   void dropCatalogSession();

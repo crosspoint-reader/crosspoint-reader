@@ -121,8 +121,9 @@ void LibraryListActivity::onExit() {
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
   const auto pluginDocuments = plugindocuments::collect();
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0,
-                                             {plugindocuments::isDocument, &pluginDocuments});
+  const bool ok = library::buildLibraryIndex(
+      "/", stats, SETTINGS.libraryUseMetadata != 0,
+      pluginDocuments.empty() ? library::SkipFile{} : library::SkipFile{plugindocuments::isDocument, &pluginDocuments});
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;

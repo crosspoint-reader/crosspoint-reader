@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstring>
@@ -14,42 +15,85 @@ namespace plugindocuments {
 namespace {
 constexpr size_t MAX_MANIFEST_SIZE = 8 * 1024;
 
-// Mirrors PluginCatalogActivity::parseMenu's acceptance rules, so the shelf hides
-// the files the menu would open as documents.
-void collectMenu(const JsonArrayConst entries, const std::string& pluginDir, const int depth, size_t& seen,
-                 std::vector<std::string>& out) {
+struct Walk {
+  const std::string& pluginDir;
+  bool hasBrowseUrl;
+  const char* logTag;
+  MenuVisitor visit;
+  void* ctx;
+  size_t kept = 0;
+};
+
+// Returns false once the entry limit is reached, which ends the whole walk.
+bool walkLevel(Walk& w, const JsonArrayConst entries, const int16_t parent, const int depth) {
   for (JsonVariantConst e : entries) {
-    if (seen >= PluginLocations::MAX_MENU_ENTRIES) return;
-    if (!e["title"].is<const char*>() || !*e["title"].as<const char*>()) continue;
+    if (w.kept >= PluginLocations::MAX_MENU_ENTRIES) {
+      if (w.logTag) {
+        LOG_ERR(w.logTag, "menu over %u entries, rest skipped",
+                static_cast<unsigned>(PluginLocations::MAX_MENU_ENTRIES));
+      }
+      return false;
+    }
+    MenuItem item;
+    item.title = e["title"] | "";
+    item.json = e;
     const char* type = e["type"] | "";
-    if (strcmp(type, "menu") == 0) {
-      if (depth >= PluginLocations::MAX_MENU_DEPTH) continue;
-      ++seen;
-      collectMenu(e["items"], pluginDir, depth + 1, seen, out);
+    const char* skip = nullptr;  // why the entry is dropped; one log line covers all
+    if (!*item.title) {
+      skip = "no title";
+    } else if (strcmp(type, "menu") == 0) {
+      item.type = MenuItem::Type::Menu;
+      if (depth >= PluginLocations::MAX_MENU_DEPTH) skip = "too deep";
+    } else if (strcmp(type, "catalog") == 0) {
+      item.type = MenuItem::Type::Catalog;
+      item.target = e["url"] | "";
+      if (item.target.empty() && !w.hasBrowseUrl) skip = "no browse url";
+    } else if (strcmp(type, "file") == 0) {
+      item.type = MenuItem::Type::File;
+      item.target = pluginhttp::inPluginDir(w.pluginDir, e["path"] | "");
+      if (!protectedpaths::isPluginPath(item.target)) {
+        skip = "path rejected";
+      } else if (item.target.size() > PluginLocations::MAX_DOCUMENT_PATH) {
+        skip = "path too long";
+      }
+      // Document is the default: a plugin must ask to touch Recents and progress.
+      item.document = strcmp(e["mode"] | "document", "book") != 0;
+    } else {
+      skip = "unknown type";
+    }
+    if (skip) {
+      if (w.logTag) LOG_ERR(w.logTag, "menu entry skipped (%s): '%s' %s", skip, item.title, item.target.c_str());
       continue;
     }
-    if (strcmp(type, "catalog") == 0) {
-      ++seen;
-      continue;
-    }
-    if (strcmp(type, "file") != 0) continue;
-    std::string path = pluginhttp::inPluginDir(pluginDir, e["path"] | "");
-    if (!protectedpaths::isPluginPath(path)) continue;
-    ++seen;
-    if (strcmp(e["mode"] | "document", "book") != 0) out.push_back(std::move(path));
+    ++w.kept;
+    const int16_t childParent = w.visit(w.ctx, item, parent);
+    if (item.type == MenuItem::Type::Menu && !walkLevel(w, e["items"], childParent, depth + 1)) return false;
   }
+  return true;
+}
+
+int16_t collectDocument(void* ctx, const MenuItem& item, int16_t /*parent*/) {
+  if (item.type == MenuItem::Type::File && item.document) {
+    static_cast<std::vector<std::string>*>(ctx)->push_back(item.target);
+  }
+  return -1;
 }
 }  // namespace
 
+void walkMenu(const JsonArrayConst entries, const std::string& pluginDir, const bool hasBrowseUrl, const char* logTag,
+              const MenuVisitor visit, void* ctx) {
+  Walk w{pluginDir, hasBrowseUrl, logTag, visit, ctx};
+  walkLevel(w, entries, -1, 1);
+}
+
 std::vector<std::string> collect() {
   std::vector<std::string> documents;
+  // Only the fields walkMenu() reads, so a large device.json parses small.
   JsonDocument filter;
+  filter["browse"]["url"] = true;
   JsonObject level = filter["menu"].add<JsonObject>();
   for (int depth = 1; depth <= PluginLocations::MAX_MENU_DEPTH; ++depth) {
-    level["title"] = true;
-    level["type"] = true;
-    level["path"] = true;
-    level["mode"] = true;
+    for (const char* key : {"title", "type", "url", "path", "mode"}) level[key] = true;
     if (depth < PluginLocations::MAX_MENU_DEPTH) level = level["items"].add<JsonObject>();
   }
   // On disk, not gated by the Plugins setting: a plugin's page is not a book
@@ -60,8 +104,8 @@ std::vector<std::string> collect() {
     if (!Storage.readFileToString("PDOC", plugin.dir + "/device.json", MAX_MANIFEST_SIZE, raw)) continue;
     JsonDocument doc;
     if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) continue;
-    size_t seen = 0;
-    collectMenu(doc["menu"], plugin.dir, 1, seen, documents);
+    const char* browseUrl = doc["browse"]["url"] | "";
+    walkMenu(doc["menu"], plugin.dir, *browseUrl != '\0', nullptr, collectDocument, &documents);
   }
   return documents;
 }

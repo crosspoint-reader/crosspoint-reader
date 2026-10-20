@@ -78,7 +78,9 @@ void HomeActivity::fillCoverGridFromLibrary() {
     library::BuildStats stats;
     const auto pluginDocuments = plugindocuments::collect();
     if (!library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0,
-                                    {plugindocuments::isDocument, &pluginDocuments}) ||
+                                    pluginDocuments.empty()
+                                        ? library::SkipFile{}
+                                        : library::SkipFile{plugindocuments::isDocument, &pluginDocuments}) ||
         !index.open(library::libraryIndexPath())) {
       LOG_ERR("HOME", "Cannot populate cover grid from library");
       return;

@@ -14,6 +14,8 @@ inline constexpr const char* INSTALL_MARKER = ".installing";
 // device.json "menu" bounds, shared by the menu screen and the Library filter.
 inline constexpr size_t MAX_MENU_ENTRIES = 32;
 inline constexpr int MAX_MENU_DEPTH = 3;
+// Longest menu file path; a silent restart carries it in a fixed RTC buffer.
+inline constexpr size_t MAX_DOCUMENT_PATH = 255;
 
 // True when documentPath lies inside the folder holding manifestPath
 // (e.g. "/plugins/WADN/device.json"). An empty manifest path (web-only plugin) never matches.

@@ -70,7 +70,7 @@ constexpr int MAX_PAGE_SIZE = 16;
 using PluginLocations::MAX_MENU_DEPTH;
 using PluginLocations::MAX_MENU_ENTRIES;
 
-// Upper bound on what parseMenu() keeps, so the entry vector is allocated once.
+// Upper bound on what walkMenu() keeps, so the entry vector is allocated once.
 size_t countMenuEntries(const JsonArrayConst entries, const int depth) {
   size_t n = 0;
   for (JsonVariantConst e : entries) {
@@ -345,52 +345,30 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.authTokenPath = auth["token_path"] | "access_token";
   manifest.authErrorPath = auth["error_path"] | "error";
 
+  // render() reads the menu from its own task.
+  RenderLock lock;
+  std::vector<int16_t>().swap(menuRows);
   std::vector<MenuEntry>().swap(menuEntries);
   menuEntries.reserve(std::min(countMenuEntries(doc["menu"], 1), MAX_MENU_ENTRIES));
-  parseMenu(doc["menu"], pluginDir, -1, 1);
+  plugindocuments::walkMenu(
+      doc["menu"], pluginDir, !manifest.browseReq.url.empty(), "PCAT",
+      [](void* ctx, const plugindocuments::MenuItem& item, const int16_t parent) -> int16_t {
+        auto& entries = *static_cast<std::vector<MenuEntry>*>(ctx);
+        MenuEntry entry;
+        entry.type = item.type;
+        entry.document = item.document;
+        entry.parent = parent;
+        entry.title = item.title;
+        entry.target = item.target;
+        if (item.type == plugindocuments::MenuItem::Type::Catalog) {
+          entry.body = item.json["body"] | "";
+          entry.item = item.json["download"] | "";
+        }
+        entries.push_back(std::move(entry));
+        return static_cast<int16_t>(entries.size() - 1);
+      },
+      &menuEntries);
   return !manifest.browseReq.url.empty() || !menuEntries.empty();
-}
-
-void PluginCatalogActivity::parseMenu(const JsonArrayConst entries, const std::string& pluginDir, const int16_t parent,
-                                      const int depth) {
-  for (JsonVariantConst e : entries) {
-    if (menuEntries.size() >= MAX_MENU_ENTRIES) {
-      LOG_ERR("PCAT", "menu over %u entries, rest skipped", static_cast<unsigned>(MAX_MENU_ENTRIES));
-      return;
-    }
-    MenuEntry entry;
-    entry.parent = parent;
-    entry.title = e["title"] | "";
-    const char* type = e["type"] | "";
-    const char* skip = nullptr;  // why the entry is dropped; one log line covers all
-    if (entry.title.empty()) {
-      skip = "no title";
-    } else if (strcmp(type, "menu") == 0) {
-      entry.type = MenuEntry::Type::Menu;
-      if (depth >= MAX_MENU_DEPTH) skip = "too deep";
-    } else if (strcmp(type, "catalog") == 0) {
-      entry.type = MenuEntry::Type::Catalog;
-      entry.target = e["url"] | "";
-      entry.body = e["body"] | "";
-      entry.item = e["download"] | "";
-      if (entry.target.empty() && manifest.browseReq.url.empty()) skip = "no browse url";
-    } else if (strcmp(type, "file") == 0) {
-      entry.type = MenuEntry::Type::File;
-      entry.target = pluginhttp::inPluginDir(pluginDir, e["path"] | "");
-      if (!protectedpaths::isPluginPath(entry.target)) skip = "path rejected";
-      // Document is the default: a plugin must ask to touch Recents and progress.
-      entry.document = strcmp(e["mode"] | "document", "book") != 0;
-    } else {
-      skip = "unknown type";
-    }
-    if (skip) {
-      LOG_ERR("PCAT", "menu entry skipped (%s): '%s' %s", skip, entry.title.c_str(), entry.target.c_str());
-      continue;
-    }
-    const bool submenu = entry.type == MenuEntry::Type::Menu;
-    menuEntries.push_back(std::move(entry));
-    if (submenu) parseMenu(e["items"], pluginDir, static_cast<int16_t>(menuEntries.size() - 1), depth + 1);
-  }
 }
 
 bool PluginCatalogActivity::loadBrowseListIndex() {
@@ -592,8 +570,11 @@ void PluginCatalogActivity::enterPluginPicker() {
 
   manifestPath.clear();
   manifest = Manifest{};
-  std::vector<MenuEntry>().swap(menuEntries);
-  std::vector<int16_t>().swap(menuRows);
+  {
+    RenderLock lock;
+    std::vector<MenuEntry>().swap(menuEntries);
+    std::vector<int16_t>().swap(menuRows);
+  }
   currentMenu = -1;
   catalogTitle = tr(STR_PLUGINS);
   dropCatalogSession();  // no TLS while only picking
@@ -652,16 +633,20 @@ void PluginCatalogActivity::dropCatalogSession() {
   std::string().swap(menuCatalogUrl);
   std::string().swap(menuCatalogBody);
   std::string().swap(menuCatalogItem);
+  pendingAutoDownload = -1;
 }
 
 void PluginCatalogActivity::showMenu(const int parent, const int selectEntry) {
   dropCatalogSession();  // menus need no TLS; a catalog entry opens its own
-  currentMenu = parent;
-  menuRows.clear();
-  for (size_t i = 0; i < menuEntries.size(); i++) {
-    if (menuEntries[i].parent == parent) menuRows.push_back(static_cast<int16_t>(i));
+  {
+    RenderLock lock;
+    currentMenu = parent;
+    menuRows.clear();
+    for (size_t i = 0; i < menuEntries.size(); i++) {
+      if (menuEntries[i].parent == parent) menuRows.push_back(static_cast<int16_t>(i));
+    }
+    state = State::PLUGIN_MENU;
   }
-  state = State::PLUGIN_MENU;
   const auto row = std::find(menuRows.begin(), menuRows.end(), selectEntry);
   if (row != menuRows.end()) moveSelectionTo(static_cast<int>(row - menuRows.begin()));
   requestUpdate();
@@ -691,9 +676,12 @@ void PluginCatalogActivity::activateMenuEntry(const int entryIndex) {
       menuCatalogBody = entry.body;
       menuCatalogItem = entry.item;
       catalogTitle = entry.title;
-      // `entry` dies here: the catalog keeps only its overrides.
-      std::vector<MenuEntry>().swap(menuEntries);
-      std::vector<int16_t>().swap(menuRows);
+      {
+        // `entry` dies here: the catalog keeps only its overrides.
+        RenderLock lock;
+        std::vector<MenuEntry>().swap(menuEntries);
+        std::vector<int16_t>().swap(menuRows);
+      }
       enterCatalog();
       return;
   }
@@ -967,7 +955,9 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
       fail(StrId::STR_NO_FILES_FOUND);
       return;
     }
-    downloadItem(static_cast<int>(it - items.begin()));
+    // Run from the next loop's handleCustomInput(): the download's TLS needs
+    // the stack this fetch call chain is holding. No repaint in between.
+    pendingAutoDownload = static_cast<int>(it - items.begin());
     return;
   }
   requestUpdate();
@@ -1168,6 +1158,10 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
   const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
   session.reset();
   item = {};
+  if (!menuCatalogItem.empty()) {
+    finishDownload(result);  // a one-tap entry returns to the menu: no list to restore
+    return;
+  }
   // Reuse the SD response without another network request or resetting navigation.
   if (!parseBrowseResponse()) return;
   session = makeUniqueNoThrow<freeink::SecureHttpClient>();
@@ -1259,6 +1253,15 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
     }
   }
   complete = true;
+  // A re-synced page must not open from the old layout cache, and a new
+  // device.json may change which files the Library hides as menu documents.
+  bool libraryChanged = false;
+  for (const auto& path : staged) {
+    clearBookCache(path);
+    libraryChanged = libraryChanged || library::isLibraryBookFile(path) ||
+                     (path.size() >= 12 && path.compare(path.size() - 12, 12, "/device.json") == 0);
+  }
+  if (libraryChanged) library::markLibraryIndexDirty();
   emitBookDownloaded(manifestPath, staged.empty() ? "" : staged.front(), item.title);
   // Bundles are how plugins install (plugin-store); pick up any new event
   // subscriptions without a restart. Cheap: a few small manifest reads.
@@ -1367,6 +1370,12 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 
 // Sign-in and completion states precede the shared catalog input handling.
 bool PluginCatalogActivity::handleCustomInput() {
+  if (pendingAutoDownload >= 0) {
+    const int index = pendingAutoDownload;
+    pendingAutoDownload = -1;
+    if (state == State::BROWSING && index < static_cast<int>(items.size())) downloadItem(index);
+    return true;
+  }
   if (ignoreHubInstallerBackRelease) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ignoreHubInstallerBackRelease = false;
