@@ -25,6 +25,8 @@
 #include <EpdFont.h>
 #include <FontDecompressor.h>
 #include <builtinFonts/bookerly_18_bolditalic.h>
+#include <builtinFonts/cjk_ui_zh_10.h>
+#include <builtinFonts/cjk_ui_zh_12.h>
 #include <builtinFonts/inter_ui_12_regular.h>
 #include <builtinFonts/inter_ui_14_regular.h>
 #include <builtinFonts/notosans_10_regular.h>
@@ -33,6 +35,7 @@
 #include <builtinFonts/notosans_16_regular.h>
 #include <builtinFonts/notosans_18_regular.h>
 #include <esp_heap_caps.h>
+#include <esp_rom_crc.h>
 #include <esp_timer.h>
 
 // ---------------------------------------------------------------------------
@@ -248,6 +251,95 @@ static void benchReaderBitmapCold(const char* label, const EpdFontData* data) {
       "BENCH reader_cold       %-18s total=%6lldus  per_glyph=%5lldus  glyphs=%d  streamed=%luB/%luB  peak_ring=%luB\n",
       label, us, glyphs ? us / glyphs : 0, glyphs, (unsigned long)st.streamedBytes, (unsigned long)st.groupBytes,
       (unsigned long)st.peakTempBytes);
+}
+
+// ---------------------------------------------------------------------------
+// 4b. A compressed CJK UI face, glyph by glyph and whole.
+//
+// The CJK UI faces ship as 1-bit DEFLATE groups of at most 2 KB (compress_ui_face.py). Two costs
+// decide whether that is affordable, and both were estimated on the host, scaled by reader_cold,
+// before any device ran them:
+//   * cjk_cold: a glyph decoded alone from its group start -- the path the language picker and CJK
+//     book titles take for the languages whose faces are not in the language pack. Estimated at
+//     ~3 ms a glyph. The sweep is the 71 characters of the Chinese Settings Display page, so the
+//     total is roughly what one draw of that page would cost with no pack behind it.
+//   * cjk_inflate: a whole face, in glyph order -- what building the language pack pays once per
+//     language change or firmware update for the active language. Estimated at ~2.5 us a byte.
+// X3, 2026-10-19: cjk_cold 1.87-1.90 ms a glyph (133-135 ms for the 71), cjk_inflate 105-106 ms a face.
+// ---------------------------------------------------------------------------
+
+// clang-format off
+static const uint32_t kCjkSettingsPage[] = {
+    0x663E, 0x793A, 0x9605, 0x8BFB, 0x64CD, 0x4F5C, 0x7CFB, 0x7EDF, 0x4F11, 0x7720, 0x65F6, 0x95F4,
+    0x5206, 0x949F, 0x5C4F, 0x5E55, 0x6DF1, 0x8272, 0x8FB9, 0x7F18, 0x7559, 0x767D, 0x7A84, 0x5C01,
+    0x9762, 0x6A21, 0x5F0F, 0x9002, 0x5E94, 0x6EE4, 0x955C, 0x65E0, 0x4FE1, 0x606F, 0x53E0, 0x52A0,
+    0x5173, 0x56FE, 0x7247, 0x9009, 0x62E9, 0x968F, 0x673A, 0x8D85, 0x540E, 0x5FEB, 0x901F, 0x6062,
+    0x590D, 0x7535, 0x6C60, 0x6807, 0x9690, 0x85CF, 0x91CF, 0x767E, 0x6BD4, 0x4ECE, 0x4E0D, 0x7528,
+    0x6237, 0x754C, 0x4E3B, 0x9898, 0x5B57, 0x53F7, 0x51C6, 0x8FD4, 0x56DE, 0x4E0A, 0x4E0B,
+};
+// clang-format on
+static constexpr int kCjkSettingsPageCount = sizeof(kCjkSettingsPage) / sizeof(kCjkSettingsPage[0]);
+
+static void benchCjkCold(const char* label, const EpdFontData* data) {
+  const EpdFont font(data);
+  decompressor.clearCache();
+  decompressor.resetStats();
+  int glyphs = 0;
+  timerStart();
+  for (int i = 0; i < kCjkSettingsPageCount; ++i) {
+    const EpdGlyphRef g = font.findGlyph(kCjkSettingsPage[i]);
+    if (!g) continue;
+    const uint8_t* bm = decompressor.getBitmap(data, g, g.index);
+    if (bm) {
+      sink += bm[0];
+      glyphs++;
+    }
+  }
+  const int64_t us = timerElapsedUs();
+  const auto& st = decompressor.getStats();
+  Serial.printf(
+      "BENCH cjk_cold          %-18s total=%6lldus  per_glyph=%5lldus  glyphs=%d  streamed=%luB  peak_ring=%luB\n",
+      label, us, glyphs ? us / glyphs : 0, glyphs, (unsigned long)st.streamedBytes, (unsigned long)st.peakTempBytes);
+}
+
+static bool countInflated(void* ctx, const uint8_t* bytes, const uint32_t len) {
+  *static_cast<uint32_t*>(ctx) += len;
+  sink += bytes[0];
+  return true;
+}
+
+static void benchCjkInflate(const char* label, const EpdFontData* data) {
+  // Static, like the language pack builder's ring: the point is the decode, not the allocator.
+  static uint8_t ring[2048];
+  static uint8_t glyph[FontDecompressor::HOT_GLYPH_BUF_SIZE];
+  uint32_t bytes = 0;
+  timerStart();
+  const bool ok = FontDecompressor::inflateFace(data, ring, sizeof(ring), glyph, &countInflated, &bytes);
+  const int64_t us = timerElapsedUs();
+  Serial.printf("BENCH cjk_inflate       %-18s total=%6lldus  bytes=%lu  per_byte=%lldns  %s\n", label, us,
+                (unsigned long)bytes, bytes ? (us * 1000) / bytes : 0, ok ? "ok" : "FAILED");
+}
+
+// ---------------------------------------------------------------------------
+// 4c. What checking the language pack slot costs on every map.
+//
+// FlashLangPartition::map() runs esp_rom_crc32_le over everything the slot holds before it hands
+// out a pointer: 88,264 B for Chinese, ~20-30 KB for most languages, once per boot and per language
+// change. Measured here over two font arrays of about that size, read through the flash cache cold,
+// as the mapped slot is. Host-estimated at 5-25 ms for Chinese; X3, 2026-10-20: 11.5 ms over 94,221 B,
+// 121 ns a byte, ~10.7 ms for Chinese.
+// ---------------------------------------------------------------------------
+
+static void benchSlotCrc() {
+  constexpr uint32_t CHINESE_SLOT_BYTES = 88264;
+  timerStart();
+  uint32_t crc = esp_rom_crc32_le(0, notosans_18_regularBitmaps, sizeof(notosans_18_regularBitmaps));
+  crc = esp_rom_crc32_le(crc, bookerly_18_bolditalicBitmaps, sizeof(bookerly_18_bolditalicBitmaps));
+  const int64_t us = timerElapsedUs();
+  sink += crc;
+  const uint32_t bytes = sizeof(notosans_18_regularBitmaps) + sizeof(bookerly_18_bolditalicBitmaps);
+  Serial.printf("BENCH slot_crc          %-18s total=%6lldus  bytes=%lu  per_byte=%lldns  chinese_slot~%lldus\n",
+                "rom crc32_le", us, (unsigned long)bytes, (us * 1000) / bytes, us * CHINESE_SLOT_BYTES / bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -870,6 +962,13 @@ void setup() {
   benchTextMeasure("notosans_18/page", &notosans_18_regular, kReaderPage);
   benchReaderBitmapCold("notosans_18", &notosans_18_regular);
   benchReaderPrewarm("notosans_18", &notosans_18_regular);
+
+  Serial.println("\n-- CJK UI faces (1-bit, 2 KB DEFLATE groups) --");
+  benchCjkCold("cjk_ui_zh_10", &cjk_ui_zh_10);
+  benchCjkCold("cjk_ui_zh_12", &cjk_ui_zh_12);
+  benchCjkInflate("cjk_ui_zh_10", &cjk_ui_zh_10);
+  benchCjkInflate("cjk_ui_zh_12", &cjk_ui_zh_12);
+  benchSlotCrc();
 
   Serial.println("\n-- Fallback-slot sizing (correctness, not timing) --");
   checkWidestGlyph("bookerly_18_bi", &bookerly_18_bolditalic, 0x01C4);

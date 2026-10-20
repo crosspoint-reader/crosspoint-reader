@@ -747,6 +747,9 @@ void setupDisplayAndFonts(bool seamless = false, bool skipSdFontDiscovery = fals
   CjkUiFonts::attach(ui12BoldFont, 12);
   CjkUiFonts::attach(ui14RegularFont, 14);
   CjkUiFonts::attach(ui14BoldFont, 14);
+  // The faces ship compressed; those the language pack does not hold decode through the same
+  // decompressor as the reader faces, glyph by glyph.
+  CjkUiFonts::setDecompressor(&fontDecompressor);
   CjkUiFonts::setLanguage(I18N.getLanguage());
   // Chinese and Japanese write no spaces: wrapped UI text breaks between their characters by the
   // reader's CJK rules, kinsoku included.
@@ -1329,6 +1332,9 @@ void setup() {
   // a settings file existed, which the load path alone would not cover.
   SETTINGS.clockTimezone = timezones::activeIndex();
   timezones::applyToClock();
+  // A CJK language's pack carries its CJK UI faces, so the faces are read straight from flash
+  // instead of decoded per glyph (CjkUiFonts.h). Registered before the first pack is resolved.
+  I18N.setPackExtension(&CjkUiFonts::packExtension());
   I18N.loadSettings();
   KOREADER_STORE.loadFromFile();
 #if CROSSPOINT_KOREADER_AUTOSYNC

@@ -9,8 +9,12 @@ character it lacks (CJK_UI_STAND_IN) and the ideographic space, cut from the Not
 region picks the glyph forms, which differ for many shared Han characters). src/CjkUiFonts.cpp
 attaches them behind the UI faces as fallback glyphs.
 
-Uncompressed, like the Inter faces and for the same reason: UI screens do not prewarm a glyph
-cache, and a compressed face inflates a whole DEFLATE group per glyph on every repaint.
+1-bit like the Inter faces, and then compressed into 2 KB DEFLATE groups (compress_ui_face.py),
+which transforms the header fontconvert.py wrote and never re-renders a glyph. UI screens do not
+prewarm a glyph cache, so a compressed face would decode a group per glyph on every repaint; the
+active UI language's faces are therefore inflated once into the language pack slot and read from
+flash like an uncompressed face (CjkUiFonts, FlashLangPartition), and only the other two languages'
+glyphs -- the language picker's names, CJK book titles -- decode on demand.
 
 Run it whenever a CJK translation changes. scripts/gen_i18n.py fails the build when a
 translation uses a character no UI face has, and names this script.
@@ -93,6 +97,8 @@ def main():
                        "--codepoints-file", chars_path]
                 with open(out, "w", encoding="utf-8", newline="\n") as header:
                     subprocess.run(cmd, check=True, stdout=header, cwd=SCRIPT_DIR)
+                subprocess.run([sys.executable, str(SCRIPT_DIR / "compress_ui_face.py"), str(out)], check=True,
+                               cwd=SCRIPT_DIR)
                 generated.append((lang_code, face, needed))
                 print(f"Generated {out.relative_to(REPO_ROOT)} ({len(needed)} characters)")
         finally:

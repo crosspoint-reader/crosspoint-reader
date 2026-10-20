@@ -1,10 +1,10 @@
 # Font flash and glyph-path speed
 
-Status: open items as of 2026-10-07. Collected from the font-flash analysis of 2026-09-19 (removed in the 2026-10-07 docs cleanup; in git history).
+Status: open items as of 2026-10-19. Collected from the font-flash analysis of 2026-09-19 (removed in the 2026-10-07 docs cleanup; in git history).
 
 Fonts are the largest part of the firmware image, so they are where flash headroom comes from. Every lever below except the first trades bytes for glyph-path CPU or RAM; measure that trade before changing a format (last item).
 
-Already shipped, so nobody redoes it: the built-in glyph record went from 16 to 8 bytes by deriving `dataLength` and narrowing `left`/`top` (`f66c1a467`, −384 KB), then to 6 bytes by dropping `dataOffset` (`7779e1936`, −97,716 B); lookups return `EpdGlyphRef` by value and `epdResolveGlyph()` is the one place that tells built-in and `.cpfont` records apart. Size-invariant tables are shared across a family's sizes (`51707caae`, −226,560 B). Kerning is stored sparsely (`b16b4cb28`, −414,710 B) with split class maps (`30a3689e7`). Groups decode through a ring sized to their longest back-reference instead of whole (`bf39ecfcd`, ~4 KB peak for +2.1 % font data). Non-English UI languages ship compressed in a flash language pack (`e06754e18`, −232 KB). `GfxRenderer::truncatedText` truncates in one pass (`8b54d1c78`). The bitmap recompression survey found every alternative but brotli dead: zopfli tuning (−0.2 % for 30× the encode time), lzma2 (+1.7 %), zstd (−0.8 %), shared or trained preset dictionaries (+3.6 % to +6.2 %), byte-delta and bitplane pre-transforms (+32 %, +35 %), and per-glyph DEFLATE at any dictionary size (best case +41 %).
+Already shipped, so nobody redoes it: the built-in glyph record went from 16 to 8 bytes by deriving `dataLength` and narrowing `left`/`top` (`f66c1a467`, −384 KB), then to 6 bytes by dropping `dataOffset` (`7779e1936`, −97,716 B); lookups return `EpdGlyphRef` by value and `epdResolveGlyph()` is the one place that tells built-in and `.cpfont` records apart. Size-invariant tables are shared across a family's sizes (`51707caae`, −226,560 B). Kerning is stored sparsely (`b16b4cb28`, −414,710 B) with split class maps (`30a3689e7`). Groups decode through a ring sized to their longest back-reference instead of whole (`bf39ecfcd`, ~4 KB peak for +2.1 % font data). Non-English UI languages ship compressed in a flash language pack (`e06754e18`, −232 KB). `GfxRenderer::truncatedText` truncates in one pass (`8b54d1c78`). The bitmap recompression survey found every alternative but brotli dead: zopfli tuning (−0.2 % for 30× the encode time), lzma2 (+1.7 %), zstd (−0.8 %), shared or trained preset dictionaries (+3.6 % to +6.2 %), byte-delta and bitplane pre-transforms (+32 %, +35 %), and per-glyph DEFLATE at any dictionary size (best case +41 %). The six CJK UI faces ship as 1-bit DEFLATE groups (`compress_ui_face.py`, −78.8 KB of font data, −75,238 B of image), the active UI language's inflated into its language pack slot so no UI screen decodes them (`docs/i18n.md`).
 
 ## `.cpfont` glyph record 16 → 10 bytes
 
@@ -20,7 +20,7 @@ Already shipped, so nobody redoes it: the built-in glyph record went from 16 to 
 
 ## A packed-glyph cache that outlives one page
 
-**Open.** Decoded glyphs live in per-page slots that each prewarm refills, plus a 4-slot fallback cache (`FontDecompressor::FALLBACK_CACHE_SLOTS`). UI screens never prewarm, so a UI face that missed would thrash those four slots on every repaint. That is why the UI faces ship uncompressed.
+**Open.** Decoded glyphs live in per-page slots that each prewarm refills, plus a 4-slot fallback cache (`FontDecompressor::FALLBACK_CACHE_SLOTS`). UI screens never prewarm, so a UI face that missed would thrash those four slots on every repaint. That is why the Inter UI faces ship uncompressed, and why the CJK UI faces, which are compressed, are read from the language pack slot for the active language instead of decoded.
 
 **Why it matters.** The cache was the biggest win in crosspoint-reader PR #3083 (681 → 385 ms a page, pages decoding nothing at all), and it is independent of how the bitmaps are stored: it would speed up today's DEFLATE groups and SD fonts, where a thrashing glyph ring is a measured multi-second cost on the font preview screen. Made global rather than reader-scoped, it is the precondition for compressing the UI faces, for brotli on the UI path, or for a per-glyph codec. A compressed UI face without it would sit in the cold regime: 2,796 µs a glyph against 3.7 µs warm (X3, 2026-09-19), about 84 ms of extra compose on a menu screen.
 
@@ -29,6 +29,23 @@ Already shipped, so nobody redoes it: the built-in glyph record went from 16 to 
 **Cost.** About 8–10 KB of RAM resident for the session. As a permanent block it has to be allocated at a stable point before anything is released (see [Memory Allocation Strategy §4](../memory-allocation-strategy.md#4-where-each-consumer-lands)); on the X3, which reads at 30–41 KB free, that is the hard part.
 
 **Next step.** Decide whether 8–10 KB of permanent heap is affordable on the X3. If it is, prototype it allocated at boot and measure `reader_cold`, `reader_warm` and Home/Settings compose time.
+
+## Compressing the Inter and Noto Sans 8 UI faces
+
+**Open.** The six Inter UI faces and Noto Sans 8 still ship flat: 226,405 B of bitmaps and offsets. Measured (2026-10-19) with the CJK faces' encoding, 1-bit rows byte-aligned in DEFLATE groups:
+
+| cap | Inter (6 faces) | Noto Sans 8 |
+| --- | ---: | ---: |
+| 512 B | −89.5 KB | −4.8 KB |
+| 1 KB | −107.0 KB | −6.0 KB |
+| 2 KB | −116.3 KB | −6.8 KB |
+| 4 KB | −123.8 KB | −7.5 KB |
+
+**Why it is not done.** Speed. uzlib decodes these streams at ~2.5 µs a byte on the C3 plus ~0.4 ms per group start (host-scaled from `reader_cold`), so a glyph decoded alone costs ~2.5 ms at 2 KB groups (the CJK faces measure 1.9 ms on the X3), and every UI screen in every language would pay it: Latin glyphs are on every screen. The CJK faces escaped that by moving the active language's faces into the language pack slot, which only works because a CJK UI needs one language's faces; Inter is needed by all of them at once, at 198 KB flat, past what the slot can hold.
+
+**A hybrid that might pay.** ASCII and Latin-1 are 16 % of Inter's bitmap bytes. Kept flat, with the rest (Latin Extended, Cyrillic, Vietnamese, punctuation and arrows beyond Latin-1) compressed, an English, German or French UI decodes nothing, and the saving is still ~90 KB. A Russian or Vietnamese UI would decode its letters, ~40-80 glyphs a screen across the faces in use: too slow without either a per-language slot (Cyrillic is ~9 KB a face) or a glyph cache that outlives a screen (above). Check the punctuation every UI draws (the truncation ellipsis, `«` `»` in the button hints) stays flat.
+
+**Next step.** Decide between a per-language Inter extension in the language pack (the CJK mechanism, sized per language) and the persistent glyph cache, then measure a Russian Settings page on the X3.
 
 ## Brotli for glyph bitmaps
 
@@ -55,7 +72,7 @@ Already shipped, so nobody redoes it: the built-in glyph record went from 16 to 
 **Open.** Any lever above trades bytes for CPU, and crosspoint-reader PR #3083 stalled because nobody could measure that trade on a device. The instruments exist; the baselines are thin.
 
 **Where.**
-- `env:bench_font` (`bench/font_main.cpp`): the font layer on a C3 with no framebuffer or panel. `glyph_lookup`, `kerning`, `text_measure`, `ui_bitmap_fetch`, `reader_cold`, `reader_prewarm` and `reader_warm` for `inter_ui_12`, `inter_ui_14` and `notosans_14`. `pio run -e bench_font -t upload`, then `pio device monitor -e bench_font`. It replaces the firmware; flash `env:default` back afterwards.
+- `env:bench_font` (`bench/font_main.cpp`): the font layer on a C3 with no framebuffer or panel. `glyph_lookup`, `kerning`, `text_measure`, `ui_bitmap_fetch`, `reader_cold`, `reader_prewarm` and `reader_warm` for `inter_ui_12`, `inter_ui_14` and `notosans_14`, and `cjk_cold` and `cjk_inflate` for the compressed Chinese UI faces. `pio run -e bench_font -t upload`, then `pio device monitor -e bench_font`. It replaces the firmware; flash `env:default` back afterwards.
 - The reader's render benchmark (`EpubReaderActivity::runRenderBenchmark`, reader menu "Render Benchmark"): ten page turns each way with per-phase timings and font cache counters. Compiled out unless `-DENABLE_BENCHMARKS=1`.
 - UI screens: only the `Time = … ms from clearScreen to displayBuffer` debug line, which is the whole compose and cannot separate the font path.
 

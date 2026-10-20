@@ -65,16 +65,21 @@ static constexpr size_t HEADER_BYTES = 8 + MAX_ENTRIES * ENTRY_SIZE;  // 776 byt
 
 // Bytes at the END of the partition reserved for FlashLangPartition.
 //
-// 64 KB because esp_partition_mmap() aligns to 64 KB and the language slot has
-// to start on such a boundary: the partition begins at 0xc90000 and is an exact
-// multiple of 64 KB, so size - 64 KB is aligned. The largest language needs
-// ~31 KB (header + offset table + blob), so half the slot is spare.
+// A multiple of 64 KB because esp_partition_mmap() aligns to 64 KB and the
+// language slot has to start on such a boundary: the partition begins at
+// 0xc90000 and is an exact multiple of 64 KB, so size - 128 KB is aligned.
 //
-// This costs the font cache nothing in practice. SdCardFontManager already
-// declines to use the top of the partition — its PARTITION_CAP is 3300 KB
-// against a real 3,538,944 B — so 159,744 B were already going unused and this
-// reservation fits inside that with ~92 KB still spare.
-static constexpr size_t LANG_RESERVED_BYTES = 64 * 1024;
+// 128 KB since the CJK languages carry their CJK UI faces in the slot after
+// their strings (src/CjkUiFonts.cpp): the faces ship DEFLATE-compressed in the
+// image, ~80 KB smaller, and the active language's are inflated here once so
+// they read like rodata. Chinese needs the most, ~88 KB (~15 KB of strings and
+// table, 70,770 B of bitmaps, 2,396 B of bitmap offsets); every other
+// language stays under the old 64 KB (Russian, the largest, ~30 KB), and maps
+// only the one page it always did. The 64 KB this took from the font cache
+// below is the price of that flash: SdCardFontManager and the TTF glyph store
+// budget against fontUsableSize(), and both reject an index or a layout that
+// reaches past it and rebuild from the SD card, so the move migrates itself.
+static constexpr size_t LANG_RESERVED_BYTES = 128 * 1024;
 
 // Bytes of the partition the font cache may use: everything below the language
 // slot. Returns 0 if the partition is missing or smaller than the reservation.

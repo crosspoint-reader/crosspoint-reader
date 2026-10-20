@@ -133,6 +133,13 @@ constexpr uint16_t glyphDataBytes(const int width, const int height, const bool 
   return static_cast<uint16_t>((width * height * (is2Bit ? 2 : 1) + 7) / 8);
 }
 
+/// Bytes one row of a glyph takes inside a compressed group (EpdFontGroup). Groups hold each row
+/// padded to a whole byte, unlike the flat bitmap: identical rows then give identical bytes wherever
+/// they start, which DEFLATE can match. FontDecompressor::GroupStream repacks a glyph as it reads it.
+constexpr uint32_t groupRowBytes(const int width, const bool is2Bit) {
+  return is2Bit ? (static_cast<uint32_t>(width) + 3u) / 4u : (static_cast<uint32_t>(width) + 7u) / 8u;
+}
+
 /// One glyph's metrics, resolved from whichever representation its font uses.
 ///
 /// Returned BY VALUE. A pointer cannot serve both forms, and the old `const EpdGlyph*` carried a
@@ -179,7 +186,8 @@ struct EpdGlyphRef {
   const EpdGlyphRef* operator->() const { return this; }
 };
 
-/// Compressed font group: a DEFLATE-compressed block of glyph bitmaps
+/// Compressed font group: a DEFLATE-compressed block of glyph bitmaps, each row padded to a byte
+/// (groupRowBytes). The 2-bit reader faces and the 1-bit CJK UI faces (compress_ui_face.py) share it.
 typedef struct {
   uint32_t compressedOffset;  ///< Byte offset into compressed data array
   uint32_t compressedSize;    ///< Compressed DEFLATE stream size
