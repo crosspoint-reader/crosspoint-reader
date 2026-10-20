@@ -321,6 +321,12 @@ void OpdsBookBrowserActivity::loop() {
   ButtonEventManager::ButtonEvent event;
   while (buttonEvents.consumeEvent(event)) {
     const auto button = event.button;
+    // A long Back leaves the whole catalog from any of these screens too, as it does from the
+    // lists (ListGrammar maps it to Home): however deep the browse went, one hold gets out.
+    if (button == MappedInputManager::Button::Back && event.type == ButtonEventManager::PressType::Long) {
+      onGoHome();
+      return;
+    }
     if (state == BrowserState::ERROR) {
       if (button == MappedInputManager::Button::Confirm) {
         checkAndConnectWifi();
