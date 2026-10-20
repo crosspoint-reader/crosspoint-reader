@@ -422,7 +422,8 @@ plugin that syncs a fixed set of files:
 
 - The item list is not shown. After Wi-Fi (and sign-in, if needed) the first
   page is fetched, the item whose `browse.fields.id` value equals the id
-  downloads at once, and the menu comes back. Back during the download also
+  downloads at once, and the menu comes back. The catalog must map
+  `browse.fields.id`. Back during the download also
   returns to the menu.
 - With more than one `browse.lists`, the list picker still comes first; the
   id is looked up on page 1 of the chosen list.
@@ -463,16 +464,17 @@ A relative `path` is in the plugin's folder. An absolute path (starting with
 plugins list: the menu to return to is found from the plugin folder that holds
 the file.
 
-Limits: 32 entries in total, counted in file order; later entries are
-skipped. The root list and two levels of submenus: a `menu` entry inside a
-second-level submenu is skipped with its items. These entries are skipped
-too, and logged (`[PCAT]`): no `title`, an unknown `type`, a `catalog` with
-no browse URL, and a `file` path that contains `..`, points at a credential
-store, or is longer than 255 bytes (a silent restart carries the open
-document's path in 256 bytes of RTC memory). The Library applies the same
-rules when it decides which files are documents. If no entry is left and there is no `browse.url`, the plugin shows the
-"invalid manifest" error. Picking a file that does not exist yet (a page the
-plugin has not synced) shows a short notice and the menu stays open.
+Limits: 32 kept entries in total (submenu items included), counted in file
+order; later entries are skipped. The root list and two levels of submenus: a
+`menu` entry inside a second-level submenu is skipped with its items. These
+entries are skipped too, and logged (`[PCAT]`): no `title`, an unknown `type`,
+a `catalog` with no browse URL, and a `file` path that contains `..`, points
+at a credential store, or is longer than 255 bytes (a silent restart carries
+the open document's path in 256 bytes of RTC memory). The Library applies the
+same rules when it decides which files are documents. If no entry is left and
+there is no `browse.url`, the plugin shows the "invalid manifest" error.
+Picking a file that does not exist yet (a page the plugin has not synced)
+shows a short notice and the menu stays open.
 While a `catalog` entry is open, the menu is freed so Wi-Fi and TLS get the
 heap; Back re-reads it from `device.json`.
 Older firmware ignores `menu` and opens the catalog (or README) as before.

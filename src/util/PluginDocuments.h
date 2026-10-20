@@ -33,6 +33,9 @@ void walkMenu(JsonArrayConst entries, const std::string& pluginDir, bool hasBrow
 // Full SD paths across every installed plugin, read from device.json.
 std::vector<std::string> collect();
 
+// True when replacing this file can change what collect() returns (a device.json).
+bool changesDocuments(std::string_view fullPath);
+
 // library::SkipFile callback; ctx is the vector collect() returned.
 bool isDocument(const void* ctx, std::string_view fullPath);
 

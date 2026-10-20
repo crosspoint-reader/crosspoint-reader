@@ -110,6 +110,11 @@ std::vector<std::string> collect() {
   return documents;
 }
 
+bool changesDocuments(const std::string_view fullPath) {
+  constexpr std::string_view DEVICE_JSON = "/device.json";
+  return fullPath.size() >= DEVICE_JSON.size() && fullPath.substr(fullPath.size() - DEVICE_JSON.size()) == DEVICE_JSON;
+}
+
 bool isDocument(const void* ctx, const std::string_view fullPath) {
   const auto& documents = *static_cast<const std::vector<std::string>*>(ctx);
   return std::find(documents.begin(), documents.end(), fullPath) != documents.end();

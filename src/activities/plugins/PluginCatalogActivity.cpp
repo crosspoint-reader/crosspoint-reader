@@ -653,7 +653,8 @@ void PluginCatalogActivity::showMenu(const int parent, const int selectEntry) {
 }
 
 const std::string& PluginCatalogActivity::menuTitle() const {
-  if (currentMenu >= 0) return menuEntries[currentMenu].title;
+  // A catalog entry frees the menu but keeps currentMenu for the way back.
+  if (currentMenu >= 0 && currentMenu < static_cast<int>(menuEntries.size())) return menuEntries[currentMenu].title;
   for (const PluginRef& plugin : installedPlugins) {
     if (plugin.name == pickerReturnName) return plugin.title;
   }
@@ -947,7 +948,6 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
   if (!manifest.isXmlList()) page = newPage;
   if (!fetchBrowseResponse() || !parseBrowseResponse()) return;
   nav.reset();
-  state = State::BROWSING;
   if (!menuCatalogItem.empty()) {
     // One-tap menu entry: download its item straight away; downloadFinished() returns to the menu.
     const auto it = std::find_if(items.begin(), items.end(), [&](const Item& i) { return i.id == menuCatalogItem; });
@@ -956,10 +956,12 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
       return;
     }
     // Run from the next loop's handleCustomInput(): the download's TLS needs
-    // the stack this fetch call chain is holding. No repaint in between.
+    // the stack this fetch call chain is holding. The state stays on loading,
+    // so a repaint in between never shows the list.
     pendingAutoDownload = static_cast<int>(it - items.begin());
     return;
   }
+  state = State::BROWSING;
   requestUpdate();
 }
 
@@ -1244,6 +1246,12 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   }
   // ponytail: a failed swap mid-loop leaves a mixed old/new bundle; a
   // directory-level swap would close that, at the cost of copying the tree.
+  // A replaced page must not open from its old layout cache, and the Library
+  // may need a rescan; both also hold for files swapped before a failure.
+  bool libraryChanged = false;
+  ScopedCleanup refresh{[&] {
+    if (libraryChanged) library::markLibraryIndexDirty();
+  }};
   for (size_t i = 0; i < staged.size(); i++) {
     if (!Storage.replaceFile((staged[i] + ".new").c_str(), staged[i].c_str())) {
       LOG_ERR("PCAT", "bundle swap failed: %s", staged[i].c_str());
@@ -1251,17 +1259,11 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       complete = true;  // already-swapped files stay; the rollback must not touch them
       return HttpDownloader::FILE_ERROR;
     }
+    clearBookCache(staged[i]);
+    libraryChanged =
+        libraryChanged || library::isLibraryBookFile(staged[i]) || plugindocuments::changesDocuments(staged[i]);
   }
   complete = true;
-  // A re-synced page must not open from the old layout cache, and a new
-  // device.json may change which files the Library hides as menu documents.
-  bool libraryChanged = false;
-  for (const auto& path : staged) {
-    clearBookCache(path);
-    libraryChanged = libraryChanged || library::isLibraryBookFile(path) ||
-                     (path.size() >= 12 && path.compare(path.size() - 12, 12, "/device.json") == 0);
-  }
-  if (libraryChanged) library::markLibraryIndexDirty();
   emitBookDownloaded(manifestPath, staged.empty() ? "" : staged.front(), item.title);
   // Bundles are how plugins install (plugin-store); pick up any new event
   // subscriptions without a restart. Cheap: a few small manifest reads.
@@ -1373,7 +1375,7 @@ bool PluginCatalogActivity::handleCustomInput() {
   if (pendingAutoDownload >= 0) {
     const int index = pendingAutoDownload;
     pendingAutoDownload = -1;
-    if (state == State::BROWSING && index < static_cast<int>(items.size())) downloadItem(index);
+    if (index < static_cast<int>(items.size())) downloadItem(index);
     return true;
   }
   if (ignoreHubInstallerBackRelease) {
