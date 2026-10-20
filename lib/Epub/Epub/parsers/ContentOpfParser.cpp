@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cctype>
@@ -57,6 +58,15 @@ MediaClass classifyMediaType(const char* mediaType) {
   if (strcmp(mediaType, MEDIA_TYPE_CSS) == 0) return MediaClass::Css;
   if (strcmp(mediaType, MEDIA_TYPE_PAGEMAP) == 0) return MediaClass::PageMap;
   return MediaClass::Other;
+}
+
+// Manifest ids that name the cover by convention, compared without regard to case.
+bool isCoverItemId(const std::string& id) {
+  for (const char* name : {"cover", "cover-image", "cover_image", "coverimage", "cover-img", "cover_img", "coverimg",
+                           "coverpage", "cover-page", "cover_page"}) {
+    if (strcasecmp(id.c_str(), name) == 0) return true;
+  }
+  return false;
 }
 
 // True when `word` appears as a whole space-separated token in `props` (the OPF
@@ -770,6 +780,22 @@ void ContentOpfParser::startElement(void* userData, const char* name, const char
       } else if (self->metaCoverPageHref.empty()) {
         LOG_DBG("COF", "Meta cover item '%s' is a page, not a picture: %s", itemId.c_str(), href.c_str());
         self->metaCoverPageHref = href;
+      }
+    }
+
+    // A cover by its id alone (id="cover", "cover-image", ...), for a book that declares none. A
+    // JPEG or PNG is the picture; an SVG or XHTML page is one to look inside, never the picture
+    // itself, since cover generation decodes no SVG (ff57c2e8). A picture wins over a page whatever
+    // the manifest order. After witchling-reader commit 5b62bbee (syfq91), whose version took any
+    // image/* item, SVG included.
+    if (isCoverItemId(itemId)) {
+      const bool picture =
+          mediaClass == MediaClass::Image && (FsHelpers::hasJpgExtension(href) || FsHelpers::hasPngExtension(href));
+      const bool page = !picture && mediaType != nullptr &&
+                        (strcmp(mediaType, "application/xhtml+xml") == 0 || strcmp(mediaType, "image/svg+xml") == 0);
+      if ((picture && !self->coverIdItemIsPicture_) || (page && self->coverIdItemHref.empty())) {
+        self->coverIdItemHref = href;
+        self->coverIdItemIsPicture_ = picture;
       }
     }
 

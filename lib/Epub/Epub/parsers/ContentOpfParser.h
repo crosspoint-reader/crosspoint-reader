@@ -149,6 +149,7 @@ class ContentOpfParser final : public Print {
   std::string uniqueIdentifierId_;  // the package's unique-identifier attribute
   void recordIdentifier();
   bool metadataRead_ = false;
+  bool coverIdItemIsPicture_ = false;  // coverIdItemHref is a JPEG/PNG, not a page
 
   // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {
@@ -211,6 +212,7 @@ class ContentOpfParser final : public Print {
   std::string coverItemHref;
   std::string guideCoverPageHref;  // Guide reference with type="cover" or "cover-page" (points to XHTML wrapper)
   std::string metaCoverPageHref;   // <meta name="cover"> naming a page (an XHTML wrapper) rather than a picture
+  std::string coverIdItemHref;     // a manifest item whose id says cover: a JPEG/PNG, else an SVG/XHTML page
   std::string textReferenceHref;
   std::vector<std::string> cssFiles;  // CSS stylesheet paths
 

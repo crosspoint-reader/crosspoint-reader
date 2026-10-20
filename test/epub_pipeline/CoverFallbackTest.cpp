@@ -151,6 +151,34 @@ TEST_F(CoverFallback, MetaCoverNamingAnXhtmlWrapperLeadsToItsPicture) {
   EXPECT_EQ(coverViaLoadForCover(), "OEBPS/image/front.png");
 }
 
+// A manifest image whose id says cover, without properties or meta, was not found when its file
+// name means nothing.
+TEST_F(CoverFallback, ManifestItemIdCoverImageIsUsed) {
+  Book book;
+  book.version = "2.0";
+  book.manifestExtra = "<item id=\"cover-image\" media-type=\"image/png\" href=\"image/img0001.png\"/>\n";
+  book.files = {{"OEBPS/image/img0001.png", kPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/img0001.png");
+  EXPECT_EQ(coverViaLoadForCover(), "OEBPS/image/img0001.png");
+}
+
+// The fork took any image/* item with a cover id, SVG included, and cover generation cannot decode
+// an SVG (the bug ff57c2e8 fixed). An SVG with a cover id is a wrapper to look inside.
+TEST_F(CoverFallback, ManifestItemIdSvgIsAWrapperNotThePicture) {
+  Book book;
+  book.version = "2.0";
+  book.manifestExtra =
+      "<item id=\"Cover\" media-type=\"image/svg+xml\" href=\"image/c.svg\"/>\n"
+      "<item id=\"img\" media-type=\"image/png\" href=\"image/img0002.png\"/>\n";
+  book.files = {{"OEBPS/image/c.svg",
+                 "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
+                 "<image xlink:href=\"img0002.png\"/></svg>"},
+                {"OEBPS/image/img0002.png", kPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/img0002.png");
+}
+
 // properties tokens separated by a newline or a tab: already recognised (the SAX parser normalises
 // attribute whitespace), kept as tests because the fork claimed them broken.
 TEST_F(CoverFallback, CoverImagePropertySeparatedByNewline) {

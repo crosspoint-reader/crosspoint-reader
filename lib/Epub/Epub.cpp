@@ -237,6 +237,10 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
   if (!haveCover && !opfParser.guideCoverPageHref.empty()) {
     takeCover("guide", coverPictureOf(opfParser.guideCoverPageHref));
   }
+  // Then the guesses, the free one first: a manifest item whose id says cover, and the file names.
+  if (!haveCover && !opfParser.coverIdItemHref.empty()) {
+    takeCover("manifest id", coverPictureOf(opfParser.coverIdItemHref));
+  }
 
   if (!haveCover) {
     // Not a cover: the scan below takes a set href for one already found and would never look.
