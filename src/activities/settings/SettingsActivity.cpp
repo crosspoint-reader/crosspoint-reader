@@ -1,4 +1,3 @@
-#include "BuildFeatures.h"
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
@@ -8,6 +7,7 @@
 
 #include <cstring>
 
+#include "BuildFeatures.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"

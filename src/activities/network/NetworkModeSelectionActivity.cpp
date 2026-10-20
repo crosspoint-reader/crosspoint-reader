@@ -1,4 +1,3 @@
-#include "BuildFeatures.h"
 #include "NetworkModeSelectionActivity.h"
 
 #include <BoardConfig.h>
@@ -7,6 +6,7 @@
 
 #include <iterator>
 
+#include "BuildFeatures.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "components/icons/networkModeIcons.h"

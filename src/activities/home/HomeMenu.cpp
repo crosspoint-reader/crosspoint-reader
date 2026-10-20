@@ -1,6 +1,6 @@
 #include "HomeMenu.h"
-#include "BuildFeatures.h"
 
+#include "BuildFeatures.h"
 #include "CrossPointSettings.h"
 
 namespace {

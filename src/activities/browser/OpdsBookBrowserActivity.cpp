@@ -11,12 +11,12 @@
 #include <SaxParser/SaxParser.h>
 #include <WiFi.h>
 #include <Xtc.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
-#include <strings.h>
 #include <memory>
 
 #include "CrossPointSettings.h"
@@ -1139,8 +1139,7 @@ void OpdsBookBrowserActivity::fetchCoverForEntry(const OpdsEntry& entry) {
   LOG_DBG("OPDS", "Fetching cover: %s", coverUrl.c_str());
 
   if (HttpDownloader::downloadToFile(session(), coverUrl, "/.tmp_opds_cover.jpg", nullptr, server.username,
-                                     server.password) !=
-      HttpDownloader::OK) {
+                                     server.password) != HttpDownloader::OK) {
     LOG_DBG("OPDS", "Cover download failed");
     return;
   }

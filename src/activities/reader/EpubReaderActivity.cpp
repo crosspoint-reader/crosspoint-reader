@@ -15,7 +15,6 @@
 #define DEBUG_BACKGROUND_WORK 0
 #endif
 
-#include "BuildFeatures.h"
 #include "EpubReaderActivity.h"
 
 #include <CooperativeAbort.h>
@@ -47,6 +46,7 @@
 #include <optional>
 
 #include "BookRelocation.h"
+#include "BuildFeatures.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
