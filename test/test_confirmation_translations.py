@@ -32,7 +32,11 @@ class ConfirmationTranslationsTest(unittest.TestCase):
         ):
             with self.subTest(filename=filename):
                 text = (ROOT / filename).read_text()
-                self.assertIn(f"tr({key})", text)
+                normalized = " ".join(text.split())
+                self.assertIn(
+                    f"makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr({key}),",
+                    normalized,
+                )
                 self.assertNotIn('tr(STR_DELETE) + std::string("? ")', text)
                 self.assertNotIn('tr(STR_SET_SLEEP_COVER) + std::string("?")', text)
 
