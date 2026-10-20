@@ -67,6 +67,28 @@ bool coverImageComplete(FsFile& imageFile, ImageFormatDetector::Format format) {
   return format != ImageFormatDetector::Format::Unknown;
 }
 
+// How strongly an image's file name (its stem, lowercased) says it is the cover: 3 for the cover
+// itself, 2 for a variant of it, 1 for a title page, 0 for anything else. A bare "title" does not
+// count: it is a title banner at least as often as the cover. A back cover is no cover.
+// After witchling-reader commit 5b62bbee (syfq91), which scores the names the same way.
+int coverNameRank(const std::string_view stem) {
+  for (const char* name :
+       {"cover", "frontcover", "front-cover", "front_cover", "cover-image", "coverimage", "cover_image", "bookcover"}) {
+    if (stem == name) return 3;
+  }
+  const auto endsWith = [&stem](const std::string_view s) {
+    return stem.size() >= s.size() && stem.substr(stem.size() - s.size()) == s;
+  };
+  if (stem.find("back") == std::string_view::npos &&
+      (stem.substr(0, 5) == "cover" || endsWith("_cover") || endsWith("-cover"))) {
+    return 2;
+  }
+  for (const char* name : {"titlepage", "title-page", "title_page"}) {
+    if (stem == name) return 1;
+  }
+  return 0;
+}
+
 // A markup document rather than a picture: an SVG wrapper (or an XHTML page) named as the cover.
 bool isCoverWrapperDocument(const std::string& href) {
   for (const char* ext : {".svg", ".xhtml", ".html", ".htm"}) {
@@ -215,18 +237,16 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
       bookMetadata.coverItemHref.clear();
     }
 
-    // Single forward pass through the ZIP central directory.
-    // For each image entry, lowercase the basename and compare against known cover stems.
-    // One SD scan regardless of EPUB size — no candidate string construction, no map.
-    static constexpr const char* kCoverStems[] = {
-        "cover", "frontcover", "titlepage", "title", "cover-image", "coverimage",
-    };
-
+    // Single forward pass through the ZIP central directory. For each image entry, lowercase the
+    // basename and rank it (coverNameRank); the best rank wins, and of one rank the first in the
+    // archive. It used to be the first name known at all, so a title.png stored ahead of cover.png
+    // was the cover. One SD scan regardless of EPUB size; a string is built only for a better rank.
     const unsigned long coverBatchStart = millis();
+    int bestRank = 0;
     ZipFile zip(filepath);
     primeZip(zip);
     zip.streamCentralDirectoryNames([&](std::string_view path) {
-      if (!bookMetadata.coverItemHref.empty()) return;  // already found
+      if (bestRank == 3) return;  // nothing ranks higher
       if (!FsHelpers::hasJpgExtension(path) && !FsHelpers::hasPngExtension(path)) return;
 
       // Extract and lowercase the basename (after last '/').
@@ -242,18 +262,18 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
         lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(stem[i])));
       lower[stem.size()] = '\0';
 
-      for (const char* s : kCoverStems) {
-        if (strcmp(lower, s) == 0) {
-          bookMetadata.coverItemHref = std::string{path};
-          LOG_DBG("EBP", "Found cover image via ZIP scan in %lu ms: %s", millis() - coverBatchStart,
-                  bookMetadata.coverItemHref.c_str());
-          return;
-        }
+      const int rank = coverNameRank(std::string_view{lower, stem.size()});
+      if (rank > bestRank) {
+        bestRank = rank;
+        bookMetadata.coverItemHref = std::string{path};
       }
     });
 
     if (bookMetadata.coverItemHref.empty()) {
       LOG_DBG("EBP", "Cover ZIP scan found no match (%lu ms)", millis() - coverBatchStart);
+    } else {
+      LOG_DBG("EBP", "Found cover image via ZIP scan (rank %d) in %lu ms: %s", bestRank, millis() - coverBatchStart,
+              bookMetadata.coverItemHref.c_str());
     }
   }
 

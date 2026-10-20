@@ -135,6 +135,7 @@ add_executable(EpubPipelineTest
   BufferedPrintTest.cpp
   CoverPipelineTest.cpp
   CoverWrapperTest.cpp
+  CoverFallbackTest.cpp
   ProgressMapperTest.cpp
   ProgressMapperRoundTripTest.cpp
   XPathExtractionTest.cpp
