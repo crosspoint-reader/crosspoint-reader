@@ -1036,6 +1036,13 @@ class EpubReaderActivity final : public Activity {
   mutable int lastStatusBarPage = -1;
   mutable int lastStatusBarBattery = -1;
   mutable int lastStatusBarClockMinute = -1;
+  // A minute tick that came while the page on screen was still being finished -- a pass in flight
+  // (a turn's display, its AA replay, a pre-render) or its deferred AA still to run. Its refresh is
+  // asked for once all of that is done (serviceOwedPeriodicRefresh), not queued behind it.
+  // Loop task only: set by shouldSkipPeriodicUpdate() (ActivityManager::loop), read in loop().
+  mutable bool periodicRefreshOwed_ = false;
+  // loop()'s idle branch: asks again for an owed minute-tick refresh once the reader has settled.
+  void serviceOwedPeriodicRefresh();
   bool maybeRestartForFragmentedHeap(uint32_t freeHeap, uint32_t contigHeap);
   // What a restart to the reader must save first, since it skips onExit: the position, when it is authoritative,
   // and the link back stack.
