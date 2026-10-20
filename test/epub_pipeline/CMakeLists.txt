@@ -144,6 +144,8 @@ add_executable(EpubPipelineTest
   TextNodeRulesTest.cpp
   BookFontsTest.cpp
   FirstOpenIndexingTest.cpp
+  BookTextSearchTest.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/BookTextSearch.cpp
   # A book's embedded body font (Publisher Fonts): the probe and the extraction. Its SHA-1 comes from
   # test/shims/wolfssl, standing in for wolfCrypt.
   ${REPO_ROOT}/lib/Epub/Epub/BookFonts.cpp
