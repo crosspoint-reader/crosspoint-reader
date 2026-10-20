@@ -90,6 +90,7 @@ class ReaderActivity : public Activity {
   void render(RenderLock&& lock) override;
 
   bool isReaderActivity() const final { return true; }
+  const std::string* pluginDocumentPath() const final { return pluginDocument ? &bookPath : nullptr; }
   bool acceptsRemoteInput() const final { return pageRendered.load(std::memory_order_acquire); }
   bool handleHomeGesture() override;
   bool handleForcedRefresh() final;

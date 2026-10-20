@@ -3369,7 +3369,6 @@ void EpubReaderActivity::updateBookmarkFlag() {
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Epub;
-  info.pluginDocument = pluginDocument;
   if (epub) {
     snprintf(info.title, sizeof(info.title), "%s", epub->getTitle().c_str());
     info.spineIndex = currentSpineIndex;

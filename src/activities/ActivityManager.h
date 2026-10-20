@@ -92,8 +92,9 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
   void goToBrowser();
-  // returnDocument: a plugin document being left; reopens the menu entry that opened it.
-  void goToPlugins(bool showOpds, std::string returnDocument = {});
+  void goToPlugins(bool showOpds);
+  // Leaves a plugin document for the menu entry that opened it.
+  void goToPluginMenuFor(std::string document);
   // pluginDocument: a plugin document that leaves Recents, progress, and the
   // last-opened book untouched (see ReaderActivity::pluginDocument).
   void goToReader(std::string path, bool allowFastInitialRefresh = false, bool pluginDocument = false);
@@ -113,6 +114,8 @@ class ActivityManager {
   bool preventAutoSleep() const;
   bool requiresExclusiveStorageLoop() const;
   bool isReaderActivity() const;
+  // The plugin document open anywhere in the stack (a menu may sit over it); nullptr if none.
+  const std::string* pluginDocumentPath() const;
   // Bluetooth page turner (lib/BlePageTurner): the book in front, whether it has painted a page, and
   // a page or chapter turn from a remote. False when no book in front took the turn.
   bool isForegroundReader() const;

@@ -319,9 +319,13 @@ void ActivityManager::goToBrowser() {
   }
 }
 
-void ActivityManager::goToPlugins(bool showOpds, std::string returnDocument) {
-  replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true,
-                                                          std::move(returnDocument)));
+void ActivityManager::goToPlugins(bool showOpds) {
+  replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true));
+}
+
+void ActivityManager::goToPluginMenuFor(std::string document) {
+  replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, OPDS_STORE.hasServers(),
+                                                          /*rootMode=*/true, std::move(document)));
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh, const bool pluginDocument) {
@@ -409,6 +413,14 @@ bool ActivityManager::isReaderActivity() const {
   return std::any_of(stackActivities.begin(), stackActivities.end(),
                      [](const auto& activity) { return activity->isReaderActivity(); }) ||
          (currentActivity && currentActivity->isReaderActivity());
+}
+
+const std::string* ActivityManager::pluginDocumentPath() const {
+  if (currentActivity && currentActivity->pluginDocumentPath()) return currentActivity->pluginDocumentPath();
+  for (auto it = stackActivities.rbegin(); it != stackActivities.rend(); ++it) {
+    if (const std::string* path = (*it)->pluginDocumentPath()) return path;
+  }
+  return nullptr;
 }
 
 bool ActivityManager::isForegroundReader() const {

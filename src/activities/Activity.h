@@ -55,6 +55,8 @@ class Activity {
   virtual bool isHomeActivity() const { return false; }
   virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
+  // The plugin document this activity shows; nullptr for anything else.
+  virtual const std::string* pluginDocumentPath() const { return nullptr; }
 
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes

@@ -48,6 +48,7 @@
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
+#include "util/PluginLocations.h"
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
@@ -124,7 +125,7 @@ RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 RTC_NOINIT_ATTR uint32_t silentRebootPayload;
 // Book path for SILENT_REBOOT_PLUGIN_DOCUMENT; a document never writes APP_STATE.openEpubPath.
-RTC_NOINIT_ATTR char silentRebootDocumentPath[256];
+RTC_NOINIT_ATTR char silentRebootDocumentPath[PluginLocations::MAX_DOCUMENT_PATH + 1];
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
@@ -328,7 +329,16 @@ bool deliver(const bleturner::Action action) {
 
 bool yieldForRadio() { return true; }        // the reader keeps no parser alive between pages
 bool fileTransferActive() { return false; }  // file transfer is a screen of its own: the radio is off there
-void restartIntoBook() { silentRestartToReader(); }
+// A plugin document is not the remembered book: reboot into the document, or
+// Home if its path cannot ride along.
+void restartIntoBook() {
+  if (const std::string* document = activityManager.pluginDocumentPath()) {
+    silentRestartToDocument(document->c_str());
+    silentRestart();
+    return;
+  }
+  silentRestartToReader();
+}
 
 // The radio needs a steady clock while it is up or changing state.
 void holdFullSpeed(const bool hold) {
@@ -399,7 +409,8 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
   size_t varCount = 0;
   char percent[8];
   const ScreenshotInfo info = activityManager.getScreenshotInfo();
-  if (info.readerType != ScreenshotInfo::ReaderType::None && !info.pluginDocument && !APP_STATE.openEpubPath.empty()) {
+  if (info.readerType != ScreenshotInfo::ReaderType::None && !activityManager.pluginDocumentPath() &&
+      !APP_STATE.openEpubPath.empty()) {
     snprintf(percent, sizeof(percent), "%d", info.progressPercent);
     vars[varCount++] = {"book", APP_STATE.openEpubPath.c_str()};
     vars[varCount++] = {"percent", percent};
@@ -474,8 +485,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   // A plugin document is not the remembered book: waking must not reopen that book
   // or show its cover as if the user had slept out of it.
-  APP_STATE.lastSleepFromReader =
-      activityManager.isReaderActivity() && !activityManager.getScreenshotInfo().pluginDocument;
+  APP_STATE.lastSleepFromReader = activityManager.isReaderActivity() && !activityManager.pluginDocumentPath();
 
   // Sleep may end in a power-off (battery death, latch); persist the clock
   // floor now so a later cold boot resumes from it.

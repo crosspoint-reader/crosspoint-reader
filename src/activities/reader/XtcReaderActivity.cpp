@@ -358,7 +358,6 @@ void XtcReaderActivity::loadProgress() {
 ScreenshotInfo XtcReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Xtc;
-  info.pluginDocument = pluginDocument;
   if (xtc) {
     const std::string t = xtc->getTitle();
     snprintf(info.title, sizeof(info.title), "%s", t.c_str());

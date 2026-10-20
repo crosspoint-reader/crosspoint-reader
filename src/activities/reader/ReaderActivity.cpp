@@ -14,7 +14,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderActivity.h"
-#include "OpdsServerStore.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -240,7 +239,7 @@ bool ReaderActivity::handleHomeGesture() {
 
 void ReaderActivity::leaveReader() {
   if (pluginDocument) {
-    activityManager.goToPlugins(OPDS_STORE.hasServers(), bookPath);
+    activityManager.goToPluginMenuFor(bookPath);
     return;
   }
   onGoHome();
