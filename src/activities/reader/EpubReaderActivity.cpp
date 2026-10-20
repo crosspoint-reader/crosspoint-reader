@@ -982,7 +982,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Debug-only: periodic serial dump of background-work counters (no-op in release).
+  // Periodic serial dump of background-work counters (DEBUG_BACKGROUND_WORK, defined at the top of
+  // this file -- on in release builds too).
   serviceBackgroundDebugLog();
 
   if (pendingProgressSave.pending.load(std::memory_order_acquire)) {
@@ -1262,8 +1263,15 @@ void EpubReaderActivity::serviceBackgroundDebugLog() {
   if (lastBgDebugLogMs_ != 0UL && (now - lastBgDebugLogMs_) < 5000UL) {
     return;
   }
+  // Never waits for the lock: DEBUG_BACKGROUND_WORK is on in every build, and a blocking take
+  // here held the loop task -- input, the IDLE answer, the minute tick -- for as long as the pass
+  // in flight, up to a page turn's 2.4 s HALF refresh, every 5 s. A busy lock tries again on the
+  // next loop pass.
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) {
+    return;
+  }
   lastBgDebugLogMs_ = now;
-  RenderLock lock;
   // B state + gate inputs so a stalled B explains itself from the log alone (e.g. parked
   // in waitheap because free/contig sit below the BG_BUILD_* floors, or css=1 with too
   // little heap for Section::heapAllowsEmbeddedStyle()).
