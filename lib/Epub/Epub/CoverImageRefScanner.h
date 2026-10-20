@@ -10,10 +10,14 @@
 
 // Finds the picture a cover document points at -- the guide's cover XHTML page, or an SVG wrapper
 // named as the cover image -- as the document streams through it, never holding the document
-// whole: the first JPEG/PNG value of a prefixed href attribute (xlink:href, an SVG <image>), else
-// of a src attribute (an <img>), else of a plain href (an SVG 2 <image>). Other images are passed
-// over, so a GIF ornament ahead of the picture cannot shadow it: cover generation decodes JPEG and
-// PNG only.
+// whole: the JPEG/PNG values of prefixed href attributes (xlink:href, an SVG <image>), else of src
+// attributes (an <img>), else of plain hrefs (an SVG 2 <image>). Other images are passed over, so a
+// GIF ornament ahead of the picture cannot shadow it: cover generation decodes JPEG and PNG only.
+//
+// Of the best kind found it keeps the first MAX_CANDIDATES references, in document order, for the
+// caller to take the largest file of: a cover page that shows a publisher's logo above the cover art
+// has two <img>s, and the art is the larger. After witchling-reader commit 5b62bbee (syfq91), which
+// ranks a cover page's pictures by size.
 //
 // Attributes are matched as text (name="value" or name='value'), as the guide scan always did. A
 // value longer than MAX_REF bytes is passed over. The scan is done at the first xlink:href picture
@@ -22,6 +26,7 @@ class CoverImageRefScanner final : public Print {
  public:
   static constexpr size_t MAX_REF = 255;
   static constexpr size_t MAX_SCAN_BYTES = 64 * 1024;
+  static constexpr size_t MAX_CANDIDATES = 4;
 
   size_t write(const uint8_t c) override {
     feed(static_cast<char>(c));
@@ -32,8 +37,13 @@ class CoverImageRefScanner final : public Print {
     return size;
   }
 
-  // The reference as written in the document, not yet resolved against its folder; empty if none.
-  std::string_view result() const { return {best_, bestLen_}; }
+  // The references as written in the document, not yet resolved against its folder: the first is
+  // result(), empty if there is none.
+  std::string_view result() const { return candidate(0); }
+  size_t candidateCount() const { return count_; }
+  std::string_view candidate(const size_t i) const {
+    return i < count_ ? std::string_view{pool_ + offsets_[i], lengths_[i]} : std::string_view{};
+  }
   const bool* stopFlag() const { return &done_; }
 
  private:
@@ -57,7 +67,7 @@ class CoverImageRefScanner final : public Print {
 
     if (c == '"' || c == '\'') {
       const Kind kind = attributeBeforeQuote();
-      if (kind < bestKind_) {
+      if (kind < bestKind_ || (kind == bestKind_ && kind != Kind::None && count_ < MAX_CANDIDATES)) {
         quote_ = c;
         valueKind_ = kind;
         valueLen_ = 0;
@@ -74,9 +84,19 @@ class CoverImageRefScanner final : public Print {
     if (valueTooLong_ || valueLen_ == 0) return;
     const std::string_view ref{value_, valueLen_};
     if (!FsHelpers::hasJpgExtension(ref) && !FsHelpers::hasPngExtension(ref)) return;
-    memcpy(best_, value_, valueLen_);
-    bestLen_ = valueLen_;
-    bestKind_ = valueKind_;
+    if (valueKind_ < bestKind_) {  // a better kind: what was kept of the worse one goes
+      bestKind_ = valueKind_;
+      count_ = 0;
+      poolUsed_ = 0;
+    }
+    // The pool holds at least one reference of any length; the first of a kind always fits.
+    if (count_ < MAX_CANDIDATES && poolUsed_ + valueLen_ <= sizeof(pool_)) {
+      memcpy(pool_ + poolUsed_, value_, valueLen_);
+      offsets_[count_] = static_cast<uint16_t>(poolUsed_);
+      lengths_[count_] = static_cast<uint8_t>(valueLen_);
+      poolUsed_ += valueLen_;
+      count_++;
+    }
     if (bestKind_ == Kind::PrefixedHref) done_ = true;
   }
 
@@ -106,8 +126,11 @@ class CoverImageRefScanner final : public Print {
   size_t valueLen_ = 0;
   bool valueTooLong_ = false;
   Kind valueKind_ = Kind::None;
-  char best_[MAX_REF] = {};
-  size_t bestLen_ = 0;
+  char pool_[2 * MAX_REF + 2] = {};  // the kept references, back to back
+  size_t poolUsed_ = 0;
+  uint16_t offsets_[MAX_CANDIDATES] = {};
+  uint8_t lengths_[MAX_CANDIDATES] = {};  // MAX_REF fits
+  size_t count_ = 0;
   Kind bestKind_ = Kind::None;
   size_t scanned_ = 0;
   bool done_ = false;

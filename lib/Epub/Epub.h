@@ -52,10 +52,17 @@ class Epub {
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCacheMode cacheMode);
-  // The first JPEG/PNG reference in a cover document (the guide's cover page, or an SVG wrapper
-  // named as the cover image), resolved against the document's folder; empty when it holds none.
-  // Streams the document, never reads it whole into RAM.
+  // The JPEG/PNG a cover document (the guide's cover page, or an SVG wrapper named as the cover
+  // image) shows, resolved against the document's folder; empty when it holds none. Of several of
+  // the best kind (see CoverImageRefScanner), the largest file. Streams the document, never reads it
+  // whole into RAM.
   std::string findCoverImageInDocument(const std::string& docHref) const;
+  // The picture a cover reference leads to: the reference itself when it names a JPEG or PNG, else
+  // the picture of the document it names (findCoverImageInDocument). A fragment is dropped.
+  std::string coverPictureOf(const std::string& href) const;
+  // The picture behind an EPUB 3 nav document's cover landmark (<a epub:type="cover">), or empty.
+  // Streams the document through NavCoverScanner.
+  std::string findCoverLandmark(const std::string& navHref) const;
   // writePageList=false leaves pagelist.bin alone (an NCX tried after a parsed nav).
   bool parseTocNcxFile(bool writePageList = true) const;
   bool parseTocNavFile() const;

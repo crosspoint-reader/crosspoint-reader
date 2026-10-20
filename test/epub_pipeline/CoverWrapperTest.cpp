@@ -230,6 +230,34 @@ TEST(CoverImageRefScanner, PrefersXlinkHrefThenSrcThenPlainHref) {
   EXPECT_EQ(scan("<image ns0:href='d.jpeg'/>"), "d.jpeg") << "any prefix, either quote";
 }
 
+// A logo above the cover art: both are kept, in document order, for the caller to compare sizes.
+TEST(CoverImageRefScanner, KeepsEveryPictureOfTheBestKindUpToItsLimit) {
+  CoverImageRefScanner scanner;
+  const std::string doc = "<img src=\"logo.png\"/><img src=\"art.jpg\"/><image href=\"plain.png\"/>";
+  scanner.write(reinterpret_cast<const uint8_t*>(doc.data()), doc.size());
+  ASSERT_EQ(scanner.candidateCount(), 2u);
+  EXPECT_EQ(scanner.candidate(0), "logo.png");
+  EXPECT_EQ(scanner.candidate(1), "art.jpg");
+  EXPECT_EQ(scanner.result(), "logo.png");
+
+  std::string many;
+  for (int i = 0; i < 6; i++) many += "<img src=\"p" + std::to_string(i) + ".png\"/>";
+  CoverImageRefScanner capped;
+  capped.write(reinterpret_cast<const uint8_t*>(many.data()), many.size());
+  EXPECT_EQ(capped.candidateCount(), CoverImageRefScanner::MAX_CANDIDATES);
+  EXPECT_EQ(capped.candidate(CoverImageRefScanner::MAX_CANDIDATES - 1), "p3.png");
+}
+
+TEST(CoverImageRefScanner, ABetterKindDropsWhatWasKeptOfAWorseOne) {
+  CoverImageRefScanner scanner;
+  const std::string doc =
+      "<img src=\"a.png\"/><img src=\"b.png\"/><image xlink:href=\"c.jpg\"/>"
+      "<image xlink:href=\"d.jpg\"/>";
+  scanner.write(reinterpret_cast<const uint8_t*>(doc.data()), doc.size());
+  ASSERT_EQ(scanner.candidateCount(), 1u) << "the scan ends at the first xlink:href picture";
+  EXPECT_EQ(scanner.result(), "c.jpg");
+}
+
 TEST(CoverImageRefScanner, PassesOverWhatCoverGenerationCannotDecode) {
   EXPECT_EQ(scan("<image xlink:href=\"orn.gif\"/><image xlink:href=\"pic.png\"/>"), "pic.png");
   EXPECT_EQ(scan("<link href=\"style.css\"/><a href=\"next.xhtml\">x</a>"), "");
