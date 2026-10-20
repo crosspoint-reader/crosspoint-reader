@@ -473,9 +473,8 @@ void BmpViewerActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!canSetSleepCover()) return;
 
-    auto confirmation =
-        makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SET_SLEEP_COVER) + std::string("?"),
-                                                filePath.substr(filePath.find_last_of('/') + 1));
+    auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SET_SLEEP_COVER_CONFIRM),
+                                                                filePath.substr(filePath.find_last_of('/') + 1));
     if (!confirmation) {
       LOG_ERR("BMP", "OOM: sleep cover confirmation (%zu bytes)", sizeof(ConfirmationActivity));
       return;
