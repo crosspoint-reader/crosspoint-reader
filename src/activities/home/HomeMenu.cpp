@@ -1,4 +1,5 @@
 #include "HomeMenu.h"
+#include "BuildFeatures.h"
 
 #include "CrossPointSettings.h"
 
@@ -47,7 +48,11 @@ bool isAvailable(const Requires requirement, const HomeMenuAvailability& availab
     case Requires::Bookmarks:
       return availability.hasBookmarks;
     case Requires::WeatherEnabled:
+#if CP_FEATURE_WEATHER
       return SETTINGS.useWeather != 0;
+#else
+      return false;
+#endif
   }
   return false;
 }

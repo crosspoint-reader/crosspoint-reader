@@ -1,3 +1,4 @@
+#include "BuildFeatures.h"
 #include "SettingsActivity.h"
 
 #include <GfxRenderer.h>
@@ -157,14 +158,18 @@ void SettingsActivity::onEnter() {
   addToMoved(systemSettings, SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network)
                                            .withSubcategory(StrId::STR_MENU_SYS_NETWORK)));
+#if CP_FEATURE_KOSYNC
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync)
                                            .withSubcategory(StrId::STR_MENU_SYS_NETWORK)));
+#endif
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser)
                                            .withSubcategory(StrId::STR_MENU_SYS_NETWORK)));
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_CLOCK_SETTINGS, SettingAction::ClockSettings)
                                            .withSubcategory(StrId::STR_MENU_SYS_TOOLS)));
+#if CP_FEATURE_WEATHER
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_WEATHER_SETTINGS, SettingAction::Weather)
                                            .withSubcategory(StrId::STR_MENU_SYS_TOOLS)));
+#endif
   // Every file on the card, images and sidecars included. Housekeeping rather than reading, so it
   // lives here and not on Home, whose browser lists only books.
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_ALL_FILES, SettingAction::AllFiles)
@@ -176,11 +181,13 @@ void SettingsActivity::onEnter() {
 
   addToMoved(systemSettings,
              std::move(SettingInfo::Separator(StrId::STR_SYSTEM_UPDATE_TYPE1).withSubmenu(StrId::STR_SYSTEM_UPDATE)));
+#if CP_FEATURE_OTA
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates)
                                            .withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   if (sawIncludeBetaUpdates) {
     addToMoved(systemSettings, std::move(includeBetaUpdatesSetting.withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   }
+#endif
   addToMoved(systemSettings,
              std::move(SettingInfo::Separator(StrId::STR_SYSTEM_UPDATE_TYPE2).withSubmenu(StrId::STR_SYSTEM_UPDATE)));
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_READING_STATS, SettingAction::ReadingStats)
@@ -199,8 +206,10 @@ void SettingsActivity::onEnter() {
                                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
   // A comparison screen, not a setting: it decides whether the size ladder can ship fewer real
   // faces and scale the rest, which the coverage metrics in bench/font_main.cpp cannot settle.
+#if CP_FEATURE_DEV_SCREENS
   addToMoved(systemSettings, std::move(SettingInfo::Action(StrId::STR_FONT_SCALING_TEST, SettingAction::FontScalingTest)
                                            .withSubcategory(StrId::STR_MENU_SYS_SYSTEM)));
+#endif
 
   SettingInfo::prepareSubmenus(displaySettings, submenuData);
   SettingInfo::prepareSubmenus(readerSettings, submenuData);

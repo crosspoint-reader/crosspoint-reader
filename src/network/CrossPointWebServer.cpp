@@ -1,3 +1,4 @@
+#include "BuildFeatures.h"
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
@@ -520,12 +521,14 @@ void CrossPointWebServer::begin() {
   server->collectHeaders(collectedHeaders, sizeof(collectedHeaders) / sizeof(collectedHeaders[0]));
   // Ownership passes to the WebServer, which deletes the handler when stopped.
   // On OOM the HTTP server still comes up; only WebDAV is unavailable.
+#if CP_FEATURE_WEBDAV
   if (auto davHandler = makeUniqueNoThrow<WebDAVHandler>()) {
     server->addHandler(davHandler.release());
     LOG_DBG("WEB", "WebDAV handler initialized");
   } else {
     LOG_ERR("WEB", "OOM: WebDAV handler — WebDAV disabled");
   }
+#endif
 
   server->begin();
 

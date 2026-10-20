@@ -15,6 +15,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "BuildFeatures.h"
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "SdCardFontGlobals.h"
@@ -373,9 +374,11 @@ inline void buildSettings(const RowSink& emit) {
   // Which StarDict dictionary word lookup uses. An Action rather than an Enum:
   // the options are folders discovered on the SD card at open time, not a fixed
   // list, so the picker has to scan.
+#if CP_FEATURE_DICTIONARY
   emit(SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::DictionarySelect)
            .withDisplayGetter(getDictionaryDisplay)
            .withCategory(StrId::STR_CAT_READER));
+#endif
   emit(SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                          "imageRendering", StrId::STR_CAT_READER)

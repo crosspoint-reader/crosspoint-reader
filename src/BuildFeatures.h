@@ -32,6 +32,10 @@
 #define CP_FEATURE_DICTIONARY 1  // On-device dictionary lookup
 #endif
 
+#ifndef CP_FEATURE_DEV_SCREENS
+#define CP_FEATURE_DEV_SCREENS 1  // Developer comparison screens (font scaling test)
+#endif
+
 #ifndef CP_FEATURE_OTA
 #define CP_FEATURE_OTA 1  // Internet firmware update (the SD-card update stays)
 #endif

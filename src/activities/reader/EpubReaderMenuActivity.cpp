@@ -126,7 +126,9 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   // Always offered, even with no dictionary configured: choosing it then opens
   // the picker, which is more useful than hiding the feature from the person
   // who has not found the setting yet.
+#if CP_FEATURE_DICTIONARY
   navigationItems.push_back(SettingInfo::Action(StrId::STR_DICTIONARY, SettingAction::None));
+#endif
 
   auto* self = this;
   // Orientation: straightforward 0-3 cycle

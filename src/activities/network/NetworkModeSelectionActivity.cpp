@@ -1,3 +1,4 @@
+#include "BuildFeatures.h"
 #include "NetworkModeSelectionActivity.h"
 
 #include <BoardConfig.h>
@@ -47,7 +48,12 @@ static_assert(std::size(kRows) == NetworkModeSelectionActivity::MAX_ROWS);
 
 // The OPDS browser has nothing to open until a server is configured (Settings > System > OPDS
 // Servers, or the web settings page).
-bool isListed(const ModeRow& row) { return row.mode != NetworkMode::OPDS_BROWSER || OPDS_STORE.hasServers(); }
+bool isListed(const ModeRow& row) {
+#if !CP_FEATURE_CALIBRE
+  if (row.mode == NetworkMode::CONNECT_CALIBRE) return false;
+#endif
+  return row.mode != NetworkMode::OPDS_BROWSER || OPDS_STORE.hasServers();
+}
 
 // A 32 px icon from networkModeIcons.h as the bitmap a list row draws (Mask1: bit 0 = ink).
 fui::BitmapRef rowIcon(const uint8_t* bits) {
