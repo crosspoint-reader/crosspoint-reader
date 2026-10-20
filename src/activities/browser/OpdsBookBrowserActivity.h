@@ -2,6 +2,7 @@
 #include <OpdsParser.h>
 
 #include <atomic>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,6 +11,7 @@
 #include "../ListController.h"
 #include "OpdsBackTo.h"
 #include "OpdsServerStore.h"
+#include "network/HttpDownloader.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
@@ -54,6 +56,19 @@ class OpdsBookBrowserActivity final : public Activity {
   std::string currentPath;
   std::string searchTemplate;
   bool memoryTrimmed = false;
+  // One kept-alive TLS connection for the whole catalog visit: feeds, next pages, searches,
+  // covers and the book itself reuse it (the handshake through a tunnel costs seconds on the C3).
+  // Dropped before a downloaded book is opened, whose indexing wants the heap back.
+  std::unique_ptr<HttpDownloader::Session> netSession;
+
+  // "On device": the download folder, scanned once per visit (on the first feed that lists books)
+  // into sorted 32-bit hashes of the book file names without extension -- about 2 KB per 500.
+  std::vector<uint32_t> onDeviceHashes;
+  bool onDeviceScanned = false;
+  void scanOnDeviceBooks();
+  bool isOnDevice(const OpdsEntry& book) const;
+  void markOnDevice(const std::string& path);
+  HttpDownloader::Session& session();
   bool coverAvailable = false;
   int selectorIndex = 0;
   int selectedBookIndex = -1;
