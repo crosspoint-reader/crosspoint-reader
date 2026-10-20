@@ -156,6 +156,9 @@ add_executable(EpubPipelineTest
   # binary must NOT get the real one (it overrides malloc/free process-wide). The two dump
   # targets pick their own implementation, so this cannot be moved into PIPELINE_SOURCES.
   HeapTrackStub.cpp
+  # Refuses large blocks as a fragmented device heap would, and tracks the live heap
+  # (FirstOpenIndexingTest). Unarmed it only counts.
+  ${REPO_ROOT}/test/book_metadata_cache/AllocationRefusal.cpp
   ${PIPELINE_SOURCES}
 )
 target_include_directories(EpubPipelineTest PRIVATE ${PIPELINE_INCLUDES})
