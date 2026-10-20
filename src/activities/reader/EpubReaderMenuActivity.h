@@ -47,6 +47,7 @@ class EpubReaderMenuActivity final : public TabbedUiListActivity {
     RENDER_BENCHMARK,
     READING_STATS_FOR_BOOK,
     BOOK_INFO,
+    SEARCH,
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,

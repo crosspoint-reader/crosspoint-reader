@@ -97,7 +97,7 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   auto& settingsItems = tabMenuItems[static_cast<size_t>(MenuTab::Settings)];
   auto& syncItems = tabMenuItems[static_cast<size_t>(MenuTab::Sync)];
   auto& toolsItems = tabMenuItems[static_cast<size_t>(MenuTab::Tools)];
-  navigationItems.reserve(8);
+  navigationItems.reserve(9);
   settingsItems.reserve(13);
   syncItems.reserve(3);
   toolsItems.reserve(8);
@@ -108,6 +108,7 @@ void EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasStarredPa
   visibleTabs[visibleTabCount++] = MenuTab::Tools;
 
   navigationItems.push_back(SettingInfo::Action(StrId::STR_SELECT_CHAPTER, SettingAction::None));
+  navigationItems.push_back(SettingInfo::Action(StrId::STR_SEARCH_BOOK, SettingAction::None));
   navigationItems.push_back(SettingInfo::Action(StrId::STR_GO_TO_PERCENT, SettingAction::None));
   if (hasPrintedPages) {
     navigationItems.push_back(SettingInfo::Action(StrId::STR_GO_TO_PRINTED_PAGE, SettingAction::None));
@@ -373,6 +374,8 @@ EpubReaderMenuActivity::MenuAction EpubReaderMenuActivity::actionForNameId(StrId
   switch (nameId) {
     case StrId::STR_SELECT_CHAPTER:
       return MenuAction::SELECT_CHAPTER;
+    case StrId::STR_SEARCH_BOOK:
+      return MenuAction::SEARCH;
     case StrId::STR_GO_TO_PERCENT:
       return MenuAction::GO_TO_PERCENT;
     case StrId::STR_GO_TO_PRINTED_PAGE:

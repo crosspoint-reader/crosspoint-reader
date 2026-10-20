@@ -98,6 +98,13 @@ struct DictionarySwitchResult {
   int8_t direction = 1;  // +1 = next in the discovered list, -1 = previous
 };
 
+// A full-text search hit: chapter and visible-text offset range of the match.
+struct SearchResult {
+  int spineIndex = 0;
+  uint32_t visibleOffset = 0;
+  uint32_t visibleEnd = 0;
+};
+
 struct StarredPageResult {
   int spineIndex = 0;
   int pageNumber = 0;
@@ -109,9 +116,10 @@ struct ConfirmResult {
   bool alternate = false;
 };
 
-using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   PageResult, SyncResult, NetworkModeResult, FootnoteResult, FilePathResult,
-                                   StarredPageResult, PrintedPageResult, DictionarySwitchResult, ConfirmResult>;
+using ResultVariant =
+    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, PageResult,
+                 SyncResult, NetworkModeResult, FootnoteResult, FilePathResult, StarredPageResult, PrintedPageResult,
+                 DictionarySwitchResult, ConfirmResult, SearchResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

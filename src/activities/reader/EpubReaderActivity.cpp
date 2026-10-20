@@ -18,6 +18,7 @@
 #include "EpubReaderActivity.h"
 
 #include <CooperativeAbort.h>
+#include <Epub/BookTextSearch.h>
 #include <Epub/FootnotePreviews.h>
 #include <Epub/FootnoteShape.h>
 #include <Epub/Page.h>
@@ -34,6 +35,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <Utf8.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
@@ -52,6 +54,7 @@
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderPrintedPageInputActivity.h"
+#include "EpubReaderSearchActivity.h"
 #include "FinishedBookActivity.h"
 #include "GlobalBookmarkIndex.h"
 #include "KOReaderCredentialStore.h"
@@ -2696,8 +2699,104 @@ void EpubReaderActivity::openDictionary() {
       });
 }
 
+// Full-text search: the search screen streams chapters itself, so the reader keeps its
+// section; a hit in this chapter resolves at once, any other loads its chapter at the hit.
+void EpubReaderActivity::openSearch() {
+  int spineIdx;
+  {
+    RenderLock lock(*this);
+    spineIdx = currentSpineIndex;
+  }
+  startActivityForResult(
+      std::make_unique<EpubReaderSearchActivity>(renderer, mappedInput, epub, spineIdx, &lastSearchQuery),
+      [this](const ActivityResult& result) {
+        // A clean refresh for the page that comes back (see SELECT_CHAPTER).
+        ReaderUtils::enforceExitFullRefresh(renderer);
+        if (result.isCancelled) return;
+        const auto& hit = std::get<SearchResult>(result.data);
+        RenderLock lock(*this);
+        searchHighlight.spine = hit.spineIndex;
+        searchHighlight.page = -1;
+        const auto page = (hit.spineIndex == currentSpineIndex && section)
+                              ? section->getPageForVisibleTextOffset(hit.visibleOffset)
+                              : std::nullopt;
+        if (page) {
+          section->currentPage = *page;
+          anchorNavTargetToCurrentPage();
+        } else {
+          navTarget = NavigationTarget::makeVisibleOffset(hit.visibleOffset);
+          currentSpineIndex = hit.spineIndex;
+          section.reset();
+        }
+      });
+}
+
+// Underlines the search hit on the page it landed on. The section keeps no per-word source
+// offsets, so the hit is found again in the page's own words: they are folded into one string
+// (glued pieces joined, others spaced) and every word overlapping the first occurrence of the
+// query is underlined. Cleared once the reader turns to another page.
+void EpubReaderActivity::drawSearchHighlight(const Page& page, const int fontId, const int marginLeft,
+                                             const int marginTop) {
+  if (searchHighlight.spine < 0 || !section) return;
+  if (searchHighlight.spine != currentSpineIndex) {
+    searchHighlight.spine = -1;
+    return;
+  }
+  if (searchHighlight.page < 0) {
+    searchHighlight.page = section->currentPage;
+  } else if (searchHighlight.page != section->currentPage) {
+    searchHighlight.spine = -1;  // the reader moved on
+    return;
+  }
+  const std::vector<uint32_t> needle = booksearch::foldQuery(lastSearchQuery);
+  if (needle.empty()) return;
+
+  struct WordRef {
+    const PageLine* line;
+    uint16_t index;
+    size_t begin, end;  // span in `text`
+  };
+  std::vector<uint32_t> text;
+  std::vector<WordRef> words;
+  for (const auto& element : page.elements) {
+    if (element->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*element);
+    const TextBlock* block = line.getBlock();
+    if (!block) continue;
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      if (!text.empty() && text.back() != ' ' && !block->wordContinues(i)) text.push_back(' ');
+      const size_t begin = text.size();
+      const auto* p = reinterpret_cast<const unsigned char*>(block->wordText(i));
+      while (*p) {
+        const uint32_t folded = booksearch::foldCodepoint(utf8NextCodepoint(&p));
+        if (folded != 0 && folded != ' ') text.push_back(folded);
+      }
+      words.push_back(WordRef{&line, i, begin, text.size()});
+    }
+  }
+  const auto match = std::search(text.begin(), text.end(), needle.begin(), needle.end());
+  if (match == text.end()) return;
+  const size_t from = static_cast<size_t>(match - text.begin());
+  const size_t to = from + needle.size();
+
+  const int barHeight = 2;
+  const int lineHeight = renderer.getLineHeight(fontId);
+  for (const auto& w : words) {
+    if (w.end <= from || w.begin >= to) continue;
+    const TextBlock* block = w.line->getBlock();
+    const int width = renderer.getTextAdvanceX(fontId, block->wordText(w.index), block->wordStyle(w.index));
+    if (width <= 0) continue;
+    const int x = marginLeft + w.line->xPos + block->wordXpos(w.index);
+    const int y = marginTop + w.line->yPos + lineHeight - barHeight;
+    renderer.fillRect(x, y, width, barHeight, true);
+  }
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   switch (action) {
+    case EpubReaderMenuActivity::MenuAction::SEARCH:
+      openSearch();
+      break;
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       int spineIdx;
       int tocIdx;
@@ -5899,6 +5998,7 @@ void EpubReaderActivity::renderContents(RenderLock& lock, std::unique_ptr<Page> 
     page->render(renderer, getEffectiveReaderFontId(), orientedMarginLeft, contentTop, effectiveForceLoad,
                  imageMonochrome);
   }
+  drawSearchHighlight(*page, getEffectiveReaderFontId(), orientedMarginLeft, contentTop);
   // An image drawn as a low-memory box: the status bar says so while the page is on screen, and its redraws skip
   // the decodes. Cleared once the page draws without one.
   if (ImageBlock::takeLowMemoryPlaceholders() > 0 && section) {

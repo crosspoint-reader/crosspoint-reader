@@ -1160,6 +1160,16 @@ class EpubReaderActivity final : public Activity {
   // Re-point navTarget at the page currently displayed. Must be called after every move of
   // section->currentPage that stays inside the loaded section — see the definition for why.
   void anchorNavTargetToCurrentPage();
+
+  // Full-text search (reader menu > Search book). The last query pre-fills the next search;
+  // the hit's words are underlined on the page it lands on until the page is turned.
+  std::string lastSearchQuery;
+  struct SearchHighlight {
+    int spine = -1;  // -1: none
+    int page = -1;   // page it landed on, set at its first render
+  } searchHighlight;
+  void openSearch();
+  void drawSearchHighlight(const Page& page, int fontId, int marginLeft, int marginTop);
   bool stepPageState(bool isForwardTurn);
   bool stepPageStateLocked(bool isForwardTurn);
   void pageTurn(bool isForwardTurn);
