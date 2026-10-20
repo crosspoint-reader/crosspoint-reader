@@ -20,6 +20,7 @@ namespace {
 
 // What cover generation sniffs for: enough of a PNG for ImageFormatDetector to call it one.
 const std::string kPng = std::string("\x89PNG\r\n\x1a\n", 8) + "not-decoded-here";
+const std::string kBigPng = std::string("\x89PNG\r\n\x1a\n", 8) + std::string(4096, 'x');
 
 struct Book {
   std::string metadataExtra;  // extra <metadata> children, e.g. <meta name="cover" .../>
@@ -92,6 +93,12 @@ class CoverFallback : public testing::Test {
   }
 };
 
+std::string xhtmlWithImg(const std::string& body) {
+  return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\"><head>"
+         "<title>C</title></head><body>" +
+         body + "</body></html>\n";
+}
+
 }  // namespace
 
 // The ZIP-name scan took the first name it knew in archive order, and "title" was one of them, so a
@@ -146,4 +153,22 @@ TEST_F(CoverFallback, CoverImagePropertySeparatedByTab) {
   book.files = {{"OEBPS/image/img0001.png", kPng}};
   writeBook(book);
   EXPECT_EQ(coverViaLoad(), "OEBPS/image/img0001.png");
+}
+
+// A guide cover page that shows a small publisher logo before the cover picture took the logo: the
+// first reference won. Of several pictures of one kind, the largest file is the cover.
+TEST_F(CoverFallback, GuideCoverPageWithLogoBeforeCoverPicture) {
+  Book book;
+  book.version = "2.0";
+  book.manifestExtra =
+      "<item id=\"cpage\" media-type=\"application/xhtml+xml\" href=\"xhtml/c.xhtml\"/>\n"
+      "<item id=\"logo\" media-type=\"image/png\" href=\"image/logo.png\"/>\n"
+      "<item id=\"art\" media-type=\"image/png\" href=\"image/art.png\"/>\n";
+  book.guide = "<guide><reference type=\"cover\" href=\"xhtml/c.xhtml\"/></guide>\n";
+  book.files = {{"OEBPS/xhtml/c.xhtml",
+                 xhtmlWithImg("<img src=\"../image/logo.png\" alt=\"\"/><img src=\"../image/art.png\" alt=\"\"/>")},
+                {"OEBPS/image/logo.png", kPng},
+                {"OEBPS/image/art.png", kBigPng}};
+  writeBook(book);
+  EXPECT_EQ(coverViaLoad(), "OEBPS/image/art.png");
 }

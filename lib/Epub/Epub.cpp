@@ -97,6 +97,15 @@ bool isCoverWrapperDocument(const std::string& href) {
   return false;
 }
 
+// A reference made inside a document, resolved against the document's own folder; empty for none.
+std::string resolveInFolderOf(const std::string& docHref, const std::string_view ref) {
+  if (ref.empty()) return {};
+  const size_t lastSlash = docHref.rfind('/');
+  std::string path = lastSlash == std::string::npos ? std::string{} : docHref.substr(0, lastSlash + 1);
+  path.append(ref);
+  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(path));
+}
+
 }  // namespace
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
@@ -301,7 +310,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
 }
 
 std::string Epub::findCoverImageInDocument(const std::string& docHref) const {
-  // ~0.5 KB of fixed buffers, once per OPF parse that needs it: on the heap, not the loop stack.
+  // ~0.8 KB of fixed buffers, once per cover document scanned: on the heap, not the loop stack.
   const auto scanner = makeUniqueNoThrow<CoverImageRefScanner>();
   if (!scanner) {
     LOG_ERR("EBP", "No memory to scan cover document %s", docHref.c_str());
@@ -310,14 +319,22 @@ std::string Epub::findCoverImageInDocument(const std::string& docHref) const {
   if (!readItemContentsToStream(docHref, *scanner, 1024, scanner->stopFlag())) {
     LOG_DBG("EBP", "Could not read cover document %s", docHref.c_str());
   }
-  const std::string_view ref = scanner->result();
-  if (ref.empty()) return {};
+  const size_t count = scanner->candidateCount();
+  if (count <= 1) return resolveInFolderOf(docHref, scanner->result());
 
-  // Relative references inside the document resolve against its own folder.
-  const size_t lastSlash = docHref.rfind('/');
-  std::string path = lastSlash == std::string::npos ? std::string{} : docHref.substr(0, lastSlash + 1);
-  path.append(ref);
-  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(path));
+  // Several pictures of the best kind: a cover page that shows the publisher's logo above the cover
+  // art, say. The largest file is the cover. From witchling-reader commit 5b62bbee (syfq91).
+  std::string best;
+  size_t bestSize = 0;
+  for (size_t i = 0; i < count; i++) {
+    std::string path = resolveInFolderOf(docHref, scanner->candidate(i));
+    size_t size = 0;
+    if (getItemSize(path, &size) && (best.empty() || size > bestSize)) {
+      best = std::move(path);
+      bestSize = size;
+    }
+  }
+  return best;
 }
 
 bool Epub::parseTocNcxFile(const bool writePageList) const {
