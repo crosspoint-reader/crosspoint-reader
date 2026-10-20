@@ -372,6 +372,7 @@ void PluginCatalogActivity::parseMenu(const JsonArrayConst entries, const std::s
       entry.type = MenuEntry::Type::Catalog;
       entry.target = e["url"] | "";
       entry.body = e["body"] | "";
+      entry.item = e["download"] | "";
       if (entry.target.empty() && manifest.browseReq.url.empty()) skip = "no browse url";
     } else if (strcmp(type, "file") == 0) {
       entry.type = MenuEntry::Type::File;
@@ -650,6 +651,7 @@ void PluginCatalogActivity::dropCatalogSession() {
   menuCatalog = -1;
   std::string().swap(menuCatalogUrl);
   std::string().swap(menuCatalogBody);
+  std::string().swap(menuCatalogItem);
 }
 
 void PluginCatalogActivity::showMenu(const int parent, const int selectEntry) {
@@ -687,6 +689,7 @@ void PluginCatalogActivity::activateMenuEntry(const int entryIndex) {
       menuCatalog = entryIndex;
       menuCatalogUrl = entry.target;
       menuCatalogBody = entry.body;
+      menuCatalogItem = entry.item;
       catalogTitle = entry.title;
       // `entry` dies here: the catalog keeps only its overrides.
       std::vector<MenuEntry>().swap(menuEntries);
@@ -957,6 +960,16 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
   if (!fetchBrowseResponse() || !parseBrowseResponse()) return;
   nav.reset();
   state = State::BROWSING;
+  if (!menuCatalogItem.empty()) {
+    // One-tap menu entry: download its item straight away; downloadFinished() returns to the menu.
+    const auto it = std::find_if(items.begin(), items.end(), [&](const Item& i) { return i.id == menuCatalogItem; });
+    if (it == items.end()) {
+      fail(StrId::STR_NO_FILES_FOUND);
+      return;
+    }
+    downloadItem(static_cast<int>(it - items.begin()));
+    return;
+  }
   requestUpdate();
 }
 
@@ -1163,6 +1176,10 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
 }
 
 void PluginCatalogActivity::downloadFinished(const bool cancelled) {
+  if (!menuCatalogItem.empty()) {
+    exitCatalog();  // a one-tap entry has no list to go back to
+    return;
+  }
   state = cancelled ? State::BROWSING : State::DONE;
   requestUpdate();
 }

@@ -403,6 +403,7 @@ Wi-Fi; only a `catalog` entry starts Wi-Fi, when it is picked.
   { "title": "Store", "type": "catalog" },                  // the browse section above
   { "title": "New this week", "type": "catalog",            // browse with url/body overrides
     "url": "https://.../new", "body": "{\"page\":{page}}" },
+  { "title": "Sync", "type": "catalog", "download": "all" },  // one tap: fetch item "all", back to the menu
   { "title": "Guides", "type": "menu", "items": [           // a submenu
     { "title": "Getting started", "type": "file", "path": "guide.epub" }
   ]},
@@ -413,7 +414,7 @@ Wi-Fi; only a `catalog` entry starts Wi-Fi, when it is picked.
 | `type` | Picking it |
 |---|---|
 | `menu` | Shows its `items`. Back returns to the parent menu. |
-| `catalog` | Opens the catalog (Wi-Fi, sign-in, browse, download) as described above. `url` and `body` override `browse.url` and `browse.body`; `browse.lists` and search still apply. Back at the catalog root returns to the menu. |
+| `catalog` | Opens the catalog (Wi-Fi, sign-in, browse, download) as described above. `url` and `body` override `browse.url` and `browse.body`; `browse.lists` and search still apply. Back at the catalog root returns to the menu. With `download` (an item id), the list is not shown: after Wi-Fi and the first page, that item downloads at once and the menu comes back (also after Back during the download). An id missing from the first page shows "No files found". |
 | `file` | Opens `path` in the reader. |
 
 `file` entries have two modes:

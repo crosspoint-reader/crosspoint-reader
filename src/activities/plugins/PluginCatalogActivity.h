@@ -125,6 +125,7 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::string title;
     std::string target;  // File: absolute SD path. Catalog: browse.url override (empty = browse's)
     std::string body;    // Catalog: browse.body override
+    std::string item;    // Catalog: id of a first-page item to download at once, then return
   };
 
   struct Item {
@@ -158,6 +159,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   int menuCatalog = -1;           // menu entry whose catalog is open; -1 = none
   std::string menuCatalogUrl;     // that entry's url/body overrides, kept after the menu is freed
   std::string menuCatalogBody;
+  std::string menuCatalogItem;  // that entry's one-tap item; "" = browse as usual
   bool showOpds = false;
   bool rootMode = false;
   std::string returnDocument;    // consumed by onEnter()
