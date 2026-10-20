@@ -196,35 +196,40 @@ std::vector<Hyphenator::BreakInfo> hangulLineEndBreaks(const std::string& word) 
 }
 
 std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
-  struct CodepointBoundary {
-    uint32_t cp;
-    size_t endOffset;
-  };
-
-  std::vector<CodepointBoundary> codepoints;
-  codepoints.reserve(text.size());
-  bool hasCjkBreakable = false;
-
   const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
   const auto* const start = ptr;
+  uint32_t previous = utf8NextCodepoint(&ptr);
+  if (previous == 0) return {};
+  bool hasCjkBreakable = utf8IsCjkBreakable(previous);
+  // Count first so words without accepted boundaries need no storage.
+  size_t boundaryCount = 0;
+
   while (*ptr) {
-    const uint32_t cp = utf8NextCodepoint(&ptr);
-    if (cp == 0) break;
-    if (utf8IsCjkBreakable(cp)) {
+    const uint32_t current = utf8NextCodepoint(&ptr);
+    if (current == 0) break;
+    if (utf8IsCjkBreakable(current)) {
       hasCjkBreakable = true;
     }
-    codepoints.push_back({cp, static_cast<size_t>(ptr - start)});
+    if (hasCjkBreakOpportunityBetween(previous, current)) {
+      ++boundaryCount;
+    }
+    previous = current;
   }
 
-  if (!hasCjkBreakable || codepoints.size() < 2) return {};
+  if (!hasCjkBreakable || boundaryCount == 0) return {};
 
   std::vector<size_t> allowedOffsets;
-  allowedOffsets.reserve(codepoints.size() - 1);
-  for (size_t i = 0; i + 1 < codepoints.size(); ++i) {
-    const uint32_t current = codepoints[i].cp;
-    const uint32_t next = codepoints[i + 1].cp;
-    if (!hasCjkBreakOpportunityBetween(current, next)) continue;
-    allowedOffsets.push_back(codepoints[i].endOffset);
+  allowedOffsets.reserve(boundaryCount);
+  ptr = start;
+  previous = utf8NextCodepoint(&ptr);
+  while (*ptr) {
+    const size_t offset = static_cast<size_t>(ptr - start);
+    const uint32_t current = utf8NextCodepoint(&ptr);
+    if (current == 0) break;
+    if (hasCjkBreakOpportunityBetween(previous, current)) {
+      allowedOffsets.push_back(offset);
+    }
+    previous = current;
   }
   return allowedOffsets;
 }
