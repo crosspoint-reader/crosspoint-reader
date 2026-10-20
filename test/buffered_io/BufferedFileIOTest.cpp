@@ -174,3 +174,30 @@ TEST(BufferedFileIO, RoundTripThroughBothWrappers) {
     EXPECT_EQ(v, static_cast<uint32_t>(i * 1000));
   }
 }
+
+// A reader over a caller's buffer reads exactly what one over its own does, and fills that
+// buffer, not one of its own; with no buffer it reads straight through.
+TEST(BufferedFileIO, ReaderOverACallersBufferReadsTheSameStream) {
+  FsFile file = HalFile::forReadWrite();
+  for (uint32_t i = 0; i < 64; ++i) serialization::writeString(file, makeString(i % 23, static_cast<char>(i)));
+  file.seek(0);
+
+  uint8_t buffer[kTinyBuffer] = {};
+  serialization::BufferedFileReader borrowed(file, buffer, sizeof(buffer));
+  std::string s;
+  for (uint32_t i = 0; i < 64; ++i) {
+    ASSERT_TRUE(borrowed.readString(s)) << "record " << i;
+    EXPECT_EQ(s, makeString(i % 23, static_cast<char>(i)));
+  }
+  bool used = false;
+  for (const uint8_t b : buffer) used = used || b != 0;
+  EXPECT_TRUE(used) << "the reader must have filled the buffer it was given";
+
+  file.seek(0);
+  serialization::BufferedFileReader unbuffered(file, nullptr, sizeof(buffer));
+  for (uint32_t i = 0; i < 64; ++i) {
+    ASSERT_TRUE(unbuffered.readString(s)) << "record " << i;
+    EXPECT_EQ(s, makeString(i % 23, static_cast<char>(i)));
+  }
+  EXPECT_FALSE(unbuffered.readString(s));
+}
