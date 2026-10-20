@@ -5,6 +5,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -18,6 +19,11 @@ using OpenResult = FlashGlyphStore::OpenResult;
 namespace {
 
 TtfFont::Hooks hooks;
+
+// TtfFontSet::storeEvents(): written under RenderLock, read from any task.
+std::atomic<uint32_t> storeFills{0};
+std::atomic<uint32_t> storeWipes{0};
+std::atomic<uint32_t> lastWipeMs{0};
 
 // What a default-ignorable codepoint draws as: no advance and no ink, as the converter makes them (spec 8.1).
 const EpdGlyph kIgnorable{};
@@ -290,7 +296,10 @@ bool TtfFontSet::install(const Files* families, const uint8_t count, const uint8
 bool TtfFontSet::wipeIfPending(const std::function<void()>& onBusy) {
   if (!store_.isOpen() || !store_.wipePending()) return false;
   if (onBusy) onBusy();
+  const uint32_t start = hooks.nowMs ? hooks.nowMs() : 0;
   if (!store_.wipe()) return false;  // stays pending: the next book open tries again
+  lastWipeMs = hooks.nowMs ? hooks.nowMs() - start : 0;
+  ++storeWipes;
   LOG_INF("TTF", "glyph store wiped");
   ringMode_ = false;
   freeRing();
@@ -304,6 +313,31 @@ bool TtfFontSet::wipeIfPending(const std::function<void()>& onBusy) {
   }
   return true;
 }
+
+bool TtfFontSet::markFull() {
+  if (!store_.isOpen()) return false;
+  store_.markFull();
+  noteCommit(Commit::Full);
+  return true;
+}
+
+TtfFontSet::Stats TtfFontSet::stats() const {
+  Stats s;
+  s.families = count_;
+  s.readsCard = readsCard_;
+  s.ringMode = ringMode_;
+  s.wipePending = store_.isOpen() && store_.wipePending();
+  s.logUsed = store_.logUsed();
+  s.logSize = store_.isOpen() ? store_.geometry().logSize : 0;
+  s.usedSlots = store_.usedSlots();
+  for (uint8_t f = 0; f < count_; ++f) {
+    s.renders += fonts_[f]->renders();
+    s.hits += fonts_[f]->storeHits();
+  }
+  return s;
+}
+
+TtfFontSet::StoreEvents TtfFontSet::storeEvents() { return {storeFills.load(), storeWipes.load(), lastWipeMs.load()}; }
 
 // --- The set: what only a miss needs ---
 
@@ -481,6 +515,7 @@ void TtfFontSet::noteCommit(const Commit result) {
     if (!ringMode_) {
       LOG_INF("TTF", "glyph store %s: new glyphs are not stored until the next book open",
               result == Commit::Full ? "full" : "write failed");
+      ++storeFills;
     }
     ringMode_ = true;
   } else if (result == Commit::Refused) {

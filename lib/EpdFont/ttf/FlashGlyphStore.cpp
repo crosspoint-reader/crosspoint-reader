@@ -619,6 +619,13 @@ bool FlashGlyphStore::recordWipePending() {
   return true;
 }
 
+bool FlashGlyphStore::markFull() {
+  if (!open_) return false;
+  writesStopped_ = true;
+  wipePending_ = true;
+  return recordWipePending();
+}
+
 bool FlashGlyphStore::wipe() {
   if (!open_) return false;
   // Wipe pending reaches flash before anything is erased. Then a cut anywhere below leaves it set and the next

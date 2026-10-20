@@ -23,6 +23,8 @@ screenshot. This page explains what the commands do, how to use them, and how to
   - [Logging: `LOG`](#logging-log)
   - [Power: `SLEEP` and `REBOOT`](#power-sleep-and-reboot)
   - [Heap ballast: `HEAP`](#heap-ballast-heap)
+  - [TrueType fonts: `TTF`](#truetype-fonts-ttf)
+  - [Files on the card: `FS`](#files-on-the-card-fs)
   - [Other: `BOOTLOG`, `HELP`](#other-bootlog-help)
 - [The USB Transfer screen](#the-usb-transfer-screen)
 - [Safety notes](#safety-notes)
@@ -319,6 +321,9 @@ unasked (off is the default, so normal logs stay clean):
 EVT:ACT <screen>                    a different screen is on top
 EVT:POPUP <text>                    a popup was drawn
 EVT:BUILD_DONE spine=<n> pages=<m>  a chapter (spine item n, 1-based) finished building, with m pages
+EVT:TTF_FULL fills=<n>              the TrueType glyph store filled up (n since boot)
+EVT:TTF_WIPE ms=<t> wipes=<n>       the glyph store was emptied, in t ms (n since boot)
+EVT:FONT_INSTALLED family=<name> ok=<0|1>  a font download ended, from the Font Manager or the web page
 ```
 
 Events are a log of what happened, for a script that wants to know a build finished or a popup
@@ -505,6 +510,56 @@ reloads of the TrueType set after its heavy step. `REFUSE=2` shows the heavy ste
 for the image lane's tries) the "not enough memory" boxes, `REFUSE=2,1` an accent family left out;
 `REFUSE=0` clears them. Test builds only, like `HOLD`.
 
+### TrueType fonts: `TTF`
+
+```
+CMD:TTF
+CMD:TTF:FULL
+```
+
+Reply to `CMD:TTF`, the loaded TrueType families and their glyph store:
+
+```
+TTF:families=1 names=NotoSansTC sd=1 log_used=80800 log_size=1835008 slots=512 ring=0 pending=0 renders=540 hits=2210 fills=0 wipes=1 last_wipe_ms=1312
+```
+
+`names` lists the set's families in its order (the body's first, then a book's accent families); `sd=1` when one
+reads its outlines from the card; `log_used`/`log_size` the store's log in bytes; `slots` its index slots in use;
+`ring=1` while new glyphs are drawn without being stored (the store filled up, or a write failed); `pending=1` while
+a wipe waits for the next book open; `renders` and `hits` the glyphs drawn from outlines and read from the store
+since the set loaded. `fills`, `wipes` and `last_wipe_ms` count since boot, whichever set was loaded. With no
+TrueType family loaded the set's fields are replaced by `none`: `TTF:none fills=0 wipes=0 last_wipe_ms=0`.
+
+`CMD:TTF:FULL` makes the store act as if it had just filled up: `TTF_OK:full`, or `TTF_ERROR:no TrueType family
+loaded`. New glyphs go to the ring and the wipe is pending, exactly as when the log runs out, so what a full store
+does can be tested at any size without reading until it fills. Development builds only.
+
+### Files on the card: `FS`
+
+```
+CMD:FS:LS:<folder>
+CMD:FS:RM:<path>
+```
+
+`LS` lists a folder, one line an entry, then the count:
+
+```
+FS:d 0 epub_2247170459
+FS:f 32946 cjk_store_fill.epub
+FS_END:2
+```
+
+`RM` removes a file, or a folder with everything in it: `FS_OK:removed <path>`. Errors: `FS_ERROR:expected
+LS:/<folder> or RM:/<path>`, `FS_ERROR:protected <path>`, `FS_ERROR:not found <path>`, `FS_ERROR:not a folder
+<path>`, `FS_ERROR:could not remove <path>`.
+
+Both work while the reader runs, without the USB Transfer screen and the restart that leaving it costs: deleting a
+book's section cache (`/.crosspoint/epub_<hash>/spines/...`) forces a cold build of a chapter, and a font folder
+under `/.crosspoint/fonts` can be looked at or removed between runs. Hidden folders can be reached; the credential
+stores (`wifi.json`, `opds.json`, `koreader.json`), a dot-named item itself (`/.crosspoint` cannot be removed) and
+any path spelled with an 8.3 alias are refused (`lib/FsHelpers/ProtectedPaths.h`). Removing what an open book is
+using is not guarded: do it from Home. Development builds only.
+
 ### Other: `BOOTLOG`, `HELP`
 
 - `CMD:BOOTLOG` prints the boot summary again (for a monitor attached after boot) as log lines,
@@ -590,11 +645,14 @@ screenshot -> page.png
 ...
 ```
 
-Steps: `cmd:<TEXT>` (send `CMD:<TEXT>`, fail on an error reply), `state` and `check:<key>=<regex>`
-(test a field of the last `STATE`), `idle[:<ms>[:SCREEN]]`, `shot:<file.png>`, `wait:<seconds>`,
-`expect:<regex>:<seconds>` (wait for a log line). `--script FILE` reads one step per line (`#`
-comments), `--keep-going` runs all steps and reports every failure, `--rotate` sets the screenshot
-rotation. A script file makes a reusable regression check:
+Steps: `cmd:<TEXT>` (send `CMD:<TEXT>`, fail on an error reply; `GET:*` and `FS:LS:` print every line of
+their reply), `state` and `check:<key>=<regex>` (test a field of the last `STATE`), `idle[:<ms>[:SCREEN]]`,
+`shot:<file.png>`, `wait:<seconds>`, `expect:<regex>:<seconds>` (wait for a log line), `select:<regex>[:<n>]` (press
+Down, waiting for each press to land, until the selected row's label matches; at most n presses, 40 by default).
+`--script FILE` reads one step per line (`#` comments), `--keep-going` runs all steps and reports every failure,
+`--rotate` sets the screenshot rotation. Paths may be given as Git Bash writes them (`/c/tmp/page.png`); output is
+UTF-8 whatever the console, and the port is closed without resetting the device even when a step fails. A script
+file makes a reusable regression check:
 
 ```
 # settings round trip: the binding is restored at the end
@@ -605,6 +663,13 @@ idle
 state
 check:activity=Home
 cmd:SET:btnDoublePower=6
+```
+
+`select:` reaches a row by its label instead of counting presses: presses sent back to back reach a list faster than
+it redraws, and it lands further down than asked. Opening the Font Manager from the Reader settings:
+
+```sh
+python3 tools/devctl.py cmd:ACT:SETTINGS:READER idle:20000 "select:Font Manager" cmd:BTN:CONFIRM idle:60000:SCREEN
 ```
 
 For a long session, capture the full log separately as well (one reader of the port at a time:

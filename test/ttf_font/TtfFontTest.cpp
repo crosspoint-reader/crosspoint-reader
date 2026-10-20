@@ -408,6 +408,34 @@ TEST_F(TtfFontTest, AWipeAtTheNextBookOpenEndsTheRing) {
   expectDrawnAs(reference(files[kRegular].bytes, 'A', 14), *font, kRegular, a);
 }
 
+TEST_F(TtfFontTest, AStoreMarkedFullActsAsAFullOneAndIsCounted) {
+  // CMD:TTF:FULL: what a filled store does, at any size, without filling it.
+  const TtfFontSet::StoreEvents before = TtfFontSet::storeEvents();
+  {
+    const auto font = open();
+    ASSERT_NE(nullptr, font);
+    ASSERT_NE(nullptr, font->glyph(kRegular, 'A'));
+    TtfFontSet::Stats stats = font.set->stats();
+    EXPECT_EQ(1, stats.families);
+    EXPECT_FALSE(stats.ringMode);
+    EXPECT_FALSE(stats.wipePending);
+    EXPECT_GT(stats.logUsed, 0u);
+    EXPECT_GT(stats.logSize, stats.logUsed);
+    EXPECT_EQ(1u, stats.renders);
+    ASSERT_TRUE(font.set->markFull());
+    stats = font.set->stats();
+    EXPECT_TRUE(stats.ringMode);
+    EXPECT_TRUE(stats.wipePending);
+    EXPECT_EQ(before.fills + 1, TtfFontSet::storeEvents().fills);
+    expectDrawnAs(reference(files[kRegular].bytes, 'B', 14), *font, kRegular, font->glyph(kRegular, 'B'));
+    EXPECT_TRUE(font->ringMode());  // drawn, not stored
+  }
+  const auto font = open();  // the next boot finishes the pending wipe
+  ASSERT_NE(nullptr, font);
+  EXPECT_FALSE(font.set->stats().wipePending);
+  EXPECT_EQ(before.wipes + 1, TtfFontSet::storeEvents().wipes);
+}
+
 TEST_F(TtfFontTest, AFullStoreSwitchesToTheRingAndTheLoadAfterItWipes) {
   flash.setFreePages(16);  // the smallest log the planner makes: 4 pages
   {
