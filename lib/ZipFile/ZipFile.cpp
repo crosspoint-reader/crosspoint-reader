@@ -69,17 +69,142 @@ static std::string normalizeZipPath(const char* filename) {
   return normalized;
 }
 
-static std::string normalizeZipPathLower(const char* filename) {
-  std::string normalized = normalizeZipPath(filename);
-  for (char& ch : normalized) {
-    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+namespace {
+constexpr uint32_t CENTRAL_DIR_SIGNATURE = 0x02014b50;
+// A central-directory record's fixed fields after its signature, up to the name.
+constexpr size_t CENTRAL_DIR_FIXED_BYTES = 42;
+// The batch walks' read window: SD reads come in sectors, and a record is ~46 bytes plus its name.
+constexpr size_t CENTRAL_DIR_WINDOW_BYTES = 4096;
+// A lookup by name reads through a window too: from the lookup region when the ZipFile has one,
+// else a small one from the heap, which section builds call it on.
+constexpr size_t LOOKUP_REGION_WINDOW_BYTES = 4096;
+constexpr size_t LOOKUP_HEAP_WINDOW_BYTES = 1024;
+
+// One central-directory record as the walker hands it over.
+struct CentralDirRecord {
+  const char* name;  // not NUL-terminated
+  uint16_t nameLen;
+  ZipFile::FileStatSlim stat;
+  uint32_t offset;  // of the record
+  uint32_t next;    // of the record after it
+};
+
+// Walks the central directory from the reader's position, calling onEntry(record) for each entry
+// whose name fits 255 bytes, until it returns false, the directory ends, or a record starts at or
+// past `stopAt`. Each record is three reads of the window (fixed fields, name, the skip past extra
+// field and comment) where a walk through the file itself was about a dozen card calls per entry.
+template <typename OnEntry>
+void walkCentralDirectory(serialization::BufferedFileReader& in, OnEntry&& onEntry,
+                          const uint32_t stopAt = UINT32_MAX) {
+  char name[256];
+  uint8_t fixed[CENTRAL_DIR_FIXED_BYTES];
+  uint32_t sig = 0;
+  for (uint32_t offset = in.position(); offset < stopAt; offset = in.position()) {
+    if (!in.readPod(sig) || sig != CENTRAL_DIR_SIGNATURE || !in.read(fixed, sizeof(fixed))) return;
+    ZIP_SCAN_STAT_ENTRY();
+    CentralDirRecord r;
+    uint16_t extraLen, commentLen;
+    memcpy(&r.stat.method, fixed + 6, sizeof(r.stat.method));
+    memcpy(&r.stat.compressedSize, fixed + 16, sizeof(r.stat.compressedSize));
+    memcpy(&r.stat.uncompressedSize, fixed + 20, sizeof(r.stat.uncompressedSize));
+    memcpy(&r.nameLen, fixed + 24, sizeof(r.nameLen));
+    memcpy(&extraLen, fixed + 26, sizeof(extraLen));
+    memcpy(&commentLen, fixed + 28, sizeof(commentLen));
+    memcpy(&r.stat.localHeaderOffset, fixed + 38, sizeof(r.stat.localHeaderOffset));
+    r.name = name;
+    r.offset = offset;
+    r.next = offset + sizeof(sig) + CENTRAL_DIR_FIXED_BYTES + r.nameLen + extraLen + commentLen;
+    if (r.nameLen < sizeof(name)) {
+      if (!in.read(name, r.nameLen)) return;
+      if (!onEntry(r)) return;
+    }
+    in.seek(r.next);
   }
-  return normalized;
 }
 
+// The read window of one lookup by name: a block of `region` when it has room, released when the
+// lookup ends (LIFO-safe: nothing reserves after it meanwhile), else LOOKUP_HEAP_WINDOW_BYTES of
+// heap, else none (the walk then reads straight from the file).
+class LookupWindow {
+ public:
+  explicit LookupWindow(BuildArena* region) {
+    if (region != nullptr && region->valid() &&
+        region->capacity() - region->used() >= LOOKUP_REGION_WINDOW_BYTES + alignof(std::max_align_t)) {
+      block_ = region->reserveBlock();
+      data_ = static_cast<uint8_t*>(region->alloc(LOOKUP_REGION_WINDOW_BYTES));
+      if (data_ != nullptr) {
+        region_ = region;
+        size_ = LOOKUP_REGION_WINDOW_BYTES;
+        return;
+      }
+      region->release(block_);
+    }
+    heap_ = makeUniqueNoThrow<uint8_t[]>(LOOKUP_HEAP_WINDOW_BYTES);
+    data_ = heap_.get();
+    size_ = data_ != nullptr ? LOOKUP_HEAP_WINDOW_BYTES : 0;
+  }
+  ~LookupWindow() {
+    if (region_ != nullptr && block_.valid()) region_->release(block_);
+  }
+  LookupWindow(const LookupWindow&) = delete;
+  LookupWindow& operator=(const LookupWindow&) = delete;
+  uint8_t* data() const { return data_; }
+  size_t size() const { return size_; }
+
+ private:
+  BuildArena* region_ = nullptr;
+  BuildArena::Block block_;
+  std::unique_ptr<uint8_t[]> heap_;
+  uint8_t* data_ = nullptr;
+  size_t size_ = 0;
+};
+
+enum class NameMatch : uint8_t { None, Exact, IgnoringCase };
+
+// How an entry's name compares with `target` (already normalised: forward slashes, no leading
+// slash), the entry's name normalised the same way on the fly. No allocation: the old lookup built
+// two strings per entry it passed, thousands per lookup.
+NameMatch matchEntryName(const char* name, size_t len, const std::string& target) {
+  while (len > 0 && (*name == '/' || *name == '\\')) {
+    ++name;
+    --len;
+  }
+  if (len != target.size()) return NameMatch::None;
+  bool exact = true;
+  for (size_t i = 0; i < len; ++i) {
+    const char c = name[i] == '\\' ? '/' : name[i];
+    if (c == target[i]) continue;
+    exact = false;
+    if (std::tolower(static_cast<unsigned char>(c)) != std::tolower(static_cast<unsigned char>(target[i]))) {
+      return NameMatch::None;
+    }
+  }
+  return exact ? NameMatch::Exact : NameMatch::IgnoringCase;
+}
+
+// The answer rides in the struct's padding: a lookup table costs 16 B a name, as it did without it.
+static_assert(sizeof(ZipFile::SizeTarget) == 16, "SizeTarget grew");
+
+bool targetBefore(const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+  return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
+}
+
+// Hands every target that names this entry to `fill`, the targets sorted by targetBefore. Returns
+// how many it handed over.
+template <typename It, typename Fill>
+int forEachTargetNamed(It begin, It end, const char* name, const uint16_t nameLen, Fill&& fill) {
+  const ZipFile::SizeTarget key = {HashUtils::fnvHash64(name, nameLen), nameLen, 0};
+  int n = 0;
+  for (It it = std::lower_bound(begin, end, key, targetBefore); it != end && it->hash == key.hash && it->len == nameLen;
+       ++it, ++n) {
+    fill(*it);
+  }
+  return n;
+}
+}  // namespace
+
 bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
-  const std::string normalizedFilename = normalizeZipPath(filename);
-  const std::string normalizedFilenameLower = normalizeZipPathLower(filename);
+  const std::string target = normalizeZipPath(filename);
 
   const ScopedOpenClose zip{*this};
   if (!zip) {
@@ -92,91 +217,43 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
     return false;
   }
 
-  // Phase 1: Try scanning from cursor position first
-  uint32_t startPos = lastCentralDirPosValid ? lastCentralDirPos : zipDetails.centralDirOffset;
-  bool wrapped = false;
-  bool found = false;
-
+  // From the cursor (just past the previous match) to the end, then from the start up to the
+  // cursor: the entry wanted next is often the one after the last. The first entry that matches
+  // exactly or ignoring case wins.
+  const uint32_t startPos = lastCentralDirPosValid ? lastCentralDirPos : zipDetails.centralDirOffset;
+  const LookupWindow window(lookupScratch_);
   file.seek(startPos);
+  serialization::BufferedFileReader in(file, window.data(), window.size());
   ZIP_SCAN_STAT_WALK();
-
-  uint32_t sig;
-  char itemName[256];
+  bool found = false;
 #ifdef BENCH_EXTRACT_PROFILE
   uint32_t scanned = 0;
 #endif
-
-  while (true) {
+  const auto match = [&](const CentralDirRecord& r) {
 #ifdef BENCH_EXTRACT_PROFILE
     ++scanned;
 #endif
-    uint32_t entryStart = file.position();
-
-    if (file.read(&sig, 4) != 4 || sig != 0x02014b50) {
-      // End of central directory
-      if (!wrapped && lastCentralDirPosValid && startPos != zipDetails.centralDirOffset) {
-        // Wrap around to beginning
-        file.seek(zipDetails.centralDirOffset);
-        wrapped = true;
-        continue;
-      }
-      break;
+    const NameMatch m = matchEntryName(r.name, r.nameLen, target);
+    if (m == NameMatch::None) return true;
+    if (m == NameMatch::IgnoringCase) {
+      LOG_DBG("ZIP", "loadFileStatSlim: case-insensitive match for %s => %.*s", filename, static_cast<int>(r.nameLen),
+              r.name);
     }
-
-    // If we've wrapped and reached our start position, stop
-    if (wrapped && entryStart >= startPos) {
-      break;
-    }
-    ZIP_SCAN_STAT_ENTRY();
-
-    file.seekCur(6);
-    file.read(&fileStat->method, 2);
-    file.seekCur(8);
-    file.read(&fileStat->compressedSize, 4);
-    file.read(&fileStat->uncompressedSize, 4);
-    uint16_t nameLen, m, k;
-    file.read(&nameLen, 2);
-    file.read(&m, 2);
-    file.read(&k, 2);
-    file.seekCur(8);
-    file.read(&fileStat->localHeaderOffset, 4);
-
-    if (nameLen < 256) {
-      file.read(itemName, nameLen);
-      itemName[nameLen] = '\0';
-
-      // Normalize once, then build lowercase via in-place transform — one alloc, not two.
-      std::string normalizedItemName = normalizeZipPath(itemName);
-      if (normalizedItemName == normalizedFilename) {
-        file.seekCur(m + k);
-        lastCentralDirPos = file.position();
-        lastCentralDirPosValid = true;
-        found = true;
-        break;
-      }
-
-      std::string normalizedItemNameLower = normalizedItemName;
-      for (char& ch : normalizedItemNameLower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-      if (normalizedItemNameLower == normalizedFilenameLower) {
-        LOG_DBG("ZIP", "loadFileStatSlim: case-insensitive match for %s => %s", filename, itemName);
-        file.seekCur(m + k);
-        lastCentralDirPos = file.position();
-        lastCentralDirPosValid = true;
-        found = true;
-        break;
-      }
-    } else {
-      // Name too long, skip it
-      file.seekCur(nameLen);
-    }
-
-    // Skip extra field + comment
-    file.seekCur(m + k);
+    *fileStat = r.stat;
+    lastCentralDirPos = r.next;
+    lastCentralDirPosValid = true;
+    found = true;
+    return false;
+  };
+  walkCentralDirectory(in, match);
+  const bool wrapped = !found && startPos != zipDetails.centralDirOffset;
+  if (wrapped) {
+    in.seek(zipDetails.centralDirOffset);
+    walkCentralDirectory(in, match, startPos);
   }
 
   if (!found) {
-    LOG_DBG("ZIP", "loadFileStatSlim: entry not found after scan: %s (normalized=%s)", filename,
-            normalizedFilename.c_str());
+    LOG_DBG("ZIP", "loadFileStatSlim: entry not found after scan: %s (normalized=%s)", filename, target.c_str());
   }
 #ifdef BENCH_EXTRACT_PROFILE
   LOG_INF("ZIP", "STATSCAN entries=%lu wrapped=%d found=%d", static_cast<unsigned long>(scanned), wrapped ? 1 : 0,
@@ -390,8 +467,8 @@ bool ZipFile::close() {
   if (file) {
     file.close();
   }
-  lastCentralDirPos = 0;
-  lastCentralDirPosValid = false;
+  // The lookup cursor is an offset into the archive, not into the handle: it stays good across a
+  // close and a reopen, and a caller can hand it to the next ZipFile over the same book.
   return true;
 }
 
@@ -405,65 +482,6 @@ bool ZipFile::getInflatedFileSize(const char* filename, size_t* size) {
   return true;
 }
 
-namespace {
-constexpr uint32_t CENTRAL_DIR_SIGNATURE = 0x02014b50;
-// A central-directory record's fixed fields after its signature, up to the name.
-constexpr size_t CENTRAL_DIR_FIXED_BYTES = 42;
-// The batch walks' read window: SD reads come in sectors, and a record is ~46 bytes plus its name.
-constexpr size_t CENTRAL_DIR_WINDOW_BYTES = 4096;
-
-// Walks the central directory from the reader's position, calling onEntry(name, nameLen, stat) for
-// each entry whose name fits 255 bytes, until it returns false or the directory ends. Each record
-// is three reads of the window (fixed fields, name, the skip past extra field and comment) where
-// a walk through the file itself was about a dozen card calls per entry.
-template <typename OnEntry>
-void walkCentralDirectory(serialization::BufferedFileReader& in, OnEntry&& onEntry) {
-  ZIP_SCAN_STAT_WALK();
-  char name[256];
-  uint8_t fixed[CENTRAL_DIR_FIXED_BYTES];
-  uint32_t sig = 0;
-  while (in.readPod(sig) && sig == CENTRAL_DIR_SIGNATURE && in.read(fixed, sizeof(fixed))) {
-    ZIP_SCAN_STAT_ENTRY();
-    ZipFile::FileStatSlim stat;
-    uint16_t nameLen, extraLen, commentLen;
-    memcpy(&stat.method, fixed + 6, sizeof(stat.method));
-    memcpy(&stat.compressedSize, fixed + 16, sizeof(stat.compressedSize));
-    memcpy(&stat.uncompressedSize, fixed + 20, sizeof(stat.uncompressedSize));
-    memcpy(&nameLen, fixed + 24, sizeof(nameLen));
-    memcpy(&extraLen, fixed + 26, sizeof(extraLen));
-    memcpy(&commentLen, fixed + 28, sizeof(commentLen));
-    memcpy(&stat.localHeaderOffset, fixed + 38, sizeof(stat.localHeaderOffset));
-    if (nameLen < sizeof(name)) {
-      if (!in.read(name, nameLen)) return;
-      if (!onEntry(name, nameLen, stat)) return;
-    } else {
-      in.seek(in.position() + nameLen);
-    }
-    in.seek(in.position() + extraLen + commentLen);
-  }
-}
-
-// The answer rides in the struct's padding: a lookup table costs 16 B a name, as it did without it.
-static_assert(sizeof(ZipFile::SizeTarget) == 16, "SizeTarget grew");
-
-bool targetBefore(const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
-  return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
-}
-
-// Hands every target that names this entry to `fill`, the targets sorted by targetBefore. Returns
-// how many it handed over.
-template <typename It, typename Fill>
-int forEachTargetNamed(It begin, It end, const char* name, const uint16_t nameLen, Fill&& fill) {
-  const ZipFile::SizeTarget key = {HashUtils::fnvHash64(name, nameLen), nameLen, 0};
-  int n = 0;
-  for (It it = std::lower_bound(begin, end, key, targetBefore); it != end && it->hash == key.hash && it->len == nameLen;
-       ++it, ++n) {
-    fill(*it);
-  }
-  return n;
-}
-}  // namespace
-
 int ZipFile::fillUncompressedSizes(SizeTarget* const targets, const size_t count, uint8_t* const window,
                                    const size_t windowBytes) {
   if (targets == nullptr || count == 0) return 0;
@@ -472,10 +490,11 @@ int ZipFile::fillUncompressedSizes(SizeTarget* const targets, const size_t count
 
   file.seek(zipDetails.centralDirOffset);
   serialization::BufferedFileReader in(file, window, windowBytes);
+  ZIP_SCAN_STAT_WALK();
   int matched = 0;
-  walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim& stat) {
-    matched += forEachTargetNamed(targets, targets + count, name, nameLen,
-                                  [&](SizeTarget& t) { t.size = stat.uncompressedSize; });
+  walkCentralDirectory(in, [&](const CentralDirRecord& r) {
+    matched += forEachTargetNamed(targets, targets + count, r.name, r.nameLen,
+                                  [&](SizeTarget& t) { t.size = r.stat.uncompressedSize; });
     return matched < static_cast<int>(count);
   });
   return matched;
@@ -489,10 +508,11 @@ int ZipFile::fillFileStats(const std::deque<SizeTarget>& targets, std::deque<Fil
   file.seek(zipDetails.centralDirOffset);
   // Its own window, for the one walk a book makes here (pass-through if the heap refuses it).
   serialization::BufferedFileReader in(file, CENTRAL_DIR_WINDOW_BYTES);
+  ZIP_SCAN_STAT_WALK();
   int matched = 0;
-  walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim& stat) {
-    matched += forEachTargetNamed(targets.begin(), targets.end(), name, nameLen, [&](const SizeTarget& t) {
-      if (t.index < stats.size()) stats[t.index] = stat;
+  walkCentralDirectory(in, [&](const CentralDirRecord& r) {
+    matched += forEachTargetNamed(targets.begin(), targets.end(), r.name, r.nameLen, [&](const SizeTarget& t) {
+      if (t.index < stats.size()) stats[t.index] = r.stat;
     });
     return matched < static_cast<int>(targets.size());
   });
@@ -507,8 +527,9 @@ bool ZipFile::streamCentralDirectoryNames(void (*const visit)(void* ctx, std::st
   // First-open indexing walks every name once for the stylesheets the OPF does not list: King's
   // Avatar's 3300 entries took ~47000 card calls read field by field, about 0.8 s on the X3.
   serialization::BufferedFileReader in(file, CENTRAL_DIR_WINDOW_BYTES);
-  walkCentralDirectory(in, [&](const char* name, const uint16_t nameLen, const FileStatSlim&) {
-    visit(ctx, std::string_view{name, nameLen});
+  ZIP_SCAN_STAT_WALK();
+  walkCentralDirectory(in, [&](const CentralDirRecord& r) {
+    visit(ctx, std::string_view{r.name, r.nameLen});
     return true;
   });
   return true;

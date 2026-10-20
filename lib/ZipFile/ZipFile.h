@@ -60,6 +60,8 @@ class ZipFile {
   // Cursor for sequential central-dir scanning optimization
   uint32_t lastCentralDirPos = 0;
   bool lastCentralDirPosValid = false;
+  // Where a lookup by name takes its read window (setLookupScratch); null: the heap.
+  BuildArena* lookupScratch_ = nullptr;
 
   long getDataOffset(const FileStatSlim& fileStat);
   bool loadZipDetails();
@@ -87,8 +89,23 @@ class ZipFile {
   };
 
  public:
-  // Look up a single entry's stat by scanning the central directory sequentially.
+  // Look up a single entry's stat by scanning the central directory sequentially, from just past
+  // the previous match (wrapping once), through a read window: 4 KB from the lookup scratch when
+  // it has room, else 1 KB of heap, else straight from the file. Names compare in place (slashes
+  // normalised, case ignored as a fallback); nothing is allocated per entry.
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
+  // A region lookups by name may take their window from, a block at a time, released before
+  // they return. For a caller holding a lent region (first-open indexing); null by default.
+  void setLookupScratch(BuildArena* scratch) { lookupScratch_ = scratch; }
+  // The lookup cursor, an offset into the archive (0: none). A caller that makes many short-lived
+  // ZipFiles over one book hands it from one to the next, so a lookup for a name stored after the
+  // previous one does not start again at the first entry.
+  uint32_t lookupCursor() const { return lastCentralDirPosValid ? lastCentralDirPos : 0; }
+  void seedLookupCursor(const uint32_t cursor) {
+    if (cursor == 0 || lastCentralDirPosValid) return;
+    lastCentralDirPos = cursor;
+    lastCentralDirPosValid = true;
+  }
   explicit ZipFile(const std::string& filePath) : filePath(filePath) {}
   ~ZipFile() = default;
   // Zip file can be opened and closed by hand in order to allow for quick calculation of inflated file size
