@@ -5,9 +5,29 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 class BuildArena;
+
+#ifdef ZIP_FILE_SCAN_STATS
+// Host tests only (firmware never defines it): central-directory walks started and entries read by
+// them, across every ZipFile. A lookup's cost on the card is the entries it reads, so this is what
+// a test bounds where a host's wall-clock time says little.
+struct ZipScanStats {
+  size_t walks = 0;
+  size_t entries = 0;
+};
+inline ZipScanStats& zipScanStats() {
+  static ZipScanStats stats;
+  return stats;
+}
+#define ZIP_SCAN_STAT_WALK() (++zipScanStats().walks)
+#define ZIP_SCAN_STAT_ENTRY() (++zipScanStats().entries)
+#else
+#define ZIP_SCAN_STAT_WALK() ((void)0)
+#define ZIP_SCAN_STAT_ENTRY() ((void)0)
+#endif
 
 class ZipFile {
  public:
@@ -24,11 +44,12 @@ class ZipFile {
     bool isSet;
   };
 
-  // Target for batch uncompressed size lookup (sorted by hash, then len)
+  // Target for the batch lookups (sorted by hash, then len)
   struct SizeTarget {
-    uint64_t hash;   // FNV-1a 64-bit hash of normalized path
-    uint16_t len;    // Length of path for collision reduction
-    uint16_t index;  // Caller's index (e.g. spine index)
+    uint64_t hash;      // FNV-1a 64-bit hash of normalized path
+    uint16_t len;       // Length of path for collision reduction
+    uint16_t index;     // Caller's index (e.g. spine index)
+    uint32_t size = 0;  // fillUncompressedSizes' answer, in what would otherwise be tail padding
   };
 
  private:
@@ -39,6 +60,8 @@ class ZipFile {
   // Cursor for sequential central-dir scanning optimization
   uint32_t lastCentralDirPos = 0;
   bool lastCentralDirPosValid = false;
+  // Where a lookup by name takes its read window (setLookupScratch); null: the heap.
+  BuildArena* lookupScratch_ = nullptr;
 
   long getDataOffset(const FileStatSlim& fileStat);
   bool loadZipDetails();
@@ -66,8 +89,23 @@ class ZipFile {
   };
 
  public:
-  // Look up a single entry's stat by scanning the central directory sequentially.
+  // Look up a single entry's stat by scanning the central directory sequentially, from just past
+  // the previous match (wrapping once), through a read window: 4 KB from the lookup scratch when
+  // it has room, else 1 KB of heap, else straight from the file. Names compare in place (slashes
+  // normalised, case ignored as a fallback); nothing is allocated per entry.
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
+  // A region lookups by name may take their window from, a block at a time, released before
+  // they return. For a caller holding a lent region (first-open indexing); null by default.
+  void setLookupScratch(BuildArena* scratch) { lookupScratch_ = scratch; }
+  // The lookup cursor, an offset into the archive (0: none). A caller that makes many short-lived
+  // ZipFiles over one book hands it from one to the next, so a lookup for a name stored after the
+  // previous one does not start again at the first entry.
+  uint32_t lookupCursor() const { return lastCentralDirPosValid ? lastCentralDirPos : 0; }
+  void seedLookupCursor(const uint32_t cursor) {
+    if (cursor == 0 || lastCentralDirPosValid) return;
+    lastCentralDirPos = cursor;
+    lastCentralDirPosValid = true;
+  }
   explicit ZipFile(const std::string& filePath) : filePath(filePath) {}
   ~ZipFile() = default;
   // Zip file can be opened and closed by hand in order to allow for quick calculation of inflated file size
@@ -84,17 +122,19 @@ class ZipFile {
   // False for a deflated entry -- there is no such range: those bytes are a DEFLATE stream, not
   // the file. Also false if the entry is missing or its local header does not check out.
   bool getStoredEntryRange(const char* filename, uint32_t* offset, uint32_t* size);
-  // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
-  // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
-  // Returns number of targets matched. Deques, not vectors: a 1700-spine book needs ~28 KB of
-  // targets, and demanding that as ONE contiguous block aborts on a fragmented heap (bare
-  // operator new under -fno-exceptions) — deque's ~512-byte chunks drop the contiguity
-  // requirement while keeping the random-access iterators lower_bound needs.
-  int fillUncompressedSizes(const std::deque<SizeTarget>& targets, std::deque<uint32_t>& sizes);
+  // Batch lookup: ONE walk of the central directory sets `size` of every target whose (hash, len)
+  // names an entry to that entry's uncompressed size, and leaves the others alone. `targets` must
+  // be sorted by (hash, len); a caller with more names than it has table for walks once per
+  // table-full. The walk reads through `window` (null: straight from the file, a dozen card calls
+  // per entry), which the caller owns so that several walks share one. Returns the number of
+  // targets matched; the walk stops once that reaches `count`.
+  int fillUncompressedSizes(SizeTarget* targets, size_t count, uint8_t* window, size_t windowBytes);
   // Batch lookup of FULL entry stats in ONE central-directory walk (vs one linear scan per
   // loadFileStatSlim call). targets must be sorted by (hash, len) like fillUncompressedSizes;
-  // stats[target.index] receives the entry's FileStatSlim. Returns number matched. Same deque
-  // rationale as fillUncompressedSizes (avoid a big contiguous block on a fragmented heap).
+  // stats[target.index] receives the entry's FileStatSlim. Returns number matched. Deques: a
+  // 1700-spine book needs ~28 KB of targets, and demanding that as ONE contiguous block aborts on
+  // a fragmented heap (bare operator new under -fno-exceptions). Reads through a 4 KB window of its
+  // own when the heap has one.
   int fillFileStats(const std::deque<SizeTarget>& targets, std::deque<FileStatSlim>& stats);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
@@ -203,41 +243,17 @@ class ZipFile {
   bool contentFingerprint(uint64_t* out);
 
   // Stream every filename in the central directory to a callback without building
-  // the in-memory stat cache. Uses a fixed 256-byte stack buffer — O(1) heap.
-  // Safe for large EPUBs (3000+ entries) where loadAllFileStatSlims() would OOM.
-  // Callback signature: void(std::string_view filename).
+  // the in-memory stat cache: one walk through a 4 KB window (straight from the file,
+  // a dozen card calls per entry, if the heap refuses the window), names in a 256-byte
+  // stack buffer. Safe for large EPUBs (3000+ entries) where loadAllFileStatSlims()
+  // would OOM. Callback signature: void(std::string_view filename); the view is valid
+  // for the call only.
   template <typename F>
   bool streamCentralDirectoryNames(F&& callback) {
-    if (!loadZipDetails()) return false;
-    const ScopedOpenClose zip{*this};
-    if (!zip) return false;
-    file.seek(zipDetails.centralDirOffset);
-    char nameBuf[256];
-    uint32_t sig;
-    while (file.available()) {
-      if (file.read(&sig, 4) != 4 || sig != 0x02014b50) break;
-      file.seekCur(6);
-      uint16_t method;
-      file.read(&method, 2);
-      file.seekCur(8);
-      uint32_t compSz, uncompSz, localOff;
-      file.read(&compSz, 4);
-      file.read(&uncompSz, 4);
-      uint16_t nameLen, extraLen, commentLen;
-      file.read(&nameLen, 2);
-      file.read(&extraLen, 2);
-      file.read(&commentLen, 2);
-      file.seekCur(8);
-      file.read(&localOff, 4);
-      if (nameLen < sizeof(nameBuf)) {
-        file.read(nameBuf, nameLen);
-        nameBuf[nameLen] = '\0';
-        callback(std::string_view{nameBuf, nameLen});
-      } else {
-        file.seekCur(nameLen);
-      }
-      file.seekCur(extraLen + commentLen);
-    }
-    return true;
+    using Callback = std::remove_reference_t<F>;
+    return streamCentralDirectoryNames(
+        [](void* ctx, const std::string_view name) { (*static_cast<Callback*>(ctx))(name); },
+        const_cast<void*>(static_cast<const void*>(&callback)));
   }
+  bool streamCentralDirectoryNames(void (*visit)(void* ctx, std::string_view name), void* ctx);
 };

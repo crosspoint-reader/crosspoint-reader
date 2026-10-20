@@ -35,6 +35,14 @@ class BufferedFileReader {
     windowStart_ = static_cast<uint32_t>(file_.position());
   }
 
+  // Caller-supplied buffer, NOT owned, as BufferedFileWriter takes one: for a reader whose buffer
+  // comes out of a lent region, or is reused across several readers. A null buffer degrades to
+  // pass-through exactly as a failed allocation does. The buffer must outlive this reader.
+  BufferedFileReader(FsFile& file, uint8_t* const buffer, const size_t bufferBytes)
+      : file_(file), external_(buffer), cap_(buffer ? bufferBytes : 0) {
+    windowStart_ = static_cast<uint32_t>(file_.position());
+  }
+
   // Logical read position (the underlying file may be ahead by the buffered remainder).
   uint32_t position() const { return windowStart_ + static_cast<uint32_t>(pos_); }
 
@@ -59,8 +67,7 @@ class BufferedFileReader {
       const size_t avail = fill_ - pos_;
       if (avail > 0) {
         const size_t take = n < avail ? n : avail;
-        uint8_t* const base = buf_.get();
-        memcpy(out, base + pos_, take);
+        memcpy(out, bufferBase() + pos_, take);
         pos_ += take;
         out += take;
         n -= take;
@@ -76,7 +83,7 @@ class BufferedFileReader {
         if (got > 0) windowStart_ += static_cast<uint32_t>(got);
         return got == static_cast<int>(n);
       }
-      const int got = file_.read(buf_.get(), cap_);
+      const int got = file_.read(bufferBase(), cap_);
       if (got <= 0) return false;
       fill_ = static_cast<size_t>(got);
     }
@@ -101,13 +108,36 @@ class BufferedFileReader {
     return len == 0 || read(&s[0], len);
   }
 
+  // readString() of the record at `offset`, for random access between sequential stretches: from
+  // the window when the record lies inside it, else straight from the file (a seek and two reads,
+  // not a window's worth). The window and the logical position are left as they were.
+  bool readStringAt(const uint32_t offset, std::string& s) {
+    uint32_t len = 0;
+    if (offset >= windowStart_ && offset + sizeof(len) <= windowStart_ + fill_) {
+      memcpy(&len, bufferBase() + (offset - windowStart_), sizeof(len));
+      if (len <= MAX_STRING_LENGTH && offset + sizeof(len) + len <= windowStart_ + fill_) {
+        s.assign(reinterpret_cast<const char*>(bufferBase() + (offset - windowStart_) + sizeof(len)), len);
+        return true;
+      }
+    }
+    file_.seek(offset);
+    const bool ok = serialization::readString(file_, s);
+    // Where the window's next refill reads from.
+    file_.seek(windowStart_ + fill_);
+    return ok;
+  }
+
  private:
+  // Owned or borrowed, never both: the owning constructor leaves external_ null and vice versa.
+  uint8_t* bufferBase() const { return external_ ? external_ : buf_.get(); }
+
   FsFile& file_;
   std::unique_ptr<uint8_t[]> buf_;
+  uint8_t* external_ = nullptr;
   size_t cap_ = 0;
-  size_t fill_ = 0;           // valid bytes in buf_
-  size_t pos_ = 0;            // consumed bytes in buf_
-  uint32_t windowStart_ = 0;  // file offset of buf_[0]
+  size_t fill_ = 0;           // valid bytes in the buffer
+  size_t pos_ = 0;            // consumed bytes in the buffer
+  uint32_t windowStart_ = 0;  // file offset of the buffer's first byte
 };
 
 class BufferedFileWriter {

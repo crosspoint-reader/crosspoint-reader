@@ -24,7 +24,20 @@ struct HostLargestFreeBlock {
  private:
   size_t saved_;
 };
-inline size_t heap_caps_get_free_size(uint32_t /*caps*/) { return 300 * 1024; }
+// Free heap in all, settable the same way (HostFreeHeap below).
+inline size_t g_hostFreeHeap = 300 * 1024;
+inline size_t heap_caps_get_free_size(uint32_t /*caps*/) { return g_hostFreeHeap; }
+
+// Scoped override of the free heap the stub reports.
+struct HostFreeHeap {
+  explicit HostFreeHeap(size_t bytes) : saved_(g_hostFreeHeap) { g_hostFreeHeap = bytes; }
+  ~HostFreeHeap() { g_hostFreeHeap = saved_; }
+  HostFreeHeap(const HostFreeHeap&) = delete;
+  HostFreeHeap& operator=(const HostFreeHeap&) = delete;
+
+ private:
+  size_t saved_;
+};
 
 // Block-count probe. Constant like the rest of this stub: it feeds diagnostic logging only,
 // never a decision, so the host must not vary on it. Field names match the ESP-IDF struct so

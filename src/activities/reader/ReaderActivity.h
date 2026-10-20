@@ -20,8 +20,11 @@ class ReaderActivity final : public Activity {
   std::string initialBookPath;
   std::string currentBookPath;  // Track current book path for navigation
   // `scratch`: lent to Epub::load for its inflate rings (first-open indexing borrows the
-  // secondary framebuffer for it); null loads from the heap as before.
-  static std::unique_ptr<Epub> loadEpub(const std::string& path, BuildArena* scratch = nullptr);
+  // secondary framebuffer for it); null loads from the heap as before. `progress`/`progressCtx`:
+  // told how far a cache build has got (Epub::setBuildProgress).
+  static std::unique_ptr<Epub> loadEpub(const std::string& path, BuildArena* scratch = nullptr,
+                                        void (*progress)(void* ctx, uint8_t percent) = nullptr,
+                                        void* progressCtx = nullptr);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
   static std::unique_ptr<Txt> loadTxt(const std::string& path);
   static bool isXtcFile(const std::string& path);

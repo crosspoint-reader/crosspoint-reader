@@ -9,6 +9,7 @@
 #include <InflateReader.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PassTable.h>
 #include <PngToBmpConverter.h>
 #include <Serialization.h>
 #include <SidecarFiles.h>
@@ -39,6 +40,13 @@
 #include "Epub/parsers/TocNcxParser.h"
 
 namespace {
+
+// What readItemContentsToStream needs of a lent region to read through it: the 1 KB read buffer
+// and the largest inflate ring, with their alignment.
+size_t streamScratchBytes() { return 1024 + InflateReader::ringSizeFor(0) + 2 * alignof(std::max_align_t); }
+
+// A spine idref table in the lent region smaller than this is not worth taking from it.
+constexpr size_t OPF_SPINE_MIN_ENTRIES = 128;
 
 // Bytes ImageFormatDetector::detect(FsFile&) sniffs. Also the threshold at which "this is not a
 // format we support" becomes a PERMANENT answer rather than "the extractor hasn't got that far yet".
@@ -175,8 +183,21 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, OpfCac
     LOG_ERR("EBP", "Could not setup content.opf parser");
     return false;
   }
+  // The spine's idref table, from the region lent to load() when it has room beside what the
+  // stream read below takes: reserved first, so the read's block nests above it and is released
+  // before it (BuildArena is LIFO). Without it the parser sizes a table from the heap.
+  PassTable<ContentOpfParser::SpineTarget> spineTable;
+  if (cacheMode == OpfCacheMode::Enabled) {
+    spineTable = PassTable<ContentOpfParser::SpineTarget>::fromRegion(loadScratch_, UINT16_MAX, OPF_SPINE_MIN_ENTRIES,
+                                                                      0, streamScratchBytes());
+    opfParser.lendSpineTable(spineTable.entries(), spineTable.capacity());
+  }
 
-  if (!readItemContentsToStream(contentOpfFilePath, opfParser, 1024)) {
+  const bool opfRead = readItemContentsToStream(contentOpfFilePath, opfParser, 1024);
+  // The read's block is back; the table's goes too, before anything else takes the region.
+  opfParser.lendSpineTable(nullptr, 0);
+  spineTable = PassTable<ContentOpfParser::SpineTarget>();
+  if (!opfRead) {
     LOG_ERR("EBP", "Could not read content.opf");
     return false;
   }
@@ -487,6 +508,10 @@ bool Epub::parsePageMapFile() const {
 }
 
 void Epub::primeZip(ZipFile& zip) const {
+  zip.seedLookupCursor(zipLookupCursor_);
+  // A lookup's read window comes out of the region lent to load() while it runs (released before
+  // the lookup returns), else from the heap.
+  zip.setLookupScratch(loadScratch_);
   if (!zipDetailsCached_) return;
   ZipFile::ZipDetails d;
   d.centralDirOffset = zipCentralDirOffset_;
@@ -496,11 +521,24 @@ void Epub::primeZip(ZipFile& zip) const {
 }
 
 void Epub::adoptZipDetails(const ZipFile& zip) const {
+  if (zip.lookupCursor() != 0) zipLookupCursor_ = zip.lookupCursor();
   const auto& d = zip.details();
   if (!d.isSet || zipDetailsCached_) return;
   zipCentralDirOffset_ = d.centralDirOffset;
   zipTotalEntries_ = d.totalEntries;
   zipDetailsCached_ = true;
+}
+
+bool Epub::lookupItemStat(ZipFile& zip, const std::string& path, ZipFile::FileStatSlim* out) const {
+  if (statMemoValid_ && statMemoPath_ == path) {
+    *out = statMemo_;
+    return true;
+  }
+  if (!zip.loadFileStatSlim(path.c_str(), out)) return false;
+  statMemoPath_ = path;
+  statMemo_ = *out;
+  statMemoValid_ = true;
+  return true;
 }
 
 bool Epub::computeZipFingerprint(uint64_t* out) const {
@@ -626,7 +664,7 @@ void Epub::discoverCssFilesFromZip() {
     return;
   }
 
-  // Use streamCentralDirectoryNames (O(1) heap, fixed 256-byte stack buffer per entry)
+  // Use streamCentralDirectoryNames (a 4 KB read window and a fixed 256-byte name buffer)
   // instead of loadAllFileStatSlims(). The old path built a full unordered_map of every
   // ZIP entry — on EPUBs with 3000+ entries this consumed ~200 KB and crashed.
   ZipFile zf(filepath);
@@ -851,6 +889,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
   LOG_DBG("EBP", "OPF pass completed in %lu ms", millis() - opfStart);
+  // Shares of a big book's build, as the X3 times them: OPF, TOC, book.bin, then the stylesheets.
+  reportBuildProgress(35);
 
   // TOC Pass - try EPUB 3 nav first, fall back to NCX
   const uint32_t tocStart = millis();
@@ -941,6 +981,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
   LOG_DBG("EBP", "TOC pass completed in %lu ms", millis() - tocStart);
+  reportBuildProgress(65);
 
   // Close the cache files
   if (!bookMetadataCache->endWrite()) {
@@ -948,13 +989,15 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss, BuildArena
     return false;
   }
 
-  // Build final book.bin
+  // Build final book.bin. Its spine size lookup takes its table from the lent region, which no
+  // stream read holds at this point.
   const uint32_t buildStart = millis();
-  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
+  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata, loadScratch_)) {
     LOG_ERR("EBP", "Could not update mappings and sizes");
     return false;
   }
   LOG_DBG("EBP", "buildBookBin completed in %lu ms", millis() - buildStart);
+  reportBuildProgress(85);
   LOG_DBG("EBP", "Total indexing completed in %lu ms", millis() - indexingStart);
 
   if (!bookMetadataCache->cleanupTmpFiles()) {
@@ -2018,8 +2061,7 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   // again, at negligible cost.
   BuildArena* const arena = scratch != nullptr ? scratch : loadScratch_;
   if (arena != nullptr && arena->valid()) {
-    const size_t wanted = 1024 + InflateReader::ringSizeFor(0) + 2 * alignof(std::max_align_t);
-    if (arena->capacity() - arena->used() >= wanted) {
+    if (arena->capacity() - arena->used() >= streamScratchBytes()) {
       return readItemContentsToStreamWithArena(itemHref, out, arena, stop);
     }
   }
@@ -2051,7 +2093,10 @@ bool Epub::readItemContentsToStreamWithArena(const std::string& itemHref, Print&
   // EntryReader is the only deflate path in ZipFile that can take an arena; readFileToStream
   // always mallocs. Same 1 KB chunk size as that path, so the SD write pattern is unchanged.
   ZipFile::EntryReader reader(zip, 1024, arena);
-  const bool opened = reader.open(path.c_str());
+  ZipFile::FileStatSlim stat = {};
+  const bool found = lookupItemStat(zip, path, &stat);
+  if (!found) LOG_ERR("EBP", "Entry not found: %s", path.c_str());
+  const bool opened = found && reader.open(stat);
   adoptZipDetails(zip);
   if (!opened) return false;
 
@@ -2174,8 +2219,10 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
   ZipFile zip(filepath);
   primeZip(zip);
-  const bool ok = zip.getInflatedFileSize(path.c_str(), size);
+  ZipFile::FileStatSlim stat = {};
+  const bool ok = lookupItemStat(zip, path, &stat);
   adoptZipDetails(zip);
+  if (ok) *size = static_cast<size_t>(stat.uncompressedSize);
   return ok;
 }
 

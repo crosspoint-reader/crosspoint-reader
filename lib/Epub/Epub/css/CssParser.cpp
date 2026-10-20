@@ -1182,10 +1182,13 @@ void CssParser::processRuleBlockWithStyle(const std::string_view selectorGroup, 
         continue;
       }
 
-      compileTempFile_.flush();
       CssStyle merged = style;
       auto existingIt = compileSelectorOffsets_.find(key);
       if (existingIt != compileSelectorOffsets_.end() && existingIt->second.order + 1 >= order) {
+        // The earlier declaration is read back through a second handle, which sees only what has
+        // reached the card. Synced here and only here: a sync writes the data and the directory
+        // entry, a few ms on the device, and one before every rule cost seconds a stylesheet.
+        compileTempFile_.flush();
         CssStyle existing;
         FsFile tempRead;
         if (Storage.openFileForRead("CSS", compileTempPath_, tempRead) &&
@@ -1799,14 +1802,24 @@ bool CssParser::readCssStylePayload(FsFile& file, CssStyle& style) {
 }
 
 void CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
-  file.write(static_cast<uint8_t>(style.textAlign));
-  file.write(static_cast<uint8_t>(style.fontStyle));
-  file.write(static_cast<uint8_t>(style.fontWeight));
-  file.write(static_cast<uint8_t>(style.textDecoration));
+  // Composed in one buffer and written once: a field at a time was ~30 SdFat calls a rule, the
+  // bulk of a stylesheet's compile on the device.
+  std::array<uint8_t, CSS_FIXED_STYLE_BYTES> payload;
+  size_t at = 0;
+  const auto put = [&payload, &at](const void* data, const size_t n) {
+    if (at + n > payload.size()) return;  // a field past CSS_FIXED_STYLE_BYTES: see its static_assert
+    memcpy(payload.data() + at, data, n);
+    at += n;
+  };
+  const auto put8 = [&put](const uint8_t v) { put(&v, 1); };
+  put8(static_cast<uint8_t>(style.textAlign));
+  put8(static_cast<uint8_t>(style.fontStyle));
+  put8(static_cast<uint8_t>(style.fontWeight));
+  put8(static_cast<uint8_t>(style.textDecoration));
 
-  auto writeLength = [&file](const CssLength& len) {
-    file.write(reinterpret_cast<const uint8_t*>(&len.value), sizeof(len.value));
-    file.write(static_cast<uint8_t>(len.unit));
+  auto writeLength = [&put, &put8](const CssLength& len) {
+    put(&len.value, sizeof(len.value));
+    put8(static_cast<uint8_t>(len.unit));
   };
 
   writeLength(style.textIndent);
@@ -1820,7 +1833,7 @@ void CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   writeLength(style.paddingRight);
   writeLength(style.imageHeight);
   writeLength(style.imageWidth);
-  file.write(static_cast<uint8_t>(style.display));
+  put8(static_cast<uint8_t>(style.display));
 
   uint16_t definedBits = 0;
   if (style.defined.textAlign) definedBits |= 1 << 0;
@@ -1839,31 +1852,32 @@ void CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   if (style.defined.imageHeight) definedBits |= 1 << 13;
   if (style.defined.imageWidth) definedBits |= 1 << 14;
   if (style.defined.display) definedBits |= 1 << 15;
-  file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
-  file.write(static_cast<uint8_t>(style.verticalAlign));
-  file.write(static_cast<uint8_t>(style.defined.verticalAlign));
-  file.write(static_cast<uint8_t>(style.cssFloat));
+  put(&definedBits, sizeof(definedBits));
+  put8(static_cast<uint8_t>(style.verticalAlign));
+  put8(static_cast<uint8_t>(style.defined.verticalAlign));
+  put8(static_cast<uint8_t>(style.cssFloat));
   // bit 0 = value, bit 1 = defined (distinguishes explicit "normal" from unset)
   uint8_t smallCapsVal = (style.smallCaps ? 0x1 : 0x0) | (style.defined.smallCaps ? 0x2 : 0x0);
-  file.write(smallCapsVal);
+  put8(smallCapsVal);
   // font-size multiplier: float + flags byte (bit 0 = defined, bit 1 = relative to the body, v27;
   // bit 2 = font-family defined, v28)
-  file.write(reinterpret_cast<const uint8_t*>(&style.fontSizeMultiplier), sizeof(style.fontSizeMultiplier));
+  put(&style.fontSizeMultiplier, sizeof(style.fontSizeMultiplier));
   const uint8_t fontSizeFlags = (style.defined.fontSizeMultiplier ? 0x1 : 0x0) |
                                 (style.fontSizeRootRelative ? 0x2 : 0x0) | (style.defined.fontFamily ? 0x4 : 0x0);
-  file.write(fontSizeFlags);
+  put8(fontSizeFlags);
   // Block flags byte: value/defined pairs, same convention as smallCaps above.
   const uint8_t blockFlags = (style.listStyleNone ? 0x01 : 0x00) | (style.defined.listStyleNone ? 0x02 : 0x00) |
                              (style.pageBreakBefore ? 0x04 : 0x00) | (style.defined.pageBreakBefore ? 0x08 : 0x00) |
                              (style.pageBreakAfter ? 0x10 : 0x00) | (style.defined.pageBreakAfter ? 0x20 : 0x00);
-  file.write(blockFlags);
+  put8(blockFlags);
   // Visibility flags byte (v19): value/defined pairs, same convention.
   const uint8_t visibilityFlags = (style.colorTransparent ? 0x01 : 0x00) |
                                   (style.defined.colorTransparent ? 0x02 : 0x00) | (style.opacityZero ? 0x04 : 0x00) |
                                   (style.defined.opacityZero ? 0x08 : 0x00) | (style.visibilityHidden ? 0x10 : 0x00) |
                                   (style.defined.visibilityHidden ? 0x20 : 0x00);
-  file.write(visibilityFlags);
-  file.write(reinterpret_cast<const uint8_t*>(&style.fontFamily), sizeof(style.fontFamily));
+  put8(visibilityFlags);
+  put(&style.fontFamily, sizeof(style.fontFamily));
+  file.write(payload.data(), at);
 }
 
 void CssParser::writeComplexTable(FsFile& file) const {

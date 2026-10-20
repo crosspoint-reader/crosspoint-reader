@@ -1,6 +1,7 @@
 #pragma once
 #include <BufferedFileIO.h>
-#include <Memory.h>  // makeUniqueNoThrow — nothrow growth (device is -fno-exceptions)
+#include <Memory.h>     // makeUniqueNoThrow — nothrow growth (device is -fno-exceptions)
+#include <PassTable.h>  // the spine idref table
 #include <Print.h>
 #include <SaxParser/SaxParser.h>
 
@@ -49,58 +50,52 @@ class ContentOpfParser final : public Print {
   std::optional<serialization::BufferedFileReader> itemReader_;
   std::string coverItemId;
 
-  // Index for fast idref→href lookup (used only for large EPUBs).
-  // Lookups trust (idHash, idLen) alone and read the href directly — the id string is never
-  // read back for verification. Hash-trusted matching adapted from the FreeInk SDK's
-  // BookCatalog (github.com/Free-Ink/freeink-sdk, "Add SD-backed catalog for large EPUB
-  // containers" by Justin Mitchell), whose rationale applies verbatim: the strings a verify
-  // would need are exactly the RAM/IO this index exists to avoid. Correctness is guaranteed
-  // by a duplicate scan after the sort: if any two manifest ids share (hash, len), the index
-  // is disabled for the whole book and lookups fall back to the exact linear scan.
-  struct ItemIndexEntry {
-    uint32_t idHash;      // FNV-1a hash of itemId
-    uint16_t idLen;       // length for collision reduction
-    uint32_t hrefOffset;  // offset of the href string in .items.bin (record's id skipped)
+  // Spine idrefs resolve a table-full at a time, one pass over .items.bin per table-full.
+  //
+  // They used to resolve one by one, through an in-RAM index of every manifest item (12 B an item,
+  // grown by doubling) or, when the heap refused its next doubling, through a scan of .items.bin
+  // per itemref. On the X3 King's Avatar's index stopped at 1024 items ("manifest index OOM at
+  // 1024 items"; its ~3300 wanted 48 KB, plus the 24 KB it doubled from); a scan resumes after the
+  // previous match, which reads the store about once for a spine in manifest order and about half
+  // of it per itemref for any other order (a manifest in name order, as Sigil writes one).
+  //
+  // Now the itemrefs collect in a table (idref hash and length, place in the spine) until it is
+  // full or the spine ends; one pass over the store, resuming after the last table-full's matches,
+  // finds every href in it, and they go to the cache in spine order. The table is lent (a block of
+  // the region first-open indexing lends, beside the stream's own: lendSpineTable), else the heap's
+  // (a PassTable sized to the manifest's candidate items), else a single entry -- which is the old
+  // resumed scan exactly. Nothing is indexed during the manifest: the parse holds no table of it.
+  //
+  // Matches trust (FNV-1a 64, length), as ZipFile's batch lookups and BookMetadataCache's spine href
+  // index do; the first item in pass order with an idref's key is its href.
+ public:
+  struct SpineTarget {
+    uint64_t idHash;
+    uint16_t idLen;
+    uint16_t slot;        // place in the table-full, in spine order
+    uint32_t hrefOffset;  // of its href in .items.bin; NO_HREF until a pass finds it
   };
-  // In-RAM manifest fast index (sorted by (idHash,idLen) for binary-search idref lookup). Grown with
-  // NOTHROW allocation (device is -fno-exceptions, so a throwing container abort()s on a fragmented
-  // heap — observed on a 1732-spine book). It grows as long as memory allows; the FIRST growth that
-  // can't be satisfied latches indexDisabled_ and idref lookups fall back to the exact linear scan
-  // over .items.bin. So a big book keeps the fast index whenever the heap can hold it (~12 bytes/item),
-  // and only genuinely-out-of-memory books degrade — no arbitrary item-count cap. The index is a pure
-  // speed optimisation, never correctness. push_back returns false on OOM (never throws).
-  struct ItemIndexVec {
-    std::unique_ptr<ItemIndexEntry[]> data_;
-    size_t size_ = 0;
-    size_t cap_ = 0;
-    bool push_back(const ItemIndexEntry& e) {
-      if (size_ == cap_) {
-        const size_t newCap = cap_ == 0 ? 64 : cap_ * 2;
-        auto next = makeUniqueNoThrow<ItemIndexEntry[]>(newCap);
-        if (!next) return false;  // OOM — caller disables the index, falls back to linear scan
-        if (size_ > 0) std::memcpy(next.get(), data_.get(), size_ * sizeof(ItemIndexEntry));
-        data_ = std::move(next);
-        cap_ = newCap;
-      }
-      data_[size_++] = e;
-      return true;
-    }
-    void clear() {
-      data_.reset();
-      size_ = 0;
-      cap_ = 0;
-    }
-    size_t size() const { return size_; }
-    ItemIndexEntry* begin() { return data_.get(); }
-    ItemIndexEntry* end() { return data_.get() + size_; }
-    const ItemIndexEntry& operator[](size_t i) const { return data_[i]; }
-  };
-  ItemIndexVec itemIndex;
-  bool useItemIndex = false;
-  bool indexDisabled_ = false;  // latched when an index growth hit OOM → linear-scan fallback
-  // Where the linear scan picks up: the .items.bin offset just past its previous match (see
-  // resolveItemRefHrefLinearScan).
+  static constexpr uint32_t NO_HREF = UINT32_MAX;
+  static constexpr uint32_t EMITTED = UINT32_MAX - 1;  // written to the cache during the pass
+
+ private:
+  SpineTarget* spineTable_ = nullptr;
+  size_t spineCapacity_ = 0;
+  size_t spinePending_ = 0;
+  size_t spinePasses_ = 0;
+  bool spineTableLent_ = false;
+  PassTable<SpineTarget> ownSpineTable_;
+  SpineTarget inlineSpineTarget_ = {};
+  // Manifest items a spine can name (not images, stylesheets or the NCX): the heap table's size.
+  size_t spineCandidates_ = 0;
+  // Where the next pass starts: the .items.bin offset just past the previous table-full's last
+  // match, so a spine in manifest order reads the store about once in all.
   uint32_t itemScanResumeOffset_ = 0;
+  std::string itemIdScratch_;
+  std::string hrefScratch_;
+  void beginSpineTable();
+  void queueSpineItemRef(const char* idref);
+  void resolvePendingSpineItemRefs();
 
   // Memo of the last manifest item's media-type and its classification (MediaClass enum in the
   // .cpp, stored as its uint8_t value here). Manifest items overwhelmingly repeat one media type
@@ -109,8 +104,6 @@ class ContentOpfParser final : public Print {
   // per-item std::string. Fixed buffer, zero heap; 48 covers every registered EPUB media type.
   char lastMediaType_[48] = {};
   uint8_t lastMediaClass_ = 0;
-
-  static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // One dc:creator as the <metadata> block describes it. Kept only until the block ends, to pick
   // the primary author then: EPUB 3 states a creator's role and filing name in <meta refines="#id">
@@ -151,23 +144,10 @@ class ContentOpfParser final : public Print {
   bool metadataRead_ = false;
   bool coverIdItemIsPicture_ = false;  // coverIdItemHref is a JPEG/PNG, not a page
 
-  // FNV-1a hash function
-  static uint32_t fnvHash(const std::string& s) {
-    uint32_t hash = 2166136261u;
-    for (char c : s) {
-      hash ^= static_cast<uint8_t>(c);
-      hash *= 16777619u;
-    }
-    return hash;
-  }
-
   static void startElement(void* userData, const char* name, const char** atts);
   static void characterData(void* userData, const char* s, int len);
   static void endElement(void* userData, const char* name);
 
-  bool resolveItemRefHrefWithIndex(const std::string& idref, std::string& href);
-  bool resolveItemRefHrefLinearScan(const std::string& idref, std::string& href);
-  bool resolveSpineItemRefHref(const std::string& idref, std::string& href);
   // Closes tempItemStore if it was ever opened — a null-cache parse never opens it.
   void closeItemStore();
   void handleSpineItemRefElement(const char** atts);
@@ -224,6 +204,13 @@ class ContentOpfParser final : public Print {
   // Set once </metadata> has closed: the stop flag of a read that wants the metadata alone (BookFonts' keys), so
   // a large manifest is not parsed for nothing.
   const bool* metadataRead() const { return &metadataRead_; }
+  // Spine idrefs collect in `table` (capacity entries, not owned, valid until the parse ends)
+  // instead of a heap table of the parser's own. Before the parse reaches <spine>.
+  void lendSpineTable(SpineTarget* table, const size_t capacity) {
+    spineTable_ = capacity > 0 ? table : nullptr;
+    spineCapacity_ = spineTable_ != nullptr ? capacity : 0;
+    spineTableLent_ = spineTable_ != nullptr;
+  }
   // Hosts the SAX parser's state in `state` (SaxParser::stateBytes()) instead of the heap. Before setup().
   void setParserState(void* state) { saxParser_.setExternalState(state, SaxParser::stateBytes()); }
   bool setup();

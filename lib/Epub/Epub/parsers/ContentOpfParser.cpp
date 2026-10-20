@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "../BookMetadataCache.h"
+#include "../HashUtils.h"
 #include "../htmlEntities.h"
 
 namespace {
@@ -416,84 +417,104 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
   return size;
 }
 
-bool ContentOpfParser::resolveItemRefHrefWithIndex(const std::string& idref, std::string& href) {
-  const uint32_t targetHash = fnvHash(idref);
-  const uint16_t targetLen = static_cast<uint16_t>(idref.size());
-
-  auto it = std::lower_bound(itemIndex.begin(), itemIndex.end(), ItemIndexEntry{targetHash, targetLen, 0},
-                             [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-                               return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-                             });
-
-  // Trust (hash, len): the duplicate scan at spine start guarantees the key is unique in this
-  // index, so the first match IS the item — seek straight to its href, skipping the id
-  // read-back-and-compare that used to cost a second string read per itemref (5.8 s of a
-  // 1732-itemref spine pass was this loop's SD traffic). The buffered reader makes the seek
-  // free when the href sits in the current window, which spine-follows-manifest order makes
-  // the common case.
-  if (it != itemIndex.end() && it->idHash == targetHash && it->idLen == targetLen) {
-    itemReader_->seek(it->hrefOffset);
-    return itemReader_->readString(href);
+void ContentOpfParser::beginSpineTable() {
+  spinePending_ = 0;
+  if (spineTable_ != nullptr) return;  // lent
+  PassTable<SpineTarget>::HeapSizing sizing;
+  // At most one table-full of slots a SpineTarget can number.
+  const size_t wanted = std::min<size_t>(spineCandidates_ > 0 ? spineCandidates_ : 1, UINT16_MAX);
+  ownSpineTable_ = PassTable<SpineTarget>::fromHeap(wanted, sizing);
+  if (ownSpineTable_.capacity() > 0) {
+    spineTable_ = ownSpineTable_.entries();
+    spineCapacity_ = ownSpineTable_.capacity();
+  } else {
+    // No heap for a table: one itemref per pass, the resumed scan of old.
+    spineTable_ = &inlineSpineTarget_;
+    spineCapacity_ = 1;
   }
-
-  return false;
 }
 
-bool ContentOpfParser::resolveItemRefHrefLinearScan(const std::string& idref, std::string& href) {
-  // Resumes after the previous match and wraps once, instead of starting at the first record:
-  // spine order follows manifest order in practice, so the item wanted is usually the next one.
-  // From the first record, a 2956-itemref spine read ~4.4 million records -- 75 s of a first open
-  // on the device. An id the manifest repeats (invalid EPUB) therefore resolves to its next
-  // occurrence after the resume point rather than always to its first.
-  const size_t itemStoreSize = tempItemStore.fileSize();
-  const uint32_t resumeOffset = itemScanResumeOffset_;
-  std::string itemId;
+void ContentOpfParser::queueSpineItemRef(const char* idref) {
+  if (spineTable_ == nullptr || !itemReader_.has_value()) return;  // no item store: nothing to resolve against
+  const size_t len = strlen(idref);
+  SpineTarget& t = spineTable_[spinePending_];
+  t.idHash = HashUtils::fnvHash64(idref, len);
+  t.idLen = static_cast<uint16_t>(len);
+  t.slot = static_cast<uint16_t>(spinePending_);
+  t.hrefOffset = NO_HREF;
+  if (++spinePending_ == spineCapacity_) resolvePendingSpineItemRefs();
+}
 
-  for (int pass = 0; pass < 2; pass++) {
-    const size_t end = pass == 0 ? itemStoreSize : resumeOffset;
+void ContentOpfParser::resolvePendingSpineItemRefs() {
+  const size_t count = spinePending_;
+  spinePending_ = 0;
+  if (count == 0 || !itemReader_.has_value()) return;
+  spinePasses_++;
+  const auto byKey = [](const SpineTarget& a, const SpineTarget& b) {
+    return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+  };
+  std::sort(spineTable_, spineTable_ + count, byKey);
+
+  // One pass from the resume point to the end and on from the start up to it, ending early once
+  // every itemref of the table-full has its href. An itemref found when it is the next one due in
+  // spine order goes to the cache at once, its href still in the read window: a spine in manifest
+  // order is written out by the pass itself and the store read about once. The others are read
+  // back by offset afterwards, a small read each.
+  const auto emit = [this](const uint32_t hrefOffset) {
+    if (itemReader_->readStringAt(hrefOffset, hrefScratch_) && cache) cache->createSpineEntry(hrefScratch_);
+  };
+  const uint32_t storeSize = static_cast<uint32_t>(tempItemStore.fileSize());
+  const uint32_t resumeOffset = itemScanResumeOffset_ < storeSize ? itemScanResumeOffset_ : 0;
+  size_t matched = 0;
+  size_t nextSlot = 0;
+  uint32_t lastMatchEnd = resumeOffset;
+  for (int pass = 0; pass < 2 && matched < count; pass++) {
+    const uint32_t end = pass == 0 ? storeSize : resumeOffset;
     itemReader_->seek(pass == 0 ? resumeOffset : 0);
-    while (itemReader_->position() < end) {
-      const size_t beforeReadPos = itemReader_->position();
-      if (!itemReader_->readString(itemId) || !itemReader_->readString(href)) {
-        return false;
-      }
-
+    while (itemReader_->position() < end && matched < count) {
+      const uint32_t recordStart = itemReader_->position();
+      uint32_t hrefLen = 0;
+      if (!itemReader_->readString(itemIdScratch_)) break;
+      const uint32_t hrefOffset = itemReader_->position();
+      if (!itemReader_->readPod(hrefLen)) break;
+      const uint32_t recordEnd = itemReader_->position() + hrefLen;
       // Guard against malformed temp data or host shims that don't signal EOF via available().
-      if (itemReader_->position() <= beforeReadPos) {
-        return false;
+      if (recordEnd <= recordStart) break;
+      const SpineTarget key = {HashUtils::fnvHash64(itemIdScratch_), static_cast<uint16_t>(itemIdScratch_.size()), 0,
+                               0};
+      for (SpineTarget* it = std::lower_bound(spineTable_, spineTable_ + count, key, byKey);
+           it != spineTable_ + count && it->idHash == key.idHash && it->idLen == key.idLen; ++it) {
+        if (it->hrefOffset != NO_HREF) continue;  // an id the manifest repeats: its first item wins
+        matched++;
+        lastMatchEnd = recordEnd;
+        if (it->slot == nextSlot) {
+          emit(hrefOffset);
+          it->hrefOffset = EMITTED;
+          nextSlot++;
+        } else {
+          it->hrefOffset = hrefOffset;
+        }
       }
-
-      if (itemId == idref) {
-        itemScanResumeOffset_ = itemReader_->position() < itemStoreSize ? itemReader_->position() : 0;
-        return true;
-      }
+      itemReader_->seek(recordEnd);
     }
   }
+  itemScanResumeOffset_ = lastMatchEnd < storeSize ? lastMatchEnd : 0;
 
-  return false;
-}
-
-bool ContentOpfParser::resolveSpineItemRefHref(const std::string& idref, std::string& href) {
-  if (!itemReader_.has_value()) {
-    return false;  // spine element never opened the item store — nothing to resolve against
+  // The rest, in spine order: every slot before nextSlot is out already.
+  std::sort(spineTable_, spineTable_ + count,
+            [](const SpineTarget& a, const SpineTarget& b) { return a.slot < b.slot; });
+  for (size_t i = nextSlot; i < count; i++) {
+    const SpineTarget& t = spineTable_[i];
+    if (t.hrefOffset == NO_HREF || t.hrefOffset == EMITTED) continue;  // NO_HREF: not in the manifest
+    emit(t.hrefOffset);
   }
-  if (useItemIndex) {
-    return resolveItemRefHrefWithIndex(idref, href);
-  }
-
-  // Slow path: linear scan (for small manifests, keeps original behavior).
-  return resolveItemRefHrefLinearScan(idref, href);
 }
 
 void ContentOpfParser::handleSpineItemRefElement(const char** atts) {
   for (int i = 0; atts[i]; i += 2) {
     if (strcmp(atts[i], "idref") == 0) {
-      const std::string idref = atts[i + 1];
-      std::string href;
-
-      if (resolveSpineItemRefHref(idref, href) && cache) {
-        cache->createSpineEntry(href);
-      }
+      stats.itemRefCount++;
+      queueSpineItemRef(atts[i + 1]);
     }
   }
 }
@@ -585,40 +606,13 @@ void ContentOpfParser::startElement(void* userData, const char* name, const char
   if (self->state == IN_PACKAGE && isSpineTag(name)) {
     self->state = IN_SPINE;
     // No cache => no spine parsing (see the isItemRefTag branch), so nothing will read this.
-    // resolveSpineItemRefHref() already treats an absent reader as "cannot resolve".
+    // queueSpineItemRef() already treats an absent reader as "cannot resolve".
     if (self->cache) {
       if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
         LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
       }
       self->itemReader_.emplace(self->tempItemStore);
-    }
-
-    // Sort item index for binary search if we have enough items
-    if (self->itemIndex.size() >= LARGE_SPINE_THRESHOLD) {
-      std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-        return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-      });
-      // Lookups trust (hash, len) without reading the id back, so a (hash, len) duplicate —
-      // a genuine 32-bit collision (~1e-4 odds per book) or a spec-invalid duplicated id —
-      // could resolve to the wrong href. Adjacent scan after the sort: any duplicate disables
-      // the index for this book and every idref falls back to the exact linear scan.
-      bool duplicateKeys = false;
-      for (size_t i = 1; i < self->itemIndex.size(); ++i) {
-        if (self->itemIndex[i].idHash == self->itemIndex[i - 1].idHash &&
-            self->itemIndex[i].idLen == self->itemIndex[i - 1].idLen) {
-          duplicateKeys = true;
-          break;
-        }
-      }
-      if (duplicateKeys) {
-        LOG_DBG("COF", "Manifest id hash collision; using exact linear idref lookup");
-      } else {
-        self->useItemIndex = true;
-        LOG_DBG("COF", "Using fast index for %zu manifest items", self->itemIndex.size());
-      }
-      // (A manifest past MAX_INDEX_ENTRIES latched indexDisabled_ and CLEARED itemIndex above, so its
-      // size is now < LARGE_SPINE_THRESHOLD and this whole block is skipped → linear scan. No branch
-      // needed here.)
+      self->beginSpineTable();
     }
     return;
   }
@@ -750,26 +744,9 @@ void ContentOpfParser::startElement(void* userData, const char* name, const char
     }
 
     // Write items down to SD card (buffered — thousands of tiny field writes otherwise cost a
-    // full FsFile call each). The index entry records the position AFTER the id string:
-    // hash-trusted lookups seek straight to the href and never re-read the id.
+    // full FsFile call each). The spine passes read them back (resolvePendingSpineItemRefs).
     if (self->itemWriter_.has_value()) self->itemWriter_->writeString(itemId);
-    if (self->tempItemStore && !self->indexDisabled_) {
-      ItemIndexEntry entry;
-      entry.idHash = fnvHash(itemId);
-      entry.idLen = static_cast<uint16_t>(itemId.size());
-      entry.hrefOffset = self->itemWriter_->position();
-      // Grow the in-RAM index with NOTHROW allocation. It keeps growing as long as the heap can hold
-      // it (~12 bytes/item), so even a 1732-spine book keeps the fast binary-search index whenever
-      // memory allows. Only if a growth genuinely can't be satisfied (OOM / fragmentation) do we
-      // abandon the index and fall back to the exact linear scan over .items.bin — never abort (the
-      // device is -fno-exceptions). No arbitrary item-count cap: memory is the only limit.
-      if (!self->itemIndex.push_back(entry)) {
-        self->indexDisabled_ = true;
-        LOG_INF("COF", "manifest index OOM at %zu items; using linear idref lookup for this book",
-                self->itemIndex.size());
-        self->itemIndex.clear();  // free the partial index; lookups use the linear scan
-      }
-    }
+    if (mediaClass == MediaClass::Other) self->spineCandidates_++;
     if (self->itemWriter_.has_value()) self->itemWriter_->writeString(href);
 
     if (itemId == self->coverItemId) {
@@ -932,6 +909,15 @@ void ContentOpfParser::endElement(void* userData, const char* name) {
 
   if (self->state == IN_SPINE && isSpineTag(name)) {
     self->state = IN_PACKAGE;
+    self->resolvePendingSpineItemRefs();
+    if (self->spineTable_ != nullptr) {
+      LOG_DBG("COF", "Spine: %u itemrefs in %u passes over the item store, %u a pass (%s)",
+              static_cast<unsigned>(self->stats.itemRefCount), static_cast<unsigned>(self->spinePasses_),
+              static_cast<unsigned>(self->spineCapacity_), self->spineTableLent_ ? "lent region" : "heap");
+    }
+    self->ownSpineTable_ = PassTable<SpineTarget>();
+    self->spineTable_ = nullptr;
+    self->spineCapacity_ = 0;
     self->itemReader_.reset();
     self->closeItemStore();
     return;

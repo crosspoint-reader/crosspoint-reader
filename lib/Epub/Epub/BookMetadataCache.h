@@ -12,6 +12,8 @@
 
 #include "HashUtils.h"
 
+class BuildArena;
+
 class BookMetadataCache {
  public:
   struct BookMetadata {
@@ -171,8 +173,10 @@ class BookMetadataCache {
   bool endWrite();
   bool cleanupTmpFiles() const;
 
-  // Post-processing to update mappings and sizes
-  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata);
+  // Post-processing to update mappings and sizes. `scratch`: a lent region (first-open indexing
+  // lends the secondary framebuffer) that the spine size lookup's table and read window take a
+  // block of while it runs, instead of the heap; returned as found.
+  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata, BuildArena* scratch = nullptr);
 
   // True when the spine/TOC cache file (book.bin) already exists for this cachePath,
   // i.e. load() can read it instead of rebuilding. Cheap (a single Storage.exists).

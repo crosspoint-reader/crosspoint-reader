@@ -1,12 +1,15 @@
 #include "BookMetadataCache.h"
 
+#include <BuildArena.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <PassTable.h>
 #include <Serialization.h>
 #include <ZipFile.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "FsHelpers.h"
@@ -23,6 +26,33 @@ constexpr uint8_t BOOK_CACHE_VERSION = 16;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
+
+// The table and read window of buildBookBin's spine size lookup.
+//
+// One walk of the ZIP central directory resolves as many spine items as the table holds, so the
+// table decides how many walks a book costs. It used to be all or nothing: King's Avatar (1732
+// spine items, ~3300 entries) found 43.5 KB free on the X3, short of the 67 KB the whole table
+// asked for, and took a walk per spine item instead -- 427 s of a 431 s first open. Now it is a
+// PassTable: a block of the lent region when first-open indexing has one (52 KB on the X3, 3000
+// spine items a walk) so the heap is not touched, else the heap's largest block, and at least
+// 128 entries: ceil(n / 128) walks wherever 2 KB can be had. Below LARGE_SPINE_THRESHOLD spine
+// items, or with no table at all, the lookup goes per item.
+//
+// The walk reads through a 4 KB window beside the table: unbuffered, it is about a dozen card
+// calls per central-directory entry (~0.8 s a walk for King's Avatar), buffered a few dozen reads.
+constexpr size_t SIZE_LOOKUP_WINDOW_BYTES = 4096;
+constexpr size_t SIZE_LOOKUP_MIN_ENTRIES = 128;
+
+PassTable<ZipFile::SizeTarget> sizeLookupTable(BuildArena* scratch, const size_t spineCount) {
+  auto table = PassTable<ZipFile::SizeTarget>::fromRegion(scratch, spineCount, SIZE_LOOKUP_MIN_ENTRIES,
+                                                          SIZE_LOOKUP_WINDOW_BYTES);
+  if (table.capacity() == 0) {
+    PassTable<ZipFile::SizeTarget>::HeapSizing sizing;
+    sizing.minEntries = SIZE_LOOKUP_MIN_ENTRIES;
+    table = PassTable<ZipFile::SizeTarget>::fromHeap(spineCount, sizing, SIZE_LOOKUP_WINDOW_BYTES);
+  }
+  return table;
+}
 }  // namespace
 
 /* ============= WRITING / BUILDING FUNCTIONS ================ */
@@ -198,7 +228,7 @@ bool BookMetadataCache::endWrite() {
   return true;
 }
 
-bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
+bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata, BuildArena* scratch) {
   LOG_DBG("BMC", "buildBookBin start: free=%lu contig=%lu", static_cast<unsigned long>(esp_get_free_heap_size()),
           static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_DEFAULT)));
   // Open all three files, writing to meta, reading from spine and toc
@@ -287,9 +317,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // seek-heavy scan in Epub::hasReliableToc().
   //
   // Deque, not vector: only ~3.5 KB at 1732 spines, but a vector demands it as ONE contiguous
-  // block, and bare operator new abort()s under -fno-exceptions on a fragmented heap — the same
-  // failure class the targets/spineSizes deques below were introduced to avoid. This was the one
-  // spine-sized table here that never got that treatment.
+  // block, and bare operator new abort()s under -fno-exceptions on a fragmented heap — the
+  // failure class that once aborted the size lookup's tables below.
   std::deque<int16_t> spineToTocIndex(spineCount, -1);
   int distinctSpinesReferenced = 0;
   tocReader.seek(0);
@@ -312,7 +341,9 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   }
 
   ZipFile zip(epubPath);
-  // Pre-open zip file to speed up size calculations
+  // Opened once for every size below. Never loadAllFileStatSlims(): holding every central-directory
+  // entry of a 2000-chapter EPUB in RAM crashed the ESP32-C3
+  // (https://github.com/crosspoint-reader/crosspoint-reader/issues/134).
   if (!zip.open()) {
     LOG_ERR("BMC", "Could not open EPUB zip for size calculations");
     bookFile.close();
@@ -320,82 +351,57 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     tocFile.close();
     return false;
   }
-  // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
-  // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
-  // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
-  // Instead, for large books we use a one-pass batch lookup that scans the ZIP
-  // central directory once and matches against spine targets using hash comparison.
-  // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
-  // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
 
-  // Deques, not vectors: at 1732 spines `targets` alone is ~28 KB, and a vector demands that as
-  // one contiguous block — observed aborting here at 51 KB free / 30 KB contig before the
-  // first-open framebuffer release widened the headroom. Chunked storage removes the CONTIGUITY
-  // failure class, but deque still allocates through the throwing path, so total exhaustion would
-  // abort() under -fno-exceptions — which is what the heap probe below guards.
-  std::deque<uint32_t> spineSizes;
-  bool useBatchSizes = false;
-
-  // Batch tables cost ~20 B/spine (16 B SizeTarget + 4 B size): 35 KB at 1732 spines, against
-  // ~122 KB free here (device-measured on King's Avatar). Skip the batch path only when the heap
-  // genuinely cannot hold them, leaving 32 KB for the ZIP scan and the rest of the build.
-  //
-  // Sized against what ACTUALLY allocates, deliberately: an earlier 2x-plus-16KB version demanded
-  // 216 KB at 5000 spines — more than this device ever has free — so it would have silently
-  // dropped plausible ~3000-spine books to the per-item ZIP lookup, i.e. one central-directory
-  // scan PER SPINE. That is the O(n) cost the per-book spine-stat cache exists to eliminate, so an
-  // over-eager probe here is a performance regression, not a safety net. The fallback is correct
-  // (it is the small-book path), just slow — it should trigger only when the alternative is death.
-  const size_t batchTableBytes = static_cast<size_t>(spineCount) * (sizeof(ZipFile::SizeTarget) + sizeof(uint32_t));
-  const size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-  const bool heapAllowsBatchSizes = freeHeap > batchTableBytes + 32 * 1024;
-
-  if (spineCount >= LARGE_SPINE_THRESHOLD && heapAllowsBatchSizes) {
-    LOG_DBG("BMC", "Using batch size lookup for %d spine items", spineCount);
-
-    std::deque<ZipFile::SizeTarget> targets;
-    targets.resize(spineCount);
-
-    std::string pathScratch;
-    spineReader.seek(0);
-    for (int i = 0; i < spineCount; i++) {
+  // Each spine item's size, a table-full of spine items per central-directory walk (see
+  // sizeLookupTable). A table-full's names are read from the spine file ahead of the loop below,
+  // which reads the same records again to write them out with their sizes.
+  const bool batched = spineCount >= LARGE_SPINE_THRESHOLD;
+  const PassTable<ZipFile::SizeTarget> lookup = sizeLookupTable(batched ? scratch : nullptr, batched ? spineCount : 0);
+  ZipFile::SizeTarget* const table = lookup.entries();
+  const size_t perWalk = lookup.capacity();
+  if (batched && perWalk == 0) {
+    LOG_INF("BMC", "No room for a size table (free %u); per-item size lookup for %d spine items",
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)), spineCount);
+  }
+  std::string pathScratch;
+  int walks = 0;
+  // Fills table[0, count) with the sizes of spine items [first, first + count), in spine order, and
+  // leaves the spine reader where it found it.
+  const auto resolveSizes = [&](const int first, const int count) {
+    const uint32_t resumeAt = spineReader.position();
+    for (int j = 0; j < count; j++) {
       readSpineEntry(spineReader, spineScratch);
       // Cached hrefs are already decoded (see ContentOpfParser); decoding again would corrupt
       // filenames that legitimately contain '%' sequences.
       FsHelpers::normalisePath(spineScratch.href, pathScratch);
-
-      ZipFile::SizeTarget t;
+      ZipFile::SizeTarget& t = table[j];
       t.hash = HashUtils::fnvHash64(pathScratch.c_str(), pathScratch.size());
       t.len = static_cast<uint16_t>(pathScratch.size());
-      t.index = static_cast<uint16_t>(i);
-      targets[i] = t;
+      t.index = static_cast<uint16_t>(first + j);
+      t.size = 0;
     }
-
-    std::sort(targets.begin(), targets.end(), [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
+    std::sort(table, table + count, [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) {
       return a.hash < b.hash || (a.hash == b.hash && a.len < b.len);
     });
-
-    spineSizes.resize(spineCount, 0);
-    const int matched = zip.fillUncompressedSizes(targets, spineSizes);
-    LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
-    (void)matched;  // only read by LOG_DBG, which compiles out at lower log levels
-
-    targets.clear();
-    targets.shrink_to_fit();
-
-    useBatchSizes = true;
-  } else if (spineCount >= LARGE_SPINE_THRESHOLD) {
-    // Should be rare — see the sizing note above. If this shows up on an ordinary book, the
-    // threshold is too conservative and is costing a central-directory scan per spine.
-    LOG_INF("BMC", "Skipping batch size lookup for %d spine items (free %u < %u needed); using per-item lookup",
-            spineCount, static_cast<unsigned>(freeHeap), static_cast<unsigned>(batchTableBytes + 32 * 1024));
-  }
+    zip.fillUncompressedSizes(table, count, lookup.extra(), lookup.extraBytes());
+    walks++;
+    std::sort(table, table + count,
+              [](const ZipFile::SizeTarget& a, const ZipFile::SizeTarget& b) { return a.index < b.index; });
+    spineReader.seek(resumeAt);
+  };
 
   uint32_t cumSize = 0;
   spineReader.seek(0);
   int lastSpineTocIndex = -1;
-  std::string pathScratch;
+  // Spine items [tableFirst, tableEnd) have their sizes in the table.
+  int tableFirst = 0;
+  int tableEnd = 0;
   for (int i = 0; i < spineCount; i++) {
+    if (perWalk > 0 && i == tableEnd) {
+      tableFirst = i;
+      tableEnd = i + static_cast<int>(std::min<size_t>(perWalk, spineCount - i));
+      resolveSizes(tableFirst, tableEnd - tableFirst);
+    }
     readSpineEntry(spineReader, spineScratch);
 
     spineScratch.tocIndex = spineToTocIndex[i];
@@ -410,8 +416,10 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     lastSpineTocIndex = spineScratch.tocIndex;
 
     size_t itemSize = 0;
-    if (useBatchSizes) {
-      itemSize = spineSizes[i];
+    if (perWalk > 0) {
+      itemSize = table[i - tableFirst].size;
+      // Not matched by the walk, which compares names byte for byte (an entry stored in another
+      // case or with backslashes), or an empty entry: looked up on its own.
       if (itemSize == 0) {
         FsHelpers::normalisePath(spineScratch.href, pathScratch);
         if (!zip.getInflatedFileSize(pathScratch.c_str(), &itemSize)) {
@@ -431,6 +439,13 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // Write out spine data to book.bin
     writeSpineEntry(bookWriter, spineScratch);
   }
+  if (perWalk > 0) {
+    LOG_DBG("BMC", "Spine sizes: %d items in %d central-directory walks, table of %u in the %s", spineCount, walks,
+            static_cast<unsigned>(perWalk), lookup.inRegion() ? "lent region" : "heap");
+  } else {
+    LOG_DBG("BMC", "Spine sizes: %d items looked up one by one", spineCount);
+  }
+  (void)walks;  // only read by LOG_DBG, which compiles out at lower log levels
   // Close opened zip file
   zip.close();
 
