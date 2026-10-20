@@ -150,8 +150,8 @@ bool BookMetadataCache::endTocPass() {
   tocFile.close();
   spineFile.close();
 
+  // clear() frees all but one deque node; shrink_to_fit() cannot release more.
   spineHrefIndex.clear();
-  spineHrefIndex.shrink_to_fit();
   useSpineHrefIndex = false;
 
   return flushed;

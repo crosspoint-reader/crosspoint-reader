@@ -200,6 +200,8 @@ STR_HOLD_OPEN_TO_DELETE: "Жою үшін Ашу түймесін ұстап т�
 STR_HOLD_SELECT_TO_DELETE: "Жою үшін Таңдау түймесін ұстап тұрыңыз"
 STR_CONFIRM: "Растау"
 STR_CANCEL: "Болдырмау"
+STR_DELETE_ITEM_CONFIRM: "Жою?"
+STR_SET_SLEEP_COVER_CONFIRM: "Мұқаба орнату?"
 STR_CONNECT: "Қосылу"
 STR_OPEN: "Ашу"
 STR_DOWNLOAD: "Жүктеп алу"

@@ -306,6 +306,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_TILT_PAGE_TURN; }),
         v.end());
   }
+  // Hidden on touch boards: the Home button actions (X4 Pro) or the short
+  // power click (other touch boards) cover these shortcuts.
+  if (BoardConfig::hasTouch()) {
+    v.erase(
+        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_LONG_PRESS_MENU; }),
+        v.end());
+  }
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
