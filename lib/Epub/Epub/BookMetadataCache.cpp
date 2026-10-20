@@ -17,7 +17,9 @@ namespace {
 // v13: TOC hrefs that match a spine item by filename only are mapped; a v12 cache holds them as -1
 // v14: coverItemHref follows an SVG wrapper to its picture; a v13 cache holds the .svg path
 // v15: a named cover missing from the archive no longer blocks the ZIP-name scan; a v14 cache holds the dead path
-constexpr uint8_t BOOK_CACHE_VERSION = 15;
+// v16: the cover fallbacks (ranked ZIP names, a cover page's largest picture, meta cover pages, cover ids, nav
+//      landmarks); a v15 cache holds a title banner, a logo or no cover for such books
+constexpr uint8_t BOOK_CACHE_VERSION = 16;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
