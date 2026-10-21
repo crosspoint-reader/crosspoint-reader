@@ -12,6 +12,7 @@
 
 namespace {
 size_t failNextArraySize = 0;
+int failArraySizeTimes = 1;  // how many allocations of failNextArraySize fail before it clears
 }  // namespace
 
 // Keep array allocation and deletion paired, including arrays allocated by the test framework.
@@ -26,7 +27,10 @@ void* operator new[](size_t size) {
 
 void* operator new[](size_t size, const std::nothrow_t&) noexcept {
   if (failNextArraySize != 0 && size == failNextArraySize) {
-    failNextArraySize = 0;
+    if (--failArraySizeTimes <= 0) {
+      failNextArraySize = 0;
+      failArraySizeTimes = 1;
+    }
     return nullptr;
   }
   return std::malloc(size == 0 ? 1 : size);
@@ -293,6 +297,73 @@ TEST(SdCardFontTest, BitmapAllocationRetriesAfterEvictingRebuildableAdvances) {
   for (uint32_t cp = FIRST; cp < FIRST + 200; ++cp) {
     EXPECT_EQ(32 << 4, font.getAdvance(cp, 0));
   }
+}
+
+SdCardFont* otherFontForHook = nullptr;
+int advanceReleaseHookCalls = 0;
+
+struct AdvanceReleaseHookGuard {
+  AdvanceReleaseHookGuard() {
+    advanceReleaseHookCalls = 0;
+    SdCardFont::setAdvanceReleaseHook([] {
+      ++advanceReleaseHookCalls;
+      if (otherFontForHook) otherFontForHook->clearPersistentCache();
+    });
+  }
+  ~AdvanceReleaseHookGuard() {
+    SdCardFont::setAdvanceReleaseHook(nullptr);
+    otherFontForHook = nullptr;
+    ESP.largestBlock = 200 * 1024;
+    failNextArraySize = 0;
+    failArraySizeTimes = 1;
+  }
+};
+
+TEST(SdCardFontTest, BitmapStillBlockedAfterItsOwnAdvancesAreGoneReleasesTheOtherFonts) {
+  makeFont();
+  SdCardFont font;
+  SdCardFont other;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_TRUE(other.load("fixture"));
+  const auto text = page(FIRST, 200);
+  ASSERT_EQ(0, font.buildAdvanceTable(text.c_str(), 1));
+  ASSERT_EQ(0, other.buildAdvanceTable(text.c_str(), 1));
+  ASSERT_EQ(0, font.prewarm(page(FIRST, 50).c_str(), 1, false, false, false));
+
+  AdvanceReleaseHookGuard guard;
+  otherFontForHook = &other;
+  ESP.largestBlock = 8 * 1024;
+  // The bitmap fails up front and again once this font's own tables are gone.
+  failNextArraySize = 201 * BITMAP_BYTES;
+  failArraySizeTimes = 2;
+  ASSERT_EQ(0, font.prewarm(text.c_str(), 1, false, false, false));
+  EXPECT_EQ(0U, failNextArraySize);
+  EXPECT_EQ(1, advanceReleaseHookCalls);
+  EXPECT_FALSE(font.hasAdvanceTable());
+  EXPECT_FALSE(other.hasAdvanceTable());
+  expectPageBitmaps(font, FIRST, 200);
+}
+
+TEST(SdCardFontTest, OtherFontsKeepTheirAdvancesWhenReleasingItsOwnIsEnough) {
+  makeFont();
+  SdCardFont font;
+  SdCardFont other;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_TRUE(other.load("fixture"));
+  const auto text = page(FIRST, 200);
+  ASSERT_EQ(0, font.buildAdvanceTable(text.c_str(), 1));
+  ASSERT_EQ(0, other.buildAdvanceTable(text.c_str(), 1));
+  ASSERT_EQ(0, font.prewarm(page(FIRST, 50).c_str(), 1, false, false, false));
+
+  AdvanceReleaseHookGuard guard;
+  otherFontForHook = &other;
+  ESP.largestBlock = 8 * 1024;
+  failNextArraySize = 201 * BITMAP_BYTES;
+  ASSERT_EQ(0, font.prewarm(text.c_str(), 1, false, false, false));
+  EXPECT_EQ(0, advanceReleaseHookCalls);
+  EXPECT_FALSE(font.hasAdvanceTable());
+  EXPECT_TRUE(other.hasAdvanceTable());
+  expectPageBitmaps(font, FIRST, 200);
 }
 
 TEST(SdCardFontTest, PagesKernWithTheFontsClassMatrix) {
