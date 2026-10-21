@@ -661,8 +661,7 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
 }
 
 bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-                        LookupResult* outResult, DictLocation* locationOut) {
-  if (locationOut) *locationOut = {};
+                        LookupResult* outResult) {
   const auto setResult = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
   };
@@ -787,7 +786,6 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   }
 
   if (readDefinition(location, definitionOut, outResult)) {
-    if (locationOut) *locationOut = location;
     setResult(LookupResult::Found);
     return true;
   }

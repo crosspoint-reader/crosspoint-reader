@@ -88,7 +88,7 @@ class Dictionary {
   // hit. *outResult (if provided) reports the precise outcome so the UI can
   // distinguish a genuine miss from a decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-              LookupResult* outResult = nullptr, DictLocation* locationOut = nullptr);
+              LookupResult* outResult = nullptr);
 
   // Reload the exact entry, including synonym targets with duplicate headwords.
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr,
