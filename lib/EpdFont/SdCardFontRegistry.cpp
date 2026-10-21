@@ -12,6 +12,10 @@
 #include <cstdlib>
 #include <cstring>
 
+// One file entry per installed size is resident from boot; keep it to the
+// name pointer plus two bytes.
+static_assert(sizeof(SdCardFontFileInfo) == 2 * sizeof(void*), "SdCardFontFileInfo grew");
+
 // --- SdCardFontFamilyInfo helpers ---
 
 const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t style) const {
@@ -67,19 +71,31 @@ namespace {
 // "_<size>.cpfont": the part of a canonical v4 filename after the family name.
 void cpfontTail(const uint8_t size, char* out, const size_t outSize) { snprintf(out, outSize, "_%u.cpfont", size); }
 constexpr size_t CPFONT_TAIL_SIZE = sizeof("_255.cpfont");
+
+// Heap copy of a filename for SdCardFontFileInfo::name; null when out of memory.
+std::unique_ptr<char[]> copyFileName(const char* filename) {
+  const size_t bytes = strlen(filename) + 1;
+  auto copy = makeUniqueNoThrow<char[]>(bytes);
+  if (!copy) {
+    LOG_ERR("SDREG", "OOM: %zu byte filename %s", bytes, filename);
+    return nullptr;
+  }
+  memcpy(copy.get(), filename, bytes);
+  return copy;
+}
 }  // namespace
 
 bool SdCardFontFamilyInfo::filePath(const SdCardFontFileInfo& file, char* out, const size_t outSize) const {
   if (!root) return false;
   int n;
-  if (file.name.empty()) {
+  if (!file.name) {
     char tail[CPFONT_TAIL_SIZE];
     cpfontTail(file.pointSize, tail, sizeof(tail));
     n = snprintf(out, outSize, "%s/%s/%s%s", root, name.c_str(), name.c_str(), tail);
   } else if (loose) {
-    n = snprintf(out, outSize, "%s/%s", root, file.name.c_str());
+    n = snprintf(out, outSize, "%s/%s", root, file.name.get());
   } else {
-    n = snprintf(out, outSize, "%s/%s/%s", root, name.c_str(), file.name.c_str());
+    n = snprintf(out, outSize, "%s/%s/%s", root, name.c_str(), file.name.get());
   }
   return n > 0 && static_cast<size_t>(n) < outSize;
 }
@@ -191,7 +207,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
   for (size_t i = 0; i < files.size(); ++i) {
     Candidate c{i, static_cast<uint16_t>((files[i].style & 1) ? 700 : 400), (files[i].style & 2) != 0};
-    snprintf(path, sizeof(path), "%s/%s", dirPath, files[i].name.c_str());
+    snprintf(path, sizeof(path), "%s/%s", dirPath, files[i].name.get());
     HalFile f = Storage.open(path);
     if (f && !f.isDirectory()) {
       FtFont::FaceInfo face;
@@ -218,7 +234,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
       const int dc = std::abs(static_cast<int>(c.weight) - target);
       const int db = std::abs(static_cast<int>(best->weight) - target);
       if (dc < db || (dc == db && (c.weight < best->weight ||
-                                   (c.weight == best->weight && files[c.index].name < files[best->index].name)))) {
+                                   (c.weight == best->weight &&
+                                    strcmp(files[c.index].name.get(), files[best->index].name.get()) < 0)))) {
         best = &c;
       }
     }
@@ -230,7 +247,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     // All faces italic: the italic nearest 400 anchors the family as regular
     // (TtfEpdFont needs a regular source; it derives the rest).
     regular = pick(true, 400, nullptr);
-    if (regular) LOG_DBG("SDREG", "No upright face in %s — promoting %s", dirPath, files[regular->index].name.c_str());
+    if (regular) LOG_DBG("SDREG", "No upright face in %s — promoting %s", dirPath, files[regular->index].name.get());
     if (!regular) return;  // no usable files at all
   }
   // Bold must be a genuinely heavier face than the regular pick; otherwise the
@@ -244,9 +261,12 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
 
   std::vector<SdCardFontFileInfo> selected;
   selected.reserve(4);
+  // Each candidate is picked for at most one role (the exclusions above), so
+  // its entry can be moved out of `files`. A second pick of the same index
+  // would leave a null name that filePath() reads as a canonical .cpfont.
   const auto add = [&](const Candidate* c, const uint8_t role) {
     if (!c) return;
-    SdCardFontFileInfo info = files[c->index];
+    SdCardFontFileInfo info = std::move(files[c->index]);
     info.style = role;
     selected.push_back(std::move(info));
   };
@@ -305,7 +325,10 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
         continue;
       }
       SdCardFontFileInfo info;
-      if (!isCanonicalCpfontName(nameBuffer, family.name, size)) info.name = nameBuffer;
+      if (!isCanonicalCpfontName(nameBuffer, family.name, size)) {
+        info.name = copyFileName(nameBuffer);
+        if (!info.name) continue;
+      }
       info.pointSize = size;
       info.style = style;
       cpfontFiles.push_back(std::move(info));
@@ -319,7 +342,8 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
       // (e.g. Merriweather/Merriweather-Italic.ttf → italic); refineVectorStyles
       // upgrades it from the face's own metadata and dedups by role afterwards.
       SdCardFontFileInfo info;
-      info.name = nameBuffer;
+      info.name = copyFileName(nameBuffer);
+      if (!info.name) continue;
       info.pointSize = 0;  // size-free
       info.style = parseVectorStyle(nameBuffer, baseLen);
       vectorFiles.push_back(std::move(info));
@@ -412,7 +436,8 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       family.vector = true;
       family.loose = true;
       SdCardFontFileInfo info;
-      info.name = nameBuffer;
+      info.name = copyFileName(nameBuffer);
+      if (!info.name) continue;
       info.pointSize = 0;  // size-free
       info.style = 0;
       family.files.push_back(std::move(info));

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,9 +10,10 @@
 
 struct SdCardFontFileInfo {
   // Filename, stored only when SdCardFontFamilyInfo::filePath() cannot rebuild
-  // it: a .cpfont not named "<Family>_<size>.cpfont", or any vector file. Empty
-  // for the canonical name, so downloaded families keep no per-file heap strings.
-  std::string name;
+  // it: a .cpfont not named "<Family>_<size>.cpfont", or any vector file. Null
+  // for the canonical name, so downloaded families keep no per-file heap strings
+  // and the entry is two pointers wide (8 bytes on the ESP32-C3).
+  std::unique_ptr<char[]> name;
   uint8_t pointSize;  // parsed from filename: 14 (0 for size-free vector fonts)
   uint8_t style;      // .cpfont: always 0 (all 4 styles bundled in one file).
                       // Vector family in a folder: the style ROLE of this file —

@@ -2,7 +2,31 @@
 #include <SdCardFontRegistry.h>
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <new>
 #include <string>
+
+namespace {
+size_t failNextArraySize = 0;
+}  // namespace
+
+// Fail one nothrow array allocation of exactly failNextArraySize bytes; the
+// registry copies a non-canonical filename through makeUniqueNoThrow<char[]>.
+void* operator new[](size_t size, const std::nothrow_t&) noexcept {
+  if (failNextArraySize != 0 && size == failNextArraySize) {
+    failNextArraySize = 0;
+    return nullptr;
+  }
+  return std::malloc(size == 0 ? 1 : size);
+}
+void* operator new[](size_t size) {
+  void* allocation = std::malloc(size == 0 ? 1 : size);
+  if (!allocation) std::abort();
+  return allocation;
+}
+void operator delete[](void* allocation) noexcept { std::free(allocation); }
+void operator delete[](void* allocation, size_t) noexcept { std::free(allocation); }
+void operator delete[](void* allocation, const std::nothrow_t&) noexcept { std::free(allocation); }
 
 namespace {
 
@@ -28,7 +52,7 @@ TEST_F(SdFontRegistryTest, CanonicalNamesStoreNoFileString) {
   ASSERT_NE(family, nullptr);
   EXPECT_STREQ(family->root, SdCardFontRegistry::FONTS_DIR_HIDDEN);
   ASSERT_EQ(family->files.size(), 2u);
-  for (const auto& file : family->files) EXPECT_TRUE(file.name.empty());
+  for (const auto& file : family->files) EXPECT_EQ(file.name, nullptr);
 
   const auto* file14 = family->findFile(14);
   ASSERT_NE(file14, nullptr);
@@ -47,12 +71,12 @@ TEST_F(SdFontRegistryTest, OtherStemsAndZeroPaddedSizesKeepTheirFilename) {
 
   const auto* file14 = family->findFile(14);
   ASSERT_NE(file14, nullptr);
-  EXPECT_EQ(file14->name, "Bookerly-SD_14.cpfont");
+  EXPECT_STREQ(file14->name.get(), "Bookerly-SD_14.cpfont");
   EXPECT_EQ(pathOf(*family, *file14), "/fonts/Bookerly/Bookerly-SD_14.cpfont");
 
   const auto* file16 = family->findFile(16);
   ASSERT_NE(file16, nullptr);
-  EXPECT_EQ(file16->name, "Bookerly_016.cpfont");
+  EXPECT_STREQ(file16->name.get(), "Bookerly_016.cpfont");
   EXPECT_EQ(pathOf(*family, *file16), "/fonts/Bookerly/Bookerly_016.cpfont");
 }
 
@@ -70,6 +94,20 @@ TEST_F(SdFontRegistryTest, HiddenRootWinsAndKeepsItsOwnRoot) {
   const auto* inter = registry.findFamily("Inter");
   ASSERT_NE(inter, nullptr);
   EXPECT_EQ(pathOf(*inter, inter->files[0]), "/fonts/Inter/Inter_14.cpfont");
+}
+
+TEST_F(SdFontRegistryTest, OutOfMemoryNameCopySkipsOnlyThatFile) {
+  fake::add("/.fonts/Bookerly/Bookerly-SD_14.cpfont");
+  fake::add("/.fonts/Bookerly/Bookerly_16.cpfont");
+
+  failNextArraySize = sizeof("Bookerly-SD_14.cpfont");
+  ASSERT_TRUE(registry.discover());
+  EXPECT_EQ(failNextArraySize, 0u);
+  const auto* family = registry.findFamily("Bookerly");
+  ASSERT_NE(family, nullptr);
+  EXPECT_EQ(family->findFile(14), nullptr);
+  ASSERT_NE(family->findFile(16), nullptr);
+  EXPECT_EQ(pathOf(*family, *family->findFile(16)), "/.fonts/Bookerly/Bookerly_16.cpfont");
 }
 
 TEST_F(SdFontRegistryTest, FilePathReportsTruncation) {
