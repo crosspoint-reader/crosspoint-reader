@@ -115,6 +115,11 @@ class ActivityManager {
   bool isForegroundReader() const;
   bool isRemoteReaderContext() const;
   bool remoteClick(RemoteButton button);
+  // The same click from the USB serial console (SerialConsole), on any screen. False while a frame
+  // is pending or drawing, or a physical button is in use.
+  bool consoleClick(RemoteButton button);
+  // Name of the screen in front, for the serial console's STATE reply. Empty before the first one.
+  const char* foregroundName() const;
   // Home is in front and has painted a frame of its own (not one left from the screen before).
   bool isForegroundHomeShown() const;
   uint32_t visit() const { return screenVisit; }
