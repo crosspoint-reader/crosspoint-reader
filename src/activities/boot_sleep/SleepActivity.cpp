@@ -572,7 +572,7 @@ void SleepActivity::onEnter() {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
     releaseSdFontCachesForDecode(renderer);
-    if (sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT && APP_STATE.lastSleepFromReader) {
+    if (sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT) {
       return renderCoverSleepScreen();
     }
     return renderTransparentCustomSleepScreen();
