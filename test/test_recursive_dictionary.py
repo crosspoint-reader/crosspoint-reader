@@ -39,6 +39,7 @@ structs = "\n".join(block(header, f"struct {name} {{", True) for name in (
     "Line", "BodyArea", "Definition", "HistoryEntry", "LookupState"
 ))
 location = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictLocation {", True)
+entry = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictEntry {", True)
 marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().splitlines()
               if "DICTIONARY_PLAIN_HEADWORD_MARKER =" in line)
 selection = block(selector, "struct Selection {", True)
@@ -472,7 +473,7 @@ struct TxtToHtml {
   static size_t escapedHtmlSize(std::string_view text) { return text.size(); }
   static void appendEscapedHtml(std::string& out, std::string_view text) { out.append(text); }
 };
-''' + location + '\n' + marker + r'''
+''' + location + '\n' + marker + '\n' + entry + r'''
 class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
@@ -483,8 +484,11 @@ class Dictionary {
   unsigned searches = 0;
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  DictLocation locate(LookupSession&, const char*, std::string*) { ++searches; return {}; }
-  bool locateSynonyms(LookupSession&, const char*, std::vector<DictLocation>&, std::vector<std::string>&, bool*) {
+  void locateAll(LookupSession&, const char*, std::vector<DictEntry>&, bool* readError) {
+    ++searches;
+    if (readError) *readError = false;
+  }
+  bool locateSynonyms(LookupSession&, const char*, std::vector<DictEntry>&, bool*) {
     ++searches;
     return false;
   }

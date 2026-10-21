@@ -16,6 +16,15 @@ struct DictLocation {
   bool readError = false;
 };
 
+// One resolved entry of a word: the headword it is filed under and where its
+// definition lives. A .idx may list the same headword more than once (one
+// entry per part of speech) and a .syn can point at several entries, so one
+// word can map to several of these.
+struct DictEntry {
+  std::string headword;
+  DictLocation location;
+};
+
 // Marks the headword label line of a plain-text definition. The wrap loop
 // draws a line that starts with it in bold.
 inline constexpr char DICTIONARY_PLAIN_HEADWORD_MARKER = '\x01';
@@ -155,23 +164,34 @@ class Dictionary {
   bool openSynonyms(LookupSession& session);
 
   // Bisect a sampled-offset sidecar (.qidx over .idx, .sidx over .syn) to the
-  // byte offset of the last sampled entry whose word is <= target, so the caller
-  // only has to linear-scan at most SAMPLE_INTERVAL entries from there. Returns
-  // 0 — scan source from the start — when sampleCount is 0 or a sample is
-  // unreadable. Clobbers wordBuf.
+  // byte offset of the last sampled entry whose word is strictly below target,
+  // so the caller scans from there and sees every entry sharing the word — a
+  // headword can be listed several times, and that run may start before the
+  // last sample that is <= target. Returns 0 — scan source from the start —
+  // when sampleCount is 0 or a sample is unreadable. Clobbers wordBuf.
   uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
 
-  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  // Every .idx entry whose headword matches target exactly. The .idx is
+  // sorted, so the entries of one headword are adjacent and one scan collects
+  // them all. *readError is set when the scan was cut short by an IO failure,
+  // which is a read failure rather than a miss.
+  void locateAll(LookupSession& session, const char* target, std::vector<DictEntry>& out, bool* readError);
+
+  // Append entry unless an entry with the same .dict range is already in out.
+  // Two .idx entries can share a headword but point at different definitions —
+  // those are different entries and both are kept; only the exact same .dict
+  // range is a duplicate. Shared by the .idx and .syn paths so one word never
+  // shows the same definition twice.
+  static void appendUniqueEntry(std::vector<DictEntry>& out, DictEntry&& entry);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
   // the .qidx samples. Used to follow a .syn synonym back to its headword.
   DictLocation locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut);
 
   // Scan every .syn/.sidx record for target, following each ordinal through
-  // locateByOrdinal(). Distinct resolved headwords are returned in dictionary
-  // order; a failed synonym read is reported separately from a genuine miss.
-  bool locateSynonyms(LookupSession& session, const char* target, std::vector<DictLocation>& locations,
-                      std::vector<std::string>& headwords, bool* readError);
+  // locateByOrdinal(). Every resolved entry is returned in dictionary order; a
+  // failed synonym read is reported separately from a genuine miss.
+  bool locateSynonyms(LookupSession& session, const char* target, std::vector<DictEntry>& out, bool* readError);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes

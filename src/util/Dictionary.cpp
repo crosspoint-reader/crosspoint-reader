@@ -355,9 +355,11 @@ bool Dictionary::openSynonyms(LookupSession& session) {
   return true;
 }
 
-// Shared by locate() (.qidx over .idx) and locateSynonym() (.sidx over .syn):
+// Shared by locateAll() (.qidx over .idx) and locateSynonyms() (.sidx over .syn):
 // both sidecars have the same layout and both sources are sorted word-first, so
-// the descent is identical and only the file pair differs.
+// the descent is identical and only the file pair differs. The descent lands on
+// the last sample strictly below the target, so a run of entries sharing the
+// word starts after it and the caller's scan sees all of them.
 uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target) {
   uint32_t startByte = 0;
   if (sampleCount == 0) return startByte;  // no usable sidecar: scan from the start
@@ -372,7 +374,12 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
       lo = 0;  // unreadable sample: abandon the descent and scan from the start
       break;
     }
-    if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+    // Strictly less than the target: a headword can be listed several times
+    // (one entry per part of speech) and that run of equal words may start
+    // before the last sample that is <= the target. Landing on a sample whose
+    // word equals the target would start the scan inside the run and miss its
+    // earlier entries, so the descent stops at the last sample below it.
+    if (StringUtils::asciiCaseCmp(wordBuf, target) < 0) {
       lo = mid;
     } else {
       hi = mid - 1;
@@ -384,18 +391,21 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
 
 // Both files stay open across the stem-variant probes; every read below seeks
 // absolutely first, so a shared handle carries no position state between calls.
-DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
-  DictLocation result;
+void Dictionary::locateAll(LookupSession& session, const char* target, std::vector<DictEntry>& out, bool* readError) {
+  if (readError) *readError = false;
 
-  // Bisect the sampled offsets to the last sample whose headword <= target.
+  // Bisect the sampled offsets to the last sample whose headword is below the
+  // target, so the scan starts before the run of entries sharing the headword.
   const uint32_t startByte = bisectSamples(session.qidx, session.idx, session.sampleCount, target);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
-  // BE32 size. The index is sorted, so stop at the first headword > target.
+  // BE32 size. The index is sorted, so the entries of one headword are
+  // adjacent: keep taking them while the headword still matches, and stop at
+  // the first headword > target.
   if (!session.idx.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
-    result.readError = true;
-    return result;
+    if (readError) *readError = true;
+    return;
   }
   while (static_cast<uint32_t>(session.idx.position()) < session.idxSize) {
     // Not flagged as readError: readWordInto returns -1 for EOF and IO error
@@ -408,15 +418,26 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
     if (cmp == 0) {
-      result.offset = readBe32(suffix);
-      result.size = readBe32(suffix + 4);
-      result.found = true;
-      if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-      return result;
+      DictEntry entry;
+      entry.headword = wordBuf;
+      entry.location.offset = readBe32(suffix);
+      entry.location.size = readBe32(suffix + 4);
+      entry.location.found = true;
+      appendUniqueEntry(out, std::move(entry));
+      continue;
     }
     if (cmp > 0) break;
   }
-  return result;
+}
+
+void Dictionary::appendUniqueEntry(std::vector<DictEntry>& out, DictEntry&& entry) {
+  // Same .dict range = the same definition. A shared headword with a different
+  // range is a different definition and is kept.
+  const bool duplicate = std::any_of(out.begin(), out.end(), [&entry](const DictEntry& existing) {
+    return existing.location.offset == entry.location.offset && existing.location.size == entry.location.size;
+  });
+  if (duplicate) return;
+  out.push_back(std::move(entry));
 }
 
 DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut) {
@@ -460,18 +481,16 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
   return result;
 }
 
-bool Dictionary::locateSynonyms(LookupSession& session, const char* target, std::vector<DictLocation>& locations,
-                                std::vector<std::string>& headwords, bool* readError) {
-  locations.clear();
-  headwords.clear();
+bool Dictionary::locateSynonyms(LookupSession& session, const char* target, std::vector<DictEntry>& out,
+                                bool* readError) {
   if (readError) *readError = false;
   if (!openSynonyms(session)) {
     if (readError) *readError = session.synFailed;
     return false;
   }
 
-  // Bisect the sampled offsets to the last synonym <= target, same descent
-  // locate() runs over .qidx/.idx.
+  // Bisect the sampled offsets to the last synonym below target, same descent
+  // locateAll() runs over .qidx/.idx.
   const uint32_t startByte = bisectSamples(session.sidx, session.syn, session.synSampleCount, target);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: synonym NUL, BE32 ordinal.
@@ -482,7 +501,6 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, std:
     if (readError) *readError = true;
     return false;
   }
-  bool found = false;
   while (static_cast<uint32_t>(session.syn.position()) < session.synSize) {
     if (readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
@@ -493,19 +511,17 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, std:
       std::string resolvedHeadword;
       const DictLocation location = locateByOrdinal(session, readBe32(ordBytes), &resolvedHeadword);
       if (location.readError && readError) *readError = true;
-      if (location.found &&
-          std::none_of(headwords.begin(), headwords.end(), [&resolvedHeadword](const std::string& existing) {
-            return StringUtils::asciiCaseCmp(existing.c_str(), resolvedHeadword.c_str()) == 0;
-          })) {
-        locations.push_back(location);
-        headwords.push_back(std::move(resolvedHeadword));
-        found = true;
+      if (location.found) {
+        DictEntry entry;
+        entry.headword = std::move(resolvedHeadword);
+        entry.location = location;
+        appendUniqueEntry(out, std::move(entry));
       }
       continue;
     }
     if (cmp > 0) break;
   }
-  return found;
+  return !out.empty();
 }
 
 bool Dictionary::readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult, bool append) {
@@ -682,9 +698,12 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   // One set of open handles for the exact-match probe, the synonym probe and
   // every stem variant, scoped so .idx/.qidx (and .syn/.sidx) close before
   // readDefinition() opens the data file.
-  DictLocation location;
-  std::vector<DictLocation> synonymLocations;
-  std::vector<std::string> synonymHeadwords;
+  //
+  // The probe collects every entry the word maps to: the .idx can list one
+  // headword several times (one entry per part of speech) and a .syn can point
+  // at several headwords. All of them are shown, one label per entry.
+  std::vector<DictEntry> group;
+  bool groupFromSynonyms = false;
   bool searchFailed = false;
   {
     LookupSession session;
@@ -695,33 +714,40 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       return false;
     }
 
-    location = locate(session, cleaned.c_str(), &matchedHeadwordOut);
-    searchFailed = location.readError;
+    bool idxReadError = false;
+    locateAll(session, cleaned.c_str(), group, &idxReadError);
+    searchFailed = idxReadError;
+    if (!group.empty()) matchedHeadwordOut = group.front().headword;
 
     // Dictionary-authored synonyms (alternate spellings, irregular forms) take
     // precedence over the English-only stemmer, and are language-agnostic.
-    if (!location.found && hasSyn) {
+    if (group.empty() && hasSyn) {
       bool synonymReadError = false;
-      const bool synonymFound =
-          locateSynonyms(session, cleaned.c_str(), synonymLocations, synonymHeadwords, &synonymReadError);
+      locateSynonyms(session, cleaned.c_str(), group, &synonymReadError);
       searchFailed = searchFailed || synonymReadError;
-      if (synonymFound) {
-        location = synonymLocations.front();
-        matchedHeadwordOut = synonymHeadwords.front();
+      // A synonym maps to other headwords, so the title bar shows the word the
+      // reader looked up; the headword of each entry labels its definition.
+      if (!group.empty()) {
+        groupFromSynonyms = true;
+        matchedHeadwordOut = cleaned;
       }
     }
 
-    if (synonymLocations.empty() && !location.found) {
+    if (group.empty()) {
       std::vector<std::string> variants;
       stemVariants(cleaned, variants);
       for (const auto& variant : variants) {
-        location = locate(session, variant.c_str(), &matchedHeadwordOut);
-        searchFailed = searchFailed || location.readError;
-        if (location.found) break;
+        bool variantReadError = false;
+        locateAll(session, variant.c_str(), group, &variantReadError);
+        searchFailed = searchFailed || variantReadError;
+        if (!group.empty()) {
+          matchedHeadwordOut = group.front().headword;
+          break;
+        }
       }
     }
   }
-  if (synonymLocations.empty() && !location.found) {
+  if (group.empty()) {
     // A search that never reached a verdict (couldn't open or seek .idx) is a
     // read failure, not a miss — reporting "Not found" is the bug this PR exists
     // for. Otherwise the word is genuinely not in the dictionary.
@@ -731,32 +757,52 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
 
   // Found in the index — propagate the precise failure reason from readDefinition
   // (decompression / low memory / read error) so the caller can name it.
-  if (!synonymLocations.empty()) {
+  //
+  // One entry is shown on its own, with the headword in the title bar. Several
+  // entries (a headword listed once per part of speech, or a .syn pointing at
+  // several headwords) are combined into one text, each labelled with its
+  // headword so the boundaries are visible.
+  if (group.size() > 1 || groupFromSynonyms) {
     // The markup the merge below appends. The budget is derived from these,
     // so the two cannot drift apart and the reserve is never short.
     constexpr char kHtmlLabelOpen[] = "<h2>";
     constexpr char kHtmlLabelClose[] = "</h2>";
     constexpr char kPlainSeparator[] = "\n\n";
 
+    // Budget the combined text. An entry that does not fit is dropped and the
+    // rest are still shown: a word with many definitions opens on what fits
+    // rather than failing the lookup. The first entry always fits on its own,
+    // so at least one definition is shown.
     size_t combinedSize = 0;
-    for (size_t i = 0; i < synonymLocations.size(); i++) {
-      const auto& synonymLocation = synonymLocations[i];
-      const size_t definitionSize = std::min<uint32_t>(synonymLocation.size, MAX_DEFINITION_BYTES);
+    size_t fitCount = 0;
+    for (size_t i = 0; i < group.size(); i++) {
+      const size_t definitionSize = std::min<uint32_t>(group[i].location.size, MAX_DEFINITION_BYTES);
       // The HTML path needs no separator: the heading is a block of its own.
       const size_t separatorSize = combinedSize == 0 || htmlDefinitions ? 0 : sizeof(kPlainSeparator) - 1;
-      const size_t labelSize = htmlDefinitions
-                                   ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(synonymHeadwords[i]) +
-                                         sizeof(kHtmlLabelClose) - 1
-                                   : sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + synonymHeadwords[i].size() + 1;
+      const size_t labelSize =
+          htmlDefinitions
+              ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(group[i].headword) + sizeof(kHtmlLabelClose) - 1
+              : sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + group[i].headword.size() + 1;
       if (combinedSize > MAX_DEFINITION_BYTES - separatorSize ||
           labelSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize ||
           definitionSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize - labelSize) {
-        LOG_ERR("DICT", "Combined synonym definitions exceed %lu bytes",
-                static_cast<unsigned long>(MAX_DEFINITION_BYTES));
-        setResult(LookupResult::ReadError);
-        return false;
+        break;
       }
       combinedSize += separatorSize + labelSize + definitionSize;
+      fitCount = i + 1;
+    }
+    if (fitCount == 0) {
+      // Not even the first entry fits the cap, so a single definition is over
+      // the limit — there is nothing to show. Same failure as the combined
+      // overflow had before.
+      LOG_ERR("DICT", "Combined definitions exceed %lu bytes", static_cast<unsigned long>(MAX_DEFINITION_BYTES));
+      setResult(LookupResult::ReadError);
+      return false;
+    }
+    if (fitCount < group.size()) {
+      LOG_INF("DICT", "Combined definitions stop at the %lu byte cap: %u of %u entries shown",
+              static_cast<unsigned long>(MAX_DEFINITION_BYTES), static_cast<unsigned>(fitCount),
+              static_cast<unsigned>(group.size()));
     }
     if (ESP.getMaxAllocHeap() < combinedSize + DEFINITION_HEAP_HEADROOM_BYTES) {
       LOG_ERR("DICT", "Low heap for combined %lu byte definition", static_cast<unsigned long>(combinedSize));
@@ -765,27 +811,26 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     }
     definitionOut.clear();
     definitionOut.reserve(combinedSize);
-    matchedHeadwordOut = cleaned;
-    for (size_t i = 0; i < synonymLocations.size(); i++) {
+    for (size_t i = 0; i < fitCount; i++) {
       if (i != 0 && !htmlDefinitions) {
         definitionOut += kPlainSeparator;
       }
       if (htmlDefinitions) {
         definitionOut += kHtmlLabelOpen;
-        TxtToHtml::appendEscapedHtml(definitionOut, synonymHeadwords[i]);
+        TxtToHtml::appendEscapedHtml(definitionOut, group[i].headword);
         definitionOut += kHtmlLabelClose;
       } else {
         definitionOut.push_back(DICTIONARY_PLAIN_HEADWORD_MARKER);
-        definitionOut += synonymHeadwords[i];
+        definitionOut += group[i].headword;
         definitionOut.push_back('\n');
       }
-      if (!readDefinition(synonymLocations[i], definitionOut, outResult, true)) return false;
+      if (!readDefinition(group[i].location, definitionOut, outResult, true)) return false;
     }
     setResult(LookupResult::Found);
     return true;
   }
 
-  if (readDefinition(location, definitionOut, outResult)) {
+  if (readDefinition(group.front().location, definitionOut, outResult)) {
     setResult(LookupResult::Found);
     return true;
   }
