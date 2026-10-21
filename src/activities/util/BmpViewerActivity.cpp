@@ -36,6 +36,12 @@ RenderConfig fitImage(const ImageDimensions& dimensions, const GfxRenderer& rend
   config.useExactDimensions = true;
   return config;
 }
+
+bool overlaySleepMode() {
+  const uint8_t mode = SETTINGS.sleepScreen;
+  return mode == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM ||
+         mode == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT;
+}
 }  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
@@ -95,8 +101,7 @@ void BmpViewerActivity::loadSiblingImages() {
 
 bool BmpViewerActivity::canSetSleepCover() const {
   return FsHelpers::hasBmpExtension(filePath) || FsHelpers::hasJpgExtension(filePath) ||
-         (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
-          FsHelpers::hasPngExtension(filePath));
+         (overlaySleepMode() && FsHelpers::hasPngExtension(filePath));
 }
 
 bool BmpViewerActivity::renderImage() {
@@ -386,8 +391,7 @@ void BmpViewerActivity::doSetSleepCover() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
   const bool jpeg = FsHelpers::hasJpgExtension(filePath);
-  const bool transparentMode =
-      !jpeg && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+  const bool transparentMode = !jpeg && overlaySleepMode();
   if (!canSetSleepCover()) return;
 
   const char* destination =
