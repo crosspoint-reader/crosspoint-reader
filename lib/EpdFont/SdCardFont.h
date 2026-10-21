@@ -94,6 +94,13 @@ class SdCardFont {
   // when font/size/family/glyph-table state changes, or to recover a failed bitmap allocation.
   void clearPersistentCache();
 
+  // Called when a glyph bitmap still cannot be reserved after this font dropped
+  // its own advance tables: another SD font's table can be what splits the
+  // largest free block. main.cpp installs one that drops every SD font's tables
+  // (FontCacheManager::releaseSdFontAdvanceTables); without it only this font's go.
+  using AdvanceReleaseHook = void (*)();
+  static void setAdvanceReleaseHook(AdvanceReleaseHook hook) { advanceReleaseHook_ = hook; }
+
   // Release every rebuildable cache while keeping the font loaded and usable:
   // mini glyph/kern arenas, ligature tables, the overflow ring, and
   // the persistent advance tables. Coverage intervals stay so hasCodepoint()
@@ -309,6 +316,7 @@ class SdCardFont {
   // (across calls to clearCache()) so repeated indexing of the same font
   // amortizes SD reads. Cleared only on font unload or clearPersistentCache().
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 768;
+  static inline AdvanceReleaseHook advanceReleaseHook_ = nullptr;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
   // Allocated entries. Merges fill spare capacity in place, and growth doubles it,

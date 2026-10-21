@@ -17,6 +17,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <SdCardFont.h>
 #include <TrustedTime.h>
 #include <VectorFontSupport.h>
 #include <WiFi.h>
@@ -539,6 +540,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
+  SdCardFont::setAdvanceReleaseHook([] { fontCacheManager.releaseSdFontAdvanceTables(); });
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
 #ifndef OMIT_FONTS
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
