@@ -94,7 +94,8 @@ class ActivityManager {
   void goToBrowser();
   void goToPlugins(bool showOpds);
   // Leaves a plugin document for the menu entry that opened it.
-  void goToPluginMenuFor(std::string document);
+  // False when the menu cannot be allocated; the current activity stays.
+  bool goToPluginMenuFor(std::string document);
   // pluginDocument: a plugin document that leaves Recents, progress, and the
   // last-opened book untouched (see ReaderActivity::pluginDocument).
   void goToReader(std::string path, bool allowFastInitialRefresh = false, bool pluginDocument = false);

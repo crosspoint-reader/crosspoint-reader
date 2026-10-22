@@ -323,9 +323,15 @@ void ActivityManager::goToPlugins(bool showOpds) {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true));
 }
 
-void ActivityManager::goToPluginMenuFor(std::string document) {
-  replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, OPDS_STORE.hasServers(),
-                                                          /*rootMode=*/true, std::move(document)));
+bool ActivityManager::goToPluginMenuFor(std::string document) {
+  auto activity = makeUniqueNoThrow<PluginCatalogActivity>(renderer, mappedInput, OPDS_STORE.hasServers(),
+                                                           /*rootMode=*/true, std::move(document));
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: plugin menu activity (%u bytes)", static_cast<unsigned>(sizeof(PluginCatalogActivity)));
+    return false;
+  }
+  replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh, const bool pluginDocument) {

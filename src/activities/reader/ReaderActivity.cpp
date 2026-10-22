@@ -238,10 +238,9 @@ bool ReaderActivity::handleHomeGesture() {
 }
 
 void ReaderActivity::leaveReader() {
-  if (pluginDocument) {
-    activityManager.goToPluginMenuFor(bookPath);
-    return;
-  }
+  // Back and Home both lead here for a document, so a failed menu must not
+  // keep the reader on screen.
+  if (pluginDocument && activityManager.goToPluginMenuFor(bookPath)) return;
   onGoHome();
 }
 
