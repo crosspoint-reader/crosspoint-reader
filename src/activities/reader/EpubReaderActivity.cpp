@@ -24,6 +24,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "AutomaticProgressCheckPolicy.h"
 #include "BookmarkEntry.h"
 #include "ChapterBuildGate.h"
 #include "ClipSelectionActivity.h"
@@ -1434,20 +1435,34 @@ bool EpubReaderActivity::pollAutomaticProgressCheck() {
   }
 
   if (status == AutomaticProgressCheck::Status::DONE_OK) {
+    const KOReaderProgress remote = automaticCheck_.remoteProgress();
     CrossPointPosition remotePosition;
     {
       // The mapping decompresses chapter data from the Epub; hold the render
       // lock so a concurrent page render can't race the Epub/Section access.
       RenderLock lock(*this);
-      remotePosition = mapRemoteProgress(automaticCheck_.remoteProgress());
+      remotePosition = mapRemoteProgress(remote);
     }
     const CrossPointPosition current = getCurrentPosition();
+    if (!epub || current.spineIndex < 0 || current.pageNumber < 0) {
+      automaticCheck_.reset();
+      return false;
+    }
+    // The percentage is the user's reference point: a record that is not
+    // meaningfully ahead by book percentage must not prompt, however the page
+    // mapping rounds or wherever the XPath lands.
+    const float localIntra =
+        current.totalPages > 1 ? static_cast<float>(current.pageNumber) / static_cast<float>(current.totalPages - 1)
+                               : 0.0f;
+    const float localPercentage = epub ? epub->calculateProgress(current.spineIndex, localIntra) : 0.0f;
+    const auto decision = AutomaticProgressCheckPolicy::decide(localPercentage, remote.percentage);
     const auto order = MappedProgressPositionPolicy::compare(current.spineIndex, current.pageNumber,
                                                              remotePosition.spineIndex, remotePosition.pageNumber);
-    LOG_DBG("KOSync", "Automatic check decision: local=%d/%d remote=%d/%d order=%d", current.spineIndex,
-            current.pageNumber, remotePosition.spineIndex, remotePosition.pageNumber, static_cast<int>(order));
-    if (order == MappedProgressPositionOrder::REMOTE_AHEAD) {
-      const KOReaderProgress remote = automaticCheck_.remoteProgress();
+    LOG_DBG("KOSync", "Automatic check decision: local=%d/%d (%.2f%%) remote=%d/%d (%.2f%%) order=%d decision=%d",
+            current.spineIndex, current.pageNumber, static_cast<double>(localPercentage * 100), remotePosition.spineIndex,
+            remotePosition.pageNumber, static_cast<double>(remote.percentage * 100), static_cast<int>(order),
+            static_cast<int>(decision));
+    if (decision == AutomaticProgressDecision::PROMPT && order == MappedProgressPositionOrder::REMOTE_AHEAD) {
       automaticCheck_.reset();
       // Reuse the manual sync's familiar result screen ("Progress found!") with
       // the already-fetched remote position; skip the network round-trip.
