@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -16,11 +17,24 @@
 
 class ClipSelectionActivity final : public Activity {
  public:
-  enum class Mode : uint8_t { Clip, Lookup };
+  enum class Mode : uint8_t { Clip, Lookup, DefinitionLookup };
+
+  struct Selection {
+    uint16_t firstPage = 0;
+    uint16_t lastPage = 0;
+    uint16_t firstWord = 0;
+    uint16_t lastWord = 0;
+    bool valid = false;
+  };
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX = -1,
                         int initialY = -1, Mode mode = Mode::Clip);
+
+  // The definition viewer retains these pages until this child exits.
+  ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        std::span<const std::unique_ptr<Page>> borrowedPages, int marginLeft, int marginTop,
+                        Selection selection, int initialX = -1, int initialY = -1);
 
   void onEnter() override;
   void loop() override;
@@ -41,6 +55,7 @@ class ClipSelectionActivity final : public Activity {
     int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
     uint16_t display = NO_DISPLAY;  // index into displayForms
+    int fontId = 0;  // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;  // logical text, for clipping and lookup
@@ -55,6 +70,10 @@ class ClipSelectionActivity final : public Activity {
   bool extractWords();
   uint16_t storeDisplayForm(const char* display);
   GfxRenderer::LaidOutText laidOut(const WordBox& word) const;
+  size_t pageCount() const { return borrowedPages.empty() ? pages.size() : borrowedPages.size(); }
+  const Page& pageAt(size_t index) const { return *(borrowedPages.empty() ? pages[index] : borrowedPages[index]); }
+  bool isLookup() const { return mode != Mode::Clip; }
+  int actionAt(int x, int y) const;
   int closestInRow(uint16_t row, int centerX) const;
   int wordAt(int x, int y) const;
   int dragWordAt(int x, int y) const;
@@ -83,6 +102,8 @@ class ClipSelectionActivity final : public Activity {
   void prewarmWord(int index) const;
 
   std::vector<std::unique_ptr<Page>> pages;
+  std::span<const std::unique_ptr<Page>> borrowedPages;
+  Selection initialSelection;
   const int marginLeft;
   const int marginTop;
   const int initialX;

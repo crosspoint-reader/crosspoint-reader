@@ -15,7 +15,8 @@ clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordS
 build_text = "bool ClipSelectionActivity::buildSelectedText" + source.split(
     "bool ClipSelectionActivity::buildSelectedText", 1
 )[1].split("void ClipSelectionActivity::confirmSelection", 1)[0]
-memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + source.split(
+confirm_source = source.split("void ClipSelectionActivity::confirmSelection", 1)[1]
+memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + confirm_source.split(
     "  const auto heap = HalMemory::getDefaultHeap();", 1
 )[1].split("  if (lowMemory ||", 1)[0]
 
@@ -28,6 +29,7 @@ extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSele
 clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
 highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
+word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
 saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
 saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
@@ -39,6 +41,8 @@ harness = r"""
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <set>
+#include <span>
 #include <string>
 #include <vector>
 #include <BidiUtils.h>
@@ -52,23 +56,39 @@ harness = r"""
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
 struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4 }; };
-constexpr size_t FONT_PREWARM_TEXT_MAX = 2048;
 constexpr int TAG_PageLine = 1;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
+struct LaidOutText { const char* text; const char* display; };
+struct Renderer;
 struct Block {
   struct Style { bool isRtl = false; int8_t characterSpacing = 0; } style;
   struct Range { uint32_t start = 0, end = 3; } range;
   using SourceRange = Range;
   const char* text = "one";
+  std::string packedText;
+  std::vector<EpdFontFamily::Style> styles;
   bool paragraphStart = true;
   bool prefixSpace = false;
   bool valid() const { return true; }
   const Style& getBlockStyle() const { return style; }
   int getRubyShift(int) const { return 0; }
-  uint16_t wordCount() const { return prefixSpace ? 2 : 1; }
-  const char* wordText(uint16_t i) const { return prefixSpace && i == 0 ? " " : text; }
-  EpdFontFamily::Style wordStyle(uint16_t) const { return EpdFontFamily::REGULAR; }
+  int blockFontId(int fallback) const { return fallback; }
+  int wordFontId(uint16_t, int fallback) const { return fallback; }
+  int wordYOffset(const Renderer&, int, uint16_t) const { return 0; }
+  static int renderFontId(const Renderer&, int fontId, int) { return fontId; }
+  uint16_t wordCount() const {
+    return packedText.empty() ? (prefixSpace ? 2 : 1) : std::count(packedText.begin(), packedText.end(), '\0');
+  }
+  const char* wordText(uint16_t i) const {
+    if (packedText.empty()) return prefixSpace && i == 0 ? " " : text;
+    const char* word = packedText.c_str();
+    while (i--) word += std::char_traits<char>::length(word) + 1;
+    return word;
+  }
+  uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
+  LaidOutText laidOutWord(uint16_t i) const { return {wordText(i), nullptr}; }
+  EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
   int wordXpos(uint16_t) const { return 0; }
   Range wordSourceRange(uint16_t i) const {
     return prefixSpace && i == 0 ? Range{range.start, range.start + 1} : range;
@@ -84,25 +104,59 @@ struct PageLine {
 };
 struct Page { std::vector<std::unique_ptr<PageLine>> elements; };
 struct Renderer {
+  using LaidOutText = ::LaidOutText;
   enum RenderMode { BW };
   struct Draw { int x, width, tracking; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
-  bool isSdCardFont(int) const { return false; }
+  bool sdFont = false;
+  mutable size_t coldMeasurements = 0;
+  std::set<std::pair<uint8_t, uint32_t>> advances;
+  bool isSdCardFont(int) const { return sdFont; }
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
   }
-  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t tracking = 0) const {
+  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t tracking = 0) const {
+    if (sdFont) {
+      const uint8_t* p = reinterpret_cast<const uint8_t*>(text);
+      while (const uint32_t cp = utf8NextCodepoint(&p)) {
+        if (!advances.count({static_cast<uint8_t>(style) & 3, cp})) ++coldMeasurements;
+      }
+    }
     const int length = std::char_traits<char>::length(text);
     return length * 8 + (length - 1) * tracking;
   }
+  int getTextAdvanceX(int font, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0) const {
+    return getTextAdvanceX(font, text.display ? text.display : text.text, style, tracking);
+  }
   void ensureSdCardFontReady(int, const char*, uint8_t) {}
+  void ensureSdCardFontReady(int, const char* const* segments, const size_t* lengths, size_t count,
+                             bool, bool, uint8_t mask) {
+    for (size_t i = 0; i < count; ++i) {
+      const char* word = segments[i];
+      const char* end = word + lengths[i];
+      while (word < end) {
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(word);
+        while (const uint32_t cp = utf8NextCodepoint(&p)) {
+          for (uint8_t style = 0; style < 4; ++style) {
+            if (mask & (1 << style)) advances.emplace(style, cp);
+          }
+        }
+        word += std::char_traits<char>::length(word) + 1;
+      }
+      assert(word == end);
+    }
+  }
   void drawText(int font, int x, int, const char* text, bool, EpdFontFamily::Style style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
     draws.push_back({x, getTextAdvanceX(font, text, style, tracking), tracking});
+  }
+  void drawText(int font, int x, int y, const LaidOutText& text, bool black, EpdFontFamily::Style style,
+                BidiUtils::BidiBaseDir dir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
+    drawText(font, x, y, text.display ? text.display : text.text, black, style, dir, tracking);
   }
   void fillRect(int x, int, int width, int, bool) const { fills.push_back({x, width, 0}); }
   void fillRectDither(int x, int, int width, int, Color) const { fills.push_back({x, width, 0}); }
@@ -111,7 +165,7 @@ struct Renderer {
 };
 struct Theme {
   void drawSelectionHandle(const Renderer&, Rect, bool) const {}
-  void drawSelectionActions(const Renderer&, Rect) const {}
+  void drawSelectionActions(const Renderer&, Rect, int = 3) const {}
 } GUI;
 struct Input { bool hasTouch() const { return false; } };
 using GfxRenderer = Renderer;
@@ -150,11 +204,20 @@ struct ClipSelectionActivity {
 """ + word_box + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
+  enum class Mode { Clip, Lookup, DefinitionLookup };
+  Mode mode = Mode::Clip;
   Renderer renderer;
   Input mappedInput;
   std::vector<std::unique_ptr<Page>> pages;
+  std::span<const std::unique_ptr<Page>> borrowedPages;
+  size_t pageCount() const { return borrowedPages.empty() ? pages.size() : borrowedPages.size(); }
+  const Page& pageAt(size_t i) const { return *(borrowedPages.empty() ? pages[i] : borrowedPages[i]); }
   size_t wordCount = 0;
   uint16_t rowCount = 0;
+  std::unique_ptr<const char*[]> displayForms;
+  uint16_t displayFormCount = 0;
+  uint16_t storeDisplayForm(const char* display);
+  GfxRenderer::LaidOutText laidOut(const WordBox& word) const;
   int fontId = 0, lineHeight = 16, marginLeft = 0, marginTop = 0;
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   bool touchDragSelecting = false;
@@ -181,7 +244,7 @@ struct EpubReaderActivity {
   int clippingAtPoint(const Page&, int, int) const;
   void drawClippingHighlights(const Page&, int, int, int) const;
 };
-""" + word_rect + saved_hit + saved_draw + r"""
+""" + word_font + word_rect + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
              bool rtl, int first = 0, uint32_t offset = 0, uint16_t row = 0) {
   std::vector<uint16_t> visual;
@@ -218,6 +281,37 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   assert(text == expected);
 }
 int main() {
+  // Returning from a definition releases the SD font caches before selection is rebuilt.
+  for (const bool rtl : {false, true}) {
+    ClipSelectionActivity cold;
+    cold.renderer.sdFont = true;
+    for (int pageIndex = 0; pageIndex < 3; ++pageIndex) {
+      auto page = std::make_unique<Page>();
+      auto line = std::make_unique<PageLine>();
+      line->block.style.isRtl = rtl;
+      for (int i = 0; i < 120; ++i) {
+        // More than 2048 bytes per line, with a new codepoint at the end.
+        line->block.packedText += i == 119 ? "abcdefghijklmnopqrZ" : "abcdefghijklmnopqrs";
+        line->block.packedText += '\0';
+        line->block.styles.push_back(static_cast<EpdFontFamily::Style>(i % 4));
+      }
+      page->elements.push_back(std::move(line));
+      cold.pages.push_back(std::move(page));
+    }
+    assert(cold.extractWords());
+    assert(cold.wordCount == 240);
+    assert(cold.words[0].pageOffset == 0);
+    assert(cold.words[239].pageOffset == 1);
+    assert(cold.renderer.coldMeasurements == 0);
+    cold.mode = ClipSelectionActivity::Mode::DefinitionLookup;
+    cold.borrowedPages = cold.pages;
+    HalMemory::stats = {1024 * 1024, 1024 * 1024};
+    assert(cold.extractWords());
+    assert(cold.wordCount == 360 && cold.words[359].pageOffset == 2);
+    assert(cold.pages[0] && cold.pages[1] && cold.pages[2]);
+    HalMemory::stats = {8192, 4096};
+    assert(!cold.extractWords());
+  }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));
   HalMemory::stats = {4500, 4200};  // A large enough block still needs spare heap.

@@ -52,7 +52,8 @@ class SdCardFontRegistry {
   // the two roots exists, otherwise the hidden root.
   static const char* defaultWriteRoot();
 
-  // Scan SD card, populate families_. Returns true if any families found.
+  // Scan SD card, populate families_. Invalidates pointers and references
+  // obtained from getFamilies()/findFamily(). Returns true if any families found.
   bool discover();
 
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }

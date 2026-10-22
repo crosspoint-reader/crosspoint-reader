@@ -329,6 +329,13 @@ void FileBrowserActivity::onRowLongPress(const int index) {
   }
 }
 
+#if FREEINK_CAP_TOUCH
+void FileBrowserActivity::swipeDelete(const int index) {
+  nav.selected = index;
+  deleteSelected();
+}
+#endif
+
 void FileBrowserActivity::activateSelected() {
   if (files.empty()) return;
   // A touch activation can carry a row index captured before a delete/reload
@@ -424,8 +431,8 @@ void FileBrowserActivity::deleteSelected() {
     requestUpdate(true);
   };
 
-  const std::string heading = tr(STR_DELETE) + std::string("? ");
-  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, utf8ComposeNfc(entry));
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE_ITEM_CONFIRM),
+                                                              utf8ComposeNfc(entry));
   if (!confirmation) {
     LOG_ERR("FileBrowser", "OOM: delete confirmation");
     return;
@@ -656,6 +663,9 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // follow/clamping to nav.top) before the list resolves rows through the
   // provider.
   prewarmRowGlyphs(nav.top);
+#if FREEINK_CAP_TOUCH
+  if (mode == Mode::Books) configureSwipeDelete(screen, props);
+#endif
   screen.list(props);
 }
 
