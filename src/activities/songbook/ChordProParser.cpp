@@ -172,6 +172,11 @@ void ChordProParser::handleDirective(const std::string_view name, const std::str
   } else if (isAny(name, {"comment", "c", "comment_italic", "ci", "comment_box", "cb", "highlight"})) {
     if (inChart) return;
     if (!value.empty() && ensureImplicitSection()) addTextLine(LineKind::Comment, value);
+  } else if (equalsIgnoreCase(name, "x_cue")) {
+    if (inChart) return;
+    cueText = TextRef{};
+    if (!value.empty() && !appendText(value, cueText)) return;
+    cueNext = true;
   } else if (equalsIgnoreCase(name, "start_of_x_chart")) {
     inChart = true;
   } else if (equalsIgnoreCase(name, "end_of_x_chart")) {
@@ -293,6 +298,21 @@ void ChordProParser::handleLyricLine(const std::string_view line) {
   }
   songLine.chordCount = static_cast<uint16_t>(song.chords.size() - songLine.firstChord);
   if (songLine.lyric.length == 0 && songLine.chordCount == 0) return;
+  if (cueNext && (cueText.length > 0 || !trim(song.view(songLine.lyric)).empty())) {
+    cueNext = false;
+    // The {x_cue} source line added no line of its own, so the cue still fits
+    // the line table reserved from the newline count.
+    if (song.lines.size() + 1 < MAX_LINES) {
+      SongLine cue = songLine;
+      cue.kind = LineKind::Cue;
+      cue.chordCount = 0;
+      if (cueText.length > 0) cue.lyric = cueText;
+      song.lines.push_back(cue);
+      ++song.sections.back().lineCount;
+    } else {
+      truncatedContent = true;
+    }
+  }
   song.lines.push_back(songLine);
   ++song.sections.back().lineCount;
 }
@@ -348,6 +368,9 @@ void ChordProParser::closeSection() {
   if (!sectionOpen) return;
   sectionOpen = false;
   Section& section = song.sections.back();
+  // A cue never leaves its section. Between sections (an implicit section holds
+  // stray comments or lyrics) it waits for the next one.
+  if (section.type != SectionType::None) cueNext = false;
   while (section.lineCount > 0 && song.lines.back().kind == LineKind::Empty) {
     song.lines.pop_back();
     --section.lineCount;

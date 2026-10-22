@@ -62,16 +62,20 @@ The host-testable files must not include Arduino, HAL, or renderer headers.
 - **Behaviour accepted by the human owner:**
   - Left/Right change the song on a short press in every state. A switch while playing starts the new song from the top; a switch while paused or stopped opens it stopped.
   - Back while playing only shows a hint; holding Back leaves.
-  - Holding Confirm toggles Lyrics/Chords. Starting from stopped always shows Lyrics.
+  - A song opened from the list starts in Chords, the performance view; Lyrics is mostly for rehearsal. Holding Confirm toggles Lyrics/Chords, Left/Right keep the view, and Play never changes it.
+  - A multi-page chart does not turn pages while playing. The owner deferred that design until a real song needs it.
   - `preventAutoSleep()` is true only while playing.
   - The song never advances to the next one by itself at the end.
   - The derived chord chart has no warning label.
+  - An empty derived chart (for example, no chords) shows Lyrics through `shownMode()`, and the view toggle is ignored there.
+  - The chord chart (derived or `x_chart`) uses Medium fonts at most; Large chords read too big there.
 - **Side buttons.**
   - Stepping uses `PageForward`/`PageBack`.
   - Prev/Prev and Next/Next layouts fall back to the fixed Up/Down buttons, orientation-aware via `isNavDirectionSwapped()`.
   - Disabled stays disabled.
 - **Parser.**
-  - Extensions go in ChordPro's `x_` namespace, like `{start_of_x_chart}`.
+  - Extensions go in ChordPro's `x_` namespace, like `{start_of_x_chart}` and `{x_cue}`.
+  - A `Cue` line is drawn only in the derived chart, also under a "(same chords)" label. A pending `{x_cue}` attaches before the next lyric line in the same section (a bare cue skips chord-only lines and shares that line's text reference). `closeSection` drops a cue pending inside an explicit section; one placed between sections, even after a stray comment, waits for the next section. The cue needs no extra reserved line, because the `{x_cue}` source line adds no line of its own.
   - Unknown directives are counted and skipped, never errors.
   - Keep `MAX_*` limits bounded. `MAX_CHORDS_PER_LINE` sizes an on-stack array, so the parser object must stay under the stack budget.
 - **Strings.** Every visible string is a `tr(STR_SONGBOOK_*)`. Update

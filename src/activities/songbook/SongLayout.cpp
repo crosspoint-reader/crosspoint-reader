@@ -72,6 +72,7 @@ PrintedText printedText(const Song& song) {
     if (!source) continue;
     for (uint16_t i = 0; i < source->lineCount; ++i) {
       const SongLine& line = song.lines[source->firstLine + i];
+      if (line.kind == LineKind::Cue) continue;
       ++total.lines;
       total.bytes += line.lyric.length;
       total.chords += line.chordCount;
@@ -477,6 +478,8 @@ void SongLayout::buildLyrics(const Song& song, const TextMeasurer& measurer, con
         case LineKind::Empty:
           y += lyricHeight / 2;
           break;
+        case LineKind::Cue:
+          break;
       }
     }
   }
@@ -561,6 +564,9 @@ void SongLayout::layoutChartAt(const Song& song, const TextMeasurer& measurer, c
   const auto labelRow = [&](const TextRef ref, const bool own) {
     y = layoutWrapped(refText(song, ref, own), ref, own, TextRole::Label, pieceSize, measurer, width, 0, y, false);
   };
+  const auto textRow = [&](const SongLine& line, const TextRole role) {
+    y = layoutWrapped(song.view(line.lyric), line.lyric, false, role, pieceSize, measurer, width, 0, y, false);
+  };
 
   if (!derivedChart) {
     for (const ChartRow& row : song.chart) {
@@ -595,7 +601,8 @@ void SongLayout::layoutChartAt(const Song& song, const TextMeasurer& measurer, c
     bool hasContent = false;
     for (uint16_t i = 0; i < section.lineCount && !hasContent; ++i) {
       const SongLine& line = song.lines[section.firstLine + i];
-      hasContent = isChordLine(line) || line.kind == LineKind::Comment || line.kind == LineKind::Tab;
+      hasContent = isChordLine(line) || line.kind == LineKind::Comment || line.kind == LineKind::Tab ||
+                   line.kind == LineKind::Cue;
     }
     if (!hasContent) continue;
 
@@ -610,6 +617,11 @@ void SongLayout::layoutChartAt(const Song& song, const TextMeasurer& measurer, c
     if (repeatsEarlier) {
       label.append(" ").append(names.sameChords);
       labelRow(addOwnText(label), true);
+      // Cues still tell sections with the same chords apart.
+      for (uint16_t i = 0; i < section.lineCount; ++i) {
+        const SongLine& line = song.lines[section.firstLine + i];
+        if (line.kind == LineKind::Cue) textRow(line, TextRole::Cue);
+      }
       continue;
     }
     if (!label.empty()) labelRow(addOwnText(label), true);
@@ -634,12 +646,13 @@ void SongLayout::layoutChartAt(const Song& song, const TextMeasurer& measurer, c
         }
       } else if (line.kind == LineKind::Comment) {
         flush();
-        y = layoutWrapped(song.view(line.lyric), line.lyric, false, TextRole::Comment, pieceSize, measurer, width, 0, y,
-                          false);
+        textRow(line, TextRole::Comment);
       } else if (line.kind == LineKind::Tab) {
         flush();
-        y = layoutWrapped(song.view(line.lyric), line.lyric, false, TextRole::Chord, pieceSize, measurer, width, 0, y,
-                          false);
+        textRow(line, TextRole::Chord);
+      } else if (line.kind == LineKind::Cue) {
+        flush();
+        textRow(line, TextRole::Cue);
       }
     }
     flush();
@@ -723,7 +736,8 @@ void SongLayout::buildChart(const Song& song, const TextMeasurer& measurer, cons
   reserve(chartBudget(song));
   std::vector<uint32_t> groupStarts;
   groupStarts.reserve(song.sections.size() + song.chart.size() + 1);
-  static constexpr FontSize SIZES[] = {FontSize::Large, FontSize::Medium, FontSize::Small};
+  // Medium at most, by owner preference: Large chords read too big in a chart.
+  static constexpr FontSize SIZES[] = {FontSize::Medium, FontSize::Small};
   for (const FontSize candidate : SIZES) {
     for (int columns = 1; columns <= 2; ++columns) {
       const int columnWidth = columns == 1 ? viewport.width : (viewport.width - COLUMN_GAP) / 2;

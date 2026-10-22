@@ -182,7 +182,7 @@ TEST(SongLayout, ChartCollapsesRepeatedLines) {
   layout.buildChart(song, measurer, Viewport{500, 700}, names);
   EXPECT_TRUE(layout.autoChart());
   EXPECT_EQ(layout.pageCount(), 1);
-  EXPECT_EQ(layout.chartSize(), FontSize::Large);
+  EXPECT_EQ(layout.chartSize(), FontSize::Medium);
   EXPECT_TRUE(findPiece(layout, song,
                         "\xC3\x97"
                         "2"));
@@ -195,6 +195,31 @@ TEST(SongLayout, ChartMarksSectionsWithSameChords) {
   layout.buildChart(song, measurer, Viewport{500, 700}, names);
   EXPECT_TRUE(findPiece(layout, song, "Verse 2 (same chords)"));
   EXPECT_TRUE(findPiece(layout, song, "Chorus (repeat)"));
+}
+
+TEST(SongLayout, ChartShowsCuesOnlyInChart) {
+  const Song song = parse("{sov}\n{x_cue: Remember me}\n[Em]a [D]b\n{eov}\n");
+  SongLayout chart;
+  chart.buildChart(song, measurer, Viewport{500, 700}, names);
+  const Piece* cue = findPiece(chart, song, "Remember me");
+  ASSERT_TRUE(cue);
+  EXPECT_EQ(cue->role, TextRole::Cue);
+  const Piece* chord = findPiece(chart, song, "Em");
+  ASSERT_TRUE(chord);
+  EXPECT_LT(rowOf(chart, cue)->y, rowOf(chart, chord)->y);
+
+  SongLayout lyrics;
+  lyrics.buildLyrics(song, measurer, Viewport{500, 700}, names);
+  EXPECT_FALSE(findPiece(lyrics, song, "Remember me"));
+}
+
+TEST(SongLayout, ChartKeepsCuesOfSectionsWithSameChords) {
+  const Song song = parse("{soc}\n{x_cue}\n[C]First [G]words\n{eoc}\n{soc}\n{x_cue}\n[C]Other [G]words\n{eoc}\n");
+  SongLayout layout;
+  layout.buildChart(song, measurer, Viewport{500, 700}, names);
+  EXPECT_TRUE(findPiece(layout, song, "Chorus (same chords)"));
+  EXPECT_TRUE(findPiece(layout, song, "First words"));
+  EXPECT_TRUE(findPiece(layout, song, "Other words"));
 }
 
 TEST(SongLayout, ChartUsesExplicitSummary) {
@@ -217,7 +242,7 @@ TEST(SongLayout, ChartUsesTwoColumnsBeforeSmallerFont) {
   layout.buildChart(song, measurer, Viewport{500, VIEW}, names);
   EXPECT_EQ(layout.pageCount(), 1);
   EXPECT_EQ(layout.columns(), 2);
-  EXPECT_EQ(layout.chartSize(), FontSize::Large);
+  EXPECT_EQ(layout.chartSize(), FontSize::Medium);
   bool secondColumn = false;
   for (const auto& row : layout.rows()) {
     EXPECT_LE(row.y + row.height, VIEW);
@@ -355,7 +380,7 @@ TEST(SongLayout, LongSectionLabelsWrapInsideTwoColumns) {
   const Song song = parse(source);
   SongLayout chart;
   constexpr int WIDTH = 500;
-  chart.buildChart(song, measurer, Viewport{WIDTH, 400}, names);
+  chart.buildChart(song, measurer, Viewport{WIDTH, 300}, names);
   ASSERT_EQ(chart.columns(), 2);
   EXPECT_FALSE(chart.truncated());
   expectPiecesInsideColumns(chart, song, WIDTH);

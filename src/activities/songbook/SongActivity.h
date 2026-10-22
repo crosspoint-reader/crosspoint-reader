@@ -69,6 +69,8 @@ class SongActivity final : public Activity {
   // False (with OutOfMemory) when the heap cannot hold both layouts' budgets.
   bool layoutsFit();
   bool changeSong(int delta);
+  // A song without chords has an empty chart, so Chords shows its lyrics instead.
+  ViewMode shownMode() const { return mode == ViewMode::Chords && chart.rows().empty() ? ViewMode::Lyrics : mode; }
   Geometry geometry() const;
   // NUL-terminated copy of text in the shared scratch buffer.
   const char* terminated(std::string_view text) const;
@@ -87,7 +89,9 @@ class SongActivity final : public Activity {
   songbook::SongLayout chart;
   songbook::AutoScrollController scroll;
   songbook::SongLoadResult loadResult = songbook::SongLoadResult::Missing;
-  ViewMode mode = ViewMode::Lyrics;
+  // The chart is the performance view; lyrics are mostly for rehearsal. Left
+  // and Right keep the chosen view; read it through shownMode().
+  ViewMode mode = ViewMode::Chords;
   uint16_t chartPage = 0;
   bool durationEstimated = false;
   // Header strings truncated once per song, outside the render path.

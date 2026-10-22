@@ -1,0 +1,41 @@
+# Только аккорды и подсказки: слова песни защищены авторским правом.
+# Один аккорд в квадратных скобках — один такт.
+{title: Луч солнца золотого}
+{artist: Г. Гладков — Ю. Энтин}
+{key: C}
+{duration: 3:00}
+
+{start_of_verse}
+{x_cue: «Луч солнца…»}
+[C] [G]
+[Am] [C]
+[C] [G]
+[F] [E7]
+{end_of_verse}
+
+{start_of_interlude: Проигрыш}
+[Am] [Am] [F] [G7]
+{end_of_interlude}
+
+{start_of_chorus}
+{x_cue: «Ночь пройдет…»}
+[C7] [C7] [F] [G7]
+[C] [Am] [F] [G7]
+[C7] [C7] [F] [E7]
+[Am] [D] [F] [G7]
+[C] [Am] [F] [G7]
+{end_of_chorus}
+
+{start_of_verse}
+{x_cue: «Петь птицы…»}
+[C] [G]
+[Am] [C]
+[C] [G]
+[F] [E7]
+{end_of_verse}
+
+{start_of_interlude: Проигрыш}
+[Am] [Am] [F] [G7]
+{end_of_interlude}
+
+{chorus}

@@ -54,6 +54,7 @@ void fontFor(const TextRole role, const FontSize size, int& fontId, EpdFontFamil
       fontId = BODY[index];
       break;
     case TextRole::Label:
+    case TextRole::Cue:
       fontId = LABEL[index];
       break;
     case TextRole::Comment:
@@ -63,6 +64,7 @@ void fontFor(const TextRole role, const FontSize size, int& fontId, EpdFontFamil
 #endif
   switch (role) {
     case TextRole::Lyric:
+    case TextRole::Cue:
       style = EpdFontFamily::REGULAR;
       break;
     case TextRole::Chord:
@@ -289,14 +291,14 @@ bool SongActivity::apply(const Action action, const uint32_t nowMs) {
     case Action::Leave:
       return false;
     case Action::ToggleMode:
+      // With an empty chart there is nothing to toggle; keep the view for the next song.
+      if (chart.rows().empty()) return false;
       mode = mode == ViewMode::Lyrics ? ViewMode::Chords : ViewMode::Lyrics;
       return true;
     case Action::Confirm:
       switch (scroll.state()) {
         case State::Idle:
         case State::Finished:
-          // Starting a performance always shows the scrolling lyrics.
-          mode = ViewMode::Lyrics;
           scroll.start(nowMs);
           break;
         case State::Playing:
@@ -315,7 +317,7 @@ bool SongActivity::apply(const Action action, const uint32_t nowMs) {
     case Action::StepForward:
     case Action::StepBack: {
       const int delta = action == Action::StepForward ? 1 : -1;
-      if (mode == ViewMode::Lyrics) return scroll.stepBy(delta, nowMs);
+      if (shownMode() == ViewMode::Lyrics) return scroll.stepBy(delta, nowMs);
       const int page = std::clamp(chartPage + delta, 0, static_cast<int>(chart.pageCount()) - 1);
       if (page == chartPage) return false;
       chartPage = static_cast<uint16_t>(page);
@@ -356,7 +358,7 @@ void SongActivity::loop() {
     // The chart ignores scroll steps; it redraws only when the state changes.
     const State before = scroll.state();
     const bool stepped = scroll.update(now);
-    redraw |= stepped && (mode == ViewMode::Lyrics || scroll.state() != before);
+    redraw |= stepped && (shownMode() == ViewMode::Lyrics || scroll.state() != before);
   }
   if (redraw) requestUpdate();
 }
@@ -372,15 +374,15 @@ void SongActivity::formatStatus(char* out, const size_t size, const uint32_t now
   const char* duration = durationEstimated ? total : total + 1;
 
   char modeText[64];
-  if (mode == ViewMode::Chords && chart.pageCount() > 1) {
+  if (shownMode() == ViewMode::Chords && chart.pageCount() > 1) {
     snprintf(modeText, sizeof(modeText), "%s %u/%u", tr(STR_SONGBOOK_CHORDS), static_cast<unsigned>(chartPage + 1),
              static_cast<unsigned>(chart.pageCount()));
   } else {
     snprintf(modeText, sizeof(modeText), "%s",
-             mode == ViewMode::Chords ? tr(STR_SONGBOOK_CHORDS) : tr(STR_SONGBOOK_LYRICS));
+             shownMode() == ViewMode::Chords ? tr(STR_SONGBOOK_CHORDS) : tr(STR_SONGBOOK_LYRICS));
   }
   // A layout that ran out of budget is missing its end; say so on stage.
-  if ((mode == ViewMode::Chords ? chart : lyrics).truncated()) {
+  if ((shownMode() == ViewMode::Chords ? chart : lyrics).truncated()) {
     const size_t used = strlen(modeText);
     snprintf(modeText + used, sizeof(modeText) - used, " (%s)", tr(STR_SONGBOOK_CUT));
   }
@@ -526,7 +528,7 @@ void SongActivity::render(RenderLock&&) {
   } else {
     // Scan pass records the glyphs, then one batched prewarm before the real draw.
     auto* fontCache = renderer.getFontCacheManager();
-    const auto drawBody = [&] { mode == ViewMode::Lyrics ? drawLyrics(g) : drawChart(g); };
+    const auto drawBody = [&] { shownMode() == ViewMode::Lyrics ? drawLyrics(g) : drawChart(g); };
     if (fontCache) {
       auto scope = fontCache->createPrewarmScope();
       drawBody();

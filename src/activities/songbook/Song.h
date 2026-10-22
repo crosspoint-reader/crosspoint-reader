@@ -21,7 +21,8 @@ struct ChordAnchor {
   uint16_t position = 0;
 };
 
-enum class LineKind : uint8_t { Lyrics, Comment, Tab, Empty };
+// Cue is an {x_cue} reminder of the words, shown only in the chord chart.
+enum class LineKind : uint8_t { Lyrics, Comment, Tab, Empty, Cue };
 
 struct SongLine {
   LineKind kind = LineKind::Lyrics;

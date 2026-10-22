@@ -11,7 +11,8 @@
 
 namespace songbook {
 
-enum class TextRole : uint8_t { Lyric, Chord, Label, Comment };
+// Cue is an {x_cue} reminder in the chart, smaller than the chords.
+enum class TextRole : uint8_t { Lyric, Chord, Label, Comment, Cue };
 // Firmware maps these to the 18/16/14 pt reader fonts.
 enum class FontSize : uint8_t { Large, Medium, Small };
 
@@ -91,7 +92,8 @@ class SongLayout {
   // continuous strip; scrollStops() holds row-aligned tops ~1/3 screen apart.
   void buildLyrics(const Song& song, const TextMeasurer& measurer, Viewport viewport, const SectionNames& names);
   // Chords only, from the explicit chart or derived from the lyrics. Picks the
-  // largest size (and one or two columns) that fits one screen, else pages.
+  // largest size up to Medium (and one or two columns) that fits one screen,
+  // else pages.
   void buildChart(const Song& song, const TextMeasurer& measurer, Viewport viewport, const SectionNames& names);
 
   const std::vector<Row>& rows() const { return rowList; }

@@ -15,7 +15,7 @@ Make this folder layout in the root of the SD card:
 /songbook/
   songs/
     amazing-grace.cho
-    oi-to-ne-vecher.cho
+    luch-solntsa-zolotogo.cho
   setlists/
     concert.json
 ```
@@ -40,7 +40,7 @@ Songbook never writes to the SD card.
 ```json
 {
   "title": "Demo concert",
-  "songs": ["when-the-saints.cho", "oi-to-ne-vecher.cho", "rock/another.cho"]
+  "songs": ["when-the-saints.cho", "luch-solntsa-zolotogo.cho", "rock/another.cho"]
 }
 ```
 
@@ -90,6 +90,7 @@ still open.
 | `start_of_tab` / `sot`, `start_of_grid` / `sog` | Text shown as written, with no chord parsing |
 | `chorus` | Repeat the last chorus here |
 | `comment` / `c`, `ci`, `cb`, `highlight` | A note line, for example `{c: Solo x2}` |
+| `x_cue` | Words shown only in the Chords view. See [Words in the chord chart](#words-in-the-chord-chart) |
 | `[Chord]` inside a line | The chord is played on the next character. `[*text]` is an annotation |
 | `# text` | A source comment. It is not shown |
 
@@ -108,6 +109,36 @@ Chorus: C G D G | x2
 ```
 
 Each line is `Label: chords`. The label is optional.
+
+### Words in the chord chart
+
+The Chords view shows no lyrics. To be reminded how a verse or chorus starts,
+put `{x_cue}` before a lyric line. The Chords view then shows the words of
+that line, without chords, in a smaller font above its chords. The Lyrics
+view does not change. Other ChordPro tools ignore `{x_cue}`.
+
+```text
+{start_of_chorus}
+{x_cue}
+[C]First line of this chorus
+[G]Second line
+{end_of_chorus}
+```
+
+- When two verses or choruses have the same chords, the chart shows the
+  second one as "(same chords)". The `{x_cue}` words stay under that label,
+  so you can still tell them apart.
+- To show your own text instead, give it a value:
+  `{x_cue: Quiet, then build up}`. With a value, the cue may also stand
+  before a line with chords only, for example in a solo.
+- Without a value, lines with chords only are skipped, and the cue uses the
+  next line with words.
+- A cue belongs to the next lyric line in the same section. You can also put
+  it just before `{start_of_…}`, after the previous section's `{end_of_…}`.
+  A cue with no lyric line after it in its section is not shown.
+- `{x_cue}` works only in the chart built from the lyrics. With an explicit
+  `x_chart`, write the words in the label, for example
+  `First line: C G Am F`. The label ends at the first `:`.
 
 ### Limits
 
@@ -129,22 +160,30 @@ Each line is `Label: chords`. The label is optional.
 
 ## Views
 
+A song that you open from the list starts in the Chords view. Hold Confirm
+to switch views. Left/Right keep the current view. If the Chords view would
+be empty, for example in a song with no chords, the lyrics are shown
+instead, and holding Confirm does nothing.
+
 - **Lyrics** shows the full lyrics with each chord above the place where it
   is played. Long lines wrap with their chords. Choruses have a bar in the
   left margin. A marker in the right margin shows the position in the song.
 - **Chords** shows only the section names and chord sequences. Lines with the
   same chords are shown once with `×N`. A section that repeats earlier chords
-  is shown as one line. The view picks the largest font, and one or two
-  columns, that fit the song on one screen. If the song does not fit even at
-  the smallest size, it uses pages.
+  is shown as one line, plus any `{x_cue}` words. Words from `{x_cue}` are
+  shown above the chords of their line. The view picks the largest font, up
+  to the medium size, and one or two columns, that fit the song on one
+  screen. If the song does not fit even at the smallest size, it uses pages.
 
 The header shows the position in the setlist, the title, the key, the
 artist, the view, and the playback state.
 
 ## Auto-scroll
 
-In the Lyrics view, auto-scroll moves the text about one third of the screen
-at a time, so you never need to turn pages while playing.
+Play does not change the view. In the Lyrics view, auto-scroll moves the
+text about one third of the screen at a time, so you never need to turn pages
+while playing. In the Chords view the timer runs, but a chart with several
+pages does not turn pages by itself.
 
 1. The song's duration comes from `{duration}`.
 2. Each step happens when a reader at a steady pace would be about 2/3 down
@@ -169,7 +208,7 @@ a chord chart with several pages shows only its first page.
 
 | Button | Stopped or ended | Playing | Paused |
 | --- | --- | --- | --- |
-| Confirm (short) | Play (switches to Lyrics) | Pause | Resume |
+| Confirm (short) | Play | Pause | Resume |
 | Confirm (hold) | Switch Lyrics / Chords | Switch Lyrics / Chords | Switch Lyrics / Chords |
 | Side page buttons | Lyrics: scroll one step. Chords: change page | Lyrics: one step, and the timer moves with it. Chords: change page | Same as Playing |
 | Left / Right | Previous / next song | Previous / next song, which starts playing | Previous / next song (stopped) |

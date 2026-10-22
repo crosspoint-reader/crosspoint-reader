@@ -12,7 +12,9 @@ namespace songbook {
 // metadata, verse/chorus/bridge/tab/grid and generic start_of_X sections,
 // {chorus} repeats, comments, and inline [chord] anchors. Unknown directives
 // are skipped. The custom {start_of_x_chart} block (ChordPro's x_ namespace)
-// holds an explicit "Label: chords" summary for the chords-only view.
+// holds an explicit "Label: chords" summary for the chords-only view, and
+// {x_cue} shows words above the next lyric line's chords in the derived chart:
+// its own text, or with no value the words of that line.
 class ChordProParser {
  public:
   // Bounds for a corrupt or oversized file; content past them is dropped.
@@ -61,6 +63,10 @@ class ChordProParser {
   const bool metadataOnly;
   bool sectionOpen = false;
   bool inChart = false;
+  // A pending {x_cue} waits for the next lyric line (one with words when it
+  // has no text of its own); cueText is empty for the bare form.
+  bool cueNext = false;
+  TextRef cueText;
   bool firstLine = true;
   bool truncatedContent = false;
   uint16_t skipped = 0;

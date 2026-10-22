@@ -170,6 +170,84 @@ TEST(ChordProParser, ExplicitChart) {
   ASSERT_EQ(song.lines.size(), 1u);
 }
 
+TEST(ChordProParser, BareCueCopiesNextLyricWords) {
+  Song song;
+  ChordProParser parser(song);
+  parser.feedLine("{soc}");
+  parser.feedLine("{x_cue}");
+  parser.feedLine("[C] [G]");
+  parser.feedLine("[Am]Ах, эта [F]свадьба");
+  parser.feedLine("{eoc}");
+  parser.finish();
+  EXPECT_EQ(parser.skippedDirectives(), 0);
+  ASSERT_EQ(song.lines.size(), 3u);
+  // A chord-only line has no words, so the cue waits for the next line.
+  EXPECT_EQ(song.lines[0].kind, LineKind::Lyrics);
+  EXPECT_EQ(song.lines[1].kind, LineKind::Cue);
+  EXPECT_EQ(song.lines[1].chordCount, 0);
+  EXPECT_EQ(song.view(song.lines[1].lyric), "Ах, эта свадьба");
+  EXPECT_EQ(song.lines[2].kind, LineKind::Lyrics);
+  EXPECT_EQ(song.lines[2].chordCount, 2);
+  EXPECT_EQ(song.sections[0].lineCount, 3);
+}
+
+TEST(ChordProParser, CueWithText) {
+  const Song song = parse("{sov}\n{x_cue: Second verse words}\n[C]Text\n{eov}\n");
+  ASSERT_EQ(song.lines.size(), 2u);
+  EXPECT_EQ(song.lines[0].kind, LineKind::Cue);
+  EXPECT_EQ(song.view(song.lines[0].lyric), "Second verse words");
+  EXPECT_EQ(song.lines[1].kind, LineKind::Lyrics);
+}
+
+TEST(ChordProParser, CueWithTextAlsoMarksChordOnlyLines) {
+  const Song song = parse("{sob}\n{x_cue: Build up}\n[Am] [G]\n{eob}\n");
+  ASSERT_EQ(song.lines.size(), 2u);
+  EXPECT_EQ(song.lines[0].kind, LineKind::Cue);
+  EXPECT_EQ(song.view(song.lines[0].lyric), "Build up");
+}
+
+TEST(ChordProParser, CueBetweenSectionsJoinsTheNextOne) {
+  const Song song = parse("{sov}\n[C]a\n{eov}\n{x_cue: Chorus words}\n{soc}\n[F]b\n{eoc}\n");
+  ASSERT_EQ(song.sections.size(), 2u);
+  EXPECT_EQ(song.sections[1].type, SectionType::Chorus);
+  ASSERT_EQ(song.sections[1].lineCount, 2);
+  EXPECT_EQ(song.lines[song.sections[1].firstLine].kind, LineKind::Cue);
+}
+
+TEST(ChordProParser, CueAfterStrayCommentJoinsTheNextSection) {
+  const Song song = parse("{sov}\n[C]a\n{eov}\n{c: Solo}\n{x_cue: Words}\n{sov}\n[C]b\n{eov}\n");
+  ASSERT_EQ(song.sections.size(), 3u);
+  ASSERT_EQ(song.sections[2].lineCount, 2);
+  EXPECT_EQ(song.lines[song.sections[2].firstLine].kind, LineKind::Cue);
+  EXPECT_EQ(song.view(song.lines[song.sections[2].firstLine].lyric), "Words");
+}
+
+TEST(ChordProParser, CueDoesNotCrossSectionEnd) {
+  const Song song = parse("{sov}\n[C]a\n{x_cue}\n[Am] [G]\n{eov}\n{soc}\n[F]b\n{eoc}\n");
+  for (const auto& line : song.lines) EXPECT_NE(line.kind, LineKind::Cue);
+}
+
+TEST(ChordProParser, CueIsIgnoredInExplicitChartAndMetadata) {
+  const Song chart = parse("{start_of_x_chart}\n{x_cue: no}\nVerse: C G\n{end_of_x_chart}\n[C]Text\n");
+  ASSERT_EQ(chart.lines.size(), 1u);
+  EXPECT_EQ(chart.lines[0].kind, LineKind::Lyrics);
+  const Song meta = parse("{title: T}\n{x_cue: no}\n{sov}\n[C]Text\n{eov}\n", true);
+  EXPECT_TRUE(meta.lines.empty());
+  EXPECT_TRUE(meta.text.empty());
+}
+
+TEST(ChordProParser, BareCueStaysWithinLineLimit) {
+  Song song;
+  ChordProParser parser(song);
+  for (size_t i = 0; i + 1 < ChordProParser::MAX_LINES; ++i) parser.feedLine("[C]Line");
+  parser.feedLine("{x_cue}");
+  parser.feedLine("[C]Last");
+  parser.finish();
+  EXPECT_EQ(song.lines.size(), ChordProParser::MAX_LINES);
+  EXPECT_EQ(song.lines.back().kind, LineKind::Lyrics);
+  EXPECT_TRUE(parser.truncated());
+}
+
 TEST(ChordProParser, StripsBomAndCarriageReturns) {
   const Song song = parse("\xEF\xBB\xBF{title: BOM}\r\n[C]Line\r\n");
   EXPECT_EQ(song.meta.title, "BOM");

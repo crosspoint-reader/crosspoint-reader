@@ -32,6 +32,8 @@ class FixedMeasurer final : public songbook::TextMeasurer {
         return 8;
       case songbook::TextRole::Comment:
         return 9;
+      case songbook::TextRole::Cue:
+        return 8;
     }
     return 10;
   }
@@ -53,6 +55,8 @@ class FixedMeasurer final : public songbook::TextMeasurer {
         return scale(size, 20);
       case songbook::TextRole::Comment:
         return scale(size, 24);
+      case songbook::TextRole::Cue:
+        return scale(size, 20);
     }
     return 30;
   }
