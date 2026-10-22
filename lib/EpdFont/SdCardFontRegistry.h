@@ -23,7 +23,8 @@ struct SdCardFontFileInfo {
 
 struct SdCardFontFamilyInfo {
   // Buffer size for filePath(), matching the installer's own path buffers.
-  // filePath() reports truncation for longer names.
+  // Discovery drops files whose path would not fit, so every registered file
+  // can be opened through filePath() with a buffer of this size.
   static constexpr size_t PATH_BUFFER_SIZE = 160;
 
   std::string name;  // directory name, e.g. "NotoSansCJK"

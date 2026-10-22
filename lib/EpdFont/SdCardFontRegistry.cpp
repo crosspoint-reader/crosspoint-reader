@@ -83,6 +83,14 @@ std::unique_ptr<char[]> copyFileName(const char* filename) {
   memcpy(copy.get(), filename, bytes);
   return copy;
 }
+
+// Loaders rebuild the path through filePath() into a PATH_BUFFER_SIZE buffer,
+// so a file whose path does not fit can never be opened: drop it at discovery.
+// `family` must already carry its name, root and loose flag.
+bool pathFits(const SdCardFontFamilyInfo& family, const SdCardFontFileInfo& file) {
+  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+  return family.filePath(file, path, sizeof(path));
+}
 }  // namespace
 
 bool SdCardFontFamilyInfo::filePath(const SdCardFontFileInfo& file, char* out, const size_t outSize) const {
@@ -331,6 +339,10 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
       }
       info.pointSize = size;
       info.style = style;
+      if (!pathFits(family, info)) {
+        LOG_ERR("SDREG", "Path too long for %s in %s — skipping", nameBuffer, dirPath);
+        continue;
+      }
       cpfontFiles.push_back(std::move(info));
       continue;
     }
@@ -346,6 +358,10 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
       if (!info.name) continue;
       info.pointSize = 0;  // size-free
       info.style = parseVectorStyle(nameBuffer, baseLen);
+      if (!pathFits(family, info)) {
+        LOG_ERR("SDREG", "Path too long for %s in %s — skipping", nameBuffer, dirPath);
+        continue;
+      }
       vectorFiles.push_back(std::move(info));
     }
 #endif
@@ -440,6 +456,10 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       if (!info.name) continue;
       info.pointSize = 0;  // size-free
       info.style = 0;
+      if (!pathFits(family, info)) {
+        LOG_ERR("SDREG", "Path too long for %s in %s — skipping", nameBuffer, rootPath);
+        continue;
+      }
       family.files.push_back(std::move(info));
       out.push_back(std::move(family));
       LOG_DBG("SDREG", "Found vector font: %s in %s", famName.c_str(), rootPath);
