@@ -1719,7 +1719,7 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
   // cleared on unload, so on CJK text this is most layout passes.
   uint8_t openStyles = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
-    if ((styleMask & (1 << si)) && styles_[si].present && advanceTableSize_[si] < ADVANCE_CACHE_LIMIT) {
+    if ((styleMask & (1 << si)) && hasStyle(si) && advanceTableSize_[si] < ADVANCE_CACHE_LIMIT) {
       openStyles |= 1 << si;
     }
   }
@@ -1757,7 +1757,7 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
   int totalMissed = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(openStyles & (1 << si))) continue;
-    const PerStyle& style = styles_[si];
+    const PerStyle& style = styleData(si);
     const bool hasReplacement = findGlobalGlyphIndex(style, REPLACEMENT_GLYPH) >= 0;
     const auto resolves = [&](const uint32_t cp) { return hasReplacement || findGlobalGlyphIndex(style, cp) >= 0; };
     const auto collect = [&](LowestCodepoints& into, auto wanted) {

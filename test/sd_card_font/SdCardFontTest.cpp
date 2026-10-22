@@ -472,6 +472,21 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   EXPECT_TRUE(font.hasAdvanceTable());
 }
 
+TEST(SdCardFontTest, AdvancesBuildForAStyleStoredInAnotherSlot) {
+  // An italic-only font: style 2 lives in slot 0 of the compact style array.
+  makeFont();
+  sdFontTestFile[32] = 2;
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_TRUE(font.hasStyle(2));
+  ASSERT_FALSE(font.hasStyle(0));
+  const auto text = page(FIRST, 100);
+  ASSERT_EQ(0, font.buildAdvanceTable(text.c_str(), 1 << 2));
+  for (uint32_t cp = FIRST; cp < FIRST + 100; ++cp) {
+    EXPECT_EQ(32 << 4, font.getAdvance(cp, 2));
+  }
+}
+
 TEST(SdCardFontTest, AFullAdvanceTableSkipsTheScanWithoutAllocating) {
   makeFont(1001);
   SdCardFont font;
