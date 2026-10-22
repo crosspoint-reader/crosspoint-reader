@@ -12,6 +12,7 @@
 
 namespace {
 size_t failNextArraySize = 0;
+size_t nothrowArrayAllocations = 0;
 int failArraySizeTimes = 1;  // how many allocations of failNextArraySize fail before it clears
 }  // namespace
 
@@ -26,6 +27,7 @@ void* operator new[](size_t size) {
 }
 
 void* operator new[](size_t size, const std::nothrow_t&) noexcept {
+  ++nothrowArrayAllocations;
   if (failNextArraySize != 0 && size == failNextArraySize) {
     if (--failArraySizeTimes <= 0) {
       failNextArraySize = 0;
@@ -533,7 +535,7 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   ASSERT_TRUE(font.load("fixture"));
   font.buildAdvanceTable("", 1);
   EXPECT_FALSE(font.hasAdvanceTable());
-  failNextArraySize = (4096 + 2) * sizeof(uint32_t);  // the codepoint scratch
+  failNextArraySize = (768 + 2) * sizeof(uint32_t);  // the codepoint scratch
   const std::string largeText = page(FIRST, 10) + std::string(4096, ' ');
   EXPECT_EQ(-1, font.buildAdvanceTable(largeText.c_str(), 1));
   EXPECT_FALSE(font.hasAdvanceTable());
@@ -541,12 +543,58 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   EXPECT_TRUE(font.hasAdvanceTable());
 }
 
+TEST(SdCardFontTest, AFullAdvanceTableSkipsTheScanWithoutAllocating) {
+  makeFont(1001);
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_EQ(0, font.buildAdvanceTable(page(FIRST, 768).c_str(), 1));
+  ASSERT_EQ(32U << 4, font.getAdvance(FIRST + 767, 0));
+  const size_t allocationsBefore = nothrowArrayAllocations;
+  EXPECT_EQ(0, font.buildAdvanceTable(page(FIRST + 768, 200).c_str(), 1));
+  EXPECT_EQ(allocationsBefore, nothrowArrayAllocations);
+  EXPECT_EQ(0, font.getAdvance(FIRST + 768, 0));
+}
+
+TEST(SdCardFontTest, OnePageWithMoreCodepointsThanTheTableKeepsTheLowestInAnyOrder) {
+  constexpr uint32_t CACHE_LIMIT = 768;  // SdCardFont::ADVANCE_CACHE_LIMIT
+  makeFont(1001);
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  // The top 768 first (ascending, so the largest is not the first held), then
+  // the rest descending: each must displace the largest held. Every codepoint
+  // appears twice, so repeats must not count twice.
+  std::string text;
+  for (uint32_t cp = FIRST + 232; cp < FIRST + 1000; ++cp) text += page(cp, 1) + page(cp, 1);
+  for (uint32_t cp = FIRST + 231; cp + 1 > FIRST; --cp) text += page(cp, 1) + page(cp, 1);
+  ASSERT_EQ(0, font.buildAdvanceTable(text.c_str(), 1));
+  for (uint32_t cp = FIRST; cp < FIRST + 1000; ++cp) {
+    ASSERT_EQ(cp < FIRST + CACHE_LIMIT ? 32U << 4 : 0U, font.getAdvance(cp, 0)) << std::hex << cp;
+  }
+}
+
+TEST(SdCardFontTest, CodepointsTheFontLacksDoNotTakeTableSlotsWithoutAReplacementGlyph) {
+  constexpr uint32_t CACHE_LIMIT = 768;  // SdCardFont::ADVANCE_CACHE_LIMIT
+  makeFont(1001);
+  put32(76, 0xFFFC);  // the last glyph is U+FFFC instead of U+FFFD
+  put32(80, 0xFFFC);
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  // 300 codepoints below FIRST that the font lacks, each twice, then a full
+  // table's worth it has. Only the latter can be cached, so all should be.
+  const std::string lacking = page(0x4E00, 300);
+  const std::string text = lacking + lacking + page(FIRST, CACHE_LIMIT);
+  EXPECT_EQ(300, font.buildAdvanceTable(text.c_str(), 1));
+  for (uint32_t cp = FIRST; cp < FIRST + CACHE_LIMIT; ++cp) {
+    ASSERT_EQ(32U << 4, font.getAdvance(cp, 0)) << std::hex << cp;
+  }
+}
+
 TEST(SdCardFontTest, ShortAdvancePreparationAvoidsLargeScratchAndRepeatedReads) {
   makeFont();
   SdCardFont font;
   ASSERT_TRUE(font.load("fixture"));
   const std::string text = page(FIRST, 3);
-  failNextArraySize = (4096 + 2) * sizeof(uint32_t);
+  failNextArraySize = (768 + 2) * sizeof(uint32_t);
   const int result = font.buildAdvanceTable(text.c_str(), 1);
   failNextArraySize = 0;
   ASSERT_EQ(result, 0);
