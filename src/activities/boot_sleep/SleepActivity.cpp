@@ -327,7 +327,8 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
 // needs the B/W frame that is on the glass, so keep it across the passes.
 class BwFrameKeeper {
  public:
-  BwFrameKeeper(GfxRenderer& renderer, const bool keep) : renderer(renderer), stored(keep && renderer.storeBwBuffer()) {}
+  BwFrameKeeper(GfxRenderer& renderer, const bool keep)
+      : renderer(renderer), stored(keep && renderer.storeBwBuffer()) {}
   ~BwFrameKeeper() {
     if (stored) renderer.restoreBwBuffer();
   }

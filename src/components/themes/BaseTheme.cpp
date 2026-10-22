@@ -824,7 +824,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // The side clusters sit in the bottom corners: clear the panel's rounded corners too.
   const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
-                                                                  : BoardConfig::ACTIVE.cornerRadius;
+                                                                 : BoardConfig::ACTIVE.cornerRadius;
   const int leftClusterX = metrics.statusBarHorizontalMargin + std::max(orientedMarginLeft, corner) + 1;
   const int rightClusterX =
       renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - std::max(orientedMarginRight, corner);
