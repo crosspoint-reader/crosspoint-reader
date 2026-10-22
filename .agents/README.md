@@ -27,6 +27,7 @@ home rather than restoring `.skills/` or duplicating the root policy.
 - `testing-debugging.md`: build, formatting, CI, serial, crash, and verification procedures
 - `git-workflow.md`: repository context, branches, commits, and publication controls
 - `generated-files-cache.md`: generated sources, i18n, local artifacts, and cache formats
+- `songbook.md`: the fork-only Songbook feature, its upstream touch points, and its contracts
 
 ## Mandatory firmware review
 

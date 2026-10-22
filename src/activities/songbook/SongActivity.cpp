@@ -1,0 +1,541 @@
+#include "SongActivity.h"
+
+#include <FontCacheManager.h>
+#include <GfxRenderer.h>
+#include <HalMemory.h>
+#include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
+
+#include <algorithm>
+#include <array>
+#include <cstdio>
+#include <cstring>
+#include <functional>
+
+#include "ChordProParser.h"
+#include "CrossPointSettings.h"
+#include "MappedInputManager.h"
+#include "activities/reader/ReaderUtils.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+
+using songbook::FontSize;
+using songbook::TextRole;
+using State = songbook::AutoScrollController::State;
+
+namespace {
+
+constexpr unsigned long HOLD_MS = ReaderUtils::SKIP_HOLD_MS;
+constexpr unsigned long LEAVE_HOLD_MS = ReaderUtils::GO_BACK_OR_HOME_MS;
+constexpr uint32_t NOTICE_MS = 2500;
+// Used when a song has no {duration}; the header marks it with "~".
+constexpr uint32_t DEFAULT_DURATION_MS = 180000;
+constexpr uint32_t MAX_DURATION_SEC = 6 * 60 * 60;
+constexpr int HEADER_PADDING = 4;
+constexpr int CHORUS_BAR_WIDTH = 3;
+constexpr int SCROLL_BAR_WIDTH = 3;
+constexpr size_t SCRATCH_BYTES = songbook::ChordProParser::MAX_LINE_BYTES + 1;
+// Kept free after both layouts are reserved.
+constexpr size_t LAYOUT_HEADROOM_BYTES = 8 * 1024;
+
+void fontFor(const TextRole role, const FontSize size, int& fontId, EpdFontFamily::Style& style) {
+#ifdef OMIT_FONTS
+  (void)size;
+  fontId = NOTOSANS_14_FONT_ID;
+#else
+  static constexpr int BODY[] = {NOTOSANS_18_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_14_FONT_ID};
+  static constexpr int LABEL[] = {NOTOSANS_14_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_12_FONT_ID};
+  static constexpr int COMMENT[] = {NOTOSANS_16_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_12_FONT_ID};
+  const auto index = static_cast<size_t>(size);
+  switch (role) {
+    case TextRole::Lyric:
+    case TextRole::Chord:
+      fontId = BODY[index];
+      break;
+    case TextRole::Label:
+      fontId = LABEL[index];
+      break;
+    case TextRole::Comment:
+      fontId = COMMENT[index];
+      break;
+  }
+#endif
+  switch (role) {
+    case TextRole::Lyric:
+      style = EpdFontFamily::REGULAR;
+      break;
+    case TextRole::Chord:
+    case TextRole::Label:
+      style = EpdFontFamily::BOLD;
+      break;
+    case TextRole::Comment:
+      style = EpdFontFamily::ITALIC;
+      break;
+  }
+}
+
+songbook::SectionNames sectionNames() {
+  songbook::SectionNames names;
+  names.verse = tr(STR_SONGBOOK_VERSE);
+  names.chorus = tr(STR_SONGBOOK_CHORUS);
+  names.bridge = tr(STR_SONGBOOK_BRIDGE);
+  names.intro = tr(STR_SONGBOOK_INTRO);
+  names.outro = tr(STR_SONGBOOK_OUTRO);
+  names.tab = tr(STR_SONGBOOK_TAB);
+  names.grid = tr(STR_SONGBOOK_GRID);
+  names.repeat = tr(STR_SONGBOOK_REPEAT);
+  names.sameChords = tr(STR_SONGBOOK_SAME_CHORDS);
+  return names;
+}
+
+void formatTime(char* out, const size_t size, const uint32_t ms) {
+  const uint32_t seconds = ms / 1000;
+  snprintf(out, size, "%u:%02u", static_cast<unsigned>(seconds / 60), static_cast<unsigned>(seconds % 60));
+}
+
+}  // namespace
+
+SongActivity::SongActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const songbook::Setlist& setlist,
+                           const size_t index)
+    : Activity("SongbookSong", renderer, mappedInput), setlist(setlist), index(index) {}
+
+int SongActivity::Measurer::width(const TextRole role, const FontSize size, const std::string_view text) const {
+  int fontId = 0;
+  EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  fontFor(role, size, fontId, style);
+  return owner.renderer.getTextAdvanceX(fontId, owner.terminated(text), style);
+}
+
+int SongActivity::Measurer::lineHeight(const TextRole role, const FontSize size) const {
+  int fontId = 0;
+  EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  fontFor(role, size, fontId, style);
+  return owner.renderer.getLineHeight(fontId);
+}
+
+const char* SongActivity::terminated(const std::string_view text) const {
+  const size_t length = std::min(text.size(), SCRATCH_BYTES - 1);
+  memcpy(scratch.get(), text.data(), length);
+  scratch[length] = '\0';
+  return scratch.get();
+}
+
+void SongActivity::onEnter() {
+  Activity::onEnter();
+  scratch = makeUniqueNoThrow<char[]>(SCRATCH_BYTES);
+  if (!scratch) {
+    LOG_ERR("SONG", "OOM: %u byte text buffer", static_cast<unsigned>(SCRATCH_BYTES));
+    loadResult = songbook::SongLoadResult::OutOfMemory;
+  } else {
+    RenderLock lock(*this);
+    openSong(index);
+  }
+  requestUpdate();
+}
+
+void SongActivity::onExit() {
+  Activity::onExit();
+  scroll.stop();
+  song.clear();
+  scratch.reset();
+}
+
+SongActivity::Geometry SongActivity::geometry() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  Geometry g{};
+  g.headerY = safe.y + metrics.topPadding;
+  g.headerHeight = renderer.getLineHeight(UI_12_FONT_ID) + renderer.getLineHeight(UI_10_FONT_ID) + 3 * HEADER_PADDING;
+  g.bodyX = safe.x + metrics.contentSidePadding;
+  g.bodyWidth = std::max(1, safe.width - 2 * metrics.contentSidePadding);
+  g.bodyY = g.headerY + g.headerHeight + 2 * HEADER_PADDING;
+  g.bodyHeight = std::max(1, safe.y + safe.height - g.bodyY - HEADER_PADDING);
+  return g;
+}
+
+void SongActivity::openSong(const size_t songIndex) {
+  index = songIndex;
+  chartPage = 0;
+  notice = nullptr;
+  // A new song gets a clean (half) refresh to clear the previous one's ghosting.
+  pagesUntilFullRefresh = 0;
+
+  // Free the previous song first so its capacity neither counts against the
+  // heap checks below nor stays reserved for the rest of the set.
+  song = songbook::Song{};
+  lyrics = songbook::SongLayout{};
+  chart = songbook::SongLayout{};
+
+  loadResult = songbook::loadSong(setlist.songs[index], song, false);
+  if (loadResult == songbook::SongLoadResult::Ok && !layoutsFit()) loadResult = songbook::SongLoadResult::OutOfMemory;
+  if (loadResult != songbook::SongLoadResult::Ok) {
+    LOG_ERR("SONG", "Cannot open %s (%d)", setlist.songs[index].c_str(), static_cast<int>(loadResult));
+    std::string title = song.meta.title.empty() ? setlist.songs[index] : song.meta.title;
+    song = songbook::Song{};
+    song.meta.title = std::move(title);
+  }
+
+  const Geometry g = geometry();
+  const songbook::Viewport viewport{g.bodyWidth, g.bodyHeight};
+  const Measurer measurer(*this);
+  const songbook::SectionNames names = sectionNames();
+  lyrics.buildLyrics(song, measurer, viewport, names);
+  chart.buildChart(song, measurer, viewport, names);
+  if (lyrics.truncated() || chart.truncated()) LOG_ERR("SONG", "Layout truncated: %s", setlist.songs[index].c_str());
+
+  durationEstimated = song.meta.durationSec == 0;
+  const uint32_t durationMs =
+      durationEstimated ? DEFAULT_DURATION_MS : std::min(song.meta.durationSec, MAX_DURATION_SEC) * 1000;
+  scroll.configure(lyrics.scrollStops(), lyrics.contentHeight(), viewport.height, durationMs);
+
+  char position[16];
+  snprintf(position, sizeof(position), "%u/%u  ", static_cast<unsigned>(index + 1),
+           static_cast<unsigned>(setlist.songs.size()));
+  keyLine.clear();
+  if (!song.meta.key.empty()) keyLine.append(tr(STR_SONGBOOK_KEY)).append(" ").append(song.meta.key);
+  if (!song.meta.capo.empty()) {
+    if (!keyLine.empty()) keyLine.append("  ");
+    keyLine.append(tr(STR_SONGBOOK_CAPO)).append(" ").append(song.meta.capo);
+  }
+  const int keyWidth = keyLine.empty() ? 0 : renderer.getTextWidth(UI_12_FONT_ID, keyLine.c_str(), EpdFontFamily::BOLD);
+  const std::string title = std::string(position) + song.meta.title;
+  titleLine = renderer.truncatedText(UI_12_FONT_ID, title.c_str(), std::max(1, g.bodyWidth - keyWidth - 16),
+                                     EpdFontFamily::BOLD);
+  artistLine = renderer.truncatedText(UI_10_FONT_ID, song.meta.artist.c_str(), g.bodyWidth / 2);
+}
+
+bool SongActivity::layoutsFit() {
+  const auto lyricsBudget = songbook::SongLayout::lyricsBudget(song);
+  const auto chartBudget = songbook::SongLayout::chartBudget(song);
+  const size_t needed = lyricsBudget.bytes() + chartBudget.bytes() + LAYOUT_HEADROOM_BYTES;
+  // Fragmentation can split the free heap, so the largest block must hold the
+  // two biggest tables together, not just one.
+  std::array<size_t, 8> tables{};
+  const auto lyricsTables = lyricsBudget.tables();
+  const auto chartTables = chartBudget.tables();
+  std::copy(lyricsTables.begin(), lyricsTables.end(), tables.begin());
+  std::copy(chartTables.begin(), chartTables.end(), tables.begin() + lyricsTables.size());
+  std::partial_sort(tables.begin(), tables.begin() + 2, tables.end(), std::greater<>());
+  const size_t block = tables[0] + tables[1];
+  const auto heap = HalMemory::getDefaultHeap();
+  if (heap.freeBytes >= needed && heap.largestBlockBytes >= block) return true;
+  LOG_ERR("SONG", "OOM: layouts need %u (block %u), free %u, largest %u", static_cast<unsigned>(needed),
+          static_cast<unsigned>(block), static_cast<unsigned>(heap.freeBytes),
+          static_cast<unsigned>(heap.largestBlockBytes));
+  return false;
+}
+
+bool SongActivity::handleHomeGesture() {
+  if (scroll.state() != State::Playing) return false;
+  {
+    RenderLock lock(*this);
+    notice = tr(STR_SONGBOOK_HOLD_TO_LEAVE);
+    noticeUntilMs = millis() + NOTICE_MS;
+  }
+  requestUpdate();
+  return true;
+}
+
+bool SongActivity::changeSong(const int delta) {
+  // Measuring needs the scratch buffer; without it no song can be laid out.
+  if (!scratch) return false;
+  const int count = static_cast<int>(setlist.songs.size());
+  const int target = std::clamp(static_cast<int>(index) + delta, 0, count - 1);
+  if (target == static_cast<int>(index)) return false;
+  openSong(static_cast<size_t>(target));
+  return true;
+}
+
+void SongActivity::leave() {
+  setResult(PageResult{static_cast<uint32_t>(index)});
+  finish();
+}
+
+SongActivity::Action SongActivity::readAction() const {
+  using Button = MappedInputManager::Button;
+  // Long presses are polled first: a fired long press consumes its release.
+  if (mappedInput.wasLongPressed(Button::Back, LEAVE_HOLD_MS)) return Action::Leave;
+  const bool loaded = loadResult == songbook::SongLoadResult::Ok;
+  if (loaded && mappedInput.wasLongPressed(Button::Confirm, HOLD_MS)) return Action::ToggleMode;
+  // A short press changes the song in every state (see apply() for playback).
+  if (mappedInput.wasReleased(Button::Left)) return Action::PreviousSong;
+  if (mappedInput.wasReleased(Button::Right)) return Action::NextSong;
+  if (mappedInput.wasReleased(Button::Back)) return Action::Back;
+  if (!loaded) return Action::None;
+  if (mappedInput.wasReleased(Button::Confirm)) return Action::Confirm;
+  // Left/Right change the song here, so single-direction side layouts step
+  // with top = back and bottom = forward (orientation-aware). Disabled stays disabled.
+  const auto layout = SETTINGS.sideButtonLayout;
+  if (layout == CrossPointSettings::PREV_PREV || layout == CrossPointSettings::NEXT_NEXT) {
+    const bool swapped = mappedInput.isNavDirectionSwapped();
+    if (mappedInput.wasPressed(swapped ? Button::Up : Button::Down)) return Action::StepForward;
+    if (mappedInput.wasPressed(swapped ? Button::Down : Button::Up)) return Action::StepBack;
+    return Action::None;
+  }
+  if (mappedInput.wasPressed(Button::PageForward)) return Action::StepForward;
+  if (mappedInput.wasPressed(Button::PageBack)) return Action::StepBack;
+  return Action::None;
+}
+
+bool SongActivity::apply(const Action action, const uint32_t nowMs) {
+  const auto showNotice = [&](const char* text) {
+    notice = text;
+    noticeUntilMs = nowMs + NOTICE_MS;
+    return true;
+  };
+  switch (action) {
+    case Action::None:
+    case Action::Leave:
+      return false;
+    case Action::ToggleMode:
+      mode = mode == ViewMode::Lyrics ? ViewMode::Chords : ViewMode::Lyrics;
+      return true;
+    case Action::Confirm:
+      switch (scroll.state()) {
+        case State::Idle:
+        case State::Finished:
+          // Starting a performance always shows the scrolling lyrics.
+          mode = ViewMode::Lyrics;
+          scroll.start(nowMs);
+          break;
+        case State::Playing:
+          scroll.pause(nowMs);
+          break;
+        case State::Paused:
+          scroll.resume(nowMs);
+          break;
+      }
+      return true;
+    case Action::Back:
+      // Idle and Finished leave before apply(); only an active performance gets here.
+      if (scroll.state() == State::Playing) return showNotice(tr(STR_SONGBOOK_HOLD_TO_LEAVE));
+      scroll.stop();
+      return true;
+    case Action::StepForward:
+    case Action::StepBack: {
+      const int delta = action == Action::StepForward ? 1 : -1;
+      if (mode == ViewMode::Lyrics) return scroll.stepBy(delta, nowMs);
+      const int page = std::clamp(chartPage + delta, 0, static_cast<int>(chart.pageCount()) - 1);
+      if (page == chartPage) return false;
+      chartPage = static_cast<uint16_t>(page);
+      return true;
+    }
+    case Action::PreviousSong:
+    case Action::NextSong: {
+      // A switch during playback keeps the performance going from the new song's top.
+      const bool wasPlaying = scroll.state() == State::Playing;
+      if (!changeSong(action == Action::NextSong ? 1 : -1)) return false;
+      // millis(), not nowMs: the timeline starts once the SD load and layout are done.
+      if (wasPlaying && loadResult == songbook::SongLoadResult::Ok) scroll.start(millis());
+      return true;
+    }
+  }
+  return false;
+}
+
+void SongActivity::loop() {
+  const uint32_t now = millis();
+  const Action action = readAction();
+  if (action == Action::Leave || (action == Action::Back && !scroll.active())) {
+    leave();
+    return;
+  }
+  const bool noticeExpired = notice && static_cast<int32_t>(now - noticeUntilMs) >= 0;
+  // The timer is polled every pass; the render lock is taken only for a change.
+  if (action == Action::None && !noticeExpired && !scroll.pending(now)) return;
+
+  bool redraw = false;
+  {
+    RenderLock lock(*this);
+    if (noticeExpired) {
+      notice = nullptr;
+      redraw = true;
+    }
+    redraw |= apply(action, now);
+    // The chart ignores scroll steps; it redraws only when the state changes.
+    const State before = scroll.state();
+    const bool stepped = scroll.update(now);
+    redraw |= stepped && (mode == ViewMode::Lyrics || scroll.state() != before);
+  }
+  if (redraw) requestUpdate();
+}
+
+void SongActivity::formatStatus(char* out, const size_t size, const uint32_t nowMs) const {
+  if (notice) {
+    snprintf(out, size, "%s", notice);
+    return;
+  }
+  char total[16];
+  formatTime(total + 1, sizeof(total) - 1, scroll.durationMs());
+  total[0] = '~';
+  const char* duration = durationEstimated ? total : total + 1;
+
+  char modeText[64];
+  if (mode == ViewMode::Chords && chart.pageCount() > 1) {
+    snprintf(modeText, sizeof(modeText), "%s %u/%u", tr(STR_SONGBOOK_CHORDS), static_cast<unsigned>(chartPage + 1),
+             static_cast<unsigned>(chart.pageCount()));
+  } else {
+    snprintf(modeText, sizeof(modeText), "%s",
+             mode == ViewMode::Chords ? tr(STR_SONGBOOK_CHORDS) : tr(STR_SONGBOOK_LYRICS));
+  }
+  // A layout that ran out of budget is missing its end; say so on stage.
+  if ((mode == ViewMode::Chords ? chart : lyrics).truncated()) {
+    const size_t used = strlen(modeText);
+    snprintf(modeText + used, sizeof(modeText) - used, " (%s)", tr(STR_SONGBOOK_CUT));
+  }
+  switch (scroll.state()) {
+    case State::Idle:
+      snprintf(out, size, "%s \xC2\xB7 %s", modeText, duration);
+      break;
+    case State::Playing:
+      snprintf(out, size, "%s \xC2\xB7 %s %s", modeText, tr(STR_SONGBOOK_PLAYING), duration);
+      break;
+    case State::Paused: {
+      char elapsed[16];
+      formatTime(elapsed, sizeof(elapsed), scroll.elapsedMs(nowMs));
+      snprintf(out, size, "%s \xC2\xB7 %s %s/%s", modeText, tr(STR_SONGBOOK_PAUSED), elapsed, duration);
+      break;
+    }
+    case State::Finished:
+      snprintf(out, size, "%s \xC2\xB7 %s %s", modeText, tr(STR_SONGBOOK_FINISHED), duration);
+      break;
+  }
+}
+
+void SongActivity::drawHeader(const Geometry& g) {
+  int y = g.headerY + HEADER_PADDING;
+  renderer.drawText(UI_12_FONT_ID, g.bodyX, y, titleLine.c_str(), true, EpdFontFamily::BOLD);
+  if (!keyLine.empty()) {
+    const int keyWidth = renderer.getTextWidth(UI_12_FONT_ID, keyLine.c_str(), EpdFontFamily::BOLD);
+    renderer.drawText(UI_12_FONT_ID, g.bodyX + g.bodyWidth - keyWidth, y, keyLine.c_str(), true, EpdFontFamily::BOLD);
+  }
+  y += renderer.getLineHeight(UI_12_FONT_ID) + HEADER_PADDING;
+  char status[96];
+  formatStatus(status, sizeof(status), millis());
+  const int statusWidth = renderer.getTextWidth(UI_10_FONT_ID, status);
+  const int statusX = g.bodyX + g.bodyWidth - statusWidth;
+  if (!artistLine.empty()) {
+    // The status keeps priority; the artist is clipped short of it.
+    const auto clip = renderer.getClipRect();
+    renderer.setClipRect(g.bodyX, y, std::max(0, statusX - 12 - g.bodyX), renderer.getLineHeight(UI_10_FONT_ID));
+    renderer.drawText(UI_10_FONT_ID, g.bodyX, y, artistLine.c_str());
+    renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
+  }
+  renderer.drawText(UI_10_FONT_ID, statusX, y, status);
+  const int ruleY = g.headerY + g.headerHeight;
+  renderer.drawLine(g.bodyX, ruleY, g.bodyX + g.bodyWidth, ruleY);
+}
+
+void SongActivity::drawPiece(const songbook::SongLayout& layout, const songbook::Piece& piece, const int x,
+                             const int y) {
+  int fontId = 0;
+  EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  fontFor(piece.role, piece.size, fontId, style);
+  renderer.drawText(fontId, x + piece.x, y + piece.dy, terminated(layout.text(song, piece)), true, style);
+}
+
+void SongActivity::drawLyrics(const Geometry& g) {
+  const auto& stops = lyrics.scrollStops();
+  const int32_t top = stops[std::min(scroll.step(), stops.size() - 1)];
+  const int32_t bottom = top + g.bodyHeight;
+  const auto& pieces = lyrics.pieces();
+  for (const auto& row : lyrics.rows()) {
+    if (row.y < top) continue;
+    // Rows cut by the bottom edge wait for the next step.
+    if (row.y + row.height > bottom) break;
+    const int rowY = g.bodyY + row.y - top;
+    if (row.chorusBar) renderer.fillRect(g.bodyX + row.x + 2, rowY, CHORUS_BAR_WIDTH, row.height);
+    for (uint32_t i = row.firstPiece; i < row.firstPiece + row.pieceCount; ++i) {
+      drawPiece(lyrics, pieces[i], g.bodyX + row.x, rowY);
+    }
+  }
+  const int32_t contentHeight = lyrics.contentHeight();
+  if (stops.size() > 1 && contentHeight > 0) {
+    // Position marker in the right margin.
+    const int barX = g.bodyX + g.bodyWidth + 4;
+    const int thumbY = g.bodyY + static_cast<int>(static_cast<int64_t>(g.bodyHeight) * top / contentHeight);
+    const int thumbHeight =
+        std::max(8, static_cast<int>(static_cast<int64_t>(g.bodyHeight) * g.bodyHeight / contentHeight));
+    renderer.fillRect(barX, thumbY, SCROLL_BAR_WIDTH, std::min(thumbHeight, g.bodyY + g.bodyHeight - thumbY));
+  }
+}
+
+void SongActivity::drawChart(const Geometry& g) {
+  const auto& pieces = chart.pieces();
+  for (const auto& row : chart.rows()) {
+    if (row.page != chartPage) continue;
+    const int rowY = g.bodyY + row.y;
+    for (uint32_t i = row.firstPiece; i < row.firstPiece + row.pieceCount; ++i) {
+      drawPiece(chart, pieces[i], g.bodyX + row.x, rowY);
+    }
+  }
+}
+
+void SongActivity::drawFooter() {
+  const char* back = tr(STR_BACK);
+  const char* confirm = tr(STR_SONGBOOK_PLAY);
+  const char* previous = tr(STR_SONGBOOK_PREV_SONG);
+  const char* next = tr(STR_SONGBOOK_NEXT_SONG);
+  if (loadResult != songbook::SongLoadResult::Ok) {
+    confirm = "";
+  } else {
+    switch (scroll.state()) {
+      case State::Idle:
+      case State::Finished:
+        break;
+      case State::Playing:
+        // Leaving needs a hold while playing, so Back stays unlabeled.
+        back = "";
+        confirm = tr(STR_SONGBOOK_PAUSE);
+        break;
+      case State::Paused:
+        back = tr(STR_SONGBOOK_STOP);
+        confirm = tr(STR_SONGBOOK_RESUME);
+        break;
+    }
+  }
+  if (index == 0) previous = "";
+  if (index + 1 >= setlist.songs.size()) next = "";
+  const auto labels = mappedInput.mapLabels(back, confirm, previous, next);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void SongActivity::render(RenderLock&&) {
+  const Geometry g = geometry();
+  renderer.clearScreen();
+  if (scratch) drawHeader(g);
+
+  if (loadResult != songbook::SongLoadResult::Ok || !scratch) {
+    const char* message = tr(STR_SONGBOOK_SONG_MISSING);
+    switch (loadResult) {
+      case songbook::SongLoadResult::Ok:
+      case songbook::SongLoadResult::OutOfMemory:
+        message = tr(STR_SONGBOOK_OUT_OF_MEMORY);
+        break;
+      case songbook::SongLoadResult::Missing:
+        break;
+      case songbook::SongLoadResult::TooLarge:
+        message = tr(STR_SONGBOOK_SONG_TOO_LARGE);
+        break;
+      case songbook::SongLoadResult::Empty:
+        message = tr(STR_SONGBOOK_SONG_EMPTY);
+        break;
+    }
+    renderer.drawCenteredText(UI_12_FONT_ID, g.bodyY + g.bodyHeight / 2, message, true, EpdFontFamily::BOLD);
+  } else {
+    // Scan pass records the glyphs, then one batched prewarm before the real draw.
+    auto* fontCache = renderer.getFontCacheManager();
+    const auto drawBody = [&] { mode == ViewMode::Lyrics ? drawLyrics(g) : drawChart(g); };
+    if (fontCache) {
+      auto scope = fontCache->createPrewarmScope();
+      drawBody();
+      scope.endScanAndPrewarm();
+      drawBody();
+    } else {
+      drawBody();
+    }
+  }
+  drawFooter();
+  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+}

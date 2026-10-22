@@ -23,6 +23,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/songbook/SongbookFiles.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -34,7 +35,30 @@ int HomeActivity::getMenuItemCount() const {
   if (hasLibrarySlot()) {
     count++;
   }
+  if (hasSongbook) {
+    count++;
+  }
   return count;
+}
+
+int HomeActivity::menuTop() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+}
+
+HomeActivity::MenuWindow HomeActivity::menuWindow(const int rowCount, const int selectedRow) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Row height from the theme, as in the touch grid (RoundedRaff derives it from the font).
+  const int step = GUI.getMenuRowHeight(renderer) + metrics.menuSpacing;
+  // Classic starts its rows verticalSpacing below the rect; reserving that for
+  // every theme keeps the last row clear of the hints.
+  const int space = renderer.getScreenHeight() - metrics.buttonHintsHeight - menuTop() - metrics.verticalSpacing;
+  const int fit = std::max(1, (space + metrics.menuSpacing) / std::max(1, step));
+  const int count = std::min(rowCount, fit);
+  int first = std::clamp(menuFirst.load(), 0, std::max(0, rowCount - count));
+  if (selectedRow >= 0 && selectedRow < first) first = selectedRow;
+  if (selectedRow >= first + count) first = selectedRow - count + 1;
+  return MenuWindow{first, count};
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -241,6 +265,8 @@ void HomeActivity::onEnter() {
     coverGridUi = makeUniqueNoThrow<CoverGridHomeUi>(renderer);
     if (!coverGridUi) LOG_ERR("HOME", "OOM: cover grid UI; using standard home");
   }
+  // The cover grid's icon tabs are fixed; Songbook is offered by the list home.
+  hasSongbook = !coverGridUi && songbook::songbookFolderExists();
   loadRecentBooks(coverGridUi ? CoverGridHomeUi::MAX_BOOKS : metrics.homeRecentBooksCount);
   hasContinueReading = !recentBooks.empty();
   if (coverGridUi) {
@@ -250,7 +276,9 @@ void HomeActivity::onEnter() {
   }
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasLibrarySlot());
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                      ? 0
+                      : base + menuItemToIndex(initialMenuItem, hasLibrarySlot(), hasSongbook);
 
   // Trigger first update
   requestUpdate();
@@ -311,7 +339,7 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasLibrarySlot())) {
+    switch (indexToMenuItem(menuIndex, hasLibrarySlot(), hasSongbook)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
@@ -320,6 +348,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuItem::OPDS_BROWSER:  // the library slot
         hasPlugins ? onPluginsOpen() : onOpdsBrowserOpen();
+        break;
+      case HomeMenuItem::SONGBOOK:
+        onSongbookOpen();
         break;
       case HomeMenuItem::FILE_TRANSFER:
         onFileTransferOpen();
@@ -433,18 +464,17 @@ void HomeActivity::loop() {
     return;
   }
 
-  const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
-  const int renderedMenuCount =
-      menuCount - (metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
+  const int menuRowOffset = metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size());
+  // The slice last drawn; a touch-down moving the highlight must not shift it under the finger.
+  const MenuWindow window = menuWindow(menuCount - menuRowOffset, -1);
   int menuRow = -1;
   // Row height from the theme, not the metrics table: RoundedRaff draws
   // font-derived rows and the touch grid must match the visuals exactly.
   const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, menuRowHeight + metrics.menuSpacing, renderedMenuCount,
-                                              0, INT32_MAX, menuRowHeight);
+  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop(), menuRowHeight + metrics.menuSpacing, window.count, 0,
+                                              INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
-    const int touchedIndex =
-        metrics.homeContinueReadingInMenu ? menuRow : menuRow + static_cast<int>(recentBooks.size());
+    const int touchedIndex = window.first + menuRow + menuRowOffset;
     if (menuTouch == MappedInputManager::RowTouch::Down) {
       if (selectorIndex != touchedIndex) {
         selectorIndex = touchedIndex;
@@ -533,21 +563,45 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 2, Plugins);
   }
 
+  if (hasSongbook) {
+    const int songbookSlot = hasLibrarySlot() ? 3 : 2;
+    menuItems.insert(menuItems.begin() + songbookSlot, tr(STR_SONGBOOK));
+    menuIcons.insert(menuIcons.begin() + songbookSlot, Book);
+  }
+
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
     menuIcons.insert(menuIcons.begin(), Book);
   }
 
+  const int selectedRow =
+      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - static_cast<int>(recentBooks.size());
+  const MenuWindow window = menuWindow(static_cast<int>(menuItems.size()), selectedRow);
+  menuFirst.store(window.first);
   GUI.drawButtonMenu(
       renderer,
-      Rect{content.x, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, content.width,
+      Rect{content.x, menuTop(), content.width,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
-      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
-      [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+      window.count, selectedRow - window.first,
+      [&menuItems, &window](int index) { return std::string(menuItems[window.first + index]); },
+      [&menuIcons, &window](int index) { return menuIcons[window.first + index]; });
+  // Small arrows in the right margin, outside the rows, mark rows scrolled out of view.
+  const int arrowX = content.x + content.width - std::max(5, metrics.contentSidePadding / 2);
+  const int rowStep = GUI.getMenuRowHeight(renderer) + metrics.menuSpacing;
+  if (window.first > 0) {
+    const int y = menuTop() + 2;
+    const int xs[] = {arrowX - 5, arrowX + 5, arrowX};
+    const int ys[] = {y + 6, y + 6, y};
+    renderer.fillPolygon(xs, ys, 3);
+  }
+  if (window.first + window.count < static_cast<int>(menuItems.size())) {
+    const int y = menuTop() + window.count * rowStep - metrics.menuSpacing - 2;
+    const int xs[] = {arrowX - 5, arrowX + 5, arrowX};
+    const int ys[] = {y - 6, y - 6, y};
+    renderer.fillPolygon(xs, ys, 3);
+  }
 
   const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
                                             tr(STR_DIR_DOWN));
@@ -578,3 +632,5 @@ void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 
 void HomeActivity::onPluginsOpen() { activityManager.goToPlugins(hasOpdsServers); }
+
+void HomeActivity::onSongbookOpen() { activityManager.goToSongbook(); }
