@@ -19,7 +19,6 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
-#include <new>
 #include <string_view>
 #include <type_traits>
 
@@ -599,8 +598,12 @@ void PluginCatalogActivity::enterCatalog() {
     fail(StrId::STR_PLUGIN_MANIFEST_INVALID);
     return;
   }
-  session.reset(new (std::nothrow) freeink::SecureHttpClient());
-  if (session) session->setReuse(true);
+  session = makeUniqueNoThrow<freeink::SecureHttpClient>();
+  if (session) {
+    session->setReuse(true);
+  } else {
+    LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
+  }
   requestUpdate();
   checkAndConnectWifi();
 }
