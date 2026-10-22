@@ -102,11 +102,27 @@ bool DictEntryList::appendUnique(const char* headword, const DictLocation& locat
     return existing.location.offset == location.offset && existing.location.size == location.size;
   });
   if (duplicate) return true;
-  if (count_ >= kMaxEntries) return false;
-  // The slot is reused across lookups, so the headword copy keeps its capacity
-  // and stops allocating once the first lookup has filled it.
-  entries_[count_].headword = headword;
-  entries_[count_].location = location;
+  if (count_ >= kMaxEntries) {
+    LOG_ERR("DICT", "Entry list full at %u entries", static_cast<unsigned>(count_));
+    return false;
+  }
+  auto& entry = entries_[count_];
+  const size_t bytes = strlen(headword) + 1;
+  if (bytes > entry.headwordCapacity) {
+    const auto heap = HalMemory::getDefaultHeap();
+    auto buffer = heap.freeBytes >= bytes + DEFINITION_HEAP_HEADROOM_BYTES && heap.largestBlockBytes >= bytes
+                      ? makeUniqueNoThrow<char[]>(bytes)
+                      : nullptr;
+    if (!buffer) {
+      LOG_ERR("DICT", "Low heap for %u byte headword", static_cast<unsigned>(bytes));
+      lowMemory_ = true;
+      return false;
+    }
+    entry.headword = std::move(buffer);
+    entry.headwordCapacity = bytes;
+  }
+  memcpy(entry.headword.get(), headword, bytes);
+  entry.location = location;
   count_++;
   return true;
 }
@@ -449,7 +465,6 @@ void Dictionary::locateAll(LookupSession& session, const char* target, DictEntry
       location.size = readBe32(suffix + 4);
       location.found = true;
       if (!out.appendUnique(wordBuf, location)) {
-        LOG_ERR("DICT", "Entry list full at %u entries", static_cast<unsigned>(out.size()));
         break;
       }
       continue;
@@ -458,7 +473,7 @@ void Dictionary::locateAll(LookupSession& session, const char* target, DictEntry
   }
 }
 
-DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut) {
+DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal) {
   DictLocation result;
 
   // The .qidx samples are taken at fixed entry-count boundaries (every
@@ -495,7 +510,6 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
   result.offset = readBe32(suffix);
   result.size = readBe32(suffix + 4);
   result.found = true;
-  if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
   return result;
 }
 
@@ -518,7 +532,6 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, Dict
     if (readError) *readError = true;
     return false;
   }
-  std::string resolvedHeadword;
   while (static_cast<uint32_t>(session.syn.position()) < session.synSize) {
     if (readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
@@ -526,11 +539,10 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, Dict
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
     if (cmp == 0) {
-      const DictLocation location = locateByOrdinal(session, readBe32(ordBytes), &resolvedHeadword);
+      const DictLocation location = locateByOrdinal(session, readBe32(ordBytes));
       if (location.readError && readError) *readError = true;
       if (location.found) {
-        if (!out.appendUnique(resolvedHeadword.c_str(), location)) {
-          LOG_ERR("DICT", "Synonym list full at %u entries", static_cast<unsigned>(out.size()));
+        if (!out.appendUnique(wordBuf, location)) {
           break;
         }
       }
@@ -562,7 +574,9 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
   // (-fno-exceptions), and the extraction below transiently holds a chunk buffer
   // plus a 32KB inflate window we'd rather not commit to a doomed lookup.
   const size_t requiredBytes = (append ? originalSize : 0) + size;
-  if (ESP.getMaxAllocHeap() < requiredBytes + DEFINITION_HEAP_HEADROOM_BYTES) {
+  // String growth may double capacity; a reserved append needs no new buffer.
+  const size_t allocationBytes = requiredBytes > out.capacity() ? std::max(requiredBytes, 2 * out.capacity()) + 1 : 0;
+  if (ESP.getMaxAllocHeap() < allocationBytes + DEFINITION_HEAP_HEADROOM_BYTES) {
     LOG_ERR("DICT", "Low heap for %lu byte definition", static_cast<unsigned long>(requiredBytes));
     return fail(LookupResult::LowMemory);
   }
@@ -740,35 +754,40 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     bool idxReadError = false;
     locateAll(session, cleaned.c_str(), group, &idxReadError);
     searchFailed = idxReadError;
-    if (!group.empty()) matchedHeadwordOut = group.front().headword;
+    if (!group.empty() && !group.lowMemory()) matchedHeadwordOut = group.front().headword.get();
 
     // Dictionary-authored synonyms (alternate spellings, irregular forms) take
     // precedence over the English-only stemmer, and are language-agnostic.
-    if (group.empty() && hasSyn) {
+    if (group.empty() && !group.lowMemory() && hasSyn) {
       bool synonymReadError = false;
       locateSynonyms(session, cleaned.c_str(), group, &synonymReadError);
       searchFailed = searchFailed || synonymReadError;
       // A synonym maps to other headwords, so the title bar shows the word the
       // reader looked up; the headword of each entry labels its definition.
-      if (!group.empty()) {
+      if (!group.empty() && !group.lowMemory()) {
         groupFromSynonyms = true;
         matchedHeadwordOut = cleaned;
       }
     }
 
-    if (group.empty()) {
+    if (group.empty() && !group.lowMemory()) {
       std::vector<std::string> variants;
       stemVariants(cleaned, variants);
       for (const auto& variant : variants) {
         bool variantReadError = false;
         locateAll(session, variant.c_str(), group, &variantReadError);
         searchFailed = searchFailed || variantReadError;
+        if (group.lowMemory()) break;
         if (!group.empty()) {
-          matchedHeadwordOut = group.front().headword;
+          matchedHeadwordOut = group.front().headword.get();
           break;
         }
       }
     }
+  }
+  if (group.lowMemory()) {
+    setResult(LookupResult::LowMemory);
+    return false;
   }
   if (group.empty()) {
     // A search that never reached a verdict (couldn't open or seek .idx) is a
@@ -802,10 +821,10 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       const size_t definitionSize = std::min<uint32_t>(group.at(i).location.size, MAX_DEFINITION_BYTES);
       // The HTML path needs no separator: the heading is a block of its own.
       const size_t separatorSize = combinedSize == 0 || htmlDefinitions ? 0 : sizeof(kPlainSeparator) - 1;
-      const size_t labelSize = htmlDefinitions
-                                   ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(group.at(i).headword) +
-                                         sizeof(kHtmlLabelClose) - 1
-                                   : sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + group.at(i).headword.size() + 1;
+      const size_t labelSize =
+          htmlDefinitions ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(group.at(i).headword.get()) +
+                                sizeof(kHtmlLabelClose) - 1
+                          : sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + strlen(group.at(i).headword.get()) + 1;
       if (combinedSize > MAX_DEFINITION_BYTES - separatorSize ||
           labelSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize ||
           definitionSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize - labelSize) {
@@ -815,12 +834,10 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       fitCount = i + 1;
     }
     if (fitCount == 0) {
-      // Not even the first entry fits the cap, so a single definition is over
-      // the limit — there is nothing to show. Same failure as the combined
-      // overflow had before.
-      LOG_ERR("DICT", "Combined definitions exceed %lu bytes", static_cast<unsigned long>(MAX_DEFINITION_BYTES));
-      setResult(LookupResult::ReadError);
-      return false;
+      LOG_INF("DICT", "First definition fills the cap; omitting labels and later entries");
+      const bool found = readDefinition(group.front().location, definitionOut, outResult);
+      if (found) setResult(LookupResult::Found);
+      return found;
     }
     if (fitCount < group.size()) {
       LOG_INF("DICT", "Combined definitions stop at the %lu byte cap: %u of %u entries shown",
@@ -840,11 +857,11 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       }
       if (htmlDefinitions) {
         definitionOut += kHtmlLabelOpen;
-        TxtToHtml::appendEscapedHtml(definitionOut, group.at(i).headword);
+        TxtToHtml::appendEscapedHtml(definitionOut, group.at(i).headword.get());
         definitionOut += kHtmlLabelClose;
       } else {
         definitionOut.push_back(DICTIONARY_PLAIN_HEADWORD_MARKER);
-        definitionOut += group.at(i).headword;
+        definitionOut += group.at(i).headword.get();
         definitionOut.push_back('\n');
       }
       if (!readDefinition(group.at(i).location, definitionOut, outResult, true)) return false;

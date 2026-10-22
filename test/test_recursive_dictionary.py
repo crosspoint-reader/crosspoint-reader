@@ -241,6 +241,7 @@ int main() {
   dictionary.entries = {{10, "first entry one two three four five six"}, {20, "other definition"}};
   DictionaryDefinitionActivity view;
   view.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+  view.lookup->query = "same";
   view.content.headword = "same";
   view.content.text = dictionary.entries.at(10);
   assert(view.prepareDefinition(view.content));
@@ -306,9 +307,9 @@ int main() {
   assert(view.message == StrId::STR_DICT_HISTORY_FULL);
   for (int i = 0; i < 16; ++i) view.navigateDefinition(true);
   assert(view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10) && view.content.currentPage == 1);
-  // Going back looks the displayed headword up again, so a synonym target comes
-  // back as itself and never as the .idx entry of the same word.
+  // Going back replays the synonym query.
   view.content = {};
+  view.lookup->query = "alias";
   view.content.headword = "alias";
   view.content.text = dictionary.entries.at(20);
   assert(view.prepareDefinition(view.content));
@@ -381,7 +382,7 @@ int main() {
     DictionaryDefinitionActivity backView;
     backView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
     backView.lookup->depth = 1;
-    backView.lookup->history[0].headword = "same";
+    backView.lookup->history[0].query = "same";
     backView.content.text = dictionary.entries.at(20);
     assert(backView.prepareDefinition(backView.content));
     backView.mappedInput.heldMs = heldMs;

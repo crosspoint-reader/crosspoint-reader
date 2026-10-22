@@ -26,7 +26,7 @@ class DictionaryDefinitionActivity final : public Activity {
         content{.headword = std::move(headword), .text = std::move(definition)},
         htmlDefinition(htmlDefinition) {}
 
-  bool enableLookup(Dictionary& dictionary);
+  bool enableLookup(Dictionary& dictionary, std::string&& query);
 
   void onEnter() override;
   void onExit() override;
@@ -72,12 +72,9 @@ class DictionaryDefinitionActivity final : public Activity {
     }
   };
 
-  // One step of the lookup history. The headword doubles as the key to look the
-  // definition up again: a word resolves to the same entries every time, so
-  // going back re-runs the lookup and rebuilds the very same text (and the
-  // very same pages) the stored page index refers to.
+  // Replay the original query: the displayed headword may be a stem or synonym.
   struct HistoryEntry {
-    std::string headword;
+    std::string query;
     int page = 0;
     int selectionPage = 0;
     ClipSelectionActivity::Selection selection;
@@ -89,6 +86,7 @@ class DictionaryDefinitionActivity final : public Activity {
     Dictionary& dictionary;  // Owned by the retained DictionaryWordSelectActivity parent.
     std::array<HistoryEntry, 16> history;
     size_t depth = 0;
+    std::string query;
     std::string pendingWord;
     std::vector<std::unique_ptr<Page>> selectionPages;
   };

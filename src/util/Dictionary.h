@@ -22,7 +22,8 @@ struct DictLocation {
 // entry per part of speech) and a .syn can point at several entries, so one
 // word can map to several of these.
 struct DictEntry {
-  std::string headword;
+  std::unique_ptr<char[]> headword;
+  size_t headwordCapacity = 0;
   DictLocation location;
 };
 
@@ -37,7 +38,11 @@ class DictEntryList {
  public:
   static constexpr size_t kMaxEntries = 128;
 
-  void clear() { count_ = 0; }
+  void clear() {
+    count_ = 0;
+    lowMemory_ = false;
+  }
+  bool lowMemory() const { return lowMemory_; }
   bool empty() const { return count_ == 0; }
   size_t size() const { return count_; }
   const DictEntry& at(size_t index) const { return entries_[index]; }
@@ -46,13 +51,13 @@ class DictEntryList {
   // Append an entry unless one with the same .dict range is already listed.
   // Two .idx entries can share a headword but point at different definitions —
   // those are different entries and both are kept; only the exact same .dict
-  // range is a duplicate. False when the list is full and the entry was
-  // dropped.
+  // range is a duplicate. False when capacity or memory prevents appending.
   bool appendUnique(const char* headword, const DictLocation& location);
 
  private:
   DictEntry entries_[kMaxEntries];
   size_t count_ = 0;
+  bool lowMemory_ = false;
 };
 
 // Marks the headword label line of a plain-text definition. The wrap loop
@@ -208,8 +213,8 @@ class Dictionary {
   void locateAll(LookupSession& session, const char* target, DictEntryList& out, bool* readError);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
-  // the .qidx samples. Used to follow a .syn synonym back to its headword.
-  DictLocation locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut);
+  // the .qidx samples. Leaves the resolved headword in wordBuf.
+  DictLocation locateByOrdinal(LookupSession& session, uint32_t ordinal);
 
   // Scan every .syn/.sidx record for target, following each ordinal through
   // locateByOrdinal(). Every resolved entry is returned in dictionary order; a
