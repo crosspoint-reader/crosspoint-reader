@@ -304,13 +304,24 @@ def execute(device: Device, args: argparse.Namespace, parser: argparse.ArgumentP
     elif cmd in ("log", "sleep"):
         device.capture(args.seconds)
     elif cmd == "run":
+        # Check every line before the first step runs, so a typo on line 8 does
+        # not surface after a restart and a long wait on lines 1-7.
+        steps = []
         for number, raw in enumerate(Path(args.script).read_text().splitlines(), 1):
-            words = shlex.split(raw, comments=True)
+            try:
+                words = shlex.split(raw, comments=True)
+            except ValueError as error:
+                raise DeviceError(f"{args.script}:{number}: {error}") from None
             if not words:
                 continue
-            step = parser.parse_args(words)
+            try:
+                step = parser.parse_args(words)
+            except SystemExit:  # argparse has already printed why
+                raise DeviceError(f"{args.script}:{number}: invalid step") from None
             if step.command == "run":
                 raise DeviceError(f"{args.script}:{number}: run scripts do not nest")
+            steps.append((number, raw, step))
+        for number, raw, step in steps:
             print(f"> {raw.strip()}", flush=True)
             try:
                 execute(device, step, parser)

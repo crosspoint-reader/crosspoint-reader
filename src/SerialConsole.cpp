@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstring>
 #include <string>
 
 #include "CrossPointState.h"
@@ -22,6 +23,13 @@ void replyOk(const SerialCommand& cmd, const char* detail = "") {
 }
 
 void replyErr(const SerialCommand& cmd, const char* reason) {
+  // Also in the device log, worded so the host never mistakes it for the reply.
+  // A busy click is routine (the host retries), so it stays at debug level.
+  if (std::strcmp(reason, "busy") == 0) {
+    LOG_DBG("CON", "%.*s refused: %s", static_cast<int>(cmd.name.size()), cmd.name.data(), reason);
+  } else {
+    LOG_ERR("CON", "%.*s refused: %s", static_cast<int>(cmd.name.size()), cmd.name.data(), reason);
+  }
   logSerial.printf("CMD_ERR %.*s %s\n", static_cast<int>(cmd.name.size()), cmd.name.data(), reason);
 }
 
