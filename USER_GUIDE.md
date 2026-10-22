@@ -549,15 +549,15 @@ Once any of the options above is set up, press **Confirm** while reading to open
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
-To check for newer remote progress automatically, enable **Settings -> System -> KOReader Sync -> Automatic progress check**. This setting is opt-in and defaults to **Off**. When enabled for EPUB books:
+To check for newer remote progress automatically, enable **Settings -> Connectivity -> CrossPoint Sync -> Automatic progress check**. This setting is opt-in and defaults to **Off**. When enabled for EPUB books:
 
-- Opening a book, or waking the device while a book is already open, checks the last connected saved Wi-Fi network for up to six seconds.
+- Opening a book, or waking the device while a book is already open, tries each saved Wi-Fi network for up to six seconds, within a 15-second total budget.
 - CrossPoint stays on the current page without showing connection or sync status. If Wi-Fi is unavailable, the server cannot be reached, or remote progress is not ahead, it returns to the book without an error.
 - When remote progress is ahead, CrossPoint asks whether to **Resume** there. Choose **No** to keep the current local position.
 - Automatic checks never upload local progress. Manual **Sync Progress** remains available with the configured **Sync Behavior**.
 - Wi-Fi is disconnected and the radio is turned off when the check finishes or while the confirmation prompt is shown.
 
-To upload newer local progress automatically, enable **Settings -> System -> KOReader Sync -> Automatic progress upload**. This is a separate opt-in setting and defaults to **Off**.
+To upload newer local progress automatically, enable **Settings -> Connectivity -> CrossPoint Sync -> Automatic progress upload**. This is a separate opt-in setting and defaults to **Off**.
 
 - After the reading position changes, leaving an EPUB for Home or the file browser, or putting the device to sleep, starts one silent sync attempt with a 15-second application-level network budget.
 - CrossPoint tries the last connected saved Wi-Fi network first, then other saved networks while time remains. A slow first network is capped so it cannot consume the entire attempt.

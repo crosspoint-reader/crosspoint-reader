@@ -91,6 +91,13 @@ void AutomaticProgressCheck::taskTrampoline(void* arg) {
 }
 
 void AutomaticProgressCheck::run() {
+  // Every exit path must drop the radio; connectHeadless() leaves the STA up
+  // even when it fails, and a check that bails out early would otherwise keep
+  // WiFi associated for the rest of the reading session.
+  struct RadioOffOnExit {
+    ~RadioOffOnExit() { WiFi.disconnect(true, false); }
+  } radioOff;
+
   // Load saved WiFi credentials from SD before the headless connect attempt.
   // (WifiSelectionActivity does this in onEnter(); a background check runs
   // without that activity, so it must load them itself.)
@@ -116,9 +123,6 @@ void AutomaticProgressCheck::run() {
   KOReaderProgress progress;
   const auto result = KOReaderSyncClient::getProgress(hash, progress);
   error_ = result;
-
-  // Drop the radio; the reader resumes normal low-power operation.
-  WiFi.disconnect(true, false);
 
   if (result == KOReaderSyncClient::OK) {
     remoteProgress_ = std::move(progress);

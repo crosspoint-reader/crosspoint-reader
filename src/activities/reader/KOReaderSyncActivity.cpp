@@ -246,6 +246,11 @@ void KOReaderSyncActivity::performSync() {
       clippingsSynced = clippingSync::run(epubPath, documentHash);
     }
     if (!clippingsSynced) {
+      if (automaticMode()) {
+        // Automatic flows must always release the sleep hand-off.
+        completeFlow();
+        return;
+      }
       {
         RenderLock lock(*this);
         state = SYNC_FAILED;

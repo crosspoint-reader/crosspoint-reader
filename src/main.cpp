@@ -151,6 +151,9 @@ static bool deepSleepInProgress = false;
 static bool deferredSleepPending = false;
 static bool deferredSleepCompletionRequested = false;
 static bool deferredSleepFromTimeout = false;
+// The deferred entry painted and saved the Quick Resume frame before the sleep
+// hand-off; the commit must not remove it as if it were stale.
+static bool deferredSleepFrameSaved = false;
 
 // A silent restart is internal maintenance, so the light must come back exactly
 // as the user left it. SETTINGS.frontlightOn is the saved preference and
@@ -487,7 +490,7 @@ static bool prepareSleepState(const bool fromTimeout) {
 }
 
 // Enter deep sleep after any activity-owned preparation has completed.
-static void commitDeepSleep(const bool fromTimeout, const bool renderScreen) {
+static void commitDeepSleep(const bool fromTimeout, const bool renderScreen, const bool frameSaved) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
 
   activityManager.goToSleep(fromTimeout, renderScreen);
@@ -497,7 +500,7 @@ static void commitDeepSleep(const bool fromTimeout, const bool renderScreen) {
        (fromTimeout && SETTINGS.quickResumeSleepScreen ==
                            CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT))) {
     saveSleepFrameBuffer();
-  } else if (Storage.exists(SLEEP_FRAME_FILE)) {
+  } else if (!frameSaved && Storage.exists(SLEEP_FRAME_FILE)) {
     // A stale Quick Resume frame must not replace the selected sleep screen during wake.
     Storage.remove(SLEEP_FRAME_FILE);
   }
@@ -535,12 +538,13 @@ void enterDeepSleep(const bool fromTimeout) {
   if (activityManager.prepareForDeferredSleep(fromTimeout)) {
     deferredSleepPending = true;
     activityManager.showSleepScreen(fromTimeout);
+    deferredSleepFrameSaved = isQuickResumeSleep;
     if (isQuickResumeSleep) {
       saveSleepFrameBuffer();
     }
     return;
   }
-  commitDeepSleep(fromTimeout, true);
+  commitDeepSleep(fromTimeout, true, false);
 }
 
 void completeDeferredDeepSleep(const bool fromTimeout) {
@@ -923,7 +927,8 @@ void loop() {
   if (deferredSleepCompletionRequested) {
     deferredSleepCompletionRequested = false;
     deferredSleepPending = false;
-    commitDeepSleep(deferredSleepFromTimeout, false);
+    commitDeepSleep(deferredSleepFromTimeout, false, deferredSleepFrameSaved);
+    deferredSleepFrameSaved = false;
     return;
   }
 
