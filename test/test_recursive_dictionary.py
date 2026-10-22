@@ -3,6 +3,7 @@
 Run: python3 test/test_recursive_dictionary.py (requires a C++20 compiler).
 """
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -44,6 +45,8 @@ marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().spli
 selection = block(selector, "struct Selection {", True)
 plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
 constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
+# The harness copies every constant but only some methods; clang's -Wall flags the unused ones.
+constants = re.sub(r"^constexpr ", "[[maybe_unused]] constexpr ", constants, flags=re.MULTILINE)
 viewer_loop = block(viewer, "void DictionaryDefinitionActivity::loop()")
 back_handler = viewer_loop.split("  int sx = 0;", 1)[1].split(
     "  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm))", 1
