@@ -689,6 +689,8 @@ Available options include:
 
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
 - **Links and Footnotes** – Select an internal link on the current page. This option appears when the page contains links.
+- **Reader Font Family** – Pick the built-in font or a font installed on the SD card. If the new font does not have the current size, the closest size is used.
+- **Reader Font Size** – Pick one of the sizes the current font provides.
 - **Text Settings** – Change the font, size, spacing and other text options without leaving the book.
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
 - **Create Clipping** – Select a range of text on the current page and save it as a highlighted clipping.
@@ -701,6 +703,8 @@ Available options include:
 - **Go Home** – Close the book and return to the Home screen.
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
+
+Font family and size changes from the menu apply when you close it. If a font list is too long to fit on the screen, **Text Settings** opens instead.
 
 Press **Back** at any time to close the menu and return to your current page.
 
