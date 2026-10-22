@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,35 @@ struct DictLocation {
 struct DictEntry {
   std::string headword;
   DictLocation location;
+};
+
+// The entries one word maps to, in a list of fixed capacity.
+//
+// How many entries a word has is not known before the index is scanned, so the
+// list is sized once for the worst case and reused: a lookup never grows a
+// container on the heap. The capacity covers the largest group measured in a
+// real dictionary (100 .syn records for one synonym, 14 .idx entries for one
+// headword) with margin; a longer group is cut short and logged.
+class DictEntryList {
+ public:
+  static constexpr size_t kMaxEntries = 128;
+
+  void clear() { count_ = 0; }
+  bool empty() const { return count_ == 0; }
+  size_t size() const { return count_; }
+  const DictEntry& at(size_t index) const { return entries_[index]; }
+  const DictEntry& front() const { return entries_[0]; }
+
+  // Append an entry unless one with the same .dict range is already listed.
+  // Two .idx entries can share a headword but point at different definitions —
+  // those are different entries and both are kept; only the exact same .dict
+  // range is a duplicate. False when the list is full and the entry was
+  // dropped.
+  bool appendUnique(const char* headword, const DictLocation& location);
+
+ private:
+  DictEntry entries_[kMaxEntries];
+  size_t count_ = 0;
 };
 
 // Marks the headword label line of a plain-text definition. The wrap loop
@@ -175,14 +205,7 @@ class Dictionary {
   // sorted, so the entries of one headword are adjacent and one scan collects
   // them all. *readError is set when the scan was cut short by an IO failure,
   // which is a read failure rather than a miss.
-  void locateAll(LookupSession& session, const char* target, std::vector<DictEntry>& out, bool* readError);
-
-  // Append entry unless an entry with the same .dict range is already in out.
-  // Two .idx entries can share a headword but point at different definitions —
-  // those are different entries and both are kept; only the exact same .dict
-  // range is a duplicate. Shared by the .idx and .syn paths so one word never
-  // shows the same definition twice.
-  static void appendUniqueEntry(std::vector<DictEntry>& out, DictEntry&& entry);
+  void locateAll(LookupSession& session, const char* target, DictEntryList& out, bool* readError);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
   // the .qidx samples. Used to follow a .syn synonym back to its headword.
@@ -191,7 +214,7 @@ class Dictionary {
   // Scan every .syn/.sidx record for target, following each ordinal through
   // locateByOrdinal(). Every resolved entry is returned in dictionary order; a
   // failed synonym read is reported separately from a genuine miss.
-  bool locateSynonyms(LookupSession& session, const char* target, std::vector<DictEntry>& out, bool* readError);
+  bool locateSynonyms(LookupSession& session, const char* target, DictEntryList& out, bool* readError);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
@@ -216,6 +239,10 @@ class Dictionary {
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;
+
+  // The entry list of the current lookup. Allocated once when the dictionary
+  // opens and reused by every lookup, so a lookup never allocates a container.
+  std::unique_ptr<DictEntryList> entryList;
 
   // Shared scan buffer: lookups are single-threaded and this avoids a
   // 256-byte array on the stack of every locate() call.

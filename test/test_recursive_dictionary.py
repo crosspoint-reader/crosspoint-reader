@@ -40,6 +40,7 @@ structs = "\n".join(block(header, f"struct {name} {{", True) for name in (
 ))
 location = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictLocation {", True)
 entry = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictEntry {", True)
+entry_list = block((ROOT / "src/util/Dictionary.h").read_text(), "class DictEntryList {", True)
 marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().splitlines()
               if "DICTIONARY_PLAIN_HEADWORD_MARKER =" in line)
 selection = block(selector, "struct Selection {", True)
@@ -453,6 +454,7 @@ lookup_harness = r'''
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -473,7 +475,7 @@ struct TxtToHtml {
   static size_t escapedHtmlSize(std::string_view text) { return text.size(); }
   static void appendEscapedHtml(std::string& out, std::string_view text) { out.append(text); }
 };
-''' + location + '\n' + marker + '\n' + entry + r'''
+''' + location + '\n' + marker + '\n' + entry + '\n' + entry_list + r'''
 class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
@@ -482,13 +484,14 @@ class Dictionary {
   bool hasSyn = false;
   bool htmlDefinitions = false;
   unsigned searches = 0;
+  std::unique_ptr<DictEntryList> entryList = std::make_unique<DictEntryList>();
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  void locateAll(LookupSession&, const char*, std::vector<DictEntry>&, bool* readError) {
+  void locateAll(LookupSession&, const char*, DictEntryList&, bool* readError) {
     ++searches;
     if (readError) *readError = false;
   }
-  bool locateSynonyms(LookupSession&, const char*, std::vector<DictEntry>&, bool*) {
+  bool locateSynonyms(LookupSession&, const char*, DictEntryList&, bool*) {
     ++searches;
     return false;
   }
