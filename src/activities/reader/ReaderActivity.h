@@ -71,12 +71,18 @@ class ReaderActivity : public Activity {
   void notePageTurn(bool forward, bool succeeded);
   void flushReaderSession();
 
+  // Reader-specific exit hooks so an EPUB reader can interpose an automatic
+  // sync upload before navigation. Defaults mirror Activity::onGoHome and the
+  // activity manager's file-browser navigation for the non-syncing formats.
+  virtual void leaveToHome() { onGoHome(); }
+  virtual void leaveToFileBrowser(const std::string& path) { activityManager.goToFileBrowser(path); }
+
  public:
   ~ReaderActivity() override = default;
 
   static std::unique_ptr<ReaderActivity> create(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                std::string path, bool allowFastInitialRefresh);
-
+                                                std::string path, bool allowFastInitialRefresh,
+                                                bool allowAutomaticProgressCheck = false);
   void onEnter() override;
   void onExit() override;
   void prepareForSleep() override;
