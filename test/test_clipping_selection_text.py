@@ -26,8 +26,7 @@ def method(name, next_name, text=source):
     return text[start:text.index(next_name, signature)].rstrip()
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
-clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
-highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
+invert_draw = method("void ClipSelectionActivity::invertWord", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
@@ -150,6 +149,7 @@ struct Renderer {
   }
   void fillRect(int x, int, int width, int, bool) const { fills.push_back({x, width, 0}); }
   void fillRectDither(int x, int, int width, int, Color) const { fills.push_back({x, width, 0}); }
+  void invertRect(int x, int, int width, int) const { fills.push_back({x, width, 0}); }
   void drawRect(int, int, int, int, bool) const {}
   void drawPixel(int, int, bool) const {}
 };
@@ -209,18 +209,17 @@ struct ClipSelectionActivity {
   bool touchDragSelecting = false;
   bool buildSelectedText(int first, int last, std::string& text) const;
   bool extractWords();
-  void drawWordClean(int, int, int) const;
-  void drawWordHighlight(int, int, int, int, int) const;
+  void invertWord(int, int, int) const;
+  void invertGapAfter(int, int, int) const;
+  void invertSelectionChange(int, int, int, int, int, int) const;
   void drawSelection() const;
-  void prewarmWord(int) const {}
-  void clearGapBetween(const WordBox&, const WordBox&, int, int) const {}
-  void ditherGapBetween(const WordBox&, const WordBox&, int, int) const {}
+  bool dragging() const { return false; }
   int textOffset() const { return 0; }
   int textXOffset() const { return 0; }
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + clean_draw + highlight_draw + selection_draw + r"""
+""" + build_text + extract_words + invert_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -333,17 +332,14 @@ int main() {
     activity.rangeStart = 0;
     activity.selected = 1;
     activity.drawSelection();
-    activity.drawWordClean(0, 0, 0);  // Cursor leaves the old word.
-    activity.drawWordHighlight(1, 1, 1, 0, 0);
-    assert(activity.renderer.draws.size() == 4);
-    assert(activity.renderer.fills.size() == 4);
-    for (size_t i = 0; i < 4; ++i) {
-      const auto& draw = activity.renderer.draws[i];
+    activity.invertSelectionChange(0, 1, 1, 1, 0, 0);  // The range shrinks to the second word.
+    assert(activity.renderer.draws.empty());
+    assert(activity.renderer.fills.size() == 3);
+    const int invertedWord[] = {0, 1, 0};
+    for (size_t i = 0; i < 3; ++i) {
       const auto& fill = activity.renderer.fills[i];
-      assert(draw.tracking == tracking);
-      assert(draw.width == 24 + 2 * tracking);
-      assert(fill.width == draw.width);
-      assert(fill.x == draw.x);
+      assert(fill.width == 24 + 2 * tracking);
+      assert(fill.x == activity.words[invertedWord[i]].x);
     }
     for (size_t i = 0; i < 2; ++i) {
       assert(activity.words[i].characterSpacing == tracking);

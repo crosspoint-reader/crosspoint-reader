@@ -90,11 +90,9 @@ class ClipSelectionActivity final : public Activity {
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();
-  void drawWordHighlight(int index, int firstSelected, int lastSelected, int offsetX, int offset) const;
-  void drawWordClean(int index, int offsetX, int offset) const;
-  void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
-  void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
-  void prewarmWord(int index) const;
+  void invertWord(int index, int offsetX, int offset) const;
+  void invertGapAfter(int index, int offsetX, int offset) const;
+  void invertSelectionChange(int oldFirst, int oldLast, int newFirst, int newLast, int offsetX, int offset) const;
 
   std::vector<std::unique_ptr<Page>> pages;
   std::span<const std::unique_ptr<Page>> borrowedPages;
@@ -126,6 +124,10 @@ class ClipSelectionActivity final : public Activity {
   int touchDragStartY = 0;
   int touchDragPageEndIndex = -1;
   unsigned long touchDragPageEndHeldSince = 0;
+  // A finger drag that has moved. Mid-drag only the boxes entering or leaving the range are flipped;
+  // the handles and action bar wait for the finger to lift.
+  bool dragging() const { return touchDragSelecting && touchDragHasMoved; }
+  bool lastRenderedDragging = false;
   int lastRenderedSelected = -1;
   int lastRenderedRangeStart = -1;
   int lastRenderedPageOffset = -1;
