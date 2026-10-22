@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -129,6 +130,9 @@ class SdCardFont {
   // Extract SdCardFont* from an opaque glyphMissCtx pointer.
   // Used by GfxRenderer::getGlyphBitmap() to recover the SdCardFont from EpdFontData::glyphMissCtx.
   static SdCardFont* fromMissCtx(void* ctx);
+
+  // True once after a loaded font first hits a corrupt glyph entry, so the UI can tell the user.
+  static bool takeCorruptGlyphNotice() { return corruptGlyphNotice_.exchange(false); }
 
   struct Stats {
     uint32_t prewarmTotalMs = 0;
@@ -326,6 +330,7 @@ class SdCardFont {
   uint32_t contentHash_ = 0;
   uint32_t fileSize_ = 0;  // bounds glyph bitmap offsets (glyphEntryValid)
   uint8_t corruptGlyphsLogged_ = 0;
+  static inline std::atomic<bool> corruptGlyphNotice_{false};
   bool loaded_ = false;
 
   // Per-style helpers

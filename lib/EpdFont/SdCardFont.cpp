@@ -832,6 +832,7 @@ bool SdCardFont::glyphEntryValid(const PerStyle& s, const EpdGlyph& glyph, const
   const uint32_t packed = s.header.is2Bit ? (pixels + 3) / 4 : (pixels + 7) / 8;
   const uint64_t end = static_cast<uint64_t>(s.bitmapFileOffset) + glyph.dataOffset + glyph.dataLength;
   if (glyph.dataLength == packed && end <= fileSize_) return true;
+  if (corruptGlyphsLogged_ == 0) corruptGlyphNotice_ = true;
   if (corruptGlyphsLogged_ < 3) {
     corruptGlyphsLogged_++;
     LOG_ERR("SDCF", "Corrupt glyph for U+%04X in %s (%ux%u, %u bytes at %u); drawing it as missing",
