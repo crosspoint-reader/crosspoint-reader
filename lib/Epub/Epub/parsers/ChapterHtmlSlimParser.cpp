@@ -1,5 +1,6 @@
 #include "ChapterHtmlSlimParser.h"
 
+#include <ComplexShaper.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -491,10 +492,14 @@ bool isDropCapPunctuation(const uint32_t cp) {
 }  // namespace
 
 // Returns false (and restores the captured text to the word buffer) once the
-// capture is too long to be an initial letter.
+// capture is too long to be an initial letter, or reaches text that must be
+// shaped: a drop cap draws codepoints one by one, which would split the cluster.
 bool ChapterHtmlSlimParser::captureDropCapCodepoint(const char* bytes, const int length) {
   constexpr uint8_t MAX_DROP_CAP_CODEPOINTS = 3;
-  if (dropCap.length + length > static_cast<int>(MAX_DROP_CAP_BYTES) || dropCap.codepoints >= MAX_DROP_CAP_CODEPOINTS) {
+  const bool needsShaping =
+      length >= 3 && ComplexShaper::startsComplexScript(reinterpret_cast<const unsigned char*>(bytes));
+  if (needsShaping || dropCap.length + length > static_cast<int>(MAX_DROP_CAP_BYTES) ||
+      dropCap.codepoints >= MAX_DROP_CAP_CODEPOINTS) {
     cancelDropCapToWord();
     return false;
   }
@@ -2369,6 +2374,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       } else {
         const auto lead = static_cast<uint8_t>(s[i]);
         const int codepointLength = std::min(len - i, lead < 0x80 ? 1 : (lead < 0xE0 ? 2 : (lead < 0xF0 ? 3 : 4)));
+        // Where the word starts if the capture is cancelled back into it.
+        if (self->dropCap.length == 0) self->partWordVisibleOffset = codepointOffset;
         if (self->captureDropCapCodepoint(s + i, codepointLength)) {
           i += codepointLength - 1;
           continue;
