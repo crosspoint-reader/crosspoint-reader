@@ -26,6 +26,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "SilentRestart.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
@@ -1249,8 +1250,17 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
   // A replaced page must not open from its old layout cache, and the Library
   // may need a rescan; both also hold for files swapped before a failure.
   bool libraryChanged = false;
+  bool documentsChanged = false;
   ScopedCleanup refresh{[&] {
     if (libraryChanged) library::markLibraryIndexDirty();
+    // A book read before this bundle claimed it as a document leaves Recents now,
+    // so Home does not wait for the next Library rebuild.
+    if (documentsChanged) {
+      const auto documents = plugindocuments::collect();
+      if (!documents.empty() && RECENT_BOOKS.pruneMatching(plugindocuments::isDocument, &documents)) {
+        RECENT_BOOKS.saveToFile();
+      }
+    }
   }};
   for (size_t i = 0; i < staged.size(); i++) {
     if (!Storage.replaceFile((staged[i] + ".new").c_str(), staged[i].c_str())) {
@@ -1260,8 +1270,9 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       return HttpDownloader::FILE_ERROR;
     }
     clearBookCache(staged[i]);
-    libraryChanged =
-        libraryChanged || library::isLibraryBookFile(staged[i]) || plugindocuments::changesDocuments(staged[i]);
+    const bool claimsDocuments = plugindocuments::changesDocuments(staged[i]);
+    documentsChanged = documentsChanged || claimsDocuments;
+    libraryChanged = libraryChanged || library::isLibraryBookFile(staged[i]) || claimsDocuments;
   }
   complete = true;
   emitBookDownloaded(manifestPath, staged.empty() ? "" : staged.front(), item.title);

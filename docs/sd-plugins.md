@@ -445,7 +445,10 @@ plugin that syncs a fixed set of files:
   menu, or turning past the last page) returns to the menu it was opened
   from, with its entry selected, also after a silent restart. Home from the
   menu goes Home. The Library does not list document files, so a page the
-  plugin rewrites never shows up as a book.
+  plugin rewrites never shows up as a book. A file that was already in
+  Recents before a plugin made it a document leaves Recents when the plugin
+  bundle installs from a catalog. If the plugin was copied by hand, it
+  leaves Recents after **Refresh library** in the Library.
   Progress sync is turned off. The layout cache under `/.crosspoint` is
   still written, because it can be rebuilt and is not shown anywhere.
   Bookmarks and clippings in an EPUB still work and save their own data.
