@@ -90,8 +90,9 @@ class ClipSelectionActivity final : public Activity {
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();
-  void invertWord(int index, int offsetX, int offset) const;
-  void invertGapAfter(int index, int offsetX, int offset) const;
+  void invertWord(int index, int offsetX, int offset, const Rect& safe) const;
+  void invertGapAfter(int index, int offsetX, int offset, const Rect& safe) const;
+  void invertClipped(int x, int y, int width, int height, const Rect& safe) const;
   void invertSelectionChange(int oldFirst, int oldLast, int newFirst, int newLast, int offsetX, int offset) const;
 
   std::vector<std::unique_ptr<Page>> pages;

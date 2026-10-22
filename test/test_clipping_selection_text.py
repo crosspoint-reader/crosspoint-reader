@@ -158,6 +158,10 @@ struct Theme {
   void drawSelectionActions(const Renderer&, Rect, int = 3) const {}
 } GUI;
 struct Input { bool hasTouch() const { return false; } };
+struct UITheme {
+  static UITheme& getInstance() { static UITheme theme; return theme; }
+  Rect getScreenSafeArea(const Renderer&, bool, bool) const { return {0, 0, 10000, 10000}; }
+};
 using GfxRenderer = Renderer;
 using TextBlock = Block;
 struct BoardConfig { static bool isEegoA4() { return false; } };
@@ -209,8 +213,9 @@ struct ClipSelectionActivity {
   bool touchDragSelecting = false;
   bool buildSelectedText(int first, int last, std::string& text) const;
   bool extractWords();
-  void invertWord(int, int, int) const;
-  void invertGapAfter(int, int, int) const;
+  void invertWord(int, int, int, const Rect&) const;
+  void invertGapAfter(int, int, int, const Rect&) const;
+  void invertClipped(int, int, int, int, const Rect&) const;
   void invertSelectionChange(int, int, int, int, int, int) const;
   void drawSelection() const;
   bool dragging() const { return false; }

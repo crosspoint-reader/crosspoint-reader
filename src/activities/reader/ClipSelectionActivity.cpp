@@ -235,6 +235,18 @@ bool ClipSelectionActivity::extractWords() {
     if (wordCount == capacity) break;
   }
 
+  // Tight line spacing packs rows closer than a line height. The selection is XOR-inverted, so a
+  // box reaching into the next row would flip the overlap twice and leave a white seam.
+  for (size_t i = 0, next = 0; i < wordCount; ++i) {
+    if (next <= i) {
+      next = i + 1;
+      while (next < wordCount && words[next].row == words[i].row) ++next;
+    }
+    if (next < wordCount && words[next].pageOffset == words[i].pageOffset) {
+      const int pitch = words[next].y - words[i].y;
+      if (pitch > 0 && pitch < words[i].height) words[i].height = static_cast<int16_t>(pitch);
+    }
+  }
   return true;
 }
 
@@ -705,35 +717,49 @@ int ClipSelectionActivity::textXOffset() const {
 // The selection is drawn by inverting word boxes, plus the gap between two selected words on one
 // row. Inverting twice restores the page, so a cursor move flips only the boxes that changed and
 // never redraws glyphs.
-void ClipSelectionActivity::invertWord(const int index, const int offsetX, const int offset) const {
+void ClipSelectionActivity::invertWord(const int index, const int offsetX, const int offset, const Rect& safe) const {
   const WordBox& word = words[index];
   if (word.pageOffset != currentPageOffset) return;
-  renderer.invertRect(word.x + offsetX, word.y + offset, word.width, word.height);
+  invertClipped(word.x + offsetX, word.y + offset, word.width, word.height, safe);
 }
 
-void ClipSelectionActivity::invertGapAfter(const int index, const int offsetX, const int offset) const {
+void ClipSelectionActivity::invertGapAfter(const int index, const int offsetX, const int offset,
+                                           const Rect& safe) const {
   const WordBox& a = words[index];
   const WordBox& b = words[index + 1];
   if (a.row != b.row || a.pageOffset != b.pageOffset || a.pageOffset != currentPageOffset) return;
   const int leftRight = std::min(a.x + a.width, b.x + b.width);
   const int rightLeft = std::max(a.x, b.x);
-  if (leftRight < rightLeft) renderer.invertRect(leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height);
+  if (leftRight < rightLeft) invertClipped(leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, safe);
+}
+
+// The page is clipped to the safe area in full renders only. Clipping every flip to it here keeps
+// full and incremental renders flipping the same pixels, so a word scrolled under the button
+// hints leaves no black box behind.
+void ClipSelectionActivity::invertClipped(const int x, const int y, const int width, const int height,
+                                          const Rect& safe) const {
+  const int left = std::max(x, safe.x);
+  const int top = std::max(y, safe.y);
+  const int right = std::min(x + width, safe.x + safe.width);
+  const int bottom = std::min(y + height, safe.y + safe.height);
+  if (left < right && top < bottom) renderer.invertRect(left, top, right - left, bottom - top);
 }
 
 // Flips what differs between the old and new range. An empty old range (oldFirst > oldLast)
 // draws the new range from scratch.
 void ClipSelectionActivity::invertSelectionChange(const int oldFirst, const int oldLast, const int newFirst,
                                                   const int newLast, const int offsetX, const int offset) const {
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int from = std::min(oldFirst, newFirst);
   const int to = std::max(oldLast, newLast);
   for (int i = from; i <= to; ++i) {
     const bool wasSelected = i >= oldFirst && i <= oldLast;
     const bool isSelected = i >= newFirst && i <= newLast;
-    if (wasSelected != isSelected) invertWord(i, offsetX, offset);
+    if (wasSelected != isSelected) invertWord(i, offsetX, offset, safe);
     if (i < to) {
       const bool gapWasSelected = i >= oldFirst && i + 1 <= oldLast;
       const bool gapIsSelected = i >= newFirst && i + 1 <= newLast;
-      if (gapWasSelected != gapIsSelected) invertGapAfter(i, offsetX, offset);
+      if (gapWasSelected != gapIsSelected) invertGapAfter(i, offsetX, offset, safe);
     }
   }
 }
