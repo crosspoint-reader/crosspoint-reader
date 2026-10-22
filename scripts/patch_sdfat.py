@@ -2,8 +2,9 @@
 PlatformIO post: script: apply CrossPoint's SdFat patches via `git apply`.
 
 The patches in `scripts/sdfat_patches/` make USE_SEPARATE_FAT_CACHE
-overridable and invalidate the sector cache after a failed read (see the
-file headers). They target SdFat 2.3.1 only.
+overridable, invalidate the sector cache after a failed read, and write the
+FAT cache before the data cache on sync (see the file headers). They target
+SdFat 2.3.1 only.
 
 Unlike JPEGDEC, SdFat is a registry dependency of the SDK, so the script
 patches only the copy that the current environment actually builds:
@@ -31,6 +32,9 @@ PATCHES = (
     ("0002-allow-separate-fat-cache-override.patch", "src/SdFatConfig.h",
      "7889975cad262158e1623c873730210c41c55c2198830d668952b82e588ff7cc",
      "32104db82acc857b70c7fe20740afbffa9f7dee0a7c685c106febfa989fdbe77"),
+    ("0003-sync-fat-before-data-cache.patch", "src/FatLib/FatPartition.h",
+     "fb91c81beac2779a0d4b08e886a5fefdf8062b8ad422ccec4e178ae4e88b72e5",
+     "3f37f159850c46b2f32ae505bf628441bef94833d7131ba8621574b9c74fdecc"),
 )
 
 
