@@ -251,7 +251,9 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   }
 
   for (const auto& ui : kUiFontSizes) {
-    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize);
+    // Use the persisted CSS variant id so UI and reader text share one prewarm set.
+    const int id = variantFontId(manager_.getFontId(familyName), ui.pointSize);
+    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize, id);
     if (sdFontId != 0) {
       renderer.setFallbackFont(ui.fontId, sdFontId);
     } else {
@@ -352,6 +354,8 @@ bool SdCardFontSystem::loadCpfontVariant(const SdCardFontFamilyInfo& family, con
       return true;
     }
   }
+  // UI fallback sizes stay resident and must not enter the variant eviction list.
+  if (manager_.getFontId(family.name, pointSize) == fontId) return true;
   // Each size keeps its interval tables resident (small for Latin, tens of KB for broad
   // CJK subsets), so skip it on a tight heap: the text then stays at the reader size.
   static constexpr size_t MIN_VARIANT_FREE_BLOCK = 48 * 1024;
