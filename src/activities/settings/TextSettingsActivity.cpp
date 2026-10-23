@@ -304,8 +304,8 @@ void TextSettingsActivity::render(RenderLock&& lock) {
 // Font switching runs on the main task from loop(), which deliberately holds no
 // RenderLock. ensureLoaded() deletes the resident SdCardFont before loading the
 // next one, and the render task walks that same object inside the preview's
-// prewarmCache() — so without this lock a font switch can free the mini glyph
-// arrays out from under prewarmStyle() (crash: null s.miniGlyphs mid-read/sort).
+// prewarmCache() — so without this lock a font switch can free the font's
+// tables and its pool entries out from under prewarmStyle() (crash mid-read).
 void TextSettingsActivity::applyFamily(int listIndex) {
   RenderLock lock;
   const auto& font = fonts_[listIndex];

@@ -110,6 +110,9 @@ class SdCardFontSystem {
   static constexpr size_t MAX_CPFONT_VARIANTS = TextBlock::MAX_WORD_FONTS + 2;  // Inline, block, and drop-cap fonts.
   std::vector<CpfontVariant> cpfontVariants_;
   uint32_t variantClock_ = 0;
+  // Free heap when freeing unpinned glyph chunks last failed to make room for a variant;
+  // 0 once a variant loads. Skips repeating that trim on every page while the heap is no better.
+  size_t variantTrimFreeHeap_ = 0;
   GfxRenderer* renderer_ = nullptr;
 
   SdCardFontRegistry registry_;

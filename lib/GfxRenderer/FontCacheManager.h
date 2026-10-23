@@ -1,6 +1,7 @@
 #pragma once
 
 #include <EpdFontFamily.h>
+#include <SdGlyphPool.h>
 
 #include <cstdint>
 #include <map>
@@ -14,12 +15,20 @@ class FontCacheManager {
   FontCacheManager(const std::map<int, EpdFontFamily>& fontMap, const std::map<int, SdCardFont*>& sdCardFonts,
                    const std::map<int, TtfEpdFont*>& ttfFonts);
 
+  SdGlyphPool& getSdGlyphPool() { return sdGlyphPool_; }
+
   void setFontDecompressor(FontDecompressor* d);
 
+  // Cache boundary for every font, including the shared SD glyph pool's pin generation.
   void clearCache();
+  // Frees the SD glyph chunks that hold nothing from the current unit of work, for a
+  // caller that needs a large free block now, such as loading a font size variant.
+  // Pinned glyphs stay; freed ones fault back in on the next prewarm. True when it
+  // freed anything.
+  bool trimSdGlyphPool();
   // Release every rebuildable font cache while keeping the fonts loaded:
-  //   * SD (.cpfont): mini glyph/kern arenas, ligature tables, overflow
-  //     rings, advance tables (SdCardFont::releaseResidentCaches).
+  //   * SD (.cpfont): shared glyph chunks/index/overflow, kern and
+  //     ligature tables, advances (SdCardFont::releaseResidentCaches).
   //   * TTF (vector): byte arenas, glyph tables, and the lazy bold/italic
   //     FreeType faces (TtfEpdFont::releaseResidentCaches).
   // Everything faults back in on demand. For heap-critical transitions (e.g.
@@ -54,6 +63,7 @@ class FontCacheManager {
   PrewarmScope createPrewarmScope();
 
  private:
+  SdGlyphPool sdGlyphPool_;
   const std::map<int, EpdFontFamily>& fontMap_;
   const std::map<int, SdCardFont*>& sdCardFonts_;
   // Read only when CROSSPOINT_VECTOR_FONTS is on (PSRAM boards).

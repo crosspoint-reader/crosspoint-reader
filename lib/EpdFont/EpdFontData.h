@@ -225,28 +225,24 @@ typedef struct {
   /// On-demand glyph loading for fonts that don't keep all glyphs in RAM (e.g. SD card fonts).
   /// Called by getGlyph() when a codepoint is not found in the interval table.
   /// Returns a valid EpdGlyph* with correct metadata, or nullptr to fall back to the
-  /// replacement glyph.  The returned pointer is valid until the next glyphMissHandler
-  /// call that causes a ring-buffer eviction — callers must consume it (measure or draw)
-  /// before requesting another missed glyph.
+  /// replacement glyph. Callers must consume it (measure or draw) before requesting
+  /// another missed glyph. SD pool entries stay valid through drawing, until the next
+  /// SD-font prewarm on the shared pool or a cache release; uncached SD metrics stay
+  /// valid until the next metric miss. SD overflow entries stay
+  /// valid until the next overflow miss.
   const EpdGlyph* (*glyphMissHandler)(void* ctx, uint32_t codepoint);
 
-  /// Context pointer for glyphMissHandler (typically SdCardFont*).  Also used by
-  /// GfxRenderer::getGlyphBitmap() to retrieve overflow bitmaps via SdCardFont.
+  /// Shared context for glyph, bitmap, coverage and dynamic kerning callbacks.
   void* glyphMissCtx;
 
-  /// Full-coverage query for fonts whose interval table only reflects what is
-  /// currently in RAM (SD card fonts: stub/mini data cover at most one page of
-  /// glyphs).  Called by hasCodepoint() when the interval table misses; must
-  /// answer from RAM-resident data without storage I/O.  Shares glyphMissCtx.
-  /// nullptr for fonts whose interval table is already complete (built-ins).
+  /// Full-coverage query for fonts whose interval table is incomplete or empty.
+  /// Called by hasCodepoint() when the interval table misses; answers from RAM
+  /// without storage I/O. nullptr for fonts with complete intervals (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
 
-  /// Vector-font bitmap accessor (FreeInkFont / TtfEpdFont). When non-null,
-  /// GfxRenderer::getGlyphBitmap() returns vectorBitmapHandler(glyphMissCtx, glyph)
-  /// instead of indexing ->bitmap or going through the SdCardFont overflow path.
-  /// This lets a runtime-rasterized TTF fault + cache glyphs on ANY draw path
-  /// (via glyphMissHandler) without pre-warming. nullptr for every other font,
-  /// so the SD/built-in bitmap paths are unaffected (all fonts zero-init this).
+  /// Bitmap accessor for handler-backed fonts (SD and TTF). Returns bytes owned
+  /// by the font cache, or nullptr for an empty bitmap. Uses glyphMissCtx.
+  /// nullptr selects the built-in compressed or direct bitmap path.
   const uint8_t* (*vectorBitmapHandler)(void* ctx, const EpdGlyph* glyph);
 
   /// Dynamic kerning for handler-backed fonts (TTF via FreeInkFont): returns
