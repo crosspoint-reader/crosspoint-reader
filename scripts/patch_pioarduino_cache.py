@@ -89,4 +89,6 @@ if rebuild and not board.get("build.esp-idf.sdkconfig_path", ""):
         resolved.unlink()
         print(f"Reset generated SDK configuration: {resolved.name}")
 
-request_file.write_text(cache_request + "\n", encoding="utf-8")
+# Skeleton-only targets install their framework directory during the core build.
+if request_file.parent.is_dir():
+    request_file.write_text(cache_request + "\n", encoding="utf-8")

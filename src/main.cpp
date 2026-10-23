@@ -888,11 +888,11 @@ void loop() {
     const auto heap = HalMemory::getInternalHeap();
     LOG_INF("MEM", "Free: %zu bytes, Total: %zu bytes, Min Free: %zu bytes, MaxAlloc: %zu bytes", heap.freeBytes,
             heap.totalBytes, heap.minFreeBytes, heap.largestBlockBytes);
-#ifdef BOARD_HAS_PSRAM
     const auto psram = HalMemory::getPsramHeap();
-    LOG_INF("MEM", "PSRAM: Free: %zu bytes, Total: %zu bytes, Min Free: %zu bytes, MaxAlloc: %zu bytes",
-            psram.freeBytes, psram.totalBytes, psram.minFreeBytes, psram.largestBlockBytes);
-#endif
+    if (psram.totalBytes > 0) {
+      LOG_INF("MEM", "PSRAM: Free: %zu bytes, Total: %zu bytes, Min Free: %zu bytes, MaxAlloc: %zu bytes",
+              psram.freeBytes, psram.totalBytes, psram.minFreeBytes, psram.largestBlockBytes);
+    }
     lastMemPrint = millis();
   }
 

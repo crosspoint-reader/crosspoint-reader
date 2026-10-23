@@ -223,7 +223,7 @@ bool HalGPIO::verifyPowerButtonWakeup() {
 
 bool HalGPIO::isUsbConnected() const {
   if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
-    return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
+    return digitalRead(BoardConfig::ACTIVE.usbDetect) == (BoardConfig::isOnePage() ? LOW : HIGH);
   }
   // X3 uses GPIO20 for I2C, not USB detection. Boards without a digital
   // USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog

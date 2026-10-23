@@ -102,6 +102,8 @@ jobs:
             asset: firmware-eego_a4.bin
           - env: picco
             asset: firmware-picco.bin
+          - env: onepage
+            asset: firmware-onepage.bin
     steps:
       - uses: actions/checkout@v6
         with:

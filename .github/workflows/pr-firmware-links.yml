@@ -69,6 +69,7 @@ jobs:
               { name: 'firmware-metalio_eink4.bin', device: 'MetalIO EInk4' },
               { name: 'firmware-eego_a4.bin', device: 'EEGO A4' },
               { name: 'firmware-picco.bin', device: 'BOOX Picco' },
+              { name: 'firmware-onepage.bin', device: 'OnePage' },
             ];
             const { data: artifactResponse } =
               await github.rest.actions.listWorkflowRunArtifacts({
