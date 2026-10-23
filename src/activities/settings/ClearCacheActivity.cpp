@@ -15,11 +15,9 @@ void ClearCacheActivity::onEnter() {
 
   state = WARNING;
   const char* options[] = {tr(STR_CANCEL), tr(STR_CLEAR_BUTTON)};
-  confirmPopup.show(tr(STR_CLEAR_READING_CACHE), options, 2, 0, [this](int idx) {
+  confirmPopup.showMessage(tr(STR_CLEAR_READING_CACHE), tr(STR_CLEAR_CACHE_WARNING_2), options, 2, 0, [this](int idx) {
     if (idx == 1) {
       beginClear();
-    } else {
-      goBack();
     }
   });
   requestUpdate();
@@ -37,17 +35,7 @@ void ClearCacheActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLEAR_READING_CACHE));
 
   if (state == WARNING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 60, tr(STR_CLEAR_CACHE_WARNING_1), true);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, tr(STR_CLEAR_CACHE_WARNING_2), true,
-                              EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, tr(STR_CLEAR_CACHE_WARNING_3), true);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, tr(STR_CLEAR_CACHE_WARNING_4), true);
-
-    if (confirmPopup.processRender(renderer, mappedInput)) return;
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CLEAR_BUTTON), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    confirmPopup.processRender(renderer, mappedInput);
     return;
   }
 
@@ -142,14 +130,10 @@ void ClearCacheActivity::clearCache() {
 
 void ClearCacheActivity::loop() {
   if (state == WARNING) {
-    if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      beginClear();
-    }
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      LOG_DBG("CLEAR_CACHE", "User cancelled");
+    confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+    // The selection callback can change state through beginClear().
+    // cppcheck-suppress knownConditionTrueFalse
+    if (!confirmPopup.isActive() && state == WARNING) {
       goBack();
     }
     return;
