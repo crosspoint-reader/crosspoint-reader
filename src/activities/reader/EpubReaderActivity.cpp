@@ -2796,7 +2796,8 @@ void EpubReaderActivity::renderOverlay() {
       using MA = EpubReaderMenuActivity::MenuAction;
       const auto action = self->moreItems[i].action;
       const auto category = EpubReaderMenuActivity::categoryFor(action);
-      if (i == 0 || EpubReaderMenuActivity::categoryFor(self->moreItems[i - 1].action) != category) {
+      if (i == self->toolbarUi->nav().top ||
+          EpubReaderMenuActivity::categoryFor(self->moreItems[i - 1].action) != category) {
         item.sectionHeading = I18N.get(EpubReaderMenuActivity::categoryLabel(category));
       }
       if (action == MA::NIGHT_MODE) GUI.setCheckboxRow(item, SETTINGS.screenInverted);

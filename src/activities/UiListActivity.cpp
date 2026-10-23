@@ -210,28 +210,7 @@ void UiListActivity::navigateButtons() {
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const int selectionOffset) {
-  props.toggleCheckbox = true;
-  props.toggleWidth = 28;
-  props.toggleHeight = 28;
-  props.partialTrailingRow = true;
-  auto& n = activeNav();
-  const int prevTop = n.top;
-  const bool trusted = n.trusts(listCount());
-  const int drawn = n.drawnRows;
-
-  screen.syncListViewport(n, props, listCount(), selectionOffset);
-
-  // When the selection is already visible in the current viewport (based on
-  // the measured drawnRows rather than the unweighted visibleRows estimate),
-  // keep selection-follow anchored instead of jumping to top. Explicit swipe
-  // scrolling clears followPending and must retain its new viewport.
-  if (n.followPending && trusted && drawn > 0) {
-    const int sel = props.selectedIndex;
-    if (sel >= prevTop && sel < prevTop + drawn) {
-      n.top = prevTop;
-      props.topIndex = static_cast<uint16_t>(prevTop);
-    }
-  }
+  UiAppHost::syncListViewport(screen, activeNav(), props, listCount(), selectionOffset);
 }
 
 void UiListActivity::drawChrome() {

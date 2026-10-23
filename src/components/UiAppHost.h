@@ -43,6 +43,11 @@ class UiAppHost {
   // should paint; chrome before, hints after.
   void renderUi();
 
+  // Shared list setup for full-screen activities and lists embedded in custom
+  // layouts. Preserve measured selection-follow and enable trailing previews.
+  static void syncListViewport(UiScreen& screen, freeink::ui::ListNav& nav, freeink::ui::ListProps& props, int count,
+                               int selectionOffset = 0);
+
   // What loop-task routing saw this pass. `routed` is true when the gate was
   // open and the snapshot carried relevant touch input — the invalidated()
   // repaint check belongs behind it, so a pending render requested elsewhere

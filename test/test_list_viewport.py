@@ -5,12 +5,16 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-# Compile the production method without the activity's hardware dependencies.
+# Compile the production helpers without their hardware dependencies.
 source = (ROOT / "src/activities/UiListActivity.cpp").read_text()
 method = source.split("void UiListActivity::syncListViewport(", 1)[1]
 method = "void UiListActivity::syncListViewport(" + method.split(
     "\nvoid UiListActivity::drawChrome", 1
 )[0]
+host_source = (ROOT / "src/components/UiAppHost.cpp").read_text()
+host_method = "void UiAppHost::syncListViewport(" + host_source.split(
+    "void UiAppHost::syncListViewport(", 1
+)[1]
 harness = r"""
 #include <components/lists/list.h>
 #include <cassert>
@@ -21,14 +25,17 @@ struct UiScreen {
     nav.syncToProps({0, 0, 200, height}, 20, 0, count, props, offset);
   }
 };
-struct UiListActivity {
+struct UiAppHost {
+  static void syncListViewport(UiScreen&, fui::ListNav&, fui::ListProps&, int, int = 0);
+};
+struct UiListActivity : UiAppHost {
   fui::ListNav nav;
   int count = 16;
   fui::ListNav& activeNav() { return nav; }
   int listCount() const { return count; }
   void syncListViewport(UiScreen&, fui::ListProps&, int = 0);
 };
-""" + method + r"""
+""" + host_method + method + r"""
 int main() {
   for (int offset : {0, 1}) {
     UiListActivity activity;
