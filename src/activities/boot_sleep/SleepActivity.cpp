@@ -328,15 +328,18 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
 class BwFrameKeeper {
  public:
   BwFrameKeeper(GfxRenderer& renderer, const bool keep)
-      : renderer(renderer), stored(keep && renderer.storeBwBuffer()) {}
+      : renderer(renderer), keep(keep), stored(!keep || renderer.storeBwBuffer()) {}
   ~BwFrameKeeper() {
-    if (stored) renderer.restoreBwBuffer();
+    if (keep && stored) renderer.restoreBwBuffer();
   }
+  // False when the B/W frame could not be kept; callers must skip the gray passes.
+  bool ready() const { return stored; }
   BwFrameKeeper(const BwFrameKeeper&) = delete;
   BwFrameKeeper& operator=(const BwFrameKeeper&) = delete;
 
  private:
   GfxRenderer& renderer;
+  const bool keep;
   const bool stored;
 };
 
@@ -404,6 +407,10 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
     return AlphaOverlayResult::Error;
   const BwFrameKeeper bwFrame(renderer, true);
+  if (!bwFrame.ready()) {
+    renderer.displayBuffer(kSleepClean);
+    return AlphaOverlayResult::Rendered;
+  }
   const bool absolute = renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
   if (absolute) {
     cleanBeforeAbsoluteGray(renderer);
@@ -749,6 +756,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   const BwFrameKeeper bwFrame(renderer, hasGreyscale);
+  if (!bwFrame.ready()) {
+    renderer.displayBuffer(kSleepClean);
+    return;
+  }
   const bool absolute = hasGreyscale && renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
   if (absolute) {
     cleanBeforeAbsoluteGray(renderer);
@@ -836,6 +847,10 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
 
   if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
   const BwFrameKeeper bwFrame(renderer, true);
+  if (!bwFrame.ready()) {
+    renderer.displayBuffer(kSleepClean);
+    return true;
+  }
   const bool absolute = renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
   if (absolute) {
     // The cover replaces the previous screen, so clean it like the BMP paths do.
