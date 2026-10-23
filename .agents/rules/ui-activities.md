@@ -124,7 +124,8 @@ the web handler for current upload support.
 
 Use `FontCacheManager::PrewarmScope` for scan/prewarm/render. Mixed built-in,
 SD, and vector fonts/styles must remain distinct; SD UI fallback matches UI size.
-`SdCardFont` retains mini arenas and advances after `clearCache()`.
+After `clearCache()`, the shared SD glyph pool, kern sets and advances stay resident
+unless the heap is tight; `trimSdGlyphPool()` frees the pool's unpinned chunks on demand.
 Use `releaseSdFontCaches()` at established heap-critical transitions to release
 rebuildable caches while keeping fonts loaded. Check kerning/ligature view
 lifetimes before changing release or reuse.

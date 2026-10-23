@@ -61,7 +61,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiU
 // so the SD advance table must be warmed with the presentation forms as well as
 // the logical codepoints — otherwise every RTL word measurement misses the fast
 // path and falls through to onGlyphMiss(), which opens the .cpfont and reads
-// glyph metadata + bitmap into the 8-slot overflow ring, once per glyph.
+// the glyph record, once per glyph.
 // Tokens without RTL lead bytes (0xD6-0xDB) are skipped with a byte scan, so
 // pure-LTR text pays almost nothing.
 void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
@@ -88,9 +88,7 @@ void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
-  // Vector (TTF) fonts: the glyph bitmap lives in the font's own cache, keyed by
-  // the EpdGlyph the miss handler returned. Checked first so it never reaches the
-  // SdCardFont overflow cast below. nullptr = zero-width glyph (e.g. space).
+  // Handler-backed fonts keep their bitmaps beside their cached glyphs.
   if (fontData->vectorBitmapHandler != nullptr) {
     return fontData->vectorBitmapHandler(fontData->glyphMissCtx, glyph);
   }
@@ -105,18 +103,6 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     // For hot-group hits it is valid only until the next getBitmap() call — callers
     // must consume it (draw the glyph) before requesting another bitmap.
     return fd->getBitmap(fontData, glyph, glyphIndex);
-  }
-  // For SD card fonts, check if the glyph was loaded on demand into the overflow
-  // buffer.  getOverflowBitmap() returns:
-  //   - bitmap pointer for overflow glyphs with bitmap data
-  //   - nullptr for overflow glyphs without bitmap data (e.g. space: width=0, height=0)
-  //   - nullptr for non-overflow glyphs (normal prewarmed path)
-  // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
-  if (fontData->glyphMissCtx) {
-    auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
-    if (sdFont->isOverflowGlyph(glyph)) {
-      return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs
-    }
   }
   return &fontData->bitmap[glyph->dataOffset];
 }
@@ -194,9 +180,11 @@ void GfxRenderer::begin() {
                                 return after > before ? after - before : 0;
                               }});
   memoryManager.registerSink({"gfx.sdFontMini", 60, [this](size_t) -> size_t {
+                                if (!fontCacheManager_) return 0;
                                 const size_t before = freeink::MemoryManager::instance().freeBytes();
+                                fontCacheManager_->trimSdGlyphPool();
                                 for (auto& entry : sdCardFonts_) {
-                                  if (entry.second) entry.second->clearCache();
+                                  if (entry.second) entry.second->clearCache();  // tight-heap kern sets
                                 }
                                 const size_t after = freeink::MemoryManager::instance().freeBytes();
                                 return after > before ? after - before : 0;
@@ -359,8 +347,8 @@ void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, con
   // filenames) have no useful kern pairs, and the ~3KB class-table load plus
   // per-rebuild mini-matrix build cost heap and SD time exactly where these
   // strings live (heap-tight UI screens). The reader's PrewarmScope path keeps
-  // kern; a kern-wanting request that subset-hits a kern-free mini tops the
-  // matrix up in prewarmStyle without re-reading glyphs.
+  // kern; a kern-wanting request for glyphs a kern-free prewarm cached builds
+  // the matrix in prepareKern without re-reading glyphs.
   const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
   sdIt->second->prewarm(text, styleMask, metadataOnly, /*loadKernLig=*/false);
 }
