@@ -26,7 +26,7 @@ class DictionaryDefinitionActivity final : public Activity {
         content{.headword = std::move(headword), .text = std::move(definition)},
         htmlDefinition(htmlDefinition) {}
 
-  bool enableLookup(Dictionary& dictionary, DictLocation location);
+  bool enableLookup(Dictionary& dictionary, std::string&& query);
 
   void onEnter() override;
   void onExit() override;
@@ -72,9 +72,9 @@ class DictionaryDefinitionActivity final : public Activity {
     }
   };
 
+  // Replay the original query: the displayed headword may be a stem or synonym.
   struct HistoryEntry {
-    std::string headword;
-    DictLocation location;
+    std::string query;
     int page = 0;
     int selectionPage = 0;
     ClipSelectionActivity::Selection selection;
@@ -82,11 +82,11 @@ class DictionaryDefinitionActivity final : public Activity {
   };
 
   struct LookupState {
-    explicit LookupState(Dictionary& dictionary, DictLocation location) : dictionary(dictionary), location(location) {}
+    explicit LookupState(Dictionary& dictionary) : dictionary(dictionary) {}
     Dictionary& dictionary;  // Owned by the retained DictionaryWordSelectActivity parent.
-    DictLocation location;
     std::array<HistoryEntry, 16> history;
     size_t depth = 0;
+    std::string query;
     std::string pendingWord;
     std::vector<std::unique_ptr<Page>> selectionPages;
   };
