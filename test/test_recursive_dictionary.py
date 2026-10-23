@@ -3,6 +3,7 @@
 Run: python3 test/test_recursive_dictionary.py (requires a C++20 compiler).
 """
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -39,11 +40,15 @@ structs = "\n".join(block(header, f"struct {name} {{", True) for name in (
     "Line", "BodyArea", "Definition", "HistoryEntry", "LookupState"
 ))
 location = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictLocation {", True)
+entry = block((ROOT / "src/util/Dictionary.h").read_text(), "struct DictEntry {", True)
+entry_list = block((ROOT / "src/util/Dictionary.h").read_text(), "class DictEntryList {", True)
 marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().splitlines()
               if "DICTIONARY_PLAIN_HEADWORD_MARKER =" in line)
 selection = block(selector, "struct Selection {", True)
 plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
 constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
+# The harness copies every constant but only some methods; clang's -Wall flags the unused ones.
+constants = re.sub(r"^constexpr ", "[[maybe_unused]] constexpr ", constants, flags=re.MULTILINE)
 viewer_loop = block(viewer, "void DictionaryDefinitionActivity::loop()")
 back_handler = viewer_loop.split("  int sx = 0;", 1)[1].split(
     "  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm))", 1
@@ -167,15 +172,18 @@ struct Dictionary {
     text = entries.at(location.offset);
     return true;
   }
-  bool lookup(const char* word, std::string& text, std::string& headword, LookupResult* result,
-              DictLocation* location) {
+  bool lookup(const char* word, std::string& text, std::string& headword, LookupResult* result) {
+    lastQuery = word;
     if (std::strcmp(word, "missing") == 0) { *result = LookupResult::NotFound; return false; }
     // A synonym selects entry 20, although both entries have the displayed headword "same".
-    const uint32_t offset = std::strcmp(word, "alias") == 0 ? 20 : 10;
-    *location = {offset, 10, true, false};
-    headword = "same";
-    return readDefinition(*location, text, result);
+    // The .syn path shows the word that was looked up, the .idx path the stored
+    // headword — so looking the displayed headword up again finds the same entry.
+    const bool synonym = std::strcmp(word, "alias") == 0;
+    const DictLocation location{synonym ? uint32_t{20} : uint32_t{10}, 10, true, false};
+    headword = synonym ? word : "same";
+    return readDefinition(location, text, result);
   }
+  std::string lastQuery;
 };
 struct ClipSelectionActivity {
 ''' + selection + r'''
@@ -235,7 +243,8 @@ int main() {
   Dictionary dictionary;
   dictionary.entries = {{10, "first entry one two three four five six"}, {20, "other definition"}};
   DictionaryDefinitionActivity view;
-  view.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{10, 10, true});
+  view.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+  view.lookup->query = "same";
   view.content.headword = "same";
   view.content.text = dictionary.entries.at(10);
   assert(view.prepareDefinition(view.content));
@@ -250,7 +259,7 @@ int main() {
   };
   view.lookup->pendingWord = "alias";
   view.navigateDefinition(false);
-  assert(view.lookup->depth == 1 && view.lookup->location.offset == 20);
+  assert(view.lookup->depth == 1 && view.content.text == dictionary.entries.at(20));
   assert(view.content.text == "other definition");
   dictionary.failRead = true;
   view.navigateDefinition(true);
@@ -258,7 +267,7 @@ int main() {
   view.finished = false;
   dictionary.failRead = false;
   view.navigateDefinition(true);
-  assert(view.lookup->depth == 0 && view.lookup->location.offset == 10);
+  assert(view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10));
   assert(view.content.currentPage == 1 && view.content.selection.valid);
   assert(view.content.selection.lastPage == 1 && view.content.selection.firstWord == 2);
   view.lookup->pendingWord = "missing";
@@ -273,7 +282,7 @@ int main() {
     dictionary.failuresRemaining = 1;
     view.lookup->pendingWord = "alias";
     view.navigateDefinition(false);
-    assert(!view.finished && view.lookup->depth == 0 && view.lookup->location.offset == 10);
+    assert(!view.finished && view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10));
     assert(view.content.text == dictionary.entries.at(10) && view.content.currentPage == 1);
     assert(view.content.selection.valid);
   }
@@ -281,7 +290,7 @@ int main() {
   HalMemory::available = 0;
   view.lookup->pendingWord = "alias";
   view.navigateDefinition(false);
-  assert(view.lookup->depth == 0 && view.lookup->location.offset == 10 && view.content.currentPage == 1);
+  assert(view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10) && view.content.currentPage == 1);
   assert(view.finished);
   view.finished = false;
   HalMemory::available = 1024 * 1024;
@@ -300,19 +309,18 @@ int main() {
   assert(view.lookup->depth == 16 && view.lookup->pendingWord.empty() && dictionary.reads == reads);
   assert(view.message == StrId::STR_DICT_HISTORY_FULL);
   for (int i = 0; i < 16; ++i) view.navigateDefinition(true);
-  assert(view.lookup->depth == 0 && view.lookup->location.offset == 10 && view.content.currentPage == 1);
-  // Restoring a synonym target uses its entry location, never the ambiguous displayed headword.
+  assert(view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10) && view.content.currentPage == 1);
+  // Going back replays the synonym query.
   view.content = {};
-  view.content.headword = "same";
+  view.lookup->query = "alias";
+  view.content.headword = "alias";
   view.content.text = dictionary.entries.at(20);
-  view.lookup->location = {20, 10, true};
   assert(view.prepareDefinition(view.content));
   view.lookup->pendingWord = "same";
   view.navigateDefinition(false);
-  assert(view.lookup->location.offset == 10);
+  assert(view.content.text == dictionary.entries.at(10));
   view.navigateDefinition(true);
-  assert(view.lookup->location.offset == 20 && view.content.text == dictionary.entries.at(20));
-  view.lookup->location = {10, 10, true};
+  assert(view.content.text == dictionary.entries.at(20));
   // Back must exit if the original styled position cannot be restored.
   view.htmlDefinition = styledAvailable = true;
   view.content.text = dictionary.entries.at(10);
@@ -321,7 +329,9 @@ int main() {
   view.navigateDefinition(false);
   styledAvailable = false;
   view.navigateDefinition(true);
-  assert(view.lookup->depth == 1 && view.lookup->location.offset == 20);
+  // The styled path hands the text to the pages, and a failed restore releases
+  // the payload, so only the history depth and the headword survive here.
+  assert(view.lookup->depth == 1 && view.content.headword == "alias");
   assert(view.finished);
   view.finished = false;
   styledAvailable = true;
@@ -373,9 +383,9 @@ int main() {
   // Short Back restores one entry; long Back waits for release and cancels the entire flow.
   for (const unsigned long heldMs : {999ul, 1000ul, 2000ul}) {
     DictionaryDefinitionActivity backView;
-    backView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{20, 10, true});
+    backView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
     backView.lookup->depth = 1;
-    backView.lookup->history[0].location = {10, 10, true};
+    backView.lookup->history[0].query = "same";
     backView.content.text = dictionary.entries.at(20);
     assert(backView.prepareDefinition(backView.content));
     backView.mappedInput.heldMs = heldMs;
@@ -405,7 +415,7 @@ int main() {
   assert(reader.selectionOpened);
   // Long Back also exits at the first definition, where there are no ancestors.
   DictionaryDefinitionActivity root;
-  root.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{10, 10, true});
+  root.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
   root.mappedInput.released = true;
   root.mappedInput.heldMs = 1000;
   root.handleBack();
@@ -416,7 +426,7 @@ int main() {
     SETTINGS.touchReaderControls = controlsEnabled;
     for (const bool onHeader : {false, true}) {
       DictionaryDefinitionActivity touchView;
-      touchView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary, DictLocation{10, 10, true});
+      touchView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
       touchView.content.text = dictionary.entries.at(10);
       assert(touchView.prepareDefinition(touchView.content));
       touchView.mappedInput.longPress = true;
@@ -448,10 +458,12 @@ lookup_harness = r'''
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 #define LOG_ERR(...) ((void)0)
+#define LOG_INF(...) ((void)0)
 constexpr size_t DEFINITION_HEAP_HEADROOM_BYTES = 8192;
 struct HalMemory {
   struct Heap { size_t freeBytes, largestBlockBytes; };
@@ -467,7 +479,7 @@ struct TxtToHtml {
   static size_t escapedHtmlSize(std::string_view text) { return text.size(); }
   static void appendEscapedHtml(std::string& out, std::string_view text) { out.append(text); }
 };
-''' + location + '\n' + marker + r'''
+''' + location + '\n' + marker + '\n' + entry + '\n' + entry_list + r'''
 class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
@@ -476,17 +488,21 @@ class Dictionary {
   bool hasSyn = false;
   bool htmlDefinitions = false;
   unsigned searches = 0;
+  std::unique_ptr<DictEntryList> entryList = std::make_unique<DictEntryList>();
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  DictLocation locate(LookupSession&, const char*, std::string*) { ++searches; return {}; }
-  bool locateSynonyms(LookupSession&, const char*, std::vector<DictLocation>&, std::vector<std::string>&, bool*) {
+  void locateAll(LookupSession&, const char*, DictEntryList&, bool* readError) {
+    ++searches;
+    if (readError) *readError = false;
+  }
+  bool locateSynonyms(LookupSession&, const char*, DictEntryList&, bool*) {
     ++searches;
     return false;
   }
   bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false) { return false; }
   static std::string cleanWord(const char*);
   static void stemVariants(const std::string&, std::vector<std::string>&);
-  bool lookup(const char*, std::string&, std::string&, LookupResult*, DictLocation*);
+  bool lookup(const char*, std::string&, std::string&, LookupResult*);
 };
 ''' + lookup_methods + r'''
 int main() {
@@ -495,17 +511,16 @@ int main() {
   for (const char* suffix : {"ing", "ed", "ies"}) {
     const std::string phrase = std::string(4096 - std::strlen(suffix), 'a') + suffix;
     auto result = Dictionary::LookupResult::Found;
-    DictLocation location{10, 20, true};
     HalMemory::heap = {12288, 12288};
     dictionary.searches = 0;
-    assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result, &location));
-    assert(result == Dictionary::LookupResult::LowMemory && dictionary.searches == 0 && !location.found);
+    assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result));
+    assert(result == Dictionary::LookupResult::LowMemory && dictionary.searches == 0);
     assert(definition == "unchanged" && headword == "unchanged");
     HalMemory::heap = {65536, 4096};
-    assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result, &location));
+    assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result));
     assert(result == Dictionary::LookupResult::LowMemory && dictionary.searches == 0);
     HalMemory::heap = {65536, 65536};
-    assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result, &location));
+    assert(!dictionary.lookup(phrase.c_str(), definition, headword, &result));
     assert(result == Dictionary::LookupResult::NotFound && dictionary.searches > 1);
   }
 }
