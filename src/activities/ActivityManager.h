@@ -118,7 +118,7 @@ class ActivityManager {
   bool remoteClick(RemoteButton button);
 #ifdef ENABLE_SERIAL_CONTROL
   // The same click from the USB serial console (SerialConsole), on any screen. False while a screen
-  // change or frame is pending, a frame is drawing, or a physical button is in use.
+  // change or frame is pending, a frame is drawing, or any physical button is held.
   bool consoleClick(RemoteButton button);
   // Name of the screen in front, for the serial console's STATE reply. Empty before the first one.
   const char* foregroundName() const;

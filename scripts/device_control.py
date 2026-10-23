@@ -12,8 +12,8 @@ Examples:
     device_control.py open --cold "/Books/Some Book.epub"
     device_control.py restart --wait
     device_control.py screenshot screen.png
-    device_control.py wait "Page 50 processed" --timeout 120 --log build.log
-    device_control.py run experiment.txt --log experiment.log
+    device_control.py --log build.log wait "Page 50 processed" --timeout 120
+    device_control.py --log experiment.log run experiment.txt
 
 A run script holds one command per line, in the same form as on the command
 line ("#" starts a comment). The commands share one connection and one log,
@@ -108,6 +108,7 @@ class Device:
         except (serial.SerialException, OSError):
             self.link.close()
             self.link = None
+            self.pending = b""  # never join half a line from the old boot to the new one
             self._record(b"\n[device_control: port dropped, reconnecting]\n")
             return b""
         self._record(data)
@@ -287,7 +288,7 @@ def execute(device: Device, args: argparse.Namespace, parser: argparse.ArgumentP
     elif cmd == "menu":
         device.command("MENU")
     elif cmd == "home":
-        device.command("HOME")
+        device.command("HOME", timeout=15.0)  # answered once Home has painted
     elif cmd == "open":
         device.command("OPEN " + ("COLD " if args.cold else "") + args.path)
     elif cmd == "restart":

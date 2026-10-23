@@ -429,6 +429,11 @@ bool ActivityManager::remoteClick(const RemoteButton button) {
 bool ActivityManager::consoleClick(const RemoteButton button) {
   // A pending screen change would hand the click to the screen that is leaving.
   if (pendingAction != PendingAction::None || RenderLock::peek() || requestedUpdate.load()) return false;
+  // A held button (Power included) can send the main loop down a combo or sleep
+  // path that returns before the screen sees the click.
+  for (uint8_t b = 0; b <= static_cast<uint8_t>(MappedInputManager::Button::ScreenDown); ++b) {
+    if (mappedInput.isPressed(static_cast<MappedInputManager::Button>(b))) return false;
+  }
   return mappedInput.injectRemoteClick(button);
 }
 
