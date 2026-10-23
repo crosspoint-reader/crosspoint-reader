@@ -687,6 +687,10 @@ The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-fo
 
 Press **Confirm** while reading to open the Reader Menu. From here you can access reading utilities and navigation options without leaving the book.
 
+The legacy menu groups actions under **Navigation**, **Tools**, **Appearance**, and **Utilities**. Select a group to open or close it; opening a group closes the previous one. **Left/Right** jumps to the previous or next group, opens it, and selects its first action. **Side Up/Down** moves between rows; hold to repeat. The menu remembers the open group and selected action while the book stays open. It starts with **Select Chapter** selected.
+
+The toolbar keeps its **Contents** and **Text** shortcuts. Its **More** panel uses the same group names for the remaining actions. Both styles keep the existing book- and device-specific options.
+
 Available options include:
 
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
@@ -694,8 +698,8 @@ Available options include:
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
 - **Create Clipping** – Select a range of text on the current page and save it as a highlighted clipping.
 - **View Clippings** – Open this book's saved clippings *(shown after the first clipping is saved)*.
-- **Reading Orientation** – Cycle through screen orientations without leaving the reader.
-- **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
+- **Reading Orientation** – Open the orientation picker without leaving the reader.
+- **Auto Turn (Pages Per Minute)** – Open the speed picker for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.

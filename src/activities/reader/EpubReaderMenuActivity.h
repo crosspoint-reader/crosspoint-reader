@@ -38,34 +38,57 @@ class EpubReaderMenuActivity final : public UiListActivity {
     StrId labelId;
   };
 
+  enum class Category : uint8_t { NAVIGATION, TOOLS, APPEARANCE, UTILITIES, COUNT };
+
+  struct MenuState {
+    Category category = Category::NAVIGATION;
+    Category selectedCategory = Category::NAVIGATION;
+    MenuAction action = MenuAction::SELECT_CHAPTER;
+    bool categorySelected = false;
+    bool expanded = true;
+  };
+
+  static Category categoryFor(MenuAction action);
+  static StrId categoryLabel(Category category);
   static void toggleBluetooth();
   static void buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks, bool hasClippings);
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
-                                  bool hasClippings);
+                                  bool hasClippings, MenuState& menuState);
 
+  void onEnter() override;
+  void onExit() override;
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
   bool acceptsRemoteInput() const override { return routingReady(); }
 
  private:
-  // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
-  // fixed-capacity array avoids any heap allocation for the row list. Labels
-  // are set once in the constructor (buildMenuRowItems()); buildScreen()
-  // only refreshes rows whose values reflect live state.
   static constexpr size_t MAX_MENU_ITEMS = 19;
-  freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
-  void buildMenuRowItems();
+  static constexpr size_t CATEGORY_COUNT = static_cast<size_t>(Category::COUNT);
+  static constexpr size_t MAX_VISIBLE_ROWS = MAX_MENU_ITEMS + CATEGORY_COUNT;
+  struct VisibleRow {
+    Category category;
+    int menuIndex;  // -1 identifies the expandable category row.
+  };
+  freeink::ui::ListItem menuRowItems[MAX_VISIBLE_ROWS]{};
+  VisibleRow visibleRows[MAX_VISIBLE_ROWS]{};
+  int visibleRowCount = 0;
+  // Borrowed from the retained reader; remembered only for this open book.
+  MenuState& menuState;
+  void rebuildRows();
+  void rememberSelection();
+  void switchCategory(int direction);
+  void navigateButtons() override;
+  void drawFooter() override;
 
-  int listCount() const override { return static_cast<int>(menuItems.size()); }
+  int listCount() const override { return visibleRowCount; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   // Popup input runs before any button or touch handling.
   bool handleCustomInput() override;
-  // Back closes on RELEASE and Confirm activates on RELEASE; everything else
-  // (row navigation, page jumps) falls through to the base handler.
+  // Back and Confirm act on release; navigation belongs to ButtonNavigator.
   bool handleButtons() override;
   // Header via GUI.drawHeader inside the safe area for the battery indicator.
   void drawChrome() override;

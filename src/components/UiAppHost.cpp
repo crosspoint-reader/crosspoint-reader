@@ -41,3 +41,28 @@ fui::ActionEvent UiAppHost::route(const fui::InputSnapshot& snap) {
   }
   return event;
 }
+
+void UiAppHost::syncListViewport(UiScreen& screen, fui::ListNav& n, fui::ListProps& props, const int count,
+                                 const int selectionOffset) {
+  props.toggleCheckbox = true;
+  props.toggleWidth = 28;
+  props.toggleHeight = 28;
+  props.partialTrailingRow = true;
+  const int prevTop = n.top;
+  const bool trusted = n.trusts(count);
+  const int drawn = n.drawnRows;
+
+  screen.syncListViewport(n, props, count, selectionOffset);
+
+  // Keep visible selections anchored. At the next row, prevent only a
+  // backwards tail clamp; ordinary forward following must work in one build.
+  // Swipes retain their independent viewport.
+  if (n.followPending && trusted && drawn > 0) {
+    const int sel = props.selectedIndex;
+    const int pageEnd = prevTop + drawn;
+    if (sel >= prevTop && (sel < pageEnd || (sel == pageEnd && n.top < prevTop))) {
+      n.top = prevTop;
+      props.topIndex = static_cast<uint16_t>(prevTop);
+    }
+  }
+}

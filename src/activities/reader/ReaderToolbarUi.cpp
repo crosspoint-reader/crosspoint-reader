@@ -48,6 +48,8 @@ void ReaderToolbarUi::begin() {
   resetUi();
   pending_ = Routed{};
   nav_.reset();
+  static constexpr fui::ListProps kInitialListProps{.inputMask = fui::InputTouch};
+  listProps_ = kInitialListProps;
   for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_ROW; ++id) {
     app.on(id, &ReaderToolbarUi::onAction, this);
   }
@@ -56,10 +58,8 @@ void ReaderToolbarUi::begin() {
 
 void ReaderToolbarUi::render() {
   renderUi();
-  // Wrapped rows can fit fewer than the fixed-height estimate; the nav then
-  // advances the viewport after layout and asks for a rebuild. Converges (top
-  // only moves forward toward the selection); the bound is a backstop.
-  for (int pass = 0; pass < 3 && nav_.consumeRebuildNeeded(); ++pass) renderUi();
+  // Use the same bounded layout-feedback loop as UiListActivity.
+  for (int pass = 0; pass < 8 && nav_.consumeRebuildNeeded(); ++pass) renderUi();
 }
 
 ReaderToolbarUi::Routed ReaderToolbarUi::route(const MappedInputManager& input) {
@@ -284,18 +284,15 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   // panel edge (theme bezel inset included) exactly like a full-screen list.
   // rowInset pulls the rows back to the title's spaceLg alignment.
   listProps_.rowInset = tokens.spaceLg;
-  const fui::Rect listRect = screen.body();
   const int count = std::max(0, model_.itemCount);
-  // The nav owns selection + viewport (same fui::ListNav idiom as the list
-  // menu screens). A shown cursor re-follows into view on every build; a
-  // hidden one (-1, touch) leaves the viewport where scrolling put it.
-  nav_.selected = std::clamp(model_.selectedIndex, -1, count - 1);
-  nav_.followOnBuild = nav_.selected >= 0;
-  nav_.followPending = false;
-  nav_.syncToProps(listRect, listProps_.rowHeight, rowGap, count, listProps_);
+  const int selected = std::clamp(model_.selectedIndex, -1, count - 1);
+  const bool selectionChanged = nav_.selected != selected;
+  nav_.selected = selected;
+  nav_.followOnBuild = selected >= 0 && (selectionChanged || nav_.followOnBuild.load());
+  syncListViewport(screen, nav_, listProps_, count);
 
-  // Materialise only the visible window of rows.
-  const int windowCount = std::min({nav_.visibleRows, count - nav_.top, kMaxWindow});
+  // Include one extra entry for the shared list's clipped trailing preview.
+  const int windowCount = std::min({nav_.visibleRows + 1, count - nav_.top, kMaxWindow});
   for (int i = 0; i < windowCount; ++i) {
     const int index = nav_.top + i;
     windowLabels_[i] = model_.rowText ? model_.rowText(index) : std::string();
