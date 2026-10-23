@@ -15,6 +15,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "util/SerialCommand.h"
+#include "util/SerialLineBuffer.h"
 
 namespace {
 
@@ -64,7 +65,7 @@ void openBook(const SerialCommand& cmd) {
       return replyErr(cmd, "could not remove the laid-out chapters");
     }
   }
-  activityManager.goToReader(path);
+  if (!activityManager.goToReader(path)) return replyErr(cmd, "the reader could not open it");
   replyOk(cmd);
 }
 
@@ -89,14 +90,7 @@ void restart(const SerialCommand& cmd) {
 }
 #endif  // ENABLE_SERIAL_CONTROL
 
-}  // namespace
-
-void pollSerialConsole() {
-  if (logSerial.available() <= 0) return;
-  const String line = logSerial.readStringUntil('\n');
-  if (!line.startsWith("CMD:")) return;
-  const SerialCommand cmd = parseSerialCommand(std::string_view(line.c_str() + 4, line.length() - 4));
-
+void runCommand(const SerialCommand& cmd) {
 #ifndef ENABLE_SERIAL_CONTROL
   // Release builds keep only the screenshot, as before this console existed.
   if (cmd.type == SerialCommand::Type::Screenshot) return sendScreenshot();
@@ -131,4 +125,29 @@ void pollSerialConsole() {
       return restart(cmd);
   }
 #endif
+}
+
+}  // namespace
+
+void pollSerialConsole() {
+  // Act only on a full line, so a slow or partial write never stalls the main
+  // loop or runs a cut-off command.
+#ifdef ENABLE_SERIAL_CONTROL
+  static SerialLineBuffer<256> input;  // room for OPEN with a long path
+#else
+  static SerialLineBuffer<32> input;  // CMD:SCREENSHOT is all a release build takes
+#endif
+  while (logSerial.available() > 0) {
+    const int byte = logSerial.read();
+    if (byte < 0 || !input.feed(static_cast<char>(byte))) continue;
+    const std::string_view text = input.line();
+    if (text.substr(0, 4) != "CMD:") continue;
+    const SerialCommand cmd = parseSerialCommand(text.substr(4));
+    if (input.overflowed()) {
+      replyErr(cmd, "line too long");
+      continue;
+    }
+    runCommand(cmd);
+    return;  // one command per main-loop pass, so an injected click reaches its frame
+  }
 }
