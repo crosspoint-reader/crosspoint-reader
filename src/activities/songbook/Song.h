@@ -19,6 +19,8 @@ struct ChordAnchor {
   TextRef name;
   // Byte offset into the owning line's lyric where the chord is played.
   uint16_t position = 0;
+  // From [*text]: drawn like a chord, but not a chord.
+  bool annotation = false;
 };
 
 // Cue is an {x_cue} reminder of the words, shown only in the chord chart.

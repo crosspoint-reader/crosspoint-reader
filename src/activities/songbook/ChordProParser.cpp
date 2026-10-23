@@ -262,12 +262,13 @@ void ChordProParser::handleLyricLine(const std::string_view line) {
       if (close != std::string_view::npos) {
         std::string_view name = trim(line.substr(i + 1, close - i - 1));
         // [*text] is an annotation; it is shown like a chord without the marker.
-        if (!name.empty() && name.front() == '*') name.remove_prefix(1);
+        const bool annotation = !name.empty() && name.front() == '*';
+        if (annotation) name.remove_prefix(1);
         if (!name.empty() && name.size() <= 255) {
           if (pendingCount < MAX_CHORDS_PER_LINE) {
             pending[pendingCount++] =
                 PendingChord{static_cast<uint16_t>(name.data() - line.data()), static_cast<uint8_t>(name.size()),
-                             static_cast<uint16_t>(lyricBytes)};
+                             annotation, static_cast<uint16_t>(lyricBytes)};
           } else {
             truncatedContent = true;
           }
@@ -294,6 +295,7 @@ void ChordProParser::handleLyricLine(const std::string_view line) {
     ChordAnchor anchor;
     if (!appendText(line.substr(pending[k].nameStart, pending[k].nameLength), anchor.name)) break;
     anchor.position = pending[k].position;
+    anchor.annotation = pending[k].annotation;
     song.chords.push_back(anchor);
   }
   songLine.chordCount = static_cast<uint16_t>(song.chords.size() - songLine.firstChord);

@@ -45,6 +45,7 @@ class ChordProParser {
   struct PendingChord {
     uint16_t nameStart;
     uint8_t nameLength;
+    bool annotation;
     uint16_t position;
   };
 

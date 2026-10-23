@@ -1,8 +1,9 @@
 # Songbook
 
 Songbook shows songs with chords for live playing. You pick a setlist and a
-song. Then you can show the chords only, or the full lyrics with chords that
-scroll by themselves while you play. It works offline and uses only the
+song. Then you can show the chords only, the full lyrics with chords that
+scroll by themselves while you play, or chord diagrams for guitar, ukulele,
+baritone ukulele, or 4- and 5-string bass. It works offline and uses only the
 device buttons.
 
 Songbook is a feature of this fork. It is not part of upstream CrossPoint.
@@ -33,7 +34,9 @@ A ready-made example is in [songbook/sd-card](songbook/sd-card/). Copy its
 `songbook` folder to the root of the card. You can copy files with a card
 reader, USB Drive mode, or the File Transfer web page.
 
-Songbook never writes to the SD card.
+Songbook never changes your songs or setlists. It writes one small file,
+`/.crosspoint/songbook.json`, which keeps the instrument you chose in the
+Diagrams view.
 
 ## Setlist format
 
@@ -153,6 +156,7 @@ view does not change. Other ChordPro tools ignore `{x_cue}`.
   the song is not shown and the status line says "cut short".
 - An explicit chord chart (`x_chart`) can have up to 64 lines; later lines
   are dropped.
+- The Diagrams view shows up to 48 different chords per song.
 - A setlist file can be up to 16 KB and list up to 200 songs.
 - Only the first 200 files of each folder are read.
 - Opening a setlist reads the header of every song in it, so a very long
@@ -161,9 +165,10 @@ view does not change. Other ChordPro tools ignore `{x_cue}`.
 ## Views
 
 A song that you open from the list starts in the Chords view. Hold Confirm
-to switch views. Left/Right keep the current view. If the Chords view would
-be empty, for example in a song with no chords, the lyrics are shown
-instead, and holding Confirm does nothing.
+to go to the next view: Chords, then Lyrics, then Diagrams, then Chords
+again. Left/Right keep the current view. If a song has no chords, the
+Diagrams view is skipped. If the Chords view would be empty too, the lyrics
+are shown instead, and holding Confirm does nothing.
 
 - **Lyrics** shows the full lyrics with each chord above the place where it
   is played. Long lines wrap with their chords. Choruses have a bar in the
@@ -174,16 +179,82 @@ instead, and holding Confirm does nothing.
   shown above the chords of their line. The view picks the largest font, up
   to the medium size, and one or two columns, that fit the song on one
   screen. If the song does not fit even at the smallest size, it uses pages.
+- **Diagrams** shows how to play each chord of the song on one instrument.
+  See [Chord diagrams](#chord-diagrams).
 
 The header shows the position in the setlist, the title, the key, the
-artist, the view, and the playback state.
+artist, the view (in Diagrams, the instrument), and the playback state.
+
+## Chord diagrams
+
+The Diagrams view shows each chord of the song once: first the chords of
+the lyrics in the order they are used, then any other chords of an `x_chart`
+block. In the Diagrams view, a short press of Confirm changes the instrument.
+The Confirm label shows the next instrument.
+
+| Instrument | Strings | What a diagram shows |
+| --- | --- | --- |
+| Guitar | E A D G B E | A common chord shape |
+| Ukulele | G C E A | A common chord shape. Soprano, concert, and tenor ukuleles use the same shapes |
+| Baritone | D G B E | A baritone ukulele shape |
+| Bass | E A D G | Every note of the chord within five frets (see below) |
+| Bass 5 | B E A D G | The same, for a 5-string bass |
+
+The device remembers the instrument for all songs, also after a restart.
+
+How to read a diagram:
+
+- Strings are drawn from left to right in the order shown in the table. A
+  thick line at the top is the nut.
+- `×` above a string means "do not play it". `○` means "play it open".
+- A bar across several strings is a barre. When a shape starts higher on the
+  neck, the number to the right of the grid is the fret of the top row.
+- The shape is for the chord as written. With `{capo}`, play the shape
+  relative to the capo.
+
+A bass diagram is a map of notes to choose from, not a shape to play at once:
+
+- It covers five frets. It starts one fret below the bass note, on the low
+  string (E or A, or also B on a 5-string bass) where that note has the
+  lowest fret. Near the nut it starts at the nut.
+- Solid dots are the bass note (the root, or the note after `/`), in each
+  octave within the map. Rings are the other notes of the chord.
+- A mark above the nut is an open string: solid for the bass note, a ring for
+  another chord note.
+- The leftmost solid dot is the lowest note of the map. Strings to its left,
+  and positions without a mark, are not used.
+
+Chord names:
+
+- `#`, `b`, `♯`, and `♭` work. `H` means B, as in Russian and German
+  songbooks. `B` also means B (not B♭).
+- Known chord types: major, `m`, `7`, `m7`, `maj7`, `6`, `m6`, `9`, `add9`,
+  `sus2`, `sus4`, `7sus4`, `dim`, `dim7`, `aug`, and `m7b5`, including
+  common spellings such as `-`, `M7`, `Δ`, `°`, and `ø`.
+- The same chord under two names, such as `A#` and `Bb`, is shown once,
+  under the name used first.
+- A slash chord such as `C/E` shows the shape of `C`. On bass, the map is
+  built around the note after `/`, and that note is solid, even when it is
+  not in the chord (as G in `Am/G`).
+- A chord with an unknown type, such as `C13`, is shown by name, with `?`
+  instead of a diagram. A word that starts with A–H and has no space, such
+  as `Coda` in an `x_chart` line, is shown the same way.
+- Annotations (`[*Riff]`), names that do not start with a note, such as
+  `N.C.`, and text with a space, such as `[Bridge - quiet]`, are not chords
+  and are not shown.
+- On ukulele and baritone, a 9th chord leaves out the root or the fifth,
+  because four strings cannot hold all five notes.
+
+If the chords do not fit on one screen, the view uses smaller diagrams, and
+then pages. A song can show up to 48 different chords; more are not shown,
+and the header says "cut short".
 
 ## Auto-scroll
 
 Play does not change the view. In the Lyrics view, auto-scroll moves the
 text about one third of the screen at a time, so you never need to turn pages
-while playing. In the Chords view the timer runs, but a chart with several
-pages does not turn pages by itself.
+while playing. In the Chords and Diagrams views the timer runs, but a view
+with several pages does not turn pages by itself.
 
 1. The song's duration comes from `{duration}`.
 2. Each step happens when a reader at a steady pace would be about 2/3 down
@@ -203,22 +274,26 @@ sleep timeout.
 The front buttons follow your button remapping. The side buttons follow
 **Side button layout**. With Prev/Prev or Next/Next, which give only one
 direction, Songbook uses the top side button for back and the bottom one for
-forward. When the side buttons are disabled, there is no manual stepping and
-a chord chart with several pages shows only its first page.
+forward. When the side buttons are disabled, there is no manual stepping, and
+a chord chart or a Diagrams view with several pages shows only its first
+page.
 
 | Button | Stopped or ended | Playing | Paused |
 | --- | --- | --- | --- |
-| Confirm (short) | Play | Pause | Resume |
-| Confirm (hold) | Switch Lyrics / Chords | Switch Lyrics / Chords | Switch Lyrics / Chords |
-| Side page buttons | Lyrics: scroll one step. Chords: change page | Lyrics: one step, and the timer moves with it. Chords: change page | Same as Playing |
+| Confirm (short) | Play. Diagrams: next instrument | Pause. Diagrams: next instrument | Resume. Diagrams: next instrument |
+| Confirm (hold) | Next view | Next view | Next view |
+| Side page buttons | Lyrics: scroll one step. Chords and Diagrams: change page | Lyrics: one step, and the timer moves with it. Chords and Diagrams: change page | Same as Playing |
 | Left / Right | Previous / next song | Previous / next song, which starts playing | Previous / next song (stopped) |
 | Back (short) | Back to the song list | Ignored, shows a hint | Stop (back to the top) |
 | Back (hold) | Back to the song list | Back to the song list | Back to the song list |
 
 When you switch songs while a song is playing, the new song starts playing
 from the top at once. When you switch while stopped or paused, the new song
-opens stopped at the top; press Confirm to start it. The view (Lyrics or
-Chords) stays the same. If the new song cannot be opened, nothing plays.
+opens stopped at the top; press Confirm to start it. The view and the
+instrument stay the same. If the new song cannot be opened, nothing plays.
+
+In the Diagrams view, Confirm changes the instrument, so it cannot pause a
+playing song. Hold Confirm to go to the Chords view, then press Confirm.
 
 Power and the screenshot combination (Power + Down) keep their normal
 system actions. On boards with a Home key or touch, the Home gesture is
@@ -234,7 +309,9 @@ press Confirm.
 - The Cover Grid Home theme has no Songbook item.
 - On boards with a frontlight, the timer keeps running while the frontlight
   panel is open over a playing song.
-- No transposing and no chord diagrams.
+- No transposing.
+- Each chord has one diagram. You cannot choose another shape or add your
+  own; `{define}` in a song is ignored.
 - Tab and grid text uses the normal proportional font, so columns in a tab
   may not line up.
 - Very long words that are wider than the screen are clipped at the edge.

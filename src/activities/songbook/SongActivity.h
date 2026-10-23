@@ -4,14 +4,18 @@
 #include <string>
 
 #include "AutoScrollController.h"
+#include "ChordShapes.h"
+#include "DiagramLayout.h"
 #include "Setlist.h"
 #include "Song.h"
+#include "SongChords.h"
 #include "SongLayout.h"
 #include "SongbookFiles.h"
 #include "activities/Activity.h"
 
 // Performance view for one song of a setlist: lyrics with chords (timed
-// auto-scroll) or the chords-only chart. Only the current song is in RAM.
+// auto-scroll), the chords-only chart, or chord diagrams for the chosen
+// instrument. Only the current song is in RAM.
 class SongActivity final : public Activity {
  public:
   // setlist is owned by the stacked SetlistActivity, which outlives this screen.
@@ -28,7 +32,7 @@ class SongActivity final : public Activity {
   bool handleHomeGesture() override;
 
  private:
-  enum class ViewMode : uint8_t { Lyrics, Chords };
+  enum class ViewMode : uint8_t { Lyrics, Chords, Diagrams };
   enum class Action : uint8_t {
     None,
     Leave,
@@ -69,8 +73,13 @@ class SongActivity final : public Activity {
   // False (with OutOfMemory) when the heap cannot hold both layouts' budgets.
   bool layoutsFit();
   bool changeSong(int delta);
-  // A song without chords has an empty chart, so Chords shows its lyrics instead.
-  ViewMode shownMode() const { return mode == ViewMode::Chords && chart.rows().empty() ? ViewMode::Lyrics : mode; }
+  // A song without chords has an empty chart and no diagrams, so it shows its lyrics.
+  ViewMode shownMode() const;
+  // Hold Confirm cycles Chords, Lyrics, Diagrams; Diagrams is skipped without chords.
+  ViewMode nextMode() const;
+  // Lays out the diagram grid for the current song and instrument. Caller holds RenderLock.
+  void buildDiagrams();
+  void selectNextInstrument();
   Geometry geometry() const;
   // NUL-terminated copy of text in the shared scratch buffer.
   const char* terminated(std::string_view text) const;
@@ -78,6 +87,14 @@ class SongActivity final : public Activity {
   void drawHeader(const Geometry& g);
   void drawLyrics(const Geometry& g);
   void drawChart(const Geometry& g);
+  void drawDiagrams(const Geometry& g);
+  void drawDiagram(const Geometry& g, const songbook::SongChord& entry, const songbook::DiagramLayout::Placement& at);
+  void drawFretGrid(const Geometry& g, const songbook::DiagramLayout::Placement& at, int strings, int firstFret);
+  void drawChordShape(const Geometry& g, const songbook::DiagramLayout::Placement& at,
+                      const songbook::ChordDiagram& shape);
+  void drawToneMap(const Geometry& g, const songbook::DiagramLayout::Placement& at, const songbook::ToneMap& tones);
+  // A filled dot, or a ring when not solid.
+  void drawDot(int centerX, int centerY, int radius, bool solid);
   void drawPiece(const songbook::SongLayout& layout, const songbook::Piece& piece, int x, int y);
   void drawFooter();
   void formatStatus(char* out, size_t size, uint32_t nowMs) const;
@@ -93,6 +110,12 @@ class SongActivity final : public Activity {
   // and Right keep the chosen view; read it through shownMode().
   ViewMode mode = ViewMode::Chords;
   uint16_t chartPage = 0;
+  songbook::SongChords songChords;
+  songbook::DiagramLayout diagrams;
+  songbook::Instrument instrument = songbook::Instrument::Guitar;
+  uint16_t diagramPage = 0;
+  // Set under RenderLock; loop() saves the choice after releasing it.
+  bool instrumentChanged = false;
   bool durationEstimated = false;
   // Header strings truncated once per song, outside the render path.
   std::string titleLine;

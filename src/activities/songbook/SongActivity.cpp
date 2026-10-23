@@ -16,6 +16,7 @@
 #include "ChordProParser.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "SongbookPrefs.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -91,6 +92,29 @@ songbook::SectionNames sectionNames() {
   return names;
 }
 
+// Firmware builds do not warn on a missing switch case; a new instrument needs a name here.
+static_assert(songbook::INSTRUMENT_COUNT == 5);
+
+const char* instrumentName(const songbook::Instrument instrument) {
+  switch (instrument) {
+    case songbook::Instrument::Guitar:
+      return tr(STR_SONGBOOK_GUITAR);
+    case songbook::Instrument::Ukulele:
+      return tr(STR_SONGBOOK_UKULELE);
+    case songbook::Instrument::Baritone:
+      return tr(STR_SONGBOOK_BARITONE);
+    case songbook::Instrument::Bass:
+      return tr(STR_SONGBOOK_BASS);
+    case songbook::Instrument::Bass5:
+      return tr(STR_SONGBOOK_BASS5);
+  }
+  return "";
+}
+
+songbook::Instrument nextInstrument(const songbook::Instrument instrument) {
+  return static_cast<songbook::Instrument>((static_cast<size_t>(instrument) + 1) % songbook::INSTRUMENT_COUNT);
+}
+
 void formatTime(char* out, const size_t size, const uint32_t ms) {
   const uint32_t seconds = ms / 1000;
   snprintf(out, size, "%u:%02u", static_cast<unsigned>(seconds / 60), static_cast<unsigned>(seconds % 60));
@@ -130,7 +154,9 @@ void SongActivity::onEnter() {
     LOG_ERR("SONG", "OOM: %u byte text buffer", static_cast<unsigned>(SCRATCH_BYTES));
     loadResult = songbook::SongLoadResult::OutOfMemory;
   } else {
+    SONGBOOK_PREFS.ensureLoaded();
     RenderLock lock(*this);
+    instrument = SONGBOOK_PREFS.instrument;
     openSong(index);
   }
   requestUpdate();
@@ -159,6 +185,7 @@ SongActivity::Geometry SongActivity::geometry() const {
 void SongActivity::openSong(const size_t songIndex) {
   index = songIndex;
   chartPage = 0;
+  diagramPage = 0;
   notice = nullptr;
   // A new song gets a clean (half) refresh to clear the previous one's ghosting.
   pagesUntilFullRefresh = 0;
@@ -185,6 +212,12 @@ void SongActivity::openSong(const size_t songIndex) {
   lyrics.buildLyrics(song, measurer, viewport, names);
   chart.buildChart(song, measurer, viewport, names);
   if (lyrics.truncated() || chart.truncated()) LOG_ERR("SONG", "Layout truncated: %s", setlist.songs[index].c_str());
+  songChords.collect(song);
+  if (songChords.truncated()) {
+    LOG_ERR("SONG", "Over %u chords: %s", static_cast<unsigned>(songbook::SongChords::MAX_CHORDS),
+            setlist.songs[index].c_str());
+  }
+  buildDiagrams();
 
   durationEstimated = song.meta.durationSec == 0;
   const uint32_t durationMs =
@@ -226,6 +259,43 @@ bool SongActivity::layoutsFit() {
           static_cast<unsigned>(block), static_cast<unsigned>(heap.freeBytes),
           static_cast<unsigned>(heap.largestBlockBytes));
   return false;
+}
+
+SongActivity::ViewMode SongActivity::shownMode() const {
+  switch (mode) {
+    case ViewMode::Lyrics:
+      return ViewMode::Lyrics;
+    case ViewMode::Chords:
+      return chart.rows().empty() ? ViewMode::Lyrics : ViewMode::Chords;
+    case ViewMode::Diagrams:
+      return songChords.size() == 0 ? ViewMode::Lyrics : ViewMode::Diagrams;
+  }
+  return ViewMode::Lyrics;
+}
+
+SongActivity::ViewMode SongActivity::nextMode() const {
+  switch (mode) {
+    case ViewMode::Chords:
+      return ViewMode::Lyrics;
+    case ViewMode::Lyrics:
+      return songChords.size() == 0 ? ViewMode::Chords : ViewMode::Diagrams;
+    case ViewMode::Diagrams:
+      return ViewMode::Chords;
+  }
+  return ViewMode::Chords;
+}
+
+void SongActivity::buildDiagrams() {
+  const Geometry g = geometry();
+  const Measurer measurer(*this);
+  diagrams.build(song, songChords, songbook::stringCount(instrument), measurer, {g.bodyWidth, g.bodyHeight});
+}
+
+void SongActivity::selectNextInstrument() {
+  instrument = nextInstrument(instrument);
+  diagramPage = 0;
+  buildDiagrams();
+  instrumentChanged = true;
 }
 
 bool SongActivity::handleHomeGesture() {
@@ -293,9 +363,14 @@ bool SongActivity::apply(const Action action, const uint32_t nowMs) {
     case Action::ToggleMode:
       // With an empty chart there is nothing to toggle; keep the view for the next song.
       if (chart.rows().empty()) return false;
-      mode = mode == ViewMode::Lyrics ? ViewMode::Chords : ViewMode::Lyrics;
+      mode = nextMode();
       return true;
     case Action::Confirm:
+      // Diagrams are for looking up shapes, so Confirm picks the instrument there.
+      if (shownMode() == ViewMode::Diagrams) {
+        selectNextInstrument();
+        return true;
+      }
       switch (scroll.state()) {
         case State::Idle:
         case State::Finished:
@@ -318,9 +393,12 @@ bool SongActivity::apply(const Action action, const uint32_t nowMs) {
     case Action::StepBack: {
       const int delta = action == Action::StepForward ? 1 : -1;
       if (shownMode() == ViewMode::Lyrics) return scroll.stepBy(delta, nowMs);
-      const int page = std::clamp(chartPage + delta, 0, static_cast<int>(chart.pageCount()) - 1);
-      if (page == chartPage) return false;
-      chartPage = static_cast<uint16_t>(page);
+      const bool onDiagrams = shownMode() == ViewMode::Diagrams;
+      uint16_t& current = onDiagrams ? diagramPage : chartPage;
+      const int pages = onDiagrams ? diagrams.pageCount() : chart.pageCount();
+      const int page = std::clamp(current + delta, 0, pages - 1);
+      if (page == current) return false;
+      current = static_cast<uint16_t>(page);
       return true;
     }
     case Action::PreviousSong:
@@ -360,6 +438,14 @@ void SongActivity::loop() {
     const bool stepped = scroll.update(now);
     redraw |= stepped && (shownMode() == ViewMode::Lyrics || scroll.state() != before);
   }
+  if (instrumentChanged) {
+    instrumentChanged = false;
+    // Start the redraw first; the SD write, outside the lock, overlaps the panel refresh.
+    requestUpdate(true);
+    SONGBOOK_PREFS.instrument = instrument;
+    SONGBOOK_PREFS.saveToFile();
+    return;
+  }
   if (redraw) requestUpdate();
 }
 
@@ -373,16 +459,34 @@ void SongActivity::formatStatus(char* out, const size_t size, const uint32_t now
   total[0] = '~';
   const char* duration = durationEstimated ? total : total + 1;
 
+  const char* modeName = tr(STR_SONGBOOK_LYRICS);
+  unsigned page = 0;
+  unsigned pages = 1;
+  bool truncated = lyrics.truncated();
+  switch (shownMode()) {
+    case ViewMode::Lyrics:
+      break;
+    case ViewMode::Chords:
+      modeName = tr(STR_SONGBOOK_CHORDS);
+      page = chartPage;
+      pages = chart.pageCount();
+      truncated = chart.truncated();
+      break;
+    case ViewMode::Diagrams:
+      modeName = instrumentName(instrument);
+      page = diagramPage;
+      pages = diagrams.pageCount();
+      truncated = songChords.truncated();
+      break;
+  }
   char modeText[64];
-  if (shownMode() == ViewMode::Chords && chart.pageCount() > 1) {
-    snprintf(modeText, sizeof(modeText), "%s %u/%u", tr(STR_SONGBOOK_CHORDS), static_cast<unsigned>(chartPage + 1),
-             static_cast<unsigned>(chart.pageCount()));
+  if (pages > 1) {
+    snprintf(modeText, sizeof(modeText), "%s %u/%u", modeName, page + 1, pages);
   } else {
-    snprintf(modeText, sizeof(modeText), "%s",
-             shownMode() == ViewMode::Chords ? tr(STR_SONGBOOK_CHORDS) : tr(STR_SONGBOOK_LYRICS));
+    snprintf(modeText, sizeof(modeText), "%s", modeName);
   }
   // A layout that ran out of budget is missing its end; say so on stage.
-  if ((shownMode() == ViewMode::Chords ? chart : lyrics).truncated()) {
+  if (truncated) {
     const size_t used = strlen(modeText);
     snprintf(modeText + used, sizeof(modeText) - used, " (%s)", tr(STR_SONGBOOK_CUT));
   }
@@ -474,6 +578,145 @@ void SongActivity::drawChart(const Geometry& g) {
   }
 }
 
+void SongActivity::drawDiagrams(const Geometry& g) {
+  for (size_t i = 0; i < songChords.size(); ++i) {
+    const auto at = diagrams.place(i);
+    if (at.page == diagramPage) drawDiagram(g, songChords[i], at);
+  }
+}
+
+void SongActivity::drawDiagram(const Geometry& g, const songbook::SongChord& entry,
+                               const songbook::DiagramLayout::Placement& at) {
+  const auto& m = diagrams.metrics();
+  int nameFont = 0;
+  EpdFontFamily::Style nameStyle = EpdFontFamily::REGULAR;
+  fontFor(TextRole::Chord, diagrams.size(), nameFont, nameStyle);
+
+  const int cellX = g.bodyX + at.cellX;
+  const int cellY = g.bodyY + at.cellY;
+  const int left = g.bodyX + at.gridX;
+  // Text is centered over the grid and kept inside the cell when it fits.
+  const auto centeredX = [&](const int width) {
+    return std::max(cellX, std::min(left + (at.gridWidth - width) / 2, cellX + diagrams.cellWidth() - width));
+  };
+  // An unknown name may be longer than the cell, so the name is clipped to it.
+  const char* name = terminated(song.view(entry.name));
+  const auto clip = renderer.getClipRect();
+  renderer.setClipRect(cellX, cellY, diagrams.cellWidth(), diagrams.cellHeight());
+  renderer.drawText(nameFont, centeredX(renderer.getTextAdvanceX(nameFont, name, nameStyle)), cellY + m.padding, name,
+                    true, nameStyle);
+  renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
+
+  const bool bass = songbook::isBass(instrument);
+  songbook::ChordDiagram shape;
+  songbook::ToneMap tones;
+  const bool found = entry.known && (bass ? songbook::findToneMap(entry.chord, instrument, tones)
+                                          : songbook::findChordDiagram(entry.chord, instrument, shape));
+  if (!found) {
+    // A word would not fit every cell; the mark always does.
+    const char* unknown = "?";
+    renderer.drawText(nameFont, centeredX(renderer.getTextAdvanceX(nameFont, unknown, nameStyle)),
+                      g.bodyY + at.gridY + 2 * m.fretGap, unknown, true, nameStyle);
+    return;
+  }
+  if (bass) {
+    drawToneMap(g, at, tones);
+  } else {
+    drawChordShape(g, at, shape);
+  }
+}
+
+void SongActivity::drawFretGrid(const Geometry& g, const songbook::DiagramLayout::Placement& at, const int strings,
+                                const int firstFret) {
+  const auto& m = diagrams.metrics();
+  const int left = g.bodyX + at.gridX;
+  const int top = g.bodyY + at.gridY;
+  const int gridHeight = songbook::DIAGRAM_FRETS * m.fretGap;
+  for (int s = 0; s < strings; ++s) {
+    renderer.drawLine(left + s * m.stringGap, top, left + s * m.stringGap, top + gridHeight);
+  }
+  for (int row = 0; row <= songbook::DIAGRAM_FRETS; ++row) {
+    renderer.drawLine(left, top + row * m.fretGap, left + at.gridWidth, top + row * m.fretGap);
+  }
+  if (firstFret == 1) {
+    const int nut = std::max(songbook::DIAGRAM_LINE_WIDTH + 1, m.fretGap / 6);
+    renderer.fillRect(left, top - nut + 1, at.gridWidth + 1, nut);
+    return;
+  }
+  int labelFont = 0;
+  EpdFontFamily::Style labelStyle = EpdFontFamily::REGULAR;
+  fontFor(TextRole::Label, diagrams.size(), labelFont, labelStyle);
+  char fret[8];
+  snprintf(fret, sizeof(fret), "%d", firstFret);
+  const int labelY = top + (m.fretGap - renderer.getLineHeight(labelFont)) / 2;
+  renderer.drawText(labelFont, g.bodyX + at.fretLabelX, labelY, fret, true, labelStyle);
+}
+
+void SongActivity::drawDot(const int centerX, const int centerY, const int radius, const bool solid) {
+  const int x = centerX - radius;
+  const int y = centerY - radius;
+  if (solid) {
+    renderer.fillRoundedRect(x, y, 2 * radius, 2 * radius, radius, Color::Black);
+    return;
+  }
+  renderer.fillRoundedRect(x, y, 2 * radius, 2 * radius, radius, Color::White);
+  renderer.drawRoundedRect(x, y, 2 * radius, 2 * radius, songbook::DIAGRAM_LINE_WIDTH, radius, true);
+}
+
+void SongActivity::drawChordShape(const Geometry& g, const songbook::DiagramLayout::Placement& at,
+                                  const songbook::ChordDiagram& shape) {
+  const auto& m = diagrams.metrics();
+  drawFretGrid(g, at, shape.stringCount, shape.firstFret);
+  const auto stringX = [&](const int string) { return g.bodyX + at.gridX + string * m.stringGap; };
+  // Center of the row that holds fret, counted from the window's first fret.
+  const auto fretY = [&](const int fret) { return g.bodyY + diagrams.rowCenterY(at, fret - shape.firstFret); };
+
+  const int markRadius = m.markRadius;
+  const int markY = g.bodyY + at.markY;
+  for (int s = 0; s < shape.stringCount; ++s) {
+    const int x = stringX(s);
+    if (shape.frets[s] == songbook::MUTED) {
+      renderer.drawLine(x - markRadius, markY - markRadius, x + markRadius, markY + markRadius,
+                        songbook::DIAGRAM_LINE_WIDTH, true);
+      renderer.drawLine(x - markRadius, markY + markRadius, x + markRadius, markY - markRadius,
+                        songbook::DIAGRAM_LINE_WIDTH, true);
+    } else if (shape.frets[s] == 0) {
+      drawDot(x, markY, markRadius, false);
+    }
+  }
+
+  const int r = m.dotRadius;
+  if (shape.barreFret > 0) {
+    const int from = stringX(shape.barreFrom);
+    renderer.fillRoundedRect(from - r, fretY(shape.barreFret) - r, stringX(shape.barreTo) - from + 2 * r, 2 * r, r,
+                             Color::Black);
+  }
+  for (int s = 0; s < shape.stringCount; ++s) {
+    const int fret = shape.frets[s];
+    if (fret <= 0) continue;
+    const bool underBarre =
+        shape.barreFret > 0 && fret == shape.barreFret && s >= shape.barreFrom && s <= shape.barreTo;
+    if (!underBarre) drawDot(stringX(s), fretY(fret), r, true);
+  }
+}
+
+void SongActivity::drawToneMap(const Geometry& g, const songbook::DiagramLayout::Placement& at,
+                               const songbook::ToneMap& tones) {
+  const auto& m = diagrams.metrics();
+  drawFretGrid(g, at, tones.stringCount, tones.firstFret);
+  // The bass note is solid; the other chord tones are rings. Strings without a mark are not played.
+  for (int s = 0; s < tones.stringCount; ++s) {
+    const int x = g.bodyX + at.gridX + s * m.stringGap;
+    const auto bit = static_cast<uint8_t>(1u << s);
+    if (tones.openTones & bit) drawDot(x, g.bodyY + at.markY, m.markRadius, (tones.openBassNotes & bit) != 0);
+    for (int row = 0; row < songbook::DIAGRAM_FRETS; ++row) {
+      const auto rowBit = static_cast<uint8_t>(1u << row);
+      if (!(tones.tones[s] & rowBit)) continue;
+      drawDot(x, g.bodyY + diagrams.rowCenterY(at, row), m.dotRadius, (tones.bassNotes[s] & rowBit) != 0);
+    }
+  }
+}
+
 void SongActivity::drawFooter() {
   const char* back = tr(STR_BACK);
   const char* confirm = tr(STR_SONGBOOK_PLAY);
@@ -496,6 +739,9 @@ void SongActivity::drawFooter() {
         confirm = tr(STR_SONGBOOK_RESUME);
         break;
     }
+  }
+  if (loadResult == songbook::SongLoadResult::Ok && shownMode() == ViewMode::Diagrams) {
+    confirm = instrumentName(nextInstrument(instrument));
   }
   if (index == 0) previous = "";
   if (index + 1 >= setlist.songs.size()) next = "";
@@ -528,7 +774,19 @@ void SongActivity::render(RenderLock&&) {
   } else {
     // Scan pass records the glyphs, then one batched prewarm before the real draw.
     auto* fontCache = renderer.getFontCacheManager();
-    const auto drawBody = [&] { shownMode() == ViewMode::Lyrics ? drawLyrics(g) : drawChart(g); };
+    const auto drawBody = [&] {
+      switch (shownMode()) {
+        case ViewMode::Lyrics:
+          drawLyrics(g);
+          break;
+        case ViewMode::Chords:
+          drawChart(g);
+          break;
+        case ViewMode::Diagrams:
+          drawDiagrams(g);
+          break;
+      }
+    };
     if (fontCache) {
       auto scope = fontCache->createPrewarmScope();
       drawBody();

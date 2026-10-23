@@ -4,7 +4,9 @@
 #include <sstream>
 #include <string>
 
+#include "ChordShapes.h"
 #include "Setlist.h"
+#include "SongChords.h"
 #include "SongbookTestSupport.h"
 
 namespace {
@@ -40,5 +42,23 @@ TEST(SongbookSamples, SetlistSongsParse) {
     const size_t budget =
         songbook::SongLayout::lyricsBudget(song).bytes() + songbook::SongLayout::chartBudget(song).bytes();
     EXPECT_LT(budget, 24u * 1024u) << path << " needs " << budget;
+
+    // Every chord of a shipped song has a diagram on every instrument.
+    songbook::SongChords chords;
+    chords.collect(song);
+    EXPECT_FALSE(chords.truncated()) << path;
+    for (size_t i = 0; i < chords.size(); ++i) {
+      const std::string name(song.view(chords[i].name));
+      ASSERT_TRUE(chords[i].known) << path << ": " << name;
+      for (size_t n = 0; n < songbook::INSTRUMENT_COUNT; ++n) {
+        const auto instrument = static_cast<songbook::Instrument>(n);
+        songbook::ChordDiagram diagram;
+        songbook::ToneMap tones;
+        const bool found = songbook::isBass(instrument)
+                               ? songbook::findToneMap(chords[i].chord, instrument, tones)
+                               : songbook::findChordDiagram(chords[i].chord, instrument, diagram);
+        EXPECT_TRUE(found) << path << ": " << name << " on " << songbook::instrumentCode(instrument);
+      }
+    }
   }
 }
