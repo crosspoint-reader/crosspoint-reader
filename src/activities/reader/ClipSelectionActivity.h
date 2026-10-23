@@ -55,7 +55,7 @@ class ClipSelectionActivity final : public Activity {
     int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
     uint16_t display = NO_DISPLAY;  // index into displayForms
-    int fontId = 0;  // the word's font; headings and CSS font-size runs differ from the section font
+    int fontId = 0;                 // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;  // logical text, for clipping and lookup
