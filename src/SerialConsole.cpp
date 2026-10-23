@@ -40,6 +40,7 @@ void sendScreenshot() {
   logSerial.printf("SCREENSHOT_END\n");
 }
 
+#ifdef ENABLE_SERIAL_CONTROL
 void sendState(const SerialCommand& cmd) {
   const auto heap = HalMemory::getInternalHeap();
   char detail[384];
@@ -86,6 +87,7 @@ void restart(const SerialCommand& cmd) {
       break;
   }
 }
+#endif  // ENABLE_SERIAL_CONTROL
 
 }  // namespace
 
@@ -95,6 +97,11 @@ void pollSerialConsole() {
   if (!line.startsWith("CMD:")) return;
   const SerialCommand cmd = parseSerialCommand(std::string_view(line.c_str() + 4, line.length() - 4));
 
+#ifndef ENABLE_SERIAL_CONTROL
+  // Release builds keep only the screenshot, as before this console existed.
+  if (cmd.type == SerialCommand::Type::Screenshot) return sendScreenshot();
+  return replyErr(cmd, "serial control is not in this build");
+#else
   switch (cmd.type) {
     case SerialCommand::Type::Invalid:
       return replyErr(cmd, cmd.error);
@@ -123,4 +130,5 @@ void pollSerialConsole() {
     case SerialCommand::Type::Restart:
       return restart(cmd);
   }
+#endif
 }

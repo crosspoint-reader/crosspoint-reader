@@ -60,7 +60,9 @@ state
 
 `open --cold` drops the book's laid-out chapters first, so the reader lays them
 out again; `wait` matches log lines that arrive after it starts. Run
-`python3 scripts/device_control.py --help` for every command. The raw protocol
+`python3 scripts/device_control.py --help` for every command. The console needs a
+development build (`pio run -e default`, or another environment without `gh_release`
+in its name): release builds keep only `SCREENSHOT` and refuse the rest. The raw protocol
 is one line per command, `CMD:<NAME> ...`, answered with `CMD_OK <NAME> ...` or
 `CMD_ERR <NAME> <reason>`; the grammar is in `src/util/SerialCommand.h`.
 

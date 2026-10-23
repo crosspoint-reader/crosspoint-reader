@@ -7,4 +7,7 @@
 // for tests and measurements. Call from the main loop between
 // mappedInputManager.update() and activityManager.loop(), so an injected click
 // reaches the screen in the same frame.
+//
+// Everything but SCREENSHOT needs ENABLE_SERIAL_CONTROL, which only development
+// environments set; release builds answer the rest with CMD_ERR.
 void pollSerialConsole();
