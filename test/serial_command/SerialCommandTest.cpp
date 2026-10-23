@@ -93,6 +93,56 @@ TEST(SerialCommand, UnknownAndEmptyLinesAreRefusedByName) {
   EXPECT_EQ(cmd.name, "");
 }
 
+TEST(SerialCommand, FileCommandsTakeAnAbsolutePath) {
+  auto cmd = parseSerialCommand("LS /Books/Some Folder");
+  EXPECT_EQ(cmd.type, Type::List);
+  EXPECT_EQ(cmd.path, "/Books/Some Folder");
+  EXPECT_EQ(parseSerialCommand("MKDIR /a/b").type, Type::MakeDir);
+  EXPECT_EQ(parseSerialCommand("RM /a.epub").type, Type::Remove);
+  EXPECT_EQ(parseSerialCommand("LS").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("RM a.epub").type, Type::Invalid);
+}
+
+TEST(SerialCommand, GetTakesAnOptionalOffset) {
+  auto cmd = parseSerialCommand("GET /a b.txt");
+  EXPECT_EQ(cmd.type, Type::Get);
+  EXPECT_EQ(cmd.offset, 0u);
+  EXPECT_EQ(cmd.path, "/a b.txt");
+
+  cmd = parseSerialCommand("GET 8192 /a.txt");
+  EXPECT_EQ(cmd.type, Type::Get);
+  EXPECT_EQ(cmd.offset, 8192u);
+  EXPECT_EQ(cmd.path, "/a.txt");
+
+  EXPECT_EQ(parseSerialCommand("GET 12x /a.txt").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("GET 5").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("GET 99999999999 /a.txt").type, Type::Invalid);
+}
+
+TEST(SerialCommand, PutTakesSizeCrcAndPath) {
+  auto cmd = parseSerialCommand("PUT 1234 cbf43926 /Books/A Book.epub");
+  EXPECT_EQ(cmd.type, Type::Put);
+  EXPECT_FALSE(cmd.replace);
+  EXPECT_EQ(cmd.size, 1234u);
+  EXPECT_EQ(cmd.crc, 0xCBF43926u);
+  EXPECT_EQ(cmd.path, "/Books/A Book.epub");
+
+  cmd = parseSerialCommand("PUT REPLACE 0 00000000 /empty.txt");
+  EXPECT_EQ(cmd.type, Type::Put);
+  EXPECT_TRUE(cmd.replace);
+  EXPECT_EQ(cmd.size, 0u);
+  EXPECT_EQ(cmd.crc, 0u);
+
+  EXPECT_EQ(parseSerialCommand("PUT 4294967295 FFFFFFFF /big").size, 4294967295u);
+  EXPECT_EQ(parseSerialCommand("PUT 4294967296 FFFFFFFF /big").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("PUT 12 cbf4392 /short-crc").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("PUT 12 cbf43926x /long-crc").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("PUT -1 cbf43926 /neg").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("PUT 12 cbf43926 relative").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("PUT 12 cbf43926").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("PUT REPLACE").type, Type::Invalid);
+}
+
 // The grammar is constexpr, so commands can be checked at compile time too.
 static_assert(parseSerialCommand("TURN NEXT CHAPTER").chapter);
 

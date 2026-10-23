@@ -1,8 +1,10 @@
 add_executable(SerialCommandTest
   SerialCommandTest.cpp
+  SerialTransferTest.cpp
 )
 
 target_include_directories(SerialCommandTest PRIVATE
+  ${REPO_ROOT}/src
   ${REPO_ROOT}/src/util
 )
 
