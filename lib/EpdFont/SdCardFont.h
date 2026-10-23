@@ -8,6 +8,9 @@
 
 #include "EpdFont.h"
 #include "EpdFontData.h"
+#include "SdGlyphPool.h"
+
+class HalFile;
 
 // On-disk binary format version for .cpfont files. Defined as a preprocessor
 // macro (rather than a constexpr) so it can be stringified into the SD-fonts
@@ -22,13 +25,10 @@
 
 class SdCardFont {
  public:
-  static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
-  // prewarmStyle: the bitmap arena did not fit the largest free block.
-  // Distinct from a missed-glyph count so the caller can retry smaller.
-  static constexpr int PREWARM_ARENA_TOO_LARGE = -2;
+  static constexpr uint16_t MAX_PAGE_GLYPHS = SdGlyphPool::MAX_PAGE_GLYPHS;
   static constexpr uint8_t MAX_STYLES = 4;
 
-  SdCardFont() = default;
+  explicit SdCardFont(SdGlyphPool* pool);
   ~SdCardFont();
   // Owns raw buffers freed in dtor — no shallow-copy semantics. Make any
   // accidental pass-by-value or move a compile-time error.
@@ -46,10 +46,11 @@ class SdCardFont {
   // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
   // Default 0x0F = all present styles.
   // When metadataOnly=true, only glyph metrics are loaded (no bitmap data).
-  // Incremental string prewarms accumulate up to MAX_PAGE_GLYPHS so adjacent
-  // UI labels do not evict each other.
-  // Complete render scans pass accumulate=false: rebuild for this page only,
-  // while retaining buffers and allowing a resident subset hit.
+  // Cached pointers stay valid through drawing, until any SD font on the shared pool
+  // prewarms again or releases its caches. Prewarm can compact entries within a chunk.
+  // Overflow pointers stay valid until the next overflow miss. Outside a PrewarmScope,
+  // each prewarm starts a new unit; inside a scope all prewarms share pins.
+  // Complete render scans pass accumulate=false to replace the page kern set.
   // Returns number of glyphs that couldn't be loaded (0 on full success).
   int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false, bool loadKernLig = true,
               bool accumulate = true);
@@ -87,20 +88,20 @@ class SdCardFont {
   // Returns true if advance table is populated for at least one style.
   bool hasAdvanceTable() const;
 
-  // Free mini data for all styles and restore stub EpdFontData.
-  // Preserves the persistent advance cache so repeated layout passes can reuse
-  // previously fetched metrics.
+  // Cache boundary for this font's own rebuildable kern sets: freed only when the heap is
+  // tight. The shared glyph pool's boundary belongs to FontCacheManager. Preserves the
+  // persistent advance cache so repeated layout passes can reuse previously fetched metrics.
   void clearCache();
 
   // Drop the persistent advance cache. Call when unloading the SD font or
-  // when font/size/family/glyph-table state changes, or to recover a failed bitmap allocation.
+  // when font/size/family/glyph-table state changes.
   void clearPersistentCache();
 
   // Release every rebuildable cache while keeping the font loaded and usable:
-  // mini glyph/kern arenas, ligature tables, the overflow ring, and
+  // pooled glyphs, mini kern matrices, ligature tables, and
   // the persistent advance tables. Coverage intervals stay so hasCodepoint()
   // and reloads keep working; glyphs fault back in on demand and the next
-  // prewarm rebuilds the arenas. For heap-critical transitions (e.g. starting
+  // prewarm rebuilds the caches. For heap-critical transitions (e.g. starting
   // WiFi + the web server), where retained font data is the difference between
   // a clean start and an OOM abort.
   void releaseResidentCaches();
@@ -122,16 +123,6 @@ class SdCardFont {
   // Number of styles present in this font file.
   uint8_t styleCount() const { return styleCount_; }
 
-  // Returns true if the glyph pointer points into the overflow buffer.
-  bool isOverflowGlyph(const EpdGlyph* glyph) const;
-
-  // Returns the bitmap for an on-demand-loaded (overflow) glyph.
-  const uint8_t* getOverflowBitmap(const EpdGlyph* glyph) const;
-
-  // Extract SdCardFont* from an opaque glyphMissCtx pointer.
-  // Used by GfxRenderer::getGlyphBitmap() to recover the SdCardFont from EpdFontData::glyphMissCtx.
-  static SdCardFont* fromMissCtx(void* ctx);
-
   // True once after a loaded font first hits a corrupt glyph entry, so the UI can tell the user.
   static bool takeCorruptGlyphNotice() { return corruptGlyphNotice_.exchange(false); }
 
@@ -141,6 +132,8 @@ class SdCardFont {
     uint32_t seekCount = 0;
     uint32_t uniqueGlyphs = 0;
     uint32_t bitmapBytes = 0;
+    uint32_t blockedInsertions = 0;
+    uint32_t overflowHits = 0;
   };
   void logStats(const char* label = "SDCF");
   void resetStats();
@@ -205,48 +198,13 @@ class SdCardFont {
     uint16_t* kernBlockIndex = nullptr;
     bool kernBlockIndexReady = false;
 
-    // Stub EpdFontData returned when not prewarmed
+    // The style's font view: no interval table, every glyph goes through the pool callbacks.
     EpdFontData stubData{};
 
-    // Mini EpdFontData built during prewarm. Buffers are kept-if-fits across pages
-    // (capacities below track allocated sizes): freeing and reallocating slightly
-    // different sizes on every page turn was a primary heap fragmenter — each page's
-    // freed hole rarely fit the next page's need, so maxAlloc eroded all session.
-    // The per-render PrewarmScope calls clearCache() -> resetStyleMiniData(), which
-    // keeps both the allocations AND the loaded data. Buffers: reuse means
-    // ensureArrayCapacity early-returns once capacities converge on the book's
-    // max, so page turns stop touching the allocator (the free/realloc-per-page
-    // pattern was a primary heap fragmenter). Data: the next prewarm
-    // subset-checks against the resident tables (see prewarmStyle), so the idle
-    // prewarm of page N+1 serves the actual turn with zero SD reads. Retention
-    // is bounded two ways in resetStyleMiniData(): a heap floor frees outright
-    // under pressure, and sustained underuse (an outlier page's oversized bitmap
-    // arena) frees after a few consecutive low-use rebuilds. freeStyleMiniData()
-    // remains the full teardown (zeroes capacities) for style eviction / font
-    // unload.
-    EpdFontData miniData{};
-    EpdUnicodeInterval* miniIntervals = nullptr;
-    EpdGlyph* miniGlyphs = nullptr;
-    uint8_t* miniBitmap = nullptr;
-    uint32_t miniIntervalCount = 0;
-    uint32_t miniGlyphCount = 0;
-    uint32_t miniIntervalCapacity = 0;
-    uint32_t miniGlyphCapacity = 0;
-    uint32_t miniBitmapCapacity = 0;
-    // Bitmap bytes the current page actually used (set by prewarmStyle), the
-    // underuse-hysteresis signal; 0 = no bitmap built this scope (metadata-only
-    // prewarm), which leaves the hysteresis counter untouched.
-    uint32_t miniBitmapUsed = 0;
-    // Exact bitmap bytes per glyph of the last requested set, for the arena retry.
-    uint32_t measuredBytesPerGlyph = 0;
-    uint8_t miniUnderuseRuns = 0;
-    // True when the resident mini was built metadata-only (no bitmaps): it can
-    // serve metadata requests but a full render request must rebuild.
-    bool miniMetadataOnly = false;
-    // Set by a rebuild, consumed by resetStyleMiniData: gates the underuse
-    // hysteresis to one evaluation per rebuild (scopes reset twice, and subset
-    // hits load nothing new to judge).
-    bool miniHysteresisPending = false;
+    // Exact page set for skipping an identical mini-kern rebuild.
+    uint32_t* kernCodepoints = nullptr;
+    uint16_t kernCodepointCount = 0;
+    uint16_t kernCodepointCapacity = 0;
 
     // Per-page mini kern matrix (built by buildMiniKernMatrix on each full
     // prewarm). miniKernLeftClasses/miniKernRightClasses map ONLY the codepoints
@@ -261,11 +219,11 @@ class SdCardFont {
     uint8_t miniKernLeftClassCount = 0;
     uint8_t miniKernRightClassCount = 0;
     int8_t* miniKernMatrix = nullptr;
-    // Kept-if-fits capacities, same rationale as the mini glyph buffers above.
+    // Kept-if-fits capacities, retained across page turns.
     uint16_t miniKernLeftCapacity = 0;
     uint16_t miniKernRightCapacity = 0;
     uint32_t miniKernMatrixCapacity = 0;
-    // True once the mini kern tables match the resident mini glyph set (possibly
+    // True once the mini kern tables match the stored kern codepoint set (possibly
     // with no pairs). Subset hits skip the rebuild, which streams from SD.
     bool miniKernBuilt = false;
 
@@ -283,24 +241,26 @@ class SdCardFont {
 
   char filePath_[128] = {};
 
-  // Overflow context: glyphMissHandler needs to know which style it's serving
-  struct OverflowContext {
+  struct GlyphContext {
     SdCardFont* self;
     uint8_t styleIdx;
   };
-  OverflowContext overflowCtx_[MAX_STYLES] = {};
+  GlyphContext glyphCtx_[MAX_STYLES] = {};
 
-  // Shared on-demand overflow buffer (ring buffer of glyphs loaded via glyphMissHandler)
-  static constexpr uint32_t OVERFLOW_CAPACITY = 8;
-  struct OverflowEntry {
-    EpdGlyph glyph;
-    uint8_t* bitmap = nullptr;
-    uint32_t codepoint = 0;
-    uint8_t styleIdx = 0;
-  };
-  OverflowEntry overflow_[OVERFLOW_CAPACITY] = {};
-  uint32_t overflowCount_ = 0;
-  uint32_t overflowNext_ = 0;
+  SdGlyphPool* pool_;
+  uint8_t fontSlot_ = SdGlyphPool::NO_FONT;
+  using PoolEntry = SdGlyphPool::Entry;
+  // A missed metric is consumed before the next miss; allocate bitmap storage only on draw.
+  EpdGlyph missedGlyph_{};
+  uint32_t missedCodepoint_ = 0;
+  uint8_t missedStyle_ = MAX_STYLES;  // MAX_STYLES: the slot holds nothing
+  uint8_t fontStyle(uint8_t style) const { return (fontSlot_ << 2) | style; }
+  bool addPrewarmCodepoint(uint32_t codepoint, uint32_t& count);
+  bool appendPrewarmDependencies(uint8_t styleMask, bool includeLigatures, uint32_t& count);
+  bool readGlyphRecord(HalFile& file, const PerStyle& s, int32_t index, int32_t& lastIndex, EpdGlyph& glyph);
+  bool readGlyphBitmap(HalFile& file, const PerStyle& s, const EpdGlyph& glyph, uint8_t* bitmap, uint32_t& nextOffset);
+  static const uint8_t* onGlyphBitmap(void* ctx, const EpdGlyph* glyph);
+  void prepareKern(PerStyle& s, const uint32_t* codepoints, uint32_t count, bool accumulate);
 
   // Compact advance-only table for layout measurement (per-style).
   // Built by buildAdvanceTable(), queried by getAdvance().
@@ -334,14 +294,10 @@ class SdCardFont {
   bool loaded_ = false;
 
   // Per-style helpers
-  void freeStyleMiniData(PerStyle& s);
-  // Per-scope variant: drop the page's data, keep the allocations (see the
-  // PerStyle comment). May escalate to freeStyleMiniData under heap pressure
-  // or sustained underuse.
-  void resetStyleMiniData(PerStyle& s);
   void freeStyleAll(PerStyle& s);
   void freeStyleLigatures(PerStyle& s);
   void freeStyleMiniKern(PerStyle& s);
+  void freeStyleKernSet(PerStyle& s);
   bool loadStyleLigatures(PerStyle& s);
   bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
@@ -358,10 +314,9 @@ class SdCardFont {
 
   // Global helpers
   void freeAll();
-  void clearOverflow();
   static void computeStyleFileOffsets(PerStyle& s, uint32_t baseOffset);
 
-  // Static callback for EpdFontData::glyphMissHandler (per-style via OverflowContext)
+  // Static callback for EpdFontData::glyphMissHandler (per-style via GlyphContext)
   static const EpdGlyph* onGlyphMiss(void* ctx, uint32_t codepoint);
 
   // Static callback for EpdFontData::coverageHandler: answers hasCodepoint()
