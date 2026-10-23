@@ -72,7 +72,10 @@ namespace {
 // Earlier GIF/table development builds also used versions 60 through 62.
 // v63: Rebuild for corrected paragraph boundaries and supported static GIF images.
 // v64: Explicit font inheritance preserves parent emphasis and changes text layout.
-constexpr uint8_t SECTION_FILE_VERSION = 64;
+// v65: Count literal spaces after hyphens and ellipses when justifying text.
+// v66: Omit carried no-break spaces at the start of wrapped lines.
+// v67: Count only stretchable literal spaces after visual text reordering.
+constexpr uint8_t SECTION_FILE_VERSION = 67;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -488,7 +491,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   return true;
 }
 
-bool Section::buildSomeMore(const int maxPages) {
+bool Section::buildSomeMore(const int maxPages, bool (*yieldNow)()) {
   if (!build_ || !build_->parser) {
     LOG_ERR("SCT", "buildSomeMore with no active build");
     return false;
@@ -507,8 +510,9 @@ bool Section::buildSomeMore(const int maxPages) {
     if (status == ChapterHtmlSlimParser::ParseStatus::Done) {
       return finalizeBuild();
     }
-    // ParseStatus::More: yield once we've laid out the requested number of pages.
-    if (maxPages > 0 && (builtPageCount_ - startCount) >= maxPages) {
+    // ParseStatus::More: yield once we've laid out the requested number of pages, or as soon
+    // as the caller has something more urgent to do.
+    if ((maxPages > 0 && (builtPageCount_ - startCount) >= maxPages) || (yieldNow && yieldNow())) {
       build_->bytesConsumed = build_->parser->parseBytesConsumed();
       return true;
     }
