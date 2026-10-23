@@ -14,6 +14,7 @@
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/RenderLock.h"
 #include "util/SerialCommand.h"
 #include "util/SerialLineBuffer.h"
 
@@ -35,6 +36,9 @@ void replyErr(const SerialCommand& cmd, const char* reason) {
 }
 
 void sendScreenshot() {
+  // Like the button screenshot: keep the render task from drawing into the
+  // frame while it streams, so a capture never mixes two frames.
+  RenderLock lock;
   const uint32_t bufferSize = display.getBufferSize();
   logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
   logSerial.write(display.getFrameBuffer(), bufferSize);
