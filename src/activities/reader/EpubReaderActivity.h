@@ -103,7 +103,7 @@ class EpubReaderActivity final : public ReaderActivity {
   void settleOverlayRefresh();
   int autoTurnOption = 0;  // current auto page-turn rate index (More panel)
   std::vector<EpubReaderMenuActivity::MenuItem> moreItems;
-  EpubReaderMenuActivity::MenuAction selectedMenuAction = EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER;
+  EpubReaderMenuActivity::MenuState legacyMenuState;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
