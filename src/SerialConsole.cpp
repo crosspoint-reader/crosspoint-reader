@@ -46,6 +46,22 @@ void sendScreenshot() {
 }
 
 #ifdef ENABLE_SERIAL_CONTROL
+bool homePending = false;
+unsigned long homeRequestedAt = 0;
+constexpr unsigned long HOME_REPLY_TIMEOUT_MS = 10000;
+
+void finishHome() {
+  if (!homePending) return;
+  constexpr SerialCommand home = parseSerialCommand("HOME");
+  if (activityManager.isForegroundHomeShown()) {
+    homePending = false;
+    replyOk(home);
+  } else if (millis() - homeRequestedAt >= HOME_REPLY_TIMEOUT_MS) {
+    homePending = false;
+    replyErr(home, "Home did not appear");
+  }
+}
+
 void sendState(const SerialCommand& cmd) {
   const auto heap = HalMemory::getInternalHeap();
   char detail[384];
@@ -116,13 +132,18 @@ void runCommand(const SerialCommand& cmd) {
       // Busy while a frame is pending or drawing; the host retries.
       return activityManager.consoleClick(cmd.click) ? replyOk(cmd) : replyErr(cmd, "busy");
     case SerialCommand::Type::Turn:
-      return activityManager.remoteTurn(cmd.forward, cmd.chapter) ? replyOk(cmd)
-                                                                  : replyErr(cmd, "busy or no book in front");
+      // Page turns only; menus take CLICK NEXT/PREV.
+      if (!activityManager.isForegroundReader()) return replyErr(cmd, "no book in front");
+      return activityManager.remoteTurn(cmd.forward, cmd.chapter) ? replyOk(cmd) : replyErr(cmd, "busy");
     case SerialCommand::Type::Menu:
       return activityManager.remoteShortcut(true) ? replyOk(cmd) : replyErr(cmd, "busy or no book in front");
     case SerialCommand::Type::Home:
+      // Answered once Home has painted (pollSerialConsole), so a script's next
+      // step never races the reader closing.
       activityManager.goHome();
-      return replyOk(cmd);
+      homeRequestedAt = millis();
+      homePending = true;
+      return;
     case SerialCommand::Type::Open:
       return openBook(cmd);
     case SerialCommand::Type::Restart:
@@ -134,6 +155,9 @@ void runCommand(const SerialCommand& cmd) {
 }  // namespace
 
 void pollSerialConsole() {
+#ifdef ENABLE_SERIAL_CONTROL
+  finishHome();
+#endif
   // Act only on a full line, so a slow or partial write never stalls the main
   // loop or runs a cut-off command.
 #ifdef ENABLE_SERIAL_CONTROL
