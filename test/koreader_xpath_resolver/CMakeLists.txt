@@ -17,7 +17,7 @@ target_include_directories(KOReaderXPathResolverTest PRIVATE
 )
 
 target_compile_definitions(KOReaderXPathResolverTest PRIVATE
-  XML_CONTEXT_BYTES=1024
+  XML_CONTEXT_BYTES=0
   XML_GE=0
 )
 

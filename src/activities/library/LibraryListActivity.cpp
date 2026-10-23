@@ -31,6 +31,13 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr int SIDE_PADDING = 12;
+
+// Side clearance for the footer text in the panel's bottom corners.
+int bottomCornerClearance() {
+  const auto& board = BoardConfig::ACTIVE;
+  return board.bottomCornerRadius != 0 ? board.bottomCornerRadius : board.cornerRadius;
+}
+
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
 constexpr int RECENT_TAB = 0;
@@ -1020,7 +1027,7 @@ void LibraryListActivity::drawPositionReadout() const {
   const int width = renderer.getTextWidth(SMALL_FONT_ID, buf);
   // Bottom-right of the viewable area, clear of the bezel and rounded corner.
   const Rect area = UITheme::getContentArea(renderer);
-  const int right = std::max(renderer.getScreenWidth() - area.x - area.width, int{BoardConfig::ACTIVE.cornerRadius});
+  const int right = std::max(renderer.getScreenWidth() - area.x - area.width, bottomCornerClearance());
   const int x = renderer.getScreenWidth() - right - width - SIDE_PADDING;
   const int y = area.y + area.height - metrics.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
   renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
@@ -1047,7 +1054,7 @@ void LibraryListActivity::drawHoldHelp() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const Rect area = UITheme::getContentArea(renderer);
-  const int left = std::max(area.x, int{BoardConfig::ACTIVE.cornerRadius});
+  const int left = std::max(area.x, bottomCornerClearance());
   const int y = area.y + area.height - metrics.buttonHintsHeight - lineHeight;
   GUI.drawHelpText(renderer,
                    Rect{left + SIDE_PADDING, y, renderer.getScreenWidth() / 2 - left - SIDE_PADDING, lineHeight}, help);
