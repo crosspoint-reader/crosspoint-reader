@@ -47,6 +47,7 @@
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "SdCardFont.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -742,6 +743,11 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showFontDamagedMessage && (millis() - fontDamagedMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showFontDamagedMessage = false;
+    requestUpdate();
+  }
+
   // The toolbar reader menu owns all input while shown, ahead of the automatic page turn
   // below: the More panel's rate popup switches automatic turning on and leaves the panel
   // open, so the timer must neither flip the page under it nor eat the panel's next
@@ -1307,7 +1313,19 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 
 bool EpubReaderActivity::launchKOReaderSync() {
   // The sync screen saves progress and reopens the book as a normal one.
-  if (pluginDocument || !KOREADER_STORE.hasCredentials()) return false;
+  if (pluginDocument) return false;
+
+  flushReaderSession();
+
+  // Without a KOReader server the sync activity only brings the device online
+  // and drains that outbox; a failed join exits back to the reader with the
+  // events still queued.
+  if (!KOREADER_STORE.hasCredentials()) {
+    activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
+        renderer, mappedInput, epub->getPath(), getCurrentPosition(), SavedProgressPosition{}, "",
+        /*pluginEventsOnly=*/true));
+    return true;
+  }
 
   RenderLock renderLock;
 
@@ -1942,6 +1960,15 @@ void EpubReaderActivity::renderBook() {
 
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+  }
+
+  // Glyphs of a damaged .cpfont draw as blanks; say why, once per loaded font.
+  if (SdCardFont::takeCorruptGlyphNotice()) {
+    showFontDamagedMessage = true;
+    fontDamagedMessageTime = millis();
+  }
+  if (showFontDamagedMessage) {
+    GUI.drawPopup(renderer, tr(STR_FONT_DAMAGED));
   }
 
   if (showClippingMessage) {
@@ -3174,8 +3201,9 @@ void EpubReaderActivity::activateMoreRow(int row) {
     return;
   }
   onReaderMenuConfirm(action);
-  // Actions that neither open a screen nor leave the reader (a sync with no
-  // credentials, say) would otherwise leave the closed panel on screen.
+  // Child screens re-render the reader on Pop; GO_HOME/DELETE_CACHE leave the
+  // reader entirely. In-place actions would otherwise leave the closed panel
+  // on screen.
   if (action != MA::GO_HOME && action != MA::DELETE_CACHE) requestUpdate();
 }
 
