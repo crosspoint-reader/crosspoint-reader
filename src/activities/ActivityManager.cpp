@@ -425,12 +425,14 @@ bool ActivityManager::remoteClick(const RemoteButton button) {
   return mappedInput.injectRemoteClick(button);
 }
 
+#ifdef ENABLE_SERIAL_CONTROL
 bool ActivityManager::consoleClick(const RemoteButton button) {
   if (RenderLock::peek() || requestedUpdate.load()) return false;
   return mappedInput.injectRemoteClick(button);
 }
 
 const char* ActivityManager::foregroundName() const { return currentActivity ? currentActivity->name.c_str() : ""; }
+#endif
 
 bool ActivityManager::isForegroundHomeShown() const {
   return pendingAction == PendingAction::None && currentActivity && currentActivity->name == "Home" &&
