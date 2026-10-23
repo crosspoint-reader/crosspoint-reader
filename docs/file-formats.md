@@ -90,6 +90,151 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 67
+
+Version 67 preserves the binary layout but rebuilds completed and partial
+sections for corrected justification of visually reordered text with attached
+spaces. Book metadata and saved progress are kept.
+
+### Version 66
+
+Version 66 preserves the binary layout but rebuilds completed and partial
+sections to remove leading non-breaking spaces carried across soft line wraps.
+Explicit paragraph-leading spaces, book metadata, and saved progress are kept.
+
+### Version 65
+
+Version 65 preserves the binary layout but rebuilds completed and partial
+sections for corrected justification of non-breaking spaces after hyphens and
+ellipses. Book metadata and reading progress are unchanged.
+
+### Version 64
+
+Version 64 preserves the binary layout but rebuilds completed and partial
+sections for corrected explicit font-weight/font-style inheritance. It retains
+version 63's GIF rendering and paragraph-boundary fixes. CSS cache version 19 stores
+`inherit` as value 2 in the existing font-style and font-weight bytes; the
+winning declaration is resolved against the parent before applying the element's
+style. Older CSS caches are rebuilt. Book metadata and reading progress are
+unchanged.
+
+### Version 63
+
+Version 63 retains the version 60 rendering format and rebuilds completed and
+partial sections to include previously omitted GIFs and their alternative text.
+Earlier GIF/table development builds used versions 60 through 62; their caches
+also rebuild to preserve both the current rendering format and corrected
+paragraph boundaries. The partial-build sentinel remains derived from the final
+section version. Book metadata and saved progress are kept, but pagination can
+change as GIFs become visible.
+
+### Version 60
+
+The serialized layout is unchanged. Text that runs straight into a block or
+heading start (`text<div>…`) now stays in its own paragraph instead of being
+joined to the first word of the new block. Older completed and partial section
+caches rebuild automatically; book metadata and reading progress are kept.
+
+### Version 59
+
+The serialized layout is unchanged. Stored CSS rules now apply even below
+48 KiB free heap. Older completed and partial sections rebuild because they may
+contain missing styles, different line breaks, or content that should be hidden.
+Book metadata, CSS rule caches, and reading progress are kept.
+
+### Version 58
+
+The serialized layout is unchanged. Completed and partial sections rebuild for
+corrected rendering layout and footnote placement. Book metadata and reading
+progress are kept.
+
+### Version 57
+
+Version 57 combines the rendering layout below with line breaks after explicit
+hyphens and dashes. It invalidates version 56 caches from both branches, which
+used different layouts under the same version. Completed and partial sections
+are rebuilt.
+
+### Version 56
+
+Version 56 adds the rendering layout below on top of version 55.
+
+Each TextBlock's BlockStyle stores a signed 32-bit `fontId` after
+`characterSpacing`: the renderer font the line was laid out in, or 0 for the
+section font. Each TextBlock ends with a `hasWordFonts` flag. When set, it is
+followed by three signed 32-bit font ids and one slot byte per word: 0 draws the
+word in the block's font, `n` in font `n - 1`; bit 0x80 of a slot marks CSS
+small caps (the word text keeps its original case). Mixed-size words share the baseline
+of the tallest font. SD (.cpfont) and vector fonts use sized variants for
+headings, CSS font-size blocks, inline runs and drop caps. A font-size span
+holding a whole paragraph sizes that paragraph.
+
+Pages gain two element types. `TAG_PageDropCap` (4) is an initial letter drawn
+scaled up from a font's glyph: position (its `yPos` is the baseline of the last
+spanned line), the renderer font id, the scale in 1/256ths, the word style and
+up to 12 bytes of UTF-8 text. `TAG_PageBorderBox` (5) is a CSS border and/or
+background shade around one page's slice of a block element: position, size,
+width and style for the top, right, bottom and left edges (a side split off by a
+page break has width 0), and a shade flag.
+
+Layout changes keep headings with following content and avoid leaving a
+paragraph's first line alone at a page bottom or its last line alone at a page
+top. Preserved whitespace and inherited block emphasis affect word placement
+and styles. Inline `<br>` breaks omit paragraph spacing, while standalone and
+consecutive breaks add blank lines.
+
+Table columns are sized from a markup pre-scan rather than equal widths.
+Bordered tables frame each grid cell with `PageBorderBox` elements. Cells honor
+CSS padding in grid and stacked layouts. Plain-text rows share a 160-token /
+2 KB budget; rows containing blocks or images use full-width flow to preserve
+paragraphs and illustrations. Older sections are rebuilt for the serialized
+font data, page elements and layout changes.
+
+CSS cache version 16 adds a boolean `preserveWhitespace` byte after `initialLetter`
+and uses defined-property bit 30 for `white-space`.
+CSS cache version 17 stores rules in source order and retains nonadjacent repeated
+selectors so equal-specificity declarations cascade in stylesheet order.
+
+CSS cache version 18 adds a border-component byte after the four border sides.
+Bits 0-3 mark declared widths and bits 4-7 mark declared styles, in top, right,
+bottom, left order. Width and style declarations cascade independently.
+
+### Version 55
+
+Each TextBlock adds a uint16 `paragraphStartWord` after `textBytes`. It is the
+visual index of the paragraph's first logical word, or `UINT16_MAX` for a
+continuation line. Clipping uses this marker independently of source-offset
+gaps. Older completed and partial section caches rebuild automatically;
+book metadata and reading progress are kept.
+
+### Version 54
+
+The serialized layout is unchanged. Word source ranges and split offsets now
+include codepoints absorbed by NFC composition. The high bit of each word's
+style byte marks a discretionary hyphen, so clipping can remove it independently
+of source length. Rebuild completed and partial section caches to correct
+clipping spaces and anchors for decomposed text.
+
+### Version 53
+
+Each TextBlock arena starts with one 8-byte source range per word (two uint32
+chapter-visible Unicode-codepoint offsets, start inclusive and end exclusive).
+Ranges follow words through BiDi ordering and line wrapping. This version also
+includes the version 52 redaction layout changes. Older completed and partial
+section caches are rebuilt automatically; book and progress files are kept.
+
+### Version 52
+
+The serialized layout is unchanged. Missing full-block (`U+2588`) and black-square
+(`U+25A0`) symbols now use font-sized solid rectangles instead of replacement
+glyphs. Rebuild older sections so cached line breaks and word positions match
+their new widths.
+
+### Version 51
+
+The serialized layout is unchanged. Paragraph continuity and top spacing are
+preserved across soft flushes. Older sections are rebuilt for the updated layout.
+
 ### Version 50
 
 The header adds `paragraphIndentSpaces` after `extraParagraphSpacing`. The value
@@ -207,7 +352,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 50
+#define EXPECTED_VERSION 64
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -227,7 +372,9 @@ fn format_string(String s) {
 enum PageElementTag : u8 {
     TAG_PageLine = 1,
     TAG_PageImage = 2,
-    TAG_PageHorizontalRule = 3
+    TAG_PageHorizontalRule = 3,
+    TAG_PageDropCap = 4,
+    TAG_PageBorderBox = 5
 };
 
 enum WordStyle : u8 {
@@ -238,7 +385,8 @@ enum WordStyle : u8 {
     UNDERLINE = 4,
     STRIKETHROUGH = 8,
     SUP = 16,
-    SUB = 32
+    SUB = 32,
+    DISCRETIONARY_HYPHEN = 128  // trailing hyphen inserted by line breaking
 };
 
 enum TextAlign : u8 {
@@ -265,6 +413,7 @@ struct BlockStyle {
     bool isRtl;
     bool directionDefined;
     s8 characterSpacing;
+    s32 fontId;
 };
 
 struct TextBlock {
@@ -286,6 +435,11 @@ struct TextBlock {
     }
 
     BlockStyle blockStyle;
+    u8 hasWordFonts;
+    if (hasWordFonts != 0) {
+        s32 wordFonts[3];
+        u8 wordFontSlot[wordCount] [[comment("0 = block font, n = wordFonts[n - 1]; bit 0x80 = small caps")]];
+    }
 };
 
 struct ImageBlock {
@@ -314,6 +468,30 @@ struct PageHorizontalRule {
     u8 thickness;
 };
 
+struct PageDropCap {
+    s16 xPos;
+    s16 yPos;  // baseline of the last spanned line
+    s32 fontId;
+    u16 scale256;
+    WordStyle style;
+    u8 length;
+    char text[length];
+};
+
+struct BorderSide {
+    u8 width;
+    u8 style;  // 0 none, 1 solid, 2 double, 3 dotted, 4 dashed
+};
+
+struct PageBorderBox {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u16 height;
+    BorderSide sides[4];  // top, right, bottom, left
+    bool shaded;
+};
+
 struct PageElement {
     PageElementTag pageElementType;
     if (pageElementType == TAG_PageLine) {
@@ -322,6 +500,10 @@ struct PageElement {
         PageImage pageImage [[inline]];
     } else if (pageElementType == TAG_PageHorizontalRule) {
         PageHorizontalRule horizontalRule [[inline]];
+    } else if (pageElementType == TAG_PageDropCap) {
+        PageDropCap dropCap [[inline]];
+    } else if (pageElementType == TAG_PageBorderBox) {
+        PageBorderBox borderBox [[inline]];
     } else {
         std::error(std::format("Unknown page element type: {}", pageElementType));
     }
@@ -515,3 +697,25 @@ make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
+
+## Clipping store (`/.crosspoint/clippings/epub_<path-hash>.bin`)
+
+Version 4 retains the version 3 header and page-local range fields. After each
+record's layout signature it stores `startOffset` and `endOffset` (uint32 chapter
+codepoint range, end exclusive; UINT32_MAX means unavailable), `syncRevision`
+(uint64), `pendingUpload` (one byte), and a 65-byte NUL-terminated sync ID. The
+chapter title, text length, and text follow. Versions 1–3 remain readable.
+
+Stable IDs are saved before upload. A sibling `.deleted` file stores fixed
+65-byte IDs awaiting server acknowledgement. Deletions are queued before the
+local record is removed and retried on the next enabled manual sync. A `.bak`
+file is recovered if power interrupted replacement of the main store.
+
+Clipping header strings are limited to 4 KiB on both reads and writes. A failed
+load leaves no usable index and disables writes until a successful load. The
+index is allocated with checked, bounded growth and released on unload.
+
+Book moves rename the store and its `.deleted` journal (plus recovery sidecars)
+together. The stored source path is informational and is refreshed on the next
+save; the current file path selects the store. Local book deletion cleans up all
+of these sidecars but preserves the independent `My Clippings.txt` export.

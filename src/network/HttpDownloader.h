@@ -34,27 +34,91 @@ class HttpDownloader {
   static constexpr uint32_t MIN_TLS_FREE_HEAP = 40000;
   static constexpr uint32_t MIN_TLS_MAX_ALLOC = 20000;
 
+  using Header = std::pair<std::string, std::string>;
+
   /**
-   * Fetch text content from a URL with optional credentials.
+   * HTTP status of the last request, or 0 when it never got a response (DNS,
+   * connect, TLS, timeout). fetchUrl() returns only success or failure; this
+   * lets a caller tell a dead server from a catalog that wants a password.
+   * Not thread-safe by design: one fetch runs at a time.
+   */
+  static int lastStatus();
+
+  /**
+   * True when the last answer came from a different origin (scheme, host or
+   * port) than the URL asked for, after a redirect. Credentials are withheld
+   * from such a hop, so a 401 there is not a wrong password.
+   */
+  static bool lastAnswerRedirected();
+
+  /**
+   * Fetch text content from a URL with optional credentials. `headers` are
+   * added to the request, as for downloadToFile().
    */
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const std::vector<Header>& headers = {});
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const std::vector<Header>& headers = {});
 
-  using Header = std::pair<std::string, std::string>;
+  /**
+   * Authentication and response inspection options for fetchUrl/postForm.
+   * `bearer`, when set, sends "Authorization: Bearer <token>" and overrides
+   * Basic credentials. `statusOut` receives the final HTTP status (0 when the
+   * request never reached a response). `captureErrorBody` also streams a 401
+   * response body to the callback — OPDS authentication documents are served
+   * as 401 bodies.
+   */
+  struct FetchOptions {
+    std::string username;
+    std::string password;
+    std::string bearer;
+    // Accept header for content negotiation (e.g. preferring OPDS 2.0 JSON
+    // from servers that also speak Atom); empty sends none.
+    std::string accept;
+    // Accept-Language header, so servers that localize the catalog return it
+    // in the reader's UI language; empty sends none.
+    std::string acceptLanguage;
+    // Extra headers (per-server custom headers), sent to the starting origin only.
+    std::vector<Header> headers;
+    int* statusOut = nullptr;
+    bool captureErrorBody = false;
+  };
+
+  static bool fetchUrl(const std::string& url, const DataCallback& onData, const FetchOptions& options);
+
+  /**
+   * POST an application/x-www-form-urlencoded body (e.g. an OAuth token
+   * request) and collect the response body (any status) into outResponse,
+   * capped at a few KB. Returns true when the response status is 2xx.
+   */
+  static bool postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
+                       int* statusOut = nullptr);
 
   /**
    * Download a file to the SD card with optional credentials. `headers` are
    * added to the request (e.g. a Bearer Authorization), alongside any Basic
    * auth derived from username/password.
+   *
+   * downgradeRedirectsToHttp rewrites followed redirect targets from https to
+   * http so the bulk transfer skips a second TLS session (and its ~17KB record
+   * buffer — the OOM site on low-heap C3 boards).
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, const bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
                                       const std::vector<Header>& headers = {}, bool downgradeRedirectsToHttp = false);
+
+  /**
+   * POST a body (e.g. an LCP license to the fulfillment service) and stream
+   * the response to the SD card, staged through "<dest>.part" like
+   * downloadToFile. Single attempt, no redirects or Range resume: the
+   * endpoint is ours and answers directly.
+   */
+  static DownloadError postToFile(const std::string& url, const std::string& body, const std::string& contentType,
+                                  const std::string& destPath, ProgressCallback progress = nullptr,
+                                  const bool* cancelFlag = nullptr);
 };

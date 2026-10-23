@@ -156,7 +156,11 @@ struct PixelCache {
         return false;
       }
     }
-    file.close();
+    if (!file.close()) {
+      LOG_ERR("IMG", "Failed to close cache: %s", cachePathStr.c_str());
+      abort();
+      return false;
+    }
     LOG_DBG("IMG", "Cache written: %s (%dx%d, %d bytes)", cachePathStr.c_str(), width, height,
             4 + bytesPerRow * height);
     ok = false;  // file handed off; nothing left to clean up

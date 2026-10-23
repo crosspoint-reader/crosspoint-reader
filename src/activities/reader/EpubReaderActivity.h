@@ -12,7 +12,9 @@
 
 #include "BookmarkEntry.h"
 #include "ChapterPosition.h"
+#include "ClipSelectionActivity.h"
 #include "EpubReaderMenuActivity.h"
+#include "LinkNoteTitle.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
@@ -33,6 +35,7 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   int8_t pendingManualTurn = 0;
+  bool pendingManualTurnTouch = false;
   bool pendingPercentJump = false;
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
@@ -44,6 +47,11 @@ class EpubReaderActivity final : public ReaderActivity {
   bool showBookmarkMessage = false;
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
+  bool showFontDamagedMessage = false;
+  unsigned long fontDamagedMessageTime = 0UL;
+  bool showClippingMessage = false;
+  StrId clippingMessage = StrId::STR_CLIPPING_SAVED;
+  unsigned long clippingMessageTime = 0UL;
   bool currentPageBookmarked = false;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
@@ -82,6 +90,10 @@ class EpubReaderActivity final : public ReaderActivity {
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
+  // A background build step lent the framebuffer: it came back white while the panel still shows the
+  // page. Until renderBook() redraws, nothing may be painted straight onto it. Set by the loop task,
+  // cleared by the render task.
+  std::atomic<bool> pageBufferStale{false};
   // True while a deferred overlay chrome refresh (pushOverlayRefresh) may still
   // be running on the panel. settleOverlayRefresh() must run before the
   // framebuffer is touched or another differential refresh is pushed.
@@ -124,8 +136,24 @@ class EpubReaderActivity final : public ReaderActivity {
   bool backgroundBuildWanted() const;
   bool buildTickHeapGate();
   bool buildHeapPaused = false;
+  // One bounded build step on the loop task, in a frame whose input did nothing. Lays out about
+  // BACKGROUND_BUILD_PAGES_PER_TICK pages (one 1 KB parse step may add more) and hands the loop
+  // back as soon as a button is down, so a short press is seen before more pages are built.
+  void backgroundBuildTick();
+  bool anyButtonPressed() const;
+  // A background build failed in this spine. The error would likely recur, so from then on the
+  // spine is built only as far as the reader goes; pages from earlier build steps stay readable.
+  int backgroundBuildFailedSpine = -1;
+  // Bluetooth page turner: every chapter build stops the radio until the chapter is built and its
+  // page is shown. False: the radio still holds or is taking the heap, and the build must not run.
+  std::atomic<bool> radioReleasedForBuild{false};
+  bool makeRoomForChapterBuild();
+  static constexpr uint32_t BUILD_ROOM_WAIT_MS = 5000;
+  static constexpr uint32_t BUILD_ROOM_STEP_MS = 50;
+  bool inputOverPage() const override { return overlay != Overlay::None || ReaderActivity::inputOverPage(); }
+  // "Connecting Bluetooth…" or "Bluetooth failed" in place of the status bar title.
+  mutable LinkNoteTitle linkNoteTitle;
   static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
-  static constexpr int BUILD_WINDOW_AHEAD = 5;
   static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
   static constexpr int BUILD_POPUP_PAGE_THRESHOLD = 20;
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
@@ -138,6 +166,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  int currentTocIndex() const;
   // Live section position, or the values cached before a child screen
   // released the section.
   ChapterPosition chapterPosition() const;
@@ -168,6 +197,11 @@ class EpubReaderActivity final : public ReaderActivity {
   void activateMoreRow(int row);
   void openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
+  void startClipSelection(int initialX = -1, int initialY = -1,
+                          ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
+  int clippingAtPoint(const Page& page, int x, int y) const;
+  void openClippings();
+  void applyProgressChange(const ProgressChangeResult& progress);
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
@@ -180,6 +214,7 @@ class EpubReaderActivity final : public ReaderActivity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
+  void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;
@@ -220,6 +255,7 @@ class EpubReaderActivity final : public ReaderActivity {
 
   bool pageTurn(bool isForward) override;
   bool skipPages(int amount) override;
+  bool remoteShortcut(bool readerMenu) override;
   bool isAtEndOfBook() const override;
   void onReturnFromEndOfBook() override;
 

@@ -5,7 +5,6 @@
 #include <Preferences.h>
 #include <SPI.h>
 #include <XteinkDetect.h>
-#include <esp_mac.h>
 #include <esp_sleep.h>
 
 // Global HalGPIO instance
@@ -82,18 +81,6 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 
 }  // namespace
 
-bool HalGPIO::getFactoryMac(char (&address)[18]) const {
-  uint8_t mac[6] = {};
-  address[0] = '\0';
-  const esp_err_t err = esp_efuse_mac_get_default(mac);
-  if (err != ESP_OK) {
-    LOG_ERR("GPIO", "Factory MAC read failed: %d", static_cast<int>(err));
-    return false;
-  }
-  snprintf(address, sizeof(address), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return true;
-}
-
 void HalGPIO::begin() {
 #if FREEINK_MCU_C3
   _deviceType = detectDeviceTypeWithFingerprint();
@@ -122,6 +109,9 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  const uint8_t pageButtons = inputMgr.capacitivePageButtonMask();
+  capacitivePagePressed = (pageButtons & ~previousCapacitivePageButtons) != 0;
+  previousCapacitivePageButtons = pageButtons;
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -130,6 +120,10 @@ void HalGPIO::update() {
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+
+void HalGPIO::prepareForDeepSleep() {
+  if (!inputMgr.prepareForDeepSleep()) LOG_ERR("GPIO", "Failed to put touch controller to sleep");
+}
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
 
@@ -159,6 +153,10 @@ bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }
 
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
+
+bool HalGPIO::hasToggleSwitch() const { return inputMgr.hasToggleSwitch(); }
+
+bool HalGPIO::isToggleSwitchOn() const { return inputMgr.isToggleSwitchOn(); }
 
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
@@ -232,8 +230,13 @@ bool HalGPIO::isUsbConnected() const {
   // divider): infer external power from charging state instead. BatteryMonitor
   // picks the board's best source — charger IC status, gauge Current() sign, or
   // a /STAT pin — and reports false on boards with no battery telemetry at all.
-  // Caveat: charge termination at 100% reads as "not connected".
+  // A charger IC that reports its input rail (BQ25896, SGM41562, M5 PMIC)
+  // answers directly; otherwise infer from charging state, where charge
+  // termination at 100% reads as "not connected".
   static const BatteryMonitor battery;
+  bool known = false;
+  const bool present = battery.isExternalPowerPresent(&known);
+  if (known) return present;
   return battery.isCharging();
 }
 
@@ -246,7 +249,8 @@ bool HalGPIO::coldBootImpliesPowerButton() const {
   // post-flash boots as battery button boots, and STAT-only boards like the
   // EEGO A4 misread them the same way once the charger terminates at 100%
   // (STAT inactive reads as "no USB").
-  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
+  // The Metalio sleeps powered off and only its button turns it back on.
+  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky() || BoardConfig::isMetalioEInk4();
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {

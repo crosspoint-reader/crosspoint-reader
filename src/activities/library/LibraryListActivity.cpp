@@ -1,5 +1,6 @@
 #include "LibraryListActivity.h"
 
+#include <BoardConfig.h>
 #include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -30,6 +31,13 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr int SIDE_PADDING = 12;
+
+// Side clearance for the footer text in the panel's bottom corners.
+int bottomCornerClearance() {
+  const auto& board = BoardConfig::ACTIVE;
+  return board.bottomCornerRadius != 0 ? board.bottomCornerRadius : board.cornerRadius;
+}
+
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
 constexpr int RECENT_TAB = 0;
@@ -305,6 +313,18 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   requestUpdate();
 }
 
+#if FREEINK_CAP_TOUCH
+void LibraryListActivity::swipeDelete(const int entry) {
+  activeNav().selected = entry + 1;
+  if (isRecentSort(sortOrder) && entry < pinnedCount()) {
+    const auto& book = RECENT_BOOKS.getBooks()[static_cast<size_t>(entry)];
+    promptDeleteBookByPath(book.path, book.title);
+  } else {
+    promptDeleteBook(entry);
+  }
+}
+#endif
+
 // Manual index refresh, same card discipline as the onEnter rebuild: the walk
 // wants the card to itself, and the render task must not read the index (or
 // the filter) around it.
@@ -382,7 +402,7 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
   // The dialog and the delete both want the card; reopen when we resume.
   index.close();
   auto confirmation =
-      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), title);
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE_ITEM_CONFIRM), title);
   if (!confirmation) {
     LOG_ERR("LIB", "OOM: delete confirmation");
     if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
@@ -398,8 +418,7 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       RenderLock lock(*this);
       if (!result.isCancelled) {
         LOG_DBG("LIB", "deleting %s", path.c_str());
-        clearBookCache(path);
-        if (!Storage.remove(path.c_str())) LOG_ERR("LIB", "cannot delete %s", path.c_str());
+        if (!removeBookFile(path)) LOG_ERR("LIB", "cannot delete %s", path.c_str());
         if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
         GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
         rebuildIndex();
@@ -457,6 +476,9 @@ void LibraryListActivity::onTabAction(const int index) {
 }
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
+#if FREEINK_CAP_TOUCH
+  closeSwipeDelete();
+#endif
   if (index < 0 || index >= TAB_SLOTS) return;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   sortOrder = orderForTab(index, descendingTabs);
@@ -769,7 +791,6 @@ bool LibraryListActivity::handleButtons() {
 
 void LibraryListActivity::navigateButtons() {
   const int count = listCount();
-  auto& nav = activeNav();
   if (mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
       mappedInput.wasPressed(MappedInputManager::Button::NavPrevious)) {
     navigationStartedOnTabs = tabsFocused();
@@ -789,20 +810,20 @@ void LibraryListActivity::navigateButtons() {
   // A held button steps tabs while the strip has focus (the base behaviour
   // Settings keeps) and page-jumps once the selection is down in the rows,
   // where fast travel through a long shelf is what a hold means.
-  buttonNavigator.onNextContinuous([this, count, &nav] {
+  buttonNavigator.onNextContinuous([this, count] {
     if (navigationStartedOnTabs) {
       activeNav().selected = 0;
       stepTab(1);
     } else if (count > 0) {
-      moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
+      moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, activeNav().pageRows()) + 1);
     }
   });
-  buttonNavigator.onPreviousContinuous([this, count, &nav] {
+  buttonNavigator.onPreviousContinuous([this, count] {
     if (navigationStartedOnTabs) {
       activeNav().selected = 0;
       stepTab(-1);
     } else if (count > 0) {
-      moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
+      moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, activeNav().pageRows()) + 1);
     }
   });
 }
@@ -885,6 +906,9 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   props.items = winItems.data();
   props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
   props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
+#if FREEINK_CAP_TOUCH
+  configureSwipeDelete(screen, props);
+#endif
   screen.list(props);
   const int next = nav.drawnRows;
   const auto body = screen.body();
@@ -952,20 +976,25 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   }
   const auto frameRect = screen.frame().screen();
   // Header and tabs share a screen-relative boundary, independent of bezel insets.
-  fui::header(screen.frame(),
-              fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding), frameRect.width,
-                        static_cast<int16_t>(metrics.headerHeight)},
-              header);
+  const fui::Rect band = BaseTheme::headerBand(renderer,
+                                               fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding),
+                                                         frameRect.width, static_cast<int16_t>(metrics.headerHeight)},
+                                               header);
+  fui::header(screen.frame(), band, header);
 }
 
 void LibraryListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // The position readout owns the line above the hints; rows must not overlap
   // it.
-  const int16_t readoutReserved = static_cast<int16_t>(renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing);
+  constexpr int READOUT_GAP = 4;  // the list's fold sits just above the readout's line box
+  const int16_t readoutReserved = static_cast<int16_t>(renderer.getLineHeight(SMALL_FONT_ID) + READOUT_GAP);
+  const Rect area = UITheme::getContentArea(renderer);
+  const auto bottomInset = static_cast<int16_t>(renderer.getScreenHeight() - area.y - area.height);
   buildHeader(screen);
-  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                                static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
+  screen.setContentMarginFromScreen(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                  static_cast<int16_t>(bottomInset + metrics.buttonHintsHeight + readoutReserved), 0});
 
   if (!degraded) buildTabBar(screen);
   if (bookRowCount() == 0) {
@@ -996,8 +1025,11 @@ void LibraryListActivity::drawPositionReadout() const {
   snprintf(buf, sizeof(buf), positionFormat, selectedEntry() + 1, count);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getTextWidth(SMALL_FONT_ID, buf);
-  const int x = renderer.getScreenWidth() - width - SIDE_PADDING;
-  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
+  // Bottom-right of the viewable area, clear of the bezel and rounded corner.
+  const Rect area = UITheme::getContentArea(renderer);
+  const int right = std::max(renderer.getScreenWidth() - area.x - area.width, bottomCornerClearance());
+  const int x = renderer.getScreenWidth() - right - width - SIDE_PADDING;
+  const int y = area.y + area.height - metrics.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
   renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
 }
 
@@ -1021,8 +1053,11 @@ void LibraryListActivity::drawHoldHelp() const {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight;
-  GUI.drawHelpText(renderer, Rect{SIDE_PADDING, y, renderer.getScreenWidth() / 2 - SIDE_PADDING, lineHeight}, help);
+  const Rect area = UITheme::getContentArea(renderer);
+  const int left = std::max(area.x, bottomCornerClearance());
+  const int y = area.y + area.height - metrics.buttonHintsHeight - lineHeight;
+  GUI.drawHelpText(renderer,
+                   Rect{left + SIDE_PADDING, y, renderer.getScreenWidth() / 2 - left - SIDE_PADDING, lineHeight}, help);
 }
 
 // OptionPopup is a self-contained modal: it owns the whole frame (hints

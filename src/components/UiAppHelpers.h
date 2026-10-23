@@ -6,6 +6,7 @@
 
 #include <atomic>
 
+#include "HapticFeedback.h"
 #include "MappedInputManager.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"

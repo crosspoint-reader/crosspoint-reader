@@ -132,6 +132,7 @@ class CrossPointWebServer {
     std::string filePath;
     bool valid = false;
     bool magicChecked = false;
+    bool isVector = false;  // .ttf/.otf upload (PSRAM boards only) vs .cpfont
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;
     std::unique_ptr<uint8_t[]> buffer;
@@ -151,11 +152,13 @@ class CrossPointWebServer {
   // Missing or malformed JSON sends a 400 response and returns false.
   bool readJsonBody(JsonDocument& out) const;
   void sendJson(const JsonDocument& doc) const;
+  bool rejectIfPluginsDisabled() const;
   void handlePluginList() const;  // GET  /api/plugins   -> discovered plugins
   void handlePluginFile() const;  // GET  /plugin?name&file -> serve SD file
   void handleRelay();             // POST /api/relay     -> device makes an HTTP(S) call
   void handleCrypto();            // POST /api/crypto    -> generic crypto primitive (base64 I/O)
   void handleFetch();             // POST /api/fetch     -> device downloads a URL to SD
+  void handleBookKey();           // POST /api/book-key  -> store a protected book's wrapped content key
   void handlePluginFs();          // POST /api/plugin-fs -> plugin writes a small file to SD
   void handlePluginFsUpload();    // its multipart file part, streamed to <path>.tmp
 

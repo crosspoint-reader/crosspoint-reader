@@ -56,11 +56,6 @@ void InflateReader::setSource(const uint8_t* src, size_t len) {
 
 void InflateReader::setReadCallback(int (*cb)(struct uzlib_uncomp*)) { decomp.source_read_cb = cb; }
 
-void InflateReader::skipZlibHeader() {
-  uzlib_get_byte(&decomp);
-  uzlib_get_byte(&decomp);
-}
-
 bool InflateReader::read(uint8_t* dest, size_t len) {
   if (!streamingMode) {
     // One-shot mode: back-references use absolute offset from dest_start.
