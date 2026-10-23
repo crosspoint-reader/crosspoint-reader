@@ -5,6 +5,8 @@
 #include <HalFrontlight.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -122,12 +124,10 @@ void EpubReaderMenuActivity::switchCategory(const int direction) {
   menuState.selectedCategory = menuState.category;
   menuState.expanded = true;
   menuState.categorySelected = false;
-  for (const auto& item : menuItems) {
-    if (categoryFor(item.action) == menuState.category) {
-      menuState.action = item.action;
-      break;
-    }
-  }
+  const auto item = std::find_if(menuItems.begin(), menuItems.end(), [this](const MenuItem& item) {
+    return categoryFor(item.action) == menuState.category;
+  });
+  if (item != menuItems.end()) menuState.action = item->action;
   app.clearTapFlash();
   rebuildRows();
   requestUpdate();
