@@ -34,7 +34,7 @@ PATCHES = (
      "32104db82acc857b70c7fe20740afbffa9f7dee0a7c685c106febfa989fdbe77"),
     ("0003-sync-fat-before-data-cache.patch", "src/FatLib/FatPartition.h",
      "fb91c81beac2779a0d4b08e886a5fefdf8062b8ad422ccec4e178ae4e88b72e5",
-     "3f37f159850c46b2f32ae505bf628441bef94833d7131ba8621574b9c74fdecc"),
+     "10d66a5d2424ed9c6919a9dc65305ebd5854170bdeea29f4b7c70f57bee929af"),
 )
 
 
