@@ -341,7 +341,7 @@ void XtcReaderActivity::saveProgress() const {
 }
 
 void XtcReaderActivity::loadProgress() {
-  if (!xtc) return;
+  if (!xtc || pluginDocument) return;  // a document always opens at the start
   HalFile f;
   if (Storage.openFileForRead("XTC", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];

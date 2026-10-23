@@ -274,7 +274,8 @@ bool EpubReaderActivity::loadBook() {
   epub->setupCacheDir();
 
   HalFile f;
-  if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  // A document always opens like a new book, even if it was read as a book before.
+  if (!pluginDocument && Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
     int dataSize = f.read(data, sizeof(data));
     if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
@@ -3251,6 +3252,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 }
 
 void EpubReaderActivity::saveLinkStack() const {
+  if (pluginDocument) return;  // a document keeps no position
   // [depth] then depth x (spine u16 LE, page u16 LE)
   uint8_t data[1 + MAX_FOOTNOTE_DEPTH * 4];
   size_t size = 0;
@@ -3268,6 +3270,7 @@ void EpubReaderActivity::saveLinkStack() const {
 }
 
 void EpubReaderActivity::loadLinkStack() {
+  if (pluginDocument) return;  // a document always opens with Back going to its menu
   const std::string path = epub->getCachePath() + "/links.bin";
   if (!Storage.exists(path.c_str())) return;
   {

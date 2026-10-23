@@ -1563,6 +1563,7 @@ void PluginCatalogActivity::activateIndex(const int index) {
     manifestPath = plugin.manifestPath;
     catalogTitle = plugin.title;
     if (!loadManifest()) {
+      LOG_ERR("PCAT", "invalid manifest: %s", manifestPath.c_str());
       fail(StrId::STR_PLUGIN_MANIFEST_INVALID);
       return;
     }
