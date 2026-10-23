@@ -158,6 +158,10 @@ A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined
 
 > [!TIP]
 > Advanced users can also manage files programmatically or via the command line using `curl`. See the [web server docs](./docs/webserver.md) for details.
+
+> [!TIP]
+> Without Wi-Fi, a computer can copy books and fonts over the USB cable while the reader is on the Home screen, using `scripts/device_control.py` from this repository (Python 3 with `pyserial`). See [Copy files over the cable](./docs/contributing/testing-debugging.md#copy-files-over-the-cable).
+
 > [!TIP]
 > If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
 
@@ -608,11 +612,12 @@ installing the family later, select it in **Settings → Reader → Font Family*
 
 CrossPoint loads additional fonts from the SD card. Custom fonts can add Chinese, Japanese, Korean, and other scripts that the built-in reader fonts lack. If your device have external RAM, you can copy `.ttf`, `.otf`, and `.ttc` files directly. Otherwise, use `.cpfont` files made from those fonts. 
 
-There are three ways to install fonts:
+There are four ways to install fonts:
 
 1. **Download from device (recommended):** Go to **Settings -> Reader -> Manage Fonts**, browse the available font families, and select one to download over Wi-Fi.
 2. **Upload via web interface:** While in **File Transfer** mode, open the web UI and use the **Fonts** tab to upload `.cpfont` files. The Fonts tab does not accept TTF/OTF/TTC files.
-3. **Manual SD card copy:** Copy `.cpfont` families from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) to `/.fonts/` or `/fonts/`. If your device have external RAM, you can also copy TTF/OTF/TTC files there without conversion.
+3. **Over the USB cable:** With the reader on the Home screen, run `python3 scripts/device_control.py install-font <folder>` on a computer. See [Copy files over the cable](./docs/contributing/testing-debugging.md#copy-files-over-the-cable).
+4. **Manual SD card copy:** Copy `.cpfont` families from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) to `/.fonts/` or `/fonts/`. If your device have external RAM, you can also copy TTF/OTF/TTC files there without conversion.
 
 Once installed, custom fonts appear in **Settings → Reader → Font Family** alongside the built-in fonts.
 

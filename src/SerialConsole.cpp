@@ -4,22 +4,36 @@
 #include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalMemory.h>
+#include <HalSerialBulkRead.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <cstdarg>
 #include <cstring>
 #include <string>
 
 #include "CrossPointState.h"
+#include "SerialFileCommands.h"
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "util/SerialCommand.h"
 
-namespace {
+namespace serialconsole {
 
-void replyOk(const SerialCommand& cmd, const char* detail = "") {
-  logSerial.printf("CMD_OK %.*s%s%s\n", static_cast<int>(cmd.name.size()), cmd.name.data(), *detail ? " " : "", detail);
+void sendLine(const char* format, ...) {
+  // HWCDC gives up on its TX lock after one tick and writes nothing; a partial
+  // write is not retried, so a line is never sent twice.
+  for (int attempt = 0; attempt < 5; attempt++) {
+    va_list args;
+    va_start(args, format);
+    const size_t written = logSerial.vprintf(format, args);  // vprintf ends args itself
+    if (written > 0) return;
+  }
+}
+
+void replyOk(const SerialCommand& cmd, const char* detail) {
+  sendLine("CMD_OK %.*s%s%s\n", static_cast<int>(cmd.name.size()), cmd.name.data(), *detail ? " " : "", detail);
 }
 
 void replyErr(const SerialCommand& cmd, const char* reason) {
@@ -30,8 +44,15 @@ void replyErr(const SerialCommand& cmd, const char* reason) {
   } else {
     LOG_ERR("CON", "%.*s refused: %s", static_cast<int>(cmd.name.size()), cmd.name.data(), reason);
   }
-  logSerial.printf("CMD_ERR %.*s %s\n", static_cast<int>(cmd.name.size()), cmd.name.data(), reason);
+  sendLine("CMD_ERR %.*s %s\n", static_cast<int>(cmd.name.size()), cmd.name.data(), reason);
 }
+
+}  // namespace serialconsole
+
+namespace {
+
+using serialconsole::replyErr;
+using serialconsole::replyOk;
 
 void sendScreenshot() {
   const uint32_t bufferSize = display.getBufferSize();
@@ -87,14 +108,7 @@ void restart(const SerialCommand& cmd) {
   }
 }
 
-}  // namespace
-
-void pollSerialConsole() {
-  if (logSerial.available() <= 0) return;
-  const String line = logSerial.readStringUntil('\n');
-  if (!line.startsWith("CMD:")) return;
-  const SerialCommand cmd = parseSerialCommand(std::string_view(line.c_str() + 4, line.length() - 4));
-
+void runCommand(const SerialCommand& cmd) {
   switch (cmd.type) {
     case SerialCommand::Type::Invalid:
       return replyErr(cmd, cmd.error);
@@ -122,5 +136,23 @@ void pollSerialConsole() {
       return openBook(cmd);
     case SerialCommand::Type::Restart:
       return restart(cmd);
+    case SerialCommand::Type::List:
+    case SerialCommand::Type::Get:
+    case SerialCommand::Type::Put:
+    case SerialCommand::Type::MakeDir:
+    case SerialCommand::Type::Remove:
+      return runSerialFileCommand(cmd);
   }
+}
+
+}  // namespace
+
+bool pollSerialConsole() {
+  HalSerialBulkRead::restoreReceiving();
+  if (logSerial.available() <= 0) return false;
+  const String line = logSerial.readStringUntil('\n');
+  if (!line.startsWith("CMD:")) return false;
+  const SerialCommand cmd = parseSerialCommand(std::string_view(line.c_str() + 4, line.length() - 4));
+  runCommand(cmd);
+  return true;
 }
