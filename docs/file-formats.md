@@ -90,13 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 65
+### Version 68
 
-Version 65 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Version 68 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
 Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
 shaping data form conjuncts, reph and positioned marks from the font's
 OpenType tables (lib/OtShaper), and other fonts reorder pre-base vowel signs;
-both change word widths, so cached word positions from version 64 no longer
+both change word widths, so cached word positions from version 67 no longer
 match. TextBlock's former `hasFocus` byte became a flags byte: bit 1 adds a
 `displayBytes` count (after `paragraphStartWord`), a `displayOff[]` table and
 a `display[]` blob that hold each complex-script word in the form layout
@@ -107,6 +107,24 @@ memory was short keeps the unshaped form it was measured in. Words without a
 display entry are resolved from `text[]` when drawn. Older completed and
 partial section caches rebuild automatically; book metadata and reading
 progress are kept.
+
+### Version 67
+
+Version 67 preserves the binary layout but rebuilds completed and partial
+sections for corrected justification of visually reordered text with attached
+spaces. Book metadata and saved progress are kept.
+
+### Version 66
+
+Version 66 preserves the binary layout but rebuilds completed and partial
+sections to remove leading non-breaking spaces carried across soft line wraps.
+Explicit paragraph-leading spaces, book metadata, and saved progress are kept.
+
+### Version 65
+
+Version 65 preserves the binary layout but rebuilds completed and partial
+sections for corrected justification of non-breaking spaces after hyphens and
+ellipses. Book metadata and reading progress are unchanged.
 
 ### Version 64
 
@@ -352,7 +370,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 65
+#define EXPECTED_VERSION 68
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -418,7 +436,7 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v65)")]];
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v68)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
     u16 paragraphStartWord [[comment("Visual index of the paragraph's first logical word, 0xFFFF = continuation line")]];
     if ((flags & 2) != 0) {
