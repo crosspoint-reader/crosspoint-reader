@@ -368,7 +368,9 @@ bool PluginCatalogActivity::loadManifest() {
         return static_cast<int16_t>(entries.size() - 1);
       },
       &menuEntries);
-  return !manifest.browseReq.url.empty() || !menuEntries.empty();
+  const bool valid = !manifest.browseReq.url.empty() || !menuEntries.empty();
+  if (!valid) LOG_ERR("PCAT", "manifest has neither browse URL nor menu entries: %s", manifestPath.c_str());
+  return valid;
 }
 
 bool PluginCatalogActivity::loadBrowseListIndex() {
