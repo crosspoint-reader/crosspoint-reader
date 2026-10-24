@@ -19,8 +19,9 @@ and the firmware carries no vendor names, URLs, or file-format knowledge.
 shown on the Home screen even when no plugins are installed. Every plugin folder
 (anything holding a `manifest.json`, `plugin.js`, or `device.json`) appears under
 **Home → Plugins**, showing its `title` and one-line `description`. Selecting a
-plugin with an on-device catalog (`device.json`
-with `browse.url`) opens that catalog. Selecting any other plugin shows its
+plugin with an on-device menu (`device.json` with `menu`) opens that menu; one
+with an on-device catalog (`device.json` with `browse.url`) opens that catalog.
+Selecting any other plugin shows its
 `README.md` (up to 16KB, as plain paged text) when it has one, so even a
 browser-only plugin (no `device.json`) can explain how to use it from the web
 UI; without a README the row does nothing. `title`/`description` are read from
@@ -37,6 +38,11 @@ any supported root. This keeps updates in place with their local settings and
 tokens. If no installed copy exists, the bundle uses its configured destination
 root as before. Nested bundle subdirectories and non-plugin destinations are
 unchanged.
+
+Each bundle file is fetched from the item's base URL plus its listed name. The
+name is percent-encoded for the URL (spaces, non-ASCII, `?`, `#` and other bytes
+a request line cannot carry; `/` and `%` are kept) and written to SD as listed,
+so an entry such as `Hôm nay.txt` works.
 
 During firmware-managed plugin installation, a plugin directory may contain a
 `.installing` marker. Normal plugin discovery and file resolution quarantine that
@@ -152,7 +158,9 @@ belongs in `plugin.js`.
 `browse.url` makes the manifest an openable catalog. An `events` section
 without `browse.url` instead makes it a background/events manifest: discovery
 keeps its title/description/README semantics, while the picker deliberately
-does not open it as a catalog. A manifest may combine both sections.
+does not open it as a catalog. A manifest may combine both sections. A `menu`
+section (see "Menus" below) makes the plugin open on its own list of entries
+instead; it may be combined with the other sections.
 
 The firmware piece (service-agnostic, in `src/activities/plugins/`):
 `PluginCatalogActivity`, one activity that opens as a picker over the
@@ -384,6 +392,97 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   Library index stale, so the book appears the next time the Library opens.
   Hidden files and folders (names that start with `.`) don't mark it, because
   the Library never lists them.
+
+### Menus
+
+A `menu` turns the plugin into a small list of entries. The menu opens without
+Wi-Fi; only a `catalog` entry starts Wi-Fi, when it is picked.
+
+```jsonc
+"menu": [
+  { "title": "Store", "type": "catalog" },                  // the browse section above
+  { "title": "New this week", "type": "catalog",            // browse with url/body overrides
+    "url": "https://.../new", "body": "{\"page\":{page}}" },
+  { "title": "Sync", "type": "catalog", "download": "all" },  // one tap: fetch item "all", back to the menu
+  { "title": "Guides", "type": "menu", "items": [           // a submenu
+    { "title": "Getting started", "type": "file", "path": "guide.epub" }
+  ]},
+  { "title": "Manual", "type": "file", "path": "manual.epub", "mode": "book" }
+]
+```
+
+| `type` | Picking it |
+|---|---|
+| `menu` | Shows its `items`. Back returns to the parent menu. |
+| `catalog` | Opens the catalog (Wi-Fi, sign-in, browse, download) as described above. `url` and `body` override `browse.url` and `browse.body`; `browse.lists` and search still apply. Back at the catalog root returns to the menu. See also one-tap downloads below. |
+| `file` | Opens `path` in the reader. |
+
+A `catalog` entry with `"download": "<id>"` is a one-tap download, for a
+plugin that syncs a fixed set of files:
+
+- The item list is not shown. After Wi-Fi (and sign-in, if needed) the first
+  page is fetched, the item whose `browse.fields.id` value equals the id
+  downloads at once, and the menu comes back. The catalog must map
+  `browse.fields.id`. Back during the download also
+  returns to the menu.
+- With more than one `browse.lists`, the list picker still comes first; the
+  id is looked up on page 1 of the chosen list.
+- An id that is not on that page shows the "No files found" error; Back
+  returns to the menu.
+- Every file the download writes has its layout cache cleared, so a page the
+  server rewrote opens with its new content even when its size is unchanged.
+
+`file` entries have two modes:
+
+- **`"document"`** (default): a page the plugin owns and keeps up to date,
+  for example rewritten from its web page or a catalog download over Wi-Fi.
+  It opens in the normal reader, but the reader keeps no trace, because it is
+  not one of the user's books. It does not add the file to Recents, does not
+  replace the book that opens after sleep, does not save the reading
+  position (it always opens where a new book opens), does not move
+  finished books, and sends no reader events (`sleep.enter` carries no
+  book). The end of the file suggests no other files. Leaving the file
+  (Back, the Home key or gesture, Home in the reader menu, or turning past
+  the last page) returns to the menu it was opened from, with its entry
+  selected, also after a silent restart. Home from the menu goes Home.
+  The Library does not list document files, so a page the
+  plugin rewrites never shows up as a book. A file that was already in
+  Recents before a plugin made it a document leaves Recents when the plugin
+  bundle installs from a catalog. If the plugin was copied by hand, it
+  leaves Recents the next time the library index is rebuilt, for example
+  after **Refresh library** in the Library.
+  Progress sync is turned off. The layout cache under `/.crosspoint` is
+  still written, because it can be rebuilt and is not shown anywhere.
+  Bookmarks and clippings in an EPUB still work and save their own data.
+  An image `path` opens in the normal image viewer in both modes.
+- **`"book"`**: the book opens exactly as it would from the Library, and the
+  Library lists it.
+
+Wi-Fi stays on after Back from a catalog entry to the menu, so picking a
+catalog entry again connects at once; it goes off when Plugins is left. If
+Wi-Fi is on when a file is opened, the device restarts silently into the
+reader, as it does when leaving any Wi-Fi screen, so the reader starts on a
+clean heap.
+
+A relative `path` is in the plugin's folder. An absolute path (starting with
+`/`) can point anywhere on the card, but leaving such a document lands on the
+plugins list: the menu to return to is found from the plugin folder that holds
+the file.
+
+Limits: 32 kept entries in total (submenu items included), counted in file
+order; later entries are skipped. The root list and two levels of submenus: a
+`menu` entry inside a second-level submenu is skipped with its items. These
+entries are skipped too, and logged (`[PCAT]`): no `title`, an unknown `type`,
+a `catalog` with no browse URL, and a `file` path that contains `..`, points
+at a credential store, or is longer than 255 bytes (a silent restart carries
+the open document's path in 256 bytes of RTC memory). The Library applies the
+same rules when it decides which files are documents. If no entry is left and
+there is no `browse.url`, the plugin shows the "invalid manifest" error.
+Picking a file that does not exist yet (a page the plugin has not synced)
+shows a short notice and the menu stays open.
+While a `catalog` entry is open, the menu is freed so Wi-Fi and TLS get the
+heap; Back re-reads it from `device.json`.
+Older firmware ignores `menu` and opens the catalog (or README) as before.
 
 ### Heap budget (ESP32-C3, ~380KB total)
 

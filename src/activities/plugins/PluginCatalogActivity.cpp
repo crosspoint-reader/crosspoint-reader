@@ -19,12 +19,14 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
-#include <new>
 #include <string_view>
 #include <type_traits>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
+#include "SilentRestart.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -64,6 +66,19 @@ constexpr size_t MAX_BROWSE_RESPONSE = 1024 * 1024;
 constexpr size_t MAX_BROWSE_LIST_INDEX_RESPONSE = 16 * 1024;
 constexpr size_t MAX_ITEM_DETAILS_RESPONSE = 24 * 1024;
 constexpr int MAX_PAGE_SIZE = 16;
+// Menu bounds: each entry is a few short strings held while the plugin is open.
+using PluginLocations::MAX_MENU_DEPTH;
+using PluginLocations::MAX_MENU_ENTRIES;
+
+// Upper bound on what walkMenu() keeps, so the entry vector is allocated once.
+size_t countMenuEntries(const JsonArrayConst entries, const int depth) {
+  size_t n = 0;
+  for (JsonVariantConst e : entries) {
+    ++n;
+    if (depth < MAX_MENU_DEPTH && strcmp(e["type"] | "", "menu") == 0) n += countMenuEntries(e["items"], depth + 1);
+  }
+  return n;
+}
 
 // JsonListParser has six generic field slots. The compatibility and details
 // passes store other fields in the slots they do not need.
@@ -182,6 +197,7 @@ void readPluginMetadata(const std::string& path, PluginRef& ref, const bool clas
   if (classifyDevice) {
     filter["browse"]["url"] = true;
     filter["events"] = true;
+    filter["menu"][0]["title"] = true;  // presence only; the menu is parsed on open
   }
   JsonDocument doc;
   if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return;
@@ -190,7 +206,8 @@ void readPluginMetadata(const std::string& path, PluginRef& ref, const bool clas
   if (classifyDevice) {
     const char* browseUrl = doc["browse"]["url"] | "";
     const bool hasEvents = !doc["events"].as<JsonObjectConst>().isNull() && doc["events"].size() > 0;
-    ref.deviceKind = PluginLocations::classifyDeviceManifest(browseUrl[0] != '\0', hasEvents);
+    const bool hasMenu = doc["menu"].size() > 0;
+    ref.deviceKind = PluginLocations::classifyDeviceManifest(browseUrl[0] != '\0', hasEvents, hasMenu);
   }
 }
 }  // namespace
@@ -228,6 +245,10 @@ bool PluginCatalogActivity::loadManifest() {
   if (!Storage.readFileToString("PCAT", manifestPath, MAX_MANIFEST_SIZE, raw)) return false;
   JsonDocument doc;
   if (deserializeJson(doc, raw) != DeserializationError::Ok) return false;
+  std::string().swap(raw);
+  // Every field below is assigned except these appended lists (a reload on Back).
+  manifest.browseLists.clear();
+  manifest.xmlExtensions.clear();
 
   const std::string pluginDir = manifestPath.substr(0, manifestPath.rfind('/'));
   manifest.tokenFile = pluginhttp::inPluginDir(pluginDir, doc["token"]["file"] | "");
@@ -324,7 +345,30 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.authTokenPath = auth["token_path"] | "access_token";
   manifest.authErrorPath = auth["error_path"] | "error";
 
-  return !manifest.browseReq.url.empty();
+  // render() reads the menu from its own task.
+  RenderLock lock;
+  std::vector<int16_t>().swap(menuRows);
+  std::vector<MenuEntry>().swap(menuEntries);
+  menuEntries.reserve(std::min(countMenuEntries(doc["menu"], 1), MAX_MENU_ENTRIES));
+  plugindocuments::walkMenu(
+      doc["menu"], pluginDir, !manifest.browseReq.url.empty(), "PCAT",
+      [](void* ctx, const plugindocuments::MenuItem& item, const int16_t parent) -> int16_t {
+        auto& entries = *static_cast<std::vector<MenuEntry>*>(ctx);
+        MenuEntry entry;
+        entry.type = item.type;
+        entry.document = item.document;
+        entry.parent = parent;
+        entry.title = item.title;
+        entry.target = item.target;
+        if (item.type == plugindocuments::MenuItem::Type::Catalog) {
+          entry.body = item.json["body"] | "";
+          entry.item = item.json["download"] | "";
+        }
+        entries.push_back(std::move(entry));
+        return static_cast<int16_t>(entries.size() - 1);
+      },
+      &menuEntries);
+  return !manifest.browseReq.url.empty() || !menuEntries.empty();
 }
 
 bool PluginCatalogActivity::loadBrowseListIndex() {
@@ -430,8 +474,11 @@ std::string PluginCatalogActivity::downloadDir() const {
 }
 
 PluginCatalogActivity::PluginCatalogActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const bool showOpds, const bool rootMode)
-    : CatalogActivity("PluginCatalog", renderer, mappedInput), showOpds(showOpds), rootMode(rootMode) {}
+                                             const bool showOpds, const bool rootMode, std::string returnDocument)
+    : CatalogActivity("PluginCatalog", renderer, mappedInput),
+      showOpds(showOpds),
+      rootMode(rootMode),
+      returnDocument(std::move(returnDocument)) {}
 
 PluginCatalogActivity::~PluginCatalogActivity() = default;
 
@@ -442,6 +489,54 @@ int PluginCatalogActivity::apiRequest(const pluginhttp::RequestSpec& req, String
 void PluginCatalogActivity::onEnter() {
   CatalogActivity::onEnter();
   enterPluginPicker();
+  std::string path;
+  path.swap(returnDocument);
+  if (!path.empty() && !reopenMenuFor(path)) {
+    LOG_ERR("PCAT", "document return target gone: %s", path.c_str());
+  }
+}
+
+// The return target comes from the document path alone (the plugin whose folder
+// holds it, then the first file entry that opens it), so it survives the silent
+// restart that ends a Wi-Fi session. A file outside its plugin's folder has no
+// menu to return to and lands on the picker.
+bool PluginCatalogActivity::reopenMenuFor(const std::string& documentPath) {
+  const auto plugin = std::find_if(installedPlugins.begin(), installedPlugins.end(), [&](const PluginRef& p) {
+    return PluginLocations::isInManifestDir(p.manifestPath, documentPath);
+  });
+  if (plugin == installedPlugins.end()) return false;
+  pickerReturnName = plugin->name;
+  manifestPath = plugin->manifestPath;
+  catalogTitle = plugin->title;
+  if (!loadManifest() || menuEntries.empty()) {
+    enterPluginPicker();
+    return false;
+  }
+  const auto entry = std::find_if(menuEntries.begin(), menuEntries.end(), [&](const MenuEntry& e) {
+    return e.type == MenuEntry::Type::File && e.target == documentPath;
+  });
+  if (entry == menuEntries.end()) {
+    showMenu(-1);  // device.json changed while the document was open
+  } else {
+    showMenu(entry->parent, static_cast<int>(entry - menuEntries.begin()));
+  }
+  return true;
+}
+
+bool PluginCatalogActivity::reloadMenu(int parent, const int selectEntry) {
+  if (!loadManifest() || menuEntries.empty()) {
+    LOG_ERR("PCAT", "menu gone on reload: %s", manifestPath.c_str());
+    enterPluginPicker();
+    return false;
+  }
+  // Indices hold while device.json is unchanged; an edited one may have moved
+  // entries, so fall back to its root. showMenu() ignores a stale selectEntry.
+  if (parent >= static_cast<int>(menuEntries.size()) ||
+      (parent >= 0 && menuEntries[parent].type != MenuEntry::Type::Menu)) {
+    parent = -1;
+  }
+  showMenu(parent, selectEntry);
+  return true;
 }
 
 void PluginCatalogActivity::enterPluginPicker() {
@@ -475,14 +570,14 @@ void PluginCatalogActivity::enterPluginPicker() {
 
   manifestPath.clear();
   manifest = Manifest{};
+  {
+    RenderLock lock;
+    std::vector<MenuEntry>().swap(menuEntries);
+    std::vector<int16_t>().swap(menuRows);
+  }
+  currentMenu = -1;
   catalogTitle = tr(STR_PLUGINS);
-  token.clear();
-  config.clear();
-  resetBrowse();
-  browseHistory.clear();
-  browseCurrentUrl.clear();
-  errorMessage.clear();
-  session.reset();  // no TLS while only picking
+  dropCatalogSession();  // no TLS while only picking
   state = State::PLUGIN_PICKER;
   for (size_t i = 0; i < installedPlugins.size(); ++i) {
     if (installedPlugins[i].name != pickerReturnName) continue;
@@ -493,26 +588,134 @@ void PluginCatalogActivity::enterPluginPicker() {
   requestUpdate();
 }
 
+// The manifest is already loaded; this is where Wi-Fi and TLS start.
 void PluginCatalogActivity::enterCatalog() {
   state = State::CHECK_WIFI;
   resetBrowse();
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
-  session.reset(new (std::nothrow) freeink::SecureHttpClient());
-  if (session) session->setReuse(true);
-
-  if (!loadManifest()) {
+  if (activeBrowseUrl().empty()) {
     fail(StrId::STR_PLUGIN_MANIFEST_INVALID);
     return;
+  }
+  session = makeUniqueNoThrow<freeink::SecureHttpClient>();
+  if (session) {
+    session->setReuse(true);
+  } else {
+    LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
   }
   requestUpdate();
   checkAndConnectWifi();
 }
 
 // Leaving the open catalog (Back at its root, or Back out of an error /
-// sign-in screen): return to the plugin picker. Wi-Fi stays up so the next
-// pick connects instantly; onExit tears it down when the activity ends.
-void PluginCatalogActivity::exitCatalog() { enterPluginPicker(); }
+// sign-in screen): return to the plugin's menu, or the picker without one.
+// Wi-Fi stays up so the next pick connects instantly; onExit tears it down
+// when the activity ends.
+void PluginCatalogActivity::exitCatalog() {
+  if (menuCatalog < 0) {
+    enterPluginPicker();
+    return;
+  }
+  // The menu was freed for the catalog: drop TLS first, then re-read it.
+  session.reset();
+  reloadMenu(currentMenu, menuCatalog);
+}
+
+// Everything a catalog session holds; the picker and the menus keep none of it.
+void PluginCatalogActivity::dropCatalogSession() {
+  // Only a catalog writes the temp file; submenu steps skip the SD access.
+  if (menuCatalog >= 0) Storage.remove(BROWSE_TMP_PATH);
+  session.reset();
+  resetBrowse();
+  browseHistory.clear();
+  browseCurrentUrl.clear();
+  errorMessage.clear();
+  token.clear();
+  config.clear();
+  menuCatalog = -1;
+  std::string().swap(menuCatalogUrl);
+  std::string().swap(menuCatalogBody);
+  std::string().swap(menuCatalogItem);
+  pendingAutoDownload = -1;
+}
+
+void PluginCatalogActivity::showMenu(const int parent, const int selectEntry) {
+  dropCatalogSession();  // menus need no TLS; a catalog entry opens its own
+  {
+    RenderLock lock;
+    currentMenu = parent;
+    menuRows.clear();
+    for (size_t i = 0; i < menuEntries.size(); i++) {
+      if (menuEntries[i].parent == parent) menuRows.push_back(static_cast<int16_t>(i));
+    }
+    state = State::PLUGIN_MENU;
+  }
+  const auto row = std::find(menuRows.begin(), menuRows.end(), selectEntry);
+  if (row != menuRows.end()) moveSelectionTo(static_cast<int>(row - menuRows.begin()));
+  requestUpdate();
+}
+
+const std::string& PluginCatalogActivity::menuTitle() const {
+  // A catalog entry frees the menu but keeps currentMenu for the way back.
+  if (currentMenu >= 0 && currentMenu < static_cast<int>(menuEntries.size())) return menuEntries[currentMenu].title;
+  for (const PluginRef& plugin : installedPlugins) {
+    if (plugin.name == pickerReturnName) return plugin.title;
+  }
+  return catalogTitle;
+}
+
+void PluginCatalogActivity::activateMenuEntry(const int entryIndex) {
+  const MenuEntry& entry = menuEntries[entryIndex];
+  app.clearTapFlash();  // the row leaves this screen
+  switch (entry.type) {
+    case MenuEntry::Type::Menu:
+      showMenu(entryIndex);
+      return;
+    case MenuEntry::Type::File:
+      openMenuFile(entry);
+      return;
+    case MenuEntry::Type::Catalog:
+      menuCatalog = entryIndex;
+      menuCatalogUrl = entry.target;
+      menuCatalogBody = entry.body;
+      menuCatalogItem = entry.item;
+      catalogTitle = entry.title;
+      {
+        // `entry` dies here: the catalog keeps only its overrides.
+        RenderLock lock;
+        std::vector<MenuEntry>().swap(menuEntries);
+        std::vector<int16_t>().swap(menuRows);
+      }
+      enterCatalog();
+      return;
+  }
+}
+
+void PluginCatalogActivity::openMenuFile(const MenuEntry& entry) {
+  if (!Storage.exists(entry.target.c_str())) {
+    // A page the plugin syncs is absent until the first sync: say so rather than
+    // leave a row that does nothing.
+    LOG_ERR("PCAT", "menu file missing: %s", entry.target.c_str());
+    const char* options[] = {tr(STR_OK_BUTTON)};
+    popup.showMessage(entry.title.c_str(), tr(STR_NO_FILES_FOUND), options, 1, 0, [this](int) { requestUpdate(); });
+    requestUpdate();
+    return;
+  }
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    // Leaving a Wi-Fi session reboots for a clean heap (CatalogActivity::onExit);
+    // route that reboot into the reader instead of Home.
+    if (entry.document) {
+      silentRestartToDocument(entry.target.c_str());
+    } else {
+      APP_STATE.openEpubPath = entry.target;
+      APP_STATE.saveToFile();
+      silentRestartToReader();
+    }
+  }
+  // Replaces this activity: the reader does not run with the plugin screen held in RAM.
+  activityManager.goToReader(entry.target, false, entry.document);
+}
 
 void PluginCatalogActivity::resetBrowse() {
   items.clear();
@@ -646,7 +849,7 @@ bool PluginCatalogActivity::fetchBrowseResponse() {
       fail(StrId::STR_PLUGIN_MANIFEST_INVALID);
       return false;
     }
-    if (browseCurrentUrl.empty()) browseCurrentUrl = substituted(manifest.browseReq.url, nullptr);
+    if (browseCurrentUrl.empty()) browseCurrentUrl = substituted(activeBrowseUrl(), nullptr);
   }
   const auto run = [&] {
     const pluginhttp::RequestSpec req = {
@@ -723,28 +926,45 @@ bool PluginCatalogActivity::nextRowVisible() const {
 int PluginCatalogActivity::rowCount() const {
   if (state == State::PLUGIN_PICKER)
     return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+  if (state == State::PLUGIN_MENU) return static_cast<int>(menuRows.size());
   if (state == State::LIST_PICKER) return static_cast<int>(manifest.browseLists.size());
   if (state != State::BROWSING) return 0;
   return static_cast<int>(items.size()) + (prevRowVisible() ? 1 : 0) + (nextRowVisible() ? 1 : 0);
 }
 
 const std::string& PluginCatalogActivity::activeBrowseUrl() const {
-  // Search overrides the list view, reusing the browse url when unspecified.
-  if (searchActive) return pick(manifest.searchUrl, manifest.browseReq.url);
-  if (currentList < 0 || currentList >= static_cast<int>(manifest.browseLists.size())) return manifest.browseReq.url;
-  return pick(manifest.browseLists[currentList].url, manifest.browseReq.url);
+  // A menu catalog entry overrides browse; search and lists layer on top,
+  // each falling back to the layer below when unspecified.
+  const std::string& base = menuCatalog >= 0 ? pick(menuCatalogUrl, manifest.browseReq.url) : manifest.browseReq.url;
+  if (searchActive) return pick(manifest.searchUrl, base);
+  if (currentList < 0 || currentList >= static_cast<int>(manifest.browseLists.size())) return base;
+  return pick(manifest.browseLists[currentList].url, base);
 }
 
 const std::string& PluginCatalogActivity::activeBrowseBody() const {
-  if (searchActive) return pick(manifest.searchBody, manifest.browseReq.body);
-  if (currentList < 0 || currentList >= static_cast<int>(manifest.browseLists.size())) return manifest.browseReq.body;
-  return pick(manifest.browseLists[currentList].body, manifest.browseReq.body);
+  const std::string& base = menuCatalog >= 0 ? pick(menuCatalogBody, manifest.browseReq.body) : manifest.browseReq.body;
+  if (searchActive) return pick(manifest.searchBody, base);
+  if (currentList < 0 || currentList >= static_cast<int>(manifest.browseLists.size())) return base;
+  return pick(manifest.browseLists[currentList].body, base);
 }
 
 void PluginCatalogActivity::fetchPage(const int newPage) {
   if (!manifest.isXmlList()) page = newPage;
   if (!fetchBrowseResponse() || !parseBrowseResponse()) return;
   nav.reset();
+  if (!menuCatalogItem.empty()) {
+    // One-tap menu entry: download its item straight away; downloadFinished() returns to the menu.
+    const auto it = std::find_if(items.begin(), items.end(), [&](const Item& i) { return i.id == menuCatalogItem; });
+    if (it == items.end()) {
+      fail(StrId::STR_NO_FILES_FOUND);
+      return;
+    }
+    // Run from the next loop's handleCustomInput(): the download's TLS needs
+    // the stack this fetch call chain is holding. The state stays on loading,
+    // so a repaint in between never shows the list.
+    pendingAutoDownload = static_cast<int>(it - items.begin());
+    return;
+  }
   state = State::BROWSING;
   requestUpdate();
 }
@@ -944,6 +1164,10 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
   const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
   session.reset();
   item = {};
+  if (!menuCatalogItem.empty()) {
+    finishDownload(result);  // a one-tap entry returns to the menu: no list to restore
+    return;
+  }
   // Reuse the SD response without another network request or resetting navigation.
   if (!parseBrowseResponse()) return;
   session = makeUniqueNoThrow<freeink::SecureHttpClient>();
@@ -952,6 +1176,10 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
 }
 
 void PluginCatalogActivity::downloadFinished(const bool cancelled) {
+  if (!menuCatalogItem.empty()) {
+    exitCatalog();  // a one-tap entry has no list to go back to
+    return;
+  }
   state = cancelled ? State::BROWSING : State::DONE;
   requestUpdate();
 }
@@ -1016,12 +1244,27 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       const std::string parent = dest.substr(0, slash);
       if (!Storage.exists(parent.c_str())) Storage.mkdir(parent.c_str());
     }
-    const auto result = downloadFile(base + rel, dest + ".new");
+    const auto result = downloadFile(base + PluginLocations::bundleEntryUrlPath(rel), dest + ".new");
     if (result != HttpDownloader::OK) return result;
     staged.push_back(dest);
   }
   // ponytail: a failed swap mid-loop leaves a mixed old/new bundle; a
   // directory-level swap would close that, at the cost of copying the tree.
+  // A replaced page must not open from its old layout cache, and the Library
+  // may need a rescan; both also hold for files swapped before a failure.
+  bool libraryChanged = false;
+  bool documentsChanged = false;
+  ScopedCleanup refresh{[&] {
+    if (libraryChanged) library::markLibraryIndexDirty();
+    // A book read before this bundle claimed it as a document leaves Recents now,
+    // so Home does not wait for the next Library rebuild.
+    if (documentsChanged) {
+      const auto documents = plugindocuments::collect();
+      if (!documents.empty() && RECENT_BOOKS.pruneMatching(plugindocuments::isDocument, &documents)) {
+        RECENT_BOOKS.saveToFile();
+      }
+    }
+  }};
   for (size_t i = 0; i < staged.size(); i++) {
     if (!Storage.replaceFile((staged[i] + ".new").c_str(), staged[i].c_str())) {
       LOG_ERR("PCAT", "bundle swap failed: %s", staged[i].c_str());
@@ -1029,6 +1272,10 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       complete = true;  // already-swapped files stay; the rollback must not touch them
       return HttpDownloader::FILE_ERROR;
     }
+    clearBookCache(staged[i]);
+    const bool claimsDocuments = plugindocuments::changesDocuments(staged[i]);
+    documentsChanged = documentsChanged || claimsDocuments;
+    libraryChanged = libraryChanged || library::isLibraryBookFile(staged[i]) || claimsDocuments;
   }
   complete = true;
   emitBookDownloaded(manifestPath, staged.empty() ? "" : staged.front(), item.title);
@@ -1139,6 +1386,12 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 
 // Sign-in and completion states precede the shared catalog input handling.
 bool PluginCatalogActivity::handleCustomInput() {
+  if (pendingAutoDownload >= 0) {
+    const int index = pendingAutoDownload;
+    pendingAutoDownload = -1;
+    if (index < static_cast<int>(items.size())) downloadItem(index);
+    return true;
+  }
   if (ignoreHubInstallerBackRelease) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       ignoreHubInstallerBackRelease = false;
@@ -1146,7 +1399,7 @@ bool PluginCatalogActivity::handleCustomInput() {
     }
     if (!mappedInput.isPressed(MappedInputManager::Button::Back)) ignoreHubInstallerBackRelease = false;
   }
-  if (pluginHubPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
+  if (popup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
 
   if (state == State::AUTH) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -1210,6 +1463,14 @@ void PluginCatalogActivity::onBackButton() {
     exitCatalog();
     return;
   }
+  if (state == State::PLUGIN_MENU) {
+    if (currentMenu < 0) {
+      enterPluginPicker();
+    } else {
+      showMenu(menuEntries[currentMenu].parent, currentMenu);
+    }
+    return;
+  }
   if (state == State::PLUGIN_PICKER) {
     if (rootMode) {
       onGoHome();  // home launch replaced the home screen (root)
@@ -1251,7 +1512,7 @@ void PluginCatalogActivity::activateIndex(const int index) {
     const int pluginStart = showOpds ? 1 : 0;
     if (showPluginHubInstallRow && index == pluginStart) {
       static constexpr StrId OPTIONS[] = {StrId::STR_INSTALL, StrId::STR_HIDE, StrId::STR_CANCEL};
-      pluginHubPopup.show(StrId::STR_PLUGIN_HUB, OPTIONS, 3, 0, [this](const int selected) {
+      popup.show(StrId::STR_PLUGIN_HUB, OPTIONS, 3, 0, [this](const int selected) {
         if (selected == 0) {
           auto installer = makeUniqueNoThrow<PluginHubInstallActivity>(renderer, mappedInput, false);
           if (!installer) {
@@ -1296,12 +1557,27 @@ void PluginCatalogActivity::activateIndex(const int index) {
       startActivityForResult(std::move(viewer), [](const ActivityResult&) {});
       return;
     }
-    if (action != PluginLocations::PickerAction::Catalog) return;
+    if (action != PluginLocations::PickerAction::Catalog && action != PluginLocations::PickerAction::Menu) return;
     app.clearTapFlash();  // the row leaves this screen
     pickerReturnName = plugin.name;
     manifestPath = plugin.manifestPath;
     catalogTitle = plugin.title;
-    enterCatalog();
+    if (!loadManifest()) {
+      LOG_ERR("PCAT", "invalid manifest: %s", manifestPath.c_str());
+      fail(StrId::STR_PLUGIN_MANIFEST_INVALID);
+      return;
+    }
+    // A menu opens offline; Wi-Fi waits for an entry that needs it.
+    if (menuEntries.empty()) {
+      enterCatalog();
+    } else {
+      showMenu(-1);
+    }
+    return;
+  }
+  if (state == State::PLUGIN_MENU) {
+    if (index < 0 || index >= static_cast<int>(menuRows.size())) return;
+    activateMenuEntry(menuRows[index]);
     return;
   }
   if (state == State::LIST_PICKER) {
@@ -1453,6 +1729,7 @@ void PluginCatalogActivity::drawFooter() {
   switch (state) {
     case State::BROWSING:
     case State::LIST_PICKER:
+    case State::PLUGIN_MENU:
     case State::PLUGIN_PICKER: {
       const int count = rowCount();
       const int prevOff = prevRowVisible() ? 1 : 0;
@@ -1491,19 +1768,21 @@ void PluginCatalogActivity::drawFooter() {
 }
 
 void PluginCatalogActivity::render(RenderLock&& lock) {
-  if (pluginHubPopup.processRender(renderer, mappedInput)) return;
+  if (popup.processRender(renderer, mappedInput)) return;
   CatalogActivity::render(std::move(lock));
 }
 
 void PluginCatalogActivity::buildScreen(UiScreen& screen) {
   const bool listState = state == State::BROWSING || state == State::LIST_PICKER;
-  const std::string title = listState ? browsingHeaderLabel() : catalogTitle;
+  const std::string title =
+      listState ? browsingHeaderLabel() : (state == State::PLUGIN_MENU ? menuTitle() : catalogTitle);
   screenHeader(screen, title.c_str());
   if (buildStatusScreen(screen)) return;
 
   switch (state) {
     case State::BROWSING:
     case State::LIST_PICKER:
+    case State::PLUGIN_MENU:
     case State::PLUGIN_PICKER:
       buildBrowsingScreen(screen);
       return;
@@ -1621,6 +1900,7 @@ void PluginCatalogActivity::rebuildRowItems() {
           addRow(plugin.title.c_str(), tr(STR_PLUGIN_WEB_ONLY), plugin.readmePath.empty() ? nullptr : ">");
           break;
         case PluginLocations::DeviceKind::Catalog:
+        case PluginLocations::DeviceKind::Menu:
           addRow(plugin.title.c_str(), subtitle, ">");
           break;
         case PluginLocations::DeviceKind::Background:
@@ -1630,6 +1910,11 @@ void PluginCatalogActivity::rebuildRowItems() {
     }
   } else if (state == State::LIST_PICKER) {
     for (const auto& list : manifest.browseLists) addRow(list.title.c_str());
+  } else if (state == State::PLUGIN_MENU) {
+    // Only submenus get the chevron; catalogs and files open in place.
+    for (const int16_t i : menuRows) {
+      addRow(menuEntries[i].title.c_str(), nullptr, menuEntries[i].type == MenuEntry::Type::Menu ? ">" : nullptr);
+    }
   } else {
     if (prevRowVisible()) addRow(tr(STR_PREV_PAGE), nullptr, ">");
     for (const auto& entry : items) {

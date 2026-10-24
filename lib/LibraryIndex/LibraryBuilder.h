@@ -66,7 +66,13 @@ struct BuildStats {
 // book over its filename. It reads an existing cache when available; otherwise
 // it stops the normal EPUB parser at the end of <metadata>, before the manifest,
 // without building the reader's spine, TOC, CSS, or section caches.
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false);
+// `skip`, when set, drops files that pass isLibraryBookFile() but are not books
+// to the shelf (a plugin's own pages). It sees each candidate's full path.
+struct SkipFile {
+  bool (*fn)(const void* ctx, std::string_view fullPath) = nullptr;
+  const void* ctx = nullptr;
+};
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false, SkipFile skip = {});
 
 // Live index path, shared by the builder and activity.
 const char* libraryIndexPath();

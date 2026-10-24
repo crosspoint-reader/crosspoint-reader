@@ -1,4 +1,5 @@
 #pragma once
+#include <ArduinoJson.h>
 #include <I18n.h>
 
 #include <memory>
@@ -9,6 +10,7 @@
 #include "activities/CatalogActivity.h"
 #include "components/OptionPopup.h"
 #include "network/HttpDownloader.h"
+#include "util/PluginDocuments.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 
@@ -34,10 +36,11 @@ std::vector<PluginRef> discoverPlugins();
 // See docs/sd-plugins.md for the device.json schema.
 class PluginCatalogActivity final : public CatalogActivity {
  public:
-  // showOpds adds the OPDS row; rootMode returns Home instead of popping to Settings.
+  // showOpds adds the OPDS row; rootMode returns Home instead of popping to Settings;
+  // returnDocument (a plugin document being left) reopens the menu entry that opened it.
   // Out-of-line construction/destruction needs the complete SecureHttpClient type.
   explicit PluginCatalogActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool showOpds = false,
-                                 bool rootMode = false);
+                                 bool rootMode = false, std::string returnDocument = {});
   ~PluginCatalogActivity() override;
 
   void onEnter() override;
@@ -114,6 +117,18 @@ class PluginCatalogActivity final : public CatalogActivity {
     bool hasPasswordGrant() const { return authType == "password" && !authReq.url.empty(); }
   };
 
+  // One device.json "menu" row; submenus link children through `parent`.
+  struct MenuEntry {
+    using Type = plugindocuments::MenuItem::Type;
+    Type type = Type::Menu;
+    bool document = true;  // File: open as a plugin document (ReaderActivity::pluginDocument)
+    int16_t parent = -1;   // enclosing submenu entry; -1 = the menu root
+    std::string title;
+    std::string target;  // File: absolute SD path. Catalog: browse.url override (empty = browse's)
+    std::string body;    // Catalog: browse.body override
+    std::string item;    // Catalog: id of a first-page item to download at once, then return
+  };
+
   struct Item {
     std::string title, author, id, url;
     std::string version;  // catalog version (tracksInstalls only)
@@ -136,9 +151,20 @@ class PluginCatalogActivity final : public CatalogActivity {
   bool pluginHubAvailable = false;
   bool showPluginHubInstallRow = false;
   bool ignoreHubInstallerBackRelease = false;
-  OptionPopup pluginHubPopup;
+  OptionPopup popup;  // Plugin Hub install prompt, missing menu file notice
+  // Parsed device.json menu; empty for a plain catalog. Freed while a menu
+  // catalog runs (its Wi-Fi and TLS need the heap) and re-read on Back.
+  std::vector<MenuEntry> menuEntries;
+  int currentMenu = -1;           // submenu shown in PLUGIN_MENU; -1 = root
+  std::vector<int16_t> menuRows;  // menuEntries indices of the shown submenu
+  int menuCatalog = -1;           // menu entry whose catalog is open; -1 = none
+  std::string menuCatalogUrl;     // that entry's url/body overrides, kept after the menu is freed
+  std::string menuCatalogBody;
+  std::string menuCatalogItem;   // that entry's one-tap item; "" = browse as usual
+  int pendingAutoDownload = -1;  // items index the one-tap entry downloads on the next loop
   bool showOpds = false;
   bool rootMode = false;
+  std::string returnDocument;    // consumed by onEnter()
   std::string pickerReturnName;  // plugin identity to reselect after leaving a catalog
   std::vector<Item> items;
   // Row buffer over items/browseLists plus the synthetic pager rows; rebuilt
@@ -167,6 +193,18 @@ class PluginCatalogActivity final : public CatalogActivity {
   freeink::ui::Rect authQrRect{};
 
   void enterPluginPicker();
+  // Show a submenu (-1 = root) without touching the network, reselecting
+  // `selectEntry` (a menuEntries index) when it is one of its rows.
+  void showMenu(int parent, int selectEntry = -1);
+  void activateMenuEntry(int entryIndex);
+  void openMenuFile(const MenuEntry& entry);
+  // Picker row for manifestPath's plugin, then its menu; false if it is gone.
+  bool reopenMenuFor(const std::string& documentPath);
+  // Re-reads device.json, then showMenu(); the picker if the menu is gone.
+  bool reloadMenu(int parent, int selectEntry);
+  // Header for the shown submenu: its entry title, or the plugin's at the root.
+  const std::string& menuTitle() const;
+  void dropCatalogSession();
   void enterCatalog();
   void exitCatalog();
   // Clear items, paging, list and search state, and the row buffer.
