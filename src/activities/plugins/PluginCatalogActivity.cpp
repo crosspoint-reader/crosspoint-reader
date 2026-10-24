@@ -1,5 +1,4 @@
 #include "PluginCatalogActivity.h"
-#include "PluginCatalogPaging.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -26,6 +25,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "PluginCatalogPaging.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
 #include "activities/util/ConfirmationActivity.h"
