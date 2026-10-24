@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "ReaderFont.h"
 #include "util/HomeButtonInput.h"
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
@@ -417,6 +418,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
+ private:
+  bool bookFontActive = false;
+  ReaderFont defaultFont;
+
+ public:
   uint16_t getPowerButtonDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
@@ -427,6 +433,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // the only set a built-in family ships — otherwise the settings UI would keep
   // offering a size nothing renders at. Both fields are persisted in one write.
   void clearSdFontFamily();
+
+  // While a book is open, fontPointSize and sdFontFamilyName hold that book's
+  // font, so every reader path uses it, and the default is kept in defaultFont
+  // so that toJson() still saves it. ReaderActivity begins and ends this.
+  // Settings are only loaded at boot, never while a book font is active.
+  void beginBookFont(const ReaderFont& bookFont);
+  void endBookFont();
+  ReaderFont readerFont() const;
+  // The font books use unless they keep their own.
+  ReaderFont defaultReaderFont() const;
 
   // Resolved status-bar composition. Consumers read the spec; only settings
   // editors read the raw fields.

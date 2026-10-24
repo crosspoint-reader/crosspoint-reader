@@ -271,6 +271,8 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Reader Font Size**: Choose a point size. Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
 
+  These two settings are the default for all books. A book can keep its own font family and size: see [Reader Menu](#5-reader-menu).
+
 - **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
 
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
@@ -339,7 +341,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
-- **Clear Reading Cache** (**Settings → Reader**): Clear the internal SD card cache.
+- **Clear Reading Cache** (**Settings → Reader**): Clear the internal SD card cache. This also removes each book's own font.
 
 - **Use book metadata**: Read the title and author stored inside each book when the Library index is rebuilt. When disabled or unavailable, the Library uses the filename.
 
@@ -702,6 +704,14 @@ Available options include:
 - **Go Home** – Close the book and return to the Home screen.
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
+
+**Each book keeps its own font.**
+
+- A font family or size you change while a book is open is used for that book only. This includes changes from **Text Settings** and from the toolbar's **Text** panel.
+- Other books keep the default from **Settings → Reader**.
+- To make a book follow the default again, pick the default font and size while the book is open.
+- The menus use the book's font for text the built-in font cannot show, such as Chinese chapter names. If the book uses the built-in font, that text shows boxes until you leave the book.
+- **Clear Reading Cache** in Settings also removes every book's own font.
 
 Press **Back** at any time to close the menu and return to your current page.
 

@@ -7,6 +7,18 @@
 
 #include "ClippingStore.h"
 
+std::string bookCachePath(const std::string& path) {
+  const char* prefix = nullptr;
+  if (FsHelpers::hasReflowableBookExtension(path)) {
+    prefix = "epub_";
+  } else if (FsHelpers::hasXtcExtension(path)) {
+    prefix = "xtc_";
+  } else {
+    return "";
+  }
+  return std::string("/.crosspoint/") + prefix + std::to_string(std::hash<std::string>{}(path));
+}
+
 bool isBookCacheDirectoryName(const char* name) {
   if (!name) {
     return false;
