@@ -8,6 +8,7 @@
 #include <Serialization.h>
 
 #include <cstring>
+#include <string_view>
 
 #include "../../../../src/fontIds.h"
 #include "../CjkBreaks.h"
@@ -205,7 +206,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
   // left and extraEndOffset on the right, so the centered rubyX is always within the page margins.
   struct RubyDrawInfo {
     int x = 0;  // spread == 0: centered x. spread > 0: left edge of the base text.
-    std::string text;
+    std::string_view text;
     BidiUtils::BidiBaseDir baseDir{};
     // ruby-align: space-around. >0 when the ruby is narrower than its base: the width difference
     // to distribute over the ruby tokens. 0 means plain centering.
@@ -213,10 +214,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     std::vector<size_t> breaks;  // token boundaries inside `text` (see CjkBreaks)
   };
   // Copies ruby token k of s (tokens are delimited by br) into out.
-  const auto rubyToken = [](const std::string& s, const std::vector<size_t>& br, const size_t k, std::string& out) {
+  const auto rubyToken = [](std::string_view s, const std::vector<size_t>& br, const size_t k, std::string& out) {
     const size_t b = k == 0 ? 0 : br[k - 1];
     const size_t e = k == br.size() ? s.size() : br[k];
-    out.assign(s, b, e - b);
+    out.assign(s.data() + b, e - b);
   };
   const bool blockHasRuby = hasRuby();
   std::vector<RubyDrawInfo> rubies;
@@ -247,7 +248,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
         // split so that each gap between ruby characters is twice the gap at either end; the centers
         // still coincide. A ruby with a single token (e.g. Latin text) degenerates to centering.
         if (rubyWidth < groupActualWidth) {
-          auto breaks = CjkBreaks::characterBreakByteOffsets(info.text);
+          auto breaks = CjkBreaks::characterBreakByteOffsets(rubyTexts[i]);
           if (!breaks.empty()) {
             int tokenSum = 0;
             std::string tok;
@@ -352,7 +353,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
       const int rubyY = wordY - ascender;
       const RubyDrawInfo& ruby = rubies[i];
       if (ruby.spread == 0) {
-        renderer.drawText(fontId, ruby.x, rubyY, ruby.text.c_str(), true, EpdFontFamily::SUP, ruby.baseDir, tracking);
+        renderer.drawText(fontId, ruby.x, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::SUP, ruby.baseDir,
+                          tracking);
       } else {
         // Token k of n sits after (2k+1)/(2n) of the spare width: an outer gap of spread/(2n) and an
         // inner gap of spread/n. Computed from k rather than by accumulating a rounded gap, so
