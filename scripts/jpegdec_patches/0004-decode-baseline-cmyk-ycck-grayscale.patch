@@ -1,0 +1,200 @@
+Subject: [PATCH] fix: decode baseline CMYK/YCCK as grayscale
+
+Upstream: https://github.com/bitbank2/JPEGDEC/pull/125
+
+Support interleaved 8-bit, 1x1-sampled CMYK/YCCK streams using the
+existing MCU buffers. Recognize Adobe APP14 polarity and transform,
+consume the fourth component, and reset its DC predictor at restarts.
+Reject unsupported four-component layouts instead of misdecoding them.
+
+Based on JPEGDEC 86282979224c8a32fd51e091ed5a35b0c699a52b with
+CrossPoint patches 0001-0003 applied. No extra heap allocations.
+
+diff --git a/src/JPEGDEC.h b/src/JPEGDEC.h
+--- a/src/JPEGDEC.h
++++ b/src/JPEGDEC.h
+@@ -209,6 +209,7 @@
+     uint8_t iScanStart, iScanEnd, ucFF, ucNumComponents;
+     uint8_t ucACTable, ucDCTable;
+     uint8_t ucMemType, ucPixelType;
++    uint8_t ucAdobeTransform; // 0xff when no Adobe APP14 marker is present
+     uint16_t u16MCUFlags;
+     int iEXIF; // Offset to EXIF 'TIFF' file
+     int iError;
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -1409,6 +1409,8 @@
+             return 1;
+         if ((c & 0xf) > 3 || (c & 0xf0) > 0x30)
+             return 1; // bogus table numbers
++        if (pJPEG->ucNumComponents == 4 && j != i)
++            return 1; // four-component decoding follows frame component order
+         pJPEG->JPCI[j].dc_tbl_no = c >> 4;
+         pJPEG->JPCI[j].ac_tbl_no = c & 0xf;
+         pJPEG->JPCI[j].component_needed = 1; // mark this component as being included in the scan
+@@ -1577,6 +1579,7 @@
+     uint16_t usMarker, usLen = 0;
+     int iFilePos = 0;
+     
++    pPage->ucAdobeTransform = 0xff;
+     pPage->pFramebuffer = NULL; // this must be set AFTER calling this function
+     // make sure usPixels is 16-byte aligned for S3 SIMD (and possibly others)
+     i = (int)(int64_t)pPage->usUnalignedPixels;
+@@ -1651,6 +1654,10 @@
+                 pPage->iError = JPEG_UNSUPPORTED_FEATURE;
+                 return 0; // currently unsupported modes
+                 
++            case 0xffee: // Adobe APP14 color transform
++                if (usLen >= 14 && memcmp(&s[iOffset+2], "Adobe", 5) == 0)
++                    pPage->ucAdobeTransform = s[iOffset+13];
++                break;
+             case 0xffe1: // App1 (EXIF?)
+                 if (s[iOffset+2] == 'E' && s[iOffset+3] == 'x' && (s[iOffset+8] == 'M' || s[iOffset+8] == 'I')) // the EXIF data we want
+                 {
+@@ -1684,6 +1691,11 @@
+                 pPage->iCropCY = pPage->iHeight = MOTOSHORT(&s[iOffset+3]);
+                 pPage->iCropCX = pPage->iWidth = MOTOSHORT(&s[iOffset+5]);
+                 pPage->ucNumComponents = s[iOffset+7];
++                if (pPage->ucNumComponents < 1 || pPage->ucNumComponents > MAX_COMPS_IN_SCAN ||
++                    (pPage->ucNumComponents == 4 && (pPage->ucMode != 0xc0 || pPage->ucBpp != 8))) {
++                    pPage->iError = JPEG_UNSUPPORTED_FEATURE;
++                    return 0;
++                }
+                 pPage->ucBpp = pPage->ucBpp * pPage->ucNumComponents; /* Bpp = number of components * bits per sample */
+                 {
+                     usLen -= 8;
+@@ -1695,6 +1707,10 @@
+                         pPage->JPCI[i].component_id = s[iOffset++];
+                         pPage->JPCI[i].component_index = (unsigned char)i;
+                         ucSamp = s[iOffset++]; // get the h+v sampling factor
++                        if (pPage->ucNumComponents == 4 && ucSamp != 0x11) {
++                            pPage->iError = JPEG_UNSUPPORTED_FEATURE;
++                            return 0; // CMYK/YCCK requires one block per component
++                        }
+                         if (i == 0) // Y component?
+                             pPage->ucSubSample = ucSamp;
+ //                        pPage->JPCI[i].h_samp_factor = ucSamp >> 4;
+@@ -1766,7 +1782,17 @@
+ //        if (pPage->ucBpp != 8) // need to match up table IDs
+ //        {
+             iOffset -= usLen;
+-            JPEGGetSOS(pPage, &iOffset); // get Start-Of-Scan info for decoding
++            if (JPEGGetSOS(pPage, &iOffset) != 0) {
++                pPage->iError = JPEG_DECODE_ERROR;
++                return 0;
++            }
++            if (pPage->ucNumComponents == 4 &&
++                (pPage->ucComponentsInScan != 4 || pPage->iScanStart != 0 || pPage->iScanEnd != 63 ||
++                 pPage->cApproxBitsLow != 0 || pPage->cApproxBitsHigh != 0 ||
++                 (pPage->ucAdobeTransform != 0xff && pPage->ucAdobeTransform != 0 && pPage->ucAdobeTransform != 2))) {
++                pPage->iError = JPEG_UNSUPPORTED_FEATURE;
++                return 0;
++            }
+ //        }
+         if (!JPEGMakeHuffTables(pPage, 0)) //int bThumbnail) DEBUG
+         {
+@@ -2806,6 +2832,36 @@
+         pOutput += 8;
+     } // for each row
+ } /* JPEGIDCT() */
++// Convert the four 8x8 component blocks in place for grayscale output.
++static int JPEGClampByte(int value)
++{
++    return value < 0 ? 0 : (value > 255 ? 255 : value);
++}
++
++static void JPEGCMYKToGray(JPEGIMAGE *pJPEG, int count)
++{
++    uint8_t *c = (uint8_t *)&pJPEG->sMCUs[MCU0];
++    const uint8_t *m = (uint8_t *)&pJPEG->sMCUs[MCU1];
++    const uint8_t *y = (uint8_t *)&pJPEG->sMCUs[MCU2];
++    const uint8_t *k = (uint8_t *)&pJPEG->sMCUs[MCU3];
++    for (int i = 0; i < count; i++) {
++        int r, g, b, black = k[i];
++        if (pJPEG->ucAdobeTransform == 2) { // YCCK stores YCbCr of non-inverted CMY
++            const int cb = m[i] - 128, cr = y[i] - 128;
++            r = 255 - JPEGClampByte(c[i] + ((91881 * cr + 32768) >> 16));
++            g = 255 - JPEGClampByte(c[i] + ((-22554 * cb - 46802 * cr + 32768) >> 16));
++            b = 255 - JPEGClampByte(c[i] + ((116130 * cb + 32768) >> 16));
++        } else if (pJPEG->ucAdobeTransform == 0) { // Adobe CMYK is inverted
++            r = c[i]; g = m[i]; b = y[i];
++        } else { // conventional CMYK without APP14
++            r = 255 - c[i]; g = 255 - m[i]; b = 255 - y[i];
++            black = 255 - black;
++        }
++        // BT.601 luma times K, rounded; the numerator fits in uint32_t.
++        c[i] = (uint8_t)(((uint32_t)(19595 * r + 38470 * g + 7471 * b) * black + 8355840u) / 16711680u);
++    }
++}
++
+ static void JPEGPutMCU8BitGray(JPEGIMAGE *pJPEG, int x, int iPitch)
+ {
+     int i, j, xcount, ycount;
+@@ -4957,7 +5013,7 @@
+ {
+     int cx, cy, x, y, mcuCX, mcuCY;
+     int iLum0, iLum1, iLum2, iLum3, iCr, iCb;
+-    signed int iDCPred0, iDCPred1, iDCPred2;
++    signed int iDCPred0, iDCPred1, iDCPred2, iDCPred3;
+     int i, iQuant1, iQuant2, iQuant3, iErr;
+     int iSkipMask, bSkipRow;
+     int iDMASize, iDMAOffset;
+@@ -5000,6 +5056,10 @@
+     }
+     if (pJPEG->iOptions & JPEG_LUMA_ONLY && pJPEG->ucPixelType < EIGHT_BIT_GRAYSCALE) {
+         pJPEG->ucPixelType = EIGHT_BIT_GRAYSCALE; // switch to grayscale output
++    }
++    if (pJPEG->ucNumComponents == 4 && pJPEG->ucPixelType < EIGHT_BIT_GRAYSCALE) {
++        pJPEG->iError = JPEG_UNSUPPORTED_FEATURE;
++        return 0;
+     }
+     // reorder and fix the quantization table for decoding
+     JPEGFixQuantD(pJPEG);
+@@ -5013,7 +5073,7 @@
+     cACTable1 = pJPEG->JPCI[1].ac_tbl_no;
+     cDCTable2 = pJPEG->JPCI[2].dc_tbl_no;
+     cACTable2 = pJPEG->JPCI[2].ac_tbl_no;
+-    iDCPred0 = iDCPred1 = iDCPred2 = mcuCX = mcuCY = 0;
++    iDCPred0 = iDCPred1 = iDCPred2 = iDCPred3 = mcuCX = mcuCY = 0;
+     
+     switch (pJPEG->ucSubSample) // set up the parameters for the different subsampling options
+     {
+@@ -5290,6 +5350,28 @@
+                     }
+                 }
+             } // if color components present
++            if (pJPEG->ucNumComponents == 4) {
++                int *predictors[3] = {&iDCPred1, &iDCPred2, &iDCPred3};
++                for (int component = 1; component < 4; component++) {
++                    const int offset = component * DCTSIZE;
++                    const int quantTable = pJPEG->JPCI[component].quant_tbl_no;
++                    pJPEG->ucACTable = pJPEG->JPCI[component].ac_tbl_no;
++                    pJPEG->ucDCTable = pJPEG->JPCI[component].dc_tbl_no;
++                    iErr |= JPEGDecodeMCU(pJPEG, offset | iSkipMask, predictors[component - 1]);
++                    if (pJPEG->u16MCUFlags == 0 || bThumbnail) {
++                        const int quant = pJPEG->sQuantTable[quantTable * DCTSIZE];
++                        c = ucRangeTable[(((*predictors[component - 1]) * quant) >> 5) & 0x3ff];
++                        l = c | ((uint32_t)c << 8) | ((uint32_t)c << 16) | ((uint32_t)c << 24);
++                        pl = (uint32_t *)&pJPEG->sMCUs[offset];
++                        for (i = 0; i < iMaxFill; i++)
++                            pl[i] = l;
++                    } else {
++                        JPEGIDCT(pJPEG, offset, quantTable);
++                    }
++                }
++                if (!iSkipMask && !iErr)
++                    JPEGCMYKToGray(pJPEG, bThumbnail ? 1 : ((pJPEG->iOptions & JPEG_SCALE_QUARTER) ? 4 : 64));
++            }
+             if (!iSkipMask) { // this MCU is not skipped
+                 if (pJPEG->ucPixelType >= EIGHT_BIT_GRAYSCALE) {
+                     JPEGPutMCU8BitGray(pJPEG, xoff, iPitch); // grayscale or color is being drawn as grayscale
+@@ -5356,7 +5438,7 @@
+                 if (--pJPEG->iResCount == 0)
+                 {
+                     pJPEG->iResCount = pJPEG->iResInterval;
+-                    iDCPred0 = iDCPred1 = iDCPred2 = 0; // reset DC predictors
++                    iDCPred0 = iDCPred1 = iDCPred2 = iDCPred3 = 0; // reset DC predictors
+                     if (pJPEG->bb.ulBitOff & 7) // need to start at the next even byte
+                     {
+                         pJPEG->bb.ulBitOff += (8 - (pJPEG->bb.ulBitOff & 7));  // new restart interval starts on byte boundary
