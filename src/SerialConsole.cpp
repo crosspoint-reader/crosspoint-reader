@@ -40,9 +40,26 @@ void sendScreenshot() {
   // frame while it streams, so a capture never mixes two frames.
   RenderLock lock;
   const uint32_t bufferSize = display.getBufferSize();
+  const uint8_t* frame = display.getFrameBuffer();
   logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
-  logSerial.write(display.getFrameBuffer(), bufferSize);
+  // write() can take only part of the frame when the USB TX buffer is full, so
+  // keep sending the rest; give up only after a second without progress.
+  constexpr unsigned long STALL_LIMIT_MS = 1000;
+  uint32_t sent = 0;
+  unsigned long lastProgress = millis();
+  while (sent < bufferSize) {
+    const size_t n = logSerial.write(frame + sent, bufferSize - sent);
+    if (n > 0) {
+      sent += n;
+      lastProgress = millis();
+    } else if (millis() - lastProgress >= STALL_LIMIT_MS) {
+      break;
+    } else {
+      delay(1);
+    }
+  }
   logSerial.printf("SCREENSHOT_END\n");
+  if (sent < bufferSize) LOG_ERR("CON", "Screenshot stalled after %u of %u bytes", sent, bufferSize);
 }
 
 #ifdef ENABLE_SERIAL_CONTROL
