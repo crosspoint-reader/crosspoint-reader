@@ -241,10 +241,15 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     indexes = hyphenator->breakIndexes(cps);
   }
 
-  // Only add fallback breaks if needed
-  if (includeFallback && indexes.empty()) {
-    const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
-    const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
+  // Only add fallback breaks if needed. Without a resolved language hyphenator (e.g. missing or
+  // unrecognized dc:language) we have no linguistic basis for a split point, so skip this step
+  // rather than guessing with the generic Liang default minima -- blindly cutting at every 2nd
+  // character mangled ordinary short words (e.g. "good" -> "go-" + "od"). A word that still can't
+  // fit its line is left unsplit; ParsedText already forces an unbreakable word onto its line
+  // instead of looping forever.
+  if (includeFallback && indexes.empty() && hyphenator) {
+    const size_t minPrefix = hyphenator->minPrefix();
+    const size_t minSuffix = hyphenator->minSuffix();
     for (size_t idx = minPrefix; idx + minSuffix <= cps.size(); ++idx) {
       indexes.push_back(idx);
     }
