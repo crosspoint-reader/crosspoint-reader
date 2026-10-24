@@ -1,4 +1,5 @@
 #include "PluginCatalogActivity.h"
+#include "PluginCatalogPaging.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -752,28 +753,32 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
 bool PluginCatalogActivity::parseBrowseResponse() {
   if (manifest.isXmlList()) return parseXmlList();
 
-  // Compatibility is opt-in. If the manifest does not map compatibility
-  // fields, the normal single streaming pass is unchanged. When it does, make
-  // a bounded first pass that remembers compatible indexes only from the
-  // displayed page. The extra titled row remains pagination lookahead.
-  // Catalog entries that omit compatibility values match by default; explicit
-  // restrictions must match this firmware.
+  // Requests with {page} are already sliced server-side. Static JSON files
+  // need a bounded client-side page window into the streamed response.
+  const bool localPaging = plugincatalogpaging::isStaticFeed(activeBrowseUrl(), activeBrowseBody());
+  const size_t pageOffset =
+      localPaging ? static_cast<size_t>(std::max(0, page - 1)) * static_cast<size_t>(manifest.pageSize) : 0;
+
+  // Static catalogs paginate *compatible* entries rather than raw entries,
+  // so incompatible plugins cannot create empty or misleading pages.
   std::vector<int> compatibleRows;
   bool rawHasMore = false;
   if (manifest.filtersCompatibility()) {
     compatibleRows.reserve(manifest.pageSize);
     int rowIndex = 0;
-    int titledRows = 0;
+    plugincatalogpaging::PageWindow filteredWindow(pageOffset, manifest.pageSize);
+    plugincatalogpaging::PageWindow serverWindow(0, manifest.pageSize);
     const std::string unused;
     auto selectCompatible = [&](JsonListParser::Row& row) {
       const int thisRow = rowIndex++;
       if (row.field[JsonListParser::F_TITLE].empty()) return;
-      if (++titledRows > manifest.pageSize) {
-        rawHasMore = true;
-        return;
-      }
-      if (catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]))
+      const bool compatible =
+          catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]);
+      if (localPaging) {
+        if (filteredWindow.take(compatible)) compatibleRows.push_back(thisRow);
+      } else if (serverWindow.take() && compatible) {
         compatibleRows.push_back(thisRow);
+      }
     };
     const std::string* compatibilityFields[JsonListParser::F_COUNT] = {};
     for (auto& field : compatibilityFields) field = &unused;
@@ -789,6 +794,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
       fail(StrId::STR_PARSE_FEED_FAILED);
       return false;
     }
+    rawHasMore = localPaging ? filteredWindow.hasMore() : serverWindow.hasMore();
   }
 
   releaseRows();
@@ -796,15 +802,16 @@ bool PluginCatalogActivity::parseBrowseResponse() {
   items.reserve(manifest.pageSize + 1);
   int rowIndex = 0;
   size_t compatibleIndex = 0;
-  // The unfiltered extra row controls server pagination; compatibility only
-  // controls which rows from this page are displayed.
+  plugincatalogpaging::PageWindow visibleWindow(pageOffset, manifest.pageSize);
   auto append = [&](JsonListParser::Row& row) {
     const int thisRow = rowIndex++;
     if (manifest.filtersCompatibility()) {
       if (compatibleIndex >= compatibleRows.size() || compatibleRows[compatibleIndex] != thisRow) return;
       compatibleIndex++;
+    } else if (!visibleWindow.take(!row.field[JsonListParser::F_TITLE].empty())) {
+      return;
     }
-    if (row.field[JsonListParser::F_TITLE].empty() || static_cast<int>(items.size()) > manifest.pageSize) return;
+    if (row.field[JsonListParser::F_TITLE].empty()) return;
     Item item;
     item.title = std::move(row.field[JsonListParser::F_TITLE]);
     item.author = std::move(row.field[JsonListParser::F_AUTHOR]);
@@ -826,8 +833,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     fail(StrId::STR_PARSE_FEED_FAILED);
     return false;
   }
-  hasMore = manifest.filtersCompatibility() ? rawHasMore : static_cast<int>(items.size()) > manifest.pageSize;
-  if (static_cast<int>(items.size()) > manifest.pageSize) items.resize(manifest.pageSize);
+  hasMore = manifest.filtersCompatibility() ? rawHasMore : visibleWindow.hasMore();
   computeInstallStatus();
   return true;
 }
