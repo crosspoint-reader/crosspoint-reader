@@ -28,9 +28,10 @@ void HalDisplay::begin(bool seamless) {
     return;
   }
   // Request resync after specific wakeup events to ensure clean display state.
+  // Timer is a deep-sleep wake like PowerButton: the panel was put to sleep.
   const auto wakeupReason = gpio.getWakeupReason();
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
-      wakeupReason == HalGPIO::WakeupReason::Other) {
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::Timer ||
+      wakeupReason == HalGPIO::WakeupReason::AfterFlash || wakeupReason == HalGPIO::WakeupReason::Other) {
     einkDisplay.requestResync();
   }
 }
