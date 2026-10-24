@@ -1,0 +1,99 @@
+name: Browser preview
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Test PR download comment
+        run: node --test test/pr_firmware_links.test.cjs
+
+      - name: Install build and browser tools
+        run: |
+          python -m pip install ninja playwright==1.63.0 \
+            https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          python -m playwright install --with-deps chromium
+          git clone https://github.com/emscripten-core/emsdk.git .cache/emsdk
+          git -C .cache/emsdk checkout b44154299bdefe75ba287874bb63fc9806243771
+          .cache/emsdk/emsdk install 6.0.6
+          .cache/emsdk/emsdk activate 6.0.6
+
+      - name: Build X4, X3, and X4 Pro previews
+        run: |
+          source .cache/emsdk/emsdk_env.sh
+          python tools/wasm/build.py --device x4
+          python tools/wasm/build.py --device x3
+          python tools/wasm/build.py --device x4pro
+          python tools/wasm/test_scheduler.py --device x4
+
+      - name: Exercise the browser firmware
+        run: |
+          python -m http.server 8099 --bind 127.0.0.1 --directory build/preview > /tmp/preview-server.log 2>&1 &
+          preview_server_pid=$!
+          trap 'kill "$preview_server_pid"' EXIT
+          python tools/wasm/smoke_test.py
+
+      - name: Exercise standalone HTML offline
+        run: python tools/wasm/smoke_test.py --standalone build/preview --output build/preview-test/standalone
+
+      - name: Upload X4 HTML
+        uses: actions/upload-artifact@v7
+        with:
+          path: build/preview/crosspoint-x4.html
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload X3 HTML
+        uses: actions/upload-artifact@v7
+        with:
+          path: build/preview/crosspoint-x3.html
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload X4 Pro HTML
+        uses: actions/upload-artifact@v7
+        with:
+          path: build/preview/crosspoint-x4pro.html
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload static preview
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-preview-${{ github.event.pull_request.head.sha || github.sha }}
+          path: build/preview/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-preview-test
+          path: build/preview-test/
+          if-no-files-found: ignore
+          retention-days: 14
