@@ -53,6 +53,109 @@ Octavia E. Butler
   EXPECT_EQ(parser.author, "Ursula K. Le Guin, Octavia E. Butler");
 }
 
+TEST(ContentOpfParserMetadata, SkipsDescriptionUnlessRequested) {
+  const std::string xml =
+      R"(<package xmlns:dc="urn:dc"><metadata><dc:description>A summary.</dc:description></metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_TRUE(parser.description.empty());
+}
+
+TEST(ContentOpfParserMetadata, KeepsFirstDescriptionAsDecodedHtml) {
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata><dc:title>Book</dc:title>"
+      "<dc:description>&lt;p&gt;First\nline &amp; more&lt;/p&gt;</dc:description>"
+      "<dc:description>Second</dc:description></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 1024;
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "<p>First\nline & more</p>");
+  EXPECT_EQ(parser.title, "Book");
+}
+
+TEST(ContentOpfParserMetadata, CapsDescriptionOnUtf8Boundary) {
+  // "é" is two bytes: a 4-byte cap after "abc" must not keep half of it.
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata><dc:description>abc\xC3\xA9xyz</dc:description>"
+      "<dc:title>After</dc:title></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 4;
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "abc");
+  EXPECT_EQ(parser.title, "After");
+}
+
+TEST(ContentOpfParserMetadata, StopsDescriptionAfterCutAcrossCallbacks) {
+  // Expat delivers each entity in its own callback: the cut lands inside the
+  // two-byte "é", and the following "<" must not be appended after the gap.
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata>"
+      "<dc:description>abc&#233;&lt;p&gt;tail</dc:description></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 4;
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "abc");
+}
+
+TEST(ContentOpfParserMetadata, BlankDescriptionDoesNotHideLaterOne) {
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata><dc:description> \n </dc:description>"
+      "<dc:description>Real summary</dc:description></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 1024;
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "Real summary");
+}
+
+TEST(ContentOpfParserMetadata, RebuildsRawXhtmlInDescription) {
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata><dc:description><p>One</p>"
+      "<h:p xmlns:h=\"urn:h\" class=\"x\">Two &amp; <i>it</i><br/></h:p></dc:description>"
+      "<dc:title>Book</dc:title></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 1024;
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "<p>One</p><p>Two &amp; <i>it</i><br></br></p>");
+  EXPECT_EQ(parser.title, "Book");
+}
+
+TEST(ContentOpfParserMetadata, NeverKeepsHalfARebuiltTag) {
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata><dc:description><p>Text</p>"
+      "</dc:description></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 9;  // "<p>Text" fits, "</p>" does not
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "<p>Text");
+}
+
+TEST(ContentOpfParserMetadata, EscapedHtmlDescriptionStaysUnescaped) {
+  // Calibre escapes its HTML; expat decodes it once, and nothing is re-escaped.
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata>"
+      "<dc:description>&lt;p&gt;A &amp;amp; B&lt;/p&gt;</dc:description></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parser.descriptionLimit = 1024;
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.description, "<p>A &amp; B</p>");
+}
+
 TEST(ContentOpfParserMetadata, ExtractsIsbnAsinAndCalibreSeries) {
   const std::string xml = R"(<package xmlns:dc="urn:dc" xmlns:opf="urn:opf"><metadata>
     <dc:identifier opf:scheme="ISBN">978-1-4028-9462-6</dc:identifier>

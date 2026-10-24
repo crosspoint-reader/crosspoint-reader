@@ -49,6 +49,9 @@ class Epub {
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
                        bool metadataOnly = false, ZipFile* sharedZip = nullptr);
+  // One metadata-only pass over the package document. Fills whichever of
+  // sync / description is non-null; the description is capped at descriptionLimit.
+  bool readPackageMetadata(SyncMetadata* sync, std::string* description, size_t descriptionLimit);
   bool generateThumbBmpForCover(int height, const std::string& coverImageHref) const;
   bool openProtection();
   bool parseTocNcxFile() const;
@@ -63,6 +66,9 @@ class Epub {
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool loadMetadata(std::string& title, std::string& author);
   bool loadSyncMetadata(SyncMetadata& metadata);
+  // The first <dc:description>, raw (often HTML), at most maxBytes. Parses the
+  // package document each call; nothing is cached. False when unreadable.
+  bool loadDescription(std::string& description, size_t maxBytes);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

@@ -683,10 +683,18 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
 
 bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
   metadata = {};
+  return readPackageMetadata(&metadata, nullptr, 0);
+}
 
+bool Epub::loadDescription(std::string& description, const size_t maxBytes) {
+  description.clear();
+  return readPackageMetadata(nullptr, &description, maxBytes);
+}
+
+bool Epub::readPackageMetadata(SyncMetadata* sync, std::string* description, const size_t descriptionLimit) {
   ZipFile zip(filepath);
   if (!zip.open()) {
-    LOG_DBG("EBP", "Could not open ePub for sync metadata: %s", filepath.c_str());
+    LOG_DBG("EBP", "Could not open ePub for package metadata: %s", filepath.c_str());
     return false;
   }
 
@@ -704,6 +712,7 @@ bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
 
   const std::string basePath = contentOpfFilePath.substr(0, contentOpfFilePath.find_last_of('/') + 1);
   ContentOpfParser parser(cachePath, basePath, contentOpfSize, nullptr, true);
+  if (description) parser.descriptionLimit = descriptionLimit;
   if (!parser.setup()) {
     zip.close();
     return false;
@@ -713,10 +722,13 @@ bool Epub::loadSyncMetadata(SyncMetadata& metadata) {
   zip.close();
   if (!read) return false;
 
-  metadata.isbn = std::move(parser.isbn);
-  metadata.asin = std::move(parser.asin);
-  metadata.series = std::move(parser.series);
-  metadata.seriesIndex = parser.seriesIndex;
+  if (sync) {
+    sync->isbn = std::move(parser.isbn);
+    sync->asin = std::move(parser.asin);
+    sync->series = std::move(parser.series);
+    sync->seriesIndex = parser.seriesIndex;
+  }
+  if (description) *description = std::move(parser.description);
   return true;
 }
 

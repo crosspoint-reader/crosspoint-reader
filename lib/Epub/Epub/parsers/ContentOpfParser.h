@@ -21,6 +21,7 @@ class ContentOpfParser final : public Print {
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
     IN_BOOK_IDENTIFIER,
+    IN_BOOK_DESCRIPTION,
     IN_META_TEXT,
     IN_MANIFEST,
     IN_SPINE,
@@ -43,6 +44,10 @@ class ContentOpfParser final : public Print {
   // separation as element state rather than inferring either from callbacks.
   bool metadataSpacePending = false;
   bool authorSeparatorPending = false;
+  // Set once a non-blank description is kept or the cap cut it.
+  bool descriptionDone = false;
+  // The description holds raw XHTML elements, so its text must be re-escaped.
+  bool descriptionXhtml = false;
 
   std::string identifierText;
   std::string identifierScheme;
@@ -118,6 +123,10 @@ class ContentOpfParser final : public Print {
   std::string asin;
   std::string series;
   std::optional<float> seriesIndex;
+  // First <dc:description>, raw (often escaped HTML). Only collected when
+  // descriptionLimit is set, up to that many bytes.
+  std::string description;
+  size_t descriptionLimit = 0;
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;

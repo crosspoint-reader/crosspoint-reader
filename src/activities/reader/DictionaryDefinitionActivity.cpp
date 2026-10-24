@@ -224,22 +224,26 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  const auto turnPage = [this](const bool forward) {
+    if (forward ? currentPage + 1 >= totalPages : currentPage <= 0) return;
+    haptic_feedback::touchAction();
+    currentPage += forward ? 1 : -1;
+    requestUpdate();
+  };
+
   // Same tap zones as the reader page turns: left third = previous page,
-  // the rest = next. Back is the usual left-edge swipe.
+  // the rest = next. Back is the usual left-edge swipe, handled above.
   int tx = 0;
   int ty = 0;
   if (mappedInput.wasScreenTapped(tx, ty)) {
-    if (tx < renderer.getScreenWidth() / 3) {
-      if (currentPage > 0) {
-        haptic_feedback::touchAction();
-        currentPage--;
-        requestUpdate();
-      }
-    } else if (currentPage + 1 < totalPages) {
-      haptic_feedback::touchAction();
-      currentPage++;
-      requestUpdate();
-    }
+    turnPage(tx >= renderer.getScreenWidth() / 3);
+    return;
+  }
+
+  // Swiping left or up moves to the next page, right or down to the previous.
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe != MappedInputManager::SwipeDir::None) {
+    turnPage(swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Up);
     return;
   }
 

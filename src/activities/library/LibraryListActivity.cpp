@@ -1,5 +1,6 @@
 #include "LibraryListActivity.h"
 
+#include <Epub.h>
 #include <FreeInkUIIcon.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -12,11 +13,14 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/DictionaryDefinitionActivity.h"  // paged description viewer
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
@@ -239,28 +243,20 @@ void LibraryListActivity::activateIndex(const int index) {
   }
 }
 
-// Row long-press prompts delete wherever grouping does not own the gesture:
-// an active search is already a flat list the reader narrowed down on purpose
-// ("find it, hold it, delete it"). Unfiltered Title/Author lists keep
-// collapse-to-groups. The Recent shelf always opens the row options menu.
-bool LibraryListActivity::deleteEligible() const { return !groupsCollapsed && (!query.empty() || !groupable()); }
-
+// Row long-press opens the book options menu on every tab. On collapsed
+// groups it expands the group, like a tap.
 void LibraryListActivity::onRowLongPress(const int index) {
-  if (isRecentSort(sortOrder)) {
-    showRecentBookOptions(index);
-  } else if (deleteEligible()) {
-    promptDeleteBook(index);
-  } else if (!groupsCollapsed && groupable()) {
-    collapseGroups(index);
-  } else {
+  if (groupsCollapsed) {
     activateIndex(index);
+  } else {
+    showBookOptions(index);
   }
 }
 
-// Recent-shelf long-press menu (button hold and touch long-press). The first
-// rows may come from RecentBooksStore; the rest are index rows sorted by
-// modification time. Only store rows can be removed from recents.
-void LibraryListActivity::showRecentBookOptions(const int entry) {
+// Book-row long-press menu (button hold and touch long-press). On the Recent
+// tab the first rows may come from RecentBooksStore; only those can be
+// removed from recents.
+void LibraryListActivity::showBookOptions(const int entry) {
   if (entry < 0 || entry >= listCount()) return;
 
   std::string path;
@@ -278,42 +274,92 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     std::string author;
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record) || !index.readPath(record, path) ||
         !rowTextFor(entry, title, author)) {
-      LOG_ERR("LIB", "cannot resolve Recent row %d", entry);
+      LOG_ERR("LIB", "cannot resolve row %d", entry);
       return;
     }
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  enum class RowAction : uint8_t { Open, Description, RemoveRecent, ShowGroups, Delete, Rebuild };
+  static constexpr int MAX_ACTIONS = 6;
+  std::array<RowAction, MAX_ACTIONS> actions{};
+  const char* labels[MAX_ACTIONS] = {};
+  int actionCount = 0;
+  const auto add = [&](const RowAction action, const char* label) {
+    actions[actionCount] = action;
+    labels[actionCount] = label;
+    actionCount++;
+  };
+  add(RowAction::Open, tr(STR_OPEN));
+  if (FsHelpers::hasEpubExtension(path)) add(RowAction::Description, tr(STR_BOOK_DESCRIPTION));
+  if (isStoreRow) add(RowAction::RemoveRecent, tr(STR_REMOVE_FROM_RECENTS));
+  if (query.empty() && groupable()) add(RowAction::ShowGroups, tr(STR_LIBRARY_SHOW_GROUPS));
+  add(RowAction::Delete, tr(STR_DELETE));
+  add(RowAction::Rebuild, tr(STR_LIBRARY_REBUILD));
+
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
-                   [this, path, title, isStoreRow](const int choice) {
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), labels, actionCount, 0,
+                   [this, path, title, entry, actions, actionCount](const int choice) {
                      swallowHeldReleases();
-                     switch (choice) {
-                       case 0:
+                     if (choice < 0 || choice >= actionCount) return;
+                     switch (actions[static_cast<size_t>(choice)]) {
+                       case RowAction::Open:
                          openBookByPath(path);
                          break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
+                       case RowAction::Description:
+                         showBookDescription(path, title);
                          break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
+                       case RowAction::RemoveRecent:
+                         promptRemoveRecentBook(path, title);
                          break;
-                       case 3:
-                         if (isStoreRow) promptRebuildIndex();
+                       case RowAction::ShowGroups:
+                         collapseGroups(entry);
                          break;
-                       default:
+                       case RowAction::Delete:
+                         promptDeleteBookByPath(path, title);
+                         break;
+                       case RowAction::Rebuild:
+                         promptRebuildIndex();
                          break;
                      }
                    });
   requestUpdate();
+}
+
+void LibraryListActivity::showBookDescription(const std::string& path, const std::string& title) {
+  // Calibre comments are usually 1-4 KB of HTML; the cap bounds the heap the
+  // string and its laid-out pages take while the viewer is open.
+  static constexpr size_t MAX_DESCRIPTION_BYTES = 8 * 1024;
+  std::string text;
+  const bool reopenIndex = index.isOpen();
+  {
+    // The book wants the card to itself, and the render task must not read
+    // the index while it is closed.
+    RenderLock lock(*this);
+    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    index.close();
+    Epub epub(path, "/.crosspoint");
+    if (!epub.loadDescription(text, MAX_DESCRIPTION_BYTES)) LOG_ERR("LIB", "cannot read description: %s", path.c_str());
+  }
+  const bool empty =
+      std::all_of(text.begin(), text.end(), [](const char c) { return std::isspace(static_cast<unsigned char>(c)); });
+  // Calibre comments are HTML; a bare "<" (as in "ages 8<12") is not a tag.
+  bool html = false;
+  for (size_t at = text.find('<'); !html && at != std::string::npos; at = text.find('<', at + 1)) {
+    const char next = at + 1 < text.size() ? text[at + 1] : '\0';
+    html = std::isalpha(static_cast<unsigned char>(next)) || next == '/' || next == '!';
+  }
+  if (empty) text = tr(STR_NO_BOOK_DESCRIPTION);
+
+  auto viewer = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, title, std::move(text), html);
+  if (!viewer) {
+    LOG_ERR("LIB", "OOM: description viewer");
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    return;
+  }
+  startActivityForResult(std::move(viewer), [this, reopenIndex](const ActivityResult&) {
+    swallowHeldReleases();
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+  });
 }
 
 // Manual index refresh, same card discipline as the onEnter rebuild: the walk
@@ -429,23 +475,6 @@ void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const 
       nav.followOnBuild = true;
     }
   });
-}
-
-void LibraryListActivity::promptDeleteBook(const int entry) {
-  if (!index.isOpen() || entry < 0 || entry >= bookRowCount()) return;
-  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
-  if (ordinal == 0xFFFF) return;
-
-  std::string path;
-  library::ClixRecord record{};
-  if (!index.readRecord(ordinal, record) || !index.readPath(record, path)) {
-    LOG_ERR("LIB", "cannot resolve path for row %d", entry);
-    return;
-  }
-  std::string title;
-  std::string author;
-  rowTextFor(entry, title, author);
-  promptDeleteBookByPath(path, title);
 }
 
 void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const std::string& title) {
@@ -811,14 +840,10 @@ bool LibraryListActivity::handleButtons() {
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
       if (!degraded) toggleSortDirection();
-    } else if (isRecentSort(sortOrder)) {
-      showRecentBookOptions(selectedEntry());
-    } else if (deleteEligible()) {
-      if (count > 0) promptDeleteBook(selectedEntry());
-    } else if (!groupsCollapsed && groupable()) {
-      collapseGroups(selectedEntry());
-    } else {
+    } else if (groupsCollapsed) {
       activateIndex(selectedEntry());
+    } else if (count > 0) {
+      showBookOptions(selectedEntry());
     }
     return true;
   }
@@ -1108,12 +1133,8 @@ void LibraryListActivity::drawHoldHelp() const {
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);
-  else if (!tabsFocused() && isRecentSort(sortOrder) && listCount() > 0)
-    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // recent rows: hold opens the row menu
-  else if (!tabsFocused() && deleteEligible() && listCount() > 0)
-    help = tr(STR_HOLD_OPEN_TO_DELETE);
-  else if (!tabsFocused() && groupable())
-    help = tr(STR_LIBRARY_HOLD_GROUPS);
+  else if (!tabsFocused() && listCount() > 0)
+    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // book rows: hold opens the row menu
   if (!help) return;
 
   const auto& metrics = UITheme::getInstance().getMetrics();

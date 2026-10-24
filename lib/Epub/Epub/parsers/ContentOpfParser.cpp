@@ -8,6 +8,7 @@
 
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -68,6 +69,66 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
     spacePending = false;
     out.push_back(c);
   }
+}
+
+// Keeps the text as is (line breaks matter in plain-text descriptions). At
+// the cap it cuts on a UTF-8 character boundary and reports the text done.
+// Capacity is grown here so it never exceeds the cap.
+bool appendDescriptionText(std::string& out, const XML_Char* text, const int len, const size_t limit) {
+  size_t take = std::min(static_cast<size_t>(len), limit - std::min(limit, out.size()));
+  const bool cut = take < static_cast<size_t>(len);
+  if (cut) {
+    while (take > 0 && (static_cast<uint8_t>(text[take]) & 0xC0) == 0x80) take--;
+    LOG_DBG("COF", "Description exceeds %u bytes; truncating", static_cast<unsigned>(limit));
+  }
+  if (out.size() + take > out.capacity()) {
+    // libstdc++ rounds any request between the old capacity and twice it up
+    // to twice it, so past limit/2 jump straight to the limit.
+    size_t want = std::max(out.capacity() * 2, out.size() + take);
+    if (want > limit / 2) want = limit;
+    out.reserve(want);
+  }
+  out.append(text, take);
+  return cut;
+}
+
+// Some tools put raw XHTML inside <dc:description> instead of escaping it.
+// expat reports those as elements, so rebuild the tag (without attributes)
+// to keep paragraphs and emphasis for the viewer.
+void appendDescriptionTag(std::string& out, bool& done, const XML_Char* qName, const bool closing, const size_t limit) {
+  if (done) return;
+  char tag[40];
+  const int len = snprintf(tag, sizeof(tag), closing ? "</%s>" : "<%s>", xmlLocalName(qName));
+  if (len <= 0 || len >= static_cast<int>(sizeof(tag))) return;  // not an HTML tag name
+  // Half a tag would be worse than none: stop before it instead.
+  if (out.size() + static_cast<size_t>(len) > limit || appendDescriptionText(out, tag, len, limit)) done = true;
+}
+
+// Text inside raw XHTML arrives entity-decoded; escape it again so the
+// rebuilt markup stays well-formed. Never keeps half an entity.
+void appendDescriptionEscaped(std::string& out, bool& done, const XML_Char* text, const int len, const size_t limit) {
+  int runStart = 0;
+  for (int i = 0; i <= len && !done; i++) {
+    const char* entity = nullptr;
+    if (i < len) {
+      if (text[i] == '&') entity = "&amp;";
+      if (text[i] == '<') entity = "&lt;";
+      if (text[i] == '>') entity = "&gt;";
+      if (!entity) continue;
+    }
+    if (i > runStart && appendDescriptionText(out, text + runStart, i - runStart, limit)) done = true;
+    runStart = i + 1;
+    if (entity && !done) {
+      const size_t entityLen = std::strlen(entity);
+      if (out.size() + entityLen > limit || appendDescriptionText(out, entity, static_cast<int>(entityLen), limit)) {
+        done = true;
+      }
+    }
+  }
+}
+
+bool isBlankText(const std::string& text) {
+  return std::all_of(text.begin(), text.end(), [](const char c) { return isXmlWhitespace(c); });
 }
 
 std::string lowerAscii(std::string value) {
@@ -224,6 +285,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
+  if (self->state == IN_BOOK_DESCRIPTION) {
+    self->descriptionXhtml = true;
+    appendDescriptionTag(self->description, self->descriptionDone, name, false, self->descriptionLimit);
+    return;
+  }
+
   if (self->state == START && xmlLocalNameEquals(name, "package")) {
     self->state = IN_PACKAGE;
     return;
@@ -253,6 +320,11 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "language")) {
     self->state = IN_BOOK_LANGUAGE;
     self->metadataSpacePending = false;
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "description")) {
+    if (self->descriptionLimit > 0 && !self->descriptionDone) self->state = IN_BOOK_DESCRIPTION;
     return;
   }
 
@@ -549,6 +621,15 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     appendMetadataText(self->metaText, s, len, self->metadataSpacePending);
     return;
   }
+
+  if (self->state == IN_BOOK_DESCRIPTION) {
+    if (self->descriptionXhtml) {
+      appendDescriptionEscaped(self->description, self->descriptionDone, s, len, self->descriptionLimit);
+    } else if (!self->descriptionDone && appendDescriptionText(self->description, s, len, self->descriptionLimit)) {
+      self->descriptionDone = true;
+    }
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -589,6 +670,23 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_BOOK_LANGUAGE && xmlLocalNameEquals(name, "language")) {
     self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_DESCRIPTION && xmlLocalNameEquals(name, "description")) {
+    // A blank description does not hide a later, real one.
+    if (isBlankText(self->description)) {
+      self->description.clear();
+      self->descriptionXhtml = false;
+    } else {
+      self->descriptionDone = true;
+    }
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_DESCRIPTION) {
+    appendDescriptionTag(self->description, self->descriptionDone, name, true, self->descriptionLimit);
     return;
   }
 
