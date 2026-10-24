@@ -1,11 +1,11 @@
-#include "ReaderFontSizes.h"
-
 #include <HalStorage.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "ReaderFontSizes.h"
 
 namespace {
 
