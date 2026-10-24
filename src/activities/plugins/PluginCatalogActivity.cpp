@@ -755,7 +755,8 @@ bool PluginCatalogActivity::parseBrowseResponse() {
 
   // Requests with {page} are already sliced server-side. Static JSON files
   // need a bounded client-side page window into the streamed response.
-  const bool localPaging = plugincatalogpaging::isStaticFeed(activeBrowseUrl(), activeBrowseBody());
+  const bool localPaging =
+      plugincatalogpaging::isStaticFeed(activeBrowseUrl(), activeBrowseBody(), manifest.browseReq.headers);
   const size_t pageOffset =
       localPaging ? static_cast<size_t>(std::max(0, page - 1)) * static_cast<size_t>(manifest.pageSize) : 0;
 

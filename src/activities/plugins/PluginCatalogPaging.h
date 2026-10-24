@@ -7,8 +7,13 @@ namespace plugincatalogpaging {
 
 // A server-provided page template returns only the requested slice. A static
 // feed contains all rows and must be advanced locally during streaming.
-inline bool isStaticFeed(const std::string_view url, const std::string_view body) {
-  return url.find("{page}") == std::string_view::npos && body.find("{page}") == std::string_view::npos;
+template <typename Headers>
+inline bool isStaticFeed(const std::string_view url, const std::string_view body, const Headers& headers) {
+  if (url.find("{page}") != std::string_view::npos || body.find("{page}") != std::string_view::npos) return false;
+  for (const auto& header : headers) {
+    if (std::string_view(header.second).find("{page}") != std::string_view::npos) return false;
+  }
+  return true;
 }
 
 // Counts eligible rows without retaining them. On a static feed the window
