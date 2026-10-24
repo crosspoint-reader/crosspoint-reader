@@ -1,7 +1,9 @@
 #include "SdCardFontSystem.h"
 
+#include <Fnv1a.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <IndicScripts.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <TtfEpdFont.h>
@@ -9,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iterator>
 
 #include "CrossPointSettings.h"
@@ -19,15 +22,11 @@ namespace {
 
 #if CROSSPOINT_VECTOR_FONTS
 // Stable, non-zero renderer font id for a vector family at a size (FNV-1a of
-// name + size). 0 is the "not found" sentinel, so bump collisions to 1.
-int computeTtfFontId(const char* familyName, uint8_t pointSize) {
-  uint32_t hash = 2166136261u;
-  for (const char* p = familyName; p && *p; ++p) {
-    hash ^= static_cast<uint8_t>(*p);
-    hash *= 16777619u;
-  }
-  hash ^= pointSize;
-  hash *= 16777619u;
+// name + size + `filesKey`). 0 is the "not found" sentinel, so bump collisions to 1.
+int computeTtfFontId(const char* familyName, uint8_t pointSize, const uint32_t filesKey = 0) {
+  uint32_t hash = fnv1a::hash(familyName, familyName ? strlen(familyName) : 0);
+  hash = fnv1a::hash(&pointSize, sizeof(pointSize), hash);
+  if (filesKey != 0) hash = fnv1a::hash(&filesKey, sizeof(filesKey), hash);
   hash ^= 0x54544600u;  // "TTF\0" salt to avoid colliding with cpfont ids
   const int id = static_cast<int>(hash);
   return id != 0 ? id : 1;
@@ -245,6 +244,10 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
       break;
     }
   }
+  // Every Indic script too.
+  hasFallbackScript = hasFallbackScript ||
+                      std::any_of(std::begin(indic::SCRIPTS), std::end(indic::SCRIPTS),
+                                  [&](const indic::ScriptInfo& s) { return readerIt->second.hasCodepoint(s.probe); });
   if (!hasFallbackScript) {
     LOG_DBG("SDFS", "%s has no fallback-script coverage - skipping UI fallback sizes", familyName.c_str());
     return;
@@ -637,7 +640,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     renderer.removeFont(ttfFontId_);
     if (ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs)) {
       ttf_->build(" ");
-      ttfFontId_ = computeTtfFontId(family.name.c_str(), size);
+      ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttf_->contentKey());
       renderer.insertFont(ttfFontId_, ttf_->family());
       renderer.registerTtfFont(ttfFontId_, ttf_.get());
       ttfPointSize_ = size;
@@ -694,7 +697,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // Seed the regular face's glyph cache; other styles + glyphs fault on demand.
   ttf_->build(" ");
 
-  ttfFontId_ = computeTtfFontId(family.name.c_str(), size);
+  ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttf_->contentKey());
   renderer.insertFont(ttfFontId_, ttf_->family());
   renderer.registerTtfFont(ttfFontId_, ttf_.get());
   ttfFamily_ = family.name;

@@ -3,6 +3,7 @@
 #include <FontDecompressor.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <ShapingTokens.h>
 #include <TtfEpdFont.h>
 #include <Utf8.h>
 
@@ -136,6 +137,7 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
   while (*cursor) {
     uint32_t codepoint = utf8NextCodepoint(&cursor);
     if (codepoint == 0) break;
+    if (shaping::isPositionToken(codepoint)) continue;  // modifies the next glyph; has no glyph of its own
     // Small caps draw lowercase letters with their uppercase glyphs.
     if (style & EpdFontFamily::SMALL_CAPS) codepoint = utf8SmallCapsUpper(codepoint);
 

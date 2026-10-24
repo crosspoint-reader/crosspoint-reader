@@ -11,7 +11,10 @@
 #include <cstring>
 #include <memory>
 
+#include "ComplexShaper.h"
 #include "EpdFontFamily.h"
+#include "FlashBlobCache.h"
+#include "ShapingTokens.h"
 
 // Resident SD-font buffers (glyph/kern arenas, interval + advance tables, the
 // overflow ring) are placed in PSRAM when the board has it — freeing scarce
@@ -107,6 +110,8 @@ void collectCodepoints(const char* text, LowestCodepoints& collected, const bool
   while (*p) {
     const uint32_t cp = utf8NextCodepoint(&p);
     if (cp == 0) break;
+    // Shaped text carries its own advances; no token needs a table entry.
+    if (shaping::isGlyphToken(cp) || shaping::isPositionToken(cp)) continue;
     if (wanted(cp)) collected.add(cp);
     if (includeSmallCaps) {
       const uint32_t upper = utf8SmallCapsUpper(cp);
@@ -243,6 +248,11 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
   psramDeleteArray(s.kernBlockIndex);
   s.kernBlockIndex = nullptr;
   s.kernBlockIndexReady = false;
+  delete s.shaper;
+  s.shaper = nullptr;
+  s.shapingBlobOffset = 0;
+  s.shapingBlobLength = 0;
+  s.shapingBlobKey = 0;
 }
 
 // --- Global free/cleanup ---
@@ -256,6 +266,9 @@ void SdCardFont::releaseResidentCaches() {
     freeStyleLigatures(styleData(i));
     applyGlyphMissCallback(i);  // keep the on-demand miss path alive on the stub
   }
+  // Shaping state is shared by every font (faces, run cache, glyph buffer),
+  // so it goes even when this font does not shape.
+  ComplexShaper::releaseAll();
 }
 
 void SdCardFont::freeAll() {
@@ -576,6 +589,7 @@ void SdCardFont::applyGlyphMissCallback(uint8_t styleIdx) {
   s.stubData.glyphMissHandler = &SdCardFont::onGlyphMiss;
   s.stubData.glyphMissCtx = &overflowCtx_[styleIdx];
   s.stubData.coverageHandler = &SdCardFont::onCoverageQuery;
+  s.stubData.shapeHandler = s.shaper ? &SdCardFont::onShape : nullptr;
 }
 
 bool SdCardFont::onCoverageQuery(void* ctx, const uint32_t codepoint) {
@@ -583,6 +597,112 @@ bool SdCardFont::onCoverageQuery(void* ctx, const uint32_t codepoint) {
   const PerStyle& s = octx->self->styleData(octx->styleIdx);
   if (!s.fullIntervals && !s.bmpIntervals) return false;  // coverage index freed/never loaded
   return octx->self->findGlobalGlyphIndex(s, codepoint) >= 0;
+}
+
+// --- Shaping section ---
+
+namespace {
+constexpr char SHAPING_MAGIC[4] = {'C', 'P', 'S', 'H'};
+constexpr uint16_t SHAPING_VERSION = 2;  // 2: the layout font carries its shaping plans (CPpl)
+// magic(4) version(2) reserved(2) ppem26_6(4) blobLength(4) blobHash(4)
+constexpr uint32_t SHAPING_HEADER_SIZE = 20;
+// An Indic layout font is 5-80 KB; anything far larger is not one.
+constexpr uint32_t SHAPING_MAX_BLOB = 256 * 1024;
+}  // namespace
+
+bool SdCardFont::loadShapingSection(HalFile& file, const uint8_t styleIdx, const uint32_t sectionOffset) {
+  uint8_t header[SHAPING_HEADER_SIZE];
+  if (!file.seekSet(sectionOffset) || file.read(header, sizeof(header)) != static_cast<int>(sizeof(header))) {
+    LOG_ERR("SDCF", "Style %u: unreadable shaping section at %u", styleIdx, sectionOffset);
+    return false;
+  }
+  const uint16_t version = readU16(header + 4);
+  const uint32_t ppem26_6 = readU32(header + 8);
+  const uint32_t length = readU32(header + 12);
+  // FNV-1a of the blob: every size of a family carries the same layout font,
+  // and the shapers share one copy of it through this key.
+  const uint32_t contentHash = readU32(header + 16);
+  if (memcmp(header, SHAPING_MAGIC, sizeof(SHAPING_MAGIC)) != 0 || version != SHAPING_VERSION || ppem26_6 == 0 ||
+      length == 0 || length > SHAPING_MAX_BLOB) {
+    LOG_ERR("SDCF", "Style %u: unsupported shaping section (v%u, %u bytes)", styleIdx, version, length);
+    return false;
+  }
+  // The blob's last byte must be in the file: a copy cut short would otherwise
+  // fail every load of it.
+  uint8_t last;
+  if (!file.seekSet(sectionOffset + SHAPING_HEADER_SIZE + length - 1) || file.read(&last, 1) != 1) {
+    LOG_ERR("SDCF", "Style %u: shaping section truncated (%u-byte blob)", styleIdx, length);
+    return false;
+  }
+  auto& s = styleData(styleIdx);
+  s.shaper = new (std::nothrow) ComplexShaper();
+  if (!s.shaper) {
+    LOG_ERR("SDCF", "Style %u: OOM creating shaper", styleIdx);
+    return false;
+  }
+  s.shapingBlobOffset = sectionOffset + SHAPING_HEADER_SIZE;
+  s.shapingBlobLength = length;
+  s.shapingBlobKey = contentHash | 1u;
+  s.shaper->setBlobSource(&SdCardFont::loadShapingBlob, &overflowCtx_[styleIdx], s.shapingBlobKey);
+  s.shaper->setScale(ppem26_6);
+  return true;
+}
+
+namespace {
+struct BlobFileCtx {
+  HalFile* file;
+  uint32_t base;
+};
+
+bool readBlobChunk(void* ctx, const uint32_t offset, uint8_t* buf, const uint32_t length) {
+  const auto* c = static_cast<BlobFileCtx*>(ctx);
+  return c->file->seekSet(c->base + offset) && c->file->read(buf, length) == static_cast<int>(length);
+}
+}  // namespace
+
+bool SdCardFont::loadShapingBlob(void* ctx, ComplexShaper::Blob* out) {
+  const auto* octx = static_cast<OverflowContext*>(ctx);
+  const PerStyle& s = octx->self->styleData(octx->styleIdx);
+  HalFile file;
+  if (!Storage.openFileForRead("SDCF", octx->self->filePath_, file)) {
+    ComplexShaper::noteSourceUnavailable();
+    return false;
+  }
+  BlobFileCtx source{&file, s.shapingBlobOffset};
+
+  // No-PSRAM boards map the layout font from internal flash (see
+  // FlashBlobCache.h); otherwise it is read into the heap, within the limit
+  // ComplexShaper sets.
+  if (const uint8_t* mapped = FlashBlobCache::acquire(s.shapingBlobKey, s.shapingBlobLength, readBlobChunk, &source)) {
+    *out = ComplexShaper::Blob{mapped, s.shapingBlobLength, &FlashBlobCache::release};
+    return true;
+  }
+  // A layout font the heap may not hold shapes only when mapped from flash.
+  if (s.shapingBlobLength > ComplexShaper::memoryStats().maxHeapSource) {
+    if (FlashBlobCache::canHold(s.shapingBlobKey, s.shapingBlobLength)) {
+      ComplexShaper::noteSourceUnavailable();  // the flash copy may succeed later
+    } else {
+      LOG_ERR("SDCF", "%u-byte shaping data fits neither the heap nor a flash cache here; text is not shaped",
+              s.shapingBlobLength);
+    }
+    return false;
+  }
+  auto* blob = static_cast<uint8_t*>(ComplexShaper::allocate(s.shapingBlobLength));
+  if (!blob) return false;
+  if (!readBlobChunk(&source, 0, blob, s.shapingBlobLength)) {
+    LOG_ERR("SDCF", "Failed to read %u-byte shaping blob", s.shapingBlobLength);
+    ComplexShaper::deallocate(blob);
+    ComplexShaper::noteSourceUnavailable();
+    return false;
+  }
+  *out = ComplexShaper::Blob{blob, s.shapingBlobLength, nullptr};
+  return true;
+}
+
+bool SdCardFont::onShape(void* ctx, const char* utf8, std::string* out) {
+  const auto* octx = static_cast<OverflowContext*>(ctx);
+  ComplexShaper* shaper = octx->self->styleData(octx->styleIdx).shaper;
+  return shaper != nullptr && shaper->shape(utf8, *out);
 }
 
 // --- Compute per-style file offsets from a base data offset ---
@@ -654,6 +774,7 @@ bool SdCardFont::load(const char* path) {
   styleCount_ = styleCount;
 
   // Read style TOC
+  uint32_t shapingOffsets[MAX_STYLES] = {};
   for (uint8_t i = 0; i < styleCount; i++) {
     uint8_t tocBuf[STYLE_TOC_ENTRY_SIZE];
     if (file.read(tocBuf, STYLE_TOC_ENTRY_SIZE) != STYLE_TOC_ENTRY_SIZE) {
@@ -709,6 +830,8 @@ bool SdCardFont::load(const char* path) {
 
     uint32_t dataOffset = readU32(tocBuf + 24);
     computeStyleFileOffsets(s, dataOffset);
+    // Formerly reserved: files without shaping data carry zero here.
+    shapingOffsets[styleId] = readU32(tocBuf + 28);
   }
 
   contentHash_ = hash;
@@ -882,6 +1005,11 @@ bool SdCardFont::load(const char* path) {
     s.stubData.is2Bit = s.header.is2Bit;
 
     s.epdFont.data = &s.stubData;
+    // A bad shaping section only costs complex-script shaping, not the font.
+    // Page caches store the layout font's glyph IDs, so its hash joins the font's.
+    if (shapingOffsets[i] != 0 && loadShapingSection(file, i, shapingOffsets[i])) {
+      contentHash_ = fnv1a(reinterpret_cast<const uint8_t*>(&s.shapingBlobKey), sizeof(s.shapingBlobKey), contentHash_);
+    }
     applyGlyphMissCallback(i);
   }
 
@@ -1008,6 +1136,7 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
     while (*p && cpCount < cpBudget) {
       uint32_t cp = utf8NextCodepoint(&p);
       if (cp == 0) break;
+      if (shaping::isPositionToken(cp)) continue;  // modifies the next glyph; has no glyph of its own
 
       bool found = false;
       for (uint32_t i = 0; i < cpCount; i++) {
@@ -1500,6 +1629,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   s.miniData.glyphMissHandler = &SdCardFont::onGlyphMiss;
   s.miniData.glyphMissCtx = &overflowCtx_[styleIdx];
   s.miniData.coverageHandler = &SdCardFont::onCoverageQuery;
+  s.miniData.shapeHandler = s.shaper ? &SdCardFont::onShape : nullptr;
 
   s.epdFont.data = &s.miniData;
 

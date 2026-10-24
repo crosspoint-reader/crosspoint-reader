@@ -348,6 +348,19 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
+
+  // A word as layout measured it: `text` is its logical form, which picks the
+  // font as for any string, and `display` the form resolveForDisplay() made
+  // of it, or nullptr when it made none. The overloads taking one draw and
+  // measure a display form without shaping again, so a page turn draws what
+  // layout measured; without one they resolve `text` like any string.
+  struct LaidOutText {
+    const char* text;
+    const char* display;
+  };
+  void drawText(int fontId, int x, int y, const LaidOutText& text, bool black = true,
+                EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
   // Draws one glyph at scale256/256 of its size with its baseline at baselineY (drop caps).
   // Outlines are bilinearly resampled from the font bitmap, so no larger font is loaded.
   // Returns the scaled advance in pixels.
@@ -365,6 +378,40 @@ class GfxRenderer {
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style, int8_t tracking = 0,
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
+  int getTextAdvanceX(int fontId, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode mode = TextMeasureMode::Layout) const;
+
+  // The form getTextAdvanceX measures a complex-script `text` in: shaped
+  // glyph tokens (ShapingTokens.h), or reordered vowel signs when the font
+  // cannot shape. A font that shapes but could not shape `text` just now
+  // (e.g. memory ran short) gets the unshaped form, so the page draws the width
+  // layout measured. Returns false, leaving `out` untouched, when `text`
+  // draws as it is: a font that cannot shape needs no reordering, or the font
+  // does not draw the script. Tied to this font and style; layout stores it
+  // in the page cache as a LaidOutText display form.
+  bool resolveForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
+
+  // While one of these is alive, repeated runs shape once (see
+  // ComplexShaper::beginMemo). Scope it to a paragraph's layout.
+  class ShapingMemoScope {
+   public:
+    ShapingMemoScope();
+    ~ShapingMemoScope();
+    ShapingMemoScope(const ShapingMemoScope&) = delete;
+    ShapingMemoScope& operator=(const ShapingMemoScope&) = delete;
+  };
+
+ private:
+  // drawText and getTextAdvanceX once `text` is the visual stream (bidi
+  // resolved, complex scripts shaped) and `resolvedFontId` the font it draws in.
+  // `shapedText`: `text` may hold shaping tokens; other text skips token handling.
+  void drawVisualText(int fontId, int resolvedFontId, int x, int y, const char* text, bool shapedText, bool black,
+                      EpdFontFamily::Style style, int8_t tracking) const;
+  int measureVisualText(int resolvedFontId, const char* text, bool shapedText, EpdFontFamily::Style style,
+                        int8_t tracking, TextMeasureMode mode) const;
+
+ public:
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   int getLineHeight(int fontId, float compression) const;

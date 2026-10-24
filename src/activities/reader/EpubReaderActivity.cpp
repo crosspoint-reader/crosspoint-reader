@@ -2314,8 +2314,8 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
       const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-      const int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), text, style,
-                                                 block->getBlockStyle().characterSpacing);
+      const int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), block->laidOutWord(i),
+                                                 style, block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
       const Rect rect =
@@ -2384,7 +2384,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
       const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-      int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), text, style,
+      int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), block->laidOutWord(i), style,
                                            block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t wordIndex = pageWordIndex++;

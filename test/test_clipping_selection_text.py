@@ -59,6 +59,7 @@ struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4 }; };
 constexpr int TAG_PageLine = 1;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
+struct LaidOutText { const char* text; const char* display; };
 struct Renderer;
 struct Block {
   struct Style { bool isRtl = false; int8_t characterSpacing = 0; } style;
@@ -86,6 +87,7 @@ struct Block {
     return word;
   }
   uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
+  LaidOutText laidOutWord(uint16_t i) const { return {wordText(i), nullptr}; }
   EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
   int wordXpos(uint16_t) const { return 0; }
   Range wordSourceRange(uint16_t i) const {
@@ -102,6 +104,7 @@ struct PageLine {
 };
 struct Page { std::vector<std::unique_ptr<PageLine>> elements; };
 struct Renderer {
+  using LaidOutText = ::LaidOutText;
   enum RenderMode { BW };
   struct Draw { int x, width, tracking; };
   mutable std::vector<Draw> draws;
@@ -126,6 +129,9 @@ struct Renderer {
     const int length = std::char_traits<char>::length(text);
     return length * 8 + (length - 1) * tracking;
   }
+  int getTextAdvanceX(int font, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0) const {
+    return getTextAdvanceX(font, text.display ? text.display : text.text, style, tracking);
+  }
   void ensureSdCardFontReady(int, const char*, uint8_t) {}
   void ensureSdCardFontReady(int, const char* const* segments, const size_t* lengths, size_t count,
                              bool, bool, uint8_t mask) {
@@ -147,6 +153,10 @@ struct Renderer {
   void drawText(int font, int x, int, const char* text, bool, EpdFontFamily::Style style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
     draws.push_back({x, getTextAdvanceX(font, text, style, tracking), tracking});
+  }
+  void drawText(int font, int x, int y, const LaidOutText& text, bool black, EpdFontFamily::Style style,
+                BidiUtils::BidiBaseDir dir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
+    drawText(font, x, y, text.display ? text.display : text.text, black, style, dir, tracking);
   }
   void fillRect(int x, int, int width, int, bool) const { fills.push_back({x, width, 0}); }
   void fillRectDither(int x, int, int width, int, Color) const { fills.push_back({x, width, 0}); }
@@ -204,6 +214,10 @@ struct ClipSelectionActivity {
   const Page& pageAt(size_t i) const { return *(borrowedPages.empty() ? pages[i] : borrowedPages[i]); }
   size_t wordCount = 0;
   uint16_t rowCount = 0;
+  std::unique_ptr<const char*[]> displayForms;
+  uint16_t displayFormCount = 0;
+  uint16_t storeDisplayForm(const char* display);
+  GfxRenderer::LaidOutText laidOut(const WordBox& word) const;
   int fontId = 0, lineHeight = 16, marginLeft = 0, marginTop = 0;
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   bool touchDragSelecting = false;

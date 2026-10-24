@@ -44,6 +44,8 @@ class ClipSelectionActivity final : public Activity {
 
  private:
   struct WordBox {
+    static constexpr uint16_t NO_DISPLAY = UINT16_MAX;
+
     int16_t x = 0;
     int16_t y = 0;
     int16_t width = 0;
@@ -52,10 +54,11 @@ class ClipSelectionActivity final : public Activity {
     uint8_t pageOffset = 0;
     int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
-    int fontId = 0;  // the word's font; headings and CSS font-size runs differ from the section font
+    uint16_t display = NO_DISPLAY;  // index into displayForms
+    int fontId = 0;                 // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
-    const char* text = nullptr;
+    const char* text = nullptr;  // logical text, for clipping and lookup
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool paragraphStart = false;
     bool isRtl = false;
@@ -65,6 +68,8 @@ class ClipSelectionActivity final : public Activity {
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 
   bool extractWords();
+  uint16_t storeDisplayForm(const char* display);
+  GfxRenderer::LaidOutText laidOut(const WordBox& word) const;
   size_t pageCount() const { return borrowedPages.empty() ? pages.size() : borrowedPages.size(); }
   const Page& pageAt(size_t index) const { return *(borrowedPages.empty() ? pages[index] : borrowedPages[index]); }
   bool isLookup() const { return mode != Mode::Clip; }
@@ -113,6 +118,11 @@ class ClipSelectionActivity final : public Activity {
   int lineHeight = 0;
   std::unique_ptr<WordBox[]> words;
   size_t wordCount = 0;
+  // TextBlock::displayForm() of the words that have one (what layout
+  // measured), indexed by WordBox::display. Allocated only when a word has
+  // one, so pages without complex scripts pay nothing per word.
+  std::unique_ptr<const char*[]> displayForms;
+  uint16_t displayFormCount = 0;
   int selected = 0;
   int rangeStart = -1;
   uint8_t currentPageOffset = 0;
