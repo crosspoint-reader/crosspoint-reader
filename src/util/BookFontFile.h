@@ -12,6 +12,7 @@ namespace BookFontFile {
 // False when the book has no font file or it cannot be read.
 bool load(const std::string& cacheDir, ReaderFont& font);
 bool save(const std::string& cacheDir, const ReaderFont& font);
-void remove(const std::string& cacheDir);
+// True when the book has no font file afterwards.
+bool remove(const std::string& cacheDir);
 
 }  // namespace BookFontFile

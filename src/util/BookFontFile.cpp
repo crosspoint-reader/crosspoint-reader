@@ -30,7 +30,9 @@ bool BookFontFile::save(const std::string& cacheDir, const ReaderFont& font) {
   return true;
 }
 
-void BookFontFile::remove(const std::string& cacheDir) {
+bool BookFontFile::remove(const std::string& cacheDir) {
   const std::string path = fontPath(cacheDir);
-  if (Storage.exists(path.c_str())) Storage.remove(path.c_str());
+  if (!Storage.exists(path.c_str()) || Storage.remove(path.c_str())) return true;
+  LOG_ERR("BFNT", "Failed to remove book font");
+  return false;
 }

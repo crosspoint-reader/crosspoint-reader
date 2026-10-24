@@ -102,6 +102,7 @@ class ReaderActivity : public Activity {
   // The font in the book's file; meaningful while hasBookFontFile.
   ReaderFont savedBookFont;
   bool hasBookFontFile = false;
+  bool rewriteBookFontFile = false;  // the file must be written again (see resaveBookFont())
   // The font in use when the book opened or its font was last saved.
   ReaderFont bookFontInUse;
   // Set by onExit() when the book used another font than the default; the

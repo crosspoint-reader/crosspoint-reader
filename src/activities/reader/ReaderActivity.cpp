@@ -155,6 +155,14 @@ void ReaderActivity::beginBookFont() {
   SETTINGS.beginBookFont(bookFont);
   // A failed load clears only the book's font: settings saves keep the default.
   sdFontSystem.ensureLoaded(renderer);
+  // The book's family is on the card but did not load: use the default for
+  // this visit, as for a missing family, rather than the built-in font.
+  const ReaderFont defaultFont = SETTINGS.defaultReaderFont();
+  if (bookFont != defaultFont && bookFont.sdFontFamilyName[0] != '\0' &&
+      sdFontSystem.resolveFontId(bookFont.sdFontFamilyName, bookFont.fontPointSize) == 0) {
+    SETTINGS.beginBookFont(defaultFont);
+    sdFontSystem.ensureLoaded(renderer);
+  }
   bookFontInUse = SETTINGS.readerFont();
 }
 
@@ -167,19 +175,24 @@ void ReaderActivity::saveBookFont() {
       if (!BookFontFile::save(bookCachePath(bookPath), current)) return;  // tried again on the next save
       savedBookFont = current;
       hasBookFontFile = true;
+      rewriteBookFontFile = false;
       break;
     case BookFontWrite::Remove:
-      BookFontFile::remove(bookCachePath(bookPath));
+      if (!BookFontFile::remove(bookCachePath(bookPath))) return;  // tried again on the next save
       hasBookFontFile = false;
+      rewriteBookFontFile = false;
       break;
     case BookFontWrite::None:
       break;
   }
+  if (rewriteBookFontFile && BookFontFile::save(bookCachePath(bookPath), savedBookFont)) rewriteBookFontFile = false;
   bookFontInUse = current;
 }
 
 void ReaderActivity::resaveBookFont() {
-  if (hasBookFontFile) BookFontFile::save(bookCachePath(bookPath), savedBookFont);
+  // Clearing the cache deleted the book's file. A failed write is tried again
+  // on the next save, at the latest when the book closes.
+  rewriteBookFontFile = hasBookFontFile;
   saveBookFont();
 }
 
