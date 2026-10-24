@@ -1,6 +1,7 @@
 add_executable(KOReaderXPathResolverTest
   KOReaderXPathResolverTest.cpp
   ${REPO_ROOT}/lib/KOReaderSync/ChapterXPathResolver.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/htmlEntities.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
   ${REPO_ROOT}/lib/expat/xmlparse.c
   ${REPO_ROOT}/lib/expat/xmlrole.c
@@ -11,6 +12,7 @@ target_include_directories(KOReaderXPathResolverTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/lib/KOReaderSync
   ${REPO_ROOT}/lib/Epub
+  $<$<COMPILE_LANGUAGE:CXX>:${REPO_ROOT}/lib/Memory>
   ${REPO_ROOT}/lib/Utf8
   ${REPO_ROOT}/lib/XmlParserUtils
   ${REPO_ROOT}/lib/expat
