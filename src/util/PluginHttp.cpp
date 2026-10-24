@@ -153,18 +153,14 @@ bool saveTokenToFile(const std::string& file, const std::string& path, const std
   JsonVariant node = doc.to<JsonObject>();
   for (size_t i = 0; i + 1 < segs.size(); i++) node = node[segs[i]].to<JsonObject>();
   node[segs.back()] = value;
-  std::string out;
+  String out;
   serializeJson(doc, out);
-  HalFile f;
-  if (!Storage.openFileForWrite("PHTP", file, f)) return false;
-  const size_t written = f.write(out.data(), out.size());
-  f.flush();
-  if (written != out.size()) {
-    // A short write (SD full, I/O fault) must not persist a truncated token:
-    // the writer would report success, then every later load fails.
-    LOG_ERR("PHTP", "short token write (%u of %u)", static_cast<unsigned>(written), static_cast<unsigned>(out.size()));
-    if (f.isOpen()) f.close();
-    Storage.remove(file.c_str());
+  if (doc.overflowed() || out.length() > MAX_TOKEN_FILE_SIZE || out.length() != measureJson(doc)) {
+    LOG_ERR("PHTP", "Invalid or oversized token JSON");
+    return false;
+  }
+  if (!Storage.writeFile(file.c_str(), out)) {
+    LOG_ERR("PHTP", "Failed to save token file");
     return false;
   }
   return true;
