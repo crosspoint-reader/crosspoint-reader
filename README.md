@@ -14,6 +14,31 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 > If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
 
+## Changes in this fork
+
+This fork follows the `develop` branch of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) and adds the changes below. Last synced with upstream on 2026-10-12.
+
+### New features
+
+- **Book description in the Library**: hold a book on any Library tab to open its options menu. **Description** shows the book's summary (Calibre's "Comments", stored as `dc:description` in the EPUB), with its formatting. The menu also has Open, Remove from recents, Show groups, Delete and Rebuild index. Grouping on the Title and Author tabs is now in this menu (**Show groups**).
+- **Swipe page turns in text viewers**: the description, dictionary definition and plugin README viewers turn pages with a swipe (left or up = next, right or down = previous), as well as with taps and buttons.
+- **Stats home** (devices with PSRAM, e.g. X4 Pro): a new home theme based on Cover Grid with reading statistics on extra pages. It shows books finished this year, reading time, pages read, a yearly goal, minutes read over the last 7 days, the reading streak, the time of day you read, and this week's and all-time totals. Reading is recorded on every PSRAM device, whatever the theme, in `.crosspoint/reading_stats.bin`. New setting: **Yearly Reading Goal**.
+- **Covers in the Library**: **Settings → System → Show Covers in Library** shows each book's cover beside its title. **Refresh library** prepares all covers at once.
+- **Faster Cover Grid home**: the home screen refreshes once when all covers are cached, and a cover that cannot be decoded is no longer retried on every visit.
+
+### Reliability fixes
+
+- **EPUBs with a ZIP archive comment open correctly**: the ZIP end record is searched in the whole area the ZIP format allows, with a fixed 4 KB buffer. Proposed upstream as [#2614](https://github.com/crosspoint-reader/crosspoint-reader/pull/2614).
+- **Chapters with HTML5 void elements** (`<br>`, `<img>`, `<hr>` without a closing slash) are fixed before parsing instead of failing to load.
+- **Book cache (`book.bin`) is written atomically** and checked on load, so a power loss during the first opening of a book no longer leaves a broken cache.
+- **EPUBs with very large manifests** (thousands of items) no longer crash the device when their cache is built.
+- **Out of memory while opening a chapter** shows an error instead of restarting the device.
+
+### Tools
+
+- `scripts/build_and_flash.sh`: builds the firmware (X4 Pro by default) and copies `firmware.bin` to the SD card or uploads it over Wi-Fi, for devices that cannot be flashed over USB. `--usb` keeps the old flash and serial monitor behavior.
+- `scripts/img2sleep.py`: converts images or folders into sleep-screen BMPs at the panel resolution.
+
 ## What can CrossPoint do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, adaptive table layouts, native CJK ruby annotations, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more.
