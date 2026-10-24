@@ -100,7 +100,7 @@ void EpubReaderMenuActivity::toggleBluetooth() {
 
 MenuResult EpubReaderMenuActivity::makeResult(const int action) const {
   MenuResult result{action, pendingOrientation, selectedPageTurnOption};
-  const bool familyChanged = pendingFontFamily != initialFontFamily;
+  const bool familyChanged = pendingFontFamily != initialFontFamily || clearMissingFamily;
   // A size-only change leaves the stored family alone, even one that is not
   // installed right now.
   if (familyChanged) result.fontFamily = static_cast<int16_t>(pendingFontFamily);
@@ -134,9 +134,14 @@ void EpubReaderMenuActivity::showFontFamilyPicker() {
   labels.reserve(count);
   for (int i = 0; i < count; i++) labels.push_back(fontFamilyLabel(i));
   optionPopup.show(I18N.get(StrId::STR_FONT_FAMILY), labels.data(), count, pendingFontFamily, [this](int idx) {
+    const char* sdName = readerFontFamilySdName(fontRegistry, idx);
+    // A stored SD family that is not installed shows as the built-in font.
+    // Picking the built-in font clears that name, or the family would come
+    // back when it is reinstalled.
+    clearMissingFamily = sdName && sdName[0] == '\0' && SETTINGS.sdFontFamilyName[0] != '\0';
     // The new family may not ship the current size; take its nearest one, as
     // SdCardFontSystem::ensureLoaded() would.
-    const auto sizes = readerFontPointSizes(fontRegistry, readerFontFamilySdName(fontRegistry, idx));
+    const auto sizes = readerFontPointSizes(fontRegistry, sdName);
     setPendingFont(idx, snapToNearestPointSize(sizes, pendingFontPointSize));
     requestUpdate();
   });

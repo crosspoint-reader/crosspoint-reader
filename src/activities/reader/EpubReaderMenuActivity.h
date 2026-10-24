@@ -94,7 +94,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   uint8_t initialFontPointSize = 0;
   int pendingFontFamily = 0;
   uint8_t pendingFontPointSize = 0;
-  char fontSizeValue[8] = "";  // "NN pt" for the Font Size row
+  bool clearMissingFamily = false;  // built-in font picked over a stored family that is not installed
+  char fontSizeValue[8] = "";       // "NN pt" for the Font Size row
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
