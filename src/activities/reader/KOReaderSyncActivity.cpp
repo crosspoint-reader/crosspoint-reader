@@ -664,10 +664,9 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
 void KOReaderSyncActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  auto metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
+  GUI.drawHeader(renderer, UITheme::getInstance().getHeaderRect(renderer, true, false),
                  state == SHOWING_RESULT ? tr(STR_PROGRESS_FOUND) : tr(STR_KOREADER_SYNC));
 
   int top = screen.y + screen.height / 2 - 40;
