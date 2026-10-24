@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 
+#include "components/themes/BaseTheme.h"
+
 class GfxRenderer;
 class TextBlock;
 
@@ -36,7 +38,7 @@ struct PreviewLayout {
 };
 
 // Draws the sample-text pane via the reader engine, reusing layout across redraws
-void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, int top,
-                   int height, const char* familyName, const char* sizeName);
+void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, Rect bounds,
+                   const char* familyName, const char* sizeName);
 
 }  // namespace textsettings
