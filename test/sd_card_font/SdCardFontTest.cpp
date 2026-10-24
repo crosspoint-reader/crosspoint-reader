@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <new>
 #include <string>
 
@@ -472,6 +473,21 @@ TEST(SdCardFontTest, AnEmptyOrFailedAdvanceBuildLeavesNoTable) {
   EXPECT_TRUE(font.hasAdvanceTable());
 }
 
+TEST(SdCardFontTest, AdvancesBuildForAStyleStoredInAnotherSlot) {
+  // An italic-only font: style 2 lives in slot 0 of the compact style array.
+  makeFont();
+  sdFontTestFile[32] = 2;
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_TRUE(font.hasStyle(2));
+  ASSERT_FALSE(font.hasStyle(0));
+  const auto text = page(FIRST, 100);
+  ASSERT_EQ(0, font.buildAdvanceTable(text.c_str(), 1 << 2));
+  for (uint32_t cp = FIRST; cp < FIRST + 100; ++cp) {
+    EXPECT_EQ(32 << 4, font.getAdvance(cp, 2));
+  }
+}
+
 TEST(SdCardFontTest, AFullAdvanceTableSkipsTheScanWithoutAllocating) {
   makeFont(1001);
   SdCardFont font;
@@ -574,5 +590,58 @@ TEST(SdCardFontTest, SmallCapsPrepareOriginalAndUppercasePackedMetricsWithoutBit
     sdFontTestReads = 0;
     ASSERT_EQ(font.buildAdvanceTablePacked(segments, lengths, 1, false, false, 1, nullptr, true), 0);
     EXPECT_EQ(sdFontTestReads, 0u);
+  }
+}
+
+TEST(SdCardFontTest, FontsWithTheSameCoverageShareOneIntervalTable) {
+  makeFont();
+  size_t firstLoad = 0;
+  size_t secondLoad = 0;
+  auto first = std::make_unique<SdCardFont>();
+  {
+    const size_t before = nothrowArrayAllocations;
+    ASSERT_TRUE(first->load("fixture"));
+    firstLoad = nothrowArrayAllocations - before;
+  }
+  SdCardFont second;
+  {
+    const size_t before = nothrowArrayAllocations;
+    ASSERT_TRUE(second.load("fixture"));
+    secondLoad = nothrowArrayAllocations - before;
+  }
+  EXPECT_EQ(firstLoad - 1, secondLoad);
+
+  // The table outlives the font that loaded it while another font still uses it.
+  first.reset();
+  EXPECT_TRUE(second.getEpdFont()->hasCodepoint(FIRST));
+  EXPECT_TRUE(second.getEpdFont()->hasCodepoint(0xFFFD));
+  EXPECT_FALSE(second.getEpdFont()->hasCodepoint(FIRST - 1));
+}
+
+TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
+  makeFont();
+  // Glyph 3 claims more bytes than its pixels need, as a corrupt .cpfont does.
+  constexpr size_t GLYPH_OFFSET = 64 + 24;
+  EpdGlyph glyph{};
+  std::memcpy(&glyph, sdFontTestFile.data() + GLYPH_OFFSET + 3 * sizeof(glyph), sizeof(glyph));
+  glyph.dataLength = 49335;
+  std::memcpy(sdFontTestFile.data() + GLYPH_OFFSET + 3 * sizeof(glyph), &glyph, sizeof(glyph));
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_EQ(0, font.prewarm(page(FIRST, 5).c_str(), 1, false, false, false));
+  const auto* data = font.getEpdFont()->data;
+  for (uint32_t cp = FIRST; cp < FIRST + 5; ++cp) {
+    const EpdGlyph* found = nullptr;
+    for (uint32_t i = 0; i < data->intervalCount; ++i) {
+      const auto& interval = data->intervals[i];
+      if (cp >= interval.first && cp <= interval.last) found = data->glyph + interval.offset + cp - interval.first;
+    }
+    ASSERT_NE(nullptr, found);
+    if (cp == FIRST + 3) {
+      EXPECT_EQ(0, found->dataLength);
+      EXPECT_EQ(0, found->width);
+    } else {
+      EXPECT_EQ(BITMAP_BYTES, found->dataLength);
+    }
   }
 }
