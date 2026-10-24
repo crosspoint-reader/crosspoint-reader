@@ -5,8 +5,11 @@
 #include <HalFrontlight.h>
 #include <I18n.h>
 
+#include <cstdio>
+
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "util/SlideSwitch.h"
@@ -17,15 +20,22 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks,
-                                               const bool hasClippings)
+                                               const bool hasClippings, const SdCardFontRegistry* fontRegistry)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
       title(title),
       pendingOrientation(currentOrientation),
+      fontRegistry(fontRegistry),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
   buildMenuItems(menuItems, hasFootnotes, hasBookmarks, hasClippings);
   buildMenuRowItems();
+  // Show the size the reader renders: the stored size snapped into the family's set.
+  initialFontFamily = readerFontFamilyIndex(fontRegistry, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
+  initialFontPointSize = snapToNearestPointSize(
+      readerFontPointSizes(fontRegistry, readerFontFamilySdName(fontRegistry, initialFontFamily)),
+      SETTINGS.fontPointSize);
+  setPendingFont(initialFontFamily, initialFontPointSize);
 }
 
 // Populates menuRowItems's labels/actionValue from menuItems. Called once
@@ -74,6 +84,9 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
+  // Last, so they are a few Up presses away: the list wraps around.
+  items.push_back({MenuAction::FONT_FAMILY, StrId::STR_FONT_FAMILY});
+  items.push_back({MenuAction::FONT_SIZE, StrId::STR_FONT_SIZE});
   items.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
 }
 
@@ -86,12 +99,70 @@ void EpubReaderMenuActivity::toggleBluetooth() {
   if (SETTINGS.ble.enabled) bleturner::requestConnect();
 }
 
+MenuResult EpubReaderMenuActivity::makeResult(const int action) const {
+  MenuResult result{action, pendingOrientation, selectedPageTurnOption};
+  const bool familyChanged = pendingFontFamily != initialFontFamily || clearMissingFamily;
+  // A size-only change leaves the stored family alone, even one that is not
+  // installed right now.
+  if (familyChanged) result.fontFamily = static_cast<int16_t>(pendingFontFamily);
+  if (familyChanged || pendingFontPointSize != initialFontPointSize) result.fontPointSize = pendingFontPointSize;
+  return result;
+}
+
 void EpubReaderMenuActivity::closeCancelled() {
   ActivityResult result;
   result.isCancelled = true;
-  result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+  result.data = makeResult(-1);
   setResult(std::move(result));
   finish();
+}
+
+const char* EpubReaderMenuActivity::fontFamilyLabel(const int family) const {
+  const char* sdName = readerFontFamilySdName(fontRegistry, family);
+  return sdName && sdName[0] != '\0' ? sdName : I18N.get(StrId::STR_NOTO_SANS);
+}
+
+void EpubReaderMenuActivity::setPendingFont(const int family, const uint8_t pointSize) {
+  pendingFontFamily = family;
+  pendingFontPointSize = pointSize;
+  snprintf(fontSizeValue, sizeof(fontSizeValue), "%u pt", pointSize);
+}
+
+void EpubReaderMenuActivity::showFontFamilyPicker() {
+  const int count = readerFontFamilyCount(fontRegistry);
+  // Transient: show() copies the labels into the popup.
+  std::vector<const char*> labels;
+  labels.reserve(count);
+  for (int i = 0; i < count; i++) labels.push_back(fontFamilyLabel(i));
+  optionPopup.show(I18N.get(StrId::STR_FONT_FAMILY), labels.data(), count, pendingFontFamily, [this](int idx) {
+    const char* sdName = readerFontFamilySdName(fontRegistry, idx);
+    // A stored SD family that is not installed shows as the built-in font.
+    // Picking the built-in font clears that name, or the family would come
+    // back when it is reinstalled.
+    clearMissingFamily = sdName && sdName[0] == '\0' && SETTINGS.sdFontFamilyName[0] != '\0';
+    // The new family may not ship the current size; take its nearest one, as
+    // SdCardFontSystem::ensureLoaded() would.
+    const auto sizes = readerFontPointSizes(fontRegistry, sdName);
+    setPendingFont(idx, snapToNearestPointSize(sizes, pendingFontPointSize));
+    requestUpdate();
+  });
+}
+
+void EpubReaderMenuActivity::showFontSizePicker() {
+  // The point sizes the picked family actually ships.
+  auto sizes = readerFontPointSizes(fontRegistry, readerFontFamilySdName(fontRegistry, pendingFontFamily));
+  std::vector<std::string> labels;
+  labels.reserve(sizes.size());
+  int current = 0;
+  for (size_t i = 0; i < sizes.size(); i++) {
+    labels.push_back(std::to_string(sizes[i]) + " pt");
+    if (sizes[i] == pendingFontPointSize) current = static_cast<int>(i);
+  }
+  optionPopup.show(StrId::STR_FONT_SIZE, labels, current, [this, sizes = std::move(sizes)](int idx) {
+    if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
+    setPendingFont(pendingFontFamily, sizes[idx]);
+    requestUpdate();
+  });
 }
 
 bool EpubReaderMenuActivity::handleHomeGesture() {
@@ -118,6 +189,30 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
                        app.setDevice(uiTarget.deviceContext());  // hit rects follow the new frame
                        requestUpdate(true);
                      });
+    requestUpdate();
+    return;
+  }
+
+  if (selectedAction == MenuAction::FONT_FAMILY || selectedAction == MenuAction::FONT_SIZE) {
+    if (selectedAction == MenuAction::FONT_FAMILY) {
+      showFontFamilyPicker();
+    } else {
+      showFontSizePicker();
+    }
+    bool fits;
+    {
+      // Measuring can load SD fallback glyphs, which the render task shares.
+      RenderLock lock;
+      fits = optionPopup.fitsScreen(renderer);
+    }
+    if (!fits) {
+      // The popup cannot scroll; the reader opens the matching Text Settings
+      // tab, whose list does.
+      optionPopup.dismiss();
+      setResult(makeResult(static_cast<int>(selectedAction)));
+      finish();
+      return;
+    }
     requestUpdate();
     return;
   }
@@ -154,7 +249,7 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
     return;
   }
 
-  setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
+  setResult(makeResult(static_cast<int>(selectedAction)));
   finish();
 }
 
@@ -205,6 +300,10 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
       menuRowItems[i].value = I18N.get(orientationLabels[pendingOrientation]);
     } else if (action == MenuAction::AUTO_PAGE_TURN) {
       menuRowItems[i].value = pageTurnLabels[selectedPageTurnOption];
+    } else if (action == MenuAction::FONT_FAMILY) {
+      menuRowItems[i].value = fontFamilyLabel(pendingFontFamily);
+    } else if (action == MenuAction::FONT_SIZE) {
+      menuRowItems[i].value = fontSizeValue;
     } else if (action == MenuAction::NIGHT_MODE) {
       GUI.setCheckboxRow(menuRowItems[i], SETTINGS.screenInverted);
     } else if (action == MenuAction::BLUETOOTH) {

@@ -18,6 +18,7 @@
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
+#include "activities/settings/TextSettingsActivity.h"
 #include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
@@ -190,6 +191,11 @@ class EpubReaderActivity final : public ReaderActivity {
   // Persist the reader text settings, (re)load the selected SD font, and
   // re-paginate the current chapter so changes apply without re-opening the book.
   void applyReaderTextSettings();
+  // Apply a font chosen in the list menu: family is a picker list index, or -1
+  // to keep the stored family.
+  void applyMenuFont(int family, uint8_t pointSize);
+  // Text Settings from the list menu; the chapter is laid out again on return.
+  void openTextSettings(TextSettingsActivity::Tab tab);
   // More panel rows.
   void buildMoreActions();
   std::string moreRowName(int row) const;

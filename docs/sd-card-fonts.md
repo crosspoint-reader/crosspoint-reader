@@ -112,7 +112,7 @@ CrossPoint's built-in fallback-detection codepoints — see `kFallbackProbes` in
 `src/SdCardFontSystem.cpp` for the current list. A script outside that list
 gets no UI fallback even with the correct `.cpfont` sizes present.
 
-For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships,
+For `.cpfont` families, **Settings > Reader > Font Size** (and **Reader Font Size** in the reader menu) lists every size the family ships,
 so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
 sizes are not hidden from the list. Reading at 8 pt is your call; if you would
 rather not see the small sizes there, convert two families (one with the UI

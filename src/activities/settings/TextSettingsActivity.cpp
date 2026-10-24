@@ -30,20 +30,6 @@ constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
                                         StrId::STR_TEXT_AA};
 
-int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
-  if (sdFontFamilyName[0] != '\0' && registry) {
-    const auto& families = registry->getFamilies();
-    const auto family = std::find_if(families.begin(), families.end(), [sdFontFamilyName](const auto& candidate) {
-      return candidate.name == sdFontFamilyName;
-    });
-    if (family != families.end()) {
-      return CrossPointSettings::BUILTIN_FONT_COUNT + static_cast<int>(family - families.begin());
-    }
-  }
-
-  return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
-}
-
 constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
 constexpr StrId WORD_SPACING_IDS[] = {StrId::STR_SPACING_50_PERCENT,  StrId::STR_SPACING_75_PERCENT,
                                       StrId::STR_SPACING_100_PERCENT, StrId::STR_SPACING_125_PERCENT,
@@ -90,7 +76,7 @@ void TextSettingsActivity::onEnter() {
 
   rebuildSizeList();
 
-  currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
+  currentFamilyIndex_ = readerFontFamilyIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
   // Per-tab ring positions (0 = tab bar, 1..N = row). The base reset each
   // tab's nav with followOnBuild armed, so each tab's first build shows its
   // remembered selection (Family/Size open on the current item).
