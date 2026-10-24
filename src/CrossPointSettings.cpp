@@ -94,11 +94,13 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonRight"] = frontButtonRight;
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
+  // A book's own font (beginBookFont()) is never saved as the default.
+  const char* storedFamily = bookFontActive ? defaultFont.sdFontFamilyName : sdFontFamilyName;
   doc["fontFamily"] = STORED_NOTOSANS;
-  doc["fontSize"] = fontPointSize;
+  doc["fontSize"] = bookFontActive ? defaultFont.fontPointSize : fontPointSize;
   // SD card font family name — not in SettingsList, save manually
-  if (sdFontFamilyName[0] != '\0') {
-    doc["sdFontFamilyName"] = sdFontFamilyName;
+  if (storedFamily[0] != '\0') {
+    doc["sdFontFamilyName"] = storedFamily;
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
@@ -403,6 +405,34 @@ void CrossPointSettings::clearSdFontFamily() {
   fontPointSize =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
   saveToFile();
+}
+
+ReaderFont CrossPointSettings::readerFont() const {
+  ReaderFont font;
+  font.setFamily(sdFontFamilyName);
+  font.fontPointSize = fontPointSize;
+  return font;
+}
+
+ReaderFont CrossPointSettings::defaultReaderFont() const { return bookFontActive ? defaultFont : readerFont(); }
+
+static_assert(sizeof(ReaderFont::sdFontFamilyName) == sizeof(CrossPointSettings::sdFontFamilyName));
+
+// storeMutex keeps a concurrent saveToFile() from seeing the swap half done.
+void CrossPointSettings::beginBookFont(const ReaderFont& bookFont) {
+  std::lock_guard<std::mutex> lock(storeMutex);
+  if (!bookFontActive) defaultFont = readerFont();
+  bookFontActive = true;
+  copyToField(sdFontFamilyName, bookFont.sdFontFamilyName, sizeof(sdFontFamilyName));
+  fontPointSize = bookFont.fontPointSize;
+}
+
+void CrossPointSettings::endBookFont() {
+  std::lock_guard<std::mutex> lock(storeMutex);
+  if (!bookFontActive) return;
+  copyToField(sdFontFamilyName, defaultFont.sdFontFamilyName, sizeof(sdFontFamilyName));
+  fontPointSize = defaultFont.fontPointSize;
+  bookFontActive = false;
 }
 
 int CrossPointSettings::getReaderFontId() const {

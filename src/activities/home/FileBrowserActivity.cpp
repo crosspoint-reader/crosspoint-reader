@@ -29,18 +29,6 @@ namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
 
-std::string getBookCachePath(const std::string& path) {
-  const char* prefix = nullptr;
-  if (FsHelpers::hasReflowableBookExtension(path)) {
-    prefix = "epub_";
-  } else if (FsHelpers::hasXtcExtension(path)) {
-    prefix = "xtc_";
-  } else {
-    return "";
-  }
-  return std::string("/.crosspoint/") + prefix + std::to_string(std::hash<std::string>{}(path));
-}
-
 bool moveStatePath(const std::string& oldPath, const std::string& newPath, bool& moved) {
   moved = false;
   if (oldPath.empty() || !Storage.exists(oldPath.c_str())) return true;
@@ -480,8 +468,8 @@ void FileBrowserActivity::renameSelectedFile(const std::string& oldPath, const s
     return;
   }
 
-  const std::string oldCachePath = getBookCachePath(oldPath);
-  const std::string newCachePath = getBookCachePath(newPath);
+  const std::string oldCachePath = bookCachePath(oldPath);
+  const std::string newCachePath = bookCachePath(newPath);
   const bool hasBookmarks = FsHelpers::hasReflowableBookExtension(oldPath);
   const std::string oldBookmarkPath = hasBookmarks ? BookmarkUtil::getBookmarkPath(oldPath) : "";
   const std::string newBookmarkPath = hasBookmarks ? BookmarkUtil::getBookmarkPath(newPath) : "";

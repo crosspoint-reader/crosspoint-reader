@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "EndOfBookOptions.h"
+#include "ReaderFont.h"
 #include "ReaderSession.h"
 #include "activities/Activity.h"
 
@@ -24,6 +25,14 @@ class ReaderActivity : public Activity {
   bool bookRemembered = false;
   void markPageRendered() { pageRendered.store(true, std::memory_order_release); }
   void rememberBookOnceRendered();
+
+  // Font changes made while the book is open belong to the book (see
+  // CrossPointSettings::beginBookFont()). Call after a font change; onExit()
+  // also saves.
+  void saveBookFont();
+  // Writes the book's font file again after its cache directory, which holds
+  // it, was cleared and set up again.
+  void resaveBookFont();
 
   explicit ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                           std::string bookPath, bool allowFastInitialRefresh);
@@ -72,7 +81,7 @@ class ReaderActivity : public Activity {
   void flushReaderSession();
 
  public:
-  ~ReaderActivity() override = default;
+  ~ReaderActivity() override;
 
   static std::unique_ptr<ReaderActivity> create(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                 std::string path, bool allowFastInitialRefresh);
@@ -86,4 +95,17 @@ class ReaderActivity : public Activity {
   bool isReaderActivity() const final { return true; }
   bool acceptsRemoteInput() const final { return pageRendered.load(std::memory_order_acquire); }
   bool handleForcedRefresh() final;
+
+ private:
+  void beginBookFont();
+  void endBookFont();
+  // The font in the book's file; meaningful while hasBookFontFile.
+  ReaderFont savedBookFont;
+  bool hasBookFontFile = false;
+  // The font in use when the book opened or its font was last saved.
+  ReaderFont bookFontInUse;
+  // Set by onExit() when the book used another font than the default; the
+  // destructor loads the default once the book's memory is free.
+  bool reloadDefaultFont = false;
+  bool preparingSleep = false;
 };
