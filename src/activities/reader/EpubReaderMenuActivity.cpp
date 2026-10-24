@@ -64,7 +64,7 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
   }
   items.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
-  if (bleturner::status().compiledIn) {
+  if (bleturner::status().compiledIn && SETTINGS.ble.remoteCount > 0) {
     items.push_back({MenuAction::BLUETOOTH, StrId::STR_BT_PAGE_TURNER});
   }
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
