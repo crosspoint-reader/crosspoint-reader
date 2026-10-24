@@ -6,11 +6,11 @@
 #include <Memory.h>
 #include <MemoryManager.h>
 #include <Serialization.h>
-#include "../CjkBreaks.h"
 
 #include <cstring>
 
 #include "../../../../src/fontIds.h"
+#include "../CjkBreaks.h"
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
