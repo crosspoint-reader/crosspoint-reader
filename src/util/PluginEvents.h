@@ -81,13 +81,16 @@ bool wantsConnectAny();
 // newest events carry the current state; stale ones are worthless by then).
 void emit(Event e, const Var* vars, size_t varCount);
 
-// Replays queued events through their manifest handlers. Call only while WiFi
-// is connected; requests run synchronously on the calling task. At most
-// `maxEvents` handlers run per call (each is a bounded HTTPS request) so a
-// backlog cannot stall an interactive session. Successfully delivered events
-// leave the outbox; failures stay for the next drain. When `renderer` is
-// non-null, a handler's "toast" template is shown via the standard popup after
-// its request succeeds.
+// Replays queued events synchronously while WiFi is connected. maxEvents caps
+// delivered lines; failures stay queued. Opt-in limits share caller HTTP
+// operations and a cooperative deadline across all plugins, including auth
+// mint and retry. Blocking SDK DNS/TCP connect can exceed the deadline.
+// A non-null renderer shows the handler's toast after a successful request.
+struct DrainLimits {
+  size_t maxAttempts;     // 0 disables the operation count limit
+  uint32_t maxElapsedMs;  // 0 disables the cooperative deadline
+};
 void drain(GfxRenderer* renderer, size_t maxEvents = 4);
+void drain(GfxRenderer* renderer, size_t maxEvents, DrainLimits limits);
 
 }  // namespace pluginevents
