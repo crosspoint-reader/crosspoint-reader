@@ -322,6 +322,28 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
 
 // Starts a gray plane under an overlay. Absolute planes keep the B/W base; other gray planes carry only
 // the overlay's gray. Cover + Transparent redraws a gray cover (set only for absolute planes) to keep its gray levels.
+// Overlay gray leaves a mask plane in the framebuffer, so a later B/W update of
+// the retained sleep frame (the Picco USB charge strip) needs the B/W frame back.
+// Absolute planes must keep the gray baseline: restoring the B/W frame there
+// makes the next fast refresh drop the grays (Picco SSD1677).
+class BwFrameKeeper {
+ public:
+  BwFrameKeeper(GfxRenderer& renderer, const bool keep)
+      : renderer(renderer), keep(keep), stored(!keep || renderer.storeBwBuffer()) {}
+  ~BwFrameKeeper() {
+    if (keep && stored) renderer.restoreBwBuffer();
+  }
+  // False when the B/W frame could not be kept; callers must skip the gray passes.
+  bool ready() const { return stored; }
+  BwFrameKeeper(const BwFrameKeeper&) = delete;
+  BwFrameKeeper& operator=(const BwFrameKeeper&) = delete;
+
+ private:
+  GfxRenderer& renderer;
+  const bool keep;
+  const bool stored;
+};
+
 bool beginOverlayGrayPlane(GfxRenderer& renderer, const Bitmap* grayCover, const GfxRenderer::RenderMode plane,
                            const bool absolute) {
   if (grayCover) {
@@ -386,6 +408,11 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
     return AlphaOverlayResult::Error;
   const bool absolute = renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
+  const BwFrameKeeper bwFrame(renderer, !absolute);
+  if (!bwFrame.ready()) {
+    renderer.displayBuffer(kSleepClean);
+    return AlphaOverlayResult::Rendered;
+  }
   if (absolute) {
     cleanBeforeAbsoluteGray(renderer);
     if (!renderer.displayGrayscaleBase(sleepGrayscaleMode(renderer))) return AlphaOverlayResult::Error;
@@ -730,6 +757,11 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   const bool absolute = hasGreyscale && renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
+  const BwFrameKeeper bwFrame(renderer, hasGreyscale && !absolute);
+  if (!bwFrame.ready()) {
+    renderer.displayBuffer(kSleepClean);
+    return;
+  }
   if (absolute) {
     cleanBeforeAbsoluteGray(renderer);
     if (!renderer.displayGrayscaleBase(sleepGrayscaleMode(renderer))) return;
@@ -816,6 +848,11 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
 
   if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
   const bool absolute = renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
+  const BwFrameKeeper bwFrame(renderer, !absolute);
+  if (!bwFrame.ready()) {
+    renderer.displayBuffer(kSleepClean);
+    return true;
+  }
   if (absolute) {
     // The cover replaces the previous screen, so clean it like the BMP paths do.
     if (overlayCover) cleanBeforeAbsoluteGray(renderer);

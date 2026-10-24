@@ -1,15 +1,19 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "VectorFontSupport.h"
 
 struct SdCardFontFileInfo {
-  std::string path;   // v4 on-disk naming: "/<root>/<Family>/<Family>_<size>.cpfont"
-                      // where <root> is "/.fonts" (preferred, hidden) or "/fonts" (visible).
-                      // e.g. "/.fonts/NotoSansCJK/NotoSansCJK_14.cpfont"
+  // Filename, stored only when SdCardFontFamilyInfo::filePath() cannot rebuild
+  // it: a .cpfont not named "<Family>_<size>.cpfont", or any vector file. Null
+  // for the canonical name, so downloaded families keep no per-file heap strings
+  // and the entry is two pointers wide (8 bytes on the ESP32-C3).
+  std::unique_ptr<char[]> name;
   uint8_t pointSize;  // parsed from filename: 14 (0 for size-free vector fonts)
   uint8_t style;      // .cpfont: always 0 (all 4 styles bundled in one file).
                       // Vector family in a folder: the style ROLE of this file —
@@ -18,13 +22,26 @@ struct SdCardFontFileInfo {
 };
 
 struct SdCardFontFamilyInfo {
+  // Buffer size for filePath(), matching the installer's own path buffers.
+  // Discovery drops files whose path would not fit, so every registered file
+  // can be opened through filePath() with a buffer of this size.
+  static constexpr size_t PATH_BUFFER_SIZE = 160;
+
   std::string name;  // directory name, e.g. "NotoSansCJK"
   std::vector<SdCardFontFileInfo> files;
-  // true for a loose TrueType/OpenType file (.ttf/.otf/.ttc) rendered at any
-  // size via the FreeInkFont engine (see TtfEpdFont / SdCardFontSystem). For a
-  // vector family `files` holds a single entry — the font path, pointSize 0
+  // SdCardFontRegistry::FONTS_DIR_HIDDEN or FONTS_DIR_VISIBLE: static storage,
+  // never freed, so a pointer is enough.
+  const char* root = nullptr;
+  // true for TrueType/OpenType files (.ttf/.otf/.ttc) rendered at any size via
+  // the FreeInkFont engine (see TtfEpdFont / SdCardFontSystem): `files` holds
+  // one entry per style role, each with its filename in `name` and pointSize 0
   // (size-free). false = a directory of pre-rasterized .cpfont files.
   bool vector = false;
+  bool loose = false;  // vector file directly under `root`, no family directory
+
+  // Writes the file's SD path, e.g. "/.fonts/NotoSansCJK/NotoSansCJK_14.cpfont".
+  // Returns false when `outSize` is too small; `out` is then truncated.
+  bool filePath(const SdCardFontFileInfo& file, char* out, size_t outSize) const;
 
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   // Installed file closest to `pointSize` (ties → smaller). nullptr when the
@@ -72,6 +89,9 @@ class SdCardFontRegistry {
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 
   static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
+  // True when `filename` is exactly "<family>_<size>.cpfont", the name
+  // filePath() rebuilds without a stored string.
+  static bool isCanonicalCpfontName(const char* filename, const std::string& family, uint8_t size);
 #if CROSSPOINT_VECTOR_FONTS
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.

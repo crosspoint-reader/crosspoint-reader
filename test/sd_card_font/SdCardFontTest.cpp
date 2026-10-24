@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <new>
 #include <string>
 
@@ -590,6 +591,31 @@ TEST(SdCardFontTest, SmallCapsPrepareOriginalAndUppercasePackedMetricsWithoutBit
     ASSERT_EQ(font.buildAdvanceTablePacked(segments, lengths, 1, false, false, 1, nullptr, true), 0);
     EXPECT_EQ(sdFontTestReads, 0u);
   }
+}
+
+TEST(SdCardFontTest, FontsWithTheSameCoverageShareOneIntervalTable) {
+  makeFont();
+  size_t firstLoad = 0;
+  size_t secondLoad = 0;
+  auto first = std::make_unique<SdCardFont>();
+  {
+    const size_t before = nothrowArrayAllocations;
+    ASSERT_TRUE(first->load("fixture"));
+    firstLoad = nothrowArrayAllocations - before;
+  }
+  SdCardFont second;
+  {
+    const size_t before = nothrowArrayAllocations;
+    ASSERT_TRUE(second.load("fixture"));
+    secondLoad = nothrowArrayAllocations - before;
+  }
+  EXPECT_EQ(firstLoad - 1, secondLoad);
+
+  // The table outlives the font that loaded it while another font still uses it.
+  first.reset();
+  EXPECT_TRUE(second.getEpdFont()->hasCodepoint(FIRST));
+  EXPECT_TRUE(second.getEpdFont()->hasCodepoint(0xFFFD));
+  EXPECT_FALSE(second.getEpdFont()->hasCodepoint(FIRST - 1));
 }
 
 TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
