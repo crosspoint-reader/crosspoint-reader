@@ -39,6 +39,7 @@
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "LongPressRotation.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -976,7 +977,18 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  // A rotation can remap the held button, so ignore page buttons (not touch) until released.
+  const bool ignorePageButtons = waitForPageButtonsUp;
+  if (waitForPageButtonsUp && !mappedInput.isPressed(MappedInputManager::Button::PageBack) &&
+      !mappedInput.isPressed(MappedInputManager::Button::PageForward) &&
+      !mappedInput.isPressed(MappedInputManager::Button::Left) &&
+      !mappedInput.isPressed(MappedInputManager::Button::Right)) {
+    waitForPageButtonsUp = false;
+    mappedInput.clearPageButtonSuppressedReleases();
+  }
+
+  auto [prevTriggered, nextTriggered, fromTilt] =
+      ignorePageButtons ? ReaderUtils::PageTurnResult{} : ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
@@ -1005,11 +1017,27 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
-    const uint8_t newOrientation =
-        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
-                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
-    applyOrientation(newOrientation);
-    if (touch.prev || touch.next) haptic_feedback::touchAction(true);
+    // Touch zones are not remapped by orientation; page buttons may be.
+    const bool fromTouch = touch.prev || touch.next;
+    const bool swappedBefore = mappedInput.isNavDirectionSwapped();
+    const bool sideFollows = SETTINGS.sideButtonLayout == CrossPointSettings::PREV_NEXT ||
+                             SETTINGS.sideButtonLayout == CrossPointSettings::NEXT_PREV;
+    // A long press can also be reported on its release frame, so count a just-released button as held.
+    const auto held = [&](const MappedInputManager::Button button) {
+      return mappedInput.isPressed(button) || mappedInput.wasReleased(button);
+    };
+    const bool heldSwapped =
+        !fromTouch &&
+        longpressrotation::heldButtonSwapped(
+            swappedBefore, held(MappedInputManager::Button::Left) || held(MappedInputManager::Button::Right),
+            held(MappedInputManager::Button::Up) || held(MappedInputManager::Button::Down), sideFollows);
+    const bool turnRight = longpressrotation::turnsRight(nextTriggered, heldSwapped);
+    applyOrientation(longpressrotation::nextOrientation(SETTINGS.orientation, turnRight, SETTINGS.ORIENTATION_COUNT));
+    if (fromTouch) {
+      haptic_feedback::touchAction(true);
+    } else if (mappedInput.isNavDirectionSwapped() != swappedBefore) {
+      waitForPageButtonsUp = true;
+    }
     requestUpdate();
     return;
   }
