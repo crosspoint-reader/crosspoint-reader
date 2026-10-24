@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Block.h"
+#include "Epub/converters/DecodeTarget.h"
 
 class ImageBlock final : public Block {
  public:
@@ -17,6 +18,12 @@ class ImageBlock final : public Block {
 
   bool hasValidCache() const;
   bool needsDecode() const;
+
+  // Cache-only decode of this image, run by ImageCacheService on its worker
+  // task. The target carries the renderer geometry (writeFramebuffer=false) so
+  // the worker never touches the live renderer. True when the .pxc is valid
+  // afterwards.
+  bool prefetch(const DecodeTarget& target, int x, int y) const;
   void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;
   static void clearRenderFailures();
 
@@ -47,6 +54,12 @@ class ImageBlock final : public Block {
   std::string srcPath;  // book-internal source href; empty once known-extracted
   int16_t width;
   int16_t height;
+
+  bool positionOnScreen(int screenWidth, int screenHeight, int x, int y) const;
+  // Lazy-extract from the book, validate, and decode straight to the .pxc (the
+  // target disables framebuffer output); owned by ImageCacheService.
+  // cacheWritten reports whether the .pxc stream completed.
+  bool decodeImage(const DecodeTarget& target, int x, int y, const std::string& cachePath, bool& cacheWritten) const;
 
   static void* extractCtx;
   static ExtractFn extractFn;

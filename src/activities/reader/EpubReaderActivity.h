@@ -55,6 +55,9 @@ class EpubReaderActivity final : public ReaderActivity {
   bool currentPageBookmarked = false;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
+  // Last (spine, page) whose next page had its images idle-prefetched.
+  int idlePrefetchSpine = -1;
+  int idlePrefetchPage = -1;
   unsigned long lastRenderCompleteMs = 0;
   bool bookmarkRemoved = false;
   std::vector<BookmarkEntry> cachedBookmarks;
@@ -251,6 +254,8 @@ class EpubReaderActivity final : public ReaderActivity {
   ~EpubReaderActivity() override;
 
   void loop() override;
+  void onEnter() override;
+  void onExit() override;
   void render(RenderLock&& lock) override;
 
   bool pageTurn(bool isForward) override;

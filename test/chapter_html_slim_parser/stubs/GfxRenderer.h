@@ -59,6 +59,19 @@ class GfxRenderer {
   }
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
+  // captureDecodeTarget (ImageToFramebufferDecoder.cpp) reads these; the
+  // fixture has no live decode, so every field is a neutral value.
+  enum class RenderMode : uint8_t { BW = 0 };
+  enum class Orientation : uint8_t { Portrait = 0 };
+  uint8_t* getWriteTarget() const { return nullptr; }
+  int getWriteOriginY() const { return 0; }
+  int getWriteRows() const { return 0; }
+  RenderMode getRenderMode() const { return RenderMode::BW; }
+  bool grayPlanesAreAbsolute() const { return false; }
+  int getDisplayWidthBytes() const { return 0; }
+  int getDisplayWidth() const { return 480; }
+  int getDisplayHeight() const { return 800; }
+  Orientation getOrientation() const { return Orientation::Portrait; }
   std::map<int, int> fontLineHeights;
   std::map<int, int> fontAscenders;
   int getLineHeight(int fontId, float compression = 1.0f) const {

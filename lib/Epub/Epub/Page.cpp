@@ -6,6 +6,8 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include "converters/ImageDecoderFactory.h"
+
 namespace {
 
 template <typename Predicate>
@@ -311,6 +313,28 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
       element->render(renderer, fontId, xOffset, yOffset);
     }
   }
+}
+
+bool Page::prefetchOneImage(const DecodeTarget& target, const int xOffset, const int yOffset) const {
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageImage) continue;
+    const auto& image = static_cast<const PageImage&>(*element);
+    if (!image.getImageBlock().needsDecode()) continue;
+    return image.getImageBlock().prefetch(target, image.xPos + xOffset, image.yPos + yOffset);
+  }
+  return false;
+}
+
+size_t Page::decodeFreeHeapFloor() const {
+  size_t floor = 0;
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageImage) continue;
+    const auto& block = static_cast<const PageImage&>(*element).getImageBlock();
+    if (!block.needsDecode()) continue;
+    const size_t needed = ImageDecoderFactory::minFreeHeapToDecode(block.getImagePath());
+    if (needed > floor) floor = needed;
+  }
+  return floor;
 }
 
 bool Page::serialize(HalFile& file) const {

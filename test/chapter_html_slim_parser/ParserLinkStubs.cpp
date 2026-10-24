@@ -24,9 +24,11 @@ bool ImageDecoderFactory::isFormatSupported(const std::string& path) {
   return Epub::enableGifProbeForTest && path.ends_with(".gif");
 }
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string&) { return nullptr; }
+size_t ImageDecoderFactory::minFreeHeapToDecode(const std::string&) { return 0; }
 
 void ImageBlock::render(GfxRenderer&, int, int) {}
 void ImageBlock::renderPlaceholder(GfxRenderer&, int, int) const {}
 bool ImageBlock::needsDecode() const { return false; }
+bool ImageBlock::prefetch(const DecodeTarget&, int, int) const { return false; }
 bool ImageBlock::serialize(HalFile&) { return false; }
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile&) { return nullptr; }
