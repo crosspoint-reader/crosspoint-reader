@@ -9,7 +9,6 @@
 #include <I18n.h>
 
 #include <algorithm>
-#include <cstdio>
 #include <string>
 #include <utility>
 
@@ -64,7 +63,7 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
 }  // namespace
 
 void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, Rect bounds,
-                   const char* familyName, const char* sizeName) {
+                   const char* caption) {
   const int top = bounds.y;
   const int height = bounds.height;
   const int left = bounds.x + previewPadding;
@@ -74,10 +73,8 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
   const int labelH = renderer.getTextHeight(UI_10_FONT_ID);
   const int labelReserved = labelH + labelGap + previewPadding;
 
-  char labelBuf[128];
-  snprintf(labelBuf, sizeof(labelBuf), "%s \"%s, %s\"", tr(STR_PREVIEW), familyName, sizeName);
   const int labelY = top + height - previewPadding - labelH;
-  renderer.drawText(UI_10_FONT_ID, left, labelY, labelBuf);
+  renderer.drawText(UI_10_FONT_ID, left, labelY, caption);
 
   const int fontId = SETTINGS.getReaderFontId();
   if (fontId == 0) return;

@@ -76,7 +76,7 @@ void TextSettingsActivity::onEnter() {
   const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int safeBottom = safeArea.y + safeArea.height;
   afterHeader = safeArea.y + metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
-  usableHeight = safeBottom - afterHeader - metrics_.verticalSpacing;
+  const int usableHeight = safeBottom - afterHeader - metrics_.verticalSpacing;
   previewHeight = usableHeight * metrics_.previewHeightPercent / 100;
 
   fonts_.clear();
@@ -209,12 +209,8 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   const int tabTop = afterHeader + previewHeight;
   const int rightInset = renderer.getScreenWidth() - (safeArea.x + safeArea.width);
   const int bottomInset = renderer.getScreenHeight() - (safeArea.y + safeArea.height);
-  // Keep Style's caption gap and bottom padding reserved even when its caption is hidden.
-  const int captionReserve =
-      tab_ == Tab::Style ? renderer.getTextHeight(UI_10_FONT_ID) + 2 * metrics_.verticalSpacing : 0;
   screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(tabTop), static_cast<int16_t>(rightInset),
-                                                static_cast<int16_t>(bottomInset + captionReserve),
-                                                static_cast<int16_t>(safeArea.x)});
+                                                static_cast<int16_t>(bottomInset), static_cast<int16_t>(safeArea.x)});
 
   buildTabBar(screen);
 
@@ -284,6 +280,9 @@ void TextSettingsActivity::drawChrome() {
   const char* sizeName = (currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
                              ? sizes_[currentSizeIndex_].name.c_str()
                              : "";
+  char labelBuf[128];
+  snprintf(labelBuf, sizeof(labelBuf), "%s \"%s, %s\"", tr(STR_PREVIEW), familyName, sizeName);
+  const char* caption = focusedRowHasNoPreview() ? tr(STR_NOT_IN_PREVIEW) : labelBuf;
   const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const Rect previewBounds{safeArea.x, afterHeader, safeArea.width, previewHeight};
   const auto [savedX, savedY, savedWidth, savedHeight] = renderer.getClipRect();
@@ -293,18 +292,11 @@ void TextSettingsActivity::drawChrome() {
   const int clipBottom = std::min(previewBounds.y + previewBounds.height, savedY + savedHeight);
   renderer.setClipRect(clipLeft, clipTop, std::max(0, clipRight - clipLeft), std::max(0, clipBottom - clipTop));
   textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing,
-                              previewBounds, familyName, sizeName);
+                              previewBounds, caption);
   renderer.setClipRect(savedX, savedY, savedWidth, savedHeight);
 }
 
 void TextSettingsActivity::drawFooter() {
-  if (focusedRowHasNoPreview()) {
-    const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-    const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
-    const int capY = afterHeader + usableHeight - captionHeight + metrics_.verticalSpacing;
-    renderer.drawText(UI_10_FONT_ID, safeArea.x + metrics_.previewPadding, capY, tr(STR_NOT_IN_PREVIEW));
-  }
-
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabelText(), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

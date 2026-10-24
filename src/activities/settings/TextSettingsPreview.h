@@ -37,8 +37,9 @@ struct PreviewLayout {
   PreviewKey key;
 };
 
-// Draws the sample-text pane via the reader engine, reusing layout across redraws
+// Draws the sample-text pane via the reader engine, reusing layout across redraws.
+// The caption is borrowed for this draw; only the sample layout is cached.
 void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, Rect bounds,
-                   const char* familyName, const char* sizeName);
+                   const char* caption);
 
 }  // namespace textsettings

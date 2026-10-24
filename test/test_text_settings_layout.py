@@ -6,6 +6,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 activity = (ROOT / "src/activities/settings/TextSettingsActivity.cpp").read_text()
+activity_header = (ROOT / "src/activities/settings/TextSettingsActivity.h").read_text()
+preview = (ROOT / "src/activities/settings/TextSettingsPreview.cpp").read_text()
+english = (ROOT / "lib/I18n/translations/english.yaml").read_text()
 tabs = (ROOT / "src/activities/UiTabListActivity.cpp").read_text()
 lists = (ROOT / "src/activities/UiListActivity.cpp").read_text()
 renderer = (ROOT / "lib/GfxRenderer/GfxRenderer.cpp").read_text()
@@ -18,7 +21,7 @@ def method(source, signature):
 
 
 # Exercise production geometry with the real SDK screen and tab components,
-# without loading fonts, SD storage, or the activity manager.
+# without SD storage or the activity manager. Caption measurements use the real UI font.
 enter = activity.split("  metrics_ =", 1)[1].split("\n  fonts_.clear();", 1)[0]
 build = activity.split("void TextSettingsActivity::buildScreen(UiScreen& screen) {", 1)[1]
 rows = "  fui::ListProps props;" + build.split("  fui::ListProps props;", 1)[1]
@@ -31,19 +34,29 @@ sync = "void TextSettingsActivity::syncListViewport(" + sync.split(
 tab_bar = tabs.split("void UiTabListActivity::buildTabBar(UiScreen& screen) {", 1)[1]
 chrome = activity.split("void TextSettingsActivity::drawChrome() {", 1)[1]
 chrome = chrome.split("\nvoid TextSettingsActivity::drawFooter()", 1)[0]
-caption = activity.split("void TextSettingsActivity::drawFooter() {", 1)[1]
-caption = caption.split("\n  const auto labels", 1)[0]
+preview_caption = "void renderPreview(" + preview.split("void renderPreview(", 1)[1]
+preview_caption = preview_caption.split("\n  const int fontId =", 1)[0] + "\n}\n"
+preview_caption = preview_caption.replace(
+    "{\n",
+    "{\n  renderer.preview = bounds;\n"
+    "  assert((renderer.clip == std::array<int, 4>{bounds.x, bounds.y, bounds.width, bounds.height}));\n",
+    1,
+)
+style_rows = "enum class StyleRow {" + activity_header.split("enum class StyleRow {", 1)[1].split(";", 1)[0] + ";"
 orientation = (ROOT / "lib/GfxRenderer/GfxRenderer.h").read_text()
 orientation = "enum Orientation {" + orientation.split("enum Orientation {", 1)[1].split("\n  };", 1)[0] + "\n  };"
 
 harness = r"""
 #include <FreeInkApp.h>
 #include <BoardConfig.h>
+#include <EpdFont.h>
+#include <builtinFonts/ubuntu_10_regular.h>
 #include <components/themes/lyra/LyraTheme.h>
 #include <components/themes/roundedraff/RoundedRaffTheme.h>
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <string>
 #include <vector>
 namespace fui = freeink::ui;
@@ -52,14 +65,22 @@ struct GfxRenderer {
 """ + orientation + r"""
   Orientation orientation = Portrait;
   int panelWidth = 800, panelHeight = 480;
-  Rect preview{}, header{}, caption{};
+  Rect header{};
+  mutable Rect preview{}, caption{};
+  mutable std::string captionText;
   mutable std::array<int, 4> clip{0, 0, 2000, 2000};
   int getScreenWidth() const;
   int getScreenHeight() const;
   Orientation getOrientation() const { return orientation; }
   void getOrientedViewableTRBL(int*, int*, int*, int*) const;
-  int getTextHeight(int) const { return 20; }
-  void drawText(int, int x, int y, const char*) { caption = Rect{x, y, 40, 24}; }
+  int getTextHeight(int) const { return ubuntu_10_regular.ascender; }
+  void drawText(int, int x, int y, const char* text) const {
+    EpdFont font(&ubuntu_10_regular);
+    int width, height;
+    font.getTextDimensions(text, &width, &height);
+    caption = Rect{x, y, width, ubuntu_10_regular.advanceY};
+    captionText = text;
+  }
   std::array<int, 4> getClipRect() const { return clip; }
   void setClipRect(int x, int y, int w, int h) const { clip = {x, y, w, h}; }
 };
@@ -73,14 +94,14 @@ struct UITheme {
   void drawHeader(GfxRenderer& renderer, Rect rect, const char*) { renderer.header = rect; }
 };
 #define GUI UITheme::getInstance()
-#define tr(id) "Text Settings"
+#define tr(id) id
+constexpr const char* STR_TEXT_SETTINGS = "Text Settings";
+constexpr const char* STR_PREVIEW = """ + english.split("STR_PREVIEW: ", 1)[1].splitlines()[0] + r""";
+constexpr const char* STR_NOT_IN_PREVIEW = """ + english.split("STR_NOT_IN_PREVIEW: ", 1)[1].splitlines()[0] + r""";
 constexpr int UI_10_FONT_ID = 0, TOUCH_TAB_BAR_HEIGHT = 50, ACTION_TAB = 1, ACTION_ROW = 2;
 namespace textsettings {
   struct PreviewLayout {};
-  void renderPreview(GfxRenderer& renderer, PreviewLayout&, int, int, Rect bounds, const char*, const char*) {
-    renderer.preview = bounds;
-    assert((renderer.clip == std::array<int, 4>{bounds.x, bounds.y, bounds.width, bounds.height}));
-  }
+""" + preview_caption + r"""
 }
 struct UiTabListActivity {
   struct { bool touch = false; bool hasTouch() const { return touch; } } mappedInput;
@@ -101,7 +122,8 @@ struct TextSettingsActivity : UiTabListActivity {
   int activeTab() const override { return static_cast<int>(tab_); }
   GfxRenderer renderer;
   ThemeMetrics metrics_;
-  int afterHeader = 0, usableHeight = 0, previewHeight = 0;
+  int afterHeader = 0, previewHeight = 0;
+  """ + style_rows + r"""
   struct Entry { std::string name; };
   std::vector<Entry> fonts_{{"Bitter"}}, sizes_{{"12 pt"}};
   int currentFamilyIndex_ = 0, currentSizeIndex_ = 0;
@@ -121,11 +143,11 @@ struct TextSettingsActivity : UiTabListActivity {
   }
   void buildRows(UiScreen& screen) {""" + rows + r"""
   void drawChrome() {""" + chrome + r"""
-  bool focusedRowHasNoPreview() const { return tab_ == Tab::Style && selected >= 2; }
-  void drawCaption() {""" + caption + r"""
-  }
+  bool focusedRowHasNoPreview() const;
 };
-""" + sync + method(renderer, "int GfxRenderer::getScreenWidth() const") + method(
+""" + sync + method(activity, "bool TextSettingsActivity::focusedRowHasNoPreview() const") + method(
+    renderer, "int GfxRenderer::getScreenWidth() const"
+) + method(
     renderer, "int GfxRenderer::getScreenHeight() const"
 ) + method(
     renderer, "void GfxRenderer::getOrientedViewableTRBL("
@@ -202,18 +224,28 @@ void checkLayout(const BoardConfig::BoardProfile& profile, GfxRenderer::Orientat
   fui::InteractionBuffer<32> interactions;
   fui::Frame<32> frame(target, device, input, interactions);
   auto theme = uiThemeTokens(target);
-  for (int focus : {0, 1, 2}) {
+  for (int focus : {0, 1, 2, 3, 4, 1, 0}) {
     activity.selected = focus;
+    activity.drawChrome();
+    const Rect caption = activity.renderer.caption;
+    assert(activity.renderer.captionText ==
+           (tab == TextSettingsActivity::Tab::Style && focus >= 2
+                ? "Setting not previewed" : "Preview \"Bitter, 12 pt\""));
+    assert(caption.x == preview.x + metrics.previewPadding);
+    assert(caption.x + caption.width <= preview.x + preview.width - metrics.previewPadding);
+    assert(caption.y == preview.y + preview.height - metrics.previewPadding -
+                            activity.renderer.getTextHeight(UI_10_FONT_ID));
+    assert(caption.y + caption.height <= preview.y + preview.height);
+    assert(activity.renderer.preview.x == preview.x && activity.renderer.preview.y == preview.y);
+    assert(activity.renderer.preview.width == preview.width && activity.renderer.preview.height == preview.height);
     interactions.clear();
     target.fills.clear();
     UiScreen screen(frame, theme);
     activity.buildScreen(screen);
     const auto content = screen.contentRect();
     assert(content.x == safe.x && content.width == safe.width);
-    const int footerHeight = tab == TextSettingsActivity::Tab::Style
-                                 ? activity.renderer.getTextHeight(UI_10_FONT_ID) + 2 * metrics.verticalSpacing
-                                 : 0;
-    assert(content.bottom() == safe.y + safe.height - footerHeight);
+    assert(content.bottom() == safe.y + safe.height);
+    assert(content.y >= preview.y + preview.height);
     assert(content.height > 0);
     assert(interactions.count() == 4);
     for (size_t i = 0; i < interactions.count(); ++i) {
@@ -229,14 +261,6 @@ void checkLayout(const BoardConfig::BoardProfile& profile, GfxRenderer::Orientat
     assert(std::any_of(target.fills.begin(), target.fills.end(), [bandLeft, bandRight, metrics](fui::Rect rect) {
       return rect.x == bandLeft && rect.right() == bandRight && rect.height == std::max(1, metrics.headerUnderlineSize);
     }));
-
-    activity.renderer.caption = Rect{};
-    activity.drawCaption();
-    if (activity.focusedRowHasNoPreview()) {
-      const Rect caption = activity.renderer.caption;
-      assert(caption.y == content.bottom() + metrics.verticalSpacing);
-      assert(caption.y + caption.height <= safe.y + safe.height);
-    }
 
     // A scrolling settings list keeps values and the scroll track out of the hints.
     activity.rowItems_.assign(20, fui::ListItem{});
@@ -255,6 +279,55 @@ void checkLayout(const BoardConfig::BoardProfile& profile, GfxRenderer::Orientat
       return rect.width == theme.listScrollWidth && rect.x >= safe.x && rect.right() <= safe.x + safe.width &&
              rect.y == content.y && rect.bottom() == content.bottom();
     }));
+  }
+}
+void checkStyleRowsFit(const BoardConfig::BoardProfile& profile, GfxRenderer::Orientation orientation,
+                       ThemeMetrics metrics) {
+  BoardConfig::ACTIVE = profile;
+  UITheme::getInstance().metrics = metrics;
+  TextSettingsActivity activity;
+  activity.tab_ = TextSettingsActivity::Tab::Style;
+  activity.renderer.panelWidth = profile.displayWidth;
+  activity.renderer.panelHeight = profile.displayHeight;
+  activity.renderer.orientation = orientation;
+  activity.enterGeometry();
+  const char* labels[] = {"Focus Reading", "Hyphenation", "Embedded Style", "Text Anti-Aliasing"};
+  for (const char* label : labels) {
+    fui::ListItem row;
+    row.label = label;
+    row.toggle = true;
+    activity.rowItems_.push_back(row);
+  }
+
+  Target target;
+  fui::DeviceContext device;
+  device.width = activity.renderer.getScreenWidth();
+  device.height = activity.renderer.getScreenHeight();
+  int top, right, bottom, left;
+  activity.renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  device.safeArea = fui::Insets{static_cast<int16_t>(top), static_cast<int16_t>(right),
+                                static_cast<int16_t>(bottom), static_cast<int16_t>(left)};
+  fui::InputSnapshot input;
+  fui::InteractionBuffer<32> interactions;
+  fui::Frame<32> frame(target, device, input, interactions);
+  auto theme = uiThemeTokens(target);
+  for (int focus : {0, 1, 2, 3, 4}) {
+    activity.selected = focus;
+    activity.nav.reset(focus);
+    interactions.clear();
+    UiScreen screen(frame, theme);
+    activity.buildScreen(screen);
+    target.textRects.clear();
+    target.clippedText = false;
+    activity.buildRows(screen);
+    if (activity.nav.drawnRows != 4) {
+      std::fprintf(stderr, "%s orientation %d: list height %d, full rows %d\n",
+                   profile.name, static_cast<int>(orientation), screen.contentRect().height, activity.nav.drawnRows);
+    }
+    assert(activity.nav.top == 0);
+    assert(activity.nav.drawnRows == 4);
+    assert(target.textRects.size() == 4);
+    assert(!target.clippedText);
   }
 }
 void checkSharedPartialRows() {
@@ -294,6 +367,12 @@ void checkSharedPartialRows() {
 }
 int main() {
   using Tab = TextSettingsActivity::Tab;
+  for (const auto& profile : {BoardConfig::XTEINK_X3, BoardConfig::XTEINK_X3_UC8279,
+                              BoardConfig::XTEINK_X4, BoardConfig::XTEINK_X4_CLASSIC})
+    for (auto orientation : {GfxRenderer::Portrait, GfxRenderer::PortraitInverted,
+                             GfxRenderer::LandscapeClockwise, GfxRenderer::LandscapeCounterClockwise})
+      for (const auto& metrics : {LyraMetrics::values, RoundedRaffMetrics::values})
+        checkStyleRowsFit(profile, orientation, metrics);
   for (const auto& profile : {BoardConfig::XTEINK_X3, BoardConfig::XTEINK_X3_UC8279, BoardConfig::XTEINK_X4,
                               BoardConfig::XTEINK_X4_PRO, BoardConfig::XTEINK_X4_CLASSIC, BoardConfig::STICKY,
                               BoardConfig::PAPER_MONO, BoardConfig::METALIO_EINK4, BoardConfig::EEGO_A4,
@@ -316,7 +395,9 @@ with tempfile.TemporaryDirectory() as directory:
         "-I", str(ROOT / "freeink-sdk/libs/hardware/XteinkDetect/test/host/stubs"),
         "-I", str(ROOT / "freeink-sdk/libs/hardware/BoardConfig/include"), "-I",
         str(ROOT / "freeink-sdk/libs/ui/FreeInkUI/include"),
+        "-I", str(ROOT / "lib/EpdFont"), "-I", str(ROOT / "lib/Utf8"),
         str(ROOT / "freeink-sdk/libs/ui/FreeInkUI/src/FreeInkUI.cpp"),
+        str(ROOT / "lib/EpdFont/EpdFont.cpp"), str(ROOT / "lib/Utf8/Utf8.cpp"),
         str(cpp), "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)
