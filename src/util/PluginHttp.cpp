@@ -17,9 +17,10 @@ namespace {
 constexpr size_t MAX_TOKEN_FILE_SIZE = 2 * 1024;
 
 // Resolves the caller's reused TLS session (or `tmp`) into a configured,
-// connected client, or nullptr if begin() failed.
+// connected client, or nullptr if begin() or the connection failed.
 freeink::SecureHttpClient* openClient(freeink::SecureHttpClient* session, freeink::SecureHttpClient& tmp,
-                                      const std::string& url, const pluginhttp::Headers& headers) {
+                                      const std::string& url, const pluginhttp::Headers& headers,
+                                      const std::function<bool()>& shouldAbort = nullptr) {
   freeink::SecureHttpClient& http = session ? *session : tmp;
   http.setUserAgent("CrossPoint");
   // Same trust posture as every other SecureNet consumer: no CA bundle ships
@@ -27,6 +28,9 @@ freeink::SecureHttpClient* openClient(freeink::SecureHttpClient* session, freein
   http.setInsecure();
   http.setTimeout(30000);
   if (!http.begin(url)) return nullptr;
+  // Handshake first: the client's copy of a large header (a session cookie can
+  // be several KB) would otherwise take heap the handshake needs.
+  if (!http.connect(shouldAbort)) return nullptr;
   for (const auto& h : headers) http.addHeader(h.first, h.second);
   return &http;
 }
@@ -190,7 +194,7 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
             Headers* responseHeaders, const std::function<bool()>& shouldAbort) {
   WifiPowerSaveGuard psGuard;
   freeink::SecureHttpClient tmp;
-  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers);
+  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers, shouldAbort);
   if (!httpPtr) return -1;
   freeink::SecureHttpClient& http = *httpPtr;
 

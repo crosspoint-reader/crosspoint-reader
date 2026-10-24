@@ -2334,7 +2334,11 @@ void CrossPointWebServer::handleFetch() {
         http.setTimeout(60000);
         // The plugin's headers (typically its Authorization) stay with the
         // starting origin; a redirect to another server gets none of them.
-        if (sameOrigin) {
+        if (sameOrigin && !requestHeaders.empty()) {
+          // Handshake before the client copies the headers: a several-KB session
+          // cookie would otherwise take heap the handshake needs. A failed connect
+          // is retried, and reported, by the request itself.
+          http.connect();
           for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
         }
       },
