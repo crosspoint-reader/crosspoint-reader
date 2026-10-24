@@ -32,8 +32,8 @@
 
 namespace library {
 
-// Longest author key written into an index record. Sized so a key fits the
-// record's fixed field; measured to collide 0 times over a 69-book library.
+// Size of an author key written into an index record: a 96-bit hash of the
+// person's normalised name, so it fits the record's fixed field.
 inline constexpr size_t AUTHOR_KEY_MAX_BYTES = 12;
 
 // Join an indexed folder with its basename using exactly one separator. The
@@ -70,15 +70,13 @@ uint32_t foldedGroupInitial(std::string_view folded);
 // which needs the whole library and so belongs to the index build.
 std::string cleanPersonName(std::string_view author);
 
-// Order-insensitive identity for one person, at most AUTHOR_KEY_MAX_BYTES.
+// Order-insensitive identity for one person: exactly AUTHOR_KEY_MAX_BYTES of
+// binary hash, or empty when the name carries no identity.
 //
 // Drops bracketed spans and everything after ';' (multi-author separator), folds,
-// drops single-character tokens (initials), sorts the remaining tokens and joins
-// them. "Lu, Xun", "Xun, Lu" and "Lu Xun [Xun, Lu]" all
-// collapse to one key. Truncation uses the longest complete UTF-8 byte prefix,
-// not a token boundary: the sort puts a short forename first, so a whole-token cut would reduce
-// "Wollstonecraft, Mary" to "alex" and merge every Alex in the library; the byte
-// cut keeps "mary wollsto", still a prefix of the full key.
+// drops single-character tokens (initials), sorts the remaining tokens, joins
+// them and hashes the result. "Lu, Xun", "Xun, Lu" and "Lu Xun [Xun, Lu]" all
+// collapse to one key. The key is only compared for equality; never order by it.
 std::string authorKey(std::string_view author);
 
 // Does a book match what has been typed so far?
