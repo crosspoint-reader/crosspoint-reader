@@ -16,6 +16,14 @@ if "--self-test" in sys.argv:
 
 Import("env")  # noqa: F821 -- provided by PlatformIO
 
+policy_spec = importlib.util.spec_from_file_location(
+    "crosspoint_arduino_build_policy",
+    Path(env.subst("$PROJECT_DIR")) / "scripts" / "arduino_build_policy.py",
+)
+policy = importlib.util.module_from_spec(policy_spec)
+policy_spec.loader.exec_module(policy)
+policy.configure(env)
+
 platform = env.PioPlatform()
 builder = Path(platform.get_dir()) / "builder" / "frameworks" / "arduino.py"
 source = builder.read_text(encoding="utf-8")

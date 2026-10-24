@@ -74,6 +74,17 @@ Keep the installed tools, packages, and build caches. The setup commands below
 apply only to a new environment or an identified missing or incompatible
 dependency; they are not steps to repeat before each build.
 
+The `default` and `sticky` profiles rebuild Arduino using the library and
+component lists in `scripts/arduino_build_policy.py`. Unselected Arduino
+libraries are disabled. Direct managed dependencies outside the list are removed
+before dependency resolution; required indirect dependencies are resolved
+normally. The mDNS component used for discovery and DSP component whose header
+PNGdec needs have exact version pins. Update these lists when firmware needs
+another library or component, and review any new indirect dependencies when
+changing component versions. Policy
+changes invalidate the rebuilt SDK cache. Profiles using prebuilt Arduino
+libraries, including `x4pro`, keep their existing build path.
+
 ## First-time toolchain setup
 
 Use the pioarduino Core revision installed by
