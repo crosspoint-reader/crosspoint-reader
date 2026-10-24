@@ -291,6 +291,8 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [Witch(hunt) Reader](https://github.com/jpirnay/witchhunt-reader) — More faithful CSS styling and background work for slightly snappier interaction. Weather information panel. Markdown support.
 
+- [Tofu Reader](https://github.com/ekkyvalent/tofu-reader) adds cycleable frontlight presets and a local build download page, and is currently pinned to the 2.0.0rc tag.
+
 **Note:** Many of these features will make their way into CrossPoint over time. Each project chooses its own priorities and tradeoffs.
 
 Want to build your own device? Be sure to check out the [Silkscreen](https://silkscreenreader.com) project or [OnePage Reader](https://github.com/MoveCall/onepage-reader).
