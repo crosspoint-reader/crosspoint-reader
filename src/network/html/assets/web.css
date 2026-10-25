@@ -631,6 +631,17 @@ body.web-ui  {
   box-shadow: 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
 }
 
+/* Own chevron: the native arrow sits flush against the border once the select is styled. */
+.web-ui select  {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a8f98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+}
+
 .web-ui input::placeholder, .web-ui textarea::placeholder  {
   color: var(--muted-color);
   opacity: 1;

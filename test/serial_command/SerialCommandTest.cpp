@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "SerialCommand.h"
+#include "SerialLineBuffer.h"
 
 namespace {
 
@@ -141,6 +142,43 @@ TEST(SerialCommand, PutTakesSizeCrcAndPath) {
   EXPECT_EQ(parseSerialCommand("PUT 12 cbf43926 relative").type, Type::Invalid);
   EXPECT_EQ(parseSerialCommand("PUT 12 cbf43926").type, Type::Invalid);
   EXPECT_EQ(parseSerialCommand("PUT REPLACE").type, Type::Invalid);
+}
+
+bool feedAll(SerialLineBuffer<16>& buffer, std::string_view bytes) {
+  bool ended = false;
+  for (const char byte : bytes) ended = buffer.feed(byte);
+  return ended;
+}
+
+TEST(SerialLineBuffer, ALineEndsOnlyAtTheNewline) {
+  SerialLineBuffer<16> buffer;
+  EXPECT_FALSE(feedAll(buffer, "CMD:PI"));
+  EXPECT_FALSE(feedAll(buffer, "NG"));
+  EXPECT_TRUE(feedAll(buffer, "\n"));
+  EXPECT_EQ(buffer.line(), "CMD:PING");
+  EXPECT_FALSE(buffer.overflowed());
+}
+
+TEST(SerialLineBuffer, TheNextLineStartsClean) {
+  SerialLineBuffer<16> buffer;
+  ASSERT_TRUE(feedAll(buffer, "CMD:STATE\r\n"));
+  EXPECT_EQ(buffer.line(), "CMD:STATE\r");  // the parser trims the CR
+  ASSERT_TRUE(feedAll(buffer, "CMD:HOME\n"));
+  EXPECT_EQ(buffer.line(), "CMD:HOME");
+  ASSERT_TRUE(feedAll(buffer, "\n"));
+  EXPECT_EQ(buffer.line(), "");
+}
+
+TEST(SerialLineBuffer, ALongLineKeepsItsStartAndIsFlagged) {
+  SerialLineBuffer<16> buffer;
+  ASSERT_TRUE(feedAll(buffer, "CMD:OPEN /a/very/long/path.epub\n"));
+  EXPECT_TRUE(buffer.overflowed());
+  EXPECT_EQ(buffer.line(), "CMD:OPEN /a/very");
+  EXPECT_EQ(parseSerialCommand(buffer.line().substr(4)).name, "OPEN");
+
+  ASSERT_TRUE(feedAll(buffer, "CMD:PING\n"));
+  EXPECT_FALSE(buffer.overflowed());
+  EXPECT_EQ(buffer.line(), "CMD:PING");
 }
 
 // The grammar is constexpr, so commands can be checked at compile time too.

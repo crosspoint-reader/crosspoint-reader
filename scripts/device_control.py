@@ -12,8 +12,8 @@ Examples:
     device_control.py open --cold "/Books/Some Book.epub"
     device_control.py restart --wait
     device_control.py screenshot screen.png
-    device_control.py wait "Page 50 processed" --timeout 120 --log build.log
-    device_control.py run experiment.txt --log experiment.log
+    device_control.py --log build.log wait "Page 50 processed" --timeout 120
+    device_control.py --log experiment.log run experiment.txt
     device_control.py push book.epub /Books
     device_control.py install-font fonts/NotoSerif
     device_control.py ls /Books
@@ -28,10 +28,12 @@ so a script can restart the reader, open a book cold and wait for a log line:
     wait "Page 100 processed" --timeout 180
     state
 
-File commands (push, install-font, rm, mkdir) need the reader on Home; push
-and install-font take --home to go there first. Files move in CRC-checked
-frames (src/util/SerialTransfer.h) and land under their name only once
-complete. Requires pyserial (scripts/requirements.txt).
+The file commands (push, install-font, pull, ls, rm, mkdir) also work on
+release builds; the rest need a development build. push, install-font, rm and
+mkdir need the reader on Home; on a development build push and install-font
+take --home to go there first. Files move in CRC-checked frames
+(src/util/SerialTransfer.h) and land under their name only once complete.
+Requires pyserial (scripts/requirements.txt).
 """
 
 from __future__ import annotations
@@ -135,6 +137,7 @@ class Device:
         except (serial.SerialException, OSError):
             self.link.close()
             self.link = None
+            self.pending = b""  # never join half a line from the old boot to the new one
             self._record(b"\n[device_control: port dropped, reconnecting]\n")
             return b""
         self._record(data)
@@ -243,13 +246,8 @@ class Device:
 
 
     def go_home(self, timeout: float = 15.0) -> None:
-        """Back to Home, and wait until it is in front."""
-        self.command("HOME")
-        deadline = time.time() + timeout
-        while "activity=Home " not in self.command("STATE"):
-            if time.time() >= deadline:
-                raise DeviceError("Home did not come up")
-            time.sleep(0.2)
+        """Back to Home; the reader answers once Home has painted (development builds only)."""
+        self.command("HOME", timeout=timeout)
 
     def list_dir(self, remote: str) -> list[tuple[str, int, str]]:
         """(kind, size, name) of each entry; kind is "D" for a folder, "F" for a file."""
@@ -565,12 +563,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("local")
     p.add_argument("remote_dir", nargs="?", default="/", help="folder on the card (default: /), made if missing")
     p.add_argument("--replace", action="store_true", help="overwrite files that already exist")
-    p.add_argument("--home", action="store_true", help="go to Home first")
+    p.add_argument("--home", action="store_true", help="go to Home first (development builds)")
     p = sub.add_parser("install-font", help="copy one font family's files into the fonts folder (reader on Home)")
     p.add_argument("local", help="a font file, or a folder of one family's files")
     p.add_argument("--family", help="family name (default: from the file names, as the web Fonts page does)")
     p.add_argument("--replace", action="store_true", help="overwrite files that already exist")
-    p.add_argument("--home", action="store_true", help="go to Home first")
+    p.add_argument("--home", action="store_true", help="go to Home first (development builds)")
     p = sub.add_parser("pull", help="copy a file from the SD card")
     p.add_argument("path")
     p.add_argument("local", nargs="?", help="where to save it (default: its name, here)")
@@ -597,7 +595,7 @@ def execute(device: Device, args: argparse.Namespace, parser: argparse.ArgumentP
     elif cmd == "menu":
         device.command("MENU")
     elif cmd == "home":
-        device.command("HOME")
+        device.command("HOME", timeout=15.0)  # answered once Home has painted
     elif cmd == "open":
         device.command("OPEN " + ("COLD " if args.cold else "") + args.path)
     elif cmd == "restart":

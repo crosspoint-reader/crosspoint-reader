@@ -1312,7 +1312,17 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
-  if (!KOREADER_STORE.hasCredentials()) return false;
+  flushReaderSession();
+
+  // Without a KOReader server the sync activity only brings the device online
+  // and drains that outbox; a failed join exits back to the reader with the
+  // events still queued.
+  if (!KOREADER_STORE.hasCredentials()) {
+    activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
+        renderer, mappedInput, epub->getPath(), getCurrentPosition(), SavedProgressPosition{}, "",
+        /*pluginEventsOnly=*/true));
+    return true;
+  }
 
   RenderLock renderLock;
 
@@ -3056,6 +3066,8 @@ void EpubReaderActivity::applyReaderTextSettings() {
   // (Re)load or unload the selected SD-card font for the current family/size.
   // The reader otherwise only loads SD fonts on book open, so without this an
   // in-reader font change wouldn't take effect until re-opening the book.
+  // Locked because the render task can load or unload SD font variants too.
+  RenderLock lock;
   sdFontSystem.ensureLoaded(renderer);
 }
 
@@ -3183,8 +3195,9 @@ void EpubReaderActivity::activateMoreRow(int row) {
     return;
   }
   onReaderMenuConfirm(action);
-  // Actions that neither open a screen nor leave the reader (a sync with no
-  // credentials, say) would otherwise leave the closed panel on screen.
+  // Child screens re-render the reader on Pop; GO_HOME/DELETE_CACHE leave the
+  // reader entirely. In-place actions would otherwise leave the closed panel
+  // on screen.
   if (action != MA::GO_HOME && action != MA::DELETE_CACHE) requestUpdate();
 }
 

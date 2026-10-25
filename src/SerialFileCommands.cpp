@@ -1,5 +1,7 @@
 #include "SerialFileCommands.h"
 
+#ifdef ENABLE_SERIAL_FILES
+
 #include <HalMemory.h>
 #include <HalPowerManager.h>
 #include <HalSerialBulkRead.h>
@@ -47,7 +49,7 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 // takes that lock too.
 const char* writeRefusal() {
   if (activityManager.isForegroundHomeShown()) return nullptr;
-  return std::strcmp(activityManager.foregroundName(), "Home") == 0 ? "busy" : "go to Home first (HOME)";
+  return std::strcmp(activityManager.foregroundName(), "Home") == 0 ? "busy" : "go to Home first";
 }
 
 bool isDirectory(const std::string& path) {
@@ -380,3 +382,5 @@ void runSerialFileCommand(const SerialCommand& cmd) {
       return;
   }
 }
+
+#endif  // ENABLE_SERIAL_FILES

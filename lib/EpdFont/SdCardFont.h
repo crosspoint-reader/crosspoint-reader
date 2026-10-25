@@ -191,11 +191,7 @@ class SdCardFont {
     static_assert(sizeof(BmpInterval16) == 6, "BmpInterval16 must remain compact");
     BmpInterval16* bmpIntervals = nullptr;
     bool intervalsAreBmp16 = false;
-    // True when bmpIntervals/fullIntervals above points at another style's table rather than
-    // this style's own allocation. Regular/bold/italic weights of the same family almost always
-    // cover the identical codepoint set, so a CJK font's multi-KB-per-style table is otherwise
-    // paid for once per style. Only the owning style frees it -- see freeStyleAll().
-    bool intervalsShared = false;
+    // The table may be shared with other styles and other loaded fonts; see releaseIntervals().
 
     // Ligature table (lazy-loaded on first prewarm). No kern table is resident:
     // buildMiniKernMatrix reads the class-table blocks (~3KB per side per style
@@ -351,6 +347,8 @@ class SdCardFont {
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
+  // Drops this style's reference to its interval table and frees the table with the last one.
+  static void releaseIntervals(PerStyle& s);
   // False for a glyph entry the file cannot back (a corrupt .cpfont): its data length must be the
   // packed size of its pixels and its bitmap must lie inside the file. Logs the first few per font.
   bool glyphEntryValid(const PerStyle& s, const EpdGlyph& glyph, uint32_t codepoint);

@@ -60,16 +60,18 @@ state
 
 `open --cold` drops the book's laid-out chapters first, so the reader lays them
 out again; `wait` matches log lines that arrive after it starts. Run
-`python3 scripts/device_control.py --help` for every command. The raw protocol
+`python3 scripts/device_control.py --help` for every command. The console needs a
+development build (`pio run -e default`, or another environment without `gh_release`
+in its name): release builds keep only `SCREENSHOT` and the file commands below,
+and refuse the rest. The raw protocol
 is one line per command, `CMD:<NAME> ...`, answered with `CMD_OK <NAME> ...` or
 `CMD_ERR <NAME> <reason>`; the grammar is in `src/util/SerialCommand.h`.
 
 ### Copy files over the cable
 
 `scripts/device_control.py` also copies books and fonts to the SD card and back,
-with no Wi-Fi.
-This is the only cable path on the X3/X4, whose ESP32-C3 cannot act as a USB
-drive:
+with no Wi-Fi, on release builds too. This is the only cable path on the X3/X4,
+whose ESP32-C3 cannot act as a USB drive:
 
 ```sh
 python3 scripts/device_control.py push book.epub /Books
@@ -81,8 +83,9 @@ python3 scripts/device_control.py rm "/Books/Some Book.epub"
 ```
 
 - `push`, `install-font`, `mkdir` and `rm` need the reader on Home, where no
-  screen holds a book or font file open; `push` and `install-font` take
-  `--home` to go there first. `ls` and `pull` work on any screen.
+  screen holds a book or font file open. On a development build, `push` and
+  `install-font` take `--home` to go there first. `ls` and `pull` work on any
+  screen.
 - A file is written to `<name>.part` and renamed only once every byte has
   arrived and its CRC matches, so an interrupted copy never leaves a truncated
   book or font. A push stops at the first file that already exists unless

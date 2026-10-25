@@ -7,8 +7,16 @@
 // for tests and measurements. GET's data follows its CMD_OK, PUT's comes
 // before it; see util/SerialTransfer.h. Call from the main loop between
 // mappedInputManager.update() and activityManager.loop(), so an injected click
-// reaches the screen in the same frame. Returns true when it ran a command, which
-// counts as activity for auto-sleep.
+// reaches the screen in the same frame.
+//
+// SCREENSHOT is always there. The file commands (LS, GET, PUT, MKDIR, RM) need
+// ENABLE_SERIAL_FILES, which every build with a serial log sets, releases
+// included, so books and fonts can be copied over the cable. The rest needs
+// ENABLE_SERIAL_CONTROL, which only development environments set; a build
+// answers a command it lacks with CMD_ERR.
+//
+// Returns true when it ran a command a build has, which the main loop counts as
+// activity, like a button press.
 bool pollSerialConsole();
 
 struct SerialCommand;

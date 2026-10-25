@@ -17,7 +17,10 @@
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/RenderLock.h"
 #include "util/SerialCommand.h"
+#include "util/SerialLineBuffer.h"
+#include "util/SerialTransfer.h"
 
 namespace serialconsole {
 
@@ -54,11 +57,61 @@ namespace {
 using serialconsole::replyErr;
 using serialconsole::replyOk;
 
+bool isFileCommand(const SerialCommand& cmd) {
+  switch (cmd.type) {
+    case SerialCommand::Type::List:
+    case SerialCommand::Type::Get:
+    case SerialCommand::Type::Put:
+    case SerialCommand::Type::MakeDir:
+    case SerialCommand::Type::Remove:
+      return true;
+    default:
+      return false;
+  }
+}
+
 void sendScreenshot() {
+  // Like the button screenshot: keep the render task from drawing into the
+  // frame while it streams, so a capture never mixes two frames.
+  RenderLock lock;
   const uint32_t bufferSize = display.getBufferSize();
+  const uint8_t* frame = display.getFrameBuffer();
   logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
-  logSerial.write(display.getFrameBuffer(), bufferSize);
+  // write() can take only part of the frame when the USB TX buffer is full, so
+  // keep sending the rest; give up only after a second without progress.
+  constexpr unsigned long STALL_LIMIT_MS = 1000;
+  uint32_t sent = 0;
+  unsigned long lastProgress = millis();
+  while (sent < bufferSize) {
+    const size_t n = logSerial.write(frame + sent, bufferSize - sent);
+    if (n > 0) {
+      sent += n;
+      lastProgress = millis();
+    } else if (millis() - lastProgress >= STALL_LIMIT_MS) {
+      break;
+    } else {
+      delay(1);
+    }
+  }
   logSerial.printf("SCREENSHOT_END\n");
+  if (sent < bufferSize) LOG_ERR("CON", "Screenshot stalled after %u of %u bytes", sent, bufferSize);
+}
+
+#ifdef ENABLE_SERIAL_CONTROL
+bool homePending = false;
+unsigned long homeRequestedAt = 0;
+constexpr unsigned long HOME_REPLY_TIMEOUT_MS = 10000;
+
+void finishHome() {
+  if (!homePending) return;
+  constexpr SerialCommand home = parseSerialCommand("HOME");
+  if (activityManager.isForegroundHomeShown()) {
+    homePending = false;
+    replyOk(home);
+  } else if (millis() - homeRequestedAt >= HOME_REPLY_TIMEOUT_MS) {
+    homePending = false;
+    replyErr(home, "Home did not appear");
+  }
 }
 
 void sendState(const SerialCommand& cmd) {
@@ -84,7 +137,7 @@ void openBook(const SerialCommand& cmd) {
       return replyErr(cmd, "could not remove the laid-out chapters");
     }
   }
-  activityManager.goToReader(path);
+  if (!activityManager.goToReader(path)) return replyErr(cmd, "the reader could not open it");
   replyOk(cmd);
 }
 
@@ -107,52 +160,102 @@ void restart(const SerialCommand& cmd) {
       break;
   }
 }
+#endif  // ENABLE_SERIAL_CONTROL
 
-void runCommand(const SerialCommand& cmd) {
+// Whether this build carries the command out; false after refusing it.
+bool runCommand(const SerialCommand& cmd) {
+  if (cmd.type == SerialCommand::Type::Screenshot) {
+    sendScreenshot();
+    return true;
+  }
+  if (isFileCommand(cmd)) {
+#ifdef ENABLE_SERIAL_FILES
+    runSerialFileCommand(cmd);
+    return true;
+#else
+    replyErr(cmd, "file commands are not in this build");
+    return false;
+#endif
+  }
+#ifndef ENABLE_SERIAL_CONTROL
+  // Release builds keep the screenshot and the file commands only.
+  replyErr(cmd, cmd.type == SerialCommand::Type::Invalid ? cmd.error : "serial control is not in this build");
+  return false;
+#else
   switch (cmd.type) {
     case SerialCommand::Type::Invalid:
-      return replyErr(cmd, cmd.error);
+      replyErr(cmd, cmd.error);
+      break;
     case SerialCommand::Type::Ping: {
       char detail[32];
       snprintf(detail, sizeof(detail), "uptime=%lu", millis());
-      return replyOk(cmd, detail);
+      replyOk(cmd, detail);
+      break;
     }
     case SerialCommand::Type::State:
-      return sendState(cmd);
-    case SerialCommand::Type::Screenshot:
-      return sendScreenshot();
+      sendState(cmd);
+      break;
     case SerialCommand::Type::Click:
       // Busy while a frame is pending or drawing; the host retries.
-      return activityManager.consoleClick(cmd.click) ? replyOk(cmd) : replyErr(cmd, "busy");
+      activityManager.consoleClick(cmd.click) ? replyOk(cmd) : replyErr(cmd, "busy");
+      break;
     case SerialCommand::Type::Turn:
-      return activityManager.remoteTurn(cmd.forward, cmd.chapter) ? replyOk(cmd)
-                                                                  : replyErr(cmd, "busy or no book in front");
+      // Page turns only; menus take CLICK NEXT/PREV.
+      if (!activityManager.isForegroundReader()) {
+        replyErr(cmd, "no book in front");
+      } else {
+        activityManager.remoteTurn(cmd.forward, cmd.chapter) ? replyOk(cmd) : replyErr(cmd, "busy");
+      }
+      break;
     case SerialCommand::Type::Menu:
-      return activityManager.remoteShortcut(true) ? replyOk(cmd) : replyErr(cmd, "busy or no book in front");
+      activityManager.remoteShortcut(true) ? replyOk(cmd) : replyErr(cmd, "busy or no book in front");
+      break;
     case SerialCommand::Type::Home:
+      // Answered once Home has painted (pollSerialConsole), so a script's next
+      // step never races the reader closing.
       activityManager.goHome();
-      return replyOk(cmd);
+      homeRequestedAt = millis();
+      homePending = true;
+      break;
     case SerialCommand::Type::Open:
-      return openBook(cmd);
+      openBook(cmd);
+      break;
     case SerialCommand::Type::Restart:
-      return restart(cmd);
-    case SerialCommand::Type::List:
-    case SerialCommand::Type::Get:
-    case SerialCommand::Type::Put:
-    case SerialCommand::Type::MakeDir:
-    case SerialCommand::Type::Remove:
-      return runSerialFileCommand(cmd);
+      restart(cmd);
+      break;
+    default:
+      break;
   }
+  return true;
+#endif
 }
 
 }  // namespace
 
 bool pollSerialConsole() {
   HalSerialBulkRead::restoreReceiving();
-  if (logSerial.available() <= 0) return false;
-  const String line = logSerial.readStringUntil('\n');
-  if (!line.startsWith("CMD:")) return false;
-  const SerialCommand cmd = parseSerialCommand(std::string_view(line.c_str() + 4, line.length() - 4));
-  runCommand(cmd);
-  return true;
+#ifdef ENABLE_SERIAL_CONTROL
+  finishHome();
+#endif
+  // Act only on a full line, so a slow or partial write never stalls the main
+  // loop or runs a cut-off command.
+#if defined(ENABLE_SERIAL_CONTROL) || defined(ENABLE_SERIAL_FILES)
+  static SerialLineBuffer<serialxfer::MAX_LINE_LENGTH> input;
+#else
+  static SerialLineBuffer<32> input;  // CMD:SCREENSHOT is all such a build takes
+#endif
+  while (logSerial.available() > 0) {
+    const int byte = logSerial.read();
+    if (byte < 0 || !input.feed(static_cast<char>(byte))) continue;
+    const std::string_view text = input.line();
+    if (text.substr(0, 4) != "CMD:") continue;
+    const SerialCommand cmd = parseSerialCommand(text.substr(4));
+    if (input.overflowed()) {
+      replyErr(cmd, "line too long");
+      continue;
+    }
+    // One command per main-loop pass, so an injected click reaches its frame.
+    return runCommand(cmd);
+  }
+  return false;
 }

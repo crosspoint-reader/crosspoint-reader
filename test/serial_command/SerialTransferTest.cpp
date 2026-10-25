@@ -3,6 +3,8 @@
 #include <cstring>
 #include <vector>
 
+#include "util/SerialCommand.h"
+#include "util/SerialLineBuffer.h"
 #include "util/SerialTransfer.h"
 
 namespace {
@@ -159,6 +161,20 @@ TEST(SerialTransfer, LongPathsAreRefused) {
   const std::string longPath = "/" + std::string(serialxfer::MAX_PATH_LENGTH, 'a');
   EXPECT_EQ(kind(longPath.c_str(), Access::Write), PathKind::Invalid);
   EXPECT_EQ(kind(longPath.c_str(), Access::Read), PathKind::Invalid);
+}
+
+TEST(SerialTransfer, TheLongestPutLineFitsTheConsoleBuffer) {
+  const std::string path = "/" + std::string(serialxfer::MAX_PATH_LENGTH - 1, 'a');
+  const std::string line = "CMD:PUT REPLACE 4294967295 ffffffff " + path + "\r\n";
+  SerialLineBuffer<serialxfer::MAX_LINE_LENGTH> buffer;
+  bool ended = false;
+  for (const char byte : line) ended = buffer.feed(byte);
+  ASSERT_TRUE(ended);
+  EXPECT_FALSE(buffer.overflowed());
+  const SerialCommand cmd = parseSerialCommand(buffer.line().substr(4));
+  EXPECT_EQ(cmd.type, SerialCommand::Type::Put);
+  EXPECT_EQ(cmd.path, path);
+  EXPECT_EQ(serialxfer::checkPath(cmd.path, Access::Write).kind, PathKind::File);
 }
 
 TEST(SerialTransfer, FontsGoThroughTheFontsFolders) {

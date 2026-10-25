@@ -93,7 +93,8 @@ class ActivityManager {
   void goToLibrary();
   void goToBrowser();
   void goToPlugins(bool showOpds);
-  void goToReader(std::string path, bool allowFastInitialRefresh = false);
+  // False when the reader or image viewer could not be created; the current screen stays.
+  bool goToReader(std::string path, bool allowFastInitialRefresh = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
@@ -115,11 +116,15 @@ class ActivityManager {
   bool isForegroundReader() const;
   bool isRemoteReaderContext() const;
   bool remoteClick(RemoteButton button);
-  // The same click from the USB serial console (SerialConsole), on any screen. False while a frame
-  // is pending or drawing, or a physical button is in use.
+#ifdef ENABLE_SERIAL_CONTROL
+  // The same click from the USB serial console (SerialConsole), on any screen. False while a screen
+  // change or frame is pending, a frame is drawing, or any physical button is held.
   bool consoleClick(RemoteButton button);
-  // Name of the screen in front, for the serial console's STATE reply. Empty before the first one.
+#endif
+#if defined(ENABLE_SERIAL_CONTROL) || defined(ENABLE_SERIAL_FILES)
+  // Name of the screen in front, for the serial console (STATE, file commands). Empty before the first.
   const char* foregroundName() const;
+#endif
   // Home is in front and has painted a frame of its own (not one left from the screen before).
   bool isForegroundHomeShown() const;
   uint32_t visit() const { return screenVisit; }

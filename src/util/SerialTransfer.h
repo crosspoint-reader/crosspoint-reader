@@ -39,6 +39,8 @@ inline constexpr uint8_t FRAME_MAGIC[2] = {0xFE, 0x5A};
 inline constexpr size_t FRAME_HEADER_SIZE = 12;
 inline constexpr size_t CHUNK_SIZE = 4096;
 inline constexpr size_t MAX_PATH_LENGTH = 255;
+// A console line long enough for "CMD:PUT REPLACE <size> <crc> " and the longest path.
+inline constexpr size_t MAX_LINE_LENGTH = 320;
 inline constexpr uint32_t CANCEL_OFFSET = 0xFFFFFFFF;
 
 struct FrameHeader {
