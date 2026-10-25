@@ -4,7 +4,7 @@
 
 #include "TokenBoundary.h"
 
-namespace {
+namespace CjkBreaks {
 
 bool isNoBreakBeforeCjkPunctuation(const uint32_t cp) {
   if (TokenBoundary::allowsBreakAfterExplicitHyphen(cp)) {
@@ -74,10 +74,6 @@ bool isNoBreakAfterCjkPunctuation(const uint32_t cp) {
       return false;
   }
 }
-
-}  // namespace
-
-namespace CjkBreaks {
 
 bool boundaryAllowsBreak(const uint32_t leftCp, const uint32_t rightCp) {
   if (TokenBoundary::allowsBreakAfterExplicitHyphen(leftCp)) {
