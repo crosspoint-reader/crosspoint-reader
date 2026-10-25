@@ -69,8 +69,6 @@ class TextSettingsActivity final : public UiTabListActivity {
   bool styleRowChecked(int row) const;
   // Button-hint label for Confirm at the current ring position.
   const char* confirmLabelText() const;
-  // True when the focused list row is a setting the preview cannot reflect.
-  bool focusedRowHasNoPreview() const;
   void switchTab(int direction = 1);
 
   // Row storage for the active tab: rowItems_ (label/actionValue) is

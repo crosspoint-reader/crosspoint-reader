@@ -27,8 +27,8 @@ constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_L
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
     StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
-constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
-                                        StrId::STR_TEXT_AA};
+constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION_NO_PREVIEW,
+                                        StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -282,7 +282,6 @@ void TextSettingsActivity::drawChrome() {
                              : "";
   char labelBuf[128];
   snprintf(labelBuf, sizeof(labelBuf), "%s \"%s, %s\"", tr(STR_PREVIEW), familyName, sizeName);
-  const char* caption = focusedRowHasNoPreview() ? tr(STR_NOT_IN_PREVIEW) : labelBuf;
   const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const Rect previewBounds{safeArea.x, afterHeader, safeArea.width, previewHeight};
   const auto [savedX, savedY, savedWidth, savedHeight] = renderer.getClipRect();
@@ -292,7 +291,7 @@ void TextSettingsActivity::drawChrome() {
   const int clipBottom = std::min(previewBounds.y + previewBounds.height, savedY + savedHeight);
   renderer.setClipRect(clipLeft, clipTop, std::max(0, clipRight - clipLeft), std::max(0, clipBottom - clipTop));
   textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing,
-                              previewBounds, caption);
+                              previewBounds, labelBuf);
   renderer.setClipRect(savedX, savedY, savedWidth, savedHeight);
 }
 
@@ -520,14 +519,6 @@ bool TextSettingsActivity::styleRowChecked(int row) const {
     default:
       return false;
   }
-}
-
-// Only Focus Reading shows in the preview (bold prefixes); the other Style rows
-// have no distinct preview.
-bool TextSettingsActivity::focusedRowHasNoPreview() const {
-  if (ringPos() == 0 || tab_ != Tab::Style) return false;
-  const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
 }
 
 void TextSettingsActivity::switchTab(const int direction) {

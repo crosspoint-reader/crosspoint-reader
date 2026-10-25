@@ -1,12 +1,12 @@
 """Run with python3 test/test_text_settings_layout.py (requires a host C++ compiler)."""
 
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 activity = (ROOT / "src/activities/settings/TextSettingsActivity.cpp").read_text()
-activity_header = (ROOT / "src/activities/settings/TextSettingsActivity.h").read_text()
 preview = (ROOT / "src/activities/settings/TextSettingsPreview.cpp").read_text()
 english = (ROOT / "lib/I18n/translations/english.yaml").read_text()
 tabs = (ROOT / "src/activities/UiTabListActivity.cpp").read_text()
@@ -21,7 +21,13 @@ def method(source, signature):
 
 
 # Exercise production geometry with the real SDK screen and tab components,
-# without SD storage or the activity manager. Caption measurements use the real UI font.
+# without SD storage or the activity manager. Text measurements use the real UI fonts.
+style_labels = activity.split("constexpr StrId STYLE_ROW_NAME_IDS[] = {", 1)[1].split("};", 1)[0]
+style_labels = re.sub(
+    r"StrId::(STR_[A-Z_]+)",
+    lambda match: english.split(match[1] + ": ", 1)[1].splitlines()[0],
+    style_labels,
+)
 enter = activity.split("  metrics_ =", 1)[1].split("\n  fonts_.clear();", 1)[0]
 build = activity.split("void TextSettingsActivity::buildScreen(UiScreen& screen) {", 1)[1]
 rows = "  fui::ListProps props;" + build.split("  fui::ListProps props;", 1)[1]
@@ -42,7 +48,6 @@ preview_caption = preview_caption.replace(
     "  assert((renderer.clip == std::array<int, 4>{bounds.x, bounds.y, bounds.width, bounds.height}));\n",
     1,
 )
-style_rows = "enum class StyleRow {" + activity_header.split("enum class StyleRow {", 1)[1].split(";", 1)[0] + ";"
 orientation = (ROOT / "lib/GfxRenderer/GfxRenderer.h").read_text()
 orientation = "enum Orientation {" + orientation.split("enum Orientation {", 1)[1].split("\n  };", 1)[0] + "\n  };"
 
@@ -51,6 +56,7 @@ harness = r"""
 #include <BoardConfig.h>
 #include <EpdFont.h>
 #include <builtinFonts/ubuntu_10_regular.h>
+#include <builtinFonts/ubuntu_12_regular.h>
 #include <components/themes/lyra/LyraTheme.h>
 #include <components/themes/roundedraff/RoundedRaffTheme.h>
 #include <algorithm>
@@ -97,7 +103,6 @@ struct UITheme {
 #define tr(id) id
 constexpr const char* STR_TEXT_SETTINGS = "Text Settings";
 constexpr const char* STR_PREVIEW = """ + english.split("STR_PREVIEW: ", 1)[1].splitlines()[0] + r""";
-constexpr const char* STR_NOT_IN_PREVIEW = """ + english.split("STR_NOT_IN_PREVIEW: ", 1)[1].splitlines()[0] + r""";
 constexpr int UI_10_FONT_ID = 0, TOUCH_TAB_BAR_HEIGHT = 50, ACTION_TAB = 1, ACTION_ROW = 2;
 namespace textsettings {
   struct PreviewLayout {};
@@ -123,7 +128,6 @@ struct TextSettingsActivity : UiTabListActivity {
   GfxRenderer renderer;
   ThemeMetrics metrics_;
   int afterHeader = 0, previewHeight = 0;
-  """ + style_rows + r"""
   struct Entry { std::string name; };
   std::vector<Entry> fonts_{{"Bitter"}}, sizes_{{"12 pt"}};
   int currentFamilyIndex_ = 0, currentSizeIndex_ = 0;
@@ -143,9 +147,8 @@ struct TextSettingsActivity : UiTabListActivity {
   }
   void buildRows(UiScreen& screen) {""" + rows + r"""
   void drawChrome() {""" + chrome + r"""
-  bool focusedRowHasNoPreview() const;
 };
-""" + sync + method(activity, "bool TextSettingsActivity::focusedRowHasNoPreview() const") + method(
+""" + sync + method(
     renderer, "int GfxRenderer::getScreenWidth() const"
 ) + method(
     renderer, "int GfxRenderer::getScreenHeight() const"
@@ -164,17 +167,26 @@ struct GfxRendererTarget : DrawTarget { static constexpr FontId FONT_BODY = 1; }
 }
 struct Target : fui::GfxRendererTarget {
   std::vector<fui::Rect> textRects, fills;
+  std::vector<std::string> textStrings;
   fui::Rect clip{0, 0, 32767, 32767};
   bool clippedText = false;
   fui::Rect clipRect() const override { return clip; }
   bool setClipRect(fui::Rect rect) override { clip = rect; return true; }
-  fui::Size measureText(fui::FontId font, const char*, fui::TextStyle) const override { return {40, lineHeight(font)}; }
-  int16_t lineHeight(fui::FontId font) const override { return font == 0 ? 24 : 29; }
+  fui::Size measureText(fui::FontId font, const char* text, fui::TextStyle) const override {
+    EpdFont epdFont(font == 0 ? &ubuntu_10_regular : &ubuntu_12_regular);
+    int width, height;
+    epdFont.getTextDimensions(text, &width, &height);
+    return {static_cast<int16_t>(width), lineHeight(font)};
+  }
+  int16_t lineHeight(fui::FontId font) const override {
+    return font == 0 ? ubuntu_10_regular.advanceY : ubuntu_12_regular.advanceY;
+  }
   void fill(fui::Rect rect, fui::Paint, uint8_t, uint8_t) override { fills.push_back(rect); }
   void stroke(fui::Rect, fui::Paint, uint8_t, uint8_t, uint8_t) override {}
   void line(fui::Point, fui::Point, uint8_t, fui::Paint) override {}
   void triangle(fui::Point, fui::Point, fui::Point, fui::Paint) override {}
-  void text(fui::Rect rect, const char*, fui::TextStyle) override {
+  void text(fui::Rect rect, const char* text, fui::TextStyle) override {
+    textStrings.emplace_back(text);
     if (rect.y < clip.y || rect.bottom() > clip.bottom()) clippedText = true;
     const int16_t left = std::max(rect.x, clip.x);
     const int16_t top = std::max(rect.y, clip.y);
@@ -228,9 +240,7 @@ void checkLayout(const BoardConfig::BoardProfile& profile, GfxRenderer::Orientat
     activity.selected = focus;
     activity.drawChrome();
     const Rect caption = activity.renderer.caption;
-    assert(activity.renderer.captionText ==
-           (tab == TextSettingsActivity::Tab::Style && focus >= 2
-                ? "Setting not previewed" : "Preview \"Bitter, 12 pt\""));
+    assert(activity.renderer.captionText == "Preview \"Bitter, 12 pt\"");
     assert(caption.x == preview.x + metrics.previewPadding);
     assert(caption.x + caption.width <= preview.x + preview.width - metrics.previewPadding);
     assert(caption.y == preview.y + preview.height - metrics.previewPadding -
@@ -291,7 +301,7 @@ void checkStyleRowsFit(const BoardConfig::BoardProfile& profile, GfxRenderer::Or
   activity.renderer.panelHeight = profile.displayHeight;
   activity.renderer.orientation = orientation;
   activity.enterGeometry();
-  const char* labels[] = {"Focus Reading", "Hyphenation", "Embedded Style", "Text Anti-Aliasing"};
+  const char* labels[] = {""" + style_labels + r"""};
   for (const char* label : labels) {
     fui::ListItem row;
     row.label = label;
@@ -311,23 +321,34 @@ void checkStyleRowsFit(const BoardConfig::BoardProfile& profile, GfxRenderer::Or
   fui::InteractionBuffer<32> interactions;
   fui::Frame<32> frame(target, device, input, interactions);
   auto theme = uiThemeTokens(target);
-  for (int focus : {0, 1, 2, 3, 4}) {
-    activity.selected = focus;
-    activity.nav.reset(focus);
-    interactions.clear();
-    UiScreen screen(frame, theme);
-    activity.buildScreen(screen);
-    target.textRects.clear();
-    target.clippedText = false;
-    activity.buildRows(screen);
-    if (activity.nav.drawnRows != 4) {
-      std::fprintf(stderr, "%s orientation %d: list height %d, full rows %d\n",
-                   profile.name, static_cast<int>(orientation), screen.contentRect().height, activity.nav.drawnRows);
+  for (bool checked : {false, true}) {
+    for (auto& row : activity.rowItems_) row.toggleChecked = checked;
+    for (int focus : {0, 1, 2, 3, 4}) {
+      activity.selected = focus;
+      activity.nav.reset(focus);
+      interactions.clear();
+      UiScreen screen(frame, theme);
+      activity.buildScreen(screen);
+      target.textRects.clear();
+      target.textStrings.clear();
+      target.clippedText = false;
+      activity.buildRows(screen);
+      if (activity.nav.drawnRows != 4) {
+        std::fprintf(stderr, "%s orientation %d: list height %d, full rows %d\n",
+                     profile.name, static_cast<int>(orientation), screen.contentRect().height, activity.nav.drawnRows);
+      }
+      assert(activity.nav.top == 0);
+      assert(activity.nav.drawnRows == 4);
+      assert(target.textRects.size() == 4);
+      assert(!target.clippedText);
+      assert(target.textStrings[0].find("(no preview)") == std::string::npos);
+      for (int row = 0; row < 4; ++row) {
+        assert(target.textStrings[row] == labels[row]);
+        assert(target.measureText(theme.smallText.font, labels[row], theme.smallText).width <=
+               target.textRects[row].width);
+        if (row != 0) assert(target.textStrings[row].find("(no preview)") != std::string::npos);
+      }
     }
-    assert(activity.nav.top == 0);
-    assert(activity.nav.drawnRows == 4);
-    assert(target.textRects.size() == 4);
-    assert(!target.clippedText);
   }
 }
 void checkSharedPartialRows() {
