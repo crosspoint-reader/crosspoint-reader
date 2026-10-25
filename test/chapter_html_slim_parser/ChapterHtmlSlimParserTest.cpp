@@ -1081,6 +1081,20 @@ TEST_F(ChapterTightSpacingTest, StackedTableRuleStartsBelowRowGlyphs) {
   EXPECT_EQ(rules[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT + 1);
 }
 
+TEST_F(ChapterTightSpacingTest, HorizontalRuleStartsBelowPreviousLineGlyphs) {
+  parser.viewportHeight = 400;
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  open("hr", "margin-top: 1px");
+  close("hr");
+  const auto rules = elementsWithTag(TAG_PageHorizontalRule);
+  ASSERT_EQ(rules.size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(rules[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT);
+}
+
 TEST_F(ChapterBlockDecorationTest, MultiWordSpanStaysText) {
   open("p", nullptr);
   open("span", "float: left");
