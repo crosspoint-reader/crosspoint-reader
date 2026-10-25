@@ -383,7 +383,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
           int pen = 0;
           std::string tok;
           for (int k = 0; k < n; ++k) {
-            rubyToken(ruby.text, ruby.breaks, static_cast<size_t>(k), tok);
+            const int tokenIndex = ruby.baseDir == BidiUtils::BidiBaseDir::RTL ? n - 1 - k : k;
+            rubyToken(ruby.text, ruby.breaks, static_cast<size_t>(tokenIndex), tok);
             const int gx = ruby.x + pen + ruby.edge + (innerTotal * k + (n - 1) / 2) / (n - 1);
             renderer.drawText(fontId, gx, rubyY, tok.c_str(), true, EpdFontFamily::SUP, ruby.baseDir, tracking);
             pen += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
