@@ -48,6 +48,17 @@ scriptGroups:
 families:
   # ── Serif ──────────────────────────────────────────────────────────────
 
+  - name: Libron
+    description: "Serif optimized for digital reading and e-readers (Latin)"
+    scripts: [latin]
+    intervals: latin-ext
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-BoldItalic.ttf"}
+
   - name: Literata
     description: "Screen-optimized serif (Latin, Greek, Cyrillic)"
     scripts: [latin, cyrillic, greek]
@@ -69,6 +80,17 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-It.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-BoldIt.ttf"}
+
+  - name: NotoSerif
+    description: "Former built-in serif (Latin, Cyrillic)"
+    scripts: [latin, cyrillic]
+    intervals: builtin,(0x018F-0x018F),(0x0259-0x0259)
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {path: "builtinFonts/source/NotoSerif/NotoSerif-Regular.ttf"}
+      bold:       {path: "builtinFonts/source/NotoSerif/NotoSerif-Bold.ttf"}
+      italic:     {path: "builtinFonts/source/NotoSerif/NotoSerif-Italic.ttf"}
+      bolditalic: {path: "builtinFonts/source/NotoSerif/NotoSerif-BoldItalic.ttf"}
 
   - name: NotoSerifExtended
     description: "Serif (Latin, Greek, Cyrillic)"

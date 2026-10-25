@@ -82,10 +82,6 @@ class InflateReader {
   // See class-level comment for the expected callback/context struct pattern.
   void setReadCallback(int (*cb)(uzlib_uncomp*));
 
-  // Consume the 2-byte zlib header (CMF + FLG) from the input stream.
-  // Call this once before the first read() when input is zlib-wrapped (e.g. PNG IDAT).
-  void skipZlibHeader();
-
   // Decompress exactly len bytes into dest.
   // Returns false if the stream ends before producing len bytes, or on error.
   bool read(uint8_t* dest, size_t len);

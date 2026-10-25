@@ -3,6 +3,7 @@
 #include <HalGPIO.h>
 
 #include "util/HomeButtonInput.h"
+#include "util/RemoteButtonInput.h"
 
 class GfxRenderer;
 namespace freeink {
@@ -50,6 +51,8 @@ class MappedInputManager {
   // expires. The main loop supplies that one-frame event here.
   void setPowerConfirmClickFrame(const bool clicked) { powerConfirmClickFrame = clicked; }
 #endif
+  bool injectRemoteClick(RemoteButton button);
+  bool hasRemoteClick() const { return remoteInput.button != RemoteButton::None; }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   // One-shot threshold event while the button is down; consumes its release.
@@ -73,7 +76,6 @@ class MappedInputManager {
   // (which wasScreenTapped never reports). InputSnapshot builders forward it
   // off-target so FreeInkUI routing clears its pressed-element state.
   bool wasScreenTouchReleased() const;
-  bool wasTapInRect(int x, int y, int width, int height) const;
 
   // Combined touch interaction for a band of equal rows with caller-supplied
   // geometry — the shared hit-test for lists the theme helpers above do not
@@ -149,6 +151,7 @@ class MappedInputManager {
   void rememberTouchHeldTime() const;
   void suppressNextRelease(Button button) const;
 
+  mutable RemoteButtonInput remoteInput;
   mutable HomeButtonInput homeButtonInput;
   mutable HomeButtonAction homeAction = HomeButtonAction::Ignore;
   mutable HomeButtonAction deferredHomeAction = HomeButtonAction::Ignore;

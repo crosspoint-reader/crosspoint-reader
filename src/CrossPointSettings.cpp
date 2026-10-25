@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <BlePageTurnerJson.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
@@ -15,6 +16,7 @@
 #include "SettingsList.h"
 #include "fontIds.h"
 #include "util/ParagraphIndentMigration.h"
+#include "util/PluginLocations.h"
 
 namespace {
 
@@ -65,10 +67,10 @@ uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue)
 void CrossPointSettings::toJson(JsonDocument& doc) const {
   const CrossPointSettings& s = *this;
 
-  for (const auto& info : getSettingsList(nullptr, nullptr, /*forPersistence=*/true)) {
-    if (!info.key) continue;
+  auto visit = [&](const SettingInfo& info) {
+    if (!info.key) return;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringOffset) continue;
+    if (!info.valuePtr && !info.stringOffset) return;
 
     if (info.stringOffset) {
       const char* strPtr = (const char*)&s + info.stringOffset;
@@ -82,7 +84,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
     } else {
       doc[info.key] = s.*(info.valuePtr);
     }
-  }
+  };
+  forEachBaseSetting(visit);
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   doc["frontButtonBack"] = frontButtonBack;
@@ -91,7 +94,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonRight"] = frontButtonRight;
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
-  doc["fontFamily"] = fontFamily;
+  doc["fontFamily"] = STORED_NOTOSANS;
   doc["fontSize"] = fontPointSize;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
@@ -115,6 +118,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (keyboardLayouts != 0) {
     doc["keyboardLayouts"] = keyboardLayouts;
   }
+
+  bleturner::writeJson(ble, doc);
 }
 
 bool CrossPointSettings::fromJson(JsonVariantConst doc) {
@@ -123,10 +128,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
-  for (const auto& info : getSettingsList(nullptr, nullptr, /*forPersistence=*/true)) {
-    if (!info.key) continue;
+  auto visit = [&](const SettingInfo& info) {
+    if (!info.key) return;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringOffset) continue;
+    if (!info.valuePtr && !info.stringOffset) return;
 
     if (info.stringOffset) {
       // destPtr starts out holding the struct-initializer default; it stays that
@@ -136,7 +141,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
         LOG_ERR("CPS", "Misconfigured SettingInfo: stringMaxLen is 0 for key '%s'", info.key);
         destPtr[0] = '\0';
         needsResave = true;
-        continue;
+        return;
       }
 
       bool loaded = false;
@@ -182,6 +187,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       }
       s.*(info.valuePtr) = v;
     }
+  };
+  forEachBaseSetting(visit);
+
+  // Plugin System did not exist in older settings files. Preserve the behavior
+  // of users who already have SD plugins installed, while keeping the new
+  // default disabled on clean installs.
+  if (doc["pluginsEnabled"].isNull()) {
+    pluginsEnabled = PluginLocations::anyPluginInstalledOnDisk() ? 1 : 0;
+    needsResave = true;
   }
 
   const auto indentSpaces = doc["paragraphIndentSpaces"];
@@ -232,8 +246,8 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fontPointSize = storedFontSize;
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
-  const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
-  fontFamily = clamp(storedFontFamily, BUILTIN_FONT_COUNT, 0);
+  const uint8_t storedFontFamily = doc["fontFamily"] | STORED_NOTOSANS;
+  fontFamily = NOTOSANS;
   // These controls use board-specific display-index mappings and are skipped by
   // the generic settings loop. Persisted action IDs remain stable across boards.
   longPressMenuFunction = clamp(doc["longPressMenuFunction"] | (uint8_t)LP_MENU_DISABLED,
@@ -254,14 +268,17 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
-  if (storedFontFamily == LEGACY_OPENDYSLEXIC && sdFontFamilyName[0] == '\0') {
-    fontFamily = NOTOSERIF;
-    strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
-    sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
-    needsResave = true;
-  } else if (storedFontFamily >= BUILTIN_FONT_COUNT) {
-    needsResave = true;
+  if (sdFontFamilyName[0] == '\0') {
+    switch (storedFontFamily) {
+      case LEGACY_NOTOSERIF:
+        copyToField(sdFontFamilyName, "NotoSerif", sizeof(sdFontFamilyName));
+        break;
+      case LEGACY_OPENDYSLEXIC:
+        copyToField(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName));
+        break;
+    }
   }
+  if (storedFontFamily != STORED_NOTOSANS) needsResave = true;
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
   // Language -- stored as code string for stability across enum reorders.
@@ -272,6 +289,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Absent means unconfigured, which is the default.
   if (doc["keyboardLayouts"].is<uint16_t>()) {
     keyboardLayouts = doc["keyboardLayouts"].as<uint16_t>();
+  }
+
+  if (!bleturner::readJson(ble, doc)) {
+    needsResave = true;
   }
 
   if (needsResave) {
@@ -320,11 +341,9 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card and vector fonts get a wider scale than the built-ins: their
-  // faces carry their own (often generous) natural line height, so the old
-  // Bookerly-tuned 1.1/1.2 steps were visually near-indistinguishable. At
-  // 12pt in portrait (~760px viewport) this scale spans ~26/24/19/15 lines
-  // per page — each step reads as a clearly different density.
+  // One scale for all SD card fonts, whatever their format: .cpfont and vector
+  // fonts both take their line height from FreeType's size metrics. Same values
+  // as the former built-in Noto Serif; Normal keeps the font's own line height.
   if (sdFontFamilyName[0] != '\0') {
     switch (lineSpacing) {
       case TIGHT:
@@ -333,38 +352,22 @@ float CrossPointSettings::getReaderLineCompression() const {
       default:
         return 1.0f;
       case WIDE:
-        return 1.3f;
+        return 1.1f;
       case EXTRA_WIDE:
-        return 1.6f;
+        return 1.2f;
     }
   }
 
-  switch (fontFamily) {
-    case NOTOSERIF:
+  switch (lineSpacing) {
+    case TIGHT:
+      return 0.90f;
+    case NORMAL:
     default:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.95f;
-        case NORMAL:
-        default:
-          return 1.0f;
-        case WIDE:
-          return 1.1f;
-        case EXTRA_WIDE:
-          return 1.2f;
-      }
-    case NOTOSANS:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
-        case EXTRA_WIDE:
-          return 1.05f;
-      }
+      return 0.95f;
+    case WIDE:
+      return 1.0f;
+    case EXTRA_WIDE:
+      return 1.05f;
   }
 }
 
@@ -416,16 +419,15 @@ int CrossPointSettings::getReaderFontId() const {
   // in the page render loop) so rendering is correct even before it has run.
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
-  const bool sans = (fontFamily == NOTOSANS);
   switch (pt) {
     case 12:
-      return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
+      return NOTOSANS_12_FONT_ID;
     case 16:
-      return sans ? NOTOSANS_16_FONT_ID : NOTOSERIF_16_FONT_ID;
+      return NOTOSANS_16_FONT_ID;
     case 18:
-      return sans ? NOTOSANS_18_FONT_ID : NOTOSERIF_18_FONT_ID;
+      return NOTOSANS_18_FONT_ID;
     case 14:
     default:
-      return sans ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID;
+      return NOTOSANS_14_FONT_ID;
   }
 }
