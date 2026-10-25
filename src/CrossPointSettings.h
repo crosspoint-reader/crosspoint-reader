@@ -121,12 +121,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
   // Line height as a percent of font size.
   enum LINE_COMPRESSION {
-    LINE_SPACING_110 = 0,
-    LINE_SPACING_120 = 1,
-    LINE_SPACING_130 = 2,
-    LINE_SPACING_145 = 3,
-    LINE_SPACING_160 = 4,
-    LINE_SPACING_175 = 5,
+    LINE_SPACING_100 = 0,
+    LINE_SPACING_110 = 1,
+    LINE_SPACING_120 = 2,
+    LINE_SPACING_130 = 3,
+    LINE_SPACING_145 = 4,
+    LINE_SPACING_160 = 5,
+    LINE_SPACING_175 = 6,
     LINE_COMPRESSION_COUNT
   };
   enum PARAGRAPH_ALIGNMENT {
