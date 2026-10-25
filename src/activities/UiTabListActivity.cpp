@@ -181,23 +181,22 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   tabProps.tabStyles = tabStyles;
   const fui::Rect contentTabRect = screen.takeTop(tabBand);
   const fui::Rect frameRect = screen.frame().screen();
-  // Tab chrome is a full-width screen band like the legacy GUI tab bar. The
-  // remaining list content still stays inside the device safe area.
-  const fui::Rect tabRect{frameRect.x, contentTabRect.y, frameRect.width, contentTabRect.height};
+  const fui::Rect safeRect = screen.frame().safeRect();
+  // The tab background reaches the display edges, but stops before the button labels.
+  const fui::Rect tabRect{static_cast<int16_t>(contentTabRect.x - safeRect.x), contentTabRect.y,
+                          static_cast<int16_t>(contentTabRect.width + frameRect.width - safeRect.width),
+                          contentTabRect.height};
   // Focused band wash is the Lyra treatment; legacy RoundedRaff keeps the
   // band plain in both states.
   if (tabsFocused && !metrics.tabPillFullSlot) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
-  // The band chrome (wash, divider) spans the full screen width, but the tab
-  // slots keep the content side padding so the outer pills never touch the
-  // bezel. The divider is drawn here rather than by tabBar(), which would
-  // inset it along with the slots; the slot band is shortened by the divider
-  // so the pills end on it. The divider matches the header's bottom rule.
+  // Leave space on both sides of the tab labels and selection highlights.
+  // Draw the line below the tabs across the full background width.
   const auto divider = static_cast<int16_t>(std::max(1, metrics.headerUnderlineSize));
   const auto side = static_cast<int16_t>(metrics.contentSidePadding);
-  const fui::Rect slotsRect{static_cast<int16_t>(tabRect.x + side), tabRect.y,
-                            static_cast<int16_t>(tabRect.width - 2 * side),
+  const fui::Rect slotsRect{static_cast<int16_t>(contentTabRect.x + side), tabRect.y,
+                            static_cast<int16_t>(contentTabRect.width - 2 * side),
                             static_cast<int16_t>(tabRect.height - divider)};
   tabProps.divider = false;
   fui::tabBar(screen.frame(), slotsRect, tabProps);

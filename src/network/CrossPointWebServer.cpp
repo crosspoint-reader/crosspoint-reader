@@ -9,6 +9,7 @@
 #include <HalGPIO.h>
 #include <HalMemory.h>
 #include <HalStorage.h>
+#include <HiddenItems.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
@@ -130,7 +131,7 @@ bool isProtectedItemName(const String& name) {
   if (name.startsWith(".")) {
     return true;
   }
-  for (const auto* item : protectedpaths::HIDDEN_ITEMS) {
+  for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
     if (name.equals(item)) {
       return true;
     }
@@ -608,7 +609,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
-      for (const auto* item : protectedpaths::HIDDEN_ITEMS) {
+      for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
         if (fileName.equals(item)) {
           shouldHide = true;
           break;
@@ -734,7 +735,7 @@ void CrossPointWebServer::handleDownload() const {
     server->send(403, "text/plain", "Cannot access system files");
     return;
   }
-  for (const auto* item : protectedpaths::HIDDEN_ITEMS) {
+  for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
     if (itemName.equals(item)) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
@@ -1282,7 +1283,7 @@ void CrossPointWebServer::handleDelete() const {
 
     // Check against explicitly protected items
     bool isProtected = false;
-    for (const auto* item : protectedpaths::HIDDEN_ITEMS) {
+    for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
       if (itemName.equals(item)) {
         isProtected = true;
         break;
@@ -2870,15 +2871,17 @@ void CrossPointWebServer::handleFontList() const {
     }
 
     JsonArray files = fObj["files"].to<JsonArray>();
+    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
     for (const auto& file : family.files) {
+      if (!family.filePath(file, path, sizeof(path))) continue;
       JsonObject fileObj = files.add<JsonObject>();
       // Extract filename from full path
-      const char* name = strrchr(file.path.c_str(), '/');
-      fileObj["name"] = name ? name + 1 : file.path.c_str();
+      const char* name = strrchr(path, '/');
+      fileObj["name"] = name ? name + 1 : path;
 
       // Stat the file for size
       HalFile f;
-      if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
+      if (Storage.openFileForRead("WEB", path, f)) {
         fileObj["size"] = static_cast<unsigned long>(f.size());
         f.close();
       } else {

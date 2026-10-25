@@ -1,0 +1,31 @@
+Subject: [PATCH 3/3] FatPartition: sync the FAT cache before the data cache
+
+With USE_SEPARATE_FAT_CACHE, cacheSync() wrote the data cache (which
+holds the directory sector a file sync just updated) before the FAT
+cache. A reset between the two left a directory entry pointing at
+clusters the FAT still marks free; the next allocation reused them and
+two files shared data. Writing the FAT first, as the shared cache
+already did, means an interrupted allocation can only leak clusters,
+which fsck reclaims safely.
+
+This order makes freeing unsafe instead. remove(), truncate() to zero
+and O_TRUNC free clusters in the FAT before the directory entry
+changes. With the old order, a reset during a free that fit in one FAT
+sector only leaked clusters. Now a reset after the FAT write and before
+the directory write can leave an entry pointing at free clusters, as
+with the shared cache.
+
+---
+--- a/src/FatLib/FatPartition.h
++++ b/src/FatLib/FatPartition.h
+@@ -203,7 +203,9 @@
+     return m_fatCache.prepare(sector, options);
+   }
+   bool cacheSync() {
+-    return m_cache.sync() && m_fatCache.sync() && syncDevice();
++    // FAT first: an interrupted allocation only leaks clusters, but an
++    // interrupted free (remove, truncate, O_TRUNC) can leave a dangling entry.
++    return m_fatCache.sync() && m_cache.sync() && syncDevice();
+   }
+ #else   // USE_SEPARATE_FAT_CACHE
+   uint8_t* fatCachePrepare(Sector_t sector, uint8_t options) {

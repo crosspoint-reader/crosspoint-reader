@@ -5,6 +5,7 @@ add_executable(SerialCommandTest
 
 target_include_directories(SerialCommandTest PRIVATE
   ${REPO_ROOT}/src
+  ${REPO_ROOT}/lib/FsHelpers
   ${REPO_ROOT}/src/util
 )
 

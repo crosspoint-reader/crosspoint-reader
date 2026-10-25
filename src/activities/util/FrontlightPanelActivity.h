@@ -7,11 +7,11 @@
 
 // Top-anchored control center opened by a top-edge down-swipe, a status-bar tap,
 // or a button bound to "Control Center" (iOS Control Center style): a grabber,
-// the frontlight brightness/warmth sliders (on boards with a light), and a grid
-// of quick-setting tiles — night mode, ghost-cleanup refresh, reading
+// the frontlight brightness/warmth sliders (on boards with a light), and a row
+// of quick-setting icons — night mode, ghost-cleanup refresh, reading
 // orientation, and reader touch controls on/off. The
 // frontlight controls are always there: they are what the panel is for. Pure
-// 1-bit: no dithered fills, selection reads as a filled tile. The grabber sits
+// 1-bit: enabled toggles have a filled circle and an On/Off caption. The grabber sits
 // along the panel's bottom edge, the edge the sheet is dragged from.
 class FrontlightPanelActivity final : public Activity, private UiAppHost {
   ButtonNavigator buttonNavigator;
@@ -35,19 +35,11 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   uint8_t touchModeRestore = CrossPointSettings::TOUCH_READER_ON;
   int panelBottom = 0;
 
-  // Quick-setting tiles, in grid order (2 columns): night mode, refresh,
-  // orientation, touch. Fixed set — shown on touch boards, absent elsewhere.
+  // Quick settings, left to right: night mode, refresh, orientation, touch.
   static constexpr int kTileCount = 4;
 
-  // fui::SliderRowProps and fui::TileGridProps embed a 324-byte fui::StyleSet,
-  // so the props the render path fills in live here instead of on the stack
-  // (AGENTS.md: locals stay under 256 bytes). The components take them by
-  // const reference and draw immediately, so one instance per call site is
-  // enough — every field either is reassigned on each use or keeps its
-  // constructed default.
+  // SliderRowProps embeds a StyleSet, so keep it off the render stack.
   freeink::ui::SliderRowProps rowProps;
-  freeink::ui::TileGridProps gridProps;
-  freeink::ui::TileGridItem gridItems[kTileCount];
 
   static void panelScreen(UiScreen& screen, void* user);
   static void onBrightnessEvent(const freeink::ui::ActionEvent& event, void* user);

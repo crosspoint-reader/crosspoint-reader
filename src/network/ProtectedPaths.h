@@ -1,5 +1,6 @@
 #pragma once
 
+#include <HiddenItems.h>
 #include <string.h>
 #include <strings.h>
 
@@ -13,14 +14,11 @@
 // match, so the stores' temp/backup siblings are covered too.
 namespace protectedpaths {
 
-// Folders the file managers hide and refuse to touch, wherever they are.
-inline constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-
-// A name the file managers hide: dot-named or one of HIDDEN_ITEMS. FAT compares
-// names case-insensitively, so this does too.
+// A name the file managers hide: dot-named or one of FsHelpers::HIDDEN_ITEMS.
+// FAT compares names case-insensitively, so this does too.
 inline bool isHiddenName(std::string_view name) {
   if (!name.empty() && name.front() == '.') return true;
-  for (const char* item : HIDDEN_ITEMS) {
+  for (const char* item : FsHelpers::HIDDEN_ITEMS) {
     if (name.size() == strlen(item) && strncasecmp(name.data(), item, name.size()) == 0) return true;
   }
   return false;
