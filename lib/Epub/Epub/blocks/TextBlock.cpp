@@ -221,7 +221,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
   };
   const bool blockHasRuby = hasRuby();
   std::vector<RubyDrawInfo> rubies;
-  if (blockHasRuby) {
+  if (blockHasRuby && !scanning) {
     rubies.resize(numWords);
     for (uint16_t i = 0; i < numWords; i++) {
       if (i < rubyTexts.size() && !rubyTexts[i].empty() && (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
@@ -350,23 +350,27 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     // Horizontal ruby text rendering
     if (blockHasRuby && i < rubyTexts.size() && !rubyTexts[i].empty() &&
         (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
-      const int rubyY = wordY - ascender;
-      const RubyDrawInfo& ruby = rubies[i];
-      if (ruby.spread == 0) {
-        renderer.drawText(fontId, ruby.x, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::SUP, ruby.baseDir,
-                          tracking);
+      if (scanning) {
+        renderer.drawText(fontId, 0, 0, rubyTexts[i].c_str(), true, EpdFontFamily::SUP);
       } else {
-        // Token k of n sits after (2k+1)/(2n) of the spare width: an outer gap of spread/(2n) and an
-        // inner gap of spread/n. Computed from k rather than by accumulating a rounded gap, so
-        // rounding error does not build up across the annotation.
-        const int n = static_cast<int>(ruby.breaks.size()) + 1;
-        int pen = 0;
-        std::string tok;
-        for (int k = 0; k < n; ++k) {
-          rubyToken(ruby.text, ruby.breaks, static_cast<size_t>(k), tok);
-          const int gx = ruby.x + pen + (ruby.spread * (2 * k + 1) + n) / (2 * n);
-          renderer.drawText(fontId, gx, rubyY, tok.c_str(), true, EpdFontFamily::SUP, ruby.baseDir, tracking);
-          pen += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
+        const int rubyY = wordY - ascender;
+        const RubyDrawInfo& ruby = rubies[i];
+        if (ruby.spread == 0) {
+          renderer.drawText(fontId, ruby.x, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::SUP, ruby.baseDir,
+                            tracking);
+        } else {
+          // Token k of n sits after (2k+1)/(2n) of the spare width: an outer gap of spread/(2n) and an
+          // inner gap of spread/n. Computed from k rather than by accumulating a rounded gap, so
+          // rounding error does not build up across the annotation.
+          const int n = static_cast<int>(ruby.breaks.size()) + 1;
+          int pen = 0;
+          std::string tok;
+          for (int k = 0; k < n; ++k) {
+            rubyToken(ruby.text, ruby.breaks, static_cast<size_t>(k), tok);
+            const int gx = ruby.x + pen + (ruby.spread * (2 * k + 1) + n) / (2 * n);
+            renderer.drawText(fontId, gx, rubyY, tok.c_str(), true, EpdFontFamily::SUP, ruby.baseDir, tracking);
+            pen += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
+          }
         }
       }
     }
