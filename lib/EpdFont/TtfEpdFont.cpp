@@ -113,7 +113,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
   //   ppem = pointSize * 150 / 72, kept in 26.6 so the fractional part survives
   // (glyphs raster and advance at the exact ppem; the per-face sizePx is the
   // rounded form for the integer-pixel Font API).
-  size26_6_ = (static_cast<uint32_t>(pointSize) * 150u * 64u + 36u) / 72u;
+  size26_6_ = (static_cast<uint32_t>(pointSize) * FONT_RASTER_DPI * 64u + 36u) / 72u;
   const uint16_t sizePx = static_cast<uint16_t>((size26_6_ + 32u) >> 6);
   resolveFaces();
   for (int i = 0; i < 4; ++i) {
