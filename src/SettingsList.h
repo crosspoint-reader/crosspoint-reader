@@ -214,29 +214,50 @@ inline SettingInfo buildLongPressMenuSetting() {
                                   setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
 }
 
+struct ShortPowerButtonOption {
+  StrId label;
+  uint8_t value;
+};
+
+// Menu order differs from the persisted enum order, so map by value.
+inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
+  std::vector<ShortPowerButtonOption> options = {{StrId::STR_IGNORE, CrossPointSettings::IGNORE},
+                                                 {StrId::STR_SLEEP, CrossPointSettings::SLEEP},
+                                                 {StrId::STR_PAGE_TURN, CrossPointSettings::PAGE_TURN},
+                                                 {StrId::STR_FORCE_REFRESH, CrossPointSettings::FORCE_REFRESH},
+                                                 {StrId::STR_FOOTNOTES, CrossPointSettings::FOOTNOTES}};
+  options.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  if (BoardConfig::hasTouch()) {
+    options.push_back({StrId::STR_CONFIRM, CrossPointSettings::PWR_CONFIRM});
+  } else {
+    options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
+  }
+  // Touch boards without a home key have no button for these shortcuts.
+  if (BoardConfig::hasTouch() && !BoardConfig::hasHomeKey()) {
+    options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
+    options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
+    options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
+  }
+  return options;
+}
+
 inline std::vector<StrId> buildShortPowerButtonValues() {
-  std::vector<StrId> values = {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                               StrId::STR_FOOTNOTES};
-  values.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
-  if (BoardConfig::hasTouch()) values.push_back(StrId::STR_CONFIRM);
-  values.push_back(StrId::STR_SAVE_CLIPPING);
+  std::vector<StrId> values;
+  for (const auto& option : shortPowerButtonOptions()) values.push_back(option.label);
   return values;
 }
 
 inline uint8_t shortPowerButtonDisplayValue() {
-  const uint8_t raw = SETTINGS.shortPwrBtn;
-  if (raw <= CrossPointSettings::FOOTNOTES) return raw;
-  if (raw == CrossPointSettings::CREATE_CLIPPING) return BoardConfig::hasTouch() ? 6 : 5;
-  if (raw == CrossPointSettings::PWR_CONFIRM && BoardConfig::hasTouch()) return 5;
+  const auto options = shortPowerButtonOptions();
+  for (size_t i = 0; i < options.size(); i++) {
+    if (options[i].value == SETTINGS.shortPwrBtn) return static_cast<uint8_t>(i);
+  }
   return CrossPointSettings::IGNORE;
 }
 
 inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
-  if (!BoardConfig::hasTouch() && displayValue == 5) {
-    SETTINGS.shortPwrBtn = CrossPointSettings::CREATE_CLIPPING;
-    return;
-  }
-  SETTINGS.shortPwrBtn = displayValue;
+  const auto options = shortPowerButtonOptions();
+  SETTINGS.shortPwrBtn = displayValue < options.size() ? options[displayValue].value : CrossPointSettings::IGNORE;
 }
 
 inline SettingInfo buildShortPowerButtonSetting() {
@@ -251,17 +272,25 @@ inline std::vector<StrId> homeThemeValues() {
   return {VALUES, VALUES + count};
 }
 
-// Shared immutable list for persistence and as the base for UI settings.
-// Constructed once; persistence borrows it without copying SettingInfo entries.
-const std::vector<SettingInfo>& getBaseSettingsList();
+using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
-// UI callers own a copy for runtime filtering and font/dictionary options.
+// Visits synchronously in list order. Borrowed references are valid only during
+// the callback; move from the descriptor to retain ownership. Its board conditions
+// must be fixed before settings load, or load and save would see different keys.
+void forEachBaseSetting(SettingVisitor visit, void* context);
+
+template <typename Fn>
+void forEachBaseSetting(Fn& fn) {
+  forEachBaseSetting([](void* context, SettingInfo& info) { (*static_cast<Fn*>(context))(info); }, &fn);
+}
+
+// Collects the same descriptors into an owning list for UI and web callers.
+std::vector<SettingInfo> getBaseSettingsList(size_t extraCapacity = 0);
+
+// UI callers own the list for runtime filtering and font/dictionary options.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
                                                 const std::vector<DictionaryEntry>* dictionaries = nullptr) {
-  const auto& baseList = getBaseSettingsList();
-  std::vector<SettingInfo> v;
-  v.reserve(baseList.size() + (dictionaries && !dictionaries->empty() ? 1 : 0));
-  v.insert(v.end(), baseList.begin(), baseList.end());
+  auto v = getBaseSettingsList(dictionaries && !dictionaries->empty() ? 1 : 0);
   // Frontlit and lightless variants of a board share one binary (EEGO A4);
   // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
   // has not run at load time, so the base list must keep the persisted key.
@@ -269,6 +298,20 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());
+  }
+  // Tilt page turn needs an IMU with a gyroscope. UI-only, like the frontlight
+  // entry: a failed probe on one boot must not drop the saved value.
+  if (!halTiltSensor.isAvailable()) {
+    v.erase(
+        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_TILT_PAGE_TURN; }),
+        v.end());
+  }
+  // Hidden on touch boards: the Home button actions (X4 Pro) or the short
+  // power click (other touch boards) cover these shortcuts.
+  if (BoardConfig::hasTouch()) {
+    v.erase(
+        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_LONG_PRESS_MENU; }),
+        v.end());
   }
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });

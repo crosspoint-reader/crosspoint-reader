@@ -235,6 +235,8 @@ STR_HOLD_OPEN_TO_DELETE: "Утрымлівайце Адкрыць, каб выд
 STR_HOLD_SELECT_TO_DELETE: "Утрымлівайце Абраць, каб выдаліць"
 STR_CONFIRM: "Пацв."
 STR_CANCEL: "Адмена"
+STR_DELETE_ITEM_CONFIRM: "Выдаліць?"
+STR_SET_SLEEP_COVER_CONFIRM: "Задаць вокладку?"
 STR_CONNECT: "Падкл."
 STR_OPEN: "Адкрыць"
 STR_DOWNLOAD: "Спампаваць"

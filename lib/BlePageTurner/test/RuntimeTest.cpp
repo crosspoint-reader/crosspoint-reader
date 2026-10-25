@@ -22,6 +22,7 @@ class RuntimeTest : public ::testing::Test {
   void SetUp() override {
     fake::reset();
     config.enabled = 1;
+    std::strcpy(config.peerAddr, "7d:de:5c:bd:ae:ca");
     bleturner::begin(fake::hostFns(), config);
     host().heap = {kEnoughFree, kEnoughLargest};
   }

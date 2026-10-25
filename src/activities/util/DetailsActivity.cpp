@@ -23,6 +23,9 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_PRIMARY = 1;
 constexpr fui::ActionId ACTION_MORE = 2;
+// htmlToPlainText marks a heading line with this byte. The plain-text target
+// used here has no bold style, so the marker is dropped again after conversion.
+constexpr char DETAILS_HEADING_MARKER = '\x01';
 }  // namespace
 
 DetailsActivity::DetailsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, DetailsSpec spec)
@@ -54,9 +57,11 @@ void DetailsActivity::layoutDescription() {
       pages.empty()) {
     LOG_INF("DETAILS", "Styled description unavailable; using plain text");
     pages.clear();
-    spec.description = htmlToPlainText(spec.description);
+    spec.description = htmlToPlainText(spec.description, DETAILS_HEADING_MARKER);
     // The UI text target wraps only at spaces; a newline would draw as a box.
     std::replace(spec.description.begin(), spec.description.end(), '\n', ' ');
+    // The same target cannot style a label line, so the heading marker goes too.
+    std::replace(spec.description.begin(), spec.description.end(), DETAILS_HEADING_MARKER, ' ');
     spec.descriptionHtml = false;
     return;
   }

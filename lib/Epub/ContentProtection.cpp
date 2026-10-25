@@ -132,6 +132,7 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
     return nullptr;
   }
   if (!book->openFromScan(source, std::move(scan))) {
+    LOG_ERR("CPRO", "Manifest open failed: %s", book->lastError().c_str());
     err = "cannot open protected content";
     return nullptr;
   }

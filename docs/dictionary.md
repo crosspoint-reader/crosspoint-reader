@@ -51,22 +51,39 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 
 ### How Lookup Works
 
-1. **Direct match** — the word or phrase is searched as-is (case-insensitive) in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms).
-2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
+1. **Direct match** — the word or phrase is searched as-is (case-insensitive) in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms). An index may list the same headword more than once (one entry per part of speech, for example); every entry it lists is shown, each labelled with its headword.
+2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). All the headwords a synonym points at are shown. This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
 4. **Not found** — a short popup appears and you return to word selection.
 
 ## The Definition Screen
 
-When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions.
+When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions. A word that maps to several definitions shows all of them one after another, each labelled with its headword; if they do not all fit, the ones that fit are shown. If the first definition fills the size limit, it is shown alone without an extra label.
 
 HTML dictionaries (`sametypesequence=h`) and XDXF dictionaries (`sametypesequence=x`) use the EPUB text-layout engine for supported formatting such as headings, bold, italics, lists, and line breaks. Unrecognized tags keep their text without special formatting. Images and CSS styling are ignored. Definitions that are too large or cannot be parsed or laid out within the available memory fall back to plain text.
 
 Definitions are drawn in your reading font. Dictionaries may use IPA symbols (e.g. `ˈ ː ɹ ɪ ʊ`…) as pronunciation guide, which built-in reader fonts do not include, so they are shown as `�`. To see them, install an [SD card font](./sd-card-fonts.md) that covers IPA and select it as the reading font.
 
 - **Left/Right** or side **Up/Down** — previous / next page
-- **Back** — return to word selection
+- **Confirm** — select words or a phrase inside the definition, then choose **Look Up**
+- **Long press on text** — select the touched word on touchscreen devices when touch reader controls are enabled
+- **Back during selection** — cancel selection
+- **Back while reading a definition** — return to the previous definition, or to book word selection at the first definition
+- **Long Back while reading a definition** — hold **Back** for at least one second, then release to close all definitions and return directly to reading
+- **Long press the header Back arrow** — close all definitions and return directly to reading on touchscreen devices, even when touch reader controls are disabled
 
+During definition word selection, press **Back** to cancel selection first, then hold **Back** or long-press the header Back arrow to leave the lookup chain.
+
+Nested lookups use the same dictionary. Both formatted and plain-text definitions support selection.
+Returning to a previous definition restores its page and remembers its selection for the next press of **Confirm**.
+
+The reader keeps up to 16 previous definitions. At this limit, another lookup shows a brief message and leaves the current definition open.
+A failed lookup reloads the current definition and keeps its page and selection.
+
+The current definition is released before loading another entry, so two definitions do not need to fit in memory together.
+Returning to a previous definition reads it from the SD card again.
+If a previous definition cannot be read or its position restored, the definition screen closes and returns to book word selection.
+The screen also closes if a failed forward lookup cannot reload the current definition.
 
 
 ## Where to find dictionaries

@@ -11,6 +11,18 @@ const char* TxtToHtml::cacheVersionTag(std::string_view filename) {
   return FsHelpers::hasMarkdownExtension(filename) ? "<!-- MD_CACHE_VERSION: 1 -->" : "<!-- TXT_CACHE_VERSION: 1 -->";
 }
 
+size_t TxtToHtml::escapedHtmlSize(const std::string_view text) {
+  size_t size = 0;
+  for (const char c : text) {
+    size += c == '&' ? 5 : (c == '<' || c == '>') ? 4 : 1;
+  }
+  return size;
+}
+
+void TxtToHtml::appendEscapedHtml(std::string& out, const std::string_view text) {
+  TxtToHtml::streamEscapedHtml([&out](std::string_view fragment) { out.append(fragment); }, text);
+}
+
 bool TxtToHtml::stream(std::string_view filename, void* readerCtx, int (*readFn)(void* ctx, uint8_t* buf, size_t size),
                        Print& out) {
   constexpr size_t IN_BUF_SIZE = 8192;
@@ -49,16 +61,7 @@ bool TxtToHtml::stream(std::string_view filename, void* readerCtx, int (*readFn)
   writeByte('\n');
   writeStr("<!DOCTYPE html>\n<html>\n<head><title>");
   std::string title = FsHelpers::getFileNameWithoutExtension(filename);
-  for (char c : title) {
-    if (c == '&')
-      writeStr("&amp;");
-    else if (c == '<')
-      writeStr("&lt;");
-    else if (c == '>')
-      writeStr("&gt;");
-    else
-      writeByte(static_cast<uint8_t>(c));
-  }
+  TxtToHtml::streamEscapedHtml(writeStr, title);
   writeStr("</title></head>\n<body>\n");
 
   bool isStart = true;
@@ -104,12 +107,9 @@ bool TxtToHtml::stream(std::string_view filename, void* readerCtx, int (*readFn)
       }
       atLineStart = false;
 
-      if (b == '&') {
-        writeStr("&amp;");
-      } else if (b == '<') {
-        writeStr("&lt;");
-      } else if (b == '>') {
-        writeStr("&gt;");
+      if (b == '&' || b == '<' || b == '>') {
+        const char special = static_cast<char>(b);
+        TxtToHtml::streamEscapedHtml(writeStr, std::string_view(&special, 1));
       } else if (b < 0x20 && b != '\t') {
         writeByte(' ');
       } else {

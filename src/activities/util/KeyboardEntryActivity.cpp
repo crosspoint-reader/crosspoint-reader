@@ -371,14 +371,11 @@ std::string KeyboardEntryActivity::displayTextForCurrentState() const {
     return displayText;
   }
 
-  size_t revealPos;
-  if (cursorMode) {
-    revealPos = text.length();  // no reveal in displayText; block draws actual char directly
-  } else {
-    revealPos = (text.length() > 0 && cursorPos > 0) ? cursorPos - 1 : std::string::npos;
-  }
+  // Keep byte offsets aligned with text, but never reveal a lone UTF-8 byte.
+  const size_t revealEnd = cursorMode ? 0 : std::min(cursorPos, text.length());
+  const size_t revealStart = utf8Prev(text, revealEnd);
   for (size_t i = 0; i < displayText.length(); i++) {
-    if (i != revealPos) {
+    if (i < revealStart || i >= revealEnd) {
       displayText[i] = '*';
     }
   }

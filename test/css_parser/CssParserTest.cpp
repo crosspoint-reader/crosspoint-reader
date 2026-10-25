@@ -186,6 +186,49 @@ TEST_F(CssParserTest, CanonicalCacheRoundTripPreservesStyles) {
   EXPECT_FLOAT_EQ(paragraph.marginTop.value, 2.0f);
 }
 
+TEST_F(CssParserTest, FontInheritanceSurvivesCascadeAndCacheRoundTrip) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer,
+                    "p { font-weight:bold; font-style:italic; }"
+                    "#inherited { font-weight:inherit; font-style:INHERIT; }"
+                    ".inherited { font-weight:normal; font-style:normal; }"
+                    ".last { font-weight:bold; font-weight:inherit; font-style:italic; font-style:inherit; }"
+                    ".normal { font-weight:inherit; font-weight:normal; font-style:inherit; font-style:normal; }"),
+            CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  for (const auto* parser : {&writer, &reader}) {
+    for (const auto style : {parser->resolveStyle("p", "inherited", "inherited"), parser->resolveStyle("p", "last")}) {
+      EXPECT_TRUE(style.hasFontStyle());
+      EXPECT_TRUE(style.hasFontWeight());
+      EXPECT_EQ(style.fontStyle, CssFontStyle::Inherit);
+      EXPECT_EQ(style.fontWeight, CssFontWeight::Inherit);
+    }
+    const auto normal = parser->resolveStyle("p", "normal");
+    EXPECT_EQ(normal.fontStyle, CssFontStyle::Normal);
+    EXPECT_EQ(normal.fontWeight, CssFontWeight::Normal);
+  }
+  const auto inlineStyle = CssParser::parseInlineStyle("font-weight:bold;font-weight:inherit;font-style:inherit");
+  EXPECT_EQ(inlineStyle.fontWeight, CssFontWeight::Inherit);
+  EXPECT_EQ(inlineStyle.fontStyle, CssFontStyle::Inherit);
+}
+
+TEST_F(CssParserTest, FontInheritanceCacheRejectsOldVersion) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, "p{font-weight:inherit;font-style:inherit}"), CssParser::ParseResult::Complete);
+  for (const bool complete : {false, true}) {
+    ASSERT_TRUE(writer.saveToCache(complete));
+    auto bytes = readCache();
+    ASSERT_FALSE(bytes.empty());
+    bytes[0] = CssParser::CSS_CACHE_VERSION - 1;
+    writeCache(bytes);
+    CssParser reader(cachePath());
+    EXPECT_EQ(reader.inspectCache(), CssParser::CacheStatus::Invalid);
+    EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
+  }
+}
+
 TEST_F(CssParserTest, PartialCacheIsValidatedDuringInspection) {
   CssParser writer(cachePath());
   ASSERT_EQ(loadCss(writer, ".a { font-weight: bold; }\n"), CssParser::ParseResult::Complete);

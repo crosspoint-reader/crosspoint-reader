@@ -26,10 +26,6 @@
 #include "components/icons/headerIcons.h"
 #include "fontIds.h"
 
-freeink::ui::BitmapRef BaseTheme::checkboxIcon(const bool checked) {
-  return freeink::ui::bitmapFromIcon(checked ? icon_checkbox_on_32 : icon_checkbox_off_32);
-}
-
 void BaseTheme::setCheckboxRow(freeink::ui::ListItem& item, const bool checked) {
   item.value = nullptr;
   item.toggle = true;
@@ -115,7 +111,16 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = powerManager.getBatteryPercentage();
-  const int y = rect.y + 6;
+  // Center the icon on the digits' ink, which sits a font-dependent distance
+  // below the text line's top (the font scales with uiScale).
+  int y = rect.y + 6;
+  const auto fontIt = renderer.getFontMap().find(SMALL_FONT_ID);
+  if (fontIt != renderer.getFontMap().end()) {
+    if (const auto glyph = fontIt->second.getGlyph('0', EpdFontFamily::REGULAR)) {
+      const int inkTop = renderer.getFontAscenderSize(SMALL_FONT_ID) - static_cast<int>(glyph->top);
+      y = rect.y + inkTop + (static_cast<int>(glyph->height) - rect.height) / 2;
+    }
+  }
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
@@ -815,10 +820,12 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
-  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
+  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4 +
+               BoardConfig::ACTIVE.statusBarOffsetY;
 
   // The side clusters sit in the bottom corners: clear the panel's rounded corners too.
-  const int corner = BoardConfig::ACTIVE.cornerRadius;
+  const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
+                                                                 : BoardConfig::ACTIVE.cornerRadius;
   const int leftClusterX = metrics.statusBarHorizontalMargin + std::max(orientedMarginLeft, corner) + 1;
   const int rightClusterX =
       renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - std::max(orientedMarginRight, corner);
@@ -997,11 +1004,11 @@ void BaseTheme::drawSelectionHandle(const GfxRenderer& renderer, const Rect rect
   renderer.fillRect(left ? rect.x + radius : rect.x, rect.y, radius, radius);
 }
 
-void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect) {
+void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect, const int count) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const char* labels[] = {tr(STR_LOOKUP), tr(STR_CLIP), tr(STR_BOOKMARK_OPTION)};
-  for (int i = 0; i < 3; ++i) {
-    const Rect button = selectionGeometry::button(rect, i, metrics.menuSpacing);
+  for (int i = 0; i < count; ++i) {
+    const Rect button = selectionGeometry::button(rect, i, metrics.menuSpacing, count);
     renderer.fillRoundedRect(button.x, button.y, button.width, button.height, metrics.controlRadius, Color::White);
     renderer.drawRoundedRect(button.x, button.y, button.width, button.height, 1, metrics.controlRadius, true);
     UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[i], 2, true,

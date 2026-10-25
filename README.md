@@ -5,8 +5,9 @@
 CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
 
 ### Now running on:
+
 - **ESP32C3-based** Xteink X4 and X3.
-- **ESP32S3-based** Xteink X4Pro and X4Classic, Seeed reTerminal Sticky, M5PaperMono
+- **ESP32S3-based** Xteink X4Pro and X4Classic, Seeed reTerminal Sticky, M5PaperMono, Metalio E-Ink 4, EEGOREAD A4 and Boox Picco.
 
 Check [our Devices page](https://crosspointreader.com/devices) for the full list.
 
@@ -22,11 +23,15 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
 
+- **Highlights and clippings**: highlight text in EPUBs and save excerpts as clippings. Use the reader menu on button devices, or hold a word and drag the selection handles on touch devices. Look up selected words or phrases in the dictionary. Enable Sync Clippings to sync saved excerpts through a compatible CrossPoint Sync server. See [Clippings and Highlights](USER_GUIDE.md#53-clippings-and-highlights).
+
 - **Screenshots.**
 
 - **Custom fonts**: install your favorite fonts on the SD card.
 
 - **Tilt page turn (X3 and Sticky)**.
+
+- **Bluetooth page turners**: pair a remote under Settings → Connectivity → Bluetooth Page Turner. Map short and long presses to page turns, chapter navigation, the reader menu, or clipping selection.
 
 - **USB Drive mode (X4Pro)**: access the SD card as USB mass storage.
 
@@ -48,13 +53,11 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
 
-- **SD-card plugins**: Optional plugin support can be enabled from **Settings → System → Plugins**. Sideloaded plugins work independently of Plugin Hub. See the [User Guide](USER_GUIDE.md) and [SD-card plugin documentation](docs/sd-plugins.md).
+- **SD card plugins**: install plugins for book catalogs, downloads, and tools in the device's web interface. Enable Plugins under Settings → Connectivity to show them on Home. On-device plugins use existing firmware screens and operations. JavaScript runs in a browser on your phone or computer, and its page must stay open while it works. Plugins follow [CrossPoint's reading-focused scope](SCOPE.md#out-of-scope). See the [plugin guide](docs/sd-plugins.md).
 
 ### Coming soon:
 
 - More themes.
-
-- Bluetooth pageturner.
 
 - Much more! stay tuned.
 

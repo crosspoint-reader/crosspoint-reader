@@ -99,10 +99,87 @@ int main() {
   assert(activity.selected == 23 && activity.pendingButtonCount == 0);
 }
 """
+# Exercise the empty selector's production popup path, including dismissal without a callback.
+loop_prefix = "void ClipSelectionActivity::loop() {" + source.split(
+    "void ClipSelectionActivity::loop() {", 1
+)[1].split("  int touchX = 0;", 1)[0] + "}\n"
+popup_source = (ROOT / "src/components/OptionPopup.h").read_text()
+popup_buttons = "  bool handleButtons(" + popup_source.split("  bool handleButtons(", 1)[1].split(
+    "  bool processRender(", 1
+)[0]
+popup_harness = r"""
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <functional>
+#include <vector>
+struct RenderLock { ~RenderLock() {} };
+struct Input { bool touch = false, back = false, confirm = false, outsideTap = false;
+  bool hasTouch() const { return touch; }
+};
+struct Popup {
+  static constexpr int MAX_OPTIONS = 16;
+  bool active = true;
+  int selectedIndex = 0;
+  std::vector<int> ownedStrings{0};
+  std::function<void(int)> onSelectCallback;
+  bool isActive() const { return active; }
+""" + popup_buttons + r"""
+  // Model an outside release after the shared touch router finds no dialog hit.
+  bool handleInput(const Input& input, const std::function<void()>& update) {
+    if (active && input.outsideTap) { active = false; update(); return true; }
+    return handleButtons(false, false, input.confirm, input.back, update);
+  }
+};
+struct ClipSelectionActivity {
+  size_t wordCount = 0;  // extractWords() could not allocate its array.
+  Popup actionPopup;
+  Input mappedInput;
+  int cancellations = 0;
+  void requestUpdate() {}
+  void cancel() { ++cancellations; }
+  void loopButtons() {
+    actionPopup.handleButtons(false, false, mappedInput.confirm, mappedInput.back, [this] { requestUpdate(); });
+  }
+  void loop();
+};
+""" + loop_prefix + r"""
+int main() {
+  for (const bool touch : {false, true}) {
+    ClipSelectionActivity selection;
+    selection.actionPopup.onSelectCallback = [&](int) { selection.cancel(); };
+    selection.mappedInput.touch = touch;
+    selection.loop();
+    assert(selection.actionPopup.isActive() && selection.cancellations == 0);
+    selection.mappedInput.back = !touch;
+    selection.mappedInput.outsideTap = touch;
+    selection.loop();
+    assert(!selection.actionPopup.isActive() && selection.cancellations == 0);
+    selection.mappedInput.back = selection.mappedInput.outsideTap = false;
+    selection.loop();
+    assert(selection.cancellations == 1);
+  }
+  ClipSelectionActivity confirmed;
+  confirmed.actionPopup.onSelectCallback = [&](int) { confirmed.cancel(); };
+  confirmed.mappedInput.confirm = true;
+  confirmed.loop();
+  assert(confirmed.cancellations == 1);
+  ClipSelectionActivity usable;
+  usable.wordCount = 1;
+  usable.mappedInput.back = true;
+  usable.loop();
+  usable.mappedInput.back = false;
+  usable.loop();
+  assert(usable.cancellations == 0);
+}
+"""
 with tempfile.TemporaryDirectory() as directory:
     cpp = Path(directory) / "selection.cpp"
     executable = Path(directory) / "selection"
     cpp.write_text(harness)
     subprocess.run(["c++", "-std=c++20", str(cpp), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
-print("Selection button regression checks passed")
+    cpp.write_text(popup_harness)
+    subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
+print("Selection button and popup regression checks passed")

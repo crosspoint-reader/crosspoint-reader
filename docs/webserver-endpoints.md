@@ -207,8 +207,9 @@ Form parameters:
 | `path` | Yes, unless `paths` is provided | Single path to delete |
 | `paths` | Yes, unless `path` is provided | JSON array of paths to delete |
 
-Protected items cannot be deleted. Non-empty folders are rejected. EPUB cache
-data for deleted files is cleared.
+`System Volume Information`, `XTCache` and the saved-credential stores cannot be
+deleted. Hidden items (names that start with `.`) can be deleted. Non-empty
+folders are rejected. EPUB cache data for deleted files is cleared.
 
 ## Settings API
 

@@ -1277,9 +1277,9 @@ void CrossPointWebServer::handleDelete() const {
     // Security check: prevent deletion of protected items
     const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
 
-    // Hidden/system files and credential stores are protected
-    if (itemName.startsWith(".") || protectedpaths::isSensitivePath(itemPath.c_str())) {
-      failedItems += itemPath + " (hidden/system file); ";
+    // Credential stores are protected. Hidden (dot-named) items can be deleted.
+    if (protectedpaths::isSensitivePath(itemPath.c_str())) {
+      failedItems += itemPath + " (protected file); ";
       allSuccess = false;
       continue;
     }
@@ -2874,15 +2874,17 @@ void CrossPointWebServer::handleFontList() const {
     }
 
     JsonArray files = fObj["files"].to<JsonArray>();
+    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
     for (const auto& file : family.files) {
+      if (!family.filePath(file, path, sizeof(path))) continue;
       JsonObject fileObj = files.add<JsonObject>();
       // Extract filename from full path
-      const char* name = strrchr(file.path.c_str(), '/');
-      fileObj["name"] = name ? name + 1 : file.path.c_str();
+      const char* name = strrchr(path, '/');
+      fileObj["name"] = name ? name + 1 : path;
 
       // Stat the file for size
       HalFile f;
-      if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
+      if (Storage.openFileForRead("WEB", path, f)) {
         fileObj["size"] = static_cast<unsigned long>(f.size());
         f.close();
       } else {

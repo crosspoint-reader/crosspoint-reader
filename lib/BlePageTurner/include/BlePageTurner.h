@@ -93,6 +93,7 @@ enum class Why : uint8_t {
   Ok,
   Off,             // the user turned the page turner off
   NotReading,      // no book in front
+  NoBond,          // no remote chosen: nothing the radio could link to
   PageNotShown,    // the book has not painted its page yet
   Indexing,        // the book still builds its index and needs the heap
   BuildNeedsHeap,  // a starved chapter build stopped the radio until its page is shown

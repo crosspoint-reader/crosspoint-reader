@@ -4,9 +4,19 @@
 #include <cstdio>
 #include <string>
 
+namespace HalFileTest {
+inline bool failNextWrite = false;
+inline bool failNextClose = false;
+}  // namespace HalFileTest
+
+constexpr int O_WRITE = 1;
+constexpr int O_CREAT = 2;
+constexpr int O_TRUNC = 4;
+
 class HalFile {
  public:
   HalFile() = default;
+  explicit HalFile(const char* path) { open(path, "wb"); }
   ~HalFile() { close(); }
   HalFile(const HalFile&) = delete;
   HalFile& operator=(const HalFile&) = delete;
@@ -18,7 +28,16 @@ class HalFile {
   }
   int available() const { return file_ ? static_cast<int>(size() - position()) : 0; }
   size_t read(void* buffer, size_t count) { return file_ ? std::fread(buffer, 1, count, file_) : 0; }
-  size_t write(const void* buffer, size_t count) { return file_ ? std::fwrite(buffer, 1, count, file_) : 0; }
+  size_t write(const void* buffer, size_t count) {
+    if (HalFileTest::failNextWrite) {
+      HalFileTest::failNextWrite = false;
+      return 0;
+    }
+    const size_t allowed = count < writeBytesLeft_ ? count : writeBytesLeft_;
+    const size_t written = file_ ? std::fwrite(buffer, 1, allowed, file_) : 0;
+    writeBytesLeft_ -= written;
+    return written;
+  }
   size_t write(uint8_t byte) { return write(&byte, 1); }
   bool flush() { return file_ && std::fflush(file_) == 0; }
   bool seek(size_t pos) { return file_ && std::fseek(file_, static_cast<long>(pos), SEEK_SET) == 0; }
@@ -27,6 +46,10 @@ class HalFile {
     if (!file_) return false;
     const bool ok = std::fclose(file_) == 0;
     file_ = nullptr;
+    if (HalFileTest::failNextClose) {
+      HalFileTest::failNextClose = false;
+      return false;
+    }
     return ok;
   }
   bool isOpen() const { return file_ != nullptr; }
@@ -41,8 +64,12 @@ class HalFile {
     return end > 0 ? static_cast<size_t>(end) : 0;
   }
 
+  size_t write(const uint8_t* buffer, size_t count) { return write(static_cast<const void*>(buffer), count); }
+  void limitWritesTo(size_t count) { writeBytesLeft_ = count; }
+
  private:
   std::FILE* file_ = nullptr;
+  size_t writeBytesLeft_ = SIZE_MAX;
 };
 
 class HalStorage {
@@ -52,9 +79,14 @@ class HalStorage {
     return instance;
   }
   int readOpens = 0;
+  std::string dictionaryTempPath;
+  std::string resolvePath(const std::string& path) const {
+    return path == "/.crosspoint/dicthtml.tmp" && !dictionaryTempPath.empty() ? dictionaryTempPath : path;
+  }
+  HalFile open(const char* path, int) { return HalFile(resolvePath(path).c_str()); }
   bool openFileForRead(const char*, const std::string& path, HalFile& file) {
     readOpens++;
-    return file.open(path.c_str(), "rb");
+    return file.open(resolvePath(path).c_str(), "rb");
   }
   bool openFileForWrite(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "wb"); }
   bool exists(const char* path) const {
@@ -63,7 +95,7 @@ class HalStorage {
     std::fclose(file);
     return true;
   }
-  bool remove(const std::string& path) { return std::remove(path.c_str()) == 0; }
+  bool remove(const std::string& path) { return std::remove(resolvePath(path).c_str()) == 0; }
   bool rename(const char* from, const char* to) { return std::rename(from, to) == 0; }
 };
 
