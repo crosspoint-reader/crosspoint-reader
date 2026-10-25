@@ -366,6 +366,18 @@ void ChapterHtmlSlimParser::noteContent(const int top, const int bottom) {
   }
 }
 
+// Glyphs of the page's last text line, which can reach below its spacing; 0 if no line ends the page.
+// Non-text content placed after text starts at or below this, applied before its page-fit check.
+int ChapterHtmlSlimParser::lastLineGlyphBottom() const {
+  if (!currentPage || currentPage->elements.empty()) return 0;
+  const PageElement& last = *currentPage->elements.back();
+  if (last.getTag() != TAG_PageLine) return 0;
+  const TextBlock& line = *static_cast<const PageLine&>(last).getBlock();
+  const int lineFontId = line.blockFontId(fontId);
+  return last.yPos + renderer.getLineHeight(lineFontId) + line.extraAscent(renderer, fontId) +
+         line.getRubyShift(renderer.getFontAscenderSize(lineFontId));
+}
+
 void ChapterHtmlSlimParser::openBoxScope(BlockStyle& ownStyle, const CssStyle& cssStyle) {
   const bool shaded = cssStyle.defined.shaded && cssStyle.shaded;
   if (tableDepth > 0 || boxScopes.size() >= MAX_BOX_SCOPES || (!cssStyle.hasVisibleBorder() && !shaded)) return;
@@ -401,6 +413,9 @@ void ChapterHtmlSlimParser::openBoxScope(BlockStyle& ownStyle, const CssStyle& c
   pad(ownStyle.paddingLeft, box.sides[3]);
   box.padTop = ownStyle.paddingTop;
   box.padBottom = ownStyle.paddingBottom;
+  // The frame starts below the previous line's glyphs; the box's top margin can cover them.
+  const int raise = lastLineGlyphBottom() - currentPageNextY - ownStyle.marginTop;
+  if (raise > 0) currentPageNextY = static_cast<int16_t>(currentPageNextY + raise);
   boxScopes.push_back(box);
 }
 
@@ -940,13 +955,14 @@ void ChapterHtmlSlimParser::closeTableCell() {
 }
 
 void ChapterHtmlSlimParser::addTableRowSeparator() {
+  // The rule starts below the row's last glyphs.
+  const int top = std::max<int>(currentPageNextY, lastLineGlyphBottom());
   if (!currentPage || currentPage->elements.empty() || viewportWidth == 0 ||
-      currentPageNextY + TABLE_ROW_SEPARATOR_GAP > viewportHeight) {
+      top + TABLE_ROW_SEPARATOR_GAP > viewportHeight) {
     return;
   }
 
-  auto separator =
-      makeUniqueNoThrow<PageHorizontalRule>(viewportWidth, TABLE_ROW_SEPARATOR_THICKNESS, 0, currentPageNextY + 1);
+  auto separator = makeUniqueNoThrow<PageHorizontalRule>(viewportWidth, TABLE_ROW_SEPARATOR_THICKNESS, 0, top + 1);
   if (!separator) {
     LOG_ERR("EHP", "OOM: table row separator");
     return;
@@ -955,7 +971,7 @@ void ChapterHtmlSlimParser::addTableRowSeparator() {
     currentPage->elements.reserve(currentPage->elements.size() + 1);
   }
   currentPage->elements.push_back(std::move(separator));
-  currentPageNextY += TABLE_ROW_SEPARATOR_GAP;
+  currentPageNextY = static_cast<int16_t>(top + TABLE_ROW_SEPARATOR_GAP);
 }
 
 // Streams a table's raw markup from its opening tag and measures each column's
@@ -1254,6 +1270,10 @@ void ChapterHtmlSlimParser::finishTableRow() {
       }
     }
 
+    // A bordered table's frame starts below the previous line's glyphs.
+    if (sliceTop < 0 && bordered) {
+      currentPageNextY = static_cast<int16_t>(std::max<int>(currentPageNextY, lastLineGlyphBottom()));
+    }
     const int topGap = sliceTop < 0 ? maxTopPadding + cellGap : 0;
     const int bottomGap = maxBottomPadding + cellGap;
     const bool pageFull = currentPage && !currentPage->elements.empty() &&
@@ -1837,16 +1857,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 }
 
                 self->applyPendingPageBreak();
+                const int clearMarginTop =
+                    std::max<int>(imageMarginTop, self->lastLineGlyphBottom() - self->currentPageNextY);
                 // Create page for image - only break if image won't fit remaining space
                 if (self->currentPage && !self->currentPage->elements.empty() &&
-                    (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
+                    (self->currentPageNextY + clearMarginTop + displayHeight + imageMarginBottom >
                      self->viewportHeight)) {
                   // A heading introducing the image moves with it when both fit on one page.
                   size_t carry = self->keepWithNextCarry();
                   if (carry > 0) {
                     const auto& elements = self->currentPage->elements;
                     const int carriedHeight = self->currentPageNextY - elements[elements.size() - carry]->yPos;
-                    if (carriedHeight + imageMarginTop + displayHeight > self->viewportHeight) carry = 0;
+                    if (carriedHeight + clearMarginTop + displayHeight > self->viewportHeight) carry = 0;
                   }
                   self->breakPageCarryingLines(carry, 0, self->visibleTextOffset);
                   if (self->stopRequested) return;
@@ -1868,6 +1890,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // bar / big screen margin) absorbs that overflow silently, but with a
                 // thin reserve it crosses the physical screen edge and fails
                 // ImageBlock::render's bounds check, dropping the image entirely.
+                // The image starts below the previous line's glyphs; its top margin can cover them.
+                imageMarginTop = static_cast<int16_t>(
+                    std::max<int>(imageMarginTop, self->lastLineGlyphBottom() - self->currentPageNextY));
                 if (self->currentPageNextY + imageMarginTop + displayHeight > self->viewportHeight) {
                   const int room = self->viewportHeight - displayHeight - self->currentPageNextY;
                   imageMarginTop = static_cast<int16_t>(room > 0 ? room : 0);

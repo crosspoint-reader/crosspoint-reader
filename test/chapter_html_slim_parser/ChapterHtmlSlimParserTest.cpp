@@ -994,6 +994,93 @@ TEST_F(ChapterTightSpacingTest, TextAfterBoxStartsBelowItsFrame) {
   EXPECT_EQ(lines[1]->yPos, lines[0]->yPos + GLYPH_HEIGHT + 5);  // 4 px gap + 1 px border
 }
 
+TEST_F(ChapterTightSpacingTest, BoxFrameStartsBelowPreviousLineGlyphs) {
+  parser.viewportHeight = 400;
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  open("div", "border: 1px solid black");
+  open("p", nullptr);
+  text("Framed");
+  close("p");
+  close("div");
+  const auto boxes = elementsWithTag(TAG_PageBorderBox);
+  ASSERT_EQ(boxes.size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(boxes[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT);
+}
+
+TEST_F(ChapterTightSpacingTest, BorderedTableStartsBelowPreviousLineGlyphs) {
+  parser.viewportHeight = 400;
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  const XML_Char* bordered[] = {"border", "1", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "table", bordered);
+  parser.tableColumnWidths = {240, 240};
+  parser.tableColumnCount = 2;
+  open("tr", nullptr);
+  for (const char* cell : {"alpha", "beta"}) {
+    open("td", nullptr);
+    text(cell);
+    close("td");
+  }
+  ASSERT_FALSE(parser.tableRowStacked);
+  close("tr");
+  close("table");
+  const auto boxes = elementsWithTag(TAG_PageBorderBox);
+  ASSERT_EQ(boxes.size(), 2u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_GE(lines.size(), 1u);
+  EXPECT_EQ(boxes[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT);
+}
+
+TEST_F(ChapterTightSpacingTest, BorderedTableRowMovesWholeWhenRaisedRowDoesNotFit) {
+  parser.viewportHeight = 66;  // the row fits below the line's spacing, not below its glyphs
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  const XML_Char* bordered[] = {"border", "1", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "table", bordered);
+  parser.tableColumnWidths = {240, 240};
+  parser.tableColumnCount = 2;
+  open("tr", nullptr);
+  for (const char* cell : {"alpha", "beta"}) {
+    open("td", nullptr);
+    text(cell);
+    close("td");
+  }
+  close("tr");
+  close("table");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_EQ(pages.size(), 2u);
+  std::map<PageElementTag, std::vector<int>> secondPage;
+  for (const auto& element : pages[1]->elements) secondPage[element->getTag()].push_back(element->yPos);
+  ASSERT_EQ(secondPage[TAG_PageLine].size(), 2u);
+  EXPECT_EQ(secondPage[TAG_PageLine][0], 3);  // 1 px border + 2 px gap
+  EXPECT_EQ(secondPage[TAG_PageLine][1], 3);
+  ASSERT_EQ(secondPage[TAG_PageBorderBox].size(), 2u);
+  EXPECT_EQ(secondPage[TAG_PageBorderBox][0], 0);
+  for (const auto& element : pages[0]->elements) EXPECT_NE(element->getTag(), TAG_PageBorderBox);
+}
+
+TEST_F(ChapterTightSpacingTest, StackedTableRuleStartsBelowRowGlyphs) {
+  parser.viewportHeight = 400;
+  open("table", nullptr);
+  open("tr", nullptr);
+  open("td", nullptr);
+  text("Only cell");
+  close("td");
+  close("tr");
+  close("table");
+  const auto rules = elementsWithTag(TAG_PageHorizontalRule);
+  ASSERT_EQ(rules.size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(rules[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT + 1);
+}
+
 TEST_F(ChapterBlockDecorationTest, MultiWordSpanStaysText) {
   open("p", nullptr);
   open("span", "float: left");
