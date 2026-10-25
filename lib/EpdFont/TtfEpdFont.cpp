@@ -106,6 +106,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
                       const uint16_t maxGlyphs) {
   loaded_ = false;
   if (!sources_[Regular].present) return false;
+  pointSize_ = pointSize;
   // CrossPoint speaks point-size-at-150-DPI (matching the .cpfont converter's
   // FT_Set_Char_Size(size, size, 150, 150)); FreeInkFont speaks pixels. Convert
   // so vector fonts match the on-glyph size and metrics of the bitmap fonts:
@@ -451,7 +452,7 @@ bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
 }
 
 EpdFontFamily TtfEpdFont::family() const {
-  return EpdFontFamily(&faces_[0].font, &faces_[1].font, &faces_[2].font, &faces_[3].font);
+  return EpdFontFamily(pointSize_, &faces_[0].font, &faces_[1].font, &faces_[2].font, &faces_[3].font);
 }
 
 bool TtfEpdFont::build(const char* utf8) {

@@ -437,6 +437,16 @@ void ChapterHtmlSlimParser::closeBoxScope() {
     noteContent(top, top + height);
   }
   emitBoxSegment(box, true);
+  // Glyphs can reach below tightly spaced lines; what follows starts below the frame.
+  const int raise = std::min<int>(viewportHeight, box.bottom + box.padBottom) - currentPageNextY;
+  if (box.top >= 0 && raise > 0) {
+    currentPageNextY = static_cast<int16_t>(currentPageNextY + raise);
+    // A block child leaves this padding pending on the next block; the frame used it.
+    if (currentTextBlock && currentTextBlock->isEmpty()) {
+      BlockStyle& pending = currentTextBlock->getBlockStyle();
+      pending.paddingBottom = static_cast<int16_t>(pending.paddingBottom - std::min<int>(pending.paddingBottom, raise));
+    }
+  }
 }
 
 void ChapterHtmlSlimParser::emitBoxSegment(const BoxScope& box, const bool closing) {
@@ -585,12 +595,13 @@ void ChapterHtmlSlimParser::layoutDropCapLines(
   capWidth = std::min(capWidth, effectiveWidth / 2);
 
   // Keep every spanned line on the letter's page.
+  const int contentHeight = lines * lineHeight + std::max(0, renderer.getLineHeight(layoutFontId) - lineHeight);
   if (!currentPage) {
     currentPage.reset(new Page());
     currentPageNextY = 0;
     currentPageVisibleOffsetSet = false;
   }
-  if (!currentPage->elements.empty() && currentPageNextY + lines * lineHeight > viewportHeight) {
+  if (!currentPage->elements.empty() && currentPageNextY + contentHeight > viewportHeight) {
     breakPageCarryingLines(keepWithNextCarry(), 0, visibleTextOffset);
     if (stopRequested) return;
   }
@@ -601,7 +612,7 @@ void ChapterHtmlSlimParser::layoutDropCapLines(
                                      static_cast<int16_t>(top + (lines - 1) * lineHeight + ascender));
   if (element) {
     currentPage->elements.push_back(std::move(element));
-    noteContent(top, top + lines * lineHeight);
+    noteContent(top, top + contentHeight);
   } else {
     LOG_ERR("EHP", "OOM: PageDropCap");
   }
@@ -1125,7 +1136,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   const int16_t lineHeight =
-      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression));
+      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression)));
   const size_t columnCount = tableRowCells.size();
   const bool planned = tableColumnCount == columnCount;
   uint16_t columnWidths[MAX_GRID_TABLE_COLUMNS] = {};
@@ -1224,27 +1235,32 @@ void ChapterHtmlSlimParser::finishTableRow() {
     }
   };
 
+  int16_t lastRowOverhang = 0;
   for (size_t lineIndex = 0; lineIndex < maxLineCount; ++lineIndex) {
     const uint32_t lineVisibleOffset =
         lineIndex < tableLineVisibleOffsets.size() ? tableLineVisibleOffsets[lineIndex] : visibleTextOffset;
     int16_t rowLineHeight = lineHeight;
+    int16_t rowContentHeight = lineHeight;
     for (size_t column = 0; column < columnCount; ++column) {
       if (lineIndex < tableCellLines[column].size()) {
         const TextBlock& line = *tableCellLines[column][lineIndex];
         const int lineFontId = line.blockFontId(fontId);
-        const int height = renderer.getLineHeight(lineFontId, lineCompression) + line.extraAscent(renderer, fontId) +
+        const int spacedHeight = renderer.getLineHeight(lineFontId, lineCompression);
+        const int height = spacedHeight + line.extraAscent(renderer, fontId) +
                            line.getRubyShift(renderer.getFontAscenderSize(lineFontId));
         rowLineHeight = std::max<int16_t>(rowLineHeight, static_cast<int16_t>(height));
+        const int contentHeight = height + std::max(0, renderer.getLineHeight(lineFontId) - spacedHeight);
+        rowContentHeight = std::max<int16_t>(rowContentHeight, static_cast<int16_t>(contentHeight));
       }
     }
 
     const int topGap = sliceTop < 0 ? maxTopPadding + cellGap : 0;
     const int bottomGap = maxBottomPadding + cellGap;
     const bool pageFull = currentPage && !currentPage->elements.empty() &&
-                          currentPageNextY + topGap + rowLineHeight + bottomGap > viewportHeight;
+                          currentPageNextY + topGap + rowContentHeight + bottomGap > viewportHeight;
     if (!currentPage || pageFull) {
       if (pageFull) {
-        if (bordered && sliceTop >= 0) frameCells(sliceTop, currentPageNextY + bottomGap);
+        if (bordered && sliceTop >= 0) frameCells(sliceTop, currentPageNextY + lastRowOverhang + bottomGap);
         sliceTop = -1;
         setCurrentPageVisibleOffset(lineVisibleOffset);
         emitCurrentPage();
@@ -1290,9 +1306,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
       addLineToPage(std::move(line), lineVisibleOffset);
     }
     currentPageNextY = static_cast<int16_t>(rowY + rowLineHeight);
+    lastRowOverhang = rowContentHeight - rowLineHeight;
   }
 
-  currentPageNextY = static_cast<int16_t>(std::min<int>(currentPageNextY + maxBottomPadding, viewportHeight));
+  currentPageNextY =
+      static_cast<int16_t>(std::min<int>(currentPageNextY + lastRowOverhang + maxBottomPadding, viewportHeight));
   keepWithNextLines = 0;
   if (bordered && sliceTop >= 0 && currentPage) {
     currentPageNextY = static_cast<int16_t>(std::min<int>(currentPageNextY + cellGap, viewportHeight));
@@ -3109,9 +3127,12 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   if (stopRequested) return;
   const int lineFontId = line->blockFontId(fontId);
   const int rubyShift = line->getRubyShift(renderer.getFontAscenderSize(lineFontId));
+  const int spacedHeight = renderer.getLineHeight(lineFontId, lineCompression);
   // Taller inline words push the shared baseline down.
-  const int baseLineHeight = renderer.getLineHeight(lineFontId, lineCompression) + line->extraAscent(renderer, fontId);
+  const int baseLineHeight = spacedHeight + line->extraAscent(renderer, fontId);
   const int lineHeight = baseLineHeight + rubyShift;
+  // Spacing can be shorter than the font's own line height; fit and frame the full glyphs.
+  const int contentHeight = lineHeight + std::max(0, renderer.getLineHeight(lineFontId) - spacedHeight);
 
   if (!currentPage) {
     currentPage.reset(new Page());
@@ -3119,7 +3140,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
     currentPageVisibleOffsetSet = false;
   }
 
-  if (currentPageNextY + lineHeight > viewportHeight) {
+  if (currentPageNextY + contentHeight > viewportHeight) {
     size_t paragraphLines = 0;
     const size_t carry = linesToCarry(paragraphLines);
     breakPageCarryingLines(carry, paragraphLines, visibleOffset);
@@ -3151,7 +3172,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
     return;
   }
   currentPage->elements.push_back(std::move(pageLine));
-  noteContent(currentPageNextY, currentPageNextY + lineHeight);
+  noteContent(currentPageNextY, currentPageNextY + contentHeight);
   currentPageNextY += lineHeight;
   if (layoutParagraph && paragraphLinesOnPage < UINT8_MAX) paragraphLinesOnPage++;
   if (recentLineCount == MAX_CARRIED_LINES) {
