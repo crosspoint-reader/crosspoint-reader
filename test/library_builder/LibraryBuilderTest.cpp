@@ -70,6 +70,33 @@ TEST(LibraryBookFileTest, RejectsOtherFilesAndHiddenNames) {
   EXPECT_FALSE(isLibraryBookFile("._book.epub"));
 }
 
+TEST(LibraryBookFileTest, RejectsSystemFoldersWithoutHidingOrdinaryTextBooks) {
+  EXPECT_FALSE(isLibraryBookFile("/XTCache/fontPos.txt"));
+  EXPECT_FALSE(isLibraryBookFile("/Backup/XTCache/epub/book/language.txt"));
+  EXPECT_FALSE(isLibraryBookFile("/System Volume Information/notes.txt"));
+  EXPECT_TRUE(isLibraryBookFile("/fontPos.txt"));
+  EXPECT_TRUE(isLibraryBookFile("/language.txt"));
+  EXPECT_TRUE(isLibraryBookFile("/XTCacheArchive/book.txt"));
+}
+
+TEST_F(LibraryBuilderTest, SkipsSystemFolderContents) {
+  fake::add("/XTCache/fontPos.txt");
+  fake::add("/XTCache/epub/book/language.txt");
+  fake::add("/System Volume Information/notes.txt");
+  fake::add("/fontPos.txt");
+  fake::add("/language.txt");
+  fake::add("/XTCacheArchive/book.txt");
+
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(index.header().bookCount, 5u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/XTCache/fontPos.txt"], 0u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/XTCache/epub"], 0u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/System Volume Information/notes.txt"], 0u);
+}
+
 TEST_F(LibraryBuilderTest, XtcTitleAndAuthorComeFromTheFile) {
   fake::add("/Comics/one.xtc");
   fake::add("/Comics/two.xtch");
