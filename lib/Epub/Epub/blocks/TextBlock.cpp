@@ -211,6 +211,9 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     // ruby-align: space-around. >0 when the ruby is narrower than its base: the width difference
     // to distribute over the ruby tokens. 0 means plain centering.
     int spread = 0;
+    // Gap before the first and after the last ruby token. Uncapped it is spread / 2n, but it is
+    // limited to half a base character; the inner gaps absorb the remainder.
+    int edge = 0;
     std::vector<size_t> breaks;  // token boundaries inside `text` (see CjkBreaks)
   };
   // Copies ruby token k of s (tokens are delimited by br) into out.
@@ -257,8 +260,21 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
               tokenSum += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
             }
             if (tokenSum < groupActualWidth) {
+              // Count base characters (UTF-8 lead bytes) to get the average base character width.
+              int baseChars = 0;
+              for (int k = 0; k < groupWordCount; ++k) {
+                for (const char* p = wordText(i + k); *p; ++p) {
+                  if ((static_cast<uint8_t>(*p) & 0xC0) != 0x80) baseChars++;
+                }
+              }
+              baseChars = std::max(baseChars, 1);
+              // CSS Ruby: the start/end spacing is capped at half the size of one base character.
+              const int edgeCap = groupActualWidth / (2 * baseChars);
+
+              const int n = static_cast<int>(breaks.size()) + 1;
               info.x = leaderWordX;
               info.spread = groupActualWidth - tokenSum;
+              info.edge = std::min(info.spread / (2 * n), edgeCap);
               info.breaks = std::move(breaks);
             }
           }
@@ -359,15 +375,16 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
           renderer.drawText(fontId, ruby.x, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::SUP, ruby.baseDir,
                             tracking);
         } else {
-          // Token k of n sits after (2k+1)/(2n) of the spare width: an outer gap of spread/(2n) and an
-          // inner gap of spread/n. Computed from k rather than by accumulating a rounded gap, so
-          // rounding error does not build up across the annotation.
-          const int n = static_cast<int>(ruby.breaks.size()) + 1;
+          // The edge gap is capped (see layout), so the remaining space is split evenly over the n-1
+          // gaps between tokens. Token k starts after the edge gap plus k inner gaps. Computed from k
+          // rather than by accumulating a rounded gap, so rounding error does not build up.
+          const int n = static_cast<int>(ruby.breaks.size()) + 1;  // n >= 2 here
+          const int innerTotal = ruby.spread - 2 * ruby.edge;
           int pen = 0;
           std::string tok;
           for (int k = 0; k < n; ++k) {
             rubyToken(ruby.text, ruby.breaks, static_cast<size_t>(k), tok);
-            const int gx = ruby.x + pen + (ruby.spread * (2 * k + 1) + n) / (2 * n);
+            const int gx = ruby.x + pen + ruby.edge + (innerTotal * k + (n - 1) / 2) / (n - 1);
             renderer.drawText(fontId, gx, rubyY, tok.c_str(), true, EpdFontFamily::SUP, ruby.baseDir, tracking);
             pen += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
           }
