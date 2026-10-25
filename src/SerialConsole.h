@@ -10,4 +10,7 @@
 //
 // Everything but SCREENSHOT needs ENABLE_SERIAL_CONTROL, which only development
 // environments set; release builds answer the rest with CMD_ERR.
-void pollSerialConsole();
+//
+// Returns true when it ran a command in a development build, which the main
+// loop counts as activity, like a button press. Release builds return false.
+bool pollSerialConsole();

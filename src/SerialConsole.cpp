@@ -171,7 +171,7 @@ void runCommand(const SerialCommand& cmd) {
 
 }  // namespace
 
-void pollSerialConsole() {
+bool pollSerialConsole() {
 #ifdef ENABLE_SERIAL_CONTROL
   finishHome();
 #endif
@@ -193,6 +193,12 @@ void pollSerialConsole() {
       continue;
     }
     runCommand(cmd);
-    return;  // one command per main-loop pass, so an injected click reaches its frame
+    // One command per main-loop pass, so an injected click reaches its frame.
+#ifdef ENABLE_SERIAL_CONTROL
+    return true;
+#else
+    return false;
+#endif
   }
+  return false;
 }
