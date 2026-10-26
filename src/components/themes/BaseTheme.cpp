@@ -808,6 +808,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
+
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
                               const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) {
   auto metrics = UITheme::getInstance().getMetrics();
@@ -817,50 +818,106 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const auto sb = SETTINGS.statusBarSpec();
   const bool showStatusBarTextLane = sb.textLaneVisible(halClock.isAvailable());
 
-  // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
   auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4 +
                BoardConfig::ACTIVE.statusBarOffsetY;
+			   
+  int sbFontId = SMALL_FONT_ID;
 
-  // The side clusters sit in the bottom corners: clear the panel's rounded corners too.
-  const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
-                                                                 : BoardConfig::ACTIVE.cornerRadius;
-  const int leftClusterX = metrics.statusBarHorizontalMargin + std::max(orientedMarginLeft, corner) + 1;
-  const int rightClusterX =
-      renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - std::max(orientedMarginRight, corner);
+  // ---- Layout constants ----
+  constexpr int sideMargin = 30;         // margin on either side of the centered block
+  constexpr int batteryTextGap = 6;      // gap between battery icon and battery percentage text
+  constexpr int estimateGap = 2;         // gap between "~" and the progress text
+  constexpr int separatorGap = 8;        // pixels of empty space on each side of the separator dot
+  constexpr int separatorDotNudge = 0;   // shift the dot left (-) or right (+) if the glyph looks off-center
+  const char* separatorDot = "\xC2\xB7"; // U+00B7 middle dot
+  const int separatorDotWidth = renderer.getTextWidth(sbFontId, separatorDot);
+  const int separatorWidth = separatorGap * 2 + separatorDotWidth;
+
+  // Space available for the whole block
+  const int availableWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight - 2 * sideMargin;
+
+  // Left cluster (rendered left to right): bookmark | battery | clock(left)
+  // Right cluster (rendered left to right): clock(right) | progress
+  // Title sits between the two clusters.
   int leftClusterWidth = 0;
   int rightClusterWidth = 0;
 
-  if (sb.showBookProgressPercent || sb.showChapterPageCount) {
-    // Right aligned text for progress counter
-    char progressStr[32];
+  // Adds an item's width to a cluster, inserting a separator before it if the cluster already has content.
+  auto addToCluster = [&](int& clusterWidth, const int itemWidth) {
+    clusterWidth += (clusterWidth > 0 ? separatorWidth : 0) + itemWidth;
+  };
 
-    // Draw the estimate marker separately so it can use the next UI font size.
-    const bool showEstimate = pageCountEstimated && sb.showChapterPageCount;
-
-    if (sb.showBookProgressPercent && sb.showChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
-    } else if (sb.showBookProgressPercent) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
-    } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
-    }
-
-    int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    const int estimateWidth = showEstimate ? renderer.getTextWidth(UI_10_FONT_ID, "~") : 0;
-    constexpr int estimateGap = 2;
-    const int estimateSpacing = showEstimate ? estimateGap : 0;
-    const int progressX = rightClusterX - estimateWidth - estimateSpacing - progressTextWidth;
-    if (showEstimate) {
-      const int estimateY = textY + (renderer.getLineHeight(SMALL_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-      renderer.drawText(UI_10_FONT_ID, progressX, estimateY, "~");
-    }
-    renderer.drawText(SMALL_FONT_ID, progressX + estimateWidth + estimateSpacing, textY, progressStr);
-
-    rightClusterWidth += estimateWidth + estimateSpacing + progressTextWidth;
+  // ---- Bookmark (left cluster) ----
+  const bool showBookmark = showStatusBarTextLane && isPageBookmarked;
+  if (showBookmark) {
+    addToCluster(leftClusterWidth, bookmarkStatusIconWidth);
   }
 
-  // Draw Progress Bar
+  // ---- Battery (left cluster) ----
+  const bool showBatteryPercentage = sb.showBatteryPercent;
+  std::string batteryText;
+  int batteryTextWidth = 0;
+  int batteryBlockWidth = 0;
+
+  if (sb.showBattery) {
+    batteryBlockWidth = metrics.batteryWidth;
+    if (showBatteryPercentage) {
+      batteryText = std::to_string(powerManager.getBatteryPercentage()) + "%";
+      batteryTextWidth = renderer.getTextWidth(sbFontId, batteryText.c_str());
+      batteryBlockWidth += batteryTextGap + batteryTextWidth;
+    }
+    addToCluster(leftClusterWidth, batteryBlockWidth);
+  }
+
+  // ---- Clock (any board whose RTC probe succeeded) ----
+  char timeBuf[9] = {0};
+  bool showClock = false;
+  bool clockOnLeft = false;
+  int clockTextWidth = 0;
+
+  if (sb.showsClock() && halClock.isAvailable()) {
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clock12h)) {
+      clockTextWidth = renderer.getTextWidth(sbFontId, timeBuf);
+      if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_LEFT) {
+        showClock = true;
+        clockOnLeft = true;
+        addToCluster(leftClusterWidth, clockTextWidth);
+      } else if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT) {
+        showClock = true;
+        clockOnLeft = false;
+        addToCluster(rightClusterWidth, clockTextWidth);
+      }
+    }
+  }
+
+  // ---- Progress text elements (right cluster) ----
+  const bool showPageCount = sb.showChapterPageCount;
+  const bool showPercent = sb.showBookProgressPercent;
+  const bool showEstimate = showPageCount && pageCountEstimated;
+
+  char pageStr[24] = {0};
+  char percentStr[12] = {0};
+  int pageStrWidth = 0;
+  int percentStrWidth = 0;
+  int estimateWidth = 0;
+  int estimateSpacing = 0;
+
+  if (showPageCount) {
+    snprintf(pageStr, sizeof(pageStr), "%d/%d", currentPage, pageCount);
+    pageStrWidth = renderer.getTextWidth(sbFontId, pageStr);
+    estimateWidth = showEstimate ? renderer.getTextWidth(UI_10_FONT_ID, "~") : 0;
+    estimateSpacing = showEstimate ? estimateGap : 0;
+    addToCluster(rightClusterWidth, estimateWidth + estimateSpacing + pageStrWidth);
+  }
+
+  if (showPercent) {
+    snprintf(percentStr, sizeof(percentStr), "%.0f%%", bookProgress);
+    percentStrWidth = renderer.getTextWidth(sbFontId, percentStr);
+    addToCluster(rightClusterWidth, percentStrWidth);
+  }
+
+  // ---- Progress bar (independent of the centered block) ----
   if (sb.showsProgressBar()) {
     const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
     const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
@@ -879,84 +936,109 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
   }
 
-  // Draw Battery
-  const bool showBatteryPercentage = sb.showBatteryPercent;
-
-  if (sb.showBattery) {
-    GUI.drawBatteryLeft(renderer,
-                        Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
-                        showBatteryPercentage);
-    int batteryWidth = metrics.batteryWidth;
-
-    if (showBatteryPercentage) {
-      const uint16_t percentage = powerManager.getBatteryPercentage();
-      // width of icon + spacing + text for layout purposes
-      batteryWidth +=
-          batteryPercentSpacing + renderer.getTextWidth(SMALL_FONT_ID, (std::to_string(percentage) + "%").c_str());
-    }
-
-    leftClusterWidth += batteryWidth;
-  }
-
-  // Draw Clock (any board whose RTC probe succeeded)
-  if (sb.showsClock() && halClock.isAvailable()) {
-    char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clock12h)) {
-      int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
-      int clockX = 0;
-      // Position to the left or right of the progress text (with a small gap)
-      if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_LEFT) {
-        clockX = leftClusterX + leftClusterWidth + (leftClusterWidth > 0 ? 10 : 0);
-        leftClusterWidth += clockTextWidth + 10;
-      } else if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT) {
-        clockX = rightClusterX - rightClusterWidth - (rightClusterWidth > 0 ? 10 : 0) - clockTextWidth;
-        rightClusterWidth += clockTextWidth + 10;
-      }
-      renderer.drawText(SMALL_FONT_ID, clockX, textY, timeBuf);
-    }
-  }
-
-  // Draw Bookmark
-  if (showStatusBarTextLane && isPageBookmarked) {
-    const int bookmarkGap = leftClusterWidth > 0 ? bookmarkStatusIconGap : 0;
-    const int bookmarkX = leftClusterX + leftClusterWidth + bookmarkGap;
-    const int bookmarkY = textY + 5;
-    drawBookmarkStatusIcon(renderer, bookmarkX, bookmarkY);
-    leftClusterWidth += bookmarkStatusIconWidth + bookmarkGap;
-  }
-
-  // Draw Title
+  // ---- Title: sized last, using whatever space is left ----
+  int titleWidth = 0;
   if (!title.empty()) {
-    textY -= textYOffset;
-    // Centered chapter title text
-    // Page width minus existing content with 30px padding on each side
-    const int rendererableScreenWidth =
-        renderer.getScreenWidth() - (metrics.statusBarHorizontalMargin * 2) - orientedMarginLeft - orientedMarginRight;
+    // Separators needed between the title and each non-empty cluster
+    const int titleSepWidth = (leftClusterWidth > 0 ? separatorWidth : 0) + (rightClusterWidth > 0 ? separatorWidth : 0);
+    int availableTitleSpace = availableWidth - leftClusterWidth - rightClusterWidth - titleSepWidth;
 
-    const int titleMarginLeft = leftClusterWidth + 30;
-    const int titleMarginRight = rightClusterWidth + 30;
-
-    // Attempt to center title on the screen, but if title is too wide then later we will center it within the
-    // available space.
-    int titleMarginLeftAdjusted = std::max(titleMarginLeft, titleMarginRight);
-    int availableTitleSpace = rendererableScreenWidth - 2 * titleMarginLeftAdjusted;
-
-    int titleWidth;
-    titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    if (titleWidth > availableTitleSpace) {
-      // Not enough space to center on the screen, center it within the remaining space instead
-      availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
-      titleMarginLeftAdjusted = titleMarginLeft;
+    if (availableTitleSpace <= 0) {
+      title.clear();
+    } else {
+      titleWidth = renderer.getTextWidth(sbFontId, title.c_str());
+      if (titleWidth > availableTitleSpace) {
+        title = renderer.truncatedText(sbFontId, title.c_str(), availableTitleSpace);
+        titleWidth = renderer.getTextWidth(sbFontId, title.c_str());
+      }
     }
-    if (titleWidth > availableTitleSpace) {
-      title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTitleSpace);
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    }
+  }
 
-    renderer.drawText(SMALL_FONT_ID,
-                      titleMarginLeftAdjusted + metrics.statusBarHorizontalMargin + orientedMarginLeft +
-                          (availableTitleSpace - titleWidth) / 2,
-                      textY, title.c_str());
+  // ---- Total block width ----
+  // Items in order: [left cluster] [title] [right cluster], with a separator between each non-empty part.
+  int totalWidth = leftClusterWidth;
+  if (titleWidth > 0) {
+    totalWidth += (totalWidth > 0 ? separatorWidth : 0) + titleWidth;
+  }
+  if (rightClusterWidth > 0) {
+    totalWidth += (totalWidth > 0 ? separatorWidth : 0) + rightClusterWidth;
+  }
+
+  // ---- Render the block, centered ----
+  int x = orientedMarginLeft + sideMargin + (availableWidth - totalWidth) / 2;
+  bool drewAnything = false;
+
+  // Draws the dot with a fixed gap on each side and advances x past the whole separator slot.
+  auto drawSeparator = [&]() {
+    renderer.drawText(sbFontId, x + separatorGap + separatorDotNudge, textY, separatorDot);
+    x += separatorWidth;
+  };
+
+  auto beginItem = [&]() {
+    if (drewAnything) {
+      drawSeparator();
+    }
+    drewAnything = true;
+  };
+
+  // 1. Bookmark
+  if (showBookmark) {
+    beginItem();
+    drawBookmarkStatusIcon(renderer, x, textY + 5);
+    x += bookmarkStatusIconWidth;
+  }
+
+  // 2. Battery (icon, 6px gap, then percentage text; no separator between them)
+  if (sb.showBattery) {
+    beginItem();
+    // Draw the icon only; the percentage text is drawn manually to control the gap.
+    GUI.drawBatteryLeft(renderer, Rect{x, textY, metrics.batteryWidth, metrics.batteryHeight}, false);
+    x += metrics.batteryWidth;
+    if (showBatteryPercentage) {
+      x += batteryTextGap;
+      renderer.drawText(sbFontId, x, textY, batteryText.c_str());
+      x += batteryTextWidth;
+    }
+  }
+
+  // 3. Clock (left mode)
+  if (showClock && clockOnLeft) {
+    beginItem();
+    renderer.drawText(sbFontId, x, textY, timeBuf);
+    x += clockTextWidth;
+  }
+
+  // 4. Title
+  if (titleWidth > 0) {
+    beginItem();
+    renderer.drawText(sbFontId, x, textY - textYOffset, title.c_str());
+    x += titleWidth;
+  }
+
+  // 5. Clock (right mode)
+  if (showClock && !clockOnLeft) {
+    beginItem();
+    renderer.drawText(sbFontId, x, textY, timeBuf);
+    x += clockTextWidth;
+  }
+
+  // 6. Chapter page count
+  if (showPageCount) {
+    beginItem();
+    if (showEstimate) {
+      const int estimateY = textY + (renderer.getLineHeight(sbFontId) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+      renderer.drawText(UI_10_FONT_ID, x, estimateY, "~");
+      x += estimateWidth + estimateSpacing;
+    }
+    renderer.drawText(sbFontId, x, textY, pageStr);
+    x += pageStrWidth;
+  }
+
+  // 7. Book progress percent
+  if (showPercent) {
+    beginItem();
+    renderer.drawText(sbFontId, x, textY, percentStr);
+    x += percentStrWidth;
   }
 }
 
