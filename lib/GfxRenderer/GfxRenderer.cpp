@@ -2400,12 +2400,14 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
-  display.displayGrayscaleBase(fallback, fadingFix);
+  display.displayGrayscaleBase(applyPromotedRefresh(fallback), fadingFix);
 }
 
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
-  if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
+  if (!display.displayGrayscaleBase(mode, promotedRefreshPending_ ? promotedRefresh_ : fallback, fadingFix))
+    return false;
+  promotedRefreshPending_ = false;
   absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
   return true;
 }
