@@ -30,6 +30,7 @@ constexpr unsigned long CLEAR_HOLD_MS = 700;
 
 void BleSettingsActivity::onEnter() {
   UiListActivity::onEnter();
+  radioVisit = activityManager.visit();
   // A saved opt-in brings the radio up here, so scanning and pairing work at once.
   if (SETTINGS.ble.enabled) bleturner::switchOn();
   refresh();
@@ -37,6 +38,12 @@ void BleSettingsActivity::onEnter() {
 }
 
 void BleSettingsActivity::loop() {
+  // Pushed panels stop the radio; returning here does not call onEnter().
+  const uint32_t currentVisit = activityManager.visit();
+  if (radioVisit != currentVisit) {
+    radioVisit = currentVisit;
+    if (SETTINGS.ble.enabled) bleturner::switchOn();
+  }
   // Holding Confirm on an action clears it (touch: a long press on the row, onRowLongPress).
   if (view == View::Mapping && mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, CLEAR_HOLD_MS)) {
     clearMapping(nav.selected);
