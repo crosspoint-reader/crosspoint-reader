@@ -157,7 +157,7 @@ void DetailsActivity::buildScreen(UiScreen& screen) {
   const auto asPtr = [](const std::string& s) { return s.empty() ? nullptr : s.c_str(); };
   const int16_t line = uiTarget.lineHeight(theme.bodyText.font);
 
-  fui::PublicationPageProps props;
+  fui::PublicationPageProps& props = pageProps;
   props.book.title = asPtr(spec.title);
   props.book.author = asPtr(spec.author);
   props.book.series = asPtr(spec.source);  // the series slot is just a hero line
@@ -207,6 +207,8 @@ void DetailsActivity::buildScreen(UiScreen& screen) {
     props.more.label = tr(STR_DETAILS);
     props.more.action = ACTION_MORE;
     styleButton(props.more);
+  } else {
+    props.more.label = nullptr;  // the HTML fallback can leave the description empty
   }
   props.actionHeight = theme.rowHeight;
 

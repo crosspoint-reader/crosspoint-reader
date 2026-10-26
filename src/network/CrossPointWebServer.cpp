@@ -2375,19 +2375,25 @@ void CrossPointWebServer::handleFetch() {
           configureClient(http);
           // The plugin's headers (typically its Authorization) stay with the
           // starting origin; a redirect to another server gets none of them.
-          if (sameOrigin) {
+          if (sameOrigin && !requestHeaders.empty()) {
+            // Handshake before the client copies the headers: a several-KB session
+            // cookie would otherwise take heap the handshake needs. A failed connect
+            // is retried, and reported, by the request itself.
+            http.connect(feedWatchdog);
             for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
           }
         },
         sink,
         // The write callback only runs when bytes arrive; with the 60s no-data
         // timeout a server stall would starve this task's WDT subscription.
-        // shouldAbort is polled in every wait loop.
+        // shouldAbort is polled in every wait loop, and by connect().
         feedWatchdog);
   } else {
     freeink::SecureHttpClient http;  // redirects are not followed (SDK default)
     configureClient(http);
     if (http.begin(url)) {
+      // Same reason as above: handshake before copying the headers.
+      if (!requestHeaders.empty()) http.connect(feedWatchdog);
       for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
       result.status = http.sendRequest(
           method.c_str(), reinterpret_cast<const uint8_t*>(requestBody.data()), requestBody.size(),
