@@ -18,6 +18,7 @@ Examples:
     device_control.py install-font fonts/NotoSerif
     device_control.py ls /Books
     device_control.py pull "/Books/Some Book.epub" copy.epub
+    device_control.py mv "/Books/Some Book.epub" /Books/Read
 
 A run script holds one command per line, in the same form as on the command
 line ("#" starts a comment). The commands share one connection and one log,
@@ -28,10 +29,10 @@ so a script can restart the reader, open a book cold and wait for a log line:
     wait "Page 100 processed" --timeout 180
     state
 
-The file commands (push, install-font, pull, ls, rm, mkdir) also work on
-release builds; the rest need a development build. push, install-font, rm and
-mkdir need the reader on Home; on a development build push and install-font
-take --home to go there first. Files move in CRC-checked frames
+The file commands (push, install-font, pull, ls, mv, rm, mkdir) also work on
+release builds; the rest need a development build. push, install-font, mv, rm
+and mkdir need the reader on Home; on a development build push, install-font
+and mv take --home to go there first. Files move in CRC-checked frames
 (src/util/SerialTransfer.h) and land under their name only once complete.
 Requires pyserial (scripts/requirements.txt).
 """
@@ -68,6 +69,8 @@ ACK_TIMEOUT = 5.0
 MAX_NAKS_IN_A_ROW = 10
 # A removal or rename on the reader waits for any cover thumbnail Home is building.
 CHANGE_TIMEOUT = 60.0
+# MV sends both paths on one console line (MAX_LINE_LENGTH in src/util/SerialTransfer.h).
+MOVE_PATHS_MAX = 320 - 9
 
 
 class DeviceError(Exception):
@@ -496,6 +499,89 @@ def push(device: Device, local: Path, remote_dir: str, replace: bool) -> None:
     print(f"{local.name}: {total:,} bytes in {elapsed:.1f} s ({total / 1024 / elapsed:,.1f} KB/s)")
 
 
+def find_entry(device: Device, path: str) -> tuple[str, str] | None:
+    """(kind, path as the card spells it) of a file or folder, or None if it is not there.
+
+    FAT matches names in any case, but the reader files a book's progress under its
+    path as spelled, so moves start from the card's own spelling.
+    """
+    if path == "/":
+        return "D", "/"
+    found = "/"
+    kind = "D"
+    for part in path.strip("/").split("/"):
+        if kind != "D":
+            return None
+        entries = {name: k for k, _, name in device.list_dir(found)}
+        name = part if part in entries else next((n for n in entries if n.casefold() == part.casefold()), None)
+        if name is None:
+            return None
+        kind = entries[name]
+        found = remote_join(found, name)
+    return kind, found
+
+
+def move_file(device: Device, source: str, target: str) -> str:
+    """Move one file; the reader moves its reading state along. Returns where it went."""
+    if len(source.encode()) + len(target.encode()) > MOVE_PATHS_MAX:
+        raise DeviceError(f"{source}: the two paths of a move may take {MOVE_PATHS_MAX} bytes together")
+    stored = device.command(f"MV {source}|{target}", timeout=CHANGE_TIMEOUT, busy_retry=CHANGE_TIMEOUT)
+    print(f"{source} -> {stored}")
+    return stored
+
+
+def move_folder(device: Device, source: str, target: str) -> int:
+    """Move a folder file by file, so each book keeps its state; returns the files left behind."""
+    if target.casefold() == source.casefold():
+        # FAT finds the new spelling as the folder itself, so go through another name.
+        temp = source + ".mv-tmp"
+        left = move_folder(device, source, temp)
+        return left or move_folder(device, temp, target)
+    device.command(f"MKDIR {target}")
+    left = 0
+    for kind, _, name in device.list_dir(source):
+        child, moved = remote_join(source, name), remote_join(target, name)
+        try:
+            if kind == "D":
+                left += move_folder(device, child, moved)
+            else:
+                move_file(device, child, moved)
+        except DeviceRefused as error:
+            print(f"left {child}: {error}", file=sys.stderr)
+            left += 1
+    if left:
+        print(f"{source}: {left} item{'s' if left != 1 else ''} left behind, so the folder stays", file=sys.stderr)
+    else:
+        device.command(f"RM {source}", timeout=CHANGE_TIMEOUT, busy_retry=CHANGE_TIMEOUT)
+    return left
+
+
+def move(device: Device, source: str, destination: str) -> None:
+    """Like mv: into DESTINATION if it is a folder, else to that name."""
+    entry = find_entry(device, source)
+    if entry is None:
+        raise DeviceError(f"{source}: no such file or folder")
+    kind, source = entry
+    if kind == "F":
+        move_file(device, source, destination)
+        return
+    if source == "/":
+        raise DeviceError("the root folder does not move")
+    at_destination = find_entry(device, destination)
+    if at_destination is not None and at_destination[0] == "D" and at_destination[1].casefold() != source.casefold():
+        destination = remote_join(at_destination[1], source.rsplit("/", 1)[1])
+        if find_entry(device, destination) is not None:
+            raise DeviceError(f"{destination} already exists")
+    elif at_destination is not None and at_destination[1].casefold() != source.casefold():
+        raise DeviceError(f"{destination} already exists")
+    elif at_destination is None and find_entry(device, destination.rsplit("/", 1)[0] or "/") is None:
+        raise DeviceError(f"{destination}: no such folder to move into")
+    if (destination.casefold() + "/").startswith(source.casefold() + "/") and destination.casefold() != source.casefold():
+        raise DeviceError(f"{source} cannot move into itself")
+    if move_folder(device, source, destination):
+        raise DeviceError(f"{source}: not everything moved")
+
+
 FONT_SUFFIXES = (".cpfont", ".ttf", ".otf")
 
 
@@ -575,6 +661,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="overwrite a local file")
     p = sub.add_parser("mkdir", help="make a folder on the SD card (reader on Home)")
     p.add_argument("path")
+    p = sub.add_parser("mv", help="move or rename a file or folder on the SD card (reader on Home)")
+    p.add_argument("source")
+    p.add_argument("destination", help="a folder to move into, or the new path")
+    p.add_argument("--home", action="store_true", help="go to Home first (development builds)")
     p = sub.add_parser("rm", help="remove a file, an empty folder or /.fonts/<family> (reader on Home)")
     p.add_argument("path")
     p = sub.add_parser("run", help="run commands from a file, one per line")
@@ -633,6 +723,10 @@ def execute(device: Device, args: argparse.Namespace, parser: argparse.ArgumentP
         progress.finish(f" -> {local}")
     elif cmd == "mkdir":
         device.command(f"MKDIR {remote_path(args.path)}")
+    elif cmd == "mv":
+        if args.home:
+            device.go_home()
+        move(device, remote_path(args.source), remote_path(args.destination))
     elif cmd == "rm":
         device.command(f"RM {remote_path(args.path)}", timeout=CHANGE_TIMEOUT)
     elif cmd == "run":

@@ -177,6 +177,33 @@ TEST(SerialTransfer, TheLongestPutLineFitsTheConsoleBuffer) {
   EXPECT_EQ(serialxfer::checkPath(cmd.path, Access::Write).kind, PathKind::File);
 }
 
+TEST(SerialTransfer, TwoPathsOfAMoveShareTheConsoleLine) {
+  constexpr size_t each = (serialxfer::MAX_LINE_LENGTH - 9) / 2;
+  const std::string from = "/" + std::string(each - 1, 'a');
+  const std::string to = "/" + std::string(each - 1, 'b');
+  const std::string line = "CMD:MV " + from + "|" + to + "\r\n";
+  SerialLineBuffer<serialxfer::MAX_LINE_LENGTH> buffer;
+  bool ended = false;
+  for (const char byte : line) ended = buffer.feed(byte);
+  ASSERT_TRUE(ended);
+  EXPECT_FALSE(buffer.overflowed());
+  const SerialCommand cmd = parseSerialCommand(buffer.line().substr(4));
+  EXPECT_EQ(cmd.type, SerialCommand::Type::Move);
+  EXPECT_EQ(cmd.path, from);
+  EXPECT_EQ(cmd.destination, to);
+}
+
+TEST(SerialTransfer, AMoveKeepsTheExtension) {
+  EXPECT_TRUE(serialxfer::sameExtension("/Books/A Book.epub", "/Read/Renamed.epub"));
+  EXPECT_TRUE(serialxfer::sameExtension("/a.EPUB", "/b.epub"));
+  EXPECT_TRUE(serialxfer::sameExtension("/notes", "/old notes"));
+  EXPECT_TRUE(serialxfer::sameExtension("/a.b/notes", "/c/notes"));
+  EXPECT_TRUE(serialxfer::sameExtension("/.hidden", "/other"));
+  EXPECT_FALSE(serialxfer::sameExtension("/a.epub", "/a.txt"));
+  EXPECT_FALSE(serialxfer::sameExtension("/a.epub", "/a"));
+  EXPECT_FALSE(serialxfer::sameExtension("/a.tar.gz", "/a.tar"));
+}
+
 TEST(SerialTransfer, FontsGoThroughTheFontsFolders) {
   auto check = serialxfer::checkPath("/.fonts/Noto-Serif/NotoSerif_14.cpfont", Access::Write);
   EXPECT_EQ(check.kind, PathKind::FontFile);

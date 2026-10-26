@@ -23,6 +23,7 @@
 //   PUT [REPLACE] size crc /path  receive a file: size in bytes, crc as 8 hex digits
 //   MKDIR /path                   make a folder and its parents
 //   RM /path                      remove a file, an empty folder or a font family
+//   MV /from|/to                  move or rename a file; "|" never occurs in a FAT name
 struct SerialCommand {
   enum class Type {
     Invalid,
@@ -39,7 +40,8 @@ struct SerialCommand {
     Get,
     Put,
     MakeDir,
-    Remove
+    Remove,
+    Move
   };
   enum class RestartTarget { Boot, Home, Reader };
 
@@ -47,10 +49,11 @@ struct SerialCommand {
   std::string_view name;   // as sent, for the reply
   const char* error = "";  // why an Invalid line was refused
   RemoteButton click = RemoteButton::None;
-  bool forward = true;    // TURN
-  bool chapter = false;   // TURN
-  bool cold = false;      // OPEN
-  std::string_view path;  // OPEN and the file commands
+  bool forward = true;           // TURN
+  bool chapter = false;          // TURN
+  bool cold = false;             // OPEN
+  std::string_view path;         // OPEN and the file commands
+  std::string_view destination;  // MV
   RestartTarget restart = RestartTarget::Boot;
   bool replace = false;  // PUT
   uint32_t size = 0;     // PUT
@@ -197,6 +200,18 @@ constexpr SerialCommand parseSerialCommand(std::string_view line) {
     if (arg.empty() || arg.front() != '/') return invalid(cmd, "expects an absolute path");
     cmd.path = arg;
     cmd.type = entry.type;
+    return cmd;
+  }
+
+  if (cmd.name == "MV") {
+    const size_t bar = arg.find('|');
+    if (bar == std::string_view::npos) return invalid(cmd, "expects /from|/to");
+    cmd.path = trim(arg.substr(0, bar));
+    cmd.destination = trim(arg.substr(bar + 1));
+    if (cmd.path.empty() || cmd.path.front() != '/' || cmd.destination.empty() || cmd.destination.front() != '/') {
+      return invalid(cmd, "expects /from|/to");
+    }
+    cmd.type = Type::Move;
     return cmd;
   }
 

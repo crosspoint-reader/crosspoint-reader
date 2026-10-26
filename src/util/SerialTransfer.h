@@ -40,6 +40,8 @@ inline constexpr size_t FRAME_HEADER_SIZE = 12;
 inline constexpr size_t CHUNK_SIZE = 4096;
 inline constexpr size_t MAX_PATH_LENGTH = 255;
 // A console line long enough for "CMD:PUT REPLACE <size> <crc> " and the longest path.
+// MV's two paths share it, so together they may take MAX_LINE_LENGTH - 9 bytes
+// ("CMD:MV ", the bar, and a terminal's carriage return).
 inline constexpr size_t MAX_LINE_LENGTH = 320;
 inline constexpr uint32_t CANCEL_OFFSET = 0xFFFFFFFF;
 
@@ -215,6 +217,19 @@ inline PathCheck checkPath(std::string_view path, Access access) {
   }
   check.kind = PathKind::File;
   return check;
+}
+
+// Whether two paths end in the same file extension, ignoring case. A book's
+// reading state only moves with it while it stays the same kind of book.
+inline bool sameExtension(std::string_view a, std::string_view b) {
+  const auto extension = [](std::string_view path) {
+    const std::string_view name = path.substr(path.rfind('/') + 1);
+    const size_t dot = name.rfind('.');
+    return dot == std::string_view::npos || dot == 0 ? std::string_view{} : name.substr(dot);
+  };
+  const std::string_view x = extension(a);
+  const std::string_view y = extension(b);
+  return x.size() == y.size() && (x.empty() || strncasecmp(x.data(), y.data(), x.size()) == 0);
 }
 
 }  // namespace serialxfer

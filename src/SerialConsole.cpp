@@ -64,6 +64,7 @@ bool isFileCommand(const SerialCommand& cmd) {
     case SerialCommand::Type::Put:
     case SerialCommand::Type::MakeDir:
     case SerialCommand::Type::Remove:
+    case SerialCommand::Type::Move:
       return true;
     default:
       return false;

@@ -144,6 +144,27 @@ TEST(SerialCommand, PutTakesSizeCrcAndPath) {
   EXPECT_EQ(parseSerialCommand("PUT REPLACE").type, Type::Invalid);
 }
 
+TEST(SerialCommand, MoveTakesTwoPathsSplitAtTheBar) {
+  auto cmd = parseSerialCommand("MV /Books/A Book.epub|/Books/Read/A Book.epub");
+  EXPECT_EQ(cmd.type, Type::Move);
+  EXPECT_EQ(cmd.path, "/Books/A Book.epub");
+  EXPECT_EQ(cmd.destination, "/Books/Read/A Book.epub");
+
+  cmd = parseSerialCommand("MV /a.txt | /");
+  EXPECT_EQ(cmd.type, Type::Move);
+  EXPECT_EQ(cmd.path, "/a.txt");
+  EXPECT_EQ(cmd.destination, "/");
+
+  EXPECT_EQ(parseSerialCommand("MV /a.txt /b.txt").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("MV /a.txt|b.txt").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("MV a.txt|/b.txt").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("MV |/b.txt").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("MV /a.txt|").type, Type::Invalid);
+  EXPECT_EQ(parseSerialCommand("MV").type, Type::Invalid);
+  // A second bar stays in the destination, where the path rules refuse it.
+  EXPECT_EQ(parseSerialCommand("MV /a|/b|/c").destination, "/b|/c");
+}
+
 bool feedAll(SerialLineBuffer<16>& buffer, std::string_view bytes) {
   bool ended = false;
   for (const char byte : bytes) ended = buffer.feed(byte);

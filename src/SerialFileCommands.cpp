@@ -18,6 +18,7 @@
 
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
+#include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SerialConsole.h"
 #include "activities/ActivityManager.h"
@@ -55,6 +56,13 @@ const char* writeRefusal() {
 bool isDirectory(const std::string& path) {
   HalFile file = Storage.open(path.c_str());
   return file && file.isDirectory();
+}
+
+// Home shows recent books from a list it read on entry; after one of them moves or
+// goes, Home is opened again so it never offers a path that is gone.
+bool isRecentBook(const std::string& path) {
+  const auto& books = RECENT_BOOKS.getBooks();
+  return std::any_of(books.begin(), books.end(), [&](const RecentBook& book) { return book.path == path; });
 }
 
 bool isActiveFontFamily(const std::string& family) {
@@ -347,6 +355,7 @@ void removeItem(const SerialCommand& cmd) {
   }
 
   const std::string path(cmd.path);
+  const bool recent = isRecentBook(path);
   RenderLock lock;
   HalFile item = Storage.open(path.c_str());
   if (!item) return replyErr(cmd, "no such file");
@@ -361,7 +370,65 @@ void removeItem(const SerialCommand& cmd) {
     removed = check.kind == PathKind::FontFile ? Storage.remove(path.c_str()) : removeBookFile(path);
   }
   if (check.kind == PathKind::FontFile) sdFontSystem.markRegistryDirty();
-  return removed ? replyOk(cmd) : replyErr(cmd, "could not remove it");
+  if (!removed) return replyErr(cmd, "could not remove it");
+  if (recent) activityManager.goHome();
+  replyOk(cmd);
+}
+
+// Moves or renames one file with its reading state, as the file browser's rename
+// does. Folders move file by file (device_control.py mv), so every book in one
+// keeps its state too: that state is filed under the book's path.
+void moveItem(const SerialCommand& cmd) {
+  if (const char* why = writeRefusal()) return replyErr(cmd, why);
+  const serialxfer::PathCheck from = serialxfer::checkPath(cmd.path, Access::Write);
+  if (from.kind == PathKind::Invalid) return replyErr(cmd, from.error);
+  if (from.kind != PathKind::File) return replyErr(cmd, "fonts are not moved; install-font and RM manage them");
+  const std::string source(cmd.path);
+  {
+    HalFile item = Storage.open(source.c_str());
+    if (!item) return replyErr(cmd, "no such file");
+    if (item.isDirectory()) return replyErr(cmd, "moves files only");
+  }
+
+  // Into a folder that exists, keeping the name; otherwise to that path.
+  std::string target(cmd.destination);
+  if (target == "/" || isDirectory(target)) {
+    target = (target == "/" ? "" : target) + source.substr(source.rfind('/'));
+  } else if (!isDirectory(target.substr(0, std::max<size_t>(target.rfind('/'), 1)))) {
+    return replyErr(cmd, "no such folder");
+  }
+  const serialxfer::PathCheck to = serialxfer::checkPath(target, Access::Write);
+  if (to.kind == PathKind::Invalid) return replyErr(cmd, to.error);
+  if (to.kind != PathKind::File) return replyErr(cmd, "fonts are not moved; install-font and RM manage them");
+  if (target == source) return replyOk(cmd, target.c_str());
+  if (!serialxfer::sameExtension(source, target)) return replyErr(cmd, "keep the file extension");
+  // FAT ignores case, so a new spelling of the same name is found as the file itself.
+  const bool caseOnly = strcasecmp(source.c_str(), target.c_str()) == 0;
+  if (!caseOnly && Storage.exists(target.c_str())) return replyErr(cmd, "already exists");
+
+  const bool recent = isRecentBook(source);
+  bool moved;
+  {
+    RenderLock lock;
+    if (caseOnly) {
+      // Through a name of another spelling; the extension stays, so the state moves along.
+      size_t dot = source.rfind('.');
+      if (dot == std::string::npos || dot <= source.rfind('/') + 1) dot = source.size();
+      const std::string temp = source.substr(0, dot) + ".mv-tmp" + source.substr(dot);
+      moved = !Storage.exists(temp.c_str()) && moveBookFile(source, temp);
+      if (moved && !moveBookFile(temp, target)) {
+        if (!moveBookFile(temp, source)) LOG_ERR("CON", "MV left %s at %s", source.c_str(), temp.c_str());
+        moved = false;
+      }
+    } else {
+      moved = moveBookFile(source, target);
+    }
+  }
+  if (!moved) return replyErr(cmd, "could not move it");
+  if (library::isLibraryBookFile(source) || library::isLibraryBookFile(target)) library::markLibraryIndexDirty();
+  if (recent) activityManager.goHome();
+  LOG_INF("CON", "Moved %s to %s", source.c_str(), target.c_str());
+  replyOk(cmd, target.c_str());
 }
 
 }  // namespace
@@ -378,6 +445,8 @@ void runSerialFileCommand(const SerialCommand& cmd) {
       return makeFolder(cmd);
     case SerialCommand::Type::Remove:
       return removeItem(cmd);
+    case SerialCommand::Type::Move:
+      return moveItem(cmd);
     default:
       return;
   }

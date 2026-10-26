@@ -79,13 +79,19 @@ python3 scripts/device_control.py push "Some Folder" /Books     # a whole folder
 python3 scripts/device_control.py install-font NotoSerif/       # a folder of one family's .cpfont files
 python3 scripts/device_control.py ls /Books
 python3 scripts/device_control.py pull "/Books/Some Book.epub" copy.epub
+python3 scripts/device_control.py mv "/Books/Some Book.epub" /Books/Read   # into a folder
+python3 scripts/device_control.py mv "/Books/Old Name" "/Books/New Name"      # rename a file or folder
 python3 scripts/device_control.py rm "/Books/Some Book.epub"
 ```
 
-- `push`, `install-font`, `mkdir` and `rm` need the reader on Home, where no
-  screen holds a book or font file open. On a development build, `push` and
-  `install-font` take `--home` to go there first. `ls` and `pull` work on any
-  screen.
+- `push`, `install-font`, `mkdir`, `mv` and `rm` need the reader on Home, where no
+  screen holds a book or font file open. On a development build, `push`,
+  `install-font` and `mv` take `--home` to go there first. `ls` and `pull` work on
+  any screen.
+- `mv` moves a book with its reading progress, bookmarks and clippings, as the
+  file browser's rename does, and keeps the recent-books list pointing at it. A
+  folder moves file by file, so every book in it keeps its state too. A move keeps
+  the file extension and never replaces a file; fonts are not moved.
 - A file is written to `<name>.part` and renamed only once every byte has
   arrived and its CRC matches, so an interrupted copy never leaves a truncated
   book or font. A push stops at the first file that already exists unless

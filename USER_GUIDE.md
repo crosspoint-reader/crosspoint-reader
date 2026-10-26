@@ -161,7 +161,7 @@ A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined
 > Advanced users can also manage files programmatically or via the command line using `curl`. See the [web server docs](./docs/webserver.md) for details.
 
 > [!TIP]
-> Without Wi-Fi, a computer can copy books and fonts over the USB cable while the reader is on the Home screen, using `scripts/device_control.py` from this repository (Python 3 with `pyserial`). See [Copy files over the cable](./docs/contributing/testing-debugging.md#copy-files-over-the-cable).
+> Without Wi-Fi, a computer can copy books and fonts, and move or rename books, over the USB cable while the reader is on the Home screen, using `scripts/device_control.py` from this repository (Python 3 with `pyserial`). See [Copy files over the cable](./docs/contributing/testing-debugging.md#copy-files-over-the-cable).
 
 > [!TIP]
 > If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
