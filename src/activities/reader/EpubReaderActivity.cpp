@@ -3400,8 +3400,15 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
       if (pct < 0) pct = 0;
       if (pct > 100) pct = 100;
       info.progressPercent = pct;
+      // 100 only on the last page: rounding must not report a long book finished early.
+      const bool lastPage = currentSpineIndex == epub->getSpineItemsCount() - 1 && !section->isBuilding() &&
+                            !section->isPartial() && section->currentPage + 1 >= info.totalPages;
+      const float chapterEnd = static_cast<float>(section->currentPage + 1) / static_cast<float>(info.totalPages);
+      const int endPct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterEnd) * 100.0f);
+      info.endProgressPercent = lastPage ? 100 : std::clamp(endPct, 0, 99);
     }
   }
+  if (isAtEndOfBook()) info.endProgressPercent = 100;
   return info;
 }
 
