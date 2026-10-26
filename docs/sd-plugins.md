@@ -187,6 +187,7 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.version_tracking` | Catalog item versions are compared with installed plugin manifests to show Installed or Update status. | Any catalog can expose install/update state using the generic installed-plugin version contract. Plugin Hub currently uses it to identify available updates. |
 | `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
 | `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
+| `catalog.list_index_mapping` | `browse.lists_url` can be fetched with `lists_headers` and read with `lists_items`/`lists_fields`, and lists can carry an `id` that fills `{list_id}`. | A catalog can build its lists from a service's own folder or tag API, with the token in a header, without a separate server to reshape the answer. |
 
 Capability names describe firmware behavior available to the entire plugin system.
 They must not encode Plugin Hub policy or ownership, and another plugin may use the
@@ -211,6 +212,7 @@ download filename/username/password; and sidecar path/body.
 | `{plugin_api}` | numeric plugin API level | template fields |
 | `{plugin_capabilities}` | comma-separated advertised capability names | template fields |
 | `{page}` | current 1-based page | browse |
+| `{list_id}` | `id` of the open list as received (not encoded), empty outside a list; firmware with it advertises `catalog.list_index_mapping` | browse, and download and sidecar while a list is open |
 | `{limit}` | `page_size + 1` (the extra row detects "more pages") | browse |
 | `{id}` `{title}` `{author}` `{url}` | fields of the selected item | download, sidecar |
 | `{md5}` | MD5 hex of the destination file path | sidecar |
@@ -288,6 +290,14 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
           "cancel": "Go Back"                  // defaults to translated Cancel
         } }
     ],                                      // omitted keys fall back to browse's
+                                            // an "id" fills {list_id}, so lists can
+                                            // share browse.url ("...?folder={list_id}")
+
+    "lists_url": "https://.../folders",     // optional: lists fetched when the
+                                            // catalog opens (json only)
+    "lists_headers": { "Authorization": "Bearer {token}" },  // sent only to lists_url
+    "lists_items": "folders",               // dotted path to the array; default "lists"
+    "lists_fields": { "title": "title", "id": "folder_id" },  // defaults: title, url, id
 
     // --- xml format (ignore the json fields above; fields become selectors) ---
     "item": "response",                     // local-name of the repeating element
@@ -372,6 +382,19 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   defaults to the list title, and omitted button labels use the firmware's
   translated Cancel/Confirm defaults. Back from the book list returns to the
   picker.
+- **Dynamic lists** (json): `lists_url` is fetched with a GET when the catalog
+  opens, used only when `lists` is empty. The request carries `lists_headers`
+  and no other headers, so a token reaches the lists server only when the
+  manifest says so. A 401/403 answer is handled as for browsing: a
+  `password` sign-in mints a new token and retries once, otherwise the
+  sign-in screen is shown. The answer is read from the array at `lists_items`;
+  each entry's title, url, and id come from the dotted paths in
+  `lists_fields`, plus the optional `body` string and `notice` object, read by
+  the same names as in `lists`. An entry needs a title and a url or an id; an
+  entry with only an id browses `browse.url` with `{list_id}`. At most 64
+  lists are shown, and an answer larger than 16KB fails to load.
+  `lists_headers`, `lists_items`, `lists_fields`, and `{list_id}` need the
+  `catalog.list_index_mapping` capability.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
