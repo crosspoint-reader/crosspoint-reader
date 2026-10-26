@@ -40,6 +40,9 @@ using serialxfer::PathKind;
 constexpr uint32_t FRAME_GAP_MS = 100;
 // No frame for this long: the host has gone, so the transfer is dropped.
 constexpr uint32_t HOST_TIMEOUT_MS = 5000;
+// isPlugged() reads a SOF watchdog that drops out for a moment on a healthy link
+// (HWCDC.cpp says so), so GET waits this long before taking the cable as gone.
+constexpr uint32_t CABLE_GONE_MS = 500;
 // LFN names reach 255 UTF-16 units; the web file list reads them into 500 bytes too.
 constexpr size_t NAME_BUFFER_SIZE = 500;
 
@@ -275,13 +278,29 @@ void getFile(const SerialCommand& cmd) {
   replyOk(cmd, detail);
 
   uint8_t* const payload = frame.get() + serialxfer::FRAME_HEADER_SIZE;
+  uint32_t cableLostAt = 0;
+  bool cableLost = false;
   for (uint32_t offset = cmd.offset; offset < size;) {
     resetTaskWatchdogIfSubscribed();
-    // A host that gives up sends its next command; a pulled cable makes HWCDC drop data unsent.
-    if (logSerial.available() > 0 || !HalSerialBulkRead::cablePresent()) {
+    // A host that gives up sends its next command.
+    if (logSerial.available() > 0) {
       sendLine("GET_ABORT stopped\n");
       return;
     }
+    // While the cable reads as gone, HWCDC drops what is written, so hold the next
+    // frame back; end the transfer only once it stays gone.
+    if (!HalSerialBulkRead::cablePresent()) {
+      if (!cableLost) {
+        cableLost = true;
+        cableLostAt = millis();
+      } else if (millis() - cableLostAt >= CABLE_GONE_MS) {
+        sendLine("GET_ABORT cable gone\n");
+        return;
+      }
+      delay(1);
+      continue;
+    }
+    cableLost = false;
     const auto length = static_cast<uint16_t>(std::min<uint32_t>(serialxfer::CHUNK_SIZE, size - offset));
     if (file.read(payload, length) != length) {
       sendLine("GET_ABORT read failed\n");

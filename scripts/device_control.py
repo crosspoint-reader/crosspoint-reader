@@ -67,6 +67,9 @@ FRAME_GAP = 0.1  # the reader's FRAME_GAP_MS: a pause this long inside a frame d
 # Matches the reader's HOST_TIMEOUT_MS: no answer for this long means it has gone.
 ACK_TIMEOUT = 5.0
 MAX_NAKS_IN_A_ROW = 10
+# A GET is resumed from the last good frame as often as it makes progress; this many
+# attempts in a row without a new byte mean it will not finish.
+MAX_GET_STALLS = 4
 # A removal or rename on the reader waits for any cover thumbnail Home is building.
 CHANGE_TIMEOUT = 60.0
 # MV sends both paths on one console line (MAX_LINE_LENGTH in src/util/SerialTransfer.h).
@@ -354,7 +357,9 @@ class Device:
         """Fetch a file; a damaged or stalled stream is resumed from the last good frame."""
         data = bytearray()
         size = None
-        for _attempt in range(4):
+        stalls = 0
+        while stalls < MAX_GET_STALLS:
+            before = len(data)
             try:
                 # Any input, this GET included, stops a stream the reader is still sending.
                 size = int(self.command(f"GET {len(data)} {remote}", timeout=10.0))
@@ -369,6 +374,7 @@ class Device:
             except DeviceRefused:
                 raise
             except DeviceError as error:
+                stalls = 0 if len(data) > before else stalls + 1
                 self.resent += 1
                 self._record(f"\n[device_control: GET resumes at {len(data)}: {error}]\n".encode())
                 self.capture(0.5)  # let the rest of the broken stream drain
@@ -380,8 +386,9 @@ class Device:
         while True:
             start = self.pending.find(FRAME_MAGIC)
             if start < 0:
-                if b"GET_ABORT" in self.pending:
-                    raise DeviceError("the reader stopped sending")
+                abort = re.search(rb"GET_ABORT ([^\r\n]*)\r?\n", self.pending)
+                if abort:
+                    raise DeviceError(f"the reader stopped sending ({abort.group(1).decode(errors='replace')})")
                 self.pending = self.pending[-1:]
             elif len(self.pending) >= start + FRAME.size:
                 _magic, offset, length, crc = FRAME.unpack_from(self.pending, start)
