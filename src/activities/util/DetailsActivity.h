@@ -55,6 +55,9 @@ class DetailsActivity final : public Activity, private UiAppHost {
   void openMore();
 
   DetailsSpec spec;
+  // Kept off the render task stack: a CJK title's SD-font glyph load runs on
+  // top of publicationPage(). buildScreen() refills it.
+  freeink::ui::PublicationPageProps pageProps{};
   // Description area the layout reserved, recorded by paintDescription.
   freeink::ui::Rect coverRect{};  // recorded by paintCover; decoded in render()
   freeink::ui::Rect descriptionRect{};
