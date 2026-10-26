@@ -99,7 +99,20 @@
       const r = await fetch(url, { method: 'POST', body: form });
       return this._readResponse(r, '/api/plugin-fs');
     },
-    async fetchToSd(plugin, url, dest, headers) {
+    async fetchToSd(plugin, url, dest, headers, options) {
+      const method = ((options && options.method) || 'GET').toUpperCase();
+      const body = (options && options.body) || '';
+      // The device sends a request with a method or body once, without segments.
+      // A failure throws, as on the GET path, with the device's result attached.
+      if (method !== 'GET' || body) {
+        const result = await this._post('/api/fetch', { plugin, url, dest, headers: headers || {}, method, body });
+        if (result.complete === false) {
+          const err = new Error('/api/fetch: ' + (result.error || 'failed') + ' (HTTP ' + result.status + ')');
+          err.result = result;
+          throw err;
+        }
+        return result;
+      }
       // Keep each browser-facing request short. Mobile browsers may terminate
       // a request after a few minutes even when response heartbeats are flowing,
       // while the device itself is still downloading successfully.
@@ -146,7 +159,7 @@
             relay: (m, u, h, b) => CrossPoint.relay(p.name, m, u, h, b),
             crypto: (op, f) => CrossPoint.crypto(op, f),
             writeFile: (path, d) => CrossPoint.writeFile(p.name, path, d),
-            fetchToSd: (u, dest, h) => CrossPoint.fetchToSd(p.name, u, dest, h),
+            fetchToSd: (u, dest, h, o) => CrossPoint.fetchToSd(p.name, u, dest, h, o),
             registerAction: (a, fn) => CrossPoint.registerAction(p.name, a, fn),
             pluginFile: (f) => '/plugin?name=' + encodeURIComponent(p.name) + '&file=' + encodeURIComponent(f)
           });

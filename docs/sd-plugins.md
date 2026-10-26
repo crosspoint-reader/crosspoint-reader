@@ -496,7 +496,7 @@ browser-side.
 | Need | Use |
 |---|---|
 | Outbound HTTP(S), any method (CORS-free) | `api.relay(method, url, headers, body)` |
-| Download a URL straight to SD | `api.fetchToSd(url, dest, headers)` |
+| Download a URL straight to SD | `api.fetchToSd(url, dest, headers, {method, body})` (options optional; with a method or body the request is sent once, and on failure the thrown error carries the `/api/fetch` result, including the start of the server's answer in `err.result.body`) |
 | Write a small file to SD | `api.writeFile(path, base64)` |
 | The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
