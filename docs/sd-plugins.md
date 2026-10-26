@@ -377,6 +377,11 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
   origin. A `config.file` lets values like a server URL and credentials be
   user-entered (via a browser `plugin.js`) rather than baked into the manifest.
+- **Failed download**: when the server answered with an error, the error
+  screen adds the HTTP status, for example "Download failed (HTTP 404)". When
+  `url_path` is set and the download request fails with a JSON body, its
+  `error` or `message` string follows the status (cut to 120 bytes), so a
+  service can explain the failure. The body of a failed file GET is not read.
 - **After download**: the book's layout cache is invalidated and the optional
   sidecar is written. Use the `{dest}.meta.json` convention so the fields ride
   KOSync progress uploads and event handlers (see `plugin-events.md`).

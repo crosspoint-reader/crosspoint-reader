@@ -141,6 +141,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   bool showOpds = false;
   bool rootMode = false;
   std::string pickerReturnName;  // plugin identity to reselect after leaving a catalog
+  std::string downloadFailure;   // shown after "Download failed", e.g. "HTTP 404"
   std::vector<Item> items;
   // Row buffer over items/browseLists plus the synthetic pager rows; rebuilt
   // lazily on the render task whenever rowsDirty (items or state changed).
@@ -226,6 +227,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   void downloadItem(int itemIndex);
   HttpDownloader::DownloadError downloadBundle(const Item& item);
   HttpDownloader::DownloadError downloadBook(const Item& item);
+  void noteFileFailure();
   void beginAuth();
   void pollAuth();
   bool refreshCredentialToken();  // password grant: mint a token from config creds
