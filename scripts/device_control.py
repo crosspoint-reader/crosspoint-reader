@@ -70,6 +70,7 @@ MAX_NAKS_IN_A_ROW = 10
 # A GET is resumed from the last good frame as often as it makes progress; this many
 # attempts in a row without a new byte mean it will not finish.
 MAX_GET_STALLS = 4
+ABORT_LINE_MAX = 128  # "GET_ABORT <reason>"; longer is not one
 # A removal or rename on the reader waits for any cover thumbnail Home is building.
 CHANGE_TIMEOUT = 60.0
 # MV sends both paths on one console line (MAX_LINE_LENGTH in src/util/SerialTransfer.h).
@@ -389,7 +390,14 @@ class Device:
                 abort = re.search(rb"GET_ABORT ([^\r\n]*)\r?\n", self.pending)
                 if abort:
                     raise DeviceError(f"the reader stopped sending ({abort.group(1).decode(errors='replace')})")
-                self.pending = self.pending[-1:]
+                # Log text between frames is dropped, but an abort line that has not
+                # ended yet is kept for its reason, and so is a tail that may start
+                # one or a frame.
+                at = self.pending.rfind(b"GET_ABORT")
+                if 0 <= at and len(self.pending) - at <= ABORT_LINE_MAX:
+                    self.pending = self.pending[at:]
+                else:
+                    self.pending = self.pending[-(len(b"GET_ABORT") - 1) :]
             elif len(self.pending) >= start + FRAME.size:
                 _magic, offset, length, crc = FRAME.unpack_from(self.pending, start)
                 end = start + FRAME.size + length
