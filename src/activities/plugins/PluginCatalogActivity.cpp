@@ -284,6 +284,7 @@ bool PluginCatalogActivity::loadManifest() {
     entry.noticeCancel = notice["cancel"] | "";
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
+  manifest.fixedListCount = manifest.browseLists.size();
   manifest.searchUrl = browse["search"]["url"] | "";
   manifest.searchBody = browse["search"]["body"] | "";
   manifest.xmlItem = browse["item"] | "";
@@ -352,8 +353,8 @@ bool PluginCatalogActivity::loadBrowseListIndex() {
     return false;
   }
 
-  manifest.browseLists.clear();
-  manifest.browseLists.reserve(lists.size());
+  manifest.browseLists.resize(manifest.fixedListCount);
+  manifest.browseLists.reserve(manifest.fixedListCount + lists.size());
   for (JsonVariantConst l : lists) {
     Manifest::BrowseList entry;
     entry.title = l["title"] | "";
@@ -366,7 +367,7 @@ bool PluginCatalogActivity::loadBrowseListIndex() {
     entry.noticeCancel = notice["cancel"] | "";
     if (!entry.title.empty() && !entry.url.empty()) manifest.browseLists.push_back(std::move(entry));
   }
-  if (manifest.browseLists.empty()) {
+  if (manifest.browseLists.size() == manifest.fixedListCount) {
     LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
     return false;
   }
@@ -554,6 +555,7 @@ void PluginCatalogActivity::enterCatalog() {
   statusMessage = tr(STR_CHECKING_WIFI);
   session.reset(new (std::nothrow) freeink::SecureHttpClient());
   if (session) session->setReuse(true);
+  listIndexLoaded = false;
 
   if (!loadManifest()) {
     fail(StrId::STR_PLUGIN_MANIFEST_INVALID);
@@ -620,7 +622,8 @@ void PluginCatalogActivity::onExit() {
 }
 
 void PluginCatalogActivity::startBrowse() {
-  const bool needsListAuth = (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) || wantsListPicker();
+  const bool needsListIndex = !manifest.browseListsUrl.empty() && !listIndexLoaded;
+  const bool needsListAuth = needsListIndex || wantsListPicker();
   if (needsListAuth) {
     // Dynamic list indexes and list pickers may both use {token}/{cfg.KEY}, so
     // resolve credentials before either path. Token-less catalogs skip the gate.
@@ -635,8 +638,14 @@ void PluginCatalogActivity::startBrowse() {
       return;
     }
   }
-  if (!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) {
-    if (!loadBrowseListIndex()) {
+  if (needsListIndex) {
+    if (loadBrowseListIndex()) {
+      listIndexLoaded = true;
+    } else if (manifest.fixedListCount > 0) {
+      // The manifest's own lists still work; Back to the picker must not refetch.
+      LOG_ERR("PCAT", "showing only the fixed browse lists");
+      listIndexLoaded = true;
+    } else {
       fail(StrId::STR_FETCH_FEED_FAILED);
       return;
     }
@@ -1269,7 +1278,7 @@ bool PluginCatalogActivity::handleCustomInput() {
 void PluginCatalogActivity::retryBrowse() {
   if (state == State::NO_TOKEN && manifest.hasDeviceCode()) {
     beginAuth();
-  } else if ((!manifest.browseListsUrl.empty() && manifest.browseLists.empty()) || wantsListPicker()) {
+  } else if ((!manifest.browseListsUrl.empty() && !listIndexLoaded) || wantsListPicker()) {
     startBrowse();
   } else {
     beginLoading();

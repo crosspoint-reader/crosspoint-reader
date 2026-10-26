@@ -288,6 +288,7 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
           "cancel": "Go Back"                  // defaults to translated Cancel
         } }
     ],                                      // omitted keys fall back to browse's
+    "lists_url": "https://.../lists.json",  // optional: more lists, shown after "lists"
 
     // --- xml format (ignore the json fields above; fields become selectors) ---
     "item": "response",                     // local-name of the repeating element
@@ -372,6 +373,15 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   defaults to the list title, and omitted button labels use the firmware's
   translated Cancel/Confirm defaults. Back from the book list returns to the
   picker.
+- **Dynamic lists** (json): `browse.lists_url` is fetched with a GET once per
+  catalog visit and must answer `{"lists":[{"title":"...","url":"..."}]}`.
+  Each entry needs `title` and `url`; `body` and `notice` work as in `lists`.
+  Entries without both are skipped, and an answer with no usable entries, or
+  one larger than 16KB, counts as a failed fetch. The fetched lists follow any
+  `lists` from the manifest. If the fetch fails, the manifest's own lists are
+  still shown and the fetch is not retried until the catalog is opened again;
+  without them the catalog shows an error, and Retry fetches again. Firmware
+  before this change ignores `lists_url` when `lists` is also set.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
