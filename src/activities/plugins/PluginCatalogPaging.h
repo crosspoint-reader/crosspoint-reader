@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -18,10 +19,9 @@ template <typename Headers>
 inline Paging pagingOf(const std::string_view url, const std::string_view body, const Headers& headers) {
   const auto uses = [&](const std::string_view key) {
     if (url.find(key) != std::string_view::npos || body.find(key) != std::string_view::npos) return true;
-    for (const auto& header : headers) {
-      if (std::string_view(header.second).find(key) != std::string_view::npos) return true;
-    }
-    return false;
+    return std::any_of(headers.begin(), headers.end(), [&](const auto& header) {
+      return std::string_view(header.second).find(key) != std::string_view::npos;
+    });
   };
   if (uses("{offset}")) return Paging::Offset;
   if (!uses("{page}")) return Paging::Static;
