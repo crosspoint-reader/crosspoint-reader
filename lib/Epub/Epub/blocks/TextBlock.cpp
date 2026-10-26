@@ -232,15 +232,16 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
         while (i + groupWordCount < numWords && (wordStyle(i + groupWordCount) & EpdFontFamily::RUBY_CONTINUE) != 0) {
           groupWordCount++;
         }
-        int groupActualWidth = 0;
-        for (int k = 0; k < groupWordCount; ++k) {
-          groupActualWidth += renderer.getTextAdvanceX(fontId, wordText(i + k), wordStyle(i + k), tracking);
-        }
         // Whole-string width: the same measure layout uses to decide whether the ruby overhangs.
         const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, tracking);
         const int leaderWordX = xposArr[i] + x;
         const auto baseDir =
             static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(wordText(i), blockStyle.isRtl ? 1 : 0));
+
+        const int lastWordIdx = i + groupWordCount - 1;
+        const int lastWordWidth =
+            renderer.getTextAdvanceX(fontId, wordText(lastWordIdx), wordStyle(lastWordIdx), tracking);
+        const int groupActualWidth = (xposArr[lastWordIdx] + lastWordWidth) - xposArr[i];
 
         RubyDrawInfo& info = rubies[i];
         info.text = rubyTexts[i];
