@@ -3,6 +3,8 @@
 #include <array>
 #include <utility>
 
+#include "util/NightSchedule.h"
+
 void forEachBaseSetting(SettingVisitor visit, void* context) {
   // Load and save walk this list, so every condition here must be fixed before
   // settings load. Runtime probes belong in isHiddenOnDevice().
@@ -62,6 +64,13 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   // applies it to every activity), so it lives in the Display category.
   emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
                            StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE_SCHEDULE, &CrossPointSettings::nightScheduleEnabled,
+                           "nightScheduleEnabled", StrId::STR_CAT_DISPLAY));
+  // Persisted as slot numbers; getSettingsList() swaps in clock-time labels.
+  emit(SettingInfo::Value(StrId::STR_NIGHT_MODE_ON_AT, &CrossPointSettings::nightScheduleOnSlot,
+                          {0, nightschedule::SLOT_COUNT - 1, 1}, "nightScheduleOnSlot", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Value(StrId::STR_NIGHT_MODE_OFF_AT, &CrossPointSettings::nightScheduleOffSlot,
+                          {0, nightschedule::SLOT_COUNT - 1, 1}, "nightScheduleOffSlot", StrId::STR_CAT_DISPLAY));
 
   // --- Reader ---
   // Built-in font-family entry. Replaced per-call with a registry-aware

@@ -47,6 +47,7 @@
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
+#include "util/NightSchedule.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SlideSwitch.h"
@@ -250,6 +251,27 @@ void handleSlideSwitch() {
   SETTINGS.saveToFile();
   activityManager.requestUpdate();
   LOG_INF("SWITCH", "Slide switch %s", on ? "on" : "off");
+}
+
+// Sets night mode when a schedule boundary has passed since the last one
+// applied, so a manual change holds until the next boundary. The slide switch,
+// when it controls night mode, always wins, so the schedule stands aside.
+// Returns true when night mode changed.
+bool applyNightSchedule() {
+  if (!SETTINGS.nightScheduleEnabled) return false;
+  if (gpio.hasToggleSwitch() && SETTINGS.slideSwitchAction == CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE) return false;
+  const int64_t now = trustedtime::trustedNow();
+  if (now == 0) return false;
+  const auto boundary = nightschedule::latestBoundary(now, SETTINGS.nightScheduleOnSlot, SETTINGS.nightScheduleOffSlot);
+  if (boundary.at == 0 || boundary.at == APP_STATE.nightScheduleBoundary) return false;
+
+  APP_STATE.nightScheduleBoundary = boundary.at;
+  APP_STATE.saveToFile();
+  LOG_INF("NIGHT", "Schedule boundary: night mode %s", boundary.nightOn ? "on" : "off");
+  if ((SETTINGS.screenInverted != 0) == boundary.nightOn) return false;
+  SETTINGS.screenInverted = boundary.nightOn ? 1 : 0;
+  SETTINGS.saveToFile();
+  return true;
 }
 
 bool handleX4ProFrontlightDoubleClick() {
@@ -688,6 +710,9 @@ void setup() {
   // Restore the monotonic clock floor before anything reads time() (event
   // timestamps, loan-expiry checks).
   trustedtime::init();
+  // Before the first screen is chosen, so a wake never draws a frame in the
+  // wrong polarity: deep-sleep wake is a full boot.
+  applyNightSchedule();
   bleturner::begin(pageturner::host, SETTINGS.ble);
 
   // Brightness and warmth are always restored. A normal wake starts with the
@@ -887,6 +912,14 @@ void loop() {
 
   // After the exclusive-storage return: it saves settings to the SD card.
   handleSlideSwitch();
+  {
+    // A minute is fine-grained enough for half-hour slots.
+    static unsigned long lastNightScheduleCheck = 0;
+    if (millis() - lastNightScheduleCheck >= 60000) {
+      lastNightScheduleCheck = millis();
+      if (applyNightSchedule()) activityManager.requestUpdate();
+    }
+  }
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   // Under the render lock, so a step never overlaps the themes' gauge reads.

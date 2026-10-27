@@ -25,6 +25,7 @@
 #include "KeyboardLayoutsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
+#include "NightTimePickerActivity.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
@@ -224,6 +225,17 @@ void SettingsActivity::toggleSelectedSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+
+  if (setting.nameId == StrId::STR_NIGHT_MODE_ON_AT || setting.nameId == StrId::STR_NIGHT_MODE_OFF_AT) {
+    const auto field = setting.nameId == StrId::STR_NIGHT_MODE_ON_AT ? &CrossPointSettings::nightScheduleOnSlot
+                                                                     : &CrossPointSettings::nightScheduleOffSlot;
+    if (auto activity = makeUniqueNoThrow<NightTimePickerActivity>(renderer, mappedInput, setting.nameId, field)) {
+      startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+    } else {
+      LOG_ERR("SETTINGS", "OOM: NightTimePickerActivity");
+    }
     return;
   }
 
