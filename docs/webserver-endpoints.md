@@ -557,7 +557,11 @@ Installed plugins that ship a `plugin.js`:
 
 Serves one file from the plugin's folder (first root holding that name). Both
 parameters must be single path components (no `/`, `\`, or `..`); 404 when
-the plugin, file, or a directory is requested.
+the plugin, file, or a directory is requested; 500 when the file cannot be read.
+
+Successful responses carry an `ETag` (MD5 of the file contents) and
+`Cache-Control: no-cache`, so a browser keeps the file and checks it again on
+each load. A request whose `If-None-Match` matches gets `304` with no body.
 
 ### `POST /api/relay`
 

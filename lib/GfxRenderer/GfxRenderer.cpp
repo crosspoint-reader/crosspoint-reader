@@ -2306,7 +2306,12 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
-  return static_cast<int>(getLineHeight(fontId) * compression + 0.5f);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return 0;
+  }
+  return static_cast<int>(fontIt->second.getSizeInPixels() * compression + 0.5f);
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {

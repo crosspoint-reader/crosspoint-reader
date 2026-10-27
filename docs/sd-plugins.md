@@ -211,7 +211,8 @@ download filename/username/password; and sidecar path/body.
 | `{plugin_api}` | numeric plugin API level | template fields |
 | `{plugin_capabilities}` | comma-separated advertised capability names | template fields |
 | `{page}` | current 1-based page | browse |
-| `{limit}` | `page_size + 1` (the extra row detects "more pages") | browse |
+| `{offset}` | rows before the current page: `(page - 1) * page_size` | browse |
+| `{limit}` | `page_size` when the request uses `{page}` and not `{offset}`; otherwise `page_size + 1` (the extra row shows that another page exists) | browse |
 | `{id}` `{title}` `{author}` `{url}` | fields of the selected item | download, sidecar |
 | `{md5}` | MD5 hex of the destination file path | sidecar |
 | `{dest}` | sanitized on-SD path of the downloaded file | sidecar |
@@ -358,11 +359,23 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   plugin.
 - **Stale tokens**: a 401/403 from browse returns to the sign-in screen rather
   than an error.
-- **Pagination** (json): the browse request should return up to `{limit}`
-  items; the firmware displays `page_size` and uses the extra row to know
-  another page exists. Navigation matches the OPDS browser: a "Previous
-  page" row precedes the items past page 1 and a "Next page" row follows
-  them while more pages exist — tappable and button-reachable like any row.
+- **Pagination** (json): the variables a request uses choose how it pages
+  (`{offset}` takes precedence over `{page}`).
+  - `{page}` with `{limit}` (`?page={page}&per_page={limit}`): `{limit}` is
+    `page_size`, so pages line up with the server's. A full page shows
+    "Next page"; when the last page is exactly full, the next one is empty.
+  - `{offset}` (`?offset={offset}&limit={limit}`): `{limit}` is
+    `page_size + 1`, and the extra row shows that another page exists.
+  - `{page}` without `{limit}` (one file per page, for example
+    `all-{page}.json`): "Next page" appears when the response has more than
+    `page_size` rows, so add one extra row at the end of every file except the
+    last (for example, a copy of the next file's first row).
+  - Neither `{page}` nor `{offset}`: the response is one static list, and the
+    firmware pages through it locally.
+
+  Navigation matches the OPDS browser: a "Previous page" row precedes the
+  items past page 1 and a "Next page" row follows them while more pages
+  exist — tappable and button-reachable like any row.
 - **Lists** (json): with `browse.lists`, opening the catalog shows a picker
   of the named entries first (a single list skips the picker and opens
   directly, after its notice; Back then leaves the catalog); each entry browses with its own url/body

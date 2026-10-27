@@ -272,7 +272,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Reader Font Size**: Choose a point size. Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
 
-- **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
+- **Reader Line Spacing**: Space added between lines, as a percentage of font size: 0%, +10%, +20% (default), +30%, +45%, +60%, or +75%.
 
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
 
@@ -298,7 +298,11 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
 
-- **Images**: Whether to display embedded images (JPG/PNG/GIF) found in EPUB files; options are "ON" (default) or "OFF". GIFs render only the first frame; interlaced GIFs are not supported.
+- **Images**: How embedded images (JPG/PNG/GIF) in EPUB files are shown. GIFs render only the first frame; interlaced GIFs are not supported.
+  - **Display** (default): images in gray levels. Pages with images take an extra grayscale refresh.
+  - **Placeholder**: the image's alt text in place of the image.
+  - **Suppress**: images are left out.
+  - **Black & White**: images drawn as a black-and-white dot pattern. Pages with images turn like text pages, without the extra refresh.
 
 - **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
 
