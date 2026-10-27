@@ -5,6 +5,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <HiddenItems.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <Utf8.h>
@@ -186,11 +187,13 @@ void clearLibraryIndexDirty() {
   }
 }
 
-// macOS AppleDouble sidecars and hidden entries. The file browser already hides
-// these (FileBrowserActivity isMacOSMetadataEntry); the shelf must agree, or a
-// card written on a Mac shows every book twice. isLibraryBookFile() applies the
-// same rule to whole paths.
-bool isHiddenOrSidecar(const char* name) { return name[0] == '.'; }
+bool isHiddenOrSidecar(const std::string_view name) {
+  if (!name.empty() && name.front() == '.') return true;
+  for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
+    if (name == item) return true;
+  }
+  return false;
+}
 
 std::string stemOf(const std::string& name) {
   const size_t dot = name.find_last_of('.');
@@ -1055,13 +1058,12 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 const char* libraryIndexPath() { return INDEX_PATH; }
 
 bool isLibraryBookFile(const std::string_view path) {
-  // The walk skips hidden (dot-prefixed) names, so it never lists a file inside
-  // a hidden folder. A lone "." names the folder itself.
+  // Match the walk's exclusions in every path component. A lone "." names the folder itself.
   size_t start = 0;
   while (start < path.size()) {
     const size_t slash = path.find('/', start);
     const std::string_view name = path.substr(start, slash - start);
-    if (name.size() > 1 && name.front() == '.') return false;
+    if (name != "." && isHiddenOrSidecar(name)) return false;
     if (slash == std::string_view::npos) break;
     start = slash + 1;
   }

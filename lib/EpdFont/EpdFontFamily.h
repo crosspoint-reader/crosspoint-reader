@@ -21,10 +21,16 @@ class EpdFontFamily {
   };
   static constexpr uint8_t TEXT_DECORATION_MASK = static_cast<uint8_t>(UNDERLINE | STRIKETHROUGH);
 
-  explicit EpdFontFamily(const EpdFont* regular, const EpdFont* bold = nullptr, const EpdFont* italic = nullptr,
-                         const EpdFont* boldItalic = nullptr)
-      : regular(regular), bold(bold), italic(italic), boldItalic(boldItalic) {}
+  // pointSize becomes pixels at FONT_RASTER_DPI.
+  explicit EpdFontFamily(uint16_t pointSize, const EpdFont* regular, const EpdFont* bold = nullptr,
+                         const EpdFont* italic = nullptr, const EpdFont* boldItalic = nullptr)
+      : regular(regular),
+        bold(bold),
+        italic(italic),
+        boldItalic(boldItalic),
+        sizeInPixels(pointSize * FONT_RASTER_DPI / 72.0f) {}
   ~EpdFontFamily() = default;
+  float getSizeInPixels() const { return sizeInPixels; }
   void getTextDimensions(const char* string, int* w, int* h, Style style = REGULAR) const;
   const EpdFontData* getData(Style style = REGULAR) const;
   const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
@@ -45,6 +51,7 @@ class EpdFontFamily {
   const EpdFont* bold;
   const EpdFont* italic;
   const EpdFont* boldItalic;
+  float sizeInPixels;
 
   const EpdFont* getFont(Style style) const;
 };

@@ -45,6 +45,7 @@
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
 #include "ReaderFontSizes.h"
+#include "ReaderLineSpacing.h"
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -71,7 +72,6 @@ bool xteinkClassPanel() {
 }
 
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
-constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
 constexpr int CLIP_SELECTION_PAGE_WINDOW = 3;
 
@@ -209,8 +209,8 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
   }
 }
 
-// A button contact is closed right now. Reads the Xteink ADC ladder and power pin only; on other
-// boards a press stops the build once the loop has debounced it.
+// A button contact is closed right now. Reads the Xteink ADC ladder, power pin, and T5S3 expander
+// key only; on other boards a press stops the build once the loop has debounced it.
 bool buttonContactClosed() { return gpio.rawInputActive(); }
 
 }  // namespace
@@ -2083,7 +2083,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
-  const bool pageHasImages = page->hasImages();
+  // Black & White images: the page turns as plain B/W, images dither in the
+  // B/W pass and text keeps its usual anti-aliasing.
+  const bool imageGrayscale = SETTINGS.imageRendering != CrossPointSettings::IMAGES_DISPLAY_BW;
+  struct DitherScope {
+    GfxRenderer& renderer;
+    ~DitherScope() { renderer.setDitherImagesInBw(false); }
+  } ditherScope{renderer};
+  renderer.setDitherImagesInBw(!imageGrayscale);
+  const bool pageHasImages = imageGrayscale && page->hasImages();
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
@@ -2483,11 +2491,9 @@ void EpubReaderActivity::renderStatusBar() const {
 namespace {
 constexpr StrId kTextRowNames[] = {StrId::STR_FONT, StrId::STR_FONT_SIZE, StrId::STR_LINE_SPACING,
                                    StrId::STR_PARA_ALIGNMENT, StrId::STR_FOCUS_READING};
-constexpr StrId kSpacingIds[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
 constexpr StrId kAlignIds[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                StrId::STR_BOOK_S_STYLE};
 constexpr int kTextRowCount = static_cast<int>(std::size(kTextRowNames));
-static_assert(std::size(kSpacingIds) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing labels");
 static_assert(std::size(kAlignIds) == CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, "alignment labels");
 }  // namespace
 
@@ -2519,7 +2525,7 @@ std::string EpubReaderActivity::textRowValue(int row) const {
     case 1:
       return std::to_string(SETTINGS.fontPointSize) + " pt";
     case 2:
-      return I18N.get(kSpacingIds[SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT]);
+      return I18N.get(LINE_SPACING_IDS[SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT]);
     case 3:
       return I18N.get(kAlignIds[SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT]);
     default:
@@ -2559,7 +2565,7 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
       break;
     }
     case 2:
-      overlayPopup.show(StrId::STR_LINE_SPACING, kSpacingIds, static_cast<int>(std::size(kSpacingIds)),
+      overlayPopup.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),
                         SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT, [this](int idx) {
                           SETTINGS.lineSpacing = static_cast<uint8_t>(idx);
                           applyTextSettingLive();
@@ -3336,9 +3342,6 @@ void EpubReaderActivity::restoreSavedPosition() {
 
 void EpubReaderActivity::loadCachedBookmarks() {
   cachedBookmarks.clear();
-  if (cachedBookmarks.capacity() < initialBookmarkCacheCapacity) {
-    cachedBookmarks.reserve(initialBookmarkCacheCapacity);
-  }
   if (!epub) {
     currentPageBookmarked = false;
     return;

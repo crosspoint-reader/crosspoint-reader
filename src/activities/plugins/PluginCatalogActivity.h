@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "PluginCatalogPaging.h"
 #include "activities/CatalogActivity.h"
 #include "components/OptionPopup.h"
 #include "network/HttpDownloader.h"
@@ -20,6 +21,7 @@ class SecureHttpClient;
 // Picker entry; an empty manifestPath marks an inert browser-only plugin.
 struct PluginRef {
   std::string name;          // folder name
+  std::string dir;           // exact discovered installation directory
   std::string title;         // from device.json or manifest.json (falls back to name)
   std::string description;   // one-line summary, if provided
   std::string manifestPath;  // device.json path, "" for a web-only plugin
@@ -50,7 +52,7 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::string configFile;
     // JSON uses dotted field paths; XML uses element/attribute selectors.
     std::string browseFormat;
-    // Browse request: templates may use {token}, {cfg.KEY}, {page}, {limit}.
+    // Browse request: templates may use {token}, {cfg.KEY}, {page}, {offset}, {limit}.
     pluginhttp::RequestSpec browseReq;
     std::string itemsPath;  // JSON: dotted path to the item array; "" = response root
     // JSON field paths (dotted); XML field selectors ("elem", "elem@attr", "@attr").
@@ -195,6 +197,9 @@ class PluginCatalogActivity final : public CatalogActivity {
   int listCount() const override { return rowCount(); }
   // Row dispatch: pager rows page, picker rows pick, item rows open/download.
   void activateIndex(int index) override;
+  void onRowLongPress(int index) override;
+  bool handleButtons() override;
+  void confirmUninstallPlugin(int pickerIndex);
   void render(RenderLock&& lock) override;
   void buildScreen(UiScreen& screen) override;
   bool handleCustomInput() override;
@@ -209,6 +214,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   // Browse url/body with the selected browse list's overrides applied.
   const std::string& activeBrowseUrl() const;
   const std::string& activeBrowseBody() const;
+  plugincatalogpaging::Paging browsePaging() const;
   // Copies `headers` with `substituted()` applied to each value.
   pluginhttp::Headers substitutedHeaders(const pluginhttp::Headers& headers, const Item* item) const;
   void fetchPage(int newPage);

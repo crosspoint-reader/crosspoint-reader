@@ -4,12 +4,14 @@
 #include <HalMemory.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
 
+#include "../../lib/Epub/Epub/CjkBreaks.h"
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
@@ -658,16 +660,35 @@ std::string Dictionary::cleanWord(const char* word) {
       start++;
     else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
       start += 3;
-    else
-      break;
+    else {
+      const unsigned char* p = b + start;
+      const uint32_t cp = utf8NextCodepoint(&p);
+
+      if (CjkBreaks::isNoBreakAfterCjkPunctuation(cp)) {
+        start += static_cast<size_t>(p - (b + start));
+      } else {
+        break;
+      }
+    }
   }
   while (end > start) {
     if (!isWordByte(b[end - 1]))
       end--;
     else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
       end -= 3;
-    else
-      break;
+    else {
+      size_t lastCharStart = end - 1;
+      while (lastCharStart > start && (b[lastCharStart] & 0xC0) == 0x80) {
+        lastCharStart--;
+      }
+      const unsigned char* p = b + lastCharStart;
+      const uint32_t cp = utf8NextCodepoint(&p);
+      if (CjkBreaks::isNoBreakBeforeCjkPunctuation(cp)) {
+        end = lastCharStart;
+      } else {
+        break;
+      }
+    }
   }
   if (start >= end) return "";
 
