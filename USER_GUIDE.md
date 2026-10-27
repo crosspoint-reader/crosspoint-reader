@@ -147,7 +147,7 @@ The index is created automatically the first time the Library is opened. To pick
 
 ### 3.5 File Transfer Screen
 
-The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode. When at least one OPDS server is configured, the screen also lists **OPDS Browser**, which opens your OPDS catalogs (see [OPDS Servers](#365-opds-servers-multiple-libraries)).
+The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode. The screen also lists **OPDS Browser**, which opens your OPDS catalogs; with no server configured it opens the server list so you can add one (see [OPDS Servers](#365-opds-servers-multiple-libraries)).
 
 See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 

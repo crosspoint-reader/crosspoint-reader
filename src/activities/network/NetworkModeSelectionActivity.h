@@ -10,7 +10,7 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, USB_DRIV
  * NetworkModeSelectionActivity presents the user with a choice:
  * - "Join a Network" - Connect to an existing WiFi network (STA mode)
  * - "Calibre Wireless" - Use Calibre wireless device transfers
- * - "OPDS Browser" - Browse OPDS catalogs (only when a server is configured)
+ * - "OPDS Browser" - Browse OPDS catalogs, or add a server when none is configured
  * - "Create Hotspot" - Create an Access Point that others can connect to (AP mode)
  * - "USB Drive" - Expose the SD card over USB (boards with USB mass storage)
  *
