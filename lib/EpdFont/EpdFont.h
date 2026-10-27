@@ -1,6 +1,20 @@
 #pragma once
 #include "EpdFontData.h"
 
+/// A glyph found by EpdFont. It holds a copy of the metrics rather than a pointer, so a font can
+/// store its glyph records in a form other than EpdGlyph.
+struct GlyphRef {
+  static constexpr uint32_t NO_INDEX = UINT32_MAX;
+
+  EpdGlyph metrics{};
+  uint32_t index = NO_INDEX;         ///< Position in the font's glyph table, or NO_INDEX
+  const EpdGlyph* loaded = nullptr;  ///< Record returned by glyphMissHandler (SD overflow, TTF)
+  bool solid = false;                ///< Synthetic solid block: fill a rectangle, there is no bitmap
+
+  explicit operator bool() const { return index != NO_INDEX || loaded != nullptr || solid; }
+  const EpdGlyph* operator->() const { return &metrics; }
+};
+
 class EpdFont {
   void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY) const;
 
@@ -10,12 +24,11 @@ class EpdFont {
   ~EpdFont() = default;
   void getTextDimensions(const char* string, int* w, int* h) const;
 
-  const EpdGlyph* getGlyph(uint32_t cp) const;
+  GlyphRef getGlyph(uint32_t cp) const;
 
   /// Like getGlyph(), but supplies metrics for missing solid block symbols.
-  /// If the returned pointer is &solidFallback, draw a filled rectangle;
-  /// it has no bitmap. The caller owns the fallback storage.
-  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback) const;
+  /// If the result is `solid`, draw a filled rectangle; it has no bitmap.
+  GlyphRef getGlyphMetrics(uint32_t cp) const;
 
   /// Returns true if this font covers `cp`: either via its in-RAM interval
   /// table or, for SD card fonts, via the coverageHandler that consults the

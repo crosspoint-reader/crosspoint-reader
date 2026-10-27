@@ -291,18 +291,18 @@ TEST(EpdFont, KernLookupEmptyRowIsZero) {
 }
 
 TEST(EpdFont, GlyphLookup) {
-  ASSERT_NE(testFont().getGlyph('T'), nullptr);
-  ASSERT_NE(testFont().getGlyph('a'), nullptr);
-  ASSERT_NE(testFont().getGlyph('o'), nullptr);
-  ASSERT_NE(testFont().getGlyph('x'), nullptr);
+  ASSERT_TRUE(testFont().getGlyph('T'));
+  ASSERT_TRUE(testFont().getGlyph('a'));
+  ASSERT_TRUE(testFont().getGlyph('o'));
+  ASSERT_TRUE(testFont().getGlyph('x'));
   EXPECT_EQ(testFont().getGlyph('T')->advanceX, 137);
   EXPECT_EQ(testFont().getGlyph('a')->advanceX, 130);
   EXPECT_EQ(testFont().getGlyph('o')->advanceX, 145);
   EXPECT_EQ(testFont().getGlyph('x')->advanceX, 136);
 
-  // No U+FFFD in font, so unknown codepoints return nullptr
-  EXPECT_EQ(testFont().getGlyph('Z'), nullptr);
-  EXPECT_EQ(testFont().getGlyph('b'), nullptr);
+  // No U+FFFD in font, so unknown codepoints find no glyph
+  EXPECT_FALSE(testFont().getGlyph('Z'));
+  EXPECT_FALSE(testFont().getGlyph('b'));
 }
 
 // Known-value regression tests.  Expected widths are computed by hand using
@@ -405,13 +405,12 @@ TEST(EpdFont, SolidSymbolsUseEmAdvanceAndKeepRealGlyphs) {
   data.intervalCount = 2;
   data.ascender = 12;
   const EpdFont font(&data);
-  EpdGlyph fallback;
-  const auto* block = font.getGlyphMetrics(0x2588, fallback);
-  ASSERT_EQ(block, &fallback);
+  const GlyphRef block = font.getGlyphMetrics(0x2588);
+  ASSERT_TRUE(block.solid);
   EXPECT_EQ(block->advanceX, 168);
   EXPECT_EQ(block->width, 11);
   EXPECT_EQ(block->height, 12);
-  EXPECT_EQ(font.getGlyphMetrics(0x25A0, fallback), &glyphs[1]);
+  EXPECT_EQ(font.getGlyphMetrics(0x25A0).index, 1u);
 }
 
 TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
@@ -423,12 +422,12 @@ TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
   data.intervalCount = 1;
   data.ascender = 12;
   const EpdFont font(&data);
-  EpdGlyph fallback;
-  EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &fallback);
-  EXPECT_EQ(fallback.advanceX, fp4::fromPixel(9));
-  EXPECT_EQ(fallback.width, 9);
-  EXPECT_EQ(fallback.height, 12);
-  EXPECT_EQ(font.getGlyphMetrics('Z', fallback), &replacement);
+  const GlyphRef fallback = font.getGlyphMetrics(0x2588);
+  EXPECT_TRUE(fallback.solid);
+  EXPECT_EQ(fallback->advanceX, fp4::fromPixel(9));
+  EXPECT_EQ(fallback->width, 9);
+  EXPECT_EQ(fallback->height, 12);
+  EXPECT_EQ(font.getGlyphMetrics('Z').index, 0u);
 }
 
 TEST(EpdFont, SolidSymbolsRespectOnDemandFontCoverage) {
@@ -441,9 +440,8 @@ TEST(EpdFont, SolidSymbolsRespectOnDemandFontCoverage) {
     return cp == 0x2588 ? static_cast<const EpdGlyph*>(ctx) : nullptr;
   };
   const EpdFont font(&data);
-  EpdGlyph fallback;
-  EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &realBlock);
-  EXPECT_EQ(font.getGlyphMetrics(0x25A0, fallback), &fallback);
+  EXPECT_EQ(font.getGlyphMetrics(0x2588).loaded, &realBlock);
+  EXPECT_TRUE(font.getGlyphMetrics(0x25A0).solid);
 }
 
 TEST(EpdFont, EmptyFontStillMeasuresSolidSymbols) {
@@ -463,8 +461,8 @@ TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
   data.intervals = intervals + 1;
   data.intervalCount = 1;
   const EpdFont font(&data);
-  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[1]);
+  EXPECT_EQ(font.getGlyph(0x02BB).index, 1u);
   data.intervals = intervals;
   data.intervalCount = 2;
-  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[0]);
+  EXPECT_EQ(font.getGlyph(0x02BB).index, 0u);
 }
