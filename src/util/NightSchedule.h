@@ -23,6 +23,9 @@ struct Boundary {
 // Returns {0, false} when the two times are equal or a slot is out of range.
 Boundary latestBoundary(int64_t now, uint8_t onSlot, uint8_t offSlot);
 
+// Fits the longest label, "12:00 AM", and its terminator.
+constexpr size_t SLOT_LABEL_SIZE = 9;
+
 // A slot as a clock time: "22:00", or "10:00 PM" when twelveHour is set.
 void formatSlot(uint8_t slot, bool twelveHour, char* buf, size_t size);
 
