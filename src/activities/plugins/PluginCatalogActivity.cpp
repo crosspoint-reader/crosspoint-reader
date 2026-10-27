@@ -417,6 +417,15 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
     substituteAll(tpl, "{title}", item->title);
     substituteAll(tpl, "{author}", item->author);
     substituteAll(tpl, "{url}", item->url);
+    // Encoded forms for URL query values and paths, built only when used: a
+    // field can be KBs and its encoded copy three times that.
+    const std::pair<const char*, const std::string*> encoded[] = {{"{id_enc}", &item->id},
+                                                                  {"{title_enc}", &item->title},
+                                                                  {"{author_enc}", &item->author},
+                                                                  {"{url_enc}", &item->url}};
+    for (const auto& [key, value] : encoded) {
+      if (tpl.find(key) != std::string::npos) substituteAll(tpl, key, urlEncodeQuery(*value));
+    }
   }
   return tpl;
 }
@@ -1081,7 +1090,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       const std::string parent = dest.substr(0, slash);
       if (!Storage.exists(parent.c_str())) Storage.mkdir(parent.c_str());
     }
-    const auto result = downloadFile(base + rel, dest + ".new");
+    const auto result = downloadFile(pluginhttp::escapeUrl(base + rel), dest + ".new");
     if (result != HttpDownloader::OK) return result;
     staged.push_back(dest);
   }
@@ -1160,8 +1169,8 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     const std::vector<HttpDownloader::Header> fileHeaders =
         manifest.dlUrlPath.empty() ? substitutedHeaders(manifest.downloadReq.headers, &item)
                                    : std::vector<HttpDownloader::Header>{};
-    return downloadFile(fileUrl, dest, substituted(manifest.dlUser, &item), substituted(manifest.dlPass, &item),
-                        fileHeaders);
+    return downloadFile(pluginhttp::escapeUrl(fileUrl), dest, substituted(manifest.dlUser, &item),
+                        substituted(manifest.dlPass, &item), fileHeaders);
   };
   session.reset();  // free browse TLS before the large file GET
   auto result = fetchFile();
