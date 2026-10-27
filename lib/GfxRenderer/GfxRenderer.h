@@ -50,6 +50,7 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   mutable bool absoluteGrayPlanes = false;
+  bool ditherImagesInBw = false;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
@@ -402,6 +403,11 @@ class GfxRenderer {
   void displayGrayBuffer() const;
   // Active input encoding, used when drawing monochrome overlays into planes.
   bool grayPlanesAreAbsolute() const { return absoluteGrayPlanes; }
+  // B/W pass: draw 2-bit image pixels as a 2x2 ordered dither instead of
+  // "any ink is black". Only for pages that get no image grayscale pass,
+  // because overlay gray planes expect every gray pixel black in the base.
+  void setDitherImagesInBw(bool enabled) { ditherImagesInBw = enabled; }
+  bool imagesDitheredInBw() const { return ditherImagesInBw; }
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM
   // from `scratch` (panelWidthBytes * numRows, physical rows [yStart, yStart+

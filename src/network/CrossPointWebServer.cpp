@@ -13,6 +13,7 @@
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
+#include <MD5Builder.h>
 #include <Memory.h>
 #include <ResumableFetch.h>
 #include <SecureHttpClient.h>
@@ -269,7 +270,7 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
-  // If-None-Match is collected so the static-page handlers can answer conditional GETs with 304
+  // If-None-Match is collected so static pages and plugin files can answer conditional GETs with 304
   const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
                                     "Lock-Token", "Timeout",     "If-None-Match"};
   server->collectHeaders(collectedHeaders, 7);
@@ -800,13 +801,22 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
   return true;
 }
 
-// Drop a partially written upload so a truncated book never lands in the library.
-// The file is new: uploads refuse to overwrite an existing name.
-static void removeUploadedFile(const CrossPointWebServer::UploadState& state) {
+static String uploadDestPath(const CrossPointWebServer::UploadState& state) {
   String filePath = state.path;
   if (!filePath.endsWith("/")) filePath += "/";
   filePath += state.fileName;
-  Storage.remove(filePath.c_str());
+  return filePath;
+}
+
+// The path being written: the destination itself, or "<dest>.part" while overwriting.
+static String uploadWritePath(const CrossPointWebServer::UploadState& state) {
+  return state.staged ? uploadDestPath(state) + ".part" : uploadDestPath(state);
+}
+
+// Drop a partially written upload so a truncated book never lands in the library.
+// An overwritten file is untouched: only its staged copy is removed.
+static void removeUploadedFile(const CrossPointWebServer::UploadState& state) {
+  Storage.remove(uploadWritePath(state).c_str());
 }
 
 void CrossPointWebServer::handleUpload(UploadState& state) const {
@@ -831,6 +841,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     state.size = 0;
     state.success = false;
     state.error = "";
+    state.staged = false;
     uploadStartTime = millis();
     lastLoggedSize = 0;
     state.bufferPos = 0;
@@ -867,9 +878,20 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     // Check if file already exists - SD operations can be slow
     resetTaskWatchdogIfSubscribed();
     if (Storage.exists(filePath.c_str())) {
-      state.error = "File already exists: " + state.fileName;
-      LOG_DBG("WEB", "[UPLOAD] Collision: %s", filePath.c_str());
-      return;
+      const String overwrite = server->arg("overwrite");
+      if (overwrite != "1" && overwrite != "true") {
+        state.error = "File already exists: " + state.fileName;
+        LOG_DBG("WEB", "[UPLOAD] Collision: %s", filePath.c_str());
+        return;
+      }
+      HalFile existing = Storage.open(filePath.c_str());
+      if (existing && existing.isDirectory()) {
+        state.error = "A folder with this name already exists: " + state.fileName;
+        LOG_DBG("WEB", "[UPLOAD] Folder collision: %s", filePath.c_str());
+        return;
+      }
+      existing.close();
+      state.staged = true;
     }
 
     // The buffer spans upload callbacks; keep it off the task stack and release it at the end.
@@ -882,15 +904,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     resetTaskWatchdogIfSubscribed();
-    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
+    if (!Storage.openFileForWrite("WEB", uploadWritePath(state), state.file)) {
       state.error = "Failed to create file on SD card";
-      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
+      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", uploadWritePath(state).c_str());
       state.buffer.reset();
       return;
     }
     resetTaskWatchdogIfSubscribed();
 
-    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
+    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", uploadWritePath(state).c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (dropUploadIfCancelled()) return;
     if (state.file && state.error.isEmpty()) {
@@ -938,8 +960,27 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       if (!flushUploadBuffer(state)) {
         state.error = "Failed to write final data to SD card";
       }
-      state.file.close();
-      if (!state.error.isEmpty()) removeUploadedFile(state);
+      // close() writes the final size: a failed close must not replace the original.
+      if (!state.file.close() && state.error.isEmpty()) state.error = "Failed to write final data to SD card";
+      bool keepStaged = false;
+      if (state.error.isEmpty() && state.staged) {
+        resetTaskWatchdogIfSubscribed();  // removing a large original walks its cluster chain
+        const String dest = uploadDestPath(state);
+        if (!Storage.replaceFile(uploadWritePath(state).c_str(), dest.c_str())) {
+          LOG_ERR("WEB", "[UPLOAD] Replace failed: %s", dest.c_str());
+          // replaceFile removes the original before the rename: if it is gone,
+          // the staged copy is the only one left, so keep it.
+          keepStaged = !Storage.exists(dest.c_str());
+          state.error = keepStaged ? "Replace failed; the new file is kept as " + state.fileName + ".part"
+                                   : "Failed to replace the existing file";
+          if (keepStaged) {
+            // The original is gone: drop its cache and Library entry.
+            clearBookCache(dest.c_str());
+            if (library::isLibraryBookFile(dest.c_str())) library::markLibraryIndexDirty();
+          }
+        }
+      }
+      if (!state.error.isEmpty() && !keepStaged) removeUploadedFile(state);
 
       if (state.error.isEmpty()) {
         state.success = true;
@@ -1933,6 +1974,30 @@ void CrossPointWebServer::handlePluginFile() const {
     return;
   }
 
+  // A content hash, not size and date: without a set clock files can share a
+  // timestamp, and a plugin update can keep the same size.
+  MD5Builder md5;
+  md5.begin();
+  uint8_t chunk[512];
+  int got;
+  while ((got = f.read(chunk, sizeof(chunk))) > 0) {
+    md5.add(chunk, static_cast<size_t>(got));
+    resetTaskWatchdogIfSubscribed();
+  }
+  if (got < 0 || !f.seek(0)) {
+    LOG_ERR("WEB", "Plugin file read failed: %s", path.c_str());
+    server->send(500, "text/plain", "Failed to read file");
+    return;
+  }
+  md5.calculate();
+  const String etag = "\"" + md5.toString() + "\"";
+  // no-cache: the browser keeps the file but revalidates it on every load.
+  server->sendHeader("ETag", etag);
+  server->sendHeader("Cache-Control", "no-cache");
+  if (server->header("If-None-Match") == etag) {
+    server->send(304);
+    return;
+  }
   server->setContentLength(f.size());
   server->send(200, pluginContentType(file), "");
   streamFileToClient(f);
