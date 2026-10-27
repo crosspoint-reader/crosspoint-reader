@@ -75,7 +75,9 @@ namespace {
 // v65: Count literal spaces after hyphens and ellipses when justifying text.
 // v66: Omit carried no-break spaces at the start of wrapped lines.
 // v67: Count only stretchable literal spaces after visual text reordering.
-constexpr uint8_t SECTION_FILE_VERSION = 67;
+// v68: Leave text below drop caps unsplit until it is laid out at full width.
+// v69: Line spacing multiplies font size instead of advanceY.
+constexpr uint8_t SECTION_FILE_VERSION = 69;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

@@ -123,6 +123,7 @@ Query parameters:
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `path` | No | `/` | Destination directory |
+| `overwrite` | No | off | `1` or `true` replaces a file with the same name |
 
 Successful response:
 
@@ -132,7 +133,13 @@ File uploaded successfully: mybook.epub
 
 Notes:
 
-- Existing files with the same name are overwritten.
+- Without `overwrite`, an existing file with the same name is kept and the
+  request fails with `400` "File already exists: <name>".
+- With `overwrite`, the upload is written to `<name>.part` and replaces the
+  existing file only when it is complete, so a failed upload keeps the old file.
+  The card needs free space for both copies while the upload runs. A file
+  already named `<name>.part` is replaced. If a folder has the name, the
+  request fails with `400` "A folder with this name already exists: <name>".
 - EPUB cache data for the uploaded path is cleared after a successful upload.
 - Uploading a book file (`.epub`, `.txt`, `.md`, `.xtc`), here or through the
   WebSocket upload, marks the Library index stale, so the book appears the next
@@ -474,6 +481,7 @@ Error messages include:
 | `ERROR:No upload in progress` | Binary data arrived without a matching START |
 | `ERROR:Upload overflow` | Client sent more bytes than declared |
 | `ERROR:Write failed - disk full?` | SD write failed |
+| `ERROR:File already exists: <name>` | A file with that name exists; WebSocket uploads never replace files |
 
 Incomplete WebSocket uploads are deleted on disconnect or error.
 
@@ -544,7 +552,11 @@ Installed plugins that ship a `plugin.js`:
 
 Serves one file from the plugin's folder (first root holding that name). Both
 parameters must be single path components (no `/`, `\`, or `..`); 404 when
-the plugin, file, or a directory is requested.
+the plugin, file, or a directory is requested; 500 when the file cannot be read.
+
+Successful responses carry an `ETag` (MD5 of the file contents) and
+`Cache-Control: no-cache`, so a browser keeps the file and checks it again on
+each load. A request whose `If-None-Match` matches gets `304` with no body.
 
 ### `POST /api/relay`
 

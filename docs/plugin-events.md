@@ -142,6 +142,16 @@ Optional per handler:
 
 - **`toast`** — a template shown as the standard popup after the request
   succeeds, when a screen is available (sleep entry, web-server session).
+- **`require_meta`** — a sidecar key, e.g. `"require_meta": "bookfusion_id"`.
+  The event is queued for this handler only when the event's book (`book`, or
+  `path` for `book.downloaded`) has a metadata sidecar where that key holds a
+  non-empty string or a whole number (decimals and `true`/`false` do not
+  match). Other books' events are not queued at all, so they cost no outbox
+  space, no request, and no WiFi bring-up at sleep. An event without a book
+  (`sleep.enter` outside a reader) is not queued, and neither is one whose
+  sidecar cannot be read. The sidecar is read when the event fires, so write
+  it before the book is opened. A handler whose `require_meta` is not a
+  string is ignored, so a wrong type cannot turn the filter off.
 - **`connect`** — normally the drain only runs when the device is already
   online. `"connect": true` opts a handler into WiFi bring-up at **sleep entry
   only**. Subscribing to `sleep.enter` sets that opt-in for you, so a
@@ -181,7 +191,7 @@ Templates in `url`, `headers`, `body`, `dest`, and `toast` substitute:
 | `{event.NAME}` | The event's variables (see the whitelist table)                  |
 | `{event.ts}`   | Unix time when the event fired; 0 if the clock was never set     |
 | `{event.id}`   | Unique event id, stable across delivery retries (dedupe key)     |
-| `{meta.KEY}`   | The book's metadata sidecar, for events that carry a `book`      |
+| `{meta.KEY}`   | The book's metadata sidecar, for events that carry a `book` (or `path`, for `book.downloaded`) |
 
 Unmatched variables substitute as nothing was replaced (the literal `{...}`
 text is sent), so servers should tolerate or reject malformed values.
@@ -214,10 +224,12 @@ writer of a key wins. Use `bookfusion_id`, not `id`.
    e.g. `metadata.bookfusion_id` — the firmware never learns what any key
    means.
 2. **Event handlers**, via `{meta.*}` as above.
+3. **Handler filters**, via `require_meta` (see above).
 
 Fields are flat strings, numbers, or booleans with a 2KB read cap. KOSync
-uploads carry them with their JSON types; `{meta.*}` templates see them as
-text. Null and nested values are ignored. Structured service data
+uploads carry them with their JSON types; `{meta.*}` templates see strings
+and whole numbers as text, and decimals and booleans as empty. Null and
+nested values are ignored. Structured service data
 belongs on the service's server, keyed by the id in the sidecar.
 
 ## Delivery semantics and limits
