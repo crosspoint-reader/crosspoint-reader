@@ -1,0 +1,4 @@
+# Patch files are applied with `git apply` during Linux/WSL builds (see
+# scripts/patch_jpegdec.py and scripts/patch_sdfat.py); CRLF endings in the
+# working tree break those builds. Always check out patches with LF endings.
+*.patch text eol=lf
