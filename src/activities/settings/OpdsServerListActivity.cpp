@@ -109,7 +109,7 @@ bool OpdsServerListActivity::handleCustomInput() {
 
 void OpdsServerListActivity::onBackButton() {
   if (pickerMode) {
-    activityManager.goHome(HomeMenuItem::OPDS_BROWSER);
+    activityManager.goHome(HomeMenuItem::FILE_TRANSFER);
   } else {
     finish();
   }

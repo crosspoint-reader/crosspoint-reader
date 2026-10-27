@@ -4,52 +4,50 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 
 namespace fui = freeink::ui;
 
 namespace {
-constexpr StrId menuItems[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    StrId::STR_JOIN_NETWORK,
-    StrId::STR_CALIBRE_WIRELESS,
-    StrId::STR_CREATE_HOTSPOT,
+struct ModeRow {
+  NetworkMode mode;
+  StrId label;
+  StrId desc;
+  UIIcon icon;
+};
+
+constexpr ModeRow MODE_ROWS[] = {
+    {NetworkMode::JOIN_NETWORK, StrId::STR_JOIN_NETWORK, StrId::STR_JOIN_DESC, UIIcon::Wifi},
+    {NetworkMode::CONNECT_CALIBRE, StrId::STR_CALIBRE_WIRELESS, StrId::STR_CALIBRE_DESC, UIIcon::Library},
+    {NetworkMode::OPDS_BROWSER, StrId::STR_OPDS_BROWSER, StrId::STR_OPDS_DESC, UIIcon::Book},
+    {NetworkMode::CREATE_HOTSPOT, StrId::STR_CREATE_HOTSPOT, StrId::STR_HOTSPOT_DESC, UIIcon::Hotspot},
 #if FREEINK_CAP_USB_MSC
-    StrId::STR_USB_DRIVE,
+    {NetworkMode::USB_DRIVE, StrId::STR_USB_DRIVE, StrId::STR_USB_DRIVE_DESC, UIIcon::Usb},
 #endif
 };
-constexpr StrId menuDescs[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    StrId::STR_JOIN_DESC,
-    StrId::STR_CALIBRE_DESC,
-    StrId::STR_HOTSPOT_DESC,
-#if FREEINK_CAP_USB_MSC
-    StrId::STR_USB_DRIVE_DESC,
-#endif
-};
-constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    UIIcon::Wifi,
-    UIIcon::Library,
-    UIIcon::Hotspot,
-#if FREEINK_CAP_USB_MSC
-    UIIcon::Usb,
-#endif
-};
+static_assert(sizeof(MODE_ROWS) / sizeof(MODE_ROWS[0]) == NetworkModeSelectionActivity::MAX_ITEM_COUNT);
 }  // namespace
 
 NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("NetworkModeSelection", renderer, mappedInput) {
-  // Entirely static, so built once here rather than every buildScreen() call.
-  for (int i = 0; i < MENU_ITEM_COUNT; i++) {
+  // Static for the screen's lifetime, so built once here rather than every
+  // buildScreen() call. The OPDS row needs a configured server.
+  const bool hasOpdsServers = OPDS_STORE.hasServers();
+  for (const ModeRow& row : MODE_ROWS) {
+    if (row.mode == NetworkMode::OPDS_BROWSER && !hasOpdsServers) continue;
     fui::ListItem item;
-    item.label = I18N.get(menuItems[i]);
-    item.subtitle = I18N.get(menuDescs[i]);
-    item.icon = listIconFor(menuIcons[i], 32);  // subtitle rows carry the larger icon
-    item.actionValue = static_cast<int16_t>(i);
-    rowItems_[i] = item;
+    item.label = I18N.get(row.label);
+    item.subtitle = I18N.get(row.desc);
+    item.icon = listIconFor(row.icon, 32);  // subtitle rows carry the larger icon
+    item.actionValue = static_cast<int16_t>(rowCount_);
+    rowModes_[rowCount_] = row.mode;
+    rowItems_[rowCount_++] = item;
   }
 }
 
-int NetworkModeSelectionActivity::listCount() const { return MENU_ITEM_COUNT; }
+int NetworkModeSelectionActivity::listCount() const { return rowCount_; }
 
 const char* NetworkModeSelectionActivity::headerTitle() const { return tr(STR_FILE_TRANSFER); }
 
@@ -59,7 +57,7 @@ void NetworkModeSelectionActivity::activateIndex(const int index) {
   app.clearTapFlash();
   nav.selected = index;
 
-  onModeSelected(static_cast<NetworkMode>(index));
+  onModeSelected(rowModes_[index]);
 }
 
 void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
@@ -73,7 +71,7 @@ void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
   // repaint.
   fui::ListProps props;
   props.items = rowItems_;
-  props.count = static_cast<uint16_t>(MENU_ITEM_COUNT);
+  props.count = static_cast<uint16_t>(rowCount_);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.subtitleText = screen.theme().smallText;

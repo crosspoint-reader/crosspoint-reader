@@ -20,7 +20,8 @@ enum class WebServerActivityState {
 /**
  * CrossPointWebServerActivity is the entry point for file transfer functionality.
  * It:
- * - First presents a choice between "Join a Network" (STA), "Connect to Calibre", and "Create Hotspot" (AP)
+ * - First presents a choice between "Join a Network" (STA), "Calibre Wireless", "Create Hotspot" (AP), and
+ *   "OPDS Browser" (which hands off to the browser before Wi-Fi starts)
  * - For STA mode: Launches WifiSelectionActivity to connect to an existing network
  * - For AP mode: Creates an Access Point that clients can connect to
  * - Starts the CrossPointWebServer when connected
