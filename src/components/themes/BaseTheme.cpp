@@ -815,21 +815,17 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
   const auto sb = SETTINGS.statusBarSpec();
-  const bool showStatusBarTextLane = sb.textLaneVisible(halClock.isAvailable());
 
-  const auto screenHeight = renderer.getScreenHeight();
-  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4 +
-               BoardConfig::ACTIVE.statusBarOffsetY;
-			   
+  auto textY = renderer.getScreenHeight() - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom -
+               paddingBottom - 4 + BoardConfig::ACTIVE.statusBarOffsetY;
+
   int sbFontId = SMALL_FONT_ID;
 
   // ---- Layout constants ----
-  constexpr int sideMargin = 30;         // margin on either side of the centered block
-  constexpr int batteryTextGap = 6;      // gap between battery icon and battery percentage text
-  constexpr int estimateGap = 2;         // gap between "~" and the progress text
-  constexpr int separatorGap = 8;        // pixels of empty space on each side of the separator dot
-  constexpr int separatorDotNudge = 0;   // shift the dot left (-) or right (+) if the glyph looks off-center
-  const char* separatorDot = "\xC2\xB7"; // U+00B7 middle dot
+  constexpr int sideMargin = 30;          // margin on either side of the centered block
+  constexpr int batteryTextGap = 6;       // gap between battery icon and battery percentage text
+  constexpr int separatorGap = 8;         // pixels of empty space on each side of the separator dot
+  const char* separatorDot = "\xC2\xB7";  // U+00B7 middle dot
   const int separatorDotWidth = renderer.getTextWidth(sbFontId, separatorDot);
   const int separatorWidth = separatorGap * 2 + separatorDotWidth;
 
@@ -848,7 +844,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   };
 
   // ---- Bookmark (left cluster) ----
-  const bool showBookmark = showStatusBarTextLane && isPageBookmarked;
+  const bool showBookmark = isPageBookmarked && sb.textLaneVisible(halClock.isAvailable());
   if (showBookmark) {
     addToCluster(leftClusterWidth, bookmarkStatusIconWidth);
   }
@@ -857,10 +853,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const bool showBatteryPercentage = sb.showBatteryPercent;
   std::string batteryText;
   int batteryTextWidth = 0;
-  int batteryBlockWidth = 0;
 
   if (sb.showBattery) {
-    batteryBlockWidth = metrics.batteryWidth;
+    int batteryBlockWidth = metrics.batteryWidth;
     if (showBatteryPercentage) {
       batteryText = std::to_string(powerManager.getBatteryPercentage()) + "%";
       batteryTextWidth = renderer.getTextWidth(sbFontId, batteryText.c_str());
@@ -903,6 +898,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int estimateSpacing = 0;
 
   if (showPageCount) {
+    constexpr int estimateGap = 2;  // gap between "~" and the progress text
     snprintf(pageStr, sizeof(pageStr), "%d/%d", currentPage, pageCount);
     pageStrWidth = renderer.getTextWidth(sbFontId, pageStr);
     estimateWidth = showEstimate ? renderer.getTextWidth(UI_10_FONT_ID, "~") : 0;
@@ -939,8 +935,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int titleWidth = 0;
   if (!title.empty()) {
     // Separators needed between the title and each non-empty cluster
-    const int titleSepWidth = (leftClusterWidth > 0 ? separatorWidth : 0) + (rightClusterWidth > 0 ? separatorWidth : 0);
-    int availableTitleSpace = availableWidth - leftClusterWidth - rightClusterWidth - titleSepWidth;
+    const int titleSepWidth =
+        (leftClusterWidth > 0 ? separatorWidth : 0) + (rightClusterWidth > 0 ? separatorWidth : 0);
+    const int availableTitleSpace = availableWidth - leftClusterWidth - rightClusterWidth - titleSepWidth;
 
     if (availableTitleSpace <= 0) {
       title.clear();
@@ -969,6 +966,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draws the dot with a fixed gap on each side and advances x past the whole separator slot.
   auto drawSeparator = [&]() {
+    constexpr int separatorDotNudge = 0;  // shift the dot left (-) or right (+) if the glyph looks off-center
     renderer.drawText(sbFontId, x + separatorGap + separatorDotNudge, textY, separatorDot);
     x += separatorWidth;
   };
