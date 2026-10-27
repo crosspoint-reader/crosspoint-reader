@@ -327,6 +327,15 @@ int EpubReaderActivity::bookPercentFor(const ChapterPosition& position) const {
   return static_cast<int>(std::clamp(fraction, 0.0f, 1.0f) * 100.0f + 0.5f);
 }
 
+namespace {
+// Menu actions that work on the page on screen, so they need its layout.
+bool usesCurrentPage(const EpubReaderMenuActivity::MenuAction action) {
+  using MA = EpubReaderMenuActivity::MenuAction;
+  return action == MA::FOOTNOTES || action == MA::SAVE_CLIPPING || action == MA::TOGGLE_BOOKMARK ||
+         action == MA::DICTIONARY || action == MA::DISPLAY_QR;
+}
+}  // namespace
+
 void EpubReaderActivity::openReaderMenu() {
   pendingManualTurn = 0;
   if (usesToolbarMenu()) {
@@ -359,13 +368,21 @@ void EpubReaderActivity::openReaderMenu() {
     if (SETTINGS.orientation != menu.orientation) {
       applyOrientation(menu.orientation);
     }
+    const auto action = static_cast<EpubReaderMenuActivity::MenuAction>(menu.action);
     if (menu.fontPointSize > 0) {
-      applyMenuFont(menu.fontFamily, menu.fontPointSize);
+      if (!result.isCancelled && usesCurrentPage(action)) {
+        // A font change frees this page's layout, which the action needs:
+        // apply the font once the action is done (see loop()).
+        deferredMenuFontFamily = menu.fontFamily;
+        deferredMenuFontSize = menu.fontPointSize;
+      } else {
+        applyMenuFont(menu.fontFamily, menu.fontPointSize);
+      }
     }
 
     toggleAutoPageTurn(menu.pageTurnOption);
     if (!result.isCancelled) {
-      onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+      onReaderMenuConfirm(action);
     }
   });
 }
@@ -661,6 +678,15 @@ void EpubReaderActivity::loop() {
   if (!epub) {
     finish();
     return;
+  }
+
+  // A menu font held back for a page action; a child screen it opened has closed.
+  if (deferredMenuFontSize > 0) {
+    const int family = deferredMenuFontFamily;
+    const uint8_t pointSize = deferredMenuFontSize;
+    deferredMenuFontFamily = -1;
+    deferredMenuFontSize = 0;
+    applyMenuFont(family, pointSize);
   }
 
   rememberBookOnceRendered();
@@ -3092,16 +3118,29 @@ void EpubReaderActivity::applyReaderTextSettings() {
 }
 
 // Font picked in the list menu's Font Family / Font Size popups.
-void EpubReaderActivity::applyMenuFont(const int family, const uint8_t pointSize) {
+bool EpubReaderActivity::setMenuFont(const int family, const uint8_t pointSize) {
   if (family >= 0) {
     const char* sdName = readerFontFamilySdName(&sdFontSystem.registry(), family);
-    if (!sdName) return;
+    if (!sdName) return false;
     if (sdName[0] == '\0') SETTINGS.fontFamily = static_cast<uint8_t>(family);
     strncpy(SETTINGS.sdFontFamilyName, sdName, sizeof(SETTINGS.sdFontFamilyName) - 1);
     SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
   }
   SETTINGS.fontPointSize = pointSize;
-  applyReaderTextSettings();
+  return true;
+}
+
+void EpubReaderActivity::applyMenuFont(const int family, const uint8_t pointSize) {
+  if (setMenuFont(family, pointSize)) applyReaderTextSettings();
+}
+
+void EpubReaderActivity::onExit() {
+  // The book closed before a held-back menu font was applied: keep the pick.
+  if (deferredMenuFontSize > 0 && setMenuFont(deferredMenuFontFamily, deferredMenuFontSize)) {
+    SETTINGS.saveToFile();
+  }
+  deferredMenuFontSize = 0;
+  ReaderActivity::onExit();
 }
 
 // The More panel carries everything the classic list menu offers except the

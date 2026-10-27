@@ -192,8 +192,12 @@ class EpubReaderActivity final : public ReaderActivity {
   // re-paginate the current chapter so changes apply without re-opening the book.
   void applyReaderTextSettings();
   // Apply a font chosen in the list menu: family is a picker list index, or -1
-  // to keep the stored family.
+  // to keep the stored family. setMenuFont() only writes the settings.
+  bool setMenuFont(int family, uint8_t pointSize);
   void applyMenuFont(int family, uint8_t pointSize);
+  // A menu font held back while a page action runs (see openReaderMenu()).
+  int deferredMenuFontFamily = -1;
+  uint8_t deferredMenuFontSize = 0;
   // Text Settings from the list menu; the chapter is laid out again on return.
   void openTextSettings(TextSettingsActivity::Tab tab);
   // More panel rows.
@@ -257,6 +261,7 @@ class EpubReaderActivity final : public ReaderActivity {
   ~EpubReaderActivity() override;
 
   void loop() override;
+  void onExit() override;
   void render(RenderLock&& lock) override;
 
   bool pageTurn(bool isForward) override;
