@@ -90,6 +90,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 69
+
+Version 69 preserves the binary layout but rebuilds completed and partial
+sections because line spacing now multiplies font size instead of the font's
+newline distance (`advanceY`). Clipping layout signatures also distinguish the
+new calculation so old page-local word ranges are not reused for a new layout.
+Book metadata and saved progress are kept.
+
 ### Version 68
 
 Version 68 preserves the binary layout but rebuilds completed and partial
