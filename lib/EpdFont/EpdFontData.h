@@ -134,9 +134,16 @@ typedef struct {
   uint16_t advanceX;    ///< Distance to advance cursor (x axis), 12.4 fixed-point in pixels
   int16_t left;         ///< X dist from cursor pos to UL corner
   int16_t top;          ///< Y dist from cursor pos to UL corner
-  uint16_t dataLength;  ///< Size of the font data.
   uint32_t dataOffset;  ///< Pointer into EpdFont->bitmap (or within-group offset for compressed fonts)
 } EpdGlyph;
+static_assert(sizeof(EpdGlyph) == 12, "EpdGlyph must stay 12 bytes: built-in fonts store one per glyph in flash");
+
+/// Byte length of a glyph bitmap. Bitmaps are packed without row padding, so the length
+/// follows from the dimensions and is not stored per glyph.
+inline uint32_t epdGlyphDataLength(const EpdGlyph& glyph, const bool is2Bit) {
+  const uint32_t pixels = static_cast<uint32_t>(glyph.width) * glyph.height;
+  return is2Bit ? (pixels + 3) / 4 : (pixels + 7) / 8;
+}
 
 /// Compressed font group: a DEFLATE-compressed block of glyph bitmaps
 typedef struct {
