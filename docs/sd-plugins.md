@@ -382,6 +382,10 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   - Neither `{page}` nor `{offset}`: the response is one static list, and the
     firmware pages through it locally.
 
+  Rows without a title are not shown. When the request uses `{page}` or
+  `{offset}`, these rows still count toward the page, so a page can show
+  fewer rows and still offer "Next page".
+
   Navigation matches the OPDS browser: a "Previous page" row precedes the
   items past page 1 and a "Next page" row follows them while more pages
   exist — tappable and button-reachable like any row.

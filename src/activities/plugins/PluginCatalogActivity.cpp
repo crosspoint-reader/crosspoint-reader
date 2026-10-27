@@ -839,12 +839,13 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     const std::string unused;
     auto selectCompatible = [&](JsonListParser::Row& row) {
       const int thisRow = rowIndex++;
-      if (row.field[JsonListParser::F_TITLE].empty()) return;
-      const bool compatible =
+      const bool shown =
+          !row.field[JsonListParser::F_TITLE].empty() &&
           catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]);
+      // Server pages count every row, even hidden ones, toward the page size.
       if (localPaging) {
-        if (filteredWindow.take(compatible)) compatibleRows.push_back(thisRow);
-      } else if (serverWindow.take() && compatible) {
+        if (filteredWindow.take(shown)) compatibleRows.push_back(thisRow);
+      } else if (serverWindow.take() && shown) {
         compatibleRows.push_back(thisRow);
       }
     };
@@ -873,10 +874,11 @@ bool PluginCatalogActivity::parseBrowseResponse() {
   plugincatalogpaging::PageWindow visibleWindow(pageOffset, manifest.pageSize);
   auto append = [&](JsonListParser::Row& row) {
     const int thisRow = rowIndex++;
+    // Server pages count untitled rows toward the page size; static lists skip them.
     if (manifest.filtersCompatibility()) {
       if (compatibleIndex >= compatibleRows.size() || compatibleRows[compatibleIndex] != thisRow) return;
       compatibleIndex++;
-    } else if (!visibleWindow.take(!row.field[JsonListParser::F_TITLE].empty())) {
+    } else if (!visibleWindow.take(!localPaging || !row.field[JsonListParser::F_TITLE].empty())) {
       return;
     }
     if (row.field[JsonListParser::F_TITLE].empty()) return;
