@@ -3,6 +3,7 @@
 #include <BlePageTurner.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <Fb2.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -238,7 +239,22 @@ EpubReaderActivity::~EpubReaderActivity() {
 }
 
 bool EpubReaderActivity::loadBook() {
-  auto loadedEpub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
+  // FB2 books are converted once into a synthetic EPUB in the cache and then
+  // read through the normal pipeline; bookPath stays the original .fb2 for
+  // recents, progress identity, and plugin events.
+  std::string contentPath = bookPath;
+  if (FsHelpers::hasFb2Extension(bookPath)) {
+    GUI.drawPopup(renderer, tr(STR_CONVERTING_FB2));
+    renderer.displayBuffer();
+    std::string fb2Error;
+    const std::string synthetic = Fb2::ensureEpub(bookPath, "/.crosspoint", &fb2Error);
+    if (synthetic.empty()) {
+      LOG_ERR("ERS", "FB2 conversion failed: %s", fb2Error.c_str());
+      return false;
+    }
+    contentPath = synthetic;
+  }
+  auto loadedEpub = makeUniqueNoThrow<Epub>(contentPath, "/.crosspoint");
   if (!loadedEpub) {
     LOG_ERR("ERS", "Failed to allocate EPUB object");
     return false;

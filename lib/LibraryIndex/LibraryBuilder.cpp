@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <BufferedFile.h>
 #include <Epub.h>
+#include <Fb2Converter.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -303,7 +304,9 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   const int priorIndex = findPrior(st, entry.pathHash);
 
   const bool isXtc = FsHelpers::hasXtcExtension(name);
-  const bool extractionExpected = st.readMetadata && (FsHelpers::hasEpubExtension(name) || isXtc);
+  const bool isFb2 = FsHelpers::hasFb2Extension(name);
+  const bool extractionExpected =
+      st.readMetadata && (FsHelpers::hasEpubExtension(name) || isXtc || isFb2);
   const uint8_t expectedStatus = extractionExpected ? CLIX_METADATA_EXTRACTED : CLIX_METADATA_NOT_ATTEMPTED;
   bool reuseMetadata = false;
   ClixRecord priorRecord{};
@@ -353,6 +356,16 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
       if (loaded) {
         bookTitle = xtc.getTitle();
         author = xtc.getAuthor();
+      }
+    } else if (isFb2) {
+      // FB2 metadata comes straight from description/title-info; no conversion
+      // and no cache writes during the library walk.
+      Fb2Converter::Metadata fb2Meta;
+      std::string fb2Error;
+      loaded = Fb2Converter::readMetadata(fullPath, fb2Meta, fb2Error);
+      if (loaded) {
+        bookTitle = std::move(fb2Meta.title);
+        author = std::move(fb2Meta.author);
       }
     } else {
       Epub epub(fullPath, CACHE_DIR);
@@ -1066,7 +1079,8 @@ bool isLibraryBookFile(const std::string_view path) {
     start = slash + 1;
   }
   return FsHelpers::checkFileExtension(path, ".epub") || FsHelpers::checkFileExtension(path, ".txt") ||
-         FsHelpers::checkFileExtension(path, ".md") || FsHelpers::hasXtcExtension(path);
+         FsHelpers::checkFileExtension(path, ".md") || FsHelpers::hasXtcExtension(path) ||
+         FsHelpers::hasFb2Extension(path);
 }
 
 bool markLibraryIndexDirty() {

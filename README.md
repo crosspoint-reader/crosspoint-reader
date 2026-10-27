@@ -19,7 +19,15 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, adaptive table layouts, native CJK ruby annotations, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more.
 
-- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
+- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, `.bmp`, and (fork addition) `.fb2`.
+
+> **FB2 support in this fork** (personal build, not distributed): `.fb2` books are
+> converted once on first open into a synthetic EPUB stored in the per-book cache
+> (`.crosspoint/fb2_<hash>/`), then read through the normal pipeline — chapters, TOC,
+> images, footnotes, tables, bookmarks and highlights all work. Text encodings
+> windows-1251 / KOI8-R are handled. The conversion groundwork (streaming base64
+> decoder and legacy-encoding tables) is adapted from
+> [papyrix-reader](https://github.com/bigbag/papyrix-reader) by bigbag — many thanks!
 
 - **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
 

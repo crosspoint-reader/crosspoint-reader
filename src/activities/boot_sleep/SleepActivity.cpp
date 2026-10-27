@@ -3,6 +3,7 @@
 #include <BitmapHelpers.h>
 #include <Epub.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
+#include <Fb2.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -952,6 +953,26 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
+  } else if (FsHelpers::hasFb2Extension(APP_STATE.openEpubPath)) {
+    // Handle FB2: reuse (or build) the synthetic EPUB from the reader cache.
+    const std::string synthetic = Fb2::ensureEpub(APP_STATE.openEpubPath, "/.crosspoint");
+    if (synthetic.empty()) {
+      LOG_ERR("SLP", "FB2 conversion failed for sleep cover");
+      return (this->*renderNoCoverSleepScreen)();
+    }
+    Epub lastEpub(synthetic, "/.crosspoint");
+    // Skip loading css since we only need metadata here
+    if (!lastEpub.load(true, true)) {
+      LOG_ERR("SLP", "Failed to load last book");
+      return (this->*renderNoCoverSleepScreen)();
+    }
+
+    if (!lastEpub.generateCoverBmp(cropped, originalThresholds)) {
+      LOG_ERR("SLP", "Failed to generate cover bmp");
+      return (this->*renderNoCoverSleepScreen)();
+    }
+
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, originalThresholds);
   } else if (FsHelpers::hasReflowableBookExtension(APP_STATE.openEpubPath)) {
     // Handle EPUB, TXT, or Markdown file
     Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
