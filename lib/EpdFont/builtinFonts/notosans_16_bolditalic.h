@@ -2674,7 +2674,7 @@ static const uint8_t notosans_16_bolditalicBitmaps[42608] = {
     0x45, 0xCB, 0x3A, 0xE8, 0xEB, 0xCC, 0x58, 0xBB, 0xCF, 0x7F, 0x44, 0x9D, 0xFF, 0xD4, 0xFD, 0x00,
 };
 
-static const EpdGlyph notosans_16_bolditalicGlyphs[] = {
+static const EpdBuiltinGlyph notosans_16_bolditalicGlyphs[] = {
     { 0, 0, 0, 0, 0, 0 }, // U+0000
     { 0, 0, 139, 0, 0, 0 }, // U+000D
     { 0, 0, 139, 0, 0, 0 }, // U+0020
@@ -4061,6 +4061,7 @@ static const EpdLigaturePair notosans_16_bolditalicLigaturePairs[] = {
 
 static const EpdFontData notosans_16_bolditalic = {
     notosans_16_bolditalicBitmaps,
+    nullptr,  // glyph: built-in fonts use the compact form below
     notosans_16_bolditalicGlyphs,
     notosans_16_bolditalicIntervals,
     20,

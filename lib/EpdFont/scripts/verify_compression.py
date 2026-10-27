@@ -42,7 +42,7 @@ def parse_groups(text):
 
 
 def parse_glyphs(text):
-    """Parse EpdGlyph array entries: { width, height, advanceX, left, top, dataOffset }"""
+    """Parse EpdBuiltinGlyph array entries: { width, height, advanceX, left, top, dataOffset }"""
     glyphs = []
     for match in re.finditer(r'\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\}', text):
         glyphs.append({
@@ -131,7 +131,7 @@ def verify_font_file(filepath):
 
     # Extract glyphs
     glyphs_match = re.search(
-        r'static const EpdGlyph ' + re.escape(font_name) + r'Glyphs\[\]\s*=\s*\{(.+?)\};',
+        r'static const EpdBuiltinGlyph ' + re.escape(font_name) + r'Glyphs\[\]\s*=\s*\{(.+?)\};',
         content, re.DOTALL
     )
     if not glyphs_match:

@@ -1456,7 +1456,7 @@ static const uint8_t notosans_12_regularBitmaps[23118] = {
     0xE7, 0x38, 0xA4, 0xF2, 0xDD, 0xFF, 0x41, 0xEC, 0x42, 0xD8, 0xCB, 0x04, 0xC4, 0x00,
 };
 
-static const EpdGlyph notosans_12_regularGlyphs[] = {
+static const EpdBuiltinGlyph notosans_12_regularGlyphs[] = {
     { 0, 0, 0, 0, 0, 0 }, // U+0000
     { 0, 0, 104, 0, 0, 0 }, // U+000D
     { 0, 0, 104, 0, 0, 0 }, // U+0020
@@ -2830,6 +2830,7 @@ static const EpdLigaturePair notosans_12_regularLigaturePairs[] = {
 
 static const EpdFontData notosans_12_regular = {
     notosans_12_regularBitmaps,
+    nullptr,  // glyph: built-in fonts use the compact form below
     notosans_12_regularGlyphs,
     notosans_12_regularIntervals,
     20,

@@ -136,7 +136,19 @@ typedef struct {
   int16_t top;          ///< Y dist from cursor pos to UL corner
   uint32_t dataOffset;  ///< Pointer into EpdFont->bitmap (or within-group offset for compressed fonts)
 } EpdGlyph;
-static_assert(sizeof(EpdGlyph) == 12, "EpdGlyph must stay 12 bytes: built-in fonts store one per glyph in flash");
+static_assert(sizeof(EpdGlyph) == 12, "EpdGlyph must stay 12 bytes: SD and TTF fonts keep one per cached glyph");
+
+/// Glyph record of the built-in fonts: EpdGlyph's fields narrowed to the ranges those fonts
+/// use, 8 bytes instead of 12. fontconvert.py rejects a font that does not fit.
+typedef struct {
+  uint8_t width;
+  uint8_t height;
+  uint16_t advanceX;  ///< 12.4 fixed-point in pixels
+  int8_t left;
+  int8_t top;
+  uint16_t dataOffset;  ///< Offset into the bitmap, or within its group for compressed fonts
+} EpdBuiltinGlyph;
+static_assert(sizeof(EpdBuiltinGlyph) == 8, "EpdBuiltinGlyph must stay 8 bytes: built-in fonts store one per glyph");
 
 /// Byte length of a glyph bitmap. Bitmaps are packed without row padding, so the length
 /// follows from the dimensions and is not stored per glyph.
@@ -182,7 +194,8 @@ EPD_PACKED_END
 /// Data stored for FONT AS A WHOLE
 typedef struct {
   const uint8_t* bitmap;                ///< Glyph bitmaps, concatenated
-  const EpdGlyph* glyph;                ///< Glyph array
+  const EpdGlyph* glyph;                ///< Glyph array; nullptr when builtinGlyph is set
+  const EpdBuiltinGlyph* builtinGlyph;  ///< Compact glyph array of the built-in fonts, else nullptr
   const EpdUnicodeInterval* intervals;  ///< Valid unicode intervals for this font
   uint32_t intervalCount;               ///< Number of unicode intervals.
   uint8_t advanceY;                     ///< Newline distance (y axis)
@@ -263,6 +276,14 @@ typedef struct {
   /// kerning is baked into the tables above (all fonts zero-init this).
   int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
 } EpdFontData;
+
+/// Metrics of the glyph at `index`, from whichever glyph array the font uses. Forced inline:
+/// FontDecompressor calls it per glyph in table scans and reads only some of the fields.
+__attribute__((always_inline)) inline EpdGlyph epdGlyphAt(const EpdFontData& data, const uint32_t index) {
+  if (data.builtinGlyph == nullptr) return data.glyph[index];
+  const EpdBuiltinGlyph& g = data.builtinGlyph[index];
+  return {g.width, g.height, g.advanceX, g.left, g.top, g.dataOffset};
+}
 
 // Solid Unicode symbols can be drawn as rectangles when the font lacks them.
 namespace syntheticGlyph {

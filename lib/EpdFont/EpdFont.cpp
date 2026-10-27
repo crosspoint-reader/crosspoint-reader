@@ -229,7 +229,7 @@ GlyphRef EpdFont::getGlyph(const uint32_t cp) const {
       if (cp <= interval.last) {
         GlyphRef ref;
         ref.index = interval.offset + (cp - interval.first);
-        ref.metrics = data->glyph[ref.index];
+        ref.metrics = epdGlyphAt(*data, ref.index);
         return ref;
       }
     }

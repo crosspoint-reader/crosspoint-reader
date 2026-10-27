@@ -2659,7 +2659,7 @@ static const uint8_t ubuntu_12_boldBitmaps[42356] = {
     0x00, 0x04, 0x00, 0x00,
 };
 
-static const EpdGlyph ubuntu_12_boldGlyphs[] = {
+static const EpdBuiltinGlyph ubuntu_12_boldGlyphs[] = {
     { 0, 0, 0, 0, 0, 0 }, // U+0000
     { 0, 0, 0, 0, 0, 0 }, // U+0008
     { 0, 0, 96, 0, 0, 0 }, // U+0009
@@ -4745,6 +4745,7 @@ static const EpdLigaturePair ubuntu_12_boldLigaturePairs[] = {
 
 static const EpdFontData ubuntu_12_bold = {
     ubuntu_12_boldBitmaps,
+    nullptr,  // glyph: built-in fonts use the compact form below
     ubuntu_12_boldGlyphs,
     ubuntu_12_boldIntervals,
     51,

@@ -2379,7 +2379,7 @@ static const uint8_t ubuntu_12_regularBitmaps[37879] = {
     0x00, 0x07, 0x00, 0x00, 0x04, 0x00, 0x00,
 };
 
-static const EpdGlyph ubuntu_12_regularGlyphs[] = {
+static const EpdBuiltinGlyph ubuntu_12_regularGlyphs[] = {
     { 0, 0, 0, 0, 0, 0 }, // U+0000
     { 0, 0, 0, 0, 0, 0 }, // U+0008
     { 0, 0, 92, 0, 0, 0 }, // U+0009
@@ -4342,6 +4342,7 @@ static const EpdLigaturePair ubuntu_12_regularLigaturePairs[] = {
 
 static const EpdFontData ubuntu_12_regular = {
     ubuntu_12_regularBitmaps,
+    nullptr,  // glyph: built-in fonts use the compact form below
     ubuntu_12_regularGlyphs,
     ubuntu_12_regularIntervals,
     51,

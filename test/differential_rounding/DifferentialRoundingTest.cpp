@@ -453,6 +453,30 @@ TEST(EpdFont, EmptyFontStillMeasuresSolidSymbols) {
   EXPECT_EQ(height, 8);
 }
 
+TEST(EpdFont, BuiltinGlyphRecordsExpandToFullMetrics) {
+  const EpdBuiltinGlyph glyphs[] = {{5, 7, 96, -2, -3, 0}, {9, 12, 0xFFFF, 127, -128, 0xFFFF}};
+  const EpdUnicodeInterval interval{'a', 'b', 0};
+  EpdFontData data{};
+  data.builtinGlyph = glyphs;
+  data.intervals = &interval;
+  data.intervalCount = 1;
+  const EpdFont font(&data);
+  const GlyphRef a = font.getGlyph('a');
+  ASSERT_TRUE(a);
+  EXPECT_EQ(a.index, 0u);
+  EXPECT_EQ(a->width, 5);
+  EXPECT_EQ(a->height, 7);
+  EXPECT_EQ(a->advanceX, 96);
+  EXPECT_EQ(a->left, -2);
+  EXPECT_EQ(a->top, -3);
+  const GlyphRef b = font.getGlyph('b');
+  EXPECT_EQ(b.index, 1u);
+  EXPECT_EQ(b->advanceX, 0xFFFF);
+  EXPECT_EQ(b->left, 127);
+  EXPECT_EQ(b->top, -128);
+  EXPECT_EQ(b->dataOffset, 0xFFFFu);
+}
+
 TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
   const EpdGlyph glyphs[] = {{3, 5, 64, 0, 8, 0}, {4, 6, 80, 0, 9, 1}};
   const EpdUnicodeInterval intervals[] = {{0x02BB, 0x02BB, 0}, {0x2018, 0x2018, 1}};

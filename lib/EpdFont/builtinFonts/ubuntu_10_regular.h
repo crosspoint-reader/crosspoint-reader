@@ -1723,7 +1723,7 @@ static const uint8_t ubuntu_10_regularBitmaps[27380] = {
     0x70, 0x00, 0x00, 0x00,
 };
 
-static const EpdGlyph ubuntu_10_regularGlyphs[] = {
+static const EpdBuiltinGlyph ubuntu_10_regularGlyphs[] = {
     { 0, 0, 0, 0, 0, 0 }, // U+0000
     { 0, 0, 0, 0, 0, 0 }, // U+0008
     { 0, 0, 77, 0, 0, 0 }, // U+0009
@@ -3686,6 +3686,7 @@ static const EpdLigaturePair ubuntu_10_regularLigaturePairs[] = {
 
 static const EpdFontData ubuntu_10_regular = {
     ubuntu_10_regularBitmaps,
+    nullptr,  // glyph: built-in fonts use the compact form below
     ubuntu_10_regularGlyphs,
     ubuntu_10_regularIntervals,
     51,
