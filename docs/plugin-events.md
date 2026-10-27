@@ -150,7 +150,8 @@ Optional per handler:
   space, no request, and no WiFi bring-up at sleep. An event without a book
   (`sleep.enter` outside a reader) is not queued, and neither is one whose
   sidecar cannot be read. The sidecar is read when the event fires, so write
-  it before the book is opened.
+  it before the book is opened. A handler whose `require_meta` is not a
+  string is ignored, so a wrong type cannot turn the filter off.
 - **`connect`** — normally the drain only runs when the device is already
   online. `"connect": true` opts a handler into WiFi bring-up at **sleep entry
   only**. Subscribing to `sleep.enter` sets that opt-in for you, so a
