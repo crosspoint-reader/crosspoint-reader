@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 
 #include "util/NightSchedule.h"
@@ -117,6 +118,7 @@ TEST(NightScheduleFormat, TwelveHour) {
   char buf[12];
   nightschedule::formatSlot(0, true, buf, sizeof(buf));
   EXPECT_STREQ(buf, "12:00 AM");
+  EXPECT_EQ(strlen(buf) + 1, nightschedule::SLOT_LABEL_SIZE);
   nightschedule::formatSlot(24, true, buf, sizeof(buf));
   EXPECT_STREQ(buf, "12:00 PM");
   nightschedule::formatSlot(35, true, buf, sizeof(buf));

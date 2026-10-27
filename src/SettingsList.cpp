@@ -66,11 +66,14 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                            StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE_SCHEDULE, &CrossPointSettings::nightScheduleEnabled,
                            "nightScheduleEnabled", StrId::STR_CAT_DISPLAY));
-  // Persisted as slot numbers; getSettingsList() swaps in clock-time labels.
+  // Half-hour slot numbers. The device shows them as clock times and edits them
+  // in NightTimePickerActivity; the web page would only show the raw number.
   emit(SettingInfo::Value(StrId::STR_NIGHT_MODE_ON_AT, &CrossPointSettings::nightScheduleOnSlot,
-                          {0, nightschedule::SLOT_COUNT - 1, 1}, "nightScheduleOnSlot", StrId::STR_CAT_DISPLAY));
+                          {0, nightschedule::SLOT_COUNT - 1, 1}, "nightScheduleOnSlot", StrId::STR_CAT_DISPLAY)
+           .withWebHidden());
   emit(SettingInfo::Value(StrId::STR_NIGHT_MODE_OFF_AT, &CrossPointSettings::nightScheduleOffSlot,
-                          {0, nightschedule::SLOT_COUNT - 1, 1}, "nightScheduleOffSlot", StrId::STR_CAT_DISPLAY));
+                          {0, nightschedule::SLOT_COUNT - 1, 1}, "nightScheduleOffSlot", StrId::STR_CAT_DISPLAY)
+           .withWebHidden());
 
   // --- Reader ---
   // Built-in font-family entry. Replaced per-call with a registry-aware

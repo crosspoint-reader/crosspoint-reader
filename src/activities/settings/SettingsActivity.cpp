@@ -40,6 +40,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/NightSchedule.h"
 #include "util/PluginEvents.h"
 
 namespace fui = freeink::ui;
@@ -477,6 +478,12 @@ void SettingsActivity::openSleepTimeoutPicker() {
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
+  if (setting.valuePtr == &CrossPointSettings::nightScheduleOnSlot ||
+      setting.valuePtr == &CrossPointSettings::nightScheduleOffSlot) {
+    char buf[nightschedule::SLOT_LABEL_SIZE];
+    nightschedule::formatSlot(SETTINGS.*(setting.valuePtr), SETTINGS.clockFormat == 1, buf, sizeof(buf));
+    return buf;
+  }
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
     // byte must not index past the enum table.

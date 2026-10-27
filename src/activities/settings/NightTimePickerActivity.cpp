@@ -4,7 +4,6 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "util/NightSchedule.h"
 
 namespace fui = freeink::ui;
 
@@ -14,13 +13,10 @@ NightTimePickerActivity::NightTimePickerActivity(GfxRenderer& renderer, MappedIn
 
 void NightTimePickerActivity::onEnter() {
   UiListActivity::onEnter();
-  labels_.resize(nightschedule::SLOT_COUNT);
   rowItems_.resize(nightschedule::SLOT_COUNT);
   for (uint8_t slot = 0; slot < nightschedule::SLOT_COUNT; slot++) {
-    char buf[12];
-    nightschedule::formatSlot(slot, SETTINGS.clockFormat == 1, buf, sizeof(buf));
-    labels_[slot] = buf;
-    rowItems_[slot].label = labels_[slot].c_str();
+    nightschedule::formatSlot(slot, SETTINGS.clockFormat == 1, labels_[slot], sizeof(labels_[slot]));
+    rowItems_[slot].label = labels_[slot];
     rowItems_[slot].actionValue = static_cast<int16_t>(slot);
   }
   const uint8_t current = SETTINGS.*field_;
