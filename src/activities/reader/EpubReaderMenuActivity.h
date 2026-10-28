@@ -47,8 +47,11 @@ class EpubReaderMenuActivity final : public UiListActivity {
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
-                                  bool hasClippings, const SdCardFontRegistry* fontRegistry);
+                                  bool hasClippings, const SdCardFontRegistry* fontRegistry,
+                                  MenuAction& selectedAction);
 
+  void onEnter() override;
+  void onExit() override;
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
   bool acceptsRemoteInput() const override { return routingReady(); }
@@ -82,6 +85,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   // Fixed menu layout
   std::vector<MenuItem> menuItems;
+  MenuAction& selectedAction;
 
   OptionPopup optionPopup;
   std::string title = "Reader Menu";

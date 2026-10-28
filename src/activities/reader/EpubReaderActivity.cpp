@@ -361,7 +361,7 @@ void EpubReaderActivity::openReaderMenu() {
   auto menuActivity = std::make_unique<EpubReaderMenuActivity>(
       renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages, bookProgressPercent,
       SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), CLIPPINGS.hasClippings(),
-      &sdFontSystem.registry());
+      &sdFontSystem.registry(), selectedMenuAction);
   startActivityForResult(std::move(menuActivity), [this](const ActivityResult& result) {
     const auto& menu = std::get<MenuResult>(result.data);
 
