@@ -736,6 +736,10 @@ void setup() {
 
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
+  // Apply a switch moved during sleep before the first paint, so the wake
+  // screen does not draw in the old night mode and then repaint.
+  handleSlideSwitch();
+
   // Resolve the single boot-presentation decision. Skipping the splash also
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the

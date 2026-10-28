@@ -58,11 +58,6 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                            "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
 #endif
-#if FREEINK_DEVICE_PICCO
-  emit(SettingInfo::Enum(StrId::STR_SLIDE_SWITCH, &CrossPointSettings::slideSwitchAction,
-                         {StrId::STR_FRONTLIGHT, StrId::STR_NIGHT_MODE, StrId::STR_TOUCH_READER_CONTROLS},
-                         "slideSwitchAction", StrId::STR_CAT_DISPLAY));
-#endif
   // Night mode = inverted output polarity everywhere (ActivityManager
   // applies it to every activity), so it lives in the Display category.
   emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
@@ -144,6 +139,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
       StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
       {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT, StrId::STR_PREV_PREV},
       "sideButtonLayout", StrId::STR_CAT_CONTROLS));
+#if FREEINK_DEVICE_PICCO
+  emit(SettingInfo::Enum(StrId::STR_SLIDE_SWITCH, &CrossPointSettings::slideSwitchAction,
+                         {StrId::STR_FRONTLIGHT, StrId::STR_NIGHT_MODE, StrId::STR_TOUCH_READER_CONTROLS},
+                         "slideSwitchAction", StrId::STR_CAT_CONTROLS));
+#endif
   // The reader menu style stays available on button boards (the toolbar
   // chrome is button-navigable); only the touch controls are hidden.
   if (BoardConfig::hasTouch()) {

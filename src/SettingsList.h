@@ -296,13 +296,22 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // Frontlit and lightless variants of a board share one binary (EEGO A4);
   // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
   // has not run at load time, so the base list must keep the persisted key.
-  // Also hidden while the Picco slide switch owns the light: its position
-  // decides the light at boot. The key stays persisted for other devices.
-  if (!Frontlight.present() || slideSwitchOwnsLight()) {
+  if (!Frontlight.present()) {
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());
   }
+  // The slide switch's position owns its bound function (the light at boot
+  // too). UI-only, so the keys stay persisted for other devices.
+  v.erase(std::remove_if(v.begin(), v.end(),
+                         [](const SettingInfo& s) {
+                           return (s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE && slideSwitchOwnsLight()) ||
+                                  (s.nameId == StrId::STR_NIGHT_MODE &&
+                                   slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) ||
+                                  (s.nameId == StrId::STR_TOUCH_READER_CONTROLS &&
+                                   slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_TOUCH_CONTROLS));
+                         }),
+          v.end());
   // Tilt page turn needs an IMU with a gyroscope. UI-only, like the frontlight
   // entry: a failed probe on one boot must not drop the saved value.
   if (!halTiltSensor.isAvailable()) {
