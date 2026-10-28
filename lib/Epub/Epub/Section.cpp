@@ -78,7 +78,8 @@ namespace {
 // v68: Leave text below drop caps unsplit until it is laid out at full width.
 // v69: Line spacing multiplies font size instead of advanceY.
 // v70: SD-font layout rounds each scaled glyph advance to match drawing.
-constexpr uint8_t SECTION_FILE_VERSION = 70;
+// v71: Focus split offsets follow the visual run order for RTL words.
+constexpr uint8_t SECTION_FILE_VERSION = 71;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
