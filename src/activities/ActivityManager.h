@@ -66,6 +66,11 @@ class ActivityManager {
   // Whether to trigger a render after the current loop()
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
+#ifdef ENABLE_SERIAL_CONTROL
+  std::atomic<uint32_t> controlRequested{0};
+  std::atomic<uint32_t> controlCompleted{0};
+  std::atomic<bool> controlRendering{false};
+#endif
 
   // Counts screen changes, so the Bluetooth page turner can tell one visit of a book from the next.
   // Written by the main loop under RenderLock; the render task captures it under that lock.
@@ -125,6 +130,18 @@ class ActivityManager {
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
   void prepareForSleep();
+#ifdef ENABLE_SERIAL_CONTROL
+  struct ControlState {
+    char activity[40] = {};
+    ScreenshotInfo reader;
+    uint32_t requested = 0;
+    uint32_t completed = 0;
+    uint8_t orientation = 0;
+    bool busy = true;
+    bool available = false;
+  };
+  void getControlState(ControlState& state) const;
+#endif
 
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.

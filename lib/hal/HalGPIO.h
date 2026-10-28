@@ -86,6 +86,7 @@ class HalGPIO {
   // expander key, one I2C read), without going through the debounced state.
   // Cheap enough to call every few ms.
   bool rawInputActive();
+  bool physicalInputActive() const;
   bool hasTouch() const;
   // Capacitive Home key reported by the touch controller (X4 Pro). The tap
   // event fires on release and excludes a long hold.
@@ -149,6 +150,7 @@ class HalGPIO {
   static constexpr uint8_t BTN_UP = 4;
   static constexpr uint8_t BTN_DOWN = 5;
   static constexpr uint8_t BTN_POWER = 6;
+  static constexpr uint8_t BUTTON_COUNT = BTN_POWER + 1;
 };
 
 extern HalGPIO gpio;
