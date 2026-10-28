@@ -60,10 +60,16 @@ class GfxRenderer {
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
   std::map<int, int> fontLineHeights;
+  std::map<int, float> fontSizePixels;
   std::map<int, int> fontAscenders;
-  int getLineHeight(int fontId, float compression = 1.0f) const {
+  int getLineHeight(int fontId) const {
     const auto found = fontLineHeights.find(fontId);
-    return found == fontLineHeights.end() ? 16 : static_cast<int>(found->second * compression);
+    return found == fontLineHeights.end() ? 16 : found->second;
+  }
+  int getLineHeight(int fontId, float compression) const {
+    const auto found = fontSizePixels.find(fontId);
+    const float size = found == fontSizePixels.end() ? getLineHeight(fontId) : found->second;
+    return static_cast<int>(size * compression + 0.5f);
   }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }

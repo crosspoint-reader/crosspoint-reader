@@ -9,6 +9,12 @@
 // TextBlock (splitting a ruby annotation into the same "characters" for ruby-align: space-around).
 namespace CjkBreaks {
 
+// True when a line break is not allowed before the CJK punctuation codepoint
+bool isNoBreakBeforeCjkPunctuation(const uint32_t cp);
+
+// True when a line break is not allowed after the CJK punctuation codepoint
+bool isNoBreakAfterCjkPunctuation(const uint32_t cp);
+
 // True when a line break is allowed between two adjacent codepoints (UAX#14-like CJK rules).
 bool boundaryAllowsBreak(uint32_t leftCp, uint32_t rightCp);
 
