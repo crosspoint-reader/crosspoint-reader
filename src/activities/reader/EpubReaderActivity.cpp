@@ -645,7 +645,10 @@ void EpubReaderActivity::loop() {
   }
 
   rememberBookOnceRendered();
-  // Before any input, so Back sees the stack as the landed link left it.
+  // Before any input, so the Back and Footnotes checks below see the stack as
+  // the landed link left it. A landing published later in this pass is picked
+  // up under the render lock by navigateToHref()/restoreSavedPosition() before
+  // they touch the stack.
   applyLinkLanding();
 
   // The radio stopped for a chapter build: once the render task has let go of the lock, that page
@@ -3245,17 +3248,19 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     return;
   }
 
-  if (savePosition) {
-    // A child screen (menu, footnote list) may have released the section;
-    // nextPageNumber then holds the page it was on.
-    const int page = section ? section->currentPage : nextPageNumber;
-    // Full: drop the oldest entry so Back always returns from the newest jump.
-    link_stack::push(savedPositions, footnoteDepth, MAX_FOOTNOTE_DEPTH, {currentSpineIndex, page});
-    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
-  }
-
   {
     RenderLock lock;
+    // The render task may have published the previous link's landing after
+    // this pass's top-of-loop apply; under the lock no further one can arrive.
+    applyLinkLanding();
+    if (savePosition) {
+      // A child screen (menu, footnote list) may have released the section;
+      // nextPageNumber then holds the page it was on.
+      const int page = section ? section->currentPage : nextPageNumber;
+      // Full: drop the oldest entry so Back always returns from the newest jump.
+      link_stack::push(savedPositions, footnoteDepth, MAX_FOOTNOTE_DEPTH, {currentSpineIndex, page});
+      LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
+    }
     clearDeferredReposition();
     // Only this jump's landing may pop the entry just pushed.
     cancelLinkLanding();
@@ -3316,13 +3321,15 @@ void EpubReaderActivity::loadLinkStack() {
 }
 
 void EpubReaderActivity::restoreSavedPosition() {
-  if (footnoteDepth <= 0) return;
-  footnoteDepth--;
-  const auto& pos = savedPositions[footnoteDepth];
-  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
-
   {
     RenderLock lock;
+    // As in navigateToHref(): a landing published since the top of this pass
+    // is applied first, so this pops the stack the reader actually has.
+    applyLinkLanding();
+    if (footnoteDepth <= 0) return;
+    footnoteDepth--;
+    const auto& pos = savedPositions[footnoteDepth];
+    LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
     clearDeferredReposition();
     cancelLinkLanding();
     currentSpineIndex = pos.spineIndex;

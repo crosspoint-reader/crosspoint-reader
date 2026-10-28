@@ -122,7 +122,9 @@ class EpubReaderActivity final : public ReaderActivity {
   // anchor only resolves to a page in renderBook(), so the render task records
   // the page it shows and loop() applies it to the stack, which stays loop-task
   // state. linkLandingPending and linkLanding are guarded by the render lock;
-  // linkLandingReady publishes linkLanding to the loop task.
+  // linkLandingReady publishes linkLanding to the loop task. Every loop-task
+  // change to the stack applies a ready landing first, so none is dropped
+  // unapplied except by an explicit jump that clears the stack anyway.
   bool linkLandingPending = false;
   SavedPosition linkLanding = {};
   std::atomic<bool> linkLandingReady{false};
