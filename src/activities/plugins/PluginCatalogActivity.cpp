@@ -25,7 +25,6 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "PluginCatalogPaging.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -407,8 +406,10 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
   substituteAll(tpl, "{plugin_api}", num);
   snprintf(num, sizeof(num), "%d", page);
   substituteAll(tpl, "{page}", num);
-  snprintf(num, sizeof(num), "%d", manifest.pageSize + 1);
+  snprintf(num, sizeof(num), "%d", plugincatalogpaging::limitFor(browsePaging(), manifest.pageSize));
   substituteAll(tpl, "{limit}", num);
+  snprintf(num, sizeof(num), "%d", std::max(0, page - 1) * manifest.pageSize);
+  substituteAll(tpl, "{offset}", num);
   substituteAll(tpl, "{query}", urlEncodeQuery(searchQuery));
   substituteAll(tpl, "{query_raw}", searchQuery);
   if (item) {
@@ -416,6 +417,15 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
     substituteAll(tpl, "{title}", item->title);
     substituteAll(tpl, "{author}", item->author);
     substituteAll(tpl, "{url}", item->url);
+    // Encoded forms for URL query values and paths, built only when used: a
+    // field can be KBs and its encoded copy three times that.
+    const std::pair<const char*, const std::string*> encoded[] = {{"{id_enc}", &item->id},
+                                                                  {"{title_enc}", &item->title},
+                                                                  {"{author_enc}", &item->author},
+                                                                  {"{url_enc}", &item->url}};
+    for (const auto& [key, value] : encoded) {
+      if (tpl.find(key) != std::string::npos) substituteAll(tpl, key, urlEncodeQuery(*value));
+    }
   }
   return tpl;
 }
@@ -795,6 +805,10 @@ const std::string& PluginCatalogActivity::activeBrowseBody() const {
   return pick(manifest.browseLists[currentList].body, manifest.browseReq.body);
 }
 
+plugincatalogpaging::Paging PluginCatalogActivity::browsePaging() const {
+  return plugincatalogpaging::pagingOf(activeBrowseUrl(), activeBrowseBody(), manifest.browseReq.headers);
+}
+
 void PluginCatalogActivity::fetchPage(const int newPage) {
   if (!manifest.isXmlList()) page = newPage;
   if (!fetchBrowseResponse() || !parseBrowseResponse()) return;
@@ -806,10 +820,10 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
 bool PluginCatalogActivity::parseBrowseResponse() {
   if (manifest.isXmlList()) return parseXmlList();
 
-  // Requests with {page} are already sliced server-side. Static JSON files
-  // need a bounded client-side page window into the streamed response.
-  const bool localPaging =
-      plugincatalogpaging::isStaticFeed(activeBrowseUrl(), activeBrowseBody(), manifest.browseReq.headers);
+  // Requests with {page} or {offset} are already sliced server-side. Static
+  // JSON files need a bounded client-side page window into the streamed response.
+  const plugincatalogpaging::Paging paging = browsePaging();
+  const bool localPaging = paging == plugincatalogpaging::Paging::Static;
   const size_t pageOffset =
       localPaging ? static_cast<size_t>(std::max(0, page - 1)) * static_cast<size_t>(manifest.pageSize) : 0;
 
@@ -848,7 +862,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
       fail(StrId::STR_PARSE_FEED_FAILED);
       return false;
     }
-    rawHasMore = localPaging ? filteredWindow.hasMore() : serverWindow.hasMore();
+    rawHasMore = localPaging ? filteredWindow.hasMore(paging) : serverWindow.hasMore(paging);
   }
 
   releaseRows();
@@ -887,7 +901,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     fail(StrId::STR_PARSE_FEED_FAILED);
     return false;
   }
-  hasMore = manifest.filtersCompatibility() ? rawHasMore : visibleWindow.hasMore();
+  hasMore = manifest.filtersCompatibility() ? rawHasMore : visibleWindow.hasMore(paging);
   computeInstallStatus();
   return true;
 }
@@ -1076,7 +1090,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       const std::string parent = dest.substr(0, slash);
       if (!Storage.exists(parent.c_str())) Storage.mkdir(parent.c_str());
     }
-    const auto result = downloadFile(base + rel, dest + ".new");
+    const auto result = downloadFile(pluginhttp::escapeUrl(base + rel), dest + ".new");
     if (result != HttpDownloader::OK) return result;
     staged.push_back(dest);
   }
@@ -1155,8 +1169,8 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     const std::vector<HttpDownloader::Header> fileHeaders =
         manifest.dlUrlPath.empty() ? substitutedHeaders(manifest.downloadReq.headers, &item)
                                    : std::vector<HttpDownloader::Header>{};
-    return downloadFile(fileUrl, dest, substituted(manifest.dlUser, &item), substituted(manifest.dlPass, &item),
-                        fileHeaders);
+    return downloadFile(pluginhttp::escapeUrl(fileUrl), dest, substituted(manifest.dlUser, &item),
+                        substituted(manifest.dlPass, &item), fileHeaders);
   };
   session.reset();  // free browse TLS before the large file GET
   auto result = fetchFile();

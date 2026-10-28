@@ -247,6 +247,7 @@ class ChapterHtmlSlimParser {
   void completeCurrentPage();
   void emitCurrentPage();
   void noteContent(int top, int bottom);
+  int lastLineGlyphBottom() const;
   void openBoxScope(BlockStyle& ownStyle, const CssStyle& cssStyle);
   void closeBoxScope();
   void emitBoxSegment(const BoxScope& box, bool closing);

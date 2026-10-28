@@ -6,7 +6,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [1. Hardware Overview](#1-hardware-overview)
     - [Button Layout](#button-layout)
     - [Taking a Screenshot](#taking-a-screenshot)
-    - [Frontlight (X4 Pro and Paper Mono)](#frontlight-x4-pro-and-paper-mono)
+    - [Control Center and Frontlight](#control-center-and-frontlight)
   - [2. Power \& Startup](#2-power--startup)
     - [Power On / Off](#power-on--off)
     - [First Launch](#first-launch)
@@ -72,12 +72,12 @@ When the Power button and the lower side button (Side Down) are pressed at the s
 
 Alternatively, while reading a book, press the **Confirm** button to open the reader menu and select **Take screenshot**.
 
-### Frontlight (X4 Pro and Paper Mono)
+### Control Center and Frontlight
 
-The X4 Pro and the M5Stack Paper Mono have a built-in frontlight. The X4 Pro has adjustable brightness and warmth; the Paper Mono has adjustable brightness only. It is controlled from a swipe panel rather than the Settings menu:
+The Control Center is available on all touch devices. Devices with a frontlight also show light controls. The X4 Pro has adjustable brightness and warmth; the Paper Mono has adjustable brightness only.
 
-* **Open the frontlight panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). Drag the brightness slider (and the warmth slider, on the X4 Pro) to adjust the light live, or tap the sun icon to turn it on or off.
-* **Quick controls:** On touch devices, the panel has one row of icons: moon for night mode, circular arrows to refresh the screen, an underlined **T** to cycle reading direction, and the Settings Controls pointer to toggle reader touch controls. The **T** rotates with the selected direction. Night mode and touch show **On** or **Off**; a filled circle means on. Turning reader touch controls off leaves the panel usable.
+* **Open the panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). You can also tap the status bar on Home, Browse Files, or Settings. On devices with a frontlight, drag the brightness slider (and the warmth slider, where available) to adjust the light live, or tap the sun icon to turn it on or off.
+* **Quick controls:** The panel has one row of icons: moon for night mode, circular arrows to refresh the screen, an underlined **T** to cycle reading direction, and the Settings Controls pointer to toggle reader touch controls. On builds with Bluetooth support, a fifth button enables or disables the Bluetooth page turner. Its crossed-out icon means disabled. The **T** rotates with the selected direction. A filled toggle means enabled; an outlined toggle means disabled. Refresh and direction always have outlines. Turning reader touch controls off leaves the panel usable. Bluetooth reconnection follows the normal rules after you close the panel; enabling it does not pair a new remote.
 * **Quick toggle (X4 Pro only):** Double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
 
 > [!NOTE]
@@ -272,7 +272,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Reader Font Size**: Choose a point size. Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
 
-- **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
+- **Reader Line Spacing**: Space added between lines, as a percentage of font size: 0%, +10%, +20% (default), +30%, +45%, +60%, or +75%.
 
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
 
@@ -298,7 +298,11 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
 
-- **Images**: Whether to display embedded images (JPG/PNG/GIF) found in EPUB files; options are "ON" (default) or "OFF". GIFs render only the first frame; interlaced GIFs are not supported.
+- **Images**: How embedded images (JPG/PNG/GIF) in EPUB files are shown. GIFs render only the first frame; interlaced GIFs are not supported.
+  - **Display** (default): images in gray levels. Pages with images take an extra grayscale refresh.
+  - **Placeholder**: the image's alt text in place of the image.
+  - **Suppress**: images are left out.
+  - **Black & White**: images drawn as a black-and-white dot pattern. Pages with images turn like text pages, without the extra refresh.
 
 - **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
 
@@ -690,11 +694,14 @@ The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-fo
 
 Press **Confirm** while reading to open the Reader Menu. From here you can access reading utilities and navigation options without leaving the book.
 
+The list menu remembers the selected entry while the book stays open. If that entry is no longer available, the cursor returns to the first entry. Closing the book resets the selection.
+
 Available options include:
 
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
 - **Links and Footnotes** – Select an internal link on the current page. This option appears when the page contains links.
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
+- **Bluetooth Page Turner** – Toggle Bluetooth for the saved remote. This entry appears after pairing a remote in **Settings → Connectivity → Bluetooth Page Turner** and disappears if that selected remote is forgotten.
 - **Create Clipping** – Select a range of text on the current page and save it as a highlighted clipping.
 - **View Clippings** – Open this book's saved clippings *(shown after the first clipping is saved)*.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
@@ -703,7 +710,7 @@ Available options include:
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.
-- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
+- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)). This entry appears when sync credentials are saved or an enabled plugin subscribes to device events. Without sync credentials, it connects to Wi-Fi to send queued plugin events.
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
 
 Press **Back** at any time to close the menu and return to your current page.

@@ -27,7 +27,7 @@ namespace {
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
-constexpr float PLAIN_TEXT_LINE_SPACING = 1.5f;
+constexpr float PLAIN_TEXT_LINE_SPACING = 2.0f;
 constexpr size_t HEAP_HEADROOM = 8 * 1024;
 constexpr unsigned long MESSAGE_DURATION_MS = 1500;
 constexpr size_t SELECTION_PAGE_WINDOW = 3;
