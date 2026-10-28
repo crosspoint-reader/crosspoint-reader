@@ -21,6 +21,7 @@
 #include "activities/settings/SettingsActivity.h"
 #include "components/UITheme.h"
 #include "util/DictionaryRegistry.h"
+#include "util/SlideSwitch.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -295,7 +296,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // Frontlit and lightless variants of a board share one binary (EEGO A4);
   // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
   // has not run at load time, so the base list must keep the persisted key.
-  if (!Frontlight.present()) {
+  // Also hidden while the Picco slide switch owns the light: its position
+  // decides the light at boot. The key stays persisted for other devices.
+  if (!Frontlight.present() || slideSwitchOwnsLight()) {
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());

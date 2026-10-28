@@ -49,6 +49,7 @@
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SlideSwitch.h"
 #include "util/Timezones.h"
 
 #if CROSSPOINT_VECTOR_FONTS
@@ -687,9 +688,12 @@ void setup() {
   // Brightness and warmth are always restored. A normal wake starts with the
   // light off unless Restore Light on Wake is enabled; silent maintenance
   // reboots replay the live state captured at restart, so they neither go dark
-  // nor light up against the user's wake preference.
-  const bool restoreLightOn =
-      isSilentReboot ? silentRebootLightOn : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
+  // nor light up against the user's wake preference. A slide switch bound to
+  // the light decides it from its position instead.
+  const bool restoreLightOn = isSilentReboot ? silentRebootLightOn
+                              : slideSwitchOwnsLight()
+                                  ? gpio.isToggleSwitchOn()
+                                  : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   switch (wakeupReason) {
