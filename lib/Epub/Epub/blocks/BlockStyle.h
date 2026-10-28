@@ -34,10 +34,16 @@ struct BlockStyle {
   bool isRtl = false;              // true if resolved direction is RTL
   bool directionDefined = false;   // true if direction was explicitly set in CSS/HTML
 
-  // Set when this block was created by a <br> element. Used by startNewTextBlock to inject
-  // a full line-height gap when the <br> block stays empty (section-break use case).
-  // NOT propagated through getCombinedBlockStyle so it can't leak into sibling blocks.
-  bool fromBrElement = false;
+  // Computed CSS font size relative to the reader's body size. Layout-time only.
+  float fontScale = 1.0f;
+  bool fontScaleDefined = false;
+  // Renderer font for this block's lines; 0 means the section's reader font.
+  int32_t fontId = 0;
+  // Forced page breaks from CSS. Layout-time only; never inherited by children.
+  bool pageBreakBefore = false;
+  bool pageBreakAfter = false;
+  // Headings: keep the block's last lines on the page with whatever follows. Layout-time only.
+  bool keepWithNext = false;
 
   // Combined insets (margin + padding)
   [[nodiscard]] int16_t leftInset() const { return marginLeft + paddingLeft; }
@@ -99,6 +105,8 @@ struct BlockStyle {
       result.marginBottom = std::max(child.marginBottom, marginBottom);
       result.paddingTop = static_cast<int16_t>(child.paddingTop + paddingTop);
       result.paddingBottom = static_cast<int16_t>(child.paddingBottom + paddingBottom);
+      // A container's break lands on its first child when they share the empty block.
+      result.pageBreakBefore = child.pageBreakBefore || pageBreakBefore;
     }
 
     // Direction is not axis-specific. Inherit from parent when child doesn't define it.
@@ -106,10 +114,11 @@ struct BlockStyle {
       result.isRtl = isRtl;
       result.directionDefined = true;
     }
+    if (!child.fontScaleDefined && fontScaleDefined) {
+      result.fontScale = fontScale;
+      result.fontScaleDefined = true;
+    }
 
-    // fromBrElement is consumed by startNewTextBlock when an empty <br> block
-    // is merged with the following paragraph; never propagate it further.
-    result.fromBrElement = false;
     return result;
   }
 
@@ -145,6 +154,8 @@ struct BlockStyle {
     } else {
       blockStyle.alignment = paragraphAlignment;
     }
+    blockStyle.pageBreakBefore = cssStyle.hasPageBreakBefore() && cssStyle.pageBreakBefore;
+    blockStyle.pageBreakAfter = cssStyle.hasPageBreakAfter() && cssStyle.pageBreakAfter;
     // RTL direction from CSS/HTML
     if (cssStyle.hasDirection()) {
       blockStyle.isRtl = (cssStyle.direction == CssTextDirection::Rtl);

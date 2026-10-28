@@ -15,11 +15,11 @@ class SectionAnchorMapTest : public ::testing::Test {
                .string();
   }
   void TearDown() override { std::filesystem::remove(path); }
-  void writeMap(const std::vector<std::pair<std::string, uint16_t>>& anchors, const std::string& requested,
-                const bool partial = false, const uint16_t pages = 10) {
+  void writeMap(const std::deque<std::pair<std::string, uint16_t>>& anchors, const std::string& requested,
+                const bool partial = false, const uint16_t pages = 10, const bool requestedPending = false) {
     HalFile file;
     ASSERT_TRUE(Storage.openFileForWrite("TEST", path, file));
-    ASSERT_TRUE(sectionAnchors::write(file, anchors, requested, pages, partial));
+    ASSERT_TRUE(sectionAnchors::write(file, anchors, requested, pages, partial, requestedPending));
   }
   sectionAnchors::Lookup lookup(const std::string& anchor) {
     HalFile file;
@@ -65,6 +65,21 @@ TEST_F(SectionAnchorMapTest, PartialCannotCertifyAbsenceOrExposeUnwrittenPage) {
   EXPECT_EQ(lookup("written").page, 2);
   EXPECT_FALSE(lookup("unwritten").checked);
   EXPECT_FALSE(lookup("absent").checked);
+}
+
+TEST_F(SectionAnchorMapTest, PartialDoesNotExposeProvisionalStructuralPage) {
+  writeMap({{"ordinary", 1}, {"requested", 2}}, "requested", true, 5, true);
+  EXPECT_EQ(lookup("ordinary").page, 1);
+  EXPECT_FALSE(lookup("requested").checked);
+  EXPECT_FALSE(lookup("requested").page.has_value());
+  writeMap({{"ordinary", 1}, {"requested", 4}}, "requested", true, 5, false);
+  EXPECT_EQ(lookup("requested").page, 4);
+}
+
+TEST_F(SectionAnchorMapTest, CompletedUnrenderedTargetDoesNotKeepProvisionalPage) {
+  writeMap({{"requested", 2}}, "requested", false, 5, true);
+  EXPECT_TRUE(lookup("requested").checked);
+  EXPECT_FALSE(lookup("requested").page.has_value());
 }
 
 TEST_F(SectionAnchorMapTest, MissingRecordKeepsExistingEncodingForOlderReaders) {

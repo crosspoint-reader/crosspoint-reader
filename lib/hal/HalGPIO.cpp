@@ -7,6 +7,10 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#if FREEINK_DEVICE_LILYGO
+#include <BoardT5S3.h>
+#endif
+
 // Global HalGPIO instance
 HalGPIO gpio;
 
@@ -105,6 +109,15 @@ void HalGPIO::begin() {
   _deviceType = DeviceType::X4;
 #endif
   inputMgr.begin();
+#if FREEINK_DEVICE_LILYGO
+  // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
+  // re-inits I2C/SPI and is unsafe to call here. inputMgr.begin() has started Wire.
+  if (BoardConfig::ACTIVE.board == BoardConfig::Board::LilyGoT5S3) {
+    BoardT5S3::setPca9535PinMode(PCA9535_IO12_BUTTON, INPUT);
+    InputManager::setButtonHook(
+        []() -> uint8_t { return BoardT5S3::readButton() ? static_cast<uint8_t>(1U << InputManager::BTN_DOWN) : 0; });
+  }
+#endif
 }
 
 void HalGPIO::update() {
@@ -135,6 +148,9 @@ bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
 
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+#if FREEINK_DEVICE_LILYGO
+  if (BoardConfig::ACTIVE.board == BoardConfig::Board::LilyGoT5S3 && BoardT5S3::readButton()) return true;
+#endif
   InputManager::ButtonAdcSample g1{}, g2{};
   inputMgr.readButtonAdc(g1, g2);
   // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
@@ -153,6 +169,10 @@ bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }
 
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
+
+bool HalGPIO::hasToggleSwitch() const { return inputMgr.hasToggleSwitch(); }
+
+bool HalGPIO::isToggleSwitchOn() const { return inputMgr.isToggleSwitchOn(); }
 
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
@@ -226,8 +246,13 @@ bool HalGPIO::isUsbConnected() const {
   // divider): infer external power from charging state instead. BatteryMonitor
   // picks the board's best source — charger IC status, gauge Current() sign, or
   // a /STAT pin — and reports false on boards with no battery telemetry at all.
-  // Caveat: charge termination at 100% reads as "not connected".
+  // A charger IC that reports its input rail (BQ25896, SGM41562, M5 PMIC)
+  // answers directly; otherwise infer from charging state, where charge
+  // termination at 100% reads as "not connected".
   static const BatteryMonitor battery;
+  bool known = false;
+  const bool present = battery.isExternalPowerPresent(&known);
+  if (known) return present;
   return battery.isCharging();
 }
 

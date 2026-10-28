@@ -6,7 +6,9 @@
 #include <utility>
 #include <vector>
 
+#include "PluginCatalogPaging.h"
 #include "activities/CatalogActivity.h"
+#include "components/OptionPopup.h"
 #include "network/HttpDownloader.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
@@ -19,6 +21,7 @@ class SecureHttpClient;
 // Picker entry; an empty manifestPath marks an inert browser-only plugin.
 struct PluginRef {
   std::string name;          // folder name
+  std::string dir;           // exact discovered installation directory
   std::string title;         // from device.json or manifest.json (falls back to name)
   std::string description;   // one-line summary, if provided
   std::string manifestPath;  // device.json path, "" for a web-only plugin
@@ -28,9 +31,6 @@ struct PluginRef {
 
 // Rescan plugin roots on demand; metadata is owned by the picker.
 std::vector<PluginRef> discoverPlugins();
-
-// True if a plugin.js or device.json is installed; reads no manifests.
-bool anyPluginInstalled();
 
 // Manifest-driven picker, catalog, download, and sign-in screens.
 // See docs/sd-plugins.md for the device.json schema.
@@ -52,20 +52,37 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::string configFile;
     // JSON uses dotted field paths; XML uses element/attribute selectors.
     std::string browseFormat;
-    // Browse request: templates may use {token}, {cfg.KEY}, {page}, {limit}.
+    // Browse request: templates may use {token}, {cfg.KEY}, {page}, {offset}, {limit}.
     pluginhttp::RequestSpec browseReq;
     std::string itemsPath;  // JSON: dotted path to the item array; "" = response root
     // JSON field paths (dotted); XML field selectors ("elem", "elem@attr", "@attr").
     std::string titlePath, authorPath, idPath, urlPath;
+    // Optional JSON detail fields are streamed only for the selected item so a
+    // page of long descriptions/repository metadata does not stay in DRAM.
+    std::string descriptionPath, detailAuthorPath, repositoryPath;
+    std::string detailsUrlPath, detailsFormatPath;
     // Compare this item field against the installed manifest version for badges.
     std::string versionPath;
+    // Optional catalog-entry compatibility fields. Empty paths mean no
+    // restriction; entries that omit the mapped values remain visible.
+    std::string compatFamilyPath, compatApiMinPath, compatRequiresPath;
     bool tracksInstalls() const { return !versionPath.empty(); }
+    bool hasItemDetails() const {
+      return tracksInstalls() || !descriptionPath.empty() || !repositoryPath.empty() || !detailsUrlPath.empty();
+    }
+    bool filtersCompatibility() const {
+      return !compatFamilyPath.empty() || !compatApiMinPath.empty() || !compatRequiresPath.empty();
+    }
     int pageSize = 8;
     // Named JSON views override the browse URL/body; Back returns to their picker.
     struct BrowseList {
       std::string title, url, body;
+      std::string noticeTitle, noticeMessage, noticeConfirm, noticeCancel;
+      bool hasNotice() const { return !noticeMessage.empty(); }
     };
     std::vector<BrowseList> browseLists;
+    // Optional remote index that supplies the named JSON views dynamically.
+    std::string browseListsUrl;
     // JSON search overrides URL/body independently; empty fields reuse browse.
     std::string searchUrl, searchBody;
     bool hasSearch() const { return (!searchUrl.empty() || !searchBody.empty()) && browseFormat != "xml"; }
@@ -109,13 +126,22 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::vector<std::string> files;
   };
 
+  struct ItemDetails {
+    std::string description, author, repository;
+    std::string detailsUrl, detailsFormat;
+  };
+
   std::string manifestPath;  // empty while the picker is showing
   std::string catalogTitle;
   Manifest manifest;
   std::vector<PluginRef> installedPlugins;
+  bool pluginHubAvailable = false;
+  bool showPluginHubInstallRow = false;
+  bool ignoreHubInstallerBackRelease = false;
+  OptionPopup pluginHubPopup;
   bool showOpds = false;
   bool rootMode = false;
-  int pickerReturnRow = 0;  // picker row to reselect after leaving a catalog
+  std::string pickerReturnName;  // plugin identity to reselect after leaving a catalog
   std::vector<Item> items;
   // Row buffer over items/browseLists plus the synthetic pager rows; rebuilt
   // lazily on the render task whenever rowsDirty (items or state changed).
@@ -149,7 +175,9 @@ class PluginCatalogActivity final : public CatalogActivity {
   void resetBrowse();
   // JSON catalog with named lists and none picked yet.
   bool wantsListPicker() const;
+  void openList(int index);
   bool loadManifest();
+  bool loadBrowseListIndex();
   bool loadToken();
   void loadConfig();
   bool saveToken(const std::string& value);
@@ -169,6 +197,10 @@ class PluginCatalogActivity final : public CatalogActivity {
   int listCount() const override { return rowCount(); }
   // Row dispatch: pager rows page, picker rows pick, item rows open/download.
   void activateIndex(int index) override;
+  void onRowLongPress(int index) override;
+  bool handleButtons() override;
+  void confirmUninstallPlugin(int pickerIndex);
+  void render(RenderLock&& lock) override;
   void buildScreen(UiScreen& screen) override;
   bool handleCustomInput() override;
   void onBackButton() override;
@@ -182,6 +214,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   // Browse url/body with the selected browse list's overrides applied.
   const std::string& activeBrowseUrl() const;
   const std::string& activeBrowseBody() const;
+  plugincatalogpaging::Paging browsePaging() const;
   // Copies `headers` with `substituted()` applied to each value.
   pluginhttp::Headers substitutedHeaders(const pluginhttp::Headers& headers, const Item* item) const;
   void fetchPage(int newPage);
@@ -189,7 +222,9 @@ class PluginCatalogActivity final : public CatalogActivity {
   void computeInstallStatus();
   bool parseXmlList();
   bool parseBrowseResponse();
-  void activateItem(int itemIndex);  // XML list: navigate into a folder, else download
+  void activateItem(int itemIndex);  // XML list: navigate into a folder, else show details/download
+  bool loadItemDetails(int itemIndex, ItemDetails& details);
+  void showItemDetails(int itemIndex);
   void downloadItem(int itemIndex);
   HttpDownloader::DownloadError downloadBundle(const Item& item);
   HttpDownloader::DownloadError downloadBook(const Item& item);

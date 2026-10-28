@@ -4,10 +4,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <deque>
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace sectionAnchors {
 
@@ -28,12 +28,13 @@ inline bool writeEntry(HalFile& file, const std::string& anchor, const uint16_t 
          file.write(anchor.data(), anchor.size()) == anchor.size() && file.write(&page, sizeof(page)) == sizeof(page);
 }
 
-inline bool write(HalFile& file, const std::vector<std::pair<std::string, uint16_t>>& anchors,
-                  const std::string& requested, const uint16_t writtenPages, const bool partial) {
+inline bool write(HalFile& file, const std::deque<std::pair<std::string, uint16_t>>& anchors,
+                  const std::string& requested, const uint16_t writtenPages, const bool partial,
+                  const bool requestedPending = false) {
   bool requestedFound = requested.empty();
   uint16_t count = 0;
   for (const auto& [anchor, page] : anchors) {
-    if (partial && page >= writtenPages) continue;
+    if ((partial && page >= writtenPages) || (requestedPending && anchor == requested)) continue;
     if (count == UINT16_MAX) return false;
     ++count;
     if (anchor == requested) requestedFound = true;
@@ -43,7 +44,7 @@ inline bool write(HalFile& file, const std::vector<std::pair<std::string, uint16
   if (recordMissing) ++count;
   if (file.write(&count, sizeof(count)) != sizeof(count)) return false;
   for (const auto& [anchor, page] : anchors) {
-    if (partial && page >= writtenPages) continue;
+    if ((partial && page >= writtenPages) || (requestedPending && anchor == requested)) continue;
     if (!writeEntry(file, anchor, page)) return false;
   }
   return !recordMissing || writeEntry(file, requested, 0, true);

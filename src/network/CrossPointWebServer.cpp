@@ -9,9 +9,11 @@
 #include <HalGPIO.h>
 #include <HalMemory.h>
 #include <HalStorage.h>
+#include <HiddenItems.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
+#include <MD5Builder.h>
 #include <Memory.h>
 #include <ResumableFetch.h>
 #include <SecureHttpClient.h>
@@ -52,6 +54,7 @@
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
+#include "util/FirmwareIdentity.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 #include "util/TaskWatchdog.h"
@@ -87,16 +90,6 @@ void releaseRequestArguments(WebServer* server) {
   static_cast<CrossPointHttpServer*>(server)->releaseRequestArguments();
 }
 
-// Folders/files to hide from the web interface file browser
-// Note: Items starting with "." are automatically hidden
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-
-// Formats the library index tracks (LibraryIndex isBookName): an upload of any
-// of these must mark the index dirty so the next Library entry rebuilds it.
-bool isLibraryBookFile(const String& filename) {
-  return FsHelpers::checkFileExtension(filename, ".epub") || FsHelpers::checkFileExtension(filename, ".txt") ||
-         FsHelpers::checkFileExtension(filename, ".md") || FsHelpers::checkFileExtension(filename, ".xtc");
-}
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -139,7 +132,7 @@ bool isProtectedItemName(const String& name) {
   if (name.startsWith(".")) {
     return true;
   }
-  for (const auto* item : HIDDEN_ITEMS) {
+  for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
     if (name.equals(item)) {
       return true;
     }
@@ -277,7 +270,7 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
-  // If-None-Match is collected so the static-page handlers can answer conditional GETs with 304
+  // If-None-Match is collected so static pages and plugin files can answer conditional GETs with 304
   const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
                                     "Lock-Token", "Timeout",     "If-None-Match"};
   server->collectHeaders(collectedHeaders, 7);
@@ -535,6 +528,9 @@ void CrossPointWebServer::handleStatus() const {
 
   JsonDocument doc;
   doc["version"] = CROSSPOINT_VERSION;
+  doc["firmwareFamily"] = firmwareidentity::FAMILY;
+  doc["pluginApi"] = firmwareidentity::PLUGIN_API_VERSION;
+  doc["pluginCapabilities"] = firmwareidentity::PLUGIN_CAPABILITIES;
   doc["ip"] = ipAddr;
   doc["mode"] = apMode ? "AP" : "STA";
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
@@ -614,7 +610,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
-      for (const auto* item : HIDDEN_ITEMS) {
+      for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
         if (fileName.equals(item)) {
           shouldHide = true;
           break;
@@ -740,7 +736,7 @@ void CrossPointWebServer::handleDownload() const {
     server->send(403, "text/plain", "Cannot access system files");
     return;
   }
-  for (const auto* item : HIDDEN_ITEMS) {
+  for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
     if (itemName.equals(item)) {
       server->send(403, "text/plain", "Cannot access protected items");
       return;
@@ -805,13 +801,22 @@ static bool flushUploadBuffer(CrossPointWebServer::UploadState& state) {
   return true;
 }
 
-// Drop a partially written upload so a truncated book never lands in the library.
-// The file is new: uploads refuse to overwrite an existing name.
-static void removeUploadedFile(const CrossPointWebServer::UploadState& state) {
+static String uploadDestPath(const CrossPointWebServer::UploadState& state) {
   String filePath = state.path;
   if (!filePath.endsWith("/")) filePath += "/";
   filePath += state.fileName;
-  Storage.remove(filePath.c_str());
+  return filePath;
+}
+
+// The path being written: the destination itself, or "<dest>.part" while overwriting.
+static String uploadWritePath(const CrossPointWebServer::UploadState& state) {
+  return state.staged ? uploadDestPath(state) + ".part" : uploadDestPath(state);
+}
+
+// Drop a partially written upload so a truncated book never lands in the library.
+// An overwritten file is untouched: only its staged copy is removed.
+static void removeUploadedFile(const CrossPointWebServer::UploadState& state) {
+  Storage.remove(uploadWritePath(state).c_str());
 }
 
 void CrossPointWebServer::handleUpload(UploadState& state) const {
@@ -836,6 +841,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     state.size = 0;
     state.success = false;
     state.error = "";
+    state.staged = false;
     uploadStartTime = millis();
     lastLoggedSize = 0;
     state.bufferPos = 0;
@@ -872,9 +878,20 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     // Check if file already exists - SD operations can be slow
     resetTaskWatchdogIfSubscribed();
     if (Storage.exists(filePath.c_str())) {
-      state.error = "File already exists: " + state.fileName;
-      LOG_DBG("WEB", "[UPLOAD] Collision: %s", filePath.c_str());
-      return;
+      const String overwrite = server->arg("overwrite");
+      if (overwrite != "1" && overwrite != "true") {
+        state.error = "File already exists: " + state.fileName;
+        LOG_DBG("WEB", "[UPLOAD] Collision: %s", filePath.c_str());
+        return;
+      }
+      HalFile existing = Storage.open(filePath.c_str());
+      if (existing && existing.isDirectory()) {
+        state.error = "A folder with this name already exists: " + state.fileName;
+        LOG_DBG("WEB", "[UPLOAD] Folder collision: %s", filePath.c_str());
+        return;
+      }
+      existing.close();
+      state.staged = true;
     }
 
     // The buffer spans upload callbacks; keep it off the task stack and release it at the end.
@@ -887,15 +904,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     resetTaskWatchdogIfSubscribed();
-    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
+    if (!Storage.openFileForWrite("WEB", uploadWritePath(state), state.file)) {
       state.error = "Failed to create file on SD card";
-      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
+      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", uploadWritePath(state).c_str());
       state.buffer.reset();
       return;
     }
     resetTaskWatchdogIfSubscribed();
 
-    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
+    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", uploadWritePath(state).c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (dropUploadIfCancelled()) return;
     if (state.file && state.error.isEmpty()) {
@@ -943,8 +960,27 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       if (!flushUploadBuffer(state)) {
         state.error = "Failed to write final data to SD card";
       }
-      state.file.close();
-      if (!state.error.isEmpty()) removeUploadedFile(state);
+      // close() writes the final size: a failed close must not replace the original.
+      if (!state.file.close() && state.error.isEmpty()) state.error = "Failed to write final data to SD card";
+      bool keepStaged = false;
+      if (state.error.isEmpty() && state.staged) {
+        resetTaskWatchdogIfSubscribed();  // removing a large original walks its cluster chain
+        const String dest = uploadDestPath(state);
+        if (!Storage.replaceFile(uploadWritePath(state).c_str(), dest.c_str())) {
+          LOG_ERR("WEB", "[UPLOAD] Replace failed: %s", dest.c_str());
+          // replaceFile removes the original before the rename: if it is gone,
+          // the staged copy is the only one left, so keep it.
+          keepStaged = !Storage.exists(dest.c_str());
+          state.error = keepStaged ? "Replace failed; the new file is kept as " + state.fileName + ".part"
+                                   : "Failed to replace the existing file";
+          if (keepStaged) {
+            // The original is gone: drop its cache and Library entry.
+            clearBookCache(dest.c_str());
+            if (library::isLibraryBookFile(dest.c_str())) library::markLibraryIndexDirty();
+          }
+        }
+      }
+      if (!state.error.isEmpty() && !keepStaged) removeUploadedFile(state);
 
       if (state.error.isEmpty()) {
         state.success = true;
@@ -961,7 +997,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
-        if (isLibraryBookFile(state.fileName)) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
     state.buffer.reset();
@@ -1279,16 +1315,16 @@ void CrossPointWebServer::handleDelete() const {
     // Security check: prevent deletion of protected items
     const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
 
-    // Hidden/system files and credential stores are protected
-    if (itemName.startsWith(".") || protectedpaths::isSensitivePath(itemPath.c_str())) {
-      failedItems += itemPath + " (hidden/system file); ";
+    // Credential stores are protected. Hidden (dot-named) items can be deleted.
+    if (protectedpaths::isSensitivePath(itemPath.c_str())) {
+      failedItems += itemPath + " (protected file); ";
       allSuccess = false;
       continue;
     }
 
     // Check against explicitly protected items
     bool isProtected = false;
-    for (const auto* item : HIDDEN_ITEMS) {
+    for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
       if (itemName.equals(item)) {
         isProtected = true;
         break;
@@ -1364,7 +1400,7 @@ void CrossPointWebServer::handleGetSettings() const {
   JsonDocument doc;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;  // Skip ACTION-only entries
+    if (!s.key || s.webHidden) continue;  // Skip ACTION-only entries
 
     doc.clear();
     doc["key"] = s.key;
@@ -1473,7 +1509,7 @@ void CrossPointWebServer::handlePostSettings() {
   int applied = 0;
 
   for (const auto& s : settings) {
-    if (!s.key) continue;
+    if (!s.key || s.webHidden) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
 
     switch (s.type) {
@@ -1885,6 +1921,12 @@ void CrossPointWebServer::sendJson(const JsonDocument& doc) const {
   server->send(200, "application/json", out);
 }
 
+bool CrossPointWebServer::rejectIfPluginsDisabled() const {
+  if (SETTINGS.pluginsEnabled) return false;
+  server->send(403, "text/plain", "plugin system disabled");
+  return true;
+}
+
 // GET /api/plugins -> [{ "name", "title", "mount" }, ...]. Only plugins with a
 // plugin.js are listed (the page loads it); optional manifest.json supplies the
 // title and mount point.
@@ -1932,6 +1974,30 @@ void CrossPointWebServer::handlePluginFile() const {
     return;
   }
 
+  // A content hash, not size and date: without a set clock files can share a
+  // timestamp, and a plugin update can keep the same size.
+  MD5Builder md5;
+  md5.begin();
+  uint8_t chunk[512];
+  int got;
+  while ((got = f.read(chunk, sizeof(chunk))) > 0) {
+    md5.add(chunk, static_cast<size_t>(got));
+    resetTaskWatchdogIfSubscribed();
+  }
+  if (got < 0 || !f.seek(0)) {
+    LOG_ERR("WEB", "Plugin file read failed: %s", path.c_str());
+    server->send(500, "text/plain", "Failed to read file");
+    return;
+  }
+  md5.calculate();
+  const String etag = "\"" + md5.toString() + "\"";
+  // no-cache: the browser keeps the file but revalidates it on every load.
+  server->sendHeader("ETag", etag);
+  server->sendHeader("Cache-Control", "no-cache");
+  if (server->header("If-None-Match") == etag) {
+    server->send(304);
+    return;
+  }
   server->setContentLength(f.size());
   server->send(200, pluginContentType(file), "");
   streamFileToClient(f);
@@ -1944,6 +2010,7 @@ void CrossPointWebServer::handlePluginFile() const {
 // device makes it via SecureNet. Sending the body raw avoids escaping it into
 // JSON on the device; PluginHost.relay() rebuilds {status, headers, body}.
 void CrossPointWebServer::handleRelay() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const String plugin = req["plugin"] | "";
@@ -2005,6 +2072,7 @@ namespace {}  // namespace
 // Generic wolfSSL primitives (hash, random, AES, RSA, PKCS#12) a plugin can use.
 // Stateless; keys are base64 in the request/reply.
 void CrossPointWebServer::handleCrypto() {
+  if (rejectIfPluginsDisabled()) return;
   using namespace freeink::content;
   JsonDocument req;
   if (!readJsonBody(req)) return;
@@ -2188,6 +2256,7 @@ void CrossPointWebServer::handleCrypto() {
 // Device downloads a URL straight to SD, so a large body never passes through
 // the browser.
 void CrossPointWebServer::handleFetch() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const std::string url = req["url"] | "";
@@ -2314,6 +2383,14 @@ void CrossPointWebServer::handleFetch() {
     written = 0;
     return Storage.openFileForWrite("PLG", part, file);
   };
+  // The write callback only runs when bytes arrive; with the 60s no-data
+  // timeout a server stall would starve this task's WDT subscription.
+  // shouldAbort is polled in every wait loop, and by connect().
+  const auto feedWatchdog = [&] {
+    resetTaskWatchdogIfSubscribed();
+    keepBrowserAlive();
+    return false;  // never aborts; only feeds
+  };
   const freeink::FetchResult result = freeink::fetchResumable(
       url, options,
       [&](freeink::SecureHttpClient& http, const bool sameOrigin) {
@@ -2327,19 +2404,15 @@ void CrossPointWebServer::handleFetch() {
         http.setTimeout(60000);
         // The plugin's headers (typically its Authorization) stay with the
         // starting origin; a redirect to another server gets none of them.
-        if (sameOrigin) {
+        if (sameOrigin && !requestHeaders.empty()) {
+          // Handshake before the client copies the headers: a several-KB session
+          // cookie would otherwise take heap the handshake needs. A failed connect
+          // is retried, and reported, by the request itself.
+          http.connect(feedWatchdog);
           for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
         }
       },
-      sink,
-      // The write callback only runs when bytes arrive; with the 60s no-data
-      // timeout a server stall would starve this task's WDT subscription.
-      // shouldAbort is polled in every wait loop.
-      [&] {
-        resetTaskWatchdogIfSubscribed();
-        keepBrowserAlive();
-        return false;  // never aborts; only feeds
-      });
+      sink, feedWatchdog);
   if (file.isOpen()) {
     file.flush();
     file.close();
@@ -2375,6 +2448,8 @@ void CrossPointWebServer::handleFetch() {
     Storage.remove(part.c_str());
     complete = false;
     resp["error"] = "sd write failed";
+  } else if (complete && library::isLibraryBookFile(dest)) {
+    library::markLibraryIndexDirty();
   }
   resp["status"] = status;
   resp["bytes"] = written;
@@ -2415,6 +2490,10 @@ void CrossPointWebServer::handlePluginFsUpload() {
       st.started = true;
       st.errorStatus = 0;
       st.error = nullptr;
+      if (!SETTINGS.pluginsEnabled) {
+        fail(403, "plugin system disabled");
+        return;
+      }
       const String plugin = server->arg("plugin");
       if (!safeComponent(plugin) || !protectedpaths::isPluginPath(st.path)) {
         LOG_ERR("WEB", "Rejected plugin file write: plugin='%s' path='%s'", plugin.c_str(), st.path.c_str());
@@ -2453,6 +2532,8 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
+      } else if (library::isLibraryBookFile(st.path)) {
+        library::markLibraryIndexDirty();
       }
       return;
     case UPLOAD_FILE_ABORTED:
@@ -2463,6 +2544,10 @@ void CrossPointWebServer::handlePluginFsUpload() {
 
 void CrossPointWebServer::handlePluginFs() {
   auto& st = pluginFsUpload;
+  if (!SETTINGS.pluginsEnabled && !st.started) {
+    server->send(403, "text/plain", "plugin system disabled");
+    return;
+  }
   if (!st.started) {
     server->send(400, "application/json", "{\"error\":\"missing file part\"}");
   } else if (st.errorStatus) {
@@ -2478,22 +2563,23 @@ void CrossPointWebServer::handlePluginFs() {
   st.started = false;
 }
 
-// POST /api/book-key {path, key (base64, 16 bytes), expires?} -> {ok}
+// POST /api/book-key {path, key (base64, 16 or 32 bytes), expires?} -> {ok}
 // Stores a protected book's content key, wrapped to this device, as
 // "<path>.key" for the reader to open the book with.
 void CrossPointWebServer::handleBookKey() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const std::string path = req["path"] | "";
   const char* keyB64 = req["key"] | "";
   const int64_t expires = req["expires"] | static_cast<int64_t>(0);
-  uint8_t key[bookkey::KEY_LEN];
+  uint8_t key[bookkey::MAX_KEY_LEN];
   const int32_t n = freeink::content::base64Decode(keyB64, strlen(keyB64), key, sizeof(key));
-  if (!protectedpaths::isPluginPath(path) || n != static_cast<int32_t>(sizeof(key)) || expires < 0) {
+  if (!protectedpaths::isPluginPath(path) || (n != 16 && n != 32) || expires < 0) {
     server->send(400, "application/json", "{\"error\":\"bad path/key\"}");
     return;
   }
-  if (!bookkey::write(path, key, expires)) {
+  if (!bookkey::write(path, key, static_cast<size_t>(n), expires)) {
     server->send(500, "application/json", "{\"error\":\"cannot store key\"}");
     return;
   }
@@ -2501,6 +2587,7 @@ void CrossPointWebServer::handleBookKey() {
 }
 
 void CrossPointWebServer::handlePluginRunnerPage() const {
+  if (rejectIfPluginsDisabled()) return;
   sendStaticContent(server.get(), RunnerPageHtml, sizeof(RunnerPageHtml), RunnerPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served plugin runner page");
 }
@@ -2517,6 +2604,7 @@ CrossPointWebServer::PluginJob* CrossPointWebServer::allocPluginJob() {
 
 // POST /api/plugin-jobs {plugin, action, args?} -> {id}
 void CrossPointWebServer::handlePluginJobSubmit() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const String plugin = req["plugin"] | "";
@@ -2554,6 +2642,7 @@ void CrossPointWebServer::handlePluginJobSubmit() {
 
 // GET /api/plugin-jobs/claim?plugin=<name> -> {id, action, args} or {id:0}
 void CrossPointWebServer::handlePluginJobClaim() {
+  if (rejectIfPluginsDisabled()) return;
   const String plugin = server->arg("plugin");
   const uint32_t now = millis();
   for (auto& job : pluginJobs) {
@@ -2578,6 +2667,7 @@ void CrossPointWebServer::handlePluginJobClaim() {
 // 409 when `claim` is stale: the lease expired and another runner re-claimed
 // the job, so this late result must not overwrite that runner's.
 void CrossPointWebServer::handlePluginJobComplete() {
+  if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
   if (!readJsonBody(req)) return;
   const uint32_t id = req["id"] | 0;
@@ -2613,6 +2703,7 @@ void CrossPointWebServer::handlePluginJobComplete() {
 
 // GET /api/plugin-jobs/status?id=<n> -> {id, state, result}
 void CrossPointWebServer::handlePluginJobStatus() {
+  if (rejectIfPluginsDisabled()) return;
   const uint32_t id = strtoul(server->arg("id").c_str(), nullptr, 10);
   static constexpr const char* STATE_NAMES[] = {"empty", "pending", "running", "done", "error"};
   for (auto& job : pluginJobs) {
@@ -2737,7 +2828,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearBookCache(filePath.c_str());
-            if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
+            if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2807,7 +2898,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
         clearBookCache(filePath.c_str());
-        if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
+        if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
@@ -2849,15 +2940,17 @@ void CrossPointWebServer::handleFontList() const {
     }
 
     JsonArray files = fObj["files"].to<JsonArray>();
+    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
     for (const auto& file : family.files) {
+      if (!family.filePath(file, path, sizeof(path))) continue;
       JsonObject fileObj = files.add<JsonObject>();
       // Extract filename from full path
-      const char* name = strrchr(file.path.c_str(), '/');
-      fileObj["name"] = name ? name + 1 : file.path.c_str();
+      const char* name = strrchr(path, '/');
+      fileObj["name"] = name ? name + 1 : path;
 
       // Stat the file for size
       HalFile f;
-      if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
+      if (Storage.openFileForRead("WEB", path, f)) {
         fileObj["size"] = static_cast<unsigned long>(f.size());
         f.close();
       } else {
