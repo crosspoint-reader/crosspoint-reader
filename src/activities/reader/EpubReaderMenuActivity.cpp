@@ -17,8 +17,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks,
-                                               const bool hasClippings)
+                                               const bool hasClippings, MenuAction& selectedAction)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
+      selectedAction(selectedAction),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -26,6 +27,24 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {
   buildMenuItems(menuItems, hasFootnotes, hasBookmarks, hasClippings);
   buildMenuRowItems();
+}
+
+void EpubReaderMenuActivity::onEnter() {
+  RenderLock lock;
+  UiListActivity::onEnter();
+  for (size_t i = 0; i < menuItems.size(); ++i) {
+    if (menuItems[i].action == selectedAction) {
+      nav.reset(static_cast<int>(i));
+      break;
+    }
+  }
+}
+
+void EpubReaderMenuActivity::onExit() {
+  if (nav.selected >= 0 && nav.selected < static_cast<int>(menuItems.size())) {
+    selectedAction = menuItems[nav.selected].action;
+  }
+  UiListActivity::onExit();
 }
 
 // Populates menuRowItems's labels/actionValue from menuItems. Called once
@@ -60,7 +79,7 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   if (Frontlight.present() && !slideSwitchOwnsLight()) {
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
   }
-  if (bleturner::status().compiledIn) {
+  if (bleturner::status().compiledIn && SETTINGS.ble.peerAddr[0] != '\0') {
     items.push_back({MenuAction::BLUETOOTH, StrId::STR_BT_PAGE_TURNER});
   }
   if (SETTINGS.dictionaryName[0] != '\0') {
@@ -234,14 +253,8 @@ void EpubReaderMenuActivity::drawChrome() {
   GUI.drawHeader(renderer, UITheme::getInstance().getHeaderRect(renderer, true, false), title.c_str());
 }
 
-void EpubReaderMenuActivity::render(RenderLock&&) {
+void EpubReaderMenuActivity::render(RenderLock&& lock) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
-  renderer.clearScreen();
-  drawChrome();
-
-  renderUi();
-
-  drawFooter();
-  renderer.displayBuffer();
+  UiListActivity::render(std::move(lock));
 }
