@@ -8,6 +8,7 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -203,6 +204,13 @@ class ChapterHtmlSlimParser {
   std::deque<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;          // deferred until after previous text block is flushed
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
+  std::string requestedAnchor;          // one fragment explicitly requested by navigation
+  bool requestedAnchorSeen = false;
+  bool requestedAnchorWaitingForText = false;
+  int requestedStructuralAnchorDepth = -1;  // opening depth of the selected structural target
+  std::optional<uint32_t> requestedAnchorOffset;
+  const TextBlock* requestedAnchorLine = nullptr;           // borrowed until its owning page is emitted
+  std::optional<uint16_t> requestedAnchorBufferByteOffset;  // follows the selected codepoint through NFC
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
   // Canonical reading-position counter: zero-based Unicode codepoints in visible
@@ -244,6 +252,7 @@ class ChapterHtmlSlimParser {
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle, bool paragraphEnd = true);
   void flushPendingAnchor();
+  void recordRequestedAnchor();
   void completeCurrentPage();
   void emitCurrentPage();
   void noteContent(int top, int bottom);
@@ -297,7 +306,8 @@ class ChapterHtmlSlimParser {
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
       const bool embeddedStyle, const std::string& contentBase, const std::string& imageBasePath,
       const uint8_t imageRendering = 0, std::vector<std::string> tocAnchors = {},
-      const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
+      const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr,
+      const std::string& requestedAnchor = {})
 
       : epub(epub),
         filepath(filepath),
@@ -317,7 +327,8 @@ class ChapterHtmlSlimParser {
         imageRendering(imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
-        tocAnchors(std::move(tocAnchors)) {}
+        tocAnchors(std::move(tocAnchors)),
+        requestedAnchor(requestedAnchor) {}
 
   ~ChapterHtmlSlimParser();
   void setTextSpacing(const int8_t character, const uint8_t wordPercent) {
@@ -343,6 +354,11 @@ class ChapterHtmlSlimParser {
   void requestStop();
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
+  const std::string& getRequestedAnchor() const { return requestedAnchor; }
+  bool hasPendingRequestedAnchor() const {
+    return requestedAnchorWaitingForText || requestedAnchorOffset.has_value() ||
+           requestedAnchorBufferByteOffset.has_value();
+  }
   const std::deque<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page

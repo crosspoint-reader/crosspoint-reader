@@ -171,6 +171,7 @@ class ParsedText {
   // True once any word was dropped because the text arena could not allocate.
   // Callers must treat the block as incomplete and fail the section build.
   bool hadDroppedWords() const { return droppedWords; }
+  uint32_t getWordVisibleEndOffsetAt(size_t wordIndex) const;
   // While a line is being handed to layoutAndExtractLines' callback: how many lines of the
   // paragraph follow it, or -1 when the rest of the paragraph is not laid out yet.
   int linesAfterCurrentLine() const { return linesAfterCurrent; }

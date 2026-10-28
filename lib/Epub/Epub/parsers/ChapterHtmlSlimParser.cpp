@@ -121,12 +121,7 @@ uint16_t parseTableSpan(const char* value) {
   return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
 }
 
-// Returns true if the HTML element is a purely inline, non-navigable wrapper.
-// IDs on these elements are never meaningful navigation targets in epub content.
-// Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
-// of such IDs for progress tracking or internal bookkeeping, and recording each one
-// as a navigation anchor exhausts the heap on memory-constrained devices.
-// Block-level, sectioning, and structural elements are always considered navigable.
+// Span IDs are often converter bookkeeping; retain them only for known targets.
 bool isNonNavigableInlineElement(const char* name) { return strcmp(name, "span") == 0; }
 
 bool isInternalEpubLink(const char* href) {
@@ -347,6 +342,16 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
 }
 
 void ChapterHtmlSlimParser::emitCurrentPage() {
+  // The selected line can move with widow/orphan or heading carry before this page is final.
+  if (requestedAnchorLine && currentPage) {
+    for (const auto& element : currentPage->elements) {
+      if (element->getTag() == TAG_PageLine &&
+          static_cast<const PageLine&>(*element).getBlock() == requestedAnchorLine) {
+        recordRequestedAnchor();
+        break;
+      }
+    }
+  }
   // Open boxes are sliced at the page break and continue on the next page.
   for (BoxScope& box : boxScopes) {
     emitBoxSegment(box, false);
@@ -690,6 +695,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   // to fail the build via layoutOom.
   if (!currentTextBlock) {
     partWordBufferIndex = 0;
+    requestedAnchorBufferByteOffset.reset();
     nextWordContinues = false;
     return;
   }
@@ -735,6 +741,18 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
       currentFootnoteLinkId = currentTextBlock->addLinkTarget(currentFootnote.href);
     }
     linkId = currentFootnoteLinkId;
+  }
+  if (requestedAnchorBufferByteOffset) {
+    // Layout ranges retain source codepoints, including accents absorbed by NFC.
+    uint32_t offset = partWordVisibleOffset;
+    const auto* ptr = reinterpret_cast<const unsigned char*>(partWordBuffer);
+    const auto* const target = ptr + *requestedAnchorBufferByteOffset;
+    while (ptr < target) {
+      utf8NextCodepoint(&ptr);
+      ++offset;
+    }
+    requestedAnchorOffset = offset;
+    requestedAnchorBufferByteOffset.reset();
   }
   // Inline font-size spans size their words apart from the block.
   float inlineScale = 0.0f;
@@ -1383,28 +1401,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        // Defer both anchor recording and TOC page breaks until startNewTextBlock,
-        // after the previous block is flushed to pages via makePages().
-        //
-        // Skip IDs on non-navigable inline elements (e.g. <span>): these are never
-        // link targets in epub content, but reading-system converters can inject tens
-        // of thousands of them per chapter, exhausting the heap. TOC anchors are
-        // always recorded regardless of element type, since they drive page breaks.
-        const char* idValue = atts[i + 1];
-        idAttr = idValue;
-        const bool isTocAnchor =
-            std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
-          // Flush a displaced anchor before overwriting. Consecutive non-block elements
-          // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
-          // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
-          // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
-          // lands at page 0 (section start) instead of the footnote.
-          if (!self->pendingAnchorId.empty()) {
-            self->flushPendingAnchor();
-          }
-          self->pendingAnchorId = idValue;
-        }
+        idAttr = atts[i + 1];
       } else if (strcmp(atts[i], "dir") == 0) {
         dirAttr = atts[i + 1];
       } else if (strcmp(atts[i], "hidden") == 0) {
@@ -1487,6 +1484,55 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
+  }
+
+  if (VisibleTextUtils::isNonVisibleElement(name)) {
+    // start skip
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
+  }
+
+  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak"
+  if (atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if ((strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0) ||
+          (strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0)) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
+    }
+  }
+
+  if (matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS)) && self->imageRendering == 2) {
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
+  }
+
+  if (idAttr[0] != '\0') {
+    const bool isTocAnchor =
+        std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idAttr) != self->tocAnchors.end();
+    const bool isRequestedAnchor = !self->requestedAnchor.empty() && self->requestedAnchor == idAttr;
+    const bool selectRequestedAnchor = isRequestedAnchor && !self->requestedAnchorSeen && self->insideBody &&
+                                       self->nonVisibleTextDepth == 0 && !self->collectingRubyText &&
+                                       strcmp(name, "rt") != 0 && !matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS));
+    if (selectRequestedAnchor) {
+      self->requestedAnchorSeen = true;
+      self->requestedAnchorWaitingForText = true;
+      if (isTocAnchor || !isNonNavigableInlineElement(name)) {
+        self->requestedStructuralAnchorDepth = self->depth;
+      }
+    }
+    // Converter spans stay filtered; TOC targets keep their structural page breaks.
+    if (isTocAnchor || (!isNonNavigableInlineElement(name) &&
+                        (selectRequestedAnchor || self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER))) {
+      if (!self->pendingAnchorId.empty()) {
+        self->flushPendingAnchor();
+      }
+      self->pendingAnchorId = idAttr;
+    }
   }
 
   // Buffer one simple row; oversized rows fall back to full-width flow.
@@ -1663,12 +1709,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
-      if (self->imageRendering == 2) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
-        return;
-      }
-
       if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
 
@@ -1988,25 +2028,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->collectingRubyText = true;
     self->depth += 1;
     return;
-  }
-
-  if (VisibleTextUtils::isNonVisibleElement(name)) {
-    // start skip
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
-    return;
-  }
-
-  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak"
-  if (atts != nullptr) {
-    for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0 ||
-          strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
-        return;
-      }
-    }
   }
 
   // Detect internal <a href="..."> links (footnotes, cross-references)
@@ -2399,7 +2420,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   uint32_t nextCodepointOffset = callbackVisibleOffset;
   for (int i = 0; i < len; i++) {
     const uint32_t codepointOffset = nextCodepointOffset;
-    if (countVisibleOffsets && (static_cast<uint8_t>(s[i]) & 0xC0) != 0x80) {
+    const bool isCodepointStart = (static_cast<uint8_t>(s[i]) & 0xC0) != 0x80;
+    if (countVisibleOffsets && isCodepointStart) {
       nextCodepointOffset++;
     }
 
@@ -2450,6 +2472,25 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->nextWordContinues = false;
       // Skip the whitespace char
       continue;
+    }
+
+    // U+FEFF is discarded before selecting rendered anchor text.
+    if (static_cast<uint8_t>(s[i]) == 0xEF && i + 2 < len && static_cast<uint8_t>(s[i + 1]) == 0xBB &&
+        static_cast<uint8_t>(s[i + 2]) == 0xBF) {
+      i += 2;
+      continue;
+    }
+
+    bool isRequestedCodepoint = false;
+    if (self->requestedAnchorWaitingForText && countVisibleOffsets && isCodepointStart) {
+      // Soft hyphens keep their source offsets but do not select rendered anchor text.
+      const bool isSoftHyphen =
+          static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xAD;
+      if (!isSoftHyphen) {
+        isRequestedCodepoint = true;
+        self->requestedAnchorOffset = codepointOffset;
+        self->requestedAnchorWaitingForText = false;
+      }
     }
 
     // Detect U+00A0 (non-breaking space, UTF-8: 0xC2 0xA0) or
@@ -2508,20 +2549,6 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
-    // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
-    const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
-    const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
-    const XML_Char FEFF_BYTE_3 = static_cast<XML_Char>(0xBF);
-
-    if (s[i] == FEFF_BYTE_1) {
-      // Check if the next two bytes complete the 3-byte sequence
-      if ((i + 2 < len) && (s[i + 1] == FEFF_BYTE_2) && (s[i + 2] == FEFF_BYTE_3)) {
-        // Sequence 0xEF 0xBB 0xBF found!
-        i += 2;    // Skip the next two bytes
-        continue;  // Move to the next iteration
-      }
-    }
-
     // If we're about to run out of space, then cut the word off and start a new one.
     // For CJK text (no spaces), this is the primary word-breaking mechanism.
     // We must avoid splitting multi-byte UTF-8 sequences across word boundaries,
@@ -2544,8 +2571,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         for (int j = 0; j < overflow; j++) {
           saved[j] = self->partWordBuffer[safeLen + j];
         }
+        std::optional<uint16_t> overflowAnchorByteOffset;
+        if (self->requestedAnchorBufferByteOffset && *self->requestedAnchorBufferByteOffset >= safeLen) {
+          overflowAnchorByteOffset = *self->requestedAnchorBufferByteOffset - safeLen;
+          self->requestedAnchorBufferByteOffset.reset();
+        }
         self->partWordBufferIndex = safeLen;
         self->flushPartWordBuffer();
+        self->requestedAnchorBufferByteOffset = overflowAnchorByteOffset;
         self->nextWordContinues = true;
         for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
@@ -2560,6 +2593,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     if (self->partWordBufferIndex == 0) {
       self->partWordVisibleOffset = codepointOffset;
+    }
+    if (isRequestedCodepoint) {
+      self->requestedAnchorBufferByteOffset = static_cast<uint16_t>(self->partWordBufferIndex);
     }
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
@@ -2600,6 +2636,10 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
   if (self->stopRequested) return;
+  if (self->requestedStructuralAnchorDepth == self->depth - 1) {
+    self->requestedAnchorWaitingForText = false;
+    self->requestedStructuralAnchorDepth = -1;
+  }
   if (self->nonVisibleTextDepth > 0) {
     self->nonVisibleTextDepth--;
   }
@@ -2939,6 +2979,7 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
 }
 
 void ChapterHtmlSlimParser::abortParse() {
+  requestedAnchorLine = nullptr;
   if (xmlParser_) {
     destroyXmlParser(xmlParser_);
     xmlParser_ = nullptr;
@@ -3010,6 +3051,19 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     }
   }
   return finishParse();
+}
+
+void ChapterHtmlSlimParser::recordRequestedAnchor() {
+  const auto existing = std::find_if(anchorData.begin(), anchorData.end(),
+                                     [this](const auto& entry) { return entry.first == requestedAnchor; });
+  if (existing != anchorData.end()) {
+    existing->second = static_cast<uint16_t>(completedPageCount);
+  } else {
+    anchorData.emplace_back(requestedAnchor, static_cast<uint16_t>(completedPageCount));
+  }
+  requestedAnchorLine = nullptr;
+  requestedAnchorOffset.reset();
+  requestedAnchorBufferByteOffset.reset();
 }
 
 void ChapterHtmlSlimParser::applyBlockFontScale(BlockStyle& blockStyle, const CssStyle& cssStyle,
@@ -3197,6 +3251,16 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   if (!pageLine) {
     LOG_ERR("EHP", "OOM: PageLine");
     return;
+  }
+  if (requestedAnchorOffset && !requestedAnchorLine) {
+    const TextBlock& placedLine = *pageLine->getBlock();
+    for (uint16_t word = 0; word < placedLine.wordCount(); ++word) {
+      const auto range = placedLine.wordSourceRange(word);
+      if (*requestedAnchorOffset >= range.start && *requestedAnchorOffset < range.end) {
+        requestedAnchorLine = pageLine->getBlock();
+        break;
+      }
+    }
   }
   currentPage->elements.push_back(std::move(pageLine));
   noteContent(currentPageNextY, currentPageNextY + contentHeight);
