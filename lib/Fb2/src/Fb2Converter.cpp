@@ -1,5 +1,6 @@
 #include "Fb2Converter.h"
 
+#include <Arduino.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
@@ -15,7 +16,7 @@
 
 namespace {
 
-constexpr size_t kReadChunk = 4096;
+constexpr size_t kReadChunk = 16384;
 constexpr size_t kMaxTitleLen = 160;
 constexpr size_t kMaxNavTitleLen = 96;
 constexpr size_t kMaxIdTargets = 2048;
@@ -102,14 +103,8 @@ void XMLCALL metaStart(void* userData, const XML_Char* name, const char** attrs)
     else if (strcmp(ln, "sequence") == 0) {
       const char* nm = findAttr(attrs, "name");
       const char* num = findAttr(attrs, "number");
-      if (nm && !m.seqName.taken) {
-        m.meta.seriesName = nm;
-        m.seqName.taken = true;
-      }
-      if (num && !m.seqNumber.taken) {
-        m.meta.seriesNumber = num;
-        m.seqNumber.taken = true;
-      }
+      if (nm && m.meta.seriesName.empty()) m.meta.seriesName = nm;
+      if (num && m.meta.seriesNumber.empty()) m.meta.seriesNumber = num;
     } else if (strcmp(ln, "coverpage") == 0) {
       m.inCoverpage++;
     } else if (m.inCoverpage > 0 && strcmp(ln, "image") == 0 && m.meta.coverRef.empty()) {
@@ -288,6 +283,7 @@ bool parseFile(const std::string& path, XML_Parser p, std::string& error, const 
   }
   static char buf[kReadChunk];
   bool ok = true;
+  size_t total = 0;
   for (;;) {
     const int n = f.read(buf, sizeof(buf));
     if (n < 0) {
@@ -296,6 +292,7 @@ bool parseFile(const std::string& path, XML_Parser p, std::string& error, const 
       break;
     }
     const bool isFinal = n == 0;
+    if ((total & 0x3FFFF) == 0) LOG_DBG("FB2", "parsed %u KB", (unsigned)(total / 1024));
     if (XML_Parse(p, buf, (int)(n > 0 ? n : 0), isFinal) == XML_STATUS_ERROR) {
       if (tolerateAbort && XML_GetErrorCode(p) == XML_ERROR_ABORTED) break;  // early stop requested
       char lineInfo[48];
@@ -304,6 +301,7 @@ bool parseFile(const std::string& path, XML_Parser p, std::string& error, const 
       ok = false;
       break;
     }
+    total += (size_t)(n > 0 ? n : 0);
     if (isFinal) break;
   }
   f.close();
@@ -366,7 +364,7 @@ constexpr size_t kMaxImageBytes = 16 * 1024 * 1024;
 
 struct EmitPass {
   StoredZipWriter zip;
-  const Metadata& meta;
+  const Fb2Converter::Metadata& meta;
   const StructurePass& structure;
   const char* bookId;  // stable urn:uuid:... tail
 
@@ -397,7 +395,8 @@ struct EmitPass {
   size_t binaryBytes = 0;
   Base64Decoder b64;
 
-  EmitPass(const Metadata& m, const StructurePass& s, const char* id) : meta(m), structure(s), bookId(id) {}
+  EmitPass(const Fb2Converter::Metadata& m, const StructurePass& s, const char* id)
+      : meta(m), structure(s), bookId(id) {}
 
   // ---- chapter entry management ----
   bool ensureChapterOpen() {
@@ -406,6 +405,7 @@ struct EmitPass {
     if (chapterCursor < 0) return false;
     char name[24];
     snprintf(name, sizeof(name), "s%d.xhtml", chapterCursor);
+    LOG_DBG("FB2", "chapter open: %s", name);
     if (!zip.startEntry(name)) return false;
     if (!zip.writeStr("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                       "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title></title></head>"
@@ -832,11 +832,14 @@ bool writeXmlEscaped(StoredZipWriter& zip, const char* s) {
 
 bool Fb2Converter::convert(const std::string& fb2Path, const std::string& outPath, std::string& error) {
   error.clear();
+  const uint32_t t0 = millis();
 
   // Pass 1: metadata (a missing title-info is tolerated; XML errors are not).
   Metadata meta;
   const bool haveMeta = readMetadata(fb2Path, meta, error);
   if (!error.empty()) return false;
+  LOG_DBG("FB2", "pass1 metadata (%lu ms): %s, lang=%s, cover=%s, series=%s", millis() - t0,
+          meta.title.c_str(), meta.language.c_str(), meta.coverRef.c_str(), meta.seriesName.c_str());
   if (!haveMeta || meta.title.empty()) {
     const char* base = fb2Path.c_str();
     const char* slash = strrchr(base, '/');
@@ -866,6 +869,8 @@ bool Fb2Converter::convert(const std::string& fb2Path, const std::string& outPat
     error = "not a FictionBook document";
     return false;
   }
+  LOG_DBG("FB2", "pass2 structure (%lu ms): chapters=%d binaries=%u ids=%u", millis() - t0,
+          st.chapterCursor + 1, (unsigned)st.binaries.size(), (unsigned)st.idTargets.size());
 
   // Pass 3: emission.
   char bookId[24];
@@ -886,10 +891,13 @@ bool Fb2Converter::convert(const std::string& fb2Path, const std::string& outPat
     XML_SetElementHandler(p, emitStart, emitEnd);
     XML_SetCharacterDataHandler(p, emitText);
     XML_SetUserData(p, &e);
+    LOG_DBG("FB2", "pass3 emission start");
     parsed = parseFile(fb2Path, p, error);
     XML_ParserFree(p);
   }
   e.closeChapter();
+  LOG_DBG("FB2", "pass3 done (%lu ms): parsed=%d materialized=%u", millis() - t0, (int)parsed,
+          (unsigned)e.materialized.size());
   if (!parsed || !e.zip.ok()) {
     e.zip.abort();
     Storage.remove(outPath.c_str());
@@ -1068,7 +1076,8 @@ bool Fb2Converter::convert(const std::string& fb2Path, const std::string& outPat
     return false;
   }
 
-  LOG_INF("FB2", "converted: %u chapters, %u images, %u anchors", (unsigned)e.materialized.size(),
-          (unsigned)st.binaries.size(), (unsigned)st.idTargets.size());
+  LOG_INF("FB2", "converted in %lu ms: %u chapters, %u images, %u anchors", millis() - t0,
+          (unsigned)e.materialized.size(), (unsigned)st.binaries.size(),
+          (unsigned)st.idTargets.size());
   return true;
 }

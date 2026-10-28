@@ -1,5 +1,6 @@
 #include "Fb2.h"
 
+#include <Arduino.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -24,10 +25,12 @@ std::string Fb2::ensureEpub(const std::string& fb2Path, const std::string& cache
   const size_t srcSize = f.size();
   const uint32_t mtime = f.modificationTime();
   f.close();
+  LOG_DBG("FB2", "ensureEpub: source size=%u mtime=%u", (unsigned)srcSize, (unsigned)mtime);
 
   const std::string dir = cacheDirFor(fb2Path, cacheRoot);
   if (!Storage.ensureDirectoryExists(dir.c_str())) {
     if (error) *error = "cannot create cache dir";
+    LOG_ERR("FB2", "ensureEpub: cache dir failed: %s", dir.c_str());
     return "";
   }
 
@@ -37,10 +40,14 @@ std::string Fb2::ensureEpub(const std::string& fb2Path, const std::string& cache
   snprintf(file, sizeof(file), "book_%u_%u.epub", (unsigned)srcSize, (unsigned)mtime);
   const std::string target = dir + "/" + file;
 
-  if (Storage.exists(target.c_str())) return target;
+  if (Storage.exists(target.c_str())) {
+    LOG_DBG("FB2", "ensureEpub: cached epub exists: %s", target.c_str());
+    return target;
+  }
 
   // Drop conversions of older fingerprints and any leftover temp file.
   const std::vector<String> stale = Storage.listFiles(dir.c_str(), 256);
+  LOG_DBG("FB2", "ensureEpub: %u stale files in cache dir", (unsigned)stale.size());
   for (const String& name : stale) {
     if (!name.startsWith("book_")) continue;
     if (name == file) continue;
@@ -48,7 +55,9 @@ std::string Fb2::ensureEpub(const std::string& fb2Path, const std::string& cache
   }
   const std::string tmp = dir + "/book.tmp";
   Storage.remove(tmp.c_str());
+  LOG_DBG("FB2", "ensureEpub: converting to %s", target.c_str());
 
+  const uint32_t t0 = millis();
   std::string convertError;
   if (!Fb2Converter::convert(fb2Path, tmp, convertError)) {
     Storage.remove(tmp.c_str());
@@ -59,8 +68,9 @@ std::string Fb2::ensureEpub(const std::string& fb2Path, const std::string& cache
   if (!Storage.replaceFile(tmp.c_str(), target.c_str())) {
     Storage.remove(tmp.c_str());
     if (error) *error = "cache write failed";
+    LOG_ERR("FB2", "ensureEpub: replaceFile failed");
     return "";
   }
-  LOG_INF("FB2", "synthetic epub ready: %s", target.c_str());
+  LOG_INF("FB2", "synthetic epub ready in %lu ms: %s", millis() - t0, target.c_str());
   return target;
 }

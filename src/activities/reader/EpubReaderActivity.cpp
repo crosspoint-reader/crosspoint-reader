@@ -245,7 +245,6 @@ bool EpubReaderActivity::loadBook() {
   std::string contentPath = bookPath;
   if (FsHelpers::hasFb2Extension(bookPath)) {
     GUI.drawPopup(renderer, tr(STR_CONVERTING_FB2));
-    renderer.displayBuffer();
     std::string fb2Error;
     const std::string synthetic = Fb2::ensureEpub(bookPath, "/.crosspoint", &fb2Error);
     if (synthetic.empty()) {

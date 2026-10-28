@@ -2,6 +2,11 @@
 
 #include <Logging.h>
 
+// MinizConfig renames the ROM-clashing symbols and compiles deflate out; only
+// the table-based mz_crc32 is needed here. Relative path so the include works
+// without depending on lib/miniz's include dir being on this lib's path.
+#include "../../miniz/src/MinizConfig.h"
+
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -32,25 +37,43 @@ bool StoredZipWriter::open(const std::string& path) {
   }
   entries_.clear();
   bytesWritten_ = 0;
+  filePos_ = 0;
+  ioLen_ = 0;
   entryOpen_ = false;
   started_ = true;
   ok_ = true;
   return true;
 }
 
+void StoredZipWriter::flushIo() {
+  if (ioLen_ == 0) return;
+  if (file_.write(ioBuf_, ioLen_) != ioLen_) {
+    ok_ = false;
+    LOG_ERR("FB2", "zip flush failed (%u bytes)", (unsigned)ioLen_);
+  }
+  filePos_ += ioLen_;
+  ioLen_ = 0;
+}
+
 bool StoredZipWriter::writeAll(const void* data, size_t len) {
   if (!ok_) return false;
   if (len == 0) return true;
-  if (file_.write(data, len) != len) {
-    ok_ = false;
-    LOG_ERR("FB2", "zip write failed (%u bytes)", (unsigned)len);
-    return false;
-  }
+  const uint8_t* p = static_cast<const uint8_t*>(data);
   bytesWritten_ += len;
+  while (len > 0) {
+    const size_t room = sizeof(ioBuf_) - ioLen_;
+    const size_t take = len < room ? len : room;
+    memcpy(ioBuf_ + ioLen_, p, take);
+    ioLen_ += take;
+    p += take;
+    len -= take;
+    if (ioLen_ == sizeof(ioBuf_)) flushIo();
+    if (!ok_) return false;
+  }
   return true;
 }
 
-bool StoredZipWriter::writeStr(const char* s) { return writeAll(s, strlen(s)); }
+bool StoredZipWriter::writeStr(const char* s) { return write(s, strlen(s)); }
 
 bool StoredZipWriter::writeFmt(const char* fmt, ...) {
   char buf[512];
@@ -60,23 +83,17 @@ bool StoredZipWriter::writeFmt(const char* fmt, ...) {
   va_end(args);
   if (n < 0) return false;
   const size_t len = (n >= (int)sizeof(buf)) ? sizeof(buf) - 1 : (size_t)n;
-  return writeAll(buf, len);
+  return write(buf, len);
 }
 
 uint32_t StoredZipWriter::crc32Update(uint32_t crc, const uint8_t* data, size_t len) {
-  // Reflected CRC-32 (polynomial 0xEDB88320), no table: entries are written
-  // once, so the throughput/size trade of a 1 KB table is not worth the RAM.
-  crc = ~crc;
-  for (size_t i = 0; i < len; i++) {
-    crc ^= data[i];
-    for (int k = 0; k < 8; k++) {
-      crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1)));
-    }
-  }
-  return ~crc;
+  // Table-based CRC-32 from the firmware's vendored miniz (renamed by MinizConfig).
+  return (uint32_t)mz_crc32((mz_ulong)crc, data, len);
 }
 
 bool StoredZipWriter::writeLocalHeader(uint32_t crc, uint32_t size) {
+  // Writes directly (unbuffered): callers guarantee the IO buffer is empty and
+  // the file position equals bytesWritten_.
   const uint16_t nameLen = (uint16_t)strlen(entries_.back().name);
   uint8_t header[30];
   putLe32(header + 0, 0x04034B50);   // local file header signature
@@ -90,8 +107,11 @@ bool StoredZipWriter::writeLocalHeader(uint32_t crc, uint32_t size) {
   putLe32(header + 22, size);        // uncompressed size
   putLe16(header + 26, nameLen);
   putLe16(header + 28, 0);           // extra field length
-  if (!writeAll(header, sizeof(header))) return false;
-  return writeAll(entries_.back().name, nameLen);
+  if (file_.write(header, sizeof(header)) != sizeof(header)) return false;
+  if (nameLen > 0 && file_.write(entries_.back().name, nameLen) != nameLen) return false;
+  bytesWritten_ += sizeof(header) + nameLen;
+  filePos_ += sizeof(header) + nameLen;
+  return true;
 }
 
 bool StoredZipWriter::startEntry(const char* name) {
@@ -106,6 +126,7 @@ bool StoredZipWriter::startEntry(const char* name) {
     ok_ = false;
     return false;
   }
+  flushIo();  // header writes go direct: buffer must be empty
   entries_.emplace_back();
   CentralEntry& e = entries_.back();
   strncpy(e.name, name, sizeof(e.name) - 1);
@@ -129,28 +150,42 @@ bool StoredZipWriter::finishEntry() {
   CentralEntry& e = entries_.back();
   e.crc = entryCrc_;
   e.size = entrySize_;
-  const uint64_t endPos = bytesWritten_;
+  flushIo();  // data must be in the file before seeking back
+  const uint64_t endLogical = bytesWritten_;
   if (!file_.seekSet(e.offset)) {
     ok_ = false;
     LOG_ERR("FB2", "zip seek failed while patching header");
     return false;
   }
-  // bytesWritten_ is restored below; writeLocalHeader adds to it, so save the
-  // true cursor first and reposition afterwards.
-  const uint64_t savedBytes = bytesWritten_;
-  bytesWritten_ = e.offset;
-  if (!writeLocalHeader(e.crc, e.size)) return false;
-  bytesWritten_ = savedBytes;
-  if (!file_.seekSet(endPos)) {
+  // Patch the placeholder header in place (direct write), then return the
+  // file cursor to the entry's end so the next entry appends correctly.
+  const uint16_t nameLen = (uint16_t)strlen(e.name);
+  uint8_t header[30];
+  putLe32(header + 0, 0x04034B50);
+  putLe16(header + 4, 20);
+  putLe16(header + 6, 0);
+  putLe16(header + 8, 0);
+  putLe16(header + 10, kDosTime);
+  putLe16(header + 12, kDosDate);
+  putLe32(header + 14, e.crc);
+  putLe32(header + 18, e.size);
+  putLe32(header + 22, e.size);
+  putLe16(header + 26, nameLen);
+  putLe16(header + 28, 0);
+  if (file_.write(header, sizeof(header)) != sizeof(header) ||
+      (nameLen > 0 && file_.write(e.name, nameLen) != nameLen) || !file_.seekSet(endLogical)) {
     ok_ = false;
+    LOG_ERR("FB2", "zip header patch failed");
     return false;
   }
+  filePos_ = endLogical;
   entryOpen_ = false;
   return true;
 }
 
 bool StoredZipWriter::finish() {
   if (!ok_ || entryOpen_) return false;
+  flushIo();
   const uint64_t cdOffset = bytesWritten_;
   for (const CentralEntry& e : entries_) {
     uint8_t header[46];
@@ -187,6 +222,7 @@ bool StoredZipWriter::finish() {
   putLe32(eocd + 16, (uint32_t)cdOffset);
   putLe16(eocd + 20, 0);     // comment length
   if (!writeAll(eocd, sizeof(eocd))) return false;
+  flushIo();
   file_.flush();
   file_.close();
   ok_ = false;  // finished: no further writes
@@ -196,6 +232,7 @@ bool StoredZipWriter::finish() {
 void StoredZipWriter::abort() {
   entryOpen_ = false;
   ok_ = false;
+  ioLen_ = 0;
   file_.close();
   entries_.clear();
 }

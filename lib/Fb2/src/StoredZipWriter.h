@@ -49,15 +49,22 @@ class StoredZipWriter {
 
   bool writeAll(const void* data, size_t len);
   bool writeLocalHeader(uint32_t crc, uint32_t size);
+  void flushIo();
 
   HalFile file_;
   std::vector<CentralEntry> entries_;
+  // Buffered output: entry data arrives in tiny (often single-byte) pieces, and
+  // per-byte SD writes make a book-sized conversion take minutes. All writes go
+  // through this buffer; flushes happen on demand, before seeks, and at close.
+  uint8_t ioBuf_[4096] = {};
+  size_t ioLen_ = 0;
+  uint64_t filePos_ = 0;  // bytes actually written to the file (buffer flushed)
   // Current entry state
   uint32_t headerOffset_ = 0;
   uint32_t entrySize_ = 0;
   uint32_t entryCrc_ = 0;
   bool entryOpen_ = false;
-  uint64_t bytesWritten_ = 0;
+  uint64_t bytesWritten_ = 0;  // logical position (includes buffered bytes)
   bool ok_ = false;
   bool started_ = false;
 
