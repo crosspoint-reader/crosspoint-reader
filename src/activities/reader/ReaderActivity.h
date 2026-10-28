@@ -26,9 +26,9 @@ class ReaderActivity : public Activity {
   void markPageRendered() { pageRendered.store(true, std::memory_order_release); }
   void rememberBookOnceRendered();
 
-  // Font changes made while the book is open belong to the book (see
-  // CrossPointSettings::beginBookFont()). Call after a font change; onExit()
-  // also saves.
+  // Font and spacing changes made while the book is open belong to the book
+  // (see CrossPointSettings::beginBookFont()). Call after such a change;
+  // onExit() also saves.
   void saveBookFont();
   // Writes the book's font file again after its cache directory, which holds
   // it, was cleared and set up again.
@@ -99,9 +99,8 @@ class ReaderActivity : public Activity {
  private:
   void beginBookFont();
   void endBookFont();
-  // The font in the book's file; meaningful while hasBookFontFile.
-  ReaderFont savedBookFont;
-  bool hasBookFontFile = false;
+  // What the book's file holds (no fields when the book has no file).
+  BookFont savedBookFont;
   bool rewriteBookFontFile = false;  // the file must be written again (see resaveBookFont())
   // The font in use when the book opened or its font was last saved.
   ReaderFont bookFontInUse;

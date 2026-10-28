@@ -93,9 +93,15 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
   doc["frontButtonRight"] = frontButtonRight;
+  // A book's own font and spacing (beginBookFont()) are never saved as the
+  // default: replace the spacing the generic loop wrote.
+  if (bookFontActive) {
+    doc["lineHeight"] = defaultFont.lineSpacing;
+    doc["wordSpacing"] = defaultFont.wordSpacing;
+    doc["characterSpacing"] = defaultFont.characterSpacing;
+  }
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
-  // A book's own font (beginBookFont()) is never saved as the default.
   const char* storedFamily = bookFontActive ? defaultFont.sdFontFamilyName : sdFontFamilyName;
   doc["fontFamily"] = STORED_NOTOSANS;
   doc["fontSize"] = bookFontActive ? defaultFont.fontPointSize : fontPointSize;
@@ -392,6 +398,9 @@ ReaderFont CrossPointSettings::readerFont() const {
   ReaderFont font;
   font.setFamily(sdFontFamilyName);
   font.fontPointSize = fontPointSize;
+  font.lineSpacing = lineSpacing;
+  font.wordSpacing = wordSpacing;
+  font.characterSpacing = characterSpacing;
   return font;
 }
 
@@ -404,16 +413,22 @@ void CrossPointSettings::beginBookFont(const ReaderFont& bookFont) {
   std::lock_guard<std::mutex> lock(storeMutex);
   if (!bookFontActive) defaultFont = readerFont();
   bookFontActive = true;
-  copyToField(sdFontFamilyName, bookFont.sdFontFamilyName, sizeof(sdFontFamilyName));
-  fontPointSize = bookFont.fontPointSize;
+  setReaderFont(bookFont);
 }
 
 void CrossPointSettings::endBookFont() {
   std::lock_guard<std::mutex> lock(storeMutex);
   if (!bookFontActive) return;
-  copyToField(sdFontFamilyName, defaultFont.sdFontFamilyName, sizeof(sdFontFamilyName));
-  fontPointSize = defaultFont.fontPointSize;
+  setReaderFont(defaultFont);
   bookFontActive = false;
+}
+
+void CrossPointSettings::setReaderFont(const ReaderFont& font) {
+  copyToField(sdFontFamilyName, font.sdFontFamilyName, sizeof(sdFontFamilyName));
+  fontPointSize = font.fontPointSize;
+  lineSpacing = font.lineSpacing;
+  wordSpacing = font.wordSpacing;
+  characterSpacing = font.characterSpacing;
 }
 
 int CrossPointSettings::getReaderFontId() const {

@@ -141,26 +141,26 @@ void ReaderActivity::prepareForSleep() {
 }
 
 void ReaderActivity::beginBookFont() {
-  ReaderFont bookFont = SETTINGS.readerFont();
-  hasBookFontFile = false;
-  if (FsHelpers::hasReflowableBookExtension(bookPath)) {
-    hasBookFontFile = BookFontFile::load(bookCachePath(bookPath), savedBookFont);
-  }
-  // A family removed from the card leaves the book on the default font; the
-  // file stays in case the family comes back (see bookFontWrite()).
-  if (hasBookFontFile && (savedBookFont.sdFontFamilyName[0] == '\0' ||
-                          sdFontSystem.registry().findFamily(savedBookFont.sdFontFamilyName))) {
-    bookFont = savedBookFont;
-  }
+  savedBookFont = BookFont{};
+  if (FsHelpers::hasReflowableBookExtension(bookPath)) BookFontFile::load(bookCachePath(bookPath), savedBookFont);
+  const ReaderFont defaultFont = SETTINGS.readerFont();
+  uint8_t fields = savedBookFont.fields;
+  // A family removed from the card leaves the book on the default font (its
+  // spacing still applies); the file stays in case the family comes back (see
+  // bookFontWrite()).
+  const char* savedFamily = savedBookFont.font.sdFontFamilyName;
+  if (savedFamily[0] != '\0' && !sdFontSystem.registry().findFamily(savedFamily)) fields &= ~BookFontField::Font;
+  ReaderFont bookFont = defaultFont;
+  copyFields(bookFont, savedBookFont.font, fields);
   SETTINGS.beginBookFont(bookFont);
   // A failed load clears only the book's font: settings saves keep the default.
   sdFontSystem.ensureLoaded(renderer);
   // The book's family is on the card but did not load: use the default for
   // this visit, as for a missing family, rather than the built-in font.
-  const ReaderFont defaultFont = SETTINGS.defaultReaderFont();
-  if (bookFont != defaultFont && bookFont.sdFontFamilyName[0] != '\0' &&
+  if ((differingFields(bookFont, defaultFont) & BookFontField::Font) && bookFont.sdFontFamilyName[0] != '\0' &&
       sdFontSystem.resolveFontId(bookFont.sdFontFamilyName, bookFont.fontPointSize) == 0) {
-    SETTINGS.beginBookFont(defaultFont);
+    copyFields(bookFont, defaultFont, BookFontField::Font);
+    SETTINGS.beginBookFont(bookFont);
     sdFontSystem.ensureLoaded(renderer);
   }
   bookFontInUse = SETTINGS.readerFont();
@@ -169,17 +169,16 @@ void ReaderActivity::beginBookFont() {
 void ReaderActivity::saveBookFont() {
   if (!FsHelpers::hasReflowableBookExtension(bookPath)) return;
   const ReaderFont current = SETTINGS.readerFont();
-  switch (
-      bookFontWrite(current, bookFontInUse, SETTINGS.defaultReaderFont(), hasBookFontFile ? &savedBookFont : nullptr)) {
+  BookFont next;
+  switch (bookFontWrite(current, bookFontInUse, SETTINGS.defaultReaderFont(), savedBookFont, next)) {
     case BookFontWrite::Save:
-      if (!BookFontFile::save(bookCachePath(bookPath), current)) return;  // tried again on the next save
-      savedBookFont = current;
-      hasBookFontFile = true;
+      if (!BookFontFile::save(bookCachePath(bookPath), next)) return;  // tried again on the next save
+      savedBookFont = next;
       rewriteBookFontFile = false;
       break;
     case BookFontWrite::Remove:
       if (!BookFontFile::remove(bookCachePath(bookPath))) return;  // tried again on the next save
-      hasBookFontFile = false;
+      savedBookFont = next;
       rewriteBookFontFile = false;
       break;
     case BookFontWrite::None:
@@ -192,7 +191,7 @@ void ReaderActivity::saveBookFont() {
 void ReaderActivity::resaveBookFont() {
   // Clearing the cache deleted the book's file. A failed write is tried again
   // on the next save, at the latest when the book closes.
-  rewriteBookFontFile = hasBookFontFile;
+  rewriteBookFontFile = savedBookFont.fields != 0;
   saveBookFont();
 }
 
@@ -200,7 +199,8 @@ void ReaderActivity::resaveBookFont() {
 // after the book's memory is free, and not at all on the way to sleep.
 void ReaderActivity::endBookFont() {
   saveBookFont();
-  reloadDefaultFont = !preparingSleep && SETTINGS.readerFont() != SETTINGS.defaultReaderFont();
+  reloadDefaultFont =
+      !preparingSleep && (differingFields(SETTINGS.readerFont(), SETTINGS.defaultReaderFont()) & BookFontField::Font);
   SETTINGS.endBookFont();
 }
 

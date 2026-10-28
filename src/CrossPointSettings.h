@@ -439,6 +439,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   bool bookFontActive = false;
   ReaderFont defaultFont;
+  void setReaderFont(const ReaderFont& font);
 
  public:
   uint16_t getPowerButtonDuration() const {
@@ -452,9 +453,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // offering a size nothing renders at. Both fields are persisted in one write.
   void clearSdFontFamily();
 
-  // While a book is open, fontPointSize and sdFontFamilyName hold that book's
-  // font, so every reader path uses it, and the default is kept in defaultFont
-  // so that toJson() still saves it. ReaderActivity begins and ends this.
+  // While a book is open, the ReaderFont fields (family, size and spacing) hold
+  // that book's, so every reader path uses them, and the defaults are kept in
+  // defaultFont so that toJson() still saves them. ReaderActivity begins and ends this.
   // Settings are only loaded at boot, never while a book font is active.
   void beginBookFont(const ReaderFont& bookFont);
   void endBookFont();

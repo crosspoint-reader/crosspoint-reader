@@ -272,7 +272,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Reader Font Size**: Choose a point size. Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
 
-  These two settings are the default for all books. A book can keep its own font family and size: see [Reader Menu](#5-reader-menu).
+  These two settings are the default for all books. A book can keep its own font family, size and spacing: see [Reader Menu](#5-reader-menu).
 
 - **Reader Line Spacing**: Space added between lines, as a percentage of font size: 0%, +10%, +20% (default), +30%, +45%, +60%, or +75%.
 
@@ -346,7 +346,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
-- **Clear Reading Cache** (**Settings → Reader**): Clear the internal SD card cache. This also removes each book's own font.
+- **Clear Reading Cache** (**Settings → Reader**): Clear the internal SD card cache. This also removes each book's own font and spacing.
 
 - **Use book metadata**: Read the title and author stored inside each book when the Library index is rebuilt. When disabled or unavailable, the Library uses the filename.
 
@@ -713,13 +713,14 @@ Available options include:
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)). This entry appears when sync credentials are saved or an enabled plugin subscribes to device events. Without sync credentials, it connects to Wi-Fi to send queued plugin events.
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
 
-**Each book keeps its own font.**
+**Each book keeps its own font and spacing.**
 
-- A font family or size you change while a book is open is used for that book only. This includes changes from **Text Settings** and from the toolbar's **Text** panel.
+- A font family, size, line spacing, word spacing or character spacing you change while a book is open is used for that book only. This includes changes from **Text Settings** and from the toolbar's **Text** panel.
 - Other books keep the default from **Settings → Reader**.
-- To make a book follow the default again, pick the default font and size while the book is open.
+- A book keeps only what differs from the default. To make a book follow the default again for one of these, pick the default value while the book is open. The font family and size go together.
+- If the book's font family is no longer on the SD card, the book opens in the default font and keeps its spacing.
 - The menus use the book's font for text the built-in font cannot show, such as Chinese chapter names. If the book uses the built-in font, that text shows boxes until you leave the book.
-- **Clear Reading Cache** in Settings also removes every book's own font.
+- **Clear Reading Cache** in Settings also removes every book's own font and spacing.
 
 Press **Back** at any time to close the menu and return to your current page.
 
