@@ -19,9 +19,13 @@ namespace {
 constexpr size_t kReadChunk = 16384;
 constexpr size_t kMaxTitleLen = 160;
 constexpr size_t kMaxNavTitleLen = 96;
-constexpr size_t kMaxIdTargets = 2048;
+// Worst-case RAM: idTargets 1024 * ~52B = ~53 KB, materialized 1000 * ~104B
+// = ~104 KB, both transient during conversion. The C3 baseline has ~380 KB
+// heap, so these caps bound a pathological book (thousands of note anchors or
+// chapters) to a graceful partial conversion instead of an OOM.
+constexpr size_t kMaxIdTargets = 1024;
 constexpr size_t kMaxBinaries = 512;
-constexpr int kMaxChapters = 4000;
+constexpr int kMaxChapters = 1000;
 
 const char* localName(const char* n) {
   const char* c = strchr(n, ':');
@@ -140,7 +144,7 @@ void XMLCALL metaEnd(void* userData, const XML_Char* name) {
       if (composed.empty() && m.nickname.taken) composed = m.nickname.text();
       m.meta.author = composed;
     }
-    if (m.inAuthor > 0) m.inAuthor--;
+    m.inAuthor = 0;  // depth marker, not a counter: leaving the author element clears it
     return;
   }
   if (m.inAuthor > 0) {
@@ -169,12 +173,12 @@ void XMLCALL metaText(void* userData, const XML_Char* s, int len) {
 
 // ------------------------------------------------------------- structure ---
 struct BinaryInfo {
-  char id[64] = {};
+  char id[48] = {};  // XML ids in real books are short; longer ones truncate
   char ext[8] = {};  // ".jpg" | ".png" | ".gif" | "" (unsupported)
 };
 
 struct IdTarget {
-  char id[64] = {};
+  char id[48] = {};
   int32_t chapter = 0;
 };
 
@@ -221,7 +225,10 @@ void structureElement(StructurePass& s, const char* ln, const char** attrs, bool
       s.bodyDepth = s.depth;  // depth already incremented for start
       s.inBody = true;
       s.sectionNesting = 0;
-      if (s.bodyCount == 1) s.chapterCursor++;  // potential front-matter chapter
+      // Every body gets a chapter slot for its front matter (title/epigraph
+      // before the sections); the entry opens lazily, so empty slots cost
+      // nothing. Must mirror the emission pass exactly.
+      s.chapterCursor++;
     } else {
       s.inBody = false;
       s.bodyDepth = -1;
@@ -542,7 +549,9 @@ void XMLCALL emitStart(void* userData, const XML_Char* name, const char** attrs)
     e.bodyDepth = e.depth;
     e.inBody = true;
     e.sectionNesting = 0;
-    if (e.bodyCount == 1) e.chapterCursor++;  // potential front-matter chapter
+    // Front-matter chapter slot for EVERY body (main title page, notes
+    // header); lazy-opened, so bodies without front matter skip the entry.
+    e.chapterCursor++;
     e.pushFrame("", false);
     return;
   }
@@ -759,9 +768,13 @@ void XMLCALL emitEnd(void* userData, const XML_Char* name) {
   } else if (strcmp(ln, "body") == 0) {
     e.inBody = false;
     e.bodyDepth = -1;
+    e.closeChapter();  // body end: nothing may append to its last chapter
   } else if (strcmp(ln, "section") == 0) {
     if (e.sectionNesting > 0) e.sectionNesting--;
-    if (e.bodyDepth >= 0 && e.depth == e.bodyDepth + 1) e.closeChapter();
+    // Top-level sections do NOT close the chapter here: the next section's
+    // start (or the body end) does. Keeping the entry open lets stray
+    // body-level content between sections append to the current chapter
+    // instead of re-opening the same entry name twice in the ZIP.
   }
 
   if (!e.frames.empty()) {

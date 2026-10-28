@@ -7,6 +7,7 @@
 // without depending on lib/miniz's include dir being on this lib's path.
 #include "../../miniz/src/MinizConfig.h"
 
+#include <cassert>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -94,6 +95,7 @@ uint32_t StoredZipWriter::crc32Update(uint32_t crc, const uint8_t* data, size_t 
 bool StoredZipWriter::writeLocalHeader(uint32_t crc, uint32_t size) {
   // Writes directly (unbuffered): callers guarantee the IO buffer is empty and
   // the file position equals bytesWritten_.
+  assert(ioLen_ == 0);
   const uint16_t nameLen = (uint16_t)strlen(entries_.back().name);
   uint8_t header[30];
   putLe32(header + 0, 0x04034B50);   // local file header signature
