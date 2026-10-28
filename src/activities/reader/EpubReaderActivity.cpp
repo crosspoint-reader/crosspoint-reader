@@ -22,6 +22,7 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <utility>
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
@@ -223,6 +224,7 @@ EpubReaderActivity::~EpubReaderActivity() {
   // A radio still stopped for this book's build may start again in the next one.
   if (radioReleasedForBuild.load()) bleturner::afterPaint();
 
+  applyLinkLanding();
   if (footnoteDepth > 0 && epub) saveLinkStack();
 
   section.reset();
@@ -643,6 +645,8 @@ void EpubReaderActivity::loop() {
   }
 
   rememberBookOnceRendered();
+  // Before any input, so Back sees the stack as the landed link left it.
+  applyLinkLanding();
 
   // The radio stopped for a chapter build: once the render task has let go of the lock, that page
   // is on screen; once the build tick below has finished the chapter, no parser is left alive and
@@ -1063,6 +1067,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   {
     RenderLock lock;
     clearDeferredReposition();
+    clearLinkStack();
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     pendingPercentJump = true;
@@ -1075,6 +1080,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
   if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
     RenderLock lock;
     clearDeferredReposition();
+    clearLinkStack();
     const auto page = section && currentSpineIndex == sync.spineIndex
                           ? section->getPageForVisibleTextOffset(sync.visibleTextOffset)
                           : std::nullopt;
@@ -1107,6 +1113,7 @@ void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
 
   RenderLock lock;
   clearDeferredReposition();
+  clearLinkStack();
 
   if (currentSpineIndex != targetSpineIndex) {
     currentSpineIndex = targetSpineIndex;
@@ -1171,6 +1178,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             const auto& chapterResult = std::get<ChapterResult>(result.data);
             RenderLock lock;
             clearDeferredReposition();
+            clearLinkStack();
             currentSpineIndex = chapterResult.spineIndex;
             pendingAnchor = chapterResult.anchor;
             nextPageNumber = 0;
@@ -1360,6 +1368,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
       localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
     }
     // The destructor can no longer save the back-stack once epub is gone.
+    applyLinkLanding();
     if (footnoteDepth > 0) saveLinkStack();
     epub.reset();
   }
@@ -1604,6 +1613,10 @@ bool EpubReaderActivity::skipLoopDelay() {
 void EpubReaderActivity::renderBook() {
   currentPageLinks.clear();
   if (!epub) return;
+  // A followed link lands on the page this render shows. A render that shows
+  // none drops it (only the page-load retry below hands it on), so a later
+  // page reached some other way is never taken for the landing.
+  const bool linkLandingDue = std::exchange(linkLandingPending, false);
   // A radio start in flight takes ~50 KB while the stack comes up: the page waits for it rather than
   // take the heap beside it (X3: abort() in a page restore at free 22,676 B). About 20 ms, once a visit.
   bleturner::settleStart();
@@ -1907,6 +1920,7 @@ void EpubReaderActivity::renderBook() {
         showPendingSyncSaveError();
         return;
       }
+      linkLandingPending = linkLandingDue;
       requestUpdate();
       showPendingSyncSaveError();
       return;
@@ -1929,6 +1943,11 @@ void EpubReaderActivity::renderBook() {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
+  }
+
+  if (linkLandingDue) {
+    linkLanding = {currentSpineIndex, section->currentPage};
+    linkLandingReady.store(true, std::memory_order_release);
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
@@ -2802,6 +2821,7 @@ void EpubReaderActivity::handleOverlayInput() {
     if (target != currentSpineIndex) {
       RenderLock lock;
       clearDeferredReposition();
+      clearLinkStack();
       nextPageNumber = 0;
       currentSpineIndex = target;
       section.reset();
@@ -2913,6 +2933,7 @@ void EpubReaderActivity::handleOverlayInput() {
       if (item.spineIndex != -1) {
         RenderLock lock;
         clearDeferredReposition();
+        clearLinkStack();
         currentSpineIndex = item.spineIndex;
         pendingAnchor = item.anchor;
         nextPageNumber = 0;
@@ -3225,22 +3246,20 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   }
 
   if (savePosition) {
-    // Full: drop the oldest entry so Back always returns from the newest jump.
-    if (footnoteDepth == MAX_FOOTNOTE_DEPTH) {
-      std::copy(savedPositions + 1, savedPositions + MAX_FOOTNOTE_DEPTH, savedPositions);
-      footnoteDepth--;
-    }
     // A child screen (menu, footnote list) may have released the section;
     // nextPageNumber then holds the page it was on.
     const int page = section ? section->currentPage : nextPageNumber;
-    savedPositions[footnoteDepth] = {currentSpineIndex, page};
-    footnoteDepth++;
+    // Full: drop the oldest entry so Back always returns from the newest jump.
+    link_stack::push(savedPositions, footnoteDepth, MAX_FOOTNOTE_DEPTH, {currentSpineIndex, page});
     LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
   }
 
   {
     RenderLock lock;
     clearDeferredReposition();
+    // Only this jump's landing may pop the entry just pushed.
+    cancelLinkLanding();
+    linkLandingPending = savePosition;
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
@@ -3263,12 +3282,12 @@ void EpubReaderActivity::saveLinkStack() const {
     data[size++] = (pos.pageNumber >> 8) & 0xFF;
   }
   HalFile f;
-  if (!Storage.openFileForWrite("ERS", epub->getCachePath() + "/links.bin", f)) return;
+  if (!Storage.openFileForWrite("ERS", EpubReaderUtils::linkStackPath(epub->getCachePath()), f)) return;
   if (f.write(data, size) != size) LOG_ERR("ERS", "Failed to write link stack");
 }
 
 void EpubReaderActivity::loadLinkStack() {
-  const std::string path = epub->getCachePath() + "/links.bin";
+  const std::string path = EpubReaderUtils::linkStackPath(epub->getCachePath());
   if (!Storage.exists(path.c_str())) return;
   {
     HalFile f;
@@ -3305,11 +3324,33 @@ void EpubReaderActivity::restoreSavedPosition() {
   {
     RenderLock lock;
     clearDeferredReposition();
+    cancelLinkLanding();
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
     section.reset();
   }
   requestUpdate();
+}
+
+void EpubReaderActivity::applyLinkLanding() {
+  if (!linkLandingReady.exchange(false, std::memory_order_acq_rel)) return;
+  const int depth = link_stack::depthAfterLanding(savedPositions, footnoteDepth, linkLanding);
+  if (depth != footnoteDepth) {
+    LOG_DBG("ERS", "Link returned to spine %d, page %d: link stack depth %d -> %d", linkLanding.spineIndex,
+            linkLanding.pageNumber, footnoteDepth, depth);
+    footnoteDepth = depth;
+  }
+}
+
+void EpubReaderActivity::cancelLinkLanding() {
+  linkLandingPending = false;
+  linkLandingReady.store(false, std::memory_order_relaxed);
+}
+
+void EpubReaderActivity::clearLinkStack() {
+  if (footnoteDepth > 0) LOG_DBG("ERS", "Explicit jump: clearing link stack (depth %d)", footnoteDepth);
+  footnoteDepth = 0;
+  cancelLinkLanding();
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {

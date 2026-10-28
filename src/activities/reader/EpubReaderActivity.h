@@ -14,6 +14,7 @@
 #include "ChapterPosition.h"
 #include "ClipSelectionActivity.h"
 #include "EpubReaderMenuActivity.h"
+#include "LinkBackStack.h"
 #include "LinkNoteTitle.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
@@ -109,10 +110,7 @@ class EpubReaderActivity final : public ReaderActivity {
   std::vector<PageLink> currentPageLinks;
   int currentPageLinkMarginLeft = 0;
   int currentPageLinkMarginTop = 0;
-  struct SavedPosition {
-    int spineIndex;
-    int pageNumber;
-  };
+  using SavedPosition = link_stack::Position;
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
@@ -120,6 +118,20 @@ class EpubReaderActivity final : public ReaderActivity {
   // still returns to where a followed link was tapped.
   void saveLinkStack() const;
   void loadLinkStack();
+  // A followed link's landing page, for link_stack::depthAfterLanding(). The
+  // anchor only resolves to a page in renderBook(), so the render task records
+  // the page it shows and loop() applies it to the stack, which stays loop-task
+  // state. linkLandingPending and linkLanding are guarded by the render lock;
+  // linkLandingReady publishes linkLanding to the loop task.
+  bool linkLandingPending = false;
+  SavedPosition linkLanding = {};
+  std::atomic<bool> linkLandingReady{false};
+  void applyLinkLanding();
+  // Drops any landing not yet applied. Requires the render lock.
+  void cancelLinkLanding();
+  // An explicit jump (TOC, chapter scrub, percent, bookmark, clipping) leaves
+  // nothing for Back to return to. Requires the render lock.
+  void clearLinkStack();
 
   uint16_t buildViewportWidth = 0;
   uint16_t buildViewportHeight = 0;
