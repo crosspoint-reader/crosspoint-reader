@@ -240,7 +240,9 @@ void handleSlideSwitch() {
       SETTINGS.touchReaderControls = on ? CrossPointSettings::TOUCH_READER_ON : CrossPointSettings::TOUCH_READER_OFF;
       break;
     default:
-      if (!Frontlight.present() || Frontlight.isOn() == on) return;
+      // Also compare the saved state: setup() lit the light from the switch
+      // without updating it.
+      if (!Frontlight.present() || (Frontlight.isOn() == on && (SETTINGS.frontlightOn != 0) == on)) return;
       Frontlight.setOn(on);
       SETTINGS.frontlightOn = on ? 1 : 0;
       break;

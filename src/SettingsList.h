@@ -319,6 +319,24 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_TILT_PAGE_TURN; }),
         v.end());
   }
+  // Clock settings need the RTC, as on the device (ClockSettingsActivity).
+  if (!halClock.isAvailable()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             switch (s.nameId) {
+                               case StrId::STR_CLOCK:
+                               case StrId::STR_CLOCK_FORMAT:
+                               case StrId::STR_TIMEZONE:
+                               case StrId::STR_CLOCK_DST:
+                               case StrId::STR_CLOCK_IN_HEADER:
+                               case StrId::STR_CLOCK_SYNCED:
+                                 return true;
+                               default:
+                                 return false;
+                             }
+                           }),
+            v.end());
+  }
   // Hidden on touch boards: the Home button actions (X4 Pro) or the short
   // power click (other touch boards) cover these shortcuts.
   if (BoardConfig::hasTouch()) {
