@@ -193,6 +193,10 @@ Templates in `url`, `headers`, `body`, `dest`, and `toast` substitute:
 | `{event.id}`   | Unique event id, stable across delivery retries (dedupe key)     |
 | `{meta.KEY}`   | The book's metadata sidecar, for events that carry a `book` (or `path`, for `book.downloaded`) |
 
+Values are inserted as they are. Before a request is sent, spaces, control
+characters, and non-ASCII bytes in its URL are percent-encoded; `&`, `?`, `#`,
+`+` and `/` inside a value are not, and events have no `_enc` forms.
+
 Unmatched variables substitute as nothing was replaced (the literal `{...}`
 text is sent), so servers should tolerate or reject malformed values.
 
