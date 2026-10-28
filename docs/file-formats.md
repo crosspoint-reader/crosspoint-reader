@@ -90,13 +90,20 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 70
+### Version 71
 
 The serialized layout is unchanged. Non-visible elements, pagebreak markers, and
 suppressed images are skipped before table layout and anchor selection. In
 particular, suppressed table images no longer contribute alt text. Older
 completed and partial section caches rebuild automatically so page numbers and
 fragment destinations use the same layout. Book metadata and progress are kept.
+
+### Version 70
+
+Version 70 preserves the binary layout but rebuilds completed and partial
+sections because SD-font layout now rounds each scaled glyph advance to pixels,
+matching unkerned drawing. Cached line breaks and word positions change.
+Book metadata and saved progress are kept.
 
 ### Version 69
 
