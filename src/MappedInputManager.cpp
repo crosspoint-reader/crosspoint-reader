@@ -17,6 +17,7 @@ namespace fui = freeink::ui;
 void MappedInputManager::update(const bool deferHomeButtonAction) const {
   remoteInput.reset();
   gpio.update();
+  updateEdgeSwipe();
   const bool pagePressed =
       SETTINGS.vibration == CrossPointSettings::VIBRATION_TOUCH_PAGE && gpio.wasCapacitivePagePressed();
   HalHaptics::feedback(SETTINGS.vibration != CrossPointSettings::VIBRATION_OFF, pagePressed, SETTINGS.hapticIntensity);
@@ -379,18 +380,63 @@ MappedInputManager::SwipeDir MappedInputManager::wasSwipe(int* startX, int* star
   }
 }
 
-// Edge classification (which swipe counts as an edge gesture) lives in the
-// SDK; only the MEANING of each edge — back, menu, home, light panel, and the
-// home-key remap — is decided here.
+void MappedInputManager::updateEdgeSwipe() const {
+  using edge_swipe::Edge;
+  edgeEvent = Edge::None;
+  float nx = 0, ny = 0;
+  if (gpio.wasTouchDown(nx, ny)) {
+    renderer.tapToLogical(nx, ny, edgeStartX, edgeStartY);
+    edgeOrientation = static_cast<uint8_t>(renderer.getOrientation());
+    edgeStartedAt = millis();
+    edgeRecognizer.begin(edgeStartX, edgeStartY, edgeStartedAt);
+  }
+  if (!edgeRecognizer.active()) return;
+  int x = 0, y = 0;
+  if (edgeOrientation != static_cast<uint8_t>(renderer.getOrientation())) {
+    edgeRecognizer.cancel();
+    return;
+  }
+  bool released = false;
+  if (gpio.isTouchHeldAt(nx, ny)) {
+    renderer.tapToLogical(nx, ny, x, y);
+  } else {
+    if (!gpio.wasTouchReleasedAt(nx, ny)) {
+      edgeRecognizer.cancel();
+      return;
+    }
+    released = true;
+    renderer.tapToLogical(nx, ny, x, y);
+  }
+  edgeEvent = edgeRecognizer.sample(x, y, renderer.getScreenWidth(), renderer.getScreenHeight(), released, millis());
+  // Top-edge controls retain upstream's release-based SDK gesture policy.
+  if (edgeEvent == Edge::Top) edgeEvent = Edge::None;
+}
+
+void MappedInputManager::acceptEdgeSwipe(bool accepted) const {
+  if (!accepted) {
+    edgeEvent = edge_swipe::Edge::None;
+    return;
+  }
+  if (edgeEvent == edge_swipe::Edge::None) return;
+  touchHeldOverrideValid = true;
+  touchHeldOverrideMs = gpio.wasTouchReleased() ? gpio.lastTouchHeldMs() : millis() - edgeStartedAt;
+  touchHeldOverrideAt = millis();
+  gpio.suppressTouchContact();
+}
+
 bool MappedInputManager::wasEdgeSwipe(const freeink::ui::ScreenEdge edge) const {
-  int sx = 0;
-  int sy = 0;
-  int ex = 0;
-  int ey = 0;
-  if (!decodeSwipe(sx, sy, ex, ey)) return false;
-  const bool hit = fui::edgeSwipe(edge, sx, sy, ex, ey, renderer.getScreenWidth(), renderer.getScreenHeight());
-  if (hit) rememberTouchHeldTime();
-  return hit;
+  using edge_swipe::Edge;
+  switch (edge) {
+    case fui::ScreenEdge::Left:
+      return edgeEvent == Edge::Left;
+    case fui::ScreenEdge::Right:
+      return edgeEvent == Edge::Right;
+    case fui::ScreenEdge::Top:
+      return edgeEvent == Edge::Top;
+    case fui::ScreenEdge::Bottom:
+      return edgeEvent == Edge::Bottom;
+  }
+  return false;
 }
 
 bool MappedInputManager::wasBackGesture() const {
@@ -408,13 +454,15 @@ bool MappedInputManager::wasBackGesture() const {
       return true;
     }
   }
-  // Back = left-to-right swipe starting near the left edge. Edge-anchored so that
-  // mid-screen horizontal swipes stay available to activities that consume
-  // SwipeDir::Left/Right (e.g. percent selection, image viewer).
-  return wasEdgeSwipe(fui::ScreenEdge::Left);
+  // Side-edge gestures remain separate from ordinary in-screen swipes.
+  return wasEdgeSwipe(fui::ScreenEdge::Left) || wasEdgeSwipe(fui::ScreenEdge::Right);
 }
 
-bool MappedInputManager::wasTopEdgeDownSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Top); }
+bool MappedInputManager::wasTopEdgeDownSwipe() const {
+  int sx = 0, sy = 0, ex = 0, ey = 0;
+  return decodeSwipe(sx, sy, ex, ey) &&
+         fui::edgeSwipe(fui::ScreenEdge::Top, sx, sy, ex, ey, renderer.getScreenWidth(), renderer.getScreenHeight());
+}
 
 bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Bottom); }
 

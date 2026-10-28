@@ -18,6 +18,7 @@
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/EdgeSwipeHint.h"
 #include "components/HeaderBackTapTarget.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -117,7 +118,27 @@ void ActivityManager::loop() {
   }
 
   if (currentActivity) {
+    int edgeX = 0, edgeY = 0;
+    auto edge = mappedInput.edgeSwipe(edgeX, edgeY);
+    const bool side = edge == edge_swipe::Edge::Left || edge == edge_swipe::Edge::Right;
+    const bool bottom = edge == edge_swipe::Edge::Bottom;
+    const bool bottomAccepted =
+        !currentActivity->isHomeActivity() &&
+        (mappedInput.wasHomeGesture() ||
+         (currentActivity->isReaderActivity() && SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_SWIPE_UP &&
+          mappedInput.wasReaderMenuSwipeUp()));
+    mappedInput.acceptEdgeSwipe((side && currentActivity->acceptsBackGesture()) || (bottom && bottomAccepted));
+    edge = mappedInput.edgeSwipe(edgeX, edgeY);
+    const bool sideHint = side && edge != edge_swipe::Edge::None;
+    if (sideHint) {
+      RenderLock lock;
+      drawEdgeSwipeHint(renderer, edge, edgeX, edgeY);
+    }
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
+      {
+        RenderLock lock;
+        drawEdgeSwipeHint(renderer, edge, edgeX, edgeY);
+      }
       if (currentActivity->handleHomeGesture()) {
         return;
       }

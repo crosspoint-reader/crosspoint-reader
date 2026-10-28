@@ -7,6 +7,8 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#include <algorithm>
+
 #if FREEINK_DEVICE_LILYGO
 #include <BoardT5S3.h>
 #endif
@@ -181,6 +183,15 @@ bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouch
 bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
 
 bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
+
+bool HalGPIO::wasTouchReleasedAt(float& nx, float& ny) const {
+  if (!inputMgr.wasTouchReleased()) return false;
+  const auto point = inputMgr.getTouchPoint();
+  const auto& t = BoardConfig::ACTIVE.touch;
+  nx = std::clamp(static_cast<float>(point.x) / std::max<int>(1, t.rawMaxX - t.rawMinX), 0.0f, 1.0f);
+  ny = std::clamp(static_cast<float>(point.y) / std::max<int>(1, t.rawMaxY - t.rawMinY), 0.0f, 1.0f);
+  return true;
+}
 
 bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
   return inputMgr.isTouchTapCandidate(nx, ny, heldMs);

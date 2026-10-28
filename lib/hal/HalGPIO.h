@@ -106,6 +106,8 @@ class HalGPIO {
   // drag-off). Snapshot builders forward it so interaction routing can clear
   // pressed state.
   bool wasTouchReleased() const;
+  // Latest release position, without swipe distance or duration classification.
+  bool wasTouchReleasedAt(float& nx, float& ny) const;
   bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
   bool isTouchHeldAt(float& nx, float& ny) const;
   // One-shot long-press, fired by the SDK classifier while the finger is still

@@ -44,6 +44,7 @@ class ClipSelectionActivity final : public Activity {
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
   bool handleHomeGesture() override;
+  bool acceptsBackGesture() const override { return !touchDragSelecting; }
 
  private:
   struct WordBox {

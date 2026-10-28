@@ -2,6 +2,7 @@
 
 #include <HalGPIO.h>
 
+#include "util/EdgeSwipe.h"
 #include "util/HomeButtonInput.h"
 #include "util/PowerButtonInput.h"
 #include "util/RemoteButtonInput.h"
@@ -94,9 +95,15 @@ class MappedInputManager {
   RowTouch colTouch(int& col, int left, int colStep, int colCount, int yStart, int yEnd, int colWidth = 0) const;
 
   SwipeDir wasSwipe(int* startX = nullptr, int* startY = nullptr) const;
-  // Back = left-to-right swipe anchored at the left edge. Public so swipe-mode
-  // page turns (reader) can exclude it from a plain SwipeDir::Right.
+  // Back = inward swipe from either side edge. Public so reader page turns
+  // can exclude navigation gestures.
   bool wasBackGesture() const;
+  void acceptEdgeSwipe(bool accepted) const;
+  edge_swipe::Edge edgeSwipe(int& x, int& y) const {
+    x = edgeStartX;
+    y = edgeStartY;
+    return edgeEvent;
+  }
   // Home-key boards use a short Home-key tap to exit; their bottom-edge swipe
   // is intentionally unused. Other boards retain the bottom-edge Home gesture.
   // The reader menu remains on its existing top-edge gesture and middle tap.
@@ -143,8 +150,7 @@ class MappedInputManager {
   bool areSidePageButtonsSwapped() const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
-  // SDK edge classification (fui::edgeSwipe) + the shared decode/held-time
-  // bookkeeping; the wrappers below give each edge its board meaning.
+  // Recovered edge classification; wrappers give each edge its board meaning.
   bool wasEdgeSwipe(freeink::ui::ScreenEdge edge) const;
   bool wasTopEdgeDownSwipe() const;
   bool wasBottomEdgeUpSwipe() const;
@@ -155,6 +161,13 @@ class MappedInputManager {
 #endif
   void rememberTouchHeldTime() const;
   void suppressNextRelease(Button button) const;
+
+  void updateEdgeSwipe() const;
+  mutable edge_swipe::Edge edgeEvent = edge_swipe::Edge::None;
+  mutable edge_swipe::Recognizer edgeRecognizer;
+  mutable int edgeStartX = 0, edgeStartY = 0;
+  mutable uint8_t edgeOrientation = 0;
+  mutable uint32_t edgeStartedAt = 0;
 
   mutable RemoteButtonInput remoteInput;
   mutable HomeButtonInput homeButtonInput;

@@ -115,9 +115,13 @@ Three gestures are handled once, for every screen. Activities must not add their
 
 | Gesture | Trigger | Where it is handled |
 |---|---|---|
-| Back | Right-swipe starting in the left 25% of the screen | Folded into `Button::Back`, so the existing `wasPressed(Button::Back)` in your activity already fires |
-| Home | Up-swipe starting in the bottom 14% | `ActivityManager::loop()`; pops to Home (activities can override via `handleHomeGesture()`) |
-| Menu | Down-swipe starting in the top 14% | Activities that have a menu check `wasMenuGesture()` themselves (the reader does this) |
+| Back | Inward swipe from either side edge; active activity must accept Back | Folded into `Button::Back`, so the existing `wasPressed(Button::Back)` in your activity already fires |
+| Home | Inward swipe from the bottom edge (optional reader-menu mapping on Home-key boards) | `ActivityManager::loop()`; pops to Home (activities can override via `handleHomeGesture()`) |
+| Menu | Inward swipe from the top edge | Activities that have a menu check `wasMenuGesture()` themselves (the reader does this) |
+
+Side and bottom recognition uses a band of 8% of the shorter logical screen dimension, clamped to 20–48 pixels. Movement squared must exceed 2499. Recognition can fire while held; release coordinates have no additional duration gate. Exact diagonals use the vertical axis. Top-edge controls retain the SDK release classifier and top 14% band. `Activity::acceptsBackGesture()` preserves page-turn ownership on a reading surface while allowing Back in reader panels and footnotes. Only accepted navigation suppresses the remaining contact.
+
+Side and bottom Home hints use the recovered masked artwork at fixed pixel dimensions. No hint is drawn for the top edge or the Home-key board's bottom menu action. The next screen paint replaces the hint; there is no dwell timer.
 
 Because the back gesture arrives as `Button::Back`, most button-era activities gain back-swipe support with zero changes.
 
