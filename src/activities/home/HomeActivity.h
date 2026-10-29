@@ -17,9 +17,14 @@ class HomeActivity final : public Activity {
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
-  // The Plugins slot (index 2) is shown while the plugin system is enabled.
-  // The index converters gate on its presence.
+  bool hasOpdsServers = false;
   bool hasPlugins = false;
+  // The home "library" slot (index 2) shows Plugins while the plugin system is
+  // enabled, otherwise OPDS when a server is configured. NONE hides the slot.
+  HomeMenuItem slotItem() const {
+    if (hasPlugins) return HomeMenuItem::PLUGINS;
+    return hasOpdsServers ? HomeMenuItem::OPDS_BROWSER : HomeMenuItem::NONE;
+  }
   bool hasContinueReading = false;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
@@ -37,26 +42,28 @@ class HomeActivity final : public Activity {
   const bool cleanInitialRefresh;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
-  static int menuItemToIndex(HomeMenuItem item, bool hasPluginsSlot) {
+  static int menuItemToIndex(HomeMenuItem item, HomeMenuItem slot) {
     int i = 0;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
     ++i;
     if (item == HomeMenuItem::LIBRARY) return i;
     ++i;
-    if (item == HomeMenuItem::PLUGINS) return hasPluginsSlot ? i : 0;
-    if (hasPluginsSlot) ++i;
-    if (item == HomeMenuItem::FILE_TRANSFER) return i;
+    if (slot != HomeMenuItem::NONE && item == slot) return i;
+    if (item == HomeMenuItem::PLUGINS) return 0;
+    if (slot != HomeMenuItem::NONE) ++i;
+    // File Transfer also opens the OPDS browser, so it returns there without its slot.
+    if (item == HomeMenuItem::FILE_TRANSFER || item == HomeMenuItem::OPDS_BROWSER) return i;
     ++i;
     if (item == HomeMenuItem::SETTINGS_MENU) return i;
     return 0;
   }
 
   // Convert menu index to HomeMenuItem (used in loop)
-  static HomeMenuItem indexToMenuItem(int idx, bool hasPluginsSlot) {
+  static HomeMenuItem indexToMenuItem(int idx, HomeMenuItem slot) {
     int i = 0;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (idx == i++) return HomeMenuItem::LIBRARY;
-    if (hasPluginsSlot && idx == i++) return HomeMenuItem::PLUGINS;
+    if (slot != HomeMenuItem::NONE && idx == i++) return slot;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
     return HomeMenuItem::NONE;
@@ -66,6 +73,7 @@ class HomeActivity final : public Activity {
   void onLibraryOpen();
   void onSettingsOpen();
   void onFileTransferOpen();
+  void onOpdsBrowserOpen();
   void onPluginsOpen();
 
   int getMenuItemCount() const;
