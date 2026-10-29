@@ -63,6 +63,11 @@ bool showOnDevice(const SettingInfo& setting) {
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
     return false;
   }
+  if ((setting.valuePtr == &CrossPointSettings::nightScheduleOnSlot ||
+       setting.valuePtr == &CrossPointSettings::nightScheduleOffSlot) &&
+      !SETTINGS.nightScheduleEnabled) {
+    return false;
+  }
   return true;
 }
 
