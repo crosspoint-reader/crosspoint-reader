@@ -60,7 +60,9 @@ CrossPoint-Reader
 ```
 
 3. Open the URL shown on the reader. `http://crosspoint.local/` is preferred
-   when supported; the fallback IP is typically `http://192.168.4.1/`.
+   when supported; the fallback IP is typically `http://192.168.4.1/`. Some
+   phones and computers open the reader's home page automatically after
+   joining.
 
 The reader displays one QR code for joining the hotspot and another QR code for
 opening the web interface.
@@ -97,9 +99,11 @@ The File Manager page can:
 - Delete one or more selected files or empty folders, hidden ones included
   (shown when **Show Hidden Files** is on)
 
-Existing files with the same name are overwritten by uploads. When EPUB files
-are overwritten, moved, renamed, or deleted through the web server, the matching
-book cache is cleared so stale metadata is not reused.
+Uploads do not replace a file that has the same name: the upload fails with
+"File already exists". API clients can replace a file with
+`POST /upload?overwrite=1` (see `webserver-endpoints.md`). When EPUB files are
+replaced, moved, renamed, or deleted through the web server, the matching book
+cache is cleared so stale metadata is not reused.
 
 ### Settings
 

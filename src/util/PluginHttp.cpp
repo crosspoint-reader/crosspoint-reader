@@ -27,7 +27,7 @@ freeink::SecureHttpClient* openClient(freeink::SecureHttpClient* session, freein
   // with the transport, so verification is skipped; traffic stays encrypted.
   http.setInsecure();
   http.setTimeout(30000);
-  if (!http.begin(url)) return nullptr;
+  if (!http.begin(pluginhttp::escapeUrl(url))) return nullptr;
   // Handshake first: the client's copy of a large header (a session cookie can
   // be several KB) would otherwise take heap the handshake needs.
   if (!http.connect(shouldAbort)) return nullptr;
@@ -112,6 +112,24 @@ std::string urlEncodeQuery(const std::string& s) {
   out.reserve(s.size() * 3);
   for (const unsigned char c : s) {
     if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      out += static_cast<char>(c);
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", c);
+      out += buf;
+    }
+  }
+  return out;
+}
+
+std::string escapeUrl(const std::string& url) {
+  const auto kept = [](const unsigned char c) { return c > 0x20 && c < 0x7F; };
+  const size_t escaped =
+      std::count_if(url.begin(), url.end(), [&](const char c) { return !kept(static_cast<unsigned char>(c)); });
+  std::string out;
+  out.reserve(url.size() + 2 * escaped);
+  for (const unsigned char c : url) {
+    if (kept(c)) {
       out += static_cast<char>(c);
     } else {
       char buf[4];

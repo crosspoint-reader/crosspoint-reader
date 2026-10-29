@@ -20,6 +20,7 @@
 #include "clippings/SelectionGeometry.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "util/DictionaryRegistry.h"
 #include "util/WordSelectionInput.h"
 
 using Input = WordSelectionInput;
@@ -71,6 +72,9 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
 
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
+  std::string dictionaryPath;
+  lookupAvailable =
+      mode == Mode::DefinitionLookup || DictionaryRegistry::resolveBasePath(SETTINGS.dictionaryName, dictionaryPath);
   fontId = SETTINGS.getReaderFontId();
   lineHeight = renderer.getLineHeight(fontId);
   const bool extracted = extractWords();
@@ -485,7 +489,7 @@ void ClipSelectionActivity::loop() {
     if (rangeStart >= 0) {
       const int action = actionAt(touchX, touchY);
       if (action >= 0) {
-        confirmSelection(SELECTION_ACTIONS[action]);
+        confirmSelection(SELECTION_ACTIONS[firstAction() + action]);
         return;
       }
       const int first = std::min(rangeStart, selected);
@@ -656,7 +660,7 @@ int ClipSelectionActivity::selectionTop() const {
 
 int ClipSelectionActivity::actionAt(const int x, const int y) const {
   return selectionGeometry::actionAt(actionRect(), UITheme::getInstance().getMetrics().menuSpacing, x, y,
-                                     mode == Mode::DefinitionLookup ? 1 : 3);
+                                     actionCount());
 }
 
 Rect ClipSelectionActivity::actionRect() const {
@@ -675,7 +679,7 @@ Rect ClipSelectionActivity::actionRect() const {
       std::max({renderer.getTextWidth(font, tr(STR_LOOKUP)), renderer.getTextWidth(font, tr(STR_CLIP)),
                 renderer.getTextWidth(font, tr(STR_BOOKMARK_OPTION))});
   const int padding = metrics.menuSpacing;
-  const int count = mode == Mode::DefinitionLookup ? 1 : 3;
+  const int count = actionCount();
   const int width = std::min(safe.width, count * (labelWidth + padding * 2) + padding * (count + 1));
   const int lines = labelWidth > (width - padding * (count + 1)) / count ? 2 : 1;
   const int height = std::max(36, renderer.getLineHeight(font) * lines + padding * 2);
@@ -872,7 +876,7 @@ void ClipSelectionActivity::drawSelection() const {
       GUI.drawSelectionHandle(renderer, handleRect(first, true), !words[first].isRtl);
     if (words[last].pageOffset == currentPageOffset)
       GUI.drawSelectionHandle(renderer, handleRect(last, false), words[last].isRtl);
-    if (!touchDragSelecting) GUI.drawSelectionActions(renderer, actionRect(), mode == Mode::DefinitionLookup ? 1 : 3);
+    if (!touchDragSelecting) GUI.drawSelectionActions(renderer, actionRect(), actionCount(), firstAction());
   } else {
     const WordBox& cursor = words[selected];
     renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
