@@ -440,7 +440,10 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
   snprintf(num, sizeof(num), "%d", std::max(0, page - 1) * manifest.pageSize);
   substituteAll(tpl, "{offset}", num);
   const bool inList = currentList >= 0 && currentList < static_cast<int>(manifest.browseLists.size());
-  substituteAll(tpl, "{list_id}", inList ? manifest.browseLists[currentList].id : std::string());
+  static const std::string noList;
+  const std::string& listId = inList ? manifest.browseLists[currentList].id : noList;
+  substituteAll(tpl, "{list_id}", listId);
+  if (tpl.find("{list_id_enc}") != std::string::npos) substituteAll(tpl, "{list_id_enc}", urlEncodeQuery(listId));
   substituteAll(tpl, "{query}", urlEncodeQuery(searchQuery));
   substituteAll(tpl, "{query_raw}", searchQuery);
   if (item) {
