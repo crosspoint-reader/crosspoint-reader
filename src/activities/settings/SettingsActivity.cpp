@@ -62,6 +62,11 @@ bool showOnDevice(const SettingInfo& setting) {
       !(CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
     return false;
   }
+  if ((setting.valuePtr == &CrossPointSettings::nightScheduleOnSlot ||
+       setting.valuePtr == &CrossPointSettings::nightScheduleOffSlot) &&
+      !SETTINGS.nightScheduleEnabled) {
+    return false;
+  }
   return true;
 }
 
