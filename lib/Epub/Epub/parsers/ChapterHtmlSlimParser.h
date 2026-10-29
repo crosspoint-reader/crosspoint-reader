@@ -51,6 +51,7 @@ class ChapterHtmlSlimParser {
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
+  bool fillPages = false;
   uint8_t paragraphIndentSpaces = 2;
   int8_t characterSpacing = 0;
   uint8_t wordSpacingPercent = 100;
@@ -325,6 +326,7 @@ class ChapterHtmlSlimParser {
     wordSpacingPercent = wordPercent;
   }
   void setParagraphIndentSpaces(const uint8_t spaces) { paragraphIndentSpaces = spaces; }
+  void setFillPages(const bool enabled) { fillPages = enabled; }
 
   // One-shot parse: builds every page before returning (begin + step* + finish).
   bool parseAndBuildPages();

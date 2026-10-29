@@ -113,6 +113,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
                            "extraParagraphSpacing", StrId::STR_CAT_READER)
            .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_FILL_PAGES, &CrossPointSettings::fillPages, "fillPages", StrId::STR_CAT_READER)
+           .withTextSettings());
   emit(SettingInfo::Value(StrId::STR_PARAGRAPH_INDENTATION, &CrossPointSettings::paragraphIndentSpaces, {0, 5, 1},
                           "paragraphIndentSpaces", StrId::STR_CAT_READER)
            .withTextSettings());

@@ -309,6 +309,15 @@ TEST(ClippingHighlight, LegacySignatureIncludesCharacterAndWordSpacing) {
   EXPECT_NE(readerRenderSpecSignature(spec), original);
 }
 
+TEST(ClippingHighlight, FillPagesInvalidatesLayoutAndRestoresDefaultSignature) {
+  ReaderRenderSpec spec;
+  const auto original = readerRenderSpecSignature(spec);
+  spec.fillPages = true;
+  EXPECT_NE(readerRenderSpecSignature(spec), original);
+  spec.fillPages = false;
+  EXPECT_EQ(readerRenderSpecSignature(spec), original);
+}
+
 TEST(SelectionGeometry, KeepsCursorClearOfHintsOnEitherAxis) {
   EXPECT_EQ(selectionGeometry::keepVisible(0, 20, 40, 700), 40);
   EXPECT_EQ(selectionGeometry::keepVisible(735, 20, 40, 700), -15);

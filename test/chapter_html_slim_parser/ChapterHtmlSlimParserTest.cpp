@@ -1716,6 +1716,48 @@ TEST_F(ChapterWidowOrphanTest, TwoLineParagraphMovesWhole) {
   EXPECT_EQ(linesOnPage(0), 4u);
 }
 
+TEST_F(ChapterWidowOrphanTest, FillPagesKeepsLoneFirstLineOnPage) {
+  parser.setFillPages(true);
+  paragraph(13 * 4);
+  paragraph(13 * 3);
+  ASSERT_EQ(pages.size(), 1u);
+  EXPECT_EQ(linesOnPage(0), 5u);
+}
+
+TEST_F(ChapterWidowOrphanTest, FillPagesAllowsLoneLastLineOnNextPage) {
+  parser.setFillPages(true);
+  paragraph(13 * 5 + 3);
+  ASSERT_EQ(pages.size(), 1u);
+  EXPECT_EQ(linesOnPage(0), 5u);
+  ASSERT_NE(parser.currentPage, nullptr);
+  ASSERT_EQ(parser.currentPage->elements.size(), 1u);
+  EXPECT_EQ(parser.currentPage->elements.front()->yPos, 0);
+}
+
+TEST_F(ChapterWidowOrphanTest, FillPagesLeavesHeadingAtBottom) {
+  parser.setFillPages(true);
+  paragraph(13 * 4);
+  open("h2", nullptr);
+  text("Heading");
+  close("h2");
+  paragraph(13 * 3);
+  ASSERT_EQ(pages.size(), 1u);
+  EXPECT_EQ(linesOnPage(0), 5u);
+  const auto& last = *static_cast<const PageLine&>(*pages[0]->elements.back()).getBlock();
+  EXPECT_STREQ(last.wordText(0), "Heading");
+  EXPECT_EQ(parser.keepWithNextCarry(), 0u);
+}
+
+TEST_F(ChapterPageBreakTest, FillPagesHonorsExplicitBookPageBreaks) {
+  parser.setFillPages(true);
+  paragraph("one");
+  paragraph("two", "page-break-before: always");
+  EXPECT_EQ(pages, 1u);
+  paragraph("three", "page-break-after: always");
+  paragraph("four");
+  EXPECT_EQ(pages, 2u);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, PassesIndentSettingsToNewTextBlock) {
   for (bool extraSpacing : {false, true}) {
     parser.extraParagraphSpacing = extraSpacing;

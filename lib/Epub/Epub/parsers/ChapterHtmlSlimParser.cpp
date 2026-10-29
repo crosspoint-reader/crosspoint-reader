@@ -3047,6 +3047,7 @@ int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale)
 
 size_t ChapterHtmlSlimParser::linesToCarry(size_t& paragraphLines) const {
   paragraphLines = 0;
+  if (fillPages) return 0;
   if (layoutParagraph && !layoutParagraphHasDropCap) {
     if (paragraphLinesOnPage == 1) {
       paragraphLines = 1;  // the paragraph's first line would sit alone at the page bottom
@@ -3065,7 +3066,9 @@ size_t ChapterHtmlSlimParser::linesToCarry(size_t& paragraphLines) const {
   return 0;
 }
 
-size_t ChapterHtmlSlimParser::keepWithNextCarry() const { return canCarry(keepWithNextLines) ? keepWithNextLines : 0; }
+size_t ChapterHtmlSlimParser::keepWithNextCarry() const {
+  return !fillPages && canCarry(keepWithNextLines) ? keepWithNextLines : 0;
+}
 
 // Only the page's trailing text lines move, and never everything on the page.
 bool ChapterHtmlSlimParser::canCarry(const size_t carry) const {

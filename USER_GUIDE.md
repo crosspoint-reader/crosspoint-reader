@@ -294,6 +294,8 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "ON" - Vertical space will be added between paragraphs in Reading Mode
   - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
 
+- **Fill Pages** (Text Settings → Layout): Off by default. Turn on to use every available text line instead of moving lines to the next page to keep paragraph endings or headings together. Single paragraph lines and headings may then appear alone at a page boundary. This applies to EPUB, TXT, and Markdown books. Book page breaks, paragraph spacing, and space needed for images, tables, or drop caps still apply. The preview does not show pagination changes.
+
 - **Dictionary**: Select the StarDict dictionary used for word lookups while reading, or "None" to disable lookups. *(Only shown when at least one dictionary folder exists under `/dictionaries/` on the SD card — see [docs/dictionary.md](docs/dictionary.md) for setup and usage.)*
 
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
