@@ -834,18 +834,14 @@ bool PluginCatalogActivity::parseBrowseResponse() {
   if (manifest.filtersCompatibility()) {
     compatibleRows.reserve(manifest.pageSize);
     int rowIndex = 0;
-    plugincatalogpaging::PageWindow filteredWindow(pageOffset, manifest.pageSize);
-    plugincatalogpaging::PageWindow serverWindow(0, manifest.pageSize);
+    plugincatalogpaging::PageWindow compatibleWindow(pageOffset, manifest.pageSize);
     const std::string unused;
     auto selectCompatible = [&](JsonListParser::Row& row) {
       const int thisRow = rowIndex++;
       const bool shown =
           !row.field[JsonListParser::F_TITLE].empty() &&
           catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]);
-      // Server pages count every row, even hidden ones, toward the page size.
-      if (localPaging) {
-        if (filteredWindow.take(shown)) compatibleRows.push_back(thisRow);
-      } else if (serverWindow.take() && shown) {
+      if (compatibleWindow.take(plugincatalogpaging::countsTowardPage(paging, shown)) && shown) {
         compatibleRows.push_back(thisRow);
       }
     };
@@ -863,7 +859,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
       fail(StrId::STR_PARSE_FEED_FAILED);
       return false;
     }
-    rawHasMore = localPaging ? filteredWindow.hasMore(paging) : serverWindow.hasMore(paging);
+    rawHasMore = compatibleWindow.hasMore(paging);
   }
 
   releaseRows();
@@ -874,11 +870,11 @@ bool PluginCatalogActivity::parseBrowseResponse() {
   plugincatalogpaging::PageWindow visibleWindow(pageOffset, manifest.pageSize);
   auto append = [&](JsonListParser::Row& row) {
     const int thisRow = rowIndex++;
-    // Server pages count untitled rows toward the page size; static lists skip them.
     if (manifest.filtersCompatibility()) {
       if (compatibleIndex >= compatibleRows.size() || compatibleRows[compatibleIndex] != thisRow) return;
       compatibleIndex++;
-    } else if (!visibleWindow.take(!localPaging || !row.field[JsonListParser::F_TITLE].empty())) {
+    } else if (!visibleWindow.take(
+                   plugincatalogpaging::countsTowardPage(paging, !row.field[JsonListParser::F_TITLE].empty()))) {
       return;
     }
     if (row.field[JsonListParser::F_TITLE].empty()) return;

@@ -6,6 +6,7 @@
 
 #include "PluginCatalogPaging.h"
 
+using plugincatalogpaging::countsTowardPage;
 using plugincatalogpaging::limitFor;
 using plugincatalogpaging::PageWindow;
 using plugincatalogpaging::Paging;
@@ -62,4 +63,27 @@ TEST(PluginCatalogPaging, StaticFeedsSliceLocally) {
   for (int i = 0; i < 20; i++) shown += last.take() ? 1 : 0;
   EXPECT_EQ(shown, 4);
   EXPECT_FALSE(last.hasMore(Paging::Static));
+}
+
+// Rows the server returned for one page, `hidden` of them untitled (not shown).
+bool nextPageWithHidden(const Paging paging, const int rows, const int hidden, const int pageSize = 8) {
+  PageWindow window(0, pageSize);
+  for (int i = 0; i < rows; i++) window.take(countsTowardPage(paging, i >= hidden));
+  return window.hasMore(paging);
+}
+
+TEST(PluginCatalogPaging, HiddenRowsCountOnServerPages) {
+  EXPECT_TRUE(nextPageWithHidden(Paging::Offset, 9, 1));
+  EXPECT_TRUE(nextPageWithHidden(Paging::PageNumber, 9, 1));
+  EXPECT_TRUE(nextPageWithHidden(Paging::SizedPages, 8, 1));
+  EXPECT_TRUE(nextPageWithHidden(Paging::Offset, 9, 9));  // an all-untitled page still has a next one
+  EXPECT_FALSE(nextPageWithHidden(Paging::Offset, 8, 1));
+}
+
+TEST(PluginCatalogPaging, StaticListsSkipHiddenRows) {
+  PageWindow first(0, 8);  // 9 rows, 1 untitled: 8 shown, nothing left over
+  int shown = 0;
+  for (int i = 0; i < 9; i++) shown += first.take(countsTowardPage(Paging::Static, i != 3)) ? 1 : 0;
+  EXPECT_EQ(shown, 8);
+  EXPECT_FALSE(first.hasMore(Paging::Static));
 }
