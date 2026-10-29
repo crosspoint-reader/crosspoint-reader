@@ -1,0 +1,4 @@
+add_executable(PluginListIndexTest PluginListIndexTest.cpp)
+target_include_directories(PluginListIndexTest PRIVATE ${REPO_ROOT}/src/activities/plugins)
+target_link_libraries(PluginListIndexTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(PluginListIndexTest)
