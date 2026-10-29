@@ -600,7 +600,7 @@ browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...
 plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
 `GET`) and `"body"` (a string, at most 4KB).
 
-- A request with a method other than GET, or with a body, is sent once: it is
+- A request with a method other than GET, or with a non-empty body, is sent once: it is
   never replayed, and `offset`/`maxBytes` must be 0. A 3xx answer is not
   followed; it fails with `error:"http status"`. Use it for APIs that answer a
   POST with a large file. Such a request is not split into segments, so if the
@@ -629,9 +629,11 @@ plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
   when the server reported a size). `status` is the upstream HTTP status, or
   -1 when no answer arrived. `error` is set to `transport failure`,
   `http status`, or `sd write failed` when the file was not installed. A failed
-  answer may include `body`, its first 512 bytes; currently only requests sent
-  with a method or body include it.
+  answer may include `body`, up to its first 512 bytes (never ending in a cut
+  UTF-8 character); currently only requests sent with a method other than GET
+  or a non-empty body include it.
 - **Errors:** `400 {"error":"bad url/dest"}`; `400 {"error":"unsupported method"}`;
+  `400 {"error":"method must be a string"}`;
   `400 {"error":"body must be a string"}`; `400 {"error":"body over 4KB"}`;
   `400 {"error":"offset and maxBytes need a GET without a body"}`;
   `409 {"error":"offset mismatch","bytes":N}`

@@ -16,6 +16,7 @@
 #include <Memory.h>
 #include <ResumableFetch.h>
 #include <SecureHttpClient.h>
+#include <Utf8.h>
 #include <Util.h>
 #include <WiFi.h>
 #include <WolfsslCrypto.h>
@@ -2204,7 +2205,12 @@ void CrossPointWebServer::handleFetch() {
     server->send(400, "application/json", "{\"error\":\"bad url/dest\"}");
     return;
   }
-  std::string method = req["method"] | "GET";
+  const JsonVariantConst methodField = req["method"];
+  if (!methodField.isNull() && !methodField.is<const char*>()) {
+    server->send(400, "application/json", "{\"error\":\"method must be a string\"}");
+    return;
+  }
+  std::string method = methodField | "GET";
   std::transform(method.begin(), method.end(), method.begin(),
                  [](unsigned char c) { return static_cast<char>(toupper(c)); });
   // HEAD would wait for a body that never comes; other verbs are not plugin downloads.
@@ -2220,12 +2226,13 @@ void CrossPointWebServer::handleFetch() {
     server->send(400, "application/json", "{\"error\":\"body must be a string\"}");
     return;
   }
-  const char* rawBody = bodyField | "";
-  if (strlen(rawBody) > FETCH_MAX_REQUEST_BODY) {
+  // JsonString keeps the decoded length, so a \u0000 in the body is sent too.
+  const JsonString rawBody = bodyField.as<JsonString>();
+  if (rawBody.size() > FETCH_MAX_REQUEST_BODY) {
     server->send(400, "application/json", "{\"error\":\"body over 4KB\"}");
     return;
   }
-  const std::string requestBody = rawBody;
+  const std::string requestBody = rawBody.isNull() ? std::string() : std::string(rawBody.c_str(), rawBody.size());
   // Only a GET without a body resumes and follows redirects. Any other request
   // is sent once: replaying it could repeat its effect, and its headers must
   // not follow a redirect.
@@ -2445,6 +2452,8 @@ void CrossPointWebServer::handleFetch() {
   if (!ok2xx) {
     Storage.remove(part.c_str());
     resp["error"] = status < 0 ? "transport failure" : "http status";
+    // The cap may have cut a UTF-8 character: drop its partial tail.
+    errorBody.resize(utf8SafeTruncateBuffer(errorBody.data(), static_cast<int>(errorBody.size())));
     if (!errorBody.empty()) resp["body"] = errorBody;
   } else if (complete && !Storage.replaceFile(part.c_str(), dest.c_str())) {
     Storage.remove(part.c_str());

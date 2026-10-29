@@ -58,10 +58,12 @@
     },
     async _readResponse(r, path) {
       if (!r.ok) {
-        let detail = '';
-        try { detail = (await r.json()).error || ''; } catch (e) {}
+        let result = null;
+        try { result = await r.json(); } catch (e) {}
+        const detail = (result && result.error) || '';
         const err = new Error(path + ' ' + r.status + (detail ? ': ' + detail : ''));
         err.status = r.status;
+        if (result) err.result = result;  // the device's JSON answer, e.g. {error: 'body over 4KB'}
         throw err;
       }
       return r.json();
@@ -102,7 +104,7 @@
     async fetchToSd(plugin, url, dest, headers, options) {
       const method = ((options && options.method) || 'GET').toUpperCase();
       const body = (options && options.body) || '';
-      // The device sends a request with a method or body once, without segments.
+      // The device sends a non-GET request, or one with a body, once, without segments.
       // A failure throws, as on the GET path, with the device's result attached.
       if (method !== 'GET' || body) {
         const result = await this._post('/api/fetch', { plugin, url, dest, headers: headers || {}, method, body });
