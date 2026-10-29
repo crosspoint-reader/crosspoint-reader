@@ -348,22 +348,22 @@ void EpubReaderActivity::openReaderMenu() {
   const ChapterPosition position = chapterPosition();
   const int bookProgressPercent = bookPercentFor(position);
 
-  startActivityForResult(
-      std::make_unique<EpubReaderMenuActivity>(
-          renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages, bookProgressPercent,
-          SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), CLIPPINGS.hasClippings()),
-      [this](const ActivityResult& result) {
-        const auto& menu = std::get<MenuResult>(result.data);
+  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
+                             renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
+                             bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
+                             !cachedBookmarks.empty(), CLIPPINGS.hasClippings(), selectedMenuAction),
+                         [this](const ActivityResult& result) {
+                           const auto& menu = std::get<MenuResult>(result.data);
 
-        if (SETTINGS.orientation != menu.orientation) {
-          applyOrientation(menu.orientation);
-        }
+                           if (SETTINGS.orientation != menu.orientation) {
+                             applyOrientation(menu.orientation);
+                           }
 
-        toggleAutoPageTurn(menu.pageTurnOption);
-        if (!result.isCancelled) {
-          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-        }
-      });
+                           toggleAutoPageTurn(menu.pageTurnOption);
+                           if (!result.isCancelled) {
+                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                           }
+                         });
 }
 
 // Runs on the render task, under its lock, right before every chapter build. The page turner's

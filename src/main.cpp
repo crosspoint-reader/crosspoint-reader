@@ -49,6 +49,7 @@
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SlideSwitch.h"
 #include "util/Timezones.h"
 
 #if CROSSPOINT_VECTOR_FONTS
@@ -239,7 +240,9 @@ void handleSlideSwitch() {
       SETTINGS.touchReaderControls = on ? CrossPointSettings::TOUCH_READER_ON : CrossPointSettings::TOUCH_READER_OFF;
       break;
     default:
-      if (!Frontlight.present() || Frontlight.isOn() == on) return;
+      // Also compare the saved state: setup() lit the light from the switch
+      // without updating it.
+      if (!Frontlight.present() || (Frontlight.isOn() == on && (SETTINGS.frontlightOn != 0) == on)) return;
       Frontlight.setOn(on);
       SETTINGS.frontlightOn = on ? 1 : 0;
       break;
@@ -687,9 +690,12 @@ void setup() {
   // Brightness and warmth are always restored. A normal wake starts with the
   // light off unless Restore Light on Wake is enabled; silent maintenance
   // reboots replay the live state captured at restart, so they neither go dark
-  // nor light up against the user's wake preference.
-  const bool restoreLightOn =
-      isSilentReboot ? silentRebootLightOn : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
+  // nor light up against the user's wake preference. A slide switch bound to
+  // the light decides it from its position instead.
+  const bool restoreLightOn = isSilentReboot ? silentRebootLightOn
+                              : slideSwitchOwnsLight()
+                                  ? gpio.isToggleSwitchOn()
+                                  : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   switch (wakeupReason) {
@@ -731,6 +737,10 @@ void setup() {
   }
 
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
+
+  // Apply a switch moved during sleep before the first paint, so the wake
+  // screen does not draw in the old night mode and then repaint.
+  handleSlideSwitch();
 
   // Resolve the single boot-presentation decision. Skipping the splash also
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
