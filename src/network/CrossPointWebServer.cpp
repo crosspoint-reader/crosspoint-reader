@@ -13,6 +13,7 @@
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
+#include <MD5Builder.h>
 #include <Memory.h>
 #include <ResumableFetch.h>
 #include <SecureHttpClient.h>
@@ -269,7 +270,7 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
-  // If-None-Match is collected so the static-page handlers can answer conditional GETs with 304
+  // If-None-Match is collected so static pages and plugin files can answer conditional GETs with 304
   const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
                                     "Lock-Token", "Timeout",     "If-None-Match"};
   server->collectHeaders(collectedHeaders, 7);
@@ -1973,6 +1974,30 @@ void CrossPointWebServer::handlePluginFile() const {
     return;
   }
 
+  // A content hash, not size and date: without a set clock files can share a
+  // timestamp, and a plugin update can keep the same size.
+  MD5Builder md5;
+  md5.begin();
+  uint8_t chunk[512];
+  int got;
+  while ((got = f.read(chunk, sizeof(chunk))) > 0) {
+    md5.add(chunk, static_cast<size_t>(got));
+    resetTaskWatchdogIfSubscribed();
+  }
+  if (got < 0 || !f.seek(0)) {
+    LOG_ERR("WEB", "Plugin file read failed: %s", path.c_str());
+    server->send(500, "text/plain", "Failed to read file");
+    return;
+  }
+  md5.calculate();
+  const String etag = "\"" + md5.toString() + "\"";
+  // no-cache: the browser keeps the file but revalidates it on every load.
+  server->sendHeader("ETag", etag);
+  server->sendHeader("Cache-Control", "no-cache");
+  if (server->header("If-None-Match") == etag) {
+    server->send(304);
+    return;
+  }
   server->setContentLength(f.size());
   server->send(200, pluginContentType(file), "");
   streamFileToClient(f);

@@ -209,8 +209,8 @@ bool endsWithBreakableHyphen(const std::string_view token) {
 // pagination and must not allocate.
 constexpr size_t FOCUS_PREFIX_BUF_SIZE = 40;
 
-// Advance from the token origin to the start of its regular-weight suffix: the bold prefix plus
-// the kerning across the weight change. Doubles as the suffix's x offset inside the word.
+// Bold prefix width plus kerning across the weight change. In LTR this is also
+// the offset to the regular suffix; in RTL it contributes to the total word width.
 uint16_t measureFocusPrefixAdvance(const GfxRenderer& renderer, const int fontId, const std::string_view word,
                                    const EpdFontFamily::Style style, const uint8_t focusBoundary,
                                    const int8_t characterSpacing) {
@@ -221,8 +221,11 @@ uint16_t measureFocusPrefixAdvance(const GfxRenderer& renderer, const int fontId
 
   const auto boldStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
   const auto* suffixPtr = reinterpret_cast<const unsigned char*>(word.data() + focusBoundary);
+  const uint32_t suffixFirst = utf8NextCodepoint(&suffixPtr);
+  const bool rtl = BidiUtils::startsWithRtl(prefixBuf);
   const int kerning =
-      renderer.getKerning(fontId, lastCodepoint(prefixBuf), utf8NextCodepoint(&suffixPtr), boldStyle, characterSpacing);
+      rtl ? renderer.getKerning(fontId, suffixFirst, lastCodepoint(prefixBuf), style, characterSpacing)
+          : renderer.getKerning(fontId, lastCodepoint(prefixBuf), suffixFirst, boldStyle, characterSpacing);
   return static_cast<uint16_t>(renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle, characterSpacing) + kerning);
 }
 
@@ -244,6 +247,16 @@ uint16_t measureFocusWordWidth(const GfxRenderer& renderer, const int fontId, co
   const uint16_t suffixWidth = measureWordWidth(renderer, fontId, word.substr(focusBoundary), style, characterSpacing,
                                                 wordSpacingPercent, appendHyphen);
   return measureFocusPrefixAdvance(renderer, fontId, word, style, focusBoundary, characterSpacing) + suffixWidth;
+}
+
+// RTL draws the regular suffix on the left and the bold prefix on the right.
+uint16_t measureFocusRtlSplitAdvance(const GfxRenderer& renderer, const int fontId, const std::string_view word,
+                                     const EpdFontFamily::Style style, const uint8_t boundary,
+                                     const int8_t characterSpacing) {
+  const auto suffix = word.substr(boundary);
+  const int kerning = renderer.getKerning(fontId, firstCodepoint(suffix), lastCodepoint(word.substr(0, boundary)),
+                                          style, characterSpacing);
+  return measureWordWidth(renderer, fontId, suffix, style, characterSpacing, 100) + kerning;
 }
 
 // Focus boundaries for the two halves of a token split at `splitOffset`.
@@ -1881,25 +1894,27 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     return;
   }
 
-  // Each word is one TextBlock entry carrying its own boundary; all that remains is the suffix x
-  // offset the renderer needs to resume in regular weight, i.e. the bold prefix's advance.
+  // Each word is one TextBlock entry carrying its own boundary and an offset
+  // to the second visual run: the bold prefix in RTL, the regular suffix in LTR.
   std::vector<uint8_t> outBoundaries;
-  std::vector<uint16_t> outSuffixX;
+  std::vector<uint16_t> outSplitX;
   outBoundaries.reserve(lineWordCount);
-  outSuffixX.reserve(lineWordCount);
+  outSplitX.reserve(lineWordCount);
   for (size_t i = 0; i < lineWordCount; i++) {
     const uint8_t boundary = focusBoundaryAt(i);
     outBoundaries.push_back(boundary);
     const int wordFont = wordFontId(lastBreakAt + (willReorder ? visualOrderScratch[i] : i), fontId);
-    outSuffixX.push_back(boundary == 0 ? 0
-                                       : measureFocusPrefixAdvance(
-                                             renderer, wordFont, lineWords[i],
-                                             getWordStyleAt(lastBreakAt + (willReorder ? visualOrderScratch[i] : i)),
-                                             boundary, blockStyle.characterSpacing));
+    const auto style = getWordStyleAt(lastBreakAt + (willReorder ? visualOrderScratch[i] : i));
+    const bool rtl = BidiUtils::startsWithRtl(lineWords[i].c_str());
+    outSplitX.push_back(boundary == 0 ? 0
+                        : rtl         ? measureFocusRtlSplitAdvance(renderer, wordFont, lineWords[i], style, boundary,
+                                                                    blockStyle.characterSpacing)
+                                      : measureFocusPrefixAdvance(renderer, wordFont, lineWords[i], style, boundary,
+                                                                  blockStyle.characterSpacing));
   }
 
   auto block =
-      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
+      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSplitX, blockStyle,
                                    std::move(lineRubyTexts), std::move(lineLinks), sourceRanges, paragraphStartWord);
   if (!block || !block->valid() || !attachWordFonts(*block)) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
