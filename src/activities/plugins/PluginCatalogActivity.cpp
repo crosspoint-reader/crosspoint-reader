@@ -167,7 +167,8 @@ std::string httpFailureDetail(const int status, const String& body) {
   filter["message"] = true;
   JsonDocument doc;
   if (deserializeJson(doc, body, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return detail;
-  const char* reason = doc["error"].is<const char*>() ? doc["error"].as<const char*>() : (doc["message"] | "");
+  const char* reason = doc["error"] | "";
+  if (*reason == '\0') reason = doc["message"] | "";
   // Room for one short sentence on the error screen. Copy only that much (the
   // answer may hold KBs) and never cut a UTF-8 sequence.
   constexpr size_t MAX_REASON = 120;
