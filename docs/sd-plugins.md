@@ -187,6 +187,7 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.version_tracking` | Catalog item versions are compared with installed plugin manifests to show Installed or Update status. | Any catalog can expose install/update state using the generic installed-plugin version contract. Plugin Hub currently uses it to identify available updates. |
 | `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
 | `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
+| `catalog.encoded_item_fields` | Download, sidecar, and details templates can use the percent-encoded item variables `{id_enc}`, `{title_enc}`, `{author_enc}`, and `{url_enc}`. | A catalog whose URLs carry item text can require this so older firmware, which would send the variable names literally, does not offer the entry. |
 
 Capability names describe firmware behavior available to the entire plugin system.
 They must not encode Plugin Hub policy or ownership, and another plugin may use the
@@ -211,11 +212,20 @@ download filename/username/password; and sidecar path/body.
 | `{plugin_api}` | numeric plugin API level | template fields |
 | `{plugin_capabilities}` | comma-separated advertised capability names | template fields |
 | `{page}` | current 1-based page | browse |
-| `{limit}` | `page_size + 1` (the extra row detects "more pages") | browse |
-| `{id}` `{title}` `{author}` `{url}` | fields of the selected item | download, sidecar |
+| `{offset}` | rows before the current page: `(page - 1) * page_size` | browse |
+| `{limit}` | `page_size` when the request uses `{page}` and not `{offset}`; otherwise `page_size + 1` (the extra row shows that another page exists) | browse |
+| `{id}` `{title}` `{author}` `{url}` | fields of the selected item, as received (unlike `{query}`, which is encoded, with `{query_raw}` as the raw form) | download, sidecar, item details |
+| `{id_enc}` `{title_enc}` `{author_enc}` `{url_enc}` | the same fields percent-encoded (everything except letters, digits, `-_.~`), for URL query values and path segments; firmware with these advertises `catalog.encoded_item_fields` | download, sidecar, item details |
 | `{md5}` | MD5 hex of the destination file path | sidecar |
 | `{dest}` | sanitized on-SD path of the downloaded file | sidecar |
 | `{device_code}` | from the auth request response | auth poll |
+
+Substitution inserts values as they are. Before a request is sent, spaces,
+control characters, and non-ASCII (UTF-8) bytes in its URL are
+percent-encoded, so a raw `{title}` in a URL path still forms a valid request.
+All other printable ASCII characters are kept, including `&`, `?`, `#`, `/`,
+`+`, `=` and `%`, so use the `_enc` forms for values inside a query string or
+a single path segment.
 
 Two browse formats:
 - **`"json"`** (default) — a paged JSON list, using `items`/`fields` below.
@@ -358,11 +368,23 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   plugin.
 - **Stale tokens**: a 401/403 from browse returns to the sign-in screen rather
   than an error.
-- **Pagination** (json): the browse request should return up to `{limit}`
-  items; the firmware displays `page_size` and uses the extra row to know
-  another page exists. Navigation matches the OPDS browser: a "Previous
-  page" row precedes the items past page 1 and a "Next page" row follows
-  them while more pages exist — tappable and button-reachable like any row.
+- **Pagination** (json): the variables a request uses choose how it pages
+  (`{offset}` takes precedence over `{page}`).
+  - `{page}` with `{limit}` (`?page={page}&per_page={limit}`): `{limit}` is
+    `page_size`, so pages line up with the server's. A full page shows
+    "Next page"; when the last page is exactly full, the next one is empty.
+  - `{offset}` (`?offset={offset}&limit={limit}`): `{limit}` is
+    `page_size + 1`, and the extra row shows that another page exists.
+  - `{page}` without `{limit}` (one file per page, for example
+    `all-{page}.json`): "Next page" appears when the response has more than
+    `page_size` rows, so add one extra row at the end of every file except the
+    last (for example, a copy of the next file's first row).
+  - Neither `{page}` nor `{offset}`: the response is one static list, and the
+    firmware pages through it locally.
+
+  Navigation matches the OPDS browser: a "Previous page" row precedes the
+  items past page 1 and a "Next page" row follows them while more pages
+  exist — tappable and button-reachable like any row.
 - **Lists** (json): with `browse.lists`, opening the catalog shows a picker
   of the named entries first (a single list skips the picker and opens
   directly, after its notice; Back then leaves the catalog); each entry browses with its own url/body

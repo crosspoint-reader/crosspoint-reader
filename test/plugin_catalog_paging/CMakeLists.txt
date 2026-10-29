@@ -1,0 +1,4 @@
+add_executable(PluginCatalogPagingTest PluginCatalogPagingTest.cpp)
+target_include_directories(PluginCatalogPagingTest PRIVATE ${REPO_ROOT}/src/activities/plugins)
+target_link_libraries(PluginCatalogPagingTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(PluginCatalogPagingTest)
