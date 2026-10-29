@@ -24,6 +24,9 @@ class GfxRenderer;
 //
 // A handler is either a "request" (response discarded; an acknowledgement) or
 // a "download" (response streamed to `dest` on SD, e.g. a sleep image).
+// "require_meta": "<key>" queues an event for that handler only when the
+// event's book ("book", or "path" for book.downloaded) has a sidecar with a
+// non-empty value for the key.
 //
 // Execution is deferred: plugin handlers need the network, and events mostly
 // fire with WiFi down (leaving the reader, entering sleep). emit() appends one

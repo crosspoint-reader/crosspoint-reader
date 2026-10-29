@@ -425,7 +425,10 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
                                        static_cast<int16_t>(iconRect.y + line.y), line.width, line.height},
                              ink);
       }
-      screen.frame().hit(slot, ACTION_TILE, static_cast<int16_t>(id), fui::InputTouch);
+      // A tile whose function the slide switch owns shows its state but takes no tap.
+      const bool switchOwned = (id == 0 && slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) ||
+                               (id == 3 && slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_TOUCH_CONTROLS));
+      if (!switchOwned) screen.frame().hit(slot, ACTION_TILE, static_cast<int16_t>(id), fui::InputTouch);
     }
   }
 }
