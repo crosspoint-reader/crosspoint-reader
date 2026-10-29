@@ -25,7 +25,6 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "PluginListIndex.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -353,7 +352,10 @@ bool PluginCatalogActivity::loadBrowseListIndex() {
     return false;
   }
 
-  auto readList = [](JsonVariantConst l, Manifest::BrowseList& entry) {
+  manifest.browseLists.resize(manifest.fixedListCount);
+  manifest.browseLists.reserve(manifest.fixedListCount + lists.size());
+  for (JsonVariantConst l : lists) {
+    Manifest::BrowseList entry;
     entry.title = l["title"] | "";
     entry.url = l["url"] | "";
     entry.body = l["body"] | "";
@@ -362,9 +364,9 @@ bool PluginCatalogActivity::loadBrowseListIndex() {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
-    return !entry.title.empty() && !entry.url.empty();
-  };
-  if (!pluginlistindex::replaceFetched(manifest.browseLists, manifest.fixedListCount, lists, readList)) {
+    if (!entry.title.empty() && !entry.url.empty()) manifest.browseLists.push_back(std::move(entry));
+  }
+  if (manifest.browseLists.size() == manifest.fixedListCount) {
     LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
     return false;
   }
@@ -647,13 +649,11 @@ void PluginCatalogActivity::startBrowse() {
     }
   }
   if (needsListIndex) {
-    const auto outcome = pluginlistindex::outcomeOf(loadBrowseListIndex(), manifest.fixedListCount);
-    if (outcome == pluginlistindex::Outcome::Failed) {
+    if (!loadBrowseListIndex() && manifest.fixedListCount == 0) {
       fail(StrId::STR_FETCH_FEED_FAILED);
       return;
     }
-    // FixedOnly: the manifest's own lists still work; Back to the picker must not refetch.
-    if (outcome == pluginlistindex::Outcome::FixedOnly) LOG_ERR("PCAT", "showing only the fixed browse lists");
+    // After a failed fetch the manifest's own lists still work; Back to the picker must not refetch.
     listIndexLoaded = true;
   }
   // Browse lists apply to JSON catalogs; XML lists navigate by folder instead.
