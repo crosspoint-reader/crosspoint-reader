@@ -34,6 +34,10 @@ inline int limitFor(const Paging paging, const int pageSize) {
   return paging == Paging::SizedPages ? pageSize : pageSize + 1;
 }
 
+// Whether a row counts toward the page window. The server counted every row it
+// sent, shown or not; a static list counts only the rows it shows.
+inline bool countsTowardPage(const Paging paging, const bool shown) { return paging != Paging::Static || shown; }
+
 // Counts eligible rows without retaining them. On a static feed the window
 // starts at (page - 1) * pageSize; for server-paged feeds it starts at zero.
 // A lookahead row, or a full page for sized pages, shows that Next Page is real.

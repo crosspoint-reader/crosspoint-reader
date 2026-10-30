@@ -528,6 +528,11 @@ The final field is the WebSocket upload port.
 - The device shows a Wi-Fi QR code and URL QR code.
 - The fallback IP is typically `192.168.4.1`.
 - `/api/status` returns `"mode": "AP"` and `"rssi": 0`.
+- The hotspot's DNS answers every name with the device's IP. A `GET` or `HEAD`
+  request whose `Host` is any other domain name (not an IP address, a `.local`
+  name or a single-label name such as `crosspoint`) gets
+  `302 Location: http://<AP IP>/`, so phones and computers can open the home
+  page as a captive portal. Other methods are not redirected.
 
 ### Calibre Wireless
 
@@ -608,7 +613,16 @@ be edited. The reader enforces `expires` when the book opens.
 ### `POST /api/fetch`
 
 Downloads a URL straight to SD, so a large body never passes through the
-browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...},"offset":0,"maxBytes":0}`.
+browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...},"offset":0,"maxBytes":0}`,
+plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
+`GET`) and `"body"` (a string, at most 4KB).
+
+- A request with a method other than GET, or with a non-empty body, is sent once: it is
+  never replayed, and `offset`/`maxBytes` must be 0. A 3xx answer is not
+  followed; it fails with `error:"http status"`. Use it for APIs that answer a
+  POST with a large file. Such a request is not split into segments, so if the
+  browser connection drops on a very large answer, check whether `dest` was
+  installed.
 
 - `dest` must be absolute with no `..`; missing parent folders are created.
 - The transfer is staged in `<dest>.part` and replaces `dest` only when the
@@ -617,10 +631,11 @@ browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...
   index stale, so the book appears the next time the Library opens. Requests
   that end with `complete:false`, failed transfers, other file types, and
   hidden files or folders (names that start with `.`) don't mark it.
-- Up to 5 redirects are followed. `headers` (typically the plugin's
+- A GET without a body follows up to 5 redirects. `headers` (typically the plugin's
   `Authorization`) are sent only while the target keeps the starting URL's
   scheme, host, and port; a redirect elsewhere, including https→http, gets none.
-- A body cut short mid-transfer resumes on its own with a Range request.
+- For a GET without a body, an answer cut short mid-transfer resumes on its own
+  with a Range request.
 - **Segments:** `maxBytes` (at most 4MB) ends the request after that many
   bytes with `complete:false`; send the next request with `offset` set to the
   returned `bytes` to continue the same `.part`. `api.fetchToSd()` does this
@@ -628,9 +643,17 @@ browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...
 - A long transfer answers early with `200` chunked and sends whitespace every
   5s to keep the browser connection open; the JSON result follows at the end.
 - **Result:** `{"status":200,"bytes":N,"complete":true,"total":N}` (`total`
-  when the server reported a size). `error` is set to `transport failure`,
-  `http status`, or `sd write failed` when the file was not installed.
-- **Errors:** `400 {"error":"bad url/dest"}`; `409 {"error":"offset mismatch","bytes":N}`
+  when the server reported a size). `status` is the upstream HTTP status, or
+  -1 when no answer arrived. `error` is set to `transport failure`,
+  `http status`, or `sd write failed` when the file was not installed. A failed
+  answer may include `body`, up to its first 512 bytes (never ending in a cut
+  UTF-8 character); currently only requests sent with a method other than GET
+  or a non-empty body include it.
+- **Errors:** `400 {"error":"bad url/dest"}`; `400 {"error":"unsupported method"}`;
+  `400 {"error":"method must be a string"}`;
+  `400 {"error":"body must be a string"}`; `400 {"error":"body over 4KB"}`;
+  `400 {"error":"offset and maxBytes need a GET without a body"}`;
+  `409 {"error":"offset mismatch","bytes":N}`
   when `offset` does not match the `.part` size; `502 {"error":"sd write failed" |
   "range unsupported" | "download truncated","bytes":N,"complete":false}`.
 

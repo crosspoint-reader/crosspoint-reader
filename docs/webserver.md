@@ -60,7 +60,9 @@ CrossPoint-Reader
 ```
 
 3. Open the URL shown on the reader. `http://crosspoint.local/` is preferred
-   when supported; the fallback IP is typically `http://192.168.4.1/`.
+   when supported; the fallback IP is typically `http://192.168.4.1/`. Some
+   phones and computers open the reader's home page automatically after
+   joining.
 
 The reader displays one QR code for joining the hotspot and another QR code for
 opening the web interface.
