@@ -869,40 +869,23 @@ bool FontDownloadActivity::handleCustomInput() {
       requestUpdate();
     }
   } else if (state_ == ERROR) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       {
         RenderLock lock(*this);
         state_ = FAMILY_LIST;
         rowsDirty_ = true;  // the failed download reset installed/hasUpdate
       }
       requestUpdate();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
-        downloadFamily(families_[downloadingFamilyIndex_]);
-        requestUpdateAndWait();
-        return true;
-      } else {
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-          rowsDirty_ = true;
-        }
-        requestUpdate();
-      }
     } else {
       int x = 0;
       int y = 0;
-      if (mappedInput.wasScreenTapped(x, y)) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
         if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
           downloadFamily(families_[downloadingFamilyIndex_]);
           requestUpdateAndWait();
           return true;
         }
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-          rowsDirty_ = true;
-        }
+        onWifiSelectionComplete(true);
         requestUpdate();
       }
     }
