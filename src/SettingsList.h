@@ -21,6 +21,7 @@
 #include "activities/settings/SettingsActivity.h"
 #include "components/UITheme.h"
 #include "util/DictionaryRegistry.h"
+#include "util/SlideSwitch.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -300,12 +301,41 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
             v.end());
   }
+  // The slide switch's position owns its bound function (the light at boot
+  // too). UI-only, so the keys stay persisted for other devices.
+  v.erase(std::remove_if(v.begin(), v.end(),
+                         [](const SettingInfo& s) {
+                           return (s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE && slideSwitchOwnsLight()) ||
+                                  (s.nameId == StrId::STR_NIGHT_MODE &&
+                                   slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) ||
+                                  (s.nameId == StrId::STR_TOUCH_READER_CONTROLS &&
+                                   slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_TOUCH_CONTROLS));
+                         }),
+          v.end());
   // Tilt page turn needs an IMU with a gyroscope. UI-only, like the frontlight
   // entry: a failed probe on one boot must not drop the saved value.
   if (!halTiltSensor.isAvailable()) {
     v.erase(
         std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_TILT_PAGE_TURN; }),
         v.end());
+  }
+  // Clock settings need the RTC, as on the device (ClockSettingsActivity).
+  if (!halClock.isAvailable()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             switch (s.nameId) {
+                               case StrId::STR_CLOCK:
+                               case StrId::STR_CLOCK_FORMAT:
+                               case StrId::STR_TIMEZONE:
+                               case StrId::STR_CLOCK_DST:
+                               case StrId::STR_CLOCK_IN_HEADER:
+                               case StrId::STR_CLOCK_SYNCED:
+                                 return true;
+                               default:
+                                 return false;
+                             }
+                           }),
+            v.end());
   }
   // Hidden on touch boards: the Home button actions (X4 Pro) or the short
   // power click (other touch boards) cover these shortcuts.

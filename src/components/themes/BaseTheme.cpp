@@ -989,14 +989,15 @@ void BaseTheme::drawSelectionHandle(const GfxRenderer& renderer, const Rect rect
   renderer.fillRect(left ? rect.x + radius : rect.x, rect.y, radius, radius);
 }
 
-void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect, const int count) {
+void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect, const int count,
+                                     const int firstAction) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const char* labels[] = {tr(STR_LOOKUP), tr(STR_CLIP), tr(STR_BOOKMARK_OPTION)};
   for (int i = 0; i < count; ++i) {
     const Rect button = selectionGeometry::button(rect, i, metrics.menuSpacing, count);
     renderer.fillRoundedRect(button.x, button.y, button.width, button.height, metrics.controlRadius, Color::White);
     renderer.drawRoundedRect(button.x, button.y, button.width, button.height, 1, metrics.controlRadius, true);
-    UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[i], 2, true,
+    UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[firstAction + i], 2, true,
                                      EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::CENTER);
   }
 }

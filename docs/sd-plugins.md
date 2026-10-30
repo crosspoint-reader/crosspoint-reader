@@ -305,8 +305,7 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
                                             // so lists can share browse.url
                                             // ("...?folder={list_id_enc}")
 
-    "lists_url": "https://.../folders",     // optional: lists fetched when the
-                                            // catalog opens (json only)
+    "lists_url": "https://.../folders",     // optional: more lists, shown after "lists"
     "lists_headers": { "Authorization": "Bearer {token}" },  // sent only to lists_url
     "lists_items": "folders",               // dotted path to the array; default "lists"
     "lists_fields": { "title": "title", "id": "folder_id" },  // defaults: title, url, id
@@ -394,6 +393,10 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   - Neither `{page}` nor `{offset}`: the response is one static list, and the
     firmware pages through it locally.
 
+  Rows without a title are not shown. When the request uses `{page}` or
+  `{offset}`, these rows still count toward the page, so a page can show
+  fewer rows and still offer "Next page".
+
   Navigation matches the OPDS browser: a "Previous page" row precedes the
   items past page 1 and a "Next page" row follows them while more pages
   exist — tappable and button-reachable like any row.
@@ -406,20 +409,24 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   defaults to the list title, and omitted button labels use the firmware's
   translated Cancel/Confirm defaults. Back from the book list returns to the
   picker.
-- **Dynamic lists** (json): `lists_url` is fetched with a GET when the catalog
-  opens, used only when `lists` is empty. The request carries `lists_headers`
-  and no other headers, so a token reaches the lists server only when the
-  manifest says so. A 401/403 answer is handled as for browsing: a
-  `password` sign-in mints a new token and retries once, otherwise the
-  sign-in screen is shown. The answer is read from the array at `lists_items`;
-  each entry's title, url, and id come from the dotted paths in
-  `lists_fields`, plus the optional `body` string and `notice` object, read by
-  the same names as in `lists`. An entry needs a title and a url or an id; an
-  entry with only an id browses `browse.url`, which gets the id through
-  `{list_id}` or `{list_id_enc}`. At most 64 lists are shown, and an answer
-  larger than 16KB fails to load. `lists_headers`, `lists_items`,
-  `lists_fields`, `{list_id}`, and `{list_id_enc}` need the
-  `catalog.list_index_mapping` capability.
+- **Dynamic lists** (json): `browse.lists_url` is fetched with a GET once per
+  catalog visit. The request carries `lists_headers` and no other headers, so
+  a token reaches the lists server only when the manifest says so. The answer
+  is read from the array at `lists_items`; each entry's title, url, and id
+  come from the dotted paths in `lists_fields`, plus the optional `body`
+  string and `notice` object, read by the same names as in `lists`. An entry
+  needs a title and a url or an id; an entry with only an id browses
+  `browse.url`, which gets the id through `{list_id}` or `{list_id_enc}`.
+  Other entries are skipped. At most 64 fetched lists are kept; an answer with
+  no usable entries, or one larger than 16KB, counts as a failed fetch. The
+  fetched lists follow any `lists` from the manifest. If the fetch fails, the
+  manifest's own lists are still shown and the fetch is not retried until the
+  catalog is opened again; without them the catalog shows an error, and Retry
+  fetches again. A 401/403 answer is handled as for browsing: a `password`
+  sign-in mints a new token and retries once, otherwise the sign-in screen is
+  shown. Firmware before this change ignores `lists_url` when `lists` is also
+  set. `lists_headers`, `lists_items`, `lists_fields`, `{list_id}`, and
+  `{list_id_enc}` need the `catalog.list_index_mapping` capability.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
@@ -544,7 +551,7 @@ browser-side.
 | Need | Use |
 |---|---|
 | Outbound HTTP(S), any method (CORS-free) | `api.relay(method, url, headers, body)` |
-| Download a URL straight to SD | `api.fetchToSd(url, dest, headers)` |
+| Download a URL straight to SD | `api.fetchToSd(url, dest, headers, {method, body})` (options optional; with a method other than GET, or a non-empty body, the request is sent once, and on failure the thrown error carries the `/api/fetch` result in `err.result`, including the start of the server's answer in `err.result.body` when there is one) |
 | Write a small file to SD | `api.writeFile(path, base64)` |
 | The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
