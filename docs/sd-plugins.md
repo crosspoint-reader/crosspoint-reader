@@ -189,6 +189,7 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
 | `catalog.encoded_item_fields` | Download, sidecar, and details templates can use the percent-encoded item variables `{id_enc}`, `{title_enc}`, `{author_enc}`, and `{url_enc}`. | A catalog whose URLs carry item text can require this so older firmware, which would send the variable names literally, does not offer the entry. |
 | `catalog.list_index_mapping` | `browse.lists_url` can be fetched with `lists_headers` and read with `lists_items`/`lists_fields`, and lists can carry an `id` that fills `{list_id}` and `{list_id_enc}`. | A catalog can build its lists from a service's own folder or tag API, with the token in a header, without a separate server to reshape the answer. |
+| `catalog.list_requirements` | Static and fetched browse lists can declare an optional `requires` array of firmware capabilities; fetched lists can map its path via `lists_fields.requires`. | List discovery hides sections that require unsupported firmware behavior, without tying the index format to any specific plugin or firmware. |
 
 Capability names describe firmware behavior available to the entire plugin system.
 They must not encode Plugin Hub policy or ownership, and another plugin may use the
@@ -427,6 +428,13 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   shown. Firmware before this change ignores `lists_url` when `lists` is also
   set. `lists_headers`, `lists_items`, `lists_fields`, `{list_id}`, and
   `{list_id_enc}` need the `catalog.list_index_mapping` capability.
+  Optional `requires` on either a manifest list or a fetched list contains an
+  array of firmware capability names. A list is shown only when all names are
+  advertised by the firmware. Lists without `requires` are unchanged; a
+  malformed array or more than 32 names hides that list. For remote APIs,
+  `browse.lists_fields.requires` can specify a dotted path to the array.
+  A plugin that depends on this filtering should declare
+  `catalog.list_requirements` in its compatibility requirements.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
