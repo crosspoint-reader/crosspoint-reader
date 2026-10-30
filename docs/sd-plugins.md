@@ -421,7 +421,7 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   no usable entries, or one larger than 16KB, counts as a failed fetch. The
   fetched lists follow any `lists` from the manifest. If the fetch fails, the
   manifest's own lists are still shown and the fetch is not retried until the
-  catalog is opened again; without them the catalog shows an error, and Retry
+  catalog is reopened; without them the catalog shows an error, and Retry
   fetches again. A 401/403 answer is handled as for browsing: a `password`
   sign-in mints a new token and retries once, otherwise the sign-in screen is
   shown. Firmware before this change ignores `lists_url` when `lists` is also
