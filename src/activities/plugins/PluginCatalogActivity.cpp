@@ -694,7 +694,6 @@ void PluginCatalogActivity::startBrowse() {
         fail(StrId::STR_FETCH_FEED_FAILED);
         return;
       }
-      return;
     }
     // After a failed fetch the manifest's own lists still work; Back to the picker must not refetch.
     listIndexLoaded = true;
