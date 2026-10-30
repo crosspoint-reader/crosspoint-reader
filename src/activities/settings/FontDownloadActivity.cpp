@@ -859,8 +859,8 @@ bool FontDownloadActivity::handleCustomInput() {
   if (state_ == COMPLETE) {
     int x = 0;
     int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       {
         RenderLock lock(*this);
         state_ = FAMILY_LIST;
