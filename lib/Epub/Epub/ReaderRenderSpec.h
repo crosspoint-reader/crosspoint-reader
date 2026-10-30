@@ -14,6 +14,7 @@ struct ReaderRenderSpec {
   int fontId = 0;
   float lineCompression = 1.0f;  // Multiplier of font size in pixels, independent of advanceY.
   bool extraParagraphSpacing = false;
+  bool fillPages = false;
   uint8_t paragraphIndentSpaces = 2;
   int8_t characterSpacing = 0;
   uint8_t wordSpacingPercent = 100;
@@ -49,5 +50,6 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
   mix(spec.embeddedStyle);
   mix(spec.imageRendering);
   mix(spec.focusReadingEnabled);
+  if (spec.fillPages) mix(1);
   return signature == 0 ? 1 : signature;
 }

@@ -90,6 +90,15 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 73
+
+Version 73 adds a `bool fillPages` after `wordSpacingPercent` in the section
+header. The setting disables automatic widow, orphan, and heading grouping;
+explicit book page breaks and indivisible content still apply. Changing it
+invalidates completed and partial section caches. Older sections rebuild;
+book metadata and saved progress are kept. The partial version remains derived
+from the final section version.
+
 ### Version 72
 
 Version 72 makes ruby layout closer to how Chromium browser render text with
@@ -390,7 +399,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 64
+#define EXPECTED_VERSION 73
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -594,6 +603,7 @@ struct SectionBin {
     bool focusReadingEnabled;
     s8 characterSpacing;
     u8 wordSpacingPercent;
+    bool fillPages;
 
     u16 pageCount;
     u32 pageLutOffset;
