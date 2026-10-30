@@ -708,6 +708,11 @@ int ClipSelectionActivity::textXOffset() const {
 
 void ClipSelectionActivity::prewarmWord(const int index) const {
   if (index >= 0 && index < static_cast<int>(wordCount) && words[index].text) {
+    // Built-in glyphs use the reusable hot-group cache for these small redraws.
+    // Page prewarming would retain another slot for every word until the next full render.
+    if (!renderer.isSdCardFont(words[index].fontId) && renderer.getTtfFonts().count(words[index].fontId) == 0) {
+      return;
+    }
     renderer.getFontCacheManager()->prewarmCache(
         words[index].fontId, words[index].text,
         static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
