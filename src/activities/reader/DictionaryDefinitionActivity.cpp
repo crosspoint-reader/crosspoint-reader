@@ -383,9 +383,11 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
   // Keep only navigation metadata while inflating and laying out another entry.
   content.releasePayload();
   if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
   const auto heap = HalMemory::getInternalHeap();
   LOG_DBG("DICT", "Navigation after release: free=%u largest=%u", static_cast<unsigned>(heap.freeBytes),
           static_cast<unsigned>(heap.largestBlockBytes));
+#endif
   Definition next;
   auto result = Dictionary::LookupResult::Found;
   const char* word = back ? lookup->history[lookup->depth - 1].query.c_str() : lookup->pendingWord.c_str();
