@@ -105,7 +105,6 @@ base text so that it becomes the same length as the ruby annotation.
 Version 71 keeps the binary layout and rebuilds completed and partial sections.
 Focus split offsets now locate the bold prefix in RTL words and the regular
 suffix in LTR words. Book metadata and saved progress are kept.
-=======
 
 ### Version 70
 
