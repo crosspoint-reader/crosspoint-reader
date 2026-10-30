@@ -6,9 +6,14 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/activities/settings/ButtonRemapActivity.cpp").read_text()
+header = (ROOT / "src/activities/settings/ButtonRemapActivity.h").read_text()
+exit_action = "enum class ExitAction" + header.split("enum class ExitAction", 1)[1].split(";", 1)[0] + ";"
 loop = "void ButtonRemapActivity::loop() {" + source.split(
     "void ButtonRemapActivity::loop() {", 1
 )[1].split("void ButtonRemapActivity::render(", 1)[0]
+apply_mapping = "void ButtonRemapActivity::applyTempMapping() {" + source.split(
+    "void ButtonRemapActivity::applyTempMapping() {", 1
+)[1].split("bool ButtonRemapActivity::validateUnassigned(", 1)[0]
 
 harness = r"""
 #include <cassert>
@@ -34,15 +39,17 @@ struct MappedInputManager {
   int getPressedFrontButton() const { return rawFront; }
 };
 struct ButtonRemapActivity {
+""" + exit_action + r"""
+  ExitAction exitAction = ExitAction::None;
   uint8_t currentStep = 0;
   uint8_t tempMapping[4] = {255, 255, 255, 255};
   unsigned long errorUntil = 0;
   std::string errorMessage;
   MappedInputManager mappedInput;
-  int finishes = 0, updates = 0, applies = 0;
+  int finishes = 0, updates = 0;
   void finish() { ++finishes; }
   void requestUpdate() { ++updates; }
-  void applyTempMapping() { ++applies; }
+  void applyTempMapping();
   bool validateUnassigned(uint8_t raw) const {
     for (auto assigned : tempMapping) if (assigned == raw) return false;
     return true;
@@ -50,7 +57,13 @@ struct ButtonRemapActivity {
   void loop();
 };
 struct RenderLock { explicit RenderLock(ButtonRemapActivity&) {} };
-""" + loop + r"""
+""" + loop + apply_mapping + r"""
+void expectMapping(int back, int confirm, int left, int right) {
+  assert(SETTINGS.frontButtonBack == back);
+  assert(SETTINGS.frontButtonConfirm == confirm);
+  assert(SETTINGS.frontButtonLeft == left);
+  assert(SETTINGS.frontButtonRight == right);
+}
 int main() {
   using Button = MappedInputManager::Button;
   for (const auto side : {Button::Up, Button::Down}) {
@@ -84,15 +97,68 @@ int main() {
       wizard.mappedInput.rawFront = -1;
       if (raw < 3) wizard.mappedInput.held[logical] = false;
     }
-    assert(wizard.currentStep == 4 && wizard.applies == 0 && wizard.finishes == 0);
+    assert(wizard.currentStep == 4 && wizard.finishes == 0);
+    expectMapping(1, 0, 3, 2);
     for (int i = 0; i < 100; ++i) wizard.loop();
-    assert(wizard.applies == 0 && SETTINGS.saves == 0 && wizard.finishes == 0);
+    assert(SETTINGS.saves == 0 && wizard.finishes == 0);
+    expectMapping(1, 0, 3, 2);
     wizard.mappedInput.held[logical] = false;
     wizard.mappedInput.released[logical] = true;
     wizard.loop();
-    assert(wizard.applies == 1 && SETTINGS.saves == 1 && wizard.finishes == 1);
+    assert(SETTINGS.saves == 1 && wizard.finishes == 1);
+    expectMapping(0, 1, 2, 3);
     // A valid completed mapping has four distinct raw indices.
     for (int i = 0; i < 4; ++i) assert(wizard.tempMapping[i] == i);
+  }
+  // Side actions must survive either release order, before or after the last assignment.
+  for (const auto side : {Button::Up, Button::Down}) {
+    for (bool frontReleasedFirst : {false, true}) {
+      for (int assignments : {1, 4}) {
+        for (int logical = 0; logical < 4; ++logical) {
+          SETTINGS = Settings{};
+          ButtonRemapActivity wizard;
+          const int mapping[] = {2, 3, 0, 1};
+          for (int i = 0; i < assignments; ++i) {
+            wizard.mappedInput.rawFront = mapping[i];
+            wizard.mappedInput.held[logical] = true;
+            wizard.loop();
+            wizard.mappedInput.rawFront = -1;
+            if (i + 1 < assignments) wizard.mappedInput.held[logical] = false;
+          }
+          wizard.mappedInput.held[int(side)] = true;
+          wizard.loop();
+          assert(wizard.finishes == 0 && SETTINGS.saves == 0);
+          if (frontReleasedFirst) {
+            wizard.mappedInput.held[logical] = false;
+            wizard.loop();
+            assert(wizard.finishes == 0 && SETTINGS.saves == 0);
+          }
+          wizard.mappedInput.held[int(side)] = false;
+          wizard.mappedInput.released[int(side)] = true;
+          // A warning expiring in the same frame must not discard the side action.
+          wizard.errorUntil = now - 1;
+          wizard.errorMessage = "duplicate";
+          wizard.loop();
+          wizard.mappedInput.released[int(side)] = false;
+          expectMapping(1, 0, 3, 2);
+          if (!frontReleasedFirst) {
+            for (int i = 0; i < 100; ++i) wizard.loop();
+            assert(wizard.finishes == 0 && SETTINGS.saves == 0);
+            // The first side action wins while the same front gesture is pending.
+            const auto other = side == Button::Down ? Button::Up : Button::Down;
+            wizard.mappedInput.released[int(other)] = true;
+            wizard.loop();
+            wizard.mappedInput.released[int(other)] = false;
+            wizard.mappedInput.held[logical] = false;
+          }
+          wizard.loop();
+          assert(wizard.finishes == 1);
+          assert(SETTINGS.saves == (side == Button::Up ? 1 : 0));
+          if (side == Button::Up) expectMapping(0, 1, 2, 3);
+          else expectMapping(1, 0, 3, 2);
+        }
+      }
+    }
   }
   ButtonRemapActivity duplicate;
   duplicate.mappedInput.rawFront = 2;
