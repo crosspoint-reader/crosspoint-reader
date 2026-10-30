@@ -107,7 +107,14 @@ struct Page { std::vector<std::unique_ptr<PageLine>> elements; };
 struct FontCacheManager {
   int prewarms = 0;
   uint8_t styleMask = 0;
-  void prewarmCache(int, const char*, uint8_t style) { ++prewarms; styleMask = style; }
+  int fontId = 0;
+  std::string text;
+  void prewarmCache(int font, const char* value, uint8_t style) {
+    ++prewarms;
+    fontId = font;
+    text = value;
+    styleMask = style;
+  }
 };
 struct Renderer {
   enum RenderMode { BW };
@@ -295,6 +302,8 @@ int main() {
       prewarm.words[0].style = static_cast<EpdFontFamily::Style>(style | 4);
       prewarm.prewarmWord(0);
       assert(prewarm.renderer.cache.styleMask == (1u << style));
+      assert(prewarm.renderer.cache.fontId == 42);
+      assert(prewarm.renderer.cache.text == "sample");
     }
   }
   assert(prewarm.renderer.cache.prewarms == 8);
