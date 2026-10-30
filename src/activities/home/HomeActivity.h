@@ -21,6 +21,7 @@ class HomeActivity final : public Activity {
   bool hasPlugins = false;
   // The home "library" slot (index 2) shows Plugins while the plugin system is
   // enabled, otherwise OPDS when a server is configured. NONE hides the slot.
+  // NetworkModeSelectionActivity lists OPDS in exactly the other cases.
   HomeMenuItem slotItem() const {
     if (hasPlugins) return HomeMenuItem::PLUGINS;
     return hasOpdsServers ? HomeMenuItem::OPDS_BROWSER : HomeMenuItem::NONE;

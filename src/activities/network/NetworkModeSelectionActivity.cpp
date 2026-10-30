@@ -3,7 +3,9 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 
@@ -31,9 +33,13 @@ static_assert(sizeof(MODE_ROWS) / sizeof(MODE_ROWS[0]) == NetworkModeSelectionAc
 
 NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("NetworkModeSelection", renderer, mappedInput) {
+  // Home shows OPDS in its Plugins slot while plugins are off and a server
+  // exists, so the row is listed here only in the other cases.
+  const bool opdsOnHome = !SETTINGS.pluginsEnabled && OPDS_STORE.hasServers();
   // Static for the screen's lifetime, so built once here rather than every
   // buildScreen() call.
   for (const ModeRow& row : MODE_ROWS) {
+    if (row.mode == NetworkMode::OPDS_BROWSER && opdsOnHome) continue;
     fui::ListItem item;
     item.label = I18N.get(row.label);
     item.subtitle = I18N.get(row.desc);
