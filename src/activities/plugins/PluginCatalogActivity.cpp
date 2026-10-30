@@ -136,7 +136,7 @@ bool matchesCapabilities(const std::string& required) {
 // List-index "requires" is an optional all-of array. Missing means public;
 // malformed or excessive requirements never expose an unsupported list.
 bool matchesListRequirements(JsonVariantConst requirements) {
-  if (requirements.isNull()) return true;
+  if (requirements.isUnbound()) return true;
   JsonArrayConst required = requirements.as<JsonArrayConst>();
   if (required.isNull() || required.size() > 32) return false;
   for (JsonVariantConst v : required) {
