@@ -19,6 +19,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     FRONTLIGHT,
     BLUETOOTH,
     GO_TO_PERCENT,
+    GO_TO_PAGE,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,

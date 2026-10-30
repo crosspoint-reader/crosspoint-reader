@@ -1,5 +1,7 @@
 #include "EpubReaderActivity.h"
 
+#include "activities/util/KeyboardEntryActivity.h"
+
 #include <BlePageTurner.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
@@ -1085,6 +1087,101 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   requestUpdate();
 }
 
+void EpubReaderActivity::jumpToSpinePage(const int spineIndex, const float pageFraction) {
+  if (!epub) return;
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) return;
+
+  {
+    RenderLock lock;
+    clearDeferredReposition();
+    currentSpineIndex = spineIndex;
+    nextPageNumber = 0;
+    pendingSpineProgress = std::clamp(pageFraction, 0.0f, 1.0f);
+    pendingPercentJump = true;
+    section.reset();
+  }
+  requestUpdate();
+}
+
+void EpubReaderActivity::goToPage(const int page) {
+  if (!epub || page <= 0) return;
+
+  // Exact jump when the number names a page of the loaded chapter.
+  if (section && page <= static_cast<int>(section->pageCount)) {
+    bleturner::acknowledgeLinkNote();
+    {
+      RenderLock lock;
+      clearDeferredReposition();
+      section->currentPage = page - 1;
+      nextPageNumber = 0;
+    }
+    requestUpdate();
+    return;
+  }
+
+  // Across the book: page numbers are render-dependent, so map the requested
+  // page onto spine+fraction through per-chapter page counts (real from section
+  // caches, byte-proportional estimate elsewhere).
+  const int spineCount = epub->getSpineItemsCount();
+  if (spineCount == 0) return;
+
+  // Pages-per-byte anchor from the loaded chapter when it has layout data.
+  float pagesPerByte = 0.0f;
+  if (section && section->pageCount > 0) {
+    const size_t cumulative = epub->getCumulativeSpineItemSize(currentSpineIndex);
+    const size_t prev = (currentSpineIndex > 0) ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+    const size_t spineBytes = (cumulative > prev) ? cumulative - prev : 0;
+    if (spineBytes > 0) {
+      pagesPerByte = static_cast<float>(section->estimatedTotalPages()) / static_cast<float>(spineBytes);
+    }
+  }
+  if (pagesPerByte <= 0.0f) pagesPerByte = 1.0f / 3500.0f;  // typical chapter-page density
+
+  int targetSpine = -1;
+  int targetPage = 0;  // 0-based within the target spine
+  int targetCount = 0;  // page count the walk attributed to the target spine
+  int pagesBefore = 0;
+  bool pastEnd = true;
+  for (int i = 0; i < spineCount; i++) {
+    int count = 0;
+    if (i == currentSpineIndex && section && section->pageCount > 0) {
+      count = section->estimatedTotalPages();
+    } else {
+      Section probe(epub, i, renderer);
+      if (const auto cached = probe.getCachedPageCount()) {
+        count = *cached;
+      }
+    }
+    if (count <= 0) {
+      const size_t cumulative = epub->getCumulativeSpineItemSize(i);
+      const size_t prev = (i > 0) ? epub->getCumulativeSpineItemSize(i - 1) : 0;
+      const size_t spineBytes = (cumulative > prev) ? cumulative - prev : 0;
+      count = std::max(1, static_cast<int>(static_cast<float>(spineBytes) * pagesPerByte + 0.5f));
+    }
+    if (page <= pagesBefore + count) {
+      targetSpine = i;
+      targetPage = page - pagesBefore - 1;
+      targetCount = count;
+      pastEnd = false;
+      break;
+    }
+    pagesBefore += count;
+  }
+
+  if (pastEnd) {
+    // Past the estimated end: last page of the final chapter.
+    jumpToSpinePage(spineCount - 1, 1.0f);
+    return;
+  }
+
+  // Fraction lands on targetPage via the pendingPercentJump mapping
+  // (page = fraction * realPageCount); the +0.5 keeps ints exact when the
+  // target spine's cached count matches its built count.
+  const float fraction =
+      targetPage == 0 ? 0.0f : (static_cast<float>(targetPage) + 0.5f) / static_cast<float>(targetCount);
+  jumpToSpinePage(targetSpine, fraction);
+}
+
 void EpubReaderActivity::applyProgressChange(const ProgressChangeResult& sync) {
   if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
     RenderLock lock;
@@ -1234,6 +1331,37 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::GO_TO_PAGE: {
+      auto keyboard =
+          makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_GO_TO_PAGE), "", 6, InputType::Text);
+      if (!keyboard) {
+        LOG_ERR("ERA", "OOM: go-to-page keyboard");
+        break;
+      }
+      startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+        if (result.isCancelled) {
+          openReaderMenu();
+          return;
+        }
+        const std::string& text = std::get<KeyboardResult>(result.data).text;
+        // Digits only; anything else cancels the jump.
+        long parsed = 0;
+        bool valid = !text.empty() && text.size() <= 6;
+        for (const char c : text) {
+          if (c < '0' || c > '9') {
+            valid = false;
+            break;
+          }
+          parsed = parsed * 10 + (c - '0');
+        }
+        if (valid && parsed > 0 && parsed <= 1000000) {
+          goToPage(static_cast<int>(parsed));
+        } else {
+          requestUpdate();
+        }
+      });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
@@ -3188,8 +3316,8 @@ void EpubReaderActivity::activateMoreRow(int row) {
   }
   // Leaf actions open their own screen / perform the action; close the overlay first.
   overlay = Overlay::None;
-  if (action == MA::GO_TO_PERCENT && overlayPageStored) {
-    // The percent dialog is a popup over the current frame: wipe the toolbar
+  if ((action == MA::GO_TO_PERCENT || action == MA::GO_TO_PAGE) && overlayPageStored) {
+    // The percent/page dialogs are popups over the current frame: wipe the toolbar
     // chrome back to the clean page first so the dialog draws over the page,
     // not the sheet. No refresh push — the dialog's first frame carries it.
     RenderLock lock;
