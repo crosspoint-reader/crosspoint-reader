@@ -925,12 +925,9 @@ std::string FontDownloadActivity::formatSize(size_t bytes) {
   return buf;
 }
 
-void FontDownloadActivity::render(RenderLock&&) {
+void FontDownloadActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
 
   const char* headerSubtitle = nullptr;
   if (state_ == FAMILY_LIST && hasGroupScreen()) {
@@ -941,19 +938,13 @@ void FontDownloadActivity::render(RenderLock&&) {
   }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_BROWSER),
                  headerSubtitle);
+}
 
-  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto centerY = (pageHeight - lineHeight) / 2;
-
-  if (state_ == LOADING_MANIFEST) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
-  } else if (state_ == GROUP_LIST) {
-    renderUi();
+void FontDownloadActivity::drawFooter() {
+  if (state_ == GROUP_LIST) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == FAMILY_LIST) {
-    renderUi();
-
     const bool hasVisibleFamilies = !filteredIndices_.empty();
     const char* confirmLabel = !hasVisibleFamilies            ? ""
                                : isSelectedFamilyDeletable()  ? tr(STR_DELETE)
@@ -962,6 +953,25 @@ void FontDownloadActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, hasVisibleFamilies ? tr(STR_DIR_UP) : "",
                                               hasVisibleFamilies ? tr(STR_DIR_DOWN) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
+}
+
+void FontDownloadActivity::render(RenderLock&& lock) {
+  if (state_ == GROUP_LIST || state_ == FAMILY_LIST) {
+    UiListActivity::render(std::move(lock));
+    return;
+  }
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto centerY = (pageHeight - lineHeight) / 2;
+  renderer.clearScreen();
+  drawChrome();
+
+  if (state_ == LOADING_MANIFEST) {
+    renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
   } else if (state_ == DOWNLOADING) {
     const auto& family = families_[downloadingFamilyIndex_];
 
