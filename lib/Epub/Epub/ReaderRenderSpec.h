@@ -50,6 +50,6 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
   mix(spec.embeddedStyle);
   mix(spec.imageRendering);
   mix(spec.focusReadingEnabled);
-  mix(spec.fillPages);
+  if (spec.fillPages) mix(1);
   return signature == 0 ? 1 : signature;
 }
