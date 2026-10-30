@@ -3126,6 +3126,7 @@ void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const siz
     }
   }
 
+  justifyCurrentPage(carry > 0 ? carriedTop : currentPageNextY);
   setCurrentPageVisibleOffset(visibleOffset);
   emitCurrentPage();
   completedPageCount++;
@@ -3148,6 +3149,56 @@ void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const siz
     currentPage->addLink(link.href, link.x, static_cast<int16_t>(link.y - carriedTop), link.width, link.height);
   }
   paragraphLinesOnPage = static_cast<uint8_t>(paragraphLines);
+}
+
+void ChapterHtmlSlimParser::justifyCurrentPage(const int flowBottom) {
+  if (!currentPage || currentPage->elements.size() < 2 || !boxScopes.empty() || tableDepth > 0) return;
+  auto& elements = currentPage->elements;
+  struct LineBounds {
+    int advanceBottom;
+    int glyphBottom;
+  };
+  const auto lineBounds = [&](const PageElement& element) {
+    const auto& block = *static_cast<const PageLine&>(element).getBlock();
+    const int lineFontId = block.blockFontId(fontId);
+    const int advance = renderer.getLineHeight(lineFontId, lineCompression);
+    const int top = element.yPos + block.extraAscent(renderer, fontId) +
+                    block.getRubyShift(renderer.getFontAscenderSize(lineFontId));
+    return LineBounds{top + advance, top + std::max(advance, renderer.getLineHeight(lineFontId))};
+  };
+  int bottom = 0;
+  int previousY = -1;
+  int previousAdvanceBottom = -1;
+  for (const auto& element : elements) {
+    // Columns and non-text elements keep their authored geometry.
+    if (element->getTag() != TAG_PageLine || element->yPos <= previousY) return;
+    previousY = element->yPos;
+    const auto bounds = lineBounds(*element);
+    if (bounds.advanceBottom <= previousAdvanceBottom) return;
+    previousAdvanceBottom = bounds.advanceBottom;
+    bottom = std::max(bottom, bounds.glyphBottom);
+  }
+  // Empty lines and block spacing consume flow height without a drawable element.
+  const int trailingHeight = std::max(0, flowBottom - previousAdvanceBottom);
+  const int spareHeight = viewportHeight - bottom - trailingHeight;
+  const int gaps = static_cast<int>(elements.size() - 1);
+  // Avoid visibly stretching sparse pages left by heading/orphan/widow protection.
+  const int maxExtraGap = std::max(1, renderer.getLineHeight(fontId, lineCompression) / 4);
+  if (spareHeight <= 0 || spareHeight > gaps * maxExtraGap) return;
+  const auto lineShift = [&](const size_t i) { return spareHeight * static_cast<int>(i) / gaps; };
+
+  // Link spans end at their line's advance, even with ruby or taller inline words.
+  for (auto& link : currentPage->links) {
+    for (size_t i = 0; i < elements.size(); ++i) {
+      if (link.y + link.height == lineBounds(*elements[i]).advanceBottom) {
+        link.y = static_cast<int16_t>(link.y + lineShift(i));
+        break;
+      }
+    }
+  }
+  for (size_t i = 1; i < elements.size(); ++i) {
+    elements[i]->yPos = static_cast<int16_t>(elements[i]->yPos + lineShift(i));
+  }
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const uint32_t visibleOffset) {
