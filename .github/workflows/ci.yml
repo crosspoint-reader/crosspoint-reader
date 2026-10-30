@@ -65,7 +65,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'scripts/patch_pioarduino_cache.py') }}
           restore-keys: pio-v2-${{ runner.os }}-
 
       - name: Install cppcheck runtime dependency
@@ -132,7 +132,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini', 'scripts/patch_pioarduino_cache.py') }}
           restore-keys: pio-v3-${{ runner.os }}-${{ matrix.env }}-
 
       - name: Pin pioarduino core inside the platform penv

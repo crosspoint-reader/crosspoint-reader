@@ -528,6 +528,11 @@ The final field is the WebSocket upload port.
 - The device shows a Wi-Fi QR code and URL QR code.
 - The fallback IP is typically `192.168.4.1`.
 - `/api/status` returns `"mode": "AP"` and `"rssi": 0`.
+- The hotspot's DNS answers every name with the device's IP. A `GET` or `HEAD`
+  request whose `Host` is any other domain name (not an IP address, a `.local`
+  name or a single-label name such as `crosspoint`) gets
+  `302 Location: http://<AP IP>/`, so phones and computers can open the home
+  page as a captive portal. Other methods are not redirected.
 
 ### Calibre Wireless
 

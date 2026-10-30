@@ -90,14 +90,24 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 72
+### Version 73
 
-Version 72 adds a `bool fillPages` after `wordSpacingPercent` in the section
+Version 73 adds a `bool fillPages` after `wordSpacingPercent` in the section
 header. The setting disables automatic widow, orphan, and heading grouping;
 explicit book page breaks and indivisible content still apply. Changing it
 invalidates completed and partial section caches. Older sections rebuild;
 book metadata and saved progress are kept. The partial version remains derived
 from the final section version.
+
+### Version 72
+
+Version 72 makes ruby layout closer to how Chromium browser render text with
+ruby characters by default (`ruby-align: space-around; ruby-overhang: auto;`)
+Ruby annotation can overhang neighboring base text by at most the smaller of
+half the ruby edge-character width and 1/4 of the neighboring word width. When
+the ruby annotation is wider than its base text, spacing is inserted between
+every character in the base text as well as at the start and the end of the
+base text so that it becomes the same length as the ruby annotation.
 
 ### Version 71
 
@@ -389,7 +399,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 72
+#define EXPECTED_VERSION 73
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
