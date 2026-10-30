@@ -46,10 +46,24 @@ void ButtonRemapActivity::loop() {
     return;
   }
 
+  // Keep the last assignment's hold in the wizard, before changing the live mapping.
+  if (currentStep == kRoleCount) {
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.isPressed(MappedInputManager::Button::Confirm) ||
+        mappedInput.isPressed(MappedInputManager::Button::Left) ||
+        mappedInput.isPressed(MappedInputManager::Button::Right)) {
+      return;
+    }
+    applyTempMapping();
+    SETTINGS.saveToFile();
+    finish();
+    return;
+  }
+
   // Side buttons:
   // - Up: reset mapping to defaults and exit.
   // - Down: cancel without saving.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     // Persist default mapping immediately so the user can recover quickly.
     SETTINGS.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
     SETTINGS.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
@@ -60,7 +74,7 @@ void ButtonRemapActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     // Exit without changing settings.
     finish();
     return;
@@ -87,10 +101,7 @@ void ButtonRemapActivity::loop() {
     currentStep++;
 
     if (currentStep >= kRoleCount) {
-      // All roles assigned; save to settings and exit.
-      applyTempMapping();
-      SETTINGS.saveToFile();
-      finish();
+      // Return only after the final front-button gesture ends.
       return;
     }
 
