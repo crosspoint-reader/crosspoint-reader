@@ -69,7 +69,8 @@ def compute_deltas():
     for codepoint in range(MAX_CODEPOINT):
         if 0xD800 <= codepoint <= 0xDFFF:  # surrogates are not scalar values
             continue
-        folded = chr(codepoint).casefold()
+        # U+1E9E casefolds to "ss" (full), but its simple fold (CaseFolding.txt, S) is U+00DF.
+        folded = "\u00df" if codepoint == 0x1E9E else chr(codepoint).casefold()
         if len(folded) == 1 and folded != chr(codepoint):
             deltas[codepoint] = ord(folded) - codepoint
     return deltas
