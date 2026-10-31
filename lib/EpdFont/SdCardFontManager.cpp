@@ -1,6 +1,7 @@
 #include "SdCardFontManager.h"
 
 #include <EpdFontFamily.h>
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <SdCardFont.h>
@@ -36,7 +37,12 @@ int SdCardFontManager::loadFile(const SdCardFontFamilyInfo& family, const SdCard
     return 0;
   }
 
-  auto* font = new (std::nothrow) SdCardFont();
+  auto* cache = renderer.getFontCacheManager();
+  if (!cache) {
+    LOG_ERR("SDMGR", "Font cache manager is not initialized");
+    return 0;
+  }
+  auto* font = new (std::nothrow) SdCardFont(&cache->getSdGlyphPool());
   if (!font) {
     LOG_ERR("SDMGR", "Failed to allocate SdCardFont for %s", path);
     return 0;
