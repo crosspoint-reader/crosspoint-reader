@@ -98,6 +98,9 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
     requestUpdate(true);
     return;
   }
+  // Taking the remote position is an explicit jump: the reader reopens there
+  // with no link back-stack left to return through.
+  Storage.remove(EpubReaderUtils::linkStackPath(epub->getCachePath()).c_str());
   returnToReader();
 }
 
