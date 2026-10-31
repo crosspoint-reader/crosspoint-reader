@@ -19,6 +19,8 @@ class ButtonRemapActivity final : public Activity, private UiAppHost {
 
   // Index of the logical role currently awaiting input.
   uint8_t currentStep = 0;
+  enum class ExitAction : uint8_t { None, Save, Reset, Cancel };
+  ExitAction exitAction = ExitAction::None;
   // Temporary mapping from logical role -> hardware button index.
   uint8_t tempMapping[4] = {0xFF, 0xFF, 0xFF, 0xFF};
   // Error banner timing (used when reassigning duplicate buttons).
