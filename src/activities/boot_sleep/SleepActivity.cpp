@@ -22,11 +22,13 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/wallpapers/WallpaperPackRegistry.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
@@ -786,8 +788,7 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
     if (Storage.openFileForRead("SLP", cachePath, cached)) {
       Bitmap bitmap(cached);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        renderBitmapSleepScreen(bitmap);
-        return true;
+        if (renderBitmapSleepScreen(bitmap)) return true;
       }
       cached.close();
       Storage.remove(cachePath.c_str());
@@ -797,12 +798,19 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
 
   Bitmap bitmap(file, true, thresholds);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;
-  renderBitmapSleepScreen(bitmap);
-  return true;
+  return renderBitmapSleepScreen(bitmap);
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // /sleep.bmp on the SD root takes priority over both custom sleep directories.
+  if (SETTINGS.wallpaperPackId[0]) {
+    std::vector<std::string> candidates;
+    if (WallpaperPackRegistry::getInstance().selectImages(SETTINGS.wallpaperPackId, candidates)) {
+      if (std::any_of(candidates.begin(), candidates.end(),
+                      [&](const std::string& path) { return renderCustomSleepBmp(path); }))
+        return;
+    }
+  }
+  // The existing custom sleep locations remain the fallback.
   if (renderCustomSleepBmp("/sleep.bmp")) return;
 
   std::string selectedPath;
@@ -836,7 +844,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(kSleepClean);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
+bool SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -855,7 +863,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
 
   if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, preserveBackground)) {
     renderer.displayBuffer(kSleepClean);
-    return;
+    return false;
   }
 
   if (!preserveBackground &&
@@ -870,18 +878,18 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     }
     renderTransparentCustomSleepScreen();
     overlayGrayCover = nullptr;
-    return;
+    return true;
   }
 
   const bool absolute = hasGreyscale && renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported();
   const BwFrameKeeper bwFrame(renderer, hasGreyscale && !absolute);
   if (!bwFrame.ready()) {
     renderer.displayBuffer(kSleepClean);
-    return;
+    return true;
   }
   if (absolute) {
     cleanBeforeAbsoluteGray(renderer);
-    if (!renderer.displayGrayscaleBase(sleepGrayscaleMode(renderer))) return;
+    if (!renderer.displayGrayscaleBase(sleepGrayscaleMode(renderer))) return false;
   } else if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
     // calibrated against the pixel state the single-pass HALF waveform leaves
@@ -922,7 +930,9 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     else
       LOG_ERR("SLP", "Incomplete grayscale image; keeping the current display");
     renderer.setRenderMode(GfxRenderer::BW);
+    if (!ready) return false;
   }
+  return true;
 }
 
 bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog) const {
@@ -940,8 +950,7 @@ bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog
   LOG_DBG("SLP", "Rendering regular BMP sleep overlay: %s (%dx%d)", pathForLog, bitmap.getWidth(), bitmap.getHeight());
   // drawBitmap leaves white pixels untouched; skipping the initial clear makes
   // them transparent while retaining the existing grayscale pipeline.
-  renderBitmapSleepScreen(bitmap, true);
-  return true;
+  return renderBitmapSleepScreen(bitmap, true);
 }
 
 bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
@@ -1021,7 +1030,7 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
     // Show the plain cover.
     const Bitmap& cover = *overlayCover;
     overlayCover = nullptr;
-    if (cover.rewindToData() == BmpReaderError::Ok) return renderBitmapSleepScreen(cover);
+    if (cover.rewindToData() == BmpReaderError::Ok && renderBitmapSleepScreen(cover)) return;
   }
   renderDefaultSleepScreen();
 }
@@ -1090,9 +1099,9 @@ void SleepActivity::renderCoverSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
       if (withOverlay) overlayCover = &bitmap;
-      renderBitmapSleepScreen(bitmap);
+      const bool rendered = renderBitmapSleepScreen(bitmap);
       overlayCover = nullptr;
-      return;
+      if (rendered) return;
     }
   }
 

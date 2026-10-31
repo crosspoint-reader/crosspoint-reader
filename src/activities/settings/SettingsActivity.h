@@ -31,6 +31,7 @@ enum class SettingAction {
   Plugins,
   KeyboardLayouts,
   HomeButton,
+  WallpaperCollection,
   About,
 };
 

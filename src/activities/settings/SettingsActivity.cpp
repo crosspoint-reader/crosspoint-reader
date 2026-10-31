@@ -33,6 +33,7 @@
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "WallpaperCollectionActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -120,7 +121,11 @@ void SettingsActivity::rebuildSettings() {
 
   for (auto& setting : all) {
     if (sectionFor(setting) != section || !showOnDevice(setting)) continue;
+    const bool isSleepScreen = setting.valuePtr == &CrossPointSettings::sleepScreen;
     settings.push_back(std::move(setting));
+    if (isSleepScreen && (SETTINGS.sleepScreen == CrossPointSettings::CUSTOM ||
+                          SETTINGS.sleepScreen == CrossPointSettings::COVER_CUSTOM))
+      addAction(SettingsSection::Display, StrId::STR_WALLPAPER_COLLECTION, SettingAction::WallpaperCollection);
   }
 
   // Clock configuration only exists where the RTC probe found hardware.
@@ -377,6 +382,11 @@ void SettingsActivity::toggleSelectedSetting() {
                                  rebuildSettings();
                                });
         break;
+      case SettingAction::WallpaperCollection: {
+        auto activity = makeUniqueNoThrow<WallpaperCollectionActivity>(renderer, mappedInput);
+        if (activity) startActivityForResult(std::move(activity), resultHandler);
+        break;
+      }
       case SettingAction::Plugins: {
         static constexpr StrId OPTIONS[] = {StrId::STR_ENABLED, StrId::STR_DISABLED, StrId::STR_CANCEL};
         optionPopup.show(StrId::STR_PLUGINS, OPTIONS, 3, SETTINGS.pluginsEnabled ? 0 : 1, [this](const int idx) {

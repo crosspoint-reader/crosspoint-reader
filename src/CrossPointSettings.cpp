@@ -89,6 +89,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   forEachBaseSetting(visit);
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
+  if (wallpaperPackId[0]) doc["wallpaperPackId"] = wallpaperPackId;
   doc["frontButtonBack"] = frontButtonBack;
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
@@ -288,6 +289,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   if (storedFontFamily != STORED_NOTOSANS) needsResave = true;
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+  copyToField(wallpaperPackId, doc["wallpaperPackId"] | "", sizeof(wallpaperPackId));
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
     language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));

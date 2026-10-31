@@ -262,7 +262,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              ProgressCallback progress, const bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
                                                              const std::vector<Header>& headers,
-                                                             bool downgradeRedirectsToHttp) {
+                                                             bool downgradeRedirectsToHttp, size_t maxBytes) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   // Stage in <dest>.part: a failed or cancelled download never replaces an
@@ -276,11 +276,20 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
 
   freeink::FetchSink sink;
-  sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
+  size_t bytesWritten = 0;
+  sink.write = [&file, &bytesWritten, maxBytes](const uint8_t* data, size_t len) {
+    // Reject an oversized body before writing the chunk, including Range resumes.
+    if (maxBytes && len > maxBytes - bytesWritten) return false;
+    if (file.write(data, len) != len) return false;
+    if (maxBytes) bytesWritten += len;
+    return true;
+  };
   // Reopening for write truncates: the server restarted the body from byte 0.
-  sink.rewind = [&file, &partPath] {
+  sink.rewind = [&file, &partPath, &bytesWritten] {
     file.close();
-    return Storage.openFileForWrite("HTTP", partPath.c_str(), file);
+    if (!Storage.openFileForWrite("HTTP", partPath.c_str(), file)) return false;
+    bytesWritten = 0;
+    return true;
   };
   sink.progress = progress;
 

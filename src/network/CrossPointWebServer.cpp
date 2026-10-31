@@ -44,6 +44,7 @@
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "WifiPowerSaveGuard.h"
+#include "components/wallpapers/WallpaperPackRegistry.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -263,6 +264,10 @@ void CrossPointWebServer::begin() {
   server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
   server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
   server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
+
+  // Wallpaper packs are data assets, not browser-side plugins.
+  server->on("/api/wallpaper-packs", HTTP_GET, [this] { handleWallpaperPackList(); });
+  server->on("/api/wallpaper-packs/delete", HTTP_POST, [this] { handleWallpaperPackDelete(); });
 
   // Browser-side plugins (JS on the SD card) + their generic capabilities.
   server->on("/api/plugins", HTTP_GET, [this] { handlePluginList(); });
@@ -1934,6 +1939,40 @@ bool CrossPointWebServer::rejectIfPluginsDisabled() const {
   if (SETTINGS.pluginsEnabled) return false;
   server->send(403, "text/plain", "plugin system disabled");
   return true;
+}
+
+void CrossPointWebServer::handleWallpaperPackList() const {
+  auto& packs = WallpaperPackRegistry::getInstance();
+  packs.scan();
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  for (const auto& pack : packs.choices()) {
+    JsonObject item = arr.add<JsonObject>();
+    item["id"] = pack.id;
+    item["title"] = pack.label;
+    item["description"] = pack.description;
+    item["author"] = pack.author;
+    item["version"] = pack.version;
+    item["selected"] = pack.id == SETTINGS.wallpaperPackId;
+  }
+  sendJson(doc);
+}
+
+void CrossPointWebServer::handleWallpaperPackDelete() {
+  JsonDocument body;
+  if (!readJsonBody(body)) return;
+  const char* id = body["id"].as<const char*>();
+  if (!id) {
+    server->send(400, "application/json", "{\"error\":\"Missing pack ID\"}");
+    return;
+  }
+  auto& packs = WallpaperPackRegistry::getInstance();
+  packs.scan();
+  if (!packs.remove(id)) {
+    server->send(404, "application/json", "{\"error\":\"Wallpaper pack unavailable\"}");
+    return;
+  }
+  server->send(200, "application/json", "{\"ok\":true}");
 }
 
 // GET /api/plugins -> [{ "name", "title", "mount" }, ...]. Only plugins with a

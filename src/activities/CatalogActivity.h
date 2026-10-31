@@ -66,11 +66,12 @@ class CatalogActivity : public UiListActivity {
   // postBody non-null turns the transfer into a POST of that body (e.g. an
   // LCP license to the fulfillment service), with postContentType as its
   // Content-Type. Same heap gating and cancel/progress pump either way.
+  // maxBytes caps GET downloads only (zero leaves the existing behavior).
   HttpDownloader::DownloadError downloadFile(const std::string& url, const std::string& dest,
                                              const std::string& user = {}, const std::string& password = {},
                                              const std::vector<HttpDownloader::Header>& headers = {},
                                              const std::string* postBody = nullptr,
-                                             const char* postContentType = nullptr);
+                                             const char* postContentType = nullptr, size_t maxBytes = 0);
   void screenHeader(UiScreen& screen, const char* title);
   bool buildStatusScreen(UiScreen& screen, bool boldError = true, bool showDownloadTotal = false);
 

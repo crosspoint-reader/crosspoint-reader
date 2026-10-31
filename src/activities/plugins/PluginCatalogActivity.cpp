@@ -31,6 +31,7 @@
 #include "activities/util/DetailsActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
+#include "components/wallpapers/WallpaperPackRegistry.h"
 #include "network/HttpDownloader.h"
 #include "network/ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
@@ -41,6 +42,7 @@
 #include "util/PluginPickerLayout.h"
 #include "util/QrUtils.h"
 #include "util/StringUtils.h"
+#include "util/WallpaperPackages.h"
 
 namespace fui = freeink::ui;
 
@@ -232,7 +234,22 @@ std::vector<PluginRef> discoverPlugins() {
     if (e.hasDevice) readPluginMetadata(ref.manifestPath, ref, true);
     plugins.push_back(std::move(ref));
   }
+  auto& packs = WallpaperPackRegistry::getInstance();
+  packs.scan();
+  plugins.reserve(plugins.size() + packs.choices().size());
+  for (const auto& pack : packs.choices()) {
+    PluginRef ref;
+    ref.name = pack.id;
+    ref.dir = "/.crosspoint/wallpapers/" + pack.id + ".crosspoint-wallpaper";
+    ref.title = pack.label;
+    ref.description = pack.description.empty() ? "Wallpaper pack" : pack.description;
+    ref.isWallpaperPack = true;
+    const std::string readmePath = ref.dir + "/README.md";
+    if (Storage.exists(readmePath.c_str())) ref.readmePath = readmePath;
+    plugins.push_back(std::move(ref));
+  }
   std::sort(plugins.begin(), plugins.end(), [](const PluginRef& lhs, const PluginRef& rhs) {
+    if (lhs.isWallpaperPack != rhs.isWallpaperPack) return !lhs.isWallpaperPack;
     const bool lhsHub = lhs.name == "pluginhub";
     const bool rhsHub = rhs.name == "pluginhub";
     if (lhsHub != rhsHub) return lhsHub;
@@ -287,6 +304,7 @@ bool PluginCatalogActivity::loadManifest() {
   // Documented bounds: each row costs an Item (strings) and a screen slot.
   manifest.pageSize = std::clamp(manifest.pageSize, 1, MAX_PAGE_SIZE);
   manifest.browseListsUrl = browse["lists_url"] | "";
+  manifest.capabilityListsUrl = browse["capability_lists_url"] | "";
   pluginhttp::readHeaders(browse["lists_headers"], manifest.listsHeaders);
   manifest.listsItemsPath = browse["lists_items"] | "lists";
   JsonVariantConst listFields = browse["lists_fields"];
@@ -296,17 +314,20 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.listsRequiresPath = listFields["requires"] | "requires";
   manifest.browseLists.reserve(browse["lists"].size());
   for (JsonVariantConst l : browse["lists"].as<JsonArrayConst>()) {
-    if (!matchesListRequirements(l["requires"])) continue;
     Manifest::BrowseList entry;
     entry.title = l["title"] | "";
     entry.url = l["url"] | "";
     entry.id = variantToString(l["id"]);
+    entry.kind = l["kind"] | "plugin";
+    entry.itemsPath = l["items"] | "";
     entry.body = l["body"] | "";
     JsonVariantConst notice = l["notice"];
     entry.noticeTitle = notice["title"] | "";
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    if (!matchesListRequirements(l["requires"])) continue;
+    if (entry.kind != "plugin" && entry.kind != "wallpaper-pack") continue;
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
   manifest.fixedListCount = manifest.browseLists.size();
@@ -358,36 +379,45 @@ bool PluginCatalogActivity::loadManifest() {
 
 bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
   status = 200;
-  if (manifest.browseListsUrl.empty()) return true;
+  if (manifest.browseListsUrl.empty() && manifest.capabilityListsUrl.empty()) return true;
 
   String response;
   std::string url;
-  const auto run = [&] {
-    url = substituted(manifest.browseListsUrl, nullptr);
+  const std::string& primary =
+      manifest.capabilityListsUrl.empty() ? manifest.browseListsUrl : manifest.capabilityListsUrl;
+  const auto run = [&](const std::string& indexUrl) {
+    response = String();
+    url = substituted(indexUrl, nullptr);
     return pluginhttp::request(session.get(), url, "GET", "", substitutedHeaders(manifest.listsHeaders, nullptr),
                                response, MAX_BROWSE_LIST_INDEX_RESPONSE);
   };
-  status = run();
+  const auto fallback = [&]() {
+    if (primary == manifest.browseListsUrl || manifest.browseListsUrl.empty()) return false;
+    manifest.capabilityListsUrl.clear();
+    return loadBrowseListIndex(status);
+  };
+  status = run(primary);
   // Same policy as browsing: an expired password-grant token is minted again once.
   if ((status == 401 || status == 403) && manifest.hasPasswordGrant()) {
     response = String();  // the error body is not needed while a token is minted
-    if (refreshCredentialToken()) status = run();
+    if (refreshCredentialToken()) status = run(primary);
   }
+  // Invalid JSON and empty capability indexes also fall back to the legacy lists.
   if (status < 200 || status >= 300) {
     LOG_ERR("PCAT", "browse list index fetch failed: status=%d %s", status, url.c_str());
-    return false;
+    return fallback();
   }
 
   JsonDocument doc;
   if (deserializeJson(doc, response) != DeserializationError::Ok) {
     LOG_ERR("PCAT", "browse list index parse failed: %s", url.c_str());
-    return false;
+    return fallback();
   }
   response = String();  // the document holds its own copies
   JsonArrayConst lists = resolvePath(doc.as<JsonVariantConst>(), manifest.listsItemsPath).as<JsonArrayConst>();
   if (lists.isNull() || lists.size() == 0) {
     LOG_ERR("PCAT", "browse list index has no lists: %s", url.c_str());
-    return false;
+    return fallback();
   }
 
   manifest.browseLists.resize(manifest.fixedListCount);
@@ -397,24 +427,27 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
       LOG_ERR("PCAT", "browse list index truncated to %u lists", static_cast<unsigned>(MAX_BROWSE_LISTS));
       break;
     }
-    if (!matchesListRequirements(resolvePath(l, manifest.listsRequiresPath))) continue;
     Manifest::BrowseList entry;
     entry.title = variantToString(resolvePath(l, manifest.listsTitlePath));
     entry.url = variantToString(resolvePath(l, manifest.listsUrlPath));
     entry.id = variantToString(resolvePath(l, manifest.listsIdPath));
+    entry.kind = l["kind"] | "plugin";
+    entry.itemsPath = l["items"] | "";
     entry.body = l["body"] | "";
     JsonVariantConst notice = l["notice"];
     entry.noticeTitle = notice["title"] | "";
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    if (!matchesListRequirements(resolvePath(l, manifest.listsRequiresPath))) continue;
+    if (entry.kind != "plugin" && entry.kind != "wallpaper-pack") continue;
     // An entry with only an id browses the shared browse url through {list_id}.
     const bool browsable = !entry.url.empty() || !entry.id.empty();
     if (!entry.title.empty() && browsable) manifest.browseLists.push_back(std::move(entry));
   }
   if (manifest.browseLists.size() == manifest.fixedListCount) {
     LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
-    return false;
+    return fallback();
   }
   return true;
 }
@@ -511,11 +544,70 @@ void PluginCatalogActivity::onEnter() {
   enterPluginPicker();
 }
 
+int PluginCatalogActivity::pinnedPluginCount() const {
+  return !installedPlugins.empty() && !installedPlugins.front().isWallpaperPack &&
+                 installedPlugins.front().name == "pluginhub"
+             ? 1
+             : 0;
+}
+
+int PluginCatalogActivity::firstWallpaperIndex() const {
+  for (size_t i = 0; i < installedPlugins.size(); ++i)
+    if (installedPlugins[i].isWallpaperPack) return static_cast<int>(i);
+  return static_cast<int>(installedPlugins.size());
+}
+
+int PluginCatalogActivity::pickerRowForPlugin(const int pluginIndex) const {
+  const int prefix = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+  const int pinned = pinnedPluginCount();
+  const int wallpaper = firstWallpaperIndex();
+  return prefix + pluginIndex + (wallpaper > pinned && pluginIndex >= pinned ? 1 : 0) +
+         (wallpaper < static_cast<int>(installedPlugins.size()) && pluginIndex >= wallpaper ? 1 : 0);
+}
+
+int PluginCatalogActivity::pickerPluginForRow(const int row) const {
+  const int prefix = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+  const int pinned = pinnedPluginCount();
+  const int wallpaper = firstWallpaperIndex();
+  int index = row - prefix;
+  if (index < 0) return -1;
+  if (wallpaper > pinned) {
+    if (index == pinned) return -1;  // Plugins heading
+    if (index > pinned) --index;
+  }
+  if (wallpaper < static_cast<int>(installedPlugins.size())) {
+    if (index == wallpaper) return -1;  // Wallpaper Packs heading
+    if (index > wallpaper) --index;
+  }
+  return index < static_cast<int>(installedPlugins.size()) ? index : -1;
+}
+
+bool PluginCatalogActivity::pickerHeaderRow(const int row) const {
+  const int prefix = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+  return state == State::PLUGIN_PICKER && row >= prefix && row < rowCount() && pickerPluginForRow(row) < 0;
+}
+
+int PluginCatalogActivity::nextPickerRow(const int current, const int direction, const int steps) const {
+  const int count = rowCount();
+  if (count <= 0) return 0;
+  int index = current;
+  for (int step = 0; step < steps; ++step) {
+    for (int attempt = 0; attempt < count; ++attempt) {
+      index = direction > 0 ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
+      if (!pickerHeaderRow(index)) break;
+    }
+  }
+  return index;
+}
+
 void PluginCatalogActivity::enterPluginPicker() {
   Storage.remove(BROWSE_TMP_PATH);
   installedPlugins = discoverPlugins();
   pluginHubAvailable = PluginHubInstallActivity::isAvailable();
-  showPluginHubInstallRow = !pluginHubAvailable && !SETTINGS.pluginHubPromptHidden;
+  const bool discoveredHub = std::any_of(installedPlugins.begin(), installedPlugins.end(), [](const PluginRef& item) {
+    return !item.isWallpaperPack && item.name == "pluginhub";
+  });
+  showPluginHubInstallRow = !pluginHubAvailable && !discoveredHub && !SETTINGS.pluginHubPromptHidden;
   // Discovery just re-read the plugin folders; keep the event subscription
   // table in step so a plugin installed since boot starts receiving events
   // (and a removed one stops) without a restart.
@@ -553,8 +645,7 @@ void PluginCatalogActivity::enterPluginPicker() {
   state = State::PLUGIN_PICKER;
   for (size_t i = 0; i < installedPlugins.size(); ++i) {
     if (installedPlugins[i].name != pickerReturnName) continue;
-    const int prefixRows = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
-    moveSelectionTo(prefixRows + static_cast<int>(i));
+    moveSelectionTo(pickerRowForPlugin(static_cast<int>(i)));
     break;
   }
   requestUpdate();
@@ -562,8 +653,7 @@ void PluginCatalogActivity::enterPluginPicker() {
 
 void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
   if (state != State::PLUGIN_PICKER) return;
-  const int offset = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
-  const int pluginIndex = pickerIndex - offset;
+  const int pluginIndex = pickerPluginForRow(pickerIndex);
   if (pluginIndex < 0 || pluginIndex >= static_cast<int>(installedPlugins.size())) return;
 
   const PluginRef plugin = installedPlugins[pluginIndex];
@@ -572,7 +662,8 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
     LOG_ERR("PCAT", "Refusing unsafe plugin name: %s", plugin.name.c_str());
     return;
   }
-  bool safeDir = false;
+  bool safeDir =
+      plugin.isWallpaperPack && plugin.dir == "/.crosspoint/wallpapers/" + plugin.name + ".crosspoint-wallpaper";
   for (const char* root : PluginLocations::ROOTS) {
     if (plugin.dir == std::string(root) + "/" + plugin.name) {
       safeDir = true;
@@ -585,9 +676,13 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
   }
 
   char message[256];
-  snprintf(message, sizeof(message), tr(STR_PLUGIN_UNINSTALL_CONFIRM), plugin.title.c_str());
-  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_PLUGIN_UNINSTALL_TITLE),
-                                                              message, tr(STR_CANCEL), tr(STR_PLUGIN_UNINSTALL));
+  if (plugin.isWallpaperPack)
+    snprintf(message, sizeof(message), "Uninstall wallpaper pack %s?", plugin.title.c_str());
+  else
+    snprintf(message, sizeof(message), tr(STR_PLUGIN_UNINSTALL_CONFIRM), plugin.title.c_str());
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(
+      renderer, mappedInput, plugin.isWallpaperPack ? "Uninstall Wallpaper Pack" : tr(STR_PLUGIN_UNINSTALL_TITLE),
+      message, tr(STR_CANCEL), tr(STR_PLUGIN_UNINSTALL));
   if (!confirmation) {
     LOG_ERR("PCAT", "OOM: plugin uninstall confirmation");
     return;
@@ -602,7 +697,14 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
   app.clearTapFlash();
   startActivityForResult(std::move(confirmation), [this, plugin, returnPluginName](const ActivityResult& result) {
     if (result.isCancelled) return;
-    const bool removed = !Storage.exists(plugin.dir.c_str()) || Storage.removeDir(plugin.dir.c_str());
+    bool removed = false;
+    if (plugin.isWallpaperPack) {
+      auto& packs = WallpaperPackRegistry::getInstance();
+      packs.scan();
+      removed = packs.remove(plugin.name);
+    } else {
+      removed = !Storage.exists(plugin.dir.c_str()) || Storage.removeDir(plugin.dir.c_str());
+    }
     if (!removed) LOG_ERR("PCAT", "Failed to recursively uninstall plugin: %s", plugin.dir.c_str());
     if (removed) pickerReturnName = returnPluginName;
     enterPluginPicker();
@@ -683,7 +785,8 @@ void PluginCatalogActivity::onExit() {
 }
 
 void PluginCatalogActivity::startBrowse() {
-  const bool needsListIndex = !manifest.browseListsUrl.empty() && !listIndexLoaded;
+  const bool needsListIndex =
+      (!manifest.browseListsUrl.empty() || !manifest.capabilityListsUrl.empty()) && !listIndexLoaded;
   const bool needsListAuth = needsListIndex || wantsListPicker();
   if (needsListAuth) {
     // Dynamic list indexes and list pickers may both use {token}/{cfg.KEY}, so
@@ -763,6 +866,7 @@ bool PluginCatalogActivity::refreshCredentialToken() {
 }
 
 bool PluginCatalogActivity::fetchBrowseResponse() {
+  wallpaperReleaseCache.clear();
   loadConfig();
   if (!loadToken() && !(manifest.hasPasswordGrant() && refreshCredentialToken())) {
     state = State::NO_TOKEN;
@@ -849,11 +953,27 @@ bool PluginCatalogActivity::nextRowVisible() const {
 }
 
 int PluginCatalogActivity::rowCount() const {
-  if (state == State::PLUGIN_PICKER)
-    return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+  if (state == State::PLUGIN_PICKER) {
+    const int pinned = pinnedPluginCount();
+    const int wallpaper = firstWallpaperIndex();
+    return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0) +
+           (wallpaper > pinned ? 1 : 0) + (wallpaper < static_cast<int>(installedPlugins.size()) ? 1 : 0);
+  }
   if (state == State::LIST_PICKER) return static_cast<int>(manifest.browseLists.size());
   if (state != State::BROWSING) return 0;
   return static_cast<int>(items.size()) + (prevRowVisible() ? 1 : 0) + (nextRowVisible() ? 1 : 0);
+}
+
+bool PluginCatalogActivity::browsingWallpaperPacks() const {
+  return !searchActive && currentList >= 0 && currentList < static_cast<int>(manifest.browseLists.size()) &&
+         manifest.browseLists[currentList].kind == "wallpaper-pack";
+}
+
+const std::string& PluginCatalogActivity::activeBrowseItemsPath() const {
+  if (currentList >= 0 && currentList < static_cast<int>(manifest.browseLists.size()) && !searchActive &&
+      !manifest.browseLists[currentList].itemsPath.empty())
+    return manifest.browseLists[currentList].itemsPath;
+  return manifest.itemsPath;
 }
 
 const std::string& PluginCatalogActivity::activeBrowseUrl() const {
@@ -916,7 +1036,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     compatibilityFields[COMPAT_API_MIN] = &manifest.compatApiMinPath;
     compatibilityFields[COMPAT_REQUIRES] = &manifest.compatRequiresPath;
     auto compatibilityParser = makeUniqueNoThrow<JsonListParser>(
-        manifest.itemsPath, compatibilityFields, unused,
+        activeBrowseItemsPath(), compatibilityFields, unused,
         [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(selectCompatible)*>(context))(row); },
         &selectCompatible);
     if (!streamBrowseFile(compatibilityParser.get())) {
@@ -957,7 +1077,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
   const std::string* const fields[] = {&manifest.titlePath, &manifest.authorPath,  &manifest.idPath,
                                        &manifest.urlPath,   &manifest.versionPath, &manifest.bundleBasePath};
   auto parser = makeUniqueNoThrow<JsonListParser>(
-      manifest.itemsPath, fields, manifest.bundleFilesPath,
+      activeBrowseItemsPath(), fields, manifest.bundleFilesPath,
       [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(append)*>(context))(row); }, &append);
   if (!streamBrowseFile(parser.get())) {
     fail(StrId::STR_PARSE_FEED_FAILED);
@@ -972,7 +1092,56 @@ bool PluginCatalogActivity::parseBrowseResponse() {
 // manifest (located by folder id across the plugin roots). Only a newer
 // catalog version is an update, so an older catalog never offers a downgrade.
 // Runs once per page.
+bool PluginCatalogActivity::resolveWallpaperRelease(const Item& item, wallpaperpackages::Release& release) {
+  const auto cached = std::find_if(wallpaperReleaseCache.begin(), wallpaperReleaseCache.end(),
+                                   [&](const auto& entry) { return entry.first == item.id; });
+  if (cached != wallpaperReleaseCache.end()) {
+    if (cached->second.name.empty()) return false;
+    release = cached->second;
+    return true;
+  }
+  wallpaperpackages::Release selected;
+  const bool compatible =
+      wallpaperpackages::selectRelease(BROWSE_TMP_PATH, item.id, activeBrowseItemsPath(), renderer.getScreenWidth(),
+                                       renderer.getScreenHeight(), selected);
+  wallpaperReleaseCache.emplace_back(item.id, compatible ? selected : wallpaperpackages::Release{});
+  if (!compatible) return false;
+  release = std::move(selected);
+  return true;
+}
+
 void PluginCatalogActivity::computeInstallStatus() {
+  if (browsingWallpaperPacks()) {
+    for (auto& item : items) {
+      wallpaperpackages::Release release;
+      if (!resolveWallpaperRelease(item, release)) {
+        item.status = "Not for this display";
+        continue;
+      }
+      if (!manifest.tracksInstalls()) {
+        item.status.clear();
+        continue;
+      }
+      std::string raw;
+      const std::string manifestFile =
+          "/.crosspoint/wallpapers/" + release.name + ".crosspoint-wallpaper/manifest.json";
+      if (!Storage.readFileToString("WPK", manifestFile, wallpaperpackages::MAX_MANIFEST_BYTES, raw)) {
+        item.status = "v" + item.version;
+        continue;
+      }
+      JsonDocument installed;
+      if (deserializeJson(installed, raw) != DeserializationError::Ok ||
+          strcmp(installed["kind"] | "", "wallpaper-pack") != 0 ||
+          strcmp(installed["name"] | "", release.name.c_str()) != 0) {
+        item.status = "v" + item.version;
+        continue;
+      }
+      const std::string version = installed["version"] | "";
+      item.status =
+          PluginLocations::isNewerVersion(item.version, version) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
+    }
+    return;
+  }
   if (!manifest.tracksInstalls()) return;
   JsonDocument filter;
   filter["version"] = true;
@@ -1077,7 +1246,9 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
     std::vector<Item>().swap(items);
   }
   requestUpdateAndWait();
-  const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
+  const auto result = browsingWallpaperPacks()
+                          ? downloadWallpaperPack(item)
+                          : (manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item));
   session.reset();
   item = {};
   // Reuse the SD response without another network request or resetting navigation.
@@ -1090,6 +1261,26 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
 void PluginCatalogActivity::downloadFinished(const bool cancelled) {
   state = cancelled ? State::BROWSING : State::DONE;
   requestUpdate();
+}
+
+HttpDownloader::DownloadError PluginCatalogActivity::downloadWallpaperPack(const Item& item) {
+  wallpaperpackages::Release release;
+  if (!resolveWallpaperRelease(item, release)) {
+    LOG_ERR("WPK", "No compatible wallpaper ZIP: %s", item.id.c_str());
+    return HttpDownloader::FILE_ERROR;
+  }
+  constexpr char ARCHIVE[] = "/.crosspoint/wallpaper-package-download.zip";
+  if (!Storage.ensureDirectoryExists("/.crosspoint")) return HttpDownloader::FILE_ERROR;
+  session.reset();
+  const auto result = downloadFile(pluginhttp::escapeUrl(release.url), ARCHIVE, {}, {}, {}, nullptr, nullptr,
+                                   wallpaperpackages::MAX_ARCHIVE_BYTES);
+  if (result != HttpDownloader::OK) {
+    Storage.remove(ARCHIVE);
+    return result;
+  }
+  const bool installed = wallpaperpackages::installVerifiedZip(ARCHIVE, release);
+  Storage.remove(ARCHIVE);
+  return installed ? HttpDownloader::OK : HttpDownloader::FILE_ERROR;
 }
 
 HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& item) {
@@ -1275,7 +1466,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 
 // Sign-in and completion states precede the shared catalog input handling.
 void PluginCatalogActivity::onRowLongPress(const int index) {
-  if (state != State::PLUGIN_PICKER) return;
+  if (state != State::PLUGIN_PICKER || pickerPluginForRow(index) < 0) return;
   activeNav().selected = index;
   confirmUninstallPlugin(index);
 }
@@ -1287,6 +1478,19 @@ bool PluginCatalogActivity::handleButtons() {
     return true;
   }
   return UiListActivity::handleButtons();
+}
+
+void PluginCatalogActivity::navigateButtons() {
+  if (state != State::PLUGIN_PICKER) {
+    UiListActivity::navigateButtons();
+    return;
+  }
+  buttonNavigator.onNextPress([this] { moveSelectionTo(nextPickerRow(activeNav().selected, 1, 1)); });
+  buttonNavigator.onPreviousPress([this] { moveSelectionTo(nextPickerRow(activeNav().selected, -1, 1)); });
+  buttonNavigator.onNextContinuous(
+      [this] { moveSelectionTo(nextPickerRow(activeNav().selected, 1, activeNav().inputPageRows())); });
+  buttonNavigator.onPreviousContinuous(
+      [this] { moveSelectionTo(nextPickerRow(activeNav().selected, -1, activeNav().inputPageRows())); });
 }
 
 bool PluginCatalogActivity::handleCustomInput() {
@@ -1345,7 +1549,8 @@ bool PluginCatalogActivity::handleCustomInput() {
 void PluginCatalogActivity::retryBrowse() {
   if (state == State::NO_TOKEN && manifest.hasDeviceCode()) {
     beginAuth();
-  } else if ((!manifest.browseListsUrl.empty() && !listIndexLoaded) || wantsListPicker()) {
+  } else if (((!manifest.browseListsUrl.empty() || !manifest.capabilityListsUrl.empty()) && !listIndexLoaded) ||
+             wantsListPicker()) {
     startBrowse();
   } else {
     beginLoading();
@@ -1423,8 +1628,9 @@ void PluginCatalogActivity::activateIndex(const int index) {
       requestUpdate();
       return;
     }
-    const int syntheticHubRows = showPluginHubInstallRow ? 1 : 0;
-    const PluginRef& plugin = installedPlugins[index - pluginStart - syntheticHubRows];
+    const int pluginIndex = pickerPluginForRow(index);
+    if (pluginIndex < 0) return;  // Non-interactive divider.
+    const PluginRef& plugin = installedPlugins[pluginIndex];
     const auto action = PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty());
     if (action == PluginLocations::PickerAction::Readme) {
       // A plain paged text view, not the book reader: viewing instructions must
@@ -1512,7 +1718,7 @@ bool PluginCatalogActivity::loadItemDetails(const int itemIndex, ItemDetails& de
     fields[JsonListParser::F_VERSION] = &manifest.versionPath;
     fields[JsonListParser::F_BASE] = extraBase;
     auto parser = makeUniqueNoThrow<JsonListParser>(
-        manifest.itemsPath, fields, unused,
+        activeBrowseItemsPath(), fields, unused,
         [](void* context, JsonListParser::Row& row) {
           (*static_cast<std::remove_reference_t<decltype(capture)>*>(context))(row);
         },
@@ -1650,7 +1856,7 @@ void PluginCatalogActivity::buildScreen(UiScreen& screen) {
   const bool listState = state == State::BROWSING || state == State::LIST_PICKER;
   const std::string title = listState ? browsingHeaderLabel() : catalogTitle;
   screenHeader(screen, title.c_str());
-  if (buildStatusScreen(screen)) return;
+  if (buildStatusScreen(screen, true, true)) return;
 
   switch (state) {
     case State::BROWSING:
@@ -1741,6 +1947,10 @@ void PluginCatalogActivity::buildBrowsingScreen(UiScreen& screen) {
   }
   syncListViewport(screen, props);
   if (state == State::PLUGIN_PICKER) {
+    // The default disabled row is white and faded; shade section headings
+    // without changing the theme's styles for interactive plugin rows.
+    props.rowStyles.disabled.background = fui::Paint::dither(fui::Color::DarkGray);
+    props.rowStyles.disabled.foreground = fui::Paint::solid(fui::Color::White);
     fitPluginSubtitleToViewport(screen.target(), screen.body().height, props);
   }
   screen.list(props);
@@ -1763,7 +1973,23 @@ void PluginCatalogActivity::rebuildRowItems() {
   if (state == State::PLUGIN_PICKER) {
     if (showOpds) addRow(tr(STR_OPDS_BROWSER), tr(STR_OPDS_SERVERS));
     if (showPluginHubInstallRow) addRow(tr(STR_PLUGIN_HUB), tr(STR_PLUGIN_HUB_DESCRIPTION), ">");
-    for (const auto& plugin : installedPlugins) {
+    const int pinned = pinnedPluginCount();
+    const int wallpaper = firstWallpaperIndex();
+    const auto addHeader = [&](const char* label) {
+      fui::ListItem header;
+      header.label = label;
+      header.enabled = false;
+      header.actionValue = static_cast<int16_t>(rowItems.size());
+      rowItems.push_back(header);
+    };
+    for (size_t i = 0; i < installedPlugins.size(); ++i) {
+      if (static_cast<int>(i) == pinned && wallpaper > pinned) addHeader("Plugins");
+      if (static_cast<int>(i) == wallpaper) addHeader("Wallpaper Packs");
+      const auto& plugin = installedPlugins[i];
+      if (plugin.isWallpaperPack) {
+        addRow(plugin.title.c_str(), plugin.description.c_str(), ">");
+        continue;
+      }
       //   None       -> web-only hint; chevron only with a readme
       //   Catalog    -> browsable, own description, chevron
       //   Background -> events-only, own description, chevron only with a readme
