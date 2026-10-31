@@ -47,6 +47,7 @@ def rjsmin_hazard(js: str):
     i, n, mode, stack = 0, len(js), None, []
     prev, prev_raw, word = "", "", ""  # last code char, same with "\n" kept, last word
     # After a string, template or regex, "x" stands for an operand, so a "/" divides.
+    prev_at, dotted = 0, False  # where prev is; word follows "." (obj.in is not a keyword)
     line = lambda pos: js.count("\n", 0, pos) + 1
     while i < n:
         c = js[i]
@@ -69,7 +70,7 @@ def rjsmin_hazard(js: str):
         if js.startswith("/*", i):
             i = n if js.find("*/", i + 2) < 0 else js.find("*/", i + 2) + 2
             continue
-        if c == "/" and (prev == "" or prev in JS_REGEX_PREFIX or word in JS_REGEX_KEYWORDS):
+        if c == "/" and (prev == "" or prev in JS_REGEX_PREFIX or (word in JS_REGEX_KEYWORDS and not dotted)):
             if not (prev_raw == "" or prev_raw in RJSMIN_REGEX_PREFIX or word == "return"):
                 return line(i), "regex literal after '" + (word or prev) + "'; wrap it in parentheses"
             in_class, j = False, i + 1
@@ -94,11 +95,14 @@ def rjsmin_hazard(js: str):
         elif c == "}" and stack and stack.pop() == "${":
             mode = "`"
         if c.isalnum() or c in "_$":
-            word = word + c if i > 0 and (js[i - 1].isalnum() or js[i - 1] in "_$") else c
+            if i > 0 and (js[i - 1].isalnum() or js[i - 1] in "_$"):
+                word += c
+            else:
+                word, dotted = c, prev == "." and js[prev_at - 1:prev_at] != "."  # not ...spread
         elif not c.isspace():
             word = ""
         if not c.isspace():
-            prev = c
+            prev, prev_at = c, i
         if not c.isspace() or c == "\n":
             prev_raw = c
         i += 1
