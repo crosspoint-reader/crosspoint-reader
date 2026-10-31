@@ -587,8 +587,8 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
 
 // Both files stay open across the stem-variant probes; every read below seeks
 // absolutely first, so a shared handle carries no position state between calls.
-void Dictionary::locateAll(LookupSession& session, const char* target, const WordCmp cmp,
-                           DictEntryList& out, bool* readError) {
+void Dictionary::locateAll(LookupSession& session, const char* target, const WordCmp cmp, DictEntryList& out,
+                           bool* readError) {
   if (readError) *readError = false;
 
   // Bisect the sampled offsets to the last sample whose headword is below the
@@ -668,8 +668,8 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
   return result;
 }
 
-bool Dictionary::locateSynonyms(LookupSession& session, const char* target, const WordCmp cmp,
-                                DictEntryList& out, bool* readError) {
+bool Dictionary::locateSynonyms(LookupSession& session, const char* target, const WordCmp cmp, DictEntryList& out,
+                                bool* readError) {
   if (readError) *readError = false;
   if (!openSynonyms(session)) {
     if (readError) *readError = session.synFailed;
@@ -878,9 +878,8 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
   }
 }
 
-void Dictionary::lookupKey(LookupSession& session, const std::string& key, const WordCmp cmp,
-                           DictEntryList& group, std::string& matchedHeadwordOut,
-                           bool& groupFromSynonyms, bool& searchFailed) {
+void Dictionary::lookupKey(LookupSession& session, const std::string& key, const WordCmp cmp, DictEntryList& group,
+                           std::string& matchedHeadwordOut, bool& groupFromSynonyms, bool& searchFailed) {
   bool readError = false;
   locateAll(session, key.c_str(), cmp, group, &readError);
   searchFailed = searchFailed || readError;
@@ -964,8 +963,7 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     // .idx/.syn's on-disk sort order (see bisectSamples). Only if that misses,
     // and folding changes the word (it has an uppercase letter), retry fully
     // case-folded — the exact-byte tiebreak can walk past a case variant.
-    lookupKey(session, cleaned, diskOrderCmp, group, matchedHeadwordOut,
-              groupFromSynonyms, searchFailed);
+    lookupKey(session, cleaned, diskOrderCmp, group, matchedHeadwordOut, groupFromSynonyms, searchFailed);
 
     if (group.empty() && !group.lowMemory()) {
       const std::string folded = foldCase(cleaned);
