@@ -14,12 +14,18 @@
        actions registered via registerAction() can claim and run jobs from
        /api/plugin-jobs. Keep this page open (a browser tab or an embedded
        webview) while external systems enqueue work. -->
-  <h3>Plugin runner active</h3>
+  <h3 id="runner-status">Plugin runner active</h3>
   <p>Jobs enqueued via <code>/api/plugin-jobs</code> execute while this page is open.</p>
   <div id="plugin-container"></div>
   <script src="/js/plugin-host.js"></script>
   <script>
-    loadPlugins(null);
+    if (typeof loadPlugins === 'function') {
+      loadPlugins(null);
+    } else {
+      // The host is a separate request. Retry instead of reporting an idle runner as active.
+      document.getElementById('runner-status').textContent = 'Plugin runner failed to load. Retrying...';
+      setTimeout(() => location.reload(), 10000);
+    }
   </script>
 </body>
 </html>
