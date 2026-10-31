@@ -164,6 +164,30 @@ bool readManifest(ZipFile& archive, const Release& release, JsonDocument& manife
   }
   return true;
 }
+bool clearSleepBitmapCaches() {
+  // Cached converted sleep BMPs are keyed by path, size, and FAT modification
+  // time. FAT timestamps can remain unchanged across same-size pack updates.
+  constexpr char CACHE_ROOT[] = "/.crosspoint";
+  std::vector<std::string> cached;
+  {
+    auto root = Storage.open(CACHE_ROOT);
+    if (!root || !root.isDirectory()) return false;
+    for (auto entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+      if (entry.isDirectory()) continue;
+      char name[64] = {};
+      if (entry.getName(name, sizeof(name)) == 0) continue;
+      const size_t len = strlen(name);
+      if (len <= 10 || strncmp(name, "sleep_", 6) != 0 || strcmp(name + len - 4, ".bmp") != 0) continue;
+      if (!std::all_of(name + 6, name + len - 4, [](char c) { return c >= '0' && c <= '9'; })) continue;
+      cached.emplace_back(std::string(CACHE_ROOT) + "/" + name);
+    }
+  }
+  return std::all_of(cached.begin(), cached.end(), [](const std::string& path) {
+    if (Storage.remove(path.c_str())) return true;
+    LOG_ERR("WPK", "Unable to invalidate sleep bitmap cache: %s", path.c_str());
+    return false;
+  });
+}
 bool prepareExisting(const std::string& dest, const std::string& backup) {
   // Recover an interrupted directory swap before doing anything destructive.
   if (!Storage.exists(backup.c_str())) return true;
@@ -366,7 +390,7 @@ bool installVerifiedZip(const std::string& archivePath, const Release& release) 
       }
       const uint64_t minimumSize =
           static_cast<uint64_t>(pixelOffset) + static_cast<uint64_t>(bitmap.getRowBytes()) * bitmap.getHeight();
-      if (!offsetValid || image.fileSize64() < minimumSize) {
+      if (!offsetValid || pixelOffset < 54 || image.fileSize64() < minimumSize) {
         allWritten = false;
         break;
       }
@@ -375,6 +399,13 @@ bool installVerifiedZip(const std::string& archivePath, const Release& release) 
   LOG_INF("EXT", "ZIP extraction %s: %lu ms (%s)", release.name.c_str(), millis() - extractStarted,
           allWritten ? "ok" : "failed");
   if (!allWritten) {
+    Storage.removeDir(temp.c_str());
+    return false;
+  }
+
+  // Invalidate converted sleep images before replacing the pack: FAT
+  // timestamps may not distinguish an updated image with the same size.
+  if (!clearSleepBitmapCaches()) {
     Storage.removeDir(temp.c_str());
     return false;
   }
