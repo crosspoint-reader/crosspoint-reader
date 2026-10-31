@@ -27,6 +27,7 @@ struct PluginRef {
   std::string manifestPath;  // device.json path, "" for a web-only plugin
   std::string readmePath;    // README.md path when present
   PluginLocations::DeviceKind deviceKind = PluginLocations::DeviceKind::None;
+  bool isWallpaperPack = false;  // Native data package, never a JS/device plugin.
 };
 
 // Rescan plugin roots on demand; metadata is owned by the picker.
@@ -77,7 +78,8 @@ class PluginCatalogActivity final : public CatalogActivity {
     // Named JSON views override the browse URL/body; Back returns to their picker.
     struct BrowseList {
       std::string title, url, body;
-      std::string id;  // fills {list_id}, so lists can share one browse url
+      std::string id;               // fills {list_id}, so lists can share one browse url
+      std::string kind, itemsPath;  // Optional capability-aware collection type and item array
       std::string noticeTitle, noticeMessage, noticeConfirm, noticeCancel;
       bool hasNotice() const { return !noticeMessage.empty(); }
     };
@@ -85,6 +87,7 @@ class PluginCatalogActivity final : public CatalogActivity {
     // Optional remote index whose views follow the manifest's own lists,
     // read with its own headers from the array and entry fields below.
     std::string browseListsUrl;
+    std::string capabilityListsUrl;
     pluginhttp::Headers listsHeaders;
     std::string listsItemsPath, listsTitlePath, listsUrlPath, listsIdPath, listsRequiresPath;
     size_t fixedListCount = 0;  // leading browseLists entries from the manifest
@@ -176,6 +179,13 @@ class PluginCatalogActivity final : public CatalogActivity {
   freeink::ui::Rect authQrRect{};
 
   void enterPluginPicker();
+  // Row mapping keeps divider rows out of selection and uninstall.
+  int pinnedPluginCount() const;
+  int firstWallpaperIndex() const;
+  int pickerRowForPlugin(int pluginIndex) const;
+  int pickerPluginForRow(int row) const;
+  bool pickerHeaderRow(int row) const;
+  int nextPickerRow(int current, int direction, int steps) const;
   void enterCatalog();
   void exitCatalog();
   // Clear items, paging, list and search state, and the row buffer.
@@ -207,6 +217,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   void activateIndex(int index) override;
   void onRowLongPress(int index) override;
   bool handleButtons() override;
+  void navigateButtons() override;
   void confirmUninstallPlugin(int pickerIndex);
   void render(RenderLock&& lock) override;
   void buildScreen(UiScreen& screen) override;
@@ -221,6 +232,9 @@ class PluginCatalogActivity final : public CatalogActivity {
   void buildBrowsingScreen(UiScreen& screen);
   // Browse url/body with the selected browse list's overrides applied.
   const std::string& activeBrowseUrl() const;
+  const std::string& activeBrowseItemsPath() const;
+  bool browsingWallpaperPacks() const;
+  HttpDownloader::DownloadError downloadWallpaperPack(const Item& item);
   const std::string& activeBrowseBody() const;
   plugincatalogpaging::Paging browsePaging() const;
   // Copies `headers` with `substituted()` applied to each value.

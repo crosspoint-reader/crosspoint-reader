@@ -27,6 +27,7 @@
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/wallpapers/WallpaperPackRegistry.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
@@ -802,7 +803,13 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // /sleep.bmp on the SD root takes priority over both custom sleep directories.
+  if (SETTINGS.wallpaperPackId[0]) {
+    std::string selected;
+    if (WallpaperPackRegistry::getInstance().selectImage(SETTINGS.wallpaperPackId, selected) &&
+        renderCustomSleepBmp(selected))
+      return;
+  }
+  // The existing custom sleep locations remain the fallback.
   if (renderCustomSleepBmp("/sleep.bmp")) return;
 
   std::string selectedPath;

@@ -50,6 +50,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
   - OTA update checks and installs from GitHub releases
 
 - **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
+- **SD wallpaper packs**: install and select sleep-screen wallpaper collections from compatible catalogs. See the [wallpaper collection guide](docs/sd-wallpaper-collections.md), including [how to create and publish a pack](docs/sd-wallpaper-collections.md#creating-and-publishing-a-wallpaper-pack).
 
 - **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
 

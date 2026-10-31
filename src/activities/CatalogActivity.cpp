@@ -173,7 +173,8 @@ void CatalogActivity::onDownloadProgress(const size_t downloaded, const size_t t
 HttpDownloader::DownloadError CatalogActivity::downloadFile(const std::string& url, const std::string& dest,
                                                             const std::string& user, const std::string& password,
                                                             const std::vector<HttpDownloader::Header>& headers,
-                                                            const std::string* postBody, const char* postContentType) {
+                                                            const std::string* postBody, const char* postContentType,
+                                                            size_t maxBytes) {
   downloadProgress = downloadTotal = 0;
   lastRenderedPercent = -1;
   lastProgressUpdateMs = 0;
@@ -194,7 +195,7 @@ HttpDownloader::DownloadError CatalogActivity::downloadFile(const std::string& u
   }
   return HttpDownloader::downloadToFile(
       url, dest, [this](size_t downloaded, size_t total) { onDownloadProgress(downloaded, total); }, &cancelDownload,
-      user, password, headers);
+      user, password, headers, false, maxBytes);
 }
 
 void CatalogActivity::finishDownload(const HttpDownloader::DownloadError result) {

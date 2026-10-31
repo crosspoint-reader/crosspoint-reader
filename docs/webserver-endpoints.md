@@ -546,6 +546,14 @@ reach these through the `PluginHost` wrappers (`api.relay`, `api.crypto`,
 `api.fetchToSd`, `api.writeFile`); the raw contracts are below. Outbound TLS is
 encrypted but the peer is not verified (the transport ships no CA bundle).
 
+### `GET /api/wallpaper-packs`
+
+Lists validated installed wallpaper collections as `[{"id":"<pack-id>","title":"<title>","description":"<description>","author":"<author>","version":"<version>","selected":false}, ...]`. Wallpaper packs are data assets, not browser plugins; a compatible Plugin Hub can display and manage them through these endpoints.
+
+### `POST /api/wallpaper-packs/delete`
+
+Accepts `{"id":"<pack-id>"}` and removes a validated installed collection. Only the collection's known wallpaper-pack directory can be removed. Deleting the active collection resets sleep-screen selection to the default pool. Returns `{"ok":true}` on success; invalid/missing IDs or unavailable packs fail without deleting arbitrary SD paths.
+
 ### `GET /api/plugins`
 
 Installed plugins that ship a `plugin.js`:

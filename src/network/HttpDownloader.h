@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -106,11 +107,15 @@ class HttpDownloader {
    * downgradeRedirectsToHttp rewrites followed redirect targets from https to
    * http so the bulk transfer skips a second TLS session (and its ~17KB record
    * buffer — the OOM site on low-heap C3 boards).
+   * maxBytes, when nonzero, rejects a chunk before it exceeds the
+   * download
+   * limit (including Range resumes) and discards the incomplete file.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, const bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      const std::vector<Header>& headers = {}, bool downgradeRedirectsToHttp = false);
+                                      const std::vector<Header>& headers = {}, bool downgradeRedirectsToHttp = false,
+                                      size_t maxBytes = 0);
 
   /**
    * POST a body (e.g. an LCP license to the fulfillment service) and stream
