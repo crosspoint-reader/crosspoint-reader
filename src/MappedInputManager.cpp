@@ -456,6 +456,9 @@ bool MappedInputManager::consumeSuppressedRelease() const {
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
 unsigned long MappedInputManager::getHeldTime() const {
+#if FREEINK_CAP_TOUCH
+  if (powerClickFrame) return 0;
+#endif
   // A mapped action has its own meaning, independent of the contact duration.
   if (hasRemoteClick() || homeAction != HomeButtonAction::Ignore) return 0;
   if (!gpio.wasAnyPressed() && !gpio.wasAnyReleased() && touchHeldOverrideValid &&
