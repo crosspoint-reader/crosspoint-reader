@@ -216,8 +216,7 @@ bool buttonContactClosed() { return gpio.rawInputActive(); }
 
 EpubReaderActivity::~EpubReaderActivity() {
   ImageBlock::setExtractor(nullptr, nullptr);
-  // ActivityManager destroys activities with its RenderLock already held;
-  // taking another here self-deadlocks (renderingMutex is non-recursive).
+  // ActivityManager already holds its RenderLock during destruction.
   settleOverlayRefresh();
   discardOverlayPage();  // free the overlay's page snapshot if one is held
   // A radio still stopped for this book's build may start again in the next one.

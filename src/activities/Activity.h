@@ -33,6 +33,8 @@ class Activity {
   // Last chance to queue activity-owned state before sleep events are drained.
   virtual void prepareForSleep() {}
   virtual void loop() {}
+  // Button-only UI hosts may retain input while a frame is being rendered.
+  virtual bool buffersButtons() const { return false; }
 
   virtual void render(RenderLock&&) {}
 

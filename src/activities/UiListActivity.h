@@ -22,6 +22,7 @@ class UiListActivity : public Activity, protected UiAppHost {
  public:
   void onEnter() override;
   void loop() override;
+  bool buffersButtons() const override { return true; }
   void render(RenderLock&&) override;
 
  protected:

@@ -90,6 +90,7 @@ class HomeActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool buffersButtons() const override { return true; }
   void render(RenderLock&&) override;
   bool isHomeActivity() const override { return true; }
 };
