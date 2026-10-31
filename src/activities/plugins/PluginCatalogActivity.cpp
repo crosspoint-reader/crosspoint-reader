@@ -170,6 +170,37 @@ void emitBookDownloaded(const std::string& manifestPath, const std::string& path
   pluginevents::emit(pluginevents::Event::BookDownloaded, vars, 3);
 }
 
+std::string httpStatusDetail(const int status) {
+  char code[16];
+  snprintf(code, sizeof(code), "HTTP %d", status);
+  return code;
+}
+
+// "HTTP <status>", plus the reason a JSON answer gives in "error" or "message".
+std::string httpFailureDetail(const int status, const String& body) {
+  std::string detail = httpStatusDetail(status);
+  JsonDocument filter;
+  filter["error"] = true;
+  filter["message"] = true;
+  JsonDocument doc;
+  if (deserializeJson(doc, body, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return detail;
+  const char* reason = doc["error"] | "";
+  if (*reason == '\0') reason = doc["message"] | "";
+  // Room for one short sentence on the error screen. Copy only that much (the
+  // answer may hold KBs) and never cut a UTF-8 sequence.
+  constexpr size_t MAX_REASON = 120;
+  size_t len = strnlen(reason, MAX_REASON + 1);
+  if (len > MAX_REASON) {
+    len = MAX_REASON;
+    while (len > 0 && (static_cast<unsigned char>(reason[len]) & 0xC0) == 0x80) len--;
+  }
+  if (len > 0) {
+    detail += ": ";
+    detail.append(reason, len);
+  }
+  return detail;
+}
+
 // Streams the browse temp file through a catalog list parser (null on OOM).
 // False when the reader cannot start or the document is malformed.
 template <typename Parser>
@@ -1077,6 +1108,7 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
     std::vector<Item>().swap(items);
   }
   requestUpdateAndWait();
+  downloadFailure.clear();
   const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
   session.reset();
   item = {};
@@ -1084,7 +1116,15 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
   if (!parseBrowseResponse()) return;
   session = makeUniqueNoThrow<freeink::SecureHttpClient>();
   if (!session) LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
-  finishDownload(result);
+  finishDownload(result, downloadFailure);
+}
+
+// The file GET's answer, when the server sent an error status. Its body is
+// discarded by the transport, so only the status is known.
+void PluginCatalogActivity::noteFileFailure() {
+  if (lastDownloadStatus > 0 && (lastDownloadStatus < 200 || lastDownloadStatus >= 300)) {
+    downloadFailure = httpStatusDetail(lastDownloadStatus);
+  }
 }
 
 void PluginCatalogActivity::downloadFinished(const bool cancelled) {
@@ -1153,7 +1193,10 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
       if (!Storage.exists(parent.c_str())) Storage.mkdir(parent.c_str());
     }
     const auto result = downloadFile(pluginhttp::escapeUrl(base + rel), dest + ".new");
-    if (result != HttpDownloader::OK) return result;
+    if (result != HttpDownloader::OK) {
+      noteFileFailure();
+      return result;
+    }
     staged.push_back(dest);
   }
   // ponytail: a failed swap mid-loop leaves a mixed old/new bundle; a
@@ -1185,6 +1228,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
       status = apiRequest(substitutedRequest(manifest.downloadReq, &item), response);
     }
     if (status < 200 || status >= 300) {
+      if (status > 0) downloadFailure = httpFailureDetail(status, response);
       return HttpDownloader::HTTP_ERROR;
     }
     JsonDocument doc;
@@ -1242,7 +1286,10 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
       refreshCredentialToken()) {
     result = fetchFile();
   }
-  if (result != HttpDownloader::OK) return result;
+  if (result != HttpDownloader::OK) {
+    noteFileFailure();
+    return result;
+  }
   clearBookCache(dest);
   if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
 
