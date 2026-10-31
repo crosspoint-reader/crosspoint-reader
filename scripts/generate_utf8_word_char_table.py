@@ -6,8 +6,9 @@ Letter, Number, or Mark (L*, N*, M*), then coalesces them into contiguous
 [start, end] ranges. This is the whitelist used by word-edge trimming: a
 codepoint is "part of a word" iff it falls in one of these ranges.
 
-Requires Python 3.14.7 (Unicode 16.0.0) to match the committed table exactly;
-a different unicodedata version will produce a different set of ranges.
+Requires a Python whose unicodedata is Unicode 16.0.0 (e.g. Python 3.14.x) to
+match the committed table exactly; a different Unicode version will produce a
+different set of ranges.
 
 Usage:
     python3 scripts/generate_utf8_word_char_table.py > lib/Utf8/Utf8WordCharTable.h
@@ -22,7 +23,7 @@ WORD_CATEGORY_PREFIXES = ("L", "N", "M")
 
 HEADER = """// Auto-generated table of Unicode codepoint ranges classified as Letter,
 // Number, or Mark (general categories L*, N*, M*), derived from Python
-// 3.12.3's unicodedata (Unicode 15.0.0).
+// 3.14's unicodedata (Unicode 16.0.0).
 //
 // This is the whitelist side of word-edge trimming: a codepoint is "part of a
 // word" iff it falls in one of these ranges. Everything else (punctuation,
@@ -79,10 +80,10 @@ def format_entries(ranges):
 
 
 def main():
-    if sys.version_info[:3] != (3, 14, 7) or unicodedata.unidata_version != "16.0.0":
+    if unicodedata.unidata_version != "16.0.0":
         print(
             f"warning: running Python {sys.version.split()[0]} / Unicode "
-            f"{unicodedata.unidata_version}, expected 3.12.3 / 15.0.0 — output "
+            f"{unicodedata.unidata_version}, expected Unicode 16.0.0 — output "
             "may not match the committed table",
             file=sys.stderr,
         )
