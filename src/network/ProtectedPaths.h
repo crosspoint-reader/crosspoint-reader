@@ -1,9 +1,11 @@
 #pragma once
 
+#include <HiddenItems.h>
 #include <string.h>
 #include <strings.h>
 
 #include <string>
+#include <string_view>
 
 // Credential stores no web request (file manager, plugin endpoints) or plugin
 // manifest may read or write: their passwords are obfuscated with a device
@@ -11,6 +13,16 @@
 // WifiCredentialStore, OpdsServerStore and KOReaderCredentialStore. Prefix
 // match, so the stores' temp/backup siblings are covered too.
 namespace protectedpaths {
+
+// A name the file managers hide: dot-named or one of FsHelpers::HIDDEN_ITEMS.
+// FAT compares names case-insensitively, so this does too.
+inline bool isHiddenName(std::string_view name) {
+  if (!name.empty() && name.front() == '.') return true;
+  for (const char* item : FsHelpers::HIDDEN_ITEMS) {
+    if (name.size() == strlen(item) && strncasecmp(name.data(), item, name.size()) == 0) return true;
+  }
+  return false;
+}
 
 inline constexpr const char* SENSITIVE_FILES[] = {"/.crosspoint/wifi.json", "/.crosspoint/opds.json",
                                                   "/.crosspoint/koreader.json"};
