@@ -74,7 +74,7 @@ bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 struct IfoFacts {
   bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
   bool htmlDefinitions = false;  // sametypesequence=h or x (HTML or XDXF)
-  bool inlineTypes = true;       // no sametypesequence: each field carries its type
+  bool inlineTypes = false;      // enabled by a readable .ifo without sametypesequence
 };
 
 IfoFacts readIfoFacts(const std::string& ifoPath) {
@@ -85,12 +85,13 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   const int n = ifo.read(buf, sizeof(buf) - 1);
   if (n <= 0) return facts;
   buf[n] = '\0';
+  facts.inlineTypes = true;
   const char* line = strstr(buf, "idxoffsetbits");
   const char* eq = line ? strchr(line, '=') : nullptr;
   facts.offsets64 = eq && strtol(eq + 1, nullptr, 10) == 64;
   line = strstr(buf, "sametypesequence");
   eq = line ? strchr(line, '=') : nullptr;
-  if (eq) {
+  if (eq && eq[1] != '\0' && eq[1] != '\r' && eq[1] != '\n') {
     facts.inlineTypes = false;
     // HTML and XDXF share the styled renderer; multi-type entries stay plain text.
     facts.htmlDefinitions = (eq[1] == 'h' || eq[1] == 'x') && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
@@ -118,7 +119,7 @@ bool readInlineField(std::string_view& input, char& type, std::string_view& fiel
   return true;
 }
 
-Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, bool truncated) {
+Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, bool truncated, bool* exceedsLimit) {
   const auto source = std::string_view(text).substr(start);
   size_t decodedSize = start;
   bool onlyMarkup = true;
@@ -137,8 +138,11 @@ Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, boo
       if (pass == 0) {
         onlyMarkup = onlyMarkup && markup;
         decodedSize += markup ? field.size() : sizeof("<pre></pre>") - 1 + TxtToHtml::escapedHtmlSize(field);
-        if (decodedSize > Dictionary::MAX_DEFINITION_BYTES) {
-          LOG_ERR("DICT", "Decoded definition exceeds byte limit");
+        // Escaping plus <pre> wrappers expands bounded raw input by less than six times.
+        const size_t limit = Dictionary::MAX_DEFINITION_BYTES * (exceedsLimit ? 1 : 6);
+        if (decodedSize > limit) {
+          if (exceedsLimit) *exceedsLimit = true;
+          LOG_INF("DICT", "Decoded definition exceeds byte limit");
           return Dictionary::LookupResult::ReadError;
         }
       } else if (markup) {
@@ -638,7 +642,9 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, Dict
   return !out.empty();
 }
 
-bool Dictionary::readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult, bool append) {
+bool Dictionary::readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult, bool append,
+                                bool* exceedsLimit) {
+  if (exceedsLimit) *exceedsLimit = false;
   const auto fail = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
     return false;
@@ -651,6 +657,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
   }
   const size_t originalSize = append ? out.size() : 0;
   if (append && (originalSize > MAX_DEFINITION_BYTES || size > MAX_DEFINITION_BYTES - originalSize)) {
+    if (exceedsLimit) *exceedsLimit = true;
     LOG_ERR("DICT", "Combined definition exceeds %lu bytes", static_cast<unsigned long>(MAX_DEFINITION_BYTES));
     return fail(LookupResult::ReadError);
   }
@@ -723,7 +730,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     return fail(LookupResult::ReadError);
   }
   if (inlineTypes) {
-    const auto result = decodeInlineFields(out, originalSize, location.size > size);
+    const auto result = decodeInlineFields(out, originalSize, location.size > size, exceedsLimit);
     if (result != LookupResult::Found) {
       out.resize(originalSize);
       return fail(result);
@@ -916,44 +923,22 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   // several headwords) are combined into one text, each labelled with its
   // headword so the boundaries are visible.
   if (group.size() > 1 || groupFromSynonyms) {
-    // The markup the merge below appends. The budget is derived from these,
-    // so the two cannot drift apart and the reserve is never short.
+    // Shared markup for the raw reserve estimate and decoded admission checks.
     constexpr char kHtmlLabelOpen[] = "<h2>";
     constexpr char kHtmlLabelClose[] = "</h2>";
     constexpr char kPlainSeparator[] = "\n\n";
 
-    // Budget the combined text. An entry that does not fit is dropped and the
-    // rest are still shown: a word with many definitions opens on what fits
-    // rather than failing the lookup. The first entry always fits on its own,
-    // so at least one definition is shown.
+    // Reserve from raw sizes; actual decoded sizes decide admission below.
     size_t combinedSize = 0;
-    size_t fitCount = 0;
     for (size_t i = 0; i < group.size(); i++) {
       const size_t definitionSize = std::min<uint32_t>(group.at(i).location.size, MAX_DEFINITION_BYTES);
-      // The HTML path needs no separator: the heading is a block of its own.
-      const size_t separatorSize = combinedSize == 0 || htmlDefinitions ? 0 : sizeof(kPlainSeparator) - 1;
       const size_t labelSize =
           htmlDefinitions ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(group.at(i).headword.get()) +
                                 sizeof(kHtmlLabelClose) - 1
-                          : sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + strlen(group.at(i).headword.get()) + 1;
-      if (combinedSize > MAX_DEFINITION_BYTES - separatorSize ||
-          labelSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize ||
-          definitionSize > MAX_DEFINITION_BYTES - combinedSize - separatorSize - labelSize) {
-        break;
-      }
-      combinedSize += separatorSize + labelSize + definitionSize;
-      fitCount = i + 1;
-    }
-    if (fitCount == 0) {
-      LOG_INF("DICT", "First definition fills the cap; omitting labels and later entries");
-      const bool found = readDefinition(group.front().location, definitionOut, outResult);
-      if (found) setResult(LookupResult::Found);
-      return found;
-    }
-    if (fitCount < group.size()) {
-      LOG_INF("DICT", "Combined definitions stop at the %lu byte cap: %u of %u entries shown",
-              static_cast<unsigned long>(MAX_DEFINITION_BYTES), static_cast<unsigned>(fitCount),
-              static_cast<unsigned>(group.size()));
+                          : sizeof(kPlainSeparator) - 1 + sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) +
+                                strlen(group.at(i).headword.get()) + 1;
+      if (labelSize + definitionSize > MAX_DEFINITION_BYTES - combinedSize) continue;
+      combinedSize += labelSize + definitionSize;
     }
     if (ESP.getMaxAllocHeap() < combinedSize + DEFINITION_HEAP_HEADROOM_BYTES) {
       LOG_ERR("DICT", "Low heap for combined %lu byte definition", static_cast<unsigned long>(combinedSize));
@@ -962,16 +947,16 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     }
     definitionOut.clear();
     definitionOut.reserve(combinedSize);
-    for (size_t i = 0; i < fitCount; i++) {
+    for (size_t i = 0; i < group.size(); i++) {
       const size_t labelSize =
           htmlDefinitions ? sizeof(kHtmlLabelOpen) - 1 + TxtToHtml::escapedHtmlSize(group.at(i).headword.get()) +
                                 sizeof(kHtmlLabelClose) - 1
-                          : (i == 0 ? 0 : sizeof(kPlainSeparator) - 1) + sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) +
-                                strlen(group.at(i).headword.get()) + 1;
+                          : (definitionOut.empty() ? 0 : sizeof(kPlainSeparator) - 1) +
+                                sizeof(DICTIONARY_PLAIN_HEADWORD_MARKER) + strlen(group.at(i).headword.get()) + 1;
       const size_t entrySize = labelSize + std::min<uint32_t>(group.at(i).location.size, MAX_DEFINITION_BYTES);
       if (entrySize > MAX_DEFINITION_BYTES - definitionOut.size()) {
-        LOG_INF("DICT", "Decoded definitions fill the cap; omitting remaining entries");
-        break;
+        LOG_INF("DICT", "Definition does not fit; skipping entry");
+        continue;
       }
       // Inline text escaping can outgrow the original raw-entry reserve.
       const size_t requiredBytes = definitionOut.size() + entrySize;
@@ -984,7 +969,8 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         }
         definitionOut.reserve(requiredBytes);
       }
-      if (i != 0 && !htmlDefinitions) {
+      const size_t previousSize = definitionOut.size();
+      if (!definitionOut.empty() && !htmlDefinitions) {
         definitionOut += kPlainSeparator;
       }
       if (htmlDefinitions) {
@@ -996,10 +982,17 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         definitionOut += group.at(i).headword.get();
         definitionOut.push_back('\n');
       }
-      if (!readDefinition(group.at(i).location, definitionOut, outResult, true)) return false;
+      bool exceedsLimit = false;
+      if (!readDefinition(group.at(i).location, definitionOut, outResult, true, &exceedsLimit)) {
+        definitionOut.resize(previousSize);
+        if (exceedsLimit) continue;
+        return false;
+      }
     }
-    setResult(LookupResult::Found);
-    return true;
+    if (!definitionOut.empty()) {
+      setResult(LookupResult::Found);
+      return true;
+    }
   }
 
   if (readDefinition(group.front().location, definitionOut, outResult)) {

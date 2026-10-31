@@ -501,7 +501,7 @@ class Dictionary {
     ++searches;
     return false;
   }
-  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false) { return false; }
+  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false, bool* = nullptr) { return false; }
   static std::string cleanWord(const char*);
   static void stemVariants(const std::string&, std::vector<std::string>&);
   bool lookup(const char*, std::string&, std::string&, LookupResult*);

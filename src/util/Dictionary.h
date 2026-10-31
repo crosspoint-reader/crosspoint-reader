@@ -134,8 +134,9 @@ class Dictionary {
               LookupResult* outResult = nullptr);
 
   // Reload the exact entry, including synonym targets with duplicate headwords.
+  // With exceedsLimit, enforce the combined-output cap and report a size rejection separately from IO failure.
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr,
-                      bool append = false);
+                      bool append = false, bool* exceedsLimit = nullptr);
 
   static std::string cleanWord(const char* word);
 
