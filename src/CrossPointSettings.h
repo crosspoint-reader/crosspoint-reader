@@ -312,6 +312,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
+  // Show dictionary definitions in a popup over the page instead of the
+  // full-screen definition activity. Default off = stock behavior.
+  uint8_t dictionaryPopup = 0;
+  // Show footnote/link targets in a popup over the page instead of jumping;
+  // targets too large for a popup still fall back to the jump. Default off.
+  uint8_t footnotePopup = 0;
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 5;

@@ -111,6 +111,12 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled",
                            StrId::STR_CAT_READER)
            .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_DICT_POPUP, &CrossPointSettings::dictionaryPopup, "dictionaryPopup",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_FOOTNOTES_POPUP, &CrossPointSettings::footnotePopup, "footnotePopup",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
   emit(SettingInfo::Enum(
       StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
       {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},

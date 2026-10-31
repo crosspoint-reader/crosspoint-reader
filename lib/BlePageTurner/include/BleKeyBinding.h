@@ -1,6 +1,8 @@
 #pragma once
 
+#if defined(FREEINK_CAP_BLE_HID_HOST) && FREEINK_CAP_BLE_HID_HOST
 #include <BleRemoteProfiles.h>
+#endif
 
 #include <array>
 #include <cstdint>
@@ -112,6 +114,9 @@ inline void formatCode(char* out, const size_t n, const Binding b) {
 }
 
 // Translate SDK logical keys into reader actions without changing saved raw codes.
+// NoRadio builds carry no default profiles: no remote ever connects, so
+// tableFor() answers from the saved tables or not at all.
+#if defined(FREEINK_CAP_BLE_HID_HOST) && FREEINK_CAP_BLE_HID_HOST
 inline const RemoteTable* defaultTableFor(const char* name) {
   static constexpr auto tables = [] {
     std::array<RemoteTable, std::size(freeink::kRemoteButtonProfiles)> result{};
@@ -133,6 +138,9 @@ inline const RemoteTable* defaultTableFor(const char* name) {
   const int index = freeink::remoteButtonProfileIndex(name);
   return index < 0 ? nullptr : &tables[index];
 }
+#else
+inline const RemoteTable* defaultTableFor(const char*) { return nullptr; }
+#endif
 
 // Table of the connected remote: the saved one for its address, else the default for
 // its name, else none (nullptr = the old usage path, exactly as today). Writes nothing.

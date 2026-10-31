@@ -1,6 +1,7 @@
 #include "EpubReaderActivity.h"
 
 #include "activities/util/KeyboardEntryActivity.h"
+#include "activities/util/TextPopupActivity.h"
 
 #include <BlePageTurner.h>
 #include <Epub/Page.h>
@@ -33,6 +34,7 @@
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryPopupActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -559,6 +561,20 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
       }
       int top, right, bottom, left;
       renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+      if (SETTINGS.dictionaryPopup) {
+        auto popupActivity = makeUniqueNoThrow<DictionaryPopupActivity>(renderer, mappedInput, std::move(page),
+                                                                       left + SETTINGS.screenMargin,
+                                                                       top + SETTINGS.screenMargin, clipping.text);
+        if (!popupActivity) {
+          LOG_ERR("CLIP", "OOM: dictionary popup activity");
+          requestUpdate();
+          return;
+        }
+        startActivityForResult(std::move(popupActivity), [this](const ActivityResult& result) {
+          if (!result.isCancelled) openDictionaryWordSelect();
+        });
+        return;
+      }
       auto lookup = makeUniqueNoThrow<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                     left + SETTINGS.screenMargin,
                                                                     top + SETTINGS.screenMargin, clipping.text);
@@ -1072,19 +1088,9 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
   const size_t cumulative = epub->getCumulativeSpineItemSize(targetSpineIndex);
   const size_t spineSize = (cumulative > prevCumulative) ? (cumulative - prevCumulative) : 0;
-  pendingSpineProgress =
+  const float progress =
       (spineSize == 0) ? 0.0f : static_cast<float>(targetSize - prevCumulative) / static_cast<float>(spineSize);
-  pendingSpineProgress = std::clamp(pendingSpineProgress, 0.0f, 1.0f);
-
-  {
-    RenderLock lock;
-    clearDeferredReposition();
-    currentSpineIndex = targetSpineIndex;
-    nextPageNumber = 0;
-    pendingPercentJump = true;
-    section.reset();
-  }
-  requestUpdate();
+  jumpToSpinePage(targetSpineIndex, progress);
 }
 
 void EpubReaderActivity::jumpToSpinePage(const int spineIndex, const float pageFraction) {
@@ -1103,12 +1109,81 @@ void EpubReaderActivity::jumpToSpinePage(const int spineIndex, const float pageF
   requestUpdate();
 }
 
+bool EpubReaderActivity::tryFootnotePopup(const std::string& hrefStr) {
+  const int targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr);
+  if (targetSpineIndex < 0 || targetSpineIndex == currentSpineIndex) return false;
+
+  // Oversized targets (a chapter, a shared notes file) keep the jump path:
+  // building them for a popup would freeze the screen without progress UI.
+  size_t itemSize = 0;
+  constexpr size_t kMaxPopupSourceBytes = 24 * 1024;
+  if (epub->getItemSize(epub->getSpineItem(targetSpineIndex).href, &itemSize) &&
+      itemSize > kMaxPopupSourceBytes) {
+    return false;
+  }
+
+  std::string anchor;
+  const auto hashPos = hrefStr.find('#');
+  if (hashPos != std::string::npos && hashPos + 1 < hrefStr.size()) {
+    anchor = hrefStr.substr(hashPos + 1);
+  }
+
+  // Viewport identical to the reader's build (margins + status bar), so the
+  // target's section cache is reusable by the normal jump later.
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  const uint16_t viewportWidth = renderer.getScreenWidth() - left - right - 2 * SETTINGS.screenMargin;
+  const uint16_t viewportHeight =
+      renderer.getScreenHeight() - top - bottom - statusBarHeight - 2 * SETTINGS.screenMargin;
+  const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
+
+  Section probe(epub, targetSpineIndex, renderer);
+  if (!probe.loadSectionFile(renderSpec)) {
+    GfxRenderer::FrameBufferLoan loan(renderer);
+    if (!probe.createSectionFile(renderSpec)) {
+      LOG_ERR("ERS", "Footnote popup build failed for %s", hrefStr.c_str());
+      return false;
+    }
+  }
+  // A multi-page target is chapter-sized content: not a popup footnote.
+  if (probe.pageCount > 3) return false;
+
+  if (!anchor.empty()) {
+    const auto anchorPage = probe.findAnchor(anchor);
+    if (anchorPage) probe.currentPage = *anchorPage;
+  }
+  std::string noteText = probe.getTextFromSectionFile();
+  if (noteText.size() < 2) return false;
+
+  // Title: the footnote's marker number when the page knows it, else the
+  // generic label.
+  std::string title = tr(STR_FOOTNOTES);
+  for (const auto& footnote : currentPageFootnotes) {
+    if (hrefStr == footnote.href) {
+      if (footnote.number[0] != '\0') title = footnote.number;
+      break;
+    }
+  }
+
+  auto background = section ? section->loadPage(section->currentPage) : nullptr;
+  auto popupActivity = makeUniqueNoThrow<TextPopupActivity>(renderer, mappedInput, std::move(background),
+                                                            left + SETTINGS.screenMargin,
+                                                            top + SETTINGS.screenMargin, std::move(title),
+                                                            std::move(noteText), "FootnotePopup");
+  if (!popupActivity) {
+    LOG_ERR("ERS", "OOM: footnote popup");
+    return false;
+  }
+  startActivityForResult(std::move(popupActivity), [this](const ActivityResult&) { requestUpdate(); });
+  return true;
+}
+
 void EpubReaderActivity::goToPage(const int page) {
   if (!epub || page <= 0) return;
 
   // Exact jump when the number names a page of the loaded chapter.
   if (section && page <= static_cast<int>(section->pageCount)) {
-    bleturner::acknowledgeLinkNote();
     {
       RenderLock lock;
       clearDeferredReposition();
@@ -1334,8 +1409,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PAGE: {
-      auto keyboard =
-          makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_GO_TO_PAGE), "", 6, InputType::Text);
+      // Url layout = QwertyEn, so the digit row is on the first screen (the
+      // default layout follows the UI language and would need a switch).
+      const std::string initial = section ? std::to_string(section->currentPage + 1) : "1";
+      auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_GO_TO_PAGE), initial, 6,
+                                                               InputType::Url);
       if (!keyboard) {
         LOG_ERR("ERA", "OOM: go-to-page keyboard");
         break;
@@ -3345,6 +3423,13 @@ void EpubReaderActivity::activateMoreRow(int row) {
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
   if (!epub) return;
+
+  // Footnote popup: cross-file targets small enough for a frame are shown in
+  // place; the reading position never moves (Back simply closes the popup).
+  // Same-file anchors and oversized targets fall through to the real jump.
+  if (SETTINGS.footnotePopup && !hrefStr.empty() && hrefStr[0] != '#' && tryFootnotePopup(hrefStr)) {
+    return;
+  }
 
   std::string anchor;
   const auto hashPos = hrefStr.find('#');
