@@ -69,33 +69,57 @@ uint32_t readBe32(const uint8_t* p) {
 // continuation/lead byte, so accented words keep their edges.
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 
-// Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
-// headers are tiny and both keys always appear early when present.
+// Facts read from the .ifo at open time.
 struct IfoFacts {
   bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
   bool htmlDefinitions = false;  // sametypesequence=h or x (HTML or XDXF)
   bool inlineTypes = false;      // enabled by a readable .ifo without sametypesequence
 };
 
+void readIfoLine(IfoFacts& facts, std::string_view line, bool& hasFixedTypes) {
+  if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+  const size_t eq = line.find('=');
+  if (eq == std::string_view::npos) return;
+  const auto key = line.substr(0, eq);
+  const auto value = line.substr(eq + 1);
+  if (key == "idxoffsetbits") {
+    char number[64];
+    const size_t count = std::min(value.size(), sizeof(number) - 1);
+    memcpy(number, value.data(), count);
+    number[count] = '\0';
+    if (strtol(number, nullptr, 10) == 64) facts.offsets64 = true;
+  }
+  if (key != "sametypesequence" || value.empty()) return;
+  hasFixedTypes = true;
+  facts.htmlDefinitions = value == "h" || value == "x";
+}
+
 IfoFacts readIfoFacts(const std::string& ifoPath) {
   IfoFacts facts;
   HalFile ifo;
   if (!Storage.openFileForRead("DICT", ifoPath, ifo)) return facts;
-  char buf[2048];
-  const int n = ifo.read(buf, sizeof(buf) - 1);
-  if (n <= 0) return facts;
-  buf[n] = '\0';
-  facts.inlineTypes = true;
-  const char* line = strstr(buf, "idxoffsetbits");
-  const char* eq = line ? strchr(line, '=') : nullptr;
-  facts.offsets64 = eq && strtol(eq + 1, nullptr, 10) == 64;
-  line = strstr(buf, "sametypesequence");
-  eq = line ? strchr(line, '=') : nullptr;
-  if (eq && eq[1] != '\0' && eq[1] != '\r' && eq[1] != '\n') {
-    facts.inlineTypes = false;
-    // HTML and XDXF share the styled renderer; multi-type entries stay plain text.
-    facts.htmlDefinitions = (eq[1] == 'h' || eq[1] == 'x') && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
+  size_t remaining = ifo.fileSize();
+  if (remaining == 0) return facts;
+  char chunk[128];
+  char line[64];
+  size_t lineLength = 0;
+  bool hasFixedTypes = false;
+  while (remaining > 0) {
+    const size_t count = std::min(remaining, sizeof(chunk));
+    if (ifo.read(chunk, count) != static_cast<int>(count)) return {};
+    remaining -= count;
+    for (size_t i = 0; i < count; ++i) {
+      if (chunk[i] == '\n') {
+        readIfoLine(facts, std::string_view(line, lineLength), hasFixedTypes);
+        lineLength = 0;
+      } else if (lineLength < sizeof(line)) {
+        // Metadata keys and type values fit; discard the rest of long descriptions.
+        line[lineLength++] = chunk[i];
+      }
+    }
   }
+  readIfoLine(facts, std::string_view(line, lineLength), hasFixedTypes);
+  facts.inlineTypes = !hasFixedTypes;
   return facts;
 }
 
@@ -133,7 +157,7 @@ Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, boo
         LOG_ERR("DICT", "Invalid inline definition field");
         return Dictionary::LookupResult::ReadError;
       }
-      if (type >= 'A' && type <= 'Z') continue;
+      if (field.empty()) continue;
       const bool markup = type == 'h' || type == 'x';
       if (pass == 0) {
         onlyMarkup = onlyMarkup && markup;
@@ -154,6 +178,7 @@ Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, boo
       }
     }
     if (pass == 0) {
+      if (decodedSize == start) return Dictionary::LookupResult::NotFound;
       // Markup only shrinks, so remove its framing without another text buffer.
       if (onlyMarkup) {
         auto fields = source;
@@ -983,9 +1008,11 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         definitionOut.push_back('\n');
       }
       bool exceedsLimit = false;
-      if (!readDefinition(group.at(i).location, definitionOut, outResult, true, &exceedsLimit)) {
+      auto entryResult = LookupResult::Found;
+      if (!readDefinition(group.at(i).location, definitionOut, &entryResult, true, &exceedsLimit)) {
         definitionOut.resize(previousSize);
-        if (exceedsLimit) continue;
+        if (exceedsLimit || entryResult == LookupResult::NotFound) continue;
+        setResult(entryResult);
         return false;
       }
     }
