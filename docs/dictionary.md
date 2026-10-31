@@ -54,7 +54,7 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 1. **Direct match** — the word or phrase is searched as-is (case-insensitive) in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms). An index may list the same headword more than once (one entry per part of speech, for example); every entry it lists is shown, each labelled with its headword.
 2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). All the headwords a synonym points at are shown. This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
-4. **Not found** — a short popup appears and you return to word selection.
+4. **Not found** — a short popup appears. Touchscreen devices return to reading; buttons-only devices return to word selection.
 
 ## The Definition Screen
 
@@ -72,7 +72,7 @@ Definitions are drawn in your reading font. Dictionaries may use IPA symbols (e.
 - **Confirm** — select words or a phrase inside the definition, then choose **Look Up**
 - **Long press on text** — select the touched word on touchscreen devices when touch reader controls are enabled
 - **Back during selection** — cancel selection
-- **Back while reading a definition** — return to the previous definition, or to book word selection at the first definition
+- **Back while reading a definition** — return to the previous definition. At the first definition, touchscreen devices return to reading; buttons-only devices return to book word selection
 - **Long Back while reading a definition** — hold **Back** for at least one second, then release to close all definitions and return directly to reading
 - **Long press the header Back arrow** — close all definitions and return directly to reading on touchscreen devices, even when touch reader controls are disabled
 
@@ -86,7 +86,7 @@ A failed lookup reloads the current definition and keeps its page and selection.
 
 The current definition is released before loading another entry, so two definitions do not need to fit in memory together.
 Returning to a previous definition reads it from the SD card again.
-If a previous definition cannot be read or its position restored, the definition screen closes and returns to book word selection.
+If a previous definition cannot be read or its position restored, the definition screen closes. Touchscreen devices return to reading; buttons-only devices return to book word selection.
 The screen also closes if a failed forward lookup cannot reload the current definition.
 
 
