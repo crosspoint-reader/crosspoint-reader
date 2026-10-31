@@ -467,7 +467,8 @@ int main() {
 
 dictionary_source = (ROOT / "src/util/Dictionary.cpp").read_text()
 lookup_methods = "\n".join(block(dictionary_source, name) for name in (
-    "std::string Dictionary::cleanWord", "void Dictionary::stemVariants", "bool Dictionary::lookup"
+    "std::string Dictionary::cleanWord", "std::string Dictionary::foldCase", "void Dictionary::stemVariants",
+    "void Dictionary::lookupKey", "bool Dictionary::lookup"
 ))
 lookup_harness = r'''
 #include <algorithm>
@@ -490,6 +491,7 @@ struct HalMemory {
   static Heap getDefaultHeap() { return heap; }
 };
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
+int diskOrderCmp(const char* a, const char* b) { return std::strcmp(a, b); }
 struct EspStub {
   size_t getMaxAllocHeap() { return 1024 * 1024; }
 };
@@ -503,6 +505,7 @@ class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
   struct LookupSession {};
+  using WordCmp = int (*)(const char*, const char*);
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
   bool hasSyn = false;
   bool htmlDefinitions = false;
@@ -510,17 +513,19 @@ class Dictionary {
   std::unique_ptr<DictEntryList> entryList = std::make_unique<DictEntryList>();
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  void locateAll(LookupSession&, const char*, DictEntryList&, bool* readError) {
+  void locateAll(LookupSession&, const char*, WordCmp, DictEntryList&, bool* readError) {
     ++searches;
     if (readError) *readError = false;
   }
-  bool locateSynonyms(LookupSession&, const char*, DictEntryList&, bool*) {
+  bool locateSynonyms(LookupSession&, const char*, WordCmp, DictEntryList&, bool*) {
     ++searches;
     return false;
   }
   bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false, bool* = nullptr) { return false; }
   static std::string cleanWord(const char*);
+  static std::string foldCase(const std::string&);
   static void stemVariants(const std::string&, std::vector<std::string>&);
+  void lookupKey(LookupSession&, const std::string&, WordCmp, DictEntryList&, std::string&, bool&, bool&);
   bool lookup(const char*, std::string&, std::string&, LookupResult*);
 };
 ''' + lookup_methods + r'''
