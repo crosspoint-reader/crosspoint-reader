@@ -147,7 +147,7 @@ The index is created automatically the first time the Library is opened. To pick
 
 ### 3.5 File Transfer Screen
 
-The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
+The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode. The screen also lists **OPDS Browser**, which opens your OPDS catalogs; with no server configured it opens the server list so you can add one (see [OPDS Servers](#365-opds-servers-multiple-libraries)). When the plugin system is off and a server is configured, OPDS Browser is on the Home screen instead.
 
 See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
@@ -365,7 +365,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 #### 3.6.5 OPDS Servers (Multiple Libraries)
 
-CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs.
+CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs. Browse them from **OPDS Browser** on the Home screen (plugin system off and a server saved), otherwise from **File Transfer -> OPDS Browser**.
 
 1. Open **Settings -> Connectivity -> OPDS Servers**.
 
