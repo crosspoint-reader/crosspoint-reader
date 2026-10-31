@@ -145,6 +145,9 @@ What this means in practice:
 - If no SD font is selected (a built-in reading font is active), there is no
   fallback and the UI again shows boxes for non-Latin text — pick an SD font
   covering that script to restore it.
+- A book can keep its own reading font (see the
+  [Reader Menu](../USER_GUIDE.md#5-reader-menu)). While that book is open, its font is the one used for fallback;
+  the default font from **Settings > Reader** is used again after you leave it.
 
 ## Available Pre-Built Fonts
 
