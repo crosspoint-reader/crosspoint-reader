@@ -54,6 +54,7 @@
 #include "html/assets/webCss.generated.h"
 #include "html/js/epub_optimizerJs.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "html/js/plugin_hostJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
 #include "util/FirmwareIdentity.h"
@@ -223,6 +224,9 @@ void CrossPointWebServer::begin() {
   server->on("/js/epub-optimizer.js", HTTP_GET, [this] {
     sendStaticContent(server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
                       "application/javascript");
+  });
+  server->on("/js/plugin-host.js", HTTP_GET, [this] {
+    sendStaticContent(server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag, "application/javascript");
   });
 
   server->on("/assets/web.css", HTTP_GET,
@@ -2022,7 +2026,7 @@ void CrossPointWebServer::handlePluginFile() const {
 //      headers in X-Relay-Headers ([[name, value], ...] JSON, duplicates kept)
 // Lets a plugin make an outbound HTTP(S) call the browser can't (CORS): the
 // device makes it via SecureNet. Sending the body raw avoids escaping it into
-// JSON on the device; PluginHost.relay() rebuilds {status, headers, body}.
+// JSON on the device; CrossPoint.relay() rebuilds {status, headers, body}.
 void CrossPointWebServer::handleRelay() {
   if (rejectIfPluginsDisabled()) return;
   JsonDocument req;

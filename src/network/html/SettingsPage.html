@@ -218,6 +218,7 @@
   </main>
 <!--#include file="shared/Footer.html.inc" -->
 
+<script src="/js/plugin-host.js"></script>
 <script>
   let allSettings = [];
   let originalValues = {};
@@ -770,8 +771,6 @@
       showWebToast('Error: ' + e.message, true);
     }
   }
-
-<!--#include file="shared/PluginHost.js.inc" -->
 
   // Sequential, not concurrent: the device's web server handles one client
   // connection at a time, and simultaneous fetches on page load can

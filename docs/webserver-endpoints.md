@@ -21,6 +21,7 @@ the IP address shown on the device screen.
 | `GET` | `/fonts` | SD-card font manager page |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
 | `GET` | `/js/epub-optimizer.js` | File manager EPUB optimizer, loaded with JSZip only when needed |
+| `GET` | `/js/plugin-host.js` | Browser plugin host shared by the Settings, File Manager, and `/plugins-run` pages |
 
 ## Device Status
 
@@ -543,9 +544,10 @@ instructions plus WebSocket upload progress on the device screen.
 ## Plugin API
 
 Device capabilities for browser-side SD plugins (`plugin.js`). Plugins normally
-reach these through the `PluginHost` wrappers (`api.relay`, `api.crypto`,
-`api.fetchToSd`, `api.writeFile`); the raw contracts are below. Outbound TLS is
-encrypted but the peer is not verified (the transport ships no CA bundle).
+reach these through the plugin host wrappers in `/js/plugin-host.js`
+(`api.relay`, `api.crypto`, `api.fetchToSd`, `api.writeFile`); the raw
+contracts are below. Outbound TLS is encrypted but the peer is not verified
+(the transport ships no CA bundle).
 
 ### `GET /api/plugins`
 

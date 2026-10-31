@@ -1933,6 +1933,7 @@
   </div>
 </dialog>
 
+<script src="/js/plugin-host.js"></script>
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
@@ -2039,7 +2040,8 @@
 
     // Load any SD-hosted plugins that mount on the File Manager page.
     // File Manager plugins may use the page's JSZip (docs/sd-plugins.md).
-    loadPlugins('files', ensureJszip);
+    // The host is a separate request; if it failed, the file list still loads.
+    if (typeof loadPlugins === 'function') loadPlugins('files', ensureJszip);
 
     // Keep upload cleanup rules when a dialog is cancelled or its backdrop is clicked.
     const closeModal = {
@@ -4771,7 +4773,6 @@ function retryAllFailedUploads() {
 
     xhr.send(formData);
   }
-<!--#include file="shared/PluginHost.js.inc" -->
   hydrate();
 </script>
 </body>
