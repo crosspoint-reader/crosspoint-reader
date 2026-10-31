@@ -19,13 +19,12 @@
   <div id="plugin-container"></div>
   <script src="/js/plugin-host.js"></script>
   <script>
-    if (typeof loadPlugins === 'function') {
-      loadPlugins(null);
-    } else {
-      // The host is a separate request. Retry instead of reporting an idle runner as active.
+    (async () => {
+      if (typeof loadPlugins === 'function' && await loadPlugins(null)) return;
+      // The host or the plugin list failed to load. Retry instead of reporting an idle runner as active.
       document.getElementById('runner-status').textContent = 'Plugin runner failed to load. Retrying...';
       setTimeout(() => location.reload(), 10000);
-    }
+    })();
   </script>
 </body>
 </html>
