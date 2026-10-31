@@ -100,8 +100,7 @@ class Dictionary {
   // missing or stale — call buildIndex() first so the UI can show an
   // "Indexing…" message for the slow first pass.
 
-  // True when the .ifo declares sametypesequence=h or x (HTML or XDXF) and
-  // the viewer may lay them out through the EPUB rendering pipeline.
+  // Declared HTML/XDXF and decoded inline fields use the EPUB rendering pipeline.
   bool definitionsAreHtml() const { return htmlDefinitions; }
 
   bool needsIndex();
@@ -244,6 +243,7 @@ class Dictionary {
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;
+  bool inlineTypes = false;
 
   // The entry list of the current lookup. Allocated once when the dictionary
   // opens and reused by every lookup, so a lookup never allocates a container.
