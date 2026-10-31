@@ -1486,10 +1486,19 @@ void CrossPointWebServer::handleGetSettings() const {
         continue;
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
-      continue;
+    const char* json = output;
+    // Only entries over the stack buffer use the heap, e.g. fontFamily with many SD families.
+    std::unique_ptr<char[]> large;
+    size_t len = serializeJson(doc, output, outputSize);
+    if (len >= outputSize) {
+      len = measureJson(doc);
+      large.reset(new (std::nothrow) char[len + 1]);
+      if (!large) {
+        LOG_ERR("WEB", "OOM: setting JSON for %s (%zu bytes)", s.key, len);
+        continue;
+      }
+      serializeJson(doc, large.get(), len + 1);
+      json = large.get();
     }
 
     if (seenFirst) {
@@ -1497,7 +1506,7 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    server->sendContent(json, len);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
