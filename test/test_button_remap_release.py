@@ -14,11 +14,20 @@ loop = "void ButtonRemapActivity::loop() {" + source.split(
 apply_mapping = "void ButtonRemapActivity::applyTempMapping() {" + source.split(
     "void ButtonRemapActivity::applyTempMapping() {", 1
 )[1].split("bool ButtonRemapActivity::validateUnassigned(", 1)[0]
+validate_unassigned = "bool ButtonRemapActivity::validateUnassigned(" + source.split(
+    "bool ButtonRemapActivity::validateUnassigned(", 1
+)[1].split("const char* ButtonRemapActivity::getRoleName(", 1)[0]
+error_duration = "constexpr unsigned long kErrorDisplayMs" + source.split(
+    "constexpr unsigned long kErrorDisplayMs", 1
+)[1].split(";", 1)[0] + ";"
 
 harness = r"""
 #include <cassert>
 #include <cstdint>
 #include <string>
+""" + error_duration + r"""
+enum StrId { STR_ALREADY_ASSIGNED };
+const char* tr(StrId id) { assert(id == STR_ALREADY_ASSIGNED); return "already assigned"; }
 unsigned long now = 2000;
 unsigned long millis() { return now; }
 constexpr uint8_t kRoleCount = 4;
@@ -50,14 +59,11 @@ struct ButtonRemapActivity {
   void finish() { ++finishes; }
   void requestUpdate() { ++updates; }
   void applyTempMapping();
-  bool validateUnassigned(uint8_t raw) const {
-    for (auto assigned : tempMapping) if (assigned == raw) return false;
-    return true;
-  }
+  bool validateUnassigned(uint8_t raw);
   void loop();
 };
 struct RenderLock { explicit RenderLock(ButtonRemapActivity&) {} };
-""" + loop + apply_mapping + r"""
+""" + loop + apply_mapping + validate_unassigned + r"""
 void expectMapping(int back, int confirm, int left, int right) {
   assert(SETTINGS.frontButtonBack == back);
   assert(SETTINGS.frontButtonConfirm == confirm);
@@ -165,6 +171,14 @@ int main() {
   duplicate.loop();
   duplicate.loop();
   assert(duplicate.currentStep == 1 && duplicate.finishes == 0);
+  assert(duplicate.errorMessage == "already assigned");
+  assert(duplicate.errorUntil == now + kErrorDisplayMs);
+  ButtonRemapActivity sameRole;
+  sameRole.currentStep = 2;
+  sameRole.tempMapping[2] = 3;
+  assert(sameRole.validateUnassigned(3));
+  assert(sameRole.errorMessage.empty() && sameRole.errorUntil == 0);
+  assert(sameRole.validateUnassigned(1));
 }
 """
 
