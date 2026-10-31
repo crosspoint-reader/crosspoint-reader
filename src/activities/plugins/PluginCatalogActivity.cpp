@@ -244,7 +244,8 @@ std::vector<PluginRef> discoverPlugins() {
     ref.title = pack.label;
     ref.description = pack.description.empty() ? "Wallpaper pack" : pack.description;
     ref.isWallpaperPack = true;
-    ref.readmePath = ref.dir + "/README.md";
+    const std::string readmePath = ref.dir + "/README.md";
+    if (Storage.exists(readmePath.c_str())) ref.readmePath = readmePath;
     plugins.push_back(std::move(ref));
   }
   std::sort(plugins.begin(), plugins.end(), [](const PluginRef& lhs, const PluginRef& rhs) {
@@ -390,31 +391,33 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
     return pluginhttp::request(session.get(), url, "GET", "", substitutedHeaders(manifest.listsHeaders, nullptr),
                                response, MAX_BROWSE_LIST_INDEX_RESPONSE);
   };
+  const auto fallback = [&]() {
+    if (primary == manifest.browseListsUrl || manifest.browseListsUrl.empty()) return false;
+    manifest.capabilityListsUrl.clear();
+    return loadBrowseListIndex(status);
+  };
   status = run(primary);
   // Same policy as browsing: an expired password-grant token is minted again once.
   if ((status == 401 || status == 403) && manifest.hasPasswordGrant()) {
     response = String();  // the error body is not needed while a token is minted
     if (refreshCredentialToken()) status = run(primary);
   }
-  if ((status < 200 || status >= 300) && primary != manifest.browseListsUrl && !manifest.browseListsUrl.empty()) {
-    // Optional capability index may not yet be published; keep legacy views usable.
-    status = run(manifest.browseListsUrl);
-  }
+  // Invalid JSON and empty capability indexes also fall back to the legacy lists.
   if (status < 200 || status >= 300) {
     LOG_ERR("PCAT", "browse list index fetch failed: status=%d %s", status, url.c_str());
-    return false;
+    return fallback();
   }
 
   JsonDocument doc;
   if (deserializeJson(doc, response) != DeserializationError::Ok) {
     LOG_ERR("PCAT", "browse list index parse failed: %s", url.c_str());
-    return false;
+    return fallback();
   }
   response = String();  // the document holds its own copies
   JsonArrayConst lists = resolvePath(doc.as<JsonVariantConst>(), manifest.listsItemsPath).as<JsonArrayConst>();
   if (lists.isNull() || lists.size() == 0) {
     LOG_ERR("PCAT", "browse list index has no lists: %s", url.c_str());
-    return false;
+    return fallback();
   }
 
   manifest.browseLists.resize(manifest.fixedListCount);
@@ -444,7 +447,7 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
   }
   if (manifest.browseLists.size() == manifest.fixedListCount) {
     LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
-    return false;
+    return fallback();
   }
   return true;
 }
@@ -863,6 +866,7 @@ bool PluginCatalogActivity::refreshCredentialToken() {
 }
 
 bool PluginCatalogActivity::fetchBrowseResponse() {
+  wallpaperReleaseCache.clear();
   loadConfig();
   if (!loadToken() && !(manifest.hasPasswordGrant() && refreshCredentialToken())) {
     state = State::NO_TOKEN;
@@ -1088,14 +1092,34 @@ bool PluginCatalogActivity::parseBrowseResponse() {
 // manifest (located by folder id across the plugin roots). Only a newer
 // catalog version is an update, so an older catalog never offers a downgrade.
 // Runs once per page.
+bool PluginCatalogActivity::resolveWallpaperRelease(const Item& item, wallpaperpackages::Release& release) {
+  const auto cached = std::find_if(wallpaperReleaseCache.begin(), wallpaperReleaseCache.end(),
+                                   [&](const auto& entry) { return entry.first == item.id; });
+  if (cached != wallpaperReleaseCache.end()) {
+    if (cached->second.name.empty()) return false;
+    release = cached->second;
+    return true;
+  }
+  wallpaperpackages::Release selected;
+  const bool compatible =
+      wallpaperpackages::selectRelease(BROWSE_TMP_PATH, item.id, activeBrowseItemsPath(), renderer.getScreenWidth(),
+                                       renderer.getScreenHeight(), selected);
+  wallpaperReleaseCache.emplace_back(item.id, compatible ? selected : wallpaperpackages::Release{});
+  if (!compatible) return false;
+  release = std::move(selected);
+  return true;
+}
+
 void PluginCatalogActivity::computeInstallStatus() {
-  if (!manifest.tracksInstalls()) return;
   if (browsingWallpaperPacks()) {
     for (auto& item : items) {
       wallpaperpackages::Release release;
-      if (!wallpaperpackages::selectRelease(BROWSE_TMP_PATH, item.id, renderer.getScreenWidth(),
-                                            renderer.getScreenHeight(), release)) {
+      if (!resolveWallpaperRelease(item, release)) {
         item.status = "Not for this display";
+        continue;
+      }
+      if (!manifest.tracksInstalls()) {
+        item.status.clear();
         continue;
       }
       std::string raw;
@@ -1118,6 +1142,7 @@ void PluginCatalogActivity::computeInstallStatus() {
     }
     return;
   }
+  if (!manifest.tracksInstalls()) return;
   JsonDocument filter;
   filter["version"] = true;
   for (auto& item : items) {
@@ -1240,8 +1265,7 @@ void PluginCatalogActivity::downloadFinished(const bool cancelled) {
 
 HttpDownloader::DownloadError PluginCatalogActivity::downloadWallpaperPack(const Item& item) {
   wallpaperpackages::Release release;
-  if (!wallpaperpackages::selectRelease(BROWSE_TMP_PATH, item.id, renderer.getScreenWidth(), renderer.getScreenHeight(),
-                                        release)) {
+  if (!resolveWallpaperRelease(item, release)) {
     LOG_ERR("WPK", "No compatible wallpaper ZIP: %s", item.id.c_str());
     return HttpDownloader::FILE_ERROR;
   }

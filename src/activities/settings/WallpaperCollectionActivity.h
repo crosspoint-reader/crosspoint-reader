@@ -26,7 +26,7 @@ class WallpaperCollectionActivity final : public UiListActivity {
   bool handleButtons() override;
   void refreshChoices();
   void confirmRemove(int index);
-  const char* headerTitle() const override { return "Wallpaper Collection"; }
+  const char* headerTitle() const override { return tr(STR_WALLPAPER_COLLECTION); }
 
   std::vector<Choice> choices;
   std::vector<freeink::ui::ListItem> items;

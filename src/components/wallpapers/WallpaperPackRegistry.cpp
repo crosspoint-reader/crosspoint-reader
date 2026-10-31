@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -52,7 +53,8 @@ bool declared(JsonArrayConst files, const char* path) {
 
 bool validManifest(const char* id, const std::string& base, JsonDocument& doc, bool checkImageHeaders) {
   std::string contents;
-  if (!Storage.readFileToString("WPK", base + "/manifest.json", wallpaperpackages::MAX_MANIFEST_BYTES, contents)) return false;
+  if (!Storage.readFileToString("WPK", base + "/manifest.json", wallpaperpackages::MAX_MANIFEST_BYTES, contents))
+    return false;
   if (deserializeJson(doc, contents, DeserializationOption::NestingLimit(5)) != DeserializationError::Ok) return false;
   if (strcmp(doc["kind"] | "", "wallpaper-pack") || strcmp(doc["name"] | "", id)) return false;
   const char* title = doc["title"] | "";
@@ -64,19 +66,19 @@ bool validManifest(const char* id, const std::string& base, JsonDocument& doc, b
   // fields but old releases have neither.
   const char* description = doc["description"] | "";
   if (*description && strlen(description) > 180) return false;
+  if (strlen(doc["author"] | "") > 120) return false;
   if (images.isNull() || files.isNull() || images.size() == 0 || images.size() > MAX_IMAGES ||
-      (files.size() != images.size() + 2 && files.size() != images.size() + 3) ||
-       files.size() > MAX_FILES || !declared(files, "manifest.json") ||
-      !declared(files, "README.md") ||
-       (files.size() == images.size() + 3 && !declared(files, "DETAILS.md")))
+      (files.size() != images.size() + 2 && files.size() != images.size() + 3) || files.size() > MAX_FILES ||
+      !declared(files, "manifest.json") || !declared(files, "README.md") ||
+      (files.size() == images.size() + 3 && !declared(files, "DETAILS.md")))
     return false;
   // Enforce a complete, explicit file list. No executable files, traversal,
   // external paths, nested collections, or arbitrary SD-file references.
   for (size_t i = 0; i < files.size(); ++i) {
     const char* path = files[i].as<const char*>();
     if (!path) return false;
-    if (!imagePath(path) && strcmp(path, "manifest.json") && strcmp(path, "README.md") &&
-        strcmp(path, "DETAILS.md")) return false;
+    if (!imagePath(path) && strcmp(path, "manifest.json") && strcmp(path, "README.md") && strcmp(path, "DETAILS.md"))
+      return false;
     for (size_t j = 0; j < i; ++j) {
       const char* prior = files[j].as<const char*>();
       if (prior && strcmp(path, prior) == 0) return false;
@@ -110,6 +112,7 @@ WallpaperPackRegistry& WallpaperPackRegistry::getInstance() {
 
 void WallpaperPackRegistry::scan() {
   installed.clear();
+  lastScanComplete = false;
   if (!Storage.ready()) return;
   // If power failed between renaming the old collection to .backup and
   // installing the new one, restore the old collection before discovery.
@@ -161,14 +164,17 @@ void WallpaperPackRegistry::scan() {
     installed.push_back({id, doc["title"].as<std::string>(), doc["description"] | "", doc["author"] | "",
                          doc["version"].as<std::string>()});
   }
+  lastScanComplete = true;
   LOG_INF("WPK", "Found %u valid wallpaper packs", static_cast<unsigned>(installed.size()));
 }
 
 bool WallpaperPackRegistry::reconcileSelection() {
-  if (!Storage.ready()) return false;
+  if (!Storage.ready() || !lastScanComplete) return false;
   if (!SETTINGS.wallpaperPackId[0]) return false;
-  for (const auto& pack : installed)
-    if (pack.id == SETTINGS.wallpaperPackId) return false;
+  if (std::any_of(installed.begin(), installed.end(),
+                  [](const WallpaperPackChoice& pack) { return pack.id == SETTINGS.wallpaperPackId; }))
+    return false;
+  if (safeId(SETTINGS.wallpaperPackId) && Storage.exists(packRoot(SETTINGS.wallpaperPackId).c_str())) return false;
   LOG_INF("WPK", "Selected wallpaper pack %s is unavailable; switching to All Wallpapers", SETTINGS.wallpaperPackId);
   SETTINGS.wallpaperPackId[0] = '\0';
   SETTINGS.saveToFile();
@@ -177,14 +183,8 @@ bool WallpaperPackRegistry::reconcileSelection() {
 
 bool WallpaperPackRegistry::remove(const std::string& id) {
   if (!safeId(id.c_str())) return false;
-  bool found = false;
-  for (const auto& pack : installed) {
-    if (pack.id == id) {
-      found = true;
-      break;
-    }
-  }
-  if (!found) return false;
+  if (std::none_of(installed.begin(), installed.end(), [&](const WallpaperPackChoice& pack) { return pack.id == id; }))
+    return false;
   const std::string active = packRoot(id.c_str());
   // Prevent an orphaned backup from restoring an explicitly uninstalled pack.
   const std::string backup = active + ".backup";
@@ -195,7 +195,8 @@ bool WallpaperPackRegistry::remove(const std::string& id) {
   return true;
 }
 
-bool WallpaperPackRegistry::selectImage(const char* id, std::string& path) const {
+bool WallpaperPackRegistry::selectImages(const char* id, std::vector<std::string>& paths) const {
+  paths.clear();
   if (!safeId(id)) return false;
   const std::string root = packRoot(id);
   JsonDocument doc;
@@ -205,11 +206,10 @@ bool WallpaperPackRegistry::selectImage(const char* id, std::string& path) const
   }
   JsonArrayConst images = doc["images"].as<JsonArrayConst>();
   const auto start = static_cast<size_t>(random(images.size()));
+  paths.reserve(images.size());
   for (size_t i = 0; i < images.size(); ++i) {
     const char* rel = images[(start + i) % images.size()].as<const char*>();
-    if (!rel) continue;
-    path = root + "/" + rel;
-    return true;
+    if (rel) paths.push_back(root + "/" + rel);
   }
-  return false;
+  return !paths.empty();
 }

@@ -125,7 +125,7 @@ void SettingsActivity::rebuildSettings() {
     settings.push_back(std::move(setting));
     if (isSleepScreen && (SETTINGS.sleepScreen == CrossPointSettings::CUSTOM ||
                           SETTINGS.sleepScreen == CrossPointSettings::COVER_CUSTOM))
-      addAction(SettingsSection::Display, StrId::STR_CUSTOM, SettingAction::WallpaperCollection);
+      addAction(SettingsSection::Display, StrId::STR_WALLPAPER_COLLECTION, SettingAction::WallpaperCollection);
   }
 
   // Clock configuration only exists where the RTC probe found hardware.
@@ -180,8 +180,7 @@ void SettingsActivity::rebuildRowItems() {
   rowItems_.reserve(settings.size());
   for (size_t i = 0; i < settings.size(); i++) {
     fui::ListItem item;
-    item.label = settings[i].action == SettingAction::WallpaperCollection ? "Wallpaper Collection"
-                                                                          : I18N.get(settings[i].nameId);
+    item.label = I18N.get(settings[i].nameId);
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }

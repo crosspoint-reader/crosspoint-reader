@@ -21,10 +21,11 @@ class WallpaperPackRegistry {
   // Only call after scan(); never discard preferences when SD is unavailable.
   bool reconcileSelection();
   const std::vector<WallpaperPackChoice>& choices() const { return installed; }
-  bool selectImage(const char* id, std::string& path) const;
+  bool selectImages(const char* id, std::vector<std::string>& paths) const;
   // Remove only a recognized, validated installed collection.
   bool remove(const std::string& id);
 
  private:
   std::vector<WallpaperPackChoice> installed;
+  bool lastScanComplete = false;
 };

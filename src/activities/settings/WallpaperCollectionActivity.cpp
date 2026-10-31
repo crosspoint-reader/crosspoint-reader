@@ -4,7 +4,10 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
+#include <iterator>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -20,15 +23,15 @@ void WallpaperCollectionActivity::onEnter() {
 }
 
 void WallpaperCollectionActivity::refreshChoices() {
-
   auto& registry = WallpaperPackRegistry::getInstance();
   registry.scan();
   registry.reconcileSelection();
   choices.clear();
   choices.reserve(registry.choices().size() + 1);
   // Empty ID is the original shared /.sleep + /sleep pool.
-  choices.push_back({"", "All wallpapers (/.sleep + /sleep)"});
-  for (const auto& choice : registry.choices()) choices.push_back({choice.id, choice.label});
+  choices.push_back({"", tr(STR_WALLPAPER_ALL)});
+  std::transform(registry.choices().begin(), registry.choices().end(), std::back_inserter(choices),
+                 [](const WallpaperPackChoice& choice) { return Choice{choice.id, choice.label}; });
 
   items.clear();
   items.reserve(choices.size());
@@ -85,9 +88,10 @@ void WallpaperCollectionActivity::confirmRemove(const int index) {
   if (index <= 0 || index >= listCount()) return;
   const std::string id = choices[static_cast<size_t>(index)].id;
   const std::string label = choices[static_cast<size_t>(index)].label;
-  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(
-      renderer, mappedInput, "Remove Wallpaper Collection", "Remove " + label + "?",
-      tr(STR_CANCEL), "Remove");
+  char message[256];
+  snprintf(message, sizeof(message), tr(STR_WALLPAPER_REMOVE_PROMPT), label.c_str());
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_WALLPAPER_REMOVE_TITLE),
+                                                              message, tr(STR_CANCEL), tr(STR_WALLPAPER_REMOVE_BUTTON));
   if (!confirmation) return;
   app.clearTapFlash();
   startActivityForResult(std::move(confirmation), [this, id](const ActivityResult& result) {
@@ -101,4 +105,3 @@ void WallpaperCollectionActivity::confirmRemove(const int index) {
     refreshChoices();
   });
 }
-

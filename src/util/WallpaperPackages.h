@@ -11,7 +11,7 @@ struct Release {
   std::string name, variant, version, url, sha256;
   uint16_t width = 0, height = 0;
 };
-bool selectRelease(const std::string& path, const std::string& collection, uint16_t width, uint16_t height,
-                   Release& release);
+bool selectRelease(const std::string& path, const std::string& collection, const std::string& itemsPath, uint16_t width,
+                   uint16_t height, Release& release);
 bool installVerifiedZip(const std::string& archivePath, const Release& release);
 }  // namespace wallpaperpackages

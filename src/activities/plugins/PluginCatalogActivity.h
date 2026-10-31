@@ -12,6 +12,7 @@
 #include "network/HttpDownloader.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
+#include "util/WallpaperPackages.h"
 
 class HalFile;
 namespace freeink {
@@ -151,6 +152,8 @@ class PluginCatalogActivity final : public CatalogActivity {
   bool rootMode = false;
   std::string pickerReturnName;  // plugin identity to reselect after leaving a catalog
   std::vector<Item> items;
+  // Cache matching wallpaper variants for one SD browse response; empty name means incompatible.
+  std::vector<std::pair<std::string, wallpaperpackages::Release>> wallpaperReleaseCache;
   // Row buffer over items/browseLists plus the synthetic pager rows; rebuilt
   // lazily on the render task whenever rowsDirty (items or state changed).
   std::vector<freeink::ui::ListItem> rowItems;
@@ -241,6 +244,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   pluginhttp::Headers substitutedHeaders(const pluginhttp::Headers& headers, const Item* item) const;
   void fetchPage(int newPage);
   // Read installed versions once per page, outside the render path.
+  bool resolveWallpaperRelease(const Item& item, wallpaperpackages::Release& release);
   void computeInstallStatus();
   bool parseXmlList();
   bool parseBrowseResponse();

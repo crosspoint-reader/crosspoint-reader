@@ -1,4 +1,5 @@
 #include "util/WallpaperPackages.h"
+
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Bitmap.h>
@@ -19,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "components/wallpapers/WallpaperPackRegistry.h"
+
 namespace wallpaperpackages {
 namespace {
 constexpr size_t MAX_FILES = 80;
@@ -31,10 +34,8 @@ bool safeId(const std::string& value) {
   if (value.empty() || value.size() > 32 ||
       !((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= '0' && value[0] <= '9')))
     return false;
-  for (char ch : value) {
-    if (!(ch >= 'a' && ch <= 'z') && !(ch >= '0' && ch <= '9') && ch != '-') return false;
-  }
-  return true;
+  return std::all_of(value.begin(), value.end(),
+                     [](const char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-'; });
 }
 
 bool safeRelative(const std::string& path) {
@@ -42,25 +43,22 @@ bool safeRelative(const std::string& path) {
       path.find("//") != std::string::npos || path.find('\\') != std::string::npos ||
       path.find(':') != std::string::npos || path.back() == '/')
     return false;
-  for (char ch : path) {
-    if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' ||
-          ch == '.' || ch == '/'))
-      return false;
-  }
-  return true;
+  return std::all_of(path.begin(), path.end(), [](const char ch) {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' ||
+           ch == '.' || ch == '/';
+  });
 }
 
 bool validHash(const std::string& hash) {
   if (hash.size() != 64) return false;
-  for (char ch : hash)
-    if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) return false;
-  return true;
+  return std::all_of(hash.begin(), hash.end(),
+                     [](const char ch) { return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'); });
 }
 
 bool validRelease(const Release& release) {
-  if (!safeId(release.name) || !safeId(release.variant) || !validHash(release.sha256) ||
-      release.version.empty() || release.version.size() > 24 ||
-      release.version.find_first_not_of("0123456789.") != std::string::npos) return false;
+  if (!safeId(release.name) || !safeId(release.variant) || !validHash(release.sha256) || release.version.empty() ||
+      release.version.size() > 24 || release.version.find_first_not_of("0123456789.") != std::string::npos)
+    return false;
   const std::string suffix = "/" + release.variant + "-" + release.version + ".crosspoint-wallpaper.zip";
   return release.url.rfind("https://", 0) == 0 && release.url.size() >= suffix.size() &&
          release.url.compare(release.url.size() - suffix.size(), suffix.size(), suffix) == 0;
@@ -78,14 +76,14 @@ void captureRow(void* context, JsonListParser::Row& row) {
   target.matched = true;
 }
 
-bool readRow(const std::string& path, const std::string& collection,
+bool readRow(const std::string& path, const std::string& collection, const std::string& itemsPath,
              const std::string* const (&fields)[JsonListParser::F_COUNT], const std::string& arrayPath,
              JsonListParser::Row& result) {
   HalFile file;
   if (!Storage.openFileForRead("EXT", path, file)) return false;
   SelectedRow selected{collection, {}, false};
-  auto parser = std::unique_ptr<JsonListParser>(new (std::nothrow)
-                                                    JsonListParser("items", fields, arrayPath, captureRow, &selected));
+  auto parser = std::unique_ptr<JsonListParser>(
+      new (std::nothrow) JsonListParser(itemsPath, fields, arrayPath, captureRow, &selected));
   if (!parser) return false;
   const bool ok = parser->parse(
       [](void* context, char* buffer, size_t length) { return static_cast<HalFile*>(context)->read(buffer, length); },
@@ -124,19 +122,9 @@ std::string destination(const Release& release) {
 bool hasRoomForPackage(const Release& release) {
   const std::string dest = destination(release);
   if (Storage.exists(dest.c_str())) return true;
-  const char* root = "/.crosspoint/wallpapers";
-  const char* suffix = ".crosspoint-wallpaper";
-  auto directory = Storage.open(root);
-  if (!directory || !directory.isDirectory()) return true;
-  unsigned count = 0;
-  for (auto entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
-    if (!entry.isDirectory()) continue;
-    char name[96] = {};
-    entry.getName(name, sizeof(name));
-    const size_t length = strlen(name), tail = strlen(suffix);
-    if (length > tail && strcmp(name + length - tail, suffix) == 0 && ++count >= 8) return false;
-  }
-  return true;
+  auto& packs = WallpaperPackRegistry::getInstance();
+  packs.scan();
+  return packs.choices().size() < 8;
 }
 bool readManifest(ZipFile& archive, const Release& release, JsonDocument& manifest, std::vector<std::string>& files) {
   const std::string top = release.name + ".crosspoint-wallpaper/";
@@ -151,6 +139,10 @@ bool readManifest(ZipFile& archive, const Release& release, JsonDocument& manife
   if (strcmp(manifest["kind"] | "", kind) != 0 || strcmp(manifest["name"] | "", release.name.c_str()) != 0 ||
       strcmp(manifest["version"] | "", release.version.c_str()) != 0)
     return false;
+  const char* title = manifest["title"] | "";
+  const char* description = manifest["description"] | "";
+  const char* author = manifest["author"] | "";
+  if (!*title || strlen(title) > 60 || strlen(description) > 180 || strlen(author) > 120) return false;
   const auto resolution = manifest["target_resolution"];
   if (resolution["width"].as<int>() != release.width || resolution["height"].as<int>() != release.height) return false;
   JsonArrayConst declared = manifest["files"].as<JsonArrayConst>();
@@ -178,10 +170,10 @@ bool prepareExisting(const std::string& dest, const std::string& backup) {
   if (!Storage.exists(dest.c_str())) return Storage.rename(backup.c_str(), dest.c_str());
   return Storage.removeDir(backup.c_str());
 }
-}
+}  // namespace
 
-bool selectRelease(const std::string& path, const std::string& collection, const uint16_t width,
-                   const uint16_t height, Release& release) {
+bool selectRelease(const std::string& path, const std::string& collection, const std::string& itemsPath,
+                   const uint16_t width, const uint16_t height, Release& release) {
   if (!safeId(collection)) return false;
   const std::string name = "name";
   const std::string empty;
@@ -198,7 +190,7 @@ bool selectRelease(const std::string& path, const std::string& collection, const
     const std::string* const fields[JsonListParser::F_COUNT] = {&name,     &namePath,  &assetPath,
                                                                 &hashPath, &widthPath, &heightPath};
     JsonListParser::Row row;
-    if (!readRow(path, collection, fields, requiresPath, row)) return false;
+    if (!readRow(path, collection, itemsPath, fields, requiresPath, row)) return false;
     if (row.field[JsonListParser::F_AUTHOR].empty()) break;
     {
       const std::string& w = row.field[JsonListParser::F_VERSION];
@@ -224,7 +216,7 @@ bool selectRelease(const std::string& path, const std::string& collection, const
   const std::string* const versionFields[JsonListParser::F_COUNT] = {&name,  &versionPath, &empty,
                                                                      &empty, &empty,       &empty};
   JsonListParser::Row versionRow;
-  if (!readRow(path, collection, versionFields, empty, versionRow)) return false;
+  if (!readRow(path, collection, itemsPath, versionFields, empty, versionRow)) return false;
   candidate.version = versionRow.field[JsonListParser::F_AUTHOR];
   if (!validRelease(candidate)) return false;
   release = std::move(candidate);
@@ -257,8 +249,9 @@ bool installVerifiedZip(const std::string& archivePath, const Release& release) 
     imagePaths.reserve(images.size());
     for (JsonVariantConst value : images) {
       const char* image = value.as<const char*>();
-      if (!image || strncmp(image, "wallpapers/", 11) != 0 || strlen(image) < 16 ||
-          strcmp(image + strlen(image) - 4, ".bmp") != 0 || std::find(files.begin(), files.end(), image) == files.end() ||
+      if (!image || strncmp(image, "wallpapers/", 11) != 0 || strlen(image) < 16 || strlen(image) > 91 ||
+          image[11] == '.' || strchr(image + 11, '/') != nullptr || strcmp(image + strlen(image) - 4, ".bmp") != 0 ||
+          std::find(files.begin(), files.end(), image) == files.end() ||
           std::find(imagePaths.begin(), imagePaths.end(), image) != imagePaths.end())
         return false;
       imagePaths.emplace_back(image);
@@ -343,7 +336,10 @@ bool installVerifiedZip(const std::string& archivePath, const Release& release) 
       break;
     }
     out.flush();
-    out.close();
+    if (!out.close()) {
+      allWritten = false;
+      break;
+    }
     if (relative.rfind("wallpapers/", 0) == 0) {
       HalFile image;
       if (!Storage.openFileForRead("EXT", full, image)) {
