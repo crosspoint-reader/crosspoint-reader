@@ -36,6 +36,19 @@ void operator delete(void* allocation) noexcept { std::free(allocation); }
 
 void operator delete(void* allocation, size_t) noexcept { std::free(allocation); }
 
+TEST(FontCacheManagerTest, ReleasingAdvanceTablesReachesEverySdFont) {
+  SdCardFont readerFont;
+  SdCardFont smallFont;
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> sdFonts{{-17, &readerFont}, {23, &smallFont}};
+  FontCacheManager manager(noBuiltinFonts, sdFonts, kNoTtfFonts);
+
+  manager.releaseSdFontAdvanceTables();
+
+  EXPECT_EQ(1, readerFont.persistentClears);
+  EXPECT_EQ(1, smallFont.persistentClears);
+}
+
 TEST(FontCacheManagerTest, PrewarmScopeBatchesEachFontAndResolvedStyleSeparately) {
   SdCardFont readerFont;
   SdCardFont fallbackFont;
