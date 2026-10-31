@@ -109,3 +109,11 @@ bool RecentBooksStore::pruneMissing() {
   recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
   return recentBooks.size() != before;
 }
+
+bool RecentBooksStore::pruneMatching(bool (*match)(const void* ctx, std::string_view path), const void* ctx) {
+  const size_t before = recentBooks.size();
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(),
+                                   [&](const RecentBook& book) { return match(ctx, book.path); }),
+                    recentBooks.end());
+  return recentBooks.size() != before;
+}

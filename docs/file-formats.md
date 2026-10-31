@@ -667,8 +667,10 @@ The arrival permutation runs oldest first, keyed by the record's FAT
 modification time (when the file landed on the card); `firstSeen` — the
 build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
-fold bump rebuilds ranks while preserving `firstSeen`.
+fold bump rebuilds the index and rereads metadata while preserving `firstSeen`.
 Fold version 4 preserves leading articles in title sort and search keys.
+Fold version 5 forces a rebuild that removes [plugin documents](./sd-plugins.md)
+from indexes built by earlier versions.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 

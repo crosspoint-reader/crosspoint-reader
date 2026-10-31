@@ -257,6 +257,7 @@ struct WalkState {
   bool dedupDegraded = false;
   bool failed = false;
   bool readMetadata = false;
+  SkipFile skip;
   LibraryIndexFile* previous = nullptr;
   BuildStats* stats = nullptr;
   uint16_t enriched = 0;
@@ -502,6 +503,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       continue;
     }
     if (!isLibraryBookFile(name)) continue;
+    if (st.skip.fn && st.skip.fn(st.skip.ctx, joinLibraryPath(path, name))) continue;
 
     // A zero-length book is a dangling directory entry: the name enumerates but
     // the contents do not exist. Counted rather than silently dropped.
@@ -1089,7 +1091,7 @@ bool markLibraryIndexDirty() {
 
 bool isLibraryIndexDirty() { return dirtyInMemory || Storage.exists(DIRTY_PATH); }
 
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata) {
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata, const SkipFile skip) {
   const uint32_t startMs = millis();
   uint32_t serviceUnits = 0;
   stats = BuildStats{};
@@ -1168,6 +1170,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   st.prior = priorList.get();
   st.priorCount = priorList ? priorCount : 0;
   st.readMetadata = readMetadata;
+  st.skip = skip;
   st.previous = previous.isOpen() ? &previous : nullptr;
   st.stats = &stats;
 

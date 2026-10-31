@@ -329,7 +329,7 @@ void XtcReaderActivity::onReturnFromEndOfBook() {
 }
 
 void XtcReaderActivity::saveProgress() const {
-  if (!xtc) return;
+  if (!xtc || pluginDocument) return;  // a document keeps no position
   uint8_t data[4];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
@@ -341,7 +341,7 @@ void XtcReaderActivity::saveProgress() const {
 }
 
 void XtcReaderActivity::loadProgress() {
-  if (!xtc) return;
+  if (!xtc || pluginDocument) return;  // a document always opens at the start
   HalFile f;
   if (Storage.openFileForRead("XTC", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
