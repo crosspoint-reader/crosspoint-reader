@@ -35,21 +35,7 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
   }
   // Touch boards without a home key: a short power click can carry a reader
   // shortcut (see SHORT_PWRBTN).
-  if (homeAction == HomeButtonAction::Ignore && mapButton(Button::Power, &HalGPIO::wasReleased)) {
-    switch (SETTINGS.shortPwrBtn) {
-      case CrossPointSettings::PWR_BOOKMARK:
-        homeAction = HomeButtonAction::Bookmark;
-        break;
-      case CrossPointSettings::PWR_SYNC:
-        homeAction = HomeButtonAction::Sync;
-        break;
-      case CrossPointSettings::PWR_READER_MENU:
-        homeAction = HomeButtonAction::ReaderMenu;
-        break;
-      default:
-        break;
-    }
-  }
+  if (mapButton(Button::Power, &HalGPIO::wasReleased)) applyPowerShortcut();
   if (deferHomeButtonAction) {
     // Keep the first action observed during a synchronous transfer. Home must
     // still be visible now so the transfer can cancel and unwind promptly.
@@ -64,6 +50,30 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
     if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
   }
 }
+
+void MappedInputManager::applyPowerShortcut() const {
+  if (homeAction != HomeButtonAction::Ignore) return;
+  switch (SETTINGS.shortPwrBtn) {
+    case CrossPointSettings::PWR_BOOKMARK:
+      homeAction = HomeButtonAction::Bookmark;
+      break;
+    case CrossPointSettings::PWR_SYNC:
+      homeAction = HomeButtonAction::Sync;
+      break;
+    case CrossPointSettings::PWR_READER_MENU:
+      homeAction = HomeButtonAction::ReaderMenu;
+      break;
+    default:
+      break;
+  }
+}
+
+#if FREEINK_CAP_TOUCH
+void MappedInputManager::setPowerClickFrame(const bool clicked) {
+  powerClickFrame = clicked;
+  if (clicked) applyPowerShortcut();
+}
+#endif
 
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Touch boards always follow the rendered orientation; button-only boards keep the user toggle.
@@ -373,7 +383,7 @@ bool MappedInputManager::wasPowerConfirmClick() const {
   // Wait out the X4 Pro's frontlight double-click window before treating its
   // first release as Confirm. With the shortcut disabled, and on other touch
   // boards, the release counts directly.
-  if (BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight) return powerConfirmClickFrame;
+  if (BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight) return powerClickFrame;
   return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
 }
 #endif
@@ -399,6 +409,9 @@ bool MappedInputManager::wasPressed(const Button button) const {
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+#if FREEINK_CAP_TOUCH
+  if (button == Button::Power && powerClickFrame) return true;
+#endif
   if (button == Button::Confirm && remoteInput.button == RemoteButton::Confirm) return true;
   if (button == Button::Back && remoteInput.button == RemoteButton::Back) return true;
   if ((button == Button::NavNext || button == Button::Right) && remoteInput.button == RemoteButton::Next) return true;

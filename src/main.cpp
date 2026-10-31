@@ -265,7 +265,7 @@ bool handleX4ProFrontlightDoubleClick() {
 
   if (lastX4ProPowerClickAt == 0 || now - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
     lastX4ProPowerClickAt = now;
-    return false;
+    return true;
   }
 
   lastX4ProPowerClickAt = 0;
@@ -853,6 +853,9 @@ void loop() {
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   mappedInputManager.update();
+#if FREEINK_CAP_TOUCH
+  mappedInputManager.setPowerClickFrame(false);
+#endif
 
   // Bluetooth page turner, before the USB drive's early return: a card handed to USB stops the radio
   // before anything else.
@@ -968,8 +971,7 @@ void loop() {
     screenshotComboActive = false;
   }
 
-  // Consume the second X4 Pro power-button release so it does not also run a
-  // configured short-power action after toggling the frontlight.
+  // Consume both releases; dispatch a single click only after the window expires.
   if (handleX4ProFrontlightDoubleClick()) {
     return;
   }
@@ -977,21 +979,20 @@ void loop() {
   const bool x4ProDoubleClickPwrLight = BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight;
 
 #if FREEINK_CAP_TOUCH
-  // A single X4 Pro power click becomes Confirm only after the frontlight
-  // double-click window expires without a second click.
-  mappedInputManager.setPowerConfirmClickFrame(false);
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && x4ProDoubleClickPwrLight) {
+  if (x4ProDoubleClickPwrLight && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {
     if (lastX4ProPowerClickAt != 0 && millis() - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
       lastX4ProPowerClickAt = 0;
-      mappedInputManager.setPowerConfirmClickFrame(true);
+      mappedInputManager.setPowerClickFrame(true);
     }
+  }
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && x4ProDoubleClickPwrLight) {
     // A release held too long to be a double-click candidate (but still within
     // the normal Confirm press duration) never reaches handleX4ProFrontlightDoubleClick's
     // click tracking above, so it needs its own Confirm check here.
     if (mappedInputManager.wasReleased(MappedInputManager::Button::Power) &&
         gpio.getPowerButtonHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS &&
         gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration()) {
-      mappedInputManager.setPowerConfirmClickFrame(true);
+      mappedInputManager.setPowerClickFrame(true);
     }
   }
 #endif
