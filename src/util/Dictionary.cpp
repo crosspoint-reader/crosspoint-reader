@@ -64,27 +64,7 @@ uint32_t readBe32(const uint8_t* p) {
          (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
 }
 
-<<<<<<< HEAD
-// Punctuation/symbol codepoint blocks stripped from word edges before lookup:
-// Latin-1 Supplement symbols (guillemets, inverted ?/!, ...), General and
-// Supplemental Punctuation (curly quotes, dashes, ...), CJK and fullwidth
-// punctuation. Scripts outside these blocks (Greek, Cyrillic, combining
-// marks, ...) are left alone so accented words keep their edges.
-bool isPunctuationCodepoint(const uint32_t cp) {
-  return (cp >= 0x00A0 && cp <= 0x00BF) || (cp >= 0x2000 && cp <= 0x206F) || (cp >= 0x2E00 && cp <= 0x2E7F) ||
-         (cp >= 0x3000 && cp <= 0x303F) || (cp >= 0xFE10 && cp <= 0xFE6F) || (cp >= 0xFF01 && cp <= 0xFF0F) ||
-         (cp >= 0xFF1A && cp <= 0xFF20) || (cp >= 0xFF3B && cp <= 0xFF40) || (cp >= 0xFF5B && cp <= 0xFF65);
-}
-
-bool isWordCodepoint(const uint32_t cp) {
-  return cp < 0x80 ? std::isalnum(static_cast<int>(cp)) != 0 : !isPunctuationCodepoint(cp);
-}
-
 // Facts read from the .ifo at open time.
-=======
-// Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
-// headers are tiny and both keys always appear early when present.
->>>>>>> 8fabe275 (fix: improves non-alpha character detection)
 struct IfoFacts {
   bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
   bool htmlDefinitions = false;  // sametypesequence=h or x (HTML or XDXF)
@@ -138,7 +118,6 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   return facts;
 }
 
-<<<<<<< HEAD
 bool readInlineField(std::string_view& input, char& type, std::string_view& field, bool truncated) {
   type = input.front();
   input.remove_prefix(1);
@@ -220,7 +199,8 @@ Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, boo
   }
   text.swap(decoded);
   return Dictionary::LookupResult::Found;
-=======
+}
+
 // Matches the .idx/.syn's actual on-disk sort order: primary key is
 // StringUtils::asciiCaseCmp (ASCII-insensitive, non-ASCII bytes compared raw),
 // with ties — entries that differ only by ASCII case, e.g. a proper noun
@@ -230,7 +210,6 @@ Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, boo
 int diskOrderCmp(const char* a, const char* b) {
   const int primary = StringUtils::asciiCaseCmp(a, b);
   return primary != 0 ? primary : strcmp(a, b);
->>>>>>> 5366aa31 (chore: addresses coderabbit comment "Use an exact-byte tie-break and always run the folded fallback after an exact miss.")
 }
 
 }  // namespace
