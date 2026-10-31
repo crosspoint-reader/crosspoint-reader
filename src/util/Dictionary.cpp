@@ -967,7 +967,9 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     // unchanged, so e.g. "iphone" can still reach the headword "iPhone".
     lookupKey(session, cleaned, diskOrderCmp, group, matchedHeadwordOut, groupFromSynonyms, searchFailed);
 
-    if (group.empty() && !group.lowMemory()) {
+    // Without a usable .qidx every probe is a linear .idx scan from byte 0, so
+    // skip the folded and case-insensitive retries rather than repeat it.
+    if (session.sampleCount > 0 && group.empty() && !group.lowMemory()) {
       const std::string folded = foldCase(cleaned);
       if (folded != cleaned) {
         // Most headwords are stored exactly lowercase, so retry the folded key
