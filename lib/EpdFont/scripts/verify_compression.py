@@ -42,17 +42,16 @@ def parse_groups(text):
 
 
 def parse_glyphs(text):
-    """Parse EpdGlyph array entries: { width, height, advanceX, left, top, dataLength, dataOffset }"""
+    """Parse EpdGlyph array entries: { width, height, advanceX, left, top, dataOffset }"""
     glyphs = []
-    for match in re.finditer(r'\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\}', text):
+    for match in re.finditer(r'\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\}', text):
         glyphs.append({
             'width': int(match.group(1)),
             'height': int(match.group(2)),
             'advanceX': int(match.group(3)),
             'left': int(match.group(4)),
             'top': int(match.group(5)),
-            'dataLength': int(match.group(6)),
-            'dataOffset': int(match.group(7)),
+            'dataOffset': int(match.group(6)),
         })
     return glyphs
 
@@ -188,22 +187,17 @@ def verify_font_file(filepath):
             height = glyph['height']
 
             if width == 0 or height == 0:
-                # Zero-size glyphs should have dataOffset == current packed_offset and dataLength == 0
+                # Zero-size glyphs should have dataOffset == current packed_offset
                 if glyph['dataOffset'] != packed_offset:
                     return (font_name, False, f"group {gi}, glyph {glyph_idx}: zero-size glyph dataOffset {glyph['dataOffset']} != expected packed offset {packed_offset}")
-                if glyph['dataLength'] != 0:
-                    return (font_name, False, f"group {gi}, glyph {glyph_idx}: zero-size glyph dataLength {glyph['dataLength']} != expected 0")
                 continue
 
             aligned_size = ((width + 3) // 4) * height
             packed_size = math.ceil(width * height / 4)
 
-            # Verify packed offset and size match glyph metadata
+            # Verify packed offset matches glyph metadata
             if glyph['dataOffset'] != packed_offset:
                 return (font_name, False, f"group {gi}, glyph {glyph_idx}: dataOffset {glyph['dataOffset']} != expected packed offset {packed_offset}")
-            if glyph['dataLength'] != packed_size:
-                return (font_name, False, f"group {gi}, glyph {glyph_idx}: dataLength {glyph['dataLength']} != expected packed length {packed_size} "
-                        f"(width={width}, height={height})")
 
             # Extract byte-aligned data for this glyph
             if byte_aligned_offset + aligned_size > len(decompressed):

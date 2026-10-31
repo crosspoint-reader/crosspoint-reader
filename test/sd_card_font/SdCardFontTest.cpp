@@ -56,7 +56,7 @@ void put32(size_t at, uint32_t value) {
 // `glyphs` Hangul glyphs from FIRST, the last of them U+FFFD.
 void makeFont(uint32_t glyphs = GLYPHS) {
   constexpr size_t GLYPH_OFFSET = 64 + 24;
-  const size_t BITMAP_OFFSET = GLYPH_OFFSET + glyphs * sizeof(EpdGlyph);
+  const size_t BITMAP_OFFSET = GLYPH_OFFSET + glyphs * sizeof(CpfontGlyphRecord);
   sdFontTestFile.assign(BITMAP_OFFSET + glyphs * BITMAP_BYTES, 0);
   std::memcpy(sdFontTestFile.data(), "CPFONT\0\0", 8);
   put16(8, CPFONT_VERSION);
@@ -72,7 +72,7 @@ void makeFont(uint32_t glyphs = GLYPHS) {
   put32(80, 0xFFFD);
   put32(84, glyphs - 1);
   for (uint32_t i = 0; i < glyphs; ++i) {
-    EpdGlyph glyph{};
+    CpfontGlyphRecord glyph{};
     glyph.width = 32;
     glyph.height = 32;
     glyph.advanceX = 32 << 4;
@@ -94,7 +94,7 @@ void makeFont(uint32_t glyphs = GLYPHS) {
 void makeKerningFont(uint16_t extraEntries = 0, uint8_t classCount = 2, uint8_t extraClass = 2, bool ligature = false) {
   constexpr uint32_t KERN_GLYPHS = 7;
   constexpr size_t GLYPH_OFFSET = 64 + 24;
-  constexpr size_t KERN_OFFSET = GLYPH_OFFSET + KERN_GLYPHS * sizeof(EpdGlyph);
+  constexpr size_t KERN_OFFSET = GLYPH_OFFSET + KERN_GLYPHS * sizeof(CpfontGlyphRecord);
   constexpr uint8_t LEFT[][2] = {{'A', 1}, {'C', 2}};
   constexpr uint8_t RIGHT[][2] = {{'B', 1}, {'D', 2}};
   constexpr int8_t MATRIX[2][2] = {{-3, 0}, {4, -5}};
@@ -122,7 +122,7 @@ void makeKerningFont(uint16_t extraEntries = 0, uint8_t classCount = 2, uint8_t 
   put32(80, 0xFFFD);
   put32(84, KERN_GLYPHS - 1);
   for (uint32_t i = 0; i < KERN_GLYPHS; ++i) {
-    EpdGlyph glyph{};
+    CpfontGlyphRecord glyph{};
     glyph.width = 32;
     glyph.height = 32;
     glyph.advanceX = 32 << 4;
@@ -190,7 +190,7 @@ void expectPageBitmaps(SdCardFont& font, uint32_t first, uint32_t count) {
       if (cp >= interval.first && cp <= interval.last) glyph = data->glyph + interval.offset + cp - interval.first;
     }
     ASSERT_NE(nullptr, glyph) << cp;
-    ASSERT_EQ(BITMAP_BYTES, glyph->dataLength);
+    ASSERT_EQ(BITMAP_BYTES, epdGlyphDataLength(*glyph, data->is2Bit));
     for (uint16_t i = 0; i < BITMAP_BYTES; ++i) {
       ASSERT_EQ((cp - FIRST) % 251, data->bitmap[glyph->dataOffset + i]);
     }
@@ -420,7 +420,7 @@ TEST(SdCardFontTest, LaterPagesReadOnlyTheKernClassBlocksTheyUse) {
 TEST(SdCardFontTest, AdvancesStayCorrectWhenPagesAddCodepointsOutOfOrder) {
   makeFont();
   for (uint32_t i = 0; i < GLYPHS; ++i) {
-    put16(64 + 24 + i * sizeof(EpdGlyph) + offsetof(EpdGlyph, advanceX), (20 + i % 13) << 4);
+    put16(64 + 24 + i * sizeof(CpfontGlyphRecord) + offsetof(CpfontGlyphRecord, advanceX), (20 + i % 13) << 4);
   }
   SdCardFont font;
   ASSERT_TRUE(font.load("fixture"));
@@ -439,7 +439,7 @@ TEST(SdCardFontTest, AdvanceMergesPastTheCapKeepTheLowestCodepoints) {
   constexpr uint32_t GLYPH_COUNT = 1001;
   makeFont(GLYPH_COUNT);
   for (uint32_t i = 0; i < GLYPH_COUNT; ++i) {
-    put16(64 + 24 + i * sizeof(EpdGlyph) + offsetof(EpdGlyph, advanceX), (20 + i % 13) << 4);
+    put16(64 + 24 + i * sizeof(CpfontGlyphRecord) + offsetof(CpfontGlyphRecord, advanceX), (20 + i % 13) << 4);
   }
   SdCardFont font;
   ASSERT_TRUE(font.load("fixture"));
@@ -563,8 +563,8 @@ TEST(SdCardFontTest, SmallCapsPrepareOriginalAndUppercasePackedMetricsWithoutBit
     put32(64, fixture.first);
     put32(68, fixture.last);
     for (uint32_t cp = fixture.first; cp <= fixture.last; ++cp) {
-      put16(64 + 24 + (cp - fixture.first) * sizeof(EpdGlyph) + offsetof(EpdGlyph, advanceX), (10 + cp - fixture.first)
-                                                                                                  << 4);
+      put16(64 + 24 + (cp - fixture.first) * sizeof(CpfontGlyphRecord) + offsetof(CpfontGlyphRecord, advanceX),
+            (10 + cp - fixture.first) << 4);
     }
     SdCardFont font;
     ASSERT_TRUE(font.load("fixture"));
@@ -622,7 +622,7 @@ TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
   makeFont();
   // Glyph 3 claims more bytes than its pixels need, as a corrupt .cpfont does.
   constexpr size_t GLYPH_OFFSET = 64 + 24;
-  EpdGlyph glyph{};
+  CpfontGlyphRecord glyph{};
   std::memcpy(&glyph, sdFontTestFile.data() + GLYPH_OFFSET + 3 * sizeof(glyph), sizeof(glyph));
   glyph.dataLength = 49335;
   std::memcpy(sdFontTestFile.data() + GLYPH_OFFSET + 3 * sizeof(glyph), &glyph, sizeof(glyph));
@@ -638,10 +638,10 @@ TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
     }
     ASSERT_NE(nullptr, found);
     if (cp == FIRST + 3) {
-      EXPECT_EQ(0, found->dataLength);
+      EXPECT_EQ(0u, epdGlyphDataLength(*found, data->is2Bit));
       EXPECT_EQ(0, found->width);
     } else {
-      EXPECT_EQ(BITMAP_BYTES, found->dataLength);
+      EXPECT_EQ(BITMAP_BYTES, epdGlyphDataLength(*found, data->is2Bit));
     }
   }
 }

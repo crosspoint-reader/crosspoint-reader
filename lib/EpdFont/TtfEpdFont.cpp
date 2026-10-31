@@ -376,11 +376,9 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     // matching the .cpfont converter's top = FreeType bitmap_top). Flip the sign.
     eg.top = static_cast<int16_t>(-g->yoff);
     eg.dataOffset = static_cast<uint32_t>(f.used);
-    eg.dataLength = static_cast<uint16_t>(bytes);
     f.used += bytes;
   } else {
     eg.dataOffset = static_cast<uint32_t>(f.used);
-    eg.dataLength = 0;
   }
 
   f.glyphs.push_back(eg);
@@ -439,7 +437,7 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
   return f->owner->faultKern(*f, leftCp, rightCp);
 }
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
-  if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
+  if (glyph == nullptr || glyph->width == 0 || glyph->height == 0) return nullptr;
   return static_cast<Face*>(ctx)->bmp.data() + glyph->dataOffset;
 }
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
