@@ -104,7 +104,7 @@
   transform: translateX(22px);
 }
 
-/* SD-card plugin cards on the File Manager and Settings pages. */
+/* SD-card plugin cards on the File Manager and Plugins pages. */
 #plugin-container {
   display: grid;
   gap: 15px;

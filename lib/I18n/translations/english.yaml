@@ -336,7 +336,7 @@ STR_PLUGIN_HUB_INSTALL_DESCRIPTION: "Browse and install Official and Community p
 STR_PLUGIN_HUB_INSTALLED: "Plugin Hub installed"
 STR_PLUGIN_HUB_INSTALLED_HINT: "Open Plugins to get started."
 STR_NO_PLUGINS_INSTALLED: "No plugins with device screens installed"
-STR_PLUGIN_NOT_SIGNED_IN: "Not signed in. Open the web Settings page and sign in via the plugin first."
+STR_PLUGIN_NOT_SIGNED_IN: "Not signed in. Open the web Plugins page and sign in via the plugin first."
 STR_PLUGIN_MANIFEST_INVALID: "Plugin manifest is missing or invalid"
 STR_PLUGIN_SIGN_IN: "Sign in"
 STR_PLUGIN_SIGN_IN_HINT: "Not signed in yet"

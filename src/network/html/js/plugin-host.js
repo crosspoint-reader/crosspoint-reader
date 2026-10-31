@@ -1,4 +1,4 @@
-// --- browser-side plugin host (Settings, File Manager, /plugins-run) ------
+// --- browser-side plugin host (Plugins, File Manager, /plugins-run) -------
 // Discovers plugins from the SD card (/api/plugins), loads each plugin.js,
 // and calls its registered render fn with a container + a small api. A plugin
 // is just JS on the SD; adding one needs no firmware change.
@@ -8,7 +8,7 @@ window.CrossPoint = window.CrossPoint || {
   // --- plugin job queue -------------------------------------------------
   // A plugin registers named actions; external systems enqueue jobs with
   // POST /api/plugin-jobs, and any open page hosting the plugin (File
-  // Manager, Settings, or the headless /plugins-run page) claims and
+  // Manager, Plugins, or the headless /plugins-run page) claims and
   // executes them here, then posts the result back for the caller to poll.
   _actions: {},
   _actionBusy: false,

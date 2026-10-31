@@ -79,7 +79,7 @@ OPDS server.
 
 ## Web Interface
 
-The browser UI has four primary pages.
+The browser UI has five primary pages.
 
 ### Home
 
@@ -133,6 +133,12 @@ Copy them into `/fonts/` or `/.fonts/` on the SD card. The Fonts page and
 [SD card font guide](./sd-card-fonts.md) for the direct font folder layout.
 To remove a loose direct font, delete its file from the SD card. The Fonts page
 can delete a family stored in a subfolder.
+
+### Plugins
+
+The Plugins page shows the web settings cards of installed SD-card plugins.
+Its navigation link appears only while **Settings > Connectivity > Plugins** is
+enabled on the device. See [SD-card plugins](./sd-plugins.md).
 
 ## Command Line Use
 

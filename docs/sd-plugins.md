@@ -91,7 +91,7 @@ firmware surfaces: the job queue and the `device.json` on-device screens.
 
 ## Surface 1: browser plugins (`plugin.js`)
 
-JS loaded into the File Manager or Settings web page, backed by generic device
+JS loaded into the File Manager or Plugins web page, backed by generic device
 endpoints (`/api/relay`, `/api/crypto`, `/api/fetch`, `/api/plugin-fs`). See
 `docs/webserver-endpoints.md` for the endpoints and the sd-plugins repository
 for the JS contract.

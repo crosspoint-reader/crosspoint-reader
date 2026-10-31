@@ -40,12 +40,10 @@
 
   <div id="wifi-container"></div>
   <div id="opds-container"></div>
-  <div id="plugin-container"></div>
 
   </main>
 <!--#include file="shared/Footer.html.inc" -->
 
-<script src="/js/plugin-host.js"></script>
 <script>
   let allSettings = [];
   let originalValues = {};
@@ -606,7 +604,6 @@
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
-    await loadPlugins('settings');
   })();
 </script>
 </body>
