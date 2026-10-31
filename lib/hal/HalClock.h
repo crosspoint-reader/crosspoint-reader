@@ -15,6 +15,7 @@ class HalClock {
   mutable time_t _cachedUtc = 0;
   mutable bool _hasCachedTime = false;
   mutable unsigned long _lastPollMs = 0;
+  mutable unsigned long _lastSuccessfulPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds
 
@@ -29,6 +30,10 @@ class HalClock {
   // read. nullptr/empty falls back to UTC. Drops the read cache so the change
   // shows immediately.
   void setTimezone(const char* posixTz);
+
+  // Current utc wall-clock time.
+  // Returns false if RTC is not available.
+  bool utcTime(time_t& out) const;
 
   // Current wall-clock time in the configured timezone.
   // Returns false if RTC is not available.
