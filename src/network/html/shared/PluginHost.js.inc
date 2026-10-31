@@ -133,7 +133,9 @@
     }
   };
 
-  async function loadPlugins(mount) {
+  // beforeLoad runs once, before the first matching plugin script; a failure
+  // there does not stop the plugins from loading.
+  async function loadPlugins(mount, beforeLoad) {
     const host = document.getElementById('plugin-container');
     if (!host) return;
     let list;
@@ -142,6 +144,10 @@
       // A null mount loads everything: the headless runner page hosts all
       // plugins so any registered action can execute there.
       if (mount && (p.mount || 'settings') !== mount) continue;
+      if (beforeLoad) {
+        try { await beforeLoad(); } catch (e) { console.warn('Plugin preload failed:', e); }
+        beforeLoad = null;
+      }
       const container = document.createElement('div');
       container.className = 'card';
       container.id = 'plugin-' + p.name;

@@ -541,7 +541,8 @@ browser-side.
   EPUB to SD. Browsing/search is HTML, so parse it in the browser.
 - **RSS → EPUB digest** — build a "morning edition." Fetch feeds with
   `api.relay`, assemble an EPUB in the browser with the JSZip the File Manager
-  page already loads, then `api.writeFile` it to SD.
+  page loads before its plugins, then `api.writeFile` it to SD. Check `typeof JSZip`
+  and load `/js/jszip.min.js` if needed: other pages do not provide it.
 - **Read-any-article** — paste a URL, run it through a readability service via
   `api.relay`, wrap the result as an EPUB, write to SD.
 - **Metadata / cover editor** — a File Manager plugin: open an EPUB with JSZip,
