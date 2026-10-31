@@ -504,7 +504,7 @@ struct TxtToHtml {
 class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
-  struct LookupSession {};
+  struct LookupSession { uint32_t sampleCount = 1; };
   using WordCmp = int (*)(const char*, const char*);
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
   bool hasSyn = false;
