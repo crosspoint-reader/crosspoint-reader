@@ -64,6 +64,9 @@ constexpr size_t MAX_API_RESPONSE = 48 * 1024;
 constexpr char BROWSE_TMP_PATH[] = "/.pcat_tmp.json";
 constexpr size_t MAX_BROWSE_RESPONSE = 1024 * 1024;
 constexpr size_t MAX_BROWSE_LIST_INDEX_RESPONSE = 16 * 1024;
+// Bounds the list vector: a 16 KB index of tiny entries would otherwise reserve
+// hundreds of KB (and abort, with exceptions off).
+constexpr size_t MAX_BROWSE_LISTS = 64;
 constexpr size_t MAX_ITEM_DETAILS_RESPONSE = 24 * 1024;
 constexpr int MAX_PAGE_SIZE = 16;
 constexpr unsigned long PLUGIN_UNINSTALL_HOLD_MS = 1000;
@@ -292,11 +295,18 @@ bool PluginCatalogActivity::loadManifest() {
   // Documented bounds: each row costs an Item (strings) and a screen slot.
   manifest.pageSize = std::clamp(manifest.pageSize, 1, MAX_PAGE_SIZE);
   manifest.browseListsUrl = browse["lists_url"] | "";
+  pluginhttp::readHeaders(browse["lists_headers"], manifest.listsHeaders);
+  manifest.listsItemsPath = browse["lists_items"] | "lists";
+  JsonVariantConst listFields = browse["lists_fields"];
+  manifest.listsTitlePath = listFields["title"] | "title";
+  manifest.listsUrlPath = listFields["url"] | "url";
+  manifest.listsIdPath = listFields["id"] | "id";
   manifest.browseLists.reserve(browse["lists"].size());
   for (JsonVariantConst l : browse["lists"].as<JsonArrayConst>()) {
     Manifest::BrowseList entry;
     entry.title = l["title"] | "";
     entry.url = l["url"] | "";
+    entry.id = variantToString(l["id"]);
     entry.body = l["body"] | "";
     JsonVariantConst notice = l["notice"];
     entry.noticeTitle = notice["title"] | "";
@@ -377,12 +387,23 @@ bool PluginCatalogActivity::loadManifest() {
   return valid;
 }
 
-bool PluginCatalogActivity::loadBrowseListIndex() {
+bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
+  status = 200;
   if (manifest.browseListsUrl.empty()) return true;
 
   String response;
-  const std::string url = substituted(manifest.browseListsUrl, nullptr);
-  const int status = pluginhttp::request(session.get(), url, "GET", "", {}, response, MAX_BROWSE_LIST_INDEX_RESPONSE);
+  std::string url;
+  const auto run = [&] {
+    url = substituted(manifest.browseListsUrl, nullptr);
+    return pluginhttp::request(session.get(), url, "GET", "", substitutedHeaders(manifest.listsHeaders, nullptr),
+                               response, MAX_BROWSE_LIST_INDEX_RESPONSE);
+  };
+  status = run();
+  // Same policy as browsing: an expired password-grant token is minted again once.
+  if ((status == 401 || status == 403) && manifest.hasPasswordGrant()) {
+    response = String();  // the error body is not needed while a token is minted
+    if (refreshCredentialToken()) status = run();
+  }
   if (status < 200 || status >= 300) {
     LOG_ERR("PCAT", "browse list index fetch failed: status=%d %s", status, url.c_str());
     return false;
@@ -393,25 +414,33 @@ bool PluginCatalogActivity::loadBrowseListIndex() {
     LOG_ERR("PCAT", "browse list index parse failed: %s", url.c_str());
     return false;
   }
-  JsonArrayConst lists = doc["lists"].as<JsonArrayConst>();
+  response = String();  // the document holds its own copies
+  JsonArrayConst lists = resolvePath(doc.as<JsonVariantConst>(), manifest.listsItemsPath).as<JsonArrayConst>();
   if (lists.isNull() || lists.size() == 0) {
     LOG_ERR("PCAT", "browse list index has no lists: %s", url.c_str());
     return false;
   }
 
   manifest.browseLists.resize(manifest.fixedListCount);
-  manifest.browseLists.reserve(manifest.fixedListCount + lists.size());
+  manifest.browseLists.reserve(manifest.fixedListCount + std::min(lists.size(), MAX_BROWSE_LISTS));
   for (JsonVariantConst l : lists) {
+    if (manifest.browseLists.size() - manifest.fixedListCount >= MAX_BROWSE_LISTS) {
+      LOG_ERR("PCAT", "browse list index truncated to %u lists", static_cast<unsigned>(MAX_BROWSE_LISTS));
+      break;
+    }
     Manifest::BrowseList entry;
-    entry.title = l["title"] | "";
-    entry.url = l["url"] | "";
+    entry.title = variantToString(resolvePath(l, manifest.listsTitlePath));
+    entry.url = variantToString(resolvePath(l, manifest.listsUrlPath));
+    entry.id = variantToString(resolvePath(l, manifest.listsIdPath));
     entry.body = l["body"] | "";
     JsonVariantConst notice = l["notice"];
     entry.noticeTitle = notice["title"] | "";
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
-    if (!entry.title.empty() && !entry.url.empty()) manifest.browseLists.push_back(std::move(entry));
+    // An entry with only an id browses the shared browse url through {list_id}.
+    const bool browsable = !entry.url.empty() || !entry.id.empty();
+    if (!entry.title.empty() && browsable) manifest.browseLists.push_back(std::move(entry));
   }
   if (manifest.browseLists.size() == manifest.fixedListCount) {
     LOG_ERR("PCAT", "browse list index has no valid lists: %s", url.c_str());
@@ -458,6 +487,11 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
   substituteAll(tpl, "{limit}", num);
   snprintf(num, sizeof(num), "%d", std::max(0, page - 1) * manifest.pageSize);
   substituteAll(tpl, "{offset}", num);
+  const bool inList = currentList >= 0 && currentList < static_cast<int>(manifest.browseLists.size());
+  static const std::string noList;
+  const std::string& listId = inList ? manifest.browseLists[currentList].id : noList;
+  substituteAll(tpl, "{list_id}", listId);
+  if (tpl.find("{list_id_enc}") != std::string::npos) substituteAll(tpl, "{list_id_enc}", urlEncodeQuery(listId));
   substituteAll(tpl, "{query}", urlEncodeQuery(searchQuery));
   substituteAll(tpl, "{query_raw}", searchQuery);
   if (item) {
@@ -853,9 +887,17 @@ void PluginCatalogActivity::startBrowse() {
     }
   }
   if (needsListIndex) {
-    if (!loadBrowseListIndex() && manifest.fixedListCount == 0) {
-      fail(StrId::STR_FETCH_FEED_FAILED);
-      return;
+    int status = 0;
+    if (!loadBrowseListIndex(status)) {
+      if (status == 401 || status == 403) {
+        state = State::NO_TOKEN;  // as for a rejected browse request: sign in again
+        requestUpdate();
+        return;
+      }
+      if (manifest.fixedListCount == 0) {
+        fail(StrId::STR_FETCH_FEED_FAILED);
+        return;
+      }
     }
     // After a failed fetch the manifest's own lists still work; Back to the picker must not refetch.
     listIndexLoaded = true;
