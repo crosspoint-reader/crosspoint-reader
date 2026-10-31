@@ -1,6 +1,6 @@
 // Auto-generated table of Unicode codepoint ranges classified as Letter,
 // Number, or Mark (general categories L*, N*, M*), derived from Python
-// 3.12.3's unicodedata (Unicode 15.0.0).
+// 3.14's unicodedata (Unicode 16.0.0).
 //
 // This is the whitelist side of word-edge trimming: a codepoint is "part of a
 // word" iff it falls in one of these ranges. Everything else (punctuation,
