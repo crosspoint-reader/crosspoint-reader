@@ -148,6 +148,7 @@ class ChapterHtmlSlimParser {
   size_t keepWithNextCarry() const;
   bool canCarry(size_t carry) const;
   void breakPageCarryingLines(size_t carry, size_t paragraphLines, uint32_t visibleOffset);
+  void justifyCurrentPage(int flowBottom);
   std::vector<BoxScope> boxScopes;
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
   // ponytail: buffer at most 160 tokens / 2 KB per row; larger rows use stacked flow.
