@@ -190,6 +190,7 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.encoded_item_fields` | Download, sidecar, and details templates can use the percent-encoded item variables `{id_enc}`, `{title_enc}`, `{author_enc}`, and `{url_enc}`. | A catalog whose URLs carry item text can require this so older firmware, which would send the variable names literally, does not offer the entry. |
 | `catalog.list_index_mapping` | `browse.lists_url` can be fetched with `lists_headers` and read with `lists_items`/`lists_fields`, and lists can carry an `id` that fills `{list_id}` and `{list_id_enc}`. | A catalog can build its lists from a service's own folder or tag API, with the token in a header, without a separate server to reshape the answer. |
 | `catalog.list_requirements` | Static and fetched browse lists can declare an optional `requires` array of firmware capabilities; fetched lists can map its path via `lists_fields.requires`. | List discovery hides sections that require unsupported firmware behavior, without tying the index format to any specific plugin or firmware. |
+| `catalog.server_paths` | A JSON catalog accepts server paths (`/path`) where a response supplies a URL: the `download.url_path` answer, a fetched list `url`, and an item `details_url`. Each path is joined to the origin (scheme, host, and port) of the request that returned it. A `url_path` answer that is a server path is fetched with the download headers. | A catalog whose API answers with paths on its own server, rather than full URLs, works without a proxy that rewrites them. |
 
 Capability names describe firmware behavior available to the entire plugin system.
 They must not encode Plugin Hub policy or ownership, and another plugin may use the
@@ -322,9 +323,11 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   "download": {
     "url": "https://.../books/{id}/download",
     "method": "POST",
-    "headers": { "Authorization": "Bearer {token}" },  // file GET too, unless url_path is set
+    "headers": { "Authorization": "Bearer {token}" },  // file GET too, unless url_path
+                                            // returns a full URL
     "body": "{}",
-    "url_path": "url",                      // response field with the file URL;
+    "url_path": "url",                      // response field with the file URL or a
+                                            // server path ("/files/1");
                                             // omit to treat "url" itself as the file URL
     "username": "{cfg.user}",              // optional HTTP Basic creds for the file GET
     "password": "{cfg.pass}",             // omit for token/header auth
@@ -435,6 +438,19 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   `browse.lists_fields.requires` can specify a dotted path to the array.
   A plugin that depends on this filtering should declare
   `catalog.list_requirements` in its compatibility requirements.
+- **Server paths** (json): a URL that a response supplies may be a server
+  path such as `/api/files/12/download`. This applies to the `download.url_path`
+  answer, a fetched list's `url`, and an item's `details_url`. The firmware
+  joins the path to the origin (scheme, host, and port) of the request that
+  returned it: the download request, `lists_url`, or the browse or search
+  request. A `url_path` answer that is a server path is on the API's own host,
+  so the file GET sends the download `headers`, and a 401/403 there gets the
+  password-grant retry. A full URL, even on the same host, still gets no
+  headers, because it may be pre-signed. The details GET sends no headers, as
+  before. Other relative forms (`files/12`, `//host/x`) are used as they are,
+  and item `url` fields are not changed, because templates such as
+  `{cfg.server}{url}` may already join them. A catalog that relies on this
+  should declare `catalog.server_paths` in its compatibility requirements.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
