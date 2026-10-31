@@ -133,7 +133,7 @@ bool readManifest(ZipFile& archive, const Release& release, JsonDocument& manife
   if (!archive.getInflatedFileSize(entry.c_str(), &len) || len < 8 || len > MAX_MANIFEST_BYTES) return false;
   std::unique_ptr<uint8_t, decltype(&free)> text(archive.readFileToMemory(entry.c_str()), &free);
   if (!text || deserializeJson(manifest, reinterpret_cast<const char*>(text.get()), len,
-                               DeserializationOption::NestingLimit(8)) != DeserializationError::Ok)
+                               DeserializationOption::NestingLimit(5)) != DeserializationError::Ok)
     return false;
   const char* kind = "wallpaper-pack";
   if (strcmp(manifest["kind"] | "", kind) != 0 || strcmp(manifest["name"] | "", release.name.c_str()) != 0 ||
@@ -349,6 +349,24 @@ bool installVerifiedZip(const std::string& archivePath, const Release& release) 
       Bitmap bitmap(image);
       if (bitmap.parseHeaders() != BmpReaderError::Ok || bitmap.getWidth() != release.width ||
           bitmap.getHeight() != release.height) {
+        allWritten = false;
+        break;
+      }
+      // Bitmap::parseHeaders computes DWORD-aligned row bytes but does not
+      // verify that the file includes every pixel row. Reject truncated BMPs
+      // before promoting the staged package to its installed directory.
+      bool offsetValid = image.seek(10);
+      uint32_t pixelOffset = 0;
+      for (int byte = 0; offsetValid && byte < 4; ++byte) {
+        const int value = image.read();
+        if (value < 0)
+          offsetValid = false;
+        else
+          pixelOffset |= static_cast<uint32_t>(value) << (8 * byte);
+      }
+      const uint64_t minimumSize =
+          static_cast<uint64_t>(pixelOffset) + static_cast<uint64_t>(bitmap.getRowBytes()) * bitmap.getHeight();
+      if (!offsetValid || image.fileSize64() < minimumSize) {
         allWritten = false;
         break;
       }

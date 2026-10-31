@@ -1125,7 +1125,7 @@ void PluginCatalogActivity::computeInstallStatus() {
       std::string raw;
       const std::string manifestFile =
           "/.crosspoint/wallpapers/" + release.name + ".crosspoint-wallpaper/manifest.json";
-      if (!Storage.readFileToString("WPK", manifestFile, MAX_MANIFEST_SIZE, raw)) {
+      if (!Storage.readFileToString("WPK", manifestFile, wallpaperpackages::MAX_MANIFEST_BYTES, raw)) {
         item.status = "v" + item.version;
         continue;
       }

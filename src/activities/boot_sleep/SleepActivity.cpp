@@ -805,8 +805,9 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (SETTINGS.wallpaperPackId[0]) {
     std::vector<std::string> candidates;
     if (WallpaperPackRegistry::getInstance().selectImages(SETTINGS.wallpaperPackId, candidates)) {
-      for (const auto& path : candidates)
-        if (renderCustomSleepBmp(path)) return;
+      if (std::any_of(candidates.begin(), candidates.end(),
+                      [&](const std::string& path) { return renderCustomSleepBmp(path); }))
+        return;
     }
   }
   // The existing custom sleep locations remain the fallback.
@@ -1029,7 +1030,7 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
     // Show the plain cover.
     const Bitmap& cover = *overlayCover;
     overlayCover = nullptr;
-    if (cover.rewindToData() == BmpReaderError::Ok) return renderBitmapSleepScreen(cover);
+    if (cover.rewindToData() == BmpReaderError::Ok && renderBitmapSleepScreen(cover)) return;
   }
   renderDefaultSleepScreen();
 }
@@ -1098,9 +1099,9 @@ void SleepActivity::renderCoverSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
       if (withOverlay) overlayCover = &bitmap;
-      renderBitmapSleepScreen(bitmap);
+      const bool rendered = renderBitmapSleepScreen(bitmap);
       overlayCover = nullptr;
-      return;
+      if (rendered) return;
     }
   }
 
