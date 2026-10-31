@@ -238,6 +238,12 @@ EpubReaderActivity::~EpubReaderActivity() {
   }
 }
 
+void EpubReaderActivity::onEnter() {
+  ReaderActivity::onEnter();
+  lastTrackedSpineIndex = -1;
+  lastTrackedPageNumber = -1;
+}
+
 bool EpubReaderActivity::loadBook() {
   auto loadedEpub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
   if (!loadedEpub) {
@@ -1430,37 +1436,42 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     RenderLock lock;
     clearDeferredReposition();
   }
+  bool turned = false;
   if (isForwardTurn) {
     if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
-      lastPageTurnTime = millis();
-      return true;
+      turned = true;
     } else if (currentSpineIndex + 1 < epub->getSpineItemsCount()) {
       RenderLock lock;
       nextPageNumber = 0;
       currentSpineIndex++;
       section.reset();
-      lastPageTurnTime = millis();
-      return true;
+      turned = true;
     } else {
       currentSpineIndex = epub->getSpineItemsCount();
-      lastPageTurnTime = millis();
-      return true;
+      turned = true;
     }
   } else {
     if (section->currentPage > 0) {
       section->currentPage--;
-      lastPageTurnTime = millis();
-      return true;
+      turned = true;
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
       nextPageNumber = 0;
       pendingPageJump = std::numeric_limits<uint16_t>::max();
       currentSpineIndex--;
       section.reset();
-      lastPageTurnTime = millis();
-      return true;
+      turned = true;
     }
+  }
+  if (turned) {
+    if (automaticPageTurnActive) {
+      speedTracker.onPageEntered();
+    } else {
+      speedTracker.onPageTurned();
+    }
+    lastPageTurnTime = millis();
+    return true;
   }
   return false;
 }
@@ -2304,6 +2315,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               tBwRender - tPrewarm, tDisplay - tBwRender, tEnd - t0);
     }
   }
+
+  const int displayedPage = section ? section->currentPage : 0;
+  if (lastTrackedSpineIndex != currentSpineIndex || lastTrackedPageNumber != displayedPage) {
+    lastTrackedSpineIndex = currentSpineIndex;
+    lastTrackedPageNumber = displayedPage;
+    speedTracker.onPageEntered();
+  }
 }
 
 int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int y) const {
@@ -2466,8 +2484,21 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub ? epub->getTitle() : "";
   }
 
+  char timeLeftStr[32] = {0};
+  if (sb.showsTimeLeft()) {
+    int minutes = 0;
+    const int totalPagesInChapter = static_cast<int>(pageCount);
+    if (sb.timeLeftMode == CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_CHAPTER) {
+      minutes = speedTracker.getMinutesLeftInChapter(currentPage, totalPagesInChapter);
+    } else if (sb.timeLeftMode == CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_BOOK) {
+      minutes = speedTracker.getMinutesLeftInBook(bookProgress, currentPage, totalPagesInChapter);
+    }
+    ReadingSpeedTracker::formatTimeLeft(timeLeftStr, sizeof(timeLeftStr), minutes, tr(STR_UNIT_MINUTE),
+                                        tr(STR_UNIT_HOUR));
+  }
+
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
-                    section ? section->isBuilding() : false);
+                    section ? section->isBuilding() : false, timeLeftStr[0] != '\0' ? timeLeftStr : nullptr);
 }
 
 // ---------------------------------------------------------------------------
