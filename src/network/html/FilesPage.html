@@ -3726,15 +3726,22 @@ function logSummary(originalSize, newSize, timeElapsed) {
   const savedPct = ((saved / originalSize) * 100).toFixed(1);
   const totalImages = conversionStats.images + conversionStats.splits;
   const totalOutput = conversionStats.images + conversionStats.splitParts;
+  // Inner parts are plain strings: rjsmin cannot minify nested template literals.
+  const splitNote = conversionStats.splitParts > conversionStats.splits
+    ? ' (+' + (conversionStats.splitParts - conversionStats.splits) + ' from splits)'
+    : '';
+  const errorRow = conversionStats.errors > 0
+    ? '<tr><td>Errors</td><td style="color:var(--danger-color)">' + conversionStats.errors + '</td></tr>'
+    : '';
 
   const summaryHtml = `
     <div class="log-summary">
       <div class="log-summary-title">Conversion Summary</div>
       <table class="log-summary-table">
         <tr><td>Images found</td><td class="highlight">${totalImages}</td></tr>
-        <tr><td>Images processed</td><td>${totalOutput}${conversionStats.splitParts > conversionStats.splits ? ` (+${conversionStats.splitParts - conversionStats.splits} from splits)` : ''}</td></tr>
+        <tr><td>Images processed</td><td>${totalOutput}${splitNote}</td></tr>
         <tr><td>EPUB repairs</td><td>${conversionStats.fixes > 0 ? conversionStats.fixes + ' fixes applied' : 'None needed'}</td></tr>
-        ${conversionStats.errors > 0 ? `<tr><td>Errors</td><td style="color:var(--danger-color)">${conversionStats.errors}</td></tr>` : ''}
+        ${errorRow}
         <tr><td>Original size</td><td>${formatBytes(originalSize)}</td></tr>
         <tr><td>Optimized size</td><td>${formatBytes(newSize)}</td></tr>
         <tr><td>Saved</td><td class="${saved > 0 ? 'saved' : 'increased'}">${saved > 0 ? formatBytes(saved) + ' (' + savedPct + '%)' : '+' + formatBytes(-saved)}</td></tr>
@@ -3830,14 +3837,17 @@ function finalizeBatchLog() {
   const totalSavedPct = batchStats.totalOriginalSize > 0
     ? ((totalSaved / batchStats.totalOriginalSize) * 100).toFixed(1)
     : '0.0';
+  // Inner parts are plain strings: rjsmin cannot minify nested template literals.
+  const totalSavedText = totalSaved > 0
+    ? formatBytes(totalSaved) + ' (' + totalSavedPct + '%)'
+    : '+' + formatBytes(-totalSaved);
+  const totalErrorsRow = batchStats.totalErrors > 0
+    ? '<tr><td>Total errors</td><td style="color:var(--danger-color)">' + batchStats.totalErrors + '</td></tr>'
+    : '';
   const sizeRowsHtml = batchStats.totalOriginalSize > 0 ? `
         <tr><td>Total original</td><td>${formatBytes(batchStats.totalOriginalSize)}</td></tr>
         <tr><td>Total optimised</td><td>${formatBytes(batchStats.totalNewSize)}</td></tr>
-        <tr><td>Total saved</td><td class="${totalSaved > 0 ? 'saved' : 'increased'}">${
-          totalSaved > 0
-            ? `${formatBytes(totalSaved)} (${totalSavedPct}%)`
-            : `+${formatBytes(-totalSaved)}`
-        }</td></tr>` : '';
+        <tr><td>Total saved</td><td class="${totalSaved > 0 ? 'saved' : 'increased'}">${totalSavedText}</td></tr>` : '';
 
   // Add batch summary
   const batchSummaryHtml = `
@@ -3850,7 +3860,7 @@ function finalizeBatchLog() {
         <tr><td>Total images processed</td><td>${batchStats.totalImages}</td></tr>
         <tr><td>Total splits</td><td>${batchStats.totalSplits}</td></tr>
         <tr><td>Total fixes applied</td><td>${batchStats.totalFixes}</td></tr>
-        ${batchStats.totalErrors > 0 ? `<tr><td>Total errors</td><td style="color:var(--danger-color)">${batchStats.totalErrors}</td></tr>` : ''}${sizeRowsHtml}
+        ${totalErrorsRow}${sizeRowsHtml}
         <tr><td>Total time</td><td>${batchTime.toFixed(1)}s</td></tr>
       </table>
     </div>
