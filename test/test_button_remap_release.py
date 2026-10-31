@@ -173,6 +173,7 @@ int main() {
   assert(duplicate.currentStep == 1 && duplicate.finishes == 0);
   assert(duplicate.errorMessage == "already assigned");
   assert(duplicate.errorUntil == now + kErrorDisplayMs);
+  assert(duplicate.errorUntil > now);
   ButtonRemapActivity sameRole;
   sameRole.currentStep = 2;
   sameRole.tempMapping[2] = 3;
