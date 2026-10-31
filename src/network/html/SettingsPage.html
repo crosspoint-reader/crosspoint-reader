@@ -5,192 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Settings - CrossPoint Reader</title>
   <style>
-    .setting-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border-color);
-    }
-    .setting-row:last-child {
-      border-bottom: none;
-    }
-    .setting-name {
-      font-weight: 500;
-      color: var(--label-color);
-      flex: 1;
-      min-width: 0;
-      padding-right: 12px;
-    }
-    .setting-control {
-      flex-shrink: 0;
-    }
-    .setting-control select,
-    .setting-control input[type="number"],
-    .setting-control input[type="text"],
-    .setting-control input[type="password"] {
-      padding: 6px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      font-size: 0.95em;
-      background: var(--card-bg);
-    }
-    .setting-control select {
-      min-width: 160px;
-    }
-    .setting-control input[type="text"],
-    .setting-control input[type="password"] {
-      width: 220px;
-    }
-    .setting-control input[type="number"] {
-      width: 80px;
-    }
-    /* Toggle switch */
-    .toggle-switch {
-      display: inline-block;
-      position: relative;
-      width: 48px;
-      height: 26px;
-    }
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .toggle-slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background-color: var(--toggle-bg);
-      border-radius: 26px;
-      transition: 0.3s;
-    }
-    .toggle-slider:before {
-      position: absolute;
-      content: "";
-      height: 20px;
-      width: 20px;
-      left: 3px;
-      bottom: 3px;
-      background-color: var(--button-text);
-      border-radius: 50%;
-      transition: 0.3s;
-    }
-    .toggle-switch input:checked + .toggle-slider {
-      background-color: var(--accent-color);
-    }
-    .toggle-switch input:checked + .toggle-slider:before {
-      transform: translateX(22px);
-    }
     .save-container {
       margin: 20px 0;
     }
-    .save-btn {
-      background-color: var(--success-color);
-      color: var(--button-text);
-      padding: 12px 40px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1.1em;
-      font-weight: 600;
-    }
-    .save-btn:hover {
-      background-color: var(--accent-hover-color);
-    }
-    .save-btn:disabled {
-      background-color: var(--label-color);
-      cursor: not-allowed;
-    }
-
-    .loader-container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 20px 0;
-    }
-    .loader {
-      width: 48px;
-      height: 48px;
-      border: 5px solid var(--border-color);
-      border-bottom-color: transparent;
-      border-radius: 50%;
-      display: inline-block;
-      box-sizing: border-box;
-      animation: rotation 1s linear infinite;
-    }
-    @keyframes rotation {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    .opds-server {
+    .item-box {
       border: 1px solid var(--border-color);
       border-radius: 6px;
       padding: 12px;
       margin: 10px 0;
     }
-    .opds-server .setting-row:last-child {
-      border-bottom: none;
-    }
-    .opds-actions {
+    .item-actions {
       display: flex;
       gap: 8px;
       margin-top: 8px;
-    }
-    .btn-small {
-      padding: 6px 14px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
-    }
-    .btn-add {
-      background-color: var(--accent-color);
-      color: var(--button-text);
-    }
-    .btn-add:hover {
-      background-color: var(--accent-hover-color);
-    }
-    .btn-delete {
-      background-color: var(--danger-color);
-      color: var(--button-text);
-    }
-    .btn-delete:hover {
-      background-color: var(--danger-hover);
-    }
-    .btn-save-server {
-      background-color: var(--success-color);
-      color: var(--button-text);
-    }
-    .btn-save-server:hover {
-      background-color: var(--accent-hover-color);
-    }
-    @media (max-width: 600px) {
-      body {
-        padding: 10px;
-        font-size: 14px;
-      }
-      .card {
-        padding: 12px;
-        margin: 10px 0;
-      }
-      h1 {
-        font-size: 1.3em;
-      }
-      .nav-links a {
-        padding: 8px 12px;
-        font-size: 0.9em;
-      }
-      .setting-row {
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-      .setting-control select,
-      .setting-control input[type="text"],
-      .setting-control input[type="password"] {
-        min-width: 0;
-        width: unset;
-      }
     }
   </style>
   <link rel="stylesheet" href="/assets/web.css" />
@@ -213,12 +40,10 @@
 
   <div id="wifi-container"></div>
   <div id="opds-container"></div>
-  <div id="plugin-container"></div>
 
   </main>
 <!--#include file="shared/Footer.html.inc" -->
 
-<script src="/js/plugin-host.js"></script>
 <script>
   let allSettings = [];
   let originalValues = {};
@@ -511,6 +336,12 @@
   }
 
   // --- Wi-Fi Network Management ---
+  // A Wi-Fi or OPDS entry's Save stays disabled until one of its fields changes;
+  // a successful save re-renders the list, which disables it again.
+  function enableItemSave(box) {
+    box.querySelector('.btn-save-server').disabled = false;
+  }
+
   // Renders an editable list of saved Wi-Fi networks using /api/wifi endpoints.
   // Password fields are never pre-filled; when left blank during edit, existing
   // passwords remain unchanged server-side.
@@ -523,7 +354,7 @@
       ? '<div style="margin-top:8px;color:var(--label-color);font-size:0.9em;">Last connected network</div>'
       : '';
 
-    return '<div class="opds-server" id="wifi-' + id + '">' +
+    return '<div class="item-box" id="wifi-' + id + '" oninput="enableItemSave(this)">' +
       '<div class="setting-row">' +
         '<span class="setting-name">SSID</span>' +
         '<span class="setting-control"><input type="text" id="wifi-ssid-' + id + '" value="' + escapeHtml(net.ssid || '') + '"></span>' +
@@ -533,8 +364,8 @@
         '<span class="setting-control"><input type="password" id="wifi-pass-' + id + '" placeholder="' + (net.hasPassword ? '(unchanged)' : '') + '"></span>' +
       '</div>' +
       lastConnected +
-      '<div class="opds-actions">' +
-        '<button class="btn-small btn-save-server" onclick="saveWifiNetwork(' + idx + ')">Save</button>' +
+      '<div class="item-actions">' +
+        '<button class="btn-small btn-save-server" onclick="saveWifiNetwork(' + idx + ')" disabled>Save</button>' +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteWifiNetwork(' + idx + ')">Delete</button>') +
       '</div>' +
     '</div>';
@@ -652,7 +483,7 @@
   function renderOpdsServer(srv, idx) {
     const isNew = idx === -1;
     const id = isNew ? 'new' : idx;
-    return '<div class="opds-server" id="opds-' + id + '">' +
+    return '<div class="item-box" id="opds-' + id + '" oninput="enableItemSave(this)">' +
       '<div class="setting-row">' +
         '<span class="setting-name">Server Name</span>' +
         '<span class="setting-control"><input type="text" id="opds-name-' + id + '" value="' + escapeHtml(srv.name || '') + '"></span>' +
@@ -670,8 +501,8 @@
         '<span class="setting-control"><input type="password" id="opds-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
       '</div>' +
       renderOpdsHeaderRows(srv, id) +
-      '<div class="opds-actions">' +
-        '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')">Save</button>' +
+      '<div class="item-actions">' +
+        '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')" disabled>Save</button>' +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteOpdsServer(' + idx + ')">Delete</button>') +
       '</div>' +
     '</div>';
@@ -779,7 +610,6 @@
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
-    await loadPlugins('settings');
   })();
 </script>
 </body>

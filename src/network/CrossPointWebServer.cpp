@@ -47,6 +47,7 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/PluginsPageHtml.generated.h"
 #include "html/RunnerPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/assets/crosspoint_iconSvg.generated.h"
@@ -276,6 +277,7 @@ void CrossPointWebServer::begin() {
   // Browser-side plugins (JS on the SD card) + their generic capabilities.
   server->on("/api/plugins", HTTP_GET, [this] { handlePluginList(); });
   server->on("/plugin", HTTP_GET, [this] { handlePluginFile(); });
+  server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
   server->on("/plugins-run", HTTP_GET, [this] { handlePluginRunnerPage(); });
   server->on("/api/plugin-jobs", HTTP_POST, [this] { handlePluginJobSubmit(); });
   server->on("/api/plugin-jobs/claim", HTTP_GET, [this] { handlePluginJobClaim(); });
@@ -500,6 +502,12 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
 
 static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
                               const char* contentType) {
+  if (strcmp(contentType, "text/html") == 0) {
+    // Read by the page header to hide the Plugins link; sent on 304 too, so it
+    // stays current on every navigation without an extra request.
+    server->sendHeader("Set-Cookie", SETTINGS.pluginsEnabled ? "cpPlugins=1; Path=/; SameSite=Strict"
+                                                             : "cpPlugins=0; Path=/; SameSite=Strict");
+  }
   // Content is baked into flash at build time, so the ETag is stable for the
   // lifetime of a firmware image. Honor If-None-Match with a 304 so browsers
   // reuse their cache instead of re-downloading on every navigation.
@@ -2677,6 +2685,12 @@ void CrossPointWebServer::handleBookKey() {
     return;
   }
   server->send(200, "application/json", "{\"ok\":true}");
+}
+
+// Served even while plugins are disabled: its empty state tells the user how to enable them.
+void CrossPointWebServer::handlePluginsPage() const {
+  sendStaticContent(server.get(), PluginsPageHtml, sizeof(PluginsPageHtml), PluginsPageHtmlETag, "text/html");
+  LOG_DBG("WEB", "Served plugins page");
 }
 
 void CrossPointWebServer::handlePluginRunnerPage() const {
