@@ -984,6 +984,10 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       }
     }
   }
+  // A synonym hit shows the word the reader selected (case preserved), not the
+  // folded key a retry may have used; direct and stem hits keep the headword.
+  if (groupFromSynonyms && !group.empty() && !group.lowMemory()) matchedHeadwordOut = cleaned;
+
   if (group.lowMemory()) {
     setResult(LookupResult::LowMemory);
     return false;
