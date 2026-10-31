@@ -82,11 +82,12 @@ def format_entries(ranges):
 def main():
     if unicodedata.unidata_version != "16.0.0":
         print(
-            f"warning: running Python {sys.version.split()[0]} / Unicode "
-            f"{unicodedata.unidata_version}, expected Unicode 16.0.0 — output "
-            "may not match the committed table",
+            f"error: running Python {sys.version.split()[0]} / Unicode "
+            f"{unicodedata.unidata_version}, expected Unicode 16.0.0; "
+            "refusing to generate a mismatched table",
             file=sys.stderr,
         )
+        sys.exit(1)
 
     ranges = compute_ranges()
     sys.stdout.write(HEADER)
