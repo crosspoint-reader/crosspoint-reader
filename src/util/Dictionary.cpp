@@ -813,6 +813,12 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
 
 std::string Dictionary::cleanWord(const char* word) {
   if (!word) return "";
+  // Variation selectors are category Mn, so the word-char table accepts them, but
+  // alone they must not start or extend a word; inside a span they stay with their base.
+  const auto isVariationSelector = [](const uint32_t c) {
+    return (c >= 0xFE00 && c <= 0xFE0F) || (c >= 0xE0100 && c <= 0xE01EF) || (c >= 0x180B && c <= 0x180D) ||
+           c == 0x180F;
+  };
   // Single forward pass: decode codepoints and keep the span from the first
   // to the last one classified as a word character, dropping any
   // punctuation/symbol run at either edge (utf8IsWordChar is Unicode-category
@@ -823,7 +829,7 @@ std::string Dictionary::cleanWord(const char* word) {
   while (*p != 0) {
     const unsigned char* cpStart = p;
     const uint32_t cp = utf8NextCodepoint(&p);
-    if (!utf8IsWordChar(cp)) continue;
+    if (isVariationSelector(cp) || !utf8IsWordChar(cp)) continue;
     // CJK opening/closing punctuation is only stripped at the matching edge.
     if (!wordStart && !CjkBreaks::isNoBreakAfterCjkPunctuation(cp)) wordStart = cpStart;
     if (wordStart && !CjkBreaks::isNoBreakBeforeCjkPunctuation(cp)) wordEnd = p;
