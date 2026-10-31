@@ -13,6 +13,8 @@ std::string resolved(std::string path, const std::string& requestUrl) {
 }
 
 TEST(ResolveServerPath, ServerPathTakesTheRequestOrigin) {
+  std::string path = "/api/files/12/download";
+  EXPECT_TRUE(resolveServerPath(path, "https://books.example.com/api/books/7"));
   EXPECT_EQ(resolved("/api/files/12/download", "https://books.example.com/api/books/7"),
             "https://books.example.com/api/files/12/download");
   EXPECT_EQ(resolved("/f?a=1", "http://192.168.1.5:6060/api?x=/y"), "http://192.168.1.5:6060/f?a=1");
