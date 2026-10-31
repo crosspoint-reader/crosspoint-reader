@@ -548,7 +548,8 @@ bool Dictionary::openSynonyms(LookupSession& session) {
 // for entries that differ only by case. diskOrderCmp mirrors that, so both the
 // exact-case attempt and the case-folded retry against a plain lowercase
 // headword use it and the descent stays sound. Only the last-resort retry
-// (both missed) passes utf8CaseInsensitiveCmp, for headwords that aren't a
+// (all earlier probes missed, even when folding left the word unchanged)
+// passes utf8CaseInsensitiveCmp, for headwords that aren't a
 // plain-lowercase match of the fold (e.g. final-sigma). That comparator folds
 // non-ASCII codepoints the on-disk sort leaves raw, so it is not fully sound
 // for non-ASCII case variants — accepted rather than an unbounded scan: every
@@ -961,8 +962,9 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
 
     // Try the word exactly as selected first, with the comparator matching the
     // .idx/.syn's on-disk sort order (see bisectSamples). Only if that misses,
-    // and folding changes the word (it has an uppercase letter), retry fully
-    // case-folded — the exact-byte tiebreak can walk past a case variant.
+    // retry case-folded — the exact-byte tiebreak can walk past a case variant.
+    // The final case-insensitive probe runs even when folding leaves the word
+    // unchanged, so e.g. "iphone" can still reach the headword "iPhone".
     lookupKey(session, cleaned, diskOrderCmp, group, matchedHeadwordOut, groupFromSynonyms, searchFailed);
 
     if (group.empty() && !group.lowMemory()) {
@@ -973,13 +975,12 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         // exact-case attempt (just against a different target string), so e.g. a
         // sentence-initial Greek "Ήταν" resolves to the headword "ήταν".
         lookupKey(session, folded, diskOrderCmp, group, matchedHeadwordOut, groupFromSynonyms, searchFailed);
-        if (group.empty() && !group.lowMemory()) {
-          // Last resort for headwords that aren't a plain-lowercase match of
-          // the fold (e.g. final-sigma, mixed-case entries) — see
-          // bisectSamples's header comment for why this can still miss.
-          lookupKey(session, folded, utf8CaseInsensitiveCmp, group, matchedHeadwordOut, groupFromSynonyms,
-                    searchFailed);
-        }
+      }
+      if (group.empty() && !group.lowMemory()) {
+        // Last resort for headwords that aren't a plain-lowercase match of
+        // the fold (e.g. final-sigma, mixed-case entries) — see
+        // bisectSamples's header comment for why this can still miss.
+        lookupKey(session, folded, utf8CaseInsensitiveCmp, group, matchedHeadwordOut, groupFromSynonyms, searchFailed);
       }
     }
   }
